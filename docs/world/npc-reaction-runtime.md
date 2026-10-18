@@ -10,16 +10,17 @@ condition and the AI consumers are not part of it ([Not ready](#not-ready)).
 
 ## Evidence
 
-- CE at the pinned commit `a7ff41b300ef712f0e7d088183a3d08957110cdd` (`reaction.c`, `effect.c`, the hit branch of
-  `ai_attack` in `ai.c`, `quest_state_set_internal` in `quest.c`), read as in ARC-RES-028.
+- The original's functions, read first as in ARC-RES-028: the reaction and effect functions, the hit branch of the AI
+  attack handler (0x4A9650) and the internal quest state setter (0x4C4E60).
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically by two independent readers per the
   [original executable check](../research/original-executable-check.md); verdicts in the
   [verification ledger](../research/original-verification-ledger.md#reaction-runtime-arc-world-026). Every function below
-  behaves as CE reads it except one: the effective reaction passes the **PC**, not the NPC, to the `reaction` effect
-  lookup (`reaction_get` 0x4C0D00 → 0x4EAA80). That is a CE reconstruction slip, so both rule modes use the PC's
-  effects. CE's switch that lets charm bypass the PC's adjustment effects (A4) does not exist in the original.
-- The 88 values of the race table (0x5B684C) equal CE's `dword_5B684C`.
-- Network-only preludes in the original (`reaction_adj` and the quest setter return early on a network client) do not
+  behaves as that first reading describes except one: the effective reaction passes the **PC**, not the NPC, to the
+  `reaction` effect lookup (the reaction getter 0x4C0D00 → 0x4EAA80, ledger R1 effects), so both rule modes use the
+  PC's effects. The original has no switch that lets charm bypass the PC's adjustment effects (A4): the delta always
+  goes through them (ledger R2).
+- The race table (0x5B684C) holds 88 values, read from the executable (ledger R1 term).
+- Network-only preludes in the original (the reaction adjustment 0x4C0DE0 and the quest setter return early on a network client) do not
   apply to single player and are not modelled.
 
 ## Rules (`Arcanum.Simulation.Reaction`)
@@ -76,7 +77,7 @@ whatever the write does.
 The Steamwoven drop is an ordinary negative change, so the negative rules of `Adjust` apply to it as if the original had
 subtracted: a leader with extraordinary charisma is immune (no change at all), any other follower gets the "check
 leader" mark, which the Original rise never sets; the follow check runs in both modes.
-| R1 effect owner | the PC's `reaction` effects | the same (CE slip, no switch) | none |
+| R1 effect owner | the PC's `reaction` effects | the same (the original, ledger R1 effects; no switch) | none |
 | LM12 race table | unchecked index | refused in both (no out-of-bounds) | none |
 
 The state has one schema for both modes, so `SelectRules` changes only the next hit decision.

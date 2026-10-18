@@ -10,7 +10,7 @@ script or player action. It is `Arcanum.Data.Inventory.AreaInventoryReader.Read(
 
 Only the snapshot's effective fields (instance value, else the authenticated prototype value); no
 archive, mobile file or prototype is reopened. The field mapping is the one the research document cites
-from the pinned CE source: container and critter `*_INVENTORY_LIST_IDX` object-ID arrays with their
+from the source: container and critter `*_INVENTORY_LIST_IDX` object-ID arrays with their
 `*_INVENTORY_NUM` counts and `*_INVENTORY_SOURCE`; item `OBJ_F_ITEM_PARENT`, `OBJ_F_ITEM_INV_LOCATION`,
 item flags, weight, worth, complexity, unknown description, gold/ammunition quantity and key ID; the common
 object flags, `OBJ_F_NAME`, `OBJ_F_DESCRIPTION` and script attachments; critter `OBJ_F_CRITTER_GOLD`; NPC

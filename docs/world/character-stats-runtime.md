@@ -13,21 +13,21 @@ creation, skills, levels, backgrounds and effect lifetimes are separate requirem
 
 ## Evidence and provenance
 
-Rules profile `steamwoven-character-stats-v1`. Numbers are **source claims** read in
-CE at [`a7ff41b`][ce] (Sustainable Use License 1.0, **not MIT**); they were not
-re-observed in the retail executable, so retail parity is **NOT_VERIFIED**. The C# code,
-its structure and the synthetic tests are independent MIT work; no CE code is copied,
-translated or linked.
+Rules profile `steamwoven-character-stats-v1`. Numbers are **source claims**: a reading
+of the original's functions at the cited addresses, evidence level F0 (not checked in the
+executable) unless the [verification ledger](../research/original-verification-ledger.md)
+lists them, so retail parity is **NOT_VERIFIED**. The C# code, its structure and the
+synthetic tests are independent MIT work.
 
 | Claim | Source |
 | --- | --- |
-| Stored stat ranges and defaults (primary 1..20, default 8; magick/tech points 0..210, default 0) and derived clamp ranges | [`stat.c` tables][stat-tables] |
-| Racial primary maxima (dwarf/half-orc ST,CN 21; elf/dark elf DX,BE,WP 21; half-elf DX 21; gnome WP 22; halfling DX 22; half-ogre ST 24; ogre ST 26; orc ST,CN 22) | [`stat_level_max`][stat-max] |
-| Effective = base, then effects, then clamp to the race range | [`stat_level_get`][stat-get] |
-| Derived formulas, derived writes ignored | [`stat_base_get` / `stat_base_set`][stat-base] |
-| Race/gender setter removes the old innate effect before applying the new one | [setter side effects][stat-base], [effect causes][effect-cause] |
-| Aggregation: sum of percents, product of multipliers, product of divisors, sum of adds, largest minimum, smallest maximum, in that order | [`effect_adjust_func`][effect-adjust] |
-| Innate effect contents (e.g. the female ST −1 / CN +1 effect, per-race effects) | Data: `rules\effect.mes` via [`effect_init`][effect-init]. **Not built in**: callers supply an `InnateEffectTable`. |
+| Stored stat ranges and defaults (primary 1..20, default 8; magick/tech points 0..210, default 0) and derived clamp ranges | the original's stat tables |
+| Racial primary maxima (dwarf/half-orc ST,CN 21; elf/dark elf DX,BE,WP 21; half-elf DX 21; gnome WP 22; halfling DX 22; half-ogre ST 24; ogre ST 26; orc ST,CN 22) | the racial stat maximum (0x4B0FC0, 0x4B0FD0) |
+| Effective = base, then effects, then clamp to the race range | the effective stat getter (0x4B0490) |
+| Derived formulas, derived writes ignored | the base stat getter and setter (0x4B0740, 0x4B0980) |
+| Race/gender setter removes the old innate effect before applying the new one | setter side effects (0x4B0740, 0x4B0980), effect causes (0x4E9F70, 0x4EA100, 0x4EA200, 0x4EA2E0, 0x4EA3C0) |
+| Aggregation: sum of percents, product of multipliers, product of divisors, sum of adds, largest minimum, smallest maximum, in that order | the effect aggregation (0x4EA690, 0x4EA6C0) |
+| Innate effect contents (e.g. the female ST −1 / CN +1 effect, per-race effects) | Data: `rules\effect.mes` via the effect table load (0x4E99F0). **Not built in**: callers supply an `InnateEffectTable`. |
 
 Derived formulas over effective inputs (C integer division, truncation toward zero):
 
@@ -65,7 +65,7 @@ Derived formulas over effective inputs (C integer division, truncation toward ze
   −100..100, not read from a world location. Poison level (0..1000) and crippled legs
   (ARC-COMBAT-002) are query arguments too: poison lowers ST and DX by `min(3, poison / 100)`
   and crippled legs lower speed by 5, added to the base before effects and the clamp, as in
-  [`stat_level_get`][stat-get]. `GetBase` still reports the stored value or the formula.
+  the effective stat getter (0x4B0490). `GetBase` still reports the stored value or the formula.
 
 ## API
 
@@ -89,11 +89,3 @@ encumbrance recalculation on effect changes; effect lifetimes and durations (FR-
 skills and resistances; character creation beyond the pre-made start of
 [ARC-WORLD-015](starting-hero-runtime.md) (which reads the innate effects from `effect.mes`); the character sheet UI.
 
-[ce]: https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd
-[stat-tables]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L38-L204
-[stat-max]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L891-L960
-[stat-get]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L336-L526
-[stat-base]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L540-L798
-[effect-cause]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L488-L638
-[effect-adjust]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L732-L850
-[effect-init]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L252-L290

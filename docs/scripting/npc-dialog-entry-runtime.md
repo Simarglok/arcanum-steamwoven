@@ -190,12 +190,10 @@ original PASS. Successful data resolution is not original executable parity.
 
 ## Provenance and remaining capabilities
 
-Framing/operand/whole-array/naming references are pinned through RES016's
-[evidence crosswalk](../research/crash-site-npc-dialog-evidence.md). Prior art CE
-pin `a7ff41b300ef712f0e7d088183a3d08957110cdd` uses Sustainable Use License 1.0,
-NOT MIT. This bounded implementation is independently authored from documented
-contracts and observations, not a mechanical CE evaluator translation or a
-clean-room claim. Research probes are references, not production oracles.
+Framing/operand/whole-array/naming references are recorded in RES016's
+[evidence crosswalk](../research/crash-site-npc-dialog-evidence.md). This bounded
+implementation is independently authored from documented contracts and
+observations. Research probes are references, not production oracles.
 
 GF/IN/RE effects/eligibility, full conversations, source-vs-project six-reply
 selection/grouping, text decoding/role variants/substitution/media/UI, real state

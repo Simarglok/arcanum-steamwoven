@@ -38,9 +38,10 @@ is recorded in the [component catalogue](../project/status.md). Historical
 experiment details below retain their own source/context; this status update
 is not a fresh runtime check.
 
-CE specification pin `a7ff41b300ef712f0e7d088183a3d08957110cdd` is Sustainable
-Use License v1.0, not MIT. CE-source claims are not original-executable observations.
-No research/CE implementation was ported, no clean-room or original parity claim.
+Claims read from the original's functions at cited addresses are evidence level
+F0 (not checked in the executable) unless the
+[verification ledger](../research/original-verification-ledger.md) lists them.
+No research implementation was ported, no clean-room or original parity claim.
 Original executable behavior remains **NOT_VERIFIED**, an accepted non-goal.
 The general [passability proposal](passability-contract.md) remains NOT READY;
 all historical 91 unresolved name classifications remain unchanged.

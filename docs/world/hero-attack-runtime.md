@@ -15,15 +15,16 @@ effective object fields. No NPC fights back. Requirements:
 
 ## Evidence
 
-- The reconstruction at its pinned commit (see the [original executable check](../research/original-executable-check.md)), read first: `ui/intgame.c` (`sub_54ED30`, the click on a target),
-  `skill.c` (skill base, level, key-stat cap, training), `critter.c` (`critter_is_monstrous`), `object.c` (resistance),
-  `combat.c` (`combat_dmg`, the dying animation), `anim.c` (the attack and attempt-attack goals, the death and fall-down
+- The original's functions, read first: the in-game click on a target (0x54ED30), the skill functions (skill base,
+  level, key-stat cap, training), the monstrous test (0x45F730), the object resistance, combat damage (0x4B4390, the
+  dying animation) and the animation functions (the attack and attempt-attack goals, the death and fall-down
   animations).
 - The retail 1.0.7.4 `Arcanum.exe`, read statically by two independent readers per the
   [original executable check](../research/original-executable-check.md); rows FA1–FA10 of the
-  [verification ledger](../research/original-verification-ledger.md#hero-attack-arc-combat-005). The original differs from the
-  reconstruction in three of its slips (a follower click, a corpse click without Alt, the inactive-PC test of the click); none is a bug of the
-  original, so there is no rule-mode switch.
+  [verification ledger](../research/original-verification-ledger.md#hero-attack-arc-combat-005). Three rows differ from that first
+  reading: a click on a follower of the hero does nothing unless left Alt is held (FA2), a corpse click without Alt does
+  nothing (FA3), and the click does nothing when the PC is not active, is stoned, or is stunned or paralysed (FA6); none
+  is a bug of the original, so there is no rule-mode switch.
 - [Function registry](../verification/README.md) rows (F2, two readings): skill points, base level, level, key-stat cap and
   training (`CombatSkillRules`, 0x4C5FA0, 0x4C5E50, 0x4C5EB0, 0x4C5F70, 0x4C60C0) and the critter resistance
   (`CombatantRules.Resistances`, 0x43D6D0); no function oracle covers them yet.
@@ -38,7 +39,7 @@ effective object fields. No NPC fights back. Requirements:
 | Skill level (`CombatSkillRules`, FA7) | 4 per stored point (bits 0..5), or 20 for the melee of a monstrous critter, then the skill's effect changes, clamped 0..20, then capped by the dexterity table `3,3,3,3,3,7,7,7,11,11,11,15,15,15,19,19,19,20,20,20` (dexterity clamped to 1..20); all five combat skills (bow, dodge, melee, throwing, backstab) key on dexterity. |
 | Training (FA8) | Stored bits 6..7; a monstrous critter's melee takes the highest tier whose melee level and character level reach 1/10, 9/20, 18/30 in order. |
 | Monstrous (FA9) | Mechanical, monster, animal or undead critter flag. |
-| Resistance (`CombatantRules.Resistances`) | Stored + worn armour (with its magic, scaled for the wearer) + `5 × (CN − 4)` for poison when positive, clamped 0..95 unless a monstrous NPC (`object_get_resistance`, ledger EQ8); resistance effects are not applied. |
+| Resistance (`CombatantRules.Resistances`) | Stored + worn armour (with its magic, scaled for the wearer) + `5 × (CN − 4)` for poison when positive, clamped 0..95 unless a monstrous NPC (the resistance getter 0x43D6D0, ledger EQ8); resistance effects are not applied. |
 | Reach | The weapon's range, 1 bare-handed; farther away the click route walks (running, as every object approach) to the nearest standable cell within reach first, the attack goal's move-near step. |
 | Animation | The hero's bare-handed attack ART (animation 20, weapon slot 1: 9 frames, 15 fps, action frame 6) played by [`RealTimeCombatRules`](real-time-combat-runtime.md#rules-realtimecombatrules) at the rate of the hero's Speed and the pause of its weapon speed; one attack sound roll (1..4) per attack start; facing the target. |
 | Hit | The update that shows the action frame runs the hit once when the target is still within reach (else the attack ends without one): `GameSessionOwner.AttackCritter`. |

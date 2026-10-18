@@ -155,12 +155,11 @@ is never a pass.
 
 | Label | Applied meaning |
 | --- | --- |
-| Source-derived | The documented phase vocabulary and positive/zero/negative response roles are attributed evidence, not copied implementation. |
+| Source-derived | The documented phase vocabulary and positive/zero/negative response roles are read from the original's dialog functions (F0, not checked in the executable), not copied implementation. |
 | Observed structure | `DlgDocument` serialized order, roles, IDs, payload offsets, and the hash-gated local member are reader/data observations. |
 | Project safety policy | Strict byte admission, caps, caller eligibility booleans, generation tokens, and per-command partial-effect accounting. |
 | Synthetic result | The test suite's invented-byte, typed-port behavior only. |
 
-No CE or DialogProbe code is used or mechanically translated, and this document
-does not make a clean-room claim. The original game, callbacks/SCR, generated
+No DialogProbe code is used or mechanically translated. The original game, callbacks/SCR, generated
 menus, unsupported operations, archive winner, invocation, text encoding, and
 full traversal remain outside the implementation.

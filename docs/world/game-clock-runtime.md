@@ -11,11 +11,11 @@ publication or verified merge delivery; those are separate exact-candidate gates
 ## Evidence and deviations
 
 The [versioned RES-020 policy][res020] and [RES-018 research][res018] distinguish
-Source, Data-observed, Proposal and Unknown. CE/TIG at
-`a7ff41b300ef712f0e7d088183a3d08957110cdd` is one attributed lineage under
-[Sustainable Use License 1.0][license], **not MIT** or independent retail evidence.
-This runtime and its synthetic fixtures are independently authored MIT work;
-no CE implementation is copied, mechanically translated or a runtime dependency.
+Source, Data-observed, Proposal and Unknown. Source is a reading of the original's
+functions at the cited addresses, evidence level F0 (not checked in the executable)
+unless the [verification ledger](../research/original-verification-ledger.md) lists
+them; it is not independent retail evidence. This runtime and its synthetic fixtures
+are independently authored MIT work.
 Selected startup year1885/hour15 is retained research data evidence, not a newly
 observed original-data or executable result. Fingerprints supplied to this API
 are declarations for binding, not an attestation that a resource was validated.
@@ -54,8 +54,8 @@ observation admits nothing; an interval under 5 ms admits nothing and keeps the
 reference (short intervals accumulate); an admitted interval moves the reference and
 is clamped to 250 ms, the excess discarded; game time gains 8 × the admitted interval
 (one game hour per 7.5 real minutes at a steady frame rate). A host time that goes
-backwards restarts the reference; `Reset()` forgets it. The 8× rate is the CE source
-observation, not an original-runtime measurement (**NOT_VERIFIED**). Pause stays the
+backwards restarts the reference; `Reset()` forgets it. The 8× rate is a source
+reading (F0), not an original-runtime measurement (**NOT_VERIFIED**). Pause stays the
 clock's: the host keeps observing while paused and the clock ignores the ordinary
 advance, so resume has no catch-up. Network gate counters, turn-based combat and
 animation time are not modelled. Tests: `tests/Arcanum.Simulation.Tests/Clock/TimeFlowTests.cs`.
@@ -225,4 +225,3 @@ implementation/test evidence is not whole delivery completion.
 
 [res020]: https://github.com/Simarglok/arcanum-steamwoven/blob/e860d16657feeb2abe9d8da69789eeb9254c6c06/docs/world/game-clock-policy.md
 [res018]: https://github.com/Simarglok/arcanum-steamwoven/blob/b9a9eb8c290b086d698c0bc33bd963b7f828de13/docs/world/time-lighting-contract.md
-[license]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/LICENSE.md

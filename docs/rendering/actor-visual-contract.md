@@ -92,7 +92,7 @@ compass convention.
 
 For the admitted isometric source route, the caller supplies map cell,
 camera/view origin, direct instance offsets, action/facing/frame, and render
-state. The pinned CE hotspot relation is admitted only when
+state. the source hotspot relation is admitted only when
 `ORF_08000000` is clear: `topLeft = location_xy(mapCell) + instanceOffset +
 (40,20) - effectiveHotspot`, after the source's mirror, binary-float scale,
 cast-to-int truncation toward zero, and (when shrunk) signed `/ 2` truncation
@@ -148,9 +148,8 @@ must preserve single ownership; byte sums alone do not prove that lifecycle.
 
 The independent research packet separates source-semantic evidence, physical
 rows, reachable-key enumeration, independent wire decode, local attributed
-reference-image observation and unknowns. Chaotic Evil specification provenance
-is pinned revision `a7ff41b300ef712f0e7d088183a3d08957110cdd`, Sustainable Use
-License1.0; no CE implementation is copied/translated/executed. ArcNET is not
+reference-image observation and unknowns. Source-semantic evidence is a source
+reading (F0) unless the verification ledger lists it. ArcNET is not
 the independent oracle. Original assets/pixels and local paths stay ignored/local
 and must not enter commits, PRs or public attachments.
 

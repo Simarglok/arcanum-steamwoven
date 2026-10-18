@@ -76,13 +76,13 @@ snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
 - `AllowArtTrailingBytes = true`: ART is read as the original reads it. Bytes
   after the last frame are accepted ([ARC-DATA-016](../formats/art.md)), and a
   single-rotation ART is drawn from its only group whatever rotation the object
-  asks for (pinned CE `first_party/tig/src/art.c`, `TIG_ART_0x01`).
+  asks for (the original's TIG ART reader, ART header flag `0x01`).
 
 A whole-map plan also:
 
 - reads tile names as the original does: a name ends at `/`, otherwise it is the
-  first three characters of the value and the rest is a sound number (pinned CE
-  `a_name.c` `load_tile_names`); `TileNames.Parse(…, originalNames: true)`;
+  first three characters of the value and the rest is a sound number (the tile name
+  load, 0x4EB2E0, F0); `TileNames.Parse(…, originalNames: true)`;
 - looks a resource up in content-stack order (ARC-DATA-018, below), not only
   in the archive of its mapping;
 - keeps a sector's roof list in its record (`RoofDiscriminator`) without

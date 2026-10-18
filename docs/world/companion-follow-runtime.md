@@ -14,7 +14,8 @@ through the cave entrance and exit with the PC ([map change](#map-change-arc-wor
 (ARC-WORLD-020, [gait runtime](gait-runtime.md); his own ART stride is not read), only the two cave endpoints carry him (no other map, no
 follower of a follower, no unconscious-follower rule, no carried inventory payload), no orders, loyalty, wait timer, combat or turn-based cost, no
 refusal line text, and the PC side of the follow check is still the AREA diagnostic profile (charisma 8, level 1), not
-the session hero. Distances and order are source claims read in CE at `a7ff41b300ef712f0e7d088183a3d08957110cdd`;
+the session hero. Distances and order are a reading of the original's functions, evidence level F0 (not checked
+in the executable) unless the [verification ledger](../research/original-verification-ledger.md) lists them;
 original executable parity is **NOT_VERIFIED**.
 
 ## Follow rules (`Arcanum.Simulation.Party`)
@@ -116,7 +117,7 @@ frame key), like the other load checks; it is not a runtime failure.
 - A companion standing on another map is **absent** from its home map: its T0 body is not drawn, picked, named or
   talked to there, and its T0 record does not block (it is in the overlay's moved records).
 - A **visitor** walks, follows, waits and blocks like at home. Its body is lit where it stands with its own visual
-  (`AreaCompanionGroup.Light`: the CE object colour at its current cell over the map's tile classes and stationary
+  (`AreaCompanionGroup.Light`: the original's object colour (F0) at its current cell over the map's tile classes and stationary
   lights); moved companion bodies on the exterior are lit at their current cell the same way. The hover index names and
   picks it where it is drawn, and a click talks to it through the exterior conversation host (its dialog state stays
   on the exterior map).

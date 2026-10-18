@@ -5,7 +5,7 @@
 `Arcanum.Scripting.GlobalFlags` implements ARC-SCRIPT-003's bounded, Godot-free,
 synchronous in-memory GF owner and standalone typed GF comparison/write adapter.
 It lives in the existing Scripting assembly, with no new package or runtime
-CE dependency. Calls, input collections and all external mutations must be
+dependency. Calls, input collections and all external mutations must be
 serialized by the host; this is not thread-safe or distributed exactly-once.
 
 This is **not** a DLG expression parser, `DialogSession` integration, SCR VM,
@@ -138,7 +138,7 @@ extra arguments, controls, non-ASCII and unsupported schemas/opcodes fail before
 any owner read/write. The decimal flag fits Int32 and must belong to the binding;
 the decimal bool is exactly numeric0 or1. Overflow is checked before multiplication
 can overflow. Limits are fixed; callers cannot enlarge them through descriptors.
-This stricter transport admission is project policy, not CE setter permissiveness
+This stricter transport admission is project policy, not the original setter's permissiveness (unmasked writes, ledger X10)
 or a change to the existing DLG parser.
 
 `GlobalFlagAdapter(binding, owner)` requires the owner's **exact validated binding
@@ -215,16 +215,14 @@ is the accepted no-bump rule, **not** RES-019's worksheet's illustrative
 always-increment convention. Neither these tests nor that worksheet establish
 whole Virgil-trace PASS or original-runtime parity.
 
-Source-confirmed GF read-equality and explicit write observations are attributed
-to `alexbatalov/arcanum-ce` at
-`a7ff41b300ef712f0e7d088183a3d08957110cdd`: [GF query][query],
-[GF action][action], [global-bit owner][globals]. This is one CE/TIG lineage under
-[Sustainable Use License1.0][license], **not MIT** and not independent retail
-corroboration. This owner/adapters/fixtures are independently authored MIT work;
-no CE code is copied, mechanically translated or executed as a dependency.
+Source-confirmed GF read-equality and explicit write observations come from a
+reading of the original's functions at the cited addresses: GF query (0x4150D0),
+GF action (0x415BA0), global-bit owner (0x444CF0, 0x444D20), evidence level F0
+(not checked in the executable) except the unmasked write (0x444D20, ledger X10).
+This owner/adapters/fixtures are independently authored MIT work.
 Identity/version/Unknown/bootstrap/bounds/receipt/strict admission and equal-write
-semantics are accepted ARC-SCRIPT-003 project safety policies, not observed CE
-version guarantees. Original live flags/defaults remain Unknown and are not
+semantics are accepted ARC-SCRIPT-003 project safety policies, not observed
+original version guarantees. Original live flags/defaults remain Unknown and are not
 imported. No original payload, private machine paths or private ledgers are public.
 
 Run the pinned SDK process-local [root checks](../workflow/toolchain.md), plus:
@@ -240,7 +238,3 @@ task; GUI/export/device/real-game execution are not required or claimed.
 Independent exact-head FULL review, private PR publication and verified merge
 receipt remain separate delivery stages; implementation is not whole delivery.
 
-[query]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1479-L1483
-[action]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1973-L1975
-[globals]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L415-L426
-[license]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/LICENSE.md

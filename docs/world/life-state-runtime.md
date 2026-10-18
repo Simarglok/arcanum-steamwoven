@@ -13,28 +13,29 @@ Two layers, both Godot-free:
 - `GameSessionOwner` life domain: the hero's life and every NPC life the session changed, with the session's version
   guard, revision, seeded rolls and snapshot schema 8 (schema 9 since ARC-WORLD-024 adds the timers' event queue).
 
-Numbers and order are the CE reading at `a7ff41b300ef712f0e7d088183a3d08957110cdd` (Sustainable Use License, read only,
-nothing copied). The fatigue recovery step was also checked in the original 1.0.7.4 executable (`Arcanum.exe` at
-0x45E610, read-only `llvm-objdump`): elapsed seconds `>> 3`, `/ 10`, at least 1, times the HealRate stat, as in CE.
+Numbers and order are a reading of the original's functions at the cited addresses, evidence level F0 (not checked in
+the executable) unless the [verification ledger](../research/original-verification-ledger.md) lists them. The fatigue
+recovery step was checked in the original 1.0.7.4 executable (`Arcanum.exe` at 0x45E610, read-only `llvm-objdump`):
+elapsed seconds `>> 3`, `/ 10`, at least 1, times the HealRate stat.
 Everything else keeps original-runtime parity **NOT_VERIFIED**.
 
 ## Source rules
 
 | Rule | Source |
 | --- | --- |
-| Max HP = `4 × HP points + HP adjustment + WP + 2 × (ST + level) + 4`; current = max − HP damage; dead = current ≤ 0 | [`object_hp_*`][hp], [`critter_is_dead`][states] |
-| Max fatigue = `4 × fatigue points + adjustment + 2 × (level + CN) + WP + 4`; unconscious = current fatigue ≤ 0 and not undead; active = neither, not stunned, paralysed or stoned | [fatigue][fatigue], [states][states] |
-| Poison lowers ST and DX by `min(3, poison / 100)` before effects; crippled legs lower speed by 5 | [`stat_level_get`][stat-get] |
-| The poison level is 0..1000 and set to 0 for a critter with extraordinary CN, on every write | [`stat_base_set`][stat-set] |
-| Damage step: undead/mechanical take no poison, stoned take no HP/fatigue/poison; an invulnerable or dead critter takes nothing; then stun (not with a knockdown/knockout), knockdown, knockout (`fatigue damage = max fatigue + 10..20` while conscious), scar, blind, arm (first, else second at d100 ≤ 50; wielded weapon and shield drop), legs, HP damage (≥ 0), fatigue (positive, not fatigue-immune), poison; a critter now dead dies | [`combat_dmg`][dmg] |
-| Death: HP damage pinned at 32,000, death time stored, dying animation plain for a kill or ≤ 20 damage, else head, leg or body by location | [`combat_dmg`][dmg], [`critter_notify_killed`][killed] |
-| Kill: the damage step with the death flag (current HP as damage, then the poison write), then HP damage 32,000 even when invulnerable; a critter the poison write brings back above 0 HP gets no death step but the pin | [`critter_kill`][kill], [`combat_dmg`][dmg] |
-| Heal: five scars without the full flag; a dead critter only with resurrect (refused for unrevivifiable + reanimate or unresurrectable without it; clears stun, fatigue damage 10); full heal (all HP, all fatigue when asked, five scars, blind and crippled cleared) or single cures; then HP, fatigue, poison while there is damage | [`combat_heal`][heal] |
-| Fatigue recovery event: `HealRate × max(1, elapsed s / 80)`, not for the dead | [fatigue event][fatigue-event] |
-| Resting: `HealRate × hours` HP and three times that fatigue; the hourly NPC event uses `max(1, elapsed s / 3600)` hours | [rest][rest] |
-| Poison ticks: damage 1 / 2 (≥ 200) / 3 (≥ 550) normal damage every 15 s through the damage step without a weapon; recovery −PoisonRecovery every 120 s | [poison event][poison] |
+| Max HP = `4 × HP points + HP adjustment + WP + 2 × (ST + level) + 4`; current = max − HP damage; dead = current ≤ 0 | the hit-point functions (0x43D410, 0x43D430, 0x43D4C0, 0x43D4E0, 0x43D510, 0x43D530, 0x43D5A0, 0x43D600, 0x43D630), the critter state tests (0x45D790, 0x45D800, 0x45D870, 0x45D8D0) |
+| Max fatigue = `4 × fatigue points + adjustment + 2 × (level + CN) + WP + 4`; unconscious = current fatigue ≤ 0 and not undead; active = neither, not stunned, paralysed or stoned | fatigue (0x45D5A0, 0x45D670, 0x45D700), states (0x45D790, 0x45D800, 0x45D870, 0x45D8D0) |
+| Poison lowers ST and DX by `min(3, poison / 100)` before effects; crippled legs lower speed by 5 | the effective stat getter (0x4B0490) |
+| The poison level is 0..1000 and set to 0 for a critter with extraordinary CN, on every write | the base stat setter (0x4B0980) |
+| Damage step: undead/mechanical take no poison, stoned take no HP/fatigue/poison; an invulnerable or dead critter takes nothing; then stun (not with a knockdown/knockout), knockdown, knockout (`fatigue damage = max fatigue + 10..20` while conscious), scar, blind, arm (first, else second at d100 ≤ 50; wielded weapon and shield drop), legs, HP damage (≥ 0), fatigue (positive, not fatigue-immune), poison; a critter now dead dies | combat damage (0x4B4390) |
+| Death: HP damage pinned at 32,000, death time stored, dying animation plain for a kill or ≤ 20 damage, else head, leg or body by location | combat damage (0x4B4390), the kill notification (0x45DA20) |
+| Kill: the damage step with the death flag (current HP as damage, then the poison write), then HP damage 32,000 even when invulnerable; a critter the poison write brings back above 0 HP gets no death step but the pin | the kill (0x45D900), combat damage (0x4B4390) |
+| Heal: five scars without the full flag; a dead critter only with resurrect (refused for unrevivifiable + reanimate or unresurrectable without it; clears stun, fatigue damage 10); full heal (all HP, all fatigue when asked, five scars, blind and crippled cleared) or single cures; then HP, fatigue, poison while there is damage | the heal (0x4B58C0) |
+| Fatigue recovery event: `HealRate × max(1, elapsed s / 80)`, not for the dead | fatigue event (0x45E610) |
+| Resting: `HealRate × hours` HP and three times that fatigue; the hourly NPC event uses `max(1, elapsed s / 3600)` hours | rest (0x45E910, 0x45EA00) |
+| Poison ticks: damage 1 / 2 (≥ 200) / 3 (≥ 550) normal damage every 15 s through the damage step without a weapon; recovery −PoisonRecovery every 120 s | poison event (0x4B1170, 0x4B1310, 0x4B1350) |
 
-Anomaly A5 (ARC-RES-030): CE clears blindness when crippled legs are healed; the original 1.0.7.4 clears crippled legs
+Anomaly A5 (ARC-RES-030): healing crippled legs clears crippled legs, not blindness, in the original 1.0.7.4
 ([anomaly decisions](../research/npc-combat-ai-plan.md#anomaly-decisions)). Both rule settings follow the original, so
 there is no switch.
 
@@ -136,15 +137,3 @@ before this schema, so nothing is lost.
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~LifeState"
 ```
 
-[hp]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L1570-L1665
-[fatigue]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L462-L535
-[states]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L569-L615
-[kill]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L622-L650
-[killed]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L657-L757
-[fatigue-event]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L1304-L1371
-[rest]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L1421-L1486
-[stat-get]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L336-L526
-[stat-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L624-L798
-[dmg]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L1390-L1944
-[heal]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L2104-L2291
-[poison]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L1007-L1135

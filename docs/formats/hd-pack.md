@@ -347,4 +347,4 @@ handheld (Steam Deck class) that also wants room for the game.
   synthetic. Visual quality of any method is ARC-RES-033/038 and ARC-RENDER-015.
 
 Provenance: format and code written for this repository from its own frame keys and the
-public PNG specification; no CE code or structure is used.
+public PNG specification.

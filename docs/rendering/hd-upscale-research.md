@@ -431,5 +431,4 @@ the owner runs them locally. Not legal advice.
   process's own and is not a VRAM measurement on discrete GPUs.
 
 Provenance: measurements by this repository's own decoder and Area code on the
-owner's installation; tools are used as external programs; no CE code or structure is
-used.
+owner's installation; tools are used as external programs.

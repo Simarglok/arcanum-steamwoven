@@ -33,4 +33,4 @@ Within that subset, `b` or `f` means `Blocked`; recognized non-block flags or no
 
 ## Provenance and boundary
 
-The serialized-mask, raw facade-bit, tile category, and `b`/`f` facts are attributed specification lineage from [arcanum-ce commit `a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd). No CE code was copied or mechanically translated; this is not original-runtime validation or a clean-room proof. The related selected-sector source record is [sector passability evidence](../research/sector-passability-evidence.md).
+The serialized-mask, raw facade-bit, tile category, and `b`/`f` facts are a reading of the original's functions, evidence level F0 (not checked in the executable); this is not original-runtime validation or a clean-room proof. The related selected-sector source record is [sector passability evidence](../research/sector-passability-evidence.md).

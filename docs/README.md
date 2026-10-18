@@ -15,8 +15,8 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Toolchain and verification entry points](workflow/toolchain.md)
 - [Private local diagnostic launch and build retention](workflow/local-development.md)
 - [Task workflow](workflow/tasks.md) and [task naming](workflow/task-naming.md)
-- [Original executable check](research/original-executable-check.md): how to tell a CE reconstruction slip from a bug of the original game, and the function oracle (emulating single functions of the executable)
-- [Original oracle and CE exclusion (ARC-RES-051)](research/original-oracle-research.md): trial results, tools and plan for checking Steamwoven against the executable and phasing out CE
+- [Original executable check](research/original-executable-check.md): how original behaviour and bugs of the original game are classified, and the function oracle (emulating single functions of the executable)
+- [Original oracle and reconstruction removal (ARC-RES-051)](research/original-oracle-research.md): trial results, tools and plan for checking Steamwoven against the executable and removing the source reconstruction
 - [Arcanum.Data](Arcanum.Data.md)
 - [Arcanum.Godot viewer](Arcanum.Godot.md)
 
@@ -53,13 +53,13 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [ARC-UI-001 display/UI validation](input/display-ui-validation.md)
 - [Gamepad prototype evidence](input/gamepad-prototype.md)
 - [Synthetic movement study](input/gamepad-movement-study.md)
-- [Bounded CE local-pathfinding study](input/arcanum-pathfinding-study.md)
+- [Bounded local-pathfinding study](input/arcanum-pathfinding-study.md)
 - [Minimal dialog contract (proposal only)](scripting/dialog-minimal-contract.md)
 - [Bounded dialog transition runtime](scripting/dialog-transition-runtime.md)
 
 ## Research evidence
 
-- [ART decoder CE-source-derived specification record](research/art-ce-spec.md)
+- [ART decoder specification record](research/art-ce-spec.md)
 - [ART research evidence record](research/art-evidence.md)
 - [Actor visual evidence and anchor readiness gap (ARC-RES-009)](research/actor-visual-evidence.md)
 - [Actor world-anchor placement evidence (ARC-RES-010)](research/actor-placement-evidence.md)

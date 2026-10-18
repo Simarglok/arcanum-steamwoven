@@ -13,18 +13,18 @@ gap policy and numeric map/sector resolution, not a general light graph.
 
 These classifications are deliberately distinct:
 
-- **Source**: the attributed CE/TIG code at
-  `a7ff41b300ef712f0e7d088183a3d08957110cdd`. This is one lineage, not independent
-  original-runtime evidence. Its [license](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/LICENSE.md)
-  is Sustainable Use License 1.0, **not MIT**. The inspector is independently
-  authored; no CE implementation was copied or mechanically translated.
+- **Source**: a reading of the original's functions (game and TIG) at the cited
+  addresses, evidence level F0 (not checked in the executable) unless the
+  [verification ledger](../research/original-verification-ledger.md) lists them.
+  This is one reading, not independent original-runtime evidence. The inspector is
+  independently authored.
 - **Actual data**: bounded read-only observations of the explicitly selected
   original module, prototype files and authentic core-mobile aggregate. Identity,
   unique entry selection, byte offsets and field tuples were independently
   reconciled. No original tables, text, pixels or binary fixtures are published.
 - **Proposal**: the strict research evaluator and future API/state shapes below.
   They are not accepted production compatibility policy or existing public APIs.
-- **Unknown / CE TODO / NOT_READY**: a concrete evidence frontier, not a zero,
+- **Unknown / NOT_READY**: a concrete evidence frontier, not a zero,
   fallback color, live handle, promise of parity or authorization to implement.
 
 The [complete-area loader](crash-site-area-loader.md),
@@ -38,20 +38,20 @@ Unmerged rendering/input/script candidates are not research inputs.
 
 ## Clock wire, startup and ownership
 
-**Source:** [time kinds and wire][clock-wire] distinguish real, game and animation
-queues. [DateTime wire][datetime-wire] contains unsigned 32-bit day and millisecond words over a
+**Source:** time kinds and wire distinguish real, game and animation
+queues. DateTime wire contains unsigned 32-bit day and millisecond words over a
 64-bit representation. It is not one little-endian absolute millisecond integer.
 The reference date/epoch and original overflow behavior are not a production
 policy. Preserve both raw words and the source/profile binding.
 
-[Startup][startup] reads `rules/gameinit.mes`: key 4 is year, key 5 is hour.
+Startup (0x4B9C30) reads `rules/gameinit.mes`: key 4 is year, key 5 is hour.
 The missing-file branch selects 1885 / 15, but a present resource with absent keys
-is a different branch. [Clock initialization][clock-init] sets the initial game
+is a different branch. Clock initialization (0x45AD10, 0x45AD20, 0x45AD70, 0x45AD80, 0x45AD90, 0x45AE20, 0x45AE80) sets the initial game
 clock from its start parameters; static values alone do not establish module
 startup. **Actual data:** the selected module has year **1885**, hour **15**.
 Default noon scheme initialization is not clock startup.
 
-**Source calendar and boundaries** ([conversions][clock-calendar]):
+**Source calendar and boundaries** (conversions (0x45A840, 0x45A870, 0x45A890, 0x45A8B0, 0x45A8D0, 0x45A8E0, 0x45A900, 0x45A920, 0x45A950, 0x45A970, 0x45A9B0, 0x45A9E0, 0x45AA10, 0x45AA50, 0x45AAA0, 0x45AAC0, 0x45AAE0, 0x45AB00, 0x45AB20, 0x45AB40)):
 
 | Operation | Observed source rule / caveat |
 | --- | --- |
@@ -60,15 +60,15 @@ Default noon scheme initialization is not clock startup.
 | current day/month | formulas are exchanged relative to the ordinary getters; do not silently normalize the discrepancy |
 | add duration | carry only when the millisecond sum is **strictly greater** than 86,400,000; equality is left in that word |
 | zero delay | the delay constructor maps zero to 1, not a zero-duration event |
-| subtract duration | explicit CE TODO says the underflow path looks wrong; not reproduced as an accepted policy |
+| subtract duration | the underflow path computes an odd value (a bug of the original, ledger row Clock subtraction); not reproduced as an accepted policy |
 
-The [day predicate][day-predicate] uses `[06:00,18:00)`. Tests distinguish
+The day predicate (0x45ACF0) uses `06:00,18:00)`. Tests distinguish
 21,599,999 / 21,600,000 / 21,600,001 ms and 64,799,999 / 64,800,000 / 64,800,001 ms;
 the normalized proposal also distinguishes 86,399,999 / 86,400,000 / 86,400,001.
 The source strict-carry worksheet and normalized proposal are separate results.
 Checked arithmetic rejects overflow; it does not simulate C unsigned wrap.
 
-**Source admission:** [timeevent_ping and its gate][admission] ignore host elapsed
+**Source admission:** the time-event ping and its gate (0x45B300, 0x45B320, 0x45B340, 0x45B360, 0x45B370) ignore host elapsed
 less than 5 ms, clamp above 250 ms, always advance the real clock on an admitted
 ping, and conditionally advance game/animation clocks by 8 times elapsed. In the
 non-network-client branch, a closed gate freezes both; turn-based combat freezes
@@ -76,11 +76,11 @@ game time but not admitted animation time. The network-client branch has an
 additional admission limit. This is **not** unconditional wall-clock speed or an
 FPS rule. The bounded source worksheet tests the non-network branch only.
 The nested counter is incremented/decremented by the
-[menu caller][menu-gate-on], [menu close][menu-gate-off] and clock initialization.
-`sub_52A900()` is a zero [compatibility macro][network-stub] in this CE pin, not
-proof of the corresponding original network behavior.
+menu caller (0x541180), menu close (0x5412E0) and clock initialization.
+The network test in this branch was read as always false; that is not
+proof of the corresponding original network behavior (F0).
 
-The [due-event loop][admission] is outside the game-time advancement branch.
+The due-event loop (0x45B300, 0x45B320, 0x45B340, 0x45B360, 0x45B370) is outside the game-time advancement branch.
 An already-due event can still be admitted while game time does not advance.
 Therefore “clock frozen” does not prove globally paused callback delivery.
 General queue ordering, catch-up, rest/sleep, combat, travel and save restoration
@@ -88,14 +88,14 @@ remain dependencies, not implemented systems.
 
 ### Hour application is not next-hour alignment
 
-**Source:** [UI registration/reset][ambient-init] registers the ambient callback
+**Source:** UI registration/reset (0x57D240, 0x57D2C0, 0x57D2D0) registers the ambient callback
 and schedules initial/reset delay **1**. The event is game-time, while Light uses
-animation time ([event-kind table][event-kinds]).
-[Ambient enable/callback/reschedule][ambient-callback] reads the current game hour,
+animation time (event-kind table).
+Ambient enable/callback/reschedule (0x57D620, 0x57D640, 0x57D650, 0x57D660, 0x57D6C0) reads the current game hour,
 applies it if application is enabled, clears the typed event and schedules delay
 **3,600,000**. Enabling/rescheduling also immediately applies the current hour;
 disabling changes application state, not the callback scheduling path.
-[Delay construction][delay-api] and its [base selection][delay-base] use the current
+Delay construction (0x45B800, 0x45B820, 0x45B860, 0x45B880, 0x45B8A0) and its base selection (0x45BA30) use the current
 clock for that event kind. This is relative scheduling, not next-hour alignment.
 For example, scheduling at 21,600,001 gives deadline 25,200,001, not 25,200,000.
 No global pause suppression or original callback cadence is claimed.
@@ -107,22 +107,22 @@ question; this inspector does not answer it by installing a scheduler.
 
 ## Map, sector and numeric scheme resolution
 
-**Source:** [mapinfo loading][mapinfo] reads `LightScheme`; the absent-extension
+**Source:** mapinfo loading (0x4115D0) reads `LightScheme`; the absent-extension
 branch simply returns. Do not invent a per-map fallback from that branch.
-[Scheme definitions][scheme-definitions] define sector sentinel **0** and default
-scheme **1**. [Scheme resource resolution][scheme-resource] resolves the numeric
+Scheme definitions define sector sentinel **0** and default
+scheme **1**. Scheme resource resolution (0x4A7DA0, 0x4A7DC0, 0x4A7DD0) resolves the numeric
 catalogue key in `rules/Lighting Schemes.mes` to the named rules MES resource.
 Resource index order is not scheme identity and establishes no DAT/PATCH/loose
 precedence rule.
 
-[Sector metadata][sector-metadata] at version/tag `>= 0xAA0003` comprises six
+Sector metadata (0x4D1530) at version/tag `>= 0xAA0003` comprises six
 32-bit words: townmap, aptitude adjustment, scheme, then three sound words.
 The existing project framing retains 24 bytes; scheme is at metadata offset +8,
 not a guessed enum/ordinal. Absence of that metadata differs from explicit 0.
 The strict inspector rejects absent/negative scheme metadata rather than
 manufacturing an original default rule.
 
-[Active-PC sector notification][active-scheme] resolves sentinel 0 to the current
+Active-PC sector notification (0x4F2330) resolves sentinel 0 to the current
 map default and applies a changed scheme at the current game hour. This is an
 **active-sector ambient selection** seam, not proof that each simultaneously
 visible neighbour gets a different ambient scheme. Neighbour emitter support is
@@ -147,16 +147,16 @@ outside this bounded selection; no synthetic override is presented as actual dat
 
 ## Hourly channels and parsing frontier
 
-**Source:** [hour grammar and gap loop][scheme-parser] has 24 hour keys and six
+**Source:** hour grammar and gap loop (0x4A8060) has 24 hour keys and six
 components in **outdoor RGB, indoor RGB** order, despite the struct's member
-order. [Hour application][scheme-hour] chooses integer hourly values and calls
-`light_set_colors`; [palette refresh/invalidation][colors-update] refreshes
+order. Hour application (0x4A7EB0) chooses integer hourly values and calls
+the light colour setter (0x4D8560), which refreshes
 palettes and, when enabled, enumerates loaded sectors and invalidates.
 This is not continuous minute blending.
 
-Important source caveats: CE explicitly initializes local colors differently
-from the original; the allocated table is zeroed at initialization, not cleared
-on every parse ([initialization][scheme-init]). There is no cyclic edge fill.
+Important source caveats: the initial values of the parse's local colors are
+not checked in the executable (F0); the allocated table is zeroed at initialization, not cleared
+on every parse (initialization (0x4A7C80, 0x4A7C90)). There is no cyclic edge fill.
 Missing and empty keys enter the gap branch. The gap loop mutates its running
 colors; later separated gaps can use those mutated values. Empty leading/trailing
 slots and reload can therefore not be generalized to cyclic, zero or immutable
@@ -168,7 +168,7 @@ must be explicit. Interior empty runs use their independently stored bracketing
 anchors and integer step truncation toward zero:
 `left + distance * trunc((right-left)/span)` per component. A new parse gets a
 fresh table. Invalid/missing/edge states fail, never guessed zero/previous color.
-This is deliberately not an assertion of CE's multi-gap/reload result.
+This is deliberately not an assertion of the original's multi-gap/reload result.
 MES selection accepts brace pairs, whitespace, semicolon/line comments and
 bounded trailing 1..12 AM/PM hour annotations found on the selected resource;
 it is a research subset, not a universal MES implementation.
@@ -186,13 +186,13 @@ or original-runtime interpolation parity.
 
 ### Stationary wire versus a usable light
 
-[Wire declaration][serialized-light], [read][light-wire] and the [flag definitions][light-flags] give
+Wire declaration, read (0x4DDD20) and the flag definitions give
 a 48-byte serialized record (not a native pointer-sized struct):
 
 | Offset / width | Meaning established by source; retained frontier |
 | --- | --- |
 | 0 / 8 | owner-like word; not a persistent GUID or usable object handle |
-| 8 / 8 | raw location; stationary coordinate conversion remains CE TODO |
+| 8 / 8 | raw location; stationary coordinate conversion remains unknown |
 | 16,20 / 4 each | signed X/Y offsets |
 | 24 / 4 | flags, including unknown bits |
 | 28 / 4 | ART ID, not radius/intensity/direction |
@@ -203,8 +203,8 @@ a 48-byte serialized record (not a native pointer-sized struct):
 | 44 / 4 | uninterpreted padding |
 
 The existing Data owner retains twelve raw words, not typed live emitters.
-[Stationary placement][stationary-placement] has explicit coordinate TODOs;
-no `LOCATION_MAKE` interpretation is promoted to parity. Unexplained padding or
+Stationary placement (0x4F72C0) leaves its coordinate conversion unknown (F0);
+no packed-location interpretation is promoted to parity. Unexplained padding or
 palette words are preserved/hash-bound, not rejected merely for being nonzero.
 
 **Actual data:** zero serialized stationary records in all twenty selected
@@ -221,7 +221,7 @@ acquisition, mask export or visual parity is asserted by this research.
 
 ### Primary, overlay and carried descriptions are separate
 
-[Object fields][object-fields] distinguish serialized light flags/ART/color and
+Object fields distinguish serialized light flags/ART/color and
 three overlay arrays from runtime primary/overlay handles. The research FILE
 projection uses primary slots **12/13/14**, overlay slots **15/16/17**, preserving
 instance absent/null/empty/explicit-zero versus prototype defaults. Only the
@@ -257,49 +257,49 @@ remain separate dependencies, not implemented by this inspector.
 
 **Proven source dispositions:** OFF (1) excludes contribution; DARK (2) selects
 subtraction otherwise addition. INDOOR (8) / OUTDOOR (16) choose **emitter tint
-sources**, not spatial indoor-only/outdoor-only exclusion; the [tint helper][tint]
+sources**, not spatial indoor-only/outdoor-only exclusion; the tint helper (0x4DE390)
 prioritizes INDOOR if both are set. With neither flag set it retains custom color. Unknown bits
 remain Unknown. Synthetic literal words test these branches even when the actual
 supplement has none.
 
-[Sector load/fold][fold] refuses inventory world insertion and applies nocturnal
+Sector load/fold (0x4F7940) refuses inventory world insertion and applies nocturnal
 scenery gating: tile class 0 is ungated by day; nonzero tiles disable during
-`[6,18)` and enable at night. [Hour refresh][hour-refresh] additionally excludes
+`6,18)` and enable at night. [Hour refresh (0x4DDD90) additionally excludes
 respawning scenery, updates only a changed state and has **no equivalent inventory
 refusal in that function**. These seams must not be flattened into one rule or a
 universal time-sensitive-object policy. The helper's load/refresh decision tables
 are bounded source worksheets, not object-state mutation.
-[Primary/overlay creation/update][object-light] also differ: primary creation adds
+Primary/overlay creation/update (0x4D9590) also differ: primary creation adds
 an extra runtime flag; overlay creation uses primary light flags plus overlay bit,
 while overlay update uses its overlay flag array. That provenance difference is
 recorded; absent original overlay/mask/state inputs stay NOT_READY.
 
 ## Renderer boundary, layers and neighbours
 
-**Source:** [tile rendering][tiles] selects indoor for tile class 0, outdoor for
-nonzero, with constant/local-sampling paths. [Roof rendering][roofs] uses outdoor
+**Source:** tile rendering selects indoor for tile class 0, outdoor for
+nonzero, with constant/local-sampling paths. Roof rendering (0x439140) uses outdoor
 tint in the hardware path but flags 0 in the software path. The
-[palette callback][palette-callback] selects indoor/outdoor for tile/facade class;
+palette callback (0x4DE0B0) selects indoor/outdoor for tile/facade class;
 wall/critter/portal/scenery/container/roof/monster/unique-NPC use outdoor;
 ground items use outdoor, other item dispositions and interface/misc/light do not.
 This callback is not a complete universal render policy or proof all callers/modes
 use it identically. Do not replace these seams with a whole-screen tint.
 
-[Footprint][footprint] derives from ART frame dimensions/hotspot, location and
+Footprint (0x4DE290) derives from ART frame dimensions/hotspot, location and
 signed offsets (with source screen anchoring +40/+20), not radial attenuation.
-[Sampling][sampling] consults neighbour sector lists and ART color-key pixels;
-[composition][composition] builds separate lighter/darker buffers. Three-by-three
+Sampling (0x4D89E0, 0x4D9240) consults neighbour sector lists and ART color-key pixels;
+composition (0x4DE900) builds separate lighter/darker buffers. Three-by-three
 map prefetch is **not** a proven universal light radius. Missing required neighbour
 coverage is Unknown/NOT_READY, not an empty dark sector. Synthetic full source
 keys deduplicate contributors, reject conflicting descriptions and demonstrate
 cross-seam rectangular support, not actual stationary-coordinate parity.
 
-[TIG multiplication/add/subtraction][tig-color] and its
-[multiplication table][tig-multiply] are platform/BPP-dependent prior art from the
-same CE lineage. The synthetic helper uses test-owned 8-bit scalar masks:
+TIG multiplication/add/subtraction and its
+multiplication table are platform/BPP-dependent, read from the
+original's TIG functions (F0). The synthetic helper uses test-owned 8-bit scalar masks:
 transparent -> no contribution, `mask*tint/255` truncation, saturating add/sub.
 It proves only its stated research arithmetic. Final palettes, BPP/blit order,
-actual ART masks, roof modes, grayscale/gameplay luminance (source TODO), Godot
+actual ART masks, roof modes, grayscale/gameplay luminance (unknown), Godot
 shaders and original visual parity remain **NOT_VERIFIED / NOT_READY**.
 
 ## Proposed Godot-free state and detached snapshot
@@ -434,7 +434,7 @@ Execution logs, TRX, full ledger and input paths remain private, outside commits
 | clock/start/calendar/admission | source chain and actual selected startup established; production profile/calendar/pause/save policy requires ratification |
 | numeric default/hour channels | actual selection inspected and strict helper tested; original multi-gap/reload/runtime parity NOT_VERIFIED |
 | nonzero actual sector override | none in the bounded selection; outside-selection acquisition NOT_READY; synthetic semantics only |
-| stationary cave | four complete wire projections; coordinate TODO + ART/mask/state binding NOT_READY; cave normal-game provenance not established |
+| stationary cave | four complete wire projections; coordinate conversion unknown + ART/mask/state binding NOT_READY; cave normal-game provenance not established |
 | exterior primary objects | 42 non-invalid descriptions, direct/default provenance inspected; live activity/render-guard/state/ART masks NOT_READY |
 | overlay / carried/equipment | no non-invalid selected overlays/mobile primaries; actual representative beyond this scope and lifecycle integration NOT_READY |
 | neighbours/layer/composition | source seams + synthetic policy established; actual support/masks/BPP/blit/mode integration NOT_READY |
@@ -457,49 +457,3 @@ Future implementation order is a **proposal, not dispatched milestones**:
    AI, weather, travel/rest/combat/equipment/healing/save implementation remain
    separate dependencies and are not authorized by this research.
 
-## Pinned source index
-
-All links below have the same immutable CE pin. TIG is first-party within that
-checkout, the same provenance/accepted license, not an independent MIT oracle.
-
-[clock-wire]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.h#L10-L15
-[datetime-wire]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.h#L64-L78
-[startup]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gameinit.c#L81-L122
-[clock-init]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L475-L560
-[clock-calendar]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L235-L375
-[day-predicate]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L467-L471
-[admission]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L763-L897
-[menu-gate-on]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L1554-L1568
-[menu-gate-off]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L1703-L1715
-[network-stub]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/net_compat.h#L40-L46
-[ambient-init]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/anim_ui.c#L36-L74
-[event-kinds]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L92-L112
-[ambient-callback]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/anim_ui.c#L220-L276
-[delay-api]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L1011-L1047
-[delay-base]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L1120-L1150
-[mapinfo]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1598-L1638
-[scheme-definitions]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light_scheme.h#L6-L11
-[scheme-resource]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light_scheme.c#L188-L254
-[sector-metadata]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1374-L1417
-[active-scheme]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_object_list.c#L680-L702
-[scheme-parser]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light_scheme.c#L331-L414
-[scheme-hour]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light_scheme.c#L271-L303
-[scheme-init]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light_scheme.c#L100-L121
-[colors-update]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light.c#L362-L376
-[light-wire]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light.c#L1838-L1866
-[serialized-light]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light.c#L24-L46
-[light-flags]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light.h#L11-L37
-[stationary-placement]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_light_list.c#L111-L153
-[object-fields]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h#L24-L29
-[tint]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light.c#L2137-L2175
-[fold]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_light_list.c#L392-L456
-[hour-refresh]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light.c#L1888-L1959
-[object-light]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light.c#L649-L744
-[tiles]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile.c#L670-L750
-[roofs]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/roof.c#L231-L244
-[palette-callback]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light.c#L2020-L2081
-[footprint]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light.c#L2111-L2135
-[sampling]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light.c#L427-L541
-[composition]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light.c#L2359-L2497
-[tig-color]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/include/tig/color.h#L57-L106
-[tig-multiply]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/color.c#L116-L127

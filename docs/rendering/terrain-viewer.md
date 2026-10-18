@@ -436,11 +436,12 @@ it reject the flag ([launcher](../workflow/local-development.md#cave-and-return-
 
 ### Actor anchor and wall fade (ARC-RENDER-011)
 
-**Actor anchor.** CE places a map location at `location_xy = 40(y-x-1), 20(y+x)` and
+**Actor anchor.** The original places a map location at `40(y-x-1), 20(y+x)` (the
+location-to-screen function 0x4B8680, source reading, F0) and
 draws an object at that point plus its offset plus `(40,20)`, so every object, the
 player included, stands on the centre of its tile diamond. The AREA plan projects
-terrain and bodies from `40(y-x)`, 40 px to the right of `location_xy`, while the
-actor placement restates `location_xy` itself; before this change the actor was
+terrain and bodies from `40(y-x)`, 40 px to the right of that location point, while the
+actor placement restates that location point itself; before this change the actor was
 therefore drawn 40 px left of its cell, on the diamond's left vertex. In
 `crash-site-area` the placement now takes the chart's location origin `(40,0)`
 (`AreaGridSession.LocationOriginX`), so the actor anchor and the followed foot point
@@ -454,12 +455,12 @@ here). The synthetic moving-overlap oracle moved with it (actor
 rectangles +40; the fixture canopy's hotspot is now `(-20,80)` so its opaque half still
 covers the witnesses; ranks unchanged).
 
-**Wall check.** The original fades walls in front of the player. At the pinned research
-revision: CE `src/game/wallcheck.c` (block regions 47-60, corner offsets 63-91, edge
-table 94-560, `wallcheck_recalc` 712-910, wall-flag update 941-1106), `object.c`
-(wall skip under a faded roof 560-575, wall render alpha 4336-4400, tile object lists
-3304) and `first_party/tig/src/art.c` (alpha lerp 3221-3260 and 3486-3493).
-`AreaWallCheck` (viewer Core) restates it:
+**Wall check.** The original fades walls in front of the player: the wall check
+recalculation (0x437E50) with its block regions, corner offsets and edge table, the
+wall-flag updates (0x438570, 0x4386B0, 0x438720, 0x4387C0, 0x438830), the object
+draw's wall skip under a faded roof (0x43B390), the render alpha choice (0x442520),
+the tile object lists (0x4407C0) and the ART alpha lerp; a source reading (F0) except
+what the ledger lists (BL2, RF8, RF9). `AreaWallCheck` (viewer Core) restates it:
 
 - Walls stand on a lattice of corners every four tiles. The player's committed tile
   is resolved to the 4×4 block with corner `(x - (x-2) mod 4, y - (y-2) mod 4)`; on
@@ -477,9 +478,9 @@ table 94-560, `wallcheck_recalc` 712-910, wall-flag update 941-1106), `object.c`
 - While the player stays in the same block and shares a region with the position of
   the last calculation, the previous set is kept. A map change starts empty.
 
-The edge list is the original's data (decoded from CE's table) re-expressed as
-lattice geometry; no CE code or structure is copied. A literal research port of the
-CE function gave the same fades as `AreaWallCheck` for every tile of the cave sector
+The edge list is the original's data (decoded from a source reading of its table, F0)
+re-expressed as lattice geometry. A literal research port of the source-read
+function gave the same fades as `AreaWallCheck` for every tile of the cave sector
 and a 4,000-step random walk (stateful); the port is not part of the repository.
 The viewer recalculates when the actor's committed cell changes and draws each faded
 wall through the same shader with the alpha at its left and right edges. The HUD
@@ -567,7 +568,7 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
 
 - **Pick.** The object under the pointer is the frontmost drawn body with an opaque pixel
   there, skipping bodies whose `OBJ_F_FLAGS` has `OF_CLICK_THROUGH` (0x800), as the
-  original's screen pick does ([CE `sub_43D9F0`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L1792-L1990)).
+  original's screen pick does (the screen pick 0x43D9F0 and the object rectangle 0x43DFD0).
   On the installed Crash Site exterior 419 of the 426 drawn scenery bodies (trees, plants,
   blood) are click-through, so 80 bodies can be hovered: 2 containers, 7 scenery, 21 food,
   16 generic items and 34 NPCs. A wall drawn faded near the actor (ARC-RENDER-011) is
@@ -597,7 +598,7 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   type, e.g. `[NPC: name unavailable]`, and the status line gives the status (never a path).
 - **Action cursor.** Project policy, not original behaviour: the original main-mode cursor
   changes with weapon and called-shot keys, not with the target
-  ([CE `intgame_refresh_cursor`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/intgame.c#L6150-L6190)).
+  (the cursor refresh, 0x553990).
   The decision follows `WorldRouteClick` in its order and guards without running it:
   a dialog NPC is *talk* within the 3-tile reach, else *walk to talk*; the cave
   entrance or exit is *use* within use range 2, else *walk to use*; anything else is a
@@ -655,8 +656,8 @@ the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
   Chebyshev reach 1 and otherwise walk to a standable cell within reach first and act on
   arrival, like walk-to-use (a ground click, the stick, another talk/use/item click,
   reset/reload or a quick load cancel the walk; the guards drop it on arrival). Reach 1 is
-  the source's range for opening a container, PC or NPC
-  ([CE `sub_428930`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L6500-L6531));
+  the original's range for opening a container, PC or NPC
+  (the use-range helper, 0x428930);
   the pickup goal's own move-near range is not pinned, so pickup uses the same reach (project
   choice). Living NPCs, chests (contents generated on first open, not modelled) and items
   inside holders are not targets. A ground item the session refuses (gold, ammunition, keys,
@@ -669,7 +670,7 @@ the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
   inventory exists; I, Escape, the Close button or a controller cancel close it. It is
   modal like the dialog panel (actor gate closed, clock paused, palette chord refused,
   every key owned by the window). Left: the PC's list in the order items entered it, each
-  with its display name (the hover rule: `object_examine` order from the description
+  with its display name (the hover rule: the examine function's (0x441B60) order from the description
   tables, type fallback without them), type and weight. When looting, right: the dead NPC's
   current list with a *Take* button per item and *Take all*; a refusal stays on the body and
   is named in the message line (on the installed exterior the item with its own
@@ -1268,9 +1269,8 @@ reconnect, drift, or all axes/settings.
 
 This uses the project's independently authored Data APIs (`DatArchive`,
 `TerrainLoader`, `TerrainGeometry`, and `ArtDecoder`). The documented diagnostic
-placement conventions are attributed CE-derived specification evidence at the
-pinned research reference; no CE code/runtime or mechanical translation is
-included, and this makes no clean-room or independent-corroboration claim.
+placement conventions are source-reading evidence (F0); no mechanical
+translation is included, and this makes no clean-room or independent-corroboration claim.
 Original inputs, extracted frames, archive paths, screenshots, and toolkit
 payloads remain local. The viewer implements its authenticated finite
 five-object and fixed-profile actor/WORLD diagnostic policies, not general

@@ -20,7 +20,7 @@ as a scenery rule.
 | Synthetic transparent / flip pixels | READY as project diagnostic policy | public in-memory fixture only |
 | Deterministic equal-key diagnostics | READY as project diagnostic policy | sort `(anchor.y, anchor.x, sourceIndex)` ascending; later opaque command wins |
 | Original scene object ordering/overlap | BLOCKED | no selected original visual/reference pair establishes an original sort or occlusion key |
-| Normal-runtime facades, walls, roofs, shadows, lighting and palette effects | BLOCKED | not measured and not implied by CE-source inspection or the terrain viewer |
+| Normal-runtime facades, walls, roofs, shadows, lighting and palette effects | BLOCKED | not measured and not implied by source reading or the terrain viewer |
 
 A future caller must reject a record outside this exact evidence envelope. It
 must not substitute prototype offsets, infer a missing field as zero, choose an
@@ -63,7 +63,7 @@ original screenshots, or decoded original pixels.
 
 ## Diagnostic coordinate and rectangle rule
 
-The CE-source-derived relative projection is deliberately separated from a
+The relative projection, from a source reading (F0), is deliberately separated from a
 future camera origin. For local coordinates `(x,y)`, direct instance offset
 `(ox,oy)`, and selected frame hotspot `(hx,hy)`:
 
@@ -74,7 +74,7 @@ topLeft   = anchor - (hx, hy)
 rect      = (topLeft.x, topLeft.y, frameWidth, frameHeight)
 ```
 
-Use signed checked integer arithmetic. The `location_xy` source expression has
+Use signed checked integer arithmetic. The original's location-to-screen expression (0x4B8680) has
 an origin and a one-cell X term; in the selected object blit path, the
 object-specific `+40,+20` compensates it. The displayed rule is the resulting
 relative relationship only. Camera origin, zoom, rounding, clipping,
@@ -110,7 +110,7 @@ renderer primitive.
 
 ## Ordering and overlap policy
 
-Original static-object ordering is blocked. The CE source has multiple queue
+Original static-object ordering is blocked. A source reading (F0) shows multiple queue
 bands and sorting inputs (including flat/non-flat paths and overlay/underlay
 behavior), while this finite record does not admit all relevant inputs or an
 original visual reference. Thus the following is a reproducibility policy,
@@ -152,11 +152,9 @@ identities, measurement boundaries, and command sequence are retained in
 
 ## Provenance and limitations
 
-The coordinate, object-anchor, frame-hotspot, and flip observations are
-attributed to pinned `alexbatalov/arcanum-ce`
-`a7ff41b300ef712f0e7d088183a3d08957110cdd`, primarily its location, object,
-sector-object-list, and ART source files. That is a single source lineage and
-is not independent corroboration. The implementation and documentation here
-are independently written; no CE code is copied, translated, or represented as
-a clean-room result. Applicable upstream licensing remains with that upstream
-project.
+The coordinate, object-anchor, frame-hotspot, and flip observations come from
+a reading of the original's location, object, sector object list and ART
+functions, evidence level F0 (not checked in the executable). That is a single
+source lineage and is not independent corroboration. The implementation and
+documentation here are independently written and are not represented as a
+clean-room result.

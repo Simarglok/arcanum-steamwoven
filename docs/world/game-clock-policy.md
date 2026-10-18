@@ -69,8 +69,9 @@ Do not quietly call the current getters an ordinary calendar.
 
 Missing-key behavior is therefore lifecycle-dependent, not always 1885/10 or
 missing-file 1885/15. Malformed `atoi`, signed conversions, overflow and the
-reference epoch are not established compatibility rules. The [subtraction
-underflow TODO][calendar] remains Unknown. No host DateTime or signed64 proposal
+reference epoch are not established compatibility rules. The original's [subtraction
+underflow branch][calendar] computes an odd value (a bug of the original, ledger row
+Clock subtraction); it is not a compatibility rule here. No host DateTime or signed64 proposal
 may be used to claim those original questions resolved.
 
 Source addition carries only for a sum **> 86,400,000**, not equality:
@@ -100,7 +101,7 @@ The bounded **Source** worksheet `source-observation-v1` covers only
 [non-network admission and nesting][admission]. Elapsed <5 rejects before updating
 the host reference. Admitted pings update that reference **before** clamping >250;
 excess is discarded, not a backlog. Real advances on every admitted ping. Counter
-0 opens the game/animation gate in this pin ([network macro][network]); counter
+0 opens the game/animation gate in the non-network branch ([network macro][network]); counter
 1..30 closes it. Increment saturates at 30; decrement saturates at 0. Open gate
 with turn-based combat freezes game only, not animation. Closed gate freezes both.
 
@@ -165,7 +166,7 @@ atomically. Public fixtures use synthetic fingerprints, not resource bytes.
 | Frozen game; due loop remains independent | paused ordinary advance no-op; no queue promise | no fabricated global scheduling semantics | paused-positive, due-equal |
 | Resume uses host reference rules | resume changes disposition only, no host catch-up | deterministic explicit-duration ownership | resume |
 | Delay0 maps to1 | duration0 is validated equal-state no-op | delay is not duration | delay-zero, zero, paused-zero |
-| Unsigned subtraction TODO | negative advance rejected; explicit forward/backward JumpTo | rewind is deliberate, not underflow | negative, negative-paused, jump-forward, jump-backward |
+| Unsigned subtraction underflow (original bug) | negative advance rejected; explicit forward/backward JumpTo | rewind is deliberate, not underflow | negative, negative-paused, jump-forward, jump-backward |
 | Strict carry leaves equality at day0 | normalized midnight increments day at equality | canonical timestamp | carry-equal, carry-after, boundary-midnight-at |
 | Swapped current getters | ordinary 30-day/12-month/360-day calendar | consistent calendar metadata | calendar-0..calendar-361 |
 | Source overflow/signed epoch unclear | checked finite time/year/revision/generation, atomic failure | explicit safety, not original parity | time-overflow, revision-overflow, generation-overflow |
@@ -332,7 +333,7 @@ also exercises missing-case, changed-expectation and malformed-input rejection
 through the same CLI entry with bounded temporary synthetic fixtures, not a PASS stub.
 Caps:256 cases,256KiB JSON,512KiB total new public material, identities256 characters;
 closed kinds, schema1, no eval or original rows. This isolated Python/doc change needs
-these targeted checks, source-pin/link/table/scope/privacy/diff audits and independent
+these targeted checks, source-address/link/table/scope/privacy/diff audits and independent
 exact-candidate review, not a full lighting/toolkit/root C# rerun. Existing C# inspector
 APIs are unchanged and unused by this verifier. Local-only / **CI_NOT_REQUIRED**;
 no GUI/export/controller gate, without waiving mandatory local checks or review.
@@ -340,7 +341,7 @@ Execution logs and full acceptance/findings ledger stay private, not in Git.
 
 ## Unknowns and minimal future dependencies
 
-- Original reference epoch, signed/unsigned and `atoi` extremes, subtraction TODO,
+- Original reference epoch, signed/unsigned and `atoi` extremes, subtraction underflow,
   overflow/underflow and source network behavior: **Unknown / NOT_VERIFIED**.
 - Original executable speed, startup precedence across modules/patches, queue order,
   catch-up, sleep/travel/combat/save and night/visual parity: **NOT_VERIFIED**.
@@ -359,8 +360,6 @@ full-token/version invalidation; (5) separately accepted scheduler and lighting/
 readiness, then Legacy rendering/visual evidence. Movement conversion, queues, original
 save compatibility and gameplay systems need their own contracts. No working production
 clock or lighting readiness is claimed by this research.
-
-## Pinned source index
 
 ## Executable functions
 

@@ -38,7 +38,7 @@ Data API and the AREA viewer's conversation host. Godot-independent.
   with a status: `Read`, `NoName`, `NotFound` (no source holds the DLG),
   `Unreadable` (stack read limits), `Invalid` (not a script, or a DLG the reader
   refuses), `Changed` or `Empty` (ARC-SCRIPT-012: a DLG with no record the
-  original keeps, which `dialog_load` 0x412E10 refuses to open). Read details name
+  original keeps, which the original's dialog loader (0x412E10, ledger DL1) refuses to open). Read details name
   statuses or virtual paths, never absolute paths or payload bytes; an open
   failure's detail is the stack's (it names the failing source path), which the
   viewer does not print.

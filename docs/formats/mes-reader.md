@@ -4,8 +4,8 @@ ARC-DATA-013. `Arcanum.Data.Messages` reads original MES message tables without
 decoding them, loads the three description tables through the
 [content stack](../research/content-precedence.md), and selects the name the
 original shows for an object (FR-ITEM-008, FR-CONTENT-006). It is
-Godot-independent and read-only. Independently authored from the pinned CE
-behaviour cited below; no CE code or structure is reused.
+Godot-independent and read-only. Independently authored from the original's
+behaviour cited below (by executable address).
 
 **Status:** the reader, catalog and resolver are merged with synthetic tests and
 one opt-in real-data check. The AREA viewer's hover tooltip
@@ -60,16 +60,16 @@ rules and scheme files, the terrain tile and facade name tables (`TerrainLoader`
 `TerrainObstructionInspector`), the T0 step rules (tile names, effects, game effects) and the area
 owner's name tables; each keeps its own limits and failure type.
 
-The original loader ([load](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L455-L509),
-[entry and field](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L516-L618),
-[character reader](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L647-L665),
-[search](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L287-L305))
+The original loader (load (0x4D4920),
+entry and field (0x4D4A60, 0x4D4B50),
+character reader (0x4D4CA0),
+search (0x4D45E0))
 skips everything up to a `{`, takes the bytes up to the next `}` as the number,
 does the same for the text, and repeats until end of file. Comments are therefore
 simply text outside braces, a stray `}` there is ignored, and the two fields may be
 on different lines. Messages are sorted by number and found by binary search.
 Archive members are opened in text mode, which reads CR LF as LF
-([archive text mode](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/database.c#L476-L493));
+(archive text mode);
 the original Windows executable reads loose files in text mode the same way.
 
 Accepted as the original does: any text outside braces, any order, empty text,
@@ -106,19 +106,19 @@ release needs is the caller's decision and is NOT_VERIFIED here.
 
 **NOT READY for Cyrillic files containing `я`:** that letter is byte 0xFF in
 Windows-1251, so `MesFile.Parse` refuses such a file as `EndOfFileByte`. The
-end-of-file reading is inferred from the pinned CE source (signed `char`);
+end-of-file reading is inferred from the source (signed `char`);
 whether a localized original executable reads 0xFF differently is NOT_VERIFIED.
 
 ## Description tables
 
-[`description.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/description.c#L38-L165):
+The description functions (0x4D40D0, 0x4D4150, 0x4D4160, 0x4D41D0, 0x4D4210, 0x4D4260):
 `mes\description.mes` is required at start-up; the module's `mes\gamedesc.mes` and
 `mes\gamekey.mes` are optional, and a file without messages counts as not loaded
-([`mes_load`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L101-L139)).
+(the MES load (0x4D4290)).
 The base file is loaded while only the base sources are mounted (`arcanum*.dat`
 and `data/` over the game folder and `tig.dat`; the module's `.dat`, patches and
 folder come later with the module,
-[start-up](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L1820-L1836))
+start-up (0x404A20))
 and stays loaded, so the catalog takes the first copy in a base source and never
 a module copy. The two module files are the content-stack winners. A description number below 30000 is looked up in
 the base file, from 30000 up in the module file. Any number below 0 or above the
@@ -130,15 +130,15 @@ handle, which the catalog reports as `ModuleFileAbsent`.
 
 ## Which name is shown
 
-[`object_examine`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3934-L3992)
+The examine function (0x441B60)
 picks the source by type, in this order:
 
 | Object | Field (effective slot) | Table |
 | --- | --- | --- |
 | key (type 11) | `OBJ_F_KEY_KEY_ID` (59) | `gamekey.mes` |
-| item (types 5..14) not identified: `OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY` (45) > 0 and no `OIF_IDENTIFIED` (0x1) in `OBJ_F_ITEM_FLAGS` (36) ([identified](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2285-L2294)) | `OBJ_F_ITEM_DESCRIPTION_UNKNOWN` (47) | description |
+| item (types 5..14) not identified: `OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY` (45) > 0 and no `OIF_IDENTIFIED` (0x1) in `OBJ_F_ITEM_FLAGS` (36) (identified (0x464370)) | `OBJ_F_ITEM_DESCRIPTION_UNKNOWN` (47) | description |
 | player character (15) | `OBJ_F_PC_PLAYER_NAME` string | none: `PlayerNameNotModelled` |
-| NPC (16) the observer does not recognize ([recognition](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L2267-L2274)) | `OBJ_F_CRITTER_DESCRIPTION_UNKNOWN` (58) | description |
+| NPC (16) the observer does not recognize (recognition (0x45F970)) | `OBJ_F_CRITTER_DESCRIPTION_UNKNOWN` (58) | description |
 | everything else, including identified items and recognized NPCs | `OBJ_F_DESCRIPTION` (22) | description |
 
 An NPC is recognized when the observer is the NPC itself or has met it; that is

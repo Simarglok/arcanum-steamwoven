@@ -77,7 +77,7 @@ Only two field defaults are admitted by evidence:
 currentArt = instance.currentArt when field 0 is present
            = exactly-one validated matching prototype.currentArt otherwise
 
-effectiveFlags = instance.flags when CE OBJ_F_FLAGS enum ID 19 is present at serialized slot 18
+effectiveFlags = instance.flags when OBJ_F_FLAGS enum ID 19 is present at serialized slot 18
                = exactly-one validated matching prototype.flags otherwise
 ```
 
@@ -106,7 +106,7 @@ height, flatness semantics, occlusion, or ordering.
 | Type classification | all real records type 3 | no type promotion or inferred aliases | `unsupported-type` |
 | Location | local coordinates present in the five handoff records | optional field must be present for a coordinate record | `unresolved-location` |
 | Current ART | 288 direct, 29 inherited real values | direct field or exactly-one valid prototype default | `unresolved-reference` |
-| Flags for static predicate | 31 direct / 286 inherited effective instance/prototype object flags from serialized slot 18 (CE enum ID 19) | direct slot or exactly-one valid prototype default; do not substitute adjacent slot 19 spell flags | `unresolved-reference` |
+| Flags for static predicate | 31 direct / 286 inherited effective instance/prototype object flags from serialized slot 18 (enum ID 19) | direct slot or exactly-one valid prototype default; do not substitute adjacent slot 19 spell flags | `unresolved-reference` |
 | Prototype file selection | six real files used | one canonical numeric candidate; unchanged fingerprint | `unresolved-reference` |
 | Scenery mapping | five real selected examples | one mapping key and safe relative filename | `unresolved-resource` |
 | ART entry | five real selected examples | one normalized candidate in explicit resource archive, 1 MiB cap | `unresolved-resource` |
@@ -135,9 +135,8 @@ claim into a whole-art corpus claim without new evidence.
 
 The byte-level observation and synthetic tests are in
 `Arcanum.CrashSiteProbe`; the bounded result is recorded in
-`crash-site-objects.md`. Source attributions are limited to `arcanum-ce`
-`a7ff41b300ef712f0e7d088183a3d08957110cdd`, principally
-`src/game/sector_object_list.c`, `src/game/object.c`, `src/game/obj.h`,
-`src/game/obj_id.h`, `src/game/obj_flags.h`, `src/game/name.c`, and
-`first_party/tig/src/art.c`. That is one lineage, not independent validation
-or permission to copy source code.
+`crash-site-objects.md`. Source claims are a reading of the original's sector
+object list, object, object field, object ID, object flag and name functions and
+the TIG ART id accessors, evidence level F0 (not checked in the executable)
+unless the [verification ledger](../research/original-verification-ledger.md)
+lists them. That is one reading, not independent validation.

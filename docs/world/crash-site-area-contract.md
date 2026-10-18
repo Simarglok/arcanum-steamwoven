@@ -12,26 +12,27 @@ or interactive object. Full exterior visual readiness is presently blocked by
 86 core mobile visual gaps, plus unverified ordering/visibility semantics.
 
 Labels below are **source fact**, **local observation**, **project policy** or
-**unknown**. Pinned CE is specification evidence with one source lineage,
-Sustainable Use License and no original-executable parity claim. Independently
-authored probes do not copy or mechanically translate CE implementations.
+**unknown**. A source fact is a reading of the original's functions at the cited
+addresses, evidence level F0 (not checked in the executable) unless the
+[verification ledger](../research/original-verification-ledger.md) lists it; it
+carries no original-executable parity claim.
 
 ## Source specification locators
 
-All CE links bind `a7ff41b300ef712f0e7d088183a3d08957110cdd`.
+Locators name the original's functions by address where one is recorded.
 
-| Topic | Attributed source fact / locator |
+| Topic | Source fact / locator |
 | --- | --- |
-| Map catalogue and selector; editor versus normal-game mobiles; filename transform | [map.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c), especially1360..1449,1668..1689,2003..2059 |
-| Region attributes, not a named area polygon | [area.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/area.c) |
-| Sector section order / independent terminal object count | [sector.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c), [framing evidence](../research/crash-site-framing.md) |
-| Low tile bits and static rebase | [sector_object_list.c143..161](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_object_list.c#L143-L161) |
-| v119 fields/types and actual instance/prototype fallback | [obj.h](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h), [obj.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c), including array fallback2539..2569 and wire I/O |
-| Sparse array serialization / fresh runtime handle | [sa.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sa.c), [obj_private.c (bitset FILE routines)](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_private.c) |
-| Packed scenery categories and ART semantics | [TIG art.h74..100](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/include/tig/art.h#L74-L100), [name.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c), [ART subset](../formats/art.md) |
-| Object flags, composition and placement | [obj_flags.h11..41](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_flags.h#L11-L41), [object.c530..594](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L530-L594) |
-| Object ordering and roof stage | [sector_object_list.c556..624](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_object_list.c#L556-L624), [object.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c), [gamelib.c1702..1715](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L1702-L1715), [roof.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/roof.c) |
-| SAP structures, actions, literal operands and potential teleport targets | [script.h](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h), [script.c1875..1888](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1875-L1888), [fade/teleport2432..2438](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2432-L2438) |
+| Map catalogue and selector; editor versus normal-game mobiles; filename transform | the map functions: mobile load (0x410D10), filename transform (0x411830), map list load (0x4125C0) |
+| Region attributes, not a named area polygon | the original's area attribute functions |
+| Sector section order / independent terminal object count | the original's sector load, [framing evidence](../research/crash-site-framing.md) |
+| Low tile bits and static rebase | the sector object list insert (0x4F1350) |
+| v119 fields/types and actual instance/prototype fallback | the object field layout, the array field fetch with prototype fallback (0x408BB0) and wire I/O |
+| Sparse array serialization / fresh runtime handle | the sparse-array and object bitset FILE routines |
+| Packed scenery categories and ART semantics | TIG ART id fields, the original's name functions, [ART subset](../formats/art.md) |
+| Object flags, composition and placement | the object flag definitions, the object draw function (0x43B390) |
+| Object ordering and roof stage | the sector object list ordering (0x4F20A0), the object draw function, the game draw loop (0x4046F0), the roof functions |
+| SAP structures, actions, literal operands and potential teleport targets | the script action executor (0x447220), including its fade/teleport action |
 
 ## Proposed API seams
 
@@ -127,9 +128,9 @@ not package it into a repository, exported app or public evidence.
 
 ### 4. Ordering, flags and placement
 
-Source fact: CE inserts flat objects before non-flat objects in a tile list,
+Source fact (F0): the original inserts flat objects before non-flat objects in a tile list,
 handles scenery `UNDER_ALL` and wall/portal relations, then compares derived
-ordering values. `object_draw` traverses visible sectors/tile lists, checks roof
+ordering values. The object draw function (0x43B390) traverses visible sectors/tile lists, checks roof
 coverage/type visibility/render flags and builds underlay/body/overlay paths.
 The game pipeline draws tiles, objects and a distinct later roof stage. This is
 not equivalent to sorting every sprite by diagnostic projectedY/sourceIndex.
@@ -150,7 +151,7 @@ are unknown. There is no area renderer or graphical gate in this research task.
 The diagnostic projection from world tile deltas to the base-sector origin is
 `anchorX = 40*(dy-dx)+offsetX`, `anchorY = 20*(dx+dy)+offsetY`, followed by hotspot
 subtraction. This reuses existing [diagnostic placement](../research/scenery-placement.md),
-not CE's original blit rectangle. Sprite dimensions/rectangles are not collision
+not the original's blit rectangle. Sprite dimensions/rectangles are not collision
 shapes. Passability requires its separate bounded traversal contract and coverage;
 interactive readiness requires scripts/state, not a successful frame decode.
 
