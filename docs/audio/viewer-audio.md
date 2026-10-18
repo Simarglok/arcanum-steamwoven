@@ -18,7 +18,7 @@ ambient (ARC-UI-041), positional effects (ARC-UI-042), voice (ARC-UI-043) and in
 | `AudioVolumes` | Effects, Voice, Music settings 0–10, default 5: the original's three option bars. A user preference, never in a save. |
 | `AudioVolumeRules.ChannelVolume` | `setting × 127 / 10`, then for effects and music `× 80 / 100` (integer steps): effects and music 50 at 5 and 101 at 10, voice 63 at 5 and 127 at 10. |
 | `StartVolume` / `AdjustedVolume` | A new effect starts at `volume × channel / 100`; a recalculation (listener or source move, later tasks) uses `volume × channel / 127`. Both scales are the original's. |
-| `Amplitude` | A 0–127 volume maps linearly to amplitude, clamped (a fresh full effect at setting 10 computes 128). |
+| `Amplitude` | A Steamwoven choice, NOT_VERIFIED against the original's mixer: a 0–127 volume maps linearly to amplitude, clamped (a fresh full effect at setting 10 computes 128). |
 | `AudioVolumesCodec` | The preference text `{"version":1,"effects":E,"voice":V,"music":M}`; anything else reads as null (defaults). |
 
 Ambient scheme sounds use the effects channel and scheme songs the music channel (SN14, SN16).
@@ -52,8 +52,8 @@ setting.
   `ARC-UI-040 audio driver=… audible=… volumes=E/V/M from=…`).
 - The catalogue is opened on first use for the module archive the area was read from, through
   the same content root as the script content (any map of any module), and kept until exit.
-- `PlaySfx(id)` plays the original's non-positional effect: volume 127 scaled by the effects
-  channel at start (SN6).
+- `PlaySfx(id)` plays the original's non-positional effect: volume 127 and the centre pan (the
+  plain play call), scaled by the effects channel at start (SN6).
 - Palette (Ctrl+Shift+F9 / Start): **Sound test: next interface sound** plays the next of the
   original's fixed interface sounds (3008, 3009, 3010, 3011, 3002–3007, 3027, 3028; SN31) and
   reports the outcome; the palette's sound line shows the device, the three settings, the
@@ -71,5 +71,5 @@ setting.
 - Native smoke on the original installation (exterior AREA and map mode):
   `ARC-UI-040 native-smoke audio PASS`: the module's catalogue opens; every fixed interface sound
   resolves, is admitted, decodes and starts on the effects channel; the world-map travel music
-  (an MP3 in the module folder) loops on the music channel; with an output device both are still
-  playing a few frames later; stop all leaves no voice. Hearing itself is not checked.
+  (an MP3 in the module folder) loops on the music channel; with an output device the music and at
+  least one interface sound are still playing a few frames later; stop all leaves no voice. Hearing itself is not checked.

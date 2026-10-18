@@ -113,11 +113,13 @@ public sealed class ViewerAudioBackend : IDisposable
             {
                 var wav = AudioStreamWav.LoadFromBuffer(bytes);
                 if (wav is null || !(wav.GetLength() > 0)) return null;
+                // A one-shot must end even when the file carries a smpl loop (the engine may apply it on load).
                 if (loop)
                 {
                     wav.LoopMode = AudioStreamWav.LoopModeEnum.Forward;
                     wav.LoopBegin = 0; wav.LoopEnd = payload.Wav!.FrameCount;
                 }
+                else wav.LoopMode = AudioStreamWav.LoopModeEnum.Disabled;
                 return wav;
             }
             var mp3 = AudioStreamMP3.LoadFromBuffer(bytes);

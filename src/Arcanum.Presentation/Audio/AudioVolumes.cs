@@ -52,8 +52,8 @@ public sealed record AudioVolumes
 /// volume scale. A channel's volume is <c>setting × 127 / 10</c>, and for effects and music then <c>× 80 / 100</c>
 /// (integer steps), so effects and music reach 101 at setting 10 and voice 127. A new effect starts at
 /// <c>volume × channel / 100</c>, a later recalculation uses <c>volume × channel / 127</c> (the original's two scales), and
-/// a channel change sets every live sound of that channel to the bare channel volume. The player maps a 0–127 volume
-/// linearly to amplitude, clamped (a fresh full effect at setting 10 computes 128).
+/// a channel change sets every live sound of that channel to the bare channel volume. How the player turns a 0–127 volume
+/// into amplitude (<see cref="Amplitude"/>) is a Steamwoven choice, not checked against the original's mixer.
 /// </summary>
 public static class AudioVolumeRules
 {
@@ -63,24 +63,36 @@ public static class AudioVolumeRules
     public static int ChannelVolume(AudioChannel channel, int setting)
     {
         if (setting is < 0 or > AudioVolumes.Max) throw new ArgumentOutOfRangeException(nameof(setting));
-        var scaled = setting * MaxVolume / AudioVolumes.Max;
         return channel switch
         {
-            AudioChannel.Voice => scaled,
-            AudioChannel.Effects or AudioChannel.Music => scaled * 80 / 100,
+            AudioChannel.Effects => EffectsVolume(setting),
+            AudioChannel.Voice => VoiceVolume(setting),
+            AudioChannel.Music => MusicVolume(setting),
             _ => throw new ArgumentOutOfRangeException(nameof(channel)),
         };
     }
 
+    [OriginalFunction(0x41C8B0, OriginalFunctionScope.Partial)]
+    private static int EffectsVolume(int setting) => setting * MaxVolume / AudioVolumes.Max * 80 / 100;
+
+    [OriginalFunction(0x41C930, OriginalFunctionScope.Partial)]
+    private static int VoiceVolume(int setting) => setting * MaxVolume / AudioVolumes.Max;
+
+    [OriginalFunction(0x41C980, OriginalFunctionScope.Partial)]
+    private static int MusicVolume(int setting) => setting * MaxVolume / AudioVolumes.Max * 80 / 100;
+
     public static int ChannelVolume(AudioVolumes volumes, AudioChannel channel) => ChannelVolume(channel, volumes[channel]);
 
     /// <summary>The volume an effect or scheme sound starts at: its own volume (0–127) times the channel volume / 100.</summary>
+    [OriginalFunction(0x41B2E0, OriginalFunctionScope.Partial)]
     public static int StartVolume(int volume, int channelVolume) => volume * channelVolume / 100;
 
     /// <summary>The volume after a recalculation (a listener move, a source move): its own volume times the channel / 127.</summary>
+    [OriginalFunction(0x41C9D0, OriginalFunctionScope.Partial)]
     public static int AdjustedVolume(int volume, int channelVolume) => volume * channelVolume / MaxVolume;
 
-    /// <summary>Linear amplitude 0–1 for a volume, clamped to 0–127.</summary>
+    /// <summary>Linear amplitude 0–1 for a volume, clamped to 0–127: a Steamwoven choice (NOT_VERIFIED against the
+    /// original's mixer curve).</summary>
     public static double Amplitude(int volume) => Math.Clamp(volume, 0, MaxVolume) / (double)MaxVolume;
 }
 

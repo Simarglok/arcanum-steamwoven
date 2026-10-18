@@ -14,9 +14,10 @@ public static partial class TerrainViewerSelfTest
     private static async Task AssertViewerAudioAsync(Node host)
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-040 audio self-test: " + why); }
-        var payload = SoundPayloadReader.Inspect("synthetic/square.wav", SquareWave(22050, 2205));
-        Require(payload.Status == SoundPayloadStatus.Admitted && payload.Wav!.FrameCount == 2205, "synthetic WAV admitted");
+        var payload = SoundPayloadReader.Inspect("synthetic/square.wav", SquareWave(22050, 22050));
+        Require(payload.Status == SoundPayloadStatus.Admitted && payload.Wav!.FrameCount == 22050, "synthetic WAV admitted");
         var backend = ViewerAudioBackend.Create(host);
+        var audible = backend.Audible;
         try
         {
             foreach (var channel in Enum.GetValues<AudioChannel>()) Require(AudioServer.GetBusIndex(ViewerAudioBackend.BusName(channel)) >= 0, $"{channel} bus");
@@ -26,21 +27,21 @@ public static partial class TerrainViewerSelfTest
             Require(Math.Abs(backend.Volume(effect.Handle!.Value)!.Value - 63) < 0.5, "start volume 63 of 127");
             backend.FlattenChannel(AudioChannel.Effects, 101);
             Require(Math.Abs(backend.Volume(effect.Handle.Value)!.Value - 101) < 0.5, "a channel change sets the bare channel volume");
-            var music = backend.Play(payload, AudioChannel.Music, 127, loop: true);
+            var music = backend.Play(payload, AudioChannel.Music, 20, loop: true);
             Require(music.Started && backend.ActiveVoices == 2, "a looped sound on the music bus");
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             backend.Tick();
             Require(backend.Volume(music.Handle!.Value) is not null, "a loop is not freed by Tick");
             Require(backend.Stop(effect.Handle.Value) && !backend.Stop(effect.Handle.Value) && backend.Volume(effect.Handle.Value) is null, "stop once, then a stale handle");
             var refused = SoundPayloadReader.Inspect("synthetic/text.wav", "not audio"u8.ToArray());
-            Require(backend.Play(refused, AudioChannel.Effects, 127).Status == ViewerAudioStatus.NotAdmitted, "a refused payload is not played");
+            Require(backend.Play(refused, AudioChannel.Effects, 10).Status == ViewerAudioStatus.NotAdmitted, "a refused payload is not played");
             var started = new List<ViewerAudioResult>();
             while (backend.ActiveVoices < ViewerAudioBackend.MaxVoices) started.Add(backend.Play(payload, AudioChannel.Effects, 10, loop: true));
             Require(started.All(r => r.Started) && backend.Play(payload, AudioChannel.Effects, 10).Status == ViewerAudioStatus.VoiceLimit, "the voice limit refuses, nothing is stolen");
             var reused = started[0];
             backend.StopAll();
             Require(backend.ActiveVoices == 0 && backend.Volume(reused.Handle!.Value) is null, "stop all");
-            var next = backend.Play(payload, AudioChannel.Voice, 127);
+            var next = backend.Play(payload, AudioChannel.Voice, 10);
             var (old, fresh) = (reused.Handle!.Value, next.Handle!.Value);
             Require(fresh.Slot == 0 && fresh.Generation != old.Generation && !backend.Stop(old), "a reused slot ignores the old handle");
         }
@@ -69,9 +70,9 @@ public static partial class TerrainViewerSelfTest
             else OS.SetEnvironment(AudioVolumesStore.TestVariable, previous);
             System.IO.Directory.Delete(root, true);
         }
-        Require(TerrainViewerApp.InterfaceSoundIds.Distinct().Count() == TerrainViewerApp.InterfaceSoundIds.Length
+        Require(TerrainViewerApp.InterfaceSoundIds.Distinct().Count() == TerrainViewerApp.InterfaceSoundIds.Count
             && TerrainViewerApp.InterfaceSoundIds.All(id => id is >= 3000 and <= 3028), "interface ids");
-        GD.Print($"ARC-UI-040 self-test audio PASS decode/start ({(DisplayServer.GetName() == "headless" ? "silent, no device" : "device")}), loop, flatten, refusals, voice limit, generations, buses removed, volume file");
+        GD.Print($"ARC-UI-040 self-test audio PASS decode/start ({(audible ? "device" : "silent, no device")}), loop, flatten, refusals, voice limit, generations, buses removed, volume file");
     }
 
     /// <summary>A mono 16-bit PCM square wave written independently for the test.</summary>

@@ -13,7 +13,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     /// <summary>The original's fixed interface sound ids (docs/research/audio-evidence.md SN31), in the order the test plays.</summary>
-    internal static readonly int[] InterfaceSoundIds = [3008, 3009, 3010, 3011, 3002, 3003, 3004, 3005, 3006, 3007, 3027, 3028];
+    internal static IReadOnlyList<int> InterfaceSoundIds { get; } = Array.AsReadOnly(new[] { 3008, 3009, 3010, 3011, 3002, 3003, 3004, 3005, 3006, 3007, 3027, 3028 });
     private ViewerAudioBackend? _audio;
     private AudioVolumesStore? _audioStore;
     private AudioVolumes _audioVolumes = AudioVolumes.Defaults;
@@ -66,7 +66,8 @@ public partial class TerrainViewerApp
         _soundContent = null;
     }
 
-    /// <summary>The original's non-positional effect (SN6): the sound's volume 127 scaled by the effects channel at start.</summary>
+    /// <summary>The original's non-positional effect (SN6: the plain play call uses volume 127 and the centre pan), scaled by
+    /// the effects channel at start.</summary>
     private (SfxResolution? Sfx, SoundPayload? Payload, ViewerAudioResult? Result) PlaySfx(int id)
     {
         if (_audio is null || _arguments?.ModulePath is not { } module || SoundCatalogFor(module) is not { } catalog) return (null, null, null);
@@ -80,10 +81,10 @@ public partial class TerrainViewerApp
     /// <summary>Palette: plays the next of the original's interface sounds and reports what happened.</summary>
     private void PaletteSoundTest()
     {
-        _soundTestCursor = (_soundTestCursor + 1) % InterfaceSoundIds.Length;
+        _soundTestCursor = (_soundTestCursor + 1) % InterfaceSoundIds.Count;
         var id = InterfaceSoundIds[_soundTestCursor];
         var (sfx, payload, result) = PlaySfx(id);
-        _audioNotice = sfx is null ? $"sound {id}: no catalogue ({_soundContent?.Detail ?? "no module"})"
+        _audioNotice = _audio is null ? $"sound {id}: audio off" : sfx is null ? $"sound {id}: no catalogue ({_soundContent?.Detail ?? "no module"})"
             : !sfx.Playable ? $"sound {id}: {sfx.Status}{(sfx.File is { } f ? $" {f.Status}" : "")}"
             : payload!.Status != SoundPayloadStatus.Admitted ? $"sound {id}: {payload.Status}"
             : $"sound {id}: {result!.Value.Status}";

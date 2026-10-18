@@ -22,7 +22,8 @@ public sealed partial class FunctionRegistryTests
     private const string Header = "address,name,domain,status,reason,level,evidence,method";
     private static readonly string[] Statuses = ["full", "partial", "not implemented", "out of scope"];
     private static readonly Assembly[] Implementations =
-        [typeof(DataFixProfile).Assembly, typeof(OriginalFunctionAttribute).Assembly, typeof(ScrRuleProfile).Assembly, typeof(GameRules).Assembly];
+        [typeof(DataFixProfile).Assembly, typeof(OriginalFunctionAttribute).Assembly, typeof(ScrRuleProfile).Assembly, typeof(GameRules).Assembly,
+         typeof(Arcanum.Presentation.Audio.AudioVolumeRules).Assembly];
 
     public TestContext TestContext { get; set; } = null!;
 
