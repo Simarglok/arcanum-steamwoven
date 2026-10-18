@@ -1,13 +1,15 @@
 # Equipment runtime (ARC-WORLD-028)
 
-Status: **Implemented bounded component**, ARC-WORLD-028 (2026-10-17). The hero's wear slots in the
+Status: **Implemented bounded component**, ARC-WORLD-028 (2026-10-17); the best items of a slot and the pre-made start's wield
+ARC-WORLD-034 (2026-10-18, [Best items](#best-items-arc-world-034)). The hero's wear slots in the
 [game session](game-session-runtime.md): which item may take which slot, wielding and wearing kit items and items taken
 from the world, and what the worn items give the [attack resolver](attack-resolver-runtime.md) (ARC-COMBAT-001) and the
 [turn-based round](turn-based-round-runtime.md) (ARC-COMBAT-003). The rules are pure functions in
 `Arcanum.Simulation.Equipment.EquipmentRules`; the session holds the worn items (snapshot schema 12). Requirements:
 [FR-ITEM-005](../requirements/items-economy.md#fr-item-005) (slot legality, wield and remove),
 [FR-ITEM-006](../requirements/items-economy.md#fr-item-006) (weapon and armour item values into combat) and the light part
-of [FR-ITEM-007](../requirements/items-economy.md#fr-item-007). Not wired into the viewer ([Not ready](#not-ready)).
+of [FR-ITEM-007](../requirements/items-economy.md#fr-item-007). The viewer uses it only for the pre-made start
+([Not ready](#not-ready)).
 
 ## Evidence
 
@@ -85,6 +87,36 @@ hero does not hold or of another type, an item that does not belong in its slot 
 and a fixed two-handed weapon beside a shield. **Migration decision: none.** Schema 11 and older are refused; a quick save
 of schema 11 loads as "written by an incompatible version" and the next F7 overwrites it (the viewer wears nothing).
 
+## Best items (ARC-WORLD-034)
+
+The original asks for a critter's best items in every slot (ledger rows WB1–WB8): a new game does it for the pre-made hero
+before the game starts, and the AI does it for NPCs. `EquipmentChoice` holds the pure rules, the session runs the steps.
+
+| Rule | Value |
+| --- | --- |
+| Worth (`Worth`, `Identified`) | an unidentified magickal item (complexity > 0 without the identified flag) 300; else the stored worth, at least 2 |
+| Thrown damage (`ThrownDamage`) | a throwable weapon its own ranges; anything else normal `(weight + 99) / 100 .. (weight + 49) / 50` from the caller's weight |
+| Weapon score (`WeaponScore`) | null without the ammunition for one use; else the sum over the five types of the average of the wielder's damage range (`AttackRules.WeaponDamageRange`: melee DamageBonus, magic adjustments, caps), times the attack effectiveness of the weapon's skill / 100; a skill at level 0 other than melee, or an effectiveness of 0, counts −1 |
+| Choice (`ChooseBest`) | weapon slot: the eligible weapon with the highest score, a tie to the later candidate (the original compares object handles, which the session has not; candidates come in creation order); with a target the best weapon that reaches it wins; other slots: the eligible item worn nowhere with a strictly higher worth than the kept item and every earlier one |
+
+`GameSessionOwner.EquipBest(expected, items, artCheck, insertCheck)` runs the slots 1000..1008 in order on a plan and
+commits once (one revision; NoChange when the worn items end as they were): a slot's item that still passes the wear check
+stays as the worth to beat, except in the weapon slot; any other comes off (no-drop or a refused insert check keeps it on);
+then the choice over the hero's items in creation order (the kit, then the items taken from the world), wielded as by
+`Equip`. The host gives every held item's facts (`SessionWearableLookup`; `SessionEquipmentFacts.Wearable` builds them from
+the stored combat fields, which now also read the script points) and answers the art and insert checks. The hero's weapon
+skill levels come from its stored 0 points under the dexterity cap without the race and gender effects on skills, which the
+session drops (skills are not session state), its tech level is 0, and it carries no ammunition. `SessionEquipBestStep` lists what happened per slot. Refused before any effect: version, no hero, invalid or
+mismatched facts, a callback that moved the session. **Project policy:** a chosen item with a move script or item spells
+is not wielded (the session runs neither; the original wears it and runs them): its step names it, the slot keeps what it
+held when the call began (a weapon taken off for the choice goes back on) and the call goes on.
+
+The AREA viewer's pre-made start (`--hero`, ARC-WORLD-027) runs it after creating the session, with the kit's facts read
+from the hero's content prototypes and yes to the art and insert checks (one diagnostic body art, no grid); the HUD shows
+`worn N`. Installed original (opt-in, `ARC_AREA_CONVERSATION_GAME_ROOT`): every pre-made hero starts with a weapon, body
+armour and boots on, except the human woman, whose body armour 8220 carries wield-on and wield-off scripts and stays in the
+pack.
+
 ## Tests
 
 - `Arcanum.Simulation.Tests/Equipment/EquipmentRulesTests`: slot mapping, race sizes, the wear check's order and every
@@ -95,17 +127,28 @@ of schema 11 loads as "written by an incompatible version" and the next F7 overw
   the art check's place, a callback that changes the session (stale), the occupant's insert check and swap, a fixed two-handed weapon against a shield (also on restore), rings between slots, unequipping, no-drop, crippled arms
   from the life domain, race and gender, a taken item, the canonical text and restore, restore and decode refusals, the
   bridge from stored fields.
+- `Arcanum.Simulation.Tests/Equipment/EquipmentChoiceTests` (ARC-WORLD-034): worth and identification, thrown damage, the
+  weapon score (every type summed, DamageBonus, difficulty, untrained skills, ammunition), the choice with its tie rule, a
+  target, and the other slots' strict worth.
+- `Arcanum.Session.Tests/EquipBestTests` (ARC-WORLD-034): the start in one revision and a repeated call, a more valuable
+  item replacing a kept one, ineligible items and a refused swap, a no-drop weapon that stays on and a shield that crippled
+  arms take off, the tie to the later item, refusals and a meddling callback, unsupported items left in the pack.
+  `Arcanum.TerrainViewer.Tests/AreaStartingHeroTests`: the viewer start wears the kit; mismatched facts and an unreadable
+  kit prototype fail it. `EquipBestTests` also keeps the knife on when the better weapon is unsupported; the session's bridge
+  test reads the wearable facts and the Data reader test the script points.
 - `Arcanum.Data.Tests/Combat/CombatFieldReaderTests`: the art fields and their bits.
 - Real data (opt-in `RealData`, `ARC_AREA_PROTOTYPES`): `EquipmentRealDataTests`. All 549 weapon, armour and generic
   prototypes convert (slots: 150 weapon, 165 body armour, 13 shields and 2 torches, 19 helmets, 15 gauntlets, 10 boots,
   19 rings, 10 medallions, 146 generic items worn nowhere); Virgil's armour 8114 is body armour with AC +3. Offered to a
   half-elf man, 290 of 403 are worn, 96 body armour items are another size, 5 are for women and 12 carry item spells.
+  `StartingHeroTests.Every_premade_hero_starts_wearing_its_best_kit_items` (`ARC_AREA_CONVERSATION_GAME_ROOT`): the worn
+  slots and prototypes of all twelve pre-made heroes (ARC-WORLD-034).
 
 ## Not ready
 
-- **No host.** The viewer's inventory window has no paperdoll; nothing calls `Equip`, the resolver or the round's attack
-  cost with the hero's equipment yet. The pre-made hero's start does not wield its kit (the original's new game runs
-  `item_wield_best_all`, which needs skill effectiveness, LM1/LM2).
+- **No paperdoll.** The viewer's inventory window has no paperdoll and no host calls `Equip`; the pre-made start wields the
+  kit (ARC-WORLD-034). The best-items choice uses skill levels from 0 points (no skill state) and no ammunition; a custom
+  character's start (weapon and armour only) and the AI's call with a target are not wired.
 - **NPC equipment.** NPC slots stay the host's (seed inventory locations); `EquipmentRules.Evaluate` serves them too, and
   looting a worn item is still `WornItemUnsupported`.
 - **Not tied to the round.** `Equip` and `Unequip` neither charge action points nor refuse during a turn-based round; the
