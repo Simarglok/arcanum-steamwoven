@@ -58,8 +58,9 @@ public sealed class MapList
         {
             if (parsed.File!.Find(number) is not { } message) break;
             var values = Encoding.Latin1.GetString(message.Bytes.Span).Split(',');
-            // Read like C strtoll (leading digits, else 0), as the original's value parser does; a
-            // negative coordinate is not a tile, so it is treated as absent.
+            // Read like C strtoll (leading digits, else 0); the original's 64-bit atoi agrees except that
+            // it wraps on overflow where this saturates (ledger IF2). A negative coordinate is not a tile,
+            // so it is treated as absent (the original keeps it).
             WorldLocation? start = null;
             if (values.Length >= 3 && WorldCatalog.StrToLong(values[1]) is var x and >= 0 && WorldCatalog.StrToLong(values[2]) is var y and >= 0) start = new(x, y);
             entries.Add(new(number, values[0].Trim(), start));
