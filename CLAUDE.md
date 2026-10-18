@@ -94,7 +94,7 @@ under `docs/research`. Details: `docs/project/status.md`.
 - Hard rules: no original/extracted game content, nothing derived from it (HD
   packs and frames, screenshots, model weights), toolkit archives, secrets or
   personal paths in git (`toolkit/`, `artifacts/`, `local/`, `research-private/`
-  are ignored); synthetic fixtures only; no mechanical copying/translation from CE;
+  are ignored); synthetic fixtures only; no source reconstruction is used or copied;
   record provenance; GitHub account `Simarglok` only; agent merges unless the owner explicitly asked to review.
 - Style: dense, defensive, immutable records; explicit limits/options objects;
   typed failure results instead of exceptions at runtime boundaries; docs state
@@ -108,16 +108,16 @@ under `docs/research`. Details: `docs/project/status.md`.
    `docs/scripting`, `docs/rendering`, `docs/formats`, research under
    `docs/research`, owner decisions in `docs/architecture/decisions.md`.
 3. For how the **original game** behaves, the retail executable is the only
-   reference. CE is a reconstruction with its own slips; it is still read first
-   in domains not yet migrated, but it is being phased out of the process and the
-   documents (owner decision 2026-10-17, [plan](docs/research/original-oracle-research.md)).
+   reference; no source reconstruction is used (owner decision 2026-10-18,
+   [plan](docs/research/original-oracle-research.md)). Facts not yet read in the
+   executable carry their address at level F0.
    Check behaviour in the original 1.0.7.4 `Arcanum.exe`
    ([original executable check](docs/research/original-executable-check.md)):
    read it with `llvm-objdump` or headless Ghidra, or run a single function in the
    emulator oracle (allowed by the owner; `./arcanum oracle`, ARC-DEV-007);
    behaviour in prose, no bytes, listings or oracle outputs in git. Use it in every
    part of the game whenever a task needs original behaviour or an anomaly must be
-   classified (CE-only slip vs bug of the game, which decides the D8
+   classified (reconstruction slip vs bug of the game, which decides the D8
    "Original"/"Steamwoven" settings). Only free tools with free licences.
 4. Obsidian vault "Arcanum Steamwoven" — Russian research/decision notes from
    2026-09-19..21. **Stale**: it predates all code. Use for intent/decisions
@@ -135,10 +135,6 @@ under `docs/research`. Details: `docs/project/status.md`.
   task explicitly names (e.g. ARC-GPAD-005: `.worktrees/t_6346b4d1`). ARC-GPAD-005
   (`arcanum-steamwoven/t_6346b4d1-arc-gpad-005-gamepad-lab`) is still unmerged;
   ARC-DATA-010 has no branch on the remote and is still todo.
-- The CE research clone (owner's Mac; `~/mnt/arcanum-ce` in bridged sessions) = `alexbatalov/arcanum-ce` at the exact pinned research
-  commit `a7ff41b300ef712f0e7d088183a3d08957110cdd` (cited ~1,200× in docs).
-  C, Sustainable Use License: read to understand original mechanics
-  (`src/game/*.c`, `src/ui/*.c`); never copy code or structure into this repo.
 
 ## 5. Where the rules live
 

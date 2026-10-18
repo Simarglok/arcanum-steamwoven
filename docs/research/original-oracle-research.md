@@ -78,6 +78,7 @@ verifier and persuaded the reviewer, so the oracle must be protected). Sources o
    and tools (ARC-DEV-009..012), contracts and requirements (ARC-DEV-013) and research documents (ARC-DEV-020);
    re-reading the F0 facts in the executable continues by domain.
 5. **Closure**: the reconstruction removed from `AGENTS.md`, `CLAUDE.md` and the method; the counter becomes a ban.
+   Done as ARC-DEV-023.
 
 ## Not done
 

@@ -139,45 +139,41 @@ public sealed partial class FunctionRegistryTests
     }
 
     [TestMethod]
-    public void LinesNamingTheReconstructionStayWithinTheBaseline()
+    public void NoTrackedFileNamesTheReconstruction()
     {
-        var root = Root();
-        var baseline = File.ReadAllLines(Path.Combine(root, "docs", "verification", "ce-references.csv"))
-            .Skip(1).Where(l => l.Length > 0).Select(l => l.Split(',')).ToDictionary(p => p[0], p => int.Parse(p[1]));
-        var counts = CountReconstructionLines(root);
-        CollectionAssert.AreEquivalent(baseline.Keys.ToList(), counts.Keys.ToList(), "baseline areas");
-        foreach (var (area, count) in counts.OrderBy(p => p.Key, StringComparer.Ordinal))
-            TestContext.WriteLine($"{area}: {count} lines (baseline {baseline[area]})");
-        var above = counts.Where(p => p.Value > baseline[p.Key]).Select(p => $"{p.Key} {p.Value} > {baseline[p.Key]}").ToList();
-        Assert.AreEqual(0, above.Count, "more lines name the reconstruction than the baseline allows (new work cites the executable): " + string.Join(", ", above));
-        // A ratchet: lines removed are not credit for later additions, so the baseline drops in the same change.
-        var below = counts.Where(p => p.Value < baseline[p.Key]).Select(p => $"{p.Key} {p.Value}").ToList();
-        Assert.AreEqual(0, below.Count, "fewer lines name the reconstruction than the baseline; lower docs/verification/ce-references.csv to: " + string.Join(", ", below));
+        var lines = ReconstructionLines(Root());
+        foreach (var line in lines) TestContext.WriteLine(line);
+        Assert.AreEqual(0, lines.Count, "tracked files name the source reconstruction the project no longer uses (owner decision 2026-10-18); cite the executable address instead: " + string.Join("; ", lines));
     }
 
-    /// <summary>Per area, the lines of tracked text files that name the reconstruction: its repository name, its pinned commit,
-    /// the word CE (also as an identifier prefix such as <c>CE_</c>) or a Markdown reference label <c>[ce]</c>.</summary>
-    internal static Dictionary<string, int> CountReconstructionLines(string root)
+    /// <summary>Lines of tracked text files that name the reconstruction: its repository name, its pinned commit, its
+    /// two-letter abbreviation (also as an identifier prefix) or a Markdown reference label made of it. Lock files, binary
+    /// files and the allowed data keywords are skipped.</summary>
+    internal static List<string> ReconstructionLines(string root)
     {
-        string[] areas = ["AGENTS.md", "CLAUDE.md", "docs", "src", "tests", "tools"];
-        var counts = areas.ToDictionary(a => a, _ => 0);
-        foreach (var file in TrackedFiles(root, areas))
+        var found = new List<string>();
+        foreach (var file in TrackedFiles(root, []))
         {
             if (file.EndsWith(".lock.json", StringComparison.Ordinal) || file.EndsWith(".lock", StringComparison.Ordinal)) continue;
             var path = Path.Combine(root, file);
             if (!File.Exists(path)) continue; // deleted in the working tree, not yet in the index
             var bytes = File.ReadAllBytes(path);
             if (bytes.AsSpan(0, Math.Min(bytes.Length, 8192)).IndexOf((byte)0) >= 0) continue;
-            var area = file.Contains('/') ? file[..file.IndexOf('/')] : file;
-            counts[area] += Encoding.UTF8.GetString(bytes).Split('\n').Count(line => Reconstruction().IsMatch(line));
+            var lines = Encoding.UTF8.GetString(bytes).Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+                if (Reconstruction().IsMatch(lines[i]) && !AllowedKeyword(file, lines[i])) found.Add($"{file}:{i + 1}");
         }
-        return counts;
+        return found;
     }
 
-    private static IEnumerable<string> TrackedFiles(string root, string[] areas)
+    /// <summary>The original DLG files have an action opcode spelled with the same two letters; the dialog study counts it.</summary>
+    private static bool AllowedKeyword(string file, string line) =>
+        file == "docs/research/dialog-evidence.md" && Reconstruction().Matches(line).All(m => line.AsSpan(m.Index).StartsWith("C" + "E:2`"));
+
+    private static IEnumerable<string> TrackedFiles(string root, string[] paths)
     {
         var start = new ProcessStartInfo("git") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
-        foreach (var argument in new[] { "-C", root, "ls-files", "-z", "--" }.Concat(areas)) start.ArgumentList.Add(argument);
+        foreach (var argument in new[] { "-C", root, "ls-files", "-z", "--" }.Concat(paths)) start.ArgumentList.Add(argument);
         using var git = Process.Start(start) ?? throw new InvalidOperationException("git did not start");
         var output = git.StandardOutput.ReadToEnd();
         git.WaitForExit();
@@ -254,7 +250,8 @@ public sealed partial class FunctionRegistryTests
     [GeneratedRegex("^F[0-4]$")]
     private static partial Regex Level();
 
-    [GeneratedRegex(@"(?i:arcanum-ce)|(?i:a7ff41b)|(?<![A-Za-z0-9_])CE(?![A-Za-z0-9])|(?i:\[ce\])")]
+    // Character classes keep the pattern from matching its own source line.
+    [GeneratedRegex(@"(?i:arcanum-c[e])|(?i:a7ff41[b])|(?<![A-Za-z0-9_])C[E](?![A-Za-z0-9])|(?i:\[c[e]\])")]
     private static partial Regex Reconstruction();
 
     [GeneratedRegex(@"OriginalFunction(?:Attribute)?\s*\(\s*(?:address\s*:\s*)?0x([0-9A-Fa-f]+)")]
