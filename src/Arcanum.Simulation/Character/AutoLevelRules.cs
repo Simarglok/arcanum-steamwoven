@@ -95,7 +95,6 @@ public static class AutoLevelRules
     // Key stats of the basic and tech skills, as source stat indices.
     private static readonly int[] BasicKeyStats = [1, 1, 1, 1, 1, 1, 5, 5, 4, 6, 4, 7];
     private static readonly int[] TechKeyStats = [4, 5, 1, 5];
-    private static readonly int[] SkillCaps = [3, 3, 3, 3, 3, 7, 7, 7, 11, 11, 11, 15, 15, 15, 19, 19, 19, 20, 20, 20];
     private static readonly int[] SpellMinimumLevels = [1, 1, 5, 10, 15];
     private static readonly int[] DefaultWillpower = [6, 9, 12, 15, 18];
     private static readonly int[] DegreeCosts = [0, 1, 1, 1, 1, 1, 1, 1];
@@ -197,10 +196,8 @@ public static class AutoLevelRules
     [OriginalFunction(0x4B0F50, OriginalFunctionScope.Full)]
     public static int StatCost(int value) => Math.Clamp(value, 1, 20) <= 1 ? 0 : 1;
 
-    /// <summary>The highest skill level a key stat allows (0x4C5F70): 3 up to 5, then 7, 11, 15
-    /// and 19 for each three more, 20 from 18; the stat is clamped to 1..20 first.</summary>
-    [OriginalFunction(0x4C5F70, OriginalFunctionScope.Full)]
-    public static int SkillCap(int keyStat) => SkillCaps[Math.Clamp(keyStat, 1, 20) - 1];
+    /// <summary>The highest skill level a key stat allows (<see cref="CombatSkillRules.KeyStatCap"/>, 0x4C5F70).</summary>
+    public static int SkillCap(int keyStat) => CombatSkillRules.KeyStatCap(keyStat);
 
     /// <summary>The willpower a spell needs when its record names none (0x4502F0 before the spell table
     /// is loaded, 0x4502F0): 6, 9, 12, 15, 18 by rank; the rank-2 value outside 0..79.</summary>
@@ -208,6 +205,7 @@ public static class AutoLevelRules
     public static int DefaultSpellMinimumWillpower(int spell) => spell is >= 0 and < Spells ? DefaultWillpower[spell % 5] : DefaultWillpower[1];
 
     /// <summary>The character level a spell rank needs (0x4B1770): 1, 1, 5, 10, 15.</summary>
+    [OriginalFunction(0x4B1770, OriginalFunctionScope.Full)]
     public static int SpellMinimumLevel(int spell) => SpellMinimumLevels[spell % 5];
 
     /// <summary>The intelligence a tech degree needs: 0, 5, 8, 11, 13, 15, 17, 19.</summary>
@@ -520,9 +518,8 @@ public static class AutoLevelRules
             return Math.Clamp(value, range.Minimum, range.Maximum);
         }
 
-        // 0x4C5EB0: 4 × points (20 for a monstrous critter's melee), then the effects, clamped 0..20, then
-        // capped by the key stat.
-        [OriginalFunction(0x4C5EB0, OriginalFunctionScope.Partial)]
+        // A basic skill's level (0x4C5EB0, the reading CombatSkillRules.Level gives the combat skills): 4 × points (20 for a
+        // monstrous critter's melee), then the effects, clamped 0..20, then capped by the key stat.
         internal int BasicLevel(int skill)
         {
             var level = skill == 2 && _sheet.Monstrous ? MaxSkillLevel : 4 * (Basic[skill] & SkillPointMask);

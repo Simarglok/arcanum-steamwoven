@@ -323,7 +323,7 @@ public sealed class EffectStateTests
     {
         using var owner = Saved();
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, EffectsJson + NoExperience + ",\"random\":");
+        StringAssert.Contains(text, EffectsJson + NoExperience + NoAdvancement + ",\"random\":");
         StringAssert.Contains(text, $"{{\"sequence\":1,\"kind\":\"effect.hero.end\",\"deadlineMs\":{T0 + 8000},\"entities\":[],\"values\":[{T0},8000,120,1]}}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));

@@ -86,10 +86,13 @@ public sealed class SessionExperienceState
 /// effects (before the 0..2,000,000,000 clamp), <see cref="LevelsGained"/> and <see cref="PointsGained"/> the levels written
 /// and their points (before the unspent cap), and <see cref="Followers"/> the PC level step the source passes to its followers
 /// and nearby waiting followers (<see cref="ExperienceRules.FollowerLevel"/>), null when the recalculation stopped before it.
-/// NPC levels are not session state: the host applies the step to the NPCs it owns, also when the result is NoChange (at the
-/// last level an award can leave the hero unchanged and still step the followers, as the source does).
+/// The host passes the step to <see cref="GameSessionOwner.LevelFollower"/> for each follower and nearby waiting follower,
+/// also when the result is NoChange (at the last level an award can leave the hero unchanged and still step the followers, as
+/// the source does). <see cref="Purchases"/> are what the hero's auto-level scheme bought at each level written (ARC-WORLD-036),
+/// in order; null when it bought nothing.
 /// </summary>
-public sealed record SessionExperienceAward(int Award, int LevelsGained, int PointsGained, FollowerLevelStep? Followers);
+public sealed record SessionExperienceAward(int Award, int LevelsGained, int PointsGained, FollowerLevelStep? Followers,
+    IReadOnlyList<AdvancementPurchase>? Purchases = null);
 
 /// <summary>An experience call: the hero's award (null when none was given: refused, a zero amount, a dead hero, an award
 /// to nobody; set also for NoChange when an award left the hero unchanged, such as a negative one at 0 or the last-level
@@ -114,7 +117,8 @@ internal sealed class ExperienceDomain(SessionExperienceRules? rules)
 internal sealed record HeroAward(SessionHeroState Hero, SessionExperienceAward Award)
 {
     internal bool Changed(SessionHeroState before) =>
-        Hero.Experience != before.Experience || Hero.Level != before.Level || Hero.UnspentPoints != before.UnspentPoints;
+        Hero.Experience != before.Experience || Hero.Level != before.Level || Hero.UnspentPoints != before.UnspentPoints ||
+        !Hero.Stats.SequenceEqual(before.Stats) || Hero.Advancement != before.Advancement;
 }
 
 public sealed partial class GameSessionOwner
@@ -248,9 +252,26 @@ public sealed partial class GameSessionOwner
         if (LifeRules.Evaluate(life, HeroLifeFacts(life)).IsDead) return null;
         var gain = EffectModifiers.Apply(adjusted, _effects.Maximum(EffectSpecial.XpGain));
         var experience = (int)Math.Clamp(hero.Experience + (long)gain, SessionHeroLimits.MinExperience, SessionHeroLimits.MaxExperience);
-        var advance = Simulation.Character.ExperienceRules.Advance(_experience.Rules!.Levels, hero.Level, experience, hero.UnspentPoints);
-        return new(hero.WithExperience(advance.Level, advance.Experience, advance.UnspentPoints),
-            new(gain, advance.LevelsGained, advance.PointsGained, advance.Followers));
+        // The hero's scheme spends each level's points as the level is written (ARC-WORLD-036), over a running copy of its sheet.
+        var sheet = AdvancementDomain.HeroSheet(hero);
+        var purchases = new List<AdvancementPurchase>();
+        Func<int, int, int>? spend = null;
+        if (_advancement.Rules is { } rules && rules.Scheme(hero.Advancement.AutoLevelScheme) is { } scheme)
+        {
+            var modifiers = AdvancementDomain.HeroModifiers(_hero.Stats, _effects, life.PoisonLevel);
+            spend = (level, unspent) =>
+            {
+                var outcome = AutoLevelRules.Apply(sheet with { Level = level, UnspentPoints = unspent }, modifiers, scheme, null, npc: false,
+                    rules.SpellWillpower);
+                sheet = outcome.Sheet;
+                purchases.AddRange(outcome.Purchases);
+                return sheet.UnspentPoints;
+            };
+        }
+        var advance = Simulation.Character.ExperienceRules.Advance(_experience.Rules!.Levels, hero.Level, experience, hero.UnspentPoints, spend);
+        sheet = sheet with { Level = advance.Level, UnspentPoints = advance.UnspentPoints };
+        return new(AdvancementDomain.WithSheet(hero, sheet, advance.Experience),
+            new(gain, advance.LevelsGained, advance.PointsGained, advance.Followers, purchases.Count == 0 ? null : purchases.AsReadOnly()));
     }
 
     // Every experience call commits here after its own checks: NoChange when neither the hero nor the NPC record changes, else
@@ -263,7 +284,7 @@ public sealed partial class GameSessionOwner
         if (npcChanged && !_experience.Npcs.ContainsKey(after!.Value.Entity) && _experience.Npcs.Count >= _limits.MaxExperienceRecords)
             return RejectExperience(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectExperience(GameSessionFailure.RevisionExhausted);
-        if (heroChanged) _hero!.State = award!.Hero;
+        if (heroChanged) _hero!.Apply(award!.Hero);
         if (npcChanged) _experience.Npcs[after!.Value.Entity] = after.Value;
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, award?.Award, after, Version);

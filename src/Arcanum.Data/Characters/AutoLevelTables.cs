@@ -19,6 +19,7 @@ public static class AutoLevelTables
     private static readonly int[] DefaultWillpower = [6, 9, 12, 15, 18];
 
     /// <summary>The rule text of <paramref name="scheme"/>, or null when the source finds none.</summary>
+    [OriginalFunction(0x4A6E40, OriginalFunctionScope.Full)]
     public static ReadOnlyMemory<byte>? Rule(MesFile game, MesFile user, int scheme)
     {
         ArgumentNullException.ThrowIfNull(game);
