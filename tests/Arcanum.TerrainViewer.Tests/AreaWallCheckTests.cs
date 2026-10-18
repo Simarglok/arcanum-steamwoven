@@ -144,6 +144,8 @@ public sealed class AreaWallCheckTests
         var state = new AreaWallCheck([edge[0], locked, edge[2]]).Recalculate(11, 11);
         Assert.AreEqual(AreaWallFade.Both, state.FadeOf(edge[0].Key));
         Assert.AreEqual(AreaWallFade.None, state.FadeOf(locked.Key));
+        // ARC-RENDER-022: the check still holds it, so its roof is counted (ledger RF9).
+        CollectionAssert.AreEquivalent(new[] { edge[0].Key, locked.Key, edge[2].Key }, state.HeldWalls.ToArray());
         var duplicate = Wall(1, 1, 0);
         Assert.ThrowsExactly<ArgumentException>(() => new AreaWallCheck([duplicate, duplicate]));
         Assert.ThrowsExactly<ArgumentException>(() => new AreaWallCheck([Wall(1, 1, 8)]));

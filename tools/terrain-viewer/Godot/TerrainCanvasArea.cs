@@ -26,6 +26,12 @@ public partial class TerrainCanvas
     private int _areaMovingStamp;
     // ARC-WORLD-017: companions of this map standing on another one; their T0 body is not drawn.
     private IReadOnlySet<AreaObjectKey>? _areaAbsent;
+    // ARC-RENDER-022: the roofs drawn after every body (unfilled blocks, with a faded block's corner alphas), the terrain
+    // commands an unfaded roof covers (drawn again in black over the terrain: the original leaves them undrawn) and the
+    // bodies a roof covers (not drawn).
+    private IReadOnlyList<(AreaDrawCommand Command, Vector4? Corners)>? _areaRoofs;
+    private IReadOnlyList<AreaDrawCommand>? _areaCoveredTiles;
+    private IReadOnlySet<AreaObjectKey>? _areaCovered;
     private AreaScenePlan? _area;
     private IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>? _areaFrames;
     private ActorDiagnosticPlacementInput? _areaActorPlacement;
@@ -116,6 +122,16 @@ public partial class TerrainCanvas
         _areaHidden = hidden; _areaView = null; QueueRedraw();
     }
     internal IReadOnlySet<AreaObjectKey>? AreaHidden => _areaHidden;
+    /// <summary>ARC-RENDER-022: the roof state from the next submission (null = no roofs).</summary>
+    public void SetAreaRoofs(IReadOnlyList<(AreaDrawCommand Command, Vector4? Corners)>? roofs, IReadOnlyList<AreaDrawCommand>? coveredTiles,
+        IReadOnlySet<AreaObjectKey>? coveredBodies)
+    {
+        if (ReferenceEquals(_areaRoofs, roofs) && ReferenceEquals(_areaCoveredTiles, coveredTiles) && ReferenceEquals(_areaCovered, coveredBodies)) return;
+        _areaRoofs = roofs; _areaCoveredTiles = coveredTiles; _areaCovered = coveredBodies; _areaView = null; QueueRedraw();
+    }
+    /// <summary>ARC-RENDER-022: the frames of the roofs and covered-tile masks the last submission drew per item.</summary>
+    public IReadOnlySet<AreaFrameKey> AreaVisibleRoofFrames { get; private set; } = new HashSet<AreaFrameKey>();
+    public int AreaVisibleRoofCount { get; private set; }
     /// <summary>ARC-WORLD-016: moved body commands from the next submission (null or empty = every body at T0).</summary>
     public void SetAreaMovingBodies(IReadOnlyList<AreaDrawCommand>? moving)
     {
@@ -139,8 +155,9 @@ public partial class TerrainCanvas
         set { if (_areaSmokeOmitted == value) return; _areaSmokeOmitted = value; _areaView = null; QueueRedraw(); }
     }
     private AreaObjectKey? _areaSmokeOmitted;
+    // ARC-RENDER-022: a body a roof covers is not drawn (the pick does not test the cover).
     internal bool AreaHiddenOf(AreaDrawCommand command) => command.Identity is { } key && (_areaHidden?.Contains(key) == true || _areaAbsent?.Contains(key) == true
-        || key == _areaSmokeOmitted);
+        || key == _areaSmokeOmitted || _areaCovered?.Contains(key) == true);
     internal AreaWallFade AreaWallFadeOf(AreaDrawCommand command)
         => command.Identity is { } key && _areaWallFades is { } fades && fades.TryGetValue(key, out var fade) ? fade : AreaWallFade.None;
     // One ambient multiplier per chunk item: a chunk is drawn as a chunk under lighting only
@@ -195,6 +212,12 @@ public partial class TerrainCanvas
     {
         if (_areaLattice is { } old) { old.Binding.Lighter.Dispose(); old.Binding.Darker.Dispose(); }
         _areaLattice = null;
+    }
+    private Color AreaRoofLight()
+    {
+        if (_areaAmbient is not { } ambient) return Colors.White;
+        var color = ambient.Pair.Outdoor;
+        return new Color(color.R / 255f, color.G / 255f, color.B / 255f);
     }
     // The actor is a critter: outdoor channel (the source's palette callback), like other bodies.
     private Color AreaAmbientColor(AreaDrawCommand command, bool isActor)
@@ -257,8 +280,16 @@ public partial class TerrainCanvas
         }
         // Per-command terrain holds no chunk textures alongside its frame textures.
         if (!chunked) _areaChunkTextures.Clear();
-        _textures.UploadAreaVisible(_areaFrames, draw.Where(command => command.Identity != ActorSentinel && !_areaChunkCommands.ContainsKey(command))
-            .Select(command => command.Frame).ToHashSet());
+        // ARC-RENDER-022: covered tiles are blacked out right after the terrain, roofs drawn after everything else.
+        var masks = (_areaCoveredTiles ?? []).Where(Intersects).ToArray();
+        var roofs = (_areaRoofs ?? []).Where(roof => Intersects(roof.Command)).ToArray();
+        var terrainCount = draw.TakeWhile(command => command.Identity is null).Count();
+        draw = draw.Take(terrainCount).Concat(masks).Concat(draw.Skip(terrainCount)).Concat(roofs.Select(roof => roof.Command)).ToArray();
+        var maskStart = terrainCount; var maskEnd = terrainCount + masks.Length; var roofStart = draw.Length - roofs.Length;
+        AreaVisibleRoofFrames = masks.Concat(roofs.Select(roof => roof.Command)).Select(command => command.Frame).ToHashSet();
+        AreaVisibleRoofCount = roofs.Length;
+        _textures.UploadAreaVisible(_areaFrames, draw.Where((command, index) => command.Identity != ActorSentinel
+            && (!_areaChunkCommands.ContainsKey(command) || index >= maskStart && index < maskEnd)).Select(command => command.Frame).ToHashSet());
         var logical = visible; visible = draw;
         // ARC-RENDER-014: HD textures for characters and objects, after the Legacy set (every
         // fallback draws Legacy, so the Legacy visible set stays resident under both profiles).
@@ -281,12 +312,17 @@ public partial class TerrainCanvas
             var command = visible[index];
             ImageTexture texture;
             var isActor = command.Identity == ActorSentinel;
-            if (_areaChunkCommands.TryGetValue(command, out var chunk)) texture = _areaChunkTextures.Acquire(_areaChunks!, chunk, AreaChunkLevel);
+            var mask = index >= maskStart && index < maskEnd; var roof = index >= roofStart;
+            if (!mask && _areaChunkCommands.TryGetValue(command, out var chunk)) texture = _areaChunkTextures.Acquire(_areaChunks!, chunk, AreaChunkLevel);
             else if (!(isActor ? _textures.TryGet(_actorPlan.Current.TextureKey, out texture!) : _textures.TryGet(command.Frame, out texture!)))
                 throw new InvalidOperationException("AREA_VISIBLE_TEXTURE_MISSING");
             if (hd[index].Texture is { } hdTexture) { texture = hdTexture; item.HdScale = hdScale; } else item.HdScale = 1;
             item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null;
-            (item.Ambient, item.AmbientRight, item.Lattice) = AreaItemLight(command, isActor);
+            // A roof is tinted by the outdoor light only (RF2); a covered tile's mask is black.
+            if (mask) (item.Ambient, item.AmbientRight, item.Lattice) = (Colors.Black, Colors.Black, null);
+            else if (roof) { var outdoor = AreaRoofLight(); (item.Ambient, item.AmbientRight, item.Lattice) = (outdoor, outdoor, null); }
+            else (item.Ambient, item.AmbientRight, item.Lattice) = AreaItemLight(command, isActor);
+            item.RoofCorners = roof ? roofs[index - roofStart].Corners : null;
             // The source drops every alpha mode for an additive (or sub/mul) object, and a constant-alpha body
             // replaces them with its own, so such a wall never fades (ARC-RENDER-018).
             item.WallFade = isActor || command.Additive || command.Unlit ? AreaWallFade.None : AreaWallFadeOf(command);
@@ -323,7 +359,7 @@ public partial class TerrainCanvas
     }
     private void ClearArea()
     {
-        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; _areaHidden = null; _areaMoving = null; _areaMovingKeys = new HashSet<AreaObjectKey?>(); _areaAbsent = null; DisposeAreaLattice();
+        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; _areaHidden = null; _areaMoving = null; _areaMovingKeys = new HashSet<AreaObjectKey?>(); _areaAbsent = null; _areaRoofs = null; _areaCoveredTiles = null; _areaCovered = null; DisposeAreaLattice();
         _areaView = null; _areaUpright = null; _areaActive = 0;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>();

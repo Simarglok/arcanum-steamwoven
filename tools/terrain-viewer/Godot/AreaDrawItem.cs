@@ -34,6 +34,8 @@ public partial class AreaDrawItem : Node2D
         // ARC-RENDER-018 wading: destination rows at or below item_rect's bottom minus wade_rows take wade_alpha,
         // which replaces body_alpha and the wall fade there; 0 rows = not wading.
         uniform int wade_rows = 0;
+        uniform bool corner_fade = false;
+        uniform vec4 corners = vec4(1.0);
         uniform float wade_alpha = 1.0;
         uniform sampler2D light_lighter : filter_nearest, repeat_disable;
         uniform sampler2D light_darker : filter_nearest, repeat_disable;
@@ -67,6 +69,11 @@ public partial class AreaDrawItem : Node2D
             int column = fade_flip ? fade_width - 1 - legacy_column : legacy_column;
             float wall = fade.x + float(column) * (fade.y - fade.x) / float(fade_width);
             float alpha = body_alpha * wall;
+            if (corner_fade) {
+                vec2 uv = (vec2(float(sx), float(sy)) + 0.5) / vec2(textureSize(TEXTURE, 0));
+                float u = fade_flip ? 1.0 - uv.x : uv.x;
+                alpha *= mix(mix(corners.x, corners.y, u), mix(corners.w, corners.z, u), uv.y);
+            }
             if (wade_rows > 0 && (FRAGCOORD.y - raster.y) / raster.w >= item_rect.y + item_rect.w - float(wade_rows)) alpha = wade_alpha;
             vec4 texel = texelFetch(TEXTURE, ivec2(sx, sy), 0);
             COLOR = BODY_COLOR;
@@ -105,6 +112,10 @@ public partial class AreaDrawItem : Node2D
     public Color Ambient { get; set; } = Colors.White;
     /// <summary>ARC-RENDER-011 wall check fade of this item; None draws it opaque.</summary>
     public AreaWallFade WallFade { get; set; }
+    /// <summary>ARC-RENDER-022: a faded roof's four corner alphas (top left, top right, bottom right, bottom left, 0–1),
+    /// interpolated over the frame in drawn orientation; null draws it without (ledger RF2).</summary>
+    public Vector4? RoofCorners { get; set; }
+    private (bool On, Vector4 Corners)? _cornerState;
     /// <summary>ARC-RENDER-012: right-end colour of a wall gradient; equal to <see cref="Ambient"/> otherwise.</summary>
     public Color AmbientRight { get; set; } = Colors.White;
     /// <summary>ARC-RENDER-012: the terrain light lattice, or null.</summary>
@@ -172,7 +183,7 @@ public partial class AreaDrawItem : Node2D
             _material.SetShaderParameter("wade_rows", command.WadeRows);
             _material.SetShaderParameter("wade_alpha", AreaScenePlan.WadingAlpha / 255f);
             _materialState = (command.Additive, command.Multiply, command.Alpha, command.WadeRows);
-            _ambientState = null; _lightState = null; _fadeState = null; // re-send the per-item uniforms with every shader swap
+            _ambientState = null; _lightState = null; _fadeState = null; _cornerState = null; // re-send the per-item uniforms with every shader swap
         }
         if (_ambientState != Ambient)
         {
@@ -192,6 +203,13 @@ public partial class AreaDrawItem : Node2D
         }
         // Constant-ambient items (every item without local light) never re-send per camera move; a wading item needs
         // the raster and its destination for its water line.
+        var corners = (RoofCorners is not null, RoofCorners ?? Vector4.One);
+        if (_cornerState != corners)
+        {
+            _material.SetShaderParameter("corner_fade", corners.Item1);
+            _material.SetShaderParameter("corners", corners.Item2);
+            _cornerState = corners;
+        }
         var mode = Lattice is not null ? 2 : AmbientRight != Ambient ? 1 : 0;
         var raster = mode == 0 && command.WadeRows == 0 ? default : new Vector4(transform.Origin.X, transform.Origin.Y, transform.X.X, transform.Y.Y);
         var light = (mode, AmbientRight, Lattice, mode == 1 || command.WadeRows > 0 ? command.Destination : default, raster);
