@@ -215,6 +215,10 @@ draw.
 
 ## Limits
 
+Every limit of a whole-map plan, its owner and its lighting is derived from the plan or a
+policy cap with at least 1.5 times the largest installed value; the census of all 81 maps and
+the headroom of each cap are in the [limits census](limits-census.md) (ARC-DATA-029).
+
 The viewer's [map mode](../rendering/area-map-mode.md) (ARC-RENDER-017) draws these
 maps and places a door or window on the wall hot-spot rule (mirror and rotation
 shift, see the portal facts); five complete maps still stop at blend states the

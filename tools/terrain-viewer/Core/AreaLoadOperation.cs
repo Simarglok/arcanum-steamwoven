@@ -29,10 +29,14 @@ public sealed record AreaLoadResult(long Generation, AreaSnapshot Snapshot, Area
 /// <summary>Admitted CPU frame repository limits; GPU residency is a subset.</summary>
 public static class AreaRepositoryPolicy
 {
-    public const int MaxFrames = 2444;
-    public const long MaxCpuBytes = 81853096;
-    /// <summary>ARC-RENDER-017: a whole interior map's CPU repository (every distinct frame it draws);
-    /// GPU residency stays within <see cref="MaxFrames"/>/<see cref="MaxCpuBytes"/> of visible frames.</summary>
+    /// <summary>The pinned plan's own limits (<see cref="Arcanum.Data.Area.AreaLoaderOptions.PinnedVisuals"/> and
+    /// <see cref="Arcanum.Data.Area.AreaLoaderOptions.PinnedFrameRgbaBytes"/>, the exterior's totals); only the pinned
+    /// profiles' frame copy uses them (ARC-DATA-029).</summary>
+    public const int MaxFrames = Arcanum.Data.Area.AreaLoaderOptions.PinnedVisuals;
+    public const long MaxCpuBytes = Arcanum.Data.Area.AreaLoaderOptions.PinnedFrameRgbaBytes;
+    /// <summary>ARC-RENDER-017: a whole interior map's CPU repository (every distinct frame it draws), and since
+    /// ARC-DATA-029 the bound of the visible frames on the GPU. Census of the 80 interiors: at most 4,557 frames and
+    /// 56.2 MiB (docs/world/limits-census.md).</summary>
     public const int MaxMapFrames = 16384;
     public const long MaxMapCpuBytes = 160L * 1024 * 1024;
 }

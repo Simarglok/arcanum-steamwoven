@@ -184,7 +184,7 @@ public sealed class SessionEventTests
     public void TheQueueHoldsEveryTimerTheLifeRecordsCanNeed()
     {
         using var owner = Session();
-        // 4096 NPC records with four timers each, then the hero's three: exactly the session's queue size.
+        // PolicyMaxLifeRecords NPC records with four timers each, then the hero's three: exactly the session's queue size.
         for (var i = 0; i < GameSessionLimits.PolicyMaxLifeRecords; i++)
             Damage(owner, Npc($"oid:n{i}"), new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
         Damage(owner, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });

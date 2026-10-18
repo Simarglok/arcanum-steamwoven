@@ -47,22 +47,28 @@ public readonly record struct MapChangeEdit(SessionMapId Map, MapChangeKey Key, 
 /// </summary>
 public readonly record struct SessionLightingState(int SchemeId, int Hour);
 
-/// <summary>Session limits can be lowered, never raised above the policy maxima.</summary>
+/// <summary>Session limits can be lowered, never raised above the policy maxima. ARC-DATA-029: each maximum is sized
+/// for a whole playthrough of any map against the census of all 81 installed maps (docs/world/limits-census.md); raising
+/// one only admits more and does not change the snapshot format.</summary>
 public sealed class GameSessionLimits
 {
-    public const int PolicyMaxMaps = 64;
-    public const int PolicyMaxChangesPerMap = 4096;
-    public const int PolicyMaxTotalChanges = 16384;
+    /// <summary>The original's map list holds at most 200 maps (checked in the 1.0.7.4 executable); the installed module has 81.</summary>
+    public const int PolicyMaxMaps = 200;
+    /// <summary>Changes of one map: at least one for every object of the largest map (158,385 on the main world map).</summary>
+    public const int PolicyMaxChangesPerMap = 262_144;
+    /// <summary>Changes of all maps: at least one for every object of every installed map (276,625).</summary>
+    public const int PolicyMaxTotalChanges = 524_288;
     /// <summary>Party records (followers, waiting NPCs and free NPCs with a flag).</summary>
     public const int PolicyMaxCompanions = 64;
     /// <summary>Items the PC took from the world; the same bound as one list of the project's T0 inventory reader.</summary>
     public const int PolicyMaxPcItems = 512;
-    /// <summary>NPC life records (ARC-COMBAT-002): critters whose life the session changed.</summary>
-    public const int PolicyMaxLifeRecords = 4096;
-    /// <summary>NPC reaction records (ARC-WORLD-026): NPCs whose reaction memory toward the PC the session changed.</summary>
-    public const int PolicyMaxReactionRecords = 4096;
-    /// <summary>NPC experience records (ARC-WORLD-030): NPCs whose experience worth or pool the session changed.</summary>
-    public const int PolicyMaxExperienceRecords = 4096;
+    /// <summary>NPC life records (ARC-COMBAT-002): critters whose life the session changed; every NPC of every installed
+    /// map (3,792) can hold one.</summary>
+    public const int PolicyMaxLifeRecords = 8192;
+    /// <summary>NPC reaction records (ARC-WORLD-026): NPCs whose reaction memory toward the PC the session changed (as life).</summary>
+    public const int PolicyMaxReactionRecords = 8192;
+    /// <summary>NPC experience records (ARC-WORLD-030): NPCs whose experience worth or pool the session changed (as life).</summary>
+    public const int PolicyMaxExperienceRecords = 8192;
     /// <summary>NPC advancement records (ARC-WORLD-036): followers whose level the session updated.</summary>
     public const int PolicyMaxAdvancementRecords = 256;
 

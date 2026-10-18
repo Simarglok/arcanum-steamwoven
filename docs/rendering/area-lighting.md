@@ -96,7 +96,8 @@ original both give the same result on all 80 interiors (opt-in
 (`MapNotCatalogued`), 2 with sectors older than the metadata section
 (`SectorMetadataAbsent`), one with an animated light ART and one with an unsupported
 light flag. Largest values against the caps: 79/256 core sectors, 3/32 schemes,
-207/256 stationary lights, 9/16 light frames.
+207/512 stationary lights, 9/16 light frames (ARC-DATA-029 raised the lights from 256 for 1.5 times
+headroom; [limits census](../world/limits-census.md)).
 
 ## Viewer controls
 
@@ -187,7 +188,7 @@ No colour values or pixels are committed.
 
 API: `Arcanum.Data.Lighting.StationaryLight`, `StationaryLightFrame`,
 `AreaStationaryLightSource` (`Create` for synthetic fixtures),
-`StationaryLightReader` (`Read(stack, snapshot)` through the content stack, `Read(artResource, snapshot)` for the pinned profiles, `TryDecode`; caps 256 lights, 16 frames, 1024 px
+`StationaryLightReader` (`Read(stack, snapshot)` through the content stack, `Read(artResource, snapshot)` for the pinned profiles, `TryDecode`; caps 512 lights, 16 frames, 1024 px
 frame side, ±16384 offset), `StationaryLightField` (`Point`, `Lattice`,
 `TerrainPixel` reference, `Compose`); viewer Core `AreaLocalLighting` (tile
 channels, body/wall/actor colours, `View`) attached as `AreaLightingPlan.Local`;

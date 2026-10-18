@@ -219,7 +219,7 @@ public sealed class StationaryLightTests
         // Context sectors are not read; no lights means no resource is needed at all.
         var context = Read(Snapshot([Wire(x: 1)], scope: AreaScope.Context));
         Assert.AreEqual(LightingFailure.None, context.Failure); Assert.AreEqual(0, context.Source!.Lights.Count); Assert.IsNull(context.Source.NamesSha256);
-        Assert.AreEqual(LightingFailure.LimitExceeded, Read(Snapshot(Enumerable.Repeat<IReadOnlyList<int>>(Wire(), 257).ToArray()), names, ("art/light/disk5x5.art", Art())).Failure);
+        Assert.AreEqual(LightingFailure.LimitExceeded, Read(Snapshot(Enumerable.Repeat<IReadOnlyList<int>>(Wire(), StationaryLightReader.MaxLights + 1).ToArray()), names, ("art/light/disk5x5.art", Art())).Failure);
     }
 
     /// <summary>ARC-DATA-027: a synthetic installation (tig.dat, an empty module archive, the given base archive and loose
