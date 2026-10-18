@@ -2,7 +2,7 @@ namespace Arcanum.Data.Area;
 
 /// <summary>
 /// ARC-RENDER-021: the roofs of one map and their fill and fade state, with the original's rules for them
-/// (docs/rendering/roofs.md, ledger RF1–RF7). A roof block covers 4 × 4 tiles; its art holds the piece, the fill bit
+/// (docs/rendering/roofs.md, ledger RF1–RF10). A roof block covers 4 × 4 tiles; its art holds the piece, the fill bit
 /// (the roof is hidden: the player is under it) and the fade bit (a faded wall in front of it). The grid starts from
 /// the state the map stores at T0. Caller-serialized; no I/O. <see cref="Revision"/> moves on every change.
 /// </summary>
@@ -11,6 +11,8 @@ public sealed class AreaRoofGrid
     private const uint FillBit = 0x2000, FadeBit = 0x1000;
     private readonly Dictionary<(long, long), uint> _art = new();
     private readonly Dictionary<(long, long), AreaRoofRecord> _records = new();
+    // Walls of the wall check per normalized roof tile (RF9).
+    private readonly Dictionary<(long, long), int> _wallFades = new();
 
     // The tiles of a 4 × 4 block a piece covers, [piece][row = y % 4][column = x % 4] (verified in the executable, RF4).
     private static readonly bool[][][] Bands = BuildBands();
@@ -88,6 +90,34 @@ public sealed class AreaRoofGrid
 
     [OriginalFunction(0x439F20, OriginalFunctionScope.Full)]
     public void FadeOff(long x, long y) => SetBit(x, y, FadeBit, false);
+
+    /// <summary>The roof a click can hit at a tile (the tile under the clicked point moved 120 pixels down): the roof of
+    /// that tile's block when it is not filled, faded or not; null otherwise. Whether the click falls on an opaque pixel of
+    /// its frame is the renderer's test.</summary>
+    [OriginalFunction(0x439890, OriginalFunctionScope.Partial)]
+    public AreaRoofRecord? HitCandidate(long x, long y) =>
+        Art(x, y) is { } art && (art & FillBit) == 0 && _records.TryGetValue((x >> 2, y >> 2), out var roof) ? roof : null;
+
+    /// <summary>A wall joined the wall check: the roof of its tile (normalized) counts it, and fades with its first wall.</summary>
+    [OriginalFunction(0x438720, OriginalFunctionScope.Full)]
+    public void AddWallFade(long x, long y)
+    {
+        var tile = Normalize(x, y);
+        var count = _wallFades.GetValueOrDefault(tile) + 1;
+        _wallFades[tile] = count;
+        if (count == 1) FadeOn(tile.X, tile.Y);
+    }
+
+    /// <summary>A wall left the wall check: the roof of its tile unfades with its last wall. A release without a count is
+    /// ignored (the original logs a warning).</summary>
+    [OriginalFunction(0x438A50, OriginalFunctionScope.Full)]
+    public void ReleaseWallFade(long x, long y)
+    {
+        var tile = Normalize(x, y);
+        if (!_wallFades.TryGetValue(tile, out var count)) return;
+        if (count == 1) { _wallFades.Remove(tile); FadeOff(tile.X, tile.Y); }
+        else _wallFades[tile] = count - 1;
+    }
 
     /// <summary>A roof is faded when it exists, is not filled and carries the fade bit.</summary>
     [OriginalFunction(0x439FA0, OriginalFunctionScope.Partial)]

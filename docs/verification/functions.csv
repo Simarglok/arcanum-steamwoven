@@ -14,11 +14,14 @@ address,name,domain,status,reason,level,evidence,method
 0x41C930,voice channel change,audio,partial,only the channel volume from the setting; flattening live voice is the backend's,F2,docs/research/audio-evidence.md#resources-settings-and-positional-sound,Arcanum.Presentation.Audio.AudioVolumeRules.VoiceVolume
 0x41C980,music channel change,audio,partial,only the channel volume from the setting; flattening live music is the backend's,F2,docs/research/audio-evidence.md#resources-settings-and-positional-sound,Arcanum.Presentation.Audio.AudioVolumeRules.MusicVolume
 0x41C9D0,channel volume adjustment,audio,partial,the caller passes the channel volume instead of the sound's type,F2,docs/research/audio-evidence.md#resources-settings-and-positional-sound,Arcanum.Presentation.Audio.AudioVolumeRules.AdjustedVolume
+0x438720,wall check roof fade on,rendering,full,,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.AddWallFade
+0x438A50,wall check roof fade clear,rendering,full,,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.ReleaseWallFade
 0x439140,roof draw,rendering,partial,only the corner alphas of a faded piece; the drawing itself (outdoor colour and blit) is the renderer's,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.FadeCorners
 0x4395C0,roof slot of a tile,rendering,full,,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.Slot
 0x4395E0,roof block tile,rendering,full,,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.Normalize
 0x439640,roof screen position,rendering,full,,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.ScreenPosition
 0x4396A0,roof art at a tile,rendering,full,,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.Art
+0x439890,roof hit test,rendering,partial,only the roof of the tile under the point moved 120 down; the screen location and the opaque-pixel test are the renderer's,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.HitCandidate
 0x439D30,roof recalculation,rendering,full,,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.Recalc
 0x439EA0,roof fill off,rendering,full,,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.FillOff
 0x439EC0,roof fill on,rendering,full,,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.FillOn
