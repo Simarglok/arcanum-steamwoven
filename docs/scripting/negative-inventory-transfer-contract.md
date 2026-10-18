@@ -182,7 +182,7 @@ created container are additional owners/effects, not an isolated two-owner move.
 Fallback is therefore **container-or-ground placement**, not always a bare drop
 and not a guaranteed successful transfer or preservation of all quantities.
 
-Placement calls `item_decay(obj, 172800000)`; parented transfer also attempts that
+Placement schedules the item's decay (0x468090) after 172,800,000 ms; parented transfer also attempts that
 delay after cancellation, whereas GET only cancels. Eligibility excludes null,
 editor mode, no-decay items and ordinary parented objects; ground or junk-pile
 items can qualify. Scheduling returns a boolean ignored by these callers; actual

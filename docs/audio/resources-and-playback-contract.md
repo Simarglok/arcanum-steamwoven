@@ -157,7 +157,7 @@ of retail bugs.
 fades and scheduling, separately supplies a validated game hour for eligibility,
 and supplies a dedicated audio RNG or deterministic recorded draw stream.
 No hidden consumption of authoritative gameplay RNG. The original draws from the
-shared game random generator (ledger SN14); that is Source, not accepted project
+shared game random generator (audio study rows SN14, SN33, [audio evidence](../research/audio-evidence.md)); that is Source, not accepted project
 RNG policy. No WORLD-004 dependency
 is introduced here. A future clock adapter is a later integration task.
 Proposed tick cadence is250ms without replaying an unbounded catch-up storm;
@@ -165,7 +165,7 @@ pause freezes game-hour input according to its owner, not the presentation
 fade clock. Mute/device failure cannot advance or invalidate game state.
 
 **S06 vs R zero:** sector caller skips zero/zero, so crossing such a sector may
-leave a previous scheme. Direct `gsound_play_scheme(0,0)` has different behavior.
+leave a previous scheme. A direct scheme play with zero/zero has different behavior.
 Future `SetSchemes` explicitly treats zero/zero as clear; a future sector adapter
 must choose Skip versus Clear in its declared compatibility profile. It cannot
 claim these are interchangeable or infer that viewport redraw should restart

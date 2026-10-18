@@ -44,7 +44,7 @@ universal sector specification.
 | `17140..47287` on this input | object-record window | terminal count controls a bounded delimiter |
 | `decoded_length - 4` | signed LE terminal object count | non-negative and at most 4,096; observed `317` |
 
-read as source (F0, not checked in the executable), the original's sector load
+Read as source (F0, not checked in the executable), the original's sector load
 reads a light list, a fixed 4,096-element tile list, roof and conditional intermediate
 sections, then an object list whose count is at the stream end. The actual
 input has `light_count = 0`, `tile_count = 4096`, an object window beginning at
@@ -56,7 +56,7 @@ placement or draw order.
 
 ## Coordinates and sector address
 
-the original's sector-from-location function (0x4CFC50) maps location components with `>> 6`; its sector
+The original's sector-from-location function (0x4CFC50) maps location components with `>> 6`; its sector
 macro packs X in bits `0..25` and Y in bits `26..51`. With the frozen start
 location this yields:
 

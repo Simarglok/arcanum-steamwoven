@@ -46,7 +46,7 @@ No exception crosses the boundary except for null arguments and cancellation.
 always, `Item` for types 5..14 with `Weapon` (5), `Ammo` (6), `Armor` (7) or `Generic` (14),
 `Critter` for PCs and NPCs (15, 16) with `Npc` for NPCs. Slots are the v119
 layout of the StaticObjects loader, in the source's field order
-(`obj.h`).
+(the executable's field-name table, 0x59BEA8).
 
 | Block | Slots | Fields |
 | --- | --- | --- |
@@ -61,11 +61,11 @@ layout of the StaticObjects loader, in the source's field order
 
 Index orders differ and are kept as stored: damage arrays by
 `CombatDamageIndex` (normal, poison, electrical, fire, fatigue), resistance
-arrays by `CombatResistanceIndex` (normal, fire, electrical, poison, magic)
-(damage, resistance). NPC monster damage stores the
+arrays by `CombatResistanceIndex` (normal, fire, electrical, poison, magic).
+NPC monster damage stores the
 minimum at 2 × type and the maximum at 2 × type + 1 (generator (0x49B5A0)).
 A weapon without ammunition stores 10000 (`NoAmmo`); ammunition types are
-arrow 0, bullet 1, power cell 2, fuel 3 (ammo).
+arrow 0, bullet 1, power cell 2, fuel 3.
 
 Sparse arrays read like the original's sparse-array get (0x4E76C0): a missing key, a null
 or an empty array is 0. A key outside the array's range, which the original would

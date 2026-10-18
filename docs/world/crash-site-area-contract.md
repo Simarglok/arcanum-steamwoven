@@ -26,7 +26,7 @@ Locators name the original's functions by address where one is recorded.
 | Map catalogue and selector; editor versus normal-game mobiles; filename transform | the map functions: mobile load (0x410D10), filename transform (0x411830), map list load (0x4125C0) |
 | Region attributes, not a named area polygon | the original's area attribute functions |
 | Sector section order / independent terminal object count | the original's sector load, [framing evidence](../research/crash-site-framing.md) |
-| Low tile bits and static rebase | the sector object list insert (0x4F1350) |
+| Low tile bits and static rebase | the sector object list load (0x4F1350) |
 | v119 fields/types and actual instance/prototype fallback | the object field layout, the array field fetch with prototype fallback (0x408BB0) and wire I/O |
 | Sparse array serialization / fresh runtime handle | the sparse-array and object bitset FILE routines |
 | Packed scenery categories and ART semantics | TIG ART id fields, the original's name functions, [ART subset](../formats/art.md) |

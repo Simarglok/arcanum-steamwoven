@@ -143,7 +143,7 @@ lifecycle, pending map transfer). Within 3 tiles (Chebyshev; project rule, not s
 the dialog opens at once; farther away the route walks to the nearest standable cell within
 reach and the talk starts on arrival, unless a stick, another click, a reset/reload or a modal
 cancels it (like the cave walk-to-use). The cave map has no dialog NPC. Replies are chosen by **mouse**, as in
-the source (`tc.c` reads only mouse messages); the controller menu navigates, confirms and
+the source (its dialog text control reads only mouse messages, F0); the controller menu navigates, confirms and
 cancels. Keyboard keys are not redirected to dialog actions: the WORLD keyboard route keeps
 them reserved for their original actions ([palette and keyboard route](../input/diagnostic-palette.md)),
 so `T`, digits, `Esc` and `Enter` do nothing in the dialog. A diagnostic **Leave** button

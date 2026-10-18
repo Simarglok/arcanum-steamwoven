@@ -60,7 +60,7 @@ observations. Unread callees remain frontiers.
 | S8 | object static/dynamic predicates (0x43D990, 0x43D9F0) and create hooks (0x442130); AI time-event helpers (0x4AD790, 0x4AD7D0); map mobile and dynamic load (0x410D10, 0x411450); sector game load (0x4D1A30) | Dynamic/static predicates and fold hooks; save/diff/load state may alter registry. |
 | S9 | critter dead test (0x45D8D0); object HP maximum and current (0x43D5A0, 0x43D600) | HP = adjusted/derived/effect maximum minus damage; absent effects are not zero. |
 | S10 | sector lock, unlock and cache (0x4D0540, 0x4D0AE0, 0x4D0B40); sector game load (0x4D1A30); map mobile and dynamic load (0x410D10, 0x411450) | Loaded neighbor/cache/source policy is not a copied immutable FILE set. |
-| S11 | path functions (0x41F3C0, 0x41F570, 0x41F6C0) | PATH_FLAG_0x1000 selects the alternative path search (0x420E30) when the earlier attempt fails; that unclosed branch is unavailable, never normal-ground fallback. |
+| S11 | path functions (0x41F3C0, 0x41F570, 0x41F6C0, 0x41F840, 0x41F9F0) | PATH_FLAG_0x1000 selects the alternative path search (0x420E30) when the earlier attempt fails; that unclosed branch is unavailable, never normal-ground fallback. |
 | S12 | object load postprocess (0x406520); wallcheck dirty mark (0x438530) | Postprocess resolves ID handles; the wallcheck helper (0x438530) dirties local-PC wallcheck. These bounded definitions do not close all fold hooks/stat/effect/registry state. |
 | S13 | TIG ART id accessors; portal open (0x4F0950); object flag definitions | Rotation shift11, wall piece shift14 and named flags/art accessors; synthetic exact-edge cases, no sprite-bound inference. |
 

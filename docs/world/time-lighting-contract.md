@@ -62,7 +62,7 @@ Default noon scheme initialization is not clock startup.
 | zero delay | the delay constructor maps zero to 1, not a zero-duration event |
 | subtract duration | the underflow path computes an odd value (a bug of the original, ledger row Clock subtraction); not reproduced as an accepted policy |
 
-The day predicate (0x45ACF0) uses `06:00,18:00)`. Tests distinguish
+The day predicate (0x45ACF0) uses `[06:00,18:00)`. Tests distinguish
 21,599,999 / 21,600,000 / 21,600,001 ms and 64,799,999 / 64,800,000 / 64,800,001 ms;
 the normalized proposal also distinguishes 86,399,999 / 86,400,000 / 86,400,001.
 The source strict-carry worksheet and normalized proposal are separate results.
@@ -264,7 +264,7 @@ supplement has none.
 
 Sector load/fold (0x4F7940) refuses inventory world insertion and applies nocturnal
 scenery gating: tile class 0 is ungated by day; nonzero tiles disable during
-`6,18)` and enable at night. [Hour refresh (0x4DDD90) additionally excludes
+`[6,18)` and enable at night. Hour refresh (0x4DDD90) additionally excludes
 respawning scenery, updates only a changed state and has **no equivalent inventory
 refusal in that function**. These seams must not be flattened into one rule or a
 universal time-sensitive-object policy. The helper's load/refresh decision tables

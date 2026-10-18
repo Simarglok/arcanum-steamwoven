@@ -92,8 +92,8 @@ compass convention.
 
 For the admitted isometric source route, the caller supplies map cell,
 camera/view origin, direct instance offsets, action/facing/frame, and render
-state. the source hotspot relation is admitted only when
-`ORF_08000000` is clear: `topLeft = location_xy(mapCell) + instanceOffset +
+state. The source hotspot relation is admitted only when
+`ORF_08000000` is clear: `topLeft = locationXy(mapCell) + instanceOffset +
 (40,20) - effectiveHotspot`, after the source's mirror, binary-float scale,
 cast-to-int truncation toward zero, and (when shrunk) signed `/ 2` truncation
 toward zero transforms; see the [placement evidence](../research/actor-placement-evidence.md)
@@ -104,7 +104,7 @@ that flag, so `CachedRenderUnsupported` and `Unknown` are fail-closed states;
 they must not be represented by a hotspot default. ART frame offsets remain
 metadata and are not added by the normal object rectangle. `flipX` preserves
 the selected physical mapping and changes the effective hotspot before the
-rectangle is formed.
+rectangle is formed. `locationXy` is the original's location-to-screen rule (0x4B8680).
 
 This is a source-derived documentation shape, not a runtime API or a readiness
 claim. A future consumer must use checked widened arithmetic and make every
