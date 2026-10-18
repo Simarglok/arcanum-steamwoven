@@ -72,7 +72,8 @@ public sealed partial class AreaDataOwner : IDisposable
             // core or context, and its templates are exactly the plan's template inputs.
             if ((plan.Window is not null) != (plan.Selection == AreaSectorSelection.Window) || plan.Original && plan.Window is not null ||
                 plan.Window is { } window && (window.Sectors.Count == 0 || window.Sectors.Select(s => s.Coordinate).Distinct().Count() != window.Sectors.Count ||
-                    window.Sectors.Any(s => s.Scope is not (AreaScope.Core or AreaScope.Context) || s.Template is { Role: not AreaSourceRole.TerrainTemplate }) ||
+                    window.Sectors.Any(s => s.Scope is not (AreaScope.Core or AreaScope.Context) || s.Template is { Role: not AreaSourceRole.TerrainTemplate } ||
+                        (s.Template is null) != (s.TemplatePath is null) || s.TemplatePath is { } path && (!AreaSourcePlan.LoosePath(path) || !path.StartsWith("terrain/", StringComparison.Ordinal))) ||
                     !window.Sectors.Any(s => s.Scope == AreaScope.Core) ||
                     !window.Sectors.Where(s => s.Template is not null).Select(s => s.Template!.Value).ToHashSet()
                         .SetEquals(plan.Identities.Where(i => i.Key.Role == AreaSourceRole.TerrainTemplate).Select(i => i.Key))) ||
