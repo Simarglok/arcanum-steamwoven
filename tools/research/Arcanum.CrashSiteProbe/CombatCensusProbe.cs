@@ -16,7 +16,7 @@ namespace Arcanum.CrashSiteProbe;
 // file of the load map's catalogue, the AI parameter rows, the spell AI fields, the effect operators, prototype
 // ranges, NPC flags, factions and item AI actions, and the NPCs and creatures of the Crash Site exterior and cave.
 // Aggregates only: counts, numbers, entry and prototype numbers, flag and key names; never text or payload bytes.
-// Every parser here follows the pinned CE reading recorded in the load map; it is a census, not a production reader.
+// Every parser here follows the source reading recorded in the load map (docs/research/combat-domain-load-map.md); it is a census, not a production reader.
 internal static partial class Program
 {
     private const int CcAiParams = 17, CcBaseAiRows = 100, CcModuleAiFirst = 100, CcModuleAiRows = 150;
@@ -286,7 +286,7 @@ internal static partial class Program
     /// for the technological records from 140.</summary>
     internal static int CcSpellBase(int spell) => 1000 + 50 * spell + (spell >= 140 ? 2000 : 0);
 
-    /// <summary>The pinned CE named-key cursor (<c>tig_str_parse_named_*</c>): whitespace is skipped, a key must start
+    /// <summary>The source's named-key cursor: whitespace is skipped, a key must start
     /// exactly at the cursor (case-sensitive), a value ends at the next comma, a key out of order is not found and
     /// leaves the cursor where it is. <see cref="Exit"/> records where the original would end the process.</summary>
     internal sealed class CcNamedLine(string text)
@@ -467,7 +467,7 @@ internal static partial class Program
         token.Length > 0 && token.All(c => c is > ' ' and < '\x7f') && EffectRules.Parse(Encoding.ASCII.GetBytes(token + " +1"), out var changes) == EffectRuleStatus.Parsed
             ? changes[0].Kind : null;
 
-    /// <summary>One effect entry tokenised like the pinned CE <c>effect_parse</c>: tokens split on space and comma; an
+    /// <summary>One effect entry tokenised like the source's effect parser 0x4E9C20: tokens split on space and comma; an
     /// attribute, then its operator (<c>min</c>/<c>max</c> take the next token). Operators are classified by shape.</summary>
     internal static CcEffectLine CcEffectTokens(string text)
     {

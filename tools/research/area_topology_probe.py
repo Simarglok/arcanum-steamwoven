@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bounded, read-only occurrence inventory; no VM, reachability or precedence.
-Specification: pinned CE script.h/script.c locators in area contract. This is
-independently authored tooling, not a translated CE implementation.
+Specification: the script locators in the area contract. This is
+independently authored tooling, not a translated implementation.
 """
 import argparse
 import hashlib

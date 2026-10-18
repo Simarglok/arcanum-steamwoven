@@ -7,8 +7,8 @@ using Arcanum.Data;
 namespace Arcanum.CrashSiteProbe;
 
 // ARC-WORLD-009 research only: how the Crash Site cave transition fires and where it
-// leads. Independently authored from the pinned CE locators cited in
-// docs/research/cave-transition-evidence.md; no CE code or structure is reused.
+// leads. Independently authored from the source locators cited in
+// docs/research/cave-transition-evidence.md; no code or structure is reused.
 // No script VM, no movement, no map lifecycle: it decodes the two literal script
 // files, the two attached trigger objects, every other script that the trigger
 // sector or the cave attaches, both trigger and arrival cells, and the cave walls.

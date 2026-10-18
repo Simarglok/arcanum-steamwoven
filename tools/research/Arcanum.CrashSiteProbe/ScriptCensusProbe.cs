@@ -9,8 +9,8 @@ namespace Arcanum.CrashSiteProbe;
 // run can reach. It decodes, it never executes. Operand signatures (which operand slots
 // take a number and which an object) are format facts taken from the order of number and
 // object placeholders in the ScriptEd 1.50 editor data (TimoP80/ScriptEd_v1_50 da7e6d2,
-// GPL-2.0; no text) and agree with the pinned CE interpreter for 194 of the 195 types (CE
-// reads the object of action 86 from slot 1, marked FIXME there). No CE code or structure
+// GPL-2.0; no text) and agree with the source interpreter reading for 194 of the 195 types (that reading
+// takes the object of action 86 from slot 1, census anomaly X9). No code or structure
 // is reused.
 // Only numbers leave the probe: no script, map or object names and no text.
 internal static partial class Program
