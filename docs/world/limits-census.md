@@ -26,12 +26,12 @@ Largest installed value against each cap; "interiors" are the 80 maps a whole-ma
 | `AreaMapPlans.MaxSectorFiles` (interiors) | 256 | 79 | caladon-castle main floor | 3.2× |
 | `AreaMapPlans.MaxLooseResources` | 1,024 | 0 | — | — |
 | `AreaMapPlans.MaxMemberBytes` (mobile aggregate) | 64 MiB | 1,823,280 | arcanum1-024-fixed (interiors: 102,016, bmc) | 36.8× |
-| Owner budgets (`AreaLoaderOptions`, scaled by the plan up to 16×) | per plan | retained bytes 47.5 % of its budget | qintarra | 2.1× |
-| — the other owner budgets (largest use) | per plan | managed 8.2 %, stored 19.2 %, decoded 18.9 %, frame requests 5.8 %, encoded 5.2 %, RGBA 4.4 %, build phase 0.3 %, read 0 % | qintarra, void | ≥ 5.2× |
+| Owner budgets (`AreaLoaderOptions`, scaled by the plan up to 16×) | per plan | retained bytes at their peak (frame holds and memos included): 61.8 % of the budget | qintarra | 1.6× |
+| — the other owner budgets (largest use) | per plan | build phase at its peak 17.1 %, stored 19.2 %, decoded 18.9 %, managed 8.2 %, frame requests 5.8 %, encoded 5.2 %, RGBA 4.4 %, read 0 % | void, qintarra | ≥ 5.2× |
 | `AreaLightingReader.MaxSectors` | 256 | 79 | caladon-castle main floor | 3.2× |
 | `AreaLightingReader.MaxSchemes` | 32 | 3 | k'na tha | 10.7× |
 | `StationaryLightReader.MaxLights` (was 256) | 512 | 207 | tarant sewers-02 | 2.5× |
-| `StationaryLightReader.MaxFrames` (was 16) | 32 | 9 | tulla interior | 3.6× |
+| `StationaryLightReader.MaxFrames` | 16 | 9 | tulla interior | 1.8× |
 | `MapPatchFile.MaxBytes` (`Rules\map.patch`) | 1 MiB | 5,779 | — | 181× |
 | `AreaMapLoadOperation.MaxChartSectors` | 32 | 14 | k'na tha | 2.3× |
 | `AreaRepositoryPolicy.MaxMapFrames` (CPU, and GPU visible since ARC-DATA-029) | 16,384 | 4,557 drawn frames (4,562 owner frame requests) | void | 3.6× |
@@ -40,7 +40,7 @@ Largest installed value against each cap; "interiors" are the 80 maps a whole-ma
 | `GameSessionLimits.PolicyMaxChangesPerMap` (was 4,096) | 262,144 | 158,385 objects | arcanum1-024-fixed | 1.7× |
 | `GameSessionLimits.PolicyMaxTotalChanges` (was 16,384) | 524,288 | 276,625 objects | all maps | 1.9× |
 | `GameSessionLimits.PolicyMaxLifeRecords`, `…ReactionRecords`, `…ExperienceRecords` (were 4,096) | 8,192 | 3,792 NPCs | all maps | 2.2× |
-| `GameSessionSnapshotCodec.MaxEncodedCharacters` (save file, was 8 MiB) | 64 MiB | about 33 MB estimated | all maps | 2.0× |
+| `GameSessionSnapshotCodec.MaxEncodedCharacters` (save file, was 8 MiB) | 96 MiB | about 43 MB estimated | all maps | 2.3× |
 
 Notes on the policy caps:
 
@@ -58,22 +58,33 @@ Notes on the policy caps:
   derived from the life records (four timers each, [event queue](game-event-queue-runtime.md)):
   33,859 events.
 - **Snapshot size.** Raising the count caps needs a larger text cap: 262,144 sector changes
-  alone take about 16 MB. 64 MiB holds a change for every installed object under an object-GUID
-  key (about 120 characters each, 276,625 × 120 ≈ 33 MB). A snapshot that reaches the count caps
-  with the longest keys (128-character entities, 64-character properties) can exceed it; saving
-  it is then the typed `TooLarge`, as before. Raising the caps does not change the snapshot
-  format, so the schema stays.
+  alone take about 16.8 MB. The estimate of a whole playthrough is a change of every installed
+  object under the viewer's 68-character object ids (`oid:` and a SHA-256), about 141 characters
+  each with a 12-character property and a 7-digit value (276,625 × 141 ≈ 39.0 MB), plus a life,
+  reaction and experience record and four timers for every NPC (3,792 NPCs, about 4.4 MB):
+  about 43.4 MB, so 96 MiB keeps 2.3 times. It is an estimate, not a measured save. A snapshot
+  that reaches the count caps with the longest keys (128-character entities, 64-character
+  properties) can exceed the cap; saving it is then the typed `TooLarge`, as before. A save file
+  is read into a buffer of its own size, not of the cap. Raising the caps does not change the
+  snapshot format, so the schema stays.
+- **HD.** The HD visible-set ceiling (`HdDeviceBudget.LegacyAreaVisibleBytes`, `N²` × 81,853,096
+  bytes, ARC-RENDER-013) is still the exterior's figure: it holds the largest interior's whole
+  repository (58,892,780 bytes) 1.39 times, and the visible set is a part of it. It is an HD
+  device ceiling, an exceeded frame draws Legacy (no failure), and changing it is an HD budget
+  decision, so it is left as it is and reported.
 - **Not sized by the census.** `PolicyMaxCompanions` (64) and `PolicyMaxPcItems` (512) bound
   what the party and the PC hold at once, not anything that grows with the maps; they are
   unchanged.
 
 The pinned Crash Site profiles keep `AreaRepositoryPolicy.MaxFrames` (2,444) and `MaxCpuBytes`
-(81,853,096): they are the pinned exterior's own totals (the defaults of its
-`AreaLoaderOptions`, reconciled by its original profile), so they are already derived from the
-only plan that uses them, and the cave (smaller) shares them. Only the pinned profiles'
+(81,853,096): since ARC-DATA-029 they are defined as the pinned plan's own limits
+(`AreaLoaderOptions.PinnedVisuals` and `PinnedFrameRgbaBytes`, the exterior's totals, which its
+original profile reconciles), so they derive from the only plans that use them; the cave
+(smaller) shares them. Only the pinned profiles'
 `CopyFrames` path reads them; until ARC-DATA-029 the GPU's visible-frame check also used them,
-which refused two interiors (t'sen-ang, 2,622 frames, and void, 4,562). Their removal is left
-to the fixture task that replaces the pinned profiles.
+so a view of more than 2,444 frames at once could be refused on the two interiors that draw
+more (t'sen-ang, 2,622 frames, and void, 4,557). Their removal is left to the fixture task that
+replaces the pinned profiles.
 
 ## Census by map
 
@@ -81,6 +92,11 @@ Sectors are sector files; objects are sector plus mobile objects; NPCs are objec
 prototypes are distinct prototype numbers; lights, frames and RGBA are from the area owner and
 the stationary-light reader (— where the map has no plan or no light source). Bytes are the
 mobile aggregate and the largest sector file.
+
+Six interiors have no stationary lights for a data reason, never a cap (the census test asserts
+that no lighting read stops at `LimitExceeded`): two are not in the map list, two have sectors
+without the metadata section, one uses an animated light ART (void) and one an unsupported
+light flag (bates mansion lev 1).
 
 | Map | Sectors | Objects | NPCs | Prototypes | Lights | Frames | RGBA MiB | Aggregate bytes | Largest sector bytes |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

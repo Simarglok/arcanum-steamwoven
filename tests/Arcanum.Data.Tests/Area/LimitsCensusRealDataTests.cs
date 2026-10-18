@@ -20,7 +20,9 @@ public sealed class LimitsCensusRealDataTests
     {
         var root = Environment.GetEnvironmentVariable("DAT_ROOT");
         if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required.");
-        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var discovery = ContentMountPlan.Discover(root);
+        Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+        using var stack = ContentStack.Open(discovery.Plan!).Stack!;
         var catalog = WorldCatalog.Open(stack);
         var rows = new List<Dictionary<string, long>>();
         foreach (var map in catalog.Maps)
@@ -29,7 +31,8 @@ public sealed class LimitsCensusRealDataTests
             long statics = 0, maxSectorBytes = 0; var prototypes = new HashSet<int>(); var npcs = 0L;
             foreach (var c in map.SectorFiles)
             {
-                var sector = catalog.ReadSector(map, c).Sector!;
+                var sector = catalog.ReadSector(map, c).Sector;
+                Assert.IsNotNull(sector, $"{map.Name} {c}");
                 statics += sector.Objects.Count;
                 foreach (var o in sector.Objects) { if (o.PrototypeNumber is { } n) prototypes.Add(n); if (o.Type == 16) npcs++; }
                 maxSectorBytes = Math.Max(maxSectorBytes, stack.Resolve(sector.Path).Winner!.Length);
@@ -48,20 +51,28 @@ public sealed class LimitsCensusRealDataTests
                 var snapshot = owner.LoadStrict();
                 var usage = owner.Usage; var limits = plan.Plan.Limits;
                 row["visuals"] = snapshot.Visuals.Count; row["frames"] = usage.FrameRequests; row["rgba"] = usage.FrameRgba;
-                // Used per mille of each budget the plan derives.
-                row["managed%"] = usage.ManagedReserved * 1000 / limits.MaxManagedBytes; row["phase%"] = usage.PhaseReserved * 1000 / limits.MaxBuildPhaseBytes;
-                row["retained%"] = usage.RetainedReserved * 1000 / limits.MaxRetainedBytes; row["requests%"] = usage.FrameRequests * 1000 / limits.MaxFrameRequests;
+                // Used per mille of each budget the plan derives: the cumulative domains at the end of the load, the build
+                // phase and the retained ownership at their peaks (frame holds and memos included).
+                row["managed%"] = usage.ManagedReserved * 1000 / limits.MaxManagedBytes;
+                row["phase%"] = owner.PhaseHistory.Max(p => p.HighWater) * 1000 / limits.MaxBuildPhaseBytes;
+                row["retained%"] = owner.RetainedHighWater * 1000 / limits.MaxRetainedBytes; row["requests%"] = usage.FrameRequests * 1000 / limits.MaxFrameRequests;
                 row["stored%"] = usage.FrameStored * 1000 / limits.MaxFrameStoredBytes; row["decoded%"] = usage.FrameDecoded * 1000 / limits.MaxFrameDecodedBytes;
                 row["rgba%"] = usage.FrameRgba * 1000 / limits.MaxFrameRgbaBytes; row["encoded%"] = usage.FrameEncoded * 1000 / limits.MaxFrameEncodedBytes;
                 row["read%"] = usage.ReadReserved * 1000 / limits.MaxReadBytes;
                 row["loose"] = plan.Plan.Plan.ResourceOrder.Count(source => source.Key.Role == AreaSourceRole.Loose);
+                // A map may be unlit for a data reason (not in the map list, sectors without metadata, an animated light or
+                // an unsupported flag), never because a cap refused it.
                 var lighting = AreaLightingReader.Read(stack, snapshot);
+                Assert.AreNotEqual(LightingFailure.LimitExceeded, lighting.Failure, map.Name);
                 if (lighting.Source is { } l)
                 {
                     row["lightSectors"] = l.SectorSchemes.Count; row["schemes"] = l.Schemes.Count;
                     var lights = StationaryLightReader.Read(stack, snapshot);
+                    Assert.AreNotEqual(LightingFailure.LimitExceeded, lights.Failure, map.Name);
                     if (lights.Source is { } s) { row["lights"] = s.Lights.Count; row["lightFrames"] = s.Frames.Count; }
+                    else Console.WriteLine($"ARC-DATA-029 unlit map={map.Name} lights={lights.Failure}");
                 }
+                else Console.WriteLine($"ARC-DATA-029 unlit map={map.Name} lighting={lighting.Failure}");
             }
             rows.Add(row);
             Console.WriteLine($"ARC-DATA-029 map={map.Name} " + string.Join(" ", row.Select(p => $"{p.Key}={p.Value}")));

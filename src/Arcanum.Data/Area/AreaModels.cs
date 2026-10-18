@@ -255,6 +255,11 @@ public enum AreaSectorSelection { TownmapComponent, AllSectors }
 
 public sealed class AreaLoaderOptions
 {
+    /// <summary>The pinned Crash Site exterior's own totals (its visual chains and their RGBA bytes): the defaults of
+    /// <see cref="MaxVisuals"/> and <see cref="MaxFrameRgbaBytes"/>, and the pinned profiles' viewer repository caps
+    /// (ARC-DATA-029). A whole-map plan sets its own visual count and scales its frame budgets.</summary>
+    public const int PinnedVisuals = 2444;
+    public const long PinnedFrameRgbaBytes = 81853096;
     // Conservative reservations for loader-controlled data and collection
     // graphs. These are not measurements of all CLR allocations or process RSS.
     public long MaxManagedBytes { get; init; } = 4454350848;
@@ -267,7 +272,7 @@ public sealed class AreaLoaderOptions
     public long MaxFrameRequests { get; init; } = 4890;
     public long MaxFrameStoredBytes { get; init; } = 329489402;
     public long MaxFrameDecodedBytes { get; init; } = 449899684;
-    public long MaxFrameRgbaBytes { get; init; } = 81853096;
+    public long MaxFrameRgbaBytes { get; init; } = PinnedFrameRgbaBytes;
     public long MaxFrameEncodedBytes { get; init; } = 9383648;
     public int MaxSurvey { get; init; } = 621;
     public int MaxPresentSectors { get; init; } = 20;
@@ -275,7 +280,7 @@ public sealed class AreaLoaderOptions
     public int MaxAggregateBytes { get; init; } = 1823280;
     public int MaxPrototypes { get; init; } = 56;
     public int MaxObjects { get; init; } = 524;
-    public int MaxVisuals { get; init; } = 2444;
+    public int MaxVisuals { get; init; } = PinnedVisuals;
     /// <summary>Inputs at least this long are hashed in parallel by whole-set authentication passes
     /// when two or more of them take part (ARC-RENDER-009); 0 parallelizes every such pass.</summary>
     public long ParallelAuthenticationMinBytes { get; init; } = 1L << 20;

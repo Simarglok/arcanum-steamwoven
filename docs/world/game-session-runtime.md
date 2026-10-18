@@ -208,7 +208,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
 
 (Line breaks added here; the encoder writes no whitespace.) `TryDecode` returns a
 `SnapshotDecodeResult` with a typed `SnapshotDecodeFailure` and a JSON path; it never
-throws on bad text and never builds an owner. It refuses: input over 64 MiB characters (8 MiB before ARC-DATA-029)
+throws on bad text and never builds an owner. It refuses: input over 96 MiB characters (8 MiB before ARC-DATA-029)
 (`TooLarge`); invalid JSON, comments, trailing commas or depth over 8 (`MalformedJson`);
 another `format` (`WrongFormat`) or `schemaVersion` (`UnsupportedSchema`); unknown,
 duplicate or missing fields; wrong JSON types; fractions, exponents and out-of-range
@@ -280,7 +280,7 @@ dialog state, a schema bump) is saved and loaded by the slot without changing it
 | --- | --- |
 | `new GameSessionSaveSlot(path)` / `QuickSave(directory)` | An absolute file path; `QuickSave` is `<directory>/quicksave.json`. Invalid paths throw (programming error). |
 | `Write(snapshot)` | Encodes, decodes the text back in memory (a save this build cannot load is never written), writes `<path>.tmp`, flushes it to disk, reads it back and compares, then moves it over the slot. Creates the directory. Returns `SaveSlotWriteResult` (`None`, `TooLarge`, `WriteFailed`, `VerifyFailed`); on any failure the temporary file is removed and the previous save is untouched. A stale temporary file from an interrupted save is overwritten. |
-| `Read()` | `SaveSlotReadResult` with the decoded snapshot or a typed failure: `NoSave` (no file or directory; a directory or unreadable entry at the path is `ReadFailed`), `TooLarge` (over 64 MiB; the codec writes ASCII, so its character limit is the byte limit, also enforced while reading), `ReadFailed`, `NotUtf8` (strict UTF-8), `Corrupt` with the codec's `SnapshotDecodeFailure` and JSON path (truncated, wrong format, unsupported schema, any field error). Never throws on content. |
+| `Read()` | `SaveSlotReadResult` with the decoded snapshot or a typed failure: `NoSave` (no file or directory; a directory or unreadable entry at the path is `ReadFailed`), `TooLarge` (over 96 MiB; the codec writes ASCII, so its character limit is the byte limit, also enforced while reading), `ReadFailed`, `NotUtf8` (strict UTF-8), `Corrupt` with the codec's `SnapshotDecodeFailure` and JSON path (truncated, wrong format, unsupported schema, any field error). Never throws on content. |
 
 The slot does not restore: the caller passes the snapshot to `Restore` with its own
 expectations. Durability: file data is flushed before the rename; the directory entry

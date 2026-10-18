@@ -36,7 +36,7 @@ profiles and every exterior smoke stay as they were.
   keeps 2,444 frames and 81,853,096 bytes); the CPU frames plus the actor stay
   within `TerrainCachePolicy.MaxRgbaBytes` (256 MiB). Since ARC-DATA-029 the
   frames visible at once on the GPU are bounded by the same map caps (two interiors
-  draw more than the exterior's 2,444 frames: 2,622 and 4,562); terrain chunks and
+  draw more than the exterior's 2,444 frames: 2,622 and 4,557); terrain chunks and
   the frame LRU are the exterior's. Census of all interiors:
   [limits census](../world/limits-census.md).
 - **Chart.** The map's chart starts at its first core sector row and column and
@@ -211,7 +211,7 @@ quest flag, a held item, a dialog) is not a trigger here (SCRIPT slice S4).
   (ARC-COMBAT-004). The game session is carried over: when the new map is
   published, its actor placement moves to the new map and arrival in one
   session step, and the new map's T0 items are attached beside those of the maps
-  already visited (the session holds the seeds of at most 64 maps, and two maps
+  already visited (the session holds the seeds of at most 200 maps, and two maps
   listing one object id refuse the second seed; then the inventory is
   unavailable on that map). A map without lighting keeps the carried session. If
   the destination's load fails before the scene is published, the origin map is

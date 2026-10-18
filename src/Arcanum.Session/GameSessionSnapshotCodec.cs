@@ -34,9 +34,10 @@ public static class GameSessionSnapshotCodec
 {
     public const string Format = "arcanum-steamwoven-session";
     /// <summary>ARC-DATA-029: a policy cap on one snapshot's text (and save file). It holds a change for every object
-    /// of every installed map (276,625) under an object-GUID key, about 33 MB, with headroom; a snapshot can still
-    /// exceed it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
-    public const int MaxEncodedCharacters = 64 * 1024 * 1024;
+    /// of every installed map (276,625, under the viewer's 68-character object ids) and a life, reaction and experience
+    /// record with their timers for every NPC (3,792), about 43 MB, with 2.3 times headroom; a snapshot can still exceed
+    /// it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
+    public const int MaxEncodedCharacters = 96 * 1024 * 1024;
 
     private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "effects", "experience", "random", "life", "reactions", "combat", "combatMode", "sound", "events", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",

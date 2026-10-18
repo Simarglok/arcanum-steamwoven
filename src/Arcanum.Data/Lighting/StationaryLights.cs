@@ -107,7 +107,7 @@ public static class StationaryLightReader
 {
     /// <summary>ARC-DATA-029: the largest installed interior has 207 stationary lights and 9 light frames.</summary>
     public const int MaxLights = 512;
-    public const int MaxFrames = 32;
+    public const int MaxFrames = 16;
     public const int MaxFrameSide = 1024;
     public const int MaxOffset = 16384;
     public const StationaryLightFlags KnownFlags = StationaryLightFlags.Off | StationaryLightFlags.Dark | StationaryLightFlags.Indoor | StationaryLightFlags.Outdoor;

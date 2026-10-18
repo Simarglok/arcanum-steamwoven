@@ -110,11 +110,20 @@ public sealed class GameSessionSaveSlot
             // Opened directly: a directory or an unreadable entry at the path is ReadFailed, not NoSave.
             using var stream = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read);
             if (stream.Length > MaxBytes) return Failed(SaveSlotFailure.TooLarge, $"FILE_BYTES {stream.Length}");
-            // Bounded even if the file grows while it is read.
-            var buffer = new byte[MaxBytes + 1];
+            // Bounded even if the file grows while it is read; the buffer starts at the file's size (ARC-DATA-029: the cap
+            // is 64 MiB) and grows only for a file that grows, never past the cap plus one byte.
+            var buffer = new byte[(int)stream.Length + 1];
             var total = 0;
             int read;
-            while (total < buffer.Length && (read = stream.Read(buffer, total, buffer.Length - total)) > 0) total += read;
+            while ((read = stream.Read(buffer, total, buffer.Length - total)) > 0)
+            {
+                total += read;
+                if (total == buffer.Length)
+                {
+                    if (buffer.Length > MaxBytes) break;
+                    Array.Resize(ref buffer, (int)Math.Min(2L * buffer.Length, MaxBytes + 1L));
+                }
+            }
             if (total > MaxBytes) return Failed(SaveSlotFailure.TooLarge, "FILE_GREW_PAST_LIMIT");
             bytes = buffer[..total];
         }

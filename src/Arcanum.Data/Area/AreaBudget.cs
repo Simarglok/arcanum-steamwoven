@@ -10,6 +10,9 @@ internal sealed class AreaBudget : IDatEntryAdmission
     private bool _frameActive;
     private long _frameAllocation;
     private long _frameHeld;
+    // ARC-DATA-029: the largest retained ownership seen (frame holds and memos included), for the limits census.
+    private long _retainedHighWater;
+    internal long RetainedHighWater => _retainedHighWater;
     private volatile AreaBudgetPhase _phaseId = AreaBudgetPhase.O;
     internal AreaBudgetPhase PhaseId => _phaseId;
     private readonly long[] _visits = new long[11];
@@ -67,17 +70,18 @@ internal sealed class AreaBudget : IDatEntryAdmission
     {
         var retained = Admit(AreaBudgetDomain.Retained, _retained, held, _limits.MaxRetainedBytes);
         var allocation = Allocation(allocated);
-        CommitAllocation(allocation); _retained = retained;
+        CommitAllocation(allocation); SetRetained(retained);
     }
     // For a previously admitted graph whose allocation is already charged.
-    internal void Hold(long bytes) => _retained = Admit(AreaBudgetDomain.Retained, _retained, bytes, _limits.MaxRetainedBytes);
+    internal void Hold(long bytes) => SetRetained(Admit(AreaBudgetDomain.Retained, _retained, bytes, _limits.MaxRetainedBytes));
+    private void SetRetained(long retained) { _retained = retained; _retainedHighWater = Math.Max(_retainedHighWater, retained); }
     // Optional ownership (a bounded memo): holds only while a quarter of the retained domain
     // stays free for mandatory admissions after it, and never records a rejection.
     internal bool TryHold(long bytes)
     {
         var reserve = _limits.MaxRetainedBytes / 4;
         if (bytes < 0 || _retained < 0 || _retained > _limits.MaxRetainedBytes || bytes > _limits.MaxRetainedBytes - reserve - _retained) return false;
-        _retained += bytes; return true;
+        SetRetained(_retained + bytes); return true;
     }
     internal void Release(long bytes)
     {
@@ -102,7 +106,7 @@ internal sealed class AreaBudget : IDatEntryAdmission
         var e = Admit(AreaBudgetDomain.Encoded, _encoded, encoded, _limits.MaxFrameEncodedBytes);
         var held = Admit(AreaBudgetDomain.Retained, _retained, _limits.MaxFrameOperationBytes, _limits.MaxRetainedBytes);
         _requests = requests; _stored = s; _decoded = d; _rgba = r; _encoded = e;
-        _retained = held; _frameHeld = _limits.MaxFrameOperationBytes;
+        SetRetained(held); _frameHeld = _limits.MaxFrameOperationBytes;
         _frameActive = true; _frameAllocation = 0;
     }
     internal void CompleteFrame(long rgba, long encoded)
