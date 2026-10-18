@@ -149,6 +149,43 @@ class UniversalDevTests(unittest.TestCase):
             cli["command_launch"](args)
             start.assert_called_once()
 
+    def test_a_malformed_installation_record_verifies_nothing(self):
+        self.assertIsNone(launch.verified_roles({}))
+        self.assertEqual(launch.verified_roles({"installation": {"pinnedVerified": ["module"]}}), ["module"])
+        for record in (None, "module", [], {}, {"pinnedVerified": "module"}, {"pinnedVerified": ["module", 1]}):
+            with self.subTest(record=record):
+                self.assertEqual(launch.verified_roles({"installation": record}), [])
+        # A launch of a pinned mode with such a record fails closed.
+        cli, args = self.launch_cli("ARC-RENDER-008", "--mode", "crash-site-area", installation={"pinnedVerified": "module"})
+        with patch.object(launch, "start") as start, self.assertRaisesRegex(ValueError, "pinned"):
+            cli["command_launch"](args)
+        start.assert_not_called()
+
+    def test_status_names_the_pinned_roles_that_differ_and_explicit_inputs_drop_the_record(self):
+        project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
+        conf = config.load_config(); conf["inputs"] = self.inputs(); conf["installation"] = {"pinnedVerified": []}; config.save_config(conf)
+
+        def lines() -> list[str]:
+            with patch("builtins.print") as printed:
+                project["status"](None)
+            return [" ".join(str(part) for part in call.args) for call in printed.call_args_list]
+
+        area = next(line for line in lines() if line.startswith("area"))
+        self.assertIn("pinned identity differs: " + ", ".join(launch.pinned_roles("crash-site-area")), area)
+        self.assertTrue(any(line.startswith("map: ready") for line in lines()))
+        # No record (an older configuration): the pinned modes are ready as before.
+        conf = config.load_config(); conf.pop("installation"); config.save_config(conf)
+        self.assertTrue(next(line for line in lines() if line.startswith("area")).endswith(": ready"))
+        # `configure inputs` replaces the inputs and drops a record setup wrote.
+        conf = config.load_config(); conf["installation"] = {"pinnedVerified": []}; config.save_config(conf)
+        inputs = self.inputs()
+        cli = runpy.run_path(str(REPO / "tools/arcanum-local"))
+        args = cli["parser"]().parse_args(["configure", "inputs", "--module", inputs["module"], "--terrain-resource", inputs["terrainResource"],
+                                           "--actor-resource", inputs["actorResource"], "--prototypes", inputs["prototypes"]])
+        with patch("builtins.print"):
+            cli["command_configure"](args)
+        self.assertNotIn("installation", config.load_config())
+
     def test_the_universal_export_carries_no_pinned_gate(self):
         self.assertIn(launch.UNIVERSAL_TASK, manifests.SUPPORTED_TOOLS["terrain"])
         required = retention.REQUIRED_SUCCESS_GATES["terrain"] | retention.REQUIRED_TASK_SUCCESS_GATES[launch.UNIVERSAL_TASK]

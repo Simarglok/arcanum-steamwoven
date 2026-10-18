@@ -143,11 +143,9 @@ def command_launch(args: argparse.Namespace) -> None:
         inputs = conf.get("inputs", {})
         # ARC-DEV-015: a pinned mode needs its pinned roles verified by setup's installation record (absent for older or
         # explicit configurations, whose inputs keep their earlier meaning).
-        installation = conf.get("installation")
-        verified = installation.get("pinnedVerified") if isinstance(installation, dict) else None
         argv = [*argv[:separator + 1], *(launch.map_arguments(inputs, args.area_map, args.hero) if args.area_map is not None
                 else launch.terrain_arguments(inputs, args.mode or "terrain-only", preview, task=manifest.get("task"), hero=args.hero,
-                                              verified=verified if isinstance(verified, list) else None))]
+                                              verified=launch.verified_roles(conf)))]
     emit(launch.start(executable, argv, allow_duplicate=args.allow_duplicate, lock_root=config.home(), tool=tool,
                       dry_run=args.dry_run, show_paths=args.show_paths))
 
@@ -201,7 +199,7 @@ def parser() -> argparse.ArgumentParser:
     listed = top.add_parser("list"); listed.add_argument("--json", action="store_true"); listed.set_defaults(func=command_list)
     configure = top.add_parser("configure"); configure_sub = configure.add_subparsers(dest="configure", required=True)
     discover = configure_sub.add_parser("discover"); discover.add_argument("--game-root", required=True)
-    discover.add_argument("--write-inputs", action="store_true", help="replace configured inputs with every verified role")
+    discover.add_argument("--write-inputs", action="store_true", help="replace configured inputs with every role found and record the installation")
     inputs = configure_sub.add_parser("inputs"); inputs.add_argument("--module", required=True); inputs.add_argument("--terrain-resource", required=True); inputs.add_argument("--actor-resource", required=True); inputs.add_argument("--prototypes", required=True); inputs.add_argument("--source-id")
     inputs.add_argument("--area-mobile")
     inputs.add_argument("--area-effects")

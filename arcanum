@@ -140,7 +140,6 @@ def oracle(args: argparse.Namespace) -> int:
 def status(_: argparse.Namespace) -> int:
     conf = config.load_config()
     inputs = conf.get("inputs", {}) if isinstance(conf.get("inputs"), dict) else {}
-    installation = conf.get("installation")
     roots = conf.get("artifactRoots", {})
     for name, (mode, tasks) in MODES.items():
         # A task's own roles (the ARC-WORLD-009 cave input) count when `run` would choose its build.
@@ -157,8 +156,8 @@ def status(_: argparse.Namespace) -> int:
         missing = [role for role in launch.MODE_ROLES[mode] + extra + ("sourceId",) if role not in inputs]
         build = f" ({chosen} build)" if chosen else ""
         # ARC-DEV-015: the pinned modes need their pinned roles to match the pinned identity (setup's installation record).
-        verified = installation.get("pinnedVerified") if isinstance(installation, dict) else None
-        differ = [role for role in launch.pinned_roles(mode, chosen) if isinstance(verified, list) and role in inputs and role not in verified]
+        verified = launch.verified_roles(conf)
+        differ = [role for role in launch.pinned_roles(mode, chosen) if verified is not None and role in inputs and role not in verified]
         state = ("missing " + ", ".join(missing) + " (run ./arcanum setup)" if missing
                  else "pinned identity differs: " + ", ".join(differ) + " (this mode is the pinned Crash Site regression; use map)" if differ
                  else "ready")

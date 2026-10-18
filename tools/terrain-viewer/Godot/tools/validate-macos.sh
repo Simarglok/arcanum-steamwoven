@@ -57,7 +57,11 @@ cleanup_candidate() {
   git -C "$candidate_root" restore -- src/Arcanum.Data/packages.lock.json src/Arcanum.Presentation/packages.lock.json src/Arcanum.Input/packages.lock.json \
     src/Arcanum.Simulation/packages.lock.json src/Arcanum.Scripting/packages.lock.json src/Arcanum.Session/packages.lock.json \
     tools/terrain-viewer/Core/packages.lock.json tools/terrain-viewer/Godot/packages.lock.json
-  # Godot .uid files are tracked; the export must leave them unchanged.
+  # Godot .uid files are tracked; the export must leave them unchanged. ARC-DEV-015: Godot also writes a .uid beside
+  # every script whose .uid is not tracked yet. The candidate was clean before the export, so every untracked .uid there
+  # is such a generated file; git removes those (untracked only, never a tracked file) so the finalize phase finds the
+  # candidate clean.
+  git -C "$candidate_root" clean -f -q -- 'tools/terrain-viewer/Godot/*.uid'
 }
 trap cleanup_candidate EXIT HUP INT TERM
 run_log() {

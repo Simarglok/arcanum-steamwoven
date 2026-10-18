@@ -167,6 +167,18 @@ def _local(inputs: dict[str, Any], role: str, *, directory: bool = False) -> str
     return str(path.resolve(strict=True))
 
 
+def verified_roles(conf: dict[str, Any]) -> list[str] | None:
+    """ARC-DEV-015: the roles setup's installation record verified, None when the configuration has no record (older or
+    explicit inputs). A record of any other shape verifies nothing, so a damaged record fails closed."""
+    if "installation" not in conf:
+        return None
+    installation = conf["installation"]
+    verified = installation.get("pinnedVerified") if isinstance(installation, dict) else None
+    if not isinstance(verified, list) or not all(isinstance(role, str) for role in verified):
+        return []
+    return verified
+
+
 def pinned_roles(mode: str, task: str | None = None) -> tuple[str, ...]:
     """ARC-DEV-015: the roles of a pinned mode whose pinned identity it requires (files with a pinned size and SHA-256)."""
     roles = MODE_ROLES[mode] + (TASK_ROLES.get(task, ()) if TASK_MODES.get(task) == mode else ())

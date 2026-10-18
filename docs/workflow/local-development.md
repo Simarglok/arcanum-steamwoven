@@ -220,7 +220,17 @@ deep/strict codesign) plus the focused viewer tests and the exported host check 
 none that reads the pinned Crash Site inputs (no world, human, grid or area original gate, no persistence gate), so
 neither the export nor its registration needs the pinned installation. The pinned AREA/WORLD tasks keep their gates as
 the opt-in regression of the pinned profiles. `tools/arcanum-local launch` runs an ARC-DEV-015 build in map mode only
-(`--mode crash-site-area --area-map NAME`, with or without `--hero`), and `./arcanum map` prefers it.
+(`--mode crash-site-area --area-map NAME`, with or without `--hero`), and `./arcanum map` prefers it whenever one is
+registered, even when a newer ARC-RENDER-008 build exists; register a newer ARC-DEV-015 build to pick up later viewer
+changes.
+
+NOT READY: no ARC-DEV-015 gate opens a map in the exported build; the gates prove that the build exports, signs, runs
+its synthetic self-tests and loads the hosted runtime. Map mode itself is covered by the viewer tests and its native
+smoke in source runs ([map mode](../rendering/area-map-mode.md)). A launch checks the pinned identities only when the
+configuration carries the installation record that `setup` writes (`pinnedVerified`); a configuration without it (older,
+or `configure inputs`) launches the pinned modes as before, and a malformed record verifies nothing. The pinned-gate
+validators (`world_validate.py`, `area_validate.py`) take the configured inputs as they are: only the pinned regression
+exports run them, on the pinned installation.
 
 ## Bounded original grid candidate (ARC-WORLD-003)
 
