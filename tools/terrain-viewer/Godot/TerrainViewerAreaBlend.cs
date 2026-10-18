@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer;
 // the original's blend of the two within 3/255: multiply s·d/255, constant alpha and wading rows d + (s − d)·a/255
 // (the shader's /255 differs from the original's /256 by at most 1/255). An upright wading body's rows above the water
 // line must also show the source itself where it differs from the colour beneath. Lighting is off during the map
-// smoke, so every channel is neutral.
+// smoke, so every channel is neutral. The samples hold the camera (ARC-RENDER-023) and refuse a pair whose view moved.
 public partial class TerrainViewerApp
 {
     private const int AreaBlendTolerance = 3;
@@ -27,16 +27,20 @@ public partial class TerrainViewerApp
             ("wading", command => command.WadeRows > 0 && !command.Unlit && !command.Additive && !command.Multiply),
         };
         var observed = new List<object>();
-        foreach (var (name, of) in kinds)
+        await WithAreaSmokeCameraHeld(async () =>
         {
-            var candidates = bodies.Where(of).Take(32).ToArray();
-            if (candidates.Length == 0) continue;
-            object? sample = null;
-            foreach (var command in candidates)
-                if ((sample = await AreaBlendSample(area, command)) is not null) break;
-            if (sample is null) throw new InvalidOperationException($"AREA_BLEND_{name.ToUpperInvariant().Replace('-', '_')}_NOT_OBSERVED");
-            observed.Add(new { Kind = name, Candidates = candidates.Length, Sample = sample });
-        }
+            foreach (var (name, of) in kinds)
+            {
+                var candidates = bodies.Where(of).Take(32).ToArray();
+                if (candidates.Length == 0) continue;
+                object? sample = null;
+                foreach (var command in candidates)
+                    if ((sample = await AreaBlendSample(area, command)) is not null) break;
+                if (sample is null) throw new InvalidOperationException($"AREA_BLEND_{name.ToUpperInvariant().Replace('-', '_')}_NOT_OBSERVED");
+                observed.Add(new { Kind = name, Candidates = candidates.Length, Sample = sample });
+            }
+            return observed;
+        });
         GD.Print(observed.Count == 0 ? "ARC-RENDER-018 native-smoke blend NONE (no multiply, constant-alpha or wading body)"
             : "ARC-RENDER-018 native-smoke blend PASS " + System.Text.Json.JsonSerializer.Serialize(observed));
     }
@@ -78,6 +82,7 @@ public partial class TerrainViewerApp
         }
         if (pixels.Count == 0) { AreaBlendDetail(command, "no uncovered opaque pixel"); return null; }
         Image beneath, drawn;
+        var view = _camera!.State;
         _canvas.AreaSmokeOmitted = command.Identity;
         try
         {
@@ -86,9 +91,16 @@ public partial class TerrainViewerApp
             beneath = GetViewport().GetTexture().GetImage();
         }
         finally { _canvas.AreaSmokeOmitted = null; }
+        var beneathView = _camera.State;
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         drawn = GetViewport().GetTexture().GetImage();
+        // Both reads must show the view the pixels were chosen in.
+        if (beneathView != view || _camera.State != view)
+        {
+            beneath.Dispose(); drawn.Dispose();
+            throw new InvalidOperationException($"AREA_BLEND_CAMERA_MOVED {command.Identity}: {view} {beneathView} {_camera.State}");
+        }
         using (beneath) using (drawn)
         {
             object? Observe((int X, int Y, int Px, int Py, int Offset) p, int alpha, bool multiply, bool source = false)

@@ -96,10 +96,11 @@ standing art), `dernholm pits` (damaged wall), `caladon-panarrii temple` (tile-a
 scenery) and `tulla interior` (42 sectors, repaired `AIR` monster, vault PASS); the
 first of four `crematorium-lev 2` runs, right after a build, stopped at the
 resource sweep's coverage check (`AREA_RESOURCES_SWEEP_COVERAGE`, a command not
-seen in any view) and the three repeats passed, so the cause is not known.
+seen in any view) and the three repeats passed; ARC-RENDER-023 found the likely
+cause (below; not reproduced on this map).
 Since ARC-DATA-024 also on `k'na tha` (77 sectors, 315,392 terrain cells, 43,087
 drawn bodies, 416 frames, 8.6 MB of frames; wading blend, vault, sweep of 2,728
-views and reload PASS in the first run). Its load took about 187 s until
+views and reload PASS). Its load took about 187 s until
 ARC-RENDER-019, almost all in the scene plan, which looked up each body's visual by
 scanning every visual, and in the wall check, which did the same per wall; both
 now use a lookup by key, and K'na Tha loads in about 17 s in a source run (the
@@ -316,14 +317,35 @@ moves the actor on the same map). Observed
 `crematorium-lev 1` → `crematorium-lev 2` → F8 → `crematorium-lev 1` at
 92,94. The fallback after a failed load is not observed natively.
 
+## Camera held during smoke samples (ARC-RENDER-023)
+
+Until ARC-RENDER-023 K'na Tha's native smoke failed in most runs, on `origin/main`
+before ARC-RENDER-019 as well: the blend check of its first wading body reported
+`AREA_BLEND_PIXEL_MISMATCH`, a run stopped once at the resource sweep's coverage
+check, and one run that passed the blend check stopped at the reload's managed-heap
+bound (+64 MB over a 4 % floor of about 33 MB). The two reads of the blend check
+showed different places: the second frame was centred on the actor. A sampler sets
+the camera with a reset and reads the frames after it, but whenever the viewer
+window had the real focus the world input gate was open, and the camera follow then
+returned the view to the actor a frame or two later. Whether the window was focused
+depended on the desktop, so the failure looked random and was not caused by other
+sessions' windows (it also failed with no other viewer running).
+
+The blend samples and both resource sweeps now run with the window focus simulated
+off (the gate stays closed, so the follow does not move the camera), and each
+refuses a view that moved after its reset: `AREA_BLEND_CAMERA_MOVED` for a blend
+pair, `AREA_RESOURCES_CAMERA_MOVED` for a sweep step. Observed after the change:
+eight `k'na tha` runs with the blend check PASS, and the four runs after the sweep
+was held too complete (map, sweep and reload PASS; managed heap after the reload
+between 0.7 MB smaller and 10 MB larger), `crematorium-lev 2` and `tarant sewers-02` complete PASS. The +64 MB
+reload was not seen again; its cause is not known. The resource sweep is shared with
+the exterior AREA smoke, so its two sweeps are held there too; the exterior smoke was
+not run for this change (it stops earlier at a known pixel-sample failure). Other
+samplers that reset the camera and then read a frame live (the exterior lighting
+and class samples, cave lighting) are not changed and may flake the same way.
+
 ## Not yet
 
-- K'na Tha's native smoke is not green: the ARC-RENDER-018 blend check of its
-  first wading body reports `AREA_BLEND_PIXEL_MISMATCH` in most runs, on
-  `origin/main` before ARC-RENDER-019 as well (two of two runs) as after it, and
-  one run that passed the blend check stopped at the reload's managed-heap bound
-  (+64 MB over a 4 % floor of about 33 MB). Both are left to their own
-  investigation.
 - Roofs are drawn, hidden and faded since ARC-RENDER-022 ([roofs](roofs.md)).
   Wall fade uses the ARC-RENDER-011 wall check; inside buildings an actor north
   of a wall can still be hidden by it (parity with the original not verified).
