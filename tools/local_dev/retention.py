@@ -41,6 +41,9 @@ REQUIRED_TASK_SUCCESS_GATES['ARC-WORLD-009'] = REQUIRED_TASK_SUCCESS_GATES['ARC-
 # ARC-RENDER-008 (passability overlay) too; its original check runs inside the native WORLD/AREA observations.
 REQUIRED_TASK_SUCCESS_GATES['ARC-RENDER-008'] = REQUIRED_TASK_SUCCESS_GATES['ARC-RENDER-007']
 AREA_TASKS = ("ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008")
+# ARC-DEV-015: universal builds (map mode on any installation) carry the terrain gates, the focused viewer tests and the
+# exported host check, and no pinned Crash Site regression gate; their launch is map mode only (tools/arcanum-local).
+REQUIRED_TASK_SUCCESS_GATES['ARC-DEV-015'] = {"focused-tests", "dual-hostfxr"}
 
 
 def _tool_for_task(task: str) -> str | None:

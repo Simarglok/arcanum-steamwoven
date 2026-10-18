@@ -38,7 +38,7 @@ is recorded in the [component catalogue](../project/status.md). Historical
 experiment details below retain their own source/context; this status update
 is not a fresh runtime check.
 
-Claims read from the original's functions at cited addresses are evidence level
+Claims from an earlier source reading, cited by executable address, are evidence level
 F0 (not checked in the executable) unless the
 [verification ledger](../research/original-verification-ledger.md) lists them.
 No research implementation was ported, no clean-room or original parity claim.

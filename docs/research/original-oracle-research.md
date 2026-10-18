@@ -1,4 +1,4 @@
-# Original oracle and CE exclusion
+# Original oracle and reconstruction exclusion
 
 Status: **Research**, work item ARC-RES-051 (2026-10-17). Owner decisions of the same day are recorded in
 [architecture direction](../architecture/decisions.md) and the method is amended in the
@@ -6,7 +6,8 @@ Status: **Research**, work item ARC-RES-051 (2026-10-17). Owner decisions of the
 tooling is ARC-DEV-007 ([`tools/original-oracle`](../../tools/original-oracle/README.md); see [Plan](#plan)).
 
 The question: how to build a complete, checkable evidence base that Steamwoven behaves like the retail 1.0.7.4
-`Arcanum.exe`, except where a recorded difference says otherwise, and how to stop depending on CE for it.
+`Arcanum.exe`, except where a recorded difference says otherwise, and how to stop depending on a source reconstruction for it (since
+2026-10-18 the project uses none; its provenance is in git history).
 
 ## Findings
 
@@ -23,21 +24,22 @@ The question: how to build a complete, checkable evidence base that Steamwoven b
   happens with the shipped data; `ExperienceTable.Create` admits thresholds up to 2,000,000,000, so a modded table
   would show it. Ledger row [XP3](original-verification-ledger.md#experience-and-levels-arc-world-030) records the
   verdict.
-- **The executable carries most of what CE is used for.**
+- **The executable carries most of what the reconstruction was used for.**
   - Ghidra 12.1.4 with its full auto-analysis plus a small script that creates functions at pointers found in `.data`
-    and `.rdata` found 5,551 functions without any CE input. 4,608 of them start at one of the 4,981 function addresses
-    CE annotates (92.5 %); 373 CE functions were not found yet (most near 0x570000, the interface code) and 943 functions
-    have no CE address. CE addresses were used only to measure this.
+    and `.rdata` found 5,551 functions without any reconstruction input. 4,608 of them start at one of the 4,981 function
+    addresses the reconstruction annotated (92.5 %); 373 of the 4,981 annotated addresses were not found yet (most near 0x570000, the interface
+    code) and 943 functions had no annotated address. The annotated addresses were used only to measure this.
   - The object field names are in the executable as a table of 338 string pointers at 0x59BEA8, from `obj_f_begin` to
-    `obj_f_max`, in field order; the stat names are a table of 22 pointers at 0x5B5384 in stat order (`stat_level` is
-    17, `stat_experience_points` 18, the numbers the oracle saw in real calls). These can replace CE's `obj.h` and `stat.h`.
-  - CE gives 4,980 distinct names for its 4,981 addresses. Of its 3,820 descriptive names, 279 occur verbatim in the executable's own strings (animation and magic
-    messages), and five Troika source paths appear (`GameLibX\Anim.c` and others). The other names are CE's own; 1,160
-    more functions are only `sub_…` in CE too.
-- **Scale of the CE dependency** on `origin/main` (lines naming CE, its repository or its commit): `docs` 2,836 lines in
+    `obj_f_max`, in field order; the stat names are a table at 0x5B5384 that names stats 0–20 in stat order (`stat_level` is
+    17, `stat_experience_points` 18, the numbers the oracle saw in real calls; from 21 on the table and the code disagree,
+    the poison level being stat 24 in code, ledger [IF12](original-verification-ledger.md#implemented-functions-arc-dev-025)). These can replace the reconstruction's field and stat headers.
+  - The reconstruction gave 4,980 distinct names for its 4,981 addresses. Of its 3,820 descriptive names, 279 occur
+    verbatim in the executable's own strings (animation and magic messages), and five Troika source paths appear
+    (`GameLibX\Anim.c` and others). The other names were its own; 1,160 more functions had only `sub_…` names.
+- **Scale of the reconstruction dependency** on `origin/main` (lines naming it, its repository or its commit): `docs` 2,836 lines in
   140 of 162 files, `tools` 107 lines in 42 files, `src` 84 lines in 44 files, `tests` 17 lines in 15 files,
   `CLAUDE.md` and `AGENTS.md` 10 lines.
-- **Call structure.** Of the CE-annotated functions, 866 call nothing, 3,735 call only other game functions, 302 make
+- **Call structure.** Of the annotated functions, 866 call nothing, 3,735 call only other game functions, 302 make
   indirect calls and 47 call Win32 directly. Game logic barely touches the operating system, so the emulation boundary
   is the service layer (object fields, stats, random numbers, messages, tig), replaced by stubs.
 
@@ -66,15 +68,18 @@ verifier and persuaded the reviewer, so the oracle must be protected). Sources o
 2. **ARC-DEV-007**: the oracle tool and its test integration, on the owner's Mac: `tools/original-oracle` (Python,
    pinned Unicorn) with a self-test on synthetic code, the C# side of the comparison in a test category
    `OriginalExe`, the function registry, the `OriginalFunction` attribute, receipts, `./arcanum oracle`, and the
-   reference counter for CE, with Ghidra and Unicorn pinned in the [toolchain](../workflow/toolchain.md). First functions:
+   reference counter for the reconstruction, with Ghidra and Unicorn pinned in the [toolchain](../workflow/toolchain.md). First functions:
    the three experience functions of the trial. Done for the oracle tool, the `OriginalExe` category and `./arcanum oracle`;
-   the registry, attribute, receipts and CE counter are ARC-DEV-008 ([function verification](../verification/README.md)).
+   the registry, attribute, receipts and reference counter are ARC-DEV-008 ([function verification](../verification/README.md)).
 3. **Experience XP3 switch**: the progress overflow as a rule-mode switch (owner decision 2026-10-17), with the oracle
    expecting the difference in Steamwoven mode only. Done as ARC-WORLD-033.
-4. **Domain migrations**: per domain, raise the implemented functions to their target level and replace CE references
-   with executable addresses in the same PR. Until its domain is migrated, new work cites CE only for the function it
-   checks.
-5. **Closure**: CE removed from `AGENTS.md`, `CLAUDE.md` and the method; the counter becomes a ban.
+4. **Domain migrations**: per domain, raise the implemented functions to their target level and replace reconstruction
+   references with executable addresses in the same PR. The owner chose full removal on 2026-10-18 (references go
+   from history and research too; facts not yet read in the executable keep their address at F0). Done for code, tests
+   and tools (ARC-DEV-009..012), contracts and requirements (ARC-DEV-013) and research documents (ARC-DEV-020);
+   re-reading the F0 facts in the executable continues by domain.
+5. **Closure**: the reconstruction removed from `AGENTS.md`, `CLAUDE.md` and the method; the counter becomes a ban.
+   Done as ARC-DEV-023.
 
 ## Not done
 

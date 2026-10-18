@@ -47,13 +47,14 @@ public sealed class AreaWallTests
     [TestMethod]
     public void Damaged_unknown_piece_and_missing_or_ambiguous_names_never_publish()
     {
-        using (var damaged = Make(Wall(0, 0, 1, damage: 0x80), "art/wall/aa1bseu0.art")) Reject(damaged, AreaErrorCode.UnsupportedArtClassOrState);
+        // A damaged wall names its damage letter (N6, every plan since ARC-DATA-036): the undamaged file does not serve it.
+        using (var damaged = Make(Wall(0, 0, 1, damage: 0x80), "art/wall/aa1bseu0.art")) Reject(damaged, AreaErrorCode.MissingSource);
         using (var piece = Make(Wall(0, 46, 1), "art/wall/aa1bseu0.art")) Reject(piece, AreaErrorCode.UnsupportedArtClassOrState);
         using (var row = Make(Wall(7, 0, 1), "art/wall/aa1bseu0.art")) Reject(row, AreaErrorCode.MissingSource);
         using (var missingName = Make(Wall(1, 0, 1), "art/wall/aa1bseu0.art")) Reject(missingName, AreaErrorCode.MissingSource);
         using (var ambiguous = Make(Wall(0, 0, 1), "art/wall/aa1bseu0.art", names: "{0}{Aa10}{1}{aa12}")) Reject(ambiguous, AreaErrorCode.AmbiguousSource);
         using (var file = Make(Wall(0, 0, 1), "art/wall/aa1bseu1.art")) Reject(file, AreaErrorCode.MissingSource);
-        using (var heavy = Make(Wall(0, 0, 1, damage: 0x400), "art/wall/aa1bseu0.art")) Reject(heavy, AreaErrorCode.UnsupportedArtClassOrState);
+        using (var heavy = Make(Wall(0, 0, 1, damage: 0x400), "art/wall/aa1bseu0.art")) Reject(heavy, AreaErrorCode.MissingSource);
         using (var flags = Make(Wall(0, 0, 1, flags: 2), "art/wall/aa1bseu0.art")) Reject(flags, AreaErrorCode.UnsupportedArtClassOrState);
         using (var oneToken = Make(Wall(0, 0, 1), "art/wall/aa1bseu0.art", structure: "{0}{Aa10}")) Reject(oneToken, AreaErrorCode.MalformedRecord);
         using (var shortSide = Make(Wall(0, 0, 1), "art/wall/aa1bseu0.art", structure: "{0}{Aa Bb10 nul nul}")) Reject(shortSide, AreaErrorCode.MalformedRecord);
@@ -103,7 +104,7 @@ public sealed class AreaWallTests
     {
         var entries = new List<(string Name, byte[] Payload)>
         {
-            ("tile.mes", Encoding.ASCII.GetBytes("{0}{stone}{100}{stone}{200}{stone}{300}{stone}{400}{end}")),
+            ("tile.mes", Encoding.ASCII.GetBytes("{0}{stone/}{100}{stone/}{200}{stone/}{300}{stone/}{400}{end/}")),
             ("facade.mes", Encoding.ASCII.GetBytes("{0}{fixture}")), ("scenery.mes", Encoding.ASCII.GetBytes("{0}{fixture.art}")),
             ("structure.mes", Encoding.ASCII.GetBytes(structure)), ("wallname.mes", Encoding.ASCII.GetBytes(names)),
             ("art/tile/stonebse0a.art", Art()), (file, art ?? Art()),

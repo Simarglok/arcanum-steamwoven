@@ -8,9 +8,7 @@ Crash Site sector. It corrects the earlier *hypothesis* that the byte after the
 specification, a production loader, an asset resolver, or a static-scene
 claim.
 
-The source-derived behavior below comes from the single `arcanum-ce` lineage
-at immutable commit `a7ff41b300ef712f0e7d088183a3d08957110cdd`; it is not
-independent confirmation. The numeric results are an experiment on the one
+The behavior below is an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. It is not independent confirmation. The numeric results are an experiment on the one
 fingerprinted user-owned input. No game bytes, names, object IDs, or extracted
 assets are committed.
 
@@ -43,19 +41,18 @@ not write the input or extract its payload.
 
 ## Source map and loader order
 
-The map is a behavioral attribution, not copied implementation. All paths in
-this table are at CE commit `a7ff41b300ef712f0e7d088183a3d08957110cdd`.
+The map is a behavioral attribution from an earlier source reading (F0), cited by function address.
 
 | Stage | Source map | What it establishes for the base `.sec` stream |
 | --- | --- | --- |
-| Address and base open | `src/game/sector.c::sector_load_game`; `src/game/sector.c::sector_id_from_loc`; `src/game/sector.h::SECTOR_MAKE` | The game constructs the sector path from the packed ID, opens the base stream, and uses X/Y shifted by six for the sector address. |
-| Difference stream | `src/game/sector.c::sector_load_game`, `DIF_HAVE_*` branches | A separate optional `.dif` stream can override light, tile, roof, scripts, metadata, sound, blocks, or objects. It is runtime/save-state input, not bytes in the selected module entry. This probe frames the selected base entry only. |
-| Lights | `src/game/sector_light_list.c::sector_light_list_load`; `src/game/light.c::light_read`; `src/game/light.c::LightSerializedData` | Reads an LE signed count, then one fixed 48-byte serialized light per item. On this input the count is zero, so no light record bytes are consumed. |
-| Tiles | `src/game/sector_tile_list.c::sector_tile_list_load_internal` | Reads exactly 4,096 four-byte ART words. |
-| Roofs | `src/game/sector_roof_list.c::sector_roof_list_load_internal`; `src/game/sector_roof_list.h::SectorRoofList` | Reads an `int empty`; only when it is zero does it read 256 four-byte roof ART words. |
-| Placeholder and conditional sections | `src/game/sector.c::sector_load_game`; `src/game/tile_script_list.c::tile_script_list_load`; `src/game/sector_script_list.c::sector_script_list_load`; `src/game/sector_sound_list.c::sector_sound_list_load`; `src/game/sector_block_list.c::sector_block_list_load` | Reads a placeholder in the inclusive range `0xAA0000..0xAA0004`. Nonzero loads a count plus 24-byte tile-script entries; `>= 0xAA0002` loads one 12-byte sector script; `>= 0xAA0003` loads three four-byte metadata values and a 12-byte sound record; `>= 0xAA0004` loads 128 four-byte block-mask values. |
-| Object list | `src/game/sector_object_list.c::objlist_load` | Saves the current cursor, seeks to `end - 4`, reads the terminal signed count, seeks back to the saved cursor, reads that many records, then reads and compares the trailing count. |
-| Runtime additions after stream decoding | `src/game/sector_object_list.c::objlist_load`; `src/game/sector.c::sector_load_game`; `src/game/sector_light_list.c::sector_light_list_load` | Object locations are rebased to the sector, postprocessed, and assigned temporary IDs; game loading later folds objects/lights and may precache art. These actions are runtime state and are not additional bytes in the selected base stream. |
+| Address and base open | `sector_load_game` (0x4D1A30); `sector_id_from_loc` (0x4CFC50); the sector ID packing | The game constructs the sector path from the packed ID, opens the base stream, and uses X/Y shifted by six for the sector address. |
+| Difference stream | `sector_load_game` (0x4D1A30), `DIF_HAVE_*` branches | A separate optional `.dif` stream can override light, tile, roof, scripts, metadata, sound, blocks, or objects. It is runtime/save-state input, not bytes in the selected module entry. This probe frames the selected base entry only. |
+| Lights | `sector_light_list_load` (0x4F72C0); `light_read` (0x4DDD20); the serialized light record | Reads an LE signed count, then one fixed 48-byte serialized light per item. On this input the count is zero, so no light record bytes are consumed. |
+| Tiles | `sector_tile_list_load_internal` (0x4F7CE0) | Reads exactly 4,096 four-byte ART words. |
+| Roofs | `sector_roof_list_load_internal` (0x4F8020); the sector roof list record | Reads an `int empty`; only when it is zero does it read 256 four-byte roof ART words. |
+| Placeholder and conditional sections | `sector_load_game` (0x4D1A30); `tile_script_list_load` (0x4F65B0); `sector_script_list_load` (0x4F6250); `sector_sound_list_load` (0x4F8150); `sector_block_list_load` (0x4F8250) | Reads a placeholder in the inclusive range `0xAA0000..0xAA0004`. Nonzero loads a count plus 24-byte tile-script entries; `>= 0xAA0002` loads one 12-byte sector script; `>= 0xAA0003` loads three four-byte metadata values and a 12-byte sound record; `>= 0xAA0004` loads 128 four-byte block-mask values. |
+| Object list | `objlist_load` (0x4F1350) | Saves the current cursor, seeks to `end - 4`, reads the terminal signed count, seeks back to the saved cursor, reads that many records, then reads and compares the trailing count. |
+| Runtime additions after stream decoding | `objlist_load` (0x4F1350); `sector_load_game` (0x4D1A30); `sector_light_list_load` (0x4F72C0) | Object locations are rebased to the sector, postprocessed, and assigned temporary IDs; game loading later folds objects/lights and may precache art. These actions are runtime state and are not additional bytes in the selected base stream. |
 
 ## Reproduced framing result
 
@@ -69,7 +66,7 @@ matches; the terminal word ends at decoded length 47,291.
 | Serialized lights | 4 | 0 | 4 | 0 | `light_count * 48` |
 | Tile words | 4 | 16,384 | 16,388 | 4,096 | `4096 * 4` |
 | Roof section | 16,388 | 4 | 16,392 | `empty = 1` | one LE `i32`; zero would add `256 * 4` bytes |
-| Placeholder | 16,392 | 4 | 16,396 | `0xAA0004` | bounded CE discriminator range |
+| Placeholder | 16,392 | 4 | 16,396 | `0xAA0004` | bounded discriminator range (F0) |
 | Tile scripts | 16,396 | 196 | 16,592 | 8 | `4 + (8 * 24)` |
 | Sector script | 16,592 | 12 | 16,604 | enabled by placeholder | one 12-byte `Script` |
 | Metadata and sound | 16,604 | 24 | 16,628 | enabled by placeholder | `3 * 4 + 12` |
@@ -88,7 +85,7 @@ framing result.
 ## Resolution of the earlier `1 / 119` discrepancy
 
 The prior `1` at offset 16,388 was a raw observation but not evidence of a
-retail object version. The CE-derived loader order places the roof `empty`
+retail object version. The loader order of `sector_load_game` (earlier source reading, F0) places the roof `empty`
 discriminator at that offset. Its observed value is `1`, which selects the
 empty-roof branch and consumes no roof ART array. The next placeholder enables
 four further base-stream sections before `objlist_load` is reached. Therefore
@@ -97,7 +94,7 @@ sections and produced the false `1 / 119` mismatch.
 
 The corrected conclusion is narrow:
 
-- `1` is the selected input's roof-empty discriminator under the attributed CE
+- `1` is the selected input's roof-empty discriminator under the F0
   framing, not a claimed retail object-record version.
 - The base-stream object window is reproducibly `[17140, 47287)`, and its
   first word is 119; the bounded v119 delimiter reaches its terminal count.

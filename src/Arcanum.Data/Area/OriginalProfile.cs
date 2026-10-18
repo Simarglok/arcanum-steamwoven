@@ -1,10 +1,9 @@
-using System.Buffers.Binary;
-using Arcanum.Data.Objects;
-
 namespace Arcanum.Data.Area;
 
 // Safe numeric identities from the independently verified source inventory.
 // No original payload, logical resource names or pixel corpus is embedded.
+// ARC-DATA-036: the profile names its inputs and its expected outputs only (counts, core sectors, the cave endpoint);
+// the owner builds it by the rules of every plan, and Check asserts that they reproduce the outputs.
 internal static class OriginalProfile
 {
     internal static readonly IReadOnlyDictionary<int, (long Length, string Sha256)> Prototypes = new Dictionary<int, (long, string)>
@@ -88,7 +87,11 @@ internal static class OriginalProfile
             Map(AreaMappingRole.UniqueNpcNames, AreaSourceRole.Resource1, 5847, 237, 552, 443052894, "224e1197160e88c683dc7ce54cf27e92d5f6d18ae72cf01c421cbd3955b6d20b", "611e82ba4e99498aaacb3e9527ef610b4939e704452182523e9c72a5a1e3c541"),
             Map(AreaMappingRole.MissingPolicy, AreaSourceRole.Resource1, 4695, 108, 332, 278084522, "90de5bb07348cecfc2bc60cfb68d8b56493a8f36ae906da63d1ec6499f84b3a6", "49502ba4e4236f7c7835e697c3ff569f894f2814f82cd3543ce861c28526b7e0")
         };
-        return new(5000, 1, new(1452, 1290), 2, "maps/Arcanum1-024-fixed", identities, mappings) { OriginalMap = OriginalAreaMap.CrashSiteExterior };
+        return new(5000, 1, new(1452, 1290), 2, "maps/Arcanum1-024-fixed", identities, mappings)
+        {
+            OriginalMap = OriginalAreaMap.CrashSiteExterior, ResourceOrder = [new(new(AreaSourceRole.Resource2)), new(new(AreaSourceRole.Resource1))],
+            Endpoints = Endpoints,
+        };
     }
 
     internal static void Check(AreaReconciliation counts, IEnumerable<AreaSectorRecord> sectors, IEnumerable<AreaObjectRecord> objects, IEnumerable<AreaVisualRecord> visuals)
@@ -101,42 +104,9 @@ internal static class OriginalProfile
         if (objects.Any(o => !o.SchemaReady || !o.PlacementReady || !o.RequiredLayersReady) || visuals.Count(v => v.Key.Kind == AreaSourceKind.Mobile) != 88)
             throw new AreaException(new(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Publication));
     }
-    internal static IReadOnlyList<AreaEndpoint> Endpoints(IEnumerable<AreaObjectRecord> objects)
-    {
-        var endpoint = objects.Single(o => o.Key.Kind == AreaSourceKind.Static && o.Key.Sector == 86570436011 && o.Key.SourceIndex == 7);
-        if (endpoint.Key.ObjectIdSha256 != "9d908ecfb6b256def8b49a7c504e6c889c4b0e41fe6ce3e01863dd7b61a20aa0" || endpoint.PrototypeNumber != 4047)
-            throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Appearance));
-        return [new(86570436011, 7, 4047, 1, 2793, 5078, 79, 2087, 2018, endpoint.Key.ObjectIdSha256)];
-    }
-    internal static (string Policy, int View, int Group) SelectionPolicy(AreaVisualKey key, uint raw, AreaEntryIdentity entry, byte[] bytes,
-        ObjectWireRecord record, int nominal, int group, int frame, int palette)
-    {
-        if (key.Kind != AreaSourceKind.Mobile || key.Layer != AreaLayerKind.Body) return ("strict-full-entry", bytes.Length, group);
-        var sha = ObjectWireReader.Hash(bytes);
-        if (key.SourceIndex is 4704 or 4705 or 5822 or 5823)
-        {
-            var (id, recordSha) = key.SourceIndex switch
-            {
-                4704 => ("27a6d09e145a3efb4a233f393a1e66dfe8d3690963b148a452a636bd1f8e17bf", "a87754b94f70f40dc2e14d6eebd6ea0795b3383ad64241f58669e9ee7466e028"),
-                4705 => ("3239ae11d3124ee747c827aec92e366990b8dfbacbf2118222ebaac229bb8b44", "e3a7fabb7bb6a426c06a6583ddcb1e8bf6aef0f291ff935441eb3b72058a1a61"),
-                5822 => ("1e2cfbecc847a79219da5c361cd36046447512f50cde7a56228976828a114924", "1c5f5e0b9ae21bd4c3baa7d017e925f7f7d1df067d4bd45ad1b6ef6170e7485e"),
-                _ => ("9f985ee57423c72d95219cf627e07149334af59ed3cb604eb7ac4dda45967a3d", "ca55aac9a234a222c9e27d2823c080ed03a939f3b722470c789c4f7773ce120d")
-            };
-            if (key.Sector.SourceSha256 != "a548f611ff5de9842bba1f700f6614c0b9651cf3ab640a23d19efc7626dde6a5" || key.ObjectIdSha256 != id || record.Sha256 != recordSha || raw != 1614807049 ||
-                entry.Source.Role != AreaSourceRole.Resource2 || entry.Ordinal != 919 || entry.StoredBytes != 823 || entry.DecodedBytes != 1419 || entry.Offset != 43648541 || entry.Flags != 2 ||
-                entry.NameSha256 != "59fb803cb2d98c6c3189e3ca0be8f4273170ac25c0a959b76b11e865d46b970e" || sha != "4369ed7b46e639a737d35a81fa42113172269207f73842e3f2ab11e7a96b10b5" || bytes.Length != 1419 || bytes[^1] != 0 || nominal != 0 || group != 0 || frame != 0 || palette != 0 ||
-                ObjectWireReader.Hash(bytes.AsSpan(0, 1418)) != "4be70c355faf34b02c6dc23e9f54eab8f7c65f4c795af0aebbca4dc02c76183d")
-                throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Frame));
-            return ("arc-data-009-exact-art-view-v1", 1418, 0);
-        }
-        if (key.SourceIndex == 5699)
-        {
-            if (key.Sector.SourceSha256 != "a548f611ff5de9842bba1f700f6614c0b9651cf3ab640a23d19efc7626dde6a5" || key.ObjectIdSha256 != "49fd9353065e5cf48d7e8a086ddfaedcafb221fd84b6cb2d59a840fa87eca395" || record.Sha256 != "77e674884f8361e10d625cdfbbeae6e176baf731fc329e6d803e9fa144fcb99c" || raw != 3494914496 ||
-                entry.Source.Role != AreaSourceRole.Resource1 || entry.Ordinal != 5445 || entry.Flags != 2 || entry.StoredBytes != 1724 || entry.DecodedBytes != 2015 || entry.Offset != 376688235 ||
-                entry.NameSha256 != "aca95bdca2f75f25ccf73adf976b0ba7c7721b467d54f879b90e27474fd26902" || sha != "d91c5cb045ae8f24896fad511d000aa8a35d8f8c5b88df6566199b2249921281" || nominal != 5 || group != 5 || frame != 0 || palette != 0 || BinaryPrimitives.ReadUInt32LittleEndian(bytes) != 1)
-                throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Frame));
-            return ("arc-data-009-exact-single-group-alias-v1", bytes.Length, 0);
-        }
-        return ("strict-full-entry", bytes.Length, group);
-    }
+    /// <summary>The expected use-click transition: the cave entrance (sector (1451, 1290), ordinal 7, prototype 4047), whose
+    /// use script 2793 teleports to the cave (catalogue 5078, runtime 79) at (2087, 2018). ARC-DATA-036: the map's
+    /// transition data give exactly this one in the core (opt-in test).</summary>
+    internal static readonly IReadOnlyList<AreaEndpoint> Endpoints =
+        [new(86570436011, 7, 4047, AreaEndpoints.UseSap, 2793, 5078, 79, 2087, 2018, "9d908ecfb6b256def8b49a7c504e6c889c4b0e41fe6ce3e01863dd7b61a20aa0")];
 }

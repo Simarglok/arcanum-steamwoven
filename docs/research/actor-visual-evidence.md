@@ -4,7 +4,7 @@
 
 **Readiness: NOT READY — original-runtime actor placement remains unobserved.**
 The probe established one bounded original monster visual chain. ARC-RES-010
-subsequently traced the pinned CE actor route and documents its source-derived
+subsequently traced the actor route in an earlier source reading (F0) and documents its
 world-anchor-to-top-left relation in
 [actor placement evidence](actor-placement-evidence.md). That trace proves
 neither an original-runtime observation nor renderer readiness; ART metadata
@@ -64,8 +64,8 @@ weapon selector components are all zero, which is the bounded single-layer
 criterion for this candidate. The tool does not infer an NPC/world association,
 name, gameplay identity, or a composite equipment policy.
 
-The direct current ART is transformed only by the pinned CE source's Stand
-(action `0`) and Walk (action `1`) selector rule. The resulting exact packed
+The direct current ART is transformed only by the Stand
+(action `0`) and Walk (action `1`) selector rule of the earlier source reading (F0). The resulting exact packed
 selectors are `0xc9001810` (Idle/Stand) and `0xc9001850` (Walk). Each resolves
 exactly once, through the explicit resource DAT's source-defined monster
 mapping, to resource-DAT ordinals 4753 and 4754 respectively. Mapping values
@@ -105,9 +105,9 @@ For the selected chain, ART offset X/Y is retained per frame. Mirrored facings
 follow the source rule: group `8-facing`, `flipX=true`, and actor-frame geometry
 uses the corresponding source mirroring transform (hot X becomes `width-hotX-1`
 and offset X changes sign). The later [actor placement evidence](actor-placement-evidence.md)
-records the exact pinned-source caller's state-dependent relation and confirms
+records the caller's state-dependent relation (F0) and confirms
 that the normal object rectangle does not add ART frame offsets. It is a
-CE-source rule, not a measured original-runtime placement; static-scenery
+rule from an earlier source reading (F0), not a measured original-runtime placement; static-scenery
 behavior is still not transferred.
 
 ## Bounded census and negative facts
@@ -165,21 +165,18 @@ allowed.
 
 | ID | Claim | Classification | Source / limit |
 | --- | --- | --- | --- |
-| AV-001 | v119 field-0 direct/one-exact-prototype ART resolution is the only admitted inheritance edge. | observed bytes + CE-source claim | Probe envelope; CE `src/game/obj.c:178-200,3549`; no general MOB/PRO parser claim. |
-| AV-002 | Type 15 and type 16 are separate player/NPC envelopes; type 15 is excluded. | CE-source claim + synthetic experiment | `src/game/object.h:25-41`; production-path self-test and bounded census. |
-| AV-003 | Monster Stand/Walk actions are source action values 0/1; normalization/path selection is source-defined. | CE-source claim | `first_party/tig/include/tig/art.h:234-260`; `src/game/name.c:647-820,978-1005`. No CE code is copied. |
-| AV-004 | Monster ART has packed action, rotation, palette and appearance selectors; type 12 is monster. | CE-source claim | `first_party/tig/include/tig/art.h:25-41`; `first_party/tig/src/art.c:16-40,1738-1829`. |
-| AV-005 | Requested rotations 1..3 resolve to physical 7..5 with horizontal flip; the rest retain physical group. | CE-source claim + observed metadata | `first_party/tig/src/art.c:553-568,1211-1256`; probe inspected every retained group. |
-| AV-006 | ART frames provide raw FPS and signed frame geometry. | observed bytes + CE-source claim | `ArtDecoder.Inspect`; `first_party/tig/src/art.c:119-142,1160-1193`. |
-| AV-007 | A move animation starts with Walk, while scheduler pause can depend on speed. | CE-source claim | `src/game/anim.c:10483-10500,10503-10557`; raw FPS is metadata, movement speed is not inferred. |
-| AV-008 | At RES009 completion, actor anchor-to-top-left delta was unmeasured. | historical unknown | Superseded only at the pinned-source level by [actor placement evidence](actor-placement-evidence.md); no original-runtime observation exists and static-scenery evidence remains excluded. |
+| AV-001 | v119 field-0 direct/one-exact-prototype ART resolution is the only admitted inheritance edge. | observed bytes + F0 reading | Probe envelope; the object field table and `sub_40A8A0` (0x40A8A0); no general MOB/PRO parser claim. |
+| AV-002 | Type 15 and type 16 are separate player/NPC envelopes; type 15 is excluded. | F0 reading + synthetic experiment | Object type numbering; production-path self-test and bounded census. |
+| AV-003 | Monster Stand/Walk actions are source action values 0/1; normalization/path selection is source-defined. | F0 reading | ART action numbering; `name_normalize_aid` (0x41D510), `name_resolve_path` (0x41DAE0). |
+| AV-004 | Monster ART has packed action, rotation, palette and appearance selectors; type 12 is monster. | F0 reading | ART type numbering; the ART library's monster identifier packing and accessors. |
+| AV-005 | Requested rotations 1..3 resolve to physical 7..5 with horizontal flip; the rest retain physical group. | F0 reading + observed metadata | The ART library's rotation and frame-data functions; probe inspected every retained group. |
+| AV-006 | ART frames provide raw FPS and signed frame geometry. | observed bytes + F0 reading | `ArtDecoder.Inspect`; the ART library's file and frame loader. |
+| AV-007 | A move animation starts with Walk, while scheduler pause can depend on speed. | F0 reading | `sub_42E9B0` (0x42E9B0), `sub_42EDC0` (0x42EDC0), `sub_42EE90` (0x42EE90); raw FPS is metadata, movement speed is not inferred. |
+| AV-008 | At RES009 completion, actor anchor-to-top-left delta was unmeasured. | historical unknown | Superseded only at the F0 reading level by [actor placement evidence](actor-placement-evidence.md); no original-runtime observation exists and static-scenery evidence remains excluded. |
 
-The CE revision is `a7ff41b300ef712f0e7d088183a3d08957110cdd` from
-`alexbatalov/arcanum-ce`, used only as Sustainable Use License specification
-material. No CE code, comments, data structures, executable, or runtime is
-copied or run. This record makes no clean-room, independent corroboration, or
-pixel/runtime-parity claim. ArcNET is CE-derived; archived tools and WorldEd are
-community reports, not independent evidence.
+The facts in this table come from an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. This record makes no
+independent corroboration or pixel/runtime-parity claim. Archived tools and
+WorldEd are community reports, not independent evidence.
 
 ## Synthetic production-path coverage
 

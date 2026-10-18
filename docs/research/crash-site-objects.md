@@ -15,7 +15,6 @@ in this repository.
 | Explicit resource DAT | 147,991,122 bytes; SHA-256 `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d` | One caller-selected source for five ART metadata checks; no winner/preference claim |
 | Explicit prototype directory | Six referenced canonical prototype files; aggregate SHA-256 `00d5610fc295b84a8dd355d843b0307d0dff5f73e6d353ed25c81667882d65d6` over sorted `six-digit ID:file SHA-256` pairs | Required only where an instance lacks current-ART and/or object flags; directory names and payloads are not reported |
 | Project code | `DatArchive`, `ArtDecoder`, and `Arcanum.CrashSiteProbe` | Bounded read-only diagnostic tooling, not reusable loading API |
-| Attributed source lineage | `arcanum-ce` commit `a7ff41b300ef712f0e7d088183a3d08957110cdd` | One source lineage, not independent corroboration and not copied implementation |
 
 Use the pinned SDK and explicit caller-owned inputs:
 
@@ -38,17 +37,19 @@ before/after use. It outputs only aggregates and selected numeric metadata.
 
 | Claim | Source attribution | Measured or synthetic evidence | Status |
 | --- | --- | --- | --- |
-| Object-list envelope obtains the terminal count from end-of-stream, reads that many objects from the saved cursor, then compares the final count | `src/game/sector_object_list.c:115-185` | Selected window `17140..47287` and final word `317`; delimiter consumes exactly 317 records | source-supported plus measured |
-| Object-ID type A is prototype-addressable, and one serialized ID is 24 bytes | `src/game/obj_id.h:14-34` | All referenced inherited records used type-A IDs and exactly six canonical local prototypes resolved | source-supported plus measured |
-| Common fields begin with current ART and location; CE `OBJ_F_FLAGS` enum value 19 serializes at zero-based common slot 18 | `src/game/obj.h:10-48` | v119 field-mask parser retains current ART, location, and slot-18 object flags; test-only fixtures independently write distinct sentinels at literal raw slots 18 and 19 | source-supported plus measured parser scope and independently framed synthetic evidence |
-| Object type `3` is scenery; a static object excludes dynamic flags after type eligibility | `src/game/object.c:1779-1789`; `src/game/obj_flags.h:24` | 317 parsed type-3 records all had an effective slot-18 object-flags value without `0x00002000`; direct and inherited fixtures independently write reversed static/dynamic sentinels at literal raw slots 18 and 19 | source-supported plus measured |
-| Current ART is used by the object-list art precache | `src/game/sector_object_list.c:515-528` | Instance override or prototype default resolved for all 317 records | source-supported plus measured |
-| Scenery ART lookup key and path family derive from scenery category/number | `src/game/name.c:937-943`; `first_party/tig/src/art.c:2068-2096` | Five exact selected metadata chains resolved uniquely in the explicit resource archive | source-supported plus measured |
-| ART type/frame/palette and physical-frame metadata | `first_party/tig/src/art.c:668-690,903-921,1029-1037`; project `ArtDecoder` | Five selected group/frame/palette values passed physical-table bounds and metadata inspection | source-supported plus measured |
-| Coordinate rebasing happens after object read | `src/game/sector_object_list.c:143-166` | Local source coordinates are reported below only; no global/runtime placement is claimed | source-supported; placement remains open |
+| Object-list envelope obtains the terminal count from end-of-stream, reads that many objects from the saved cursor, then compares the final count | object-list load `objlist_load` (0x4F1350) | Selected window `17140..47287` and final word `317`; delimiter consumes exactly 317 records | source-supported plus measured |
+| Object-ID type A is prototype-addressable, and one serialized ID is 24 bytes | the object ID layout | All referenced inherited records used type-A IDs and exactly six canonical local prototypes resolved | source-supported plus measured |
+| Common fields begin with current ART and location; `OBJ_F_FLAGS` field ID 19 serializes at zero-based common slot 18 | the common object field order | v119 field-mask parser retains current ART, location, and slot-18 object flags; test-only fixtures independently write distinct sentinels at literal raw slots 18 and 19 | source-supported plus measured parser scope and independently framed synthetic evidence |
+| Object type `3` is scenery; a static object excludes dynamic flags after type eligibility | static test `object_is_static` (0x43D990); the `OF_DYNAMIC` flag bit | 317 parsed type-3 records all had an effective slot-18 object-flags value without `0x00002000`; direct and inherited fixtures independently write reversed static/dynamic sentinels at literal raw slots 18 and 19 | source-supported plus measured |
+| Current ART is used by the object-list art precache | object-list art precache `objlist_precache_art` (0x4F1F00) | Instance override or prototype default resolved for all 317 records | source-supported plus measured |
+| Scenery ART lookup key and path family derive from scenery category/number | path resolver `name_resolve_path` (0x41DAE0); the ART path builder (earlier source reading) | Five exact selected metadata chains resolved uniquely in the explicit resource archive | source-supported plus measured |
+| ART type/frame/palette and physical-frame metadata | the ART header and frame functions (earlier source reading); project `ArtDecoder` | Five selected group/frame/palette values passed physical-table bounds and metadata inspection | source-supported plus measured |
+| Coordinate rebasing happens after object read | object-list load `objlist_load` (0x4F1350) | Local source coordinates are reported below only; no global/runtime placement is claimed | source-supported; placement remains open |
 
-The source revision was consulted as attribution only. This note makes no
-clean-room, license, or runtime-parity claim.
+The attributions above are an earlier source reading (provenance in git
+history), cited by the executable address of each function; level F0 (not
+checked in the executable). This note makes no clean-room or
+runtime-parity claim.
 
 ## Record envelope: admitted fields and deliberate omissions
 
@@ -68,7 +69,7 @@ claim that every skipped field has a known semantic interpretation.
 | Object type | Record type integer | All 317 values equal `3`; source attribution labels this scenery | A universal type catalog |
 | Current ART | Common field index 0, direct when present; otherwise selected prototype default | Resolves 288 direct and 29 inherited values | That prototype and instance values normally coincide |
 | Local location | Common optional field index 1 | Each selected handoff example carries source-local `x,y` | Global coordinate, offsets, baseline, hitbox, or visual anchor |
-| Object flags | CE `OBJ_F_FLAGS` enum ID 19, serialized as zero-based common slot 18; direct when present, otherwise selected prototype default | Checked only for `OF_DYNAMIC` in the static subset test; synthetic slot-18/slot-19 values differ | Meaning or handling of every other bit |
+| Object flags | `OBJ_F_FLAGS` field ID 19, serialized as zero-based common slot 18; direct when present, otherwise selected prototype default | Checked only for `OF_DYNAMIC` in the static subset test; synthetic slot-18/slot-19 values differ | Meaning or handling of every other bit |
 | Other masked fields | Wire-kind bounded skip | Safe traversal to the next record | Their names, meanings, or loader representation |
 
 ## Reproduced result and reconciliation
@@ -111,7 +112,7 @@ v119 instance record
 A missing/duplicated prototype or resource entry, unlocatable ID, mismatching
 prototype type/ID, invalid mapping, unsafe relative filename, non-scenery ART
 type, or out-of-table group/frame aborts rather than selecting a fallback.
-Resource matching uses the documented non-Windows/macOS CE normalization
+Resource matching uses the documented macOS normalization
 (lowercase ASCII and slash normalization) within the one explicit archive only.
 No archive, PATCH, or loose-file precedence follows from that observation.
 

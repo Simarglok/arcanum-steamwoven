@@ -17,8 +17,7 @@ missing or unsupported source, unreadable input; I/O and archive errors are
 reported, not thrown): the structural `AreaSourcePlan`, the input files and
 `AreaLoaderOptions` sized for the map. `AreaMapPlan.Open()` opens the inputs and
 the owner; the owner authenticates every input against the plan as before. The
-snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
-`arc-data-019-whole-map-v1` without the ART rules).
+snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1`.
 
 - **Inputs:** the module archive, every resource source of the content stack
   (see [stack order](#resources-in-content-stack-order) below), the map's mobile
@@ -60,31 +59,38 @@ snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
   sectors or objects, whichever grows more, at most 16×, and frame budgets are
   that 16× cap outright (interiors read larger ART per visual than the
   exterior), so an oversized map fails with a budget error instead of exhausting
-  memory. A whole map with the original's ART rules reads archive entries
-  (sectors, mappings, ART) up to 16 MiB (1 MiB for pinned profiles), with a
+  memory. A plan reads archive entries (sectors, mappings, ART) up to 16 MiB (every
+  plan since ARC-DATA-036, pinned profiles too), and a whole map has a
   32 MiB frame-operation budget. Other caps stay as they are: 1 MiB per object
   record and per prototype, and the strict ART frame limits (4 Mi pixels,
   16 MiB RGBA, 256 KiB frame table).
 
-## Rules of a whole-map plan
+## Rules of every plan
 
-`AreaSourcePlan` gains two init options; pinned profiles ignore both.
+`Selection = AreaSectorSelection.AllSectors` makes every sector file under the
+map's prefix core, with no context ring (sectors without a file are the map's
+edge). The default `TownmapComponent` keeps the exterior rule. The selection
+chooses sectors only: since ARC-DATA-036 every plan, the pinned profiles too, is
+built by the rules below ([one rule set](#one-rule-set-arc-data-036)).
 
-- `Selection = AreaSectorSelection.AllSectors`: every sector file under the
-  map's prefix is core and there is no context ring (sectors without a file are
-  the map's edge). The default `TownmapComponent` keeps the exterior rule.
-- `AllowArtTrailingBytes = true`: ART is read as the original reads it. Bytes
-  after the last frame are accepted ([ARC-DATA-016](../formats/art.md)), and a
-  single-rotation ART is drawn from its only group whatever rotation the object
-  asks for (the original's TIG ART reader, ART header flag `0x01`).
+Every plan:
 
-A whole-map plan also:
+- reads ART as the original reads it: bytes after the last frame are no part of
+  the ART ([ARC-DATA-016](../formats/art.md)), so the frame is read from the ART's
+  own extent (the visual's `ViewLength` is the entry's decoded bytes less the
+  trailing bytes; policy `original-art-extent-v1`), and a single-rotation ART is
+  drawn from its only group whatever rotation the object asks for (the original's
+  TIG ART reader, ART header flag `0x01`; policy `original-single-group-rotation-v1`).
+  Before ARC-DATA-036 a whole map read such an ART whole (`ViewLength` the full
+  entry); the pixels are the same, but an HD pack built from map-mode frames before
+  it is keyed by the old view and misses those few frames, which draw Legacy
+  ([HD pack key](../formats/hd-pack.md#sprite-entries-the-portable-frame-key));
 
 - reads tile names as the original does: a name ends at `/`, otherwise it is the
   first three characters of the value and the rest is a sound number (the tile name
   load, 0x4EB2E0, F0); `TileNames.Parse(…, originalNames: true)`;
-- looks a resource up in content-stack order (ARC-DATA-018, below), not only
-  in the archive of its mapping;
+- looks a resource up in content-stack order (ARC-DATA-018, below), not in the
+  archive of its mapping;
 - keeps a sector's roof list in its record (`RoofDiscriminator`) without
   failing the map, and since ARC-RENDER-021 reads the roof blocks of every core
   sector, with the `Roof` (`art/roof/roofname.mes`) and `RoofShade`
@@ -105,8 +111,7 @@ A whole-map plan also:
   original still draws a don't-draw object's overlays, so their admission check
   still applies to it; a destroyed or off object is not checked;
 - names art as the original does (ARC-DATA-023, rules N1–N7 of the
-  [art gaps study](../research/whole-map-art-gaps.md)) when it reads ART with the
-  original's rules (`AllowArtTrailingBytes`):
+  [art gaps study](../research/whole-map-art-gaps.md)):
   - critter, monster and unique NPC art (classes 2, 12, 13) in any of the 25
     animations, with the original's body rules (an elf female drawn as human; plate
     armour male only, elf as human, halfling as dwarf), the missing-art repair from
@@ -139,8 +144,7 @@ A whole-map plan also:
   hashes, policy) into every later visual with that selection, each keeping its own
   key, raw and lookup art, facing, mirror flag, offsets and scale (ARC-DATA-024).
   Budget admissions and decodes are therefore per distinct selection, as terrain
-  selections already were; pinned profiles keep one admission and decode per
-  visual.
+  selections already were.
 
 ## Resources in content-stack order
 
@@ -149,7 +153,10 @@ system opens it: from the first source in [search order](../research/content-pre
 that holds the name (module folder, module patches, module archive, `data/`,
 `Arcanum4.dat`, `arcanum3.dat`, `arcanum2.dat`, `arcanum1.dat`, game folder,
 `tig.dat`), so an override in a later archive, a patch or a loose folder is
-seen, and a name two base archives hold is no longer ambiguous.
+seen, and a name two base archives hold is no longer ambiguous. A pinned profile
+lists its own two base archives in that order (`arcanum2.dat`, then `arcanum1.dat`;
+ARC-DATA-036); a caller-authored plan without an order reads a name from the one of
+the two base archives that holds it and refuses a name both hold.
 
 - `AreaSourcePlan.ResourceOrder` lists the resource sources top first
   (`AreaResourceSource`: an input key, plus the virtual path for a loose file).
@@ -173,9 +180,9 @@ seen, and a name two base archives hold is no longer ambiguous.
   16 MiB, else the plan is `TooLarge`; `AreaLoaderOptions.MaxResourceInputs`
   bounds the `Archive` and `Loose` inputs an owner admits (0 by default, so no
   caller plan gains inputs it did not size).
-- The owner refuses a plan whose order omits an `Archive` or `Loose` input, and
-  the order on a pinned profile, which keeps its own archive rule. A plan without
-  an order keeps the earlier rule (one holder among the two base archives).
+- The owner refuses a plan whose order omits an `Archive` or `Loose` input. Since
+  ARC-DATA-036 a pinned profile has an order too (its two base archives). A plan
+  without an order keeps the earlier rule (one holder among the two base archives).
 - Each extra archive adds its index to the owner's retained budget, which
   `Limits` does not scale for it; an installation with large patch archives can
   fail with a typed `BudgetExceeded`. The snapshot's `Profile` is the same with
@@ -240,8 +247,8 @@ main world map included, through the same area owner. It is how the main map loa
   `DuplicateIdentity`. Profile `arc-data-032-window-original-rules-v1`. A generated object keeps the template's
   serialized location; only its world position moves. Retail templates hold no object ids; a template object with one,
   serving two sectors, would be refused as a duplicate identity (temporary ids are not modelled).
-- **Rules.** A window follows the whole-map rules (original ART names and leniency, portals, small items, hidden
-  objects, roofs read): `AreaSourcePlan.UniversalRules` covers both selections.
+- **Rules.** A window follows the rules of every plan (original ART names and leniency, portals, small items, hidden
+  objects, roofs read; ARC-DATA-036).
 - **Start.** The plan's `Start` is the window's centre; `AreaMapPlan.StartTile` stays the map list's start tile, which is
   usually outside the window. The reconciliation's survey count is the window's own sector files.
 - **Objects.** The owner reads the map-wide mobile file (the original loads mobiles map-wide when the map opens, ledger
@@ -276,6 +283,41 @@ the map default, as for an own sector); the stationary-light reader reads the mo
 lights, and a template held as a loose file is read for lighting and step evidence alike.
 
 **NOT READY:** the viewer does not stream windows; saved differences are not modelled.
+
+## One rule set (ARC-DATA-036)
+
+The owner builds every plan, a catalogue plan or a pinned Crash Site profile, by the same rules: the rules
+[above](#rules-of-every-plan), the stack order and the window rules. Nothing in the owner depends on which
+profile made the plan except the profile's own expected-output check.
+
+- **Profiles.** `OriginalProfile` (exterior) and `CaveProfile` hold only identities and expected outputs: their input
+  files, mapping entries and prototypes by length and SHA-256, the resource order of their two base archives, the
+  reconciliation counts, the core sectors and object readiness (`Check`), and the expected endpoint. The per-object
+  ART exceptions they once pinned are the general rules now: on the exterior four mobiles whose ground ART (entry 919)
+  ends with one NUL and one mobile asking its single-rotation ART for rotation 5, in the cave four items whose ART ends
+  with `00` or `02 00` and one container asking for rotation 1. The trailing-byte view and the single-group rotation
+  give the same entries, views and pixels. The pinned exterior still equals the independent full-area oracle (2,444 visuals by entry, frame
+  and pixels) and the cave its pinned counts.
+- **Endpoints.** `AreaSourcePlan.Endpoints` are the use-click transitions a plan expects out of its core. The owner
+  publishes them only after checking each against the built objects (`AreaEndpoints.Check`: a present static core
+  object with that id and prototype whose own use script, word 2 of the use element of its effective script field, is
+  the endpoint's script); a profile's expected endpoint that the data do not carry fails the build
+  (`InputIdentityMismatch`). `AreaEndpoints.FromTransitions` derives endpoints by the general rule: the unconditional
+  use sites of the map's transition data ([map transitions](map-transitions.md), ARC-DATA-025) whose trigger is a
+  static object of the given core sectors. Catalogue plans name no endpoints (map mode reads the map's transitions
+  itself, ARC-WORLD-031); the pinned viewer path has no content stack, so the profiles name theirs.
+- **Proof (opt-in, installed original).** The general rules reproduce the profiles: the exterior's full-area oracle
+  and the Crash Site window (ARC-DATA-032/034: same core sectors, terrain, objects and visuals, step evidence equal to
+  the pinned validator, reach 7,150); the cave profile equals the cave's whole-map plan in every core sector, terrain
+  cell, object and visual (frame, view, policy and pixels, 194 visuals); and each profile's endpoint is exactly the one
+  use transition the transition data give in its core (exterior: script 2793 to the cave, arriving at (2087, 2018);
+  cave: script 1532 to the main map, arriving at (92913, 82598)). Tests: `AreaRuleSetRealDataTests`,
+  `AreaOriginalTests`, `AreaCaveOriginalTests`, `AreaWindowRealDataTests`, `AreaWindowStepRealDataTests`.
+- **Unchanged.** The pinned profiles keep their selection (the exterior's townmap component with its eleven present
+  and five absent ring sectors; a window generates those five from templates) and take no map patch or window; the
+  viewer's pinned exterior mode and the launcher's pinned regression modes stay (retiring them waits for the map-mode
+  work). The pinned AREA export gate compares the oracle's two per-object policy labels as the general labels
+  (`tools/local_dev/area_validation.py`, `ORACLE_POLICIES`).
 
 ## Limits
 

@@ -11,7 +11,7 @@ from the module's content stack and the
 (ARC-WORLD-018) decides every step. The Crash Site exterior path, its pinned
 profiles and every exterior smoke stay as they were.
 
-    ./arcanum map "elven ruins"            # needs ./arcanum setup (game root role) and an ARC-RENDER-008 build with map mode
+    ./arcanum map "elven ruins"            # needs ./arcanum setup (any installation) and an ARC-DEV-015 or ARC-RENDER-008 build with map mode
     viewer: --mode crash-site-area --module … --resource … --source-id … --actor-resource … --game-root GAME --area-map "elven ruins"
 
 ## What it does
@@ -78,7 +78,7 @@ evidence and a session the walker can leave (the cave spawns on the pinned
 cave's arrival 2087,2018); all interiors whose strict snapshot is
 complete load in the viewer: all 80 since ARC-DATA-024 (K'na Tha's shared frame
 selections), 79 since ARC-DATA-023 (the original's
-[art names and bad art](../world/whole-map-plans.md#rules-of-a-whole-map-plan)),
+[art names and bad art](../world/whole-map-plans.md#rules-of-every-plan)),
 54 before it and 49 before ARC-RENDER-018, which draws the
 [body blends and wading](#body-blends-and-wading-arc-render-018) of five of them.
 

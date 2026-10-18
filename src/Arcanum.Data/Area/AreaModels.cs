@@ -76,6 +76,9 @@ public sealed record AreaRoofRecord(AreaSectorKey Sector, int Slot, long BlockX,
 /// <summary>The three <c>art/roof/roofshade.mes</c> values a faded roof's corners take (entries 0, 1 and 2, read like C
 /// <c>atoi</c> into a byte).</summary>
 public sealed record AreaRoofShades(byte Opaque, byte Partial, byte Transparent);
+/// <summary>A use-click transition out of the area: the static trigger object (its sector, window ordinal, prototype and
+/// own id), the attachment point and the script it runs, and where the script's teleport goes. ARC-DATA-036: the
+/// transition data of the map (<see cref="Maps.MapTransitions"/>, use sites) give it; <see cref="AreaEndpoints"/> derives it.</summary>
 public sealed record AreaEndpoint(long Sector, int Ordinal, int Prototype, int Sap, int Script, int CatalogueDestination, int RuntimeDestination, long ArrivalX, long ArrivalY, string SourceObjectIdSha256);
 public sealed record AreaReconciliation(int Survey, int CoreSectors, int ContextPresent, int ContextMissing, int CoreTerrain, int ContextTerrain, int Statics, int Aggregate, int CoreMobiles, int ContextMobiles, int OutsideMobiles, int UnknownMobiles, int EditorCorrespondence, int Prototypes, int Visuals);
 public sealed record AreaBudgetUsage(long ReadReserved, long ReadActual, long ManagedReserved, long PhaseReserved, long RetainedReserved, long FrameRequests, long FrameStored, long FrameDecoded, long FrameRgba, long FrameEncoded, long ConsumerCopyBytes);
@@ -210,26 +213,20 @@ public sealed class AreaSourcePlan
     {
         OriginalAreaMap.CrashSiteExterior => "arc-data-009-complete-file-effective-source-v1",
         OriginalAreaMap.CrashSiteCave => "arc-world-009-cave-file-effective-source-v1",
-        _ when Selection == AreaSectorSelection.Window && AllowArtTrailingBytes => "arc-data-032-window-original-rules-v1",
-        _ when Selection == AreaSectorSelection.Window => "arc-data-032-window-v1",
-        _ when Selection == AreaSectorSelection.AllSectors && AllowArtTrailingBytes => "arc-data-019-whole-map-original-rules-v1",
-        _ when Selection == AreaSectorSelection.AllSectors => "arc-data-019-whole-map-v1",
+        _ when Selection == AreaSectorSelection.Window => "arc-data-032-window-original-rules-v1",
+        _ when Selection == AreaSectorSelection.AllSectors => "arc-data-019-whole-map-original-rules-v1",
         _ => "structural-file-effective-v1",
     };
     /// <summary>How core sectors are chosen: the start sector's four-neighbour component with the
     /// plan's townmap (the exterior rule), every sector file under the prefix (a whole map,
     /// ARC-DATA-019), or the plan's <see cref="Window"/> (ARC-DATA-032).</summary>
     public AreaSectorSelection Selection { get; init; } = AreaSectorSelection.TownmapComponent;
-    /// <summary>Read ART as the original does: accept bytes after the last frame
-    /// (<see cref="ArtDecoderOptions.AllowTrailingBytes"/>) and draw a single-rotation ART from
-    /// its only group whatever the requested rotation. Pinned profiles keep their exact
-    /// per-object exceptions instead and ignore this flag.</summary>
-    public bool AllowArtTrailingBytes { get; init; }
     /// <summary>ARC-DATA-018: the resource sources in content-stack search order, first wins. When set, an ART
     /// or name a plan resolves itself is read from the first source that holds it as a file (archive directory
-    /// and ignored records hold nothing), as the original's file system opens it; empty keeps each pinned
-    /// profile's own archive rule. Every <see cref="AreaSourceRole.Archive"/> and <see cref="AreaSourceRole.Loose"/>
-    /// input must be listed; pinned profiles take none.</summary>
+    /// and ignored records hold nothing), as the original's file system opens it; empty reads it from the one of
+    /// the two base archives that holds it. Every <see cref="AreaSourceRole.Archive"/> and <see cref="AreaSourceRole.Loose"/>
+    /// input must be listed. ARC-DATA-036: a pinned profile lists its own two base archives in the installed stack
+    /// order (<c>arcanum2.dat</c> before <c>arcanum1.dat</c>).</summary>
     public IReadOnlyList<AreaResourceSource> ResourceOrder
     {
         get => _resourceOrder;
@@ -251,13 +248,30 @@ public sealed class AreaSourcePlan
     public AreaMapPatchBinding? MapPatch { get; init; }
     /// <summary>ARC-DATA-032: the sectors of a <see cref="AreaSectorSelection.Window"/> plan, required exactly for that selection.</summary>
     public AreaWindow? Window { get; init; }
-    /// <summary>A plan made from the universal catalogue (a whole map or a window): its sectors, ART and objects follow the
-    /// whole-map rules, not a pinned profile's exceptions.</summary>
-    internal bool UniversalRules => !Original && Selection is AreaSectorSelection.AllSectors or AreaSectorSelection.Window;
+    /// <summary>ARC-DATA-036: the use-click transitions the plan expects out of its core sectors (<see cref="AreaEndpoint"/>).
+    /// The owner publishes them only after checking each against the built objects: a present static core object with
+    /// that id and prototype whose own use script is the endpoint's script. A pinned profile names its expected
+    /// transitions; a catalogue plan names none (map mode reads the map's transitions itself).</summary>
+    public IReadOnlyList<AreaEndpoint> Endpoints
+    {
+        get => _endpoints;
+        init
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            var endpoints = Array.AsReadOnly(value.ToArray());
+            if (endpoints.Any(e => e is null || e.Sap != AreaEndpoints.UseSap || !Digest(e.SourceObjectIdSha256)) ||
+                endpoints.Select(e => (e.Sector, e.Ordinal)).Distinct().Count() != endpoints.Count)
+                throw new ArgumentException("Endpoints are distinct use-click transitions of SHA256-identified objects.", nameof(value));
+            _endpoints = endpoints;
+        }
+    }
+    private readonly IReadOnlyList<AreaEndpoint> _endpoints = Array.Empty<AreaEndpoint>();
     internal static bool LoosePath(string? path) =>
         !string.IsNullOrEmpty(path) && path.All(c => c is >= ' ' and <= '~' and not '\\' and not (>= 'A' and <= 'Z')) &&
         path.Split('/').All(segment => segment.Length > 0 && segment != "." && segment != "..");
-    /// <summary>The pinned original profile that authored this plan; None for caller-authored structural plans.</summary>
+    /// <summary>The pinned original profile that authored this plan; None for caller-authored structural plans. ARC-DATA-036:
+    /// it selects only the profile's expected-output check (<see cref="OriginalProfile.Check"/>, <see cref="CaveProfile.Check"/>);
+    /// every plan is built by the same rules.</summary>
     internal OriginalAreaMap OriginalMap { get; init; }
     internal bool Original => OriginalMap != OriginalAreaMap.None;
     internal static bool Digest(string value) => value is not null && value.Length == 64 && value.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');

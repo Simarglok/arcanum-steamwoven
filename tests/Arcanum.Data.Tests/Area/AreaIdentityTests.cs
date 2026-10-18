@@ -248,12 +248,12 @@ public sealed class AreaIdentityTests
         internal Fixture((long Sector, byte[][] Records)[] sectors, byte[][]? aggregate = null, byte[][]? editors = null, int map = 1, byte[]? extraPrototype = null, AreaLoaderOptions? limits = null,
             Func<AreaInputKey, byte[], Stream>? streamFactory = null, byte[]? prototype = null, byte[]? moduleBytes = null,
             (string Name, byte[] Payload)[]? resourceEntries = null, byte[]? secondResource = null, AreaMappingRole[]? mappingRoles = null,
-            AreaSectorSelection selection = AreaSectorSelection.TownmapComponent, bool allowArtTrailingBytes = false,
-            AreaWindow? window = null, (AreaInputKey Key, byte[] Bytes)[]? extraInputs = null)
+            AreaSectorSelection selection = AreaSectorSelection.TownmapComponent,
+            AreaWindow? window = null, (AreaInputKey Key, byte[] Bytes)[]? extraInputs = null, IReadOnlyList<AreaEndpoint>? endpoints = null)
         {
             var moduleEntries = sectors.Select(s => ($"maps/test/{s.Sector}.sec", Sector(s.Records))).ToList();
             foreach (var (record, index) in (editors ?? aggregate ?? []).Select((r, i) => (r, i))) moduleEntries.Add(($"maps/test/{index}.mob", record));
-            byte[] tile = Encoding.ASCII.GetBytes("{0}{stone}{100}{stone}{200}{stone}{300}{stone}{400}{end}");
+            byte[] tile = Encoding.ASCII.GetBytes("{0}{stone/}{100}{stone/}{200}{stone/}{300}{stone/}{400}{end/}");
             byte[] facade = Encoding.ASCII.GetBytes("{0}{fixture}"); byte[] scenery = Encoding.ASCII.GetBytes("{0}{fixture.art}");
             var entries = resourceEntries ?? [("tile.mes", tile), ("facade.mes", facade), ("scenery.mes", scenery), ("art/tile/stonebse0a.art", Art()), ("art/scenery/fixture.art", Art())];
             tile = entries[0].Payload; facade = entries[1].Payload; scenery = entries[2].Payload;
@@ -271,7 +271,7 @@ public sealed class AreaIdentityTests
                 return new AreaMappingBinding(role, new(new(AreaSourceRole.Resource1), i, 1, e.StoredSize, e.DeclaredOutputSize, e.Offset, Hash(e.RawNameBytes.ToArray())), Hash(payload));
             });
             Plan = new(1, map, new(1, 1), 2, "maps/test", files.Select(f => new AreaInputIdentity(f.Key, f.Bytes.Length, Hash(f.Bytes))), mappings)
-            { Selection = selection, AllowArtTrailingBytes = allowArtTrailingBytes, Window = window };
+            { Selection = selection, Window = window, Endpoints = endpoints ?? [] };
             Owner = AreaDataOwner.Open(new(inputs), Plan, limits ?? new());
         }
         internal AreaSourcePlan Plan { get; }

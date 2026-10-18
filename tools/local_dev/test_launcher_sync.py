@@ -135,8 +135,8 @@ class LauncherSyncTests(unittest.TestCase):
     def test_project_launcher_modes_bind_known_modes_and_tasks(self):
         project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
         modes = project["MODES"]
-        # Map mode (ARC-RENDER-017) exists only in AREA builds exported from it: the newest AREA task.
-        self.assertEqual(project["MAP_MODE"], ("crash-site-area", ("ARC-RENDER-008",)))
+        # Map mode (ARC-RENDER-017) exists in the universal build (ARC-DEV-015) and the newest AREA task.
+        self.assertEqual(project["MAP_MODE"], ("crash-site-area", (launch.UNIVERSAL_TASK, "ARC-RENDER-008")))
         # Same pairing arcanum-local enforces at launch: crash-site-area only from
         # ARC-RENDER-007, ARC-INPUT-001 (diagnostic palette), ARC-WORLD-007 (LMB click-to-move) ARC-WORLD-009 (cave) or ARC-RENDER-008 (passability overlay).
         allowed = {"crash-site-area": {"ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008"},
@@ -180,7 +180,7 @@ class LauncherSyncTests(unittest.TestCase):
         self.assertTrue(f3 <= set(launch.ORACLE_FUNCTIONS), f3 - set(launch.ORACLE_FUNCTIONS))
         self.assertTrue((REPO / launch.ORACLE_RECEIPTS).is_dir())
 
-    def test_discovery_verifies_identity_and_rejects_links(self):
+    def test_discovery_records_identity_and_rejects_links(self):
         game = self.root / "game"
         fixture = {"module": b"module", "areaMobile": b"mobile"}
         roles = {role: (f"files/{role}.bin", len(data), hashlib.sha256(data).hexdigest()) for role, data in fixture.items()}
@@ -190,19 +190,24 @@ class LauncherSyncTests(unittest.TestCase):
             (game / "files").mkdir(parents=True, exist_ok=True); (game / roles[role][0]).write_bytes(data)
         (game / "proto").mkdir(); (game / "proto" / "a.pro").write_bytes(b"x")
         with patch.object(launch, "GAME_ROLES", roles):
-            found, missing = launch.discover_inputs(game)
+            found, missing, _ = launch.discover_inputs(game)
+            self.assertIn("gameRoot", missing)
             (game / "modules").mkdir()
             self.assertEqual((sorted(found := launch.discover_inputs(game)[0]), launch.discover_inputs(game)[1]),
                              (["areaMobile", "gameRoot", "module", "prototypes"], []))
             self.assertEqual(found["gameRoot"], str(game.resolve()))
+            self.assertEqual(launch.discover_inputs(game)[2]["pinnedVerified"], ["areaMobile", "module"])
+            # ARC-DEV-015: another installation's file is found and recorded, only not pinned.
             (game / roles["module"][0]).write_bytes(b"changed")
-            self.assertEqual(launch.discover_inputs(game)[1], ["module"])
+            found, missing, installation = launch.discover_inputs(game)
+            self.assertEqual((missing, installation["pinnedVerified"]), ([], ["areaMobile"]))
+            self.assertEqual(installation["roles"]["module"]["sha256"], hashlib.sha256(b"changed").hexdigest())
             (game / roles["module"][0]).unlink(); (game / roles["module"][0]).symlink_to(game / roles["areaMobile"][0])
             self.assertIn("module", launch.discover_inputs(game)[1])
             (game / "proto" / "a.pro").unlink()
             self.assertIn("prototypes", launch.discover_inputs(game)[1])
 
-    def test_write_inputs_fails_closed_without_every_role(self):
+    def test_write_inputs_fails_closed_without_the_map_roles(self):
         home = self.root / "home"; home.mkdir(); game = self.root / "empty-game"; game.mkdir()
         env = dict(os.environ, ARCANUM_LOCAL_HOME=str(home))
         completed = subprocess.run([sys.executable, "-B", str(REPO / "tools/arcanum-local"), "configure", "discover",

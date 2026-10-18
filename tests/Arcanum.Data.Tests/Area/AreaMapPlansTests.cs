@@ -63,13 +63,13 @@ public sealed class AreaMapPlansTests
     }
 
     [TestMethod]
-    public void Only_whole_map_plans_read_entries_beyond_one_mebibyte()
+    public void Every_plan_reads_entries_up_to_sixteen_mebibytes()
     {
-        AreaSourcePlan Plan(AreaSectorSelection selection, bool original) => new(1, 1, new(1, 1), 2, "maps/test", [], []) { Selection = selection, AllowArtTrailingBytes = original };
-        Assert.AreEqual(1048576, AreaDataOwner.EntryCap(Plan(AreaSectorSelection.TownmapComponent, true)));
-        Assert.AreEqual(1048576, AreaDataOwner.EntryCap(Plan(AreaSectorSelection.AllSectors, false)));
-        Assert.AreEqual(16L * 1048576, AreaDataOwner.EntryCap(Plan(AreaSectorSelection.AllSectors, true)));
-        Assert.AreEqual(1048576, AreaDataOwner.EntryCap(CaveProfile.Plan()));
+        // ARC-DATA-036: one entry cap for every plan, pinned profiles too.
+        foreach (var selection in Enum.GetValues<AreaSectorSelection>().Where(s => s != AreaSectorSelection.Window))
+            Assert.AreEqual(16L * 1048576, AreaDataOwner.EntryCap(new(1, 1, new(1, 1), 2, "maps/test", [], []) { Selection = selection }));
+        Assert.AreEqual(16L * 1048576, AreaDataOwner.EntryCap(CaveProfile.Plan()));
+        Assert.AreEqual(16L * 1048576, AreaDataOwner.EntryCap(OriginalProfile.Plan()));
     }
 
     [TestMethod]

@@ -57,6 +57,9 @@ ARC-RENDER-008 (passability overlay) uses literal `ARCANUM_TERRAIN_EXPORT_TASK=A
 with the same gate set and, like ARC-WORLD-009, the cave input; its synthetic gates require the
 overlay markers and the native WORLD/AREA observations must print the original overlay check
 ([contract](../rendering/passability-overlay.md)).
+ARC-DEV-015 (universal map-mode build) uses literal `ARCANUM_TERRAIN_EXPORT_TASK=ARC-DEV-015` with the terrain gates,
+the focused tests and the exported host check only: no gate reads the pinned Crash Site inputs, so it exports on any
+installation ([local workflow](local-development.md#universal-map-mode-candidate-arc-dev-015)).
 The bounded grid source candidate uses literal
 `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-003` in that same endpoint/root. It retains
 the sixteen terrain/WORLD/GPAD/Human gates and adds source/exported original

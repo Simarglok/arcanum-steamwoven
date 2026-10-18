@@ -1,4 +1,4 @@
-// Independently authored synthetic audio lab. MIT; no CE-derived implementation.
+// Independently authored synthetic audio lab. MIT; no implementation derived from a source reconstruction.
 namespace AudioLab.Core;
 
 public enum AudioBus { Master, Music, Voice, SFX, Ambient }

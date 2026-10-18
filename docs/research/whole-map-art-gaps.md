@@ -1,8 +1,9 @@
 # Whole-map art gaps and the original's missing-art fallback
 
 Status: **Research**, work item ARC-RES-050 (2026-10-17). Census measured on the
-owner's installed original (GOG 1.0.7.4, `DAT_ROOT`); name rules read in CE at the
-pinned commit `a7ff41b300ef712f0e7d088183a3d08957110cdd` and checked in the retail
+owner's installed original (GOG 1.0.7.4, `DAT_ROOT`); name rules from an earlier
+source reading (provenance in git history), cited by the executable address of
+each function, and checked in the retail
 `Arcanum.exe` (SHA-256 `9bd80511…8d52`) by the
 [original executable check](original-executable-check.md) where the ledger says so, rows MA1–MA8 of the
 [verification ledger](original-verification-ledger.md#art-names-and-missing-art-arc-res-050).
@@ -122,9 +123,10 @@ question only for animated effects at run time (spells, `animfx`).
 
 ## How the original names critter art and falls back
 
-These rules come from CE `name.c`, `a_name.c` and tig `art.c`; N1–N3, N6 and the
+These rules come from an earlier source reading of the name functions
+(0x41CA40–0x41F240), the art name functions (0x4EAC80–0x4ED440) and the ART cache; N1–N3, N6 and the
 load fallback of N4 are checked in the retail executable, N5, N7 and N4's frame
-lookup are CE readings (ledger rows in
+lookup are earlier readings, level F0 (not checked in the executable) (ledger rows in
 brackets).
 
 - **N1 Normalize before naming** (MA2, MA3). `name_resolve_path` (0x41DAE0)
@@ -137,7 +139,7 @@ brackets).
      6) forces the male gender and draws an elf as human and a halfling as dwarf;
   2. the missing-art repair N2 on (animation, weapon);
   3. animation 24 (explode) clears armour, shield and weapon (critters also set
-     the male gender, where CE writes female; the explode name uses `XX` and
+     the male gender, where the reconstruction wrote female; the explode name uses `XX` and
      gender `X` either way, so nothing visible depends on it, MA2);
      animation 23 (stunned) sets weapon 1 and clears the shield;
      otherwise weapon 1 with animation 3 (stealth walk) or 5 (conceal fidget)
@@ -160,22 +162,22 @@ brackets).
   name lists). The game uses the file only when its header equals the current file
   count; otherwise it rebuilds the masks by checking each pair's file and writes the
   file again. The installed file (332 bytes, `arcanum1.dat`) has header 4,601,
-  which equals the current count, so it is current. CE compares the unique NPC
-  read with the monster count; the original compares it with the unique count (CE
-  slip, no effect on this data).
+  which equals the current count, so it is current. The original compares the unique
+  NPC read with the unique count (an earlier reading compared it with the monster
+  count: reconstruction slip, no effect on this data).
 - **N4 Bad art** (MA5). When the cache cannot load the resolved file, the original
   loads `art\badart.art` in its place under the same art id and draws it; only if
-  that fails too is nothing drawn. `badart.art` is one rotation, one frame. In CE the
+  that fails too is nothing drawn. `badart.art` is one rotation, one frame. The
   frame lookup that follows does not check the frame number, so a frame other than
-  0 would read past the table (CE reading, not checked in the executable); only
-  frame 0 is defined.
+  0 would read past the table (earlier reading, level F0, not checked in the
+  executable); only frame 0 is defined.
 - **N5 Single-rotation files** (MA6). A one-rotation ART serves every rotation
   (already the whole-map rule since ARC-DATA-016).
 - **N6 Damaged walls** (MA7). The wall's damage bits are `0x400` and `0x80`. At
   rotations 2, 3, 6 and 7 the two bits swap. Then `0x400` names the `L` file and
   turns piece 7 into the base piece; `0x80` turns piece 8 into the base piece and
-  names `L` for pieces 1–6 and `R` otherwise. CE writes pieces 2–6: piece 1
-  (`lfc`) differs (CE slip).
+  names `L` for pieces 1–6 and `R` otherwise. An earlier reading had pieces 2–6:
+  piece 1 (`lfc`) differs (reconstruction slip).
 - **N7 Tile art on an object** (MA8). The object draw (`object_draw`, 0x43B390)
   and the name resolver handle every art class alike; a tile id names the tile's
   file (`a_name_tile_aid_to_fname`, 0x4EAE90), rotation and frame are 0 and the
@@ -193,11 +195,12 @@ ARC-DATA-024 (all 80); ARC-RENDER-019 made the viewer load K'na Tha in about 17 
 instead of about 3 minutes.
 
 1. **ARC-DATA-023 — original art names on whole maps.** In whole-map plans that
-   read ART as the original does (`AllSectors` with `AllowArtTrailingBytes`; in the
-   code `_plan.Original` means the pinned profiles instead): the full N1 normalization for classes 2, 12 and 13 (every
+   read ART as the original does (`AllSectors` with `AllowArtTrailingBytes` then; in the
+   code `_plan.Original` meant the pinned profiles instead; since ARC-DATA-036 every plan
+   follows these rules and the flag is gone): the full N1 normalization for classes 2, 12 and 13 (every
    animation, the weapon/shield rules), N2 from `art/missing.dat` with N3's header
-   check (the pinned profiles already read it, as a fixed 332-byte file with header
-   4,601 that refuses bit 8; whole-map plans already bind the mapping) (masks rebuilt from the content index when the header does not match),
+   check (the pinned profiles then read it, as a fixed 332-byte file with header
+   4,601 that refuses bit 8, until ARC-DATA-036; whole-map plans already bind the mapping) (masks rebuilt from the content index when the header does not match),
    N6 damaged walls, N7 tile-art bodies, N4 `badart.art` frame 0 for a resolved
    name no archive holds, recorded on the visual as a fallback policy. Pinned
    profiles unchanged. Expected: the 25 maps other than K'na Tha publish complete

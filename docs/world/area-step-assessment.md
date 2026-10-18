@@ -249,7 +249,7 @@ interiors) unchanged.
 ## Windows (ARC-DATA-034)
 
 `InspectWholeMap` also takes a window snapshot ([window plans](whole-map-plans.md#window-plans-arc-data-032),
-profiles `arc-data-032-window-original-rules-v1` and `arc-data-032-window-v1`) and applies the whole-map rules to it. Its own core sectors are read
+profile `arc-data-032-window-original-rules-v1`) and applies the whole-map rules to it. Its own core sectors are read
 from the module archive as for a whole map. A generated core sector is read again from the archive that holds its
 template in the stack (the window names each template's virtual path, `AreaWindowSector.TemplatePath`; `AreaSnapshot.Window`
 exposes the window), bound to the snapshot's payload digest (`FingerprintMismatch` otherwise), and inspected at the real

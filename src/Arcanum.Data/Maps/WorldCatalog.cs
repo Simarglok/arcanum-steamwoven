@@ -304,7 +304,7 @@ public sealed class WorldCatalog
     }
 
     /// <summary>The name of a map's game-generated mobile file: letters rotated by 13 within
-    /// their case (the original's wrap is one short of the alphabet), then the whole name
+    /// their case (one that passes Z moves back by 24, not 26, as the original does), then the whole name
     /// reversed (the source's name obfuscation 0x411830).</summary>
     [OriginalFunction(0x411830, OriginalFunctionScope.Full)]
     public static string AggregateName(string mapName)

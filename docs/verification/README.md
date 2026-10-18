@@ -1,8 +1,8 @@
 # Function verification
 
 Status: **Implemented bounded component**, ARC-DEV-008. Steamwoven keeps one registry of the retail 1.0.7.4 functions
-it implements, marks the implementing methods in code, keeps the receipts of the function oracle, and counts the lines
-that still cite the reconstruction it is moving away from ([plan](../research/original-oracle-research.md#plan)). Root
+it implements, marks the implementing methods in code, keeps the receipts of the function oracle, and refuses any
+reference to the source reconstruction it no longer uses ([plan](../research/original-oracle-research.md#plan)). Root
 tests in `tests/Arcanum.Session.Tests/Verification` keep all four consistent.
 
 ## Registry
@@ -25,8 +25,9 @@ switch, ARC-WORLD-033: a known difference keeps a row from `full` until it is im
 F2, [audio study](../research/audio-evidence.md), marking methods of `Arcanum.Data`, which declares its own attribute),
 the rows other tasks added, and since ARC-DEV-009 and ARC-DEV-010 the original functions the Simulation, Session and Data code implements and names (F2 where
 the [ledger](../research/original-verification-ledger.md) has two readings, F0 where the function was not read in the
-executable). A host method that only calls the registered rule carries no mark (one method per address). Other domains
-add their rows when they are migrated.
+executable). Since ARC-DEV-025 no implemented row is at F0: the twelve that were F0 have been read by two readers
+([ledger IF1–IF12](../research/original-verification-ledger.md#implemented-functions-arc-dev-025)). A host method that
+only calls the registered rule carries no mark (one method per address). Other domains add their rows when they are migrated.
 
 ## OriginalFunction attribute
 
@@ -60,8 +61,10 @@ Every boolean switch of a profile composed in `GameRules` needs a row with a led
 
 ## Reconstruction references
 
-[`ce-references.csv`](ce-references.csv) records, per area (`AGENTS.md`, `CLAUDE.md`, `docs`, `src`, `tests`,
-`tools`), how many lines of tracked text files name the reconstruction: its repository name, its pinned commit, the word CE (also
-as an identifier prefix such as `CE_`) or a Markdown reference label `[ce]`. The root test counts them again and fails
-when an area differs from its baseline: more lines are refused, fewer must lower the baseline in the same PR (a ratchet).
-Two PRs that each pass can still fail together, so rebase onto `main` before merging. Lock files and binary files are not counted.
+Since ARC-DEV-023 no tracked text file may name the reconstruction (owner decision 2026-10-18): its repository name,
+its pinned commit, its two-letter abbreviation (also as an identifier prefix) or a Markdown reference label made of it.
+The root test reads every tracked file except lock files and binary files and lists each offending line. The only
+exception is the original DLG action opcode spelled with the same two letters, which the
+[dialog study](../research/dialog-evidence.md) counts. Facts that were never read in the executable cite the function's
+address at level F0; their provenance is in git history. Until ARC-DEV-023 a per-area baseline only kept the count from
+growing (ARC-DEV-008 to ARC-DEV-020).

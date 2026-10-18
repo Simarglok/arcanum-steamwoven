@@ -155,6 +155,7 @@ def _main(state: dict) -> int:
                     raise ValueError("grid-original requires the literal WORLD003 task")
                 env["WORLD003_GRID_VALIDATE"] = "1"
         state["stage"] = "config-roles"
+        # ARC-DEV-015: no installation-record gate; only the pinned regression exports run this validator, on the pinned installation.
         argv = prefix + ["--", "--native-smoke", *launch.terrain_arguments(config.load_config().get("inputs", {}), "world-diagnostic")]
         state["stage"] = "child-launch"
         code, output = run_child(argv, env, args.timeout)

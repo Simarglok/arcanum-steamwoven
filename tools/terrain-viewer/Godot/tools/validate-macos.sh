@@ -8,7 +8,11 @@ common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 main_root=$(dirname "$common_dir")
 head=$(git rev-parse HEAD)
 task=${ARCANUM_TERRAIN_EXPORT_TASK:-ARC-DEV-001}
-case "$task" in ARC-DEV-001) artifact_dir=builds ;; ARC-WORLD-001|ARC-GPAD-004|ARC-RENDER-006|ARC-WORLD-003|ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007|ARC-WORLD-009|ARC-RENDER-008) artifact_dir=world-builds ;; *) printf '%s\n' 'Unsupported terrain export task.' >&2; exit 2 ;; esac
+case "$task" in ARC-DEV-001) artifact_dir=builds ;; ARC-WORLD-001|ARC-GPAD-004|ARC-RENDER-006|ARC-WORLD-003|ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007|ARC-WORLD-009|ARC-RENDER-008|ARC-DEV-015) artifact_dir=world-builds ;; *) printf '%s\n' 'Unsupported terrain export task.' >&2; exit 2 ;; esac
+# ARC-DEV-015: a universal map-mode build runs the synthetic gates, the focused tests and the exported host check, and
+# none of the gates that read the pinned Crash Site inputs (world/human/grid/area original, persistence).
+pinned=1
+case "$task" in ARC-DEV-001|ARC-DEV-015) pinned=0 ;; esac
 build_root=${ARCANUM_BUILD_ROOT:-"$main_root/artifacts/$artifact_dir/$task/$head"}
 regression_task=$task
 # ARC-INPUT-001 (diagnostic palette) is delivered on the whole-core AREA build and
@@ -53,7 +57,11 @@ cleanup_candidate() {
   git -C "$candidate_root" restore -- src/Arcanum.Data/packages.lock.json src/Arcanum.Presentation/packages.lock.json src/Arcanum.Input/packages.lock.json \
     src/Arcanum.Simulation/packages.lock.json src/Arcanum.Scripting/packages.lock.json src/Arcanum.Session/packages.lock.json \
     tools/terrain-viewer/Core/packages.lock.json tools/terrain-viewer/Godot/packages.lock.json
-  # Godot .uid files are tracked; the export must leave them unchanged.
+  # Godot .uid files are tracked; the export must leave them unchanged. ARC-DEV-015: Godot also writes a .uid beside
+  # every script whose .uid is not tracked yet. The candidate was clean before the export, so every untracked .uid there
+  # is such a generated file; git removes those (untracked only, never a tracked file) so the finalize phase finds the
+  # candidate clean.
+  git -C "$candidate_root" clean -f -q -- 'tools/terrain-viewer/Godot/*.uid'
 }
 trap cleanup_candidate EXIT HUP INT TERM
 run_log() {
@@ -83,7 +91,7 @@ else
   run_log source-headless.log "$GODOT" --headless --path "$project_root" -- --self-test
   run_log source-graphical.log "$GODOT" --path "$project_root" -- --self-test
 fi
-if test "$task" != ARC-DEV-001; then
+if test "$pinned" = 1; then
   run_log source-world-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root"
   run_log source-world-persistence.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind persistence
 fi
@@ -118,9 +126,11 @@ else
   run_log exported-headless.log "$app" --headless -- --self-test
   run_log exported-graphical.log "$app" -- --self-test
 fi
-if test "$task" != ARC-DEV-001; then
+if test "$pinned" = 1; then
   run_log exported-world-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app"
   run_log exported-world-persistence.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind persistence
+fi
+if test "$task" != ARC-DEV-001; then
   run_log hostfxr.log /usr/bin/python3 -B "$project_root/tools/hostfxr_validate.py" "$build_root/ArcanumTerrainViewer.app"
 fi
 if test "$task" = ARC-RENDER-006 || test "$task" = ARC-WORLD-003 || test "$area_task" = 1; then

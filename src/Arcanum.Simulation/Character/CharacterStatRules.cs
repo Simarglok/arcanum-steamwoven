@@ -102,8 +102,9 @@ internal static class CharacterStatRules
     }
 
     /// <summary>
-    /// The source's situational adjustment of a base value before effects: poison lowers strength and dexterity by
-    /// <c>min(3, poison / 100)</c>, crippled legs lower speed by 5 (the stat getter 0x4B0490, F0).
+    /// Part of the original's situational adjustment of a base value before effects: poison lowers strength and dexterity by
+    /// <c>min(3, poison / 100)</c>, crippled legs lower speed by 5 (the stat getter 0x4B0490, ledger IF12; Tempus Fugit,
+    /// the follower bonus and the background adjustments are not modelled).
     /// </summary>
     [OriginalFunction(0x4B0490, OriginalFunctionScope.Partial)]
     public static int Situational(CharacterStat stat, CharacterStatContext context) => stat switch

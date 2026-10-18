@@ -75,12 +75,11 @@ public sealed partial class AreaDataOwner
         TerrainLoader.TileNames tiles; TerrainLoader.FacadeNames facades;
         try
         {
-            tiles = TerrainLoader.TileNames.Parse(mappings[AreaMappingRole.Tile], originalNames: _plan.UniversalRules);
+            tiles = TerrainLoader.TileNames.Parse(mappings[AreaMappingRole.Tile], originalNames: true);
             facades = TerrainLoader.FacadeNames.Parse(mappings[AreaMappingRole.Facade]);
             _objectTiles = tiles;
         }
         catch (TerrainException) { throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping); }
-        var tileSource = MappingSource(AreaMappingRole.Tile); var facadeSource = MappingSource(AreaMappingRole.Facade);
         var sectors = new List<AreaSectorRecord>(); var terrain = new List<AreaTerrainRecord>(); var objects = new List<AreaObjectRecord>();
         var roofs = new List<AreaRoofRecord>();
         // ARC-RENDER-021: roof names by position in roofname.mes, as the original indexes them (entry 0 must exist).
@@ -120,10 +119,8 @@ public sealed partial class AreaDataOwner
             sectors.Add(new(sectorKey, coordinate, scope, true, row?.Entry.Ordinal, townmap, framing.LightCount, framing.RoofDiscriminator, framing.Placeholder,
                 framing.ObjectWindow.TerminalObjectCount, Array.AsReadOnly(framing.Ranges.OrderBy(p => p.Key).Select(p => new AreaByteRange(p.Value.Offset, p.Value.Length)).ToArray()), lights.AsReadOnly(),
                 row is null ? null : EntryIdentity(moduleKey, row.Entry), ObjectWireReader.Hash(bytes), template));
-            // Roofs are not drawn yet. A pinned profile treats a roof list as unsupported; a whole
-            // map keeps it in the sector record (RoofDiscriminator) for a later roof renderer.
-            if (framing.RoofDiscriminator == 0 && !_plan.UniversalRules)
-                issues.Add(new(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Sector, framing[TerrainSection.Roof].Offset));
+            // A roof list stays in the sector record (RoofDiscriminator); its roofs are read below when the plan binds the
+            // two roof tables (ARC-RENDER-021).
             for (var ordinal = 0; ordinal < 4096; ordinal++)
             {
                 var raw = parsed.Words[ordinal]; var lookup = raw >> 28 == 0 ? raw & ~63U : raw;
@@ -142,7 +139,7 @@ public sealed partial class AreaDataOwner
                         var role = raw >> 28 == 0 ? AreaMappingRole.Tile : AreaMappingRole.Facade;
                         construction.Allocate(checked(4096 + mappings[role].Values.Max(v => v.Length) * 16L));
                         var path = raw >> 28 == 0 ? TerrainLoader.TilePath(tiles, lookup).Path : "art/facade/" + Safe(facades.Name(TerrainLoader.FacadeNumber(raw))) + ".art";
-                        entry = Resolve(raw >> 28 == 0 ? tileSource : facadeSource, path);
+                        entry = Resolve(path);
                         terrainEntries.Add(lookup, entry);
                     }
                     var tuple = (entry, group, frame, palette);
@@ -240,18 +237,19 @@ public sealed partial class AreaDataOwner
         var reconciliation = new AreaReconciliation(survey.Count, core.Count, present.Length - core.Count, ring.Count - (present.Length - core.Count),
             terrain.Count(t => t.Scope == AreaScope.Core), terrain.Count(t => t.Scope == AreaScope.Context), objects.Count(o => o.Key.Kind == AreaSourceKind.Static && o.Scope == AreaScope.Core),
             aggregate.Count, partitions[0], partitions[1], partitions[2], partitions[3], editorIds.Count, prototypes.Count, visuals.Count);
+        // ARC-DATA-036: a pinned profile's expected outputs, checked on what the same rules built.
         if (_plan.OriginalMap == OriginalAreaMap.CrashSiteExterior) OriginalProfile.Check(reconciliation, sectors, objects, visuals);
         else if (_plan.OriginalMap == OriginalAreaMap.CrashSiteCave) CaveProfile.Check(reconciliation, sectors, objects, visuals);
+        // The plan's endpoints, each a present static core object with its own id, prototype and use script.
+        if (_plan.Endpoints.Count > 0)
+        {
+            construction.Allocate(checked(4096 + 64L * objects.Count)); // the check's index of the core statics
+            if (!AreaEndpoints.Check(_plan.Endpoints, objects)) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Appearance);
+        }
         // Only the actual new immutable collection copies/sort/endpoints remain
         // here; object/visual graphs were admitted before their construction.
         output.Allocate(checked(8192 + 32L * sectors.Count + 8L * (_plan.Identities.Count + terrain.Count + objects.Count + visuals.Count)));
-        var endpoints = _plan.OriginalMap switch
-        {
-            OriginalAreaMap.CrashSiteExterior => OriginalProfile.Endpoints(objects),
-            OriginalAreaMap.CrashSiteCave => CaveProfile.Endpoints(objects),
-            _ => [],
-        };
-        var snapshot = new AreaSnapshot(_identity, _generation + 1, _plan, sectors.OrderBy(s => s.Key.Packed), terrain, objects, visuals, reconciliation, endpoints,
+        var snapshot = new AreaSnapshot(_identity, _generation + 1, _plan, sectors.OrderBy(s => s.Key.Packed), terrain, objects, visuals, reconciliation, _plan.Endpoints,
             roofs, roofs.Count > 0 ? RoofShades(mappings[AreaMappingRole.RoofShade]) : null);
         return new(snapshot, issues, _budget.Usage);
     }
@@ -299,20 +297,20 @@ public sealed partial class AreaDataOwner
             disposition = scope == AreaScope.Context ? AreaDisposition.ContextOnly : (flags & 4096) != 0 ? AreaDisposition.ExteriorSectorInsertionRefusedByInventory :
                 (flags & 0x103) != 0 ? AreaDisposition.BodySuppressedBySerializedState : AreaDisposition.BodyEligibleConditionally;
             if (!x.HasValue || !y.HasValue) throw Fail(AreaErrorCode.UnknownLocation, AreaStage.Appearance, offset, ordinal);
-            // A whole map resolves no body its serialized state hides at T0 (destroyed 0x1, off
-            // 0x2 or don't-draw 0x100; every trap is don't-draw), whatever its type: consumers
-            // draw no such body. The original still draws a don't-draw object's overlays, so
-            // their admission check below still applies unless the object is destroyed or off.
-            var hiddenOnWholeMap = _plan.UniversalRules && disposition == AreaDisposition.BodySuppressedBySerializedState;
+            // No body its serialized state hides at T0 is resolved (destroyed 0x1, off 0x2 or
+            // don't-draw 0x100; every trap is don't-draw), whatever its type: consumers draw no
+            // such body. The original still draws a don't-draw object's overlays, so their
+            // admission check below still applies unless the object is destroyed or off.
+            var hidden = disposition == AreaDisposition.BodySuppressedBySerializedState;
             if (scope == AreaScope.Core)
             {
-                if (!hiddenOnWholeMap)
+                if (!hidden)
                 {
-                    // Walls (type 0) only where the plan binds both wall-name tables.
-                    // A whole map also draws scrolls, keys and key rings (types 10-12): their ground
-                    // ART is the same item class as every admitted item type.
-                    if (record.Type is not 2 and not 3 and not 5 and not 6 and not 7 and not 8 and not 9 and not 13 and not 14 and not 16 && !(record.Type == 0 && WallsAdmitted) &&
-                        !(record.Type is 10 or 11 or 12 && _plan.UniversalRules) && !(record.Type == 1 && PortalsAdmitted))
+                    // Walls (type 0) only where the plan binds both wall-name tables, doors and windows
+                    // (type 1) only where it binds the portal names. Scrolls, keys and key rings (types
+                    // 10-12) are drawn too: their ground ART is the same item class as every admitted item type.
+                    if (record.Type is not 2 and not 3 and not 5 and not 6 and not 7 and not 8 and not 9 and not 10 and not 11 and not 12 and not 13 and not 14 and not 16 &&
+                        !(record.Type == 0 && WallsAdmitted) && !(record.Type == 1 && PortalsAdmitted))
                         throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
                     var aid = unchecked((uint)Number(effective, 0)); var ox = checked((int)Number(effective, 2)); var oy = checked((int)Number(effective, 3)); var scale = checked((int)Number(effective, 11));
                     var visualSector = sector ?? new AreaSectorCoordinate(x.Value / 64, y.Value / 64);
@@ -322,7 +320,7 @@ public sealed partial class AreaDataOwner
                     output.Allocate(2048);
                     AddVisual(visuals, MakeVisual(vkey, aid, request.Lookup, request.Entry, request.Nominal, request.Group, request.Frame, request.Palette, request.Mirror, ox, oy, scale, record, token, request.Policy));
                 }
-                if (!hiddenOnWholeMap || (flags & 0x3) == 0)
+                if (!hidden || (flags & 0x3) == 0)
                     foreach (var (slot, bit, size) in new[] { (5, 0x8000U, 7), (6, 0x8000U, 7), (7, 0x10000U, 4) })
                     {
                         if (!effective.TryGetValue(slot, out var array)) throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
@@ -473,7 +471,7 @@ public sealed partial class AreaDataOwner
                     throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance, index: index);
                 var number = (int)((raw >> 19) & 511);
                 if (number >= names.Count) throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping, index: index);
-                var entry = Resolve(MappingSource(AreaMappingRole.Roof), "art/roof/" + Safe(names[number]) + ".art");
+                var entry = Resolve("art/roof/" + Safe(names[number]) + ".art");
                 var key = new AreaVisualKey(AreaSourceKind.Terrain, sector, index, string.Empty, AreaLayerKind.Roof);
                 AdmitVisual(visuals); output.Allocate(2048);
                 // The fill and fade bits are state, not appearance: the visual's lookup leaves them out.
@@ -498,8 +496,7 @@ public sealed partial class AreaDataOwner
         for (; i < text.Length && char.IsAsciiDigit(text[i]); i++) value = unchecked(value * 10 + (text[i] - '0'));
         return unchecked(negative ? -value : value);
     }
-    private bool RoofsAdmitted => _plan.UniversalRules
-        && _plan.Mappings.Any(m => m.Role == AreaMappingRole.Roof) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.RoofShade);
+    private bool RoofsAdmitted => _plan.Mappings.Any(m => m.Role == AreaMappingRole.Roof) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.RoofShade);
     private void AdmitVisual(List<AreaVisualRecord> visuals)
     { if (visuals.Count >= _limits.MaxVisuals) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Frame); }
     private static void AddVisual(List<AreaVisualRecord> visuals, AreaVisualRecord visual) => visuals.Add(visual);

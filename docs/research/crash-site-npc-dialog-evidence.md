@@ -9,17 +9,16 @@ executable. Heartbeat and dialog-override attachments are separate, excluded cal
 The installation and all selected archives/files were opened read-only. No original
 text, expressions, asset bytes, gameplay operand values or machine paths are published.
 
-Categories used below: **ObservedField** (selected bytes), **SourceClaim** (pinned
-CE semantics), **ProjectPolicy** (instrumentation or proposed contract), **Unknown**.
+Categories used below: **ObservedField** (selected bytes), **SourceClaim** (an earlier
+source reading, provenance in git history, cited by the executable address of
+its function; level F0, not checked in the executable), **ProjectPolicy** (instrumentation or proposed contract), **Unknown**.
 Original execution, original display, saved-world overrides and untraced branches
 are **NOT_VERIFIED**. An explicit selected archive is not the runtime precedence winner.
 
-CE specification lineage is `alexbatalov/arcanum-ce`, revision
-`a7ff41b300ef712f0e7d088183a3d08957110cdd`, Sustainable Use License 1.0
-([license](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/LICENSE.md)).
-Source bodies informed field and caller interpretation; no CE code was copied or
-mechanically translated. This is not clean-room research. CE-derived references
-are not independent corroboration. Toolkit editor documentation is supporting
+Source claims come from an earlier source reading (provenance in git history),
+cited by the executable address of its function; level F0 (not checked in the
+executable) unless a ledger row is cited. They informed field and caller
+interpretation. Toolkit editor documentation is supporting
 provenance only; no legacy executable was run. The original fields and separately
 authored selected-byte worksheet check results, not independent source lineage.
 
@@ -27,7 +26,7 @@ authored selected-byte worksheet check results, not independent source lineage.
 
 | Claim | Category | Locator / observation | Disposition |
 |---|---|---|---|
-| NDE-01 | ObservedField + SourceClaim | Selected module MapList payload SHA-256 `3df16fd2bd186415da0738c25a6b7ea8a32134f5ea95817e3bcfafdbcf55843f`; exactly one START_MAP, map ID 5000. Its map basename transforms to the selected loose game aggregate basename by the pinned rotation/reversal rule. | Base-world map context; not an editor `.mob` or a guessed archive member. |
+| NDE-01 | ObservedField + SourceClaim | Selected module MapList payload SHA-256 `3df16fd2bd186415da0738c25a6b7ea8a32134f5ea95817e3bcfafdbcf55843f`; exactly one START_MAP, map ID 5000. Its map basename transforms to the selected loose game aggregate basename by the rotation/reversal rule of the earlier source reading (F0). | Base-world map context; not an editor `.mob` or a guessed archive member. |
 | NDE-02 | ObservedField | Aggregate SHA-256 `a548f611ff5de9842bba1f700f6614c0b9651cf3ab640a23d19efc7626dde6a5`, 1,823,280 bytes, 16-byte prefix then 7,399 records consumed exactly to EOF. Selected instance begins at 743644, ends at 744462, object type 16, prototype ID 17102, identity SHA-256 `bd0cff305f47b07e845a120966b402c5c44073aba7ffd1407b626f93733bf601`. | Unique matching instance. Complete census uses external explicit layout descriptors; selected fields separately reconciled without those descriptors. |
 | NDE-03 | ObservedField + SourceClaim | Instance location is present; its little-endian 8-byte value hashes to `5474307a69c758197cbcae7ee15276f82c4dae9e423a7496f1805b48405c5d10`. Private coordinate comparison places it adjacent to the selected START_MAP location. Description ID 31073 resolves to Virgil in module gamedesc; name hash `e3b7a5d30dcfe893ffafd9ef2407468b7e8253cf461bf728db69195ee282e3ba`. | Identity comes from object and description, not SCR filename. Module description payload hash `8254286b832d30cb1ce13a9ccffd4fc887ae7b4d0783f2251a2b8f4a85f68e60`. |
 | NDE-04 | ObservedField | Selected prototype identity/type matches instance prototype/type; prototype SHA-256 `084a85124a37c41097806dface638254194efd46a5b318009e1c841c42797ea4`. Script array is explicitly present on the instance, with six occupied event keys. Key 9 (SAP_DIALOG) binds script ID 1324. | Whole instance array overrides prototype array; absent overridden slots are NOT individually inherited. |
@@ -43,20 +42,20 @@ Payload fingerprints alone would not prove whole-file integrity.
 
 ### Source seams for NDE-01..06
 
-All links below are the pinned revision, not mutable main:
+Executable addresses of the seams (earlier source reading, level F0):
 
-- [Game aggregate versus editor mobile load](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1360-L1501), [name transform](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1668-L1688).
-- [Object version and reader dispatch](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L1233-L1253), [prototype reader](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L2932-L2985), [instance reader](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L3032-L3092). The blocked prototype identifier selects the prototype branch; the instance branch reads identity, type, field count and override masks before its field callbacks.
-- [Prototype field callback](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L3246-L3259), [instance field callback](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L3301-L3312), [serialized scalar/presence/array fields](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_private.c#L517-L762), [array header/payload and bitset read](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sa.c#L319-L342). These are the file-reading seams, distinct from [overridden-field enumeration](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L4783-L4808), which chooses callbacks by mask and field order, not by reading record headers.
-- [Whole-array inheritance](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L2540-L2593), [description source selection](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/description.c#L123-L145).
-- [SAP and operand declarations](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L7-L81), [catalogue and DLG derivation](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script_name.c#L38-L207), [SCR framing](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L3430-L3555).
+- Game aggregate versus editor mobile load (0x410D10), name transform (0x411830).
+- Object version and reader dispatch (0x406600), prototype reader (0x4097B0), instance reader (0x409AA0). The blocked prototype identifier selects the prototype branch; the instance branch reads identity, type, field count and override masks before its field callbacks.
+- Prototype field callback (0x40A140), instance field callback (0x40A290), serialized scalar/presence/array fields (0x4E4360, 0x4E44F0), array header/payload and bitset read (0x4E78F0). These are the file-reading seams, distinct from overridden-field enumeration (0x40CE20), which chooses callbacks by mask and field order, not by reading record headers.
+- Whole-array inheritance (0x408BB0), description source selection (0x4D4210).
+- SAP and operand declarations, catalogue and DLG derivation (0x4CEC10, 0x4CECC0, 0x4CECE0, 0x4CEDA0, 0x4CEDC0, 0x4CEE60), SCR framing (0x44C4E0, 0x44C630, 0x44C670, 0x44C710, 0x44C730).
 
 ## Conditional caller and entry rule
 
 The inspected object-dialog caller invokes SAP_DIALOG with PC as triggerer, NPC
 as attachee, no extra object and SCR line 0
-([caller](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/tb_ui.c#L248-L258),
-[dispatch](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3866-L3908)).
+(caller (0x57CC70),
+dispatch (0x441980)).
 On the explicitly assumed context of NPC not following this PC, both encountered
 local-flag queries false, and NPC not jilted, entries 0..3 fall through their
 DO_NOTHING else actions. Entry 4 is TRUE → DIALOG; its immediate value selects
@@ -65,11 +64,11 @@ True alternatives jump to SCR lines 6, 8, 10, 12; they are not followed here.
 A missing following/jilted query result is a frontier, never false by default.
 
 The callback receives PC, NPC, script ID, current SCR line and distinct DLG node
-([callback](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1513-L1534)).
+(callback (0x447220)).
 UI/source admission additionally depends on life/consciousness/speaking/combat,
 local-dialog exclusivity and hostility checks
-([UI admission](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/dialog_ui.c#L118-L211),
-[hostility/generated branch](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L471-L506)).
+(UI admission (0x567460),
+hostility/generated branch (0x412FD0)).
 The static chain does not prove these predicates actually held in the original
 executable. SCR execution guards, host/state-copy behavior and post-callback
 return handling remain separate dependencies; no full VM is admitted.
@@ -85,21 +84,21 @@ with decimal operand tokens. No raw expressions or operand values are published.
 
 | Instance(s) | Required behavior / arity / participants | Order and provenance | Support |
 |---|---|---|---|
-| SCR line 0 FOLLOWING (type 18) | Two focus operands: attachee NPC, triggerer PC; query following relationship. | First branch query; `script.c:869-890`. | NeedsImplementation; probe consumes explicit nullable context, does not query world. |
-| SCR lines 1 and 3 LOCAL_FLAG (type 3) | One immediate value tag 3; read distinct bit indices from effective attachment header. | Before dialog callback; `script.c:621-629`. | NeedsImplementation as SCR dispatch; existing DLG LF port alone is not SCR execution. |
-| SCR line 2 JILTED (type 39) | One focus operand, attachee NPC; query jilted state. | Between local-flag checks; `script.c:1269-1300`. | NeedsImplementation. |
-| SCR line 4 TRUE (type 0) | Zero active arguments. | Select true action unconditionally; `script.c:590-592`. | NeedsImplementation in future dispatcher. |
+| SCR line 0 FOLLOWING (type 18) | Two focus operands: attachee NPC, triggerer PC; query following relationship. | First branch query; script condition 0x4451B0. | NeedsImplementation; probe consumes explicit nullable context, does not query world. |
+| SCR lines 1 and 3 LOCAL_FLAG (type 3) | One immediate value tag 3; read distinct bit indices from effective attachment header. | Before dialog callback; script condition 0x4451B0. | NeedsImplementation as SCR dispatch; existing DLG LF port alone is not SCR execution. |
+| SCR line 2 JILTED (type 39) | One focus operand, attachee NPC; query jilted state. | Between local-flag checks; script condition 0x4451B0. | NeedsImplementation. |
+| SCR line 4 TRUE (type 0) | Zero active arguments. | Select true action unconditionally; script condition 0x4451B0. | NeedsImplementation in future dispatcher. |
 | SCR lines 0..3 DO_NOTHING else (type 0) | Zero active arguments; continue next SCR line. | Taken only under stated predicates. | NeedsImplementation as control flow, not permission to skip unknown effects. |
-| SCR lines 0..3 GOTO true (type 3) | One immediate SCR-line operand. | Alternatives leave chosen entry path; `script.c:1511-1512`. | NeedsImplementation; alternative conversations NOT_VERIFIED. |
-| SCR line 4 DIALOG (type 4) | One immediate DLG-node operand; callback receives five contextual arguments. | Entry-resolution boundary; `script.c:1513-1534`. | NeedsImplementation. |
-| DLG node 1 action instances 1,2,3,5: GF | Two operands: global-flag identity and boolean value; shared world flag state. | Ordered instances, with IN at instance 4; `dialog.c:1973-1975`. | NeedsImplementation; first effect already outside current runtime. |
-| DLG node 1 action instance 4: IN | One signed item-name identity; sign selects direction. Selected case NPC/substitute inventory → PC, with transfer failure/drop behavior. | Inventory effect, not display or IQ gate; `dialog.c:2004-2056`. | NeedsImplementation (inventory query/transfer/location/failure policy). |
-| DLG node 1 action instance 6: QU | Two operands: quest identity/state; participants PC plus NPC context. | After preceding effects; `dialog.c:1958-1960`. | SupportedByExistingRuntime as a standalone command in its accepted domains, NOT admission of the entire entry. |
-| DLG node 1 action instance 7: RU | One rumor identity; PC rumor log. | Last entry effect; `dialog.c:2075-2077`. | SupportedByExistingRuntime individually, not a skipped-prefix execution path. |
-| DLG NPC nodes 1 and 9 Condition fields | Speech metadata, not Player condition evaluation; source derives speech ID using script identity. | Before NPC text/action handling; `dialog.c:2264-2277`. | NeedsImplementation (speech/media boundary); no false LF/unknown-condition rejection as NPC eligibility. |
-| Player IDs 2..7 gender/IQ | Alternate field is gender selector, not female text. Signed IQ gate: positive minimum, negative maximum; dumb adjustment precedes IQ. | Gender → IQ → condition; `dialog.c:1309-1355`. | NeedsImplementation in caller; current runtime accepts caller booleans only. |
-| Player IDs 2..7 RE condition | One signed threshold: positive reaction minimum, negative maximum; NPC reaction toward PC. | After entry effects and gender/IQ; `dialog.c:1489-1499`. | NeedsImplementation; do not substitute LF or guessed reaction. |
-| Player IDs 4,5,7 RE action | One operand; selected unsigned form sets reaction to absolute value, not relative adjustment. | Selected reply effect before transition; `dialog.c:1933-1956`. | NeedsImplementation. |
+| SCR lines 0..3 GOTO true (type 3) | One immediate SCR-line operand. | Alternatives leave chosen entry path; script action 0x447220. | NeedsImplementation; alternative conversations NOT_VERIFIED. |
+| SCR line 4 DIALOG (type 4) | One immediate DLG-node operand; callback receives five contextual arguments. | Entry-resolution boundary; script action 0x447220. | NeedsImplementation. |
+| DLG node 1 action instances 1,2,3,5: GF | Two operands: global-flag identity and boolean value; shared world flag state. | Ordered instances, with IN at instance 4; dialog action 0x415BA0. | NeedsImplementation; first effect already outside current runtime. |
+| DLG node 1 action instance 4: IN | One signed item-name identity; sign selects direction. Selected case NPC/substitute inventory → PC, with transfer failure/drop behavior. | Inventory effect, not display or IQ gate; dialog action 0x415BA0. | NeedsImplementation (inventory query/transfer/location/failure policy). |
+| DLG node 1 action instance 6: QU | Two operands: quest identity/state; participants PC plus NPC context. | After preceding effects; dialog action 0x415BA0. | SupportedByExistingRuntime as a standalone command in its accepted domains, NOT admission of the entire entry. |
+| DLG node 1 action instance 7: RU | One rumor identity; PC rumor log. | Last entry effect; dialog action 0x415BA0. | SupportedByExistingRuntime individually, not a skipped-prefix execution path. |
+| DLG NPC nodes 1 and 9 Condition fields | Speech metadata, not Player condition evaluation; source derives speech ID using script identity. | Before NPC text/action handling; dialog 0x416840. | NeedsImplementation (speech/media boundary); no false LF/unknown-condition rejection as NPC eligibility. |
+| Player IDs 2..7 gender/IQ | Alternate field is gender selector, not female text. Signed IQ gate: positive minimum, negative maximum; dumb adjustment precedes IQ. | Gender → IQ → condition; dialog 0x414F50. | NeedsImplementation in caller; current runtime accepts caller booleans only. |
+| Player IDs 2..7 RE condition | One signed threshold: positive reaction minimum, negative maximum; NPC reaction toward PC. | After entry effects and gender/IQ; dialog condition 0x4150D0. | NeedsImplementation; do not substitute LF or guessed reaction. |
+| Player IDs 4,5,7 RE action | One operand; selected unsigned form sets reaction to absolute value, not relative adjustment. | Selected reply effect before transition; dialog action 0x415BA0. | NeedsImplementation. |
 | Player IDs 2,3,6 actions | Empty field. | No response command. | SupportedByExistingRuntime individually. |
 | Player IDs 2..7 Direct edge | All point to NPC node 9; choose response ID 2 conditionally eligible. | One selected edge; selected action empty, destination action empty. | Direct shape SupportedByExistingRuntime, but whole chain not admitted. |
 | Node 9 next decision | Stop before evaluating its replies. | First subsequent frontier. | NeedsImplementation for continued traversal; no Exit or special form encountered in selected step. |
@@ -109,7 +108,7 @@ Research records later fields without executing or skipping the unsupported firs
 Source-first-entry effects occur before reply enumeration; no rollback is inferred.
 The six structural immediate replies are IDs **2,3,4,5,6,7**. Selected serialized
 and numerical-source grouping agree on this input (F-ORDER closed for this input
-only). CE enumerates up to five *eligible* replies; current project runtime
+only). As read, the dialog enumerates up to five *eligible* replies; current project runtime
 rejects six structural replies rather than truncating. It also lacks GF/IN/RE.
 Thus **the current one-edge runtime cannot run this conversation**. Do not choose
 a different reply group, truncate, or discard effects to manufacture compatibility.
@@ -130,13 +129,13 @@ a different reply group, truncate, or discard effects to manufacture compatibili
 No name-substitution delimiters were present in these selected display fields.
 No generated-text directive was encountered by private selected-field inspection.
 Ordinary NPC variant selection uses **PC** critter/gender, not NPC gender
-([selection](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2332-L2339)).
+(selection (0x416840)).
 Empty alternate is not automatically replaced by main text. Player neutral/matching
 selector and IQ tests are analysis policies, not a new production formatter.
 Source name substitutions recognize PCNAME/NPCNAME case-insensitively; unknown
 paired tokens add no name; unmatched delimiter behavior is unsafe/Unknown, so
 instrumentation fails closed
-([substitution](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2362-L2389)).
+(substitution (0x416B00)).
 
 The selected sample supports lossless **ASCII subset** decoding only, not universal
 UTF-8, CP1251, installation-wide encoding or Russian localization. Production
@@ -169,7 +168,7 @@ continuous bit numbering assumption. Source field types may be inspected against
 but that static reader is not an NPC loader. In particular container inventory
 must be an object-ID **array**, not a solitary handle; this research supplies the
 corrected descriptor externally and does not change the production static reader.
-Review the external layout against the pinned source; it is an evidence input,
+Review the external layout against the earlier source reading (F0); it is an evidence input,
 not proof of its own correctness. Never place the private manifest in a PR.
 
 Caps: aggregate 32 MiB / 16,384 records, prototype 2 MiB, SCR 1 MiB / 4,096
@@ -183,7 +182,7 @@ Catalogue selection compares the **complete leading decimal basename key**, not
 a fixed-width digit prefix: key 13240 cannot satisfy attachment 1324. Strict
 printable-ASCII raw names, exact `scr\` folder / `.scr` suffix, no nested path,
 sign, whitespace prefix or numeric overflow are project safety policy, not a
-reimplementation of permissive CE `atoi`. Leading zeros may identify the same
+reimplementation of the original's permissive `atoi` name parse (ledger row SN1). Leading zeros may identify the same
 numeric key but raw spelling is retained for the exact payload read; multiple
 actual matches fail, including differently spelled names for the same key.
 It reads all record boundaries but semantically traces only the necessary SCR

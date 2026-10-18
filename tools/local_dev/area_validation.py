@@ -27,6 +27,17 @@ PINNED_RECONCILIATION = dict(Survey=621, CoreSectors=9, ContextPresent=11, Conte
     Prototypes=56, Visuals=2444)
 
 
+# ARC-DATA-036: the oracle names the two ART rules the pinned profile once applied per object by the profile's own
+# labels; the owner now applies them to every plan under the general labels, with the same view and pixels.
+ORACLE_POLICIES = {'arc-data-009-exact-art-view-v1': 'original-art-extent-v1',
+                   'arc-data-009-exact-single-group-alias-v1': 'original-single-group-rotation-v1'}
+
+
+def oracle_policy(policy: str) -> str:
+    """The owner's label for an oracle request's view policy."""
+    return ORACLE_POLICIES.get(policy, policy)
+
+
 def _require(condition: bool, frontier: str) -> None:
     if not condition:
         raise ValueError(frontier)
@@ -350,7 +361,7 @@ def _compare_metadata(report: dict, oracle: dict, *, expected_reconciliation: di
         _require(name in requests, 'selected request identity')
         source = requests[name]
         _require(name not in selected_requests, 'duplicate selected request'); selected_requests.add(name)
-        _require(row['ViewLength']==source['view_length'] and row['Policy']==source['policy'], 'selected view policy')
+        _require(row['ViewLength']==source['view_length'] and row['Policy']==oracle_policy(source['policy']), 'selected view policy')
         if source.get('chain'):
             chain = source['chain']
             _require((row['RawArt'],row['ObjectOffsetX'],row['ObjectOffsetY'],row['Scale'],row['NominalFacing'],row['Mirrored']) ==

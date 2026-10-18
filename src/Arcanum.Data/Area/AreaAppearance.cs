@@ -33,69 +33,31 @@ public sealed partial class AreaDataOwner
         if (!result.ContainsKey(AreaMappingRole.Tile) || !result.ContainsKey(AreaMappingRole.Facade)) throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping);
         return result;
     }
-    private AreaInputKey MappingSource(AreaMappingRole role) => _plan.Mappings.SingleOrDefault(m => m.Role == role)?.Entry.Source ?? throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping);
     private static string Mapped(Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps, AreaMappingRole role, int key) => maps.TryGetValue(role, out var table) && table.TryGetValue(key, out var value) ? Safe(value) : throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping);
     private Request ObjectRequest(uint aid, Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps, CancellationToken token)
     {
         var cls = aid >> 28; var frame = cls == 6 ? 0 : (int)((aid >> 14) & 31); var nominal = cls == 6 ? 0 : (int)((aid >> 11) & 7);
         var palette = (int)((aid >> 4) & 3); var mirror = cls is 2 or 12 or 13 && nominal is 1 or 2 or 3; var group = mirror ? 8 - nominal : nominal;
-        string path; AreaInputKey? source = null; var lookup = aid;
+        string path; var lookup = aid;
         if (cls is 4 or 7)
         {
             var role = cls == 4 ? AreaMappingRole.Scenery : AreaMappingRole.Container;
             var key = (int)(1000 * ((aid >> 6) & 31) + ((aid >> 19) & 511));
-            path = (cls == 4 ? "art/scenery/" : "art/container/") + Mapped(maps, role, key); source = MappingSource(role);
+            path = (cls == 4 ? "art/scenery/" : "art/container/") + Mapped(maps, role, key);
         }
         else if (cls == 6)
         {
             if (((aid >> 12) & 3) != 0) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
             var type = aid & 15; var subtype = (aid >> 6) & 15; var number = (aid >> 17) & 2047; var coverage = (aid >> 14) & 7;
             var key = checked((int)(number + 20 * (subtype + 50 * type) + (type == 2 && coverage != 0 ? 20 * (5 * coverage + 10) : 0)));
-            path = "art/item/" + Mapped(maps, AreaMappingRole.ItemGround, key); source = MappingSource(AreaMappingRole.ItemGround);
+            path = "art/item/" + Mapped(maps, AreaMappingRole.ItemGround, key);
             lookup = aid & ~0x30U;
         }
-        else if (cls is 2 or 12 or 13 && OriginalArtNames)
+        else if (cls is 2 or 12 or 13)
         {
             // The original's critter names (N1, N2): any animation, the weapon/shield rules and
             // the missing-art repair. Frame, rotation and palette select inside the file.
             path = OriginalCritterPath(cls, aid, maps, token);
-        }
-        else if (cls is 2 or 12 or 13)
-        {
-            var animation = (int)((aid >> 6) & 31); var weapon = (int)(aid & 15); var shield = (int)((aid >> 19) & 1);
-            var armor = cls == 13 ? 0 : (int)((aid >> 20) & (cls == 2 ? 15U : 7U));
-            if (animation is not 0 and not 7 || armor > 8 || weapon > 14) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
-            int population;
-            if (cls == 2)
-            {
-                var body = (int)((aid >> 24) & 7); var gender = (int)((aid >> 27) & 1);
-                if (body > 4) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
-                if (body == 4 && gender == 0) body = 0;
-                if (armor is 4 or 6) { gender = 1; body = body == 4 ? 0 : body == 2 ? 1 : body; }
-                population = body * 2 + gender;
-            }
-            else population = cls == 12 ? (int)((aid >> 23) & 31) : (int)((aid >> 20) & 255);
-            if (animation == 0 && weapon == 0)
-            {
-                var stand = NpcPath(cls, population, 0, 0, 0, 0, maps);
-                _ = ClosedUnique(stand); // PRESENT only; absent/ambiguous is strict failure, no weapon1 repair.
-                if (_plan.Original)
-                {
-                    token.ThrowIfCancellationRequested();
-                    var missing = _plan.Mappings.Single(m => m.Role == AreaMappingRole.MissingPolicy);
-                    using var payload = new AreaOwnership(_budget);
-                    var bytes = ReadEntry(missing.Entry, token, payload);
-                    if (ObjectWireReader.Hash(bytes) != missing.PayloadSha256 || bytes.Length != 332 || BinaryPrimitives.ReadUInt32LittleEndian(bytes) != 4601)
-                        throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Appearance);
-                    var start = cls == 2 ? 1 : cls == 12 ? 11 : 43;
-                    var max = cls == 2 ? 10 : cls == 12 ? 32 : 40;
-                    if (population >= max || (BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan((start + population) * 4)) & 8) != 0)
-                        throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
-                }
-            }
-            if (animation == 7) { weapon = 0; shield = 0; }
-            path = NpcPath(cls, population, armor, animation, weapon, shield, maps);
-            lookup = aid; // source selector transformations are recorded, never replace raw state
         }
         else if (cls == 3 && PortalsAdmitted)
         {
@@ -123,8 +85,8 @@ public sealed partial class AreaDataOwner
             // variation digit; MakeVisual then requires a single-rotation ART for group 0.
             // Rotation and the flip/palette bits stay in the raw selector; the renderer applies them.
             // Flag bits other than the flip bit (bits 1-3) and bit 6 are not admitted.
-            // A whole map with the original's ART rules also names damaged walls (bits 0x400/0x80, N6).
-            if ((aid & 0x4E) != 0 || ((aid & 0x480) != 0 && !OriginalArtNames)) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
+            // Damaged walls take their damage letter (bits 0x400/0x80, N6).
+            if ((aid & 0x4E) != 0) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
             var number = (int)((aid >> 20) & 255); var rotation = (int)((aid >> 11) & 7); var piece = (int)((aid >> 14) & 63); var variation = (int)((aid >> 8) & 3);
             if (piece >= WallPieces.Length) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
             var (damageLetter, namedPiece) = WallDamage(aid, rotation, piece);
@@ -143,10 +105,9 @@ public sealed partial class AreaDataOwner
             var names = maps[AreaMappingRole.WallName].Values.Where(v => v.Length >= 3 && string.Equals(v[..3], side[..3], StringComparison.OrdinalIgnoreCase)).ToArray();
             if (names.Length != 1) throw Fail(names.Length == 0 ? AreaErrorCode.MissingSource : AreaErrorCode.AmbiguousSource, AreaStage.Mapping);
             path = "art/wall/" + Safe(names[0][..3]) + WallPieces[namedPiece] + damageLetter + (char)('0' + variation) + ".art";
-            source = MappingSource(AreaMappingRole.WallStructure);
             nominal = rotation; group = 0; frame = 0; mirror = (aid & 1) != 0; lookup = aid;
         }
-        else if (cls == 0 && OriginalArtNames && _objectTiles is not null)
+        else if (cls == 0 && _objectTiles is not null)
         {
             // A tile id on an object names the tile's file as a terrain cell does (N7): no
             // rotation or frame, palette from bits 4-5, and a flippable tile (bits 6, 7) with
@@ -154,7 +115,6 @@ public sealed partial class AreaDataOwner
             lookup = aid & ~63U;
             try { path = TerrainLoader.TilePath(_objectTiles, lookup).Path; }
             catch (TerrainException) { throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping); }
-            source = MappingSource(AreaMappingRole.Tile);
             nominal = 0; group = 0; frame = 0; mirror = (aid & 0xC1) == 0xC1;
         }
         else throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
@@ -166,17 +126,15 @@ public sealed partial class AreaDataOwner
             entry = Unique(explicitBindings[0].Entry.Source, path);
             if (entry != explicitBindings[0].Entry) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Appearance);
         }
-        else (entry, badArt) = ResolveOrBadArt(source, path);
+        else (entry, badArt) = ResolveOrBadArt(path);
         // Bad art has one rotation and one frame; only frame 0 is defined (N4).
         if (badArt) { group = 0; frame = 0; }
         return new(entry, lookup, nominal, group, frame, palette, mirror, badArt ? BadArtPolicy : null);
     }
-    /// <summary>A pinned profile reads a resource from the archive its mapping names. A whole-map
-    /// plan reads it from whichever resource archive holds it, as the original's file system does
-    /// across its mounted archives: the first in its stack order (ARC-DATA-018), or, without one,
-    /// the one of the two base archives that holds it.</summary>
-    private AreaEntryIdentity Resolve(AreaInputKey source, string path) =>
-        _plan.ResourceOrder.Count > 0 || _plan.UniversalRules ? ClosedUnique(path) : Unique(source, path);
+    /// <summary>A resource is read from whichever resource archive holds it, as the original's file system
+    /// does across its mounted archives: the first in the plan's stack order (ARC-DATA-018), or, without
+    /// one, the one of the two base archives that holds it (ARC-DATA-036: every plan, pinned profiles too).</summary>
+    private AreaEntryIdentity Resolve(string path) => ClosedUnique(path);
     private AreaEntryIdentity ClosedUnique(string path)
     {
         if (_plan.ResourceOrder.Count > 0) return StackFirst(path);
@@ -212,29 +170,12 @@ public sealed partial class AreaDataOwner
         }
         throw Fail(AreaErrorCode.MissingSource, AreaStage.Appearance);
     }
-    private static string NpcPath(uint cls, int population, int armor, int animation, int weapon, int shield, Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps)
-    {
-        string[] armors = ["UW", "V1", "LA", "CM", "PM", "RB", "PC", "BN", "CD"];
-        const string weapons = "ABCDEFGHIJKXYNZ";
-        var suffix = (shield == 0 ? "X" : "S") + weapons[weapon == 7 && shield != 0 ? 3 : weapon] + (char)('a' + animation) + ".art";
-        if (cls == 2)
-        {
-            string[] bodies = ["HM", "DF", "GH", "HG", "EF"];
-            if (population < 0 || population >= 10) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
-            var label = bodies[population / 2] + (armor is 4 or 6 ? "X" : population % 2 == 0 ? "F" : "M");
-            return "art/critter/" + label + "/" + label + armors[armor] + suffix;
-        }
-        var name = Mapped(maps, cls == 12 ? AreaMappingRole.MonsterNames : AreaMappingRole.UniqueNpcNames, population);
-        return (cls == 12 ? "art/monster/" : "art/unique_npc/") + name + "/" + name + (cls == 12 ? armors[armor] : string.Empty) + suffix;
-    }
-
     private AreaVisualRecord MakeVisual(AreaVisualKey key, uint raw, uint lookup, AreaEntryIdentity entry, int nominal, int group, int frame, int palette, bool mirrored,
         int ox, int oy, int scale, ObjectWireRecord? record, CancellationToken token, string? fallbackPolicy = null)
     {
         token.ThrowIfCancellationRequested();
-        // A whole map decodes each distinct frame selection once per build (ARC-DATA-024): the
-        // selection fixes the decode, so later visuals copy its frame facts. Pinned profiles keep
-        // one admission and decode per visual.
+        // Each distinct frame selection is decoded once per build (ARC-DATA-024): the selection
+        // fixes the decode, so later visuals copy its frame facts.
         var shared = _sharedFrames is not null ? (entry, group, frame, palette, raw >> 28 is 1 or 3, fallbackPolicy) : default;
         if (_sharedFrames is not null && _sharedFrames.TryGetValue(shared, out var template))
             return template with { Key = key, RawArt = raw, LookupArt = lookup, NominalFacing = nominal, Mirrored = mirrored, ObjectOffsetX = ox, ObjectOffsetY = oy, Scale = scale };
@@ -245,16 +186,14 @@ public sealed partial class AreaDataOwner
         // eight-rotation ART would need the rotation's own group, which is not admitted.
         if (raw >> 28 is 1 or 3 && (bytes.Length < 4 || (BinaryPrimitives.ReadUInt32LittleEndian(bytes) & 1) == 0))
             throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame);
-        if (_plan.OriginalMap == OriginalAreaMap.CrashSiteExterior && record is not null)
-            (policy, view, physical) = OriginalProfile.SelectionPolicy(key, raw, entry, bytes, record, nominal, group, frame, palette);
-        else if (_plan.OriginalMap == OriginalAreaMap.CrashSiteCave && record is not null)
-            (policy, view, physical) = CaveProfile.SelectionPolicy(key, raw, entry, bytes, record, nominal, group, frame, palette);
-        // Whole-map plans read ART as the original does: a single-rotation ART has only group 0,
+        // ART is read as the original reads it (ARC-DATA-036: every plan). Bytes after the last frame are no part of
+        // the ART: the frame is read from the ART's own extent, the view. A single-rotation ART has only group 0,
         // whatever rotation the object asks for (the art id's rotation-free flag).
-        else if (!_plan.Original && _plan.AllowArtTrailingBytes && bytes.Length >= 4 && (BinaryPrimitives.ReadUInt32LittleEndian(bytes) & 1) == 1 && physical != 0)
-            (policy, physical) = ("original-single-group-rotation-v1", 0);
+        if (bytes.Length >= 4 && (BinaryPrimitives.ReadUInt32LittleEndian(bytes) & 1) == 1 && physical != 0)
+            (policy, physical) = (SingleGroupPolicy, 0);
+        var descriptor = InspectFrame(bytes, physical, frame, palette);
+        if (descriptor.Trailing > 0) (policy, view) = (physical == group ? TrailingBytesPolicy : policy, bytes.Length - descriptor.Trailing);
         if (fallbackPolicy is not null) policy = fallbackPolicy;
-        var descriptor = InspectFrame(bytes.AsSpan(0, view), physical, frame, palette);
         _budget.Context = _budget.Context with { Callsite = AreaBudgetCallsite.Pixels };
         _budget.CompleteFrame(checked((long)descriptor.Metadata.Width * descriptor.Metadata.Height * 4), descriptor.Metadata.EncodedPayloadLength);
         token.ThrowIfCancellationRequested();
@@ -306,14 +245,16 @@ public sealed partial class AreaDataOwner
             };
         }
     }
-    private ArtDecoderOptions ArtOptions => _plan.AllowArtTrailingBytes && !_plan.Original ? LenientArt : WireLimits.ArtOptions;
+    private ArtDecoderOptions ArtOptions => LenientArt;
+    internal const string TrailingBytesPolicy = "original-art-extent-v1", SingleGroupPolicy = "original-single-group-rotation-v1";
     private ArtFrame DecodeFrame(ReadOnlySpan<byte> bytes, ArtFrameSelection selection)
     {
         try { return ArtDecoder.Decode(bytes, selection, ArtOptions); }
         catch (ArtException error) { throw Fail(error is ArtLimitExceededException ? AreaErrorCode.BudgetExceeded : AreaErrorCode.MalformedRecord, AreaStage.Frame); }
         catch (ArgumentOutOfRangeException) { throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame); }
     }
-    private (ArtFrameMetadata Metadata, int Frames) InspectFrame(ReadOnlySpan<byte> bytes, int group, int frame, int palette)
+    /// <summary>The selected frame's metadata, the ART's frame count and the bytes after its last frame payload.</summary>
+    private (ArtFrameMetadata Metadata, int Frames, int Trailing) InspectFrame(ReadOnlySpan<byte> bytes, int group, int frame, int palette)
     {
         _budget.Context = _budget.Context with { Callsite = AreaBudgetCallsite.ArtTable };
         if (bytes.Length < 132) throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame);
@@ -325,7 +266,7 @@ public sealed partial class AreaDataOwner
         {
             var metadata = ArtDecoder.Inspect(bytes, ArtOptions);
             if (palette is < 0 or > 3) throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame);
-            return (metadata.GetFrame(group, frame), frames * groups);
+            return (metadata.GetFrame(group, frame), frames * groups, metadata.TrailingBytes);
         }
         catch (Exception error) when (error is ArtException or ArgumentOutOfRangeException)
         { throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame); }
@@ -346,8 +287,8 @@ public sealed partial class AreaDataOwner
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
     private sealed record Request(AreaEntryIdentity Entry, uint Lookup, int Nominal, int Group, int Frame, int Palette, bool Mirror, string? Policy = null);
-    /// <summary>Doors and windows are drawn only by whole-map plans that bind the portal names.</summary>
-    private bool PortalsAdmitted => _plan.UniversalRules && _plan.Mappings.Any(m => m.Role == AreaMappingRole.Portal);
+    /// <summary>Doors and windows are drawn only by plans that bind the portal names.</summary>
+    private bool PortalsAdmitted => _plan.Mappings.Any(m => m.Role == AreaMappingRole.Portal);
     private bool WallsAdmitted => _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallStructure) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallName);
     // Wall piece file codes by piece index: the file naming order of the source's wall file name builder,
     // docs/research/cave-transition-evidence.md T7.

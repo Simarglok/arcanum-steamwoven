@@ -16,13 +16,13 @@ public sealed class AreaWireBoundaryTests
         var proto = PrototypeWithDefaults();
         using (var f = new Fixture([(67108865, [Fields((1, Location()), (0, I32Bytes(0)))])], prototype: proto))
         {
-            var report = f.Owner.Inspect(); Assert.IsFalse(report.IsComplete);
-            var obj = report.Snapshot!.Objects.Single();
+            // The direct art id 0 replaces the prototype's: a tile id, so the object is drawn from tile 0's file (N7).
+            var snapshot = f.Owner.LoadStrict();
+            var obj = snapshot.Objects.Single();
             Assert.AreEqual(0L, obj.DirectFields.Single(v => v.Slot == 0).Number);
             Assert.AreEqual(0L, obj.EffectiveFields.Single(v => v.Slot == 0).Number);
             Assert.AreEqual(AreaValueOrigin.Instance, obj.EffectiveFields.Single(v => v.Slot == 0).Origin);
-            Assert.IsFalse(obj.SchemaReady);
-            Throws<AreaIncompleteException>(() => f.Owner.LoadStrict());
+            Assert.AreEqual(0U, snapshot.Visuals.Single(v => v.Key.Kind == AreaSourceKind.Static).RawArt);
         }
         using (var f = new Fixture([(67108865, [Fields((1, Location()))])], prototype: proto))
         {

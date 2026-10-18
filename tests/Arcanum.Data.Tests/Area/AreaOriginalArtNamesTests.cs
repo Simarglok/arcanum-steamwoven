@@ -136,13 +136,13 @@ public sealed class AreaOriginalArtNamesTests
         Assert.IsFalse(visual.Visual.Mirrored);
         // A flippable tile (bits 6, 7) with flag bit 0 is mirrored, as a terrain cell is.
         Assert.IsTrue(Visual(Complete(0xC1, [], MissingDat(0, new uint[CritterMasks + 4]))).Visual.Mirrored);
-        // Without the original's ART rules a tile id on an object stays refused.
-        using var strict = Owner(0x20, [], MissingDat(0, new uint[CritterMasks + 4]), allowArtTrailingBytes: false);
-        Assert.IsTrue(strict.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.UnsupportedArtClassOrState));
+        // ARC-DATA-036: one rule for every plan; a townmap-component plan names it the same way.
+        using var townmap = Owner(0x20, [], MissingDat(0, new uint[CritterMasks + 4]), AreaSectorSelection.TownmapComponent);
+        Assert.AreEqual(visual.Visual.Entry, townmap.Owner.LoadStrict().Visuals.Single(v => v.Key.Kind == AreaSourceKind.Static).Entry);
     }
 
     [TestMethod]
-    public void A_name_no_archive_holds_is_drawn_from_bad_art_on_whole_maps_only()
+    public void A_name_no_archive_holds_is_drawn_from_bad_art_on_every_plan()
     {
         // Scenery key 1 maps to a file the archives do not hold.
         const uint scenery = (4u << 28) | (1u << 19) | (3u << 14);
@@ -151,11 +151,12 @@ public sealed class AreaOriginalArtNamesTests
         Assert.AreEqual(Named("art/badart.art"), visual.Name);
         Assert.AreEqual(0, visual.Visual.Frame); // frame 3 asked; bad art has only frame 0
         Assert.AreEqual(scenery, visual.Visual.RawArt);
-        // Without bad art, or without the original's ART rules, the name stays missing.
+        // Without bad art the name stays missing.
         using (var none = Owner(scenery, [], MissingDat(0, new uint[CritterMasks + 4])))
             Assert.IsTrue(none.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.MissingSource));
-        using var strict = Owner(scenery, [("art/badart.art", Art())], MissingDat(0, new uint[CritterMasks + 4]), allowArtTrailingBytes: false);
-        Assert.IsTrue(strict.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.MissingSource));
+        // ARC-DATA-036: a townmap-component plan draws it from bad art too.
+        using var townmap = Owner(scenery, [("art/badart.art", Art())], MissingDat(0, new uint[CritterMasks + 4]), AreaSectorSelection.TownmapComponent);
+        Assert.AreEqual("original-badart-v1", townmap.Owner.LoadStrict().Visuals.Single(v => v.Key.Kind == AreaSourceKind.Static).Policy);
     }
 
     [TestMethod]
@@ -192,7 +193,8 @@ public sealed class AreaOriginalArtNamesTests
         return bytes;
     }
 
-    private static Fixture Owner(uint aid, (string, byte[])[] art, byte[]? missing, bool allowArtTrailingBytes = true, byte[]? secondResource = null)
+    private static Fixture Owner(uint aid, (string, byte[])[] art, byte[]? missing, AreaSectorSelection selection = AreaSectorSelection.AllSectors,
+        byte[]? secondResource = null)
     {
         var resources = new List<(string, byte[])>
         {
@@ -204,7 +206,7 @@ public sealed class AreaOriginalArtNamesTests
         resources.Add(("art/tile/stonebse0a.art", Art())); resources.Add(("art/scenery/fixture.art", Art()));
         resources.AddRange(art);
         return new Fixture([(Start, [TypedRecord()])], extraPrototype: SceneryPrototype(aid), resourceEntries: [.. resources], mappingRoles: [.. roles],
-            selection: AreaSectorSelection.AllSectors, allowArtTrailingBytes: allowArtTrailingBytes, secondResource: secondResource);
+            selection: selection, secondResource: secondResource);
     }
 
     private static AreaSnapshot Complete(uint aid, (string, byte[])[] art, byte[]? missing)
