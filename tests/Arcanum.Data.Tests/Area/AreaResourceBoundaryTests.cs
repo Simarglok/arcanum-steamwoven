@@ -29,18 +29,22 @@ public sealed class AreaResourceBoundaryTests
     }
 
     [TestMethod]
-    public void Invalid_physical_group_frame_and_item_state_never_clamp_or_use_exact_original_exceptions()
+    public void Invalid_physical_group_frame_and_item_state_never_clamp_and_a_tail_is_no_part_of_the_art()
     {
-        foreach (var raw in new uint[] { 0x40000800, 0x40004000, 0x60001000, 0x30000000 })
+        // A frame the ART lacks, an unadmitted item state and a portal without portal names. (Rotation 1 of a
+        // single-rotation ART is its group 0: Item_and_three_npc_classes_use_literal_paths_and_reject_ambiguous_closed_source_sets.)
+        foreach (var raw in new uint[] { 0x40004000, 0x60001000, 0x30000000 })
         {
             using var f = Make(raw);
             var report = f.Owner.Inspect(); Assert.IsFalse(report.IsComplete);
             Assert.IsNull(f.Owner.PublishedSnapshot);
             Assert.IsTrue(report.Issues.Any(i => i.Code is AreaErrorCode.UnsupportedPhysicalSelection or AreaErrorCode.UnsupportedArtClassOrState));
         }
+        // ARC-DATA-036: bytes after the last frame are no part of the ART; the frame is read from the ART's own extent.
         var trailing = Art().Concat(new byte[] { 0 }).ToArray();
-        using var malformed = Make(0x40000000, art: trailing);
-        Reject(malformed, AreaErrorCode.UnsupportedPhysicalSelection);
+        using var tailed = Make(0x40000000, art: trailing);
+        var visual = tailed.Owner.LoadStrict().Visuals.Single(v => v.Key.Kind == AreaSourceKind.Static);
+        Assert.AreEqual(("original-art-extent-v1", Art().Length), (visual.Policy, visual.ViewLength));
     }
 
     [TestMethod]
@@ -82,13 +86,15 @@ public sealed class AreaResourceBoundaryTests
                 Reject(duplicate, AreaErrorCode.AmbiguousSource);
             }
         }
-        // Packed facing1 aliases physical7 by the source rule, not modulo.
-        using var wrongGroup = Make(0x20000800, resourceName: cases[1].Path, allMappings: true);
-        Reject(wrongGroup, AreaErrorCode.UnsupportedPhysicalSelection);
+        // Packed facing 1 asks group 7 by the source rule (mirrored), not modulo; a single-rotation ART has only group 0
+        // (ARC-DATA-036: the original's rule on every plan).
+        using var rotated = Make(0x20000800, resourceName: cases[1].Path, allMappings: true);
+        var alias = rotated.Owner.LoadStrict().Visuals.Single(v => v.Key.Kind == AreaSourceKind.Static);
+        Assert.AreEqual((7, 0, true, "original-single-group-rotation-v1"), (alias.SourceGroup, alias.PhysicalGroup, alias.Mirrored, alias.Policy));
     }
 
     [TestMethod]
-    public void Mapping_bound_source_wins_only_for_its_explicit_role_and_pixels_keep_transparency_row_order()
+    public void A_name_held_by_both_base_archives_is_ambiguous_and_pixels_keep_transparency_row_order()
     {
         var art = new byte[1188]; Art().CopyTo(art, 0);
         BinaryPrimitives.WriteInt32LittleEndian(art.AsSpan(1160), 2); // height2
@@ -96,9 +102,12 @@ public sealed class AreaResourceBoundaryTests
         BinaryPrimitives.WriteInt32LittleEndian(art.AsSpan(1176), -13);
         BinaryPrimitives.WriteInt32LittleEndian(art.AsSpan(1180), 17);
         art[1184] = 1; art[1185] = 0; art[1186] = 2; art[1187] = 1;
-        using var f = Make(0x40000000, art: art, secondResource: Dat(("art/scenery/fixture.art", Art())));
+        // ARC-DATA-036: a mapping's archive does not choose the ART; without a stack order a name both base archives hold is ambiguous.
+        using (var both = Make(0x40000000, art: art, secondResource: Dat(("art/scenery/fixture.art", Art()))))
+            Reject(both, AreaErrorCode.AmbiguousSource);
+        using var f = Make(0x40000000, art: art);
         var snapshot = f.Owner.LoadStrict(); var visual = snapshot.Visuals.Single(v => v.Key.Kind == AreaSourceKind.Static);
-        Assert.AreEqual(AreaSourceRole.Resource1, visual.Entry.Source.Role); // explicit scenery mapping, not global precedence
+        Assert.AreEqual(AreaSourceRole.Resource1, visual.Entry.Source.Role);
         Assert.AreEqual(-13, visual.ArtOffsetX); Assert.AreEqual(17, visual.ArtOffsetY);
         using var lease = f.Owner.AcquireSelectedFrame(snapshot, visual.Key);
         CollectionAssert.AreEqual(new byte[] { 1,2,3,255, 0,0,0,0, 4,5,6,255, 1,2,3,255 }, lease.CopyRgba());
@@ -111,7 +120,8 @@ public sealed class AreaResourceBoundaryTests
         {
             using var f = Make(0x40000000, flags: flags);
             var s = f.Owner.LoadStrict(); Assert.AreEqual(expected, s.Objects.Single().Disposition);
-            Assert.AreEqual(2, s.Visuals.Count); // body reference retained, even if source draw disposition refuses it
+            // A body the serialized state hides at T0 resolves no visual; an inventory-refused body keeps its reference.
+            Assert.AreEqual(expected == AreaDisposition.BodySuppressedBySerializedState ? 1 : 2, s.Visuals.Count);
         }
         using var layered = Make(0x40000000, flags: 32768);
         var report = layered.Owner.Inspect(); Assert.IsFalse(report.IsComplete);
@@ -175,7 +185,7 @@ public sealed class AreaResourceBoundaryTests
         BinaryPrimitives.WriteUInt32LittleEndian(prototype.AsSpan(68),raw); // 4-byte version + two24-byte IDs + type + three masks
         BinaryPrimitives.WriteInt32LittleEndian(prototype.AsSpan(119),flags); // literal slot18, with nullable fields represented by one byte
         var entries = new List<(string Name,byte[] Payload)> {
-            ("tile.mes",Encoding.ASCII.GetBytes("{0}{stone}{100}{stone}{200}{stone}{300}{stone}{400}{end}")),
+            ("tile.mes",Encoding.ASCII.GetBytes("{0}{stone/}{100}{stone/}{200}{stone/}{300}{stone/}{400}{end/}")),
             ("facade.mes",Encoding.ASCII.GetBytes("{0}{fixture}")), ("scenery.mes",Encoding.ASCII.GetBytes(mapping)) };
         if (allMappings) entries.AddRange(new (string,byte[])[] { ("item.mes",Encoding.ASCII.GetBytes("{0}{fixture.art}")),
             ("monster.mes",Encoding.ASCII.GetBytes("{0}{fixture}")), ("npc.mes",Encoding.ASCII.GetBytes("{0}{fixture}")) });

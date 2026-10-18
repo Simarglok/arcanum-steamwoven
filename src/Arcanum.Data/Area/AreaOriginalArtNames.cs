@@ -4,16 +4,13 @@ using Arcanum.Data.Terrain;
 
 namespace Arcanum.Data.Area;
 
-/// <summary>ARC-DATA-023: the original's art names on whole maps (rules N1-N7 of
+/// <summary>ARC-DATA-023: the original's art names (rules N1-N7 of
 /// docs/research/whole-map-art-gaps.md, ledger MA1-MA8). Critter, monster and unique NPC
 /// names are normalized and repaired with the missing-art masks, damaged walls take their
 /// damage letter, a tile id names its tile file, and a resolved name that no archive holds
 /// is drawn from <c>art/badart.art</c>.</summary>
 public sealed partial class AreaDataOwner
 {
-    /// <summary>A whole-map plan that reads ART as the original does. (<c>_plan.Original</c>
-    /// means a pinned Crash Site profile; those keep their own rules.)</summary>
-    private bool OriginalArtNames => _plan.UniversalRules && _plan.AllowArtTrailingBytes;
     internal const string BadArtPath = "art/badart.art";
     internal const string BadArtPolicy = "original-badart-v1";
     private const int CritterMasks = 10;
@@ -206,10 +203,10 @@ public sealed partial class AreaDataOwner
 
     /// <summary>The entry a resolved name selects, or <c>art/badart.art</c> when no resource
     /// archive holds the name (N4, MA5). Ambiguous names stay refused.</summary>
-    private (AreaEntryIdentity Entry, bool BadArt) ResolveOrBadArt(AreaInputKey? source, string path)
+    private (AreaEntryIdentity Entry, bool BadArt) ResolveOrBadArt(string path)
     {
-        try { return (source.HasValue ? Resolve(source.Value, path) : ClosedUnique(path), false); }
-        catch (AreaException error) when (OriginalArtNames && error.Issue.Code == AreaErrorCode.MissingSource)
+        try { return (Resolve(path), false); }
+        catch (AreaException error) when (error.Issue.Code == AreaErrorCode.MissingSource)
         {
             return (ClosedUnique(BadArtPath), true);
         }

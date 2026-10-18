@@ -92,17 +92,21 @@ from the critter rotation alias. The loader does not move hotspots: drawing
 a wall (hotspot adjustment for rotations 0, 1, 6, 7 and the flip) and wall edge
 blocking are the next ARC-WORLD-009 steps.
 
-**Exact exceptions.** Five aggregate bodies use pinned policies, each bound to the
-object, record, raw selector, ART entry identity and payload digest: four contained
-items whose ground ART has trailing bytes after its last frame
-(`arc-world-009-exact-art-view-v1`; one NUL for entry 919, the bytes `02 00` for
-entries 955 and 956) and one container whose single-rotation ART is selected with
-rotation 1 (`arc-world-009-exact-single-group-alias-v1`). Any other mismatch fails.
+**ART rules.** Since ARC-DATA-036 the cave profile is built by the rules of every plan
+([one rule set](whole-map-plans.md#one-rule-set-arc-data-036)); its former pinned
+exceptions are those rules: four contained items whose ground ART has trailing bytes
+after its last frame (one NUL for entry 919, the bytes `02 00` for entries 955 and 956)
+are read from the ART's own extent (`original-art-extent-v1`), and one container whose
+single-rotation ART is selected with rotation 1 is drawn from group 0
+(`original-single-group-rotation-v1`). The cave profile equals the cave's whole-map plan
+in every visual (opt-in test).
 
-**Endpoint.** The snapshot publishes one endpoint: cave sector 2080374816 index 99,
-prototype 4047, use slot 1, script 1532 → catalogue 5000 / runtime 1, arrival
-(92913,82598). The exterior snapshot keeps its endpoint into the cave. Neither is
-executed by Data.
+**Endpoint.** The snapshot publishes the profile's expected endpoint after the owner checks
+it against the cave's objects (present static core object, id, prototype and use script):
+cave sector 2080374816 index 99, prototype 4047, use slot 1, script 1532 → catalogue 5000 /
+runtime 1, arrival (92913,82598). The exterior snapshot keeps its endpoint into the cave.
+Both are the one use transition the maps' transition data give in each core (ARC-DATA-036,
+opt-in test). Neither is executed by Data.
 
 ## API and explicit sources
 
@@ -193,14 +197,15 @@ Appearance resolution covers the admitted tile/facade and class4/7 scenery/conta
 class6 ground-item, class2/12/13 NPC and, where a plan binds both wall tables, class1
 wall source rules (see the cave profile). Object types 2, 3, 5–9, 13, 14 and 16 are
 admitted bodies, plus type 0 under the same wall condition; ammo (type 6) was added
-with the cave, which carries two. The original profile has two
-**exact-identity-only** exceptions: four specific item records use an authenticated
-1,418-byte ART view of a 1,419-byte entry, and one specific unique NPC aliases its
-nominal facing5 to physical group0 in an authenticated single-group entry. Raw
-selectors, full payload identity, view length and policy remain in descriptors.
-Neither exception is generic trimming, modulo/clamping or permission to repair a
-structural plan. Missing/ambiguous sources and unsupported state/physical selection
-remain failures. Palette fallback is the existing decoder's explicit present-slot
+with the cave, which carries two. Since ARC-DATA-036 the profile has no exceptions of
+its own: it is built by the rules of every plan ([one rule set](whole-map-plans.md#one-rule-set-arc-data-036)).
+Four item records whose ART entry (1,419 bytes) ends with one NUL after its last frame
+are read from the ART's 1,418-byte extent (`original-art-extent-v1`), and one unique NPC
+asking its single-rotation ART for facing 5 is drawn from group 0
+(`original-single-group-rotation-v1`), as before under pinned per-object policies; the
+independent oracle still matches every entry, view and pixel. Raw selectors, full
+payload identity, view length and policy remain in descriptors. Missing/ambiguous
+sources and unsupported state/physical selection remain failures. Palette fallback is the existing decoder's explicit present-slot
 policy, exposed as requested and effective palette, not arbitrary asset fallback.
 
 `AreaVisualRecord` retains group/frame/palette, mirroring, signed hotspot/ART/object

@@ -3,6 +3,8 @@ namespace Arcanum.Data.Area;
 // ARC-WORLD-009: pinned original profile of the Crash Site cave, catalogue map 5078
 // (runtime 79), from docs/research/cave-transition-evidence.md. Safe numeric
 // identities only; no original payload, logical names or pixel corpus is embedded.
+// ARC-DATA-036: the profile names its inputs and its expected outputs only; the owner builds it by the rules of every
+// plan, and Check asserts that they reproduce the outputs.
 internal static class CaveProfile
 {
     internal const int CatalogueMap = 5078;
@@ -69,7 +71,11 @@ internal static class CaveProfile
             Map(AreaMappingRole.WallStructure, AreaSourceRole.Resource2, 7420, 1300, 3402, 81663721, "aef55e332c0b73e1844f6667aa5c0a23610efd223ec95c8e36e58d32e69697d6", "5128adf3e7acbb8d5f1a44d811acdd47a0cc400c003e3cb2409da822310cf8e1"),
             Map(AreaMappingRole.WallName, AreaSourceRole.Resource2, 8354, 466, 910, 87012024, "cd4bae5237d96bba39d8aae531959f39e946d30653169e6b4f2c943e2f6d45bd", "79f2b405885e431ccffedcba7fe36ffaffbf860a0302b7f1495ae402e3621e8b"),
         };
-        return new(CatalogueMap, RuntimeMap, new(32, 31), 141, "maps/Crash Site Cave", identities, mappings) { OriginalMap = OriginalAreaMap.CrashSiteCave };
+        return new(CatalogueMap, RuntimeMap, new(32, 31), 141, "maps/Crash Site Cave", identities, mappings)
+        {
+            OriginalMap = OriginalAreaMap.CrashSiteCave, ResourceOrder = [new(new(AreaSourceRole.Resource2)), new(new(AreaSourceRole.Resource1))],
+            Endpoints = Endpoints,
+        };
     }
 
     internal static readonly AreaReconciliation ExpectedCounts = new(1, 1, 0, 8, 4096, 0, 138, 39, 39, 0, 0, 0, 39, 30, 194);
@@ -86,58 +92,9 @@ internal static class CaveProfile
             throw new AreaException(new(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Publication));
     }
 
-    // Exact exceptions, each pinned to the object, record, raw selector and full ART entry:
-    // four contained items whose ground ART carries trailing bytes after its last frame
-    // (one NUL for entry 919, the rule the exterior profile pins for it; the pair 02 00 for
-    // entries 955 and 956), viewed without them; and one container whose single-rotation
-    // ART is selected with a nonzero rotation (read as its only group).
-    private static readonly IReadOnlyDictionary<int, (uint Raw, string Object, string Record, int Ordinal, uint Stored, uint Decoded, uint Offset, string Name, string Sha, string Tail, string View)> TrailingBytes =
-        new Dictionary<int, (uint, string, string, int, uint, uint, uint, string, string, string, string)>
-        {
-            [0] = (0x60400009, "dad248354d3256ca38916ac22a953f5dd16193e2795383aa41f5ad3ec7131e27", "df40e5387eeb7f55fe2cafb6954ace97b124f53415ed76d7032ed8b5feeabf2c",
-                919, 823, 1419, 43648541, "59fb803cb2d98c6c3189e3ca0be8f4273170ac25c0a959b76b11e865d46b970e", "4369ed7b46e639a737d35a81fa42113172269207f73842e3f2ab11e7a96b10b5", "00", "4be70c355faf34b02c6dc23e9f54eab8f7c65f4c795af0aebbca4dc02c76183d"),
-            [5] = (0x60ca0009, "fc48f8291e96149a438695cae7aaa36939aabd9002c4d64dcfb18939413bfa2d", "002a802ffc3ef1bc5558a314cb49f6285fac74b378afc8c7299350e7dc9f7d1b",
-                956, 504, 1298, 43693671, "07459d6d81fa68323c7ec5052accacd53ae5775d9da03d61f543b0074efb7e43", "b5e11cea3f266f277ed8027269cf53ea57ad3454b8274d396281d56f6e921322", "0200", "458b2a35607a4a5e9e7f867adc999f68b97b75b6c73366da9b387b56204f7e23"),
-            [9] = (0x60ca0009, "04493b058cfc8899bbede3d0d421991dcdc1acd44ddab20e9c5d7df4dc9bdf0c", "e3cf54b7039bef9ceaf09f672ce17e5c91a613c1cc8037c3f7496088b6594e6e",
-                956, 504, 1298, 43693671, "07459d6d81fa68323c7ec5052accacd53ae5775d9da03d61f543b0074efb7e43", "b5e11cea3f266f277ed8027269cf53ea57ad3454b8274d396281d56f6e921322", "0200", "458b2a35607a4a5e9e7f867adc999f68b97b75b6c73366da9b387b56204f7e23"),
-            [16] = (0x606a0004, "7c77d44b6fbb839225febebe16e8bde05b597dbc6209fb11a4f7715cedcc3123", "7502809b908bac103cce04bba3d7afcff919114c2693dd44d50fa460b1a81065",
-                955, 571, 1316, 43693100, "a081ccd560a9b446f33883af0193cd47071c6fcd6b27892ca6f6f007802432cb", "c98b350f9d5e74e24391926a1c172bff8a515fab40d4f51b2915c0d36e4ec316", "0200", "a1f70f2fb7f07365808eb09a5c70f01a9351a97a13edb51022ffdb514425def3"),
-        };
-
-    internal static (string Policy, int View, int Group) SelectionPolicy(AreaVisualKey key, uint raw, AreaEntryIdentity entry, byte[] bytes,
-        Objects.ObjectWireRecord record, int nominal, int group, int frame, int palette)
-    {
-        if (key.Kind != AreaSourceKind.Mobile || key.Layer != AreaLayerKind.Body || key.Sector.SourceSha256 != NormalGameMobileSha256)
-            return ("strict-full-entry", bytes.Length, group);
-        var sha = Objects.ObjectWireReader.Hash(bytes);
-        if (TrailingBytes.TryGetValue(key.SourceIndex, out var pin) && key.ObjectIdSha256 == pin.Object)
-        {
-            if (record.Sha256 != pin.Record || raw != pin.Raw || entry.Source.Role != AreaSourceRole.Resource2 || entry.Ordinal != pin.Ordinal || entry.Flags != 2 ||
-                entry.StoredBytes != pin.Stored || entry.DecodedBytes != pin.Decoded || entry.Offset != pin.Offset || entry.NameSha256 != pin.Name ||
-                sha != pin.Sha || bytes.Length != pin.Decoded || nominal != 0 || group != 0 || frame != 0 || palette != 0)
-                throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Frame));
-            var view = bytes.Length - pin.Tail.Length / 2;
-            if (Convert.ToHexString(bytes.AsSpan(view)).ToLowerInvariant() != pin.Tail || Objects.ObjectWireReader.Hash(bytes.AsSpan(0, view)) != pin.View)
-                throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Frame));
-            return ("arc-world-009-exact-art-view-v1", view, 0);
-        }
-        if (key.SourceIndex == 15 && key.ObjectIdSha256 == "01ad8798be58cfdc63c11670968b24e52230e728544285bd00f0dd3ae776f9fd")
-        {
-            if (record.Sha256 != "7731877218f9828782b9ad1add2876fcd52a45ad5993d990b92f62ad7606293a" || raw != 0x40a80b40 || entry.Source.Role != AreaSourceRole.Resource2 ||
-                entry.Ordinal != 2816 || entry.Flags != 2 || entry.StoredBytes != 2885 || entry.DecodedBytes != 3122 || entry.Offset != 55379562 ||
-                entry.NameSha256 != "2e6008afc41b62cef615fb868d38e642f59bf6d45060c35b4f80bdaca924838e" || sha != "3a8646d7fdb67b529f81a7cbd9b0b2644dc6367ca6025425521fb99b36c96d8f" ||
-                nominal != 1 || group != 1 || frame != 0 || palette != 0 || (System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes) & 1) != 1)
-                throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Frame));
-            return ("arc-world-009-exact-single-group-alias-v1", bytes.Length, 0);
-        }
-        return ("strict-full-entry", bytes.Length, group);
-    }
-
-    internal static IReadOnlyList<AreaEndpoint> Endpoints(IEnumerable<AreaObjectRecord> objects)
-    {
-        var exit = objects.Single(o => o.Key.Kind == AreaSourceKind.Static && o.Key.Sector == Sector && o.Key.SourceIndex == 99);
-        if (exit.Key.ObjectIdSha256 != "9d908ecfb6b256def8b49a7c504e6c889c4b0e41fe6ce3e01863dd7b61a20aa0" || exit.PrototypeNumber != 4047 || exit.WorldX != 2093 || exit.WorldY != 2019)
-            throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Appearance));
-        return [new(Sector, 99, 4047, 1, 1532, 5000, 1, 92913, 82598, exit.Key.ObjectIdSha256)];
-    }
+    /// <summary>The expected use-click transition: the cave exit (ordinal 99 of the cave sector, prototype 4047), whose use
+    /// script 1532 teleports to the main map (catalogue 5000, runtime 1) at (92913, 82598). ARC-DATA-036: the map's
+    /// transition data give exactly this one (opt-in test).</summary>
+    internal static readonly IReadOnlyList<AreaEndpoint> Endpoints =
+        [new(Sector, 99, 4047, AreaEndpoints.UseSap, 1532, 5000, 1, 92913, 82598, "9d908ecfb6b256def8b49a7c504e6c889c4b0e41fe6ce3e01863dd7b61a20aa0")];
 }

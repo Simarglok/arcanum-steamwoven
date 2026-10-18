@@ -79,10 +79,8 @@ public sealed partial class AreaDataOwner : IDisposable
                         .SetEquals(plan.Identities.Where(i => i.Key.Role == AreaSourceRole.TerrainTemplate).Select(i => i.Key))) ||
                 plan.Window is null && plan.Identities.Any(i => i.Key.Role == AreaSourceRole.TerrainTemplate))
                 throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
-            // A stack order is the whole resource search: every archive or loose input is in it,
-            // and a pinned profile keeps its own archive rule.
-            if (plan.Original && plan.ResourceOrder.Count > 0 ||
-                plan.Identities.Any(i => i.Key.Role is AreaSourceRole.Archive or AreaSourceRole.Loose && !plan.ResourceOrder.Any(s => s.Key == i.Key)))
+            // A stack order is the whole resource search: every archive or loose input is in it.
+            if (plan.Identities.Any(i => i.Key.Role is AreaSourceRole.Archive or AreaSourceRole.Loose && !plan.ResourceOrder.Any(s => s.Key == i.Key)))
                 throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
             budget.Retain(checked(65536 + inputs.Inputs.Count * 1024L));
             owner = new AreaDataOwner(inputs, plan, limits, budget);
@@ -190,7 +188,7 @@ public sealed partial class AreaDataOwner : IDisposable
                 else AuthenticateAll(cancellationToken);
                 BeginEntryMemo();
                 AreaInspection inspection;
-                _sharedFrames = _plan.UniversalRules ? new() : null;
+                _sharedFrames = new();
                 try { inspection = Build(cancellationToken, output); }
                 finally { _missingMasks = null; _artHolders = null; _objectTiles = null; _sharedFrames = null; } // build-local (ARC-DATA-023/024)
                 EndEntryMemo();
@@ -285,11 +283,9 @@ public sealed partial class AreaDataOwner : IDisposable
             foreach (var input in _inputs.Inputs) if (!input.LeaveOpen) input.Stream.Dispose();
         }
     }
-    /// <summary>Largest archive entry (sector, mapping or ART) the owner reads: 16 MiB for whole-map
-    /// plans with the original's ART rules, whose maps hold larger ART (ARC-DATA-019); 1 MiB
-    /// otherwise, so pinned profiles are unchanged.</summary>
-    internal static long EntryCap(AreaSourcePlan plan) =>
-        plan.UniversalRules && plan.AllowArtTrailingBytes ? 16L * 1048576 : 1048576;
+    /// <summary>Largest archive entry (sector, mapping or ART) the owner reads: 16 MiB, as whole maps hold larger
+    /// ART (ARC-DATA-019); one rule for every plan (ARC-DATA-036).</summary>
+    internal static long EntryCap(AreaSourcePlan plan) => 16L * 1048576;
     private void Alive() { if (_disposed) throw new ObjectDisposedException(nameof(AreaDataOwner)); }
     private static AreaException Fail(AreaErrorCode code, AreaStage stage, long? offset = null, int? index = null) => new(new(code, stage, offset, index));
     private AreaInputIdentity Identity(AreaInputKey key) => _plan.Identities.SingleOrDefault(i => i.Key == key) ?? throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);

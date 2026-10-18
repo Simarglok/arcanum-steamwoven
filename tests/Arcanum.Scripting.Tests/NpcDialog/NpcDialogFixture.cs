@@ -25,7 +25,7 @@ internal sealed class NpcDialogFixture : IDisposable
         var npc = record ?? Record(inherit ? null : instanceSap ?? Sap((9, 71)), parentPadding: true);
         var proto = prototype ?? Prototype(prototypeSap ?? Sap((9, 82)));
         var module = Dat(("maps/test/67108865.sec", Sector()), ("maps/test/67108866.sec", duplicateNpc ? Sector(npc, npc) : Sector(npc)));
-        var resource = Dat(("tile.mes", Encoding.ASCII.GetBytes("{0}{stone}{100}{stone}{200}{stone}{300}{stone}{400}{end}")),
+        var resource = Dat(("tile.mes", Encoding.ASCII.GetBytes("{0}{stone/}{100}{stone/}{200}{stone/}{300}{stone/}{400}{end/}")),
             ("facade.mes", "{0}{fixture}"u8.ToArray()), ("scenery.mes", "{0}{fixture.art}"u8.ToArray()), ("art/tile/stonebse0a.art", Art()));
         var files = new[] { (Key: new AreaInputKey(AreaSourceRole.Module), Bytes: module), (Key: new AreaInputKey(AreaSourceRole.Resource1), Bytes: resource), (Key: new AreaInputKey(AreaSourceRole.Prototype, 7001), Bytes: proto) };
         var inputs = files.Select(f => new AreaInput(f.Key, Stream(f.Bytes), leaveOpen: true)).ToArray();

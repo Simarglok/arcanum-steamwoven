@@ -193,8 +193,9 @@ ARC-DATA-024 (all 80); ARC-RENDER-019 made the viewer load K'na Tha in about 17 
 instead of about 3 minutes.
 
 1. **ARC-DATA-023 — original art names on whole maps.** In whole-map plans that
-   read ART as the original does (`AllSectors` with `AllowArtTrailingBytes`; in the
-   code `_plan.Original` means the pinned profiles instead): the full N1 normalization for classes 2, 12 and 13 (every
+   read ART as the original does (`AllSectors` with `AllowArtTrailingBytes` then; in the
+   code `_plan.Original` meant the pinned profiles instead; since ARC-DATA-036 every plan
+   follows these rules and the flag is gone): the full N1 normalization for classes 2, 12 and 13 (every
    animation, the weapon/shield rules), N2 from `art/missing.dat` with N3's header
    check (the pinned profiles already read it, as a fixed 332-byte file with header
    4,601 that refuses bit 8; whole-map plans already bind the mapping) (masks rebuilt from the content index when the header does not match),

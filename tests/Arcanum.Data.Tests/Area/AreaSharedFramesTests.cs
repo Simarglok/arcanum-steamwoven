@@ -13,7 +13,7 @@ public sealed class AreaSharedFramesTests
     private const long Start = 67108865;
 
     [TestMethod]
-    public void A_whole_map_decodes_one_frame_for_objects_with_the_same_selection()
+    public void Every_plan_decodes_one_frame_for_objects_with_the_same_selection()
     {
         var records = new[] { Record(Id(2, 11), location: 1), Record(Id(2, 12), location: 2), Record(Id(2, 13), location: 3) };
         int Requests(AreaSectorSelection selection, out AreaSnapshot snapshot)
@@ -27,14 +27,14 @@ public sealed class AreaSharedFramesTests
             snapshot = report.Snapshot!;
             return checked((int)report.Usage.FrameRequests);
         }
-        // One terrain selection plus one object selection, against one terrain plus three objects.
+        // One terrain selection plus one object selection for three objects; ARC-DATA-036: a townmap-component plan too.
         Assert.AreEqual(2, Requests(AreaSectorSelection.AllSectors, out var whole));
-        Assert.AreEqual(4, Requests(AreaSectorSelection.TownmapComponent, out var townmap));
+        Assert.AreEqual(2, Requests(AreaSectorSelection.TownmapComponent, out var townmap));
         var bodies = whole.Visuals.Where(v => v.Key.Object is not null).ToArray();
         Assert.AreEqual(3, bodies.Length);
         Assert.AreEqual(3, bodies.Select(v => v.Key).Distinct().Count());
         Assert.AreEqual(1, bodies.Select(v => (v.RgbaSha256, v.Width, v.Height, v.HotX, v.HotY, v.PayloadSha256)).Distinct().Count());
-        // The shared facts equal what a per-visual decode gives.
+        // Both plans give the same frame facts.
         var single = townmap.Visuals.First(v => v.Key.Object is not null);
         Assert.AreEqual((single.RgbaSha256, single.EncodedBytes, single.RgbaBytes, single.EffectivePalette), (bodies[0].RgbaSha256, bodies[0].EncodedBytes, bodies[0].RgbaBytes, bodies[0].EffectivePalette));
     }
@@ -47,7 +47,7 @@ public sealed class AreaSharedFramesTests
         foreach (var (aid, requests) in new[] { (0x40000000u, 2), (0x40000000u | (2u << 11), 3), (0x40000010u, 3) })
         {
             var records = new[] { Record(Id(2, 11), location: 1), Record(Id(2, 12), location: 2, parent: Id(1, 7002)) };
-            using var f = new Fixture([(Start, records)], extraPrototype: Prototype7002(aid, ox: 7, oy: -3, scale: 50), selection: AreaSectorSelection.AllSectors, allowArtTrailingBytes: true,
+            using var f = new Fixture([(Start, records)], extraPrototype: Prototype7002(aid, ox: 7, oy: -3, scale: 50), selection: AreaSectorSelection.AllSectors,
                 resourceEntries: WholeMapResources);
             var report = f.Owner.Inspect();
             Assert.IsTrue(report.IsComplete, string.Join("; ", report.Issues));

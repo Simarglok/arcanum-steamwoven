@@ -149,6 +149,27 @@ public sealed class MapTransitionsTests
     }
 
     [TestMethod]
+    public void Area_endpoints_are_the_unconditional_use_sites_of_static_objects_in_the_core()
+    {
+        // ARC-DATA-036 (AreaEndpoints.FromTransitions): a placed object's use site in a core sector is an endpoint; a mobile's
+        // use site, tile and sector entries, a conditional use site and a sector outside the core are not.
+        Maps();
+        Script(10, Lines((Always, Teleport(0, 5001, 7, 8), Nothing)));
+        Script(11, Lines((Clause.Of(43, N(5)), Teleport(0, 5001, 7, 8), Nothing)));
+        Write("maps/alpha/67108865.sec", Sector([(65 + 64 * 3, 10)], 10, Scenery(41, 5, 6, 0, 10), Scenery(42, 7, 6, 0, 11)));
+        Write("maps/alpha/0.sec", Sector([], null, Scenery(43, 5, 6, 0, 10)));
+        Write($"maps/{WorldCatalog.AggregateName("alpha")}", [.. new byte[16], .. Scenery(31, 100, 200, 0, 10)]);
+        var set = Read("alpha");
+        Assert.AreEqual(0, set.Issues.Count, string.Join("; ", set.Issues));
+        var placed = set.Sites.Single(s => s.Trigger == MapTransitionTrigger.Use && s.Object!.Sector == new WorldSectorCoordinate(1, 1) && s.Unconditional);
+        var endpoints = Arcanum.Data.Area.AreaEndpoints.FromTransitions(set, sector => sector == new Arcanum.Data.Area.AreaSectorCoordinate(1, 1));
+        Assert.AreEqual(new Arcanum.Data.Area.AreaEndpoint(new WorldSectorCoordinate(1, 1).Id, 0, 7001, Arcanum.Data.Area.AreaEndpoints.UseSap, 10, 5001, 2, 7, 8,
+            placed.Object!.OwnIdSha256), endpoints.Single());
+        Assert.AreEqual(2, Arcanum.Data.Area.AreaEndpoints.FromTransitions(set, _ => true).Count);
+        Assert.AreEqual(0, Arcanum.Data.Area.AreaEndpoints.FromTransitions(set, _ => false).Count);
+    }
+
+    [TestMethod]
     public void An_unlisted_map_and_an_unlisted_destination_are_marked()
     {
         Maps();

@@ -232,6 +232,25 @@ class AreaMetadataTests(unittest.TestCase):
         self.refuse(lambda r:r['Visuals'][3].update(RgbaSha256='f'*64),'selected pixels/geometry')
         self.refuse(lambda r:r['Visuals'][0].update(PhysicalGroup=1),'selected request identity')
 
+    def test_oracle_profile_policies_are_the_general_art_rules(self):
+        # ARC-DATA-036: the oracle's per-object labels name the general rules the owner applies to every plan.
+        self.assertEqual(area.oracle_policy('arc-data-009-exact-art-view-v1'),'original-art-extent-v1')
+        self.assertEqual(area.oracle_policy('arc-data-009-exact-single-group-alias-v1'),'original-single-group-rotation-v1')
+        self.assertEqual(area.oracle_policy('strict-full-entry'),'strict-full-entry')
+        key=self.report['Visuals'][3]['Key']
+        name=f"static:{key['Sector']['Packed']}:{key['SourceIndex']}" if key['Kind']==1 else f"mobile:{key['SourceIndex']}"
+        oracle=deepcopy(self.oracle)
+        next(r for r in oracle['requests'] if r['key']==name)['policy']='arc-data-009-exact-art-view-v1'
+        for label,accepted in (('original-art-extent-v1',True),('arc-data-009-exact-art-view-v1',False),('strict-full-entry',False)):
+            report=deepcopy(self.report);report['Visuals'][3]['Policy']=label
+            for command in report['Commands']:
+                if command['Visual']==key: command['Frame']['Policy']=label
+            with self.subTest(label=label):
+                if accepted: area._compare_metadata(report,oracle,expected_reconciliation=self.counts)
+                else:
+                    with self.assertRaisesRegex(ValueError,'^selected view policy$'):
+                        area._compare_metadata(report,oracle,expected_reconciliation=self.counts)
+
     def test_full_inputs_and_object_fields_through_same_metadata_stage(self):
         self.refuse(lambda r:r['Inputs'][0].update(Sha256='b'*64),'input identity set')
         self.refuse(lambda r:r['Objects'][0]['EffectiveFields'][2].update(Number=-2),'object field value')

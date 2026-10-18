@@ -377,7 +377,7 @@ public sealed class AreaStackOrderTests
                 return new AreaMappingBinding(role, new(new(AreaSourceRole.Resource1), i, 1, e.StoredSize, e.DeclaredOutputSize, e.Offset, Hash(e.RawNameBytes.ToArray())), Hash(archive.ReadEntry(e)));
             }).ToArray();
             var plan = new AreaSourcePlan(1, 1, new(1, 1), 2, "maps/test", files.Select(f => new AreaInputIdentity(f.Key, f.Bytes.Length, Hash(f.Bytes))), mappings)
-            { Selection = AreaSectorSelection.AllSectors, AllowArtTrailingBytes = true, ResourceOrder = order, MapPatch = mapPatch };
+            { Selection = AreaSectorSelection.AllSectors, ResourceOrder = order, MapPatch = mapPatch };
             Owner = AreaDataOwner.Open(new(files.Select(f => new AreaInput(f.Key, new MemoryStream(f.Bytes)))), plan, new() { MaxResourceInputs = maxResources });
         }
         internal AreaDataOwner Owner { get; }

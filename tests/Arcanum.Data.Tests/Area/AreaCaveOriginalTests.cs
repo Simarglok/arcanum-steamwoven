@@ -16,7 +16,7 @@ public sealed class AreaCaveOriginalTests
         Assert.AreEqual(new AreaSectorCoordinate(32, 31), plan.Start); Assert.AreEqual(141, plan.Townmap);
         Assert.AreEqual("arc-world-009-cave-file-effective-source-v1", plan.Profile);
         Assert.AreEqual(4 + CaveProfile.Prototypes.Count, plan.Identities.Count);
-        // Exactly the ten roles of the pinned profile; the portal names (ARC-DATA-020) are bound only by whole-map plans.
+        // Exactly the ten roles of the pinned profile; the portal names (ARC-DATA-020) are bound only by catalogue plans.
         CollectionAssert.AreEquivalent(new[] { AreaMappingRole.Tile, AreaMappingRole.Facade, AreaMappingRole.Scenery, AreaMappingRole.Container, AreaMappingRole.ItemGround,
             AreaMappingRole.MonsterNames, AreaMappingRole.UniqueNpcNames, AreaMappingRole.MissingPolicy, AreaMappingRole.WallStructure, AreaMappingRole.WallName },
             plan.Mappings.Select(m => m.Role).ToArray());
@@ -51,9 +51,15 @@ public sealed class AreaCaveOriginalTests
         Assert.IsTrue(walls.All(v => v.PhysicalGroup == 0 && v.Frame == 0 && v.Policy == "strict-full-entry" &&
             v.NominalFacing == (int)((v.RawArt >> 11) & 7) && v.Mirrored == ((v.RawArt & 1) != 0)));
         CollectionAssert.AreEquivalent(new[] { 1, 3, 5, 7 }, walls.Select(v => v.NominalFacing).Distinct().ToArray());
-        // The two exception kinds are each pinned to exact objects.
-        Assert.AreEqual(4, snapshot.Visuals.Count(v => v.Policy == "arc-world-009-exact-art-view-v1"));
-        Assert.AreEqual(1, snapshot.Visuals.Count(v => v.Policy == "arc-world-009-exact-single-group-alias-v1"));
+        // ARC-DATA-036: the general ART rules give the profile's former exceptions. Four contained items whose ground ART
+        // carries bytes after its last frame (one NUL for entry 919, the pair 02 00 for entries 955 and 956) are read
+        // from the ART's own extent, and one container asks a single-rotation ART for rotation 1 (read as its only group).
+        var extents = snapshot.Visuals.Where(v => v.Policy == "original-art-extent-v1").ToArray();
+        CollectionAssert.AreEquivalent(new[] { (0, 919, 1418), (5, 956, 1296), (9, 956, 1296), (16, 955, 1314) },
+            extents.Select(v => (v.Key.SourceIndex, v.Entry.Ordinal, v.ViewLength)).ToArray());
+        Assert.IsTrue(extents.All(v => v.Key.Kind == AreaSourceKind.Mobile && v.PhysicalGroup == 0));
+        var single = snapshot.Visuals.Single(v => v.Policy == "original-single-group-rotation-v1");
+        Assert.AreEqual((AreaSourceKind.Mobile, 15, 2816, 1, 0, 3122), (single.Key.Kind, single.Key.SourceIndex, single.Entry.Ordinal, single.SourceGroup, single.PhysicalGroup, single.ViewLength));
         Assert.AreEqual(snapshot.Visuals.Count - 5, snapshot.Visuals.Count(v => v.Policy == "strict-full-entry"));
 
         var firstJson = JsonSerializer.Serialize(snapshot);
