@@ -64,6 +64,7 @@ after each level written and returns the unspent points left.
 | `GameSessionDescriptor.AutoLevel`, `GameSessionRestoreOptions.AutoLevel` | `SessionAutoLevelRules.Create(schemes, spell willpower)`: the parsed rules by number (1..199) and the 80 willpower minima; data, never saved. Without it no scheme runs. |
 | `SessionHeroDefinition.Advancement`, `SessionHeroState.Advancement` | The hero's skill fields, colleges, degrees, bought hit and fatigue points (0..100) and scheme (0..199); a pre-made hero starts with none bought and its prototype's scheme. |
 | `Create` | With scheme data, a new hero's scheme runs once over its starting points (AL11) with its innate effects only. |
+| Pool bound | The hero holds at most `SessionAdvancementLimits.MaxHeroPoolPoints` (100) bought hit and fatigue points each, so the effect bounds of its maxima hold; a scheme run (at creation or for one level) that would go past it buys nothing and leaves that level's points unspent. A project guard: a pre-made hero buys at most 64 points in all. |
 | Experience awards (`AwardHeroExperience`, `AwardQuestExperience`, `SetQuestState`, hits and kills) | The hero's scheme spends each level's points as the level is written (AL12), with its effects' changes and poison; the award's `Purchases` lists what it bought (null when nothing). A level raises the maxima by the bought points too. |
 | `LevelFollower(expected, loaded, modifiers, step)` | For one follower or waiting follower after an award's `Followers` step: its level and points ([experience](experience-runtime.md), XP7), then its scheme and rule 70 (AL1). `loaded` is the NPC's map data, read only while the session has no record of it. A level that does not rise is `NoChange`. Refused, in order: no scheme data (`AdvancementUnavailable`), an invalid entity, sheet, scheme, modifiers or step (`InvalidAdvancement`), the version, a new record over `GameSessionLimits.MaxAdvancementRecords` (256, `BudgetExceeded`), the revision. One revision. |
 | `QueryNpcAdvancement(entity)`, `AutoLevel` | The NPC's saved record (null until levelled) and the session's scheme data. |
@@ -82,7 +83,8 @@ With `--hero` the AREA viewer reads `gamelevel.mes`, `userlevel.mes` and `spelll
 (`AreaAdvancement.Rules`) and the module's `gameeffect.mes` effect rules, so the hero's scheme spends its starting points and
 each level's. After every award (a dialog's quest completion, a hit or a kill) the followers and the waiting NPCs on the
 current map follow the hero's level step (`AreaAdvancement.LevelFollowers`) from their stored fields
-(`CombatFieldReader`; a follower that came along from another map is read from that map) and effects; the conversation reads a levelled follower's level from the session. The smoke log prints
+(`CombatFieldReader`, from the map whose objects hold the NPC; a waiting NPC counts while the session places it on the
+current map) and effects; the conversation reads a levelled follower's level from the session. The smoke log prints
 `ARC-WORLD-036 follower-level`.
 
 ## Tests
@@ -103,6 +105,11 @@ current map follow the hero's level step (`AreaAdvancement.LevelFollowers`) from
 - The scheme choice (the character screen's auto-level selection) and point purchases by the player; the Educator
   background; the level-up message.
 - Waiting followers "nearby" are the ones on the current map; a waiting follower on another map does not follow the level
-  step (the source's distance test is not modelled).
+  step (the source's distance test is not modelled). An NPC whose home map the viewer has not loaded (map mode covers one
+  map) is skipped, even when the session already holds its record.
+- The hero's purchases read the skill and maxima changes of its durable effects; the race and gender effects' skill changes
+  are dropped when the hero is built (`DroppedChanges`, [starting hero](starting-hero-runtime.md)), so they do not reach the
+  skill levels a scheme compares.
+- Viewer: an award reached while the viewer has no combat host or effect rules (no `--hero`) levels no follower.
 - Script changes of a scheme (Virgil's script 2023 sets scheme 101) have no runtime.
 - Multiplayer and network branches (AL13) are out of scope.

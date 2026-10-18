@@ -9,8 +9,9 @@ namespace Arcanum.Session;
 /// <summary>Bounds of the advancement domain (ARC-WORLD-036; project policy, the source has none).</summary>
 public static class SessionAdvancementLimits
 {
-    /// <summary>The largest hit or fatigue points the hero holds: above what 50 levels of points can buy (about 65), low enough
-    /// that the effect bounds of the hero's maxima keep holding.</summary>
+    /// <summary>The largest hit or fatigue points the hero holds: above what a pre-made hero's points can buy (5 at the start and
+    /// 59 for levels 2..50), low enough that the effect bounds of the hero's maxima keep holding. A scheme run that would take the
+    /// hero past it buys nothing (a project guard; no installed hero comes near it).</summary>
     public const int MaxHeroPoolPoints = 100;
     /// <summary>The scheme numbers the source looks up (1..49 the user file, 50..199 the game file); 0 is none.</summary>
     public const int MaxScheme = 199;
@@ -123,6 +124,10 @@ internal sealed class AdvancementDomain(SessionAutoLevelRules? rules)
     internal SessionAdvancementState Capture() =>
         new(Npcs.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Value).ToArray());
 
+    /// <summary>A scheme run's sheet the hero may hold: its bought pools within <see cref="SessionAdvancementLimits.MaxHeroPoolPoints"/>.</summary>
+    internal static bool HeroBounded(AdvancementSheet sheet) =>
+        sheet.HitPointPoints <= SessionAdvancementLimits.MaxHeroPoolPoints && sheet.FatiguePoints <= SessionAdvancementLimits.MaxHeroPoolPoints;
+
     internal static bool Valid(SessionNpcAdvancement? npc) => npc is not null && SessionValidation.Entity(npc.Entity) &&
         AutoLevelRules.IsValid(npc.Sheet) && npc.AutoLevelScheme is >= 0 and <= SessionAdvancementLimits.MaxScheme;
 
@@ -211,14 +216,16 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// The hero's scheme at creation (0x4A6F00 runs it after the level's points): its purchases from the starting unspent
-    /// points, with only its innate effects. Null when there is no scheme data or no rule for the hero's scheme.
+    /// points, with only its innate effects. Null when there is no scheme data, no rule for the hero's scheme, or the run would
+    /// take the hero's bought pools past their bound.
     /// </summary>
     [Simulation.OriginalFunction(0x4A6F00, Simulation.OriginalFunctionScope.Partial)]
     internal static AutoLevelOutcome? CreationScheme(HeroDomain hero, SessionAutoLevelRules? rules)
     {
         if (rules?.Scheme(hero.State.Advancement.AutoLevelScheme) is not { } scheme) return null;
         var modifiers = AdvancementDomain.HeroModifiers(hero.Stats, new EffectDomain(), 0);
-        return AutoLevelRules.Apply(AdvancementDomain.HeroSheet(hero.State), modifiers, scheme, null, npc: false, rules.SpellWillpower);
+        var outcome = AutoLevelRules.Apply(AdvancementDomain.HeroSheet(hero.State), modifiers, scheme, null, npc: false, rules.SpellWillpower);
+        return AdvancementDomain.HeroBounded(outcome.Sheet) ? outcome : null;
     }
 
     // NPC records are valid, unique, in ordinal order and within the caller's budget.

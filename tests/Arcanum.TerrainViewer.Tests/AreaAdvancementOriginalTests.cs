@@ -63,6 +63,7 @@ public sealed class AreaAdvancementOriginalTests
         Assert.IsNotNull(input, "Virgil's sheet is admitted");
         var (loaded, modifiers) = input.Value;
         Assert.AreEqual(1, loaded.Sheet.Level);
+        Assert.AreEqual(91, loaded.AutoLevelScheme, "Virgil's scheme (ARC-RES-031)");
         Assert.IsTrue(modifiers.Stats.Length > 0, "his effects change stats");
 
         var created = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),

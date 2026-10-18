@@ -59,6 +59,23 @@ public sealed class AdvancementStateTests
     }
 
     [TestMethod]
+    public void ASchemeRunPastThePoolBoundBuysNothing()
+    {
+        var rules = SessionAutoLevelRules.Create(new Dictionary<int, AutoLevelScheme> { [63] = Scheme("maxhps 9999") }, AutoLevelRules.DefaultSpellWillpower);
+        var full = SessionHeroAdvancement.WithScheme(63) with { HitPointPoints = SessionAdvancementLimits.MaxHeroPoolPoints };
+        var result = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() with { Advancement = full }, Experience = ExperienceStateTests.Rules(), AutoLevel = rules });
+        using var owner = result.Owner!;
+        // The creation run would buy a 201st point: it buys nothing, the points stay, and the session restores what it saves.
+        Assert.AreEqual((SessionAdvancementLimits.MaxHeroPoolPoints, 5), (owner.QueryHero()!.Advancement.HitPointPoints, owner.QueryHero()!.UnspentPoints));
+        var award = owner.AwardHeroExperience(owner.Version, T(2));
+        Assert.AreEqual((GameSessionDisposition.Changed, (IReadOnlyList<AdvancementPurchase>?)null), (award.Disposition, award.Award!.Purchases));
+        Assert.AreEqual((SessionAdvancementLimits.MaxHeroPoolPoints, 6), (owner.QueryHero()!.Advancement.HitPointPoints, owner.QueryHero()!.UnspentPoints));
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text), RestoreOptions() with { AutoLevel = rules, Experience = ExperienceStateTests.Rules() });
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+    }
+
+    [TestMethod]
     public void EachLevelWrittenRunsTheSchemeWithThatLevel()
     {
         using var owner = Owner(61);

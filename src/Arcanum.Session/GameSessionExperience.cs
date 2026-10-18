@@ -263,6 +263,8 @@ public sealed partial class GameSessionOwner
             {
                 var outcome = AutoLevelRules.Apply(sheet with { Level = level, UnspentPoints = unspent }, modifiers, scheme, null, npc: false,
                     rules.SpellWillpower);
+                // A run past the pools' bound buys nothing; the level's points stay unspent.
+                if (!AdvancementDomain.HeroBounded(outcome.Sheet)) return unspent;
                 sheet = outcome.Sheet;
                 purchases.AddRange(outcome.Purchases);
                 return sheet.UnspentPoints;

@@ -117,6 +117,18 @@ public static class AreaAdvancement
         return raised.AsReadOnly();
     }
 
+    /// <summary>
+    /// Whether an NPC follows the hero's level step from where it stands: a follower always (it is with the hero), a waiting
+    /// one when it stands on <paramref name="currentMap"/> (<see cref="AreaCompanionPlacement.Where"/> from its home map).
+    /// </summary>
+    public static bool Nearby(GameSessionOwner session, string entity, int homeMap, int currentMap)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.QueryParty().Followers.Any(f => f.Entity == entity)) return true;
+        var where = AreaCompanionPlacement.Where(session, new(homeMap), entity);
+        return where.Error is null && where.Map.RuntimeMap == currentMap;
+    }
+
     /// <summary>The follower's level now: the session's record when it levelled it, else its stored level.</summary>
     public static int Level(GameSessionOwner session, string entity, int stored)
     {
@@ -132,7 +144,10 @@ public static class AreaAdvancement
         EffectChangeOperator.Add => StatModifierOperator.Add,
         EffectChangeOperator.Percent => StatModifierOperator.Percent,
         EffectChangeOperator.Minimum => StatModifierOperator.Minimum,
-        _ => StatModifierOperator.Maximum,
+        EffectChangeOperator.Maximum => StatModifierOperator.Maximum,
+        EffectChangeOperator.Multiply => StatModifierOperator.Multiply,
+        EffectChangeOperator.Divide => StatModifierOperator.Divide,
+        _ => throw new ArgumentOutOfRangeException(nameof(op)),
     };
 
     private static CharacterStat? Stat(int attribute) => attribute switch

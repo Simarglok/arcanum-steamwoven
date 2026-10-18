@@ -54,6 +54,25 @@ public sealed class AutoLevelRulesTests
     }
 
     [TestMethod]
+    public void ASkillLoopComparesTheLevelReadBeforeAKeyStatRaise()
+    {
+        // Melee +8 from an effect, capped at 7 by dexterity 8: one point keeps it at 7, the second is above the cap, so
+        // dexterity rises to 9; the loop still holds level 7 and buys the second point (ledger AL5). A re-read would stop at one.
+        var boosted = AdvancementModifiers.None with { BasicSkills = [new SkillModifier(2, StatModifierOperator.Add, 8)] };
+        var run = Run(Sheet(10), "melee 8", boosted);
+        Assert.AreEqual((2, 9, 7, true), (run.Sheet.BasicSkills[2] & AutoLevelRules.SkillPointMask, run.Sheet.Stats[1], run.Sheet.UnspentPoints,
+            run.Completed));
+    }
+
+    [TestMethod]
+    public void AMissingStandardRuleLeavesAnNpcRunNotCompleted()
+    {
+        var run = AutoLevelRules.Apply(Sheet(3), AdvancementModifiers.None, Scheme("st 9"), null, npc: true, AutoLevelRules.DefaultSpellWillpower);
+        Assert.AreEqual((9, false), (run.Sheet.Stats[0], run.Completed));
+        Assert.IsTrue(AutoLevelRules.Apply(Sheet(3), AdvancementModifiers.None, Scheme("st 9"), null, npc: false, AutoLevelRules.DefaultSpellWillpower).Completed);
+    }
+
+    [TestMethod]
     public void StatsAreBoughtFromTheirBaseValue()
     {
         var bought = Run(Sheet(3), "st 10");

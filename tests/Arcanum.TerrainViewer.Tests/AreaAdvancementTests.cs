@@ -69,6 +69,21 @@ public sealed class AreaAdvancementTests
     }
 
     [TestMethod]
+    public void EveryEffectOperatorKeepsItsMeaning()
+    {
+        EffectRule? Scaled(int number) => number == 300
+            ? new(300, true, [new(EffectAttributeKind.Stat, 2, EffectChangeOperator.Multiply, 2), new(EffectAttributeKind.Stat, 3, EffectChangeOperator.Divide, 2),
+                new(EffectAttributeKind.Stat, 5, EffectChangeOperator.Maximum, 6), new(EffectAttributeKind.Stat, 6, EffectChangeOperator.Minimum, 9)])
+            : null;
+        var (_, modifiers) = AreaAdvancement.Npc("virgil", Follower(), Scaled)!.Value;
+        CollectionAssert.AreEqual(new StatModifier[]
+        {
+            new(CharacterStat.Constitution, StatModifierOperator.Multiply, 2), new(CharacterStat.Beauty, StatModifierOperator.Divide, 2),
+            new(CharacterStat.Perception, StatModifierOperator.Maximum, 6), new(CharacterStat.Willpower, StatModifierOperator.Minimum, 9),
+        }, modifiers.Stats.ToArray());
+    }
+
+    [TestMethod]
     public void AnAwardsFollowerStepLevelsTheHerosFollowers()
     {
         var flags = AreaStartingHero.NewGameFlags(new(new(Guid.NewGuid()), new(Guid.NewGuid())), new(Guid.NewGuid()), null);
@@ -84,6 +99,10 @@ public sealed class AreaAdvancementTests
         Assert.AreEqual((2, 9, 8, 0), (record.Sheet.Level, record.Sheet.Stats[1], record.Sheet.Stats[4], record.Sheet.UnspentPoints));
         Assert.AreEqual(2, AreaAdvancement.Level(session, "virgil", 1));
         Assert.AreEqual(7, AreaAdvancement.Level(session, "nobody", 7));
+        // A follower is with the hero on any map; another NPC counts only on the map it stands on (here its home map).
+        Assert.IsTrue(AreaAdvancement.Nearby(session, "virgil", 5, 79));
+        Assert.IsTrue(AreaAdvancement.Nearby(session, "stranger", 79, 79));
+        Assert.IsFalse(AreaAdvancement.Nearby(session, "stranger", 5, 79));
         Assert.AreEqual(0, AreaAdvancement.LevelFollowers(session, award with { Followers = null }, _ => null).Count);
     }
 }

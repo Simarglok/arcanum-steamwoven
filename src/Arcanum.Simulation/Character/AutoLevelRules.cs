@@ -189,7 +189,8 @@ public static class AutoLevelRules
         if (scheme is null) return new(sheet, false, []);
         var work = new Work(sheet, modifiers, spellWillpower);
         var completed = Run(work, scheme);
-        if (completed && npc && standardNpcScheme is not null) completed = Run(work, standardNpcScheme);
+        // A missing standard rule is "no rule": nothing runs and the run is not completed (as for the critter's own scheme).
+        if (completed && npc) completed = standardNpcScheme is not null && Run(work, standardNpcScheme);
         return new(work.Sheet(), completed, work.Purchases.ToImmutable());
     }
 
@@ -217,17 +218,19 @@ public static class AutoLevelRules
     /// <summary>The highest skill level a key stat allows (<see cref="CombatSkillRules.KeyStatCap"/>, 0x4C5F70).</summary>
     public static int SkillCap(int keyStat) => CombatSkillRules.KeyStatCap(keyStat);
 
-    /// <summary>The willpower a spell needs when its record names none (0x4502F0 before the spell table
-    /// is loaded, 0x4502F0): 6, 9, 12, 15, 18 by rank; the rank-2 value outside 0..79.</summary>
+    /// <summary>The willpower a spell needs when its record names none (0x4502F0, the value before the spell table is loaded;
+    /// 0x4502E0 reads the intelligence minimum, 5): 6, 9, 12, 15, 18 by rank; the rank-2 value outside 0..79.</summary>
     [OriginalFunction(0x4502F0, OriginalFunctionScope.Partial)]
     public static int DefaultSpellMinimumWillpower(int spell) => spell is >= 0 and < Spells ? DefaultWillpower[spell % 5] : DefaultWillpower[1];
 
     /// <summary>The character level a spell rank needs (0x4B1770): 1, 1, 5, 10, 15.</summary>
     [OriginalFunction(0x4B1770, OriginalFunctionScope.Full)]
-    public static int SpellMinimumLevel(int spell) => SpellMinimumLevels[spell % 5];
+    public static int SpellMinimumLevel(int spell) => spell is >= 0 and < Spells ? SpellMinimumLevels[spell % 5]
+        : throw new ArgumentOutOfRangeException(nameof(spell));
 
     /// <summary>The intelligence a tech degree needs: 0, 5, 8, 11, 13, 15, 17, 19.</summary>
-    public static int DegreeMinimumIntelligence(int degree) => DegreeIntelligence[degree];
+    public static int DegreeMinimumIntelligence(int degree) => degree is >= 0 and <= MaxDegree ? DegreeIntelligence[degree]
+        : throw new ArgumentOutOfRangeException(nameof(degree));
 
     // One rule (0x4A7340): each step buys until its target; running out of points ends the rule, not completed;
     // any other failure skips to the next step; a token that names nothing ends the rule, not completed.

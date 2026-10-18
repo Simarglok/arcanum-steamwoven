@@ -162,7 +162,7 @@ public static class ExperienceRules
     /// PC's new level stays (the original's first test; testing the maximum instead gives the same for every step the
     /// recalculation passes, ledger XP7); one at or below the PC's old level keeps its gap, one between is pulled to the PC's new
     /// level, never to <see cref="MaxLevel"/> or above; a level that would not rise stays. Points are the bonus points of the
-    /// levels gained (the source then runs the NPC's auto-level scheme, which is not modelled here).
+    /// levels gained (the source then runs the NPC's auto-level scheme: <c>GameSessionOwner.LevelFollower</c>, ARC-WORLD-036).
     /// </summary>
     [OriginalFunction(0x4A6CB0, OriginalFunctionScope.Partial)]
     public static FollowerLevelUp FollowerLevel(int level, FollowerLevelStep step)
