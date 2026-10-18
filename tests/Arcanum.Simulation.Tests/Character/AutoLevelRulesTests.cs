@@ -70,6 +70,10 @@ public sealed class AutoLevelRulesTests
         var run = AutoLevelRules.Apply(Sheet(3), AdvancementModifiers.None, Scheme("st 9"), null, npc: true, AutoLevelRules.DefaultSpellWillpower);
         Assert.AreEqual((9, false), (run.Sheet.Stats[0], run.Completed));
         Assert.IsTrue(AutoLevelRules.Apply(Sheet(3), AdvancementModifiers.None, Scheme("st 9"), null, npc: false, AutoLevelRules.DefaultSpellWillpower).Completed);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AutoLevelRules.SpellMinimumLevel(-1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AutoLevelRules.SpellMinimumLevel(AutoLevelRules.Spells));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AutoLevelRules.DegreeMinimumIntelligence(AutoLevelRules.MaxDegree + 1));
+        Assert.AreEqual((15, 19), (AutoLevelRules.SpellMinimumLevel(79), AutoLevelRules.DegreeMinimumIntelligence(7)));
     }
 
     [TestMethod]

@@ -61,11 +61,24 @@ public sealed class AdvancementStateTests
     [TestMethod]
     public void ASchemeRunPastThePoolBoundBuysNothing()
     {
-        var rules = SessionAutoLevelRules.Create(new Dictionary<int, AutoLevelScheme> { [63] = Scheme("maxhps 9999") }, AutoLevelRules.DefaultSpellWillpower);
+        var rules = SessionAutoLevelRules.Create(new Dictionary<int, AutoLevelScheme> { [63] = Scheme("maxhps 9999"), [64] = Scheme("st 10, maxhps 9999") },
+            AutoLevelRules.DefaultSpellWillpower);
+        GameSessionOwner Start(int scheme, int points) => GameSessionOwner.Create(Descriptor() with
+        {
+            Hero = HalfElf() with { Advancement = SessionHeroAdvancement.WithScheme(scheme) with { HitPointPoints = points } },
+            Experience = ExperienceStateTests.Rules(), AutoLevel = rules,
+        }).Owner!;
+        // A run that ends exactly at the bound is kept.
+        using (var edge = Start(63, SessionAdvancementLimits.MaxHeroPoolPoints - 5))
+            Assert.AreEqual((SessionAdvancementLimits.MaxHeroPoolPoints, 0), (edge.QueryHero()!.Advancement.HitPointPoints, edge.QueryHero()!.UnspentPoints));
+        // A run past it keeps none of its purchases, not only the pools.
+        using (var whole = Start(64, SessionAdvancementLimits.MaxHeroPoolPoints))
+            Assert.AreEqual((8, SessionAdvancementLimits.MaxHeroPoolPoints, 5), (whole.QueryHero()!.Stats[0], whole.QueryHero()!.Advancement.HitPointPoints,
+                whole.QueryHero()!.UnspentPoints));
         var full = SessionHeroAdvancement.WithScheme(63) with { HitPointPoints = SessionAdvancementLimits.MaxHeroPoolPoints };
         var result = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() with { Advancement = full }, Experience = ExperienceStateTests.Rules(), AutoLevel = rules });
         using var owner = result.Owner!;
-        // The creation run would buy a 201st point: it buys nothing, the points stay, and the session restores what it saves.
+        // The creation run would buy a 101st point: it buys nothing, the points stay, and the session restores what it saves.
         Assert.AreEqual((SessionAdvancementLimits.MaxHeroPoolPoints, 5), (owner.QueryHero()!.Advancement.HitPointPoints, owner.QueryHero()!.UnspentPoints));
         var award = owner.AwardHeroExperience(owner.Version, T(2));
         Assert.AreEqual((GameSessionDisposition.Changed, (IReadOnlyList<AdvancementPurchase>?)null), (award.Disposition, award.Award!.Purchases));

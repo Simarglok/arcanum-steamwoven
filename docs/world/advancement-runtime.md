@@ -92,10 +92,10 @@ current map) and effects; the conversation reads a levelled follower's level fro
 - `tests/Arcanum.Simulation.Tests/Character/AutoLevelRulesTests.cs`: parsing and its refusals, each purchase kind, caps
   and key-stat raises, spell and degree minima, pools, rule 70, a PC never running it.
 - `tests/Arcanum.Data.Tests/Characters/AutoLevelTablesTests.cs`: rule lookup and spell willpower on synthetic MES text.
-- `tests/Arcanum.Session.Tests/AdvancementStateTests.cs`: the creation scheme, purchases per level, follower levels,
-  refusals, the budget, the snapshot and its refusals.
+- `tests/Arcanum.Session.Tests/AdvancementStateTests.cs`: the creation scheme, purchases per level, the pool bound, follower
+  levels, refusals, the budget, the snapshot and its refusals.
 - `tests/Arcanum.TerrainViewer.Tests/AreaAdvancementTests.cs`: the viewer's tables, a follower's sheet and effects from
-  its fields, the award's follower step.
+  its fields, every effect operator, the award's follower step, which NPCs are nearby.
 - Opt-in `tests/Arcanum.TerrainViewer.Tests/AreaAdvancementOriginalTests.cs` (`DAT_ROOT`): the twelve pre-made heroes spend
   their starting points and level to 50 with their schemes; Virgil's sheet levels from 1 to 50 with scheme 91. Only counts
   and levels are printed.

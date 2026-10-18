@@ -167,8 +167,8 @@ public sealed partial class GameSessionOwner
     /// difficulty changes it (<see cref="Simulation.Character.ExperienceRules.AdjustForDifficulty"/>), a dead hero gets
     /// nothing, the hero's experience effects (<c>xpgain</c>) change it, the sum is clamped to 0..2,000,000,000 and the level is
     /// recalculated (<see cref="Simulation.Character.ExperienceRules.Advance"/>): every level reached is written with its
-    /// points, unspent points stay at most 56, and the hero stays at level 50 (ledger XP5). A hero's auto-level scheme is not
-    /// run: the points stay unspent. Refused, in order: no hero or no experience data
+    /// points, unspent points stay at most 56, and the hero stays at level 50 (ledger XP5). With scheme data the hero's auto-level
+    /// scheme spends each level's points as it is written (ARC-WORLD-036; a run past the pool bound buys nothing). Refused, in order: no hero or no experience data
     /// (<see cref="GameSessionFailure.ExperienceUnavailable"/>), an amount beyond <see cref="SessionExperienceLimits.MaxAward"/>
     /// (<see cref="GameSessionFailure.InvalidExperience"/>), the version, the revision. One revision when the hero changed.
     /// </summary>
