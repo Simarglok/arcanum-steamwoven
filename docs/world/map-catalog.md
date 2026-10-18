@@ -24,6 +24,9 @@ read-only, and it never prints or returns MES/DLG text.
 | `ReadTerrain(map)` | the whole `terrain.tdf` | one 16-bit word per sector, raw or one zlib row per grid row |
 | `ReadPrototype(number)` | `proto/NNNNNN - *.pro` from the base sources ([prototypes](#prototypes)) | the prototype record |
 | `Prototypes` | the same files | the shared `ContentPrototypes` index: numbers, the source each is read from, `Read(number)` as a `PrototypeFile` |
+| `TerrainTypes` | `terrain/terrain.mes` from the base sources | ARC-DATA-031: the terrain types and template rule ([generated sectors](#generated-sectors-arc-data-031)) |
+| `ResolveSector(map, coordinate, grid)` | the map's file list, the terrain word, the template's presence in the stack | ARC-DATA-031: the sector's source (`Own`, `Template`, `Fill`, `OutsideMap`, `Unresolved`) |
+| `ReadResolvedSector(map, source)` | the own file or the template file | ARC-DATA-031: the sector, a template's objects and lights moved to the real sector |
 
 `WorldSectorCoordinate` packs a sector as `X | Y << 26`;
 `WorldLocation.FromPacked` unpacks a tile location as `X | Y << 32`;
@@ -110,6 +113,44 @@ header (1.8 MB for the main map); this costs time, not correctness.
 - **Raw sections.** Lights, roofs, tile and sector scripts and metadata stay raw
   words: their meaning belongs to the components that render or run them.
 
+## Generated sectors (ARC-DATA-031)
+
+A sector without its own file is generated from a terrain template, as the 1.0.7.4 executable does (checked by two
+readers: [ledger](../research/original-verification-ledger.md#terrain-templates-arc-data-031) TR1–TR5 and
+[SS2, SS5, SS6](../research/original-verification-ledger.md#main-map-streaming-arc-data-030); facts and counts in the
+[generated-wilderness study](../research/generated-wilderness-evidence.md)).
+
+- **Types.** `TerrainTypeTable.Open(stack)` reads `terrain/terrain.mes` from the first base source only: the original
+  loads it once at game start, before the module is mounted. Types are messages 0, 1, … (at most 32) up to the first
+  missing number; `/b` marks a type blocked and is cut with what follows it and the white space before it. Typed
+  failures where the original's terrain initialisation fails: `Missing`, `ReadFailed`, `ParseFailed`, `NoTypes`,
+  `FirstTypeWithoutTemplate` (type 0 has no `0.sec` in the base sources), and `MalformedName` (a text starting with the
+  mark, where the original reads before the text). `TerrainTypeTable.Create(mes, exists)` builds one from a parsed file.
+- **Word.** `TerrainWord`: base type bits 11..15, second 6..10, transition code 2..5, variant 0..1; a sector outside the
+  grid reads `0xFFFF`.
+- **Path.** `TerrainTypeTable.Resolve(word)`: `Plain` (`terrain/<base>/<slot>.sec`, slot (variant mod 2, variant / 2))
+  when base = second or the code is 0; otherwise `Transition` (`terrain/<from> to <to>/<slot>.sec`) from the code's
+  slot, swapping the pair and using the slot of 15 − code when the code has none; `NoSlot` when neither has one (the
+  original's `-1.sec`); `UnnamedType` when a type is at or above the count (the original faults). Paths are lower case,
+  as the content stack spells them.
+- **Source.** `ResolveSector`: `OutsideMap` beyond the `map.prp` size (the original's sector lock refuses it), `Own` for
+  a sector file, else the word's template: `Template` when the stack holds it (any source: templates are read while the
+  game runs), `Fill` when it does not or the code has no slot, `Unresolved` for an unnamed type or a missing grid. The
+  optional demo limits are not modelled; retail data has none.
+- **Read.** `ReadResolvedSector` reads a template like a sector file and moves its objects (location field) and lights
+  (words 2 and 3) to the real sector: the sector's origin plus the tile inside the template slot. The tiles, roofs,
+  block mask, scripts and sounds stay sector-local. Record hashes stay those of the template's records, and
+  `WorldSector.SourceKind` says `Template`.
+- **Not modelled.** Fill's tiles (one tile family with a random variation per tile), the init's transition-message check,
+  the variant counts beyond type 0, saved differences (`.dif`) and the original's log lines.
+
+Installed original (opt-in `TerrainTemplatesRealDataTests`, about 3 s): 19 types, 6 blocked; every sector of every map
+resolves with no `Fill`, `Unresolved` or `OutsideMap`. The main map has 621 own, 3,954,569 plain and 44,810 transition
+sectors and uses 208 templates; all maps use 212, all won by `arcanum2.dat`, and the other maps have 28,243 generated
+sectors. Read once each, the 212 templates hold 29,561 walls and scenery without object ids and 128 lights, all moved
+inside their sectors. The Crash Site ring's five generated sectors read from the mountain and forest-to-mountains
+templates.
+
 ## Verification
 
 - Synthetic tests (`tests/Arcanum.Data.Tests/Maps/WorldCatalogTests.cs`):
@@ -126,7 +167,7 @@ header (1.8 MB for the main map); this costs time, not correctness.
 
 ## Not yet
 
-Generated sectors from the terrain grid (ARC-RES-034), map transitions and the
+Map transitions and the
 map catalogue numbers (ARC-RES-035), ART trailing-byte policy, the content
 stack fingerprint, sector streaming and every consumer (viewer, traversal,
 session) are later steps of the [whole-world plan](../research/data-census.md#proposal-for-arc-data-015-p).

@@ -381,6 +381,10 @@ missing (anomaly A5). No retail sector needs any of these.
 
 ## Limits and NOT READY
 
+Since ARC-DATA-031 the Data layer implements slices 1–3 in the map catalogue
+([generated sectors](../world/map-catalog.md#generated-sectors-arc-data-031)), with the type table and path rule
+checked in the executable ([ledger TR1–TR5](original-verification-ledger.md#terrain-templates-arc-data-031)).
+
 - No loader, renderer or session code; nothing in the viewer changes.
 - The original executable was not run or disassembled. A1's correct rule is an
   inference from CE and the data; the fill's random tile variation is from CE only.
