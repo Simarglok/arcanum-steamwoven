@@ -32,7 +32,8 @@ public partial class TerrainViewerApp
     /// is released only once the destination is published with the loaded session; a transfer carries one session for both.</summary>
     private sealed record MapTransferHandoff(GameSessionOwner? Session, int FromMap, string To, NeighborDirection Facing,
         TerrainViewerArguments Origin, AreaStepCell OriginCell, string Loading, string? Failure = null, GameSessionOwner? Previous = null,
-        MapHandoffKind Kind = MapHandoffKind.Transfer, NeighborDirection? OriginFacing = null)
+        MapHandoffKind Kind = MapHandoffKind.Transfer, NeighborDirection? OriginFacing = null,
+        IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)>? Companions = null)
     {
         public bool Fallback => Failure is not null;
         /// <summary>The facing the actor arrives with on the map being loaded.</summary>
@@ -69,8 +70,11 @@ public partial class TerrainViewerApp
         {
             // The carried session records the actor on the arrival map in one step.
             var arrival = chart.ToWorld(chart.Spawn);
-            var placed = session.ApplyChanges(session.Version, new ActorPlacement(new(area.Snapshot.RuntimeMap),
-                new(checked((int)arrival.X), checked((int)arrival.Y)), handoff.ArrivalFacing), []);
+            // ARC-WORLD-037: the companions that follow the PC arrive on the same cell in the same session step.
+            var here = new SessionMapId(area.Snapshot.RuntimeMap); var cell = new CellCoord(checked((int)arrival.X), checked((int)arrival.Y));
+            var companions = handoff.Fallback || handoff.Companions is not { } leaving ? []
+                : leaving.SelectMany(c => AreaCompanionGroup.Arrive(c.Template, new(handoff.FromMap), here, cell, c.Facing)).ToArray();
+            var placed = session.ApplyChanges(session.Version, new ActorPlacement(here, cell, handoff.ArrivalFacing), companions);
             GD.Print("ARC-WORLD-031 transfer arrived " + System.Text.Json.JsonSerializer.Serialize(new {
                 Kind = handoff.Kind.ToString(), From = handoff.FromMap, To = area.Snapshot.RuntimeMap, Arrival = arrival, handoff.Fallback,
                 Session = placed.Disposition.ToString(), placed.Failure, Revision = session.Version.Revision }));
@@ -187,8 +191,10 @@ public partial class TerrainViewerApp
             var map = _mapTransfers.Map;
             if (_areaSession is { } owner)
             {
-                var placed = owner.ApplyChanges(owner.Version, new ActorPlacement(new(map.RuntimeMap),
-                    new(checked((int)transfer.Arrival.X), checked((int)transfer.Arrival.Y)), session.State.Facing), []);
+                // ARC-WORLD-037: the companions that follow the PC are moved to the arrival with it.
+                var here = new SessionMapId(map.RuntimeMap); var cell = new CellCoord(checked((int)transfer.Arrival.X), checked((int)transfer.Arrival.Y));
+                var companions = LeavingCompanions().SelectMany(c => AreaCompanionGroup.Arrive(c.Template, here, here, cell, c.Facing)).ToArray();
+                var placed = owner.ApplyChanges(owner.Version, new ActorPlacement(here, cell, session.State.Facing), companions);
                 if (placed.Disposition == GameSessionDisposition.Rejected)
                 {
                     _areaUseStatus = $"transfer refused by the session ({placed.Failure})"; RefreshAreaStatus();
@@ -214,7 +220,8 @@ public partial class TerrainViewerApp
     private void BeginMapLoadTransfer(AreaMapTransfer transfer, AreaGridSession session)
     {
         var origin = _arguments!;
-        _mapHandoff = new(_areaSession, transfer.FromMap, transfer.To.Name, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell), transfer.To.Name);
+        _mapHandoff = new(_areaSession, transfer.FromMap, transfer.To.Name, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell), transfer.To.Name,
+            Companions: LeavingCompanions());
         var next = origin with { AreaMapName = transfer.To.Name, AreaMapArrival = new(transfer.Arrival.X, transfer.Arrival.Y) };
         _areaUseStatus = $"loading '{transfer.To.Name}' ({transfer.To.Catalogue})";
         GD.Print("ARC-WORLD-031 transfer load " + System.Text.Json.JsonSerializer.Serialize(new { transfer.FromMap, To = transfer.To, transfer.Arrival, Trigger = transfer.Site.Trigger.ToString() }));
@@ -342,6 +349,7 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-031 native-smoke transfer PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 From = from, To = pending.To.Name, pending.To.Catalogue, site.Script, Arrival = pending.Arrival, SameMap = pending.SameMap,
                 Session = _areaSession?.Version.Revision, Carried = session is not null, Exits = exits.Length, Visible = _canvas.AreaVisibleCount }));
+            ReportAreaMapCarry(from!, pending.SameMap);
             await RunAreaMapJumpSmokeAsync();
             // ARC-WORLD-038: on the destination (after its jump smoke), F8 loads the save's map again and stands the actor on
             // the saved cell.
@@ -355,8 +363,12 @@ public partial class TerrainViewerApp
                     || _areaSession is null || ReferenceEquals(_areaSession, carried) || _areaSession.QueryActor().Map.RuntimeMap != map.RuntimeMap
                     || _areaSession.QueryActor().Cell.X != map.Chart.ToWorld(near).X || _areaSession.QueryActor().Cell.Y != map.Chart.ToWorld(near).Y)
                     throw new InvalidOperationException($"AREA_MAP_QUICK_LOAD_OTHER_MAP map={_readyMapName} status={_quickSaveStatus} use={_areaUseStatus}");
+                // ARC-WORLD-037: a companion the follow smoke joined comes back with the save.
+                if (_smokeCompanion is { } joined && _areaCompanions?.Companions.Any(c => c.Entity == joined) != true)
+                    throw new InvalidOperationException("AREA_MAP_QUICK_LOAD_COMPANION_MISSING " + _areaCompanions?.Status());
                 GD.Print("ARC-WORLD-038 native-smoke quickload PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                    SameMap = sameMapLoad, OtherMap = new { From = pending.To.Name, To = from, Cell = map.Chart.ToWorld(near) }, Session = _areaSession.Version.Revision }));
+                    SameMap = sameMapLoad, OtherMap = new { From = pending.To.Name, To = from, Cell = map.Chart.ToWorld(near) }, Session = _areaSession.Version.Revision,
+                    Companions = _areaCompanions?.Companions.Count ?? 0 }));
             }
             else GD.Print($"ARC-WORLD-038 native-smoke quickload {(sameMapLoad is null ? "NONE (no session)" : "SAME-MAP-ONLY " + System.Text.Json.JsonSerializer.Serialize(sameMapLoad))}");
         }
@@ -412,6 +424,16 @@ public partial class TerrainViewerApp
         }
         GD.Print("ARC-WORLD-031 native-smoke jump PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = _readyMapName, From = map.Chart.ToWorld(jump), site.Arrival, site.DestinationCatalogue, Frames = frames }));
+        // ARC-WORLD-037: a follower the follow smoke joined jumps with the PC.
+        if (_smokeCompanion is not null)
+        {
+            for (var frame = 0; frame < 3; frame++)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            }
+            ReportAreaMapCarry(_readyMapName!, site.DestinationRuntime == map.RuntimeMap);
+        }
     }
 
     // A cell reachable from the chart's start from which the use rule accepts a use of the trigger.

@@ -37,6 +37,10 @@ public sealed class VirgilFollowOriginalTests
         var host = new AreaConversationHost(area, scripts, session, party: true);
         var speaker = host.Speakers.Single();
         Assert.AreSame(AreaCompanionRoster.Virgil, AreaCompanionRoster.For(speaker), "the only speaker is Virgil (prototype 17102, script 1324)");
+        // ARC-WORLD-037: the facts read from the game's data (AI row, level and alignment with effects) are the measured ones.
+        var data = AreaCompanionData.Open(Required("ARC_AREA_MODULE"));
+        Assert.AreEqual(AreaCompanionDataStatus.Ready, data.Status, data.Detail);
+        Assert.AreEqual(AreaCompanionRoster.Virgil, data.Data!.Facts(speaker, out var refusal), refusal);
         var templates = AreaCompanionTemplate.From(host.Speakers, result.Area.Plan, area.Visuals, AreaChart.Exterior, new(area.RuntimeMap));
         var group = AreaCompanionGroup.Create(templates, steps, AreaChart.Exterior, session, new(area.RuntimeMap), SimulationTime.At(0));
         var virgil = group.Companions.Single();

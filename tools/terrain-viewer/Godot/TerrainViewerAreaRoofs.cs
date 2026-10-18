@@ -21,6 +21,7 @@ public partial class TerrainViewerApp
     private AreaStepCell? _areaRoofDeparture;
     private HashSet<AreaObjectKey> _areaRoofWalls = new();
     private long _areaRoofRevision = -1;
+    private string? _areaRoofCompanionCells;
     private Dictionary<(long, long), AreaRoofDraw> _areaRoofDraws = new();
     private Dictionary<(long, long), AreaDrawCommand[]> _areaRoofTileCommands = new();
     private Dictionary<(long, long), AreaObjectKey[]> _areaRoofBodies = new();
@@ -49,12 +50,15 @@ public partial class TerrainViewerApp
         foreach (var key in walls.Except(_areaRoofWalls)) grid.AddWallFade(_areaRoofObjects[key].WorldX!.Value, _areaRoofObjects[key].WorldY!.Value);
         foreach (var key in _areaRoofWalls.Except(walls)) grid.ReleaseWallFade(_areaRoofObjects[key].WorldX!.Value, _areaRoofObjects[key].WorldY!.Value);
         _areaRoofWalls = walls;
-        if (grid.Revision != _areaRoofRevision) PublishAreaRoofs(area, grid);
+        // ARC-WORLD-037: a companion is covered where it stands now, not on its T0 tile.
+        var companions = _areaCompanions?.Companions.Select(c => (c.Key, Cell: session.Chart.ToWorld(c.Grid.State.CommittedCell))).ToArray() ?? [];
+        var signature = string.Join(";", companions.Select(c => $"{c.Key.SourceIndex}@{c.Cell.X},{c.Cell.Y}"));
+        if (grid.Revision != _areaRoofRevision || signature != _areaRoofCompanionCells) { _areaRoofCompanionCells = signature; PublishAreaRoofs(area, grid, companions); }
     }
 
     private void BindAreaRoofs(AreaLoadResult area)
     {
-        _areaRoofArea = area; _areaRoofCell = null; _areaRoofDeparture = null; _areaRoofWalls = new(); _areaRoofRevision = -1;
+        _areaRoofArea = area; _areaRoofCell = null; _areaRoofDeparture = null; _areaRoofWalls = new(); _areaRoofRevision = -1; _areaRoofCompanionCells = null;
         _areaRoofGrid = area.Plan.Roofs.Count == 0 ? null : new AreaRoofGrid(area.Plan.Roofs.Select(roof => roof.Roof));
         _areaRoofDraws = area.Plan.Roofs.ToDictionary(roof => (roof.Roof.BlockX >> 2, roof.Roof.BlockY >> 2));
         _areaRoofTileCommands = area.Plan.Commands.Where(command => command.Identity is null).GroupBy(command => ((long)command.MapX, (long)command.MapY))
@@ -84,7 +88,7 @@ public partial class TerrainViewerApp
         return (art >> 28) switch { 0 => (art & 0x100) == 0, 11 => (art & 0x2000000) == 0, _ => true };
     }
 
-    private void PublishAreaRoofs(AreaLoadResult area, AreaRoofGrid grid)
+    private void PublishAreaRoofs(AreaLoadResult area, AreaRoofGrid grid, IReadOnlyList<(AreaObjectKey Key, AreaStepCell Cell)> companions)
     {
         var shades = area.Snapshot.RoofShades ?? throw new InvalidOperationException("AREA_ROOF_SHADES_REQUIRED");
         var roofs = new List<(AreaDrawCommand, Vector4?)>(); var tiles = new List<AreaDrawCommand>(); var bodies = new HashSet<AreaObjectKey>();
@@ -106,6 +110,11 @@ public partial class TerrainViewerApp
                 if (grid.IsCovered(x, y, true, AreaRoofIndoor) && _areaRoofBodies.TryGetValue((x, y), out var keys)) bodies.UnionWith(keys);
                 if (grid.IsCovered(x, y, false, AreaRoofIndoor) && _areaRoofTileCommands.TryGetValue((x, y), out var terrain)) tiles.AddRange(terrain);
             }
+        }
+        foreach (var (key, cell) in companions)
+        {
+            bodies.Remove(key);
+            if (grid.IsCovered(cell.X, cell.Y, true, AreaRoofIndoor)) bodies.Add(key);
         }
         _areaRoofRevision = grid.Revision;
         _canvas!.SetAreaRoofs(roofs.AsReadOnly(), tiles.Distinct().ToArray(), bodies);

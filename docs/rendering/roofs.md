@@ -119,8 +119,8 @@ interior stays complete, and the shades are 255, 200 and 80.
 - The software path's stippled fade, the roof switch and the view types other
   than isometric; the black of a covered tile is the cleared view the original
   leaves, not checked pixel for pixel.
-- A companion or the actor itself on a covered tile is still drawn (only T0
-  bodies are covered); the tile scripts' and other critters' moves do not
+- The actor itself on a covered tile is still drawn (T0 bodies are covered on
+  their tile, and since ARC-WORLD-037 a companion on the tile it stands on); the tile scripts' and other critters' moves do not
   recalculate roofs (the original does it for the local PC only).
 - Roofs of the start map (it is not opened in map mode) and of the pinned
   Crash Site exterior.
