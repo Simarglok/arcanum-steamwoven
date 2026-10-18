@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """ARC-RES-027 read-only probe: pre-made heroes, starting gold/items, effects.
 
-Research only, not a character runtime or CE translation. Rules are
-independently written from the pinned CE locators cited in
+Research only, not a character runtime or a translation of the source. Rules are
+independently written from the source locators cited in
 docs/research/starting-hero-evidence.md. Original mode reads the owner's
 installation in memory and prints only numbers, identifiers, counts, engine
 keywords and SHA-256 digests; MES text, names and payload bytes never leave the
@@ -22,14 +22,13 @@ import tempfile
 
 import dat_probe
 
-PIN = "a7ff41b300ef712f0e7d088183a3d08957110cdd"
 OBJECT_VERSION = 119
 TYPE_PC = 15
 MAX_PROTO_BYTES = 64 * 1024
-MAX_MES_STRING = 2000  # CE MAX_STRING; longer entries are refused by the set parsers
-MAX_SET_NAME = 70  # CE MAX_INVEN_SOURCE_SET_NAME: a name of this length or more fails
-MAX_SET_ITEMS = 300  # CE INVEN_SOURCE_SET_SIZE
-MAX_EFFECT_CHANGES = 7  # CE MAX_CHANGE_COUNT per effect and attribute collection
+MAX_MES_STRING = 2000  # the source's string limit; longer entries are refused by the set parsers
+MAX_SET_NAME = 70  # the source's set name limit: a name of this length or more fails
+MAX_SET_ITEMS = 300  # the source's set size
+MAX_EFFECT_CHANGES = 7  # the source's change limit per effect and attribute collection
 
 # v119 wire kinds of the common block and the critter/PC groups, slot order.
 # Same layout as src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs.
@@ -71,7 +70,7 @@ GENDERS = ["female", "male"]
 BODY_TYPES = ["human", "dwarf", "halfling", "half_ogre", "elf"]
 EFFECT_CAUSES = ["race", "background", "class", "bless", "curse", "item", "spell", "injury", "tech", "gender"]
 
-# Engine keywords of the effect and auto-level rule grammars (CE effect.c / level.c).
+# Engine keywords of the effect and auto-level rule grammars (the source's effect and level parsers).
 EFFECT_TOKENS = {
     "stat": ["st", "dx", "cn", "be", "in", "pe", "wp", "ch", "carry", "damage", "ac", "speed", "healrate",
              "poisonrate", "beautyreaction", "maxfollowers", "aptitude", "level", "xpsunused", "alignment",
@@ -95,9 +94,9 @@ SCHEME_TOKENS = {
     "misc": ["maxhps", "maxfatigue"],
 }
 
-# CE built-in PC prototypes (descriptions.h / proto.c): race, gender, body type,
+# The built-in PC prototypes (docs/research/starting-hero-evidence.md): race, gender, body type,
 # portrait, inventory source, background, background text, auto-level scheme.
-CE_PCS = {
+PREMADE_PCS = {
     16066: ("human", "male", "human", 1005, 0, 0, 0, 0),
     16067: ("halfling", "male", "halfling", 1017, 108, 39, 1039, 76),
     16068: ("gnome", "male", "halfling", 1002, 24, 40, 1040, 77),
@@ -118,12 +117,12 @@ RACE_EFFECT_BASE, FEMALE_EFFECT = 64, 330
 STARTING_KIT = {"nice_suit": 8049, "small_nice_suit": 8065, "large_nice_suit": 8069, "jacket": 8110,
                 "small_jacket": 8118, "large_jacket": 8126, "plain_dress": 8133, "small_ladies_clothes": 8134,
                 "large_ladies_clothes": 8135, "crude_lockpicks": 15178, "bandages": 15179, "gold": 9056}
-# CE armour size by race (item.c item_race_to_armor_size_tbl); a source fact, not an observation.
+# Armour size by race (the source's race-to-armour-size table); a source fact, not an observation.
 ARMOR_SIZE = {"human": "medium", "dwarf": "small", "elf": "medium", "half_elf": "medium", "gnome": "small",
               "halfling": "small", "half_orc": "medium", "half_ogre": "large", "dark_elf": "medium",
               "ogre": "large", "orc": "medium"}
 
-# Critter ART file name parts (CE name.c), indexed by the art id fields.
+# Critter ART file name parts (the source's art name builder), indexed by the art id fields.
 ART_BODY = ["HM", "DF", "GH", "HG", "EF"]
 ART_GENDER = "FMX"
 ART_ARMOR = ["UW", "V1", "LA", "CM", "PM", "RB", "PC", "BN", "CD"]
@@ -132,7 +131,7 @@ ART_WEAPON = "ABCDEFGHIJKXYNZ"
 ART_TYPE_CRITTER, ART_ARMOR_PLATE, ART_ARMOR_PLATE_CLASSIC, ART_ANIM_EXPLODE = 2, 4, 6, 20
 ART_WEAPON_SWORD, ART_WEAPON_TWO_HANDED = 3, 7
 ART_BODY_HUMAN, ART_BODY_DWARF, ART_BODY_HALFLING, ART_BODY_ELF = 0, 1, 2, 4
-MISSING_STAND_NO_WEAPON = 0x8  # missing.dat bit of the stand/no-weapon check (CE name.c)
+MISSING_STAND_NO_WEAPON = 0x8  # missing.dat bit of the stand/no-weapon check
 CRITTER_ART_KINDS = 10  # missing.dat critter entries: gender + 2 * body type
 ART_LIST_ROOTS = ("art/critter/", "art/monster/", "art/unique_npc/")
 # Background conditions are race/gender codes, NPC or ANY; anything else is printed as a digest.
@@ -350,7 +349,7 @@ def art_fields(aid: int) -> dict[str, int]:
 
 # ------------------------------------------------------------- rule parsers
 def effect_over_limit(changes: list[dict]) -> bool:
-    """CE stores at most 7 changes per attribute collection; more would overrun its arrays."""
+    """The source stores at most 7 changes per attribute collection; more would overrun its arrays."""
     counts: dict[str, int] = {}
     for change in changes:
         counts[change["category"]] = counts.get(change["category"], 0) + 1
@@ -379,14 +378,11 @@ def parse_effect(text: str) -> tuple[list[dict], bool]:
         elif op_tok[0] in "+-":
             operator, param = ("percent" if op_tok.endswith("%") else "add"), c_atoi(op_tok)
         elif op_tok[0] in "*/":
-            # CE passes the whole token to atoi, so the stored factor is 0; the
-            # literal after the sign is kept separately.
-            operator, param = ("multiply" if op_tok[0] == "*" else "divide"), c_atoi(op_tok)
+            # The original reads the number after the operator (ledger LM9, SH-07).
+            operator, param = ("multiply" if op_tok[0] == "*" else "divide"), c_atoi(op_tok[1:])
         else:
             operator, param = "invalid", 0
         change = {"category": found[0], "attribute": found[1], "operator": operator, "param": param}
-        if operator in ("multiply", "divide"):
-            change["literal"] = c_atoi(op_tok[1:])
         changes.append(change)
         tok = strtok(text, state, " ,")
     return changes, True
@@ -582,7 +578,7 @@ def find_prototype(sources: list[Source], description: int) -> tuple[str | None,
 # ------------------------------------------------------------------ report
 def missing_art_table(sources: list[Source]) -> dict:
     """Critter rows of art/missing.dat, used only when its file count matches the ART lists;
-    otherwise the stand/no-weapon bit is derived from file existence, as CE rebuilds it."""
+    otherwise the stand/no-weapon bit is derived from file existence, as the source rebuilds it."""
     listed = {n for src in sources for n in src.names
               if n.startswith(ART_LIST_ROOTS) and n.count("/") == 3 and n.endswith(".art")}
     copies, data, role, _ = resolve(sources, "art/missing.dat")
@@ -609,7 +605,7 @@ def pc_row(description: int, sources: list[Source], missing: list[int]) -> dict:
     stats = f[S_STAT_BASE]
     effects, causes = f[S_EFFECTS] or {}, f[S_EFFECT_CAUSES] or {}
     race, gender = stats.get(27), stats.get(26)
-    expected = CE_PCS[description]
+    expected = PREMADE_PCS[description]
     aid = f[S_AID] & 0xFFFFFFFF
     art = critter_art_path(aid, missing)
     art_hits = [s.role for s in sources if art is not None and art in s.names]
@@ -635,7 +631,7 @@ def pc_row(description: int, sources: list[Source], missing: list[int]) -> dict:
         "player_name_bytes": None if name is None else name[1],
         "current_aid": f"0x{aid:08X}", "art": art_fields(aid), "art_path": art, "art_sources": art_hits,
     }
-    row["matches_ce_table"] = {
+    row["matches_prototype_table"] = {
         "race": row["race"] == expected[0], "gender": row["gender"] == expected[1],
         "body_type": row["art"]["body_type"] < len(BODY_TYPES) and BODY_TYPES[row["art"]["body_type"]] == expected[2],
         "art_gender": row["art"]["gender"] == GENDERS.index(expected[1]),
@@ -682,7 +678,7 @@ def original(root: Path) -> dict:
         return proto_cache[description]
 
     missing = missing_art_table(sources)
-    pcs = [pc_row(d, sources, missing["masks"]) for d in sorted(CE_PCS)]
+    pcs = [pc_row(d, sources, missing["masks"]) for d in sorted(PREMADE_PCS)]
     critter_folders = sorted({(n.split("/")[2], s.role) for s in sources for n in s.names
                               if n.startswith("art/critter/") and n.count("/") == 3})
 
@@ -747,7 +743,7 @@ def original(root: Path) -> dict:
 
     gate = next(p for p in pcs if p["description"] == GENDER_GATE_PROTOTYPE)
     return {
-        "probe": "starting_hero_probe", "ce_pin": PIN, "mode": "original",
+        "probe": "starting_hero_probe", "mode": "original",
         "sources": fingerprints, "resources": resources,
         "pc_prototypes": pcs,
         "missing_art": {k: v for k, v in missing.items() if k != "masks"},
@@ -769,7 +765,7 @@ def original(root: Path) -> dict:
         },
         "starting_kit": {key: {"description": d, "source": proto_info(d)[0], "type": proto_info(d)[1], "copies": proto_info(d)[2]}
                          for key, d in STARTING_KIT.items()},
-        "ce_armor_size_by_race": ARMOR_SIZE,
+        "armor_size_by_race": ARMOR_SIZE,
     }
 
 
@@ -823,8 +819,7 @@ def self_test() -> dict:
     check(ok, True)
     check([(c["category"], c["attribute"], c["operator"], c["param"]) for c in changes],
           [("stat", 0, "add", 1), ("stat", 2, "add", -2), ("basic_skill", 10, "percent", 10),
-           ("special", 0, "min", 5), ("resistance", 1, "multiply", 0)])
-    check(changes[-1]["literal"], 2)
+           ("special", 0, "min", 5), ("resistance", 1, "multiply", 2)])
     check(parse_effect("st +1, bogus +2")[1], False)
     check((effect_over_limit(parse_effect("st +1, " * 7)[0]), effect_over_limit(parse_effect("st +1, " * 8)[0])), (False, True))
 

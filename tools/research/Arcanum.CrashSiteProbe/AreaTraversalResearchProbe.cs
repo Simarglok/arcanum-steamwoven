@@ -15,7 +15,7 @@ internal static partial class Program
 {
     private const string AreaTraversalSchema = "AREA_TRAVERSAL_RESEARCH_V1";
     private const string AreaTraversalRule = "S1_NORMAL_GROUND_FILE_FRONTIER_V1";
-    private const string AreaTraversalPin = "a7ff41b300ef712f0e7d088183a3d08957110cdd";
+    private const string AreaTraversalPin = "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52";
     private readonly record struct ResearchCell(int Map, long X, long Y);
     private sealed record ResearchActor(string Caller, string Chart, string Id, int Kind, uint Art, uint SpellFlags,
         bool Ground, string StateMode, string Classification, string Profile, string RegistryPolicy, string StateToken, bool RegistryClosed = false);
@@ -618,10 +618,10 @@ internal static partial class Program
         Check(Canonical(FieldArray(sparse))=="[30,\"Array\",\"Prototype\",null,[[2,[0,4294967295]],[9,[1,2]]],null]" && CanonicalDigest(FieldArray(sparse))=="24c4b5764e9b24c48a0d663d2abbd521767f732b81a00d477792bd8d13ca2934","T10_SPARSE_LITERAL");
         Check(CanonicalDigest(ActorArray(actor with{StateToken="state-2"}))!=binding.ActorDigest,"T10_STATE_INVALIDATION");
         Reject(()=>Canonical(new object?[]{1.0}),"T10_FLOAT"); Reject(()=>Canonical("\n"),"T10_NONASCII");
-        object?[] selectedFixture=["AREA_TRAVERSAL_RESEARCH_V1","SELECTED_EVIDENCE",1,"S1_NORMAL_GROUND_FILE_FRONTIER_V1","a7ff41b300ef712f0e7d088183a3d08957110cdd","Structural",1,1,"fixture",
+        object?[] selectedFixture=["AREA_TRAVERSAL_RESEARCH_V1","SELECTED_EVIDENCE",1,"S1_NORMAL_GROUND_FILE_FRONTIER_V1","9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52","Structural",1,1,"fixture",
             Array.Empty<object?>(),Array.Empty<object?>(),Array.Empty<object?>(),Array.Empty<object?>(),Array.Empty<object?>(),new int[15],Array.Empty<object?>(),null,Array.Empty<object?>()];
-        const string selectedPayload="[\"AREA_TRAVERSAL_RESEARCH_V1\",\"SELECTED_EVIDENCE\",1,\"S1_NORMAL_GROUND_FILE_FRONTIER_V1\",\"a7ff41b300ef712f0e7d088183a3d08957110cdd\",\"Structural\",1,1,\"fixture\",[],[],[],[],[],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[],null,[]]";
-        Check(Canonical(selectedFixture)==selectedPayload && CanonicalDigest(selectedFixture)=="5491cd236bfd9a2e8424643da97f4928e30cce2d90ee1bb027bf4b31bfee5ade","T10_SELECTED_LITERAL");
+        const string selectedPayload="[\"AREA_TRAVERSAL_RESEARCH_V1\",\"SELECTED_EVIDENCE\",1,\"S1_NORMAL_GROUND_FILE_FRONTIER_V1\",\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\",\"Structural\",1,1,\"fixture\",[],[],[],[],[],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[],null,[]]";
+        Check(Canonical(selectedFixture)==selectedPayload && CanonicalDigest(selectedFixture)=="5d7826e4e9138e37d678276f8b1b59e0a056539d4c2f3e6e24a3a0eb17f92aaf","T10_SELECTED_LITERAL");
         AreaTraversalOwnerOracles(Check, Reject);
         Console.WriteLine($"area-traversal-self-test: PASS ({checks} independent research assertions; T1-T10, structural only; production owner/framing limits separately exercised by root Area tests)");
     }

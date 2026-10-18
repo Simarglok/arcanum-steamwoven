@@ -6,13 +6,13 @@ using Arcanum.Data.Terrain;
 
 namespace Arcanum.CrashSiteProbe;
 
-// Independently authored evidence composition, not a port of the CE traversal routine.
+// Independently authored evidence composition, not a port of the source traversal routine.
 // Nothing here is a production admission API or an installed-game snapshot.
 internal static class CardinalTraversalProbe
 {
     private const string Profile = "BASE_SECTOR_1452_1290";
     private const string ContextId = "ISOLATED_PC_CRITTER_ART_NONPOLYMORPH";
-    private const string Source = "CE_a7ff41b300ef712f0e7d088183a3d08957110cdd";
+    private const string Source = "docs/world/cardinal-traversal-contract.md";
     private enum Coverage { Supported, Unknown, Unsupported }
     private enum Applicability { Applicable, NotApplicable, Unknown }
     private enum Disposition { Open, Blocked }

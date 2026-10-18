@@ -91,7 +91,7 @@ internal static class Program
             throw new InvalidDataException("Resource fingerprint does not match the frozen one-source Crash Site input.");
         }
         Console.WriteLine($"input module_bytes={moduleBefore.Bytes} module_sha256={moduleBefore.Sha256} resource_bytes={resourceBefore.Bytes} resource_sha256={resourceBefore.Sha256}");
-        Console.WriteLine("database_path_profile=ce-non-windows-macos ascii_lowercase=true backslash_to_slash=true");
+        Console.WriteLine("database_path_profile=non-windows-macos ascii_lowercase=true backslash_to_slash=true");
         using var module = DatArchive.Open(modulePath, Options());
         using var resources = DatArchive.Open(resourcePath, Options());
         var sector = ReadUnique(module, SectorName, "selected sector");
@@ -252,12 +252,12 @@ internal static class Program
     private static void ReportTileNormalizationEffect(DatArchive resources, TileNameTable names, IEnumerable<Resolution> tiles)
     {
         var candidates = resources.Entries
-            .GroupBy(entry => NormalizeMacOsCeDatabasePath(entry.RawNameBytes, requireTerminalNul: true), StringComparer.Ordinal)
+            .GroupBy(entry => NormalizeMacOsDatabasePath(entry.RawNameBytes, requireTerminalNul: true), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
         foreach (var branch in tiles.GroupBy(result => result.Branch).OrderBy(group => group.Key))
         {
             var changed = branch.Where(result => Resolver.TilePathWithoutNameNormalization(names, result.RawId) != result.Path).ToArray();
-            var rawZero = changed.Where(result => candidates.GetValueOrDefault(NormalizeMacOsCeDatabasePath(System.Text.Encoding.ASCII.GetBytes(Resolver.TilePathWithoutNameNormalization(names, result.RawId)), requireTerminalNul: false), 0) == 0).ToArray();
+            var rawZero = changed.Where(result => candidates.GetValueOrDefault(NormalizeMacOsDatabasePath(System.Text.Encoding.ASCII.GetBytes(Resolver.TilePathWithoutNameNormalization(names, result.RawId)), requireTerminalNul: false), 0) == 0).ToArray();
             var restored = rawZero.Where(result => result.Success).ToArray();
             Console.WriteLine($"normalization branch={branch.Key} changed_cells={changed.Length} changed_ids={changed.Select(result => result.RawId).Distinct().Count()} raw_zero_cells={rawZero.Length} raw_zero_ids={rawZero.Select(result => result.RawId).Distinct().Count()} recovered_cells={restored.Length} recovered_ids={restored.Select(result => result.RawId).Distinct().Count()}");
         }
@@ -266,12 +266,12 @@ internal static class Program
     private static void InventoryCandidates(IEnumerable<Resolution> results, TileNameTable tileNames, IReadOnlyList<string> inventoryPaths, IReadOnlyList<string> looseRoots)
     {
         var correctedPaths = results.Where(result => !string.IsNullOrEmpty(result.Path))
-            .Select(result => NormalizeMacOsCeDatabasePath(System.Text.Encoding.ASCII.GetBytes(result.Path), requireTerminalNul: false))
+            .Select(result => NormalizeMacOsDatabasePath(System.Text.Encoding.ASCII.GetBytes(result.Path), requireTerminalNul: false))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         var historicalPaths = results.Where(result => result.Kind == TerrainKind.Tile &&
                 Resolver.TilePathWithoutNameNormalization(tileNames, result.RawId) != result.Path)
-            .Select(result => NormalizeMacOsCeDatabasePath(System.Text.Encoding.ASCII.GetBytes(Resolver.TilePathWithoutNameNormalization(tileNames, result.RawId)), requireTerminalNul: false))
+            .Select(result => NormalizeMacOsDatabasePath(System.Text.Encoding.ASCII.GetBytes(Resolver.TilePathWithoutNameNormalization(tileNames, result.RawId)), requireTerminalNul: false))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
@@ -307,7 +307,7 @@ internal static class Program
     private static int CountArchiveCandidateEntries(DatArchive archive, IReadOnlyList<string> candidatePaths)
     {
         var normalizedEntries = archive.Entries
-            .GroupBy(entry => NormalizeMacOsCeDatabasePath(entry.RawNameBytes, requireTerminalNul: true), StringComparer.Ordinal)
+            .GroupBy(entry => NormalizeMacOsDatabasePath(entry.RawNameBytes, requireTerminalNul: true), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
         return candidatePaths.Sum(path => normalizedEntries.GetValueOrDefault(path, 0));
     }
@@ -387,14 +387,14 @@ internal static class Program
 
     private static DatEntry ReadUnique(DatArchive archive, string path, string label)
     {
-        var expected = NormalizeMacOsCeDatabasePath(System.Text.Encoding.ASCII.GetBytes(path), requireTerminalNul: false);
-        var entries = archive.Entries.Where(entry => NormalizeMacOsCeDatabasePath(entry.RawNameBytes, requireTerminalNul: true) == expected).ToArray();
+        var expected = NormalizeMacOsDatabasePath(System.Text.Encoding.ASCII.GetBytes(path), requireTerminalNul: false);
+        var entries = archive.Entries.Where(entry => NormalizeMacOsDatabasePath(entry.RawNameBytes, requireTerminalNul: true) == expected).ToArray();
         if (entries.Length != 1) throw new InvalidDataException($"The {label} did not resolve exactly once by raw ASCII path.");
         return entries[0];
     }
 
-    // CE compat.c performs slash conversion only on its non-Windows branch; this macOS probe models that branch.
-    private static string NormalizeMacOsCeDatabasePath(IReadOnlyList<byte> raw, bool requireTerminalNul)
+    // The source's path helper converts slashes only on its non-Windows branch; this macOS probe models that branch.
+    private static string NormalizeMacOsDatabasePath(IReadOnlyList<byte> raw, bool requireTerminalNul)
     {
         var length = requireTerminalNul ? raw.Count - 1 : raw.Count;
         if (length < 0 || (requireTerminalNul && (raw.Count == 0 || raw[^1] != 0)))
@@ -483,8 +483,8 @@ internal static class Program
     {
         var tiles = TileNameTable.Parse(ParseMes(Ascii("{0}{aaa/x}{1}{bbb/x}{100}{ccc/x}{101}{ddd/x}{200}{aaa/x}{201}{zzz/x}{300}{mmm/x}{301}{nnn/x}{400}{000000}")));
         var rawId = TileId(0, 1, 3, true, true, true) | 0x31u;
-        var correctedPath = NormalizeMacOsCeDatabasePath(Ascii(Resolver.TilePath(tiles, rawId)), requireTerminalNul: false);
-        var historicalPath = NormalizeMacOsCeDatabasePath(Ascii(Resolver.TilePathWithoutNameNormalization(tiles, rawId)), requireTerminalNul: false);
+        var correctedPath = NormalizeMacOsDatabasePath(Ascii(Resolver.TilePath(tiles, rawId)), requireTerminalNul: false);
+        var historicalPath = NormalizeMacOsDatabasePath(Ascii(Resolver.TilePathWithoutNameNormalization(tiles, rawId)), requireTerminalNul: false);
         if (correctedPath == historicalPath) throw new InvalidOperationException("Synthetic normalization recovery did not create distinct path sets.");
         WithSyntheticArchive(CreateSyntheticDat(new SyntheticDatEntry(NameBytes("ART/TILE/AAABBB4A.ART"), [1])), archive =>
         {
@@ -541,12 +541,12 @@ internal static class Program
             new(NameBytes(FacadeNamesPath), facade)), archive =>
         {
             var (tiles, _) = InitializeNameTables(archive);
-            if (tiles.Counts != "1,1,1,1") throw new InvalidOperationException("Tile MES range counting did not ignore a key outside the four CE categories.");
+            if (tiles.Counts != "1,1,1,1") throw new InvalidOperationException("Tile MES range counting did not ignore a key outside the four source categories.");
         });
         var tooManyFacades = string.Concat(Enumerable.Range(0, 512).Select(index => $"{{{index}}}{{name{index}}}"));
         AssertSyntheticInitializationRejected("over-cap facade MES", CreateSyntheticDat(
             new(NameBytes(TileNamesPath), tile),
-            new(NameBytes(FacadeNamesPath), Ascii(tooManyFacades))), "fewer than the CE 512-name capacity");
+            new(NameBytes(FacadeNamesPath), Ascii(tooManyFacades))), "fewer than the source 512-name capacity");
     }
 
     private static void AssertResolverProductionPaths()
@@ -764,15 +764,15 @@ internal static class Program
             try
             {
                 var lookup = kind == TerrainKind.Tile ? TileLookup(tiles, pathId) : new Lookup(FacadePath(facades, pathId), "facade-ordinal");
-                var expected = NormalizeMacOsCeDatabasePath(System.Text.Encoding.ASCII.GetBytes(lookup.Path), requireTerminalNul: false);
-                var matches = resources.Entries.Where(entry => NormalizeMacOsCeDatabasePath(entry.RawNameBytes, requireTerminalNul: true) == expected).ToArray();
+                var expected = NormalizeMacOsDatabasePath(System.Text.Encoding.ASCII.GetBytes(lookup.Path), requireTerminalNul: false);
+                var matches = resources.Entries.Where(entry => NormalizeMacOsDatabasePath(entry.RawNameBytes, requireTerminalNul: true) == expected).ToArray();
                 var status = matches.Length switch
                 {
                     0 => ResolutionStatus.ZeroMatches,
                     1 => ResolutionStatus.Resolved,
                     _ => ResolutionStatus.AmbiguousCandidates,
                 };
-                return new Resolution(rawId, ordinal, kind, lookup.Branch, packed, $"{lookup.Branch}: CE database normalized ASCII pathname", lookup.Path, pathId, selection.Frame, selection.Palette, matches.Length == 1 ? matches[0] : null, status);
+                return new Resolution(rawId, ordinal, kind, lookup.Branch, packed, $"{lookup.Branch}: source database normalized ASCII pathname", lookup.Path, pathId, selection.Frame, selection.Palette, matches.Length == 1 ? matches[0] : null, status);
             }
             catch (InvalidDataException)
             {
@@ -851,7 +851,7 @@ internal static class Program
         {
             var slash = value.IndexOf('/');
             if (slash >= 0) return value[..slash];
-            if (value.Length < 3) throw new InvalidDataException("A tile-name MES value lacks the CE three-character fallback prefix.");
+            if (value.Length < 3) throw new InvalidDataException("A tile-name MES value lacks the source three-character fallback prefix.");
             return value[..3];
         }
     }
@@ -861,7 +861,7 @@ internal static class Program
         public int Count => names.Length;
         public static FacadeNameTable Parse(SortedDictionary<int, string> entries)
         {
-            if (entries.Count is < 1 or >= 512) throw new InvalidDataException("Facade MES entry count must be 1 through fewer than the CE 512-name capacity.");
+            if (entries.Count is < 1 or >= 512) throw new InvalidDataException("Facade MES entry count must be 1 through fewer than the source 512-name capacity.");
             if (!entries.ContainsKey(0)) throw new InvalidDataException("Facade MES initialization requires exact key 0.");
             return new(entries.Values.ToArray());
         }

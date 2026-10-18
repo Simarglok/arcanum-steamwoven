@@ -23,7 +23,7 @@ public enum FollowConsent
     LimitReached,
 }
 
-/// <summary>Persuasion training of the PC; only Expert (+1 follower) and Master (always accepted) matter here.</summary>
+/// <summary>Persuasion training of the PC; only Expert (+1 follower) and Master (straight to the follower limit) matter here.</summary>
 public enum PersuasionTraining { None, Apprentice, Expert, Master }
 
 /// <summary>
@@ -59,8 +59,9 @@ public sealed record FollowConsentInput(
     bool IgnoreCharismaLimit);
 
 /// <summary>
-/// The source follow check (ARC-RES-024 C2–C4) as a pure function. Numbers and order are the claims of
-/// docs/world/party-runtime.md (F0); original executable parity is NOT_VERIFIED.
+/// The original's follow check (0x4AD950, ledger AP3) as a pure function over the caller's effective values. Since
+/// ARC-DATA-033 it follows the executable: a PC with Persuasion Master skips the other-leader, forced, reaction,
+/// alignment and level steps but not the follower limit.
 /// </summary>
 public static class FollowConsentRules
 {
@@ -70,9 +71,10 @@ public static class FollowConsentRules
     public const int MaxMaxFollowers = 7;
 
     /// <summary>
-    /// Max followers without stat effects: charisma / 4 (integer), +1 at Persuasion Expert or above, clamped to 1..7.
-    /// A caller with effects on the stat applies them before the clamp and passes its own value.
+    /// Max followers without stat effects (ledger AP4): the effective charisma / 4 (integer), +1 at Persuasion Expert or
+    /// above, clamped to 1..7. A caller with effects on the stat applies them before the clamp and passes its own value.
     /// </summary>
+    [OriginalFunction(0x4B0740, OriginalFunctionScope.Partial)]
     public static int MaxFollowers(int charisma, PersuasionTraining persuasion)
     {
         if (charisma < 0) throw new ArgumentOutOfRangeException(nameof(charisma));
@@ -81,7 +83,9 @@ public static class FollowConsentRules
         return Math.Clamp(value, MinMaxFollowers, MaxMaxFollowers);
     }
 
-    /// <summary>First matching step wins: mind control, Persuasion Master, other leader, forced, reaction, alignment, level, limit.</summary>
+    /// <summary>First matching step wins: mind control, other leader, forced, reaction, alignment, level, then the limit
+    /// steps; Persuasion Master goes straight to the limit steps.</summary>
+    [OriginalFunction(0x4AD950, OriginalFunctionScope.Full)]
     public static FollowConsent Evaluate(FollowConsentInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -89,21 +93,26 @@ public static class FollowConsentRules
         if (input.NonForcedFollowers < 0) throw new ArgumentOutOfRangeException(nameof(input), "NonForcedFollowers");
 
         if (input.MindControlledByPc) return FollowConsent.Accepted;
-        if (input.PcPersuasion == PersuasionTraining.Master) return FollowConsent.Accepted;
-        if (input.OtherLeaderCharisma is { } leader && leader >= input.PcCharisma) return FollowConsent.AlreadyInGroup;
-        if (input.ForcedFollower) return FollowConsent.Accepted;
+        if (input.PcPersuasion != PersuasionTraining.Master)
+        {
+            if (input.OtherLeaderCharisma is { } leader && leader >= input.PcCharisma) return FollowConsent.AlreadyInGroup;
+            if (input.ForcedFollower) return FollowConsent.Accepted;
 
-        var t = input.Thresholds;
-        if (input.Reaction <= t.DislikeReaction) return FollowConsent.Dislike;
-        // Widened so extreme caller values cannot overflow.
-        var gap = (long)input.PcAlignment - input.NpcAlignment;
-        if (gap > t.MaxAlignmentAbove) return FollowConsent.TooGood;
-        if (-gap > t.MaxAlignmentBelow) return FollowConsent.TooBad;
-        if (input.NpcLevel >= (long)input.PcLevel + t.LevelGate) return FollowConsent.LowLevel;
+            var t = input.Thresholds;
+            if (input.Reaction <= t.DislikeReaction) return FollowConsent.Dislike;
+            // As the executable: one branch by which alignment is higher, in 32-bit arithmetic that wraps.
+            if (input.PcAlignment > input.NpcAlignment)
+            {
+                if (unchecked(input.PcAlignment - input.NpcAlignment) > t.MaxAlignmentAbove) return FollowConsent.TooGood;
+            }
+            else if (unchecked(input.NpcAlignment - input.PcAlignment) > t.MaxAlignmentBelow) return FollowConsent.TooBad;
+            if (input.NpcLevel >= unchecked(input.PcLevel + t.LevelGate)) return FollowConsent.LowLevel;
+        }
 
         if (!input.IgnoreCharismaLimit)
         {
-            if (input.MaxFollowers <= 0) return FollowConsent.NotAllowed;
+            // The original tests for exactly 0; a negative maximum is below any count.
+            if (input.MaxFollowers == 0) return FollowConsent.NotAllowed;
             if (input.NonForcedFollowers >= input.MaxFollowers) return FollowConsent.LimitReached;
         }
         return FollowConsent.Accepted;

@@ -22,7 +22,7 @@ internal static partial class Program
     private const int ExpectedSectorOrdinal = 463;
     private const int ExpectedSectorDecodedBytes = 47_291;
     private const uint DynamicObjectFlag = 0x00002000;
-    // Pinned CE OBJ_F_FLAGS is enum value 19, while serialized common fields are
+    // The object field OBJ_F_FLAGS is number 19 (the executable's field-name table 0x59BEA8), while serialized common fields are
     // zero-based because OBJ_F_CURRENT_AID (enum value 1) occupies slot 0.
     private const int CurrentArtField = 0;
     private const int LocationField = 1;
@@ -804,12 +804,12 @@ internal static partial class Program
             var cursor = new Cursor(bytes.Slice(tileEnd, trailingStart - tileEnd));
             var roofStart = tileEnd;
             var roofEmpty = cursor.I32();
-            if (roofEmpty is not 0 and not 1) throw new InvalidDataException("Roof empty discriminator is outside the bounded CE-derived form.");
+            if (roofEmpty is not 0 and not 1) throw new InvalidDataException("Roof empty discriminator is outside the bounded source-derived form.");
             if (roofEmpty == 0) cursor.Skip(256 * sizeof(uint));
             var roofEnd = checked(tileEnd + (trailingStart - tileEnd - cursor.Remaining));
             var placeholderStart = roofEnd;
             var placeholder = cursor.I32();
-            if (placeholder is < 0xAA0000 or > 0xAA0004) throw new InvalidDataException("Sector placeholder is outside the CE-derived discriminator range.");
+            if (placeholder is < 0xAA0000 or > 0xAA0004) throw new InvalidDataException("Sector placeholder is outside the source-derived discriminator range.");
             var placeholderEnd = checked(placeholderStart + sizeof(int));
             var tileScriptsStart = placeholderEnd;
             var tileScriptCount = 0;

@@ -9,8 +9,8 @@ namespace Arcanum.CrashSiteProbe;
 // ARC-RES-023 research only: who holds which item at the Crash Site at T0 (the
 // normal-game aggregate before any tick), how the display-name chain resolves, and
 // which DLG IN/$$ operands the core dialog NPCs reference. Independently authored
-// from the pinned CE locators cited in docs/research/crash-site-item-inventory.md;
-// no CE code or structure is reused. No inventory runtime, no transfer, no script
+// from the source locators cited in docs/research/crash-site-item-inventory.md;
+// no code or structure is reused. No inventory runtime, no transfer, no script
 // VM. Only numbers, booleans and SHA-256 digests leave the probe; MES/DLG text
 // stays in memory.
 internal static partial class Program

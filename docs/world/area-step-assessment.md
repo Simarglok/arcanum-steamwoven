@@ -244,6 +244,26 @@ effects the rules do not model and from the lock cases above. ARC-RES-049 left
 these counts (54 complete, at least 48 walkable, 22 window-jump steps in 2
 interiors) unchanged.
 
+## Windows (ARC-DATA-034)
+
+`InspectWholeMap` also takes a window snapshot ([window plans](whole-map-plans.md#window-plans-arc-data-032),
+profiles `arc-data-032-window-original-rules-v1` and `arc-data-032-window-v1`) and applies the whole-map rules to it. Its own core sectors are read
+from the module archive as for a whole map. A generated core sector is read again from the archive that holds its
+template in the stack (the window names each template's virtual path, `AreaWindowSector.TemplatePath`; `AreaSnapshot.Window`
+exposes the window), bound to the snapshot's payload digest (`FingerprintMismatch` otherwise), and inspected at the real
+sector's coordinates; a template that is no archive member is `InputUnavailable`. The template inputs are among the
+evidence's sources (`area-terraintemplate-N`).
+
+Installed original (opt-in `AreaWindowStepRealDataTests`):
+
+- **Crash Site (1452, 1290).** The window's evidence equals the pinned exterior profile's (`ValidateOriginalData`) on
+  every one of the 36,864 core cells and for every object evaluation, with no Unknown cell or object and no wall edge;
+  7,150 cells are reachable from the spawn in both, the pinned profile's frozen count.
+- **Town (1409, 1314), elven forest wilderness (1384, 239, all nine core sectors generated) and a generated centre
+  (1450, 1290, five core sectors generated).** Evidence builds for all 36,864 core cells with no Unknown terrain; the only Unknown object is one town
+  critter whose effect the step rules do not model (`CRITTER_EFFECT_UNSUPPORTED`). The wilderness has 3,539 wall edges
+  from its templates' walls, the town 717, the generated centre none.
+
 ## Not delivered
 
 No route search, state after T0, context-ring or southern admission, other

@@ -30,6 +30,7 @@ public sealed class FollowConsentRulesTests
         Assert.AreEqual(FollowConsent.LowLevel, FollowConsentRules.Evaluate(Base() with { NpcLevel = 8 }));
         Assert.AreEqual(FollowConsent.Accepted, FollowConsentRules.Evaluate(Base() with { NpcLevel = 7 }));
         Assert.AreEqual(FollowConsent.NotAllowed, FollowConsentRules.Evaluate(Base() with { MaxFollowers = 0 }));
+        Assert.AreEqual(FollowConsent.LimitReached, FollowConsentRules.Evaluate(Base() with { MaxFollowers = -1 }), "only exactly 0 is not allowed");
         Assert.AreEqual(FollowConsent.LimitReached, FollowConsentRules.Evaluate(Base() with { NonForcedFollowers = 2 }));
         Assert.AreEqual(FollowConsent.Accepted, FollowConsentRules.Evaluate(Base() with { NonForcedFollowers = 1 }));
     }
@@ -42,9 +43,12 @@ public sealed class FollowConsentRulesTests
             OtherLeaderCharisma = 9, Reaction = -100, PcAlignment = 900, NpcLevel = 50, NonForcedFollowers = 5,
         };
         Assert.AreEqual(FollowConsent.AlreadyInGroup, FollowConsentRules.Evaluate(everything));
-        // Mind control and Persuasion Master accept before the other leader is looked at.
+        // Mind control accepts before the other leader is looked at; Persuasion Master skips to the limit steps (ledger AP3).
         Assert.AreEqual(FollowConsent.Accepted, FollowConsentRules.Evaluate(everything with { MindControlledByPc = true }));
-        Assert.AreEqual(FollowConsent.Accepted, FollowConsentRules.Evaluate(everything with { PcPersuasion = PersuasionTraining.Master }));
+        Assert.AreEqual(FollowConsent.LimitReached, FollowConsentRules.Evaluate(everything with { PcPersuasion = PersuasionTraining.Master }));
+        Assert.AreEqual(FollowConsent.Accepted, FollowConsentRules.Evaluate(everything with { PcPersuasion = PersuasionTraining.Master, NonForcedFollowers = 1 }));
+        Assert.AreEqual(FollowConsent.Accepted, FollowConsentRules.Evaluate(everything with { PcPersuasion = PersuasionTraining.Master, IgnoreCharismaLimit = true }));
+        Assert.AreEqual(FollowConsent.NotAllowed, FollowConsentRules.Evaluate(everything with { PcPersuasion = PersuasionTraining.Master, MaxFollowers = 0 }));
         // A forced follower is accepted after the other-leader step, before reaction, alignment, level and limit.
         Assert.AreEqual(FollowConsent.AlreadyInGroup, FollowConsentRules.Evaluate(everything with { ForcedFollower = true }));
         Assert.AreEqual(FollowConsent.Accepted, FollowConsentRules.Evaluate(everything with { ForcedFollower = true, OtherLeaderCharisma = null }));
@@ -64,11 +68,16 @@ public sealed class FollowConsentRulesTests
     }
 
     [TestMethod]
-    public void ExtremeInputsDoNotOverflow()
+    public void AlignmentTakesOneBranchAndArithmeticWrapsInThirtyTwoBits()
     {
-        Assert.AreEqual(FollowConsent.TooGood, FollowConsentRules.Evaluate(Base() with { PcAlignment = int.MaxValue, NpcAlignment = int.MinValue }));
-        Assert.AreEqual(FollowConsent.TooBad, FollowConsentRules.Evaluate(Base() with { PcAlignment = int.MinValue, NpcAlignment = int.MaxValue }));
-        Assert.AreEqual(FollowConsent.Accepted, FollowConsentRules.Evaluate(Base() with { PcLevel = int.MaxValue, Thresholds = Row with { LevelGate = int.MaxValue } }));
+        // Ledger AP3: equal alignments take the "not above" branch only; a negative limit there is never compared.
+        Assert.AreEqual(FollowConsent.Accepted, FollowConsentRules.Evaluate(Base() with { Thresholds = Row with { MaxAlignmentAbove = -1 } }));
+        Assert.AreEqual(FollowConsent.Accepted, FollowConsentRules.Evaluate(Base() with { PcAlignment = 2, Thresholds = Row with { MaxAlignmentBelow = -5 } }));
+        Assert.AreEqual(FollowConsent.TooBad, FollowConsentRules.Evaluate(Base() with { Thresholds = Row with { MaxAlignmentBelow = -1 } }));
+        // Differences and the level sum wrap as in the executable.
+        Assert.AreEqual(FollowConsent.Accepted, FollowConsentRules.Evaluate(Base() with { PcAlignment = int.MaxValue, NpcAlignment = int.MinValue }));
+        Assert.AreEqual(FollowConsent.Accepted, FollowConsentRules.Evaluate(Base() with { PcAlignment = int.MinValue, NpcAlignment = int.MaxValue }));
+        Assert.AreEqual(FollowConsent.LowLevel, FollowConsentRules.Evaluate(Base() with { PcLevel = 1, Thresholds = Row with { LevelGate = int.MaxValue } }));
         Assert.AreEqual(FollowConsent.LowLevel, FollowConsentRules.Evaluate(Base() with { PcLevel = int.MinValue, NpcLevel = int.MaxValue }));
     }
 
