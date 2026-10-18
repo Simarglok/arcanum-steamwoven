@@ -15,7 +15,8 @@ public enum BlessingEffectSource
     Prefix,
     /// <summary>The text does not start with a number: effect 0.</summary>
     NotANumber,
-    /// <summary>A number outside the 32-bit range, where <c>atoi</c> is undefined: refused, no effect number.</summary>
+    /// <summary>A number outside the 32-bit range, which the original's <c>atol</c> would wrap: refused, no effect number (no
+    /// installed entry is near it).</summary>
     Overflow,
 }
 
@@ -43,16 +44,19 @@ public static class BlessingRules
     public static BlessingEffect EffectOf(MesFile table, int number)
     {
         ArgumentNullException.ThrowIfNull(table);
-        if (number < FirstNumber || number > (int.MaxValue - EffectField) / Bank) return new(0, BlessingEffectSource.BelowRange);
+        if (number < FirstNumber) return new(0, BlessingEffectSource.BelowRange);
+        // A number whose entry would lie beyond the 32-bit entry numbers has no entry.
+        if (number > (int.MaxValue - EffectField) / Bank) return new(0, BlessingEffectSource.Missing);
         if (table.Find(number * Bank + EffectField) is not { } message) return new(0, BlessingEffectSource.Missing);
         return Atoi(message.Bytes.Span);
     }
 
-    /// <summary>The numbers from 50 that have an effect entry, ascending (the entries below 1000).</summary>
+    /// <summary>The numbers from 50 that have an effect entry, ascending (number 100's name would share entry 1000 with the
+    /// received message; no installed table reaches 100).</summary>
     public static IReadOnlyList<int> Numbers(MesFile table)
     {
         ArgumentNullException.ThrowIfNull(table);
-        return table.Messages.Select(m => m.Number).Where(n => n >= FirstNumber * Bank && n < ReceivedMessage && n % Bank == EffectField)
+        return table.Messages.Select(m => m.Number).Where(n => n >= FirstNumber * Bank && n % Bank == EffectField)
             .Select(n => n / Bank).Order().ToArray();
     }
 

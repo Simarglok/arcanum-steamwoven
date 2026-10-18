@@ -65,7 +65,7 @@ public sealed class BlessingStateTests
         Changed(owner.AddHeroEffect(owner.Version, Strong, EffectCause.Item), owner, 1);
         Changed(owner.AddHeroBlessing(owner.Version, SessionBlessingKind.Blessing, 55, Strong), owner, 1);
         Changed(owner.AddHeroBlessing(owner.Version, SessionBlessingKind.Blessing, 56, Nothing), owner, 1);
-        // bless_remove: the list closes up and effect_remove_one_typed takes the item's entry, the first 120.
+        // The removal (0x4C4450): the list closes up and the typed removal (0x4EA100) takes the item's entry, the first 120.
         Changed(owner.RemoveHeroBlessing(owner.Version, SessionBlessingKind.Blessing, 55), owner, 1);
         CollectionAssert.AreEqual(new[] { new SessionBlessing(56, 4, T0) }, owner.QueryHeroBlessings(SessionBlessingKind.Blessing)!.ToArray());
         CollectionAssert.AreEqual(new SessionEffect[] { new(120, EffectCause.Bless), new(4, EffectCause.Bless) }, owner.QueryHeroEffects()!.Effects.ToArray());
@@ -98,6 +98,24 @@ public sealed class BlessingStateTests
             owner.AddHeroBlessing(owner.Version, SessionBlessingKind.Blessing, 50, Strong with { Changes = [] }).Failure);
         Assert.AreEqual((0, 1L), (owner.QueryHeroBlessings(SessionBlessingKind.Blessing)!.Count, owner.Version.Revision));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => owner.QueryHeroBlessings((SessionBlessingKind)2));
+    }
+
+    [TestMethod]
+    public void AListHoldsAtMostSixtyFourNumbers()
+    {
+        // The effect entries go away as the list fills, so only the list's own bound stops it.
+        using var owner = Owner();
+        for (var number = 50; number < 50 + SessionEffectLimits.MaxBlessings; number++)
+        {
+            Changed(owner.AddHeroBlessing(owner.Version, SessionBlessingKind.Blessing, number, Nothing), owner, 1);
+            Changed(owner.RemoveHeroEffectsCausedBy(owner.Version, EffectCause.Bless, all: true), owner, 1);
+        }
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.AddHeroBlessing(owner.Version, SessionBlessingKind.Blessing, 50, Nothing).Disposition);
+        Assert.AreEqual(GameSessionFailure.EffectCapacityExceeded, owner.AddHeroBlessing(owner.Version, SessionBlessingKind.Blessing, 200, Nothing).Failure);
+        Changed(owner.AddHeroBlessing(owner.Version, SessionBlessingKind.Curse, 200, Nothing), owner, 1);
+        // A full list still saves and restores.
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(SessionEffectLimits.MaxBlessings, restored.QueryHeroBlessings(SessionBlessingKind.Blessing)!.Count);
     }
 
     [TestMethod]

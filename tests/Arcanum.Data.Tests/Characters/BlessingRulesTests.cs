@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Data.Tests.Characters;
 
-// ARC-WORLD-035: the blessing and curse tables (bless_get_effect / curse_get_effect, checked in the original executable).
+// ARC-WORLD-035: the blessing and curse tables (the effect numbers 0x4C4420 / 0x4C3F70, checked in the original executable).
 // Entries are invented.
 [TestClass]
 public sealed class BlessingRulesTests
@@ -32,8 +32,11 @@ public sealed class BlessingRulesTests
         Assert.AreEqual(new BlessingEffect(null, BlessingEffectSource.Overflow), BlessingRules.EffectOf(table, 56));
         // Below 50 no entry is read, though entry 401 exists.
         Assert.AreEqual(new BlessingEffect(0, BlessingEffectSource.BelowRange), BlessingRules.EffectOf(table, 40));
-        Assert.AreEqual(new BlessingEffect(0, BlessingEffectSource.BelowRange), BlessingRules.EffectOf(table, int.MaxValue));
+        Assert.AreEqual(new BlessingEffect(0, BlessingEffectSource.Missing), BlessingRules.EffectOf(table, int.MaxValue));
         CollectionAssert.AreEqual(new[] { 50, 51, 52, 53, 54, 55, 56 }, BlessingRules.Numbers(table).ToArray());
+        // Numbers from 100 read entries above the received message 1000, as the original does.
+        CollectionAssert.AreEqual(new[] { 100 }, BlessingRules.Numbers(Mes("{1000}{got}{1001}{5}")).ToArray());
+        Assert.AreEqual(new BlessingEffect(5, BlessingEffectSource.Number), BlessingRules.EffectOf(Mes("{1000}{got}{1001}{5}"), 100));
     }
 
     [TestMethod]

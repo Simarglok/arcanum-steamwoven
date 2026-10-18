@@ -70,8 +70,9 @@ public sealed record SessionHeroEffectsView(IReadOnlyList<SessionEffect> Innate,
     public int Count(int number) => Innate.Count(e => e.Number == number) + Effects.Count(e => e.Number == number);
 }
 
-/// <summary>Saved durable effects of the hero (snapshot schema 13): the entries in list order and the rule of each number
-/// they use, by ascending number. Both are empty for a session without a hero.</summary>
+/// <summary>Saved durable effects of the hero (snapshot schema 13; blessings and curses since schema 17): the entries in list
+/// order, the rule of each number they use by ascending number, and the blessing and curse lists. All are empty for a session
+/// without a hero.</summary>
 public sealed class SessionEffectState
 {
     internal SessionEffectState(SessionEffect[] hero, SessionEffectDefinition[] definitions, SessionBlessing[] blessings,
@@ -87,9 +88,9 @@ public sealed class SessionEffectState
 
     public IReadOnlyList<SessionEffect> Hero { get; }
     public IReadOnlyList<SessionEffectDefinition> Definitions { get; }
-    /// <summary>The hero's blessings in list order (snapshot schema 16, ARC-WORLD-035).</summary>
+    /// <summary>The hero's blessings in list order (snapshot schema 17, ARC-WORLD-035).</summary>
     public IReadOnlyList<SessionBlessing> Blessings { get; }
-    /// <summary>The hero's curses in list order (snapshot schema 16, ARC-WORLD-035).</summary>
+    /// <summary>The hero's curses in list order (snapshot schema 17, ARC-WORLD-035).</summary>
     public IReadOnlyList<SessionBlessing> Curses { get; }
 }
 
@@ -186,7 +187,8 @@ internal sealed class EffectDomain
     /// <summary>
     /// A rule the session admits: a number in the tables' range, at most seven changes per collection, each naming an
     /// attribute of its collection with an admitted operator and at most nine digits, and every change the session models
-    /// (the stats, the two maxima and the three reaction values) at most <see cref="SessionEffectLimits.MaxModelledMagnitude"/>.
+    /// (the stats, the two maxima and the three reaction values) at most <see cref="SessionEffectLimits.MaxModelledMagnitude"/>;
+    /// no divisor of 0 and no multiply or divide change on a maximum (ARC-WORLD-035).
     /// </summary>
     internal static bool IsValid(SessionEffectDefinition? definition)
     {
@@ -348,7 +350,9 @@ public sealed partial class GameSessionOwner
         return result;
     }
 
-    /// <summary>The hero's blessings or curses in list order (ARC-WORLD-035), or null for a session without a hero.</summary>
+    /// <summary>The hero's blessings or curses in list order (ARC-WORLD-035), or null for a session without a hero. An undefined
+    /// <paramref name="kind"/> throws <see cref="ArgumentOutOfRangeException"/> (a query; the mutations refuse it as
+    /// <see cref="GameSessionFailure.InvalidEffect"/>).</summary>
     public IReadOnlyList<SessionBlessing>? QueryHeroBlessings(SessionBlessingKind kind)
     {
         ThrowIfDisposed();

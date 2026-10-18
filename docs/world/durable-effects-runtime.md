@@ -154,7 +154,7 @@ network branch it leaves out (never taken in single player) and its bounded copy
 | Effect (0x4C4420 / 0x4C3F70) | `atoi` of the effect entry: an empty or non-numeric text is effect 0, the module's `gameeffect.mes` effect 0. |
 | Has (0x4C4280 / 0x4C3DD0) | A PC only; the number in its list. |
 | Add (0x4C42F0 / 0x4C3E40) | A PC only; nothing when held. Appends the number and the current game time, adds the effect with cause bless (3) or curse (4), and for the local PC shows message 1000 and lights the logbook button. |
-| Remove (0x4C4450 / 0x4C3FA0) | A PC only; nothing when not held. Removes the first entry (later entries and their times move up), then the first effect entry of the effect number (`effect_remove_one_typed`, whatever caused it), and lights the logbook button. |
+| Remove (0x4C4450 / 0x4C3FA0) | A PC only; nothing when not held. Removes the first entry (later entries and their times move up), then the first effect entry of the effect number (the typed removal 0x4EA100, whatever caused it), and lights the logbook button. |
 
 **Data.** `Arcanum.Data.Characters.BlessingRules` reads a table: `EffectOf(table, number)` gives the source's effect number
 and how it was read (`Number`, `BelowRange`, `Missing`, `Prefix`, `NotANumber`; a number outside 32 bits is refused as
