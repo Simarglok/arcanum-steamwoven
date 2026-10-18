@@ -4,7 +4,7 @@
 
 Roofs of any whole map of the content stack, read as the original reads them
 and kept with the original's rules for hiding, fading and covering, checked in
-the retail executable ([ledger RF1–RF7](../research/original-verification-ledger.md#roofs-arc-render-021);
+the retail executable ([ledger RF1–RF10](../research/original-verification-ledger.md#roofs-arc-render-021);
 the stored layout and the first house are the
 [first building research](../research/first-building-evidence.md#roofs-fr-scene-010), ARC-RES-029).
 ARC-RENDER-021 is the data half: the roofs in the strict snapshot and the rules
@@ -63,6 +63,49 @@ implements an original function carries its address
   alphas of a faded piece on the original's hardware path, RF2; without 3D
   hardware the original stipples a faded roof) and `Piece`.
 
+## Viewer (ARC-RENDER-022)
+
+The viewer's map mode draws the roofs of the published map with `AreaRoofGrid`
+as the state, so any map with roofs works the same way:
+
+- **Plan.** `AreaScenePlan.Roofs` holds one command per roof block, outside the
+  terrain and body commands: its frame is drawn at the block's normalized tile's
+  screen origin moved 120 left and 200 up, less the frame's hot spot (`HotSpot`:
+  hot spot x 0 for a mirrored roof frame), mirrored for pieces 9–12 (RF1, RF7).
+  The roofs' frames join the map's CPU frame repository.
+- **Drawing.** An unfilled roof is drawn after every terrain item and body,
+  tinted by the outdoor light only (the original's hardware path, RF2); a faded
+  roof takes `FadeCorners`' four corner alphas, interpolated over the frame in
+  its drawn orientation. Roofs stay Legacy under an HD pack.
+- **Hiding.** Every tile the actor's committed cell changes to recalculates the
+  roof of that tile (RF3, the flood RF5), so stepping onto a tile whose block
+  band holds it hides that whole roof; a same-map transfer first unfills the
+  roof of the tile it leaves (RF8). A map change and a reset scene start from
+  the map's stored roof state and recalculate the arrival tile.
+- **Fading.** Each wall the wall check holds counts on the roof of its
+  normalized tile, a wall whose flags forbid its own fade included
+  (`AreaWallCheckState.HeldWalls`); a roof fades with its first wall and
+  unfades with its last (`AddWallFade`/`ReleaseWallFade`, RF9).
+- **Covering.** An unfaded, unfilled roof covers the indoor tiles three tiles
+  before its band (RF4): they are drawn again in black right after the terrain,
+  where the original leaves them undrawn on its cleared view. A roof faded or
+  not covers the bodies on those tiles: they are not drawn. The pick does not
+  test the cover (RF10), so a covered body is still picked where its frame is
+  opaque and no roof pixel is hit.
+- **Picking.** A click whose point, moved 120 down, falls on a tile with an
+  unfilled roof and on an opaque pixel of that roof's frame picks no object
+  (`HitCandidate` and the pixel test, RF10).
+- The HUD names the roof blocks and how many are hidden or faded.
+
+The native map smoke observes it when a roof is reachable from the map's start
+(`ARC-RENDER-022 native-smoke roofs PASS`, or `NONE` / `NO-REACHABLE-ROOF`):
+next to a roof, outside it, roofs are drawn in view and, when the view has a
+roof pixel over a pickable body, a click there picks nothing (`PickOverBody`
+says whether it was checked); standing on a tile under a roof whose band holds
+it hides that roof. On `tulla interior` the first such tile hides 491 of its 515
+blocks (one roof over the whole building); `ARC_AREA_ROOF_CAPTURE=PATH` saves
+the views outside and inside.
+
 ## Installed original
 
 The opt-in whole-map test (`AreaMapPlansRealDataTests`, `DAT_ROOT`) reads every
@@ -73,9 +116,17 @@ interior stays complete, and the shades are 255, 200 and 80.
 
 ## Not yet
 
-- Drawing, hiding, the walk's recalculation, the wall check's fading, covered
-  tiles and objects and the roof's click test in the viewer (ARC-RENDER-022).
+- The software path's stippled fade, the roof switch and the view types other
+  than isometric; the black of a covered tile is the cleared view the original
+  leaves, not checked pixel for pixel.
+- A companion or the actor itself on a covered tile is still drawn (only T0
+  bodies are covered); the tile scripts' and other critters' moves do not
+  recalculate roofs (the original does it for the local PC only).
 - Roofs of the start map (it is not opened in map mode) and of the pinned
   Crash Site exterior.
 - What recomputes fill and fade after a save is loaded is not traced (U7 of the
   research).
+- The hit test's pixel rule: the original counts palette indexes 0 and 1 as a
+  miss and tests a roof frame unmirrored (its mirror branch serves other art
+  classes only), while the viewer tests the decoded alpha in the drawn
+  orientation, so pieces 9–12 and index-1 pixels may differ (RF10).

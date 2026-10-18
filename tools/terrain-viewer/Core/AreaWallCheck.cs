@@ -14,10 +14,13 @@ public sealed record AreaWallPiece(AreaObjectKey Key, long X, long Y, int Rotati
 /// <summary>The fade set after a recalculation: the 4×4 block the player was resolved to, the block regions it stood
 /// in, and the fade of every wall that is not opaque. <see cref="Recalculated"/> is false when the source's same-block
 /// rule kept the previous set. <see cref="SharedEdgeTiles"/> counts faded edge tiles holding more than one wall, where
-/// only the first in the area's same-tile order fades (the source fades the head of its tile list).</summary>
+/// only the first in the area's same-tile order fades (the source fades the head of its tile list).
+/// <see cref="Held"/> (ARC-RENDER-022) is every wall the check holds, those whose flags forbid fading included: the
+/// original joins them to the check and counts their roof (ledger RF9); only their own alpha stays unchanged.</summary>
 public sealed record AreaWallCheckState(long BlockX, long BlockY, AreaWallRegions Regions,
-    IReadOnlyDictionary<AreaObjectKey, AreaWallFade> Fades, bool Recalculated, int SharedEdgeTiles = 0)
+    IReadOnlyDictionary<AreaObjectKey, AreaWallFade> Fades, bool Recalculated, int SharedEdgeTiles = 0, IReadOnlySet<AreaObjectKey>? Held = null)
 {
+    public IEnumerable<AreaObjectKey> HeldWalls => (IEnumerable<AreaObjectKey>?)Held ?? Fades.Keys;
     public static AreaWallCheckState Empty { get; } = new(0, 0, AreaWallRegions.None,
         new Dictionary<AreaObjectKey, AreaWallFade>().AsReadOnly(), false);
     public AreaWallFade FadeOf(AreaObjectKey key) => Fades.TryGetValue(key, out var fade) ? fade : AreaWallFade.None;
@@ -135,7 +138,7 @@ public sealed class AreaWallCheck
                 if ((regions & region) != 0) foreach (var target in targets) hidden[target] = true;
         }
 
-        var fades = new Dictionary<AreaObjectKey, AreaWallFade>(); var shared = 0;
+        var fades = new Dictionary<AreaObjectKey, AreaWallFade>(); var held = new HashSet<AreaObjectKey>(); var shared = 0;
         var corners = new Dictionary<(int X, int Y), (bool YStart, bool YEnd, bool XStart, bool XEnd)>();
         for (var index = 0; index < Edges.Length; index++)
         {
@@ -161,10 +164,11 @@ public sealed class AreaWallCheck
                 var (start, end) = wall.Rotation is 0 or 1 or 4 or 5 ? (marks.YStart, marks.YEnd) : (marks.XStart, marks.XEnd);
                 if (start || end) Set(wall, start && end ? AreaWallFade.Both : start ? AreaWallFade.Right : AreaWallFade.Left);
             }
-        return State = new(blockX, blockY, regions, fades.AsReadOnly(), true, shared);
+        return State = new(blockX, blockY, regions, fades.AsReadOnly(), true, shared, held);
 
         void Set(AreaWallPiece wall, AreaWallFade fade)
         {
+            held.Add(wall.Key);
             if (!wall.FadeDisallowed) fades[wall.Key] = fade;
         }
         void Mark((int X, int Y) corner, bool alongY, bool start)

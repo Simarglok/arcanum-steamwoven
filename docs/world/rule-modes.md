@@ -78,6 +78,7 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Game data | `DataFixProfile` | `StoneExamineTextLost` | DF1 | four stone-examination DLGs lack their record's effects field, so the game opens none and examining the stones shows nothing ([data fixes](../formats/data-fixes.md), ARC-DATA-022) |
 | Game data | `DataFixProfile` | `NpcLineEffectsInResponseLost` | DF2 | an NPC line's effects written in its response field are never applied (ARC-DATA-022) |
 | Game data | `DataFixProfile` | `ReplyFinalLineInResponseLost` | DF3 | a reply's final-line action written in its response field reads as 0 and ends the talk without the final line (ARC-DATA-022) |
+| Music and ambient | `SoundRuleProfile` | `CombatSaveLosesSchemes` | SN18 | a save made while combat music plays stores empty scheme slots; on load they replace the saved pre-combat pair, so the loaded map's default (or silence, without one) plays through combat and leaving it restores silence ([audio study](../research/audio-evidence.md), ARC-WORLD-040) |
 | Experience | `ExperienceRuleProfile` | `ProgressProductWraps` | XP3 | the progress toward the next level multiplies `1000 × to-next` in 32 bits and wraps above 2,147,483 to-next (found by the function oracle of ARC-RES-051; ARC-WORLD-033, checked by the oracle in both modes) |
 
 Reserved and candidate differences, added by the slice that implements the rule (the slice records the D2 decision;
@@ -95,6 +96,7 @@ until then both modes behave as the original):
 | Real-time combat | a repeat shot that would go before frame 0 (project guard in both modes, ARC-COMBAT-004) | RT6 (auto attack registered on), RT8 (the invisibility test of the attack start) and RT10 (Speed 8, LA1) are CE slips; everything else is the original's behaviour, no switch (ARC-COMBAT-004). |
 | Experience | none open | XP3 is implemented (above). XP1 (hard difficulty takes a quarter) and XP5 (the last-level experience, no recursion) are CE slips; XP7's first test differs from CE only in form; everything else is the original's behaviour, no switch (ARC-WORLD-030). |
 | Effects | EF10 (an effect that lowers a maximum so far that no fatigue or hit points remain skips the faint and death handling; no fix recorded, ARC-WORLD-029); an effect number outside 0..399 (both fixed: the original reads past its effect tables; the session refuses it); an effect divisor `/0` (both fixed: the original would divide by zero; the effect reader refuses it, ARC-WORLD-035); a multiply or divide change on a maximum (a project guard in both modes: the session refuses it so the effect bounds hold; the original would apply it; no installed rule has one) | EF1–EF9 and the typed removal of the first entry whatever its cause are the original's behaviour, no switch. |
+| Music and ambient | SN14 (reversed hour windows never play; candidate for the player, ARC-UI-041), SN31 (hot-key equip plays the slot number as a sound; candidate, ARC-UI-044); SN12 (a 26th scheme record; both fixed: the original dereferences a null pointer, the catalogue refuses the scheme) | SN18 is implemented (above). |
 | Blessings and curses | BC6 (curses 52–54 hold a placeholder, so the original adds the module's effect 0; owner decision open, ARC-WORLD-035); the reconstruction's own change BC1 (a bounded copy of a blessing's text; the original's copy is unbounded, which no installed text can overflow) | BC2–BC5 are the original's behaviour. |
 | World | LA4 direction-5 leaving on the portal tile; clock day carry only above one day (off by one), clock subtraction underflow, exchanged current day/month getters (dead code); wilderness A6 (both fixed: a null name faults) | LA1, LA2 and the tile swap itself are CE slips. |
 
@@ -113,5 +115,7 @@ The list covers every "Original bug" and "CE change" row of the ledger.
 - The game data fixes (ARC-DATA-022) are read by `ScriptContent.Dialog` with `Rules.Data`; the AREA conversation
   passes the session's rules at each dialog read.
 - The experience domain (ARC-WORLD-033) reads `Rules.Experience` in `GameSessionOwner.QueryHeroExperience`.
-- Domains other than combat, the event queue, scripts, NPC reaction, game data and experience have no profile yet; their
-  first switch adds one.
+- The sound domain (ARC-WORLD-040) reads `Rules.Sound` when a session is restored (a load of a save made during combat
+  music).
+- Domains other than combat, the event queue, scripts, NPC reaction, game data, experience and sound have no profile yet;
+  their first switch adds one.

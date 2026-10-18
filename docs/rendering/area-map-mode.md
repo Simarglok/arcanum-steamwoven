@@ -247,9 +247,9 @@ walks onto a jump point; observed in `tulla interior`, 437,214 → 304,219), or
   one run that passed the blend check stopped at the reload's managed-heap bound
   (+64 MB over a 4 % floor of about 33 MB). Both are left to their own
   investigation.
-- Roofs are not drawn. Wall fade uses the ARC-RENDER-011 wall check; inside
-  buildings an actor north of a wall can still be hidden by it (parity with the
-  original not verified).
+- Roofs are drawn, hidden and faded since ARC-RENDER-022 ([roofs](roofs.md)).
+  Wall fade uses the ARC-RENDER-011 wall check; inside buildings an actor north
+  of a wall can still be hidden by it (parity with the original not verified).
 - Door passability follows the step evidence: a locked door the player has no key
   for opens only for a step leaving a building, as the original executable decides
   it (ARC-RES-049); doors are not opened or animated.

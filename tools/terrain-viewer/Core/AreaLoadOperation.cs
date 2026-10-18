@@ -261,7 +261,7 @@ internal static class AreaLoadOperation
             maxCpuBytes < 0 || maxCpuBytes > (mapCaps ? AreaRepositoryPolicy.MaxMapCpuBytes : MaxCpuBytes))
             throw new ArgumentOutOfRangeException(nameof(maxFrames));
         token.ThrowIfCancellationRequested();
-        var needed = plan.Commands.Select(command => command.Frame).Distinct().ToHashSet();
+        var needed = plan.Frames.Distinct().ToHashSet();
         var selected = snapshot.Visuals.GroupBy(AreaFrameKey.From).Where(group => needed.Contains(group.Key))
             .ToDictionary(group => group.Key, group => group.First());
         if (!needed.SetEquals(selected.Keys)) throw new InvalidOperationException("AREA_FRAME_DESCRIPTOR_REQUIRED");

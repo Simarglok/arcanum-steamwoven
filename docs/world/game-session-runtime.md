@@ -67,6 +67,7 @@ during an event pass, which must not call back into the owner (a `PlaceActor` or
 | `QueryCombatRound` / `StartCombatRound` / `EndCombatRound` / `ConsumeActionPoints` / `EndCombatTurn` / `CompleteCombatActions` / `AddCombatant` / `QueryActionPointCheck` / `QueryCombatActionGate` | Turn-based round (ARC-COMBAT-003): participants from the host's `ISessionCombatWorld` scan, action points, charges with the hero's overexertion, subturns and the end of a round one game second later; mutations take the expected version, decide the step on a copy, refuse before any effect and add one revision when the round changes. While a round is active an ordinary `AdvanceGameTime` is NoChange. See [turn-based round runtime](turn-based-round-runtime.md). |
 | `QueryHeroAttack` / `AttackCritter` / `QueryNpcKilled`, `SessionCritterCombat.From` | The hero's attack (ARC-COMBAT-005): an NPC's combat values from its stored fields, what the hero attacks with, one attack resolved and applied with its experience, and whether the session killed an NPC (then `LootItem` and `QueryMapInventory` count it dead). No snapshot change. See [hero attack runtime](hero-attack-runtime.md). |
 | `QueryCombatMode` / `QueryCombatModes` / `SetCombatMode` / `ToggleHeroCombatMode` / `LeaveHeroCombatMode` / `QueryCanExitCombatMode` / `SwitchTurnBased` / `ChargeCombatRun` | Combat mode (ARC-COMBAT-004): the hero's and NPCs' flags with the source's toggle refusals, the PC's key and exit gate, the turn-based round started or ended by the hero's change, the setting switch, and the run step's fatigue charge; a death leaves combat mode. See [real-time combat runtime](real-time-combat-runtime.md). |
+| `QuerySound` / `PlaySoundScheme` / `EnterMapSound` / `EnterSectorSound` / `FinishSoundTransition` / `LockSound` / `UnlockSound` / `AttachSoundSchemes` | Music and ambient (ARC-WORLD-040, [contract](session-sound-runtime.md)): the original's two scheme slots, the transition restore, combat music (started and stopped by combat mode) and the movie lock; a game load takes the loaded map's default through `GameSessionRestoreOptions.SoundMapDefault`. |
 | `Rules` / `SelectRules(mode)` | Rule mode (ARC-WORLD-023, [contract](rule-modes.md)): the active `GameRules` (Steamwoven or Original) every domain reads at its decision, and an immediate switch (`Changed`, `NoChange`, `Rejected` for an undefined mode). Starts from `GameSessionDescriptor.Rules` or `GameSessionRestoreOptions.Rules` (default Steamwoven). A setting, not state: no revision, not in the snapshot. |
 | `QueryEvents` / `ProcessEvents(world, budget)` | Event queue (ARC-WORLD-024): the pending timers in queue order, and one pass at the session's game time on the actor's map with the host's `ISessionEventWorld` for NPC facts. Life steps set their timers in the same step (`EventBudgetExceeded` when they do not fit); `PlaceActor` and `ApplyChanges` to another map move the followers' timers (`EventConflict` on a collision). See [session wiring](game-event-queue-runtime.md#session-wiring-arc-world-024). |
 | `Capture()` | One detached `GameSessionSnapshot` of every component at this call boundary. |
@@ -150,7 +151,7 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 17
+## Snapshot schema 18
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -169,13 +170,14 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 `Reactions` (the changed NPCs' reaction slots in ordinal order; [NPC reaction](npc-reaction-runtime.md#snapshot-schema-10)),
 `Combat` (the active round or `null`; [turn-based round](turn-based-round-runtime.md#snapshot-schema-11)),
 `CombatMode` (the hero's flag and the NPCs in combat mode; [real-time combat](real-time-combat-runtime.md#snapshot-schema-15)),
+`Sound` (the music and ambient scheme slots, the transition restore and combat music; [session sound](session-sound-runtime.md#snapshot-schema-18)),
 `Events` (the registry version, the next sequence and the pending timers; [event queue](game-event-queue-runtime.md#snapshot-schema-9))
 and `Lighting` (applied scheme and hour, or `null`). Collections are read-only copies.
 
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":17,
+{"format":"arcanum-steamwoven-session","schemaVersion":18,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -199,6 +201,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
  "reactions":{"records":[]},
  "combat":null,
  "combatMode":{"hero":false,"critters":[]},
+ "sound":{"slots":[0,0],"restorePending":false,"restore":[0,0],"combatMusic":false,"preCombat":[0,0]},
  "events":{"registry":1,"nextSequence":1,"pending":[]},
  "lighting":{"schemeId":1,"hour":15}}
 ```
@@ -229,7 +232,8 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 17 is the only accepted version. ARC-WORLD-035 added the required `blessings` and
+**Migration decision: none.** Schema 18 is the only accepted version. ARC-WORLD-040 added the required `sound` section;
+schema 17 is refused like the earlier ones. ARC-WORLD-035 had added the required `blessings` and
 `curses` lists to `effects`; schema 16 is refused like the earlier ones (see
 [durable effects](durable-effects-runtime.md#blessings-and-curses-arc-world-035)). ARC-DEV-009 had bound the clock profile
 to the retail executable (schema 16), ARC-COMBAT-004 added `combatMode` (schema 15) and ARC-WORLD-030 the hero's experience
@@ -261,8 +265,9 @@ dialog. ARC-WORLD-030 added the hero's experience and the NPCs' experience recor
 ARC-COMBAT-004 added the combat-mode flags as schema 15 and refuses schema 14
 ([real-time combat](real-time-combat-runtime.md#snapshot-schema-15)). ARC-DEV-009 binds the clock profile to the retail
 executable (`sourceRevision` is its SHA-256, [clock policy](game-clock-policy.md)) as schema 16, with no structural change, and
-refuses schema 15. ARC-WORLD-035 added the hero's blessings and curses as schema 17 and refuses schema 16. Adding another
-domain needs schema 18 with its own explicit migration decision.
+refuses schema 15. ARC-WORLD-035 added the hero's blessings and curses as schema 17 and refuses schema 16. ARC-WORLD-040
+added the sound state as schema 18 and refuses schema 17. Adding another domain needs schema 19 with its own explicit
+migration decision.
 
 ## Save slot (ARC-WORLD-011)
 

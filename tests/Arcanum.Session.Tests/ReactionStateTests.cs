@@ -276,7 +276,7 @@ public sealed class ReactionStateTests
         Changed(owner.AdjustReaction(owner.Version, "oid:a", Human60, Pc, -70), owner, 3);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"reactions\":{\"records\":[{\"entity\":\"oid:a\",\"remembered\":null,\"conversation\":-10}," +
-            "{\"entity\":\"oid:b\",\"remembered\":65,\"conversation\":null}]},\"combat\":null,\"combatMode\":{\"hero\":false,\"critters\":[]},\"events\":");
+            "{\"entity\":\"oid:b\",\"remembered\":65,\"conversation\":null}]},\"combat\":null,\"combatMode\":{\"hero\":false,\"critters\":[]},\"sound\":");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(new SessionReaction("oid:a", null, -10), restored.QueryReactionRecord("oid:a"));
         Assert.AreEqual(new SessionReaction("oid:b", 65, null), restored.QueryReactionRecord("oid:b"));

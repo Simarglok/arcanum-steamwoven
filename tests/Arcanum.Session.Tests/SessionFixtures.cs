@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":17," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":18," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
@@ -86,7 +86,7 @@ internal static class SessionFixtures
         "\"flags\":{\"revision\":0,\"entries\":[{\"flag\":3,\"value\":false},{\"flag\":7,\"value\":true},{\"flag\":9,\"value\":null}]}," +
         "\"actor\":{\"map\":79,\"x\":100,\"y\":200,\"facing\":\"XPlus\"}," +
         "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":1}," +
-        "{\"scope\":\"entity\",\"entity\":\"npc-1\",\"property\":\"hp\",\"value\":12}]}]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoEvents + LightingTail;
+        "{\"scope\":\"entity\",\"entity\":\"npc-1\",\"property\":\"hp\",\"value\":12}]}]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoSound + NoEvents + LightingTail;
 
     internal const string EmptyStory = ",\"story\":{\"quests\":[],\"globalQuests\":[],\"rumors\":[]}";
     internal const string EmptyParty = ",\"party\":{\"followers\":[],\"others\":[]}";
@@ -97,6 +97,7 @@ internal static class SessionFixtures
     internal const string NoReactions = ",\"reactions\":{\"records\":[]}";
     internal const string NoCombat = ",\"combat\":null";
     internal const string NoCombatMode = ",\"combatMode\":{\"hero\":false,\"critters\":[]}";
+    internal const string NoSound = ",\"sound\":{\"slots\":[0,0],\"restorePending\":false,\"restore\":[0,0],\"combatMusic\":false,\"preCombat\":[0,0]}";
     internal const string NoEquipment = ",\"equipment\":[]";
     internal const string NoEffects = ",\"effects\":{\"hero\":[],\"definitions\":[],\"blessings\":[],\"curses\":[]}";
     internal const string NoExperience = ",\"experience\":{\"npcs\":[]}";

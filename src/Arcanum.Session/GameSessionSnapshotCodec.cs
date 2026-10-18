@@ -24,7 +24,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 17. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 18. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets, and the order and meaning of pending events, whose queue order
@@ -38,7 +38,7 @@ public static class GameSessionSnapshotCodec
     /// exceed it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
     public const int MaxEncodedCharacters = 64 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "effects", "experience", "random", "life", "reactions", "combat", "combatMode", "events", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "effects", "experience", "random", "life", "reactions", "combat", "combatMode", "sound", "events", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -87,6 +87,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] EventsFields = ["registry", "nextSequence", "pending"];
     private static readonly string[] CombatFields = ["turn", "participants", "current", "actionPoints"];
     private static readonly string[] CombatModeFields = ["hero", "critters"];
+    private static readonly string[] SoundFields = ["slots", "restorePending", "restore", "combatMusic", "preCombat"];
     private static readonly string[] PendingEventFields = ["sequence", "kind", "deadlineMs", "entities", "values"];
     private static readonly string[] EventEntityFields = ["map", "entity"];
 
@@ -396,6 +397,15 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteEndObject();
 
+            var sound = snapshot.Sound;
+            w.WriteStartObject("sound");
+            w.WriteStartArray("slots"); w.WriteNumberValue(sound.Slot0); w.WriteNumberValue(sound.Slot1); w.WriteEndArray();
+            w.WriteBoolean("restorePending", sound.RestorePending);
+            w.WriteStartArray("restore"); w.WriteNumberValue(sound.Restore0); w.WriteNumberValue(sound.Restore1); w.WriteEndArray();
+            w.WriteBoolean("combatMusic", sound.CombatMusic);
+            w.WriteStartArray("preCombat"); w.WriteNumberValue(sound.PreCombat0); w.WriteNumberValue(sound.PreCombat1); w.WriteEndArray();
+            w.WriteEndObject();
+
             w.WriteStartObject("events");
             w.WriteNumber("registry", snapshot.Events.Registry);
             w.WriteNumber("nextSequence", snapshot.Events.NextSequence);
@@ -509,7 +519,7 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Effects(f["effects"]), Experience(f["experience"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Events(f["events"]), Lighting(f["lighting"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Effects(f["effects"]), Experience(f["experience"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
@@ -629,6 +639,22 @@ public static class GameSessionSnapshotCodec
                 throw new DecodeException(SnapshotDecodeFailure.NotCanonical, $"{p}.critters[{i}]");
         }
         return new(Bool(f["hero"], p + ".hero"), critters);
+    }
+
+    // Shapes and ranges; the slot invariants are Restore's.
+    private static SessionSoundState Sound(JsonElement element)
+    {
+        const string p = "$.sound";
+        var f = Fields(element, p, SoundFields);
+        (int, int) Pair(string name)
+        {
+            var items = Array(f[name], $"{p}.{name}", 16);
+            if (items.Length != 2) throw new DecodeException(SnapshotDecodeFailure.WrongType, $"{p}.{name}");
+            return (Int(items[0], $"{p}.{name}[0]", 0, int.MaxValue), Int(items[1], $"{p}.{name}[1]", 0, int.MaxValue));
+        }
+        var slots = Pair("slots"); var restore = Pair("restore"); var pre = Pair("preCombat");
+        return new(slots.Item1, slots.Item2, Bool(f["restorePending"], p + ".restorePending"), restore.Item1, restore.Item2,
+            Bool(f["combatMusic"], p + ".combatMusic"), pre.Item1, pre.Item2);
     }
 
     // Shapes and ranges only: kinds, sequence order, deadlines against the clock and the NPCs' records are Restore's.
