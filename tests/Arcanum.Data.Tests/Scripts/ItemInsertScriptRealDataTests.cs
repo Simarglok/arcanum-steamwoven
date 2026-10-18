@@ -39,12 +39,18 @@ public sealed class ItemInsertScriptRealDataTests
         foreach (var line in program.Lines.Skip(1))
             Assert.AreEqual((ScrCatalogue.Condition.True, ScrCatalogue.Action.DoNothing), (line.Condition.Type, line.OnFalse.Type), line.Number.ToString());
 
-        // Its DLG holds one NPC line, number 1, with empty condition and action fields: printing it runs no dialog operation.
+        // Its DLG holds one NPC line, number 1, with empty condition, response and action fields, so printing it runs no
+        // dialog action (ledger IS2); both texts are present and neither starts with a generated-text prefix.
         var dialog = content.Dialog(Script);
         Assert.AreEqual(ScriptContentStatus.Read, dialog.Status, dialog.Detail);
         var record = dialog.Document!.Records.Single();
-        Assert.AreEqual((1, DlgRecordRole.Npc, 0, 0), (record.Id, record.Role, record.Condition.Length, record.Action.Length));
-        Assert.IsTrue(record.Text.Length > 0);
+        Assert.AreEqual((1, DlgRecordRole.Npc, 0, 0, 0), (record.Id, record.Role, record.Condition.Length, record.Response.Length, record.Action.Length));
+        foreach (var text in new[] { record.Text, record.AlternateText })
+        {
+            Assert.IsTrue(text.Length > 2);
+            var prefix = Encoding.Latin1.GetString(text.Bytes.Take(2).ToArray()).ToLowerInvariant();
+            CollectionAssert.DoesNotContain(new[] { "g:", "i:", "m:", "r:" }, prefix);
+        }
 
         // Global flag 1085: no script writes it, only 1341 reads it; four dialogs set it in NPC or player actions.
         var scriptUses = new List<(int Script, int Line, string Side)>();

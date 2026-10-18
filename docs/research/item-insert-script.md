@@ -23,9 +23,11 @@ and **Unknown (U)** as usual. No original text is published: numbers, sizes and 
 
 - **What it does (D, E).** Script 1341 has four lines. If global flag 1085 is set, it returns and lets the default
   run; otherwise it prints line 1 of its own DLG to the message window and returns with "skip the default". That is
-  all: it writes no flag, variable, quest, rumor or object, and its DLG line has empty condition and action fields.
-- **Can it change or remove the item? (E)** No. Printing a line reads the script's DLG and hands text to the user
-  interface; it touches no object. The insert-item point cannot cancel: the insertion is already done when the script
+  all: the script writes no flag, variable, quest, rumor or object. Printing a DLG line also runs that line's action
+  field (E, IS2), but this line's condition, response and action fields are empty and its text has no generated-text
+  prefix, so here it only shows text.
+- **Can it change or remove the item? (E)** No. Printing this line reads the script's DLG and hands text to the user
+  interface; with an empty action field it touches no object. The insert-item point cannot cancel: the insertion is already done when the script
   runs and its result is ignored (ledger [IF10](original-verification-ledger.md#implemented-functions-arc-dev-025),
   [dispatcher table](scr-event-dispatcher.md), point 21).
 - **When it fires (D, E).** On every insertion of the item into any inventory, PC or not, every time: there is no
@@ -49,7 +51,7 @@ Read by [ItemInsertScriptRealDataTests](../../tests/Arcanum.Data.Tests/Scripts/I
 | --- | --- |
 | D1 | Item 2527 (armor type, name class 2807, description 8159), pack slot 0 of dead NPC 1201, has script 1341 on attachment point 0 (examine) **and** point 21 (insert item); no other attachment. The context item 3488 (same prototype, held by context NPC 1382) has the same pair. NPC 1201 has no script. |
 | D2 | Script 1341 (`scr/01341…`) has 4 lines, no initial local flags or counters, file flags 0. Line 0: `eq(GF 1085, 1)` → `goto 3`, else `do_nothing`. Line 1: always → `print_line(1, 6)` (both numbers literal). Line 2: always → `return_and_skip_default`. Line 3: always → `return_and_run_default`. False branches of lines 1–3 do nothing. Type names are the [census](scr-census.md) names. |
-| D3 | Its DLG (the script's name with the dialog extension) reads and holds exactly one record: NPC line 1, 75 bytes of text, empty condition and action fields. |
+| D3 | Its DLG (the script's name with the dialog extension) reads and holds exactly one record: NPC line 1 with 75 bytes of text and 75 of alternate text, neither starting with `g:`, `i:`, `m:` or `r:`, and empty condition, response and action fields. |
 | D4 | Global flag 1085 across all 2,399 scripts and the 697 dialogs the game opens: no script writes it (no global-flag operand, no set/clear action); only line 0 of 1341 reads it. Four dialogs set it to 1 in actions: 1047 (records 1100, 1130, 1160, 1195, 1225, 1235), 1074 (379), 1096 (19) and 3011 (4); dialogs 1074 (376, 377) and 3011 (4) test it in player conditions. No dialog clears it. None of them belongs to a Crash Site speaker (the only Crash Site dialog is Virgil's, 1324). |
 
 ## Executable (E)
@@ -57,7 +59,8 @@ Read by [ItemInsertScriptRealDataTests](../../tests/Arcanum.Data.Tests/Scripts/I
 | ID | Function (address) | Reading |
 | --- | --- | --- |
 | IS1 | `script_execute_action` (0x447220), jump table at 0x44ADBC | The table is indexed by action type − 1; entry 23 (type 24, `print_line`) is the case at 0x447822, which only calls 0x44B390 with the action and the run state and returns. Entry 43 is the teleport case 0x4481A1 of ledger TR1, which checks the indexing. |
-| IS2 | print line (0x44B390) | Builds the DLG name of the running attachment's script (0x4CEE60) and loads it (`dialog_load` 0x412E10); does nothing when the attachment has no script, the load fails or the run object handle it tests (run record offset 0x10) is null. Operand 0 through `script_get_value` (0x44BA70) selects the DLG line, whose text the dialog's NPC-entry step builds (0x413A30 → 0x416840); operand 1, read the same way, travels with the text. In a single-player game the pair goes to the user interface's message callback (0x460630, slot 0x5E86D8 of the callback table installed at 0x45FD40); on a network game (flags 0x62AC6C bit 0) it goes through the network path (0x4A2B10, 0x4EDA60) to a player chosen from the run's other object instead. The DLG is then freed (0x412F40). The function writes nothing but its own stack. |
+| IS2 | print line (0x44B390), NPC-line step 0x413A30 → 0x416840 | Builds the DLG name of the running attachment's script (0x4CEE60) and loads it through the dialog cache (`dialog_load` 0x412E10); does nothing when the attachment has no script, the load fails or the attachee is null. Operand 0 through `script_get_value` (0x44BA70) selects the DLG line. The NPC-line step finds it (a missing line prints a single space), **runs its action field** through the DLG action interpreter (0x415BA0) between triggerer and attachee, and builds the text: a `g:`, `i:`, `m:` or `r:` prefix selects generated text, otherwise the text or alternate text by the triggerer's gender when it is a critter. Operand 1, read the same way, travels with the text: in a single-player game to the user interface's message callback (0x460630, slot 0x5E86D8 of the table installed at 0x45FD40), in a network game (flags 0x62AC6C bit 0) to the triggerer's player (0x4A2B10, 0x4EDA60). Then the cache reference is released (0x412F40). The function itself writes no global or object; what the line's action field does is the only game effect. |
+| IS3 | print line (0x44B390) | A null attachee is tested after the DLG load and returns without the release, so the cache entry keeps one extra reference. Inserts always have the item as attachee, so this path is not reached here. |
 
 Already in the ledger and used here: the insert-item script runs after the item entered the list and cannot cancel
 (IF10); its roles are holder (triggerer) and item (attachee), result ignored, and examine is gated by its script
@@ -69,14 +72,17 @@ Already in the ledger and used here: the insert-item script runs after the item 
   interface callback, whose side was not read. It matters only for presentation.
 - **U2.** Which object the line's name tokens refer to, if the text has any; it is not read here because the text is
   not published. Presentation only.
+- **U3.** Whether the generated-text helpers behind the `g:`, `m:` and `r:` prefixes change state. Line 1 of 1341 uses
+  none of them; a script that prints such a line needs them read first.
 
 ## Proposal (P)
 
 1. **Admit 2527 through the script, not by exception.** A follow-up implementation task runs the item's insert-item
    script through the [SCR dispatcher](../scripting/scr-dispatcher-runtime.md) when the session moves an item (holder
    as triggerer, item as attachee, result ignored), with `print_line` added to an admission set as a host-facing
-   message effect (DLG line and the second number). The session keeps refusing items whose insert-item script falls
-   outside the admitted set. 2527 then loots, and the viewer shows the line while flag 1085 is clear.
+   message effect (DLG line and the second number), admitted only for a line whose action field is empty (or itself
+   admitted) and whose text has no generated-text prefix. The session keeps refusing items whose insert-item script
+   falls outside the admitted set. 2527 then loots, and the viewer shows the line while flag 1085 is clear.
 2. The same path covers the examine point later (an inspect window would show the line instead of the description
    while 1085 is clear).
 3. Size: the [census](scr-census.md) counts 41 insert-item scripts on 74 object slots plus 12 prototype defaults;

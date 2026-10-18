@@ -782,12 +782,16 @@ while the code reads the poison level as stat 24 (the setter and the strength an
 
 Source: [item insert script](item-insert-script.md). Question: what the `print_line` action (type 24) of a script does,
 for script 1341 on the Crash Site amulet's insert-item and examine points. Read on 2026-10-18 by a first reader and,
-independently, a second reader that saw only the question and the addresses (method step 6). SECOND_READER_RESULT
+independently, a second reader that saw only the question and the addresses (method step 6). Both agree on IS1 and on
+the path of IS2. The second reader added that the NPC-line step runs the printed line's action field, the generated-text
+prefixes and IS3; the first reader re-read them (the release skip of IS3 directly, the action field through the step's
+dialog records) and agrees. Every call target stays inside `.text`.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
 | IS1 | `script_execute_action` (0x447220), jump table 0x44ADBC | The table is indexed by action type − 1 (entry 43 is the teleport case of TR1); entry 23, type 24 `print_line`, is the case at 0x447822, which only calls 0x44B390 with the action and the run state. | Original |
-| IS2 | print line (0x44B390) | Loads the DLG named after the running attachment's script (0x4CEE60, `dialog_load` 0x412E10) and does nothing without a script number, on a failed load or when the run object it tests is null; operand 0 (`script_get_value` 0x44BA70) selects the DLG line, whose text the NPC-entry step builds (0x413A30 → 0x416840); operand 1 travels with the text to the interface's message callback (0x460630, slot 0x5E86D8 of the table installed at 0x45FD40), or on a network game (0x62AC6C bit 0) through 0x4A2B10 and 0x4EDA60; the DLG is freed (0x412F40). Nothing but its own stack is written. | Original |
+| IS2 | print line (0x44B390), NPC-line step 0x413A30 → 0x416840 | Loads the DLG named after the running attachment's script through the dialog cache (0x4CEE60, `dialog_load` 0x412E10) and does nothing without a script number, on a failed load or with a null attachee; operand 0 (`script_get_value` 0x44BA70) selects the line (a missing line prints a single space); the NPC-line step runs the line's action field (DLG action interpreter 0x415BA0, triggerer and attachee) and builds the text (`g:`, `i:`, `m:`, `r:` prefixes generated; else text or alternate text by the triggerer's gender); operand 1 travels with the text to the interface's message callback (0x460630, slot 0x5E86D8 of the table installed at 0x45FD40), or on a network game (0x62AC6C bit 0) to the triggerer's player (0x4A2B10, 0x4EDA60); the cache reference is released (0x412F40). The function writes no global or object itself. | Original |
+| IS3 | print line (0x44B390) | The null-attachee test comes after the DLG load and returns without the release, leaving one cache reference behind. | Original bug (latent: never reached with an item as attachee) |
 
 ## Decisions to revisit
 
