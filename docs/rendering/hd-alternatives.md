@@ -55,8 +55,8 @@ Local observation.
 - **Walk:** the body's walk `hmfuwxab`, the five drawn groups 0, 4, 5, 6, 7 × 10 frames. Facings 1..3 are
   mirrors, as in ARC-RES-038.
 - **Reproduction on the second Mac.** It exported the frames from its own installation and got byte-identical
-  PNGs for all five evaluation frames and the 80 exported walk frames, all eight groups (SHA-256 compared). It reproduced the klein chest
-  to the reported precision: IoU 0.979, mean contour deviation 0.33 source px, repeated-part residual
+  PNGs for all five evaluation frames and the 80 exported walk frames, all eight groups (SHA-256 compared). It
+  reproduced the klein chest to the reported precision: IoU 0.979, mean contour deviation 0.33 source px, repeated-part residual
   47.2 → 9.8, HD offset (57, 27).
 - **Harness:** Python scripts under `local/hd-gen/lib`, plus throwaway C# exporters over `Arcanum.Data` and the
   terrain viewer core. Not committed.
