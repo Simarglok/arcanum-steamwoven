@@ -19,22 +19,31 @@ namespace Arcanum.TerrainViewer;
 // and stands the actor settled on the saved map and cell, as a transfer does; the dialog host moves to the loaded
 // session (ARC-SCRIPT-006), so quests, rumors, flags and NPC dialog state come back with it. Domains that live in the session are
 // carried by the snapshot without changes here.
+// ARC-WORLD-038: map mode (--area-map) has its own slot (user://saves/map), so the Crash Site slot is never touched. A
+// save there records the map's runtime number; a load onto the map shown is adopted in place, and a load whose actor
+// stands on another map that map mode can open loads that map through the ordinary load path, carrying the loaded
+// session and standing the actor on the saved cell (the running session is kept until the map is published with the
+// loaded one, and comes back with the origin map when the destination does not load or refuses the loaded session; the
+// saved cell and that map's inventory seed can only be checked once it is loaded).
 public partial class TerrainViewerApp
 {
     private const string QuickSaveDirectory = "user://saves";
+    private const string MapQuickSaveDirectory = "user://saves/map";
     private GameSessionSaveSlot? _quickSaveSlot;
+    private GameSessionSaveSlot? _mapQuickSaveSlot;
     // The native smoke writes to its own temporary slot, never to the player's quick save.
     private GameSessionSaveSlot? _quickSaveSlotForSelfTest;
     private readonly QuickKeyGate _quickKeys = new();
     private string? _quickSaveStatus;
 
-    private enum QuickBusy { None, NoActor, Lifecycle, TransferPending }
+    private enum QuickBusy { None, NoActor, Lifecycle, TransferPending, MapLoading }
 
-    private GameSessionSaveSlot QuickSaveSlot => _quickSaveSlotForSelfTest
-        ?? (_quickSaveSlot ??= GameSessionSaveSlot.QuickSave(ProjectSettings.GlobalizePath(QuickSaveDirectory)));
+    private GameSessionSaveSlot QuickSaveSlot => _quickSaveSlotForSelfTest ?? (_readyMapName is not null
+        ? _mapQuickSaveSlot ??= GameSessionSaveSlot.QuickSave(ProjectSettings.GlobalizePath(MapQuickSaveDirectory))
+        : _quickSaveSlot ??= GameSessionSaveSlot.QuickSave(ProjectSettings.GlobalizePath(QuickSaveDirectory)));
 
-    // Map mode (ARC-RENDER-017) never touches the player's Crash Site quick save slot.
-    private bool QuickKeysActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea && _readyMapName is null;
+    // Map mode (ARC-RENDER-017) never touches the player's Crash Site quick save slot: it has its own (ARC-WORLD-038).
+    private bool QuickKeysActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
 
     /// <summary>Routes F7/F8 while quick save/load is available (<see cref="QuickKeyGate"/>). Returns true when the
     /// key belongs to it, so it is not reported as a reserved, unimplemented original key. An open dialog takes every
@@ -59,6 +68,7 @@ public partial class TerrainViewerApp
     {
         if (_worldActor.Session is not AreaGridSession || _readyArea is null) return QuickBusy.NoActor;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) return QuickBusy.Lifecycle;
+        if (_mapHandoff is not null) return QuickBusy.MapLoading;
         if (AreaTransferPending) return QuickBusy.TransferPending;
         return QuickBusy.None;
     }
@@ -68,6 +78,7 @@ public partial class TerrainViewerApp
         QuickBusy.NoActor => "no area actor",
         QuickBusy.Lifecycle => "reset/reload in progress",
         QuickBusy.TransferPending => "map transfer pending",
+        QuickBusy.MapLoading => "another map is loading",
         _ => "ready",
     };
 
@@ -93,9 +104,17 @@ public partial class TerrainViewerApp
     {
         // A load supersedes a queued transfer; it waits only for a reset/reload.
         var busy = QuickBusyReason();
-        if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle) { SetQuickStatus("F8 quick load refused: " + Describe(busy)); return; }
+        if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading) { SetQuickStatus("F8 quick load refused: " + Describe(busy)); return; }
         var maps = AreaRuntimes();
-        var result = AreaQuickSave.Load(QuickSaveSlot, _areaSession!, placement => PlacementRefusal(maps, placement), MapSoundDefault);
+        // ARC-WORLD-038: in map mode a save on another map is loaded with that map, where its cell is placed.
+        AreaMapDestination? elsewhere = null;
+        string? Refusal(ActorPlacement placement)
+        {
+            if (_readyMapName is null || maps.ContainsKey(placement.Map.RuntimeMap)) return PlacementRefusal(maps, placement);
+            if (_mapTransfers?.Destinations.TryGetValue(placement.Map.RuntimeMap, out var destination) != true) return "map mode cannot open that map";
+            elsewhere = destination; return null;
+        }
+        var result = AreaQuickSave.Load(QuickSaveSlot, _areaSession!, Refusal, MapSoundDefault);
         GD.Print("ARC-WORLD-011 quick-load " + System.Text.Json.JsonSerializer.Serialize(new {
             Loaded = result.Owner is not null, Read = result.Read?.Failure.ToString(), Decode = result.Read?.DecodeFailure.ToString(),
             result.Read?.DecodePath, Restore = result.RestoreFailure.ToString() }));
@@ -118,8 +137,29 @@ public partial class TerrainViewerApp
             SetQuickStatus("F8 quick load REFUSED: the save's dialog state is not readable");
             return;
         }
+        // The shown map's seeds and dialog state are checked above; the other map binds its own when it is published.
+        if (elsewhere is { } map) { QuickLoadOtherMap(result.Owner, map, result.Status); return; }
         AdoptLoadedSession(result.Owner, maps, talk);
         SetQuickStatus("F8 " + result.Status);
+    }
+
+    /// <summary>ARC-WORLD-038: the loaded session goes with a load of its map (a pending transfer is dropped, the actor's host
+    /// state is cleared, and the scene is cleared as the load starts); the running session is kept until the map is published
+    /// with the loaded one, and comes back with the shown map when it is not.</summary>
+    private void QuickLoadOtherMap(GameSessionOwner loaded, AreaMapDestination map, string status)
+    {
+        StopWorldRoute("QUICK_LOAD");
+        CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load"); CancelInventoryApproach("quick load"); CancelAreaAttack("quick load");
+        if (_mapTransfers?.Clear() is { } dropped) GD.Print("ARC-WORLD-038 quick load dropped the queued transfer to=" + dropped.To.Name);
+        var grid = (AreaGridSession)_worldActor.Session!;
+        var actor = loaded.QueryActor();
+        var origin = _arguments!;
+        _mapHandoff = new(loaded, _readyArea!.Snapshot.RuntimeMap, map.Name, actor.Facing, origin, grid.Chart.ToWorld(grid.State.CommittedCell), map.Name,
+            Previous: _areaSession, Kind: MapHandoffKind.QuickLoad, OriginFacing: grid.State.Facing);
+        var next = origin with { AreaMapName = map.Name, AreaMapArrival = new(actor.Cell.X, actor.Cell.Y) };
+        GD.Print("ARC-WORLD-038 quick-load map " + System.Text.Json.JsonSerializer.Serialize(new { From = _readyArea.Snapshot.RuntimeMap, To = map, actor.Cell }));
+        SetQuickStatus($"F8 {status}; loading '{map.Name}'");
+        _lastLoad = LoadTransferAsync(next);
     }
 
     /// <summary>The maps this run has loaded, by runtime map.</summary>
@@ -142,6 +182,7 @@ public partial class TerrainViewerApp
         StopWorldRoute("QUICK_LOAD");
         CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load"); CancelInventoryApproach("quick load"); CancelAreaAttack("quick load");
         if (_areaTransitions?.Cancel() is { } dropped) GD.Print("ARC-WORLD-011 quick load dropped the queued transfer to=" + dropped.ToMap);
+        if (_mapTransfers?.Clear() is { } queued) GD.Print("ARC-WORLD-038 quick load dropped the queued transfer to=" + queued.To.Name);
         var actor = loaded.QueryActor();
         ReplaceAreaSession(loaded, maps, actor.Map.RuntimeMap, talk);
         var runtime = maps[actor.Map.RuntimeMap];
@@ -149,6 +190,8 @@ public partial class TerrainViewerApp
         ConfigureAreaActor(runtime, runtime.Chart.ToChart(new AreaStepCell(actor.Cell.X, actor.Cell.Y)), actor.Facing);
         _camera!.SetAreaPlan(_readyArea!.Plan, WorldViewport);
         StopAreaWalls(); // a loaded game starts the wall check afresh (ARC-RENDER-011)
+        ResetAreaRoofs(); // and the roofs from the map's stored state (ARC-RENDER-022)
+        _mapEntered.Clear(); // tiles the replaced actor stepped into fire nothing (ARC-WORLD-038)
         RebindAreaMapAmbient();
         RebindAreaSound();
         _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
@@ -183,7 +226,7 @@ public partial class TerrainViewerApp
     }
 
     private string QuickSaveStatus() => !QuickKeysActive ? ""
-        : " | F7 quick save / F8 quick load (one slot " + QuickSaveDirectory + "/" + GameSessionSaveSlot.QuickSaveFileName + ")"
+        : " | F7 quick save / F8 quick load (one slot " + (_readyMapName is null ? QuickSaveDirectory : MapQuickSaveDirectory) + "/" + GameSessionSaveSlot.QuickSaveFileName + ")"
             + (_quickSaveStatus is null ? "" : ": " + _quickSaveStatus);
 
     // Native observation (ARC-WORLD-011), run after the transition smoke with the exterior published: F7 through the

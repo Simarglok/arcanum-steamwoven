@@ -17,19 +17,30 @@ namespace Arcanum.TerrainViewer;
 // with the actor where it stood. A reset or reload drops a queued transfer.
 public partial class TerrainViewerApp
 {
+    private enum MapHandoffKind { Transfer, QuickLoad }
     private AreaMapTransfers? _mapTransfers;
     private MapTransferHandoff? _mapHandoff;
     // Tiles the actor stepped into since the last frame, in order (a frame can complete several steps; ledger TR3 fires on each).
     private readonly Queue<AreaStepCell> _mapEntered = new();
     private string? _lastPublishedFailure;
 
-    /// <summary>A transfer to another map in progress: the session it carries (null on an unlit map without one), the
-    /// transfer, the facing, and the origin map and cell to fall back to. <see cref="Loading"/> is the map being loaded:
-    /// the destination, or the origin again after the destination failed (<see cref="Failure"/>).</summary>
-    private sealed record MapTransferHandoff(GameSessionOwner? Session, AreaMapTransfer Transfer, NeighborDirection Facing,
-        TerrainViewerArguments Origin, AreaStepCell OriginCell, string Loading, string? Failure = null)
+    /// <summary>A load of another map in progress: the session the destination adopts (null on an unlit map without one),
+    /// the map it leaves and the destination's name, the facing, and the origin map and cell to fall back to.
+    /// <see cref="Loading"/> is the map being loaded: the destination, or the origin again after the destination failed
+    /// (<see cref="Failure"/>). ARC-WORLD-038: a quick load to another map carries the loaded session and keeps the running
+    /// one as <see cref="Previous"/>, which the origin adopts again on a fallback (with <see cref="OriginFacing"/>), and which
+    /// is released only once the destination is published with the loaded session; a transfer carries one session for both.</summary>
+    private sealed record MapTransferHandoff(GameSessionOwner? Session, int FromMap, string To, NeighborDirection Facing,
+        TerrainViewerArguments Origin, AreaStepCell OriginCell, string Loading, string? Failure = null, GameSessionOwner? Previous = null,
+        MapHandoffKind Kind = MapHandoffKind.Transfer, NeighborDirection? OriginFacing = null)
     {
         public bool Fallback => Failure is not null;
+        /// <summary>The facing the actor arrives with on the map being loaded.</summary>
+        public NeighborDirection ArrivalFacing => Fallback && OriginFacing is { } origin ? origin : Facing;
+        /// <summary>The session the map being loaded adopts.</summary>
+        public GameSessionOwner? Adopted => Fallback && Previous is not null ? Previous : Session;
+        /// <summary>The session that is released once the map being loaded has adopted <see cref="Adopted"/>.</summary>
+        public GameSessionOwner? Released => Previous is null ? null : Fallback ? Session : Previous;
     }
 
     private bool AreaTransferPending => _areaTransitions?.Pending is not null || _mapTransfers?.Pending is not null || _mapHandoff is not null;
@@ -41,7 +52,7 @@ public partial class TerrainViewerApp
     private GameSessionOwner? AdoptHandoffSession(TerrainViewerArguments arguments)
     {
         if (_mapHandoff is not { } handoff || !string.Equals(handoff.Loading, arguments.AreaMapName, StringComparison.Ordinal)) return null;
-        return handoff.Session;
+        return handoff.Adopted;
     }
 
     private void StartMapTransfers(TerrainViewerArguments arguments, TerrainLoadResult result)
@@ -50,17 +61,23 @@ public partial class TerrainViewerApp
         var area = result.Area!; var steps = result.AreaStepSnapshot!; var chart = area.Plan.Chart;
         var handoff = _mapHandoff; _mapHandoff = null;
         // A carried session that this map did not adopt (another load published meanwhile) is released.
-        if (handoff?.Session is { } stray && !ReferenceEquals(stray, _areaSession)) { stray.Dispose(); handoff = null; }
+        if (handoff?.Adopted is { } stray && !ReferenceEquals(stray, _areaSession)) { stray.Dispose(); handoff.Released?.Dispose(); handoff = null; }
+        // ARC-WORLD-038: on a fallback the loaded session ends here; the running session a quick load replaced ends only once
+        // the destination is published with the loaded one (LoadTransferAsync), so a refusal while binding it can fall back.
+        if (handoff is { Fallback: true }) handoff.Released?.Dispose();
         if (handoff is not null && _areaSession is { } session)
         {
             // The carried session records the actor on the arrival map in one step.
             var arrival = chart.ToWorld(chart.Spawn);
             var placed = session.ApplyChanges(session.Version, new ActorPlacement(new(area.Snapshot.RuntimeMap),
-                new(checked((int)arrival.X), checked((int)arrival.Y)), handoff.Facing), []);
+                new(checked((int)arrival.X), checked((int)arrival.Y)), handoff.ArrivalFacing), []);
             GD.Print("ARC-WORLD-031 transfer arrived " + System.Text.Json.JsonSerializer.Serialize(new {
-                From = handoff.Transfer.FromMap, To = area.Snapshot.RuntimeMap, Arrival = arrival, handoff.Fallback,
+                Kind = handoff.Kind.ToString(), From = handoff.FromMap, To = area.Snapshot.RuntimeMap, Arrival = arrival, handoff.Fallback,
                 Session = placed.Disposition.ToString(), placed.Failure, Revision = session.Version.Revision }));
             if (placed.Disposition == GameSessionDisposition.Rejected) handoff = handoff with { Failure = handoff.Failure ?? $"session refused the arrival ({placed.Failure})" };
+            // A quick load asked for the saved cell; the map stands the actor on its start when the cell is not admitted.
+            if (handoff is { Kind: MapHandoffKind.QuickLoad, Fallback: false } && arguments.AreaMapArrival is { } asked && (asked.X != arrival.X || asked.Y != arrival.Y))
+                SetQuickStatus($"F8 quick loaded, but the saved cell ({asked.X},{asked.Y}) is not admitted here: the actor stands on the map's start ({arrival.X},{arrival.Y})");
         }
         if (result.MapTransitions is not { } transitions || result.MapDestinations is not { } destinations)
         {
@@ -68,8 +85,9 @@ public partial class TerrainViewerApp
             return;
         }
         _mapTransfers = new(new(area.Snapshot, steps, chart), transitions, destinations);
-        var arrived = handoff is null ? "" : handoff.Fallback ? $"; transfer to '{handoff.Transfer.To.Name}' failed ({handoff.Failure}), back where it started"
-            : $"; arrived from map {handoff.Transfer.FromMap}";
+        var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
+        var arrived = handoff is null ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
+            : handoff.Kind == MapHandoffKind.Transfer ? $"; arrived from map {handoff.FromMap}" : $"; quick load from map {handoff.FromMap}";
         _areaUseStatus = $"map {arguments.AreaMapName}: {_mapTransfers.Triggers.Count} exit objects, {_mapTransfers.TriggerCells.Count} exit tiles{arrived}";
         GD.Print("ARC-WORLD-031 transfers-ready " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = arguments.AreaMapName, area.Snapshot.RuntimeMap, _mapTransfers.Exits, Objects = _mapTransfers.Triggers.Count,
@@ -196,7 +214,7 @@ public partial class TerrainViewerApp
     private void BeginMapLoadTransfer(AreaMapTransfer transfer, AreaGridSession session)
     {
         var origin = _arguments!;
-        _mapHandoff = new(_areaSession, transfer, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell), transfer.To.Name);
+        _mapHandoff = new(_areaSession, transfer.FromMap, transfer.To.Name, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell), transfer.To.Name);
         var next = origin with { AreaMapName = transfer.To.Name, AreaMapArrival = new(transfer.Arrival.X, transfer.Arrival.Y) };
         _areaUseStatus = $"loading '{transfer.To.Name}' ({transfer.To.Catalogue})";
         GD.Print("ARC-WORLD-031 transfer load " + System.Text.Json.JsonSerializer.Serialize(new { transfer.FromMap, To = transfer.To, transfer.Arrival, Trigger = transfer.Site.Trigger.ToString() }));
@@ -206,23 +224,35 @@ public partial class TerrainViewerApp
     private async Task LoadTransferAsync(TerrainViewerArguments next)
     {
         _arguments = next; _lastPublishedFailure = null;
+        var started = _mapHandoff;
         await StartLoadAsync(next, false);
+        if (_mapHandoff is null && started?.Previous is { } previous)
+        {
+            // ARC-WORLD-038: the destination consumed the handoff. With the loaded session in place the running one ends;
+            // otherwise publishing it failed after the handoff was taken (a binding refused the loaded session), and the
+            // origin is loaded again with the running session.
+            if (ReferenceEquals(_areaSession, started.Session) && _readyMapName == next.AreaMapName) { previous.Dispose(); return; }
+            // Another load published meanwhile and released both sessions (StartMapTransfers): nothing falls back.
+            if (_lastPublishedFailure is null) return;
+            _mapHandoff = started;
+        }
         if (_mapHandoff is not { } handoff) return;
         if (_exiting || handoff.Fallback)
         {
-            // Exiting, or the origin did not load again either: the carried session ends here.
+            // Exiting, or the origin did not load again either: the carried sessions end here.
             if (handoff.Fallback) GD.Print("ARC-WORLD-031 transfer fallback failed " + _lastPublishedFailure);
-            _mapHandoff = null; handoff.Session?.Dispose();
+            _mapHandoff = null; handoff.Session?.Dispose(); handoff.Previous?.Dispose();
             return;
         }
         // The destination did not publish: the origin map is loaded again with the actor where the transfer started.
         var failure = _lastPublishedFailure ?? "not published";
-        GD.Print($"ARC-WORLD-031 transfer failed to={handoff.Transfer.To.Name} failure={failure}; reloading the origin");
+        GD.Print($"ARC-WORLD-031 {handoff.Kind} failed to={handoff.To} failure={failure}; reloading the origin");
+        if (handoff.Kind == MapHandoffKind.QuickLoad) SetQuickStatus($"F8 quick load FAILED: '{handoff.To}' did not load ({failure}); the running game is kept");
         var origin = handoff.Origin with { AreaMapArrival = new(handoff.OriginCell.X, handoff.OriginCell.Y) };
         _mapHandoff = handoff with { Loading = handoff.Origin.AreaMapName!, Failure = failure };
         _arguments = origin;
         await StartLoadAsync(origin, false);
-        if (_mapHandoff is { } failed) { _mapHandoff = null; failed.Session?.Dispose(); }
+        if (_mapHandoff is { } failed) { _mapHandoff = null; failed.Session?.Dispose(); failed.Previous?.Dispose(); }
     }
 
     /// <summary>Per advance in map mode: every step the actor started into a tile, in order, for the jump point and tile
@@ -239,10 +269,14 @@ public partial class TerrainViewerApp
     // destination map mode opens, click an opaque pixel of its sprite through the production ground-click seam, let the
     // frames apply the transfer and, for another map, await its load; the actor stands on the authored arrival and the
     // carried session records it there. Then, when the arrival map has a jump point, walk onto it by a ground click.
+    // ARC-WORLD-038 (with a session): F7 next to the exit and F8 a step away come back to the saved cell on this map; after
+    // a transfer to another map (and its jump smoke), F8 loads the saved map again with the actor on the saved cell. Uses a
+    // temporary slot.
     private async Task RunAreaMapTransferSmokeAsync()
     {
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
+        string? quickDirectory = null;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -254,8 +288,30 @@ public partial class TerrainViewerApp
             var exit = key.Key;
             if (key.Cell is not { } near) { GD.Print($"ARC-WORLD-031 native-smoke transfer NO-EXIT map={_readyMapName} objects={transfers.Triggers.Count} opened={exits.Length}"); await RunAreaMapJumpSmokeAsync(); return; }
             var map = transfers.Map; var row = transfers.Object(exit); var site = transfers.Site(exit)!;
-            var from = _readyMapName; var session = _areaSession;
+            var from = _readyMapName;
             AreaSmokePlace(map, near);
+            // ARC-WORLD-038: F7 next to the exit, a step away, F8 back onto the saved cell under a new session.
+            object? sameMapLoad = null;
+            if (_areaSession is not null)
+            {
+                quickDirectory = System.IO.Directory.CreateTempSubdirectory("arc-world-038-").FullName;
+                _quickSaveSlotForSelfTest = GameSessionSaveSlot.QuickSave(quickDirectory);
+                QuickKey(Key.F7);
+                if (_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) != true) throw new InvalidOperationException("AREA_MAP_QUICK_SAVE " + _quickSaveStatus);
+                var away = Enum.GetValues<NeighborDirection>().Select(d => RoutePlanner.Neighbor(near, d))
+                    .First(c => map.Chart.Contains(c) && map.Steps.IsAdmitted(map.Chart.ToWorld(c)));
+                AreaSmokePlace(map, away);
+                if (((AreaGridSession)_worldActor.Session!).State.CommittedCell != away) throw new InvalidOperationException("AREA_MAP_QUICK_SAVE_NOT_MOVED");
+                var running = _areaSession;
+                for (var i = 0; i < 3; i++) AreaSmokeFrame();
+                QuickKey(Key.F8);
+                if (_quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) != true || ReferenceEquals(running, _areaSession)
+                    || ((AreaGridSession)_worldActor.Session!).State.CommittedCell != near || _readyMapName != from)
+                    throw new InvalidOperationException("AREA_MAP_QUICK_LOAD_SAME_MAP " + _quickSaveStatus);
+                sameMapLoad = new { Map = from, Cell = map.Chart.ToWorld(near), Away = map.Chart.ToWorld(away) };
+                for (var i = 0; i < 3; i++) AreaSmokeFrame();
+            }
+            var session = _areaSession;
             var command = _readyArea!.Plan.Commands.Single(c => c.Identity == exit);
             AreaSmokeClick(await AreaSmokeTriggerPointAsync(command));
             if (transfers.Pending is not { } pending) throw new InvalidOperationException("AREA_MAP_TRANSFER_USE_NOT_ACCEPTED " + _areaUseStatus);
@@ -287,11 +343,29 @@ public partial class TerrainViewerApp
                 From = from, To = pending.To.Name, pending.To.Catalogue, site.Script, Arrival = pending.Arrival, SameMap = pending.SameMap,
                 Session = _areaSession?.Version.Revision, Carried = session is not null, Exits = exits.Length, Visible = _canvas.AreaVisibleCount }));
             await RunAreaMapJumpSmokeAsync();
+            // ARC-WORLD-038: on the destination (after its jump smoke), F8 loads the save's map again and stands the actor on
+            // the saved cell.
+            if (sameMapLoad is not null && !pending.SameMap && _areaSession is { } carried)
+            {
+                for (var i = 0; i < 3; i++) AreaSmokeFrame();
+                QuickKey(Key.F8);
+                if (_mapHandoff is null) throw new InvalidOperationException("AREA_MAP_QUICK_LOAD_NOT_STARTED " + _quickSaveStatus);
+                await (_lastLoad ?? Task.CompletedTask);
+                if (_readyMapName != from || _worldActor.Session is not AreaGridSession back || back.State.CommittedCell != near
+                    || _areaSession is null || ReferenceEquals(_areaSession, carried) || _areaSession.QueryActor().Map.RuntimeMap != map.RuntimeMap
+                    || _areaSession.QueryActor().Cell.X != map.Chart.ToWorld(near).X || _areaSession.QueryActor().Cell.Y != map.Chart.ToWorld(near).Y)
+                    throw new InvalidOperationException($"AREA_MAP_QUICK_LOAD_OTHER_MAP map={_readyMapName} status={_quickSaveStatus} use={_areaUseStatus}");
+                GD.Print("ARC-WORLD-038 native-smoke quickload PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                    SameMap = sameMapLoad, OtherMap = new { From = pending.To.Name, To = from, Cell = map.Chart.ToWorld(near) }, Session = _areaSession.Version.Revision }));
+            }
+            else GD.Print($"ARC-WORLD-038 native-smoke quickload {(sameMapLoad is null ? "NONE (no session)" : "SAME-MAP-ONLY " + System.Text.Json.JsonSerializer.Serialize(sameMapLoad))}");
         }
         finally
         {
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
+            _quickSaveSlotForSelfTest = null; _quickKeys.Reset();
+            if (quickDirectory is not null) try { System.IO.Directory.Delete(quickDirectory, recursive: true); } catch (System.IO.IOException) { }
         }
     }
 

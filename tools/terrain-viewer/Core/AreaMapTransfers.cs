@@ -30,12 +30,15 @@ public sealed class AreaMapTransfers
     private readonly Dictionary<AreaObjectKey, (MapTransitionSite Site, AreaObjectRecord Object)> _uses = new();
     private readonly Dictionary<AreaStepCell, MapTransitionSite> _cells = new();
     private readonly IReadOnlyDictionary<int, AreaMapDestination> _destinations;
+    /// <summary>Every map map mode can open, by runtime number (ARC-WORLD-038: a quick load to another map).</summary>
+    public IReadOnlyDictionary<int, AreaMapDestination> Destinations { get; }
 
     public AreaMapTransfers(AreaMapRuntime map, MapTransitionSet transitions, IReadOnlyDictionary<int, AreaMapDestination> destinations)
     {
         ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(transitions); ArgumentNullException.ThrowIfNull(destinations);
         if (transitions.Entry is not { } entry || entry.Runtime != map.RuntimeMap) throw new ArgumentException("AREA_MAP_TRANSFERS_MAP_MISMATCH");
         Map = map; _destinations = destinations;
+        Destinations = destinations;
         var statics = map.Snapshot.Objects.Where(o => o.Key.Kind == AreaSourceKind.Static && o.Key.Sector is not null)
             .ToDictionary(o => (o.Key.Sector!.Value, o.Key.SourceIndex));
         // A mobile has its own unique id; its record ordinal depends on the source (aggregate or editor files).

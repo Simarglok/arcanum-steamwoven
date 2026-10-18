@@ -67,8 +67,8 @@ profiles and every exterior smoke stay as they were.
   work on the map as on the exterior (the map's T0 items seed the session).
 - **Transitions.** See [map transitions](#map-transitions-arc-world-031) below.
 - **Dialogs.** See [dialogs in map mode](#dialogs-arc-world-032) below.
-- **Not in map mode.** Companions and F7/F8 quick save (the Crash Site slot is
-  never touched); the HUD says so.
+- **Quick save.** See [quick save in map mode](#quick-save-arc-world-038) below.
+- **Not in map mode.** Companions; the HUD says so.
 
 ## Coverage on the installed original
 
@@ -275,6 +275,46 @@ ended, 1 effect in the session; `tulla interior` reports `FRONTIER` (generated
 greetings); in `caladon-mafia underground` both NPCs are undrawn. That the
 consequences travel with the session to another map and back is the host's
 synthetic test (`AreaConversationTests`); the native smoke does not observe it.
+
+## Quick save (ARC-WORLD-038)
+
+With a session, F7 and F8 work on any map as on the exterior
+([quick save](terrain-viewer.md#quick-save-and-quick-load-arc-world-011): keys on
+release, the same guards, atomic slot, every check before anything changes),
+with their own slot, `user://saves/map/quicksave.json`, so the Crash Site slot
+is never touched. A save records the actor on the map's runtime number. While
+another map loads there is no session, so F7/F8 do nothing; a load drops a
+queued transfer.
+
+- **Same map.** A save whose actor stands on the map shown is adopted in place,
+  as on the exterior: the shown map's inventory seeds and dialog state are
+  checked against it, then it replaces the running session.
+- **Another map.** A save whose actor stands on another map that map mode can
+  open (listed, 1 to 256 sector files) passes the same checks of the slot, the
+  restore and the shown map, then loads that map through the ordinary load
+  path with the actor on the saved cell, as a transfer does; the shown scene is
+  cleared as the load starts, as for any load. The loaded session keeps its
+  saved sound state and is adopted when the map is published; the running
+  session is kept until then and released once the map is published with the
+  loaded one. When the map does not load, or publishing it refuses the loaded
+  session (for example its dialog state there), the shown map is loaded again
+  with the running session, the actor where it stood and its facing. Checked
+  only once the map is loaded: the saved cell (when that map does not admit it,
+  the actor stands on the map's start and the HUD says so) and the map's own
+  inventory seed (attached as after a transfer, so a disagreement leaves its
+  inventory unavailable instead of refusing the load). A save on a map map mode
+  cannot open is refused.
+- **Same map, host state.** A load on the map shown also starts the wall check
+  and the roofs afresh and drops the tiles the replaced actor had stepped into.
+
+Native smoke (in the transfer smoke, with a session): F7 next to the exit, F8
+a step away brings the actor back to the saved cell under a new session; after
+the transfer to another map, F8 loads the saved map again with the actor on
+the saved cell under the loaded session, after the destination's jump smoke
+(`ARC-WORLD-038 native-smoke quickload PASS`; `SAME-MAP-ONLY` when the exit
+moves the actor on the same map). Observed
+`crematorium-lev 1` → `crematorium-lev 2` → F8 → `crematorium-lev 1` at
+92,94. The fallback after a failed load is not observed natively.
 
 ## Not yet
 
