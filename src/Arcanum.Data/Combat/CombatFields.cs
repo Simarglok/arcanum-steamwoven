@@ -48,8 +48,8 @@ public sealed record CombatItemFields(uint Flags, int Weight, int Worth, int Man
     int InventoryLocation, IReadOnlyList<int> Spells, int SpellManaStore, int AiAction, uint InventoryArt, uint UseArtFragment);
 
 /// <summary>
-/// The item art id bits the wear rules read (the retail 1.0.7.4 executable decodes the
-/// same bits, ARC-WORLD-028): an art id's type is bits 28..31, and only an item art id (type 6) has the item fields; anything else
+/// The item art id bits the wear rules read (the bits the retail 1.0.7.4 executable decodes,
+/// ARC-WORLD-028): an art id's type is bits 28..31, and only an item art id (type 6) has the item fields; anything else
 /// reads 0. Coverage is bits 14..16 of the inventory art, the subtype bits 6..9 of the use-art fragment, and bit 10 of the current
 /// art marks a destroyed (broken) item.
 /// </summary>

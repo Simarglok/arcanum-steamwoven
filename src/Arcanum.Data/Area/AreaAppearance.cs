@@ -349,8 +349,8 @@ public sealed partial class AreaDataOwner
     /// <summary>Doors and windows are drawn only by whole-map plans that bind the portal names.</summary>
     private bool PortalsAdmitted => !_plan.Original && _plan.Selection == AreaSectorSelection.AllSectors && _plan.Mappings.Any(m => m.Role == AreaMappingRole.Portal);
     private bool WallsAdmitted => _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallStructure) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallName);
-    // Wall piece file codes by piece index: the file naming order specified by the pinned
-    // The source's wall file name builder, docs/research/cave-transition-evidence.md T7.
+    // Wall piece file codes by piece index: the file naming order of the source's wall file name builder,
+    // docs/research/cave-transition-evidence.md T7.
     private static readonly string[] WallPieces =
     [
         "bse", "lfc", "bse", "bcl", "bcr", "tcl", "tcr", "uec", "lec", "w3l", "w3a", "w3r", "w4l", "w4a", "w4b", "w4r",

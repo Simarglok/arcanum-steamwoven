@@ -58,6 +58,8 @@ public static class ExperienceTables
     /// A table of numbers by entry (<c>rules\xp_quest.mes</c>, <c>rules\xp_critter.mes</c>): every entry, as the source looks
     /// any number up; a number with no entry is 0 there (0x4C53C0, 0x45F0B0).
     /// </summary>
+    [OriginalFunction(0x4C45C0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45CF30, OriginalFunctionScope.Partial)]
     public static ExperienceTableRead ReadValues(MesFile file)
     {
         ArgumentNullException.ThrowIfNull(file);
@@ -75,6 +77,7 @@ public static class ExperienceTables
     /// its entry. Quests without an entry are not listed (their level is <see cref="DefaultQuestLevel"/>); other entry numbers
     /// are not read. The other 22 numbers (alignment and dialog lines) belong to other owners.
     /// </summary>
+    [OriginalFunction(0x4C4670, OriginalFunctionScope.Partial)]
     public static ExperienceTableRead ReadQuestLevels(MesFile file)
     {
         ArgumentNullException.ThrowIfNull(file);

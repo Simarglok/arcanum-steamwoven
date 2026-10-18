@@ -45,6 +45,8 @@ public sealed class ScriptNameIndex
     /// <summary>The number's files, or null when the original has no name for it.</summary>
     public ScriptName? Find(int number) => _names.TryGetValue(number, out var name) ? name : null;
 
+    [OriginalFunction(0x4CEC10, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4CECE0, OriginalFunctionScope.Full)]
     public static ScriptNameIndex Build(ContentStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);
