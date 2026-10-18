@@ -84,6 +84,33 @@ public sealed class AreaWindowStepTests
         }
     }
 
+    [TestMethod]
+    public void Lighting_refuses_a_template_changed_since_loading_or_missing_and_the_module_only_read()
+    {
+        Install(Sector());
+        using (var stack = Stack())
+        {
+            var (snapshot, _) = Load(stack);
+            File.WriteAllBytes(Path.Combine(_root, "arcanum1.dat"), Base(WithScheme(Sector(), 5)));
+            using var changed = Stack();
+            Assert.AreEqual(Arcanum.Data.Lighting.LightingFailure.SectorIdentityMismatch, Arcanum.Data.Lighting.AreaLightingReader.Read(changed, snapshot).Failure);
+            File.WriteAllBytes(Path.Combine(_root, "arcanum1.dat"), BaseWithout("terrain/grass/0.sec"));
+            using var missing = Stack();
+            Assert.AreEqual(Arcanum.Data.Lighting.LightingFailure.MissingResource, Arcanum.Data.Lighting.AreaLightingReader.Read(missing, snapshot).Failure);
+            // The pinned profiles' module-only read generates no sector.
+            using var module = DatArchive.Open(Path.Combine(_root, "modules", "Mod.dat"));
+            Assert.AreEqual(Arcanum.Data.Lighting.LightingFailure.SectorIdentityMismatch,
+                new Arcanum.Data.Lighting.AreaLightingReader.ArchiveFiles(module).Template("terrain/grass/0.sec", out _));
+        }
+    }
+
+    private static byte[] BaseWithout(string name)
+    {
+        using var archive = DatArchive.Open(new MemoryStream(Base(Sector())));
+        return Dat([.. archive.Entries.Where(e => System.Text.Encoding.ASCII.GetString(e.RawNameBytes.ToArray()).TrimEnd('\0') != name)
+            .Select(e => (System.Text.Encoding.ASCII.GetString(e.RawNameBytes.ToArray()).TrimEnd('\0'), archive.ReadEntry(e)))]);
+    }
+
     /// <summary>The sector of <see cref="AreaIdentityTests.Sector"/> (format 3) with its light scheme word set.</summary>
     private static byte[] WithScheme(byte[] sector, int scheme)
     {

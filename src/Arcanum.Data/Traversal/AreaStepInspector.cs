@@ -88,11 +88,16 @@ public static class AreaStepInspector
                     {
                         if (winner.Length > new TerrainLoaderOptions().MaxSectorDecodedEntryBytes) throw Fail(AreaStepInvocationCode.LimitExceeded, AreaStepInvocationStage.Terrain);
                         var read = stack.Read(winner);
-                        return read.Status == ContentReadStatus.Read ? new(read.Bytes!, path, 0, null)
-                            : throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Terrain);
+                        return read.Status switch
+                        {
+                            ContentReadStatus.Read => new(read.Bytes!, path, 0, null),
+                            ContentReadStatus.TooLarge => throw Fail(AreaStepInvocationCode.LimitExceeded, AreaStepInvocationStage.Terrain),
+                            _ => throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Terrain),
+                        };
                     }
                     if (!archives.TryGetValue(winner.Source.Path, out var archive)) archives.Add(winner.Source.Path, archive = DatArchive.Open(winner.Source.Path));
                     var entry = archive.Entries[member.Ordinal];
+                    Unique(archive, entry);
                     return new(archive.ReadEntry(entry), Encoding.ASCII.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0'), entry.Ordinal,
                         new(entry.Ordinal, entry.Flags, entry.DeclaredOutputSize));
                 }
@@ -216,6 +221,7 @@ public static class AreaStepInspector
                 var entries = module.Entries.Where(e => e.Ordinal == sector.DatOrdinal).ToArray();
                 if (entries.Length != 1 || sector.PayloadSha256 is null) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Terrain);
                 var entry = entries[0];
+                Unique(module, entry);
                 source = new(module.ReadEntry(entry), Encoding.ASCII.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0'), entry.Ordinal,
                     new(entry.Ordinal, entry.Flags, entry.DeclaredOutputSize));
             }
@@ -345,6 +351,13 @@ public static class AreaStepInspector
     internal const string WallEdgeReason = "WALL_EDGE_COMPONENT";
     internal const string PortalEdgeReason = "PORTAL_EDGE_COMPONENT";
     internal const string LockedLeavingOnlyReason = "PORTAL_LOCKED_LEAVING_ONLY";
+    /// <summary>A sector read for evidence is the only member of its archive with its raw name.</summary>
+    private static void Unique(DatArchive archive, DatEntry entry)
+    {
+        if (archive.Entries.Count(e => e.RawNameBytes.SequenceEqual(entry.RawNameBytes)) != 1)
+            throw Fail(AreaStepInvocationCode.MalformedSource, AreaStepInvocationStage.Terrain);
+    }
+
     /// <summary>The bytes of a sector read for evidence, its source name and entry ordinal (0 for a loose file), and the
     /// member's metadata when it is an archive member.</summary>
     private sealed record TemplateSector(byte[] Bytes, string Name, int Ordinal, TerrainEntryExpectation? Expectation);

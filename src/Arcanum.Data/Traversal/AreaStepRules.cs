@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Arcanum.Data.Characters;
 using Arcanum.Data.Messages;
