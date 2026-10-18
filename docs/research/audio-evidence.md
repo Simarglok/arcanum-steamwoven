@@ -18,7 +18,8 @@ sound actions, and the only audio code is the synthetic [audio lab](../audio/aud
 it from one explicitly selected archive. This study:
 
 - re-states the audio requirements as testable items for the whole game (AU1–AU14);
-- checks every audio behaviour those items rest on in the original executable (rows SN1–SN33);
+- checks every audio behaviour those items rest on in the original executable (rows SN1–SN33;
+  ARC-WORLD-041 added SN34);
 - counts the installed sound data over all 81 maps of the module through the content stack;
 - corrects ARC-RES-022 where the executable or the whole-world rule disagrees;
 - splits full in-game audio into ordered, PR-sized tasks.
@@ -62,7 +63,7 @@ meaning: **Original** (CE agrees, intended or harmless), **CE slip** (CE differs
 follow the original), **Original bug** (CE agrees, unintended; switch candidate).
 
 Evidence level ([F0–F4](original-executable-check.md#evidence-levels-for-a-function-f0f4)): **F2**
-(two independent readings) for every row; SN21 was read by this task and again by the two
+(two independent readings) for every row but SN34 (F1, one reading by ARC-WORLD-041); SN21 was read by this task and again by the two
 reviewers of ARC-RES-052 and ARC-DATA-040, and SN32 is a caller list the first reviewer checked. The readers checked operand widths, signed compares and rounding where the result
 depends on them (SN4 64-bit signed division and the rounded single-precision distance, SN8 and
 SN13 integer truncation, SN14 the absolute tick difference).
@@ -114,6 +115,10 @@ SN13 integer truncation, SN14 the absolute tick difference).
 | SN31 | `quest_state_set_internal` (0x4C4E60), interface callers, hot-key equip (0x550000) | Quest completed: 3028, non-positional. Windows: open 3008, close 3009, page 3010, switch 3011; messages: bless 3002, cursed 3003, exclamation 3004, level up 3005, poisoned 3006; inventory: containers and items by their formulas, 3007, bad trade 8158; generic click 0; main-menu text-only buttons 3027; schematic combine 3018 + discipline. All non-positional. Equipping from a hot key into an empty slot plays the slot number (1000-range) as a sound id. | Original; the hot-key id is an **original bug** |
 | SN32 | `gsound_play_scheme` callers | Requests come only from the map default, sector changes, `play_sound_scheme`, unlock, load, `/over` completion and the end of combat (plus a multiplayer relay). | Original (the executable's callers of 0x41BD50 are exactly these) |
 | SN33 | `random_between` (0x4CEF00) | Ambient chances, volume and balance draws, footstep variants and the combat stinger all advance the shared game random generator. | Original |
+| SN34 | `load_tile_names` (0x4EB2E0), `a_name_tile_sound` (0x4EBBE0), critter art armour (0x504030), `item_weight` (0x461370) | `tilename.mes` (needs record 0) gives four tables of footstep classes by record range (0–99 outdoor flippable, 100–199 outdoor, 200–299 indoor flippable, 300–399 indoor; the position restarts at 100, 200 and 300; reading stops at 400). A record with `/` takes flag letters up to the first space and `atoi` of the rest; a record without one shorter than three characters fails the load, otherwise its class is `atoi` of the text after the third character, read **before** the name is cut there. A tile's class: art bit 8 outdoor, bit 7 flippable, bits 22–27 the position, no bound check. A critter art's armour is bits 20–23 for art type 2, bits 20–22 for type 12, else 0. Item weight: gold 0; stored weight plus the magic adjustment scaled by the holder; ammunition times its quantity / 4. | Original (all 21 installed records without flags carry their class after the third character; 17 are stone or wood). Read once by ARC-WORLD-041 (F1) |
+
+Rows SN23–SN25 were read again by ARC-WORLD-041 (the offsets, the gold field, the empty-record
+test of the weapon hit, the local PC's off flag) with no difference.
 
 The second readings agree on every behaviour above except the three noted (SN18 value count,
 SN26 bark source and eye-candy flag bit), each settled by a third reading: of the function in the executable for SN18 and the flag bit, of CE's `ai.c` for the bark source.
@@ -152,6 +157,14 @@ payload or table text is reproduced.
 - **Formats**: WAV all PCM (format tag 1): mono 16-bit at 8,000 / 11,025 / 22,050 / 44,100 Hz,
   mono 8-bit at 11,025 / 44,100 Hz, stereo 16-bit at 22,050 / 44,100 Hz; 2 files carry a
   `smpl` chunk. MP3 all MPEG-1 Layer III 44.1 kHz: music stereo, speech mono (12 stereo).
+- **Prototype sound fields** (ARC-WORLD-041, all 1,423 prototypes read): a sound base on 15 of
+  15 portals, 38 of 38 containers, 3 of 45 scenery, 150 of 150 weapons, 13 of 13 PCs and 496 of 497
+  NPCs; none on walls, projectiles, traps or items other than weapons; one gold prototype. 22
+  weapons have a base no table holds, nor their hit ids (their hits use the material sounds); every other weapon's
+  hit and critical ids (base + 4, 5, 6) are **empty records**, so per SN23 their hits play nothing.
+  Every footstep id 2900–2939, pickup and drop id and material hit id names an installed file.
+- **Tile sound classes** (ARC-WORLD-041): 31, 6, 2 and 13 tiles by category; 21 dirt, 3 sand,
+  0 snow, 14 stone, 8 water, 6 wood; 21 records have no flags.
 - **Speech**: 2,678 files in 99 folders; 2,630 follow `NNNNN/vL_g.mp3` (2,513 male, 117
   female, every female line has a male file), 48 are the slide voices under `speech/slide/`.
 
@@ -184,6 +197,7 @@ under D2 for the owner. Proposed, not decided:
 | SN14 | A reversed hour window never plays (20 night entries silent). | Implemented (ARC-UI-041, `SoundRuleProfile.HourWindowsNeverWrap`): Steamwoven wraps past midnight, so `19-0` plays from 19:00 to 00:59. |
 | SN18 | A save made during combat loses the pre-combat schemes. | Implemented (ARC-WORLD-040, `SoundRuleProfile.CombatSaveLosesSchemes`): Steamwoven keeps the saved pre-combat pair on load. |
 | SN31 | Hot-key equip into an empty slot plays the slot number as a sound. | No sound (or the generic click). |
+| SN23 (data) | A weapon hit whose id is an empty record plays nothing: 128 installed weapons hit silently. | Proposed for ARC-UI-042: an empty record falls back to the material sound, as an id no table holds does. |
 | SN12 | A 26th scheme entry crashes. | Both settings refuse the scheme with a typed issue (owner rule: Original never reproduces a crash). |
 
 Quirks kept in both settings unless the owner asks otherwise: the effects-volume change that
@@ -236,7 +250,7 @@ plus the root checks; viewer tasks follow the launcher rule (a new argument upda
 | 3 | ARC-UI-040 (done, [contract](../audio/viewer-audio.md)) | Sound in the viewer: backend and volumes | DATA-040, DATA-041 | Audio backend from the lab in the AREA viewer: Effects/Voice/Music buses with the SN8 volumes, preferences file outside saves (0–10, default 5), silent mode without a device; smoke plays interface ids by number. |
 | 4 | ARC-WORLD-040 (done, [contract](../world/session-sound-runtime.md)) | Music and ambient state in the session | DATA-040 | Session scheme owner: map default on open, local PC sector change (0/0 skipped), script request, combat start by NPC and end by PC with restore, movie lock; snapshot schema bump; SN18 switch. Headless tests over synthetic schemes. |
 | 5 | ARC-UI-041 (done, [contract](../audio/scheme-player.md)) | Music and ambient play in the viewer | UI-040, WORLD-040 | Scheme player rules in `Arcanum.Presentation` and their host in AREA and map mode: 250 ms ticks on the session hour, loop windows, ambient chances with presentation random, one ambient per slot per tick, 25 ms fades, combat stinger and loop, cut on map change; SN14 switch. Smoke: map mode (`fal'kins maze`): the map's loop song, an ambient sound and combat music. |
-| 6 | ARC-WORLD-041 | Sound cues of world events | DATA-040 | Godot-free rules SN23–SN26 and SN27 (item, critter, footstep by tile sound class and armour, container, portal, misc, combat) and the session cue output; prototype and object sound fields through the stack; local-PC off rule. Headless tests. |
+| 6 | ARC-WORLD-041 (done, [contract](../audio/sound-cues.md)) | Sound cues of world events | DATA-040 | Godot-free rules SN23–SN26 and SN27 (item, critter, footstep by tile sound class and armour, container, portal, misc, combat) and the session cue output; prototype and object sound fields through the stack; local-PC off rule. Headless tests. |
 | 7 | ARC-UI-042 | Positional effects in the viewer | UI-040, WORLD-041 | Positional rules in `Arcanum.Presentation` (SN4–SN7: listener at the view centre, attenuation and pan with per-size volume, recalculation on scroll) and their host; plays footsteps, doors, pickup, combat and looping scenery cues. |
 | 8 | ARC-UI-043 | Dialogue voice | UI-040, DATA-040 | Speech id per NPC line in the conversation (SN21), voice by PC gender with fallback, start/replace/stop as SN22, voice bus; missing voice changes nothing. Smoke: Virgil's lines. |
 | 9 | ARC-SCRIPT-040 | Script sounds | WORLD-040, WORLD-041 | Admit `play_sound`, `play_sound_on`, `play_sound_scheme` in the SCR interpreter, output through the session's cue and scheme ports; teleport and fade sound operand when the teleport action is admitted. |
@@ -263,10 +277,8 @@ text-float layer). Each reuses the catalogue, backend and cue output above.
 - Nothing was heard: these are static readings and data counts. How often a branch runs, the
   exact Miles mixing curve, latency and the timing of fades in the running game need an
   observation in the running original.
-- Prototype sound fields were not counted (which items, critters and objects carry a base and
-  whether `base + offset` names an installed file); ARC-WORLD-041 counts them.
-- The tile-name sound classes were not tabulated; ARC-WORLD-041 reads them with the tile-name
-  rules the step evidence already loads.
+- Prototype sound fields and tile classes: counted by ARC-WORLD-041 (census above); objects
+  placed in maps may carry their own sound field, which the census of prototypes does not show.
 - The `play_sound` ids of the 146 script uses ([SCR census](scr-census.md#action-types-d)) were not resolved against the catalogue;
   ARC-SCRIPT-040 does it.
 - Multiplayer branches present in the executable and missing in CE were noted, not read.

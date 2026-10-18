@@ -67,9 +67,9 @@ under `docs/research`. Details: `docs/project/status.md`.
   `Content`, MES `Messages`, ART, DLG `Dialogue`, terrain, static objects,
   universal map catalogue `Maps`, `Area` owner with Crash Site and whole-map
   plans, step evidence `Traversal`, T0 `Inventory`, `Lighting`, pre-made hero
-  `Characters`, item/critter `Combat` fields, `Hd` pack/recipe reader, `Audio` sound catalogue), `Arcanum.Simulation`
+  `Characters`, item/critter `Combat` fields, `Hd` pack/recipe reader, `Audio` sound catalogue, object sound fields and tile sound classes), `Arcanum.Simulation`
   (exact grid `Movement`, click-to-move `Navigation`, `Clock`, `Character`
-  stats, `Party`, `Combat` attack resolver and life rules, `Equipment` wear rules), `Arcanum.Scripting` (`Dialog`
+  stats, `Party`, `Combat` attack resolver and life rules, `Equipment` wear rules, `Sound` event cue rules), `Arcanum.Scripting` (`Dialog`
   transition and conversation, `NpcDialog` entry, `GlobalFlags`),
   `Arcanum.Presentation` (animation timeline), `Arcanum.Input` (+
   `Arcanum.Input.Godot` adapter source), `Arcanum.Session` (one game-session
