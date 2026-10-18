@@ -213,6 +213,57 @@ Before doors, windows, small items and hidden objects were admitted (ARC-DATA-02
 19 maps were complete; those added 2,568 objects of the types the owner did not
 draw.
 
+## Window plans (ARC-DATA-032)
+
+`AreaMapPlans.CreateWindow(stack, catalog, map, centre, radius = 1)` plans the sectors around one sector of any map, the
+main world map included, through the same area owner. It is how the main map loads through the universal path.
+
+- **Selection.** The core is the `(2·radius + 1)²` sectors around the centre (radius 1, the default, is the 3×3 the original
+  loads around the PC when it teleports, [ledger SS4](../research/original-verification-ledger.md#main-map-streaming-arc-data-030)),
+  and one ring of context sectors surrounds it; radius at most `MaxWindowRadius` (2). Sectors outside the map's `map.prp`
+  size are left out (the original never loads them); a centre outside it is `OutsideMap`.
+- **Sources.** Each sector is resolved by the map catalogue as the original takes it
+  ([generated sectors](map-catalog.md#generated-sectors-arc-data-031), ledger SS5): the map's own file is read from the
+  module archive, as for a whole map; a sector without one is generated from its terrain template, which becomes an
+  authenticated `AreaSourceRole.TerrainTemplate` input (one per distinct template, read from the stack's winner). A
+  sector the original would fill, or cannot resolve, refuses the plan (`UnsupportedSource`); retail data has none.
+- **Owner.** `AreaSourcePlan.Selection = Window` with `AreaSourcePlan.Window` listing each sector, its scope and its
+  template. The owner surveys only the window's own sector files (all must be in the module archive, else
+  `MissingSource` at selection), reads a generated sector from its template input like a sector file, places its
+  objects at the sector's origin plus their tile (ledger SS6) and moves its lights (words 2 and 3, Wilderness A1).
+  `AreaSectorRecord.Template` names the template input of a generated sector, which has no module ordinal or entry.
+  It refuses an inconsistent window (no core sector, a repeated sector, a template that is no input or an input no
+  sector uses, a window on another selection or a pinned profile) with `InvalidSelection`, and more templates than
+  `AreaLoaderOptions.MaxTerrainTemplates` with `BudgetExceeded`. Profile `arc-data-032-window-original-rules-v1`.
+- **Rules.** A window follows the whole-map rules (original ART names and leniency, portals, small items, hidden
+  objects, roofs read): `AreaSourcePlan.UniversalRules` covers both selections.
+- **Objects.** The owner reads the map-wide mobile file (the original loads mobiles map-wide when the map opens, ledger
+  SS7) and keeps the objects standing in the window's sectors; `map.patch`, prototypes, name tables and resources are
+  bound as for a whole map.
+- **Limits.** Derived from the window, not the map: survey and present sectors are the window's (25 for radius 1),
+  objects and prototypes those of its sectors and the mobiles standing in them, one template input per distinct
+  template; the aggregate limits follow the whole mobile file, which the owner reads.
+
+Installed original (opt-in `AreaWindowRealDataTests`):
+
+| Window | Present sectors | Generated | Objects | Core mobiles | Visuals |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Crash Site (1452, 1290) | 25 | 5 | 524 | 88 | 2,444 |
+| Town, the largest own cluster (1409, 1314) | 25 | 0 | 4,660 | 387 | 5,092 |
+| Elven forest wilderness (1384, 239) | 25 | 25 | 10,532 | 0 | 5,414 |
+| Generated centre beside the Crash Site (1450, 1290) | 25 | 13 | 2,173 | 8 | 1,950 |
+
+The Crash Site window reproduces the pinned exterior profile's core: the same nine core sectors and payloads, every one of
+the 36,864 core terrain cells, the 426 core statics and 88 core mobiles by record and place, the eleven context sectors it
+has files for, the same 524 objects and the same 2,444 visuals by RGBA digest. The pinned profile records its five other
+context sectors as absent; the window generates them (four mountain templates, one forest-to-mountains transition), and
+they add terrain only.
+
+**NOT READY:** step evidence for a window (`AreaStepInspector` re-reads core sectors from the module archive and does
+not accept the window profile yet: ARC-DATA-033); the area lighting reader re-reads each core sector from the module
+archive, so a window with a generated core sector gets `SectorIdentityMismatch` (the stationary-light reader reads the
+moved lights); the viewer does not stream windows; saved differences are not modelled.
+
 ## Limits
 
 Every limit of a whole-map plan, its owner and its lighting is derived from the plan or a
@@ -229,5 +280,6 @@ elsewhere is refused, not read; lifting it needs per-file sector and `.mob`
 inputs in the owner, which reads both from the module archive's index, so
 ARC-DATA-026 leaves it), and the viewer still reads its actor and light
 ART from `arcanum1.dat` and `arcanum2.dat` outside the owner, so it refuses a
-plan in which either wins nothing under `art/` (`AREA_MAP_SOURCES_MISMATCH`). The main map is not covered (its sectors are generated from the terrain grid,
-ARC-RES-034). Original-executable parity is NOT_VERIFIED.
+plan in which either wins nothing under `art/` (`AREA_MAP_SOURCES_MISMATCH`). The main map loads only as windows
+([window plans](#window-plans-arc-data-032)); a whole-map plan of it is `TooLarge` by design. Original-executable parity is
+NOT_VERIFIED.

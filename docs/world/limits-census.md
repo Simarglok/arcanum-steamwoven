@@ -14,7 +14,8 @@ Only counts and sizes are recorded, no content.
 
 **Not covered:** the main world map (`arcanum1-024-fixed`, 621 sector files) is reported but not
 planned: its sectors are generated from the terrain grid and it is meant to be streamed, so it
-exceeds `AreaMapPlans.MaxSectorFiles` by design and that cap is not raised. The pinned Crash Site
+exceeds `AreaMapPlans.MaxSectorFiles` by design and that cap is not raised; since ARC-DATA-032 it loads as windows,
+whose limits follow the window ([window plans](whole-map-plans.md#window-plans-arc-data-032)). The pinned Crash Site
 exterior and cave profiles keep their own pinned limits (below).
 
 ## Limits and headroom
