@@ -205,7 +205,7 @@ may lower each of them (amendment below).
 
 | Domain | Legacy limit today | HD limit |
 | --- | --- | --- |
-| AREA visible GPU set | `AreaRepositoryPolicy.MaxFrames` 2,444 frames, `MaxCpuBytes` 81,853,096 B (since ARC-DATA-029 the map caps `MaxMapFrames` 16,384 and `MaxMapCpuBytes` 160 MiB, [limits census](../world/limits-census.md)) | same frame count, `N² · 81,853,096` B (the exterior's figure, unchanged) |
+| AREA visible GPU set | `AreaRepositoryPolicy.MaxFrames` 2,444 frames, `MaxCpuBytes` 81,853,096 B (since ARC-DATA-029 the map caps `MaxMapFrames` 16,384 and `MaxMapCpuBytes` 160 MiB, [limits census](../world/limits-census.md)) | the Legacy frame count of the profile, `N² · 81,853,096` B (the exterior's figure, unchanged) |
 | AREA retained (left the view) | 512 frames, 32 MiB | 512 frames, `N² · 32` MiB |
 | WORLD actor + static textures | key caps 184 + 5 (`MaxActorDistinctKeys`, `MaxStaticDistinctKeys`), bytes shared with terrain inside `TerrainCachePolicy.MaxRgbaBytes` 256 MiB | the same key caps; a separate HD byte limit of `N²/4 · 256` MiB (256 MiB at 2×, 1 GiB at 4×), not shared with the Legacy 256 MiB |
 | Terrain chunks | `AreaChunkTextureCache` 192 MiB, 1,024 chunks | since ARC-RENDER-016 one HD byte limit for visible and kept chunks of `N² · 192` MiB, the same 192 chunks (4 MiB each at 2×, 16 MiB at 4×: 768 MiB / 3 GiB), and at most 1,024 kept chunks; separate from the AREA frame limits |

@@ -26,7 +26,7 @@ Largest installed value against each cap; "interiors" are the 80 maps a whole-ma
 | `AreaMapPlans.MaxSectorFiles` (interiors) | 256 | 79 | caladon-castle main floor | 3.2× |
 | `AreaMapPlans.MaxLooseResources` | 1,024 | 0 | — | — |
 | `AreaMapPlans.MaxMemberBytes` (mobile aggregate) | 64 MiB | 1,823,280 | arcanum1-024-fixed (interiors: 102,016, bmc) | 36.8× |
-| Owner budgets (`AreaLoaderOptions`, scaled by the plan up to 16×) | per plan | retained bytes at their peak (frame holds and memos included): 61.8 % of the budget | qintarra | 1.6× |
+| Owner budgets (`AreaLoaderOptions`, scaled by the plan up to 16×) | per plan | retained bytes at their peak (frame holds and the optional memos included, so the bound is conservative: memos only hold while a quarter of the budget stays free): 61.8 % of the budget | qintarra | 1.6× |
 | — the other owner budgets (largest use) | per plan | build phase at its peak 17.1 %, stored 19.2 %, decoded 18.9 %, managed 8.2 %, frame requests 5.8 %, encoded 5.2 %, RGBA 4.4 %, read 0 % | void, qintarra | ≥ 5.2× |
 | `AreaLightingReader.MaxSectors` | 256 | 79 | caladon-castle main floor | 3.2× |
 | `AreaLightingReader.MaxSchemes` | 32 | 3 | k'na tha | 10.7× |
