@@ -11,30 +11,32 @@ and consent part of [FR-SOCIAL-003](../requirements/story-social-ai.md#fr-social
 **NOT READY:** since ARC-WORLD-016 the AREA viewer passes `SessionDialogPartyPort` for Virgil and he
 follows the PC ([companion follow runtime](companion-follow-runtime.md)); other speakers keep the
 diagnostic `follow.pc` key. There is no map-change group, orders, loyalty test, wait timer or death
-handling, and no generated refusal line text. Original executable parity is **NOT_VERIFIED**; numbers and
-order are source claims read in CE at `a7ff41b300ef712f0e7d088183a3d08957110cdd`.
+handling, and no generated refusal line text. Since ARC-DATA-033 the follow check and the max-followers stat
+are checked in the retail executable ([ledger AP3, AP4](../research/original-verification-ledger.md#ai-parameters-and-follow-consent-arc-data-033));
+the rest of the party state's numbers and order are earlier source claims, **NOT_VERIFIED** in the executable.
 
 ## Follow check (`Arcanum.Simulation.Party`)
 
 `FollowConsentRules.Evaluate(FollowConsentInput)` is a pure function over explicit, effective
-inputs. The first matching step wins ([C2](../research/companion-follow-evidence.md#findings)):
+inputs. The first matching step wins (the executable's 0x4AD950, ledger AP3):
 
 | Step | Input | Result |
 | --- | --- | --- |
 | 1 | `MindControlledByPc` (the caller resolves the source's controller lookup) | `Accepted` |
-| 2 | `PcPersuasion == Master` | `Accepted` |
+| 2 | `PcPersuasion == Master` | go to step 8 (steps 3–7 are skipped; earlier readings had an unconditional `Accepted`) |
 | 3 | `OtherLeaderCharisma` (another leader, PC or NPC) ≥ `PcCharisma` | `AlreadyInGroup` |
 | 4 | `ForcedFollower` | `Accepted` |
 | 5 | `Reaction` ≤ AI field 5 | `Dislike` |
-| 6 | PC alignment − NPC alignment > field 6 / NPC − PC > field 7 | `TooGood` / `TooBad` |
+| 6 | PC alignment above the NPC's: PC − NPC > field 6; otherwise NPC − PC > field 7 | `TooGood` / `TooBad` |
 | 7 | NPC level ≥ PC level + field 8 | `LowLevel` |
-| 8 | unless `IgnoreCharismaLimit`: `MaxFollowers` ≤ 0 / `NonForcedFollowers` ≥ `MaxFollowers` | `NotAllowed` / `LimitReached` |
+| 8 | unless `IgnoreCharismaLimit`: `MaxFollowers` = 0 / `NonForcedFollowers` ≥ `MaxFollowers` | `NotAllowed` / `LimitReached` |
 
-`FollowThresholds` carries AI fields 5..8. Differences are computed in 64 bits, so extreme
-caller values cannot overflow. `FollowConsentRules.MaxFollowers(charisma, persuasion)` is
-charisma / 4, +1 at Expert or above, clamped to 1..7 ([C4](../research/companion-follow-evidence.md#findings));
+`FollowThresholds` carries AI fields 5..8. Differences and the level sum are computed in 32 bits
+and wrap, as in the executable. `FollowConsentRules.MaxFollowers(charisma, persuasion)` is
+the effective charisma / 4, +1 at Expert or above, clamped to 1..7 (ledger AP4);
 a caller with stat effects passes its own effective value. With a clamped value `NotAllowed`
-is unreachable, as ARC-RES-026 found; the evaluator keeps it for an explicit 0.
+is unreachable, as ARC-RES-026 found; the evaluator keeps it for an explicit 0 (a negative
+value, as in the executable, falls through to `LimitReached`).
 `MayLeaveUnforced(leaderCharisma, mindControlled)` is the C6 leave guard (refused at charisma
 ≥ 20 or under mind control). Invalid enum values, a negative follower count or a null input
 throw (programming errors).
