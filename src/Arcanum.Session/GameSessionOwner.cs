@@ -36,6 +36,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private readonly EquipmentDomain _equipment;
     private readonly EffectDomain _effects;
     private readonly ExperienceDomain _experience;
+    private readonly AdvancementDomain _advancement;
     private readonly HeroDomain? _hero;
     private readonly LifeDomain _life;
     private readonly ReactionDomain _reactions;
@@ -61,12 +62,12 @@ public sealed partial class GameSessionOwner : IDisposable
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
         ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story,
         PartyDomain party, HeroDomain? hero, InventoryDomain inventory, EquipmentDomain equipment, EffectDomain effects,
-        ExperienceDomain experience, SeededRandom random, LifeDomain life,
+        ExperienceDomain experience, AdvancementDomain advancement, SeededRandom random, LifeDomain life,
         ReactionDomain reactions, CombatDomain combat, SessionLightingState? lighting, SessionEventSink sink, GameEventQueue events)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
         _story = story; _party = party; _hero = hero; _inventory = inventory; _equipment = equipment; _effects = effects;
-        _experience = experience; _random = random; _life = life; _reactions = reactions;
+        _experience = experience; _advancement = advancement; _random = random; _life = life; _reactions = reactions;
         _combat = combat;
         _lighting = lighting;
         _events = events;
@@ -92,10 +93,14 @@ public sealed partial class GameSessionOwner : IDisposable
         if (descriptor.Hero is { } definition)
         {
             hero = HeroDomain.Build(definition.Prototype, definition.Race, definition.Gender, definition.Stats, definition.Level,
-                definition.UnspentPoints, definition.Alignment, definition.RaceEffect, definition.GenderEffect, definition.Experience);
+                definition.UnspentPoints, definition.Alignment, definition.RaceEffect, definition.GenderEffect, definition.Experience,
+                definition.Advancement);
             var kit = definition.Kit?.ToArray();
             if (hero is null || definition.Gold < 0 || kit is null || kit.Length > limits.MaxPcItems)
                 return Rejected(GameSessionFailure.InvalidHero);
+            // A new PC's level set runs its scheme over the starting points (ARC-WORLD-036).
+            if (CreationScheme(hero, descriptor.AutoLevel) is { } outcome)
+                hero.Apply(AdvancementDomain.WithSheet(hero.State, outcome.Sheet, hero.State.Experience));
             for (var index = 0; index < kit.Length; index++)
             {
                 if (kit[index] is not { } item || !Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type))
@@ -115,7 +120,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var life = new LifeDomain { Hero = hero is null ? null : new SessionLifeRecord(LifeState.Unharmed, null) };
         var sink = new SessionEventSink();
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
-            new(), new(), new(descriptor.Experience), new(descriptor.RandomSeed), life, new(), new(), null, sink,
+            new(), new(), new(descriptor.Experience), new(descriptor.AutoLevel), new(descriptor.RandomSeed), life, new(), new(), null, sink,
             new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits))
         { _rules = GameRules.For(descriptor.Rules), _difficulty = descriptor.Difficulty };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
@@ -157,6 +162,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportExperience(snapshot.Experience, options.Experience, limits, out var experience);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportAdvancement(snapshot.Advancement, options.AutoLevel, limits, out var advancement);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportReactions(snapshot.Reactions, limits, out var reactions);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportCombat(snapshot.Combat, hero is not null, out var combat);
@@ -190,7 +197,7 @@ public sealed partial class GameSessionOwner : IDisposable
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party,
-            hero, inventory, equipment, effects, experience, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat,
+            hero, inventory, equipment, effects, experience, advancement, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat,
             snapshot.Lighting, sink, events!)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
@@ -498,7 +505,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (shared != SessionQuestState.Accepted) _story.GlobalQuests[quest] = shared;
         if (award is not null)
         {
-            _hero!.State = award.Hero;
+            _hero!.Apply(award.Hero);
             experience = award.Award;
         }
         return Changed();
@@ -1165,7 +1172,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), _equipment.Capture(), _effects.Capture(), _experience.Capture(), new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureEvents(), _lighting, _sound.Capture());
+            _inventory.Capture(), _equipment.Capture(), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureEvents(), _lighting, _sound.Capture());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -1331,7 +1338,7 @@ public sealed partial class GameSessionOwner : IDisposable
         hero = null;
         if (saved is null) return GameSessionFailure.None;
         hero = HeroDomain.Build(saved.Prototype, saved.Race, saved.Gender, saved.Stats, saved.Level, saved.UnspentPoints, saved.Alignment,
-            saved.RaceEffect, saved.GenderEffect, saved.Experience);
+            saved.RaceEffect, saved.GenderEffect, saved.Experience, saved.Advancement);
         return hero is null ? GameSessionFailure.InvalidHero : GameSessionFailure.None;
     }
 

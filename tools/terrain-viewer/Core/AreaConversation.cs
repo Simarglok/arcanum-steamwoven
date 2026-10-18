@@ -241,7 +241,8 @@ public sealed class AreaConversationHost
         var entity = AreaConversationState.EntityId(speaker.Row);
         return new SessionDialogPartyPort(_session, AreaConversationState.PcParticipant,
             participant => participant == npc ? entity : null,
-            participant => participant == npc ? AreaCompanionRoster.Facts(facts, State.Alignment, State.Reaction(speaker.Index)) : null);
+            participant => participant == npc ? AreaCompanionRoster.Facts(facts, State.Alignment, State.Reaction(speaker.Index),
+                AreaAdvancement.Level(_session, entity, facts.Level)) : null);
     }
 
     private string? SpeakerEntity(DialogParticipantId npc) =>
@@ -282,6 +283,16 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     private readonly Guid _attachmentEpoch = Guid.NewGuid();
     private readonly int _initialReaction;
     private readonly HashSet<int> _party;
+    private readonly List<SessionExperienceAward> _awards = [];
+
+    /// <summary>ARC-WORLD-036: the experience awards the talk's commands gave (a completed quest) since the last call, in order;
+    /// the host passes their follower steps on (<see cref="AreaAdvancement.LevelFollowers"/>).</summary>
+    public IReadOnlyList<SessionExperienceAward> TakeAwards()
+    {
+        var awards = _awards.ToArray();
+        _awards.Clear();
+        return awards;
+    }
 
     /// <param name="speakerEntities">Stable session entity id of each speaker index (see <see cref="EntityId"/>).</param>
     /// <param name="partySpeakers">ARC-WORLD-016: speaker indexes whose "following" is the session party standing
@@ -375,7 +386,8 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     {
         var speaker = Speaker(command.NpcContext);
         if (!Enum.IsDefined((SessionQuestState)command.State)) return DialogCommandResult.Rejected;
-        var result = _session.SetQuestState(_session.Version, command.QuestId, (SessionQuestState)command.State);
+        var result = _session.SetQuestState(_session.Version, command.QuestId, (SessionQuestState)command.State, out var award);
+        if (award is not null) _awards.Add(award);
         if (result.Disposition != GameSessionDisposition.Changed) return Result(result);
         var entity = _entities[speaker];
         // Source quest rules: accepted raises the effective reaction to at least 41 (a delta), completed adds 10.

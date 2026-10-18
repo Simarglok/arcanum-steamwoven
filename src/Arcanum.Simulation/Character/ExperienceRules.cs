@@ -109,7 +109,9 @@ public static class ExperienceRules
 
     /// <summary>
     /// The source's level recalculation after the experience changed (0x4A69C0), for a PC with no
-    /// auto-level scheme and no effects on its level. Nothing changes at or above the maximum level or while the next level
+    /// effects on its level. Its auto-level scheme runs through <paramref name="spend"/> (ARC-WORLD-036): after each level is
+    /// written with its points, the callback gets the new level and unspent points and returns the unspent points the scheme
+    /// left (the caller keeps what the scheme bought); without it the points stay unspent. Nothing changes at or above the maximum level or while the next level
     /// is not reached. Otherwise each reached level is written with its points (the unspent total capped at
     /// <see cref="MaxUnspentPoints"/>), until a level is not reached or the next one would be <see cref="MaxLevel"/>: then the
     /// original writes the threshold of the PC's current level (<c>MaxLevel − 1</c>) as its experience, keeps the level and
@@ -117,7 +119,8 @@ public static class ExperienceRules
     /// passed on to followers either way, so in that branch it is one level above the PC.
     /// </summary>
     [OriginalFunction(0x4A69C0, OriginalFunctionScope.Partial)]
-    public static ExperienceAdvance Advance(ExperienceTable table, int level, int experience, int unspentPoints)
+    public static ExperienceAdvance Advance(ExperienceTable table, int level, int experience, int unspentPoints,
+        Func<int, int, int>? spend = null)
     {
         ArgumentNullException.ThrowIfNull(table);
         ValidateLevel(level);
@@ -144,6 +147,11 @@ public static class ExperienceRules
             gained++;
             points += bonus;
             unspentPoints = Math.Min(MaxUnspentPoints, unspentPoints + bonus);
+            if (spend is not null)
+            {
+                unspentPoints = spend(level, unspentPoints);
+                if (unspentPoints is < 0 or > MaxUnspentPoints) throw new InvalidOperationException("The scheme left unspent points outside 0..56.");
+            }
             toNext = ToNextLevel(table, level, experience);
         }
         return new(level, experience, unspentPoints, gained, points, new(old, current));
@@ -154,7 +162,7 @@ public static class ExperienceRules
     /// PC's new level stays (the original's first test; testing the maximum instead gives the same for every step the
     /// recalculation passes, ledger XP7); one at or below the PC's old level keeps its gap, one between is pulled to the PC's new
     /// level, never to <see cref="MaxLevel"/> or above; a level that would not rise stays. Points are the bonus points of the
-    /// levels gained (the source then runs the NPC's auto-level scheme, which is not modelled here).
+    /// levels gained (the source then runs the NPC's auto-level scheme: <c>GameSessionOwner.LevelFollower</c>, ARC-WORLD-036).
     /// </summary>
     [OriginalFunction(0x4A6CB0, OriginalFunctionScope.Partial)]
     public static FollowerLevelUp FollowerLevel(int level, FollowerLevelStep step)

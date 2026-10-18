@@ -92,20 +92,23 @@ internal sealed class LifeDomain
 
     /// <summary>
     /// The hero's life facts at a state: level and effective stats from the character owner, strength without and under
-    /// each poison penalty, crippled legs as a query condition. Pools are 0: every pre-made PC prototype stores no hit-point
-    /// or fatigue points or adjustment, and buying them belongs to levelling. No traits; the normal resistance is the worn armour's
+    /// each poison penalty, crippled legs as a query condition. The hit-point and fatigue points are the ones the hero bought
+    /// (ARC-WORLD-036); the adjustments are 0, as every pre-made PC prototype stores none. No traits; the normal resistance is the worn armour's
     /// (ARC-WORLD-028, <see cref="GameSessionOwner"/> equipment); the effect changes of the two maxima are the hero's durable
     /// effects' (ARC-WORLD-029). Pools or adjustments added here must raise <see cref="EffectDomain.HeroMaximumCeiling"/> too,
     /// or the effect bounds stop holding.
     /// </summary>
-    internal static LifeFacts HeroFacts(CharacterStatsOwner stats, int level, LifeState state, int normalResistance,
+    internal static LifeFacts HeroFacts(CharacterStatsOwner stats, SessionHeroState hero, LifeState state, int normalResistance,
         ImmutableArray<EffectModifier> maxHitPoints, ImmutableArray<EffectModifier> maxFatigue)
     {
+        var level = hero.Level;
         var legs = state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth);
         CharacterStatsSnapshot At(int poison) => stats.Query(new(0, poison, legs)).Snapshot!;
         var plain = At(0);
         return new LifeFacts
         {
+            HitPointPoints = hero.Advancement.HitPointPoints,
+            FatiguePoints = hero.Advancement.FatiguePoints,
             Level = level,
             Strength = plain.GetEffective(CharacterStat.Strength),
             PoisonedStrength = [At(100).GetEffective(CharacterStat.Strength), At(200).GetEffective(CharacterStat.Strength),

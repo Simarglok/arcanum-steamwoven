@@ -28,8 +28,11 @@ public partial class TerrainViewerApp
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-WORLD-027 hero smoke: " + why); }
         var session = _areaSession ?? throw new InvalidOperationException("ARC-WORLD-027 hero smoke: no area session");
         var state = session.QueryHero();
-        Require(state is not null && state.Prototype == definition.Prototype && state.Level == definition.Level && state.UnspentPoints == definition.UnspentPoints,
-            "session hero " + state?.Prototype);
+        // ARC-WORLD-036: a new hero's scheme spends its starting points at the start, as a new PC's level set does.
+        var schemed = hero.AutoLevel?.Scheme(definition.Advancement?.AutoLevelScheme ?? 0) is not null;
+        Require(state is not null && state.Prototype == definition.Prototype && state.Level == definition.Level
+            && (schemed ? state.UnspentPoints < definition.UnspentPoints : state.UnspentPoints == definition.UnspentPoints),
+            "session hero " + state?.Prototype + " unspent " + state?.UnspentPoints);
         Require(session.QueryGold() == definition.Gold && session.QueryHeroKit().Count == definition.Kit.Count, "gold and kit");
         var flags = session.Flags;
         var read = flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(flag)));

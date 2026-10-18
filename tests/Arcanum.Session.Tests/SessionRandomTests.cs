@@ -171,7 +171,7 @@ public sealed class SessionRandomTests
         using var owner = Seeded();
         var saved = owner.Capture();
         var snapshot = new GameSessionSnapshot(saved.SchemaVersion, saved.Identity, saved.Revision, saved.Clock, saved.Flags,
-            saved.Actor, saved.Maps.ToArray(), saved.Story, saved.Party, saved.Hero, saved.Inventory, saved.Equipment, saved.Effects, saved.Experience, new(Seed, -1), saved.Life, saved.Reactions, saved.Combat, saved.CombatMode, saved.Events, saved.Lighting, saved.Sound);
+            saved.Actor, saved.Maps.ToArray(), saved.Story, saved.Party, saved.Hero, saved.Inventory, saved.Equipment, saved.Effects, saved.Experience, saved.Advancement, new(Seed, -1), saved.Life, saved.Reactions, saved.Combat, saved.CombatMode, saved.Events, saved.Lighting, saved.Sound);
         var result = GameSessionOwner.Restore(snapshot, RestoreOptions());
         Assert.AreEqual((null, GameSessionFailure.InvalidSnapshot), (result.Owner, result.Failure));
     }

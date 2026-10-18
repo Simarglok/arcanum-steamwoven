@@ -914,12 +914,17 @@ content stack's base sources (`ContentPrototypes`, ARC-DATA-026), `rules\effect.
 the diagnostic profile.
 
 The session's player character is that hero ([starting hero runtime](../world/starting-hero-runtime.md#viewer-start-arc-world-027)):
-level 1, 5 points unspent, its race and gender effects, gold and starting kit, and its main-menu global flag (2350..2361)
+level 1, its race and gender effects, gold and starting kit, and its main-menu global flag (2350..2361)
 is true. Dialogs gate replies on the hero's own gender, effective intelligence and race (also after F8, which follows the
 loaded save's hero). The inventory window lists the kit first (`(starting kit)`, named from the item's description
-number; an item the session's equipment wears is marked `(worn)`) and shows the gold; the HUD adds `hero: NAME level 1 (5 points unspent), gold G, kit K, worn W` or `hero: none
+number; an item the session's equipment wears is marked `(worn)`) and shows the gold; the HUD adds `hero: NAME level L (U points unspent), gold G, kit K, worn W` or `hero: none
 (diagnostic PC profile)`. ARC-WORLD-034: the start wields the kit's best items before the game begins, as the original's
-pre-made menu does ([best items](../world/equipment-runtime.md#best-items-arc-world-034)). The actor is still drawn with the fixed human body of the AREA profile, not the hero's own
+pre-made menu does ([best items](../world/equipment-runtime.md#best-items-arc-world-034)). ARC-WORLD-036: the load also reads
+`rules\gamelevel.mes`, `rules\userlevel.mes`, `rules\spelllist.mes` and the module's `rules\gameeffect.mes`, so the hero's
+auto-level scheme spends its 5 starting points at the start and each level's points as it is reached, and after every
+experience award (a dialog's quest completion, a hit, a kill) the followers and the NPCs waiting on this map follow the
+hero's level step with their own schemes ([auto-level schemes](../world/advancement-runtime.md#viewer-host); the log prints
+`ARC-WORLD-036 follower-level`). The actor is still drawn with the fixed human body of the AREA profile, not the hero's own
 race/gender ART. Launcher: `./arcanum area --hero NAME`, `./arcanum map NAME --hero HERO`
 ([local development](../workflow/local-development.md#project-launcher)). Native smoke with `--hero` (after the
 inventory stage, and in map mode after the map stages): `ARC-WORLD-027 native-smoke hero PASS`.

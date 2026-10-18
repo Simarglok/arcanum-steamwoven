@@ -63,11 +63,13 @@ public sealed class GameSessionLimits
     public const int PolicyMaxReactionRecords = 4096;
     /// <summary>NPC experience records (ARC-WORLD-030): NPCs whose experience worth or pool the session changed.</summary>
     public const int PolicyMaxExperienceRecords = 4096;
+    /// <summary>NPC advancement records (ARC-WORLD-036): followers whose level the session updated.</summary>
+    public const int PolicyMaxAdvancementRecords = 256;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
         int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
         int maxLifeRecords = PolicyMaxLifeRecords, int maxReactionRecords = PolicyMaxReactionRecords,
-        int maxExperienceRecords = PolicyMaxExperienceRecords)
+        int maxExperienceRecords = PolicyMaxExperienceRecords, int maxAdvancementRecords = PolicyMaxAdvancementRecords)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
@@ -77,9 +79,11 @@ public sealed class GameSessionLimits
         if (maxLifeRecords is < 1 or > PolicyMaxLifeRecords) throw new ArgumentOutOfRangeException(nameof(maxLifeRecords));
         if (maxReactionRecords is < 1 or > PolicyMaxReactionRecords) throw new ArgumentOutOfRangeException(nameof(maxReactionRecords));
         if (maxExperienceRecords is < 1 or > PolicyMaxExperienceRecords) throw new ArgumentOutOfRangeException(nameof(maxExperienceRecords));
+        if (maxAdvancementRecords is < 1 or > PolicyMaxAdvancementRecords) throw new ArgumentOutOfRangeException(nameof(maxAdvancementRecords));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
         MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
         MaxReactionRecords = maxReactionRecords; MaxExperienceRecords = maxExperienceRecords;
+        MaxAdvancementRecords = maxAdvancementRecords;
     }
 
     public int MaxMaps { get; }
@@ -90,6 +94,7 @@ public sealed class GameSessionLimits
     public int MaxLifeRecords { get; }
     public int MaxReactionRecords { get; }
     public int MaxExperienceRecords { get; }
+    public int MaxAdvancementRecords { get; }
 }
 
 /// <summary>
@@ -101,24 +106,27 @@ public sealed class GameSessionLimits
 /// normally the player's saved setting; an undefined value is <see cref="GameSessionFailure.InvalidDescriptor"/>.
 /// <paramref name="Experience"/> (ARC-WORLD-030) is the experience data the host read (level thresholds, quest experience);
 /// without it the session awards no experience. <paramref name="Difficulty"/> is the starting game difficulty, the player's
-/// setting; an undefined value is <see cref="GameSessionFailure.InvalidDescriptor"/>.
+/// setting; an undefined value is <see cref="GameSessionFailure.InvalidDescriptor"/>. <paramref name="AutoLevel"/>
+/// (ARC-WORLD-036) is the scheme data the host read; without it no auto-level scheme runs.
 /// </summary>
 public sealed record GameSessionDescriptor(ProfileBinding Clock, GlobalFlagOwnerDescriptor? Flags,
     ActorPlacement Actor, GameSessionLimits? Limits = null, SessionHeroDefinition? Hero = null, ulong RandomSeed = 0,
-    RuleMode Rules = RuleMode.Steamwoven, SessionExperienceRules? Experience = null, GameDifficulty Difficulty = GameDifficulty.Normal);
+    RuleMode Rules = RuleMode.Steamwoven, SessionExperienceRules? Experience = null, GameDifficulty Difficulty = GameDifficulty.Normal,
+    SessionAutoLevelRules? AutoLevel = null);
 
 /// <summary>
 /// Restore expectations, checked before any component is built. <paramref name="FlagEpoch"/> is the
 /// new process-local GF epoch; saved epochs are not persisted. <paramref name="Rules"/> (ARC-WORLD-023) is the rule
 /// mode to continue under: a snapshot never records one, so any save loads under either mode (D4). <paramref name="Experience"/>
-/// and <paramref name="Difficulty"/> (ARC-WORLD-030) are data and a setting, never saved, as in the descriptor.
+/// and <paramref name="Difficulty"/> (ARC-WORLD-030) are data and a setting, never saved, as in the descriptor; so is
+/// <paramref name="AutoLevel"/> (ARC-WORLD-036).
 /// <paramref name="SoundMapDefault"/> (ARC-WORLD-040) is the loaded map's default music and ambient pair (its map info's
 /// <c>SoundScheme</c>, null without one): the original opens the map, which plays it, before it loads the sound state.
 /// </summary>
 public sealed record GameSessionRestoreOptions(GlobalFlagIdentity ExpectedIdentity,
     ProfileBinding ExpectedClockProfile, OwnerEpoch FlagEpoch, GameSessionLimits? Limits = null,
     RuleMode Rules = RuleMode.Steamwoven, SessionExperienceRules? Experience = null, GameDifficulty Difficulty = GameDifficulty.Normal,
-    SessionMapSound? SoundMapDefault = null);
+    SessionAutoLevelRules? AutoLevel = null, SessionMapSound? SoundMapDefault = null);
 
 public enum GameSessionFailure
 {
@@ -149,6 +157,8 @@ public enum GameSessionFailure
     EffectsUnavailable, InvalidEffect, EffectMismatch, InnateEffect, EffectCapacityExceeded, UnknownTimedEffect,
     // Experience (ARC-WORLD-030).
     ExperienceUnavailable, InvalidExperience, InvalidExperienceTarget,
+    // Advancement (ARC-WORLD-036).
+    AdvancementUnavailable, InvalidAdvancement,
     // Combat mode (ARC-COMBAT-004).
     CombatModeInactive, InvalidCombatMode,
     // Hero attack (ARC-COMBAT-005).
@@ -274,19 +284,20 @@ public sealed class GameSessionSnapshot
     /// <see cref="Experience"/> (ARC-WORLD-030); schema 15 added <see cref="CombatMode"/> (ARC-COMBAT-004); schema 16 binds the clock profile
     /// to the retail executable (<see cref="Arcanum.Simulation.Clock.GameClockOwner.RetailExecutableSha256"/>, ARC-DEV-009); schema 17
     /// adds the hero's blessings and curses to <see cref="Effects"/> (ARC-WORLD-035); schema 18 adds <see cref="Sound"/> (ARC-WORLD-040); schema 19 adds the
-    /// quelled rumors to the story (ARC-UI-008). Schemas 1..18 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 19;
+    /// quelled rumors to the story (ARC-UI-008); schema 20 adds the hero's advancement fields and <see cref="Advancement"/> (ARC-WORLD-036).
+    /// Schemas 1..19 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 20;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
         SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionEquipmentState equipment,
-        SessionEffectState effects, SessionExperienceState experience, SessionRandomState random,
+        SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
         SessionEventState events, SessionLightingState? lighting, SessionSoundState sound)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Equipment = equipment; Effects = effects; Experience = experience; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Events = events; Lighting = lighting; Sound = sound;
+        Hero = hero; Inventory = inventory; Equipment = equipment; Effects = effects; Experience = experience; Advancement = advancement; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Events = events; Lighting = lighting; Sound = sound;
     }
 
     public int SchemaVersion { get; }
@@ -308,6 +319,8 @@ public sealed class GameSessionSnapshot
     /// <summary>The experience worth and pool of the NPCs the session changed (ARC-WORLD-030); the hero's experience is in
     /// <see cref="Hero"/>.</summary>
     public SessionExperienceState Experience { get; }
+    /// <summary>The advancement records of the followers the session levelled (ARC-WORLD-036); the hero's are in <see cref="Hero"/>.</summary>
+    public SessionAdvancementState Advancement { get; }
     /// <summary>The gameplay generator's seed and position (ARC-WORLD-019).</summary>
     public SessionRandomState Random { get; }
     /// <summary>The hero's and the changed NPCs' life (ARC-COMBAT-002).</summary>
