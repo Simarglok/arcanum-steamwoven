@@ -80,7 +80,7 @@ public sealed class AreaStartingHeroTests
         Assert.AreEqual(2355, flags.Bootstrap.Single(value => value.Value).Flag.Value);
         Assert.AreEqual(OriginalGlobalFlags.Count, flags.Bootstrap.Count);
         Assert.IsTrue(AreaStartingHero.NewGameFlags(identity, epoch, 0).Bootstrap.Single(value => value.Value).Flag.Value == 0,
-            "flag 0 is written by the original (CE's > 0 is a reconstruction slip)");
+            "flag 0 is written by the original");
         Assert.Throws<ArgumentOutOfRangeException>(() => AreaStartingHero.NewGameFlags(identity, epoch, OriginalGlobalFlags.Count));
         Assert.Throws<ArgumentOutOfRangeException>(() => AreaStartingHero.NewGameFlags(identity, epoch, -1));
     }

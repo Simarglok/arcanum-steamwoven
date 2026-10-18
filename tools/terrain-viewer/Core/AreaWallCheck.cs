@@ -29,8 +29,7 @@ public enum AreaWallRegions { None = 0, LowY = 1, LowX = 2, HighY = 4, HighX = 8
 
 /// <summary>
 /// ARC-RENDER-011: the original wall check, which makes walls in front of the player see-through. Restated from the
-/// study of CE <c>src/game/wallcheck.c</c> (tables 47-91 and 94-560, <c>wallcheck_recalc</c> 712-910, 941-1106) and
-/// <c>object.c</c> 560-575 and 4336-4400 at the pinned research revision (see docs/rendering/terrain-viewer.md); no CE
+/// wall-check study (the source's tables and its recalculation 0x437E50, see docs/rendering/terrain-viewer.md, F0); no
 /// code or structure is copied.
 ///
 /// Walls stand on a lattice of corners every four tiles. The player's tile is resolved to the 4×4 block whose corner
@@ -80,7 +79,7 @@ public sealed class AreaWallCheck
         var drawn = plan.Commands.Where(command => command.Identity is { } key && objects.ContainsKey(key)).Select(command => command.Identity!.Value).ToHashSet();
         foreach (var wall in objects.Values.Where(wall => wall.Scope == AreaScope.Core && !drawn.Contains(wall.Key)))
         {
-            // CE lists a tile's walls without OF_DESTROYED|OF_OFF only (object_list_location); any other undrawn wall
+            // The source lists a tile's walls without OF_DESTROYED|OF_OFF only; any other undrawn wall
             // would still take part in the check.
             var flags = wall.EffectiveFields.SingleOrDefault(field => field.Slot == 18 && field.Presence == AreaPresence.Value)?.Number
                 ?? throw new InvalidOperationException("AREA_WALL_FLAGS_REQUIRED");

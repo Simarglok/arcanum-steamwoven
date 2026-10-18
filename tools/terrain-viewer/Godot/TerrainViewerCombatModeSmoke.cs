@@ -104,7 +104,7 @@ public partial class TerrainViewerApp
             Require(healed.Disposition != GameSessionDisposition.Rejected && session.QueryHeroLife()!.Record.State.FatigueDamage == before, "fatigue healed back");
             GD.Print("ARC-COMBAT-004 native-smoke combat-mode PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Start = map.Chart.ToWorld(start), Goal = map.Chart.ToWorld(far), RunSteps = runSteps, StickRunSteps = stickSteps, Charged = charged,
-                Parity = "NOT_VERIFIED (rules from the CE reading and the original executable; no original-runtime run)" }));
+                Parity = "NOT_VERIFIED (rules checked in the original executable; no original-runtime run)" }));
         }
         finally
         {

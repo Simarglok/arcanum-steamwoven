@@ -69,7 +69,7 @@ public sealed class GaitTiming
     public static string Provenance(MovementGait gait) => gait == MovementGait.Run ? RunProvenance : WalkProvenance;
 
     /// <summary>Frames per second of a human (not dwarf or halfling) walking or running at a Speed: below 8 from the
-    /// low value, 8 the middle value (the original; CE keeps the ART rate, anomaly LA1), above 8 Speed/30 of the upper
+    /// low value, 8 the middle value (the original, ledger LA1), above 8 Speed/30 of the upper
     /// span, 30 and more the high value (research L6).</summary>
     public static int FramesPerSecond(MovementGait gait, int speed)
     {

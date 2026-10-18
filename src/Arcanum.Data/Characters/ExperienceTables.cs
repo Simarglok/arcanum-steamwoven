@@ -20,8 +20,8 @@ public sealed record ExperienceTableRead(ExperienceTableStatus Status, IReadOnly
 public sealed record ExperienceLevelsRead(ExperienceTableStatus Status, IReadOnlyList<int>? Thresholds, int? Number = null);
 
 /// <summary>
-/// The experience tables the source loads at startup (ARC-WORLD-030; CE <c>level_init</c>, <c>quest_init</c>,
-/// <c>quest_mod_load</c>, <c>critter_init</c> at the pinned revision, checked in the original executable, ledger XP6):
+/// The experience tables the source loads at startup (ARC-WORLD-030; 0x4A6620, 0x4C45C0,
+/// 0x4C4670, 0x45CF30, checked in the original executable, ledger XP6):
 /// <c>rules\xp_level.mes</c> (the experience a PC needs for each level), <c>rules\xp_quest.mes</c> (quest experience by the
 /// quest's experience level), <c>rules\xp_critter.mes</c> (an NPC's experience worth by its level) and the module's
 /// <c>rules\gamequest.mes</c> (each quest's experience level, its first number). Numbers only; nothing is decoded as text.
@@ -30,16 +30,17 @@ public static class ExperienceTables
 {
     /// <summary>The source's level count (<c>LEVEL_MAX</c>).</summary>
     public const int Levels = 51;
-    /// <summary>The quest numbers <c>quest_mod_load</c> reads.</summary>
+    /// <summary>The quest numbers 0x4C4670 reads.</summary>
     public const int FirstQuest = 1000, LastQuest = 1999;
     /// <summary>The experience level of a quest with no entry: the source's default.</summary>
     public const int DefaultQuestLevel = 1;
 
     /// <summary>
     /// <c>rules\xp_level.mes</c>: entry <c>n</c> is the experience of level <c>n</c> (1..51); a missing entry is 0, and level 1
-    /// is 0 whatever the file says, as <c>level_init</c> reads it, so its entry is not read either. Entries outside 2..51 are
+    /// is 0 whatever the file says, as 0x4A6620 reads it, so its entry is not read either. Entries outside 2..51 are
     /// not read.
     /// </summary>
+    [OriginalFunction(0x4A6620, OriginalFunctionScope.Partial)]
     public static ExperienceLevelsRead ReadLevels(MesFile file)
     {
         ArgumentNullException.ThrowIfNull(file);
@@ -55,8 +56,10 @@ public static class ExperienceTables
 
     /// <summary>
     /// A table of numbers by entry (<c>rules\xp_quest.mes</c>, <c>rules\xp_critter.mes</c>): every entry, as the source looks
-    /// any number up; a number with no entry is 0 there (<c>quest_get_xp</c>, <c>critter_xp_worth</c>).
+    /// any number up; a number with no entry is 0 there (0x4C53C0, 0x45F0B0).
     /// </summary>
+    [OriginalFunction(0x4C45C0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45CF30, OriginalFunctionScope.Partial)]
     public static ExperienceTableRead ReadValues(MesFile file)
     {
         ArgumentNullException.ThrowIfNull(file);
@@ -74,6 +77,7 @@ public static class ExperienceTables
     /// its entry. Quests without an entry are not listed (their level is <see cref="DefaultQuestLevel"/>); other entry numbers
     /// are not read. The other 22 numbers (alignment and dialog lines) belong to other owners.
     /// </summary>
+    [OriginalFunction(0x4C4670, OriginalFunctionScope.Partial)]
     public static ExperienceTableRead ReadQuestLevels(MesFile file)
     {
         ArgumentNullException.ThrowIfNull(file);

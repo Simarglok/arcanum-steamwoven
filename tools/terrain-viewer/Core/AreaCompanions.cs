@@ -430,7 +430,7 @@ public sealed class AreaCompanionGroup
 
     /// <summary>
     /// ARC-WORLD-017: the light of a moved body command (from <see cref="Commands"/>) where it stands now: its ART
-    /// channel, and with <paramref name="local"/> the CE object colour at its current cell (tile class plus stationary
+    /// channel, and with <paramref name="local"/> the source's object colour at its current cell (tile class plus stationary
     /// lights, as for a T0 body). Null for a command that is not a companion body of this group.
     /// </summary>
     public AreaLitColors? Light(AreaDrawCommand command, AmbientPair pair, AreaLocalLighting? local)

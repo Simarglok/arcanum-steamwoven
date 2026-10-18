@@ -28,7 +28,7 @@ public sealed record InventorySourceSet(int Number, int MinCoins, int MaxCoins, 
 public sealed record InventorySourceRead(InventorySourceStatus Status, InventorySourceSet? Set);
 
 /// <summary>
-/// <c>rules\InvenSource.mes</c> sets (ARC-RES-027; CE <c>invensource.c</c> at the pinned revision): set N is message N,
+/// <c>rules\InvenSource.mes</c> sets (ARC-RES-027, docs/research/starting-hero-evidence.md, F0): set N is message N,
 /// numbered from 1 without gaps; the lookup accepts <c>0 &lt; N &lt; entry count</c>. An entry is the set name, a colon,
 /// then space-separated <c>a,b</c> pairs: the first is the coin range, each further one an item's rate and basic
 /// prototype. Project admission policy: a shape the source would empty, truncate or read partially is a typed refusal.

@@ -17,7 +17,7 @@ public enum ScriptContentStatus
     Invalid,
     /// <summary>The winning copy's bytes differ from the first read of the same path through this object.</summary>
     Changed,
-    /// <summary>ARC-SCRIPT-012: the DLG holds no record the original keeps (<c>dialog_load</c> 0x412E10 then refuses the
+    /// <summary>ARC-SCRIPT-012: the DLG holds no record the original keeps (0x412E10 then refuses the
     /// file, so the game shows nothing from it).</summary>
     Empty,
 }

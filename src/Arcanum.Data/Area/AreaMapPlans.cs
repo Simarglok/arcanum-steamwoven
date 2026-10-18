@@ -315,8 +315,8 @@ public static class AreaMapPlans
         };
     }
 
-    /// <summary><c>rules/maplist.mes</c> numbers maps from 5000 without gaps, at most 200 (pinned
-    /// CE <c>map_list_info_load</c> stops at the first missing number); the runtime map number is
+    /// <summary><c>rules/maplist.mes</c> numbers maps from 5000 without gaps, at most 200 (the
+    /// source's map list loader 0x4125C0 stops at the first missing number); the runtime map number is
     /// the catalogue number minus 4999. 0/0 when the map is not listed or the list does not parse.</summary>
     internal static (int Catalogue, int Runtime) CatalogueNumbers(ContentStack stack, string mapName)
     {

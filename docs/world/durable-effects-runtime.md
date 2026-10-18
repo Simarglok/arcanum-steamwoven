@@ -4,7 +4,8 @@ Status: **Implemented bounded component**, ARC-WORLD-029 (2026-10-17), top-20 it
 [game session](game-session-runtime.md): numbered effects with a cause that stay until something removes them (a
 blessing, a curse, an item or spell effect, a script's effect), timed effects whose END waits on the session's
 [event queue](game-event-queue-runtime.md) (ARC-WORLD-024), and what an effect does to the hero's stats, its two maxima
-(hit points and fatigue) and its reaction effects. The list is saved (snapshot schema 13); an END is a saved event.
+(hit points and fatigue) and its reaction effects. The list is saved (snapshot schema 13; blessings and curses, schema 17,
+[below](#blessings-and-curses-arc-world-035)); an END is a saved event.
 Requirements: [FR-CHAR-022](../requirements/characters-skills.md#fr-char-022) (effects, their causes and removal) and the
 effect part of [FR-MAGIC-006](../requirements/combat-magic-tech.md#fr-magic-006) and
 [FR-MAGIC-007](../requirements/combat-magic-tech.md#fr-magic-007) (a timed run whose components add and remove an effect).
@@ -135,15 +136,65 @@ effect).
   maximum back to the damage, so the hero stays at none), the reaction effects, the canonical text with an END that fires
   after a restore, decode and restore refusals.
 - Real data (opt-in `RealData`, `DAT_ROOT`): `EffectRealDataTests`. Of the 309 `effect.mes` entries and the module's one,
-  305 parse and 5 use `*` or `/`, which the effect reader refuses (ARC-RES-027 SH-07, decision 7 of the ledger still
-  open); all 305 but the fixture half-elf's race effect 67 are added and removed; 191 change a modelled stat, 7 the maximum
-  hit points, 7 the maximum fatigue, 5 the reaction, 4 the bad and 3 the good reaction adjustment.
+  all 310 parse, 5 of them with `*` or `/` (read as the original reads them since ARC-WORLD-035, decision 7; none on a
+  maximum); all but the fixture half-elf's race effect 67 are added and removed; 194 change a modelled stat, 7 the maximum
+  hit points, 7 the maximum fatigue, 5 the reaction, 7 the bad and 5 the good reaction adjustment.
+
+## Blessings and curses (ARC-WORLD-035)
+
+The hero's blessings and curses: two PC lists of a number and the game time it was received (the logbook's date), each
+of which adds one effect entry with the bless or curse cause. Requirement
+[FR-CHAR-023](../requirements/characters-skills.md#fr-char-023). Evidence: the retail executable, read by two independent
+readers at the blessing and curse functions (ledger rows BC1–BC6); the reconstruction's reading of them holds, apart from a
+network branch it leaves out (never taken in single player) and its bounded copy of a blessing's text (BC1, its own change).
+
+| Source (bless / curse) | Original |
+| --- | --- |
+| Table entry (0x4C4170 / 0x4C3CC0) | The module's `mes\gamebless.mes` / `mes\gamecurse.mes`: entry `number × 10 + field`, field 0 the name, 1 the effect number, 2 the description; a number below 50 reads nothing, a missing entry gives an empty text. |
+| Effect (0x4C4420 / 0x4C3F70) | `atoi` of the effect entry: an empty or non-numeric text is effect 0, the module's `gameeffect.mes` effect 0. |
+| Has (0x4C4280 / 0x4C3DD0) | A PC only; the number in its list. |
+| Add (0x4C42F0 / 0x4C3E40) | A PC only; nothing when held. Appends the number and the current game time, adds the effect with cause bless (3) or curse (4), and for the local PC shows message 1000 and lights the logbook button. |
+| Remove (0x4C4450 / 0x4C3FA0) | A PC only; nothing when not held. Removes the first entry (later entries and their times move up), then the first effect entry of the effect number (the typed removal 0x4EA100, whatever caused it), and lights the logbook button. |
+
+**Data.** `Arcanum.Data.Characters.BlessingRules` reads a table: `EffectOf(table, number)` gives the source's effect number
+and how it was read (`Number`, `BelowRange`, `Missing`, `Prefix`, `NotANumber`; a number outside 32 bits is refused as
+`Overflow`, where the original's `atol` would wrap; no installed entry is near it); `Numbers(table)` lists the numbers with
+an effect entry. `EffectRules.ReadAny(effects, module, number)` reads any effect 0..399 the way the tables hold it (0..49 from
+the module, a number without an entry has no changes). Installed original: 18 blessings (50..67) and 17 curses (50..66).
+Blessings 50 and 51 name module effects 4 and 8, which the module does not define (no changes). **Curses 52, 53 and 54
+hold a placeholder that is no number, so the original adds the module's effect 0** (strength +6, beauty −6, intelligence −6,
+prowling −3, age +20, ARC-RES-027 SH-08) with the curse; no script gives them by a literal number, but 62 SCR operands of the
+blessing and curse operations are computed, so whether play reaches them is not established (BC6, owner question).
+
+**Session.** `QueryHeroBlessings(kind)`, `AddHeroBlessing(expected, kind, number, effect)` and
+`RemoveHeroBlessing(expected, kind, number)` with `SessionBlessingKind` `Blessing` or `Curse`. Add: the hero, the version,
+NoChange when held (the effect is not looked at), at most 64 entries per list (`EffectCapacityExceeded`), then
+`AddHeroEffect`'s checks and step with the bless or curse cause; the host passes the effect rule it read for the number
+(`BlessingRules.EffectOf`, then `EffectRules.ReadAny`, `SessionEffectDefinition.FromRule`) and shows the received message on a
+change. Remove: NoChange when not held; else the entry leaves the list and the first effect entry of the effect number it
+added is removed (none may be left). Each change is one revision; the entry keeps the effect number it added, which is what
+the source reads again at removal. Both modes behave as the original: the placeholder curses add effect 0 until the owner
+decides BC6.
+
+**Snapshot schema 17.** `SessionEffectState.Blessings` and `Curses`, in `effects` after `definitions`:
+`"blessings":[{"number":55,"effect":120,"timeMs":54000000}],"curses":[]` (list order). `Restore` refuses them without a hero
+(`InvalidSnapshot`), and a number held twice, a time after the saved clock, or an effect number outside 0..399 or innate
+(`InvalidEffect`). Schema 16 and older are refused, not migrated.
+
+**Tests.** `Arcanum.Data.Tests/Characters/BlessingRulesTests` (the `atoi` cases, below 50, missing, the module's numbers);
+`Arcanum.Session.Tests/BlessingStateTests` (held once with its time, curses apart, removal of the first effect of its number
+whatever its cause, a blessing whose effect is already gone, refusals, the canonical text and restore refusals); real data
+(`DAT_ROOT`): `BlessingRealDataTests` (the tables, their effect numbers and the literal SCR numbers) and
+`EffectRealDataTests.Installed_blessings_and_curses_are_received_and_taken_back` (all 35 given and taken back).
+
+**Not ready.** No SCR action or condition runs them, no logbook page, no "received" message in the viewer; fate points and
+the deferred blessings of FR-CHAR-024 are not part of this.
 
 ## Not ready
 
 - **No host.** Nothing in the viewer adds an effect yet: no spell casting, no item spells (wearing such an item is still
-  refused), no blessings or curses, no SCR add-effect or remove-effect action (the dispatcher admits neither), no effect
-  shown on a character sheet.
+  refused), no SCR add-effect, remove-effect, blessing or curse action or has-blessing/has-curse condition (the dispatcher
+  admits none of them), no effect shown on a character sheet, no logbook page of blessings and curses.
 - **NPCs.** Only the hero has an effect list; NPC lists come from their map data and are not loaded.
 - **Runs.** A timed effect stands for a run made only of Effect components. Active spells (magic slice 4) own maintenance,
   the `INT / 4` cap, the scaled count and its MG17, and every ending trigger: they will call `EndHeroTimedEffect` or replace
@@ -153,5 +204,6 @@ effect).
   not take a death time as the only sign of death.
 - **Not modelled:** encumbrance (a strength change does not recalculate it), the animation speed, the injury cause (the
   life domain counts scars; their effect 50 changes nothing in the session), the innate effects' non-stat changes (the
-  gnome's bad-reaction adjustment, the halfling's critical-hit chance: ARC-WORLD-015 keeps only stats), multiply and divide
-  changes (refused by the reader), background and class effects of a new character.
+  gnome's bad-reaction adjustment, the halfling's critical-hit chance: ARC-WORLD-015 keeps only stats), background and class
+  effects of a new character. A multiply or divide change on a maximum is refused (`InvalidEffect`): no installed rule has
+  one, and the bounds that keep removals admissible assume none.

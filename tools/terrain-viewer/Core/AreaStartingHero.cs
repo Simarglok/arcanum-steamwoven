@@ -8,7 +8,7 @@ using Arcanum.Simulation.Character;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>One of the twelve pre-made heroes the original main menu offers: the project's own name (race and gender,
-/// unique among the twelve) and its basic prototype 16067..16078 (ARC-RES-025, table of CE's built-in PC prototypes).
+/// unique among the twelve) and its basic prototype 16067..16078 (ARC-RES-025, the table of built-in PC prototypes).
 /// <see cref="Index"/> is the main menu's hero index minus one, which picks its global flag.</summary>
 public sealed record AreaPremadeHero(string Name, int BasicPrototype)
 {
@@ -54,7 +54,7 @@ public static class AreaStartingHero
 {
     public const int FirstPremadePrototype = 16067;
     /// <summary>Main-menu message of the first hero's global flag; hero <c>i</c> reads message <c>551 + i</c> (the original
-    /// <c>mainmenu_ui_pregen_char_execute</c>, 0x545B60, checked in the executable).</summary>
+    /// 0x545B60, checked in the executable).</summary>
     public const int FirstFlagMessage = 551;
     public const string EffectsPath = "rules/effect.mes", SourcesPath = "rules/InvenSource.mes", SourcesBuyPath = "rules/InvenSourceBuy.mes",
         MainMenuPath = "mes/MainMenu.mes", LevelsPath = "rules/xp_level.mes", QuestExperiencePath = "rules/xp_quest.mes",
@@ -133,8 +133,8 @@ public static class AreaStartingHero
         return flags with { Bootstrap = Array.AsReadOnly(flags.Bootstrap.Select(value => value.Flag.Value == chosen ? value with { Value = true } : value).ToArray()) };
     }
 
-    // The original reads the message with atoi and writes any result that is not negative (flag 0 included; CE's `> 0`
-    // is a reconstruction slip). Project admission: one to five ASCII digits, optionally space-padded, inside the
+    // The original reads the message with atoi and writes any result that is not negative (flag 0 included, checked in
+    // the executable at 0x545B60, docs/world/starting-hero-runtime.md). Project admission: one to five ASCII digits, optionally space-padded, inside the
     // new-game domain; an absent or other message is refused instead of atoi's partial or zero value.
     private static int? Flag(MesFile menu, AreaPremadeHero hero)
     {
@@ -210,7 +210,9 @@ public static class AreaStartingHero
                 modifiers.Add(new(stat, change.Operator switch
                 {
                     EffectChangeOperator.Add => StatModifierOperator.Add, EffectChangeOperator.Percent => StatModifierOperator.Percent,
-                    EffectChangeOperator.Minimum => StatModifierOperator.Minimum, _ => StatModifierOperator.Maximum,
+                    EffectChangeOperator.Minimum => StatModifierOperator.Minimum, EffectChangeOperator.Maximum => StatModifierOperator.Maximum,
+                    EffectChangeOperator.Multiply => StatModifierOperator.Multiply, EffectChangeOperator.Divide => StatModifierOperator.Divide,
+                    _ => throw new ArgumentOutOfRangeException(nameof(rule)),
                 }, change.Value));
             }
             return modifiers.Count == 0 ? null : new(rule.Number, [.. modifiers]);

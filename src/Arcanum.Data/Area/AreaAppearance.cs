@@ -99,7 +99,7 @@ public sealed partial class AreaDataOwner
         }
         else if (cls == 3 && PortalsAdmitted)
         {
-            // Door or window (pinned CE a_name.c portal names; docs/research/first-building-evidence.md):
+            // Door or window (the source's portal art names; docs/research/first-building-evidence.md):
             // number 19..27, frame 14..18, rotation 11..13, type bit 10 (1 door, 0 window: entry
             // number + 1001), busted bit 9 (the name's sixth-from-last letter becomes D), flag bit 0
             // mirrors. Every portal ART has one group (MakeVisual checks it). Flag bits 1-3 and
@@ -250,7 +250,7 @@ public sealed partial class AreaDataOwner
         else if (_plan.OriginalMap == OriginalAreaMap.CrashSiteCave && record is not null)
             (policy, view, physical) = CaveProfile.SelectionPolicy(key, raw, entry, bytes, record, nominal, group, frame, palette);
         // Whole-map plans read ART as the original does: a single-rotation ART has only group 0,
-        // whatever rotation the object asks for (pinned CE tig art.c, TIG_ART_0x01).
+        // whatever rotation the object asks for (the art id's rotation-free flag).
         else if (!_plan.Original && _plan.AllowArtTrailingBytes && bytes.Length >= 4 && (BinaryPrimitives.ReadUInt32LittleEndian(bytes) & 1) == 1 && physical != 0)
             (policy, physical) = ("original-single-group-rotation-v1", 0);
         if (fallbackPolicy is not null) policy = fallbackPolicy;
@@ -349,8 +349,8 @@ public sealed partial class AreaDataOwner
     /// <summary>Doors and windows are drawn only by whole-map plans that bind the portal names.</summary>
     private bool PortalsAdmitted => !_plan.Original && _plan.Selection == AreaSectorSelection.AllSectors && _plan.Mappings.Any(m => m.Role == AreaMappingRole.Portal);
     private bool WallsAdmitted => _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallStructure) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallName);
-    // Wall piece file codes by piece index: the file naming order specified by the pinned
-    // CE a_name.c 1562-1660 (build_wall_file_name), cited in docs/research/cave-transition-evidence.md T7.
+    // Wall piece file codes by piece index: the file naming order of the source's wall file name builder,
+    // docs/research/cave-transition-evidence.md T7.
     private static readonly string[] WallPieces =
     [
         "bse", "lfc", "bse", "bcl", "bcr", "tcl", "tcr", "uec", "lec", "w3l", "w3a", "w3r", "w4l", "w4a", "w4b", "w4r",
