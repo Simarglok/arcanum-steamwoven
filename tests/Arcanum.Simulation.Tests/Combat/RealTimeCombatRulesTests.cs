@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Arcanum.Simulation.Tests.Combat;
 
 // Real-time combat (ARC-COMBAT-004): combat mode, the attack animation's rate, pause and playback, the auto-attack repeat
-// and the run charge. Numbers from the CE reading, checked in the original 1.0.7.4 executable (ledger RT1–RT12); clips are
+// and the run charge. Numbers checked in the original 1.0.7.4 executable (ledger RT1–RT12); clips are
 // invented.
 [TestClass]
 public sealed class RealTimeCombatRulesTests

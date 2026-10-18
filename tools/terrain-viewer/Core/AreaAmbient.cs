@@ -69,7 +69,7 @@ public sealed record AreaLightingPlan(AreaLightingSource Source, IReadOnlyDictio
 public sealed class AreaAmbientDriver
 {
     public const string ClockPolicy = "steamwoven-normalized-clock-v1";
-    public const string ClockSourceRevision = "a7ff41b300ef712f0e7d088183a3d08957110cdd";
+    public const string ClockSourceRevision = GameClockOwner.RetailExecutableSha256;
     public const long HourMilliseconds = 3_600_000;
     private readonly GameSessionOwner _session;
     private AmbientLightingState _state;

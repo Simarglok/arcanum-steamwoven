@@ -5,8 +5,8 @@ namespace Arcanum.Simulation.Combat;
 /// <summary>
 /// The life rules of one critter as pure functions (ARC-COMBAT-002): hit points and fatigue, the dead, unconscious and
 /// active predicates, applying damage, a kill, healing, fatigue recovery, resting heal, the two poison ticks and the end
-/// of a stun. Numbers and order are the CE reading at <c>a7ff41b300ef712f0e7d088183a3d08957110cdd</c> (see
-/// docs/world/life-state-runtime.md); the fatigue recovery step was also checked in the original 1.0.7.4 executable.
+/// of a stun. Numbers and order are the claims of
+/// docs/world/life-state-runtime.md (F0); the fatigue recovery step was also checked in the original 1.0.7.4 executable.
 /// Every function validates its inputs (<see cref="ArgumentException"/> for a state, facts or amount out of range) and
 /// returns a new state; the only randomness is the knockout and second-arm rolls of <see cref="ApplyDamage"/>.
 /// </summary>
@@ -29,14 +29,16 @@ public static class LifeRules
     }
 
     /// <summary>Maximum hit points: <c>4 × points + adjustment + WP + 2 × (ST + level) + 4</c>, then the maximum's effects over
-    /// that whole sum (ARC-WORLD-029; <c>object_hp_max</c>, checked in the original executable at 0x43D5A0). Facts that fail
+    /// that whole sum (ARC-WORLD-029; 0x43D5A0, checked in the original executable). Facts that fail
     /// <see cref="IsValid(LifeFacts)"/> may throw <see cref="ArgumentOutOfRangeException"/> (an undefined operator, a divide by 0).</summary>
+    [OriginalFunction(0x43D5A0, OriginalFunctionScope.Full)]
     public static int MaxHitPoints(LifeFacts facts, int poisonLevel) => EffectModifiers.Apply(
         4L * facts.HitPointPoints + facts.HitPointAdjustment + facts.Willpower + 2 * (StrengthAt(facts, poisonLevel) + facts.Level) + 4,
         facts.MaxHitPointEffects.IsDefault ? [] : facts.MaxHitPointEffects);
 
     /// <summary>Maximum fatigue: <c>4 × points + adjustment + 2 × (level + CN) + WP + 4</c>, then the maximum's effects over that
-    /// whole sum (<c>critter_fatigue_max</c>, 0x45D670); the same exceptions.</summary>
+    /// whole sum (0x45D670); the same exceptions.</summary>
+    [OriginalFunction(0x45D670, OriginalFunctionScope.Full)]
     public static int MaxFatigue(LifeFacts facts) => EffectModifiers.Apply(
         4L * facts.FatiguePoints + facts.FatigueAdjustment + 2 * (facts.Level + facts.Constitution) + facts.Willpower + 4,
         facts.MaxFatigueEffects.IsDefault ? [] : facts.MaxFatigueEffects);
@@ -80,13 +82,14 @@ public static class LifeRules
     }
 
     /// <summary>
-    /// A kill (the source's <c>critter_kill</c>): the damage step with the death flag, so a living critter takes its current
+    /// A kill (the source's 0x45D900): the damage step with the death flag, so a living critter takes its current
     /// hit points and dies with the plain fall, then hit-point damage is pinned at <see cref="LifeLimits.DeathHitPointDamage"/>.
     /// An invulnerable or nigh-invulnerable critter skips the death step but is pinned all the same, as in the source, so
     /// it reads as dead without <see cref="LifeEvents.Died"/>. The step's poison write applies too: when the
     /// extraordinary-constitution reset lifts strength, the critter is not dead at the death check and the death step
     /// does not run either, though the pin follows.
     /// </summary>
+    [OriginalFunction(0x45D900, OriginalFunctionScope.Partial)]
     public static LifeOutcome Kill(LifeState state, LifeFacts facts)
     {
         Check(state, facts);
@@ -114,7 +117,7 @@ public static class LifeRules
     /// here unless <see cref="LifeHeal.Resurrect"/>, and a resurrection is refused for an unrevivifiable critter that is
     /// reanimated or an unresurrectable one that is not (the resurrect script is not run); a resurrection clears the stun
     /// and sets fatigue damage to 10. Then the full heal or the single cures (crippled legs heal crippled legs, as in the
-    /// original game; CE clears blindness there, anomaly A5), and the hit-point, fatigue and poison amounts, each only
+    /// original game, anomaly A5), and the hit-point, fatigue and poison amounts, each only
     /// while there is damage to remove.
     /// </summary>
     public static LifeOutcome Heal(LifeState state, LifeFacts facts, LifeHeal heal)
@@ -159,12 +162,14 @@ public static class LifeRules
     }
 
     /// <summary>
-    /// Recovery steps of a fatigue recovery event: <c>max(1, (now s − scheduled s) / 80)</c> in whole game seconds (CE
-    /// <c>critter_fatigue_timeevent_process</c>; the same arithmetic in the original 1.0.7.4 executable at 0x45E610).
+    /// Recovery steps of a fatigue recovery event: <c>max(1, (now s − scheduled s) / 80)</c> in whole game seconds
+    /// (checked in the original 1.0.7.4 executable at 0x45E610).
     /// </summary>
+    [OriginalFunction(0x45E610, OriginalFunctionScope.Partial)]
     public static int FatigueRecoverySteps(long scheduledAtGameMs, long nowGameMs) => Steps(scheduledAtGameMs, nowGameMs, 80);
 
-    /// <summary>Hours of a resting event: <c>max(1, (now s − scheduled s) / 3600)</c> (CE <c>critter_resting_timeevent_process</c>).</summary>
+    /// <summary>Hours of a resting event: <c>max(1, (now s − scheduled s) / 3600)</c> (0x45EA00, F0).</summary>
+    [OriginalFunction(0x45EA00, OriginalFunctionScope.Partial)]
     public static int RestingHours(long scheduledAtGameMs, long nowGameMs) =>
         Math.Min(Steps(scheduledAtGameMs, nowGameMs, 3600), LifeLimits.MaxRestHours);
 

@@ -6,8 +6,8 @@ namespace Arcanum.Simulation.Combat;
 public enum BasicCombatSkill { Bow = 0, Dodge = 1, Melee = 2, Throwing = 3, Backstab = 4 }
 
 /// <summary>
-/// The level and training of a basic combat skill (ARC-COMBAT-005; the source's <c>basic_skill_base</c>,
-/// <c>basic_skill_level</c>, <c>max_skill_for_stat_level</c> and <c>basic_skill_training_get</c>, checked in the original
+/// The level and training of a basic combat skill (ARC-COMBAT-005; the source's 0x4C5E50,
+/// 0x4C5EB0, 0x4C5F70 and 0x4C60C0, checked in the original
 /// 1.0.7.4 executable, ledger rows FA7–FA9).
 /// A stored skill keeps its points in bits 0..5 and its training in bits 6..7. The level is four per point, or 20 for the
 /// melee skill of a monstrous critter (mechanical, monster, animal or undead), then the skill's effect changes, clamped to

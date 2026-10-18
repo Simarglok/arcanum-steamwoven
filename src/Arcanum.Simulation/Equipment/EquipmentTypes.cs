@@ -3,7 +3,7 @@ using Arcanum.Simulation.Combat;
 
 namespace Arcanum.Simulation.Equipment;
 
-/// <summary>The nine wear slots of a critter, numbered as the source's inventory locations 1000..1008 (pinned CE <c>item.h</c>).</summary>
+/// <summary>The nine wear slots of a critter, numbered as the source's inventory locations 1000..1008 (ledger EQ6).</summary>
 public enum EquipmentSlot
 {
     Helmet = 1000, Ring1 = 1001, Ring2 = 1002, Medallion = 1003, Weapon = 1004, Shield = 1005, Armor = 1006, Gauntlets = 1007,

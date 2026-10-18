@@ -32,7 +32,7 @@ public sealed class BootstrapOwnershipTests
             Rejected(GameClockOwner.Bootstrap(profile), ClockFailure.InvalidSchema);
         foreach (var profile in new[] {
             p with { PolicyId = null! }, p with { PolicyId = "" }, p with { PolicyId = " " + p.PolicyId },
-            p with { PolicyId = p.PolicyId.ToUpperInvariant() }, p with { PolicyId = "ce-a7ff41b-source-observation-v1" },
+            p with { PolicyId = p.PolicyId.ToUpperInvariant() }, p with { PolicyId = "source-observation-v1" },
             p with { SourceRevision = null! }, p with { SourceRevision = "" },
             p with { SourceRevision = p.SourceRevision.ToUpperInvariant() }, p with { SourceRevision = p.SourceRevision + " " },
             p with { SourceDataSha256 = null! }, p with { SourceDataSha256 = "" },

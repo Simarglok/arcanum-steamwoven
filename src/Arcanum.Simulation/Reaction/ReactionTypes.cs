@@ -46,7 +46,7 @@ public sealed record ReactionNpcFacts(
 /// <summary>
 /// The PC's side: its race (one of the eight PC races, Human..HalfOgre), its effective reaction modifier stat (beauty,
 /// <see cref="CharacterStat.ReactionModifier"/>), the reputation sum for this NPC (the reputation owner computes it), its
-/// <c>reaction</c> effects (the retail executable applies the PC's, not the NPC's as CE reads it), its good and bad
+/// <c>reaction</c> effects (the retail executable applies the PC's, ledger R1), its good and bad
 /// reaction-adjustment effects, and whether its charisma is extraordinary (20 or more).
 /// </summary>
 public sealed record ReactionPcFacts(
