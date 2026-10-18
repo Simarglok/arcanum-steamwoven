@@ -47,8 +47,15 @@ public sealed record SoundRuleProfile
     /// </summary>
     public bool CombatSaveLosesSchemes { get; init; }
 
+    /// <summary>
+    /// Ledger SN14: a scheme sound's hour window is inclusive and never wraps, so a reversed window (20 installed night
+    /// entries such as <c>19-0</c>) never plays, as the retail executable does (0x41BAF0). Steamwoven runs it past midnight.
+    /// The scheme player reads it (ARC-UI-041).
+    /// </summary>
+    public bool HourWindowsNeverWrap { get; init; }
+
     public static readonly SoundRuleProfile Steamwoven = new() { Name = "steamwoven" };
-    public static readonly SoundRuleProfile Original = new() { Name = "original", CombatSaveLosesSchemes = true };
+    public static readonly SoundRuleProfile Original = new() { Name = "original", CombatSaveLosesSchemes = true, HourWindowsNeverWrap = true };
     public static IReadOnlyList<SoundRuleProfile> All { get; } = new[] { Steamwoven, Original };
     public static SoundRuleProfile? FromName(string? name) => All.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
 }

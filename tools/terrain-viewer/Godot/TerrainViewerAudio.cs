@@ -8,8 +8,8 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-UI-040: sound output, the three original channel volumes and the original's sound catalogue for the area's module
 // (docs/audio/viewer-audio.md). The catalogue is opened once per module archive through the same content root as the
-// script content (any map of any module); nothing plays by itself yet: the palette's sound test plays the original's fixed
-// interface sounds by id, and later tasks start music, ambient, voice and event sounds through PlaySfx and the backend.
+// script content (any map of any module); the palette's sound test plays the original's fixed interface sounds by id,
+// music and ambient play through TerrainViewerAudioScheme (ARC-UI-041), and later tasks add event, voice and interface sounds.
 public partial class TerrainViewerApp
 {
     /// <summary>The original's fixed interface sound ids (docs/research/audio-evidence.md SN31), in the order the test plays.</summary>
@@ -64,6 +64,7 @@ public partial class TerrainViewerApp
     {
         _soundContent?.Stack?.Dispose();
         _soundContent = null;
+        _soundWorld = null; _schemeCache.Clear(); _sectorSoundCache.Clear(); _ambientPayloads.Clear();
     }
 
     /// <summary>The original's non-positional effect (SN6: the plain play call uses volume 127 and the centre pan), scaled by
@@ -104,7 +105,11 @@ public partial class TerrainViewerApp
 
     private string AudioStatus() => _audioNotice is null ? "" : $" | sound: {_audioNotice}";
 
-    private void TickAudio() => _audio?.Tick();
+    private void TickAudio()
+    {
+        _audio?.Tick();
+        if (_readyMode == TerrainViewerMode.CrashSiteArea) TickSceneSound();
+    }
 
     private void DisposeAudio()
     {
