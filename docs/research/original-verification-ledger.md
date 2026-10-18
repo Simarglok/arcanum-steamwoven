@@ -555,12 +555,12 @@ Source: [durable effects runtime](../world/durable-effects-runtime.md#blessings-
 [FR-CHAR-023](../requirements/characters-skills.md#fr-char-023). Read on 2026-10-18 by a first reader and, independently, a
 second reader that saw only the questions (method step 6); both agree on every behaviour below. The blessing and curse
 functions are the same code with their own fields (numbers 0x104 and 0x106, times 0x105 and 0x107), message file, effect
-cause (3, 4) and UI message type. Add and remove begin with a network branch that CE leaves out; `multiplayer_is_locked`
+cause (3, 4) and UI message type. Add and remove begin with a network branch that the reconstruction leaves out; `multiplayer_is_locked`
 is true in single player, so it is never taken. Every direct branch stays inside `.text`; there is no indirect one.
 
 | ID | Function (address, bless / curse) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
-| BC1 | copy field (0x4C4170 / 0x4C3CC0) | Clears the caller's buffer; a number below 50 (signed) or a missing entry `number × 10 + field` leaves it empty; otherwise the text is copied without a length limit. | Original; CE's bounded copy in `bless.c` is a CE change (the 80-byte buffer of BC2 would overflow on a text of 80 characters or more; the installed effect entries have 1 to 3) |
+| BC1 | copy field (0x4C4170 / 0x4C3CC0) | Clears the caller's buffer; a number below 50 (signed) or a missing entry `number × 10 + field` leaves it empty; otherwise the text is copied without a length limit. | Original; the reconstruction's bounded copy of a blessing's text is its own change (the 80-byte buffer of BC2 would overflow on a text of 80 characters or more; the installed effect entries have 1 to 3) |
 | BC2 | get effect (0x4C4420 / 0x4C3F70) | Field 1 into an 80-byte buffer, then the CRT `atoi` (`atol`: white space, one sign, digits up to the first other character, no overflow check). An empty or non-numeric text gives 0. | Original |
 | BC3 | has (0x4C4280 / 0x4C3DD0) | A PC only; the number in its list. | Original |
 | BC4 | add (0x4C42F0 / 0x4C3E40) | A PC only; nothing when held; appends the number and the game time, `effect_add` with the effect of BC2 and the bless or curse cause; for the local PC message 1000, a UI message and the logbook button. | Original |
@@ -600,6 +600,8 @@ Nothing below is changed by this ledger; each needs the owner's word or its owni
    Steamwoven (D2 fix) and not in the Original setting (`TileScriptChangesDiscarded`).
 7. **Starting hero `*n` / `/n`** ([starting hero](starting-hero-evidence.md), SH-07 and the runtime's
    refusal): the original parses the factor, so backgrounds 5 and 11 double their reaction adjustment.
+   **Implemented 2026-10-18 by ARC-WORLD-035** as the recommended option (read the factor as the original does, both
+   modes; `/0` refused in both, it would divide by zero), put to the owner, who had not answered by then.
 8. **Magic slices** ([magic core](magic-core-evidence.md)): MG1, MG2 (mastery `ceil(cost / 2)` at run
    time) and MG8 are CE slips; O9 and O10 are answered by the CE-change rows.
 9. **AI stages** ([AI plan](npc-combat-ai-plan.md)): P1, P2, P3, LM1, LM2, LM13 and LM18 are CE slips

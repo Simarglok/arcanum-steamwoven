@@ -81,13 +81,17 @@ public sealed class EffectRealDataTests
         int Special(int attribute) => rules.Count(r => r.Changes.Any(c => c.Kind == EffectAttributeKind.Special && c.Attribute == attribute));
         var specials = (MaxHp: Special(0), MaxFatigue: Special(1), Reaction: Special(2), Bad: Special(7), Good: Special(8));
         Console.WriteLine($"rules {rules.Count}, with modelled stat changes {modelled}, specials {specials}");
-        // 309 effect.mes entries and the module's one; five use * or /, which the effect rules refuse (SH-07, decision open).
-        Assert.AreEqual((305, 5), (statuses["Parsed"], statuses["UnsupportedOperator"]));
-        // Every parsed rule is admitted, but the fixture hero's own race effect 67 (innate).
-        Assert.AreEqual((304, 1, 2), (outcomes["None"], outcomes["InnateEffect"], outcomes.Count));
-        // 191 rules change a stat the character owner models; 7 the maximum hit points, 7 the maximum fatigue, 5 the reaction,
-        // 4 the bad and 3 the good reaction adjustment.
-        Assert.AreEqual((191, 7, 7, 5, 4, 3), (modelled, specials.MaxHp, specials.MaxFatigue, specials.Reaction, specials.Bad, specials.Good));
+        // 309 effect.mes entries and the module's one, all parsed (decision 7: `*n` and `/n` read as the original reads them;
+        // 5 rules use them, all on stats or the reaction adjustments).
+        Assert.AreEqual((310, 1), (statuses["Parsed"], statuses.Count));
+        Assert.AreEqual(5, rules.Count(r => r.Changes.Any(c => c.Operator is EffectChangeOperator.Multiply or EffectChangeOperator.Divide)));
+        Assert.IsFalse(rules.Any(r => r.Changes.Any(c => c.Operator is EffectChangeOperator.Multiply or EffectChangeOperator.Divide &&
+            c.Kind == EffectAttributeKind.Special && c.Attribute is 0 or 1)), "no factor on a maximum");
+        // Every rule is admitted, but the fixture hero's own race effect 67 (innate).
+        Assert.AreEqual((309, 1, 2), (outcomes["None"], outcomes["InnateEffect"], outcomes.Count));
+        // 194 rules change a stat the character owner models; 7 the maximum hit points, 7 the maximum fatigue, 5 the reaction,
+        // 7 the bad and 5 the good reaction adjustment.
+        Assert.AreEqual((194, 7, 7, 5, 7, 5), (modelled, specials.MaxHp, specials.MaxFatigue, specials.Reaction, specials.Bad, specials.Good));
         // No rule uses −1 as a minimum or maximum, the aggregation's "unset" mark (EF6).
         Assert.AreEqual(0, rules.Sum(r => r.Changes.Count(c => c.Operator is EffectChangeOperator.Minimum or EffectChangeOperator.Maximum && c.Value == -1)));
     }

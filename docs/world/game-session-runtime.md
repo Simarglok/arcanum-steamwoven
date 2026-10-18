@@ -148,7 +148,7 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 16
+## Snapshot schema 17
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -173,7 +173,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":16,
+{"format":"arcanum-steamwoven-session","schemaVersion":17,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -227,10 +227,11 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 16 is the only accepted version. ARC-WORLD-035 added the required `blessings` and
-`curses` lists to `effects`; schema 15 is refused like the earlier ones (see
-[durable effects](durable-effects-runtime.md#blessings-and-curses-arc-world-035)). ARC-COMBAT-004 had added `combatMode`
-(schema 15) and ARC-WORLD-030 the hero's experience and `experience` (schema 14).
+**Migration decision: none.** Schema 17 is the only accepted version. ARC-WORLD-035 added the required `blessings` and
+`curses` lists to `effects`; schema 16 is refused like the earlier ones (see
+[durable effects](durable-effects-runtime.md#blessings-and-curses-arc-world-035)). ARC-DEV-009 had bound the clock profile
+to the retail executable (schema 16), ARC-COMBAT-004 added `combatMode` (schema 15) and ARC-WORLD-030 the hero's experience
+and `experience` (schema 14).
 ARC-WORLD-029 had added the required `effects` section and refused schema 12 (see [durable effects](durable-effects-runtime.md#snapshot-schema-13)).
 ARC-WORLD-028 had added the required `equipment` list and refused schema 11 (see [equipment](equipment-runtime.md#snapshot-schema-12)).
 ARC-COMBAT-003 had added the required, nullable `combat` section and refused schema 10 (see
@@ -256,8 +257,10 @@ running session kept, and the next F7 overwrites it. The only earlier host (the 
 viewer) had a one-flag placeholder GF domain, so a migrated session could not run any
 dialog. ARC-WORLD-030 added the hero's experience and the NPCs' experience records as schema 14 and refuses schema 13.
 ARC-COMBAT-004 added the combat-mode flags as schema 15 and refuses schema 14
-([real-time combat](real-time-combat-runtime.md#snapshot-schema-15)).
-Adding another domain needs schema 16 with its own explicit migration decision.
+([real-time combat](real-time-combat-runtime.md#snapshot-schema-15)). ARC-DEV-009 binds the clock profile to the retail
+executable (`sourceRevision` is its SHA-256, [clock policy](game-clock-policy.md)) as schema 16, with no structural change, and
+refuses schema 15. ARC-WORLD-035 added the hero's blessings and curses as schema 17 and refuses schema 16. Adding another
+domain needs schema 18 with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
 

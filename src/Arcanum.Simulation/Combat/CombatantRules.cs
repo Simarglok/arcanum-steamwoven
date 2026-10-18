@@ -19,7 +19,7 @@ public enum CombatantFlags
 
 /// <summary>
 /// The parts of an attack's <see cref="Combatant"/> that come from other owners (ARC-COMBAT-005): the effective resistances
-/// (the source's <c>object_get_resistance</c>, 0x43D6D0) and the combat conditions of a critter's life state, traits and flags.
+/// (the source's 0x43D6D0) and the combat conditions of a critter's life state, traits and flags.
 /// Pure functions; every one validates its inputs (<see cref="ArgumentException"/>).
 /// </summary>
 public static class CombatantRules

@@ -210,7 +210,9 @@ public static class AreaStartingHero
                 modifiers.Add(new(stat, change.Operator switch
                 {
                     EffectChangeOperator.Add => StatModifierOperator.Add, EffectChangeOperator.Percent => StatModifierOperator.Percent,
-                    EffectChangeOperator.Minimum => StatModifierOperator.Minimum, _ => StatModifierOperator.Maximum,
+                    EffectChangeOperator.Minimum => StatModifierOperator.Minimum, EffectChangeOperator.Maximum => StatModifierOperator.Maximum,
+                    EffectChangeOperator.Multiply => StatModifierOperator.Multiply, EffectChangeOperator.Divide => StatModifierOperator.Divide,
+                    _ => throw new ArgumentOutOfRangeException(nameof(rule)),
                 }, change.Value));
             }
             return modifiers.Count == 0 ? null : new(rule.Number, [.. modifiers]);

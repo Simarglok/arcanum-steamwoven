@@ -7,7 +7,7 @@ namespace Arcanum.Simulation.Character;
 public readonly record struct EffectModifier(StatModifierOperator Operator, int Value);
 
 /// <summary>
-/// The source's effect aggregation for one value (<c>effect_adjust_func</c>, checked in the original executable at 0x4EA6C0):
+/// The source's effect aggregation for one value (0x4EA6C0, checked in the original executable):
 /// the percent changes summed, then the products of the multiply and divide changes, then the sum of the adds, then the highest
 /// minimum and the lowest maximum. As in the original, −1 is the "unset" mark of both bounds: a bound of −1 is never applied,
 /// and a −1 met after a lower minimum or a higher maximum clears it (ledger EF6). Integer division truncates toward zero;
@@ -19,6 +19,7 @@ public static class EffectModifiers
     private const int Unset = -1;
 
     /// <summary>Applies <paramref name="modifiers"/> to <paramref name="value"/>; a divide change of 0 or an undefined operator throws.</summary>
+    [OriginalFunction(0x4EA6C0, OriginalFunctionScope.Full)]
     public static int Apply(long value, IReadOnlyList<EffectModifier> modifiers)
     {
         ArgumentNullException.ThrowIfNull(modifiers);

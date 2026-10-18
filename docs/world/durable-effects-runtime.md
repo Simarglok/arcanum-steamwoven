@@ -4,7 +4,7 @@ Status: **Implemented bounded component**, ARC-WORLD-029 (2026-10-17), top-20 it
 [game session](game-session-runtime.md): numbered effects with a cause that stay until something removes them (a
 blessing, a curse, an item or spell effect, a script's effect), timed effects whose END waits on the session's
 [event queue](game-event-queue-runtime.md) (ARC-WORLD-024), and what an effect does to the hero's stats, its two maxima
-(hit points and fatigue) and its reaction effects. The list is saved (snapshot schema 13; blessings and curses, schema 16,
+(hit points and fatigue) and its reaction effects. The list is saved (snapshot schema 13; blessings and curses, schema 17,
 [below](#blessings-and-curses-arc-world-035)); an END is a saved event.
 Requirements: [FR-CHAR-022](../requirements/characters-skills.md#fr-char-022) (effects, their causes and removal) and the
 effect part of [FR-MAGIC-006](../requirements/combat-magic-tech.md#fr-magic-006) and
@@ -136,17 +136,17 @@ effect).
   maximum back to the damage, so the hero stays at none), the reaction effects, the canonical text with an END that fires
   after a restore, decode and restore refusals.
 - Real data (opt-in `RealData`, `DAT_ROOT`): `EffectRealDataTests`. Of the 309 `effect.mes` entries and the module's one,
-  305 parse and 5 use `*` or `/`, which the effect reader refuses (ARC-RES-027 SH-07, decision 7 of the ledger still
-  open); all 305 but the fixture half-elf's race effect 67 are added and removed; 191 change a modelled stat, 7 the maximum
-  hit points, 7 the maximum fatigue, 5 the reaction, 4 the bad and 3 the good reaction adjustment.
+  all 310 parse, 5 of them with `*` or `/` (read as the original reads them since ARC-WORLD-035, decision 7; none on a
+  maximum); all but the fixture half-elf's race effect 67 are added and removed; 194 change a modelled stat, 7 the maximum
+  hit points, 7 the maximum fatigue, 5 the reaction, 7 the bad and 5 the good reaction adjustment.
 
 ## Blessings and curses (ARC-WORLD-035)
 
 The hero's blessings and curses: two PC lists of a number and the game time it was received (the logbook's date), each
 of which adds one effect entry with the bless or curse cause. Requirement
-[FR-CHAR-023](../requirements/characters-skills.md#fr-char-023). Evidence: CE `bless.c` and `curse.c` and the retail
-executable, read by two independent readers (ledger rows BC1–BC6); the original does what CE reads, apart from a network
-branch CE leaves out (never taken in single player) and CE's bounded copy of a blessing's text (BC1, a CE change).
+[FR-CHAR-023](../requirements/characters-skills.md#fr-char-023). Evidence: the retail executable, read by two independent
+readers at the blessing and curse functions (ledger rows BC1–BC6); the reconstruction's reading of them holds, apart from a
+network branch it leaves out (never taken in single player) and its bounded copy of a blessing's text (BC1, its own change).
 
 | Source (bless / curse) | Original |
 | --- | --- |
@@ -176,10 +176,10 @@ added is removed (none may be left). Each change is one revision; the entry keep
 the source reads again at removal. Both modes behave as the original: the placeholder curses add effect 0 until the owner
 decides BC6.
 
-**Snapshot schema 16.** `SessionEffectState.Blessings` and `Curses`, in `effects` after `definitions`:
+**Snapshot schema 17.** `SessionEffectState.Blessings` and `Curses`, in `effects` after `definitions`:
 `"blessings":[{"number":55,"effect":120,"timeMs":54000000}],"curses":[]` (list order). `Restore` refuses them without a hero
 (`InvalidSnapshot`), and a number held twice, a time after the saved clock, or an effect number outside 0..399 or innate
-(`InvalidEffect`). Schema 15 and older are refused, not migrated.
+(`InvalidEffect`). Schema 16 and older are refused, not migrated.
 
 **Tests.** `Arcanum.Data.Tests/Characters/BlessingRulesTests` (the `atoi` cases, below 50, missing, the module's numbers);
 `Arcanum.Session.Tests/BlessingStateTests` (held once with its time, curses apart, removal of the first effect of its number
@@ -204,5 +204,6 @@ the deferred blessings of FR-CHAR-024 are not part of this.
   not take a death time as the only sign of death.
 - **Not modelled:** encumbrance (a strength change does not recalculate it), the animation speed, the injury cause (the
   life domain counts scars; their effect 50 changes nothing in the session), the innate effects' non-stat changes (the
-  gnome's bad-reaction adjustment, the halfling's critical-hit chance: ARC-WORLD-015 keeps only stats), multiply and divide
-  changes (refused by the reader), background and class effects of a new character.
+  gnome's bad-reaction adjustment, the halfling's critical-hit chance: ARC-WORLD-015 keeps only stats), background and class
+  effects of a new character. A multiply or divide change on a maximum is refused (`InvalidEffect`): no installed rule has
+  one, and the bounds that keep removals admissible assume none.

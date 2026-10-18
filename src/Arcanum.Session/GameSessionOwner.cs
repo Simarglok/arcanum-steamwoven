@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
@@ -414,7 +415,7 @@ public sealed partial class GameSessionOwner : IDisposable
     /// the request (Completed/OtherCompleted complete it for everyone, Botched botches it); once the shared state
     /// left Accepted, the request becomes OtherCompleted (shared Completed) or Botched. Botched keeps the stored
     /// state and marks it. The change is stamped with the current session game time. A Completed request that passes these
-    /// checks first gives the hero the quest's experience (ARC-WORLD-030, as <c>quest_state_set</c> does; see
+    /// checks first gives the hero the quest's experience (ARC-WORLD-030, as 0x4C4D20 does; see
     /// <see cref="AwardQuestExperience"/>) when the session has experience data and a hero, in the same revision. Alignment
     /// and reaction effects of the source belong to their own owners and are not applied here.
     /// </summary>
@@ -423,6 +424,7 @@ public sealed partial class GameSessionOwner : IDisposable
 
     /// <summary><see cref="SetQuestState(GameSessionVersion, int, SessionQuestState)"/>, also returning the experience the
     /// completion gave (null when it gave none or the request changed nothing).</summary>
+    [OriginalFunction(0x4C4D20, OriginalFunctionScope.Partial)]
     public GameSessionMutationResult SetQuestState(GameSessionVersion expected, int quest, SessionQuestState requested,
         out SessionExperienceAward? experience)
     {
@@ -663,11 +665,12 @@ public sealed partial class GameSessionOwner : IDisposable
     public IReadOnlyList<SessionPcItem> QueryPcInventory() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Pc.ToArray()); }
 
     /// <summary>
-    /// Ground pickup (CE <c>AG_PICKUP_ITEM</c> → <c>item_transfer</c>): an item lying on the actor's map goes to the end of
+    /// Ground pickup (the pickup goal, then the item transfer 0x4617F0): an item lying on the actor's map goes to the end of
     /// the PC's list. Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
     /// effect: an item with an item <c>SAP_GET</c> or <c>SAP_INSERT_ITEM</c> script (not run here), a stack or key type
     /// (stack merge and key rings are not modelled), and a refusal of <paramref name="insertCheck"/>, which runs last.
     /// </summary>
+    [OriginalFunction(0x4617F0, OriginalFunctionScope.Partial)]
     public InventoryMutationResult PickUpItem(GameSessionVersion expected, string item, SessionInsertCheck insertCheck)
     {
         ThrowIfDisposed();
@@ -681,7 +684,7 @@ public sealed partial class GameSessionOwner : IDisposable
     }
 
     /// <summary>
-    /// Loot (a click on a dead critter opens it as a container; the moved item runs <c>item_transfer</c> to the PC): an item
+    /// Loot (a click on a dead critter opens it as a container; the moved item runs 0x4617F0 to the PC): an item
     /// still in the list of a dead NPC on the actor's map goes to the end of the PC's list. Only an NPC the seed marks dead, or one
     /// that died in this session (ARC-COMBAT-005, <see cref="QueryNpcKilled"/>), is lootable here: chests (generated on first open) are not. Refused before any effect, beyond the item rules of
     /// <see cref="PickUpItem"/>: a holder with a <c>SAP_USE</c> script, an item in a worn slot (unequip effects), and an item
@@ -704,7 +707,7 @@ public sealed partial class GameSessionOwner : IDisposable
     }
 
     /// <summary>
-    /// Negative dialog <c>IN -name</c> (CE <c>DIALOG_ACTION_IN</c>, ARC-RES-021): the first item in the NPC's current list
+    /// Negative dialog <c>IN -name</c> (the dialog <c>IN</c> action, ARC-RES-021): the first item in the NPC's current list
     /// whose name class is <paramref name="name"/> goes to the end of the PC's list, under the item rules of
     /// <see cref="LootItem"/>. No such item and no substitute inventory changes nothing, as in the source; an NPC with a
     /// substitute inventory then is <see cref="GameSessionFailure.SubstituteInventoryUnsupported"/>. The source drops an item
@@ -1055,7 +1058,7 @@ public sealed partial class GameSessionOwner : IDisposable
         }
     }
 
-    // The timers a life step sets (CE: a positive fatigue-damage write schedules recovery in 80 s, a positive poison write
+    // The timers a life step sets (docs/world/life-state-runtime.md: a positive fatigue-damage write schedules recovery in 80 s, a positive poison write
     // the 15-second damage and 120-second recovery ticks, a positive hit-point-damage write an NPC's hourly resting), as
     // changes from the stored state, plus the writes of a timer's own handler. One per critter and kind: a pending one stays.
     private static IEnumerable<LifeTimer> Timers(bool hero, LifeState before, LifeState after, Func<LifeState, LifeState, IEnumerable<LifeTimer>>? handler)

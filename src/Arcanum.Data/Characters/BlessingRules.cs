@@ -24,8 +24,8 @@ public enum BlessingEffectSource
 public readonly record struct BlessingEffect(int? Effect, BlessingEffectSource Source);
 
 /// <summary>
-/// The module's blessing and curse tables, <c>mes\gamebless.mes</c> and <c>mes\gamecurse.mes</c> (ARC-WORLD-035; CE
-/// <c>bless.c</c>/<c>curse.c</c> at the pinned revision, checked in the original executable): each number from 50 has a bank of
+/// The module's blessing and curse tables, <c>mes\gamebless.mes</c> and <c>mes\gamecurse.mes</c> (ARC-WORLD-035; read as the
+/// original executable's blessing and curse functions read them, ledger BC1–BC6): each number from 50 has a bank of
 /// ten entries, <c>number × 10 + 0</c> its name, <c>+ 1</c> its effect number, <c>+ 2</c> its description; entry 1000 is the
 /// "received" message. A number below 50 reads no entry.
 /// </summary>

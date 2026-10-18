@@ -5,8 +5,9 @@ namespace Arcanum.Data.Characters;
 /// <summary>The six attribute collections an effect change names, in the source's lookup order.</summary>
 public enum EffectAttributeKind { Stat, BasicSkill, TechSkill, Resistance, TechDiscipline, Special }
 
-/// <summary>Admitted operators. The source's multiply and divide are refused (see <see cref="EffectRuleStatus.UnsupportedOperator"/>).</summary>
-public enum EffectChangeOperator { Add, Percent, Minimum, Maximum }
+/// <summary>The operators of an effect change. Multiply and divide (<c>*n</c>, <c>/n</c>) are read as the original reads them, the
+/// number after the sign (ledger SH-07 and LM9, owner decision 7 of ARC-WORLD-035).</summary>
+public enum EffectChangeOperator { Add, Percent, Minimum, Maximum, Multiply, Divide }
 
 /// <summary>
 /// One change of an effect: the collection, the attribute's zero-based index in it (for <see cref="EffectAttributeKind.Stat"/>
@@ -22,9 +23,9 @@ public enum EffectRuleStatus
     InvalidToken,
     /// <summary>An attribute without an operator, or <c>min</c>/<c>max</c> without a value.</summary>
     MissingOperand,
-    /// <summary><c>*n</c> or <c>/n</c>: CE stores <c>atoi("*n")</c> = 0 as the factor and the original is NOT_VERIFIED
-    /// (ARC-RES-027 SH-07), so the project refuses them.</summary>
-    UnsupportedOperator,
+    /// <summary><c>/0</c>: the original would divide by zero when the effect applies, so both rule modes refuse it (owner
+    /// decision: the Original mode reproduces no crash). No installed entry has one.</summary>
+    ZeroDivisor,
     /// <summary>More than seven changes in one collection, which would overrun the source's per-effect arrays.</summary>
     TooManyChanges,
     /// <summary>A byte outside printable ASCII (space included). The source splits only on spaces and commas, so a tab or line
@@ -43,8 +44,8 @@ public sealed record EffectRuleRead(EffectRuleStatus Status, EffectRule? Rule);
 /// <summary>
 /// <c>rules\effect.mes</c> entries (ARC-RES-027; CE <c>effect_parse</c> at the pinned revision): tokens separated by
 /// spaces and commas; an attribute keyword (ASCII case-insensitive, first collection that has it wins) followed by its
-/// operator: <c>+n</c>/<c>-n</c> add, the same with a trailing <c>%</c> percent, <c>min n</c>, <c>max n</c>. Numbers are
-/// 1..9 digits. Project admission policy, stricter than the source's scanner: anything else is a typed refusal instead
+/// operator: <c>+n</c>/<c>-n</c> add, the same with a trailing <c>%</c> percent, <c>min n</c>, <c>max n</c>, <c>*n</c> multiply,
+/// <c>/n</c> divide (n with an optional sign). Numbers are 1..9 digits. Project admission policy, stricter than the source's scanner: anything else is a typed refusal instead
 /// of the source's partial effect.
 /// </summary>
 public static class EffectRules
@@ -113,7 +114,12 @@ public static class EffectRules
                 if (!Number(tokens[i], signRequired: false, out value)) return EffectRuleStatus.InvalidToken;
                 @operator = char.ToLowerInvariant(op[1]) == 'i' ? EffectChangeOperator.Minimum : EffectChangeOperator.Maximum;
             }
-            else if (op[0] is '*' or '/') return EffectRuleStatus.UnsupportedOperator;
+            else if (op[0] is '*' or '/')
+            {
+                if (!Number(op[1..], signRequired: false, out value)) return EffectRuleStatus.InvalidToken;
+                if (op[0] == '/' && value == 0) return EffectRuleStatus.ZeroDivisor;
+                @operator = op[0] == '*' ? EffectChangeOperator.Multiply : EffectChangeOperator.Divide;
+            }
             else if (op[0] is '+' or '-')
             {
                 var percent = op[^1] == '%';

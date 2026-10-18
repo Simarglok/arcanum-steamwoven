@@ -6,7 +6,7 @@ Status: **Implemented bounded component**, ARC-COMBAT-004 (2026-10-17). Slice 4 
 animation's cadence in real time (rate from Speed and weapon, pause from weapon speed, the action-frame hit, the pistol,
 rifle and bow repeat shot), the auto-attack repeat, and the fatigue charge of running in combat mode. The rules are pure
 functions in `Arcanum.Simulation.Combat.RealTimeCombatRules`; combat mode is a domain of the
-[game session](game-session-runtime.md) (snapshot schema 15); the AREA viewer toggles it with the original R key.
+[game session](game-session-runtime.md) (snapshot schema 15, now 16); the AREA viewer toggles it with the original R key.
 Requirements: [FR-COMBAT-001](../requirements/combat-magic-tech.md#fr-combat-001) (mode and switching),
 [FR-COMBAT-012](../requirements/combat-magic-tech.md#fr-combat-012) (the auto-attack part) and
 [FR-RUNTIME-003](../requirements/world-travel-runtime.md#fr-runtime-003) (the attack's action frame runs its hit once). The hero's attack in the viewer is

@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Simulation.Tests.Combat;
 
-// The turn-based round rules (ARC-COMBAT-003): numbers from the CE reading, checked in the original 1.0.7.4 executable.
+// The turn-based round rules (ARC-COMBAT-003): numbers checked in the original 1.0.7.4 executable.
 [TestClass]
 public sealed class TurnBasedRulesTests
 {

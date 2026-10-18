@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Arcanum.Data.Characters;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
@@ -64,7 +65,8 @@ public sealed record SessionTimedEffect(long Sequence, long ScheduledAtMs, long 
 public sealed record SessionHeroEffectsView(IReadOnlyList<SessionEffect> Innate, IReadOnlyList<SessionEffect> Effects,
     IReadOnlyList<SessionEffectDefinition> Definitions, IReadOnlyList<SessionTimedEffect> Timed)
 {
-    /// <summary>Entries of <paramref name="number"/> in the whole list, innate ones included (<c>effect_count_effects_of_type</c>).</summary>
+    /// <summary>Entries of <paramref name="number"/> in the whole list, innate ones included (0x4EA4A0).</summary>
+    [OriginalFunction(0x4EA4A0, OriginalFunctionScope.Full)]
     public int Count(int number) => Innate.Count(e => e.Number == number) + Effects.Count(e => e.Number == number);
 }
 
@@ -197,6 +199,11 @@ internal sealed class EffectDomain
                 !Enum.IsDefined(change.Operator) || Math.Abs((long)change.Value) > SessionEffectLimits.MaxMagnitude ||
                 ++counts[(int)change.Kind] > EffectRules.MaxChangesPerCollection) return false;
             if (Modelled(change) && Math.Abs((long)change.Value) > SessionEffectLimits.MaxModelledMagnitude) return false;
+            // A divisor of 0 would fault the original; a factor on a maximum is refused, so the bounds of Bounded hold (no
+            // installed rule has one).
+            if (change.Operator == EffectChangeOperator.Divide && change.Value == 0) return false;
+            if (change.Kind == EffectAttributeKind.Special && change.Attribute is (int)EffectSpecial.MaxHitPoints or (int)EffectSpecial.MaxFatigue &&
+                change.Operator is EffectChangeOperator.Multiply or EffectChangeOperator.Divide) return false;
         }
         return true;
     }
@@ -225,6 +232,8 @@ internal sealed class EffectDomain
         EffectChangeOperator.Percent => StatModifierOperator.Percent,
         EffectChangeOperator.Minimum => StatModifierOperator.Minimum,
         EffectChangeOperator.Maximum => StatModifierOperator.Maximum,
+        EffectChangeOperator.Multiply => StatModifierOperator.Multiply,
+        EffectChangeOperator.Divide => StatModifierOperator.Divide,
         _ => throw new ArgumentOutOfRangeException(nameof(op)),
     };
 
@@ -256,7 +265,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// Adds <paramref name="count"/> entries of an effect with <paramref name="cause"/> to the end of the hero's list, one at a
-    /// time, as <c>effect_add</c> does for each (a script's add-effect action, an Effect component that adds). Each entry that
+    /// time, as 0x4E9F70 does for each (a script's add-effect action, an Effect component that adds). Each entry that
     /// changes a maximum moves the damage by the same amount, so current hit points and fatigue stay, clamped at no damage.
     /// Refused, in order: no hero (<see cref="GameSessionFailure.EffectsUnavailable"/>); a rule the session does not admit, a cause
     /// of the race and gender setters or of the life domain's scars, or a count below 1 (<see cref="GameSessionFailure.InvalidEffect"/>);
@@ -266,6 +275,7 @@ public sealed partial class GameSessionOwner
     /// entries that could leave the hero's maxima or reaction effects beyond their consumers' bounds once some are removed
     /// (<see cref="GameSessionFailure.InvalidEffect"/>), so no removal or END is ever refused for them; the event budget and the revision. One revision.
     /// </summary>
+    [OriginalFunction(0x4E9F70, OriginalFunctionScope.Partial)]
     public SessionEffectResult AddHeroEffect(GameSessionVersion expected, SessionEffectDefinition definition, EffectCause cause, int count = 1)
     {
         ThrowIfDisposed();
@@ -288,10 +298,11 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// Removes the first entry of <paramref name="number"/>, <paramref name="count"/> times (<c>effect_remove_one_typed</c>: a
+    /// Removes the first entry of <paramref name="number"/>, <paramref name="count"/> times (0x4EA100: a
     /// script's remove-effect action, an Effect component that removes). Refused with <see cref="GameSessionFailure.InnateEffect"/>
     /// when the first entry would be an innate one (the race and gender setters own them); NoChange when there is none.
     /// </summary>
+    [OriginalFunction(0x4EA100, OriginalFunctionScope.Partial)]
     public SessionEffectResult RemoveHeroEffect(GameSessionVersion expected, int number, int count = 1)
     {
         ThrowIfDisposed();
@@ -299,7 +310,8 @@ public sealed partial class GameSessionOwner
         return RemoveEffects(expected, number, count, null);
     }
 
-    /// <summary>Removes every entry of <paramref name="number"/> (<c>effect_remove_all_typed</c>); innate numbers are refused.</summary>
+    /// <summary>Removes every entry of <paramref name="number"/> (0x4EA200); innate numbers are refused.</summary>
+    [OriginalFunction(0x4EA200, OriginalFunctionScope.Partial)]
     public SessionEffectResult RemoveAllHeroEffects(GameSessionVersion expected, int number)
     {
         ThrowIfDisposed();
@@ -309,8 +321,10 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// Removes the first entry with <paramref name="cause"/>, or every one when <paramref name="all"/>
-    /// (<c>effect_remove_one_caused_by</c>, <c>effect_remove_all_caused_by</c>). The race, gender and injury causes are refused.
+    /// (0x4EA2E0, 0x4EA3C0). The race, gender and injury causes are refused.
     /// </summary>
+    [OriginalFunction(0x4EA2E0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4EA3C0, OriginalFunctionScope.Partial)]
     public SessionEffectResult RemoveHeroEffectsCausedBy(GameSessionVersion expected, EffectCause cause, bool all = false)
     {
         ThrowIfDisposed();
