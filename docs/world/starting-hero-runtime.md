@@ -185,8 +185,9 @@ the hero's [character sheet](../rendering/terrain-viewer.md#character-sheet-arc-
 
 ## Not implemented
 
-The auto-level scheme replay (the hero keeps its 5 points unspent, so its sheet is **not** the original level-1 sheet;
-ARC-RES-027 open question), the new-character path (prototype 16066 with the block-0 background, clothes and skill
+The auto-level scheme is [ARC-WORLD-036](advancement-runtime.md): with the scheme data the session runs the hero's scheme
+at creation, as the original's player creation does, so it spends the 5 starting points (without the data they stay
+unspent). Not implemented: the new-character path (prototype 16066 with the block-0 background, clothes and skill
 kits), backgrounds and their context effects, skills, spells, tech, hit-point and fatigue pools (the hero's life state is
 [ARC-COMBAT-002](life-state-runtime.md), with pools 0 as every pre-made prototype stores them), the PC object and name, and
 the hero's body ART in the viewer. Since ARC-WORLD-034 the viewer's start wields the kit's best items
