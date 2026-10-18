@@ -26,7 +26,7 @@ internal sealed class AreaOwnerFixture : IDisposable
             ("maps/test/86637544876.sec",Sector(seamMarkers ? 63 : -1,Record(63,0,-7,5))),
             ("maps/test/86637544877.sec",Sector(seamMarkers ? 0 : -1,Record(0,0,9,-13))));
         (string Name, byte[] Bytes)[] entries = [
-            ("tile.mes",Encoding.ASCII.GetBytes("{0}{stone}{100}{stone}{200}{stone}{300}{stone}{400}{end}")),
+            ("tile.mes",Encoding.ASCII.GetBytes("{0}{stone/}{100}{stone/}{200}{stone/}{300}{stone/}{400}{end/}")),
             ("facade.mes",Encoding.ASCII.GetBytes("{0}{fixture}")),
             ("scenery.mes",Encoding.ASCII.GetBytes("{0}{fixture.art}")),
             ("art/tile/stonebse0a.art",Art(80,40,0,0,false,seamMarkers)),

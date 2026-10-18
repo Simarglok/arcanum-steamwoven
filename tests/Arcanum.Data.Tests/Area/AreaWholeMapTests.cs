@@ -5,7 +5,8 @@ using static Arcanum.Data.Tests.Area.AreaIdentityTests;
 namespace Arcanum.Data.Tests.Area;
 
 /// <summary>ARC-DATA-019 whole-map plans on synthetic fixtures: every sector file is core,
-/// no context ring, roofs do not block, and ART is read with the original's leniency.</summary>
+/// no context ring, roofs do not block, and ART is read with the original's leniency. ARC-DATA-036: the same
+/// rules hold for every plan; a townmap-component plan gives the same results.</summary>
 [TestClass]
 public sealed class AreaWholeMapTests
 {
@@ -20,19 +21,15 @@ public sealed class AreaWholeMapTests
         Assert.AreEqual(0, s.Reconciliation.ContextPresent);
         Assert.AreEqual(0, s.Reconciliation.ContextMissing);
         Assert.IsTrue(s.Sectors.All(row => row.Scope == AreaScope.Core && row.Present));
-        Assert.AreEqual("arc-data-019-whole-map-v1", s.Profile);
+        Assert.AreEqual("arc-data-019-whole-map-original-rules-v1", s.Profile);
     }
 
     [TestMethod]
-    public void A_roof_list_blocks_the_townmap_profile_but_not_a_whole_map()
+    public void A_roof_list_stays_in_the_sector_record_on_every_plan()
     {
         var module = Dat(("maps/test/67108865.sec", RoofedSector()));
         using (var townmap = new Fixture([(Start, [])], moduleBytes: module))
-        {
-            var report = townmap.Owner.Inspect();
-            Assert.IsFalse(report.IsComplete);
-            Assert.IsTrue(report.Issues.Any(i => i.Code == AreaErrorCode.UnsupportedArtClassOrState && i.Stage == AreaStage.Sector));
-        }
+            Assert.AreEqual(0, townmap.Owner.LoadStrict().Sectors.Single(s => s.Scope == AreaScope.Core).RoofDiscriminator);
         using var whole = new Fixture([(Start, [])], moduleBytes: module, resourceEntries: Resources(), selection: AreaSectorSelection.AllSectors);
         var snapshot = whole.Owner.LoadStrict();
         Assert.AreEqual(0, snapshot.Sectors.Single().RoofDiscriminator);
@@ -53,8 +50,9 @@ public sealed class AreaWholeMapTests
         var visual = snapshot.Visuals.Single(v => v.Key == second.Visual);
         Assert.AreEqual((AreaLayerKind.Roof, 4096 + 17, true, 0, words[17] & ~0x3000U), (visual.Key.Layer, visual.Key.SourceIndex, visual.Mirrored, visual.Frame, visual.LookupArt));
         Assert.AreEqual(new AreaRoofShades(255, 200, 80), snapshot.RoofShades);
-        // A pinned-style plan keeps refusing a roof list, whatever the mappings.
-        Assert.IsFalse(Roofed(words, AreaSectorSelection.TownmapComponent).Owner.Inspect().IsComplete);
+        // A townmap-component plan that binds the roof tables reads the same roofs.
+        using var townmap = Roofed(words, AreaSectorSelection.TownmapComponent);
+        Assert.AreEqual(2, Complete(townmap).Roofs.Count);
     }
 
     [TestMethod]
@@ -78,16 +76,19 @@ public sealed class AreaWholeMapTests
     }
 
     [TestMethod]
-    public void Art_with_a_tail_is_read_only_when_the_plan_allows_it()
+    public void Art_with_a_tail_is_read_from_its_own_extent_on_every_plan()
     {
+        // ARC-DATA-036: bytes after the last frame are no part of the ART; the frame is read from the ART's own extent.
         var tailed = Resources(Art(), [.. Art(), 0]);
         var record = Record(Id(2, 11));
-        using (var strict = new Fixture([(Start, [record])], resourceEntries: tailed, selection: AreaSectorSelection.AllSectors))
-            Assert.IsFalse(strict.Owner.Inspect().IsComplete);
-        using var lenient = new Fixture([(Start, [record])], resourceEntries: tailed, selection: AreaSectorSelection.AllSectors, allowArtTrailingBytes: true);
-        var snapshot = lenient.Owner.LoadStrict();
-        Assert.AreEqual(1, snapshot.Objects.Count);
-        Assert.IsTrue(snapshot.Objects.Single().SchemaReady);
+        foreach (var selection in new[] { AreaSectorSelection.AllSectors, AreaSectorSelection.TownmapComponent })
+        {
+            using var f = new Fixture([(Start, [record])], resourceEntries: tailed, selection: selection);
+            var snapshot = f.Owner.LoadStrict();
+            Assert.IsTrue(snapshot.Objects.Single().SchemaReady);
+            var visual = snapshot.Visuals.Single(v => v.Key.Object is not null);
+            Assert.AreEqual(("original-art-extent-v1", Art().Length, Art().Length + 1), (visual.Policy, visual.ViewLength, (int)visual.Entry.DecodedBytes), selection.ToString());
+        }
     }
 
     [TestMethod]
@@ -118,12 +119,15 @@ public sealed class AreaWholeMapTests
             Assert.AreEqual(0, visual.PhysicalGroup);
             Assert.AreEqual((aid & 1) != 0, visual.Mirrored);
         }
-        // A pinned-style plan (townmap selection) does not admit portals.
+        // A townmap-component plan that binds the portal names draws it too; a plan without them admits no portal.
         var plain = new (string, byte[])[] { ("tile.mes", Tile), ("facade.mes", Facade), ("scenery.mes", Scenery),
             ("portal.mes", "{55}{door1.art 2028}"u8.ToArray()), ("art/tile/stonebse0a.art", Art()), ("art/portal/door1.art", Art()) };
-        using var townmap = new Fixture([(Start, [TypedRecord(1)])], extraPrototype: PortalPrototype(door), resourceEntries: plain,
-            mappingRoles: [AreaMappingRole.Tile, AreaMappingRole.Facade, AreaMappingRole.Scenery, AreaMappingRole.Portal]);
-        Assert.IsTrue(townmap.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.UnsupportedVersionOrSchema));
+        using (var townmap = new Fixture([(Start, [TypedRecord(1)])], extraPrototype: PortalPrototype(door), resourceEntries: plain,
+            mappingRoles: [AreaMappingRole.Tile, AreaMappingRole.Facade, AreaMappingRole.Scenery, AreaMappingRole.Portal]))
+            Assert.AreEqual(1, Complete(townmap).Visuals.Count(v => v.RawArt >> 28 == 3));
+        using var unnamed = new Fixture([(Start, [TypedRecord(1)])], extraPrototype: PortalPrototype(door), resourceEntries: plain[..3].Concat(plain[4..]).ToArray(),
+            mappingRoles: [AreaMappingRole.Tile, AreaMappingRole.Facade, AreaMappingRole.Scenery]);
+        Assert.IsTrue(unnamed.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.UnsupportedVersionOrSchema));
     }
 
     [TestMethod]

@@ -308,7 +308,7 @@ public static class AreaMapPlans
             ? WorldSectorCoordinate.Containing(tile) : map.SectorFiles[0]);
         var plan = new AreaSourcePlan(catalogueMap, runtimeMap, new(start.X, start.Y), 0, map.Folder, identities, mappings)
         {
-            Selection = window is null ? AreaSectorSelection.AllSectors : AreaSectorSelection.Window, AllowArtTrailingBytes = true, ResourceOrder = order,
+            Selection = window is null ? AreaSectorSelection.AllSectors : AreaSectorSelection.Window, ResourceOrder = order,
             MapPatch = patchBinding, Window = window is null ? null : new(windowPlan.AsReadOnly()),
         };
         var resources = identities.Count(i => i.Key.Role is AreaSourceRole.Archive or AreaSourceRole.Loose);

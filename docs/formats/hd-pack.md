@@ -105,7 +105,7 @@ An HD frame is bound to the **install-independent part** of the ARC-RENDER-013 f
 | Part | From `AreaFrameKey` / `AreaVisualRecord` |
 | --- | --- |
 | `art.sha256` | `PayloadSha256`: SHA-256 of the whole ART entry after resource precedence (ARC-DATA-011) |
-| `art.view` | `ViewLength`: decoded bytes the frame is read from (132..2³¹−1) |
+| `art.view` | `ViewLength`: decoded bytes the frame is read from (132..2³¹−1); since ARC-DATA-036 the ART's own extent for every AREA visual: bytes after the last frame are excluded (a pack built from map-mode frames before it misses the few frames of such an ART, which draw Legacy). A frame decoded outside the owner (`HdFrameQueries.ArtIdentity`) still uses the whole entry |
 | `group` | physical group (0..7) |
 | `frame` | frame (0..4095) |
 | `palette` | **effective** palette slot (0..3): an HD frame is built from the RGBA of its own slot (ARC-RES-033) |

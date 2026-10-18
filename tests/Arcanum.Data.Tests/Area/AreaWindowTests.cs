@@ -25,7 +25,7 @@ public sealed class AreaWindowTests
             limits: new() { MaxTerrainTemplates = 1 }, resourceEntries: Resources());
         var snapshot = f.Owner.LoadStrict();
 
-        Assert.AreEqual("arc-data-032-window-v1", snapshot.Profile);
+        Assert.AreEqual("arc-data-032-window-original-rules-v1", snapshot.Profile);
         var own = snapshot.Sectors.Single(s => s.Coordinate == new AreaSectorCoordinate(1, 1));
         Assert.AreEqual((AreaScope.Core, true, (AreaInputKey?)null), (own.Scope, own.Present, own.Template));
         Assert.IsNotNull(own.DatOrdinal);

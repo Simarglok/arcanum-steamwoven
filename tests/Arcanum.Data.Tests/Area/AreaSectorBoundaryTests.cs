@@ -29,14 +29,13 @@ public sealed class AreaSectorBoundaryTests
     }
 
     [TestMethod]
-    public void Required_roof_presence_retains_diagnostic_sector_but_never_publishes_strict_readiness()
+    public void A_roof_list_is_kept_in_the_sector_record_and_read_only_with_the_roof_tables()
     {
+        // ARC-DATA-036: a roof list no longer blocks any plan; without the two roof tables no roof is read.
         using var f = new Fixture([(67108865, [])], moduleBytes: Dat(("maps/test/67108865.sec", Sector()), ("maps/test/67108866.sec", OptionalSector(4, roof: true))));
-        var report = f.Owner.Inspect(); Assert.IsFalse(report.IsComplete);
-        Assert.IsNull(f.Owner.PublishedSnapshot);
-        Assert.AreEqual(0, report.Snapshot!.Sectors.Single(s => s.Key.Packed == 67108866).RoofDiscriminator);
-        Assert.IsTrue(report.Issues.Any(i => i.Code == AreaErrorCode.UnsupportedArtClassOrState && i.Stage == AreaStage.Sector));
-        Throws<AreaIncompleteException>(() => f.Owner.LoadStrict());
+        var snapshot = f.Owner.LoadStrict();
+        Assert.AreEqual(0, snapshot.Sectors.Single(s => s.Key.Packed == 67108866).RoofDiscriminator);
+        Assert.AreEqual(0, snapshot.Roofs.Count);
     }
 
     [TestMethod]
