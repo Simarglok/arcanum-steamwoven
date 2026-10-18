@@ -45,7 +45,9 @@ public static class AreaStepInspector
     /// at game start, so from the first base source; the module's game effects at module load and
     /// map.patch when a map opens, so the stack winners; a loose file is read like an archive member),
     /// and the mobile file from the map's aggregate. Walls and portals use the whole-map
-    /// edge rules (<see cref="WallPieceRule"/>, <see cref="PortalEdgeRule"/>).</summary>
+    /// edge rules (<see cref="WallPieceRule"/>, <see cref="PortalEdgeRule"/>). ARC-DATA-034: a window snapshot
+    /// (ARC-DATA-032) too; its generated core sectors are read again from the archive that holds their template in the
+    /// stack and bound to the snapshot's payload digest.</summary>
     public static AreaStepSnapshot InspectWholeMap(AreaSnapshot area, ContentStack stack, string? aggregatePath, long evidenceEpoch)
     {
         ArgumentNullException.ThrowIfNull(area); ArgumentNullException.ThrowIfNull(stack);
@@ -53,7 +55,7 @@ public static class AreaStepInspector
         var stage = new StageCursor();
         return Sanitize(stage, () =>
         {
-            if (!area.Profile.StartsWith(WholeMapProfilePrefix, StringComparison.Ordinal)) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
+            if (!Universal(area.Profile)) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
             var module = stack.Plan.SearchOrder.SingleOrDefault(s => s.Role == ContentSourceRole.ModuleArchive) ?? throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
             byte[]? Rule(string path, bool required)
             {
@@ -73,7 +75,22 @@ public static class AreaStepInspector
                 mobile = read.Status == ContentReadStatus.Read ? read.Bytes! : throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Selection);
             }
             using var moduleArchive = DatArchive.Open(module.Path);
-            return Build(stage, AreaStepInputKind.Structural, area, moduleArchive, Rule, mobile, evidenceEpoch);
+            var archives = new Dictionary<string, DatArchive>(StringComparer.Ordinal);
+            try
+            {
+                // A generated sector's template: the stack's winner, which must be an archive member.
+                (DatArchive, DatEntry) Template(AreaSectorRecord sector)
+                {
+                    var path = area.Window?.Sectors.SingleOrDefault(s => s.Coordinate == sector.Coordinate)?.TemplatePath
+                        ?? throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Terrain);
+                    var winner = stack.Resolve(path).Winner ?? throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Terrain);
+                    if (winner.Entry is not { } entry) throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Terrain);
+                    if (!archives.TryGetValue(winner.Source.Path, out var archive)) archives.Add(winner.Source.Path, archive = DatArchive.Open(winner.Source.Path));
+                    return (archive, archive.Entries[entry.Ordinal]);
+                }
+                return Build(stage, AreaStepInputKind.Structural, area, moduleArchive, Rule, mobile, evidenceEpoch, Template);
+            }
+            finally { foreach (var archive in archives.Values) archive.Dispose(); }
         });
     }
 
@@ -132,7 +149,7 @@ public static class AreaStepInspector
     };
 
     private static AreaStepSnapshot Build(StageCursor stage, AreaStepInputKind kind, AreaSnapshot area, DatArchive module,
-        Func<string, bool, byte[]?> readRule, ReadOnlyMemory<byte> mobileFile, long epoch)
+        Func<string, bool, byte[]?> readRule, ReadOnlyMemory<byte> mobileFile, long epoch, Func<AreaSectorRecord, (DatArchive Archive, DatEntry Entry)>? template = null)
     {
         stage.Current = AreaStepInvocationStage.Selection;
         // Only a strict-complete publication: an inspected snapshot with issues may omit unlocated objects.
@@ -179,15 +196,26 @@ public static class AreaStepInspector
         var terrainByCell = area.Terrain.GroupBy(t => t.Key.Sector).ToDictionary(g => g.Key, g => g.ToArray());
         foreach (var sector in sectors)
         {
-            var entries = module.Entries.Where(e => e.Ordinal == sector.DatOrdinal).ToArray();
-            if (entries.Length != 1 || sector.PayloadSha256 is null) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Terrain);
-            var entry = entries[0];
-            if (Sha(module.ReadEntry(entry)) != sector.PayloadSha256) throw Fail(AreaStepInvocationCode.FingerprintMismatch, AreaStepInvocationStage.Terrain);
+            var (archive, label) = (module, "AREA_MODULE");
+            DatEntry entry;
+            if (sector.Template is not null)
+            {
+                // ARC-DATA-034: a generated window sector is its template, moved into the sector (ARC-DATA-032).
+                if (template is null || sector.PayloadSha256 is null) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Terrain);
+                (archive, entry) = template(sector); label = "AREA_TEMPLATE";
+            }
+            else
+            {
+                var entries = module.Entries.Where(e => e.Ordinal == sector.DatOrdinal).ToArray();
+                if (entries.Length != 1 || sector.PayloadSha256 is null) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Terrain);
+                entry = entries[0];
+            }
+            if (Sha(archive.ReadEntry(entry)) != sector.PayloadSha256) throw Fail(AreaStepInvocationCode.FingerprintMismatch, AreaStepInvocationStage.Terrain);
             var selector = new TerrainSectorSelector(Encoding.ASCII.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0'), "area",
                 checked((int)sector.Coordinate.X), checked((int)sector.Coordinate.Y), sector.Key.Packed,
                 checked((int)sector.Coordinate.OriginX), checked((int)sector.Coordinate.OriginY), 64, 64,
                 new(entry.Ordinal, entry.Flags, entry.DeclaredOutputSize));
-            var report = TerrainObstructionInspector.InspectSector(module, "AREA_MODULE", selector, null);
+            var report = TerrainObstructionInspector.InspectSector(archive, label, selector, null);
             var words = report.CopyTileWords(); var mask = report.CopyBlockWords();
             var records = terrainByCell.GetValueOrDefault(sector.Key, []);
             if (records.Length != 4096 || records.Select(r => r.LocalX + 64 * r.LocalY).Distinct().Count() != 4096 ||
@@ -214,7 +242,7 @@ public static class AreaStepInspector
         }
 
         stage.Current = AreaStepInvocationStage.Objects;
-        var wholeMap = area.Profile.StartsWith(WholeMapProfilePrefix, StringComparison.Ordinal);
+        var wholeMap = Universal(area.Profile);
         var admitted = sectors.Select(s => (s.Coordinate.X, s.Coordinate.Y)).ToHashSet();
         var objects = new Dictionary<AreaStepCell, List<AreaStepObjectEvaluation>>();
         var walls = new Dictionary<AreaStepCell, List<AreaStepWallEdge>>();
@@ -308,7 +336,10 @@ public static class AreaStepInspector
     internal const string WallEdgeReason = "WALL_EDGE_COMPONENT";
     internal const string PortalEdgeReason = "PORTAL_EDGE_COMPONENT";
     internal const string LockedLeavingOnlyReason = "PORTAL_LOCKED_LEAVING_ONLY";
-    private const string WholeMapProfilePrefix = "arc-data-019-";
+    private const string WholeMapProfilePrefix = "arc-data-019-", WindowProfilePrefix = "arc-data-032-";
+    /// <summary>A whole-map (ARC-DATA-019) or window (ARC-DATA-032) snapshot: universal plans with the whole-map rules.</summary>
+    private static bool Universal(string profile) =>
+        profile.StartsWith(WholeMapProfilePrefix, StringComparison.Ordinal) || profile.StartsWith(WindowProfilePrefix, StringComparison.Ordinal);
     private const int PortalFlagsSlot = 36, ScriptsSlot = 31, UnlockScriptSap = 3;
     private static readonly int[] WindowWallPieces = [10, 13, 14, 17, 18, 19];
     private static readonly int[] DoorwayWallPieces = [22, 25, 26, 29, 30, 31, 32];
