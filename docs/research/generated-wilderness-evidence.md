@@ -381,9 +381,13 @@ missing (anomaly A5). No retail sector needs any of these.
 
 ## Limits and NOT READY
 
-- No loader, renderer or session code; nothing in the viewer changes.
-- The original executable was not run or disassembled. A1's correct rule is an
-  inference from CE and the data; the fill's random tile variation is from CE only.
+Since ARC-DATA-031 the Data layer implements slices 1–3 in the map catalogue
+([generated sectors](../world/map-catalog.md#generated-sectors-arc-data-031)), with the type table and path rule
+checked in the executable ([ledger TR1–TR5](original-verification-ledger.md#terrain-templates-arc-data-031)).
+
+- No renderer, plan or session consumes generated sectors yet; nothing in the viewer changes.
+- This study read no executable; later checks did (A1 and A3/A6 in ARC-RES-048, the type
+  table and path rule in ARC-DATA-031). The fill's random tile variation is still unchecked.
 - The v119 record walker met only object types 0 and 3 on real data; other types
   are covered by the synthetic self-test only.
 - The probe models the mounts of the measured installation (`patch0`,

@@ -8,7 +8,7 @@ and its verdicts decide which differences become switches of the two rule settin
 decision D8 (see [the AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)).
 
 The combat-core anomalies A1–A10 were checked by ARC-COMBAT-001 and are not repeated here (A11 and A12 are in
-[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029), blessings and curses in [Blessings and curses](#blessings-and-curses-arc-world-035); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); auto-level schemes in [Auto-level schemes](#auto-level-schemes-arc-world-036); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026); the phase of other rule files in [Load phases](#load-phases-arc-data-027); `map.patch` in [Map patch](#map-patch-arc-data-028); audio in [Audio](#audio-arc-res-052); the logbook in [Logbook](#logbook-arc-ui-008); the map list size in [Limits census](#limits-census-arc-data-029); sector residency and loading in [Main-map streaming](#main-map-streaming-arc-data-030))
+[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029), blessings and curses in [Blessings and curses](#blessings-and-curses-arc-world-035); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); auto-level schemes in [Auto-level schemes](#auto-level-schemes-arc-world-036); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026); the phase of other rule files in [Load phases](#load-phases-arc-data-027); `map.patch` in [Map patch](#map-patch-arc-data-028); audio in [Audio](#audio-arc-res-052); the logbook in [Logbook](#logbook-arc-ui-008); the map list size in [Limits census](#limits-census-arc-data-029); sector residency and loading in [Main-map streaming](#main-map-streaming-arc-data-030); terrain types and template paths in [Terrain templates](#terrain-templates-arc-data-031))
 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). Domain
 documents keep their own tables; where a row below contradicts a domain document, this ledger is
 the newer evidence, and the domain document's "likely intent" column is superseded by the verdict.
@@ -691,6 +691,25 @@ sector initialisation (game or editor).
 | SS6 | object list load (0x4F1350) | A template object's location becomes the real sector's origin (x × 64, y × 64) plus the object's tile inside its slot, and its change bits are cleared. | Original (with Wilderness A1 for lights) |
 | SS7 | object fold (0x4F1CD0), 0x441FC0, 0x4AD790 | Every object found at the sector that is not in an inventory and not static joins the sector's list. Outside the editor, an NPC that is not destroyed has its AI time event replaced by an immediate one carrying the SS5 flag. | Original |
 | SS8 | light fold (0x4F7940) | Day is hour 6..17. Nocturnal scenery (flag 0x4) not in an inventory is switched on on a tile whose art type bit is clear, otherwise off by day and on by night. Other objects, and nocturnal scenery left on, add their lights to the sector. | Original |
+
+## Terrain templates (ARC-DATA-031)
+
+Source: the [map catalogue](../world/map-catalog.md#generated-sectors-arc-data-031) and the
+[generated-wilderness study](generated-wilderness-evidence.md). Question: where the terrain type names come from and how a
+terrain word becomes a template path. Read on 2026-10-18 by a first reader and, independently, a second reader that saw
+only the questions (method step 6). Both agree on every row. The second reader added the variant counts' only consumer and
+the terrain init's transition check. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| TR1 | the Terrain entry of the map subsystem table (0x59F2A4), terrain init (0x4E7B00) | The entry has an init, a reset, an exit and map-new and map-close functions but no module-load or module-unload function, like Proto. The init loads `terrain\terrain.mes` once, then builds the type names, the type count and the transition table, each failing the init. Nothing loads the file again, so only the base sources count. | Original |
+| TR2 | type names (0x4E8EA0) | Messages 0, 1, … up to 31 by exact number, stopping at the first missing one. A text containing `/b` (case-sensitive) marks the type blocked; the mark, everything after it and the white space before it are cut in place. A text starting with the mark has no guard. | Original |
+| TR3 | type count (0x4E8F40) | The count is the number of those messages. For each type it counts the files `terrain\<name>\<slot>.sec` for variants 0..3 up to the first missing one; the init fails when there is no type or type 0 has none. The counts are read only by the word builder for new maps. | Original |
+| TR4 | terrain word (0x4E87F0), fields (0x4E8DC0, 0x4E8DD0, 0x4E8DE0, 0x4E8DF0) | A sector outside the grid reads 0xFFFF. Base type bits 11..15, second type bits 6..10, transition code bits 2..5, variant bits 0..1. | Original |
+| TR5 | template path (0x4E84C0), variant slot (0x4E8E60), slot table (0x5B9968), type name (0x4E8B20) | Plain when base = second or the code is 0: `terrain\<base>\<slot>.sec`, slot (variant mod 2, variant / 2). Otherwise the table entry of the code; when it is -1 the pair swaps (second to base) and the entry of 15 − code is used: `terrain\<from> to <to>\<slot>.sec`, a still missing slot written as `-1`. Slots: code 1 (1,0), 2 (1,2), 3 (1,1), 4 (3,2), 5 (0,0), 6 (2,2), 8 (3,0), 9 (2,0), 12 (3,1), the others none. A type at or above the count has no name; the path then appends a null string (a fault, Wilderness A6). | Original |
+
+Not modelled by Steamwoven: the transition-message check of the init (0x4E90B0), which only an invalid module fails; the
+variant counts beyond type 0; the error log lines.
 
 ## Decisions to revisit
 

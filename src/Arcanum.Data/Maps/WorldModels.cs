@@ -92,7 +92,7 @@ public sealed class WorldMap
     public WorldMapInfo? Info { get; }
     public IReadOnlyList<WorldJumpPoint> JumpPoints { get; }
     /// <summary>Sectors that have a file, in id order. Other sectors of the map are generated
-    /// from the terrain grid (not modelled yet).</summary>
+    /// from the terrain grid (<see cref="WorldCatalog.ResolveSector"/>, ARC-DATA-031).</summary>
     public IReadOnlyList<WorldSectorCoordinate> SectorFiles { get; }
     public IReadOnlyList<string> EditorMobilePaths { get; }
     /// <summary>The game-generated mobile file the original reads in a normal game.</summary>
@@ -138,14 +138,21 @@ public sealed class WorldSector
 {
     internal WorldSector(WorldSectorCoordinate coordinate, string path, int version, IReadOnlyList<IReadOnlyList<int>> lights, IReadOnlyList<uint> tiles,
         IReadOnlyList<uint>? roofs, IReadOnlyList<IReadOnlyList<int>> tileScripts, IReadOnlyList<int>? sectorScript, IReadOnlyList<int>? metadataAndSound,
-        TerrainSerializedBlockMask? blockMask, int declaredObjects, IReadOnlyList<WorldObject> objects, WorldIssue? objectIssue)
+        TerrainSerializedBlockMask? blockMask, int declaredObjects, IReadOnlyList<WorldObject> objects, WorldIssue? objectIssue,
+        WorldSectorSourceKind sourceKind = WorldSectorSourceKind.Own)
     {
         Coordinate = coordinate; Path = path; Version = version; Lights = lights; Tiles = tiles; Roofs = roofs; TileScripts = tileScripts;
         SectorScript = sectorScript; MetadataAndSound = metadataAndSound; BlockMask = blockMask; DeclaredObjects = declaredObjects; Objects = objects; ObjectIssue = objectIssue;
+        SourceKind = sourceKind;
     }
 
     public WorldSectorCoordinate Coordinate { get; }
+    /// <summary>The file read: the own sector file, or the template file for <see cref="WorldSectorSourceKind.Template"/>.</summary>
     public string Path { get; }
+    /// <summary>ARC-DATA-031: <see cref="WorldSectorSourceKind.Own"/> or <see cref="WorldSectorSourceKind.Template"/>. A template
+    /// sector's objects and lights are moved to <see cref="Coordinate"/> (ledger SS6, Wilderness A1); their hashes stay
+    /// those of the template's records.</summary>
+    public WorldSectorSourceKind SourceKind { get; }
     /// <summary>Sector format 0..4; later versions add tile scripts, a sector script, metadata
     /// and sound, and a block mask.</summary>
     public int Version { get; }
@@ -167,6 +174,27 @@ public sealed class WorldSector
 }
 
 public enum WorldSectorStatus { Read, NoFile, Refused }
+
+/// <summary>Where the original takes a sector from (ARC-DATA-031, ledger SS2, SS5).</summary>
+public enum WorldSectorSourceKind
+{
+    /// <summary>The map's own <c>&lt;sector id&gt;.sec</c>.</summary>
+    Own,
+    /// <summary>The terrain template the sector's terrain word names, moved to the sector.</summary>
+    Template,
+    /// <summary>No own file and no template file (also a transition code without a slot): the original fills the
+    /// sector with one tile family in random variations and nothing else; no plan models that.</summary>
+    Fill,
+    /// <summary>Outside the map's <c>map.prp</c> size: the original's sector lock refuses it.</summary>
+    OutsideMap,
+    /// <summary>The terrain grid is missing (the original does not open the map) or the word names a type without a
+    /// name (the original faults).</summary>
+    Unresolved,
+}
+
+/// <summary>A sector's source: the own file, or the template with the word that named it.</summary>
+public sealed record WorldSectorSource(WorldSectorCoordinate Coordinate, WorldSectorSourceKind Kind, string? Path, TerrainWord? Word,
+    TerrainTemplatePath? Template);
 public sealed record WorldSectorResult(WorldSectorStatus Status, WorldSector? Sector, WorldIssue? Issue);
 
 /// <summary>A map's mobile objects. A refused aggregate record ends the readable part of

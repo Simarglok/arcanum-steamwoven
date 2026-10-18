@@ -24,11 +24,15 @@ public sealed class WorldCatalog
     private readonly WorldLoaderOptions _options;
     private readonly IReadOnlyDictionary<string, WorldMap> _byName;
 
-    private WorldCatalog(ContentStack stack, WorldLoaderOptions options, IReadOnlyList<WorldMap> maps, ContentPrototypes prototypes, IReadOnlyList<WorldIssue> issues)
+    private WorldCatalog(ContentStack stack, WorldLoaderOptions options, IReadOnlyList<WorldMap> maps, ContentPrototypes prototypes, IReadOnlyList<WorldIssue> issues,
+        TerrainTypeLoad terrainTypes)
     {
-        _stack = stack; _options = options; Maps = maps; Prototypes = prototypes; Issues = issues;
+        _stack = stack; _options = options; Maps = maps; Prototypes = prototypes; Issues = issues; TerrainTypes = terrainTypes;
         _byName = maps.ToDictionary(m => m.Name, StringComparer.Ordinal);
     }
+
+    /// <summary>ARC-DATA-031: the terrain types the original reads at game start; without them no sector is generated.</summary>
+    public TerrainTypeLoad TerrainTypes { get; }
 
     /// <summary>Maps in folder-name order.</summary>
     public IReadOnlyList<WorldMap> Maps { get; }
@@ -75,7 +79,49 @@ public sealed class WorldCatalog
         foreach (var key in prototypes.AmbiguousKeys)
             issues.Add(new(WorldIssueCode.Malformed, key, TryPrototypeNumber(key[6..], out var number) ? number : null, "duplicate prototype number"));
         foreach (var key in prototypes.IgnoredModuleKeys) issues.Add(new(WorldIssueCode.IgnoredModuleCopy, key));
-        return new(stack, options, maps.AsReadOnly(), prototypes, issues.AsReadOnly());
+        return new(stack, options, maps.AsReadOnly(), prototypes, issues.AsReadOnly(), TerrainTypeTable.Open(stack));
+    }
+
+    /// <summary>
+    /// ARC-DATA-031: where the original takes a sector from (ledger SS2, SS5, TR5). A sector outside the map's
+    /// <c>map.prp</c> size is <see cref="WorldSectorSourceKind.OutsideMap"/>; one with its own file is
+    /// <see cref="WorldSectorSourceKind.Own"/>; otherwise the terrain word (<see cref="TerrainWord.OutsideGrid"/> outside
+    /// <paramref name="grid"/>) names a template, which is <see cref="WorldSectorSourceKind.Template"/> when the stack holds
+    /// it and <see cref="WorldSectorSourceKind.Fill"/> when it does not. The optional demo limits are not modelled.
+    /// </summary>
+    [OriginalFunction(0x4D1A30, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4E87F0, OriginalFunctionScope.Full)]
+    public WorldSectorSource ResolveSector(WorldMap map, WorldSectorCoordinate coordinate, WorldTerrainGrid? grid)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        if (coordinate.X < 0 || coordinate.Y < 0 || coordinate.X >= map.Properties.WidthTiles / 64 || coordinate.Y >= map.Properties.HeightTiles / 64)
+            return new(coordinate, WorldSectorSourceKind.OutsideMap, null, null, null);
+        if (map.HasSectorFile(coordinate))
+            return new(coordinate, WorldSectorSourceKind.Own, $"{map.Folder}/{coordinate.Id.ToString(CultureInfo.InvariantCulture)}.sec", null, null);
+        if (grid is null || TerrainTypes.Table is not { } types) return new(coordinate, WorldSectorSourceKind.Unresolved, null, null, null);
+        var word = new TerrainWord(coordinate.X < grid.Header.WidthSectors && coordinate.Y < grid.Header.HeightSectors
+            ? grid[coordinate.X, coordinate.Y] : TerrainWord.OutsideGrid);
+        var template = types.Resolve(word);
+        if (template.Kind == TerrainTemplateKind.UnnamedType) return new(coordinate, WorldSectorSourceKind.Unresolved, null, word, template);
+        return template.Kind != TerrainTemplateKind.NoSlot && _stack.Resolve(template.Path!).Winner is not null
+            ? new(coordinate, WorldSectorSourceKind.Template, template.Path, word, template)
+            : new(coordinate, WorldSectorSourceKind.Fill, null, word, template);
+    }
+
+    /// <summary>ARC-DATA-031: reads a sector from its source: an own file as <see cref="ReadSector(WorldMap, WorldSectorCoordinate)"/>
+    /// does, a template file read like a sector file with its objects and lights moved to the real sector. Another source
+    /// kind is <see cref="WorldSectorStatus.NoFile"/>; a template source without a path under <c>terrain/</c> is refused.</summary>
+    public WorldSectorResult ReadResolvedSector(WorldMap map, WorldSectorSource source)
+    {
+        ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(source);
+        return source.Kind switch
+        {
+            WorldSectorSourceKind.Own => ReadSector(map, source.Coordinate),
+            WorldSectorSourceKind.Template when source.Path is { } path && path.StartsWith("terrain/", StringComparison.Ordinal)
+                => Read(path, source.Coordinate, relocate: true),
+            WorldSectorSourceKind.Template => new(WorldSectorStatus.Refused, null, new(WorldIssueCode.Malformed, source.Path ?? "terrain/", null, "not a template path")),
+            _ => new(WorldSectorStatus.NoFile, null, null),
+        };
     }
 
     /// <summary>Reads one sector file. A sector without a file is <see cref="WorldSectorStatus.NoFile"/>;
@@ -85,6 +131,11 @@ public sealed class WorldCatalog
         ArgumentNullException.ThrowIfNull(map);
         var path = $"{map.Folder}/{coordinate.Id.ToString(CultureInfo.InvariantCulture)}.sec";
         if (!map.HasSectorFile(coordinate)) return new(WorldSectorStatus.NoFile, null, null);
+        return Read(path, coordinate, relocate: false);
+    }
+
+    private WorldSectorResult Read(string path, WorldSectorCoordinate coordinate, bool relocate)
+    {
         var read = new Reader(_stack, _options).Bytes(path, _options.Sector.MaxSectorDecodedEntryBytes, out var issue);
         if (read is null) return new(WorldSectorStatus.Refused, null, issue);
         TerrainLoader.ParsedSector parsed;
@@ -95,6 +146,7 @@ public sealed class WorldCatalog
         }
         var framing = parsed.Framing;
         var lights = Words(read, framing[TerrainSection.Lights], 12);
+        if (relocate) lights = Array.AsReadOnly(lights.Select(light => RelocateLight(light, coordinate)).ToArray());
         var roofs = framing.RoofDiscriminator == 0 ? Unsigned(read, framing[TerrainSection.Roof], 4) : null;
         var scriptRange = framing[TerrainSection.TileScripts];
         var tileScripts = framing.TileScriptCount == 0 ? Array.Empty<IReadOnlyList<int>>()
@@ -111,14 +163,44 @@ public sealed class WorldCatalog
             try
             {
                 var record = ObjectWireReader.Read(bytes[offset..], _options.Wire, maxRecordBytes: _options.Sector.MaxSectorDecodedEntryBytes);
-                objects.Add(Object(record)); offset += record.Length;
+                var item = Object(record);
+                objects.Add(relocate ? Relocate(item, coordinate) : item); offset += record.Length;
             }
             catch (StaticObjectException error) { objectIssue = new(WorldIssueCode.ObjectRefused, path, index, error.Code.ToString()); break; }
         }
         if (objectIssue is null && offset != bytes.Length) objectIssue = new(WorldIssueCode.Malformed, path, window.TerminalObjectCount, "object window has trailing bytes");
         var sector = new WorldSector(coordinate, path, framing.Placeholder - 0xAA0000, lights, Array.AsReadOnly(parsed.Words), roofs, tileScripts,
-            sectorScript, metadata, parsed.BlockMask, window.TerminalObjectCount, objects.AsReadOnly(), objectIssue);
+            sectorScript, metadata, parsed.BlockMask, window.TerminalObjectCount, objects.AsReadOnly(), objectIssue,
+            relocate ? WorldSectorSourceKind.Template : WorldSectorSourceKind.Own);
         return new(WorldSectorStatus.Read, sector, null);
+    }
+
+    /// <summary>ARC-DATA-031 (ledger SS6): a template record's location becomes the real sector's origin plus the tile
+    /// inside its own template slot.</summary>
+    [OriginalFunction(0x4F1350, OriginalFunctionScope.Partial)]
+    internal static long RelocateLocation(long packed, WorldSectorCoordinate sector)
+    {
+        var location = WorldLocation.FromPacked(packed);
+        var x = ((long)sector.X << 6) + (location.X & 63);
+        var y = ((long)sector.Y << 6) + (location.Y & 63);
+        return x | y << 32;
+    }
+
+    private static WorldObject Relocate(WorldObject item, WorldSectorCoordinate sector)
+    {
+        if (!item.Fields.TryGetValue(1, out var value) || value.Presence != WorldFieldPresence.Value || value.Number is not { } packed) return item;
+        var fields = new SortedDictionary<int, WorldFieldValue>(item.Fields.ToDictionary(p => p.Key, p => p.Value)) { [1] = value with { Number = RelocateLocation(packed, sector) } };
+        return new(item.Type, item.PrototypeNumber, item.OwnIdKind, item.OwnIdSha256, item.Sha256, item.SemanticSha256, new ReadOnlyDictionary<int, WorldFieldValue>(fields));
+    }
+
+    /// <summary>A template light moves by the object rule (ledger Wilderness A1): words 2 and 3 hold its location.</summary>
+    [OriginalFunction(0x4F72C0, OriginalFunctionScope.Partial)]
+    internal static IReadOnlyList<int> RelocateLight(IReadOnlyList<int> light, WorldSectorCoordinate sector)
+    {
+        var words = light.ToArray();
+        var packed = RelocateLocation((uint)words[2] | (long)words[3] << 32, sector);
+        words[2] = (int)(packed & 0xFFFFFFFF); words[3] = (int)(packed >> 32);
+        return Array.AsReadOnly(words);
     }
 
     /// <summary>The map's mobile objects as a normal game reads them: the game-generated
