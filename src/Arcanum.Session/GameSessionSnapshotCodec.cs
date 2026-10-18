@@ -35,7 +35,7 @@ public static class GameSessionSnapshotCodec
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "effects", "experience", "random", "life", "reactions", "combat", "combatMode", "events", "lighting", "sound"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "effects", "experience", "random", "life", "reactions", "combat", "combatMode", "sound", "events", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -645,7 +645,7 @@ public static class GameSessionSnapshotCodec
         var f = Fields(element, p, SoundFields);
         (int, int) Pair(string name)
         {
-            var items = Array(f[name], $"{p}.{name}", 2);
+            var items = Array(f[name], $"{p}.{name}", 16);
             if (items.Length != 2) throw new DecodeException(SnapshotDecodeFailure.WrongType, $"{p}.{name}");
             return (Int(items[0], $"{p}.{name}[0]", 0, int.MaxValue), Int(items[1], $"{p}.{name}[1]", 0, int.MaxValue));
         }

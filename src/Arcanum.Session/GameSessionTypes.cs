@@ -112,10 +112,13 @@ public sealed record GameSessionDescriptor(ProfileBinding Clock, GlobalFlagOwner
 /// new process-local GF epoch; saved epochs are not persisted. <paramref name="Rules"/> (ARC-WORLD-023) is the rule
 /// mode to continue under: a snapshot never records one, so any save loads under either mode (D4). <paramref name="Experience"/>
 /// and <paramref name="Difficulty"/> (ARC-WORLD-030) are data and a setting, never saved, as in the descriptor.
+/// <paramref name="SoundMapDefault"/> (ARC-WORLD-040) is the loaded map's default music and ambient pair (its map info's
+/// <c>SoundScheme</c>, null without one): the original opens the map, which plays it, before it loads the sound state.
 /// </summary>
 public sealed record GameSessionRestoreOptions(GlobalFlagIdentity ExpectedIdentity,
     ProfileBinding ExpectedClockProfile, OwnerEpoch FlagEpoch, GameSessionLimits? Limits = null,
-    RuleMode Rules = RuleMode.Steamwoven, SessionExperienceRules? Experience = null, GameDifficulty Difficulty = GameDifficulty.Normal);
+    RuleMode Rules = RuleMode.Steamwoven, SessionExperienceRules? Experience = null, GameDifficulty Difficulty = GameDifficulty.Normal,
+    SessionMapSound? SoundMapDefault = null);
 
 public enum GameSessionFailure
 {

@@ -93,14 +93,32 @@ public sealed class SoundStateTests
     }
 
     [TestMethod]
+    public void An_npc_entering_takes_one_revision_and_the_pcs_death_stops_combat_music()
+    {
+        using var owner = Owner(hero: true);
+        owner.PlaySoundScheme(owner.Version, 1, 40);
+        owner.SetCombatMode(owner.Version, SessionCombatant.Hero, true, SessionCombatModeContext.RealTime);
+        var revision = owner.Version.Revision;
+        owner.SetCombatMode(owner.Version, Wolf, true, new() { Facts = new() { Speed = 7, Life = new() } });
+        Assert.AreEqual((revision + 1, true), (owner.Version.Revision, State(owner).CombatMusic), "the combat-mode change and the sound share one revision");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Hero).Disposition);
+        Assert.AreEqual((false, 1, 40), (State(owner).CombatMusic, State(owner).Slot0, State(owner).Slot1), "the PC's death leaves combat mode and restores the pair");
+    }
+
+    [TestMethod]
     public void A_map_opens_by_stopping_everything_and_playing_its_default_and_a_sector_skips_zero_pairs()
     {
         using var owner = Owner();
         owner.PlaySoundScheme(owner.Version, 1, 40);
-        Changed(owner.EnterMapSound(owner.Version, 3, 29), owner);
+        Changed(owner.EnterMapSound(owner.Version, new(3, 29)), owner);
         Assert.AreEqual((3, 29), (State(owner).Slot0, State(owner).Slot1));
-        Changed(owner.EnterMapSound(owner.Version, null, null), owner);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.EnterMapSound(owner.Version, new(3, 29)).Disposition, "a reopen that changes nothing");
+        Changed(owner.EnterMapSound(owner.Version, null), owner);
         Assert.AreEqual((0, 0), (State(owner).Slot0, State(owner).Slot1), "no SoundScheme line: silence until a sector or script asks");
+        Changed(owner.EnterMapSound(owner.Version, null), owner);
+        Assert.AreEqual((0, 0), (State(owner).Restore0, State(owner).Restore1), "the second open records the empty slots as restore ids");
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.EnterMapSound(owner.Version, null).Disposition, "nothing left to change: no revision");
+        Assert.AreEqual(GameSessionFailure.InvalidSound, owner.EnterMapSound(owner.Version, new(-1, 0)).Failure);
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.EnterSectorSound(owner.Version, 0, 0).Disposition, "a 0/0 sector changes nothing");
         Changed(owner.EnterSectorSound(owner.Version, 0, 42), owner);
         Assert.AreEqual((42, 0), (State(owner).Slot0, State(owner).Slot1), "one id 0 leaves that slot empty");
@@ -138,8 +156,19 @@ public sealed class SoundStateTests
             Assert.AreEqual(snapshot.Sound, State(steamwoven), "Steamwoven keeps the pre-combat pair");
             Assert.AreEqual(0L, steamwoven.QuerySound().CombatStarts, "a load never replays the stinger");
         }
-        using var original = Restore(snapshot, RestoreOptions() with { Rules = RuleMode.Original });
-        Assert.AreEqual(new SessionSoundState(0, 0, false, 1, 40, true, 0, 0), State(original), "the original overwrites it with the empty slots");
+        using (var original = Restore(snapshot, RestoreOptions() with { Rules = RuleMode.Original }))
+            Assert.AreEqual(new SessionSoundState(0, 0, false, 1, 40, true, 0, 0), State(original), "the original overwrites it with the empty slots");
+
+        // The original opens the loaded map first, which plays its default pair, then loads the sound state.
+        using (var original = Restore(snapshot, RestoreOptions() with { Rules = RuleMode.Original, SoundMapDefault = new(3, 29) }))
+            Assert.AreEqual(new SessionSoundState(3, 29, false, 1, 40, true, 0, 0), State(original), "the map default plays through the loaded combat");
+        using (var steamwoven = Restore(snapshot, RestoreOptions() with { SoundMapDefault = new(3, 29) }))
+            Assert.AreEqual(snapshot.Sound, State(steamwoven), "Steamwoven: empty slots during combat, the pre-combat pair kept");
+        var calmSnapshot = Decode(calm);
+        using (var restored = Restore(calmSnapshot, RestoreOptions() with { SoundMapDefault = new(1, 29) }))
+            Assert.AreEqual((1, 40, 0, 29), (State(restored).Slot0, State(restored).Slot1, State(restored).Restore0, State(restored).Restore1),
+                "the saved request keeps 1 and replaces the map ambient, whose id becomes the restore id");
+        Assert.AreEqual(GameSessionFailure.InvalidSound, GameSessionOwner.Restore(calmSnapshot, RestoreOptions() with { SoundMapDefault = new(-1, 0) }).Failure);
     }
 
     [TestMethod]
@@ -155,6 +184,19 @@ public sealed class SoundStateTests
                 Assert.AreEqual(GameSessionFailure.InvalidSound, GameSessionOwner.Restore(snapshot, RestoreOptions()).Failure, bad);
             else Assert.AreEqual(SnapshotDecodeFailure.OutOfRange, decoded.Failure, bad);
         }
+        foreach (var (bad, failure, path) in new[]
+        {
+            ("\"sound\":{\"slots\":[0],", SnapshotDecodeFailure.WrongType, "$.sound.slots"),
+            ("\"sound\":{\"slots\":[0,0,0],", SnapshotDecodeFailure.WrongType, "$.sound.slots"),
+            ("\"sound\":{\"slots\":\"none\",", SnapshotDecodeFailure.WrongType, "$.sound.slots"),
+            ("\"sound\":{\"extra\":1,\"slots\":[0,0],", SnapshotDecodeFailure.UnknownField, "$.sound.extra"),
+        })
+        {
+            var decoded = GameSessionSnapshotCodec.TryDecode(text.Replace("\"sound\":{\"slots\":[0,0],", bad, StringComparison.Ordinal));
+            Assert.AreEqual((failure, path), (decoded.Failure, decoded.Path), bad);
+        }
+        var missing = GameSessionSnapshotCodec.TryDecode(text.Replace(",\"combatMusic\":false", "", StringComparison.Ordinal));
+        Assert.AreEqual((SnapshotDecodeFailure.MissingField, "$.sound.combatMusic"), (missing.Failure, missing.Path));
         var combatWithSlots = text.Replace("\"slots\":[0,0]", "\"slots\":[1,0]", StringComparison.Ordinal).Replace("\"combatMusic\":false", "\"combatMusic\":true", StringComparison.Ordinal);
         Assert.AreEqual(GameSessionFailure.InvalidSound, GameSessionOwner.Restore(Decode(combatWithSlots), RestoreOptions()).Failure);
     }

@@ -26,6 +26,9 @@ public interface ISessionSoundSchemes
     bool StartsTransition(int schemeId);
 }
 
+/// <summary>A map's default music and ambient pair (its map info's <c>SoundScheme</c> line).</summary>
+public readonly record struct SessionMapSound(int Music, int Ambient);
+
 /// <summary>A sound call's disposition and the version after it.</summary>
 public sealed record SessionSoundResult(GameSessionDisposition Disposition, GameSessionFailure Failure, GameSessionVersion Version);
 
@@ -67,24 +70,36 @@ internal sealed class SoundDomain
     internal int LockDepth { get; private set; }
     internal long CombatStarts { get; private set; }
 
+    internal SoundDomain Clone()
+    {
+        var copy = new SoundDomain { _restorePending = _restorePending, _combat = _combat, LockDepth = LockDepth, CombatStarts = CombatStarts };
+        _slots.CopyTo(copy._slots, 0); _restore.CopyTo(copy._restore, 0); _preCombat.CopyTo(copy._preCombat, 0); _preLock.CopyTo(copy._preLock, 0);
+        return copy;
+    }
+
+    internal bool SameAs(SoundDomain other) => Capture() == other.Capture() && LockDepth == other.LockDepth && CombatStarts == other.CombatStarts
+        && _preLock.SequenceEqual(other._preLock);
+
     internal SessionSoundState Capture() => new(_slots[0], _slots[1], _restorePending, _restore[0], _restore[1], _combat, _preCombat[0], _preCombat[1]);
 
     internal static bool Valid(SessionSoundState state) =>
         state.Slot0 >= 0 && state.Slot1 >= 0 && state.Restore0 >= 0 && state.Restore1 >= 0 && state.PreCombat0 >= 0 && state.PreCombat1 >= 0
         && (state.Slot0 == 0 || state.Slot0 != state.Slot1) && !(state.CombatMusic && (state.Slot0 != 0 || state.Slot1 != 0));
 
-    /// <summary>The original's load: the saved restore and combat state first, then a scheme request of the saved slots
-    /// (which, while combat music is flagged, only replaces the restore target, unless Steamwoven keeps it).</summary>
+    /// <summary>The original's load. The map loads first and opens the saved map, which plays its default pair; then the
+    /// sound load sets the saved restore and combat state and requests the saved slots. While combat music is flagged that
+    /// request only replaces the restore target (the original's bug); Steamwoven keeps the saved pre-combat pair and leaves
+    /// the slots empty, as they were when the game was saved.</summary>
     [OriginalFunction(0x41B0F0, OriginalFunctionScope.Partial)]
-    internal static SoundDomain Import(SessionSoundState saved, SoundRuleProfile rules)
+    internal static SoundDomain Import(SessionSoundState saved, SoundRuleProfile rules, SessionMapSound? mapDefault)
     {
-        var domain = new SoundDomain
-        {
-            _restorePending = saved.RestorePending, _combat = saved.CombatMusic,
-        };
+        var domain = new SoundDomain();
+        domain.EnterMap(mapDefault, null);
+        domain._restorePending = saved.RestorePending; domain._combat = saved.CombatMusic;
         (domain._restore[0], domain._restore[1]) = (saved.Restore0, saved.Restore1);
         (domain._preCombat[0], domain._preCombat[1]) = (saved.PreCombat0, saved.PreCombat1);
-        if (!(saved.CombatMusic && !rules.CombatSaveLosesSchemes)) domain.Play(saved.Slot0, saved.Slot1, null);
+        if (saved.CombatMusic && !rules.CombatSaveLosesSchemes) domain._slots[0] = domain._slots[1] = 0;
+        else domain.Play(saved.Slot0, saved.Slot1, null);
         return domain;
     }
 
@@ -135,11 +150,11 @@ internal sealed class SoundDomain
     /// <summary>A map opens: every sound stops, combat music and the lock are reset, then the map's default pair plays when
     /// its map info has one.</summary>
     [OriginalFunction(0x41B060, OriginalFunctionScope.Partial)]
-    internal void EnterMap(int? music, int? ambient, ISessionSoundSchemes? schemes)
+    internal void EnterMap(SessionMapSound? mapDefault, ISessionSoundSchemes? schemes)
     {
         StopAll();
         _combat = false; LockDepth = 0;
-        if (music is { } m) Play(m, ambient ?? 0, schemes);
+        if (mapDefault is { } pair) Play(pair.Music, pair.Ambient, schemes);
     }
 
     /// <summary>An NPC entered combat mode: unless combat music already plays, the slots are saved as the restore target
@@ -202,46 +217,50 @@ public sealed partial class GameSessionOwner
 
     public SessionSoundView QuerySound() { ThrowIfDisposed(); return new(_sound.Capture(), _sound.LockDepth, _sound.CombatStarts); }
 
-    /// <summary>A map opened (every map open, also a reload): every sound stops and the map's default pair (its map info's
-    /// <c>SoundScheme</c>, null when the line is missing) plays.</summary>
-    public SessionSoundResult EnterMapSound(GameSessionVersion expected, int? music, int? ambient) =>
-        SoundChange(expected, music is < 0 || ambient is < 0, () => { _sound.EnterMap(music, ambient, _soundSchemes); return true; });
+    /// <summary>A map opened in play (a transition or a reload of the area, not a game load: <see cref="Restore"/> takes the
+    /// loaded map's default through <see cref="GameSessionRestoreOptions.SoundMapDefault"/>): every sound stops and the map's
+    /// default pair (null when its map info has no <c>SoundScheme</c> line) plays.</summary>
+    public SessionSoundResult EnterMapSound(GameSessionVersion expected, SessionMapSound? mapDefault) =>
+        SoundChange(expected, mapDefault is { } pair && (pair.Music < 0 || pair.Ambient < 0), sound => sound.EnterMap(mapDefault, _soundSchemes));
 
     /// <summary>The local PC was placed in another sector: the sector's pair plays unless both ids are 0.</summary>
     public SessionSoundResult EnterSectorSound(GameSessionVersion expected, int music, int ambient) =>
-        SoundChange(expected, music < 0 || ambient < 0, () => (music != 0 || ambient != 0) && _sound.Play(music, ambient, _soundSchemes));
+        SoundChange(expected, music < 0 || ambient < 0, sound => { if (music != 0 || ambient != 0) sound.Play(music, ambient, _soundSchemes); });
 
     /// <summary>A script's scheme request (<c>play_sound_scheme</c>), unchanged.</summary>
     public SessionSoundResult PlaySoundScheme(GameSessionVersion expected, int music, int ambient) =>
-        SoundChange(expected, music < 0 || ambient < 0, () => _sound.Play(music, ambient, _soundSchemes));
+        SoundChange(expected, music < 0 || ambient < 0, sound => sound.Play(music, ambient, _soundSchemes));
 
     /// <summary>The player reports that a transition song ended.</summary>
     public SessionSoundResult FinishSoundTransition(GameSessionVersion expected) =>
-        SoundChange(expected, false, () => { var before = _sound.Capture(); _sound.FinishTransition(_soundSchemes); return _sound.Capture() != before; });
+        SoundChange(expected, false, sound => sound.FinishTransition(_soundSchemes));
 
     /// <summary>A movie starts (the lock nests): the slots stop and every scheme request is dropped until the last unlock.</summary>
-    public SessionSoundResult LockSound(GameSessionVersion expected) => SoundChange(expected, false, () => { _sound.Lock(); return true; });
+    public SessionSoundResult LockSound(GameSessionVersion expected) => SoundChange(expected, false, sound => sound.Lock());
 
-    public SessionSoundResult UnlockSound(GameSessionVersion expected) =>
-        SoundChange(expected, false, () => { var depth = _sound.LockDepth; _sound.Unlock(_soundSchemes); return depth > 0; });
+    public SessionSoundResult UnlockSound(GameSessionVersion expected) => SoundChange(expected, false, sound => sound.Unlock(_soundSchemes));
 
-    private SessionSoundResult SoundChange(GameSessionVersion expected, bool invalid, Func<bool> change)
+    // The change runs on a copy: NoChange when the copy equals the state, a revision only for a real change.
+    private SessionSoundResult SoundChange(GameSessionVersion expected, bool invalid, Action<SoundDomain> change)
     {
         ThrowIfDisposed();
         if (invalid) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidSound, Version);
         if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
+        var next = _sound.Clone();
+        change(next);
+        if (next.SameAs(_sound)) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
-        if (!change()) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
+        _sound = next;
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
 
-    private static GameSessionFailure ImportSound(SessionSoundState? saved, SoundRuleProfile rules, out SoundDomain sound)
+    private static GameSessionFailure ImportSound(SessionSoundState? saved, SoundRuleProfile rules, SessionMapSound? mapDefault, out SoundDomain sound)
     {
         sound = new();
         if (saved is null) return GameSessionFailure.InvalidSnapshot;
-        if (!SoundDomain.Valid(saved)) return GameSessionFailure.InvalidSound;
-        sound = SoundDomain.Import(saved, rules);
+        if (!SoundDomain.Valid(saved) || mapDefault is { } pair && (pair.Music < 0 || pair.Ambient < 0)) return GameSessionFailure.InvalidSound;
+        sound = SoundDomain.Import(saved, rules, mapDefault);
         return GameSessionFailure.None;
     }
 }

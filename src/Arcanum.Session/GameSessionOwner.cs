@@ -163,7 +163,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportCombatMode(snapshot.CombatMode, hero is not null, combat);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportSound(snapshot.Sound, GameRules.For(options.Rules).Sound, out var sound);
+        failure = ImportSound(snapshot.Sound, GameRules.For(options.Rules).Sound, options.SoundMapDefault, out var sound);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         var sink = new SessionEventSink();
         failure = ImportEvents(snapshot.Events, hero?.State, life, snapshot.Clock.GameTimestampMs, sink,
