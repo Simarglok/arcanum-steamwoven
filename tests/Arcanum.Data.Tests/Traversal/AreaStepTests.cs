@@ -46,6 +46,13 @@ public sealed class AreaStepTests
         foreach (var refused in new[] { "unknowntoken +1", "st", "st ?3", "st *3", "st /2", "st min -1", "st\t+1", "st +1\nwp +1" })
             Assert.IsNull(AreaStepRules.ParseEffect(refused), refused);
         Assert.AreEqual(0, AreaStepRules.ParseEffect("")!.Count);
+        // ARC-DATA-035: attributes the hit-point rule does not read are ignored, whatever their operator; the grammar still
+        // has to accept them (the shared effect grammar, ledger LM9).
+        var kept = AreaStepRules.ParseEffect("speed -2, st +1, dodge *2, resistfire min -1, poisonlevel +10%")!;
+        CollectionAssert.AreEqual(new[] { "st", "poisonlevel" }, kept.Select(p => p.Attribute).ToArray());
+        Assert.AreEqual(0, AreaStepRules.ParseEffect("speed -2")!.Count);
+        Assert.IsNull(AreaStepRules.ParseEffect("speedy -2"));
+        Assert.IsNull(AreaStepRules.ParseEffect("level /0"));
     }
 
     [TestMethod]
