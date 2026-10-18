@@ -13,15 +13,14 @@ of [FR-ITEM-007](../requirements/items-economy.md#fr-item-007). The viewer uses 
 
 ## Evidence
 
-- CE at the pinned commit `a7ff41b300ef712f0e7d088183a3d08957110cdd`: `item.c` (wear check, wield, unwield, remove check,
-  slot of an item, armour class adjustment, race size table, effective power and magic adjustment, weapon speed, range,
-  minimum strength, unarmed damage, light), `object.c` (armour class and resistance), `inven_ui.c` (the paperdoll's own
-  checks), `first_party/tig/src/art.c` (item art bits). No code or structure was copied.
+- The original's functions, read first: the item functions (wear check, wield, unwield, remove check, slot of an item,
+  armour class adjustment, race size table, effective power and magic adjustment, weapon speed, range, minimum strength,
+  unarmed damage, light), the object armour class and resistance, the paperdoll UI's own checks and the TIG item art bits.
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically by two independent readers at the same
   functions per the [original executable check](../research/original-executable-check.md); rows EQ1–EQ14 in the
-  [verification ledger](../research/original-verification-ledger.md#equipment-arc-world-028). The original does what CE
-  reads except one CE slip that changes a rule (EQ1: a shield is refused with one crippled arm too) and one that changes only
-  stored flags (EQ12: the critter keeps only its largest light flag). EQ5 is a bug of the original without a session effect
+  [verification ledger](../research/original-verification-ledger.md#equipment-arc-world-028). The original does what
+  that first reading describes except in two rows: one changes a rule (EQ1: the original refuses a shield with one crippled arm
+  too) and one changes only stored flags (EQ12: the original keeps only the critter's largest light flag). EQ5 is a bug of the original without a session effect
   (the medallion slot recalculates the animation speed of the item, not the wearer), so no rule-mode switch.
 - Installed original (opt-in, below): all 150 weapon, 251 armour and 148 generic prototypes become wear values.
 
@@ -52,8 +51,8 @@ and unarmed bonus not negative, the blocks of its kind).
 | --- | --- |
 | `QueryEquipment()` | The worn items in slot order: slot, the PC item entity (`kit:n` or a taken item), its saved values. |
 | `QueryHeroEquipmentCombat(training)` | `EquipmentRules.Evaluate` for the hero's effective magick/tech aptitude; null without a hero. Training is the caller's (skills are not session state). |
-| `Equip(expected, entity, slot, item, artCheck, insertCheck)` | The source's `item_wield_set`. Refusals, in order: input, version, no hero (`EquipmentUnavailable`), an item the hero does not hold (`ItemNotAvailable`) or another kind than the saved one (`InventoryMismatch`); NoChange when already in that slot; a `SAP_INSERT_ITEM`, `SAP_REMOVE_ITEM`, `SAP_WIELD_ON` or `SAP_WIELD_OFF` script (`ItemScriptUnsupported`) or item spells (`ItemEffectUnsupported`); the wear check with the hero's race, gender, aptitude and crippled arms from the life domain, then `artCheck` (`WearRefused` with the `EquipmentRefusal`); the no-drop flag of the item, then of the slot's occupant (`WearRefused`, `NotDroppable`); the insert check of the occupant going back to the grid (`InsertRefused`). A ring in the other ring slot moves. One revision. |
-| `Unequip(expected, slot, insertCheck)` | The source's unwield to the grid: NoChange for an empty slot; the no-drop flag, then the insert check. One revision. |
+| `Equip(expected, entity, slot, item, artCheck, insertCheck)` | The original's wield (0x464AE0). Refusals, in order: input, version, no hero (`EquipmentUnavailable`), an item the hero does not hold (`ItemNotAvailable`) or another kind than the saved one (`InventoryMismatch`); NoChange when already in that slot; a `SAP_INSERT_ITEM`, `SAP_REMOVE_ITEM`, `SAP_WIELD_ON` or `SAP_WIELD_OFF` script (`ItemScriptUnsupported`) or item spells (`ItemEffectUnsupported`); the wear check with the hero's race, gender, aptitude and crippled arms from the life domain, then `artCheck` (`WearRefused` with the `EquipmentRefusal`); the no-drop flag of the item, then of the slot's occupant (`WearRefused`, `NotDroppable`); the insert check of the occupant going back to the grid (`InsertRefused`). A ring in the other ring slot moves. One revision. |
+| `Unequip(expected, slot, insertCheck)` | The original's unwield to the grid: NoChange for an empty slot; the no-drop flag, then the insert check. One revision. |
 
 `SessionWearableItem` is what the host offers: the saved kind, script points, whether the item has item spells, and its
 `EquipmentItem` values. `SessionEquipmentFacts.FromCombatFields` builds the values from the stored combat fields
@@ -154,6 +153,6 @@ pack.
 - **Not tied to the round.** `Equip` and `Unequip` neither charge action points nor refuse during a turn-based round; the
   whether the original charges for changing equipment in a round is not researched here.
 - **Not modelled:** item spells on wear and unwear (such items are refused), scripts on wield (refused), art and
-  appearance changes, the animation speed recalculation (EQ5), the paperdoll UI's own path (`inven_ui.c`), identification
+  appearance changes, the animation speed recalculation (EQ5), the paperdoll UI's own path, identification
   (combat reads every magic adjustment), weapon wear, hexed items, ammunition pools, drop, barter, weight effects,
   base AC and resistances of the PC and its effects, skills and training.

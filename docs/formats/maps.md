@@ -29,7 +29,7 @@ not extract it to disk.
 
 ## Sector framing for the frozen input
 
-The following byte order is **corroborated from the pinned CE loader order and
+The following byte order is **corroborated from the source loader order and
 experimentally bounded on this one input**. The complete section ledger and
 the read-only probe limits are in
 [crash-site-framing.md](../research/crash-site-framing.md); this is not a
@@ -44,8 +44,8 @@ universal sector specification.
 | `17140..47287` on this input | object-record window | terminal count controls a bounded delimiter |
 | `decoded_length - 4` | signed LE terminal object count | non-negative and at most 4,096; observed `317` |
 
-Pinned CE revision `a7ff41b300ef712f0e7d088183a3d08957110cdd` loads a light
-list, a fixed 4,096-element tile list, roof and conditional intermediate
+Read as source (F0, not checked in the executable), the original's sector load
+reads a light list, a fixed 4,096-element tile list, roof and conditional intermediate
 sections, then an object list whose count is at the stream end. The actual
 input has `light_count = 0`, `tile_count = 4096`, an object window beginning at
 `17140`, and terminal count `317`. The bounded delimiter reaches `47287` after
@@ -56,7 +56,7 @@ placement or draw order.
 
 ## Coordinates and sector address
 
-Pinned CE `sector_id_from_loc` maps location components with `>> 6`; its sector
+The original's sector-from-location function (0x4CFC50) maps location components with `>> 6`; its sector
 macro packs X in bits `0..25` and Y in bits `26..51`. With the frozen start
 location this yields:
 
@@ -67,28 +67,28 @@ sector_id = sector_x | (sector_y << 26) = 86570436012
 local_origin = (1452 << 6, 1290 << 6) = (92928, 82560)
 ```
 
-This is CE-derived and verified against the selected entry selector, but is not
+This is source-derived and verified against the selected entry selector, but is not
 a promise for every map source. The probe's synthetic test rejects an impossible
 light count, a truncated computed tile table, a negative terminal count, and a
 non-tile identifier when strict type checking is requested.
 
 ## Terrain ART-ID status
 
-Pinned CE's ART source identifies a type field in the high four bits. The
-selected words occupy two classes, and the bounded companion probe now handles
-only those CE-attributed tile and facade branches. The real run reported counts
+A reading of the original's ART identifier code (F0) identifies a type field in
+the high four bits. The selected words occupy two classes, and the bounded
+companion probe now handles only those tile and facade branches. The real run reported counts
 by high nibble:
 
 ```text
 3033, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1063, 0, 0, 0, 0
 ```
 
-Under the pinned CE enum, these are tile and facade classes respectively. The
+Under the source enum, these are tile and facade classes respectively. The
 type-specific MES callback lookup, exact one-source ART selection, frame
 selection, and coverage failures are recorded in
 [crash-site-terrain-resolution.md](../research/crash-site-terrain-resolution.md).
 that investigation resolves all 4,096 records in its explicit one-source run.
-Its R2 addition defines CE-derived diagnostic tile/editor-facade footprints,
+Its R2 addition defines source-derived diagnostic tile/editor-facade footprints,
 crop and raw-tile-flip behavior, but not source precedence, lighting, a normal
 game facade pass, or a complete terrain scene.
 
@@ -120,13 +120,9 @@ slice.
 ## Sources and lineage
 
 - Project implementation: `src/Arcanum.Data/DatArchive.cs`.
-- Pinned CE revision `a7ff41b300ef712f0e7d088183a3d08957110cdd`:
-  `src/game/sector.c`, `src/game/sector_light_list.c`,
-  `src/game/sector_tile_list.c`, `src/game/sector_object_list.c`, `src/game/obj.c`,
-  `src/game/obj.h`, `src/game/obj_private.c`, `src/game/obj_id.h`, `src/game/sa.c`,
-  `src/game/sa.h`, `src/game/proto.c`, `src/game/obj_pool.c`, `src/game/script.h`,
-  `src/game/quest.h`, and `first_party/tig/src/art.c`.
+- A source reading (evidence level F0, not checked in the executable) of the
+  original's sector, sector light/tile/object list, object, object id, sparse
+  array, prototype, object pool, script, quest and ART identifier code.
 
-CE and CE-derived sources remain one lineage and are not independent
-confirmation. This independently authored note records constrained behavior;
-it does not copy CE implementation structure or license terms.
+Source-derived readings are one lineage and are not independent confirmation.
+This independently authored note records constrained behavior.

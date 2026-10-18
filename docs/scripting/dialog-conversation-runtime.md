@@ -56,7 +56,7 @@ instead of the world port; `IN` then needs only one of the two. The optional `ID
 
 ## Flow and source semantics
 
-Source references are the pinned CE lineage below; implementation is independent.
+Source references are the function addresses listed under [Provenance](#provenance); implementation is independent.
 
 1. **Entry** — the caller supplies the checked NPC node (in the viewer: the dialog
    action the [SCR dispatcher](scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3)
@@ -143,7 +143,7 @@ lifecycle, pending map transfer). Within 3 tiles (Chebyshev; project rule, not s
 the dialog opens at once; farther away the route walks to the nearest standable cell within
 reach and the talk starts on arrival, unless a stick, another click, a reset/reload or a modal
 cancels it (like the cave walk-to-use). The cave map has no dialog NPC. Replies are chosen by **mouse**, as in
-the source (`tc.c` reads only mouse messages); the controller menu navigates, confirms and
+the source (its dialog text control reads only mouse messages, F0); the controller menu navigates, confirms and
 cancels. Keyboard keys are not redirected to dialog actions: the WORLD keyboard route keeps
 them reserved for their original actions ([palette and keyboard route](../input/diagnostic-palette.md)),
 so `T`, digits, `Esc` and `Enter` do nothing in the dialog. A diagnostic **Leave** button
@@ -172,7 +172,7 @@ capture/encode/decode/restore of the session, and they change the next conversat
 
 | Consequence | Where it lives |
 | --- | --- |
-| GF conditions and writes | The session's flags: original new-game domain 0..3199, all known false ([source: 100 words of flags zeroed on init and reset][gf]); flags ≥3200 are not admitted and fail the dialog. |
+| GF conditions and writes | The session's flags: original new-game domain 0..3199, all known false (source: 100 words of flags zeroed on init and reset (0x4446E0, 0x4447D0)); flags ≥3200 are not admitted and fail the dialog. |
 | QU | Session quest rules ([story domain](../world/game-session-runtime.md#story-domain)); a QU that leaves a quest Accepted lifts the NPC's effective reaction to at least 41 (a delta through the reaction domain), Completed adds 10 (source rule, checked in the original executable); such a QU takes two session revisions (quest, then reaction). A quest outside 1000..1999 is refused and fails the dialog. |
 | RU | Session rumors with their game time; outside 1000..2999 is refused. |
 | RQ | ARC-UI-008: the session's game-wide quelled rumors (no participant, as the original's dialog action); quelling a quelled rumor is no change; outside 1000..2999 is refused and fails the dialog. |
@@ -186,7 +186,6 @@ follow consent picks his follower entry after a round trip to the cave or a rest
 HUD status shows the session story (quests, rumors, followers). In the synthetic
 self-test without area lighting the session clock is an invented synthetic profile.
 
-[gf]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L150-L212
 
 Observed with the user-owned installation: Virgil (script 1324) enters at SCR line 4 → DLG
 node 1; choosing the first Direct reply each time walks 13 NPC nodes
@@ -220,20 +219,13 @@ ARC-RENDER-007 export, which predates this change until a new export is register
 
 ## Provenance
 
-Source-backed observations come from `alexbatalov/arcanum-ce` at
-`a7ff41b300ef712f0e7d088183a3d08957110cdd` (Sustainable Use License 1.0, **not MIT**; no
-code copied or mechanically translated): [record fields][parse], [reply enumeration and
-gates][enumerate], [conditions][conditions], [actions][actions], [NPC line, markers and
-names][npc], [generated Player options][options], [response and UI outcomes][ui].
+Source-backed observations are a reading of the original's functions at the cited addresses,
+evidence level F0 (not checked in the executable) unless the
+[verification ledger](../research/original-verification-ledger.md) lists them: record fields (0x417860), reply enumeration and
+gates (0x414E60, 0x414F50), conditions (0x4150D0), actions (0x415BA0), NPC line, markers and
+names (0x416840, 0x416AB0, 0x416B00), generated Player options (0x416C10, 0x417590), response and UI outcomes (0x567E30, 0x5680A0, 0x5681C0, 0x568430, 0x568480).
 Strict grammar, group-order guard, look-ahead blocking, budgets, typed ports and the
 diagnostic profile are project policy. Unknown: original parser edge cases, generated
 phrases, all other operations, reaction/alignment modifiers, item transfer outcomes,
 follower rules and the SCR continuation after the dialog.
 
-[parse]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2641-L2734
-[enumerate]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1274-L1358
-[conditions]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1361-L1859
-[actions]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1862-L2243
-[npc]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2260-L2390
-[options]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2393-L2549
-[ui]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/dialog_ui.c#L281-L407

@@ -8,9 +8,10 @@ snapshot schema 5. It covers the transfer part of [FR-ITEM-001](../requirements/
 these three paths only. Since ARC-UI-004 the AREA viewer uses it: seeds from its loaded maps, pickup and loot clicks,
 the inventory window and Virgil's `IN` ([viewer](../rendering/terrain-viewer.md#inventory-window-pickup-and-loot-arc-ui-004)).
 
-Categories as in the research: source claims (S) are read from `alexbatalov/arcanum-ce` at
-`a7ff41b300ef712f0e7d088183a3d08957110cdd` (Sustainable Use License, not MIT); nothing is copied. Data claims (D) are
-checked by the opt-in real-data test below.
+Categories as in the research: source claims (S) are a reading of the original's functions at the cited addresses,
+evidence level F0 (not checked in the executable) unless the
+[verification ledger](../research/original-verification-ledger.md) lists them. Data claims (D) are checked by the opt-in
+real-data test below.
 
 ## Model
 
@@ -46,8 +47,8 @@ of the PC's list. `InventoryMutationResult` names the moved item and the insert 
 
 | Call | Source path (S) | Admitted here |
 | --- | --- | --- |
-| `PickUpItem(item)` | left click → `AG_PICKUP_ITEM` → `item_transfer` of an unparented item: item `SAP_GET`, insert check, `object_pickup`, `item_insert` (item `SAP_INSERT_ITEM`) | an item on the ground of the actor's map |
-| `LootItem(holder, item)` | click on a dead critter opens it as a container (target `SAP_USE` checked first); a moved item runs the parented transfer: PC `SAP_TRANSFER`, insert check, `item_remove` (item `SAP_REMOVE_ITEM`, unequip when worn), `item_insert` | an item still listed by an NPC the seed marks dead, or one the session killed (ARC-COMBAT-005, [hero attack](hero-attack-runtime.md)) |
+| `PickUpItem(item)` | left click → `AG_PICKUP_ITEM` → the item transfer (0x4617F0) of an unparented item: item `SAP_GET`, insert check, the object pickup (0x4417A0), the item insert (0x466640; item `SAP_INSERT_ITEM`) | an item on the ground of the actor's map |
+| `LootItem(holder, item)` | click on a dead critter opens it as a container (target `SAP_USE` checked first); a moved item runs the parented transfer: PC `SAP_TRANSFER`, insert check, the item removal (0x466E00; item `SAP_REMOVE_ITEM`, unequip when worn), the item insert (0x466640) | an item still listed by an NPC the seed marks dead, or one the session killed (ARC-COMBAT-005, [hero attack](hero-attack-runtime.md)) |
 | `GiveItemToPc(npc, name)` | `DIALOG_ACTION_IN` with a negative value: first item in the NPC's list with that name class, else in its substitute inventory; parented transfer to the PC; dropped at the PC's location when the PC did not get it | the NPC's current list; no match and no substitute is NoChange, as in the source |
 
 Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and seed (`InventoryUnavailable`) checks:
@@ -64,7 +65,7 @@ Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and se
 other attachments such as examine and use do not run on a transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`,
 at most 512), `RevisionExhausted`, and last `InsertRefused`.
 
-**Insert check.** `item_check_insert` depends on the created character (carry weight against its strength, the
+**Insert check.** The original's insert check (0x466510) depends on the created character (carry weight against its strength, the
 Technophobia background against technology items, free grid room around its own items), none of which the session owns.
 The host answers it per item with a `SessionInsertCheck` delegate (`Accepted`, `TooHeavy`, `TechnologyRefused`,
 `NoRoom`; any other value refuses). It runs only after every other refusal. If the host calls back into the owner from it and anything the transfer read
@@ -74,7 +75,7 @@ loot that is the source behaviour; for IN the source would drop the item at the 
 items lie there), which is not modelled, so IN is refused instead.
 
 Not modelled, on purpose: the PC's `SAP_TRANSFER` attachment (no PC object), reach and the walk to an item, the
-combat action-point cost of a pickup, item decay timers, `item_insert` slot choice and hotkeys, encumbrance effects,
+combat action-point cost of a pickup, item decay timers, the item insert's slot choice and hotkeys, encumbrance effects,
 dropping, barter, theft, positive `IN`, NPC respawn and chest generation.
 
 ## Dialog seam

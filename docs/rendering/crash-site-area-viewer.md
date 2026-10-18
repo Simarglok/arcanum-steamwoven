@@ -391,21 +391,23 @@ scalar summary in the safe receipt; the raw report stays in private evidence.
 
 ## Source attribution and unknowns
 
-The source-derived specification is attributed to alexbatalov/arcanum-ce commit
-`a7ff41b300ef712f0e7d088183a3d08957110cdd`, Sustainable Use License 1.0:
+The specification comes from a reading of the original's functions at these
+addresses, evidence level F0 (not checked in the executable) unless the
+verification ledger lists them:
 
-- `game/sector.c:734–769` and `game/object.c:541–556`: global cell traversal;
-- `game/sector_object_list.c:555–649`, `game/location.c:490–499`: flat/upright,
-  UNDER_ALL and local offset insertion ranks;
-- `game/object.c:525–530,620–704,840–849,1985–2099`: render phases and normal body
-  position; inventory insertion is `game/sector_object_list.c:532–540`;
+- sector rectangle from a location rectangle (0x4D0090) and the object draw
+  (0x43B390): global cell traversal;
+- object list insertion helpers (0x4F20A0, 0x4F2230) and a location helper
+  (0x4B93F0): flat/upright, UNDER_ALL and local offset insertion ranks;
+- the object draw (0x43B390) and the object rectangle (0x43DFD0): render phases
+  and normal body position; inventory insertion is the object list insert
+  (0x4F2020);
 - serialized flags and appearance census are separately recorded in the
   [inventory](../research/crash-site-area-inventory.md) and
   [area contract](../world/crash-site-area-contract.md).
 
 This is one specification lineage, not independent original execution. Code and
-public synthetic fixtures are independently authored; no CE implementation is
-copied or mechanically translated. General cached rendering, mirrored-getter
+public synthetic fixtures are independently authored. General cached rendering, mirrored-getter
 compatibility beyond the admitted diagnostic policy, retail ties, shadows,
 lighting and original-runtime parity remain unverified or unsupported. Neither
 source attribution nor successful synthetic pixels removes those boundaries.

@@ -5,15 +5,16 @@
 This document retains the R2 experimental record and now describes the bounded
 implemented C# decoder of **one physical 8-bpp ART frame** into RGBA. It is not a
 renderer, animator, writer, extractor, or viewer. Experimental observations remain
-in [the ART evidence record](../research/art-evidence.md); CE-source-derived API
-rules are separately attributed in [the CE specification record](../research/art-ce-spec.md).
+in [the ART evidence record](../research/art-evidence.md); API rules derived
+from a reading of the original's ART functions (evidence level F0, not checked in
+the executable) are recorded in [the ART specification record](../research/art-ce-spec.md).
 
 Status vocabulary follows [the research method](../research/method.md):
 reported, corroborated, experimentally verified, disputed, and unknown. The
 R2 observations below deliberately did not assign rendering behaviour to
 palette index 0, palette alpha, direction order, anchors, or timing. The later
 implemented BGRX-to-RGBA, index-0, and row-order normalization rules are
-CE-source-derived contract decisions, not retroactive claims about the R2 run.
+source-reading (F0) contract decisions, not retroactive claims about the R2 run.
 
 ## Observed layout
 
@@ -27,9 +28,9 @@ published.
 | --- | --- | --- | --- |
 | Header | 132 bytes, interpreted as 33 little-endian 32-bit words for the probe | experimentally verified for 12 samples | The probe reached the palette table, complete frame-header table, and exact payload end for every selected entry. The 132-byte size and word order are also reported by ArtConverter. |
 | Header word 0 | Preserve as raw `uint32`; bit 0 selected one frame-header group for the six `item` entries and eight groups for the six `critter` entries | experimentally verified for the corpus; semantics unknown | The probe's count derived from this bit made every frame table and payload boundary exact. The semantic label “static” comes from the source route and local category selection; it is not a runtime direction-order claim. |
-| Header words 1–2 | Preserve raw; the API exposes word 1 using the CE-source-derived `FramesPerSecond` label | unknown | The label is metadata only, not independent timing evidence and is not used to drive animation. |
+| Header words 1–2 | Preserve raw; the API exposes word 1 using the source-reading (F0) `FramesPerSecond` label | unknown | The label is metadata only, not independent timing evidence and is not used to drive animation. |
 | Header words 3–6 | Four raw palette selectors; non-zero word count controls the number of following 1,024-byte tables in this subset | experimentally verified for the corpus; selector semantics unknown | All selected `item` entries had one table; all selected `critter` entries had four. A zero/non-zero condition was sufficient to locate the next table. IDs, palette choice, and meaning are not established. |
-| Header word 7 | Preserve raw; the API exposes it using the CE-source-derived `ActionFrame` label | unknown | The label is metadata only. No original-runtime or independent observational proof establishes an action/key-frame semantic. |
+| Header word 7 | Preserve raw; the API exposes it using the source-reading (F0) `ActionFrame` label | unknown | The label is metadata only. No original-runtime or independent observational proof establishes an action/key-frame semantic. |
 | Header word 8 | Per-group frame count | experimentally verified for the corpus | Combined with the observed bit-0 rule, it located every 28-byte frame header. |
 | Header words 9–16 and 25–32 | Preserve raw | unknown | They were not needed to establish the frame boundaries. |
 | Header words 17–24 | Eight raw per-group values | disputed / unknown | They equal observed payload-byte totals for all six directional samples, but not for any of the six selected static samples. Do not name or rely on them as data-size totals for a decoder. |
@@ -64,8 +65,8 @@ the 12 real samples and is not part of the proven real-data subset.
 The R2 probe retained pixel order only as one-dimensional palette indices in
 file decoding order. ArtConverter's BMP path reverses rows for BMP output, but
 that did not establish a renderer coordinate origin or alpha policy for the R2
-observation. The implemented decoder contract below is separately
-CE-source-derived and deliberately does not retroactively promote those rules
+observation. The implemented decoder contract below separately comes from a
+source reading (F0) and deliberately does not retroactively promote those rules
 to R2 experiment facts.
 
 ## Implemented decoder contract
@@ -81,19 +82,19 @@ supports exactly this input and output contract:
   group-frame-palette metadata, and tightly packed straight RGBA bytes.
 - Present palette tables follow in increasing slot order and retain gaps. A
   requested absent slot falls back only to present slot 0; absence of both is a
-  format error. For this CE-source-derived normalization, file B/G/R/X maps to
+  format error. For this source-reading (F0) normalization, file B/G/R/X maps to
   `(R,G,B,255)` for indices 1–255, X remains in raw palette metadata, and
   index 0 is `(0,0,0,0)` regardless of its palette bytes.
 - Pixels remain stored row-major: `x` increases first, then `y`, with byte
   offset `4 * (y * width + x)`. The decoder does not reverse rows for BMP.
-- FPS and action-frame are preserved as signed metadata under CE-source-derived
-  labels only; they do not establish or drive animation, timing, placement, or
+- FPS and action-frame are preserved as signed metadata under source-reading
+  (F0) labels only; they do not establish or drive animation, timing, placement, or
   direction semantics.
 - Admitted real-data structural subset: the observed 132-byte layout,
   zero/non-zero palette-table presence, bit-0-derived one/eight physical group
   sizing, selected RLE frames, and checked byte boundaries. The RGBA policy is
   synthetic-contract coverage plus bounded same-input local regression checks,
-  not CE pixel parity or an independent pixel oracle.
+  not pixel parity with the original or an independent pixel oracle.
 - Required rejection conditions before allocation: entry shorter than 132
   bytes; non-positive or over-cap frame/group counts; absent palette/frame
   tables; dimension, multiplication, offset, or payload-size overflow; a
@@ -114,10 +115,10 @@ accept a different layout.
 437 of the 13,993 installed ART files (interface 326, eye candy 35, wall 33,
 item 18, scenery 16, portal 8, monster 1) carry bytes after the last frame
 payload: 1 byte in 44 files, 2–64 bytes in 134, more in 259. Every frame of
-every one of them decodes to exactly `width × height` pixels. The pinned CE
-reader (`first_party/tig/src/art.c`, `art_read_header` and the frame loop) reads
-the header, palettes, frame table and payloads in order and never checks the
-end of the file, so the tail is invisible to it.
+every one of them decodes to exactly `width × height` pixels. The original's
+ART reader (its header read and frame loop) reads the header, palettes, frame
+table and payloads in order and never checks the end of the file, so the tail is
+invisible to it (source reading, not checked in the executable, F0).
 
 `ArtDecoderOptions.AllowTrailingBytes` (off by default) accepts such a tail and
 reports its length as `ArtMetadata.TrailingBytes`; a payload that runs past the
@@ -151,4 +152,4 @@ The following remain outside the supported subset:
 In particular, the location of animation timing is **unknown**: the ART source
 route names a rate-like word, but no runtime or independent data experiment
 establishes whether timing belongs to ART, an external table, or runtime code.
-No Arcanum executable or CE application was run to resolve it.
+No Arcanum executable or other application was run to resolve it.

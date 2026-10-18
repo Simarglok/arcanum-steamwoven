@@ -7,15 +7,17 @@ is a separate Proposed/NOT_READY assessment contract, not movement admission.
 
 ARC-RES-013 specifies one logical step; it implements no production movement,
 collision, navigation, input adapter, Godot component or simulation assembly.
-The [evidence record](../research/grid-movement-evidence.md) contains the exact
-CE pin, license, caller trace, source/policy differences and reproducible checks.
+The [evidence record](../research/grid-movement-evidence.md) contains the
+caller trace, source/policy differences and reproducible checks.
 Original executable behavior remains **NOT_VERIFIED**. This document does not
 make real cardinal or diagonal traversal ready.
 
 Classification applies to every assertion in its labelled section/table row:
 
-- **Original/source-confirmed (CE-source)**: directly inspected pinned CE text,
-  not an original executable observation or independent corroboration.
+- **Original/source-confirmed (source reading)**: a reading of the original's
+  functions at the cited addresses, evidence level F0 (not checked in the
+  executable) unless the [verification ledger](../research/original-verification-ledger.md)
+  lists them; not an original executable observation or independent corroboration.
 - **Original/source-confirmed (historical original metadata)**: previously
   recorded identity-bound data observations; not rerun for this specification.
 - **Project policy**: ratified P1–P8, including the owner's stopping rule; not
@@ -26,10 +28,10 @@ Classification applies to every assertion in its labelled section/table row:
 
 ## Source boundary
 
-**Original/source-confirmed (CE-source)**: CE keeps a packed map location and
-separate instance offsets. Its isometric `location_xy` projector and the actor
+**Original/source-confirmed (source reading)**: the original keeps a packed map location and
+separate instance offsets. Its isometric location projector (0x4B8680) and the actor
 base `projected + offset + (40,20)` are not a normalized simulation chart.
-`location_in_dir` enumerates eight neighboring map cells and rejects map-limit
+The step-in-direction function (0x4B8FF0) enumerates eight neighboring map cells and rejects map-limit
 violations. Normal `AG_ATTEMPT_MOVE` calls begin/update callbacks; update advances
 ART frames, applies frame offsets to instance offsets, normalizes the location,
 and separately checks subsequent progress/completion. Scheduler/stat inputs
@@ -37,7 +39,7 @@ modify the pause. See evidence S1–S9 for definitions **and** callers/condition
 
 **Unknown**: original runtime interpolation, exact crossing/tie behavior,
 release/cancellation, general turn scheduling and absolute compass-facing
-semantics. CE's inspected ordinary update is discrete/frame-offset-driven,
+semantics. The original's inspected ordinary update (F0) is discrete/frame-offset-driven,
 not evidence for the linear law below. Its normal completion restores the
 previous animation, not universally Stand. A separate source path explicitly
 selects Stand, and cleanup has a local ART value without a writeback. Do not
@@ -55,7 +57,7 @@ No raw ART FPS-to-gameplay-speed equivalence is admitted.
 **Project policy**. `CellCoord=(x,y)` consists of checked signed integers in a
 caller-declared chart. `WorldAnchor=(u,v)` is finite continuous simulation space
 in the same normalized units. `Center(C)=C`. Negative coordinates are legal
-chart examples, not claims about CE packed locations or original map bounds.
+chart examples, not claims about the original's packed locations or original map bounds.
 The selected real-data profile still requires coordinates in its fixed sector;
 chart validity alone is not traversal permission.
 
@@ -162,10 +164,10 @@ start there is no positive-duration Idle slice. A zero-length cancelled start
 has no positive-duration Walk. Animation cadence is independently supplied by
 presentation/action policy, never used to calculate displacement here.
 
-**Original/source-confirmed (CE-source)**: S2/S3 relate eight neighbor rotations
+**Original/source-confirmed (source reading)**: S2/S3 relate eight neighbor rotations
 to map deltas and current-ART rotation in the inspected begin path:
 
-| Map delta | CE rotation | Project alias (policy, not compass) |
+| Map delta | Original rotation | Project alias (policy, not compass) |
 | --- | ---: | --- |
 | (-1,-1) | 0 | X−Y− |
 | (-1,0) | 1 | X− |
@@ -237,7 +239,7 @@ recovery; a future task needs a separate dynamic contract.
 
 **Project policy**. The [worksheet](../../tools/research/grid_movement_probe.py)
 uses exact fractions with independent literal anchors and event transcripts.
-No CE/source/data constants are imported. All rows below are synthetic;
+No source/data constants are imported. All rows below are synthetic;
 `Open` is a fixture permit, **not** the real-data diagonal result.
 
 From A=(0,0), D=8, start=0. Each row's three anchors are at release t=2/4/6
@@ -301,11 +303,11 @@ and precedence remain those of the [passability contract](passability-contract.m
 | --- | --- | --- |
 | Terrain tile-name component: 91 Unknown/null | Original/source-confirmed (historical original metadata), [current component evidence](../research/terrain-obstruction-components-evidence.md). Different stage from historical 3033 Unknown in [sector evidence](../research/sector-passability-evidence.md). Neither aggregate rerun here. | Resolve only the entries required by a chosen bounded step; retain any unresolved component as Unknown. No need to resolve all 91 for this task. |
 | Mask/facade/name NoBlock | Original/source-confirmed (historical component evidence), [component API](terrain-obstruction-components.md). | Never promote component NoBlock into total Open; retain applicability/null dimensions. |
-| Cardinal source/destination terrain, directional edges/walls/portals | [ARC-RES-014 bounded research context](cardinal-traversal-contract.md) has admitted Open/Blocked rows and reversals; production/runtime real steps remain unverified. CE-source dependencies S8. | Retain exact full contributor/source/context proof; do not generalize diagnostic admission to other actors, states or runtime movement. |
-| Diagonal shoulders/corner/recursive object traversal | Unknown; CE-source recursive shoulder path S8, not complete diagonal admission. | Prove both shoulder/edge/corner contributions and relevant tile/object contexts; kinematic corner equality supplies no permission. |
+| Cardinal source/destination terrain, directional edges/walls/portals | [ARC-RES-014 bounded research context](cardinal-traversal-contract.md) has admitted Open/Blocked rows and reversals; production/runtime real steps remain unverified. Source-reading dependencies S8. | Retain exact full contributor/source/context proof; do not generalize diagnostic admission to other actors, states or runtime movement. |
+| Diagonal shoulders/corner/recursive object traversal | Unknown; source-reading recursive shoulder path S8, not complete diagonal admission. | Prove both shoulder/edge/corner contributions and relevant tile/object contexts; kinematic corner equality supplies no permission. |
 | Ordinary static-scenery subset | Original/source-confirmed (historical metadata/source), [static contract](static-obstruction-contract.md). Destination-only cardinal-normal-critter/base/flags-zero component. | Do not infer source registration, edge extent or general object membership. Its Blocker-before-Unknown aggregation is component-only. |
 | Other static types, critters, doors and dynamic state | Unknown; source/destination lists, portal state/AI-open, critter death and capabilities in S8. | Fully enumerate relevant object contributions and exact serialized/prototype/runtime inputs; no actor capability or spell-state default. |
-| Actor/context, traps/fire, floating/shrunk/special movement | Unknown outside fixed future profile; CE-source caller S3/S8. | Declare actor state/capabilities/flags and all overrides; source callbacks are not pure admission oracles. |
+| Actor/context, traps/fire, floating/shrunk/special movement | Unknown outside fixed future profile; source-reading caller S3/S8. | Declare actor state/capabilities/flags and all overrides; source callbacks are not pure admission oracles. |
 | Cross-sector, other profiles, PATCH/DIF/loose precedence | Unsupported/null under selected-sector contract. | Separately authorize neighbor inputs, version/precedence and fingerprints; do not load/infer a neighbor here. |
 | PATH_FLAG_0x1000 | Unknown/unavailable source branch S9. | Reject that context; do not select the normal fallback as replacement. |
 | Dynamic permit invalidation/recovery | Unknown; outside P8 fixed-context specification. | Separate dynamic contract and independent observations before expansion. |

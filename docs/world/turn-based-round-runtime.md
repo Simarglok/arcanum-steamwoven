@@ -13,15 +13,15 @@ as a domain of the [game session](game-session-runtime.md) (snapshot schema 11).
 
 ## Evidence
 
-- CE at the pinned commit `a7ff41b300ef712f0e7d088183a3d08957110cdd`: `combat.c` (turn-based start, begin turn, next
-  subturn, end turn, subturn start, the animations-complete check and its time event, action-point check and charge,
-  costs, insert, sort, save and load), `critter.c` (`critter_is_active`, the fatigue write), `anim.c` (step cost, the
-  goal-start gate), `item.c` (weapon speed), `object.c`, `sector.c` and `obj_find.c` (scan order), `timeevent.c` (game
-  time during a round).
+- The original's functions, read first: the combat functions (turn-based start, begin turn, next subturn, end turn,
+  subturn start, the animations-complete check and its time event, action-point check and charge, costs, insert, sort,
+  save and load), the critter activity test (0x45D790) and the fatigue write, the animation step cost and goal-start
+  gate, weapon speed, the object, sector and object-find scan order, and game time during a round.
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically by two independent readers per the
   [original executable check](../research/original-executable-check.md); the rows are in the
   [verification ledger](../research/original-verification-ledger.md#turn-based-round-arc-combat-003). The original does
-  what CE reads for every rule below except the two CE slips already known (A1 in the sort, A4 in the run step), and it
+  what that first reading describes for every rule below except the two differences already known (A1 in the sort: the
+  original moves followers too; A4 in the run step, ledger TB14), which both rule modes follow, and it
   answers the open question O2 (scan order). Three behaviours of the original are bugs and get a switch of the Original
   rule mode: A9, A11 and A12 ([Rule modes](#rule-modes)).
 
@@ -69,8 +69,8 @@ call), refuses before any effect, and adds one revision when the saved round cha
 when a round ends). Results list what happened in order: `RoundBegan(turn)`, `SubturnStarted(combatant, action points)`
 (for an NPC the host then runs its heartbeat script and AI), `SubturnEnded(combatant)` (for an NPC its end-of-combat
 script) and `RoundEnded`. A life step that knocks out or stuns the participant whose subturn it is sets its action points
-to 0; the host's next `CompleteCombatActions` passes the turn on (the source does it inside the fatigue write,
-`critter_fatigue_damage_set`, and when the stunned animation goal starts, `anim_goal_animate_stunned`). An overexertion decides the rest of its step with the hero's state after the damage, so a
+to 0; the host's next `CompleteCombatActions` passes the turn on (the original does it inside the fatigue write
+(0x45D5A0) and when the stunned animation goal starts (0x4357B0)). An overexertion decides the rest of its step with the hero's state after the damage, so a
 knockout that leaves nobody able to act ends the round. The hero holds its subturn with action points left only while
 it is active: a hero killed on its own subturn (the original ends the game then) passes on at the next completion check.
 The hero is never hidden from drawing, so only its activity decides whether it is skipped.
@@ -107,7 +107,7 @@ incompatible version". The stalled-actor check is not saved and starts empty aft
 Deliberate difference from the original's load: the original restarts the round on load, so it rescans (participants
 merged over earlier rounds and their order are lost; the load fails when the saved actor is not found again), and the
 turn counter restarts at 1. The session keeps the saved participants, order and turn number instead: a restore has no
-world to scan, and nothing in the original reads the turn counter (`combat_turn_based_turn_get` has no caller). The
+world to scan, and nothing in the original reads the turn counter (its turn counter getter, 0x4B80D0, has no caller). The
 saved required action points (reset on load) and the unused second actor handle are not kept.
 
 ## Tests

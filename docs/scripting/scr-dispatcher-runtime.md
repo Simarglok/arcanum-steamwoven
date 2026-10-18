@@ -12,7 +12,8 @@ nothing itself: the result carries every change, for the caller to apply as one
 step. Godot-free, net8.0, synchronous. No session binding, no engine event fires
 it yet (see [Not ready](#not-ready)).
 
-Sources: rows E1–E13 of the dispatcher research (CE at the pinned commit), the
+Sources: rows E1–E13 of the dispatcher research (a reading of the original's
+functions, F0 unless the ledger lists them), the
 [verification ledger](../research/original-verification-ledger.md) for the
 original 1.0.7.4 executable, and the rule modes of
 [Steamwoven and Original](../world/rule-modes.md). Original-executable parity
@@ -24,7 +25,7 @@ beyond the rows named here is **NOT_VERIFIED**.
 | --- | --- | --- |
 | `RunObject(ScrObjectEvent, IScrHost, ScrRunOptions?)` | point 0..35 on an attachee (triggerer and extra optional), start line ≥ 0 | the attachee's slot for the point when its number, local flags or counters changed; a trap object whose script became 0 is destroyed instead |
 | `RunTile(ScrTileEvent, IScrHost, ScrRunOptions?)` | the tile's slot, the entering critter; point use, line 0, no attachee | the tile's slot, unless `TileScriptChangesDiscarded` (Original, X3 tile) |
-| `RunSector(ScrSectorEvent, IScrHost, ScrRunOptions?)` | the sector's slot, the player; point use, line 0, no attachee | the sector's slot in both modes (X3 sector is a CE slip) |
+| `RunSector(ScrSectorEvent, IScrHost, ScrRunOptions?)` | the sector's slot, the player; point use, line 0, no attachee | the sector's slot in both modes (the original, ledger X3 sector) |
 
 `IScrHost` answers reads only: the attachee's slot (`ScrSlot`: number, local
 flags, counters), a script by number (`ScrScriptLookup`: found program, missing,
@@ -50,8 +51,8 @@ original applies them as it goes; a refused script has none.
 
 ## Decision order of an object event
 
-Each step returns at once when it applies (CE `object.c` 3866–3908 and
-`script.c` 278–401; original `script_execute` 0x4449B0):
+Each step returns at once when it applies (the original's object script
+dispatch 0x441980 and script executor 0x4449B0):
 
 1. Point outside 0..35, the dialog-override slot (31, it names a DLG), a
    negative line or a default (empty) object reference: `SkipDefault`,
@@ -61,7 +62,7 @@ Each step returns at once when it applies (CE `object.c` 3866–3908 and
    `SkipDefault`, `TrapSpotted` (E2).
 4. Missing or unreadable script: `SkipDefault` (E4).
 5. A trap script, number 30000..30007 with a trap file flag (0x1 or 0x2), as
-   the original's `trap_script_execute` 0x4BCB70 tests: `SkipDefault`,
+   the original's trap script test (0x4BCB70) checks: `SkipDefault`,
    `TrapScript`. The trap domain runs it and must reproduce what the original does
    afterwards: the seven installed trap scripts carry the auto-removing flag, so
    the slot clears and a trap object is destroyed through E3 (E4). A trap flag on
@@ -111,12 +112,12 @@ raises it (original 0x4450A0).
 
 | ID | Original 1.0.7.4 | Steamwoven | Original setting |
 | --- | --- | --- | --- |
-| X7 divide | signed quotient, nothing for divisor 0 (CE adds: CE slip) | as the original | as the original |
+| X7 divide | signed quotient, nothing for divisor 0 (ledger X7) | as the original | as the original |
 | X7 edge | `int.MinValue / −1` faults the original's `idiv` | stores `int.MinValue` (both fixed: crash) | stores `int.MinValue` |
-| X8 counter write | masked to the counter's byte (CE spills: CE slip) | as the original | as the original |
+| X8 counter write | masked to the counter's byte (ledger X8) | as the original | as the original |
 | X10 global-flag write | clears the flag, ORs the whole value shifted to its bit into the 32-flag word (2 sets the next flag, a negative value every higher one) | the value's low bit into the flag only (D2 fix) | `GlobalFlagWriteSpills` |
 | X3 tile writeback | the unmodified tile record is stored back | changes persist, as for objects and sectors (D2 fix) | `TileScriptChangesDiscarded` |
-| X3 sector writeback | number, flags and counters persist (CE drops the number: CE slip) | as the original | as the original |
+| X3 sector writeback | number, flags and counters persist (ledger X3 sector) | as the original | as the original |
 | X6 negative goto | −1..−4 are control codes | refused by admission (project strictness; no installed script uses one) | refused |
 | global flag number outside 0..3199 | reads or writes outside the flag store | `IndexOutOfRange` stop (both fixed: out of bounds) | the same stop |
 
@@ -188,7 +189,7 @@ the script; a reset, reload or map change closes the panel without resuming.
   the original stores a null handle) and a game delay of the seconds × 8000 ms
   (real seconds at the 8× game rate). The original makes a 32-bit millisecond
   count of `seconds × 1000`, raises 0 to 1 and multiplies by 8 (call-in case
-  0x44867B, `sub_45A950`), so 0 seconds is 8 ms. TE1, an original bug at the
+  0x44867B, millisecond helper 0x45A950), so 0 seconds is 8 ms. TE1, an original bug at the
   edges: that count wraps above 536,870 s and a negative count gives weeks.
   Steamwoven computes without wrapping and reads a negative count as 0 (8 ms);
   the Original setting wraps (`ScrRuleProfile.CallDelayWraps`). Not modelled:

@@ -58,11 +58,11 @@ is executed. These declarations do not recover a human/equipment model or descri
 the WORLD rendered monster. Each directed query has the same immutable predicate
 context; no actor is actually moved to a potentially blocked starting cell.
 
-**CE-source-confirmed consequence**, not a chosen numeric shortcut: the normal
+**Consequence read from the original's functions** (F0, not checked in the executable), not a chosen numeric shortcut: the normal
 adjacent animation helper starts traversal flags0, ORs polymorph/capability blocking
 bits; non-polymorph + PC portal capability + current CRITTER ART window capability
 contribute0, so the complete selected helper flags are0. Normal begin invocation is
-at `anim.c:10478`, under begin/run gate `0x400` at10471. Path flags0 select the current
+in the adjacent-move begin function (0x42E9B0), under its begin/run gate `0x400`. Path flags0 select the current
 path rotation (current index0 for this one adjacent diagnostic request), not the
 ART-rotation branch. The helper's tile argument `a2=false` does not suppress tile
 blocking. This is **not** normal route admission/cost or success of the entire
@@ -123,7 +123,7 @@ contracts. Synthetic and original modes call the **same** research `Assess` seam
 | TO_MASK / serialized fact | Destination ordinal, word index/bit/word; set bit is unconditional blocker under this context. |
 | TO_FACADE / packed fact | Facade class11 uses bit0; bit clear blocks, bit set is nonblocking. Non-facade is NotApplicable. No visual extent inference. |
 | TO_NAME / selected resource fact | Existing bounded category/material name rule with reason/provenance. Missing/ambiguous entry, mapping or value retains gap; no all91 resolution. |
-| REGISTRATION and EXTENT / source proof | CE load assigns normalized location, inserts one node in `heads[tile_id_from_loc(location)]`; exact-cell list queries that head. Visual offsets affect ordering, not neighboring admission. Inventory cannot be inserted; OFF/DESTROYED are query-excluded in non-editor context. Runtime registration changes are not performed. |
+| REGISTRATION and EXTENT / source proof | The original's load assigns normalized location, inserts one node in the list head of the location's tile index (0x4D7090); exact-cell list queries that head. Visual offsets affect ordering, not neighboring admission. Inventory cannot be inserted; OFF/DESTROYED are query-excluded in non-editor context. Runtime registration changes are not performed. |
 | CENSUS / original structural fact | Complete terminal count equals all unique source-index records. Survey every type, strict **unmasked** world location, flags and provenance before cell lookup. A filtered subset or `LocationCoverageComplete` alone is insufficient. |
 | RECORD_n / original + source rule | Each record is considered in source-index order. Unlocated/outside-sector/unresolved flags/other types/dynamic facts create gaps even if hidden by a component subset. Direct slot18 overrides prototype; otherwise a resolved inherited default is required. OFF/DESTROYED/inventory are explicit exclusions, not NO_BLOCK. Non-destination scenery is not in source wall/portal mask. At destination, normal flags0 and NO_BLOCK bit0x400 clear imply unconditional Blocked; set implies component nonblocking. Same-cell multiplicity is never collapsed. |
 | SOURCE_EDGES / source-proven serialized absence | Full admitted census contains no wall/portal type, so source mask3 has zero contributors. No guessed wall orientation, portal state, passwall or AI-open call. |

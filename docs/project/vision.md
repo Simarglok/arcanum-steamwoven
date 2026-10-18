@@ -2,7 +2,7 @@
 
 Arcanum Steamwoven aims to provide an independent MIT C#/Godot runtime for Arcanum using the player's legally acquired original data. Preserve original gameplay as the principal behavioral reference; distinguish compatibility findings, intentional fixes and optional mod profiles. This is an unofficial fan project with noncommercial project intent; that intent does not restrict use of independently authored MIT code. Original assets and third-party archives are not redistributed. Eventual original-data and mod compatibility require explicit versioned profiles and behavioral evidence.
 
-Data and authoritative simulation should remain independent of Godot, UI and physical input. Current assemblies and their bounded implementations are listed in [status](status.md); the complete game runtime remains a goal. Research must retain source lineage and uncertainty. CE-derived specifications may be attributed evidence, but no CE code copying, mechanical translation, fork or runtime dependency is authorized; this does not imply a clean-room claim.
+Data and authoritative simulation should remain independent of Godot, UI and physical input. Current assemblies and their bounded implementations are listed in [status](status.md); the complete game runtime remains a goal. Research must retain source lineage and uncertainty. Original behaviour is checked in the retail executable; no copying or mechanical translation of any reconstruction of the original's source, and no fork of or runtime dependency on one, is authorized; this does not imply a clean-room claim.
 
 ## Presentation and platforms
 
@@ -23,7 +23,7 @@ The [dependency roadmap](roadmap.md) explains sequencing without creating tasks.
 
 ## Considered and deferred alternatives
 
-- A CE fork was rejected by the user because its licensing did not fit the independent MIT product goal. This records a product decision, not a new legal analysis of CE or third-party licenses.
+- A fork of an existing source reconstruction of the original was rejected by the user because its licensing did not fit the independent MIT product goal. This records a product decision, not a new legal analysis of that reconstruction or other third-party licenses.
 - A new generic engine was considered; C#/Godot was chosen to reduce infrastructure work while retaining independent data/simulation boundaries.
 - New sprite directions/frames and 3D are deferred because of asset effort, required skills and review burden. Early work preserves original sprites and later one-to-one upscale.
 - Controller mouse emulation is not the primary gamepad UX. Semantic movement, camera and interaction need bounded testing and physical device evidence.

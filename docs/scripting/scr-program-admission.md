@@ -44,8 +44,8 @@ throws.
 flags and the store sizes (32 local flags, 4 counters, 10 local variables and
 local objects, 3,200 global flags, 2,000 global variables). Only the types the
 project reads by name have named constants. The numbers and signatures are read
-from the pinned CE interpreter, cross-checked against the ScriptEd 1.50 editor
-data and against every installed script (ARC-RES-045); no CE code is reused.
+from a reading of the original's interpreter, cross-checked against the
+ScriptEd 1.50 editor data and against every installed script (ARC-RES-045).
 
 ## Admission (`Arcanum.Scripting.Scr`)
 
@@ -67,7 +67,7 @@ carries exactly one of the program and the refusal.
 | `IndexOutOfRange` | P4 | a literal index outside its store: a counter, local variable, global flag, global variable or local object operand, or the literal flag number of a local-flag (0..31) or global-flag (0..3199) condition or action |
 | `WriteToNumber` | P5 | an assign, add, subtract, multiply, divide or get-story-state action stores into a number literal |
 | `ComputedGoto` | P6 | a goto whose target is not a number literal |
-| `NegativeGoto` | P6 | a literal goto below 0 (CE reads −1..−4 as control codes, anomaly X6) |
+| `NegativeGoto` | P6 | a literal goto below 0 (the original reads −1..−4 as control codes, ledger X6) |
 | `GotoBeyondEnd` | P6 | a literal goto past the line count |
 | `ScriptNumberOutOfRange` | P4 | a literal change-this-script number outside 0..99999 (ARC-SCRIPT-008) |
 
@@ -78,8 +78,8 @@ Not refused, by design:
 - The false action of an always-true condition (type 0) is never run, so it is
   not checked either.
 - A literal goto to exactly the line count is the end of the script: *skip
-  default* without auto-removal (CE clears an auto-removing script when a run
-  falls past the last line, not on this goto; census rule P6).
+  default* without auto-removal (the original clears an auto-removing script
+  when a run falls past the last line, not on this goto, F0; census rule P6).
 - A computed flag index (a counter, variable or flag holding the number) is a
   run-time bound for the interpreter (S2), not a static refusal.
 

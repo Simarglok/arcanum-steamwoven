@@ -16,12 +16,14 @@ combat stinger and loop start together; voice gender is the PC's; overnight hour
 the data (20 entries) and are a rule-setting choice, not an unsupported case. Its task plan
 replaces the proposed profile below.
 
-## Evidence, lineage and scope
+## Evidence and scope
 
 Labels used throughout:
 
-- **Source (S)**: inspected CE source at
-  `a7ff41b300ef712f0e7d088183a3d08957110cdd`; not retail behavior.
+- **Source (S)**: a reading of the original's functions at the cited addresses,
+  evidence level F0 (not checked in the executable) unless the verification
+  ledger lists them; the [audio study](../research/audio-evidence.md) rows
+  SN1–SN34 checked many of them and win where they differ.
 - **Data (D)**: bounded read-only original observations retained in the local
   ignored ledger, not reproduced here. Headers are not decoding/playback proof.
 - **Policy (P)**: accepted task and [architecture direction](../architecture/decisions.md),
@@ -31,10 +33,8 @@ Labels used throughout:
   or an inference about retail parity.
 - **Unknown (U)**: deliberately unresolved; not silently replaced by a guess.
 
-CE and its bundled TIG/compat layers are **one research lineage**, not multiple
-independent confirmations. Their [Sustainable Use License 1.0](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/LICENSE.md)
-is not the project's MIT license. No CE code, mechanical translation, runtime
-library, middleware or codec is incorporated. The standard-library Python
+No runtime library, middleware or codec of another implementation is
+incorporated. The standard-library Python
 research helpers and literal synthetic fixtures are independently authored under
 the repository's [MIT license](../../LICENSE). The local toolkit manifest was
 consulted for provenance only; no toolkit binary was executed or copied.
@@ -47,28 +47,28 @@ retail executable A/B study. [Research method](../research/method.md),
 [FR-MEDIA-003/004](../requirements/ui-media-lifecycle.md#fr-media-003) and
 [toolchain](../workflow/toolchain.md) remain applicable.
 
-### Exact pinned source / claim ledger
+### Source / claim ledger
 
-All source links below refer to the same CE pin. Confidence is inspected-source
-for S rows, not experimental retail confirmation. Each claim's boundary is part
+Confidence for S rows is a reading of the functions at the cited addresses (F0
+unless the ledger lists them), not experimental retail confirmation. Each claim's boundary is part
 of the claim, not an optional footnote.
 
-| Claim | Inspected production seam and source | Established / limit |
+| Claim | Functions read (address) | Established / limit |
 | --- | --- | --- |
-| S01 | [gsound.c 361–388](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L361-L388), [395–428](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L395-L428), [655–670](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L655-L670) | `snd_00index.mes` names the SFX tables. Search follows their load order, then module `snd_user.mes`; resource prefix is `sound`. This is table lookup, NOT global DAT-versus-loose precedence. |
-| S02 | [gsound.c 437–569](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L437-L569), [1933–2038](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L1933-L2038) | Listener initialization, defaults, soundparams overrides and effects/voice/music settings. No separate original Ambient or Master setting is established. |
-| S03 | [gsound.c 758–772](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L758-L772), [1179–1268](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L1179-L1268) | Strictly greater than 250ms ping interval, current game hour, ambient frequency/random volume/balance, loop-hour eligibility, transition restore, `#id` resource references. |
-| S04 | [gsound.c 1275–1420](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L1275-L1420), [1428–1611](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L1428-L1611) | Two active scheme slots; equal identities suppressed; repeated active IDs retained; load scans 100 IDs and stores at most25 sounds. Parse options and one-shot startup; not a safe public parser contract. |
-| S05 | [sector_sound_list.h 6–13](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_sound_list.h#L6-L13), [sector_sound_list.c 60–84](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_sound_list.c#L60-L84), [105–127](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_sound_list.c#L105-L127) | Sound record is flags/music/ambient,12 bytes; modified flag cleared on load/save. DIF helpers no-op in this source. |
-| S06 | [sector.c 1356–1435](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1356-L1435), [sector_object_list.c 690–702](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_object_list.c#L690-L702) | Framing order; sound included for version≥0xAA0003. Sector caller invokes schemes only if at least one ID nonzero. A zero/zero sector does NOT establish stop-all. |
-| S07 | [dialog.c 3277–3297](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L3277-L3297), [dialog_ui.c 478–519](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/dialog_ui.c#L478-L519) | Packed directory15bits / line16bits; `-1` no speech; gender-dependent path and female→male existence fallback; destroy/clear previous handle. |
-| S08 | [dialog_ui.c 410–445](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/dialog_ui.c#L410-L445), [281–294](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/dialog_ui.c#L281-L294), [80–84](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/dialog_ui.c#L80-L84) | Reply caller starts voice; option selection/exit stops it. Full dialog-close path inventory Unknown. |
-| S09 | [gsound.c 862–945](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L862-L945), [1029–1068](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L1029-L1068), [1841–1906](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L1841-L1906) | Origin-relative projected coordinates; doubled Y for distance, horizontal X for pan; source and listener updates recompute positional volumes. |
-| S10 | [scroll.c 442–513](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/scroll.c#L442-L513), [597–604](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/scroll.c#L597-L604), S02 | Camera scroll uses viewport-center location; origin-change caller too. Effects-volume callback instead repositions listener to local PC. Not a universal actor-only or camera-only rule. |
-| S11 | [sfx.c 125–146](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sfx.c#L125-L146), [298–359](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sfx.c#L298-L359), [anim.c 11479–11487](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L11479-L11487) | Plate/surface/chain variants plus random0..3; selected walk/run caller on frames3/8. Does not establish complete animation or movement timing. |
-| S12 | [gsound.c 1718–1785](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L1718-L1785), [1798–1833](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L1798-L1833), [677–750](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L677-L750) | Combat defers world-scheme replacement and later restores; nested scheme lock and serialized restore identities. Not a promise of sequential stinger/loop playback or complete persistence compatibility. |
-| S13 | [gsound.h 6–32](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.h#L6-L32), [gsound.c 789–811](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L789-L811), [1619–1652](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c#L1619-L1652) | Distinct public SFX/voice/music/scheme/listener operations; lock/failure invalid handles. Not the future Steamwoven API. |
-| S14 | [TIG sound.c 87–120](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/sound.c#L87-L120), [mss_compat.c 38–104](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/mss_compat/src/mss_compat.c#L38-L104) | Startup can return TIG_OK without initialized playback. SDL mixer wrapper delegates audio loading; codec/device/audibility are not proven. |
+| S01 | resolve path (0x41A940), init (0x41AA30), module load/unload (0x41B0A0, 0x41B0D0) | `snd_00index.mes` names the SFX tables. Search follows their load order, then module `snd_user.mes`; resource prefix is `sound`. This is table lookup, NOT global DAT-versus-loose precedence. |
+| S02 | init (0x41AA30), volume get/changed (0x41C8A0, 0x41C8B0, 0x41C920, 0x41C930, 0x41C970, 0x41C980), volume adjust (0x41C9D0) | Listener initialization, defaults, soundparams overrides and effects/voice/music settings. No separate original Ambient or Master setting is established. |
+| S03 | ping (0x41B2A0), update (0x41BAF0), scheme helper (0x41BCD0) | Strictly greater than 250ms ping interval, current game hour, ambient frequency/random volume/balance, loop-hour eligibility, transition restore, `#id` resource references. |
+| S04 | scheme active test (0x41BD10), play scheme (0x41BD50), scheme load (0x41BE20), entry parse (0x41BF70), scheme helpers (0x41C260, 0x41C290) | Two active scheme slots; equal identities suppressed; repeated active IDs retained; load scans 100 IDs and stores at most25 sounds. Parse options and one-shot startup; not a safe public parser contract. |
+| S05 | sector sound record layout, sector sound load/save (0x4F8150, 0x4F8180), DIF load/save (0x4F81C0, 0x4F81D0) | Sound record is flags/music/ambient,12 bytes; modified flag cleared on load/save. DIF helpers no-op in this source. |
+| S06 | sector load (0x4D1530), sector-change notify (0x4F2330) | Framing order; sound included for version≥0xAA0003. Sector caller invokes schemes only if at least one ID nonzero. A zero/zero sector does NOT establish stop-all. |
+| S07 | speech id (0x4189C0, 0x418A00), speech start/stop (0x5688D0, 0x5689B0) | Packed directory15bits / line16bits; `-1` no speech; gender-dependent path and female→male existence fallback; destroy/clear previous handle. |
+| S08 | dialog reply/option handlers (0x5684C0, 0x568540), option processing (0x567E30), dialog close (0x5673A0) | Reply caller starts voice; option selection/exit stops it. Full dialog-close path inventory Unknown. |
+| S09 | positional parameters (0x41B420), play on location/object (0x41B870, 0x41B930), listener and move (0x41C690, 0x41C6D0, 0x41C780) | Origin-relative projected coordinates; doubled Y for distance, horizontal X for pan; source and listener updates recompute positional volumes. |
+| S10 | scroll (0x40E630), origin changed (0x40E910), S02 | Camera scroll uses viewport-center location; origin-change caller too. Effects-volume callback instead repositions listener to local PC. Not a universal actor-only or camera-only rule. |
+| S11 | footstep table, critter sound (0x4F0ED0), path-move update (0x4305D0) | Plate/surface/chain variants plus random0..3; selected walk/run caller on frames3/8. Does not establish complete animation or movement timing. |
+| S12 | combat music start/stop (0x41C4D0, 0x41C5A0), lock/unlock (0x41C610, 0x41C660), load/save (0x41B0F0, 0x41B1D0) | Combat defers world-scheme replacement and later restores; nested scheme lock and serialized restore identities. Not a promise of sequential stinger/loop playback or complete persistence compatibility. |
+| S13 | public sound interface, play SFX (0x41B2E0), stop all and voice (0x41C340, 0x41C370) | Distinct public SFX/voice/music/scheme/listener operations; lock/failure invalid handles. Not the future Steamwoven API. |
+| S14 | TIG sound layer (not read) | Not checked in the executable (F0 gap): startup success does not prove initialized playback; codec/device/audibility are not proven. |
 
 ## Resource identity and selected-source profile
 
@@ -110,7 +110,7 @@ encoding. A loose path must stay under its supplied root with no symlink in the
 selected chain. Archives are never extracted.
 
 **U:** universal archive/patch/loose precedence, localized/non-ASCII resource
-identity, mod overlays, duplicate MES behavior inside CE's general parser,
+identity, mod overlays, duplicate MES behavior inside the original's general MES parser,
 full caller catalog, and retail-version compatibility require separate evidence.
 The CLI only examines the chosen archive entry, not a global path-safety census;
 unselected unsafe/non-ASCII names are not candidate matches.
@@ -139,31 +139,33 @@ Percent values convert to TIG's raw0..127 representation, not linear dB.
 nonnegative percent ranges, inclusive increasing hours0..23, frequency0..1000,
 one mode, no repeated/unknown options. Blank list records are omitted. It
 preserves percent metadata and does not mechanically emulate `atoi`, substring
-matching, raw scaling or CE invalid-value clamps. Overnight windows, combined
+matching, raw scaling or the original's invalid-value clamps. Overnight windows, combined
 `/over /loop`, song frequency/balance/scatter, and timed anchor/over are explicit
 unsupported cases, not retail impossibilities. Numeric holes are scanned;
 excess sounds fail rather than silently truncating.
 
-**U anomalies not ported:** CE's size-small volume key12 writes the MEDIUM
-array and key22 overwrites it; balance-left above127 clamps to0. Comments
-alone do not settle the intended soundparams behavior. Combined transition/loop
+**U anomalies not ported:** in the original, soundparams key12 is the small
+size's volume and key22 the medium's, with no overwrite (ledger SN3); a
+balance-left above127 clamps to127 and `/over` wins over `/loop` (ledger SN13).
+Combined transition/loop
 flags, failed transition backend handles, pending restore reentrancy, end-of-track
 versus failed-start completion, and source integer overflow/division edge cases
-are not a robust future contract. Preserve them as source anomalies, not fixes
-to CE or proof of retail bugs.
+are not a robust future contract. Preserve them as source anomalies, not proof
+of retail bugs.
 
 **P/R time boundary:** presentation supplies monotonic elapsed audio time for
 fades and scheduling, separately supplies a validated game hour for eligibility,
 and supplies a dedicated audio RNG or deterministic recorded draw stream.
-No hidden consumption of authoritative gameplay RNG. CE uses its shared random
-API; that is Source, not accepted project RNG policy. No WORLD-004 dependency
+No hidden consumption of authoritative gameplay RNG. The original draws from the
+shared game random generator (audio study rows SN14, SN33, [audio evidence](../research/audio-evidence.md)); that is Source, not accepted project
+RNG policy. No WORLD-004 dependency
 is introduced here. A future clock adapter is a later integration task.
 Proposed tick cadence is250ms without replaying an unbounded catch-up storm;
 pause freezes game-hour input according to its owner, not the presentation
 fade clock. Mute/device failure cannot advance or invalidate game state.
 
 **S06 vs R zero:** sector caller skips zero/zero, so crossing such a sector may
-leave a previous scheme. Direct `gsound_play_scheme(0,0)` has different behavior.
+leave a previous scheme. A direct scheme play with zero/zero has different behavior.
 Future `SetSchemes` explicitly treats zero/zero as clear; a future sector adapter
 must choose Skip versus Clear in its declared compatibility profile. It cannot
 claim these are interchangeable or infer that viewport redraw should restart
@@ -187,14 +189,14 @@ not that a particular retail conversation emitted it.
 **R:** keep optional speech identity separate from text. A new reply command
 owns its voice token and replaces/cancels prior voice even when new voice is
 missing or silent. Close/skip/speaker destruction explicitly cancel the owner.
-This is a proposed improvement, not a claim that CE's `-1` branch stops voice
+This is a proposed improvement, not a claim that the original's `-1` branch stops voice
 or that every close caller was audited. Missing voice never delays a valid
 reply/option, rolls back dialog state, or changes a script transition.
 
 ## Sector and positional boundary
 
 **S05/S06:** within the selected framing, serialized little-endian sound record
-is flags:u32, music:i32, ambient:i32. CE's struct static assertion is12bytes;
+is flags:u32, music:i32, ambient:i32, 12 bytes;
 its modified bit is `0x08000000`. Keep raw flags in observations. Do not
 interpret unknown bits as domain permissions. Before the sound record, walk
 validated light count and48byte selected light records,4096tile words,
@@ -247,7 +249,7 @@ Ambient is a **proposed extension**, not an original option exposed by the
 inspected source. Per-cue gain × bus × Master is independent; an Ambient mute
 must not silence SFX. Store volumes outside save slots. Save-load restores only
 explicit desired presentation identities, not device handles, active decoder
-objects, monotonic timestamps or user preferences. No compatibility with CE's
+objects, monotonic timestamps or user preferences. No compatibility with the original's
 serialized restore state is claimed.
 
 Proposed conservative limits for a first backend:32 total active voices,
@@ -312,13 +314,13 @@ claimed to prove production Godot behavior.
 | O01 | cue9 in two ordered tables plus user → first table; cue10 only user → user; cue11 absent → missing | `resolve_sfx`, duplicate/missing policy |
 | O02 | identity0x002a0011 → folder00042/line17; absent female→male; absent male→missing; -1→empty candidates | `speech_candidates`/`resolve_speech` |
 | O03 | index7→base100, entries100/102 with hole101 → both entries; zero→none;26 entries→limit error | `scheme_entries` |
-| O04 | `/freq:10 /time:5-19`: hour4 false,5/draw9 true,5/draw10 false,19 true,20 false; freq0 false,1000/draw999 true | real scheme metadata/eligibility, not CE execution |
+| O04 | `/freq:10 /time:5-19`: hour4 false,5/draw9 true,5/draw10 false,19 true,20 false; freq0 false,1000/draw999 true | real scheme metadata/eligibility, not original execution |
 | O05 | PCM16 mono11025 synthetic4frames →8data bytes; optional loop1..3 accepted; endpoint4 rejected | `wav_header` geometry/loop bounds |
 | O06 | literal MP3 headerfffb90c0 with two417byte frames → MPEG1/LayerIII/44100/128kbps/mono; one frame rejected | `mp3_header`, ID3 and malformed matrix |
 | O07 | zero lights, empty roof, version0xAA0004 and explicit sound bytes → offset16424, flags0x08000000, music1/ambient101; nonempty roof/lights/scripts →17616 | `sector_sound`; absent older-version sound explicit |
 | O08 | projected delta(30,20) →50, (0,50) →100; camera listener reaches source→0, actor need not move | exact bounded metric, not full attenuation |
 | O09 | cancel dialog owner retains map; cancel twice no-op; reset then cancel old(1,1) retains new(2,3); voice33 rejected | synthetic ownership model |
-| O10 | repeated(7,8) unchanged, equal(7,7)→(7,0), repeated zero unchanged | proposed scheme intent, not every CE transition |
+| O10 | repeated(7,8) unchanged, equal(7,7)→(7,0), repeated zero unchanged | proposed scheme intent, not every original transition |
 | O11 | compressed synthetic DAT entry CLI→header; duplicate normalized path/missing reject;1MiB excess/decompression overrun reject | actual `selected_dat` and inherited DAT seam |
 | O12 | synthetic3MB loose MP3 reads only64KiB header; symlink and8MiB excess reject | actual loose helper and CLI |
 
@@ -362,14 +364,14 @@ review is NOT_VERIFIED until a distinct Reviewer records FULL PASS for the
 stable candidate. The private run ledger binds actual commands, timestamp,
 workspace, base/head, session, tool/source pins and original invariance; it is
 retained outside commits and public attachments. Rerun affected checks after
-source/base/tool/input changes. Source links are range-audited against the pin;
-local links, privacy and the full scoped diff are audited before handoff.
+source/base/tool/input changes. Cited addresses are audited against the function
+list; local links, privacy and the full scoped diff are audited before handoff.
 
 | Requirement / finding | Production seam / independent oracle | Evidence and disposition |
 | --- | --- | --- |
 | AC1 | S01/S04/S07; O01–O03/O11–O12; original explicit selected bindings | Implemented identity/path helpers and local source/index/resource/header ledger. Duplicate/missing/unsupported/traversal policies explicit. No universal precedence claim. |
 | AC2 | real selected DAT/loose reads and sector framing; O05–O07; independent prefix/cursor checks | Bounded original WAV/music/speech/table/sector observations retained locally with before/after fingerprints; header proof only. No full audio catalog decode/export. |
-| AC3 | S01–S14; O01–O12 literal fixtures; license/source audit | Source/Data/Policy/Proposal/Unknown distinguished; single CE/TIG lineage; unknown retail/caller/timing behavior retained. |
+| AC3 | S01–S14; O01–O12 literal fixtures; license/source audit | Source/Data/Policy/Proposal/Unknown distinguished; unknown retail/caller/timing behavior retained. |
 | AC4 implementation | Data/Godot API table and explicit limits/unsupported profile; actual CLI/self-tests, DAT regression and required root checks | Research tool and independent synthetic cases implemented. No production runtime/codec/hardware claim. Required local checks bound in handoff. |
 | AC4 independent review | exact implementation-ready SHA, original implementer/session, whole ledger | Future required native dev-reviewer FULL PASS; NOT_VERIFIED at Developer completion. Existing child-aware routing retains same Developer/candidate before native review. |
 | AC5 | independent PASS→private PR exact-head→separate Reviewer policy merge or observed owner merge→fresh-main ancestry receipt | NOT_IMPLEMENTED here; routing owner preserves publication obligation and existing CLOSE card. Stage completion is not delivery. |
@@ -379,10 +381,10 @@ local links, privacy and the full scoped diff are audited before handoff.
 | F04 | environment inline-script denial | Runtime rejected shell `python -c`; used permitted task-owned script files without credentials/profile changes. Closed infrastructure alternative; not a substantive review correction. |
 | F05 | bounded MES identity preservation / O01 negative boundary | Self-audit found blanket comment removal could rewrite comment-like bytes inside values. Byte scanner now strips comments only outside fields; literal value preservation and unterminated/nested-brace rejection are regression-tested. Closed without normalizing original identifiers. |
 | F06 | WAV aggregate loop budget / O05 boundary | Final self-review found repeated `smpl` chunks could each spend the16-loop limit. Enforce16 across the complete WAV; literal16-loop acceptance and17-loop split-chunk rejection regression added. Closed after full checks rerun. |
-| U01 | CE combined flags, bad values, pending restore, zero-sector, listener callers | Explicit Source anomalies/Unknown above; proposed strict subset differs intentionally, not retail parity. |
+| U01 | Combined flags, bad values, pending restore, zero-sector, listener callers | Explicit Source anomalies/Unknown above; proposed strict subset differs intentionally, not retail parity. |
 | U02 | all decoders, platforms, devices, catalog and retail behavior | NOT_VERIFIED and outside accepted research gates; no inferred pass from source, header or exit0. |
 
-Implemented: research contract, pinned selected source traces, bounded resource
+Implemented: research contract, selected source traces, bounded resource
 and header helpers, literal synthetic tests and opt-in original observation
 workflow. Not implemented: production C# audio loader/backend/mixer/dialog/map
 integration, decoding or audible validation. Remaining delivery: exact-head

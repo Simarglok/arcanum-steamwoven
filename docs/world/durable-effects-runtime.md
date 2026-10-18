@@ -14,14 +14,14 @@ Not wired into the viewer ([Not ready](#not-ready)).
 
 ## Evidence
 
-- CE at the pinned commit `a7ff41b300ef712f0e7d088183a3d08957110cdd`: `effect.c` (add, the four removals, count, the
-  internal removal, the aggregation), `object.c` (`object_hp_damage_set`, `object_hp_max`), `critter.c`
-  (`critter_fatigue_damage_set`, `critter_fatigue_max`), `magictech.c` (the Effect component, the death hooks),
-  `script.c` (the add-effect and remove-effect actions). No code or structure was copied.
+- The original's functions, read first: the effect functions (add, the four removals, count, the internal removal,
+  the aggregation), the hit-point damage setter and maximum (0x43D530, 0x43D5A0), the fatigue damage setter and maximum
+  (0x45D5A0, 0x45D670), the magick and tech Effect component and death hooks, and the script add-effect and
+  remove-effect actions.
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically per the
   [original executable check](../research/original-executable-check.md) by two independent readers; rows EF1–EF10 in the
   [verification ledger](../research/original-verification-ledger.md#durable-effects-arc-world-029). **The original does what
-  CE reads** in every row; it adds only a network branch before the critter test of add and typed removal, which a single
+  that first reading describes** in every row; it adds only a network branch before the critter test of add and typed removal, which a single
   player game never takes. The one oddity of the original that a player could meet (EF10: an effect that lowers a maximum
   far enough leaves the critter at no fatigue or no hit points without the faint or death handling) has no session effect
   beyond the values themselves, so **no rule-mode switch**: both modes follow the original.
@@ -35,8 +35,8 @@ curse 4, item 5, spell 6, injury 7, tech 8, gender 9). The source puts no bound 
 
 | Operation | Original |
 | --- | --- |
-| Add (`effect_add`, 0x4E9F70) | Appends number and cause. Before and after it reads strength, the encumbrance level, maximum hit points and maximum fatigue: a strength change recalculates encumbrance; a change of either maximum is **added to that damage** through its setter, which clamps at 0. Then the animation speed. |
-| Remove one typed (`effect_remove_one_typed`, 0x4EA100) | The **first** entry with the number, whatever its cause; then the animation speed, also when nothing matched. |
+| Add (0x4E9F70) | Appends number and cause. Before and after it reads strength, the encumbrance level, maximum hit points and maximum fatigue: a strength change recalculates encumbrance; a change of either maximum is **added to that damage** through its setter, which clamps at 0. Then the animation speed. |
+| Remove one typed (0x4EA100) | The **first** entry with the number, whatever its cause; then the animation speed, also when nothing matched. |
 | Remove all typed, one or all caused by (0x4EA200, 0x4EA2E0, 0x4EA3C0) | Every entry with the number; the first or every entry with the cause. No animation speed. |
 | Internal removal (0x4EA520) | Shifts the later entries up in both arrays and shortens them; the same strength and maxima handling as add. |
 | Count (0x4EA4A0) | Entries with the number. |
@@ -47,11 +47,11 @@ leave less than one combined step would (see the tests). The hit-point setter sc
 write, the fatigue setter the 80-second recovery on a non-zero one; the faint consequences run only when a non-zero write
 makes the critter unconscious, which a shift that keeps the current value never does (EF7, EF10).
 
-The aggregation (`effect_adjust_func`, 0x4EA6C0, EF6) sums the percent changes, multiplies the multiply and divide factors,
+The aggregation (0x4EA6C0, EF6) sums the percent changes, multiplies the multiply and divide factors,
 sums the adds, takes the highest minimum and the lowest maximum, and applies them in that order; −1 is the "unset" mark of
 both bounds, so a bound of −1 is never applied and a −1 met after a lower minimum or a higher maximum clears it (no
 installed rule uses −1); its "ignore innate" variant skips race, background, class and gender. Maximum hit points and maximum fatigue apply their effects to the whole
-sum of points, adjustment and stat part (`object_hp_max` 0x43D5A0, `critter_fatigue_max` 0x45D670, EF8).
+sum of points, adjustment and stat part (the hit-point maximum 0x43D5A0, the fatigue maximum 0x45D670, EF8).
 
 A timed spell is a magick or tech run, not a timed effect: its Effect component (0x451F20, EF9) adds `Count` entries
 (plus `Scaled × parent aptitude / 100` for a critter parent) at BEGIN and removes as many with the typed removal at END,
@@ -68,9 +68,9 @@ every pre-made hero's prototype does (ARC-RES-027 SH-03); their stat changes are
 | Entry | Contract |
 | --- | --- |
 | `QueryHeroEffects()` | The innate entries, the durable entries, the rule of each number in use and the pending timed effects; `Count(number)` counts the whole list. Null without a hero. |
-| `AddHeroEffect(expected, definition, cause, count = 1)` | `effect_add` `count` times. Refusals in order: no hero (`EffectsUnavailable`); a rule the session does not admit, a cause of the race and gender setters or the life domain's scars (injury), a count below 1 (`InvalidEffect`); an innate number (`InnateEffect`: its typed removal would meet the innate entry first); a number in use with other changes (`EffectMismatch`); the version; more than 64 durable entries (`EffectCapacityExceeded`); entries that could leave the consumers' bounds once some of them are removed (`InvalidEffect`, below); the event budget and revision. One revision. |
+| `AddHeroEffect(expected, definition, cause, count = 1)` | The add (0x4E9F70) `count` times. Refusals in order: no hero (`EffectsUnavailable`); a rule the session does not admit, a cause of the race and gender setters or the life domain's scars (injury), a count below 1 (`InvalidEffect`); an innate number (`InnateEffect`: its typed removal would meet the innate entry first); a number in use with other changes (`EffectMismatch`); the version; more than 64 durable entries (`EffectCapacityExceeded`); entries that could leave the consumers' bounds once some of them are removed (`InvalidEffect`, below); the event budget and revision. One revision. |
 | `AddHeroTimedEffect(expected, definition, cause, count, durationMs)` | The same, and an END event (`effect.hero.end`) after 1 ms up to `int.MaxValue × 8000` ms of game time (a `Duration:` in real seconds × 8000); at most 64 pending ENDs. The result's `TimedEffect` is its queue sequence. |
-| `RemoveHeroEffect(expected, number, count = 1)` | `effect_remove_one_typed` `count` times; an innate number is `InnateEffect`; NoChange when nothing matches. |
+| `RemoveHeroEffect(expected, number, count = 1)` | The typed removal (0x4EA100) `count` times; an innate number is `InnateEffect`; NoChange when nothing matches. |
 | `RemoveAllHeroEffects(expected, number)`, `RemoveHeroEffectsCausedBy(expected, cause, all)` | The other three removals; race, gender and injury causes are `InvalidEffect`. |
 | `EndHeroTimedEffect(expected, sequence)` | The run interrupted (a dispel, a stop, the death of its caster or target): its END now and its event cancelled; `UnknownTimedEffect` when none is pending. |
 | `ProcessEvents` | A due END removes its entries without a version check, one revision; `SessionEventPassResult.Effects` reports it. |
@@ -145,8 +145,8 @@ effect).
 The hero's blessings and curses: two PC lists of a number and the game time it was received (the logbook's date), each
 of which adds one effect entry with the bless or curse cause. Requirement
 [FR-CHAR-023](../requirements/characters-skills.md#fr-char-023). Evidence: the retail executable, read by two independent
-readers at the blessing and curse functions (ledger rows BC1–BC6); the reconstruction's reading of them holds, apart from a
-network branch it leaves out (never taken in single player) and its bounded copy of a blessing's text (BC1, its own change).
+readers at the blessing and curse functions (ledger rows BC1–BC6). The original also has a network branch (never taken
+in single player) and copies a blessing's text without a length limit (BC1).
 
 | Source (bless / curse) | Original |
 | --- | --- |

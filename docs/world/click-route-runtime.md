@@ -16,13 +16,13 @@ a goal limit) and KM-03 in [original keyboard and mouse](../requirements/origina
 
 ## Provenance
 
-Project policy shaped by the bounded source reading in the
-[pathfinding study](../input/arcanum-pathfinding-study.md) of the pinned CE commit
-`a7ff41b300ef712f0e7d088183a3d08957110cdd` (`path.c` `path_make`, the straight
-attempt and the 64×64 local search; `location.c` `location_rot`). The structure and
-limits below follow that reading; the code is independently written, and no CE code
-or table layout was copied or translated. Tie-breaking, the open set, the turn cost
-model and repeated segmenting are project choices. CE's special path flags (doors,
+Project policy shaped by the bounded reading in the
+[pathfinding study](../input/arcanum-pathfinding-study.md) of the original's path
+function (0x41F3C0: the straight attempt and the 64×64 local search) and its rotation
+helper (0x4B8D50), evidence level F0 (not checked in the executable). The structure and
+limits below follow that reading; the code is independently written. Tie-breaking, the
+open set, the turn cost model and repeated segmenting are project choices. The original's
+special path flags (doors,
 windows, traps, fire, light, `0x1000`) are not modelled; the step source decides
 every step.
 
@@ -135,7 +135,7 @@ runtime receives therefore share one Data verdict.
 - **Picking.** `AreaCellPicking` maps the click through the canvas transform to chart
   space and picks the diamond of the drawn ground: cell (x,y) is centred at
   `(40(y-x)+40, 20(y+x)+20)`, the centre of the AREA tile rectangle and the anchor of
-  AREA scenery (CE `location_xy` plus the object `+40,+20`). Shared diamond edges go to
+  AREA scenery (the original's location-to-screen function (0x4B8680) plus the object `+40,+20`). Shared diamond edges go to
   the larger map coordinate. Since ARC-RENDER-011 a settled actor stands on that
   centre too ([actor anchor](../rendering/terrain-viewer.md#actor-anchor-and-wall-fade-arc-render-011));
   before it the actor was drawn 40 px left, on the left vertex of its diamond. Picking

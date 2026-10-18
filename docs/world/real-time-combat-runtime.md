@@ -14,16 +14,17 @@ Requirements: [FR-COMBAT-001](../requirements/combat-magic-tech.md#fr-combat-001
 
 ## Evidence
 
-- CE at the pinned commit `a7ff41b300ef712f0e7d088183a3d08957110cdd`: `combat.c` (toggle, exit gate, turn-based switch,
-  auto-attack setting, `combat_init`), `anim.c` (attack begin and update, the Speed-scaled rate, the frame pause, the
-  attack and attempt-attack goal tables and their runner, the auto-attack check, the run step), `item.c` (weapon
-  speed), `critter.c` (the fatigue write), `ui/intgame.c` (the combat-mode key), `ui/dialog_ui.c`, `ui/sleep_ui.c`,
-  `ui/wmap_ui.c` and `teleport.c` (leaving combat mode).
+- The original's functions, read first: the combat functions (toggle, exit gate, turn-based switch, auto-attack
+  setting, the combat init 0x4B1D50), the animation functions (attack begin and update, the Speed-scaled rate, the frame
+  pause, the attack and attempt-attack goal tables and their runner, the auto-attack check, the run step), weapon speed,
+  the fatigue write, the in-game combat-mode key, and the dialog, sleep, world-map and teleport paths that leave combat
+  mode.
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically by two independent readers per the
   [original executable check](../research/original-executable-check.md); the rows RT1–RT12 are in the
   [verification ledger](../research/original-verification-ledger.md#real-time-combat-arc-combat-004). The original does
-  what CE reads except three CE slips: the `auto attack` default (RT6), Speed 8 (LA1, RT10) and the invisibility test of
-  the attack start (RT8). None is a bug of the original, so there is no rule-mode switch.
+  what that first reading describes except in three places: the `auto attack` default is "1" (RT6), Speed 8 gives the
+  middle rate (LA1, RT10) and the attack start clears invisibility for an attacker that is not the local PC (RT8). None
+  is a bug of the original, so there is no rule-mode switch.
 
 ## Rules (`RealTimeCombatRules`)
 

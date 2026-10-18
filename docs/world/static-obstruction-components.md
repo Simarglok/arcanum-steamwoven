@@ -10,12 +10,11 @@ origin `(92928,82560)`, extent 64×64. Only v119 type-3 ordinary scenery in a no
 non-editor ordinary-ground-critter, adjacent-cardinal, zero-traversal-flags
 context is admitted. `NoBlock` means no blocker from this component alone.
 
-Specification attribution is [arcanum-ce
-`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd),
-under its Sustainable Use License, and the corroborating archived WorldEd report.
-The exact source trace, limits and source lineage remain in
+The specification is a reading of the original's functions, evidence level F0
+(not checked in the executable), and the corroborating archived WorldEd report.
+The exact source trace and limits remain in
 [RES-012 evidence](../research/static-obstruction-evidence.md). This component
-is independently authored; no CE code is copied or mechanically translated.
+is independently authored.
 Source support and fingerprint-bound serialized-data checks do not establish
 original executable behavior or independent source corroboration.
 

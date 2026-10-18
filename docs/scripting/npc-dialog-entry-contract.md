@@ -102,8 +102,8 @@ Proposed phases:
 
 The current runtime has its own narrower AwaitingSelection/CompletedAtFrontier/
 Failed phases. It groups contiguous serialized replies, rejects a sixth structural
-reply and executes one Direct edge. CE numerically sorts and caps *eligible*
-replies. Selected grouping equivalence is not global equivalence. Virgil's six
+reply and executes one Direct edge. The original numerically sorts and caps
+*eligible* replies (F0, not checked in the executable). Selected grouping equivalence is not global equivalence. Virgil's six
 structural replies plus missing GF/IN/RE make current admission unsupported.
 Static inspection can record the chosen conditional response 2 → node 9, but
 cannot report executed gameplay or hide those admission failures.

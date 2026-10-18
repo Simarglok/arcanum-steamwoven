@@ -12,9 +12,10 @@ A Godot-free reader in `Arcanum.Data` turns one original pre-made PC prototype i
 The AREA viewer starts a pre-made hero on request since ARC-WORLD-027 ([viewer start](#viewer-start-arc-world-027));
 without `--hero` it starts a session without a hero and talks with its project diagnostic PC profile.
 
-Categories as in the research: source claims (S) are read from `alexbatalov/arcanum-ce` at
-`a7ff41b300ef712f0e7d088183a3d08957110cdd` (Sustainable Use License, not MIT); nothing is copied. Data claims (D) are
-checked by the opt-in real-data tests below. Retail executable parity is NOT_VERIFIED.
+Categories as in the research: source claims (S) are a reading of the original's functions at the cited addresses,
+evidence level F0 (not checked in the executable) unless the
+[verification ledger](../research/original-verification-ledger.md) lists them. Data claims (D) are checked by the opt-in
+real-data tests below. Retail executable parity is NOT_VERIFIED.
 
 ## Pre-made hero reader (Arcanum.Data)
 
@@ -26,16 +27,15 @@ original reads, ARC-DATA-026; on the installed original all 13 PC prototypes and
 SH-02/SH-05; `DirectoryPrototypes` over one folder is for synthetic fixtures) and the three rule tables (the tests resolve them through the
 [content stack](../research/content-precedence.md)). It creates no object and runs no script.
 
-The result is the hero **at the start of a new game** (S): `level_set(pc, 1)` keeps the prototype's race, gender,
+The result is the hero **at the start of a new game** (S): setting the PC's level to 1 (0x4A6F00) keeps the prototype's race, gender,
 alignment and age and writes the stat defaults (eight primary stats 8, level 1, 5 unspent points, magick and tech points
-0; [level_set](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L708-L763),
-[defaults](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L115-L144)); the
+0; the stat defaults); the
 stat setter re-adds the race effect `64 + race` and, for a woman, effect 330. The stored background (39..50) is display
 data and adds nothing (ARC-RES-027 proposal 4). Gold is the set's coin amount and the items are its prototypes in order.
-The source then gives each item to the PC through `item_transfer`
-([inventory source](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2073-L2164)):
+The original then gives each item to the PC through the item transfer (0x4617F0), from the inventory source function
+(0x463E20):
 an item whose prototype attaches a `SAP_GET` or `SAP_INSERT_ITEM` script is refused here (`ItemScriptUnsupported`), and
-the PC's insert check (carry weight, room) is **NOT evaluated**; a refused item would be destroyed in the source. For the
+the PC's insert check (carry weight, room) is **NOT evaluated**; a refused item would be destroyed in the original. For the
 twelve installed sets no item is refused (D), and the heaviest-kit check against ST 8 is NOT_VERIFIED.
 
 Typed refusals (`PremadeHeroFailure`, fail-closed): missing, ambiguous or invalid prototype (size, wire, trailing bytes,
@@ -46,7 +46,7 @@ rate other than 100 (`RandomInventorySource`: a range or rate 1..99 needs gamepl
 0 never creates its item); a missing, ambiguous or invalid item prototype; an item that is gold or not an item type; an
 item with a get or insert script.
 
-**Effect rules** (`EffectRules`, S: [effect_parse](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L360-L481)):
+**Effect rules** (`EffectRules`, S: the effect parser (0x4E9C20)):
 effect N is message N of `rules\effect.mes` (50..399; an absent message is an empty effect, as the source's
 zero-initialised table). Tokens split on spaces and commas only, as in the source, so any byte outside printable ASCII
 (a tab or line feed included, which would glue two tokens) is `InvalidText`; an attribute keyword (ASCII case-insensitive) from the six
@@ -58,7 +58,7 @@ a malformed number (sign rules, 1..9 digits), more than seven changes in one col
 ASCII are typed refusals instead of the source's partial effect.
 
 **Inventory source sets** (`InventorySourceRules`, S:
-[parser and lookup](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/invensource.c#L167-L330)):
+parser and lookup (0x4BF5D0, 0x4BF640, 0x4BF7B0)):
 set N is message N, numbered from 1 without gaps, reachable when `0 < N < entry count`. An entry is
 `name: min,max rate,proto …`; here the entry must be printable ASCII (the source splits on commas and spaces only, so a
 tab or line feed would empty the set), the name 1..69 characters before the first colon and every space-separated token
@@ -77,8 +77,7 @@ skills, prowling, dodge, melee, haggle, resistances, critical-hit chance, the ba
 
 `Create` refuses (`InvalidHero`, before any component is built) a prototype below 1, an undefined race or gender, a
 stats list that is not ten values, a stored value outside the race's range (strict, as `SetBase`), level outside
-0..51, unspent points outside 0..56, alignment outside −1000..1000 (the source's stat ranges,
-[stat.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L38-L110)),
+0..51, unspent points outside 0..56, alignment outside −1000..1000 (the original's stat ranges),
 an effect the character owner refuses (no modifiers, more than seven, a magnitude above 1000, divisor 0, negative id),
 negative gold, a kit item of a type transfers cannot hold (gold, ammunition, key, key ring) and a kit larger than
 `MaxPcItems`. The definition is copied (its lists are checked on the copy). Gold and the kit enter the inventory at revision 0: the kit as `kit:1`,
@@ -90,7 +89,7 @@ A seed that lists a kit entity is `InventoryMismatch`.
 | --- | --- |
 | `QueryHero()` | `SessionHeroState` (the saved fields) or `null` without a hero. |
 | `QueryHeroStats(context)` | The character owner's `CharacterStatsQueryResult` under the context (base/effective/derived values, applied innate effects), or `null`. |
-| `QueryHeroDialogFacts()` | `DialogPcFacts` for DLG gates, or `null`: gender, **effective** intelligence (race and gender effects applied), the source race index 0..10 (CE `RACE_*`). `IsDumb` is false: the source sets it for backgrounds 55, 74 and 75 only ([critter_is_dumb](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L2392-L2419)) and no background is modelled. |
+| `QueryHeroDialogFacts()` | `DialogPcFacts` for DLG gates, or `null`: gender, **effective** intelligence (race and gender effects applied), the original's race index 0..10. `IsDumb` is false: the original sets it for backgrounds 55, 74 and 75 only (the dumb test, 0x45FC00) and no background is modelled. |
 | `QueryGold()` | The PC's gold (0 without a hero). |
 | `QueryHeroKit()` | The starting kit in kit order (empty without a hero); in the PC's inventory it precedes `QueryPcInventory`. |
 
@@ -163,14 +162,14 @@ it in (ARC-DATA-027, exe-checked, [ledger](../research/original-verification-led
 holds is absent, detail `<path> NotInPhase`); `rules\gamequest.mes` at module load, so the stack winner. The installed module holds none of the
 game-start tables, so the installed heroes read unchanged.
 
-**Pre-made hero flag** (S, and checked in the original executable): picking a hero, `mainmenu_ui_pregen_char_execute`
+**Pre-made hero flag** (S, and checked in the original executable): picking a hero, the main menu's pre-made hero step
 (0x545B60) reads `MainMenu.mes` messages 551 + i for each hero index i, turns each into a flag number with `atoi` and
 writes 1 for the chosen hero and 0 for the others ([ledger](../research/original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)).
 The viewer starts from the original new-game flags (all 0..3199 known false, so the 0 writes change nothing) with the
 chosen hero's flag true (`AreaStartingHero.NewGameFlags`); on the installed original that is flag 2350 + i (CC-07).
 Project admission: the chosen message must be one to five ASCII digits (space-padded allowed) naming a flag below 3,200;
 anything else is `FlagInvalid` instead of `atoi`'s partial or zero value. The original writes any non-negative result, flag
-0 included; CE's `> 0` test is a reconstruction slip. Whether Crash Site scripts read these flags stays the open
+0 included (ledger row Pre-made flags). Whether Crash Site scripts read these flags stays the open
 ARC-RES-025 question. The main menu's gate on prototype 16075 and its ART, which makes the four female heroes selectable, is not evaluated
 (it is open on the pinned installation, SH-04).
 

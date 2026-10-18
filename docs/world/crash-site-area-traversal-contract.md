@@ -43,30 +43,28 @@ Offsets/frame bounds/alpha never replace exact-tile registration.
 
 ## Selected source and applicability
 
-Prior art: CE Sustainable Use License v1.0, pin
-[`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd).
-This independently authored probe consumes existing project readers; it does
-not copy/translate CE code. Versioned bounded references below describe source
-claims, not original executable observations. Unread callees remain frontiers.
+This independently authored probe consumes existing project readers. The bounded
+references below are a reading of the original's functions at the cited addresses,
+evidence level F0 (not checked in the executable), not original executable
+observations. Unread callees remain frontiers.
 
-| ID | Pinned file and actually inspected range | Consequence |
+| ID | Original functions actually inspected | Consequence |
 | --- | --- | --- |
-| S1 | [anim.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L4737-L4776) 4737–4776,10454–10498 | Selected normal-ground `sub_425760`: final terrain with false caller suppression, then object constraints; opportunity depends on begin-move caller flags. |
-| S2 | src/game/critter.c 1988–2032; src/game/ai.c 3725–3769 | PC portal capability; window capability from current ART; nonpolymorph human diagnostic is declared, not a recovered PC. Portal attempt needs script/lock state. |
-| S3 | src/game/location.c 350–459; src/game/tile.c 130–219; src/game/tile_block.c 311–355 | Eight semantic deltas; final mask/facade/name, once. Failed sector/resource lookup never establishes Open here. |
-| S4 | src/game/object.c 2962–3283 | Source wall/portal list; destination type mask `0x3801F` admits 0..4,15..17, excludes ordinary item types 5..14. Critters need current HP, not NO_BLOCK. |
-| S5 | src/game/object.c 2997–3026 | Four ordered object constraints for diagonals, preserving original direction; no shoulder terrain substitution. |
-| S6 | src/game/object.c 253–284,3304–3394 | Noneditor destroyed/off filter, exact tile lists; requested masks force sector loading. DONTDRAW differs from exclusion. |
-| S7 | src/game/sector_object_list.c 115–186,458–504,532–641; src/game/tile.c 134–143 | Static low-six-bit rebase, inventory insertion refusal, mobile fold; ordering is not sprite extent. |
-| S8 | src/game/object.c 1755–1799,4151–4240; src/game/ai.c 3048–3107; src/game/map.c 1360–1579; src/game/sector.c 1690–1774 | Dynamic/static predicates and fold hooks; save/diff/load state may alter registry. |
-| S9 | src/game/critter.c 608–647; src/game/object.c 1632–1677 | HP = adjusted/derived/effect maximum minus damage; absent effects are not zero. |
-| S10 | src/game/sector.c 844–1008,1390–1519; src/game/map.c 1360–1579 | Loaded neighbor/cache/source policy is not a copied immutable FILE set. |
-| S11 | [path.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/path.c#L70-L171) 70–171,239–340 | PATH_FLAG_0x1000 selects `sub_420E30` when the earlier attempt fails; that unclosed branch is unavailable, never normal-ground fallback. |
-| S12 | src/game/obj.c 1189–1205; src/game/wallcheck.c 933–939 | Postprocess resolves ID handles; `sub_438530` dirties local-PC wallcheck. These bounded definitions do not close all fold hooks/stat/effect/registry state. |
-| S13 | [art.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/art.c#L17-L27) 17–27,761–802,1647–1710; src/game/portal.c 130–201; src/game/obj_flags.h 1–80 | Rotation shift11, wall piece shift14 and named flags/art accessors; synthetic exact-edge cases, no sprite-bound inference. |
+| S1 | move goal helpers (0x425760, 0x4257E0, 0x425840), adjacent-move begin (0x42E9B0) | Selected normal-ground helper (0x425760): final terrain with false caller suppression, then object constraints; opportunity depends on begin-move caller flags. |
+| S2 | critter portal and window capability (0x45F550, 0x45F570); AI portal capability and open attempt (0x4AEB10, 0x4AEB70) | PC portal capability; window capability from current ART; nonpolymorph human diagnostic is declared, not a recovered PC. Portal attempt needs script/lock state. |
+| S3 | location rotation and step in direction (0x4B8D50, 0x4B8FF0); tile index, art and blocking queries (0x4D7090, 0x4D70B0, 0x4D7110); tile block query (0x4BB410) | Eight semantic deltas; final mask/facade/name, once. Failed sector/resource lookup never establishes Open here. |
+| S4 | object traversal block and cost (0x43FD70, 0x43FDC0, 0x43FE00) | Source wall/portal list; destination type mask `0x3801F` admits 0..4,15..17, excludes ordinary item types 5..14. Critters need current HP, not NO_BLOCK. |
+| S5 | object traversal cost worker (0x43FE00) | Four ordered object constraints for diagonals, preserving original direction; no shoulder terrain substitution. |
+| S6 | object init (0x43A330), object list at a location (0x4407C0) | Noneditor destroyed/off filter, exact tile lists; requested masks force sector loading. DONTDRAW differs from exclusion. |
+| S7 | sector object list load, fold, insert and ordering (0x4F1350, 0x4F1CD0, 0x4F2020, 0x4F20A0); tile index (0x4D7090) | Static low-six-bit rebase, inventory insertion refusal, mobile fold; ordering is not sprite extent. |
+| S8 | object static/dynamic predicates (0x43D990, 0x43D9F0) and create hooks (0x442130); AI time-event helpers (0x4AD790, 0x4AD7D0); map mobile and dynamic load (0x410D10, 0x411450); sector game load (0x4D1A30) | Dynamic/static predicates and fold hooks; save/diff/load state may alter registry. |
+| S9 | critter dead test (0x45D8D0); object HP maximum and current (0x43D5A0, 0x43D600) | HP = adjusted/derived/effect maximum minus damage; absent effects are not zero. |
+| S10 | sector lock, unlock and cache (0x4D0540, 0x4D0AE0, 0x4D0B40); sector game load (0x4D1A30); map mobile and dynamic load (0x410D10, 0x411450) | Loaded neighbor/cache/source policy is not a copied immutable FILE set. |
+| S11 | path functions (0x41F3C0, 0x41F570, 0x41F6C0, 0x41F840, 0x41F9F0) | PATH_FLAG_0x1000 selects the alternative path search (0x420E30) when the earlier attempt fails; that unclosed branch is unavailable, never normal-ground fallback. |
+| S12 | object load postprocess (0x406520); wallcheck dirty mark (0x438530) | Postprocess resolves ID handles; the wallcheck helper (0x438530) dirties local-PC wallcheck. These bounded definitions do not close all fold hooks/stat/effect/registry state. |
+| S13 | TIG ART id accessors; portal open (0x4F0950); object flag definitions | Rotation shift11, wall piece shift14 and named flags/art accessors; synthetic exact-edge cases, no sprite-bound inference. |
 
-Other table file/range pairs are relative to the linked immutable source pin,
-not the current branch. Bounds name inspected ranges, not proof of every callee.
+Addresses name inspected functions, not proof of every callee.
 
 Semantic direction codes are `XMinusYMinus`=0, `XMinus`=1,
 `XMinusYPlus`=2, `YPlus`=3, `XPlusYPlus`=4, `XPlus`=5,

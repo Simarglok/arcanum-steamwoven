@@ -11,9 +11,9 @@ selected FILE-effective Crash Site exterior. It implements the data seams of the
 [area research contract](crash-site-area-contract.md), not an area renderer,
 simulation, save writer or universal map loader. It reuses `DatArchive`,
 `TerrainLoader` sector framing and `ArtDecoder`; its internal `ObjectWireReader`
-is shared with the frozen static-object reader. No CE implementation is copied.
-Source-derived specifications retain the pinned CE lineage and license attribution
-in the [inventory](../research/crash-site-area-inventory.md) and research contract.
+is shared with the frozen static-object reader. Source-derived specifications and
+their addresses are recorded in the
+[inventory](../research/crash-site-area-inventory.md) and research contract.
 
 The authenticated version-one profile selects catalogue map 5000, runtime map 1,
 start sector (1452,1290), and townmap 2. A complete metadata survey selects the

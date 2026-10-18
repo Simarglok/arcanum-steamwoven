@@ -157,6 +157,6 @@ dotnet test tests/Arcanum.Data.Tests/Arcanum.Data.Tests.csproj --filter "FullyQu
 See [Crash Site objects](../research/crash-site-objects.md) for the frozen
 input identities, provenance, and evidence boundaries, and
 [the static-object contract](static-object-loader-contract.md) for the
-unimplemented placement/renderer boundaries. The cited CE material remains
-attributed specification evidence only; this implementation is independently
-written and does not copy or translate CE code.
+unimplemented placement/renderer boundaries. The cited source readings remain
+specification evidence only (F0 unless the verification ledger lists them); this
+implementation is independently written.

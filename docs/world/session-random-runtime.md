@@ -9,20 +9,20 @@ rolls, and combat is not wired.
 
 ## What the original does
 
-Read in CE at the pinned commit `a7ff41b`; no CE code or structure was copied.
+Read in the original's random, item and dialog functions and checked in the executable (ledger row Random (R1–R6)).
 
 - One global generator: a 32-bit linear congruential step (Numerical Recipes constants) whose bits 8..22 are the
-  15-bit output ([`random_rand`][rand]). `random_between(lower, upper)` returns `lower + rand % span`, so the low
+  15-bit output (the generator step, 0x4CEF50). The range draw `between(lower, upper)` returns `lower + rand % span`, so the low
   values of a range that does not divide 32,768 come up slightly more often (for a d100, 1..68 have 328 chances in
   32,768 and 69..100 have 327), and spans above 32,768 are not covered. Equal bounds draw nothing; reversed bounds
-  are swapped ([`random_between`][between]).
-- The seed is the wall-clock time at start-up ([`random_seed_generate`][seed]). The "Random" game module registers only
-  init and exit, no save or load function ([module table][module], [module fields][fields]), so a saved game does not
+  are swapped (the range draw, 0x4CEF00).
+- The seed is the wall-clock time at start-up (the seed functions 0x4CEEB0, 0x4CEEC0, 0x4CEED0, 0x4CEEE0). The "Random" game module registers only
+  init and exit, no save or load function (module table, module fields), so a saved game does not
   keep the generator, and a load continues from whatever state the running process had.
 - Two callers re-seed the shared generator. Generating a spawn-once inventory seeds it from the object's location, the
   product of the PC's race and background, the PC's gender and pairwise character products of the PC's examine text
-  ([`item.c`][item]). A dialog re-seeds it from the time when it first builds its replies, stores that seed, and
-  re-seeds with it when it rebuilds them ([`dialog.c`][dialog]). The generator then continues from that seed.
+  (an item function, 0x463E20). A dialog re-seeds it from the time when it first builds its replies, stores that seed, and
+  re-seeds with it when it rebuilds them (a dialog function, 0x414E60). The generator then continues from that seed.
 
 The original sequence therefore cannot be replayed: its seeds come from the time, and nothing saves the state.
 
@@ -103,17 +103,10 @@ before this schema, so nothing is lost.
 - No host rolls yet: the viewer passes no seed (its sessions use 0) and combat is not wired to a session. The life
   state's knockout and second-arm rolls (`combat.KnockoutFatigue`, `combat.CrippleBothArms`, ARC-COMBAT-002) draw from
   the same generator.
-- The original's other draws (AI reactions, sounds, effect stat checks) are not modelled, so a session fight is not a
-  CE fight draw for draw.
+- The original's other draws (AI reactions, sounds, effect stat checks) are not modelled, so a session fight is not an
+  original fight draw for draw.
 - The original's re-seeding for spawned inventories and dialog replies; a derived, independent sequence per purpose (if
   the owner wants rolls of one kind not to shift those of another).
 - A legacy LCG profile, if the owner wants the original's 15-bit modulo distribution.
 - A trace of recent rolls kept by the session (callers keep their own, like the resolver's `CombatRollLog`).
 
-[rand]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/random.c#L104-L108
-[between]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/random.c#L64-L73
-[seed]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/random.c#L17-L57
-[module]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L135
-[fields]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L98-L110
-[item]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2111-L2138
-[dialog]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1285-L1289

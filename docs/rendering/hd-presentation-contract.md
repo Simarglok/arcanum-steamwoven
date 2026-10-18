@@ -431,4 +431,4 @@ and the [viewer](terrain-viewer.md#hd-render-path-arc-render-014) have the detai
 - Original-runtime pixel parity stays NOT_VERIFIED, as for Legacy.
 
 Provenance: the rules are derived from this repository's own exact sampling, scene
-plan and wall-fade code; no CE code or structure is used.
+plan and wall-fade code.
