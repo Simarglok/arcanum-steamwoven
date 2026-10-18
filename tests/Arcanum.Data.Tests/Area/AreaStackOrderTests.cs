@@ -167,6 +167,86 @@ public sealed class AreaStackOrderTests
     }
 
     [TestMethod]
+    public void The_map_patch_changes_the_mobile_object_it_names_for_every_consumer()
+    {
+        // ARC-DATA-028: one mobile scenery object with a GUID in the map's game-generated mobile file, and a map.patch
+        // in the module folder that switches it off; the original applies it when the map opens.
+        var id = Id(2); for (var i = 0; i < 16; i++) id[8 + i] = (byte)(0x10 + i);
+        var guid = new Guid(id.AsSpan(8, 16));
+        var aggregate = (byte[])[.. new byte[16], .. Record(id, location: 70L | (71L << 32))];
+        // The editor's copy of the object in the module archive, which the owner checks the mobile file against.
+        Install(arcanum1: Base(("art/scenery/fixture.art", Art()), ("rules/effect.mes", "{50}{}"u8.ToArray())), moduleExtra: ("maps/test/1.mob", Record(id, location: 70L | (71L << 32))));
+        Loose("modules/Mod/maps/" + WorldCatalog.AggregateName("test"), aggregate);
+        var line = "G_" + guid.ToString("D").ToUpperInvariant().Replace('-', '_');
+        var unknownObjects = 0;
+        AreaSnapshot Load(string? patch)
+        {
+            var path = Path.Combine(_root, "modules", "Mod", "rules", "map.patch");
+            if (patch is null) { if (File.Exists(path)) File.Delete(path); }
+            else Loose("modules/Mod/rules/map.patch", Encoding.ASCII.GetBytes(patch));
+            using var stack = Stack();
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual(AreaMapPlanStatus.Ready, result.Status, result.Detail);
+            Assert.AreEqual(patch is not null, result.Plan!.Plan.MapPatch is not null);
+            using var owner = result.Plan.Open();
+            var snapshot = owner.LoadStrict();
+            unknownObjects = Arcanum.Data.Traversal.AreaStepInspector.InspectWholeMap(snapshot, stack, result.Plan.Map.AggregatePath, 1).UnknownObjects;
+            return snapshot;
+        }
+        static AreaObjectRecord Mobile(AreaSnapshot snapshot) => snapshot.Objects.Single(o => o.Key.Kind == AreaSourceKind.Mobile);
+
+        var plain = Load(null);
+        Assert.IsNull(Mobile(plain).MapPatch);
+        Assert.AreEqual(1, plain.Visuals.Count(v => v.Key.Kind == AreaSourceKind.Mobile));
+
+        var patched = Load("# switch it off\r\n" + line + ":obj_flag OF_OFF internal_name 77\r\n");
+        var mobile = Mobile(patched);
+        CollectionAssert.AreEqual(new[] { 2 }, mobile.MapPatch!.Lines.ToArray());
+        Assert.AreEqual(2L, mobile.EffectiveFields.Single(f => f.Slot == 18).Number, "OF_OFF over the prototype's flags");
+        Assert.AreEqual((77L, AreaValueOrigin.Instance), (mobile.EffectiveFields.Single(f => f.Slot == 21).Number, mobile.EffectiveFields.Single(f => f.Slot == 21).Origin));
+        Assert.AreEqual(Mobile(plain).RawSha256, mobile.RawSha256, "the raw record is unchanged");
+        Assert.AreEqual(AreaDisposition.BodySuppressedBySerializedState, mobile.Disposition);
+        Assert.AreEqual(0, patched.Visuals.Count(v => v.Key.Kind == AreaSourceKind.Mobile), "an object the patch switches off is not drawn");
+        Assert.AreEqual(0, unknownObjects, "the step evidence reads the patched object instead of leaving it Unknown");
+        Load(line + " without a colon\n");
+        Assert.AreEqual(1, unknownObjects, "a change the original makes differently (here a crash) stays Unknown");
+
+        // A patch line whose effect is not modelled keeps the plan and the step evidence honest about it.
+        var unmodelled = Load("A_0001:faction 1\n" + line + ":obj_flag OF_OFF\n");
+        Assert.IsTrue(unmodelled.MapPatch!.HasUnmodelledLines);
+        Assert.AreEqual(1, unknownObjects, "MAP_PATCH_LINE_UNSUPPORTED");
+
+        // script: the script file named by number (module scripts 1..999 from every source), its 8-byte header and the number.
+        Loose("modules/Mod/scr/00042Fixture.scr", [7, 0, 0, 0, 9, 0, 0, 0, 0xFF]);
+        var scripted = Mobile(Load(line + ":script 9 42 script 10 43\n"));
+        var scripts = scripted.EffectiveFields.Single(f => f.Slot == 31);
+        CollectionAssert.AreEqual(new long[] { 7, 9, 42 }, scripts.Elements.Single(e => e.Key == 9).Words.ToArray());
+        Assert.IsFalse(scripts.Elements.Any(e => e.Key == 10), "script 43 names no file: nothing is attached");
+    }
+
+    [TestMethod]
+    public void The_owner_takes_a_map_patch_input_exactly_when_the_plan_binds_one()
+    {
+        // ARC-DATA-028: an input without a binding, a binding without an input, a numbered input, or a binding that does not
+        // match the authenticated file is refused.
+        AreaMapPatchBinding Binding(bool unmodelled = false, params int[] scripts) =>
+            new(scripts.ToDictionary(n => n, n => (Arcanum.Data.Maps.MapPatchScriptHeader?)null), unmodelled);
+        var patch = (new AreaInputKey(AreaSourceRole.MapPatch), "# none\n"u8.ToArray());
+        AreaResourceSource[] order = [new(new(AreaSourceRole.Resource1))];
+        Assert.AreEqual(AreaErrorCode.InvalidSelection, Throws<AreaException>(() => new OrderFixture(order, 0, null, patch).Dispose()).Issue.Code);
+        Assert.AreEqual(AreaErrorCode.InvalidSelection, Throws<AreaException>(() => new OrderFixture(order, 0, Binding()).Dispose()).Issue.Code);
+        Assert.AreEqual(AreaErrorCode.InvalidSelection,
+            Throws<AreaException>(() => new OrderFixture(order, 0, Binding(), (new AreaInputKey(AreaSourceRole.MapPatch, 1), patch.Item2)).Dispose()).Issue.Code);
+        using (var accepted = new OrderFixture(order, 0, Binding(), patch)) Assert.IsNotNull(accepted.Owner.LoadStrict().MapPatch);
+        using (var lying = new OrderFixture(order, 0, Binding(unmodelled: true), patch))
+            Assert.IsTrue(lying.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.InputIdentityMismatch));
+        var scripted = (patch.Item1, "G_01234567_89AB_CDEF_0123_456789ABCDEF:script 1 42\n"u8.ToArray());
+        using (var missing = new OrderFixture(order, 0, Binding(), scripted))
+            Assert.IsTrue(missing.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.InputIdentityMismatch));
+        using (var decided = new OrderFixture(order, 0, Binding(false, 42), scripted)) decided.Owner.LoadStrict();
+    }
+
+    [TestMethod]
     public void An_archive_member_changed_after_planning_is_refused_when_the_plan_opens()
     {
         Install(arcanum1: Base(("art/scenery/fixture.art", Art())), arcanum4: Dat(("proto/007001 - test.pro", Prototype())), prototypeLoose: false);
@@ -282,7 +362,8 @@ public sealed class AreaStackOrderTests
     private sealed class OrderFixture : IDisposable
     {
         internal OrderFixture(AreaResourceSource[] order, params (AreaInputKey Key, byte[] Bytes)[] extra) : this(order, extra.Length, extra) { }
-        internal OrderFixture(AreaResourceSource[] order, int maxResources, params (AreaInputKey Key, byte[] Bytes)[] extra)
+        internal OrderFixture(AreaResourceSource[] order, int maxResources, params (AreaInputKey Key, byte[] Bytes)[] extra) : this(order, maxResources, null, extra) { }
+        internal OrderFixture(AreaResourceSource[] order, int maxResources, AreaMapPatchBinding? mapPatch, params (AreaInputKey Key, byte[] Bytes)[] extra)
         {
             var resource = Dat(("art/tile/tilename.mes", Tile), ("art/facade/facadename.mes", Table), ("art/scenery/scenery.mes", Scenery),
                 ("art/tile/stonebse0a.art", Art()), ("art/scenery/fixture.art", Art()));
@@ -296,7 +377,7 @@ public sealed class AreaStackOrderTests
                 return new AreaMappingBinding(role, new(new(AreaSourceRole.Resource1), i, 1, e.StoredSize, e.DeclaredOutputSize, e.Offset, Hash(e.RawNameBytes.ToArray())), Hash(archive.ReadEntry(e)));
             }).ToArray();
             var plan = new AreaSourcePlan(1, 1, new(1, 1), 2, "maps/test", files.Select(f => new AreaInputIdentity(f.Key, f.Bytes.Length, Hash(f.Bytes))), mappings)
-            { Selection = AreaSectorSelection.AllSectors, AllowArtTrailingBytes = true, ResourceOrder = order };
+            { Selection = AreaSectorSelection.AllSectors, AllowArtTrailingBytes = true, ResourceOrder = order, MapPatch = mapPatch };
             Owner = AreaDataOwner.Open(new(files.Select(f => new AreaInput(f.Key, new MemoryStream(f.Bytes)))), plan, new() { MaxResourceInputs = maxResources });
         }
         internal AreaDataOwner Owner { get; }
@@ -305,15 +386,15 @@ public sealed class AreaStackOrderTests
 
     /// <summary>The synthetic installation: tig.dat, the base archives given, module <c>Mod</c>
     /// (one map "test" with one scenery object of prototype 7001) and the prototype as a loose file.</summary>
-    private void Install(byte[] arcanum1, byte[]? arcanum4 = null, byte[]? tig = null, bool prototypeLoose = true)
+    private void Install(byte[] arcanum1, byte[]? arcanum4 = null, byte[]? tig = null, bool prototypeLoose = true, params (string Name, byte[] Payload)[] moduleExtra)
     {
         File.WriteAllBytes(Path.Combine(_root, "tig.dat"), tig ?? Dat());
         File.WriteAllBytes(Path.Combine(_root, "arcanum1.dat"), arcanum1);
         File.WriteAllBytes(Path.Combine(_root, "arcanum2.dat"), Dat(("rules/other.mes", "{0}{x}"u8.ToArray())));
         if (arcanum4 is not null) File.WriteAllBytes(Path.Combine(_root, "Arcanum4.dat"), arcanum4);
         Directory.CreateDirectory(Path.Combine(_root, "modules"));
-        File.WriteAllBytes(Path.Combine(_root, "modules", "Mod.dat"), Dat(($"maps/test/{Start}.sec", Sector(Record(Id(2, 11)))), ("maps/test/map.prp", Properties()),
-            ("rules/maplist.mes", "{5000}{test, 64, 64}"u8.ToArray())));
+        File.WriteAllBytes(Path.Combine(_root, "modules", "Mod.dat"), Dat([.. new[] { ($"maps/test/{Start}.sec", Sector(Record(Id(2, 11)))), ("maps/test/map.prp", Properties()),
+            ("rules/maplist.mes", "{5000}{test, 64, 64}"u8.ToArray()) }.Concat(moduleExtra).OrderBy(e => e.Item1, StringComparer.Ordinal)]));
         if (prototypeLoose) Loose("data/proto/007001 - test.pro", Prototype());
     }
 

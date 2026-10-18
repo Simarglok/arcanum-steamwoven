@@ -5,7 +5,7 @@ namespace Arcanum.Data.Area;
 /// <summary>Input roles. <see cref="Archive"/> (any other resource archive of the content stack, numbered by
 /// its search-order position) and <see cref="Loose"/> (one loose resource file) are read only by plans with a
 /// <see cref="AreaSourcePlan.ResourceOrder"/> (ARC-DATA-018).</summary>
-public enum AreaSourceRole { Module, Resource1, Resource2, NormalGameMobile, Prototype, Archive, Loose }
+public enum AreaSourceRole { Module, Resource1, Resource2, NormalGameMobile, Prototype, Archive, Loose, MapPatch }
 public readonly record struct AreaInputKey(AreaSourceRole Role, int Number = 0);
 public sealed record AreaInputIdentity(AreaInputKey Key, long Length, string Sha256);
 public enum AreaScope { Core, Context, Outside, Unknown }
@@ -62,7 +62,8 @@ public sealed record AreaFieldValue(int Slot, AreaPresence Presence, AreaValueOr
 public sealed record AreaByteRange(int Start, int Length);
 public sealed record AreaSectorRecord(AreaSectorKey Key, AreaSectorCoordinate Coordinate, AreaScope Scope, bool Present, int? DatOrdinal, int? Townmap, int LightCount, int RoofDiscriminator, int Placeholder, int TerminalCount, IReadOnlyList<AreaByteRange> Sections, IReadOnlyList<IReadOnlyList<int>> Lights, AreaEntryIdentity? Entry, string? PayloadSha256);
 public sealed record AreaTerrainRecord(AreaVisualKey Key, int LocalX, int LocalY, long WorldX, long WorldY, uint RawArt, uint LookupArt, AreaScope Scope, AreaVisualKey SelectedVisual);
-public sealed record AreaObjectRecord(AreaObjectKey Key, int Version, int Type, int PrototypeNumber, string PrototypeReferenceSha256, string PrototypeOwnSha256, string RawSha256, string SemanticSha256, AreaScope Scope, long? SerializedLocation, long? WorldX, long? WorldY, AreaDisposition Disposition, IReadOnlyList<AreaFieldValue> DirectFields, IReadOnlyList<AreaFieldValue> EffectiveFields, bool SchemaReady, bool PlacementReady, bool RequiredLayersReady);
+public sealed record AreaObjectRecord(AreaObjectKey Key, int Version, int Type, int PrototypeNumber, string PrototypeReferenceSha256, string PrototypeOwnSha256, string RawSha256, string SemanticSha256, AreaScope Scope, long? SerializedLocation, long? WorldX, long? WorldY, AreaDisposition Disposition, IReadOnlyList<AreaFieldValue> DirectFields, IReadOnlyList<AreaFieldValue> EffectiveFields, bool SchemaReady, bool PlacementReady, bool RequiredLayersReady,
+    Maps.MapPatchApplication? MapPatch = null);
 public sealed record AreaVisualRecord(AreaVisualKey Key, uint RawArt, uint LookupArt, AreaEntryIdentity Entry, string PayloadSha256, int ViewLength, int NominalFacing, int SourceGroup, int PhysicalGroup, int Frame, int RequestedPalette, int EffectivePalette, bool Mirrored, int Width, int Height, int HotX, int HotY, int ArtOffsetX, int ArtOffsetY, int ObjectOffsetX, int ObjectOffsetY, int Scale, int EncodedBytes, int RgbaBytes, string RgbaSha256, string Policy);
 /// <summary>ARC-RENDER-021: one roof block of a whole map: the sector's slot (block <c>x/4 + 16·(y/4)</c> of its local
 /// tiles), the block's first tile, the roof art as the sector stores it, its piece (0–12; 9–12 are pieces 0–3 drawn
@@ -82,7 +83,7 @@ public sealed class AreaSnapshot
         IEnumerable<AreaRoofRecord>? roofs = null, AreaRoofShades? roofShades = null)
     {
         Roofs = Array.AsReadOnly((roofs ?? []).ToArray()); RoofShades = roofShades;
-        Owner = owner; Generation = generation; CatalogueMap = plan.CatalogueMap; RuntimeMap = plan.RuntimeMap; Profile = plan.Profile;
+        Owner = owner; Generation = generation; CatalogueMap = plan.CatalogueMap; RuntimeMap = plan.RuntimeMap; Profile = plan.Profile; MapPatch = plan.MapPatch;
         Inputs = Array.AsReadOnly(plan.Identities.ToArray());
         Sectors = Array.AsReadOnly(sectors.ToArray()); Terrain = Array.AsReadOnly(terrain.ToArray()); Objects = Array.AsReadOnly(objects.ToArray());
         Visuals = Array.AsReadOnly(visuals.ToArray()); Reconciliation = counts; Endpoints = Array.AsReadOnly(endpoints.ToArray());
@@ -95,6 +96,8 @@ public sealed class AreaSnapshot
     public int CatalogueMap { get; }
     public int RuntimeMap { get; }
     public string Profile { get; }
+    /// <summary>ARC-DATA-028: the map patch the owner applied to the mobile objects, or null.</summary>
+    public AreaMapPatchBinding? MapPatch { get; }
     public IReadOnlyList<AreaInputIdentity> Inputs { get; }
     public IReadOnlyList<AreaSectorRecord> Sectors { get; }
     public IReadOnlyList<AreaTerrainRecord> Terrain { get; }
@@ -154,6 +157,22 @@ public sealed record AreaArtBinding(uint RawArt, AreaEntryIdentity Entry);
 /// file (<see cref="AreaSourceRole.Loose"/>) with the normalized virtual path it holds
 /// (lower-case printable ASCII, <c>/</c> separators).</summary>
 public sealed record AreaResourceSource(AreaInputKey Key, string? Path = null);
+
+/// <summary>ARC-DATA-028: how a plan applies <c>Rules\map.patch</c>: the 8-byte header of each script a <c>script</c>
+/// attribute names (null when the original cannot load it, so it sets nothing), resolved through the content stack when
+/// the plan is made, and whether the file holds lines whose effect is not modelled.
+/// The script headers are resolved from the stack when the plan is made and are not authenticated inputs of the owner.</summary>
+public sealed record AreaMapPatchBinding
+{
+    public AreaMapPatchBinding(IReadOnlyDictionary<int, Maps.MapPatchScriptHeader?> scriptHeaders, bool hasUnmodelledLines)
+    {
+        ArgumentNullException.ThrowIfNull(scriptHeaders);
+        ScriptHeaders = new System.Collections.ObjectModel.ReadOnlyDictionary<int, Maps.MapPatchScriptHeader?>(new Dictionary<int, Maps.MapPatchScriptHeader?>(scriptHeaders));
+        HasUnmodelledLines = hasUnmodelledLines;
+    }
+    public IReadOnlyDictionary<int, Maps.MapPatchScriptHeader?> ScriptHeaders { get; }
+    public bool HasUnmodelledLines { get; }
+}
 
 /// <summary>Version-one explicit FILE-effective source plan. Constructor plans are structural,
 /// not proof that caller inputs are authentic original data. The original validator uses its own pinned profile.</summary>
@@ -219,6 +238,9 @@ public sealed class AreaSourcePlan
         }
     }
     private readonly IReadOnlyList<AreaResourceSource> _resourceOrder = Array.Empty<AreaResourceSource>();
+    /// <summary>ARC-DATA-028: the map patch the original applies when this map opens (the
+    /// <see cref="AreaSourceRole.MapPatch"/> input), or null when the plan applies none. Pinned profiles take none.</summary>
+    public AreaMapPatchBinding? MapPatch { get; init; }
     internal static bool LoosePath(string? path) =>
         !string.IsNullOrEmpty(path) && path.All(c => c is >= ' ' and <= '~' and not '\\' and not (>= 'A' and <= 'Z')) &&
         path.Split('/').All(segment => segment.Length > 0 && segment != "." && segment != "..");

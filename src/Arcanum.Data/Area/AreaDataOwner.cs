@@ -50,13 +50,18 @@ public sealed partial class AreaDataOwner : IDisposable
             // any input. Four non-prototype roles plus the admitted prototypes
             // define this loader's source-count envelope, not a heap estimate.
             // ARC-DATA-018 adds the plan's own resource archives and loose resource files.
-            if (inputs.Inputs.Count > 4L + limits.MaxPrototypes + limits.MaxResourceInputs ||
-                plan.Identities.Count > 4L + limits.MaxPrototypes + limits.MaxResourceInputs ||
+            // ARC-DATA-028 adds the map patch.
+            if (inputs.Inputs.Count > 5L + limits.MaxPrototypes + limits.MaxResourceInputs ||
+                plan.Identities.Count > 5L + limits.MaxPrototypes + limits.MaxResourceInputs ||
                 plan.Identities.Count(i => i.Key.Role == AreaSourceRole.Prototype) > limits.MaxPrototypes ||
                 plan.Identities.Count(i => i.Key.Role is AreaSourceRole.Archive or AreaSourceRole.Loose) > limits.MaxResourceInputs ||
                 plan.Mappings.Count > Enum.GetValues<AreaMappingRole>().Length || plan.ArtBindings.Count > limits.MaxVisuals)
                 throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Input);
             if (plan.Identities.Any(i => !Enum.IsDefined(i.Key.Role)))
+                throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
+            // A map patch input exactly when the plan binds one, and never on a pinned profile.
+            if (plan.Identities.Any(i => i.Key.Role == AreaSourceRole.MapPatch && i.Key.Number != 0) ||
+                (plan.MapPatch is not null) != plan.Identities.Any(i => i.Key.Role == AreaSourceRole.MapPatch) || plan.Original && plan.MapPatch is not null)
                 throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
             // A stack order is the whole resource search: every archive or loose input is in it,
             // and a pinned profile keeps its own archive rule.
@@ -72,6 +77,7 @@ public sealed partial class AreaDataOwner : IDisposable
                 if (!input.Stream.CanRead || !input.Stream.CanSeek) throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
                 if (identity.Key.Role == AreaSourceRole.Prototype && identity.Length > 1048576 ||
                     identity.Key.Role == AreaSourceRole.NormalGameMobile && identity.Length > limits.MaxAggregateBytes ||
+                    identity.Key.Role == AreaSourceRole.MapPatch && identity.Length > Maps.MapPatchFile.MaxBytes ||
                     identity.Key.Role is AreaSourceRole.Module or AreaSourceRole.Resource1 or AreaSourceRole.Resource2 or AreaSourceRole.Archive && identity.Length > 536870912 ||
                     identity.Key.Role == AreaSourceRole.Loose && identity.Length > EntryCap(plan))
                     throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Input);
