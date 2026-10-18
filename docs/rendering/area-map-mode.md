@@ -66,8 +66,9 @@ profiles and every exterior smoke stay as they were.
 - **Inventory.** With a session, ground pickup, looting and the inventory window
   work on the map as on the exterior (the map's T0 items seed the session).
 - **Transitions.** See [map transitions](#map-transitions-arc-world-031) below.
-- **Not in map mode.** NPC dialogs, companions and F7/F8 quick save (the Crash
-  Site slot is never touched); the HUD says so.
+- **Dialogs.** See [dialogs in map mode](#dialogs-arc-world-032) below.
+- **Not in map mode.** Companions and F7/F8 quick save (the Crash Site slot is
+  never touched); the HUD says so.
 
 ## Coverage on the installed original
 
@@ -224,8 +225,7 @@ quest flag, a held item, a dialog) is not a trigger here (SCRIPT slice S4).
 - **Not covered.** A teleport into another jump point does not chain (the
   original nests up to 9). Tile scripts fire for the player only (the original
   runs them for any critter). No fade, sound, movie or time advance of a
-  fade-and-teleport. Companions do not travel and dialogs stay off in map mode
-  (ARC-WORLD-032).
+  fade-and-teleport. Companions do not travel in map mode (ARC-WORLD-037).
 
 Opt-in tests (`tests/Arcanum.TerrainViewer.Tests/AreaMapTransfersOriginalTests.cs`):
 `crematorium-lev 1` has its two exits; the way down is accepted and loads
@@ -238,6 +238,43 @@ session; observed `crematorium-lev 1` → `crematorium-lev 2`, script 2369,
 arrival 116,112) and `ARC-WORLD-031 native-smoke jump PASS` (a ground click
 walks onto a jump point; observed in `tulla interior`, 437,214 → 304,219), or
 `NO-EXIT`/`NONE` when the map has no such trigger reachable from its start.
+
+## Dialogs (ARC-WORLD-032)
+
+The dialog NPCs of a map are those of its own snapshot (a core critter whose
+effective script slot names a dialog script), so every map talks the same way
+and nothing is bound to a location. With a session (a lit map, or one reached
+by a transfer), the left click, hover action, walk to talk, modal panel,
+dispatcher run and DLG reading are those of the exterior
+([AREA viewer integration](../scripting/dialog-conversation-runtime.md#area-viewer-integration-project-diagnostic)),
+with the game's script content found from the module archive. The consequences
+(GF, quests, rumors, an NPC's local flags, reaction and dialog slot) are
+session state on the map's runtime number, so they go with the session to the
+next map and come back with it. The party commands keep the diagnostic follow
+key: no NPC follows the player in map mode yet (ARC-WORLD-037). A map the map
+list does not name (`scienticians underground lev 2`) has no runtime number,
+hence no session and no dialogs.
+
+Opt-in census (`AreaMapConversationOriginalTests`, `DAT_ROOT`): 34 listed
+interiors have 182 dialog NPCs. Each one gets a typed start: 50 start a
+conversation, 1 ends with skip default, and 131 stop at an SCR action,
+condition, goto or value kind the dispatcher does not admit yet (most often
+action types 23 and 22, and condition type 21). Of the 50 conversations, 35 stop at a generated NPC
+line, which is not loaded yet, 8 at an unsupported DLG operation, and 7 offer
+replies at once; 6 end when the first choosable reply is always taken. Native smoke (`ARC-WORLD-032 native-smoke talk PASS`, after
+the roof smoke): from 4–6 cells away the NPC hovers as a walk to talk, a click
+through the production seam walks within reach and opens the panel (a walk
+that stops short is tried again from within reach, where the click must open
+it), the first choosable replies run until the dialog ends or stops, and Close
+ends the modal panel; a start refused for missing script content, an entry
+error or a changed source fails the smoke. `FRONTIER` means every NPC tried (up
+to eight) stopped before offering a reply, `NOT-STARTED` that none started,
+`NO-REACHABLE-SPEAKER` that none could be clicked, and `NONE` that no NPC is
+drawn. Observed: `caladon-panarrii temple`, script 2969, 3 turns, the dialog
+ended, 1 effect in the session; `tulla interior` reports `FRONTIER` (generated
+greetings); in `caladon-mafia underground` both NPCs are undrawn. That the
+consequences travel with the session to another map and back is the host's
+synthetic test (`AreaConversationTests`); the native smoke does not observe it.
 
 ## Not yet
 
@@ -254,5 +291,6 @@ walks onto a jump point; observed in `tulla interior`, 437,214 → 304,219), or
   for opens only for a step leaving a building, as the original executable decides
   it (ARC-RES-049); doors are not opened or animated.
 - The main world map (ARC-RES-034) and therefore every exit to it, conditional
-  transitions, door runtime, dialogs and companions on these maps.
+  transitions, door runtime and companions on these maps; the dialog gaps
+  above (SCR admission, generated lines).
 - Original-executable parity is NOT_VERIFIED.

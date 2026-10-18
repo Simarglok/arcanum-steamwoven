@@ -80,7 +80,8 @@ Data API and the AREA viewer's conversation host. Godot-independent.
   quick loads; a content that saw a file change is opened again at the next
   publication. Base archives replaced on disk while the viewer runs are seen only
   when the module changes or a file change was caught. Map mode (`--area-map`)
-  still wires no dialogs ([map mode](../rendering/area-map-mode.md)).
+  reads its dialogs through it too since ARC-WORLD-032
+  ([map mode](../rendering/area-map-mode.md#dialogs-arc-world-032)).
 
 ## Coverage on the installed original
 
