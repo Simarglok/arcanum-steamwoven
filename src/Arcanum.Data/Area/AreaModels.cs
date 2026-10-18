@@ -4,8 +4,9 @@ namespace Arcanum.Data.Area;
 
 /// <summary>Input roles. <see cref="Archive"/> (any other resource archive of the content stack, numbered by
 /// its search-order position) and <see cref="Loose"/> (one loose resource file) are read only by plans with a
-/// <see cref="AreaSourcePlan.ResourceOrder"/> (ARC-DATA-018).</summary>
-public enum AreaSourceRole { Module, Resource1, Resource2, NormalGameMobile, Prototype, Archive, Loose, MapPatch }
+/// <see cref="AreaSourcePlan.ResourceOrder"/> (ARC-DATA-018). <see cref="TerrainTemplate"/> (ARC-DATA-032) is one terrain
+/// template file a window plan generates sectors from, numbered within the plan.</summary>
+public enum AreaSourceRole { Module, Resource1, Resource2, NormalGameMobile, Prototype, Archive, Loose, MapPatch, TerrainTemplate }
 public readonly record struct AreaInputKey(AreaSourceRole Role, int Number = 0);
 public sealed record AreaInputIdentity(AreaInputKey Key, long Length, string Sha256);
 public enum AreaScope { Core, Context, Outside, Unknown }
@@ -60,7 +61,10 @@ public sealed record AreaEntryIdentity(AreaInputKey Source, int Ordinal, uint Fl
 public sealed record AreaSparseElement(int Key, IReadOnlyList<long> Words);
 public sealed record AreaFieldValue(int Slot, AreaPresence Presence, AreaValueOrigin Origin, long? Number, IReadOnlyList<AreaSparseElement> Elements, string? Fingerprint);
 public sealed record AreaByteRange(int Start, int Length);
-public sealed record AreaSectorRecord(AreaSectorKey Key, AreaSectorCoordinate Coordinate, AreaScope Scope, bool Present, int? DatOrdinal, int? Townmap, int LightCount, int RoofDiscriminator, int Placeholder, int TerminalCount, IReadOnlyList<AreaByteRange> Sections, IReadOnlyList<IReadOnlyList<int>> Lights, AreaEntryIdentity? Entry, string? PayloadSha256);
+/// <param name="Template">ARC-DATA-032: the <see cref="AreaSourceRole.TerrainTemplate"/> input a generated sector was read
+/// from (its objects placed and its lights moved into this sector); null for a sector read from the module archive.</param>
+public sealed record AreaSectorRecord(AreaSectorKey Key, AreaSectorCoordinate Coordinate, AreaScope Scope, bool Present, int? DatOrdinal, int? Townmap, int LightCount, int RoofDiscriminator, int Placeholder, int TerminalCount, IReadOnlyList<AreaByteRange> Sections, IReadOnlyList<IReadOnlyList<int>> Lights, AreaEntryIdentity? Entry, string? PayloadSha256,
+    AreaInputKey? Template = null);
 public sealed record AreaTerrainRecord(AreaVisualKey Key, int LocalX, int LocalY, long WorldX, long WorldY, uint RawArt, uint LookupArt, AreaScope Scope, AreaVisualKey SelectedVisual);
 public sealed record AreaObjectRecord(AreaObjectKey Key, int Version, int Type, int PrototypeNumber, string PrototypeReferenceSha256, string PrototypeOwnSha256, string RawSha256, string SemanticSha256, AreaScope Scope, long? SerializedLocation, long? WorldX, long? WorldY, AreaDisposition Disposition, IReadOnlyList<AreaFieldValue> DirectFields, IReadOnlyList<AreaFieldValue> EffectiveFields, bool SchemaReady, bool PlacementReady, bool RequiredLayersReady,
     Maps.MapPatchApplication? MapPatch = null);
@@ -204,13 +208,15 @@ public sealed class AreaSourcePlan
     {
         OriginalAreaMap.CrashSiteExterior => "arc-data-009-complete-file-effective-source-v1",
         OriginalAreaMap.CrashSiteCave => "arc-world-009-cave-file-effective-source-v1",
+        _ when Selection == AreaSectorSelection.Window && AllowArtTrailingBytes => "arc-data-032-window-original-rules-v1",
+        _ when Selection == AreaSectorSelection.Window => "arc-data-032-window-v1",
         _ when Selection == AreaSectorSelection.AllSectors && AllowArtTrailingBytes => "arc-data-019-whole-map-original-rules-v1",
         _ when Selection == AreaSectorSelection.AllSectors => "arc-data-019-whole-map-v1",
         _ => "structural-file-effective-v1",
     };
     /// <summary>How core sectors are chosen: the start sector's four-neighbour component with the
-    /// plan's townmap (the exterior rule), or every sector file under the prefix (a whole map,
-    /// ARC-DATA-019).</summary>
+    /// plan's townmap (the exterior rule), every sector file under the prefix (a whole map,
+    /// ARC-DATA-019), or the plan's <see cref="Window"/> (ARC-DATA-032).</summary>
     public AreaSectorSelection Selection { get; init; } = AreaSectorSelection.TownmapComponent;
     /// <summary>Read ART as the original does: accept bytes after the last frame
     /// (<see cref="ArtDecoderOptions.AllowTrailingBytes"/>) and draw a single-rotation ART from
@@ -241,6 +247,11 @@ public sealed class AreaSourcePlan
     /// <summary>ARC-DATA-028: the map patch the original applies when this map opens (the
     /// <see cref="AreaSourceRole.MapPatch"/> input), or null when the plan applies none. Pinned profiles take none.</summary>
     public AreaMapPatchBinding? MapPatch { get; init; }
+    /// <summary>ARC-DATA-032: the sectors of a <see cref="AreaSectorSelection.Window"/> plan, required exactly for that selection.</summary>
+    public AreaWindow? Window { get; init; }
+    /// <summary>A plan made from the universal catalogue (a whole map or a window): its sectors, ART and objects follow the
+    /// whole-map rules, not a pinned profile's exceptions.</summary>
+    internal bool UniversalRules => !Original && Selection is AreaSectorSelection.AllSectors or AreaSectorSelection.Window;
     internal static bool LoosePath(string? path) =>
         !string.IsNullOrEmpty(path) && path.All(c => c is >= ' ' and <= '~' and not '\\' and not (>= 'A' and <= 'Z')) &&
         path.Split('/').All(segment => segment.Length > 0 && segment != "." && segment != "..");
@@ -251,7 +262,14 @@ public sealed class AreaSourcePlan
 }
 
 internal enum OriginalAreaMap { None, CrashSiteExterior, CrashSiteCave }
-public enum AreaSectorSelection { TownmapComponent, AllSectors }
+public enum AreaSectorSelection { TownmapComponent, AllSectors, Window }
+
+/// <summary>ARC-DATA-032: one sector of a window: a core sector (loaded whole) or a context sector (its objects only as
+/// context), read from the module archive (<see cref="Template"/> null) or generated from a terrain template input.</summary>
+public sealed record AreaWindowSector(AreaSectorCoordinate Coordinate, AreaScope Scope, AreaInputKey? Template);
+
+/// <summary>ARC-DATA-032: the sectors a window plan loads, around its <see cref="AreaSourcePlan.Start"/>.</summary>
+public sealed record AreaWindow(IReadOnlyList<AreaWindowSector> Sectors);
 
 public sealed class AreaLoaderOptions
 {
@@ -287,12 +305,14 @@ public sealed class AreaLoaderOptions
     /// <summary>Most <see cref="AreaSourceRole.Archive"/> and <see cref="AreaSourceRole.Loose"/> inputs (ARC-DATA-018);
     /// 0, the default, admits none.</summary>
     public int MaxResourceInputs { get; init; }
+    /// <summary>ARC-DATA-032: most <see cref="AreaSourceRole.TerrainTemplate"/> inputs; 0, the default, admits none.</summary>
+    public int MaxTerrainTemplates { get; init; }
     internal void Validate()
     {
         if (MaxManagedBytes <= 0 || MaxRetainedBytes <= 0 || MaxBuildPhaseBytes <= 0 || MaxFrameOperationBytes <= 0 || MaxReadBytes <= 0 ||
             MaxFrameRequests <= 0 || MaxFrameStoredBytes <= 0 || MaxFrameDecodedBytes <= 0 || MaxFrameRgbaBytes <= 0 || MaxFrameEncodedBytes <= 0 ||
             MaxSurvey <= 0 || MaxPresentSectors <= 0 || MaxAggregateRecords <= 0 || MaxAggregateBytes < 16 || MaxPrototypes <= 0 || MaxObjects <= 0 || MaxVisuals <= 0 ||
-            ParallelAuthenticationMinBytes < 0 || MaxResourceInputs < 0)
+            ParallelAuthenticationMinBytes < 0 || MaxResourceInputs < 0 || MaxTerrainTemplates < 0)
             throw new ArgumentOutOfRangeException(nameof(AreaLoaderOptions));
     }
 }

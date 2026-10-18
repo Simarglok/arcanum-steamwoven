@@ -7,7 +7,7 @@ using Arcanum.Data.Scripts;
 
 namespace Arcanum.Data.Area;
 
-public enum AreaMapPlanStatus { Ready, UnknownMap, NoSectors, TooLarge, MissingSource, UnsupportedSource, Unreadable }
+public enum AreaMapPlanStatus { Ready, UnknownMap, NoSectors, TooLarge, MissingSource, UnsupportedSource, Unreadable, OutsideMap }
 
 /// <summary>One input of a whole-map plan: a local file, or one member of a local archive
 /// (<see cref="Member"/> is its entry ordinal), read into memory when the plan opens (ARC-DATA-018).</summary>
@@ -111,7 +111,46 @@ public static class AreaMapPlans
         { return new(AreaMapPlanStatus.Unreadable, null, error.GetType().Name); }
     }
 
-    private static AreaMapPlanResult CreateChecked(ContentStack stack, WorldCatalog catalog, WorldMap map)
+    /// <summary>Most rings of core sectors around a window's centre (a radius of 2 loads 5×5 core sectors and a 7×7 window).</summary>
+    public const int MaxWindowRadius = 2;
+
+    /// <summary>
+    /// ARC-DATA-032: a plan for the sectors around <paramref name="centre"/> on any map, the main map included: the core
+    /// sectors within <paramref name="radius"/> (1 gives the 3×3 the original loads around the PC when it teleports, ledger
+    /// SS4) and one ring of context sectors around them. Each sector comes from its source as the original takes it (ledger
+    /// SS5): the map's own file from the module archive, or its terrain template, an authenticated input whose objects and
+    /// lights the owner moves into the sector. Sectors outside the map are left out (the original never loads them); a
+    /// sector the original would fill, or cannot resolve, refuses the plan. Mobile objects come from the map-wide file and
+    /// count where they stand; map.patch, prototypes, names and resources are bound as for a whole map; the limits follow
+    /// the window.
+    /// </summary>
+    public static AreaMapPlanResult CreateWindow(ContentStack stack, WorldCatalog catalog, string mapName, WorldSectorCoordinate centre, int radius = 1)
+    {
+        ArgumentNullException.ThrowIfNull(stack); ArgumentNullException.ThrowIfNull(catalog); ArgumentNullException.ThrowIfNull(mapName);
+        if (radius is < 0 or > MaxWindowRadius) throw new ArgumentOutOfRangeException(nameof(radius));
+        var map = catalog.Find(mapName);
+        if (map is null) return new(AreaMapPlanStatus.UnknownMap, null);
+        if (catalog.TerrainTypes.Table is null) return new(AreaMapPlanStatus.MissingSource, null, $"terrain types: {catalog.TerrainTypes.Status}");
+        var grid = catalog.ReadTerrain(map).Grid;
+        if (grid is null) return new(AreaMapPlanStatus.MissingSource, null, $"{map.Folder}/terrain.tdf");
+        if (catalog.ResolveSector(map, centre, grid).Kind == WorldSectorSourceKind.OutsideMap) return new(AreaMapPlanStatus.OutsideMap, null);
+        var window = new List<(WorldSectorSource Source, AreaScope Scope)>();
+        for (var dy = -radius - 1; dy <= radius + 1; dy++)
+            for (var dx = -radius - 1; dx <= radius + 1; dx++)
+            {
+                var source = catalog.ResolveSector(map, new(centre.X + dx, centre.Y + dy), grid);
+                if (source.Kind == WorldSectorSourceKind.OutsideMap) continue;
+                if (source.Kind is not (WorldSectorSourceKind.Own or WorldSectorSourceKind.Template))
+                    return new(AreaMapPlanStatus.UnsupportedSource, null, $"sector ({source.Coordinate.X}, {source.Coordinate.Y}) is {source.Kind}");
+                window.Add((source, Math.Max(Math.Abs(dx), Math.Abs(dy)) <= radius ? AreaScope.Core : AreaScope.Context));
+            }
+        try { return CreateChecked(stack, catalog, map, window, centre); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or DatException or InvalidOperationException)
+        { return new(AreaMapPlanStatus.Unreadable, null, error.GetType().Name); }
+    }
+
+    private static AreaMapPlanResult CreateChecked(ContentStack stack, WorldCatalog catalog, WorldMap map,
+        IReadOnlyList<(WorldSectorSource Source, AreaScope Scope)>? window = null, WorldSectorCoordinate? centre = null)
     {
         var module = stack.Plan.SearchOrder.SingleOrDefault(s => s.Role == ContentSourceRole.ModuleArchive);
         if (module is null) return new(AreaMapPlanStatus.MissingSource, null, "module archive");
@@ -123,16 +162,31 @@ public static class AreaMapPlans
 
         // Prototypes and object counts come from the catalogue's own reads of the map.
         var prototypes = new SortedSet<int>(); long objects = 0;
-        foreach (var coordinate in map.SectorFiles)
-        {
-            var sector = catalog.ReadSector(map, coordinate).Sector;
-            if (sector is null) continue;
-            objects += sector.Objects.Count;
-            foreach (var item in sector.Objects) if (item.PrototypeNumber is { } number) prototypes.Add(number);
-        }
+        if (window is null)
+            foreach (var coordinate in map.SectorFiles)
+            {
+                var sector = catalog.ReadSector(map, coordinate).Sector;
+                if (sector is null) continue;
+                objects += sector.Objects.Count;
+                foreach (var item in sector.Objects) if (item.PrototypeNumber is { } number) prototypes.Add(number);
+            }
+        else
+            foreach (var (source, _) in window)
+            {
+                var sector = catalog.ReadResolvedSector(map, source).Sector;
+                if (sector is null) return new(AreaMapPlanStatus.Unreadable, null, source.Path);
+                objects += sector.Objects.Count;
+                foreach (var item in sector.Objects) if (item.PrototypeNumber is { } number) prototypes.Add(number);
+            }
         var mobiles = catalog.ReadMobiles(map);
-        objects += mobiles.Objects.Count;
-        foreach (var item in mobiles.Objects) if (item.PrototypeNumber is { } number) prototypes.Add(number);
+        // A window keeps the mobile objects standing in its sectors; the owner still reads the whole file (ledger SS7).
+        var windowSectors = window?.Select(w => w.Source.Coordinate).ToHashSet();
+        foreach (var item in mobiles.Objects)
+        {
+            if (windowSectors is not null && (item.Location is not { } location || !windowSectors.Contains(WorldSectorCoordinate.Containing(location)))) continue;
+            objects++;
+            if (item.PrototypeNumber is { } number) prototypes.Add(number);
+        }
 
         // Resource sources in search order: each archive that wins a name under art/, and each
         // loose file a folder wins there. Every resource name's winner is then a listed source.
@@ -227,15 +281,39 @@ public static class AreaMapPlans
             mappings.Add(new(role, entry, Hash(read.Bytes!)));
         }
 
+        // ARC-DATA-032: each distinct template of a window is one authenticated input, read from the stack's winner (the
+        // original reads templates while the game runs, ledger SS5).
+        var templates = new Dictionary<string, AreaInputKey>(StringComparer.Ordinal);
+        var windowPlan = new List<AreaWindowSector>();
+        foreach (var (source, scope) in window ?? [])
+        {
+            AreaInputKey? template = null;
+            if (source.Kind == WorldSectorSourceKind.Template)
+            {
+                if (!templates.TryGetValue(source.Path!, out var key))
+                {
+                    key = new(AreaSourceRole.TerrainTemplate, templates.Count);
+                    var winner = stack.Resolve(source.Path!).Winner;
+                    if (winner is null) return new(AreaMapPlanStatus.MissingSource, null, source.Path);
+                    if (Member(stack, key, winner, files, identities, 16L * 1048576, source.Path!) is { } failure) return failure;
+                    templates.Add(source.Path!, key);
+                }
+                template = key;
+            }
+            windowPlan.Add(new(new(source.Coordinate.X, source.Coordinate.Y), scope, template));
+        }
+
         var (catalogueMap, runtimeMap, startTile) = CatalogueEntry(stack, map.Name);
-        var start = startTile is { } tile && map.HasSectorFile(WorldSectorCoordinate.Containing(tile))
-            ? WorldSectorCoordinate.Containing(tile) : map.SectorFiles[0];
+        var start = centre ?? (startTile is { } tile && map.HasSectorFile(WorldSectorCoordinate.Containing(tile))
+            ? WorldSectorCoordinate.Containing(tile) : map.SectorFiles[0]);
         var plan = new AreaSourcePlan(catalogueMap, runtimeMap, new(start.X, start.Y), 0, map.Folder, identities, mappings)
         {
-            Selection = AreaSectorSelection.AllSectors, AllowArtTrailingBytes = true, ResourceOrder = order, MapPatch = patchBinding,
+            Selection = window is null ? AreaSectorSelection.AllSectors : AreaSectorSelection.Window, AllowArtTrailingBytes = true, ResourceOrder = order,
+            MapPatch = patchBinding, Window = window is null ? null : new(windowPlan.AsReadOnly()),
         };
         var resources = identities.Count(i => i.Key.Role is AreaSourceRole.Archive or AreaSourceRole.Loose);
-        return new(AreaMapPlanStatus.Ready, new(map, plan, files.AsReadOnly(), Limits(map.SectorFiles.Count, objects, mobiles.Objects.Count, aggregateBytes, prototypes.Count, resources), startTile));
+        return new(AreaMapPlanStatus.Ready, new(map, plan, files.AsReadOnly(),
+            Limits(window?.Count ?? map.SectorFiles.Count, objects, mobiles.Objects.Count, aggregateBytes, prototypes.Count, resources, templates.Count), startTile));
     }
 
     private const string MapPatchPath = "rules/map.patch";
@@ -289,10 +367,10 @@ public static class AreaMapPlans
     }
 
     /// <summary>Limits from the pinned exterior profile (20 present sectors, 524 objects): memory
-    /// budgets scaled by the map's sectors or objects, whichever grows more, capped at
-    /// <see cref="MaxLimitScale"/>; frame budgets at that cap outright. Count limits follow the
-    /// map exactly.</summary>
-    internal static AreaLoaderOptions Limits(int sectors, long objects, int mobiles, long aggregateBytes, int prototypes, int resources = 0)
+    /// budgets scaled by the plan's sectors or objects (a whole map's, or a window's, ARC-DATA-032), whichever grows more,
+    /// capped at <see cref="MaxLimitScale"/>; frame budgets at that cap outright. Count limits follow the plan exactly; the
+    /// aggregate limits follow the whole mobile file, which the owner reads for a window too.</summary>
+    internal static AreaLoaderOptions Limits(int sectors, long objects, int mobiles, long aggregateBytes, int prototypes, int resources = 0, int templates = 0)
     {
         var baseline = new AreaLoaderOptions();
         var factor = Math.Clamp(Math.Max(sectors / 20.0, objects / 524.0), 1.0, MaxLimitScale);
@@ -311,7 +389,7 @@ public static class AreaMapPlans
             MaxFrameRgbaBytes = Frames(baseline.MaxFrameRgbaBytes), MaxFrameEncodedBytes = Frames(baseline.MaxFrameEncodedBytes),
             MaxSurvey = sectors, MaxPresentSectors = sectors, MaxAggregateRecords = Math.Max(1, mobiles),
             MaxAggregateBytes = (int)Math.Clamp(aggregateBytes, 16, int.MaxValue),
-            MaxPrototypes = Math.Max(1, prototypes), MaxResourceInputs = resources, MaxObjects = (int)Math.Clamp(objects + 1, 1, int.MaxValue), MaxVisuals = (int)visuals,
+            MaxPrototypes = Math.Max(1, prototypes), MaxResourceInputs = resources, MaxTerrainTemplates = templates, MaxObjects = (int)Math.Clamp(objects + 1, 1, int.MaxValue), MaxVisuals = (int)visuals,
         };
     }
 

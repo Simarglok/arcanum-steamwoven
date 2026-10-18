@@ -50,9 +50,10 @@ public sealed partial class AreaDataOwner : IDisposable
             // any input. Four non-prototype roles plus the admitted prototypes
             // define this loader's source-count envelope, not a heap estimate.
             // ARC-DATA-018 adds the plan's own resource archives and loose resource files.
-            // ARC-DATA-028 adds the map patch.
-            if (inputs.Inputs.Count > 5L + limits.MaxPrototypes + limits.MaxResourceInputs ||
-                plan.Identities.Count > 5L + limits.MaxPrototypes + limits.MaxResourceInputs ||
+            // ARC-DATA-028 adds the map patch, ARC-DATA-032 a window's terrain templates.
+            if (inputs.Inputs.Count > 5L + limits.MaxPrototypes + limits.MaxResourceInputs + limits.MaxTerrainTemplates ||
+                plan.Identities.Count > 5L + limits.MaxPrototypes + limits.MaxResourceInputs + limits.MaxTerrainTemplates ||
+                plan.Identities.Count(i => i.Key.Role == AreaSourceRole.TerrainTemplate) > limits.MaxTerrainTemplates ||
                 plan.Identities.Count(i => i.Key.Role == AreaSourceRole.Prototype) > limits.MaxPrototypes ||
                 plan.Identities.Count(i => i.Key.Role is AreaSourceRole.Archive or AreaSourceRole.Loose) > limits.MaxResourceInputs ||
                 plan.Mappings.Count > Enum.GetValues<AreaMappingRole>().Length || plan.ArtBindings.Count > limits.MaxVisuals)
@@ -62,6 +63,20 @@ public sealed partial class AreaDataOwner : IDisposable
             // A map patch input exactly when the plan binds one, and never on a pinned profile.
             if (plan.Identities.Any(i => i.Key.Role == AreaSourceRole.MapPatch && i.Key.Number != 0) ||
                 (plan.MapPatch is not null) != plan.Identities.Any(i => i.Key.Role == AreaSourceRole.MapPatch) || plan.Original && plan.MapPatch is not null)
+                throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
+            // ARC-DATA-032: a window is bounded by the present-sector limit before anything is built from it.
+            if (plan.Window is { } bounded && (bounded.Sectors is null || bounded.Sectors.Any(s => s is null)))
+                throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
+            if (plan.Window is { } large && large.Sectors.Count > limits.MaxPresentSectors) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Input);
+            // A window exactly for the window selection, never on a pinned profile; its sectors are distinct,
+            // core or context, and its templates are exactly the plan's template inputs.
+            if ((plan.Window is not null) != (plan.Selection == AreaSectorSelection.Window) || plan.Original && plan.Window is not null ||
+                plan.Window is { } window && (window.Sectors.Count == 0 || window.Sectors.Select(s => s.Coordinate).Distinct().Count() != window.Sectors.Count ||
+                    window.Sectors.Any(s => s.Scope is not (AreaScope.Core or AreaScope.Context) || s.Template is { Role: not AreaSourceRole.TerrainTemplate }) ||
+                    !window.Sectors.Any(s => s.Scope == AreaScope.Core) ||
+                    !window.Sectors.Where(s => s.Template is not null).Select(s => s.Template!.Value).ToHashSet()
+                        .SetEquals(plan.Identities.Where(i => i.Key.Role == AreaSourceRole.TerrainTemplate).Select(i => i.Key))) ||
+                plan.Window is null && plan.Identities.Any(i => i.Key.Role == AreaSourceRole.TerrainTemplate))
                 throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
             // A stack order is the whole resource search: every archive or loose input is in it,
             // and a pinned profile keeps its own archive rule.
@@ -79,7 +94,7 @@ public sealed partial class AreaDataOwner : IDisposable
                     identity.Key.Role == AreaSourceRole.NormalGameMobile && identity.Length > limits.MaxAggregateBytes ||
                     identity.Key.Role == AreaSourceRole.MapPatch && identity.Length > Maps.MapPatchFile.MaxBytes ||
                     identity.Key.Role is AreaSourceRole.Module or AreaSourceRole.Resource1 or AreaSourceRole.Resource2 or AreaSourceRole.Archive && identity.Length > 536870912 ||
-                    identity.Key.Role == AreaSourceRole.Loose && identity.Length > EntryCap(plan))
+                    identity.Key.Role is AreaSourceRole.Loose or AreaSourceRole.TerrainTemplate && identity.Length > EntryCap(plan))
                     throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Input);
                 // AreaPathStream's caller-created FileStream can lazily allocate
                 // its single 64 KiB read buffer on our first small read. It stays
@@ -174,7 +189,7 @@ public sealed partial class AreaDataOwner : IDisposable
                 else AuthenticateAll(cancellationToken);
                 BeginEntryMemo();
                 AreaInspection inspection;
-                _sharedFrames = !_plan.Original && _plan.Selection == AreaSectorSelection.AllSectors ? new() : null;
+                _sharedFrames = _plan.UniversalRules ? new() : null;
                 try { inspection = Build(cancellationToken, output); }
                 finally { _missingMasks = null; _artHolders = null; _objectTiles = null; _sharedFrames = null; } // build-local (ARC-DATA-023/024)
                 EndEntryMemo();
@@ -273,7 +288,7 @@ public sealed partial class AreaDataOwner : IDisposable
     /// plans with the original's ART rules, whose maps hold larger ART (ARC-DATA-019); 1 MiB
     /// otherwise, so pinned profiles are unchanged.</summary>
     internal static long EntryCap(AreaSourcePlan plan) =>
-        !plan.Original && plan.Selection == AreaSectorSelection.AllSectors && plan.AllowArtTrailingBytes ? 16L * 1048576 : 1048576;
+        plan.UniversalRules && plan.AllowArtTrailingBytes ? 16L * 1048576 : 1048576;
     private void Alive() { if (_disposed) throw new ObjectDisposedException(nameof(AreaDataOwner)); }
     private static AreaException Fail(AreaErrorCode code, AreaStage stage, long? offset = null, int? index = null) => new(new(code, stage, offset, index));
     private AreaInputIdentity Identity(AreaInputKey key) => _plan.Identities.SingleOrDefault(i => i.Key == key) ?? throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);

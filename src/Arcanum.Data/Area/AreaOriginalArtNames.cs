@@ -13,7 +13,7 @@ public sealed partial class AreaDataOwner
 {
     /// <summary>A whole-map plan that reads ART as the original does. (<c>_plan.Original</c>
     /// means a pinned Crash Site profile; those keep their own rules.)</summary>
-    private bool OriginalArtNames => !_plan.Original && _plan.Selection == AreaSectorSelection.AllSectors && _plan.AllowArtTrailingBytes;
+    private bool OriginalArtNames => _plan.UniversalRules && _plan.AllowArtTrailingBytes;
     internal const string BadArtPath = "art/badart.art";
     internal const string BadArtPolicy = "original-badart-v1";
     private const int CritterMasks = 10;

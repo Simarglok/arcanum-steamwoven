@@ -176,7 +176,7 @@ public sealed partial class AreaDataOwner
     /// across its mounted archives: the first in its stack order (ARC-DATA-018), or, without one,
     /// the one of the two base archives that holds it.</summary>
     private AreaEntryIdentity Resolve(AreaInputKey source, string path) =>
-        _plan.ResourceOrder.Count > 0 || _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original ? ClosedUnique(path) : Unique(source, path);
+        _plan.ResourceOrder.Count > 0 || _plan.UniversalRules ? ClosedUnique(path) : Unique(source, path);
     private AreaEntryIdentity ClosedUnique(string path)
     {
         if (_plan.ResourceOrder.Count > 0) return StackFirst(path);
@@ -347,7 +347,7 @@ public sealed partial class AreaDataOwner
     }
     private sealed record Request(AreaEntryIdentity Entry, uint Lookup, int Nominal, int Group, int Frame, int Palette, bool Mirror, string? Policy = null);
     /// <summary>Doors and windows are drawn only by whole-map plans that bind the portal names.</summary>
-    private bool PortalsAdmitted => !_plan.Original && _plan.Selection == AreaSectorSelection.AllSectors && _plan.Mappings.Any(m => m.Role == AreaMappingRole.Portal);
+    private bool PortalsAdmitted => _plan.UniversalRules && _plan.Mappings.Any(m => m.Role == AreaMappingRole.Portal);
     private bool WallsAdmitted => _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallStructure) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallName);
     // Wall piece file codes by piece index: the file naming order of the source's wall file name builder,
     // docs/research/cave-transition-evidence.md T7.

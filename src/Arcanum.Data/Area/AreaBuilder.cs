@@ -21,6 +21,15 @@ public sealed partial class AreaDataOwner
         var issues = new List<AreaIssue>();
         var moduleKey = new AreaInputKey(AreaSourceRole.Module); var module = Archive(moduleKey);
         var candidates = module.Entries.Where(e => Name(e).StartsWith(_plan.SectorPrefix, StringComparison.Ordinal) && Name(e).EndsWith(".sec", StringComparison.Ordinal)).ToArray();
+        // ARC-DATA-032: a window surveys only its own sector files, which the module archive must hold.
+        var window = _plan.Window?.Sectors.ToDictionary(s => s.Coordinate.Packed);
+        if (window is not null)
+        {
+            var own = window.Values.Where(s => s.Template is null).Select(s => _plan.SectorPrefix + s.Coordinate.Packed.ToString(CultureInfo.InvariantCulture) + ".sec").ToHashSet(StringComparer.Ordinal);
+            candidates = candidates.Where(e => own.Contains(Name(e))).ToArray();
+            if (candidates.Select(Name).Distinct(StringComparer.Ordinal).Count() != candidates.Length) throw Fail(AreaErrorCode.DuplicateIdentity, AreaStage.Selection);
+            if (candidates.Length != own.Count) throw Fail(AreaErrorCode.MissingSource, AreaStage.Selection);
+        }
         if (candidates.Length > _limits.MaxSurvey) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Selection);
 
         var survey = new SortedDictionary<long, SurveyRow>();
@@ -41,6 +50,7 @@ public sealed partial class AreaDataOwner
         }
         var core = new HashSet<long>(); var queue = new Queue<AreaSectorCoordinate>(); queue.Enqueue(_plan.Start);
         if (_plan.Selection == AreaSectorSelection.AllSectors) { core.UnionWith(survey.Keys); queue.Clear(); }
+        if (window is not null) { core.UnionWith(window.Values.Where(s => s.Scope == AreaScope.Core).Select(s => s.Coordinate.Packed)); queue.Clear(); }
         while (queue.TryDequeue(out var coordinate))
         {
             token.ThrowIfCancellationRequested();
@@ -51,9 +61,10 @@ public sealed partial class AreaDataOwner
         if (core.Count == 0) throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Selection);
         // A whole map has no context ring: its sectors without files are the map's own edge.
         var ring = _plan.Selection == AreaSectorSelection.AllSectors ? new HashSet<long>()
+            : window is not null ? window.Values.Where(s => s.Scope == AreaScope.Context).Select(s => s.Coordinate.Packed).ToHashSet()
             : core.SelectMany(id => Neighbors(AreaSectorCoordinate.Unpack(id), diagonal: true)).Select(c => c.Packed).Where(id => !core.Contains(id)).ToHashSet();
         if (core.Count + ring.Count > checked(_limits.MaxPresentSectors + 16)) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Selection);
-        var present = core.Concat(ring).Where(survey.ContainsKey).Order().ToArray();
+        var present = core.Concat(ring).Where(id => survey.ContainsKey(id) || window?.GetValueOrDefault(id)?.Template is not null).Order().ToArray();
         if (present.Length > _limits.MaxPresentSectors) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Selection);
         _budget.BeginPhase(AreaBudgetPhase.I2);
         // Admit the shared finite wire-schema/hash initialization before the
@@ -64,7 +75,7 @@ public sealed partial class AreaDataOwner
         TerrainLoader.TileNames tiles; TerrainLoader.FacadeNames facades;
         try
         {
-            tiles = TerrainLoader.TileNames.Parse(mappings[AreaMappingRole.Tile], originalNames: _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original);
+            tiles = TerrainLoader.TileNames.Parse(mappings[AreaMappingRole.Tile], originalNames: _plan.UniversalRules);
             facades = TerrainLoader.FacadeNames.Parse(mappings[AreaMappingRole.Facade]);
             _objectTiles = tiles;
         }
@@ -83,11 +94,19 @@ public sealed partial class AreaDataOwner
         _budget.BeginPhase(AreaBudgetPhase.I3);
         foreach (var packed in present)
         {
-            token.ThrowIfCancellationRequested(); var row = survey[packed]; var coordinate = row.Coordinate; var scope = core.Contains(packed) ? AreaScope.Core : AreaScope.Context;
+            token.ThrowIfCancellationRequested(); var scope = core.Contains(packed) ? AreaScope.Core : AreaScope.Context;
+            // ARC-DATA-032: a generated window sector is its template file read like a sector file (ledger SS5, SS6).
+            var template = window?.GetValueOrDefault(packed)?.Template;
+            var row = template is null ? survey[packed] : null; var coordinate = AreaSectorCoordinate.Unpack(packed);
+            var sourceKey = template ?? moduleKey;
             using var payload = new AreaOwnership(_budget);
-            var bytes = ReadEntry(EntryIdentity(moduleKey, row.Entry), token, payload); payload.Allocate(checked(bytes.Length * 2L + 32768));
+            var bytes = template is { } templateKey ? ReadFile(templateKey, token, payload) : ReadEntry(EntryIdentity(moduleKey, row!.Entry), token, payload);
+            payload.Allocate(checked(bytes.Length * 2L + 32768));
             var parsed = ParseSector(bytes); var framing = parsed.Framing;
-            var sectorKey = new AreaSectorKey(Identity(moduleKey).Sha256, _plan.RuntimeMap, packed);
+            var sectorKey = new AreaSectorKey(Identity(sourceKey).Sha256, _plan.RuntimeMap, packed);
+            int? townmap = row?.Townmap;
+            if (template is not null && framing[TerrainSection.MetadataAndSound] is { Length: > 0 } templateMetadata)
+                townmap = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(templateMetadata.Offset));
             output.Allocate(checked(4096L * 384 + 8192));
             output.Allocate(checked(framing.LightCount * 128L));
             var lights = new List<IReadOnlyList<int>>();
@@ -95,13 +114,15 @@ public sealed partial class AreaDataOwner
             for (var l = 0; l < framing.LightCount; l++)
             {
                 var words = new int[12]; for (var w = 0; w < 12; w++) words[w] = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(lightRange.Offset + 48 * l + 4 * w));
-                lights.Add(Array.AsReadOnly(words));
+                // A template light moves by the object rule (ledger Wilderness A1): its location is words 2 and 3.
+                lights.Add(template is null ? Array.AsReadOnly(words) : WorldCatalog.RelocateLight(words, new(checked((int)coordinate.X), checked((int)coordinate.Y))));
             }
-            sectors.Add(new(sectorKey, coordinate, scope, true, row.Entry.Ordinal, row.Townmap, framing.LightCount, framing.RoofDiscriminator, framing.Placeholder,
-                framing.ObjectWindow.TerminalObjectCount, Array.AsReadOnly(framing.Ranges.OrderBy(p => p.Key).Select(p => new AreaByteRange(p.Value.Offset, p.Value.Length)).ToArray()), lights.AsReadOnly(), EntryIdentity(moduleKey, row.Entry), ObjectWireReader.Hash(bytes)));
+            sectors.Add(new(sectorKey, coordinate, scope, true, row?.Entry.Ordinal, townmap, framing.LightCount, framing.RoofDiscriminator, framing.Placeholder,
+                framing.ObjectWindow.TerminalObjectCount, Array.AsReadOnly(framing.Ranges.OrderBy(p => p.Key).Select(p => new AreaByteRange(p.Value.Offset, p.Value.Length)).ToArray()), lights.AsReadOnly(),
+                row is null ? null : EntryIdentity(moduleKey, row.Entry), ObjectWireReader.Hash(bytes), template));
             // Roofs are not drawn yet. A pinned profile treats a roof list as unsupported; a whole
             // map keeps it in the sector record (RoofDiscriminator) for a later roof renderer.
-            if (framing.RoofDiscriminator == 0 && _plan.Selection != AreaSectorSelection.AllSectors)
+            if (framing.RoofDiscriminator == 0 && !_plan.UniversalRules)
                 issues.Add(new(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Sector, framing[TerrainSection.Roof].Offset));
             for (var ordinal = 0; ordinal < 4096; ordinal++)
             {
@@ -145,13 +166,13 @@ public sealed partial class AreaDataOwner
             {
                 using var wire = new AreaOwnership(_budget);
                 var record = ReadWire(bytes.AsSpan(start, end - start), AreaStage.Sector, start, ordinal, ownership: wire);
-                instanceIds.Register(record, moduleKey, packed, start, AreaStage.Sector, ordinal, allowNull: true);
-                AddObject(record, moduleKey, packed, ordinal, start, scope, coordinate, definitions, prototypes, objects, visuals, mappings, issues, token, output);
+                instanceIds.Register(record, sourceKey, packed, start, AreaStage.Sector, ordinal, allowNull: true);
+                AddObject(record, sourceKey, packed, ordinal, start, scope, coordinate, definitions, prototypes, objects, visuals, mappings, issues, token, output);
                 start = checked(start + record.Length);
             }
             if (start != end) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Sector, start, framing.ObjectWindow.TerminalObjectCount);
         }
-        foreach (var packed in ring.Except(survey.Keys).Order())
+        foreach (var packed in ring.Except(present).Order())
         {
             var coordinate = AreaSectorCoordinate.Unpack(packed);
             sectors.Add(new(new(Identity(moduleKey).Sha256, _plan.RuntimeMap, packed), coordinate, AreaScope.Context, false, null, null, 0, 1, 0, 0, [], [], null, null));
@@ -282,7 +303,7 @@ public sealed partial class AreaDataOwner
             // 0x2 or don't-draw 0x100; every trap is don't-draw), whatever its type: consumers
             // draw no such body. The original still draws a don't-draw object's overlays, so
             // their admission check below still applies unless the object is destroyed or off.
-            var hiddenOnWholeMap = _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original && disposition == AreaDisposition.BodySuppressedBySerializedState;
+            var hiddenOnWholeMap = _plan.UniversalRules && disposition == AreaDisposition.BodySuppressedBySerializedState;
             if (scope == AreaScope.Core)
             {
                 if (!hiddenOnWholeMap)
@@ -291,7 +312,7 @@ public sealed partial class AreaDataOwner
                     // A whole map also draws scrolls, keys and key rings (types 10-12): their ground
                     // ART is the same item class as every admitted item type.
                     if (record.Type is not 2 and not 3 and not 5 and not 6 and not 7 and not 8 and not 9 and not 13 and not 14 and not 16 && !(record.Type == 0 && WallsAdmitted) &&
-                        !(record.Type is 10 or 11 or 12 && _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original) && !(record.Type == 1 && PortalsAdmitted))
+                        !(record.Type is 10 or 11 or 12 && _plan.UniversalRules) && !(record.Type == 1 && PortalsAdmitted))
                         throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
                     var aid = unchecked((uint)Number(effective, 0)); var ox = checked((int)Number(effective, 2)); var oy = checked((int)Number(effective, 3)); var scale = checked((int)Number(effective, 11));
                     var visualSector = sector ?? new AreaSectorCoordinate(x.Value / 64, y.Value / 64);
@@ -477,7 +498,7 @@ public sealed partial class AreaDataOwner
         for (; i < text.Length && char.IsAsciiDigit(text[i]); i++) value = unchecked(value * 10 + (text[i] - '0'));
         return unchecked(negative ? -value : value);
     }
-    private bool RoofsAdmitted => _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original
+    private bool RoofsAdmitted => _plan.UniversalRules
         && _plan.Mappings.Any(m => m.Role == AreaMappingRole.Roof) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.RoofShade);
     private void AdmitVisual(List<AreaVisualRecord> visuals)
     { if (visuals.Count >= _limits.MaxVisuals) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Frame); }
