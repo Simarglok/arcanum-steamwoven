@@ -59,7 +59,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 
 ## Research evidence
 
-- [ART decoder specification record](research/art-ce-spec.md)
+- [ART decoder specification record](research/art-decoder-spec.md)
 - [ART research evidence record](research/art-evidence.md)
 - [Actor visual evidence and anchor readiness gap (ARC-RES-009)](research/actor-visual-evidence.md)
 - [Actor world-anchor placement evidence (ARC-RES-010)](research/actor-placement-evidence.md)

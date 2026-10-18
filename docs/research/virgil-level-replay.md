@@ -14,9 +14,8 @@ file, and adds no level-up runtime. Requirements:
 [FR-SOCIAL-003](../requirements/story-social-ai.md#fr-social-003).
 
 Categories as in [ARC-RES-031](virgil-auto-level.md): **Source (S)** is
-`alexbatalov/arcanum-ce` at
-[`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd)
-(Sustainable Use License 1.0; read for intent, nothing copied); **Data (D)** is
+read from the executable's functions at the addresses given, level F0 (not
+checked in the executable) unless a ledger row is cited, for intent; **Data (D)** is
 the authenticated installation (its `Version.txt` says 1.0.7.4) read by the
 probe; **External (X)** is a public changelog or player report, the weakest
 category, used only to confirm or contradict S and D; **Proposal (P)** and
@@ -79,22 +78,23 @@ actions are not counted).
 
 ## 1. The purchase model (S)
 
-The replay is a model of the CE helpers as read, run over explicit inputs. It
-is research evidence, not a runtime.
+The replay is a model of the purchase helpers as first read, run over explicit
+inputs (several were later checked in the executable: ledger rows AL4–AL10 of
+the auto-level schemes). It is research evidence, not a runtime.
 
 | ID | Rule the replay applies | Source |
 | --- | --- | --- |
-| R1 | Effective stat = base, then effects (percent, multiply, divide, add, largest minimum, smallest maximum), clamped (primary stats 1..20 for a human). An NPC has no background term. | [stat.c 336–527][stat-level], [effect.c 741–850][fold] |
-| R2 | A stat unit costs 1 (0 only to reach 1). After a purchase the loop compares the **effective** value with the target, so an effect that lowers the stat makes the helper set the same base again and pay for it. | [stat.c 151–172][stat-cost], [stat.c 835–844][stat-cost-fn], [level.c 949–982][buy-stat] |
-| R3 | A skill rank (4 levels) costs 1. The skill level is 4 × points, then effects, clamped 0..20, then capped by the key stat (3 up to 5, 7 at 6–8, 11 at 9–11, 15 at 12–14, 19 at 15–17, 20 from 18). A rank the cap refuses buys one base unit of the key stat instead. Key stats: dodge, melee and lock picking dexterity, heal intelligence. | [skill.c 37–62][key-stats], [skill.c 145–166][cap], [skill.c 506–545][basic-level], [skill.c 592–625][basic-set], [skill.c 1037–1140][tech], [level.c 989–1072][buy-skill] |
-| R4 | A college rank costs 1. Rank *k* needs character level 1, 1, 5, 10, 15, intelligence 5, and the willpower named by the spell's `IQ:` value or by default 6, 9, 12, 15, 18. Too low a level skips the step; otherwise the helper buys intelligence (if short) or willpower. | [spell.c 31–37][min-level], [spell.c 465–526][spell-add], [magictech.c 1472–1490][min-stats], [magictech.c 468–474][default-wp], [magictech.c 1375–1415][spell-entries], [level.c 1079–1126][buy-spell] |
-| R5 | A hit (fatigue) point costs 1 and adds 4: maximum hit points = willpower + 2 × (strength + level) + 4 + adjustment + 4 × points; fatigue = 4 × points + adjustment + 2 × (level + constitution) + willpower + 4; both then through effects. | [object.c 1632–1677][hp], [critter.c 502–524][fatigue], [level.c 1178–1212][buy-misc] |
+| R1 | Effective stat = base, then effects (percent, multiply, divide, add, largest minimum, smallest maximum), clamped (primary stats 1..20 for a human). An NPC has no background term. | stat 0x4B0490, effect 0x4EA6C0 |
+| R2 | A stat unit costs 1 (0 only to reach 1). After a purchase the loop compares the **effective** value with the target, so an effect that lowers the stat makes the helper set the same base again and pay for it. | stat tables, stat 0x4B0F50, level 0x4A75E0 |
+| R3 | A skill rank (4 levels) costs 1. The skill level is 4 × points, then effects, clamped 0..20, then capped by the key stat (3 up to 5, 7 at 6–8, 11 at 9–11, 15 at 12–14, 19 at 15–17, 20 from 18). A rank the cap refuses buys one base unit of the key stat instead. Key stats: dodge, melee and lock picking dexterity, heal intelligence. | skill tables, skill 0x4C5EB0, 0x4C6000, 0x4C65E0, 0x4C6680, 0x4C66E0, level 0x4A76B0, 0x4A77A0 |
+| R4 | A college rank costs 1. Rank *k* needs character level 1, 1, 5, 10, 15, intelligence 5, and the willpower named by the spell's `IQ:` value or by default 6, 9, 12, 15, 18. Too low a level skips the step; otherwise the helper buys intelligence (if short) or willpower. | spell 0x4B1790 and its table, magic-tech 0x4502E0, 0x4502F0, 0x450090 and a magic-tech table, level 0x4A7890 |
+| R5 | A hit (fatigue) point costs 1 and adds 4: maximum hit points = willpower + 2 × (strength + level) + 4 + adjustment + 4 × points; fatigue = 4 × points + adjustment + 2 × (level + constitution) + willpower + 4; both then through effects. | object 0x43D5A0, 0x43D600, 0x43D630, 0x43D690, critter 0x45D670, level 0x4A7AA0 |
 | R6 | Per level-up: level + 1, +1 point (+2 at multiples of 5, unspent capped at 56), scheme rule from step 0, standard rule 70 if the scheme completes; running out of points stops a rule, other failures skip a step. | ARC-RES-031 L3–L7 |
 
 The replay assumes he follows from T0 and the PC gains one level at a time. A
 multi-level jump grants its points at once and could buy in a different
 order (not replayed). The level-up also runs the Educator background on
-followers ([level.c 559][educate]), which sets training bits only and does
+followers (level 0x4A69C0), which sets training bits only and does
 not change purchases; poison and the monstrous-melee case do not apply to
 him. The model refuses a non-human sheet.
 
@@ -175,11 +175,8 @@ points. So the step that `Arcanum4.dat` drops costs three of his level-ups.
 ## 4. Scripts that act on him (D, read with S)
 
 Script lines below are read with the source's focus, value, condition and
-action enums ([script.h 46–81][enums], [script.h 95–294][enums2]) and handlers
-([script.c 1511–1575][arith], [script.c 1746–1757][get-stat],
-[script.c 1875–1889][teleport], [script.c 2380–2394][change-script],
-[script.c 2767–2821][adjust-set], [script.c 904–925][named],
-[script.c 631–648][compare]). Unused operand slots
+action enumerations and handlers
+(script 0x447220, 0x4451B0). Unused operand slots
 hold editor leftovers and are not read.
 
 **1997, enter combat.** Lines 0–3: get the player's alignment, get his own,
@@ -202,7 +199,7 @@ maxhps 140, dx 20, necro_evil 5, maxfatigue 200, maxhps 250.
 | ID | Source | What it says | Agrees with |
 | --- | --- | --- | --- |
 | X1 | [GOG forum, 2014](https://www.gog.com/forum/arcanum_of_steamworks_and_magick_obscura/virgil_doesnt_improve_anything_when_he_gets_to_level_10) | At level 10 Virgil's sheet shows no change except hit points, 55 → 65; each level adds 2 hit points and 2 fatigue. | The replay at levels 9–10 and R5 exactly |
-| X2 | [Arcanum 1.0.7.4 update notes](https://arcanumclub.org/sierra/support/arcanum_update1074.html) | XP continues at level 50; followers then level up; new script opcodes change auto-level schemes and standpoints on other maps; fixes for Virgil leaving and returning. | L7 at PC level 50 (contradicts the CE reading of A1), the set-scheme and standpoint actions of script 2023 |
+| X2 | [Arcanum 1.0.7.4 update notes](https://arcanumclub.org/sierra/support/arcanum_update1074.html) | XP continues at level 50; followers then level up; new script opcodes change auto-level schemes and standpoints on other maps; fixes for Virgil leaving and returning. | L7 at PC level 50 (contradicts the earlier reading of A1; the original agrees with the note, ledger row A1 (auto-level)), the set-scheme and standpoint actions of script 2023 |
 | X3 | [Steam discussion](https://steamcommunity.com/app/500810/discussions/0/1746768126951068036) | The Unofficial Arcanum Patch lets the player set a follower to "no scheme"; otherwise followers spend their own points. | ARC-RES-031 L9 (no scheme control in the unpatched sheet) |
 
 X1 and X2 are not original-executable traces; they only raise confidence in
@@ -219,7 +216,8 @@ the model where they agree.
    replay's level 2..50 table as a real-data regression for Virgil.
 2. Keep the ARC-RES-031 gate conclusion; add the level-50 follower rule from
    X2 as the installed-version behaviour, behind an explicit policy flag,
-   since it contradicts the CE reading.
+   since it contradicts the earlier reading (the original matches X2: ledger
+   row A1 (auto-level)).
 3. Treat 1997's alignment copy as an input to the consent evaluator when
    combat exists: after any fight Virgil's alignment equals the PC's.
 
@@ -238,42 +236,12 @@ the model where they agree.
 
 ## Method
 
-Source reading at the pinned commit, the read-only probe `--virgil-auto-level`
+Source reading of the executable's functions, the read-only probe `--virgil-auto-level`
 (self-test `--virgil-auto-level-self-test` now also covers the effect grammar
 and fold, the formulas, every purchase helper including the R2 loop, the
 tech-points side effect and a refused hit point, the spell gates, rule runs,
 the replay and the reach; the line decoder and the flag-writer scan are
-exercised only by the real data), and the outside sources above. The replay follows the CE helpers'
-control flow closely because it is a research model of them; a runtime should
+exercised only by the real data), and the outside sources above. The replay follows the purchase helpers'
+control flow as first read closely because it is a research model of them; a runtime should
 be written from R1–R6, not ported from this file.
 
-[stat-level]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L336-L527
-[fold]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L741-L850
-[stat-cost]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L151-L172
-[buy-stat]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L949-L982
-[key-stats]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L37-L62
-[cap]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L145-L166
-[basic-level]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L506-L545
-[basic-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L592-L625
-[tech]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L1037-L1140
-[buy-skill]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L989-L1072
-[min-level]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/spell.c#L31-L37
-[spell-add]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/spell.c#L465-L526
-[min-stats]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L1472-L1490
-[default-wp]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L468-L474
-[spell-entries]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L1375-L1415
-[buy-spell]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L1079-L1126
-[hp]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L1632-L1677
-[fatigue]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L502-L524
-[buy-misc]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L1178-L1212
-[enums]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L46-L81
-[enums2]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L95-L294
-[teleport]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1875-L1889
-[adjust-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2767-L2821
-[stat-cost-fn]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L835-L844
-[educate]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L559
-[arith]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1511-L1575
-[get-stat]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1746-L1757
-[change-script]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2380-L2394
-[named]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L904-L925
-[compare]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L631-L648

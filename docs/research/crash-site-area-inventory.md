@@ -9,14 +9,13 @@ loaded/live readiness remains NOT_READY.
 ARC-RES-015 expands the [frozen initial sector](crash-site-slice.md) into a
 reproducible **research area**, not a production loader, scene or gameplay implementation.
 
-- **Source fact** means the attributed pinned CE specification, not original execution.
+- **Source fact** means a reading of the executable's functions, level F0 (not checked in the executable) unless a ledger row is cited, not original execution.
 - **Local observation** means a bounded read of the identified unchanged installation.
 - **Project policy** means this research selection or diagnostic convention, not a stored engine boundary.
 - **Unknown / NOT_VERIFIED** remains separate from parsed, resource-resolved and numerically placed.
 
-Code was independently authored after inspecting specification sources. CE and its
-Sustainable Use License are attributed; this is not a clean-room or MIT relicense claim.
-The preserved toolkit manifest has SHA-256
+Code was independently authored after inspecting specification sources; earlier
+provenance is in git history. The preserved toolkit manifest has SHA-256
 `491b84d31ff83fa346833965d246031c3c8a96fd91502d70e70cfb9dd939cc29`;
 its community tools are context, not executed or translated here. See the
 [research method](method.md), [framing](crash-site-framing.md),
@@ -51,7 +50,7 @@ personal paths are included in this document.
 Local observation: catalogue record 5000 is the start map, runtime map 1, start
 `(92958,82592)`. Map properties ordinal 8023 preserves numeric map extent
 `(128000,128000)`; it does not define a Crash Site polygon. Area record 2 gives
-origin `(92960,82592)` without an explicit radius. CE's default area-radius
+origin `(92960,82592)` without an explicit radius. The game's default area-radius
 behavior is not used as a census rectangle.
 
 Project policy: survey **all 621 sector entries** of the start map, collect the
@@ -159,7 +158,7 @@ NOT_VERIFIED, not consequences of resource resolution or sprite bounds.
 
 ### Normal-game mobile provenance
 
-Source fact: CE distinguishes editor loose `.mob` loading from normal-game
+Source fact: the game distinguishes editor loose `.mob` loading from normal-game
 aggregate loading and transforms a map selector into the game filename. Ordinary
 ROT13 was not a successful selector; the observed game file was supplied explicitly
 and authenticated by size/hash, not guessed from an editor path.
@@ -221,7 +220,8 @@ ordinal10236. An effective object script on exterior sector86570436011/index7,
 prototype4047, world `(92910,82598)`, SAP1, script2793 has a literal action44 at
 line0/true targeting catalogue5078 at `(2087,2018)`. Cave sector/index99,
 prototype4047, world `(2093,2019)`, SAP1, script1532 has line0/true action44 targeting
-catalogue5000 at `(92913,82598)`. CE converts these script map IDs by subtracting4999.
+catalogue5000 at `(92913,82598)`. The game converts these script map IDs by subtracting4999
+(ledger [TR1 of map transitions](original-verification-ledger.md#map-transitions-arc-data-025)).
 These are **directed potential endpoints**, not an executed round trip; attached
 object position and destination position intentionally differ.
 

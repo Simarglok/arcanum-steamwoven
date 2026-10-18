@@ -8,18 +8,19 @@ parser, precedence policy, extracted asset, or original-game payload to the
 repository.
 
 **Verdict:** the selected sector's tile/facade table decodes into its two
-CE-defined packed identifier classes and, after applying the callback's tile
+packed identifier classes and, after applying the callback's tile
 name normalization, resolves all 4,096 cells to one candidate in the explicit
 `arcanum2.dat` source. Every selected frame was boundedly inspected before the
-representative decodes. The pinned source also establishes a bounded,
+representative decodes. The executable's functions as read also establish a bounded,
 renderer-independent diagnostic footprint/crop/flip specification for the
 tile and editor-facade draw calls below. This does not establish source
 precedence, lighting/palette parity, a general runtime facade layer, or static
 scenery readiness.
 
-All CE statements below are source-derived from the single external lineage
-at commit `a7ff41b300ef712f0e7d088183a3d08957110cdd`, not independent format
-confirmation. Retail byte measurements are labelled as such.
+All statements about the executable's functions below are read at level F0
+(not checked in the executable); earlier provenance is in git history. They are
+not independent format confirmation. Retail byte measurements are labelled as
+such.
 
 ## Frozen input and byte boundary
 
@@ -38,38 +39,38 @@ The input remains the R3 module described in
 
 The independent project probe's bounded prefix establishes zero lights and a
 4,096-word table at offsets `4..16387`; the table order is now also tied to
-CE's `src/game/tile.c::tile_id_from_loc` and `src/game/tile.h::TILE_MAKE`:
+`tile_id_from_loc` (0x4D7090) and the tile-number packing:
 `ordinal = localX | (localY << 6)`. Thus ordinal is x-major within each
 successive local-Y row, with `localX = ordinal & 63` and
-`localY = (ordinal >> 6) & 63`. `src/game/sector_tile_list.c` reads the
+`localY = (ordinal >> 6) & 63`. The sector tile list loader (0x4F7C30) reads the
 serialized values into this 4,096-element array; `tile_art_id_at` indexes it
-with that ordinal. This does not establish semantics for any later sector
+with that ordinal (`tile_art_id_at`, 0x4D70B0). This does not establish semantics for any later sector
 suffix bytes.
 
 The real R3 table contains 3,033 high-nibble-0 words and 1,063
-high-nibble-11 words, 1,041 distinct words overall. Under the cited CE source,
+high-nibble-11 words, 1,041 distinct words overall. Under the functions cited,
 those classes dispatch to tile and facade handling, respectively. There were
 no other high-nibble classes in this table. These are retail aggregate
 measurements; no raw identifier list is retained.
 
-## CE source map: identifier, lookup, resource, frame
+## Executable function map: identifier, lookup, resource, frame
 
 ### Dispatch and packed fields
 
-`first_party/tig/src/art.c` at the pinned commit is the behavioral source for
-these field interpretations.
+The executable's ART identifier functions are the behavioral source for these
+field interpretations (F0).
 
-* `tig_art_type` reads bits `28..31` (`art.c:668-671`). The selected classes
+* `tig_art_type` reads bits `28..31`. The selected classes
   are `TIG_ART_TYPE_TILE` (0) and `TIG_ART_TYPE_FACADE` (11).
-* For a tile, `tig_art_tile_id_create` (`art.c:1427-1451`) defines: `num1`
+* For a tile, `tig_art_tile_id_create` defines: `num1`
   bits `22..27`, `num2` bits `16..21`, edge/variation-1 bits `12..15`,
   variation-2 bits `9..11`, indoor/outdoor type bit `8`, flip flags `7` and
-  `6`, palette bits `4..5`, and the low flags. The source's accessors
+  `6`, palette bits `4..5`, and the low flags. The accessors
   `sub_503700` and `sub_5037B0` apply the two fixed edge tables and low-flag
-  adjustment (`art.c:1477-1529`), but the callback does not consume an
+  adjustment, but the callback does not consume an
   unnormalized sector word directly.
 * For a facade, `tig_art_facade_id_create` and its accessors
-  (`art.c:2473-2531`) define its number as bits `17..24` plus 256 when bit 27
+  define its number as bits `17..24` plus 256 when bit 27
   is set, tile number bits `11..16`, type bit 25, flip bit 26, frame bits
   `1..10`, and walkability bit 0.
 
@@ -80,34 +81,34 @@ fail-closed error; no default resource or placeholder is selected.
 
 The real chain is callback based, not a filename guess:
 
-1. `src/main.c:177-182` installs `name_resolve_path` as the TIG ART-file-path
-   resolver; `first_party/tig/src/art.c:372-408` stores that callback during
-   ART initialization.
-2. `tig_art_build_path` delegates every non-misc ART ID to that callback
-   (`art.c:5452-5497`), and `tig_art_exists` uses that resolved path
-   (`art.c:465-477`).
-3. `src/game/name.c::name_init` loads the name-table subsystem. Its actual
-   initialization sequence invokes `a_name_tile_init` then
-   `a_name_facade_init` (`name.c:236-379`). The tile initializer requires exact
+1. `main` (0x401000) installs `name_resolve_path` (0x41DAE0) as the ART
+   library's file-path resolver; the executable's ART initialization stores that
+   callback.
+2. The ART library's path builder delegates every non-misc ART ID to that
+   callback, and its existence check uses that resolved path.
+3. `name_init` (0x41CA40) loads the name-table subsystem. Its actual
+   initialization sequence invokes `a_name_tile_init` (0x4EAC80) then
+   `a_name_facade_init` (0x4EC370). The tile initializer requires exact
    MES keys `0`, `100`, `200`, `300`, and `400`: range counting starts only
    when each category's exact start exists, loading resets only at the first
    four starts, and edge loading searches exact key `400`
-   (`a_name.c:193-222`, `424-540`, `543-575`; `mes.c:252-279`). The facade
+   (0x4EAC80, the tile name counting and loading functions from 0x4EB270, the
+   edge loader 0x4EB5E0; `mes_entries_count_in_range` 0x4D4550). The facade
    initializer requires 1 through 511 entries and exact key `0`, sorts the
    loaded MES entries, and appends their values sequentially to
-   `facade_names[index++]` (`a_name.c:1107-1183`).
+   `facade_names[index++]` (0x4EC370 and its loader).
 4. `name_resolve_path` normalizes first and dispatches tile and facade IDs to
    `a_name_tile_aid_to_fname` and `a_name_facade_aid_to_fname`
-   (`name.c:856-881`, `973-977`). Tile lookup chooses the MES category from
-   outdoor/type and flip bits, then `build_tile_file_name` applies the actual
-   edge/variation and ordering rules (`a_name.c:256-385`). Crucially,
-   `name_normalize_aid` clears a tile's palette and all four low flag bits
-   before that dispatch (`name.c:648-655`; `art.c:1011-1025,1041-1055`). The
+   (0x4EAE90, 0x4EC3F0). Tile lookup chooses the MES category from
+   outdoor/type and flip bits, then `build_tile_file_name` (0x4EAF70) applies the
+   actual edge/variation and ordering rules. Crucially, `name_normalize_aid`
+   (0x41D510) clears a tile's palette and all four low flag bits before that
+   dispatch, through the ART library's palette and flag setters. The
    probe keeps the raw identifier for frame/palette evidence but uses
    `rawId & ~0x3f` only for the callback pathname calculation. Facade lookup uses
    its decoded number as a zero-based ordinal into the sorted,
    sequentially-populated `facade_names` array, then constructs its ART
-   pathname (`a_name.c:1129-1147`). It is not a MES-key lookup.
+   pathname (0x4EC3F0). It is not a MES-key lookup.
 
 The companion probe parses only brace-keyed MES entries needed by these two
 lookups and fails closed on malformed syntax or duplicate keys. It requires the
@@ -126,21 +127,21 @@ non-zero facade start, each shifted/missing tile anchor, unsupported class,
 invalid selector, normalized duplicate candidate, normalized case/separator
 pathname, separated corrected versus historical candidate inventories, and
 every resolver branch through the production archive lookup path. The macOS
-probe explicitly models CE's **non-Windows** DAT-database comparison: lowercase
+probe explicitly models a **non-Windows** DAT-database comparison: lowercase
 ASCII plus `\\`→`/` conversion, with exactly one normalized candidate required
-in the selected source (`database.c:180-185,356-374`; `compat.c:9-22`). In the
-pinned `compat.c`, the slash conversion is a non-Windows conditional branch;
-Windows is a no-op before lowercasing. This experiment makes no Windows-path or
+in the selected source. In the earlier reading of the database name comparison,
+the slash conversion was a non-Windows conditional branch and a no-op on Windows
+before lowercasing (F0). This experiment makes no Windows-path or
 cross-profile duplicate claim. The bounded local run reports representative
 chains below, but no MES text or decoded pixels.
 
 ### Selected frame and metadata
 
-For these types CE has no rotation branch:
-`tig_art_id_rotation_get` returns zero for both tile and facade
-(`art.c:761-778`). `tig_art_id_frame_get` selects frame zero for tiles and the
-facade's 10-bit frame field for facades (`art.c:903-921`).
-`tig_art_id_palette_get` (`art.c:1029-1036`) takes bits `4..5` only for a
+For these types the ART library has no rotation branch:
+`tig_art_id_rotation_get` returns zero for both tile and facade.
+`tig_art_id_frame_get` selects frame zero for tiles and the
+facade's 10-bit frame field for facades.
+`tig_art_id_palette_get` takes bits `4..5` only for a
 tile and returns palette `0` for a facade; facade bits `4..5` instead belong to
 its frame field. The synthetic regression gives a facade a frame whose bits
 `4..5` are nonzero and requires its selected palette to remain zero. For each
@@ -258,7 +259,7 @@ module/PATCH/loose-file precedence.
 
 ## Historical R1 anchor-only boundary (superseded by R2 below)
 
-CE `src/game/location.c::location_xy` maps a world cell in isometric view as:
+`location_xy` (0x4B8680) maps a world cell in isometric view as:
 
 ```text
 screenX = originX + 40 * (worldY - worldX - 1)
@@ -277,13 +278,13 @@ The probe checks `(0,0) -> (0,0)`, `(1,0) -> (-40,20)`, `(0,1) -> (40,20)`,
 and R3's start offset `(30,32) -> (80,1240)`.
 
 The concrete draw call sites establish the cell anchor but not a standalone
-C# baseline formula. `src/game/tile.c::tile_draw_iso` assigns the packed ID,
-uses the projected location, and starts the tile rectangle at
-`(centerX + 1, centerY)` (`tile.c:684-740`). `src/game/facade.c::facade_draw`
+C# baseline formula. The isometric tile draw under `tile_draw` (0x4D6950)
+assigns the packed ID, uses the projected location, and starts the tile
+rectangle at `(centerX + 1, centerY)`. `facade_draw` (0x4C9E70)
 uses `location_xy` for each facade cell, offsets its isometric tile rectangle
-by one X pixel, and passes it to the ART blit (`facade.c:117-151`). TIG then
+by one X pixel, and passes it to the ART blit. The ART library then
 loads selected `hot_x`, `hot_y`, `offset_x`, and `offset_y` frame metadata in
-`tig_art_frame_data` (`art.c:1197-1257`). The source inspected here does not
+`tig_art_frame_data`. The functions inspected here do not
 supply a small independent formula that reduces the later renderer's blit
 geometry to `ArtDecoder` metadata alone. Therefore:
 
@@ -297,18 +298,17 @@ geometry to `ArtDecoder` metadata alone. Therefore:
 
 ## R2 renderer-independent tile/facade placement specification
 
-This source-derived diagnostic specification is tied to pinned CE
-`a7ff41b300ef712f0e7d088183a3d08957110cdd`; it is not CE execution, a
-renderer, or a pixel/lighting-parity result. `location_xy` (`src/game/location.c:135-144`)
-gives the relative point `(40 * (localY - localX), 20 * (localY + localX))`.
+This diagnostic specification is read from the executable's functions at
+level F0; it is not an execution of the original, a renderer, or a
+pixel/lighting-parity result. `location_xy` (0x4B8680) gives the relative point `(40 * (localY - localX), 20 * (localY + localX))`.
 Both callers add one X pixel, therefore the diagnostic anchor is
 `A = (40 * (localY - localX) + 1, 20 * (localY + localX))`. Arithmetic is
 signed integer addition/subtraction with no rounding.
 
 | call / source | initial footprint at `A` | selected ART metadata effect |
 | --- | --- | --- |
-| `tile_draw_iso` (`src/game/tile.c:667-705`) | `(A.x,A.y,78,40)` | frame width/height bound the copy; `hot_x`, `hot_y`, `offset_x`, and `offset_y` are not read here |
-| `facade_draw` editor path (`src/game/facade.c:107-146`) | `(A.x,A.y,80,40)` | frame width/height bound the copy; the four geometry metadata values are not read here |
+| isometric tile draw under `tile_draw` (0x4D6950) | `(A.x,A.y,78,40)` | frame width/height bound the copy; `hot_x`, `hot_y`, `offset_x`, and `offset_y` are not read here |
+| `facade_draw` editor path (0x4C9E70) | `(A.x,A.y,80,40)` | frame width/height bound the copy; the four geometry metadata values are not read here |
 
 For a visible/dirty rectangle `V` and selected frame bound
 `B=(0,0,frameWidth,frameHeight)`, let `F` be the table footprint. The exact
@@ -316,18 +316,18 @@ unscaled crop used by both call chains is `D0=intersection(F,V)`,
 `S0=D0-F.origin`, `S=intersection(S0,B)`, and
 `D=(F.x+S.x,F.y+S.y,S.width,S.height)`. An empty intersection emits nothing.
 The input source/destination rectangle sizes are equal, so `art_blit` takes its
-integer non-stretch branch (`first_party/tig/src/art.c:3095-3126,3144-3180`).
-`TigArtBlitInfo` carries only rectangles/palette/blend state (`art.h:402-414`),
+integer non-stretch branch in the ART library's blitter.
+`TigArtBlitInfo` carries only rectangles/palette/blend state,
 and neither terrain caller invokes `tig_art_frame_data`: viewer hotspot
 alignment is explicitly inapplicable here.
 
 Path normalization does not replace the raw draw ID. A tile flips sampled X
 only when raw bits 7 and 6 and low flag bit 0 are all set:
-`tig_art_blit` toggles X (`art.c:540-552`, `1579-1618`) and `art_blit` reads
-the selected source X in descending order (`art.c:3221-3267`). Its footprint
+`tig_art_blit` toggles X and `art_blit` reads
+the selected source X in descending order. Its footprint
 and destination do not move, and this path has no Y flip. A facade's bit 26 is
-flippable (`art.c:2473-2493`), but `facade_draw` supplies no flip flag and
-`tig_art_id_flags_get` returns zero for facades (`art.c:2627-2639`); this
+flippable, but `facade_draw` supplies no flip flag and
+`tig_art_id_flags_get` returns zero for facades; this
 bounded call chain therefore establishes no facade mirror.
 
 Adjacent un-clipped examples are tile `(0,0)` `F=(1,0,78,40)`, tile `(1,0)`
@@ -335,11 +335,11 @@ Adjacent un-clipped examples are tile `(0,0)` `F=(1,0,78,40)`, tile `(1,0)`
 `F=(41,20,78,40)` with overlap `(41,20,38,20)`. A facade `(1,0)` has
 `F=(-39,20,80,40)` and overlaps tile `(0,0)` at `(1,20,40,20)`.
 For one sector, tile's outer/inner loops move by `(40,20)` then `(-40,20)`
-(`tile.c:689-695,823-836`); facade loops `y` then `x` (`facade.c:117-161`).
+(isometric tile draw under 0x4D6950); facade loops `y` then `x` (0x4C9E70).
 Thus the bounded order is `(localY ascending, localX ascending)`. In editor,
-`gamelib_draw_editor` draws tiles then facades (`gamelib.c:1719-1745`), so the
+`gamelib_draw_editor` (0x404740) draws tiles then facades, so the
 diagnostic/editor layer order is tiles then facades. `gamelib_draw_game` draws
-tiles but not facades (`gamelib.c:1703-1716`): this does not claim a normal
+tiles but not facades (`gamelib_draw_game`, 0x4046F0): this does not claim a normal
 game-runtime facade layer or scenery/object/roof ordering.
 
 `Arcanum.TerrainProbe --self-test` independently exercises nonzero signed
@@ -378,7 +378,7 @@ module plus an explicitly ordered resource source set. It must:
    and x-major ordinal mapping;
 2. classify only packed tile/facade words, reject every other class, and retain
    unresolved lookup as an error record rather than an image fallback;
-3. initialize the bounded MES-derived tables, apply the CE-attributed packed
+3. initialize the bounded MES-derived tables, apply the F0 packed
    field and normalized lookup rules, and require exactly one candidate under
    the chosen source policy;
 4. use `DatArchive` and `ArtDecoder` for any approved bounded ART entry,
@@ -401,9 +401,9 @@ renderer parity remain separate evidence.
   bounded static predicate, and current-ART/prototype chain, but none of those
   facts proves a visual baseline or occlusion rule.
 * Establish lighting/palette treatment, dirty-rectangle/camera policy, and a
-  measured renderer comparison before claiming terrain scene or CE visual
+  measured renderer comparison before claiming terrain scene or original visual
   parity. The source shows editor-only facade layering, not a normal game
   facade pass.
-* Preserve the distinction between these CE-source-derived rules and any
-  independent retail-byte evidence. A CE-derived implementation or catalogue
-  does not create a second corroborating lineage.
+* Preserve the distinction between these F0 rules read from the executable's
+  functions and any independent retail-byte evidence. An implementation or
+  catalogue derived from them does not create a second corroborating source.

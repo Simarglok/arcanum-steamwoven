@@ -12,10 +12,9 @@ adds the transition layer on top of the same data.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the pinned CE specification
-  [`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd)
-  (Sustainable Use License v1.0, not MIT); line ranges below are what was read. It
-  is a specification lineage, not an original-executable observation.
+- **Source fact**: read from the executable's functions at the addresses
+  given, level F0 (not checked in the executable); earlier provenance is in
+  git history.
 - **Local observation**: measured by the probe on the owner's unchanged
   installation through the [ARC-DATA-011 content stack](content-precedence.md)
   (winner per virtual path). The probe prints only numbers, booleans and SHA-256
@@ -24,8 +23,7 @@ adds the transition layer on top of the same data.
   leaves the question open (what counts as "unconditional", below).
 
 `tools/research/Arcanum.CrashSiteProbe/WorldTransitionProbe.cs` was written
-independently from the rules stated here and does not translate CE code. It
-decodes, it does not execute: no script VM, dialog, movement or map lifecycle
+independently from the rules stated here. It decodes, it does not execute: no script VM, dialog, movement or map lifecycle
 runs. Original executable parity remains **NOT_VERIFIED**.
 
 Map numbers: the **catalogue** number is the `rules/maplist.mes` key
@@ -51,7 +49,7 @@ reachable teleport), `orphan_sites`, `graph`, `unresolved_steps`,
 ## Answer
 
 - **81 catalogue rows, 79 real maps.** The catalogue is an unbroken run
-  5000..5080. Rows 5021 and 5025 have no map folder (CE refuses to open a map
+  5000..5080. Rows 5021 and 5025 have no map folder (as read, the map loader refuses to open a map
   without one); one more map, 5013 (one sector), has no transition in or out.
   Two map folders in the module (18 sector files, 21 mobiles) are not in the
   catalogue and can never be opened; with them the counts equal the 1,680
@@ -88,15 +86,15 @@ reachable teleport), `orphan_sites`, `graph`, `unresolved_steps`,
 
 | ID | Claim | Source fact | Local observation |
 | --- | --- | --- | --- |
-| W1 | Map catalogue and map identity | [map.c 2003–2060](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L2003-L2060), [792–847](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L792-L847), [880–943](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L880-L943) | Rows from 5000 while the key exists: name, start x, start y, then optional `Type:` (`START_MAP`), `WorldMap:` and `Area:`. 81 rows, no key after the run. One `START_MAP` row (5000). `WorldMap:` absent on 10 rows, 0 on 71. 31 distinct non-zero `Area:` values; 0 or absent on 8 rows. |
-| W2 | Map folder files | [map.c 579–790](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L579-L790), [1599–1640](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1599-L1640) | `map.prp` is 24 bytes: base terrain type, 4 padding bytes, width and height in cells (64-bit). All 79 present; sizes in the table below; terrain types 2 (73 maps), 7 (5), 4 (1). `startloc.txt` (two lines, each read like `strtoll`) on 79 maps, 71 of them with the same editor value; the new game uses the catalogue start instead (W8). `mapinfo.txt` on 79: one `LightScheme` each (value 2 on 68 maps), one `SoundScheme` (music, ambient) on 72. `terrain.tdf` on 79. |
-| W3 | Jump point format and trigger | [jumppoint.h 6–16](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/jumppoint.h#L6-L16), [jumppoint.c 187–224, 392–405, 607–630](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/jumppoint.c#L607-L630), [map.c 1002–1018](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1002-L1018), [object.c 5240–5251](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L5240-L5251), [teleport.c 190–194](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/teleport.c#L190-L194) | `map.jmp` is a count and 32-byte records: flags, padding, source location, runtime destination map, padding, destination location (x low, y high 32 bits). Entering the cell as a PC teleports that PC (nesting below 9), flags 0, no condition. Destination map −1 means the current map. 79 files: 62 empty, 17 with 45 records; all flags 0. |
-| W4 | Script teleport actions | [script.h 151–293, 299–325](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L299-L325), [script.c 1875–1889, 2405–2441](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2405-L2441) | Teleport (44): focus object, map, x, y. Fade-and-teleport (102): seconds of time advance, sound, movie, focus, map, x, y. The map is a catalogue number (−4999 at run time). 2,399 script numbers, all framed; 39 winners shadow an older copy. 457 teleport actions in 357 scripts, all with literal map, x and y. Focus: triggerer 440, player 9, attachee 8. |
-| W5 | Script control flow | [script.c 278–388, 586–592, 1507–1535, 1622–1665](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L278-L388) | A script runs from an entry line; each line evaluates its condition and runs the true or the false action; the next line follows unless the action returns, starts a dialog (which also returns) or jumps (`goto` to a literal line). Condition type 0 is always true. Loops repeat over the objects their focus resolves to. From line 0, 265 teleport actions lie on the forced path, 84 behind a condition, 108 are not reached (most only by dialog resumption, W7). |
-| W6 | Who runs a script | [script.h 7–44](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L7-L44), [tile_script.c 360–389](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile_script.c#L360-L389), [tile_script_list.h 8–13](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile_script_list.h#L8-L13), [sector_object_list.c 680–730](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_object_list.c#L680-L730), [object.c 2536–2672](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L2536-L2672), [portal.c 30–38](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/portal.c#L30-L38) | An object's script slot index is its attachment point: 1 use, 2 destroy, 9 dialog, 12 dying, 19 heartbeat, 30 bust (the object is broken). A tile script (24-byte node: node flags, tile index, the attachment's own script header flags and counters, script number) runs at line 0 for any critter entering the tile; a sector script runs at line 0 when the PC enters the sector; both as a use. 9,854 attachments in 1,662 sector files and 12,702 mobiles; 554 run a script that holds or calls a teleport, 530 of them reach one: 303 scenery and 6 portals in sectors, 170 tiles, 46 NPCs and 5 containers among the mobiles, no sector script. |
-| W7 | Dialog resumption | [script.c 1513–1535](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1513-L1535), [dialog_ui.c 295–306, 400–406](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/dialog_ui.c#L400-L406), [dialog.c 2408, 2538–2549](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2538-L2549) | A dialog action starts the conversation of the DLG with the same number and returns. A player response of 0 ends it and resumes the NPC's dialog script on the line after the dialog action; a response of −N resumes it on line N. 501 negative responses in the DLGs of the dialog-attached teleport scripts; 121 paths start this way. |
-| W8 | Other transfers (not catalogued as edges) | [wmap_ui.c 1760–1773](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/wmap_ui.c#L1760-L1773), [magictech.c 2700–2747](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L2700-L2747), [mainmenu_ui.c 1651–1679](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L1651-L1679), [ai.c 2596–2663](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2596-L2663) | World-map travel always lands on the start map. The teleportation spell takes the player to an area location on the start map (from another map only through that map's `Area:`), unless the place blocks teleports. A new game places the PC on the start map at the catalogue start. NPC waypoints and standpoints teleport NPCs between maps. None of these needs map-pair data. |
-| W9 | What a teleport does | [teleport.c 114–139, 164–271](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/teleport.c#L164-L271) | As the [cave research](cave-transition-evidence.md#t4--what-the-teleport-does): one pending PC teleport at a time, followers that do not wait travel along, the destination map opens with its saved differences, no passability check at the arrival. All 873 arrivals lie inside their map's bounds; 872 land in a sector that has a file, one lands on a generated sector of the start map. |
+| W1 | Map catalogue and map identity | map 0x4125C0, 0x40FC70, 0x40FEE0, 0x40FF40, 0x40FF50, 0x40FF70, 0x40FFE0, 0x410020 | Rows from 5000 while the key exists: name, start x, start y, then optional `Type:` (`START_MAP`), `WorldMap:` and `Area:`. 81 rows, no key after the run. One `START_MAP` row (5000). `WorldMap:` absent on 10 rows, 0 on 71. 31 distinct non-zero `Area:` values; 0 or absent on 8 rows. |
+| W2 | Map folder files | map 0x40F4E0, 0x4115D0 | `map.prp` is 24 bytes: base terrain type, 4 padding bytes, width and height in cells (64-bit). All 79 present; sizes in the table below; terrain types 2 (73 maps), 7 (5), 4 (1). `startloc.txt` (two lines, each read like `strtoll`) on 79 maps, 71 of them with the same editor value; the new game uses the catalogue start instead (W8). `mapinfo.txt` on 79: one `LightScheme` each (value 2 on 68 maps), one `SoundScheme` (music, ambient) on 72. `terrain.tdf` on 79. |
+| W3 | Jump point format and trigger | jump point record, jump point 0x4E30A0, 0x4E3450, 0x4E3800, map 0x4101D0, object 0x444270, teleport 0x4D3460 | `map.jmp` is a count and 32-byte records: flags, padding, source location, runtime destination map, padding, destination location (x low, y high 32 bits). Entering the cell as a PC teleports that PC (nesting below 9), flags 0, no condition. Destination map −1 means the current map. 79 files: 62 empty, 17 with 45 records; all flags 0. |
+| W4 | Script teleport actions | action enumeration and clause record, script 0x447220 | Teleport (44): focus object, map, x, y. Fade-and-teleport (102): seconds of time advance, sound, movie, focus, map, x, y. The map is a catalogue number (−4999 at run time). 2,399 script numbers, all framed; 39 winners shadow an older copy. 457 teleport actions in 357 scripts, all with literal map, x and y. Focus: triggerer 440, player 9, attachee 8. |
+| W5 | Script control flow | script 0x4449B0, 0x4451B0, 0x447220 | A script runs from an entry line; each line evaluates its condition and runs the true or the false action; the next line follows unless the action returns, starts a dialog (which also returns) or jumps (`goto` to a literal line). Condition type 0 is always true. Loops repeat over the objects their focus resolves to. From line 0, 265 teleport actions lie on the forced path, 84 behind a condition, 108 are not reached (most only by dialog resumption, W7). |
+| W6 | Who runs a script | attachment-point enumeration, tile script 0x4C0980, tile script node record, sector object list 0x4F2330, object 0x43F1C0, portal 0x4F06E0 | An object's script slot index is its attachment point: 1 use, 2 destroy, 9 dialog, 12 dying, 19 heartbeat, 30 bust (the object is broken). A tile script (24-byte node: node flags, tile index, the attachment's own script header flags and counters, script number) runs at line 0 for any critter entering the tile; a sector script runs at line 0 when the PC enters the sector; both as a use. 9,854 attachments in 1,662 sector files and 12,702 mobiles; 554 run a script that holds or calls a teleport, 530 of them reach one: 303 scenery and 6 portals in sectors, 170 tiles, 46 NPCs and 5 containers among the mobiles, no sector script. |
+| W7 | Dialog resumption | script 0x447220, dialog UI 0x567E30, 0x568480, dialog 0x416C10, 0x417590 | A dialog action starts the conversation of the DLG with the same number and returns. A player response of 0 ends it and resumes the NPC's dialog script on the line after the dialog action; a response of −N resumes it on line N. 501 negative responses in the DLGs of the dialog-attached teleport scripts; 121 paths start this way. |
+| W8 | Other transfers (not catalogued as edges) | world map UI 0x561860, magic-tech 0x452650, main menu UI 0x5412E0, AI 0x4AC910, 0x4ACBB0 | World-map travel always lands on the start map. The teleportation spell takes the player to an area location on the start map (from another map only through that map's `Area:`), unless the place blocks teleports. A new game places the PC on the start map at the catalogue start. NPC waypoints and standpoints teleport NPCs between maps. None of these needs map-pair data. |
+| W9 | What a teleport does | teleport 0x4D3380, 0x4D3460 | As the [cave research](cave-transition-evidence.md#t4--what-the-teleport-does): one pending PC teleport at a time, followers that do not wait travel along, the destination map opens with its saved differences, no passability check at the arrival. All 873 arrivals lie inside their map's bounds; 872 land in a sector that has a file, one lands on a generated sector of the start map. |
 
 ## Unconditional (project policy)
 
@@ -107,15 +105,15 @@ all of these hold; otherwise the report lists every reason that fails:
    Dialog, dying, destroy, heartbeat and bust triggers are reported as `sap_N`.
    A use click on a container never counts: it opens the container first (its
    unlock script, lock, jam and magic-hold checks) and runs the use script only
-   from the loot screen ([anim.c 6582–6596](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L6582-L6596),
-   [inven_ui.c 565–590](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L565-L590),
-   [ai.c 3830–3865](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3830-L3865));
+   from the loot screen (animation 0x428A10,
+   inventory UI 0x572370,
+   AI 0x4AED80);
    all five teleport containers carry the locked bit (one also always-locked),
    reported as `container_flags`. Scenery and portals run the use script
    directly.
 2. The object is not off or destroyed (`OF_OFF`, `OF_DESTROYED`) and, for a use
    click, can be picked (not don't-draw, invisible or click-through;
-   [obj_flags.h 11–22](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_flags.h#L11-L22)).
+   the object flag definitions).
 3. The attached script has no trap file flag (a trap check runs first).
 4. Every line from line 0 to the teleport, through each literal call, lies on
    the forced path: only always-true conditions, no loop, no call that is
@@ -154,7 +152,7 @@ A guard is a condition met on the way to the teleport, on either branch. Each
 of the 623 conditional paths and each of the 52 pairs without an unconditional
 path counts once per guard kind, so a row can share paths with another.
 Condition and value numbers follow
-[script.h 73–81, 95–149](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L95-L149).
+the source's condition and value enumerations.
 
 | Guard | Meaning | Conditional paths | Pairs without an unconditional path |
 | --- | --- | ---: | ---: |
@@ -344,13 +342,13 @@ the current map (W3).
   the two folders outside the catalogue. No computed goto or call and no
   unmatched loop break occurs in those scripts (`unresolved_steps` is empty).
 - **One pending player teleport.** A second player teleport is refused while one
-  is pending (teleport.c 114–120); the probe does not model that, so a teleport
+  is pending (teleport 0x4D3380); the probe does not model that, so a teleport
   after an earlier forced one on the same run would be over-counted (no such
   path occurs).
 - **What a condition reads at T0 is not evaluated**: a guarded path may be open
   at a new game, and a container may be unlocked by its key or skill. Script
   counters, the editor `startloc.txt`, the jump point flags word (always 0) and
-  the script file flag 0x100 (defined, never read by CE) are recorded only.
+  the script file flag 0x100 (defined, never read by the functions read) are recorded only.
 - **Bust triggers** (31 paths, slot 30) are on scenery and portals with the
   respawnable or bustable state; whether the original fires them for these
   objects is NOT_VERIFIED.

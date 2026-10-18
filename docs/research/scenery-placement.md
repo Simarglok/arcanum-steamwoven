@@ -27,7 +27,7 @@ retained in Git.
 | Module DAT | 355,938,305 bytes; SHA-256 `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` | The frozen sector and all five records; no `.dif`, PATCH, or loose-file policy |
 | Explicit resource DAT | 147,991,122 bytes; SHA-256 `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d` | Exactly the five selected ART metadata chains; no archive winner claim |
 | Referenced prototype directory | Six-file aggregate SHA-256 `00d5610fc295b84a8dd355d843b0307d0dff5f73e6d353ed25c81667882d65d6` | Used only for the already-reviewed current-ART/object-flag resolution edges |
-| CE source | `alexbatalov/arcanum-ce` commit `a7ff41b300ef712f0e7d088183a3d08957110cdd` | Source attribution only, subject to its Sustainable Use License; no code copied and no independent corroboration claim |
+| Executable functions | The functions at the addresses below, read at level F0 (not checked in the executable); earlier provenance is in git history | No independent corroboration claim |
 
 The direct-offset observation was added to the bounded research probe rather
 than a production parser. Its synthetic coverage retains an independently
@@ -39,12 +39,12 @@ inherited object flags, and 317 records passing the narrow static predicate.
 
 | Claim | Source / measurement | Status | Boundary |
 | --- | --- | --- | --- |
-| Isometric cell projection | CE `src/game/location.c:135-144` | CE-source-derived | Camera origin is caller state, not a portable world origin |
-| Sector objects are rebased after read | CE `src/game/sector_object_list.c:143-173`; selected local coordinates measured by the probe | source-derived plus measured | No `.dif` behavior or runtime postprocessing claim |
-| Object draw base includes object `offset_x/y` and `+40,+20` after `location_xy` | CE `src/game/object.c:570-576`, `1985-2101`; direct serialized slots 2/3 measured for the five records | source-derived plus measured | Prototype-default behavior for offsets is not admitted |
-| Main object rectangle subtracts frame hotspot | CE `src/game/object.c:2064-2101`; selected ART metadata measured | source-derived plus measured | Does not establish a scene camera or dirty-rectangle policy |
-| Main object rectangle does not read frame `offset_x/y` | CE `src/game/object.c:2072-2101`; selected raw ART offsets measured as `(0,0)` | source-derived plus measured | This is distinct from special hover/overlay paths, which are not admitted |
-| Flip changes source sampling, not the diagnostic destination rectangle | CE `first_party/tig/src/art.c:3095-3267`; synthetic asymmetric fixture | CE-source-derived plus synthetic policy check | No selected real object is claimed to enable a flip |
+| Isometric cell projection | `location_xy` (0x4B8680) | F0 executable reading | Camera origin is caller state, not a portable world origin |
+| Sector objects are rebased after read | `objlist_load` (0x4F1350); selected local coordinates measured by the probe | F0 executable reading plus measured | No `.dif` behavior or runtime postprocessing claim |
+| Object draw base includes object `offset_x/y` and `+40,+20` after `location_xy` | `object_draw` (0x43B390), `object_get_rect` (0x43DFD0); direct serialized slots 2/3 measured for the five records | F0 executable reading plus measured | Prototype-default behavior for offsets is not admitted |
+| Main object rectangle subtracts frame hotspot | `object_get_rect` (0x43DFD0); selected ART metadata measured | F0 executable reading plus measured | Does not establish a scene camera or dirty-rectangle policy |
+| Main object rectangle does not read frame `offset_x/y` | `object_get_rect` (0x43DFD0); selected raw ART offsets measured as `(0,0)` | F0 executable reading plus measured | This is distinct from special hover/overlay paths, which are not admitted |
+| Flip changes source sampling, not the diagnostic destination rectangle | The executable's ART blitter; synthetic asymmetric fixture | F0 executable reading plus synthetic policy check | No selected real object is claimed to enable a flip |
 | Pixel index zero is transparent in the project ART decode contract | `ArtDecoder` and synthetic fixture | project decoder policy plus synthetic check | Not a measured original alpha/blending result |
 
 For a selected record's local coordinate `(x,y)`, direct instance offset
@@ -108,9 +108,10 @@ used only to make equal computed keys deterministic.
 
 ## Ordering and occlusion limits
 
-CE's object pass visits sector/cell lists and assigns separate flat,
+The executable's object pass visits sector/cell lists and assigns separate flat,
 non-flat, shadow, overlay, and underlay queue bands before sorting queued blits
-(`src/game/object.c:541-576`, `764-930`, `4754-4808`). That source evidence
+(`object_draw` 0x43B390, `object_enqueue_blit` 0x443440, `object_compare_blits`
+0x443600; F0). That evidence
 establishes neither a simple source-index order nor a static-scenery-only
 occlusion rule for the selected retail records. The current probe does not
 admit object `OF_FLAT`, render flags, underlays/overlays, scale, visibility,
@@ -121,7 +122,7 @@ scenery runtime rule. In particular, `gamelib_draw_game` versus editor facade
 behavior remains outside this result. No normal-runtime facade ordering, wall
 or roof occlusion, original object overlap reference, palette/lighting
 behavior, transparency blend mode, or original rendered comparison was
-observed. A local diagnostic render and CE-source inspection are not
+observed. A local diagnostic render and an F0 reading of the executable's functions are not
 original-game runtime observation.
 
 ## Reproduction

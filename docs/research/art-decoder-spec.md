@@ -1,23 +1,14 @@
-# ART decoder CE-source-derived specification record
+# ART decoder specification record
 
 ## Purpose and provenance boundary
 
 ARC-DATA-002 independently implemented the bounded public `Arcanum.Data`
-8-bpp ART one-physical-frame decoder. Its source-level contract was prepared
-from a study of arcanum-ce commit
-`a7ff41b300ef712f0e7d088183a3d08957110cdd`, specifically
-`first_party/tig/src/art.c` (header/frame handling, palette selection,
-unflipped source addressing, and the named `tig_art_frame_data`,
-`sub_51B710`, `sub_51BE30`, and `art_read_header` regions) and
-`first_party/tig/src/color.c` (`tig_color_index_of` region). The CE
-`LICENSE.md` at that revision remains applicable to CE itself.
-
-This record supplies provenance, not copied implementation. The project has
-not copied CE code, comments, or C structures; it does not reference CE as a
-build or runtime dependency. The project does not call this a legal clean-room
-process, does not replace CE's Sustainable Use License with MIT, and makes no
-claim of measured CE pixel parity. ArcNET shares CE-derived lineage and is not
-an independent confirmation.
+8-bpp ART one-physical-frame decoder. Its contract was read from the
+executable's ART functions (header and frame handling, palette selection,
+unflipped source addressing, the frame-data lookup and the header reader) and
+its colour-index lookup, level F0 (not checked in the executable); earlier
+provenance is in git history. The project makes no claim of measured pixel
+parity. ArcNET is not an independent confirmation.
 
 ## Contract adopted for this bounded decoder
 
@@ -53,4 +44,4 @@ experimental history: it established bounded layout and RLE observations but
 did not independently establish channel conversion, transparency, or row
 orientation. The production decoder's synthetic tests independently state
 expected RGBA values. Opt-in local data checks are structural/regression
-coverage, not an external pixel oracle or CE comparison.
+coverage, not an external pixel oracle or comparison with another decoder.

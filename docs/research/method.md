@@ -4,7 +4,7 @@ Research starts from community knowledge, then verifies claims on the user's unc
 
 Each technical claim records its source and lineage, conditions/version, evidence, confidence and unknowns. Suggested states: reported, corroborated, experimentally verified, disputed, unknown. Two projects sharing one decoder are not independent confirmation.
 
-Code behaviour that CE reconstructs is checked against the original game with the [original executable check](original-executable-check.md): the retail binary is read at the function address CE gives, so a CE reconstruction slip can be told apart from a bug of the original game. Single functions may also be run in an emulator as an oracle (owner decision 2026-10-17); CE is being phased out ([plan](original-oracle-research.md)).
+Code behaviour of the original game is checked with the [original executable check](original-executable-check.md): the retail binary is read at the function's address, so a slip of an earlier reading can be told apart from a bug of the original game. Single functions may also be run in an emulator as an oracle (owner decision 2026-10-17); no source reconstruction is used (owner decision 2026-10-18, [plan](original-oracle-research.md)).
 
 ## Historical R1 direction — not an executable task
 
@@ -20,7 +20,7 @@ Known research entry points (not endorsements or proof of format claims):
 
 - [AMTUT / DBMaker](https://terra-arcanum.com/amtut/amtut/undat_tutorial.htm)
 - [Arkanum and format research](https://github.com/vleon1/Arkanum)
-- [ArcNET](https://github.com/Bia10/ArcNET) — README identifies CE-derived research routes; assess lineage.
+- [ArcNET](https://github.com/Bia10/ArcNET) — its README names a source reconstruction as a research route; assess lineage.
 - [High Resolution Patch](https://terra-arcanum.com/drog/highres.html)
 
 Detailed discovery notes remain in the project's Obsidian vault. Carry necessary evidence into reviewed repository documents as work progresses; do not treat those notes as tasks or automatically accepted specifications.

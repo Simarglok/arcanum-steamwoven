@@ -22,24 +22,23 @@ ARC-RES-042.
   aggregate, terrain template and prototype is the winner of its path. The probe
   prints numbers only (no names, no text, no payload); the full report stays in
   the ignored `research-private/`, and only the aggregates below are published.
-- **Source (S)**: `alexbatalov/arcanum-ce` at
-  [`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd)
-  (Sustainable Use License), read for meaning only: the type catalogue
-  ([script.h 46–294](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L46-L294)),
-  the clause layout ([script.h 299–325](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L299-L325))
-  and how each operand is read ([script.c 3217–3274](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L3217-L3274)).
-  No CE code or structure is reused.
+- **Source (S)**: read from the executable's functions at the addresses
+  given, level F0 (not checked in the executable) unless a
+  [verification ledger](original-verification-ledger.md) row is cited: the
+  type catalogue (the condition and action type enumerations), the clause
+  layout (the clause record) and how each operand is read (script 0x44BA70,
+  0x44BB50). Earlier provenance is in git history.
 - **Operand signatures** (which operand slots of a type take a number, which an
   object) are format facts. The probe's table was taken from the order of number
   and object placeholders in the ScriptEd 1.50 editor data (`data/condition.mes`,
   `data/action.mes` of [TimoP80/ScriptEd_v1_50](https://github.com/TimoP80/ScriptEd_v1_50)
   at `da7e6d2`, GPL-2.0, read from the local toolkit archive; no text was taken).
-  It agrees with how the pinned CE interpreter reads its operands for 194 of the
-  195 types. The exception is action 86 (float newspaper headline): CE reads its
-  object from slot 1, one past the editor's one-slot signature, and marks the
-  line FIXME ([script.c 2272–2275](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2272-L2275));
-  CE's set reaction (30) reads slot 2's kind with slot 1's value
-  ([script.c 1726–1731](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1726-L1731)).
+  It agrees with how the interpreter reads its operands (as read earlier) for
+  194 of the 195 types. The exception is action 86 (float newspaper headline):
+  the interpreter reads its object from slot 1, one past the editor's one-slot
+  signature (script 0x447220; the original does the same, ledger row X9);
+  set reaction (30) as read takes slot 2's kind with slot 1's value
+  (script 0x447220).
   The census checks the table against the data: no number slot holds a kind
   outside the 7 value types and no object slot a kind outside the 24 focus types.
   Taking factual operand order from GPL editor data is recorded here for the
@@ -89,9 +88,9 @@ an approximation in both directions; "all lines" is an upper bound.
   (ARC-RES-042 section 7) refuses no installed script.
 - **Unused operand slots carry editor bytes (D).** 22,400 of 23,872 condition
   clauses and 29,297 of 29,395 action clauses hold a nonzero kind or value in a
-  slot their type never reads (92,452 and 97,349 nonzero kind bytes). CE never
-  reads those slots (apart from the action 86 slip above, one clause in the
-  data), so admission must ignore them; a
+  slot their type never reads (92,452 and 97,349 nonzero kind bytes). As read,
+  the interpreter never reads those slots (apart from action 86 above, one
+  clause in the data), so admission must ignore them; a
   "slots past the signature are zero" rule would refuse almost every script (P1).
 - **Events (D).** 30 of the 36 attachment points carry a script somewhere; 4
   (`GET`), 5 (`DROP`), 6 (`THROW`), 16 (`END_COMBAT`), 17 (`BUY_OBJECT`) and 29
@@ -218,7 +217,7 @@ condition and action that the signature says the type reads.
 
 ## Condition types (D)
 
-Names are the CE enumerators without their prefix; operands are the signature
+Names are the descriptive enumerator names of the earlier reading without their prefix; operands are the signature
 (n number, o object).
 
 | Type | Name | Operands | All lines | Live | Scripts (live) |
@@ -438,9 +437,9 @@ line, the component and the type number.
   whose operand 0 is a number literal is refused (none occurs).
 - **P6 Jumps.** A literal goto inside the script is admitted; a goto to exactly
   the line count is admitted as "end of script": *skip default* without
-  auto-removal (in CE running past the last line also gives *skip default* but
+  auto-removal (as read, running past the last line also gives *skip default* but
   does clear an auto-removing script, the goto does not;
-  [script.c 352–376](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L352-L376);
+  script 0x4449B0;
   none of the 11 gotos to or past the end is in an auto-removing script); a negative literal, one beyond the end, and a
   computed goto are refused in S1 (2 and 13 live sites; the 13 computed ones are
   a later slice).
@@ -457,11 +456,12 @@ line, the component and the type number.
 - **U2** The 459 scripts this model never reaches may be reached through call-ex,
   DLG resumption or engine-chosen numbers; not checked.
 - **U3** Whether the original interpreter reads the slots past a signature is
-  **NOT_VERIFIED**; CE does not, except action 86 (one clause in the data).
+  **NOT_VERIFIED**; the earlier reading does not, except action 86 (one clause
+  in the data; ledger row X9).
 
 ## Anomalies for S1 (S)
 
-**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019) supersede the CE readings below where they differ.
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019) supersede the earlier readings below where they differ.
 
 Recorded, not adopted; the slice that implements the action decides (owner
 decisions D2 and D8: fix confirmed slips; only a bug of the original game keeps its
@@ -469,7 +469,7 @@ behaviour behind a switch of the Original setting).
 
 | ID | Source behaviour | Note |
 | --- | --- | --- |
-| X7 | Divide stores the **sum** of its operands when the divisor is not 0, and stores nothing when it is ([script.c 1585–1594](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1585-L1594)). | Likely a CE slip; 14 divide clauses, 10 live. S1 admits the type; the interpreter slice (S2) chooses quotient or source sum. |
-| X8 | A counter write shifts the value into its byte without masking it ([script.c 3249–3251](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L3249-L3251)), so a value above 255 or negative spills into the higher counters. | S2 decides masking. |
-| X9 | Float newspaper headline (86) reads its object from slot 1, outside the editor signature ([script.c 2272–2275](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2272-L2275)). | Not admitted in S1; the one installed clause has kind 1 in slot 0 and 0 (triggerer) in slot 1. |
-| X10 | A global-flag write shifts the value into the flag's bit without masking it ([script.c 421–425](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L421-L425)), so an arithmetic or get-story-state result of 2 sets the neighbouring flag and a negative one every higher flag of the same 32-flag word. | Found in the ARC-SCRIPT-007 review; S1 admits global-flag write targets, S2 decides masking. |
+| X7 | Divide stores the **sum** of its operands when the divisor is not 0, and stores nothing when it is (script 0x447220). | A reconstruction slip: the original stores the signed quotient (ledger row X7); 14 divide clauses, 10 live. S1 admits the type; the interpreter slice (S2) chooses quotient or source sum. |
+| X8 | A counter write shifts the value into its byte without masking it (script 0x44BB50), so a value above 255 or negative spills into the higher counters. | S2 decides masking. |
+| X9 | Float newspaper headline (86) reads its object from slot 1, outside the editor signature (script 0x447220). | Not admitted in S1; the one installed clause has kind 1 in slot 0 and 0 (triggerer) in slot 1. |
+| X10 | A global-flag write shifts the value into the flag's bit without masking it (script 0x444D20), so an arithmetic or get-story-state result of 2 sets the neighbouring flag and a negative one every higher flag of the same 32-flag word. | Found in the ARC-SCRIPT-007 review; S1 admits global-flag write targets, S2 decides masking. |

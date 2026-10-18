@@ -15,12 +15,11 @@ they depend on loaded data.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the pinned CE specification
-  [`a7ff41b300ef712f0e7d088183a3d08957110cdd`][ce] (Sustainable Use License
-  v1.0) or from the [verification ledger](original-verification-ledger.md)
-  (ARC-RES-048), where the retail 1.0.7.4 executable already settled a CE
-  reading. Every parser in the probe follows the load map's reading; no CE code
-  or structure is copied.
+- **Source fact**: read from the executable's functions at the addresses
+  given, level F0 (not checked in the executable), or from the
+  [verification ledger](original-verification-ledger.md) (ARC-RES-048), where
+  the retail 1.0.7.4 executable already settled the reading. Every parser in
+  the probe follows the load map's reading.
 - **Local observation**: a number the probe measured on the owner's
   installation (module `Arcanum`) through the module content stack of
   [content precedence](content-precedence.md) (ARC-DATA-011). Only aggregates
@@ -84,8 +83,8 @@ effect operator shapes.
 4. **Effects: five entries use `*` or `/`, none overflows (local
    observation).** `rules\effect.mes` has 309 entries (50..358): 587 add, 40
    percent, 11 min, 7 max, 5 multiply and 1 divide operators. Entries 91, 97,
-   213, 214 and 218 hold the `*`/`/` pairs that CE mis-parses (LM9, a CE slip
-   per the ledger). An entry has up to 11 pairs, but no collection gets more
+   213, 214 and 218 hold the `*`/`/` pairs that the earlier reading mis-parsed
+   (LM9, a reconstruction slip per the ledger). An entry has up to 11 pairs, but no collection gets more
    than 7, the size of the source's per-collection arrays. The module's
    `rules\gameeffect.mes` has one entry (0, five adds).
 5. **Prototypes: every range is full, so nothing is ever generated; LM15 is
@@ -93,8 +92,8 @@ effect operator shapes.
    in `data\proto`, none shadowed by the module, and every slot of all 20
    description ranges is present. In 27309..27393, 81 of 85 critters use
    unique-NPC art; in 28310..28471 all 162 use monster art. The description
-   header's labels (27309 unique NPCs, 28310 monsters) and CE's generator are
-   right; the `proto.c` comments are the slip.
+   header's labels (27309 unique NPCs, 28310 monsters) and the generator are
+   right; the earlier reading's range comments are the slip.
 6. **The first fight: an exterior creature of prototype 28359 (proposal).**
    The Crash Site exterior holds 25 creatures and 18 humans, the cave 6
    creatures and one dead human. Every creature is kill-on-sight and faction
@@ -128,7 +127,7 @@ Every present MES file parses with the production reader. Module table sizes:
 
 ## 2. AI parameter rows
 
-Source fact ([AI init][ai-init]): the entry numbered 0 must exist; from it each
+Source fact (AI init (0x4A8320)): the entry numbered 0 must exist; from it each
 next entry by position fills the next row up to row 99; values are split on
 space, tab and line feed and read with `atoi`, at most 17 per row. The module
 file does the same from entry 100 up to row 149. The ledger confirms the
@@ -173,7 +172,7 @@ rows with a non-zero column 13.
 
 ## 3. Spell records
 
-Source fact ([numbering][mt-numbering], [line +1][mt-line1], [line +4][mt-line4]):
+Source fact (numbering (0x44FFA0, 0x450090, 0x4501D0, 0x450240), line +1 (0x4578F0), line +4 (0x457E70)):
 record n starts at message 1000 + 50·n, 2000 more from record 140; lines +0
 and +1 are always read, +2..+4 only when present, components from +5 to the
 first gap. Named keys must appear at the cursor in a fixed order and are
@@ -214,11 +213,11 @@ the value after the last one; the defensive list's second value is shown as
 
 ## 4. Effects
 
-Source fact ([parse][effect-parse]): tokens split on space and comma, an
+Source fact (parse (0x4E9C20)): tokens split on space and comma, an
 attribute then its operator (`min`/`max` take the next token); the ledger
 (LM9, SH-07) records that the original reads the number after `*` and `/`
-(CE stores 0) and has no bound on pairs, while each attribute collection has
-seven slots ([size][effect-size]).
+(the earlier reading stored 0) and has no bound on pairs, while each attribute collection has
+seven slots (size).
 
 | Measure | `effect.mes` | `gameeffect.mes` |
 | --- | ---: | ---: |
@@ -234,7 +233,7 @@ seven slots ([size][effect-size]).
 
 Ranges here are description numbers; a prototype number (as in the tables
 below and in section 7) is its description number + 20. Every one of the 20
-description ranges of [`proto.c`][proto-ranges] is full
+description ranges of the prototype functions (0x4681B0–0x49C610) is full
 (1,423 files: 8 walls, 15 portals, 38 containers, 45 scenery, 1 projectile,
 150 weapons, 4 ammunition, 251 armour, 1 gold, 88 food, 84 scrolls, 3 keys, 1
 key ring, 68 written, 148 generic, 13 PCs, 250 + 85 + 162 NPCs, 8 traps), so the
@@ -242,8 +241,9 @@ generator for missing prototypes and the `rules\*.txt` critter defaults never
 run on this installation. The production combat-field reader reads all 1,308
 item and critter prototypes; the other 115 are not its types.
 
-**LM15.** Source fact: `proto.c` labels 27309.. "monster" and 28310.. "unique
-NPC"; the [description header][desc-header] and the [generator][proto-gen]
+**LM15.** Source fact: the earlier reading's range comments label 27309..
+"monster" and 28310.. "unique NPC"; the description header and the generator
+(0x49B340)
 use the opposite. Local observation by current art type: 27309..27393 holds 81
 unique-NPC art critters and 4 human-art critters (61 with the monster flag, 76
 with a monster damage table); 28310..28471 holds 162 monster art critters (97
@@ -262,7 +262,7 @@ also use monster art.
 degree, 237 a monster damage table.
 
 **Items (798).** Seven carry the valid-AI-action item flag, each with a
-matching action number ([order][mt-actions]): food 10094 healing light, 10154
+matching action number (order): food 10094 healing light, 10154
 and 10158 healing heavy, 10157 cure poison, 10155 and 10156 fatigue recover,
 and generic 15179 offensive; no item has an action number without the flag.
 Items with at least one spell: 84 scrolls, 43 food, 16 generic, 7 weapons, 5
@@ -295,12 +295,13 @@ effective fields (instance field, else the prototype's):
   1,103, two or more 73; 742 NPCs wield one.
 
 **LM1 and LM2 (estimate).** Source fact: the original adds the five damage
-averages and stores the best in-range weapon (ledger: both are CE slips). The
+averages and stores the best in-range weapon (ledger: both are reconstruction slips). The
 search starts below any score, so the first eligible weapon is always taken
 and a later one replaces it only on a higher score, or an equal score with a
-higher handle ([wield][wield]). So only NPCs with two or more eligible weapons
+higher handle (wield (0x465170)). So only NPCs with two or more eligible weapons
 can be affected: 73 in the module. For the 31 whose weapons share one skill,
-comparing stored damage alone, CE's fatigue-only score picks the same weapon
+comparing stored damage alone, the earlier reading's fatigue-only score picks the same weapon
+
 for 19 and another for 1; 11 involve a tie that the runtime handle decides; 42 mix skills
 and are not estimated. LM2 needs a target and its distance: next to the
 target every weapon is in range, so it can touch all 73; farther away it needs
@@ -342,9 +343,9 @@ awareness and approach of A2/A6 and the existing attack resolver with an NPC
 damage table; none needs weapon choice, spells, items or grenades. All three
 also meet the back-off a kill starts: when the PC kills an NPC, every NPC
 within 3 tiles of the PC that shares the victim's faction, lacks `NO_FLEE` and
-is focused on the PC gets the backing-off flag ([kill hook][ai-killed]), and a
+is focused on the PC gets the backing-off flag (kill hook (0x4AA1B0)), and a
 backing-off NPC runs away before anything else, to 5 cells when column 15 is
-at most 1 ([perform][ai-perform], [back off][ai-backoff]). No creature here
+at most 1 (perform (0x4AC180), back off (0x4AC7B0)). No creature here
 has `NO_FLEE`, so a fight against two or more of them needs back-off (S15, A4)
 or must record it as a known deferral.
 
@@ -413,18 +414,3 @@ dead humans have row 0 and no kill-on-sight flag.
   per record range and the Crash Site and cave college ranks and masteries.
 - **U4** Only module `Arcanum` was measured; `Vormantown` was not.
 
-[ce]: https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd
-[ai-init]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L192-L232
-[mt-numbering]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L1344-L1437
-[mt-line1]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L5648-L5714
-[mt-line4]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L5816-L5874
-[effect-parse]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L360-L481
-[effect-size]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L54-L78
-[proto-ranges]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L89-L135
-[proto-gen]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L16098-L16108
-[desc-header]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/descriptions.h#L1036-L1039
-[mt-actions]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_ai.h#L6-L17
-[ai-killed]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1248-L1281
-[ai-perform]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2316-L2322
-[ai-backoff]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2498-L2533
-[wield]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2850-L2961

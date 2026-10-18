@@ -14,11 +14,11 @@ level-up runtime, character-point purchase or party state. Requirements:
 
 Categories, as in [ARC-RES-026](virgil-follow-consent.md):
 
-- **Source (S):** read from `alexbatalov/arcanum-ce` at
-  [`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd)
-  (Sustainable Use License 1.0, not MIT). It is a reconstruction lineage, not
-  original-executable parity; decompiler names are read for intent. No CE code
-  or structure is copied.
+- **Source (S):** read from the executable's functions at the addresses
+  given, level F0 (not checked in the executable) unless a
+  [verification ledger](original-verification-ledger.md) row is cited; names
+  of unnamed functions are read for intent. Earlier provenance is in git
+  history.
 - **Data (D):** the authenticated normal-game Crash Site aggregate, the six
   pinned archives and the installed content stack, read by the probe below. T0
   is the serialized state before any tick, script or player action.
@@ -100,16 +100,16 @@ file holds entry 1 only; the name file names both 91 and 70.
 
 | ID | Claim | Source |
 | --- | --- | --- |
-| L1 | A scheme number selects its rule: 1..49 from `rules\userlevel.mes`, 50..199 from `rules\gamelevel.mes`, anything else none. Both files are required at start-up. | [level.c 296–308][init], [level.c 678–701][rule] |
-| L2 | A rule is read as `<token> <score>,` repeated: the token up to the next space, the score with `atoi` up to the next comma. Tokens are matched case-insensitively against stats (`st`..`ch`), basic skills, tech skills, spell colleges, tech disciplines and `maxhps` / `maxfatigue`, in that order. An unknown token stops the rule as failed. There is no level token. | [level.c 68–159][tokens], [level.c 857–942][process] |
-| L3 | Each step buys one unit at a time until the critter's current value reaches the score: stats at the stat cost, a basic or tech skill point at 1 character point (4 skill levels per point), a spell college level at 1 point, a tech degree at its cost, and one hit or fatigue point per character point. When a skill point is refused (the key stat caps the skill), the step buys +1 of that key stat instead and tries again; a refused spell buys intelligence or willpower unless the level is too low, and a refused tech degree buys intelligence. A step whose target is already met costs nothing. | [level.c 949–1212][buy], [level.c 1016–1023, 1061–1067, 1110–1121, 1160–1166][buy], [skill.c 486–499][skill-base], [skill.c 909–915][skill-cost], [spell.c 347–352][spell-cost] |
-| L4 | Only "not enough points" stops a rule early. Any other failure (a spell the level does not allow yet, or a stat purchase of L3 that cannot raise the stat) skips the step and the rule goes on to the next one. A stopped rule restarts from its first step at the next level-up. | [level.c 867–941][process], [level.c 1079–1126][spell-buy] |
-| L5 | For an NPC, a rule that finishes without running out of points is followed by the standard NPC scheme 70 in the same call. | [level.c 30–33][std], [level.c 813–821][apply] |
-| L6 | A PC levels up only from experience: setting the PC's XP recalculates the level, adds 1 character point per level plus 1 more at every multiple of 5, and runs the PC's own scheme if it has one (non-zero). XP is awarded to PCs only; the dialog `XP` action gives it to the PC. | [stat.c 732–737][xp-recalc], [level.c 432–447][bonus], [level.c 454–534][recalc], [critter.c 1837–1868][give-xp], [dialog.c 2148–2150][dlg-xp] |
-| L7 | After the PC's level-up, every follower in his follower list, and every living NPC within one screen of the PC who waits with the PC as leader, gets a new level: (PC new level + his level − PC old level) if he was at or below the PC's old level, otherwise the PC's new level; capped at 50; applied only if higher. He gets the matching character points and his scheme runs. | [level.c 536–556][recalc], [level.c 567–605][follower], [object.c 3524–3551][vicinity] |
-| L8 | The level stat runs 0..51, unspent character points 0..56; a base value outside the range is clamped when it is set. | [stat.c 97–101][max], [stat.c 624–656][base-set] |
-| L9 | The other writers of an NPC's level are a script's adjust-stat action (any stat of any focus object), a magic-tech trait-index component (sets any base stat of its target, named by the stat key `stat_level` for the level), a script's transform-into-prototype action (replaces the attachee with a new object whose level comes from the prototype), and the effects that name `level` (effective level). The script set-scheme action and the character sheet can change the scheme. The character sheet opens followers and dialog partners read-only, hides its scheme buttons then, and creates its level buttons only when it has no object. | [script.c 2767–2774][adjust], [magictech.c 2976–3003][trait-idx], [magictech.c 6117–6127][trait-idx-parse], [stat.c 225][stat-keys], [script.c 1804–1854][transform], [proto.c 16190–16191][proto-level], [script.c 2789–2797][set-scheme], [script.h 289–291][sat], [charedit_ui.c 1066–1097][sheet], [follower_ui.c 698][follower-sheet], [dialog_ui.c 325][dialog-sheet] |
-| L10 | The follow check refuses with "low level" when the NPC's effective level is at least the PC's effective level plus AI field 8 (30 for Virgil's row 5). The join check, the unwait check and the leave check while following all run it. | [ai.c 3185–3187][gate], [critter.c 877–928][join], [ai.c 1505–1530][unwait], [ai.c 2412–2443][leave] |
+| L1 | A scheme number selects its rule: 1..49 from `rules\userlevel.mes`, 50..199 from `rules\gamelevel.mes`, anything else none. Both files are required at start-up. | level 0x4A6620, 0x4A6E40 |
+| L2 | A rule is read as `<token> <score>,` repeated: the token up to the next space, the score with `atoi` up to the next comma. Tokens are matched case-insensitively against stats (`st`..`ch`), basic skills, tech skills, spell colleges, tech disciplines and `maxhps` / `maxfatigue`, in that order. An unknown token stops the rule as failed. There is no level token. | level tables, level 0x4A7340 |
+| L3 | Each step buys one unit at a time until the critter's current value reaches the score: stats at the stat cost, a basic or tech skill point at 1 character point (4 skill levels per point), a spell college level at 1 point, a tech degree at its cost, and one hit or fatigue point per character point. When a skill point is refused (the key stat caps the skill), the step buys +1 of that key stat instead and tries again; a refused spell buys intelligence or willpower unless the level is too low, and a refused tech degree buys intelligence. A step whose target is already met costs nothing. | level 0x4A75E0, 0x4A76B0, 0x4A77A0, 0x4A7890, 0x4A79C0, 0x4A7AA0, skill 0x4C5E50, 0x4C64B0, spell 0x4B1650 |
+| L4 | Only "not enough points" stops a rule early. Any other failure (a spell the level does not allow yet, or a stat purchase of L3 that cannot raise the stat) skips the step and the rule goes on to the next one. A stopped rule restarts from its first step at the next level-up. | level 0x4A7340, 0x4A7890 |
+| L5 | For an NPC, a rule that finishes without running out of points is followed by the standard NPC scheme 70 in the same call. | level constants, level 0x4A7030 |
+| L6 | A PC levels up only from experience: setting the PC's XP recalculates the level, adds 1 character point per level plus 1 more at every multiple of 5, and runs the PC's own scheme if it has one (non-zero). XP is awarded to PCs only; the dialog `XP` action gives it to the PC. | stat 0x4B0980, level 0x4A6980, 0x4A69C0, critter 0x45F110, dialog 0x415BA0 |
+| L7 | After the PC's level-up, every follower in his follower list, and every living NPC within one screen of the PC who waits with the PC as leader, gets a new level: (PC new level + his level − PC old level) if he was at or below the PC's old level, otherwise the PC's new level; capped at 50; applied only if higher. He gets the matching character points and his scheme runs. | level 0x4A69C0, 0x4A6CB0, object 0x440FF0 |
+| L8 | The level stat runs 0..51, unspent character points 0..56; a base value outside the range is clamped when it is set. | stat range table, stat 0x4B0980 |
+| L9 | The other writers of an NPC's level are a script's adjust-stat action (any stat of any focus object), a magic-tech trait-index component (sets any base stat of its target, named by the stat key `stat_level` for the level), a script's transform-into-prototype action (replaces the attachee with a new object whose level comes from the prototype), and the effects that name `level` (effective level). The script set-scheme action and the character sheet can change the scheme. The character sheet opens followers and dialog partners read-only, hides its scheme buttons then, and creates its level buttons only when it has no object. | script 0x447220, magic-tech 0x452D80, 0x458060, stat key table, script 0x447220, prototype 0x49B5A0, script 0x447220 and the action enumeration, character editor 0x5597C0, follower UI 0x56A9D0, dialog UI 0x567E30 |
+| L10 | The follow check refuses with "low level" when the NPC's effective level is at least the PC's effective level plus AI field 8 (30 for Virgil's row 5). The join check, the unwait check and the leave check while following all run it. | AI 0x4AD950, critter 0x45DE90, AI 0x4AA8C0, 0x4AC380 |
 
 ## 2. Virgil at T0 and scheme 91 (D)
 
@@ -172,7 +172,7 @@ Let *g* be Virgil's level minus the PC's.
 
 | Situation | Effect on *g* |
 | --- | --- |
-| T0, new game | *g* = 0 (both level 1; the PC's level is set to 1 at creation, [player.c 290][player]) |
+| T0, new game | *g* = 0 (both level 1; the PC's level is set to 1 at creation, player 0x40DB70) |
 | PC levels up while Virgil follows, or waits on screen near the PC | unchanged while *g* ≤ 0 (he gains as many levels as the PC, capped at 50) |
 | PC levels up while Virgil is elsewhere (not joined yet, waiting off screen, or left) | decreases by the PC's gain; he does not catch up later, because L7 keeps the gap (the only exception is the unreached A1 path at PC level 50) |
 | Any installed script, effect or dialog action | none (section 3) |
@@ -192,7 +192,7 @@ matters only once both schemes are complete, since a running rule spends them.
 
 ## Anomalies (S)
 
-**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027) supersede the CE readings below where they differ.
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027) supersede the earlier readings below where they differ.
 
 - **A1** At PC level 50 with enough XP for 51, the recalculation caps the XP
   instead of storing level 51. Setting the XP runs the recalculation again
@@ -200,22 +200,22 @@ matters only once both schemes are complete, since a running rule spends them.
   without end and never reaches the follower loops. If it ended (in the
   original executable or a fix), every later XP award at level 50 would call
   L7 with PC levels 50 → 51 and raise a lagging follower by one level, capped
-  at 50. [level.c 366–377][to-next], [level.c 492–500][recalc], [stat.c 732–737][xp-recalc]
+  at 50. level 0x4A68B0, 0x4A69C0, stat 0x4B0980
   The 1.0.7.4 update notes describe that behaviour (followers level up at PC
   level 50; [ARC-RES-032](virgil-level-replay.md#5-outside-sources-x), X2);
   the installed executable was not traced.
 - **A2** The PC's level-up message is built with `sizeof` of a pointer as the
   remaining buffer length; only the PC path builds the message.
-  [level.c 831–834][apply]
+  level 0x4A7030
 - **A3** A rule token with no score left would pass a null pointer to `atoi`;
-  the installed rules have none. [level.c 867–868][process]
+  the installed rules have none. level 0x4A7340
 - **A4** L4's skip-on-failure means a rule can "finish" with steps unmet, which
   for an NPC also starts scheme 70 early.
 - **A5** The follower-list loop of L7 has no death check, while the waiting
-  loop has one. [level.c 536–556][recalc]
+  loop has one. level 0x4A69C0
 - **A6** The recursive follower list used by L7 never advances its inner
   cursor, so as read it would not end if a follower had followers of his own.
-  [object.c 3646–3688][all-followers]
+  object 0x441260
 
 ## Proposal for implementation (P)
 
@@ -256,49 +256,11 @@ matters only once both schemes are complete, since a running rule spends them.
 
 ## Method
 
-Source reading at the pinned commit through the call chains above, plus the
+Source reading of the executable's functions through the call chains above, plus the
 read-only probe `--virgil-auto-level` (self-test
 `--virgil-auto-level-self-test` covers the rule grammar, the bonus-point rule,
 the follower-level rule with its gap invariant over every input, and the
 script action scan; the real-data run also counts transform actions and the
-magic-tech level key). No CE code or structure was copied; names in this
+magic-tech level key). Earlier provenance is in git history; names in this
 document are descriptive.
 
-[init]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L296-L308
-[rule]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L678-L701
-[tokens]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L68-L159
-[process]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L857-L942
-[buy]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L949-L1212
-[spell-buy]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L1079-L1126
-[std]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L30-L33
-[apply]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L772-L848
-[bonus]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L432-L447
-[recalc]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L454-L560
-[follower]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L567-L605
-[skill-base]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L486-L499
-[skill-cost]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L909-L915
-[spell-cost]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/spell.c#L347-L352
-[xp-recalc]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L732-L737
-[give-xp]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L1837-L1868
-[dlg-xp]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2148-L2150
-[vicinity]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3524-L3551
-[max]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L97-L101
-[base-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L624-L656
-[adjust]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2767-L2774
-[set-scheme]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2789-L2797
-[sat]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L289-L291
-[sheet]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/charedit_ui.c#L1066-L1097
-[follower-sheet]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/follower_ui.c#L698
-[dialog-sheet]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/dialog_ui.c#L325
-[gate]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3185-L3187
-[join]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L877-L928
-[unwait]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1505-L1530
-[leave]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2412-L2443
-[trait-idx]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L2976-L3003
-[trait-idx-parse]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L6117-L6127
-[stat-keys]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L225
-[transform]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1804-L1854
-[proto-level]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L16190-L16191
-[to-next]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L366-L377
-[all-followers]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3646-L3688
-[player]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/player.c#L290

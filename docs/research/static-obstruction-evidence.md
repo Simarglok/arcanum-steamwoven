@@ -9,7 +9,7 @@ actor movement, renderer geometry, or original-runtime validation.
 
 The context is one immutable Crash Site 64x64 base sector: a normal,
 non-editor ordinary ground critter makes one adjacent cardinal step on the
-pinned CE non-recursive odd-rotation path, with traversal flags exactly zero.
+executable's non-recursive odd-rotation path (F0), with traversal flags exactly zero.
 The component considers only a type-3 scenery contribution registered in the
 step destination cell. Projectile, sound, skip-objects, ignore-critters,
 wall/window/portal branches, critters, traps, spells, combat, mutable state,
@@ -17,8 +17,8 @@ diagonals, same-cell/non-adjacent requests, and cross-sector traversal are
 outside this component.
 
 This evidence has source-supported and identity-bound original-data aggregate
-status. CE is one source lineage, not independent confirmation or a proof of
-the original executable. The original installation was read only; this record
+status. The F0 reading of the executable's functions is not independent
+confirmation or a proof of the running original. The original installation was read only; this record
 contains no local path, original payload, text, image, raw object bytes, names,
 or full grid.
 
@@ -27,7 +27,7 @@ or full grid.
 | Provenance kind | Immutable identity / trace | Role and limit |
 | --- | --- | --- |
 | Archived report | WorldEd manual archive, SHA-256 `049faa6956bab507f99d6174ce14b2b4feb49a49b0dcf7b69bec3203a3df72cb`; lines 850-858, 878-884, and 1034-1036 | Corroborates the reported “No Block” scenery/editor concept and a blocking tile where placed. It is not runtime proof. |
-| Pinned source | [`alexbatalov/arcanum-ce` `a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd) | One attributed source lineage; Sustainable Use License applies. No code was copied or mechanically translated. |
+| Executable functions | The functions at the addresses below, read at level F0 (not checked in the executable) | Earlier provenance is in git history. |
 | Serialized instance | Fixed selected-sector v119 records parsed by `StaticObjectLoader.Inspect` | Direct location and direct slot-18 flags are observed only in the authenticated input. |
 | Prototype default | Exactly one matching type-A prototype when direct slot 18 is absent | Resolves only the missing object-flags default; it never supplies location. |
 | Synthetic check | `Arcanum.CrashSiteProbe --self-test` | Independently asserted boundary and aggregation cases, not an original-data oracle. |
@@ -35,26 +35,26 @@ or full grid.
 
 The source trace is intentionally narrow:
 
-- `src/game/obj.h:10-32` numbers `OBJ_F_FLAGS` as enum 19, whose serialized
+- The object field numbering gives `OBJ_F_FLAGS` as enum 19, whose serialized
   common-object position is zero-based slot 18. Slot 19 is spell flags and is
   deliberately not an input here.
-- `src/game/obj_flags.h:11-24` supplies `OF_DESTROYED` `0x00000001`, `OF_OFF`
+- The object flag values are `OF_DESTROYED` `0x00000001`, `OF_OFF`
   `0x00000002`, `OF_NO_BLOCK` `0x00000400`, `OF_INVENTORY` `0x00001000`, and
   `OF_DYNAMIC` `0x00002000`.
-- `src/game/object.c:1779-1788` supplies the static predicate used only as a
+- `object_is_static` (0x43D990) supplies the static predicate used only as a
   subset selector, not a collision rule.
-- `src/game/sector_object_list.c:115-185` rebases loaded locations and inserts
-  sector objects; `src/game/obj.c:1189-1205` is handle postprocessing, not a
+- `objlist_load` (0x4F1350) rebases loaded locations and inserts
+  sector objects; `obj_load_postprocess` (0x406520) is handle postprocessing, not a
   footprint calculation.
-- `src/game/sector_object_list.c:532-624,652-676` rejects inventory objects
+- The sector object list insert and removal (0x4F2020, 0x4F20A0, 0x4F22B0) reject inventory objects
   and uses the location-derived tile list. Offsets affect list order, not cell
   membership or footprint.
-- `src/game/object.c:3304-3394` is the exact-cell list query and the normal
+- `object_list_location` (0x4407C0) is the exact-cell list query and the normal
   non-editor DESTROYED/OFF filtering.
-- `src/game/object.c:2978-3027,3152-3282` supplies the ordinary destination
+- `object_calc_traversal_cost_func` (0x43FE00) supplies the ordinary destination
   object branch, its `OF_NO_BLOCK` handling, and the excluded diagonal/wall/
-  portal/context branches. `src/game/path.c:239-280` and
-  `src/game/anim.c:4737-4763` identify the caller/traversal context.
+  portal/context branches. The path function 0x41F840 and the animation
+  functions 0x425760, 0x4257E0 identify the caller/traversal context.
 
 No ART, offset, hotspot, sprite dimension, pixel alpha, visual rectangle,
 `OF_SHOOT_THROUGH`, sight/cover flag, or adjacent slot-19 spell flag is an

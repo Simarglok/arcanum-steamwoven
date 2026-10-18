@@ -10,10 +10,10 @@ is described in [Proposed implementation](#proposed-implementation-not-authorize
 
 ## Vocabulary and boundary
 
-- **Source fact**: a claim read from the pinned CE specification
-  [`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd)
-  (Sustainable Use License v1.0). It is a specification lineage, not an
-  original-executable observation. Line ranges below are what was read.
+- **Source fact**: a claim read from the executable's functions at the addresses
+  given, level F0 (not checked in the executable) unless a ledger row is cited;
+  earlier provenance is in git history. It is not an observation of the running
+  original.
 - **Local observation**: an aggregate measured by the research probe on the
   owner's unchanged installation. No original text, names or bytes are
   recorded here or printed by the probe.
@@ -21,8 +21,7 @@ is described in [Proposed implementation](#proposed-implementation-not-authorize
   runtime or product decision open.
 
 The code in `tools/research/Arcanum.CrashSiteProbe/AreaPassabilityClosureProbe.cs`
-was written independently from the rules stated in this document. It does not
-translate CE code. Original executable parity remains **NOT_VERIFIED**.
+was written independently from the rules stated in this document. Original executable parity remains **NOT_VERIFIED**.
 
 **Initial state T0** means: a new game has emptied the current save folder,
 the map is open, its mobile file and `map.patch` are applied, sectors are
@@ -33,7 +32,7 @@ Every closure below holds at T0 only. What changes after T0 is listed in
 ## Selected rule
 
 The normal-ground step check `sub_425760`
-([anim.c 4737–4748](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L4737-L4748))
+(0x425760)
 is unchanged from the step contract. It checks the **destination** tile with
 `tile_is_blocking` once, then calls the object traversal routine. The source
 tile and diagonal shoulder tiles are never checked for terrain.
@@ -44,13 +43,13 @@ or window flags are relevant because the area has no walls or portals (F5).
 
 | ID | Claim | Source fact | Local observation |
 | --- | --- | --- | --- |
-| F1 | Tile-name flags | [a_name.c 425–538](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/a_name.c#L425-L538), [749–780](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/a_name.c#L749-L780), [mes.c 287–300](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L287-L300), [mes.c 393–396](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L393-L396) | All 38,678 cells that the conservative production component reports Unknown resolve; 0 remain unresolved. |
-| F2 | Absent block mask | [sector.c 556–562](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L556-L562), [sector.c 1453–1717](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1453-L1717), [sector_block_list.c 10–43](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_block_list.c#L10-L43), [tile_block.c 311–327](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile_block.c#L311-L327) | The three mask-less sectors are context sectors with version `0xAA0003`. All nine core sectors are `0xAA0004` and have a mask. |
-| F3 | Resource precedence | [map.c 1360–1537](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1360-L1537), [map.c 662–700](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L662-L700), [gamelib.c 417–486](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L417-L486) | The four consumed rule/name resources and every present sector file occur exactly once across all seven archives. No loose override, sector or save difference file exists under the module and data folders. |
-| F4 | Patch file | [map.c 1500–1530](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1500-L1530), [obj_id.c 103–130, 189–245](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_id.c#L189-L245) | The PATCH archive's `map.patch` names 50 objects; none of the 98 core/context mobile records contains any of those IDs in either byte order. |
-| F5 | Exact-tile registry | [obj.c 3032–3091](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L3032-L3091), [sector_object_list.c 115–186, 459–473, 532–560](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_object_list.c#L459-L473), [object.c 253–284, 3304–3394](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3304-L3394) | 98 mobile records re-verified in place; 0 walls or portals; 123 destination-blocker cells. |
-| F6 | Critter life | [critter.c 608–615](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L608-L615), [object.c 1632–1677](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L1632-L1677), [stat.c 43–110, 336–540, 891–960](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L336-L540), [effect.c 257–480, 742–850](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L742-L850), [background.c 312–324](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/background.c#L312-L324) | 42 visible critters: 38 alive (minimum current HP 10), 4 dead (maximum current HP −31,952). None is Unknown. |
-| F7 | Step composition | [object.c 2962–3283](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L2962-L3283), [location.c 369–416](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/location.c#L369-L416), [tile.c 146–188](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile.c#L146-L188) | All seven frozen production observations at spawn are reproduced. |
+| F1 | Tile-name flags | tile name counting and loading (0x4EB270, 0x4EB2E0), name flags (0x4EBAB0, 0x4EBAD0), `mes_search` (0x4D45E0), `mes_merge` (0x4D46F0) | All 38,678 cells that the conservative production component reports Unknown resolve; 0 remain unresolved. |
+| F2 | Absent block mask | `sector_cache_init` (0x4CF810), `sector_load_game` (0x4D1A30), sector block list (0x4F81E0, 0x4F8200, 0x4F8230, 0x4F8250), `tileblock_is_tile_blocked` (0x4BB410) | The three mask-less sectors are context sectors with version `0xAA0003`. All nine core sectors are `0xAA0004` and have a mask. |
+| F3 | Resource precedence | `map_load_mobile` (0x410D10), `map_open` (0x40F4E0), `gamelib_reset` and `gamelib_exit` (0x402380, 0x4024D0) | The four consumed rule/name resources and every present sector file occur exactly once across all seven archives. No loose override, sector or save difference file exists under the module and data folders. |
+| F4 | Patch file | `map_load_mobile` (0x410D10), object ID text conversion (0x4E6570) and GUID parser (0x4E67A0) | The PATCH archive's `map.patch` names 50 objects; none of the 98 core/context mobile records contains any of those IDs in either byte order. |
+| F5 | Exact-tile registry | `obj_inst_read_file` (0x409AA0), `objlist_load` (0x4F1350), `objlist_fold` (0x4F1CD0), `objlist_insert_internal` (0x4F2020), `object_init` (0x43A330), `object_list_location` (0x4407C0) | 98 mobile records re-verified in place; 0 walls or portals; 123 destination-blocker cells. |
+| F6 | Critter life | `critter_is_dead` (0x45D8D0), object hit point functions (0x43D5A0, 0x43D600, 0x43D630, 0x43D690), stat tables, `stat_level_get` (0x4B0490), `stat_base_get` (0x4B0740), effect loading and `effect_parse` (0x4E99F0, 0x4E9C20), `effect_adjust_func` (0x4EA6C0), `background_get` (0x4C2690) | 42 visible critters: 38 alive (minimum current HP 10), 4 dead (maximum current HP −31,952). None is Unknown. |
+| F7 | Step composition | object traversal (0x43FD70, 0x43FDC0, 0x43FE00), `location_in_dir` (0x4B8FF0), `tile_art_id_at` and `tile_is_blocking` (0x4D70B0, 0x4D7110) | All seven frozen production observations at spawn are reproduced. |
 | F8 | Reachability | Composition of F1–F7 | 8,138 cells reachable from spawn; the only exits lead into an unsurveyed sector south of the context ring. |
 
 ### F1 — tile-name flags
@@ -117,10 +116,11 @@ loaded.
 
 `map.patch` lines name an object ID followed by attribute changes. Every line
 of this input is a `G_` GUID line; any other non-comment line fails the probe.
-The pinned string parser stores the 32 hex digits in text order, but the
-observed mobile file stores GUIDs in the mixed-endian Windows layout: 32 of the
-50 targets occur in the file in that layout and none in text order. This
-source/observation discrepancy is recorded, not resolved. The probe therefore
+The earlier reading of the string parser stored the 32 hex digits in text order,
+but the observed mobile file stores GUIDs in the mixed-endian Windows layout: 32 of
+the 50 targets occur in the file in that layout and none in text order. This
+source/observation discrepancy is recorded, not resolved here; ledger MP3 later
+found that the original parser stores the Windows layout. The probe therefore
 searches each core and context mobile record's raw bytes for **both** byte
 orders, which is a superset of an own-ID match. There are 0 hits in either
 order. Statics are not yet loaded when the patch is applied, so the patch
@@ -166,7 +166,8 @@ current = maxhps-effects(WP + 2 × (ST + Level) + 4 + HpAdj + 4 × HpPts) − Hp
   (50..399) and `rules\gameeffect.mes` (0..49). Tokens are separated by
   spaces and commas. Changes stack as percent, multiply, divide, add,
   strongest minimum, strongest maximum. The probe admits only add, percent and
-  min/max: the pinned parser reads a `*` or `/` factor as zero, and `-1` is its
+  min/max: an earlier reading had the parser read a `*` or `/` factor as zero
+  (ledger LM9: the original reads the number after the operator), and `-1` is its
   "unset" bound, so those forms fail closed.
 - Every race maximum is at least 20. The probe therefore computes an exact
   ST or WP inside `[1, 20]` and an interval above it. Level's bound does not
@@ -222,15 +223,14 @@ open cells form 82 components; the two largest have 8,138 and 1,540 cells.
 These facts are **not** closed and need separate work:
 
 - Fold schedules an immediate AI time event for every non-destroyed NPC
-  ([object.c 4151–4159](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L4151-L4159),
-  [ai.c 3048–3058](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3048-L3058)).
+  (0x441FC0, 0x4AD790).
   NPC positions can change from the first tick.
 - Scripts (heartbeat, sector, tile, dialog) can change flags, HP and
   positions. For example, the `OF_OFF` context NPC can be switched on.
 - Start-location placement of the PC and party, combat, death and saved games
   (`.dif`, `mobile.md`) are outside T0.
 - Absent sectors would be generated from `terrain.tdf` by `terrain_fill`
-  ([sector.c 1464–1490](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1464-L1490)).
+  (`sector_load_game`, 0x4D1A30).
   This is not researched, but no reachable step reaches such a sector.
 - `PATH_FLAG_0x1000` remains an unavailable caller branch, and other actor
   contexts remain undeclared.
