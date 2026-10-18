@@ -391,7 +391,9 @@ missing (anomaly A5). No retail sector needs any of these.
   treated as absent.
 - Script 30285 (sector plant generator) in 20 plain templates may change vegetation
   at run time; what it does is not researched here.
-- `.dif` files for generated sectors (save state) are not examined.
+- `.dif` files for generated sectors (save state) are not examined here; the executable
+  looks one up under the real sector id for template sectors too
+  ([main-map streaming](main-map-streaming.md), SS5).
 - Only the owner's GOG + CE installation and its one module were measured;
   `Vormantown` and other modules are out of scope.
 
