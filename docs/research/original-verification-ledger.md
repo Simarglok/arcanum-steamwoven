@@ -575,7 +575,8 @@ no rule switch; Steamwoven reads both files as the original does.
 | LB12 | dialog action executor (0x415BA0) | `RQ n` quells rumor *n* with no participant and no PC test; `RU n` marks rumor *n* known to the dialog's PC. | Original |
 | LB13 | date-time hour (0x45A870), minute (0x45A8B0), day (0x45A8E0), month (0x45A900), year (0x45A920) | From the (days, milliseconds) pair, unsigned: hour = ms / 3,600,000 mod 24, minute = ms / 60,000 mod 60, day = days mod 30 + 1, month = days / 30 mod 12 + 1, year = start year + days / 360. | Original |
 
-Not modelled by Steamwoven: the order of equal times (Steamwoven orders them by number), the developer quotes page, the
+Not modelled by Steamwoven: the order of equal times (Steamwoven orders them by number), a rumor learned at game time 0
+(the original's zero time means not known; no profile starts there), the developer quotes page, the
 other five tabs, the book page spreads, the month and state labels of `logbk_ui.mes` (the viewer uses its own), the
 logbook button's highlight and the sounds.
 

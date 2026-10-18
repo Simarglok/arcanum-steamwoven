@@ -14,7 +14,7 @@ public sealed record LogbookTextLoad(LogbookTextStatus Status, LogbookTexts? Tex
 /// "Logbook"). Universal: it reads whatever module the stack mounts, never a location.
 /// <list type="bullet">
 /// <item>Quest descriptions (numbers 1000..1999) come from <c>mes\gamequestlog.mes</c> and, for a PC of low intelligence,
-/// <c>mes\gamequestlogdumb.mes</c>; both are loaded only when the module has <c>rules\gamequest.mes</c> (LB8).</item>
+/// <c>mes\gamequestlogdumb.mes</c>; both are loaded only when the module's <c>rules\gamequest.mes</c> loads (LB8).</item>
 /// <item>A rumor's text is message 20 × number of <c>mes\game_rd_npc_m2m.mes</c>, or of <c>mes\game_rd_npc_m2m_dumb.mes</c>
 /// for a PC of low intelligence (LB10).</item>
 /// </list>
@@ -59,9 +59,11 @@ public sealed class LogbookTexts
         ArgumentNullException.ThrowIfNull(stack);
         options ??= new();
         options.Validate();
-        var questRules = ContentPhase.Candidate(stack, QuestRulesPath, ContentLoadPhase.ModuleLoaded) is not null;
+        // The descriptions load only after the quest table itself loads (LB8): it is read and parsed here too.
+        var failure = Read(stack, QuestRulesPath, options, out var rules);
+        if (failure is not null) return failure;
+        var questRules = rules is not null;
         MesFile? questLog = null, questLogLow = null;
-        LogbookTextLoad? failure = null;
         if (questRules)
         {
             failure = Read(stack, QuestLogPath, options, out questLog) ?? Read(stack, QuestLogLowPath, options, out questLogLow);

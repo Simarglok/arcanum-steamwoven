@@ -1011,7 +1011,7 @@ the session can fill: **rumors** and **quests**. What it lists and how each entr
   accepted and achieved in blue, completed struck through in green, completed by someone else and botched struck through
   in red, mentioned in black. The description is the low-intelligence one of `mes\gamequestlogdumb.mes` when it exists and
   the hero's intelligence is 4 or less, otherwise the normal one of `mes\gamequestlog.mes`; both are read only when the
-  module has `rules\gamequest.mes`.
+  module's `rules\gamequest.mes` loads (a file that cannot be read or parsed refuses the texts, project policy).
 - Each entry starts with the original's date line (month, day, year, 12-hour time, `January 1, 1885  3:00pm`), the
   quest's state label right after it, and the text on the next line. Equal times are ordered by number (the original's
   order for them is its unstable sort's).

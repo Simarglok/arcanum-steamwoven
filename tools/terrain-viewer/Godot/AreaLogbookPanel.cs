@@ -18,6 +18,7 @@ public partial class AreaLogbookPanel : CanvasLayer
     private Button _rumors = null!;
     private Button _quests = null!;
     private Button _close = null!;
+    private readonly ButtonGroup _tabs = new() { AllowUnpress = false };
     private AreaLogbookView? _view;
     public event Action? CloseRequested;
     public event Action<AreaLogbookTab>? TabRequested;
@@ -63,7 +64,8 @@ public partial class AreaLogbookPanel : CanvasLayer
 
     private Button TabButton(string text, AreaLogbookTab tab)
     {
-        var button = new Button { Name = text, Text = text, ToggleMode = true, FocusMode = Control.FocusModeEnum.All };
+        // One group: a click on the shown tab keeps it pressed instead of releasing it.
+        var button = new Button { Name = text, Text = text, ToggleMode = true, ButtonGroup = _tabs, FocusMode = Control.FocusModeEnum.All };
         button.Pressed += () => TabRequested?.Invoke(tab);
         return button;
     }
@@ -93,7 +95,7 @@ public partial class AreaLogbookPanel : CanvasLayer
         ResizePanel();
     }
 
-    /// <summary>Confirm on the focused tab button switches to it; anywhere else it switches to the other tab.</summary>
+    /// <summary>Confirm (a controller confirm or Tab) switches to the other tab.</summary>
     public void Confirm()
     {
         if (_view is null) return;

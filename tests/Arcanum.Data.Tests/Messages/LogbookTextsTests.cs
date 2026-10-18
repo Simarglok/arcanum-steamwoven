@@ -92,6 +92,10 @@ public sealed class LogbookTextsTests
 
         Write(module, "mes/gamequestlogdumb.mes", "{1000}{Low}");
         Write(module, "mes/game_rd_npc_m2m_dumb.mes", "{20000}{A longer low rumor}");
+        Write(module, "rules/gamequest.mes", "{1000}{1 0");
+        var rules = Load(module, data);
+        Assert.AreEqual((LogbookTextStatus.ParseFailed, LogbookTexts.QuestRulesPath), (rules.Status, rules.Path), "the quest table is read and parsed too");
+        Write(module, "rules/gamequest.mes", "{1000}{1 0}");
         var tooLarge = Load(module, data, new() { MaxBytes = 16 });
         Assert.AreEqual((LogbookTextStatus.ParseFailed, LogbookTexts.RumorLowPath, MesParseStatus.TooLarge), (tooLarge.Status, tooLarge.Path, tooLarge.Parse!.Status));
     }
