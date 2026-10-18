@@ -31,10 +31,10 @@ cache needs the room.
 
 - **Cache (SS1).** Sector initialisation asks for a cache of 16 sectors; the cache
   clamps any request to 8..128, and nothing else resizes it.
-- **Lock (SS2).** A lock fails while another lock is being taken, and fails (with a
-  log line) when no map is open. It refuses a sector outside the map: x and y must lie in
-  `0 .. size / 64`, where the size is the map's tile width and height from `map.prp`,
-  set when the map opens (`terrain.tdf` is not consulted for the bound). A hit counts a
+- **Lock (SS2).** A lock fails while another lock is being taken (with a warning), while
+  a walk over the cached sectors runs (silently), and when no map is open (logged). It
+  refuses a sector outside the map: `0 <= x < width / 64` and `0 <= y < height / 64`, with
+  the map's tile width and height from `map.prp`, set when the map opens (`terrain.tdf` is not consulted for the bound). A hit counts a
   reference and refreshes the entry's age. On a miss with the cache full, the oldest
   entry without references is saved (the game's sector save, which writes the
   sector's differences) and evicted; when every entry is referenced the lock fails with
@@ -58,7 +58,7 @@ cache needs the room.
   2. otherwise the terrain template path of the sector's terrain word
      ([path rule](generated-wilderness-evidence.md#3-terrain-word-and-template-path));
   3. otherwise fill: one tile family, no other content.
-  
+
   Outside the optional demo limits the own file is not tried. A template sector is read
   like an own file, but the loaders of lights and objects get the real sector id so that
   they move their records; an own sector passes "no id".
@@ -86,10 +86,10 @@ cache needs the room.
 
 | Data | When | Scope |
 | --- | --- | --- |
-| Mobile objects (critters, items, portals, containers…) | map open, from the map's mobile file and the save | whole map; a sector only lists those standing in it (SS7) |
+| Mobile objects (critters, items, portals, containers…) | map open, from the map's mobile file and the save ([MP1](original-verification-ledger.md#map-patch-arc-data-028)) | whole map; a sector only lists those standing in it (SS7) |
 | `Rules\map.patch` | map open, after the mobiles ([MP1](original-verification-ledger.md#map-patch-arc-data-028)) | whole map, mobile objects only |
 | Sector lights, light scheme word | sector load | per sector, moved for templates |
-| Map default light scheme | map open (`mapinfo.txt`) | whole map |
+| Map default light scheme | map open (`mapinfo.txt`, [area lighting](../rendering/area-lighting.md)) | whole map |
 | Saved differences | sector load (`.dif`) and save at eviction | per sector, own and template |
 
 ## Local observation: Crash Site and the main map
@@ -109,8 +109,9 @@ five context sectors the pinned profile records as absent.
 
 - A **window** of 3×3 sectors around a centre sector is the set the original loads around
   the PC when it teleports (SS4), and the pinned Crash Site profile's core. A ring around
-  it matches the pinned profile's context. The plan's limits follow the window (at most
-  25 sectors), not the map's 621 files.
+  it matches the pinned profile's context. That 5×5 is a project bound for a plan, not
+  the original's resident set (16 most recently used sectors); the plan's limits follow
+  the window (at most 25 sectors), not the map's 621 files.
 - Each window sector resolves own file → template → fill. Retail data never reaches
   fill. Fill's random tile variation needs a policy, so a plan should refuse it as a
   typed result rather than invent tiles.
