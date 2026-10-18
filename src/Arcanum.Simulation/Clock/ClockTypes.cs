@@ -42,5 +42,5 @@ public readonly record struct ClockMutationResult(ClockMutationDisposition Dispo
 // Friend construction is bounded and validated through the same production construction path.
 internal readonly record struct ClockDescriptor(ProfileBinding ProfileBinding, long GameTimestampMs,
     PauseDisposition PauseDisposition, long Generation, long Revision);
-internal readonly record struct ClockCalendarFields(long DayIndex, long MillisecondOfDay, int Hour,
+public readonly record struct ClockCalendarFields(long DayIndex, long MillisecondOfDay, int Hour,
     int Minute, int Second, int DayOfMonth, int Month, long Year, bool IsDay);

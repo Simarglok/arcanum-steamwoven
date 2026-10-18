@@ -33,6 +33,7 @@ public sealed record DialogConversationRequest(
 /// effects, except those a present <paramref name="Party"/> or <paramref name="Inventory"/> port takes. A null capability turns every operation that needs it into a static frontier. <paramref name="Party"/>
 /// (ARC-WORLD-013) admits WA and UW and, when present, also takes JO instead of <paramref name="World"/>.
 /// <paramref name="Inventory"/> (ARC-WORLD-014), when present, takes negative IN instead of <paramref name="World"/>.
+/// <paramref name="Rumors"/> (ARC-UI-008) takes RQ; without it RQ is a static frontier.
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
@@ -40,7 +41,8 @@ public sealed record DialogConversationPorts(
     IVersionedGlobalFlagOwner? GlobalFlags,
     IDialogWorldPort? World = null,
     IDialogPartyPort? Party = null,
-    IDialogInventoryPort? Inventory = null);
+    IDialogInventoryPort? Inventory = null,
+    IDialogRumorPort? Rumors = null);
 
 public enum DialogReactionMode
 {
@@ -68,6 +70,10 @@ public sealed record GiveItemCommand(DialogParticipantId Npc, DialogParticipantI
 public sealed record AlignmentCommand(DialogParticipantId PlayerCharacter, DialogReactionMode Mode, int Value) : DialogCommand;
 
 public sealed record MarkAreaCommand(DialogParticipantId PlayerCharacter, int Area) : DialogCommand;
+
+/// <summary>RQ: the rumor is quelled (proven false). The original sets a game-wide mark with no participant (ARC-UI-008,
+/// ledger LB12).</summary>
+public sealed record QuellRumorCommand(int RumorId) : DialogCommand;
 
 /// <summary>JO 0 node: the NPC asks to follow the PC; on acceptance the dialog continues at the node.</summary>
 public sealed record JoinCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter) : DialogCommand;
@@ -120,6 +126,15 @@ public interface IDialogPartyPort
 public interface IDialogInventoryPort
 {
     DialogCommandResult Execute(GiveItemCommand command);
+}
+
+/// <summary>
+/// Rumor seam (ARC-UI-008): RQ. Calls are synchronous and serialized by the host. Rejected means the command had no effect
+/// and the owner refused it; a thrown exception is recorded as indeterminate.
+/// </summary>
+public interface IDialogRumorPort
+{
+    DialogCommandResult Execute(QuellRumorCommand command);
 }
 
 public sealed class DialogConversationOptions

@@ -45,7 +45,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] LightingFields = ["schemeId", "hour"];
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
-    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors"];
+    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors"];
     private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
     private static readonly string[] RumorFields = ["rumor", "timestampMs"];
@@ -195,6 +195,9 @@ public static class GameSessionSnapshotCodec
                 w.WriteNumber("timestampMs", rumor.TimestampMs);
                 w.WriteEndObject();
             }
+            w.WriteEndArray();
+            w.WriteStartArray("quelledRumors");
+            foreach (var rumor in story.QuelledRumors) w.WriteNumberValue(rumor);
             w.WriteEndArray();
             w.WriteEndObject();
 
@@ -830,7 +833,16 @@ public static class GameSessionSnapshotCodec
             if (i > 0 && rumor <= rumors[i - 1].Rumor) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".rumor");
             rumors[i] = new(rumor, Long(item["timestampMs"], path + ".timestampMs", 0, long.MaxValue));
         }
-        return new(quests, globals, rumors);
+        // ARC-UI-008: the rumors proven false, a game-wide set (not the PC's): ascending numbers in the rumor range.
+        items = Array(f["quelledRumors"], p + ".quelledRumors", SessionStoryLimits.MaxRumors);
+        var quelled = new int[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.quelledRumors[{i}]";
+            quelled[i] = Int(items[i], path, SessionStoryLimits.FirstRumor, SessionStoryLimits.LastRumor);
+            if (i > 0 && quelled[i] <= quelled[i - 1]) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+        }
+        return new(quests, globals, rumors, quelled);
     }
 
     private static SessionPartyState Party(JsonElement element)

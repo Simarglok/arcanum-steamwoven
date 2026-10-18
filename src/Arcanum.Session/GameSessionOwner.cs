@@ -408,8 +408,45 @@ public sealed partial class GameSessionOwner : IDisposable
         return _story.Rumors.TryGetValue(rumor, out var value) ? value : null;
     }
 
+    /// <summary>Whether a rumor is quelled (proven false; ARC-UI-008). The set is game-wide, not the PC's.</summary>
+    public bool QueryRumorQuelled(int rumor)
+    {
+        ThrowIfDisposed();
+        if (!SessionStoryLimits.IsRumor(rumor)) throw new ArgumentOutOfRangeException(nameof(rumor));
+        return _story.QuelledRumors.Contains(rumor);
+    }
+
     /// <summary>Detached copy of the story domain in ascending order.</summary>
     public SessionStoryState QueryStory() { ThrowIfDisposed(); return _story.Capture(); }
+
+    /// <summary>
+    /// ARC-UI-008: the quests of the PC's logbook, as the original lists them (checked in the executable, ledger LB6): every
+    /// record whose stored state is not Unknown (a quest botched while still Unknown is left out), reported Botched when its
+    /// botched mark is set and with its stored state otherwise, ordered by the game time of its last change. Records with
+    /// the same time are ordered by quest number; the original sorts with its run-time library's unstable sort, whose order
+    /// for equal times is not modelled.
+    /// </summary>
+    [OriginalFunction(0x4C52E0, OriginalFunctionScope.Partial)]
+    public IReadOnlyList<SessionQuestLogEntry> QueryQuestLog()
+    {
+        ThrowIfDisposed();
+        return Array.AsReadOnly(_story.Quests.Values.Where(quest => quest.State != SessionQuestState.Unknown)
+            .OrderBy(quest => quest.TimestampMs).ThenBy(quest => quest.Quest)
+            .Select(quest => new SessionQuestLogEntry(quest.Quest, quest.Effective, quest.TimestampMs)).ToArray());
+    }
+
+    /// <summary>
+    /// ARC-UI-008: the rumors of the PC's logbook, as the original lists them (ledger LB9): every rumor the PC knows, with the
+    /// game time it was learned and whether it is quelled, ordered by that time. Rumors with the same time are ordered by
+    /// number; the original's order for equal times is its run-time library sort's and is not modelled.
+    /// </summary>
+    [OriginalFunction(0x4C5A40, OriginalFunctionScope.Partial)]
+    public IReadOnlyList<SessionRumorLogEntry> QueryRumorLog()
+    {
+        ThrowIfDisposed();
+        return Array.AsReadOnly(_story.Rumors.OrderBy(pair => pair.Value).ThenBy(pair => pair.Key)
+            .Select(pair => new SessionRumorLogEntry(pair.Key, pair.Value, _story.QuelledRumors.Contains(pair.Key))).ToArray());
+    }
 
     /// <summary>
     /// Requests a PC quest state with the source rules: a Completed, OtherCompleted or Botched quest and a request
@@ -476,6 +513,23 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_story.Rumors.ContainsKey(rumor)) return NoChange();
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         _story.Rumors.Add(rumor, _clock.QueryClockSnapshot().GameTimestampMs);
+        return Changed();
+    }
+
+    /// <summary>
+    /// ARC-UI-008: marks a rumor quelled (proven false), as the dialog action <c>RQ</c> does (ledger LB11–LB12): a game-wide
+    /// mark that never clears and does not need the PC to know the rumor. Quelling a quelled rumor is NoChange. A number
+    /// outside the rumor range is refused (the original writes it unchecked).
+    /// </summary>
+    [OriginalFunction(0x4C5690, OriginalFunctionScope.Partial)]
+    public GameSessionMutationResult QuellRumor(GameSessionVersion expected, int rumor)
+    {
+        ThrowIfDisposed();
+        if (!SessionStoryLimits.IsRumor(rumor)) return Reject(GameSessionFailure.InvalidRumor);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        if (_story.QuelledRumors.Contains(rumor)) return NoChange();
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        _story.QuelledRumors.Add(rumor);
         return Changed();
     }
 
@@ -1174,6 +1228,11 @@ public sealed partial class GameSessionOwner : IDisposable
             if (rumor.TimestampMs < 0 || rumor.TimestampMs > clockMs) return GameSessionFailure.InvalidSnapshot;
             if (!story.Rumors.TryAdd(rumor.Rumor, rumor.TimestampMs)) return GameSessionFailure.InvalidSnapshot;
         }
+        foreach (var rumor in saved.QuelledRumors)
+        {
+            if (!SessionStoryLimits.IsRumor(rumor)) return GameSessionFailure.InvalidRumor;
+            if (!story.QuelledRumors.Add(rumor)) return GameSessionFailure.InvalidSnapshot;
+        }
         foreach (var quest in story.Quests.Values)
         {
             var shared = quest.Effective switch
@@ -1549,9 +1608,11 @@ internal sealed class Story
     internal Dictionary<int, SessionQuest> Quests { get; } = [];
     internal Dictionary<int, SessionQuestState> GlobalQuests { get; } = [];
     internal Dictionary<int, long> Rumors { get; } = [];
+    internal HashSet<int> QuelledRumors { get; } = [];
 
     internal SessionStoryState Capture() => new(
         Quests.Values.OrderBy(quest => quest.Quest).ToArray(),
         GlobalQuests.OrderBy(pair => pair.Key).Select(pair => new SessionGlobalQuest(pair.Key, pair.Value)).ToArray(),
-        Rumors.OrderBy(pair => pair.Key).Select(pair => new SessionRumor(pair.Key, pair.Value)).ToArray());
+        Rumors.OrderBy(pair => pair.Key).Select(pair => new SessionRumor(pair.Key, pair.Value)).ToArray(),
+        QuelledRumors.Order().ToArray());
 }

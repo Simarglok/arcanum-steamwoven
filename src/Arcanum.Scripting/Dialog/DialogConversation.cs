@@ -460,6 +460,7 @@ public sealed class DialogConversation
                 ConversationLocalFlag local => new LocalFlagWriteCommand(_request.Participants.Dialog, _request.Participants.Npc, local.Index, local.Value),
                 ConversationQuest quest => new QuestStateCommand(_request.Participants.PlayerCharacter, quest.QuestId, quest.State, _request.Participants.Npc),
                 ConversationRumor rumor => new RumorLogCommand(_request.Participants.PlayerCharacter, rumor.RumorId),
+                ConversationQuellRumor quell => new QuellRumorCommand(quell.RumorId),
                 ConversationReaction reaction => new ReactionCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter, reaction.Mode, reaction.Value),
                 ConversationGiveItem item => new GiveItemCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter, item.ItemName),
                 ConversationMarkArea area => new MarkAreaCommand(_request.Participants.PlayerCharacter, area.Area),
@@ -474,6 +475,7 @@ public sealed class DialogConversation
                     LocalFlagWriteCommand local => _ports.Commands.Execute(local),
                     QuestStateCommand quest => _ports.Commands.Execute(quest),
                     RumorLogCommand rumor => _ports.Commands.Execute(rumor),
+                    QuellRumorCommand quell => _ports.Rumors!.Execute(quell),
                     ReactionCommand reaction => _ports.World!.Execute(reaction),
                     GiveItemCommand item => _ports.Inventory is { } inventory ? inventory.Execute(item) : _ports.World!.Execute(item),
                     MarkAreaCommand area => _ports.World!.Execute(area),
@@ -778,6 +780,7 @@ public sealed class DialogConversation
         ConversationGiveItem => _ports.World is null && _ports.Inventory is null,
         ConversationJoin => _ports.World is null && _ports.Party is null,
         ConversationWaiting or ConversationUnwait => _ports.Party is null,
+        ConversationQuellRumor => _ports.Rumors is null,
         _ => false,
     })?.Source;
 
