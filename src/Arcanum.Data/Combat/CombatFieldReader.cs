@@ -44,8 +44,10 @@ public static class CombatFieldReader
     private const int GenericFlagsSlot = 59, UsageBonusSlot = 60, UsageCountSlot = 61;
     // Critter block (36..68).
     private const int CritterFlagsSlot = 36, CritterFlags2Slot = 37, StatSlot = 38, BasicSkillSlot = 39, TechSkillSlot = 40, SpellTechSlot = 41,
-        FatigueSlot = 42, FatigueAdjustmentSlot = 43, FatigueDamageSlot = 44, CritterCritHitChartSlot = 45, InventorySourceSlot = 57,
-        SchemeSlot = 63;
+        FatigueSlot = 42, FatigueAdjustmentSlot = 43, FatigueDamageSlot = 44, CritterCritHitChartSlot = 45, EffectSlot = 46, CauseSlot = 47,
+        InventorySourceSlot = 57, SchemeSlot = 63;
+    /// <summary>The longest effect list read (project policy; the session's own lists hold at most 64 entries).</summary>
+    public const int MaxEffects = 256;
     // NPC block (69..93).
     private const int NpcFlagsSlot = 69, AiDataSlot = 71, ExperienceWorthSlot = 74, ExperiencePoolSlot = 75, FactionSlot = 81,
         ReactionBaseSlot = 84, SocialClassSlot = 85, NpcDamageSlot = 92;
@@ -147,7 +149,8 @@ public static class CombatFieldReader
         {
             var critter = new CombatCritterFields(Flags(CritterFlagsSlot), Flags(CritterFlags2Slot), Array(StatSlot, BaseStats),
                 Array(BasicSkillSlot, BasicSkills), Array(TechSkillSlot, TechSkills), Array(SpellTechSlot, SpellTech), Int(FatigueSlot),
-                Int(FatigueAdjustmentSlot), Int(FatigueDamageSlot), Int(CritterCritHitChartSlot), Int(InventorySourceSlot), Int(SchemeSlot));
+                Int(FatigueAdjustmentSlot), Int(FatigueDamageSlot), Int(CritterCritHitChartSlot), Int(InventorySourceSlot), Int(SchemeSlot),
+                EffectList(field(EffectSlot), field(CauseSlot)));
             CombatNpcFields? npc = null;
             if (type == NpcType)
             {
@@ -188,6 +191,25 @@ public static class CombatFieldReader
         else if (type == GenericType)
             generic = new(Flags(GenericFlagsSlot), Int(UsageBonusSlot), Int(UsageCountSlot));
         return new(origin, common, item, weapon, ammo, armor, generic, null, null);
+    }
+
+    // The two parallel effect arrays: keys 0..n−1 in both, one word each; an absent or null array is empty. Anything else is
+    // a malformed array, as the source would read a number without its cause (or past the list).
+    private static IReadOnlyList<CombatEffectEntry> EffectList(Field? numbers, Field? causes)
+    {
+        static (int Key, long Word)[] Entries(Field? field, int slot)
+        {
+            if (field is null || field.Presence is Presence.Null or Presence.Empty) return [];
+            if (field.Presence == Presence.Value) throw new Refusal(CombatFieldFailure.FieldUnresolved, slot);
+            return [.. field.Elements.Select(e => e.Words.Count == 1 && e.Words[0] is >= 0 and <= uint.MaxValue ? (e.Key, e.Words[0])
+                : throw new Refusal(CombatFieldFailure.ArrayMalformed, slot)).OrderBy(e => e.Key)];
+        }
+        var n = Entries(numbers, EffectSlot);
+        var c = Entries(causes, CauseSlot);
+        if (n.Length != c.Length || n.Length > MaxEffects) throw new Refusal(CombatFieldFailure.ArrayMalformed, EffectSlot);
+        for (var i = 0; i < n.Length; i++)
+            if (n[i].Key != i || c[i].Key != i) throw new Refusal(CombatFieldFailure.ArrayMalformed, EffectSlot);
+        return System.Array.AsReadOnly(n.Select((e, i) => new CombatEffectEntry(unchecked((int)(uint)e.Word), unchecked((int)(uint)c[i].Word))).ToArray());
     }
 
     // A dense copy of a sparse int32 array: a null or empty array, or a missing key, is 0; a 32-bit word is reinterpreted

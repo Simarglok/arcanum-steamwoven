@@ -21,6 +21,8 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     private AreaCombatHost? _combatHost;
+    // ARC-WORLD-036: the effect rules of the hero's start tables, for the followers' effects (null without --hero).
+    private Func<int, Arcanum.Data.Characters.EffectRule?>? _areaEffectRules;
     private string? _attackNotice;
     private AttackGoal? _attack;
     // Left Alt as the key events report it (a follower is attacked only with left Alt, FA2).
@@ -258,11 +260,34 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-COMBAT-005 attack-hit target={goal.Target.Entity} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} cause={result.Resolution?.MissCause} damage={result.Life?.HitPointDamage} events={result.Life?.Events}"
             + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} xp={result.HitAward?.Award}/{result.KillAward?.Award} step={result.StepFailure}");
+        LevelAreaFollowers(result.HitAward);
+        LevelAreaFollowers(result.KillAward);
         if (result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))
             _deathAnimations[(CurrentAreaMap, goal.Target.Entity)] = AreaFallenPoses.Animation(dealt.Death);
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();
+    }
+
+    /// <summary>
+    /// ARC-WORLD-036: passes an award's follower step to the hero's followers and the NPCs waiting for it on this map, with their
+    /// stored fields and effects (<see cref="AreaAdvancement.LevelFollowers"/>).
+    /// </summary>
+    private void SyncAreaAwards()
+    {
+        if (_conversationHost?.State.TakeAwards() is not { Count: > 0 } awards) return;
+        foreach (var award in awards) LevelAreaFollowers(award);
+    }
+
+    private void LevelAreaFollowers(SessionExperienceAward? award)
+    {
+        if (award?.Followers is null || _areaSession is null || _combatHost is null || _areaEffectRules is not { } effects) return;
+        var map = CurrentAreaMap;
+        var raised = AreaAdvancement.LevelFollowers(_areaSession, award,
+            entity => _combatHost.Fields(map, entity) is { } fields ? AreaAdvancement.Npc(entity, fields, effects) : null);
+        foreach (var follower in raised)
+            GD.Print($"ARC-WORLD-036 follower-level entity={follower.Record!.Entity} level={follower.Level!.Value.Level}"
+                + $" points={follower.Level.Value.PointsGained} purchases={follower.Scheme?.Purchases.Length ?? 0} completed={follower.Scheme?.Completed}");
     }
 
     /// <summary>Stops the attack goal (a new click, the stick, a dialog, the map or the hero's state); <paramref name="why"/>

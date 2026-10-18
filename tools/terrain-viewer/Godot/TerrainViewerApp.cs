@@ -847,7 +847,7 @@ public partial class TerrainViewerApp : Node
         PaceFrames();
         if (IsWorld)
         {
-            try { TickAreaClock(); ProcessWorld(delta); SyncAreaSheet(); }
+            try { TickAreaClock(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaAwards(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");

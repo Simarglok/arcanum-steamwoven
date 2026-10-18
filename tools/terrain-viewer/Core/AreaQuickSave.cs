@@ -51,7 +51,7 @@ public static class AreaQuickSave
                 $"quick load REFUSED: saved actor on map {snapshot.Actor.Map.RuntimeMap} cell ({snapshot.Actor.Cell.X},{snapshot.Actor.Cell.Y}): {refusal}");
         var options = new GameSessionRestoreOptions(new(snapshot.Identity.World, current.Flags.Binding.Identity.Module),
             current.QueryClockSnapshot().ProfileBinding, new(Guid.NewGuid()), current.Limits, current.Rules.Mode,
-            current.Experience, current.Difficulty);
+            current.Experience, current.Difficulty, current.AutoLevel);
         var restored = GameSessionOwner.Restore(snapshot, options);
         if (restored.Owner is null)
             return new(null, read, restored.Failure, "quick load REFUSED: " + Describe(restored.Failure));

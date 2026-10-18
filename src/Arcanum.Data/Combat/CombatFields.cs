@@ -97,10 +97,15 @@ public sealed record CombatGenericFields(uint Flags, int UsageBonus, int UsageCo
 /// in bits 6..7 (<see cref="CombatFieldReader.SkillPoints"/>, <see cref="CombatFieldReader.SkillTraining"/>);
 /// <see cref="SpellTech"/> (25) holds the 16 college levels, the mastery college (−1 none) and the 8 tech degrees.
 /// <see cref="CriticalHitChart"/> is the body type the source uses for critical hits against this critter.
+/// <see cref="Effects"/> (ARC-WORLD-036) is its effect list in order, number and cause (the two parallel effect arrays); empty
+/// when it has none, or for a caller that built the record without them.
 /// </summary>
 public sealed record CombatCritterFields(uint Flags, uint Flags2, IReadOnlyList<int> BaseStats, IReadOnlyList<int> BasicSkills,
     IReadOnlyList<int> TechSkills, IReadOnlyList<int> SpellTech, int FatiguePoints, int FatigueAdjustment, int FatigueDamage,
-    int CriticalHitChart, int InventorySource, int AutoLevelScheme);
+    int CriticalHitChart, int InventorySource, int AutoLevelScheme, IReadOnlyList<CombatEffectEntry>? Effects = null);
+
+/// <summary>One entry of a critter's effect list: the effect number and its cause code (0 race .. 9 gender).</summary>
+public readonly record struct CombatEffectEntry(int Number, int Cause);
 
 /// <summary>NPC fields the combat and AI domains read: flags, AI parameter row, experience worth and pool, faction,
 /// reaction base, social class and the monster damage table (five ranges by <see cref="CombatDamageIndex"/>).</summary>

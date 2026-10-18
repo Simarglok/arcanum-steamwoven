@@ -55,6 +55,7 @@ public partial class TerrainViewerApp
             _areaUseStatus = mapMode ? $"map {arguments.AreaMapName}: drawn unlit ({area.UnlitReason}), no session clock; " + _areaUseStatus : "cave: not loaded (no session clock)";
             return;
         }
+        _areaEffectRules = result.Hero?.Effects;
         if (carried is not null) _areaSession = carried;
         else
         {

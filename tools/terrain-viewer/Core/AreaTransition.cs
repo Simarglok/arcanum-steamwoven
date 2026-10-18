@@ -182,6 +182,6 @@ public sealed class AreaTransitionCoordinator
         var identity = new GlobalFlagIdentity(new WorldId(world), new ModuleId(module));
         var flags = AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), hero?.Flag);
         return GameSessionOwner.Create(new(clock, flags, new(new(runtimeMap), new(checked((int)actor.X), checked((int)actor.Y)), NeighborDirection.XPlus),
-            Hero: hero?.Definition, Experience: hero?.Experience));
+            Hero: hero?.Definition, Experience: hero?.Experience, AutoLevel: hero?.AutoLevel));
     }
 }
