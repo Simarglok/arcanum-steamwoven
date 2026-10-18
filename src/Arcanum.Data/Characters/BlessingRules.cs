@@ -34,10 +34,12 @@ public static class BlessingRules
     public const int FirstNumber = 50, Bank = 10, NameField = 0, EffectField = 1, DescriptionField = 2, ReceivedMessage = 1000;
 
     /// <summary>
-    /// The effect a blessing or curse adds and removes (<c>bless_get_effect</c>, <c>curse_get_effect</c>): <c>atoi</c> of its effect
+    /// The effect a blessing or curse adds and removes (0x4C4420, 0x4C3F70): <c>atoi</c> of its effect
     /// entry, so a number below 50, a missing entry or a text without a leading number gives effect 0 (the module's
     /// <c>gameeffect.mes</c> effect 0), as the original does.
     /// </summary>
+    [OriginalFunction(0x4C4420, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4C3F70, OriginalFunctionScope.Partial)]
     public static BlessingEffect EffectOf(MesFile table, int number)
     {
         ArgumentNullException.ThrowIfNull(table);

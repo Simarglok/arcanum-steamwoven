@@ -357,7 +357,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// <c>bless_add</c> / <c>curse_add</c> (ARC-WORLD-035; a script's add-blessing and add-curse actions): after the hero and
+    /// The blessing and curse add (0x4C42F0, 0x4C3E40; ARC-WORLD-035; a script's add-blessing and add-curse actions): after the hero and
     /// version checks, NoChange when the hero already holds <paramref name="number"/> (the effect is not looked at, as in the
     /// source), <see cref="GameSessionFailure.EffectCapacityExceeded"/> at <see cref="SessionEffectLimits.MaxBlessings"/>; otherwise the number and the current game time are appended to the list and
     /// <paramref name="effect"/> is added with the bless or curse cause, as <see cref="AddHeroEffect"/> adds it (its refusals
@@ -366,6 +366,8 @@ public sealed partial class GameSessionOwner
     /// the module's <c>gameeffect.mes</c> effect 0, as in the original). The host shows the "received" message (entry 1000)
     /// and marks the logbook on a change. One revision.
     /// </summary>
+    [OriginalFunction(0x4C42F0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4C3E40, OriginalFunctionScope.Partial)]
     public SessionEffectResult AddHeroBlessing(GameSessionVersion expected, SessionBlessingKind kind, int number, SessionEffectDefinition effect)
     {
         ThrowIfDisposed();
@@ -380,10 +382,12 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// <c>bless_remove</c> / <c>curse_remove</c>: NoChange when the hero does not hold <paramref name="number"/>; otherwise its
+    /// The blessing and curse removal (0x4C4450, 0x4C3FA0): NoChange when the hero does not hold <paramref name="number"/>; otherwise its
     /// first entry leaves the list (the later ones move up) and the first effect entry of the number it added is removed, as
     /// <see cref="RemoveHeroEffect"/> removes it (whatever caused that entry, as in the source; none may be left). One revision.
     /// </summary>
+    [OriginalFunction(0x4C4450, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4C3FA0, OriginalFunctionScope.Partial)]
     public SessionEffectResult RemoveHeroBlessing(GameSessionVersion expected, SessionBlessingKind kind, int number)
     {
         ThrowIfDisposed();
@@ -482,7 +486,7 @@ public sealed partial class GameSessionOwner
                     throw new InvalidOperationException("Trial effect removal failed.");
                 ids.RemoveAt(step.RemoveAt);
             }
-            // effect_add and effect_remove_internal: each maximum's change moves its damage, which never goes below 0.
+            // The effect add (0x4E9F70) and the internal removal (0x4EA520): each maximum's change moves its damage, which never goes below 0.
             var next = TrialFacts(trial, entries, definitions, state);
             if (next is null) return RejectEffect(GameSessionFailure.InvalidEffect);
             state = state with
