@@ -24,7 +24,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 14. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 17. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets, and the order and meaning of pending events, whose queue order
@@ -68,7 +68,8 @@ public static class GameSessionSnapshotCodec
         "magicCritMissEffect"];
     private static readonly string[] EquipmentArmorFields = ["coverage", "sizes", "maleOnly", "femaleOnly", "ac", "magicAc", "resistances",
         "magicResistances", "unarmedBonus"];
-    private static readonly string[] EffectsFields = ["hero", "definitions"];
+    private static readonly string[] EffectsFields = ["hero", "definitions", "blessings", "curses"];
+    private static readonly string[] BlessingFields = ["number", "effect", "timeMs"];
     private static readonly string[] HeroEffectFields = ["effect", "cause"];
     private static readonly string[] DefinitionFields = ["effect", "changes"];
     private static readonly string[] ChangeFields = ["kind", "attribute", "operator", "value"];
@@ -304,6 +305,19 @@ public static class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+            foreach (var (name, list) in new[] { ("blessings", snapshot.Effects.Blessings), ("curses", snapshot.Effects.Curses) })
+            {
+                w.WriteStartArray(name);
+                foreach (var entry in list)
+                {
+                    w.WriteStartObject();
+                    w.WriteNumber("number", entry.Number);
+                    w.WriteNumber("effect", entry.Effect);
+                    w.WriteNumber("timeMs", entry.TimeMs);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+            }
             w.WriteEndObject();
 
             w.WriteStartObject("experience");
@@ -1062,7 +1076,21 @@ public static class GameSessionSnapshotCodec
             }
             definitions[i] = new(number, ImmutableArray.Create(changes));
         }
-        return new(hero, definitions);
+        SessionBlessing[] Blessings(string name)
+        {
+            var list = Array(f[name], $"{p}.{name}", SessionEffectLimits.MaxBlessings);
+            var result = new SessionBlessing[list.Length];
+            for (var i = 0; i < list.Length; i++)
+            {
+                var at = $"{p}.{name}[{i}]";
+                var b = Fields(list[i], at, BlessingFields);
+                result[i] = new(Int(b["number"], at + ".number", int.MinValue, int.MaxValue),
+                    Int(b["effect"], at + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber),
+                    Long(b["timeMs"], at + ".timeMs", 0, long.MaxValue));
+            }
+            return result;
+        }
+        return new(hero, definitions, Blessings("blessings"), Blessings("curses"));
     }
 
     private static EquipmentItem EquipmentItemValue(JsonElement element, string p)

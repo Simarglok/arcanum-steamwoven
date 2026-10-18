@@ -74,7 +74,7 @@ public sealed class AreaWholeMapStepTests
         Assert.AreEqual("Open", Verdict(Step((10, 10), 5, (10, 10), East, (11, 10))));
         Assert.AreEqual("WALL_EDGE_BLOCKED", Verdict(Step((10, 10), 5, (11, 10), West, (10, 10))));
         // Portal on the outdoor tile facing in (rotation 1): the original exchanges the tiles for a walker from across,
-        // so leaving the building through it opens (CE never counts that side as leaving); entering stays locked
+        // so leaving the building through it opens (ledger LV1–LV5); entering stays locked
         // although the goal on the portal's own tile tests rotation 1 in reverse (the traversal refuses first).
         Assert.AreEqual("Open", Verdict(Step((11, 10), 1, (10, 10), East, (11, 10))));
         Assert.AreEqual("WALL_EDGE_BLOCKED", Verdict(Step((11, 10), 1, (11, 10), West, (10, 10))));

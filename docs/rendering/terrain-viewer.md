@@ -1032,7 +1032,7 @@ whenever the session, the tab or the loaded texts change and closes when the ses
 `L logbook` and the last refusal.
 
 The session holds the quelled rumors (game-wide, [story domain](../world/game-session-runtime.md#story-domain), snapshot
-schema 17) and the conversation's `RQ` action writes them (`IDialogRumorPort`).
+schema 18) and the conversation's `RQ` action writes them (`IDialogRumorPort`).
 
 **Not implemented:** the other five tabs (reputations, blessings and curses, kills and injuries, background, keys), the
 book pages and page buttons (the viewer scrolls one list), the developer quotes page, the logbook button's highlight, the

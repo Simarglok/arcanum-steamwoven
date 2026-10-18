@@ -38,8 +38,8 @@ internal enum ConversationField
 /// Without a party port WA and UW stay unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>), as before
 /// ARC-WORLD-013.
 /// Operations are separated by SP, HTAB, ',', ';', ':', '(' or ')'; inside one operation only SP/HTAB may
-/// precede an operand. A field holding only separators is empty. This is project admission policy, not CE's
-/// permissive scanner.
+/// precede an operand. A field holding only separators is empty. This is project admission policy, not the
+/// source's permissive scanner.
 /// </summary>
 internal static class DialogConversationGrammar
 {

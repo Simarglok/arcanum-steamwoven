@@ -41,6 +41,13 @@ public sealed class PremadeHeroTests
             new(EffectAttributeKind.TechDiscipline, 7, EffectChangeOperator.Maximum, 4), new(EffectAttributeKind.Special, 9, EffectChangeOperator.Minimum, -3),
             new(EffectAttributeKind.Stat, 27, EffectChangeOperator.Add, 0),
         }, changes.ToArray());
+        // Decision 7 (ARC-WORLD-035): a factor is the number after the sign, as the original reads it.
+        Assert.AreEqual(EffectRuleStatus.Parsed, Parse("goodreactionadj *2 badreactionadj /2 st *-1", out changes));
+        CollectionAssert.AreEqual(new EffectChange[]
+        {
+            new(EffectAttributeKind.Special, 8, EffectChangeOperator.Multiply, 2), new(EffectAttributeKind.Special, 7, EffectChangeOperator.Divide, 2),
+            new(EffectAttributeKind.Stat, 0, EffectChangeOperator.Multiply, -1),
+        }, changes.ToArray());
         Assert.AreEqual(EffectRuleStatus.Parsed, Parse(" , ", out changes));
         Assert.AreEqual(0, changes.Count);
         Assert.AreEqual(EffectRuleStatus.Parsed, Parse(string.Join(" ", Enumerable.Repeat("st +1", 7)) + " bow +1", out changes));
@@ -52,7 +59,8 @@ public sealed class PremadeHeroTests
     {
         foreach (var (text, status) in new[]
         {
-            ("st *2", EffectRuleStatus.UnsupportedOperator), ("goodreactionadj /2", EffectRuleStatus.UnsupportedOperator),
+            ("st /0", EffectRuleStatus.ZeroDivisor), ("goodreactionadj /-0", EffectRuleStatus.ZeroDivisor), ("st *", EffectRuleStatus.InvalidToken),
+            ("st *x", EffectRuleStatus.InvalidToken), ("st /2x", EffectRuleStatus.InvalidToken),
             ("strength +1", EffectRuleStatus.InvalidToken), ("st 1", EffectRuleStatus.InvalidToken), ("st +1x", EffectRuleStatus.InvalidToken),
             ("st +", EffectRuleStatus.InvalidToken), ("st +%", EffectRuleStatus.InvalidToken), ("st +1234567890", EffectRuleStatus.InvalidToken),
             ("st min x", EffectRuleStatus.InvalidToken), ("st =1", EffectRuleStatus.InvalidToken), ("st", EffectRuleStatus.MissingOperand),
@@ -66,13 +74,13 @@ public sealed class PremadeHeroTests
             Assert.AreEqual(0, changes.Count, text);
         }
 
-        var table = Mes("{64}{}{67}{dx +1}{68}{st *2}");
+        var table = Mes("{64}{}{67}{dx +1}{68}{st /0}");
         Assert.AreEqual(new EffectRuleRead(EffectRuleStatus.OutOfRange, null), EffectRules.Read(table, 49));
         Assert.AreEqual(new EffectRuleRead(EffectRuleStatus.OutOfRange, null), EffectRules.Read(table, 400));
         Assert.AreEqual((true, 0), (EffectRules.Read(table, 64).Rule!.Defined, EffectRules.Read(table, 64).Rule!.Changes.Count));
         Assert.AreEqual((false, 0), (EffectRules.Read(table, 65).Rule!.Defined, EffectRules.Read(table, 65).Rule!.Changes.Count), "absent: an empty effect");
         Assert.AreEqual(1, EffectRules.Read(table, 67).Rule!.Changes.Count);
-        Assert.AreEqual(new EffectRuleRead(EffectRuleStatus.UnsupportedOperator, null), EffectRules.Read(table, 68));
+        Assert.AreEqual(new EffectRuleRead(EffectRuleStatus.ZeroDivisor, null), EffectRules.Read(table, 68));
     }
 
     private static readonly MesFile Sources = Mes(
@@ -183,7 +191,7 @@ public sealed class PremadeHeroTests
         [49] = 1032, [57] = 2, [63] = 78, [73] = 41,
     };
 
-    private static readonly MesFile Effects = Mes("{64}{}{67}{dx +1 be +1 cn -1 magicpts +1 repair -1 age +15}{71}{st *2}{330}{st -1 cn +1}");
+    private static readonly MesFile Effects = Mes("{64}{}{67}{dx +1 be +1 cn -1 magicpts +1 repair -1 age +15}{71}{st /0}{330}{st -1 cn +1}");
 
     private static PremadeHeroSources Inputs(Dictionary<int, PrototypeFile> files, MesFile? effects = null, MesFile? buy = null) =>
         new(number => files.TryGetValue(number, out var file) ? file : new(PrototypeFileStatus.Missing, null), effects ?? Effects, Sources, buy);
@@ -277,7 +285,7 @@ public sealed class PremadeHeroTests
             "stored primary stats are replaced by the level-1 defaults");
 
         var effect = Read(Files(Pc(race: 7)));
-        Assert.AreEqual((PremadeHeroFailure.EffectRefused, 71, (EffectRuleStatus?)EffectRuleStatus.UnsupportedOperator),
+        Assert.AreEqual((PremadeHeroFailure.EffectRefused, 71, (EffectRuleStatus?)EffectRuleStatus.ZeroDivisor),
             (effect.Failure, effect.Detail, effect.EffectStatus));
         Refused(PremadeHeroFailure.EffectRefused, Files(Pc(gender: 0)), 330, Mes("{67}{dx +1}{330}{st +1x}"));
         var set = Read(Changed(pc => pc[57] = 4));

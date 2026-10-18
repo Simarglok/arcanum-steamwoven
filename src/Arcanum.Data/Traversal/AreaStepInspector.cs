@@ -308,7 +308,7 @@ public static class AreaStepInspector
     private static readonly int[] WindowWallPieces = [10, 13, 14, 17, 18, 19];
     private static readonly int[] DoorwayWallPieces = [22, 25, 26, 29, 30, 31, 32];
 
-    /// <summary>Whole-map wall rule (docs/research/first-building-evidence.md, pinned CE object.c
+    /// <summary>Whole-map wall rule (docs/research/first-building-evidence.md, the source's
     /// traversal): a doorway piece never blocks, the portal on its edge decides; a window piece
     /// blocks a diagonal step and makes a cardinal one a window jump for a critter walker
     /// (ARC-WORLD-021); every other piece blocks.</summary>
@@ -317,8 +317,8 @@ public static class AreaStepInspector
         : WindowWallPieces.Contains(piece) ? (AreaStepEdgeRule.WindowJump, "WINDOW_PIECE_JUMP")
         : (AreaStepEdgeRule.Block, "WALL_PIECE_BLOCKS");
 
-    /// <summary>A portal's edge for the player at T0 (pinned CE ai_attempt_open_portal and
-    /// object_locked_get): open or busted passes; an unlock script (SAP 3) is Unknown; jammed or
+    /// <summary>A portal's edge for the player at T0 (the source's portal open attempt and
+    /// lock test, ledger LV1–LV5 and docs/research/first-building-evidence.md): open or busted passes; an unlock script (SAP 3) is Unknown; jammed or
     /// magically held blocks; otherwise the portal is locked only when its LOCKED bit is set and it
     /// is not never-locked, and a by-day or by-night bit can unlock it by the hour (Unknown, the
     /// static evidence has no clock). A locked portal needs its key (none is held at T0) unless the
