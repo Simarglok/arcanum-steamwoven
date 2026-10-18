@@ -711,6 +711,20 @@ the terrain init's transition check. Every direct branch stays inside `.text`.
 Not modelled by Steamwoven: the transition-message check of the init (0x4E90B0), which only an invalid module fails; the
 variant counts beyond type 0; the error log lines.
 
+## AI parameters and follow consent (ARC-DATA-033)
+
+Source: the [AI parameter table](../world/ai-parameters.md) and the [follow check](../world/party-runtime.md#follow-check-arcanumsimulationparty)
+that companions on any map need. Read on 2026-10-18 by this task and, independently, by its reviewer, who formed its own
+answers before comparing: both agree on every row (the reviewer added the details of the controller lookup and the
+32-bit level sum, which the code now follows).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| AP1 | the AI entry of the game library table (0x59A90C: init 0x4A8320, module load 0x4A8400, module unload 0x4A84C0 and exit 0x4A83F0 return at once) | The init loads `rules\ai_params.mes` before the module is mounted and fails when it cannot; the module load loads the module's `rules\gameai.mes` and succeeds without it. Each looks up the entry numbered exactly 0 (100), and when it is missing fills nothing; otherwise that entry and each next entry in number order fill consecutive rows of 17 integers, starting at row 0 (100) and stopping before row 100 (150). A row's text is split with `strtok` on space, tab and line feed, each token read with `atoi`, at most 17 tokens; missing tokens leave the field as it was (zero in the static table). Unloading the module keeps rows 100..149. | Original |
+| AP2 | AI parameters of an object (0x4AAA60) | Reads the object's field 282 (the AI data) and copies the 17 integers of that row, without a range check. | Original |
+| AP3 | follow check (0x4AD950) | Results 0 accepted, 1 too good, 2 too bad, 3 dislike, 4 already in group, 5 limit reached, 6 not allowed, 7 low level. A mind-controlled NPC (spell flag 0x8000000) accepts when its controller is this PC, or when no controller is found and it has a PC leader. A PC with Persuasion training Master (3 or more) goes straight to the limit steps; otherwise: another leader with charisma at least the PC's refuses (4); a forced follower (NPC flag 0x400) accepts; reaction (0x4C0CC0) at or below field 5 refuses (3); a PC alignment above the NPC's by more than field 6 (1), or below or equal and the NPC's above by more than field 7 (2); an NPC level at or above the PC's plus field 8 (7). The limit steps, skipped when the caller ignores the charisma limit: a max-followers stat of exactly 0 refuses (6), then the PC's follower count without forced followers (0x45E3F0) at or above it (5). | CE slip (CE accepts a Master persuader at once) |
+| AP4 | stat getter (0x4B0490) and stat base level (0x4B0740), max followers (stat 15) | The base level is the effective charisma divided by 4 (truncated toward zero); the getter adds 1 at Persuasion training Expert (2) or more, then the critter's effects, then clamps to the stat's minimum (0x4B0FC0: 1 from the table at 0x5B5194) and maximum (0x4B0FD0: 7 from the table at 0x5B5204; its race cases are other stats'). | Original |
+
 ## Decisions to revisit
 
 These owner decisions or accepted proposals rest on a CE fact that the original does not share.
