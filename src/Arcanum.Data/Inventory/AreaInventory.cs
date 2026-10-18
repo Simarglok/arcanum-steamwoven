@@ -116,7 +116,7 @@ public sealed record AreaInventoryReadResult(AreaInventoryFailure Failure, AreaI
 /// <summary>
 /// ARC-DATA-012: the Godot-free T0 inventory view over a strict Area snapshot, step 1 of the
 /// ARC-RES-023 proposal (docs/research/crash-site-item-inventory.md). It reads only the snapshot's
-/// effective fields; no archive, no transfer, no script. Field mapping (pinned CE locators in that
+/// effective fields; no archive, no transfer, no script. Field mapping (locators in that
 /// document): holder lists are the container/critter <c>*_INVENTORY_LIST_IDX</c> object-ID arrays with
 /// their <c>*_INVENTORY_NUM</c> counts; items carry <c>OBJ_F_ITEM_PARENT</c>, <c>OBJ_F_ITEM_INV_LOCATION</c>
 /// and the common inventory flag. Identity is the SHA-256 of the raw 24-byte object ID, the same digest

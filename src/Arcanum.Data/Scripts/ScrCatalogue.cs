@@ -47,10 +47,10 @@ public enum ScrOperandRole : byte
 
 /// <summary>The SCR type catalogue: 53 condition types (0..52) and 142 action types (0..141) with
 /// the operand signature of each, which slots take a number and which an object, in order. The
-/// numbers and signatures are format facts read from the pinned CE interpreter and cross-checked
+/// numbers and signatures are format facts read from the source's interpreter (docs/research/scr-census.md) and cross-checked
 /// against the ScriptEd 1.50 editor data and the installed scripts (ARC-RES-045); only the types
 /// the project reads by name have named constants. Signatures are the editor's; for action 86
-/// (float newspaper headline) CE reads the object from slot 1 instead (census anomaly X9), so
+/// (float newspaper headline) the interpreter reading takes the object from slot 1 instead (census anomaly X9), so
 /// a slice that admits 86 must decide which slot it checks.</summary>
 public static class ScrCatalogue
 {

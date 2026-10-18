@@ -29,7 +29,7 @@ internal sealed class GridWireFixture : IDisposable
         using var resource = DatArchive.Open(new MemoryStream(Dat(names ? [("art\\tile\\tilename.mes", Encoding.ASCII.GetBytes("{0}{aaa}{300}{aaa}"))] : [])));
         Snapshot = CardinalTraversalInspector.InspectSector(new(module, SectorPath, resource), new(_root),
             "MODULE", "RESOURCE", "PROTOTYPES", new(SectorPath, "BASE_SECTOR_1452_1290", 1452,1290,86570436012,92928,82560,64,64),
-            names ? new(resource,"RESOURCE","art\\tile\\tilename.mes",TerrainPathProfile.CeNonWindowsMacOs) : null, 7, policy: policy);
+            names ? new(resource,"RESOURCE","art\\tile\\tilename.mes",TerrainPathProfile.NonWindowsMacOs) : null, 7, policy: policy);
         // All sources are disposed before any runtime tests query the snapshot.
     }
     internal CardinalTraversalSnapshot Snapshot { get; }

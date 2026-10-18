@@ -103,9 +103,10 @@ public static class CombatFieldReader
         return new(CombatFieldFailure.None, objects.AsReadOnly());
     }
 
-    /// <summary>The source's weapon skill of a weapon (<c>item_weapon_skill</c>): boomerangs throw; a technological weapon
+    /// <summary>The source's weapon skill of a weapon (0x465D80): boomerangs throw; a technological weapon
     /// with range at least 3 and bullets, power cells or fuel is a firearm; arrows are bows; everything else is melee.
     /// A non-weapon item is thrown.</summary>
+    [OriginalFunction(0x465D80, OriginalFunctionScope.Full)]
     public static CombatWeaponSkill WeaponSkill(CombatWeaponFlags flags, int magickTechComplexity, int range, int ammoType)
     {
         if ((flags & CombatWeaponFlags.Boomerangs) != 0) return CombatWeaponSkill.Throwing;

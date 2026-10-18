@@ -15,7 +15,7 @@ public static class ScrDispatcher
     public const int MindControlScript = 2188;
 
     /// <summary>The trap scripts the trap code runs instead of the interpreter: these numbers with a trap file flag
-    /// (original <c>trap_script_execute</c> 0x4BCB70).</summary>
+    /// (original 0x4BCB70).</summary>
     public const int FirstTrapScript = 30000, LastTrapScript = 30007;
 
     /// <summary>

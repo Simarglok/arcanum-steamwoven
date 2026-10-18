@@ -359,7 +359,7 @@ internal static partial class Program
             if (names.Length != 1) throw new InvalidDataException("NAME_SELECTION");
             var name = names[0]; var nameIdentity = new AreaEntryIdentity(new(AreaSourceRole.Resource2), name.Ordinal, name.Flags, name.StoredSize, name.DeclaredOutputSize, name.Offset, AreaHash(name.RawNameBytes.ToArray()));
             nameBinding = new(nameIdentity, AreaHash(resource.ReadEntry(name)));
-            var nameSource = new TerrainTileNameSource(resource, snapshot.Inputs.Single(i => i.Key.Role == AreaSourceRole.Resource2).Sha256, namePath, TerrainPathProfile.CeNonWindowsMacOs);
+            var nameSource = new TerrainTileNameSource(resource, snapshot.Inputs.Single(i => i.Key.Role == AreaSourceRole.Resource2).Sha256, namePath, TerrainPathProfile.NonWindowsMacOs);
             foreach (var s in snapshot.Sectors.Where(s => s.Present))
             {
                 var e = module.Entries.Single(e => e.Ordinal == s.DatOrdinal);
@@ -674,7 +674,7 @@ internal static partial class Program
         foreach(var s in snapshot.Sectors.Where(s=>s.Present))
         {
             var report=TerrainObstructionInspector.InspectSector(module,"fixture",new($"maps/test/{s.Key.Packed}.sec","test",(int)s.Coordinate.X,(int)s.Coordinate.Y,s.Key.Packed,(int)s.Coordinate.OriginX,(int)s.Coordinate.OriginY,64,64),
-                new(resource,"fixture","art/tile/tilename.mes",TerrainPathProfile.CeNonWindowsMacOs));
+                new(resource,"fixture","art/tile/tilename.mes",TerrainPathProfile.NonWindowsMacOs));
             foreach(var t in snapshot.Terrain.Where(t=>t.Key.Sector==s.Key))
             {
                 var c=report.GetCell(t.LocalX,t.LocalY); var cell=new ResearchCell(1,c.WorldX,c.WorldY);

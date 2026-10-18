@@ -49,8 +49,8 @@ public sealed record TerrainTileNameSource
         Archive = archive ?? throw new ArgumentNullException(nameof(archive));
         TerrainObstructionSourceId.Validate(sourceId, nameof(sourceId));
         TerrainSectorSelector.ValidateAscii(mesEntryPath, nameof(mesEntryPath));
-        if (pathProfile != TerrainPathProfile.CeNonWindowsMacOs)
-            throw new TerrainUnsupportedException(TerrainErrorCode.UnsupportedProfile, "Only the CE non-Windows/macOS path profile is supported.");
+        if (pathProfile != TerrainPathProfile.NonWindowsMacOs)
+            throw new TerrainUnsupportedException(TerrainErrorCode.UnsupportedProfile, "Only the non-Windows/macOS path profile is supported.");
         SourceId = sourceId;
         MesEntryPath = mesEntryPath;
         PathProfile = pathProfile;

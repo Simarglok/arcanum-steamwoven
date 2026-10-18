@@ -8,7 +8,7 @@ and its verdicts decide which differences become switches of the two rule settin
 decision D8 (see [the AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)).
 
 The combat-core anomalies A1–A10 were checked by ARC-COMBAT-001 and are not repeated here (A11 and A12 are in
-[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026); the phase of other rule files in [Load phases](#load-phases-arc-data-027); audio in [Audio](#audio-arc-res-052))
+[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029), blessings and curses in [Blessings and curses](#blessings-and-curses-arc-world-035); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026); the phase of other rule files in [Load phases](#load-phases-arc-data-027); audio in [Audio](#audio-arc-res-052))
 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). Domain
 documents keep their own tables; where a row below contradicts a domain document, this ledger is
 the newer evidence, and the domain document's "likely intent" column is superseded by the verdict.
@@ -567,6 +567,24 @@ confirm the earlier LM1 and LM2 verdicts. Every direct branch stays inside `.tex
 | WB7 | item worth (0x461F20), item identified test (0x464370) | Not identified: 300; else the stored worth, at least 2. Identified: an item type with complexity ≤ 0, or item flag bit 0x1. | Original |
 | WB8 | thrown item damage (0x462330) | A weapon with the throwable flag (0x10) reads its own damage arrays; anything else has normal damage `(weight + 99) / 100 .. (weight + 49) / 50` from its weight (0x461370, with the owner) and no other type. | Original |
 
+## Blessings and curses (ARC-WORLD-035)
+
+Source: [durable effects runtime](../world/durable-effects-runtime.md#blessings-and-curses-arc-world-035) and
+[FR-CHAR-023](../requirements/characters-skills.md#fr-char-023). Read on 2026-10-18 by a first reader and, independently, a
+second reader that saw only the questions (method step 6); both agree on every behaviour below. The blessing and curse
+functions are the same code with their own fields (numbers 0x104 and 0x106, times 0x105 and 0x107), message file, effect
+cause (3, 4) and UI message type. Add and remove begin with a network branch that the reconstruction leaves out; `multiplayer_is_locked`
+is true in single player, so it is never taken. Every direct branch stays inside `.text`; there is no indirect one.
+
+| ID | Function (address, bless / curse) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| BC1 | copy field (0x4C4170 / 0x4C3CC0) | Clears the caller's buffer; a number below 50 (signed) or a missing entry `number × 10 + field` leaves it empty; otherwise the text is copied without a length limit. | Original; the reconstruction's bounded copy of a blessing's text is its own change (the 80-byte buffer of BC2 would overflow on a text of 80 characters or more; the installed effect entries have 1 to 3) |
+| BC2 | get effect (0x4C4420 / 0x4C3F70) | Field 1 into an 80-byte buffer, then the CRT `atoi` (`atol`: white space, one sign, digits up to the first other character, no overflow check). An empty or non-numeric text gives 0. | Original |
+| BC3 | has (0x4C4280 / 0x4C3DD0) | A PC only; the number in its list. | Original |
+| BC4 | add (0x4C42F0 / 0x4C3E40) | A PC only; nothing when held; appends the number and the game time, the effect add (0x4E9F70) with the effect of BC2 and the bless or curse cause; for the local PC message 1000, a UI message and the logbook button. | Original |
+| BC5 | remove (0x4C4450 / 0x4C3FA0) | A PC only; the first entry only; later numbers and times move up; both lengths shortened; the typed removal (0x4EA100) with BC2's effect of the number; the logbook button for the local PC. Not held: nothing. | Original |
+| BC6 | BC2 with the installed `gamecurse.mes` | Curses 52, 53 and 54 hold a placeholder text that is no number, so receiving one adds the module's effect 0 (strength +6, beauty −6, intelligence −6, prowling −3, age +20). | Original bug (data); switch candidate, owner decision open; both modes follow the original until then |
+
 ## Decisions to revisit
 
 These owner decisions or accepted proposals rest on a CE fact that the original does not share.
@@ -600,6 +618,8 @@ Nothing below is changed by this ledger; each needs the owner's word or its owni
    Steamwoven (D2 fix) and not in the Original setting (`TileScriptChangesDiscarded`).
 7. **Starting hero `*n` / `/n`** ([starting hero](starting-hero-evidence.md), SH-07 and the runtime's
    refusal): the original parses the factor, so backgrounds 5 and 11 double their reaction adjustment.
+   **Implemented 2026-10-18 by ARC-WORLD-035** as the recommended option (read the factor as the original does, both
+   modes; `/0` refused in both, it would divide by zero), put to the owner, who had not answered by then.
 8. **Magic slices** ([magic core](magic-core-evidence.md)): MG1, MG2 (mastery `ceil(cost / 2)` at run
    time) and MG8 are CE slips; O9 and O10 are answered by the CE-change rows.
 9. **AI stages** ([AI plan](npc-combat-ai-plan.md)): P1, P2, P3, LM1, LM2, LM13 and LM18 are CE slips

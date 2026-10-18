@@ -6,7 +6,7 @@ namespace Arcanum.Data.Traversal;
 
 /// <summary>
 /// T0 rule set from docs/research/area-passability-closure.md (F1, F6). Independently authored from that
-/// written specification; CE pin a7ff41b3 is attributed lineage, not translated code. Original text is
+/// written specification, not translated code. Original text is
 /// parsed into flags/numbers only and never retained or surfaced.
 /// </summary>
 internal static class AreaStepRules

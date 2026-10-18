@@ -155,7 +155,7 @@ public partial class TerrainCanvas
         var channel = channels.Length == 1 ? channels[0] : (AreaAmbientChannel?)null;
         _areaChunkChannels[chunk] = channel; return channel;
     }
-    // ARC-RENDER-012: terrain under a light lattice samples it per pixel; bodies take their CE object
+    // ARC-RENDER-012: terrain under a light lattice samples it per pixel; bodies take the source's object
     // colour (walls a two-end gradient), the actor its colour at the current placement.
     private (Color Left, Color Right, AreaLatticeBinding? Lattice) AreaItemLight(AreaDrawCommand command, bool isActor)
     {
@@ -196,7 +196,7 @@ public partial class TerrainCanvas
         if (_areaLattice is { } old) { old.Binding.Lighter.Dispose(); old.Binding.Darker.Dispose(); }
         _areaLattice = null;
     }
-    // The actor is a critter: outdoor channel (CE palette callback), like other bodies.
+    // The actor is a critter: outdoor channel (the source's palette callback), like other bodies.
     private Color AreaAmbientColor(AreaDrawCommand command, bool isActor)
     {
         if (_areaAmbient is not { } ambient) return Colors.White;

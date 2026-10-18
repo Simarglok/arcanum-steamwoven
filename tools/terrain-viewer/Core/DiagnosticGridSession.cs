@@ -115,9 +115,9 @@ public sealed record AreaChart(long OriginX, long OriginY, CellCoord Spawn, stri
 public sealed class AreaGridSession : IGridSession
 {
     public const long ChartOriginX = AreaScenePlan.CameraOriginX, ChartOriginY = AreaScenePlan.CameraOriginY;
-    /// <summary>The CE <c>location_xy</c> origin of the AREA chart (ARC-RENDER-011). CE places cell (x,y) at
+    /// <summary>The location-to-screen origin (0x4B8680) of the AREA chart (ARC-RENDER-011). The source places cell (x,y) at
     /// <c>40(y-x-1)</c> and an object at that point plus its offset and <c>+40,+20</c>; the AREA plan projects terrain
-    /// and bodies from <c>40(y-x)</c>, 40 px to the right. The actor placement, which restates <c>location_xy</c>,
+    /// and bodies from <c>40(y-x)</c>, 40 px to the right. The actor placement, which restates 0x4B8680,
     /// takes this origin so the actor stands on the same diamond centre as every AREA body.</summary>
     public const long LocationOriginX = 40, LocationOriginY = 0;
     /// <summary>Chart-relative cell range of the nine core sectors around the base sector (the default <see cref="AreaChart"/> range).</summary>
