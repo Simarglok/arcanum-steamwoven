@@ -22,8 +22,8 @@ public enum EffectRuleStatus
     InvalidToken,
     /// <summary>An attribute without an operator, or <c>min</c>/<c>max</c> without a value.</summary>
     MissingOperand,
-    /// <summary><c>*n</c> or <c>/n</c>: CE stores <c>atoi("*n")</c> = 0 as the factor and the original is NOT_VERIFIED
-    /// (ARC-RES-027 SH-07), so the project refuses them.</summary>
+    /// <summary><c>*n</c> or <c>/n</c>: the original reads the number after the operator (ledger LM9, SH-07); the project
+    /// still refuses them by policy.</summary>
     UnsupportedOperator,
     /// <summary>More than seven changes in one collection, which would overrun the source's per-effect arrays.</summary>
     TooManyChanges,
@@ -41,7 +41,7 @@ public sealed record EffectRule(int Number, bool Defined, IReadOnlyList<EffectCh
 public sealed record EffectRuleRead(EffectRuleStatus Status, EffectRule? Rule);
 
 /// <summary>
-/// <c>rules\effect.mes</c> entries (ARC-RES-027; CE <c>effect_parse</c> at the pinned revision): tokens separated by
+/// <c>rules\effect.mes</c> entries (ARC-RES-027; the source's effect parser 0x4E9C20, ledger LM9): tokens separated by
 /// spaces and commas; an attribute keyword (ASCII case-insensitive, first collection that has it wins) followed by its
 /// operator: <c>+n</c>/<c>-n</c> add, the same with a trailing <c>%</c> percent, <c>min n</c>, <c>max n</c>. Numbers are
 /// 1..9 digits. Project admission policy, stricter than the source's scanner: anything else is a typed refusal instead
@@ -77,6 +77,7 @@ public static class EffectRules
     }
 
     /// <summary>Parses one entry's text (the bytes of a MES message).</summary>
+    [OriginalFunction(0x4E9C20, OriginalFunctionScope.Partial)]
     public static EffectRuleStatus Parse(ReadOnlySpan<byte> text, out IReadOnlyList<EffectChange> changes)
     {
         changes = [];

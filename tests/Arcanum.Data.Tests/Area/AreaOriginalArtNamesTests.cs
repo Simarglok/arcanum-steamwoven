@@ -117,7 +117,7 @@ public sealed class AreaOriginalArtNamesTests
     {
         Assert.AreEqual(('l', 0), AreaDataOwner.WallDamage(0x400, rotation: 0, piece: 7));
         Assert.AreEqual(('r', 0), AreaDataOwner.WallDamage(0x400, rotation: 7, piece: 0)); // swapped to 0x80
-        Assert.AreEqual(('l', 1), AreaDataOwner.WallDamage(0x80, rotation: 0, piece: 1)); // piece 1 as the original, not CE
+        Assert.AreEqual(('l', 1), AreaDataOwner.WallDamage(0x80, rotation: 0, piece: 1)); // piece 1 as the original
         Assert.AreEqual(('r', 0), AreaDataOwner.WallDamage(0x80, rotation: 1, piece: 8));
         Assert.AreEqual(('l', 3), AreaDataOwner.WallDamage(0x80, rotation: 2, piece: 3)); // swapped to 0x400
         Assert.AreEqual(('l', 5), AreaDataOwner.WallDamage(0x480, rotation: 0, piece: 5)); // 0x400 wins

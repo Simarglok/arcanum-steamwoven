@@ -23,7 +23,7 @@ tests in `tests/Arcanum.Session.Tests/Verification` keep all four consistent.
 The registry covers the experience functions of ARC-WORLD-030 (three full at F3 by the oracle; progress since its XP3
 switch, ARC-WORLD-033: a known difference keeps a row from `full` until it is implemented), the audio rows (ARC-DATA-040,
 F2, [audio study](../research/audio-evidence.md), marking methods of `Arcanum.Data`, which declares its own attribute),
-the rows other tasks added, and since ARC-DEV-009 every original function the Simulation and Session code names (F2 where
+the rows other tasks added, and since ARC-DEV-009 and ARC-DEV-010 the original functions the Simulation, Session and Data code implements and names (F2 where
 the [ledger](../research/original-verification-ledger.md) has two readings, F0 where the function was not read in the
 executable). A host method that only calls the registered rule carries no mark (one method per address). Other domains
 add their rows when they are migrated.
