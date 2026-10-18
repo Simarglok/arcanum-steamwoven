@@ -4,7 +4,7 @@
 
 This is the reproducibility record for the read-only R1 DAT-format pilot. It
 records observations of the locally available, user-owned installation
-candidates, not canonical/vanilla bytes and not a behavioural oracle. No CE
+candidates, not canonical/vanilla bytes and not a behavioural oracle. No other
 application, legacy executable, Windows installation, game runtime, writer,
 packer, or extraction tool was run. No game bytes, original entry names, or
 personal absolute paths are committed.
@@ -18,13 +18,11 @@ it does not select a production technology stack.
 
 `Version.txt` in the investigated installation says `Activision`, `Arcanum`,
 and `VERSION:1.0.7.4`. Its `readme.txt` calls itself a 1.0.7.4 readme and
-contains a GOG technical-support section. An adjacent macOS application
-identifies itself as `com.alexbatalov.arcanum-ce`, version `1.0.0`.
+contains a GOG technical-support section.
 
 Consequently, the eight files below are **user-owned 1.0.7.4 candidates**.
 The version text is direct installation evidence, but it does not prove the
-files are an unmodified canonical or vanilla release. The adjacent CE app was
-not executed and is not a behavioural reference for this work.
+files are an unmodified canonical or vanilla release.
 
 ## Observed inventory
 
@@ -110,7 +108,7 @@ every record.
 | DBMaker package | Toolkit `downloads/terra-arcanum/tools/dbmaker.zip`, SHA-256 `efc4e2324591565e119cea1bf541374a9be4087c8f3444c96bf7c798139795f9` | Provenance reviewed as a preserved, unexecuted package. | License/source status not reviewed; no executable was run and it was not a structural comparator. |
 | MatuX UnDAT package | Toolkit `downloads/terra-arcanum/tools/UnDAT_MatuX_TMS.zip`, SHA-256 `35c1cf64059e7df38c8959e50bfe39e2787d252797ff2bbcbd1234d85a6bd420` | Read only `undat.cpp`, `undat.h`, `dat2.1.txt`, and readme from the archive; no code was transferred. | Package license is not reviewed; documentation describes partial research and its tool was not run. It is not retail/canonical proof. |
 | Arkanum | [`vleon1/Arkanum`](https://github.com/vleon1/Arkanum/tree/ad58733e9f3e7c95055ae34f8c6d997e3b2d8d29), commit `ad58733e9f3e7c95055ae34f8c6d997e3b2d8d29`; local bundle SHA-256 `67c18d146120c49f1a2249214efcda593513ff5767478c5b473b5011e94ea19b` | Inspected `formats/dat.py`; its reader was run unchanged from a temporary local checkout for the comparison below. | No `LICENSE` path exists at the pinned tree. Shared decoder lineage is not established; it is a comparison, not reusable code. |
-| ArcNET | [`Bia10/ArcNET`](https://github.com/Bia10/ArcNET/tree/baa7cb5a7b8d1498344cdb5e3170bce8f191fd3c), commit `baa7cb5a7b8d1498344cdb5e3170bce8f191fd3c`; local bundle SHA-256 `398b0daa72fe69eb526bf4ad3a4fb6c33091bc6b233ab065c9cd1f698098dba6` | Inspected DAT directory/entry/flag sources and README; its MIT license was observed. | README credits `arcanum-ce` as the primary archive-format source. It is CE-derived corroboration, not an independent oracle; it was not run. |
+| ArcNET | [`Bia10/ArcNET`](https://github.com/Bia10/ArcNET/tree/baa7cb5a7b8d1498344cdb5e3170bce8f191fd3c), commit `baa7cb5a7b8d1498344cdb5e3170bce8f191fd3c`; local bundle SHA-256 `398b0daa72fe69eb526bf4ad3a4fb6c33091bc6b233ab065c9cd1f698098dba6` | Inspected DAT directory/entry/flag sources and README; its MIT license was observed. | Its README names another project as the primary archive-format source. It is derived corroboration, not an independent oracle; it was not run. |
 
 Toolkit package hashes above were recomputed from the local files and matched
 `toolkit/manifest.json` and `toolkit/SHA256SUMS`; both Git bundles also passed
@@ -129,7 +127,7 @@ reader lineage is unproven and the pinned project has no license at this
 commit.
 
 ArcNET was intentionally not used as an independent comparator: its own README
-attributes archive-format knowledge to CE.
+attributes archive-format knowledge to another project.
 
 ## Reproduction commands
 
@@ -190,7 +188,7 @@ no extracted content, and writes no output adjacent to an input.
 - MatuX/DBMaker provenance and licensing do not authorize source reuse; their
   executables were not run.
 - Arkanum provides a runnable comparison but has unproven lineage and no
-  pinned-tree license; ArcNET is expressly CE-derived.
+  pinned-tree license; ArcNET is expressly derived from another project.
 - No production reader, C# implementation, writer, packer, CLI, engine, ART
-  support, Windows/VM setup, CE execution, or runtime experiment was
+  support, Windows/VM setup, other application execution, or runtime experiment was
   implemented.

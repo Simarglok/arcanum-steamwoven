@@ -11,74 +11,75 @@ Area loader, NPC conversation and viewer are **not** rewired by this work.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the pinned CE specification
-  [`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd)
-  (Sustainable Use License v1.0); line ranges below are what was read. It is a
-  specification lineage, not an original-executable observation.
+- **Source fact**: an earlier source reading (provenance in git history), cited by
+  the executable address of its function (the file and archive functions of the tig
+  library are named in words, without an address); level F0 (not checked in the
+  executable) unless a ledger row or check is cited. It is not an observation of
+  the running original.
 - **Local observation**: measured by `tools/research/Arcanum.ContentProbe` on the
-  owner's unchanged installation (GOG files, CE app). The probe prints paths, member
+  owner's unchanged installation (GOG files). The probe prints paths, member
   names, sizes and SHA-256 digests only, never payload bytes.
 - **Project policy**: a choice made here where the source leaves a decision open or
   where fidelity cannot be modelled; each is listed under [Limits](#limits-and-not-ready).
 
-The API and probe were written from the rules stated here and do not translate CE code.
+The API and probe were written from the rules stated here.
 
 ## Mount sequence (source facts)
 
 Every mount pushes a source on **top** of a list; lookups walk the list from the top.
 Re-adding a mounted path moves it to the top
-([`file.c` 573–659](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L573-L659)).
+(the file layer's mount function).
 
-1. `tig.dat`, then the game folder `.` ([`tig_file_init`, `file.c` 535–553](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L535-L553)).
+1. `tig.dat`, then the game folder `.` (the file layer's init).
 2. Every `arcanum*.dat` in the game folder, in case-insensitive name order, then the
-   `data` folder ([`gamelib_load_data`, `gamelib.c` 1820–1835](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L1820-L1835),
-   called from [`gamelib_init`, 330](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L330)). The name list is
+   `data` folder (`gamelib_load_data` 0x404A20,
+   called from `gamelib_init` 0x4020F0). The name list is
    gathered through the already mounted sources and kept sorted and de-duplicated
-   case-insensitively ([`file.c` 937–1015](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L937-L1015),
-   [1817–1847](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L1817-L1847)).
-3. Module `Arcanum` (default, [`gamelib.c` 204](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L204); `-mod:NAME`
-   overrides it, [`main.c` 265–268](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/main.c#L265-L268)):
+   case-insensitively (the file layer's listing functions).
+3. Module `Arcanum` (the default of the game library; `-mod:NAME`
+   overrides it in `main`, 0x401000):
    `Modules/NAME.dat`; only if it exists, `Modules/NAME.patch0`..`patch9` in digit
    order; then the folder `Modules/NAME`
-   ([`gamelib_load_module_data`, `gamelib.c` 1838–1902](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L1838-L1902),
-   from [`gamelib_mod_load`, 662–673](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L662-L673)).
+   (`gamelib_load_module_data` 0x404C10,
+   from `gamelib_mod_load` 0x402A50).
    Missing `data` and module folders are created; this project never writes, omits a
    missing `data` folder and refuses a module with neither `.dat` nor folder.
 
 Search order is therefore, highest priority first:
 module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-named
 `arcanum*.dat` … first › game folder › `tig.dat`. Multiplayer mounts
-([`multiplayer.c` 684, 941](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/multiplayer.c#L684)) are out of scope.
+(0x49CC70, 0x49D590) are out of scope.
 
 ## Lookup rule (source facts and derivation)
 
-- **Archive member names** are ASCII-lowercased when an archive is opened (CE's
-  non-Windows port also turns backslashes into slashes, [`compat.c` 9–22](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/compat.c#L9-L22);
-  the Windows build keeps backslashes), and every member gets the "check loose first" flag `0x100`
-  ([`database.c` 55–206](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/database.c#L55-L206)). Lookup is a
+- **Archive member names** are ASCII-lowercased when an archive is opened (the
+  Windows build keeps backslashes; the earlier reading's non-Windows port turned them
+  into slashes),
+  and every member gets the "check loose first" flag `0x100`
+  (the archive open function). Lookup is a
   binary search over the lowercased names; a member flagged `0x800` is treated as
-  absent ([`database.c` 356–375](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/database.c#L356-L375)). A
+  absent (the archive lookup). A
   sidecar `ARCHIVE.ignore` file sets `0x800` by pattern
-  ([`database.c` 734–778](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/database.c#L734-L778)).
-- **Open for reading** ([`tig_file_open_internal_native`, `file.c` 1729–1804](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L1729-L1804)):
+  (the archive's ignore-file reader).
+- **Open for reading** (the file layer's open function):
   find the topmost archive holding the name. If its member still carries `0x100`/`0x200`,
   try every folder **above that archive**, top-down; the first loose file found wins
   (and the member is marked `0x200`). Otherwise the archive wins and both flags are
   cleared, so later opens never look for a loose file again. With no archive holding
   the name, the topmost folder holding it wins. Folder names match without regard to
-  letter case: the Windows original relies on its file system, CE's port resolves each
-  segment itself ([`compat.c` 24–78](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/compat.c#L24-L78)).
-- **Exists** ([`file.c` 1064–1135](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L1064-L1135)) and
-  **extract**, used for sounds and movies ([`file.c` 837–934](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L837-L934),
-  [`sound.c` 449](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/sound.c#L449), [`gmovie.c` 82](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gmovie.c#L82)),
+  letter case: the Windows original relies on its file system; the earlier reading's
+  non-Windows port resolved each segment itself.
+- **Exists** (the file layer's exists test) and
+  **extract**, used for sounds and movies (the file layer's extract function,
+  called by the sound library and by `gmovie_play_path` 0x40DEE0),
   take the first source in plain search order, archive or folder.
 - Mounting a folder deletes its top-level `TIGCache` folder
-  ([`file.c` 573–659](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L573-L659)), so cached extracts
+  (the mount function), so cached extracts
   are never seen as candidates after a mount, also not through an enclosing folder
   such as the game folder.
 - A script's file name comes from listing `scr\*.scr` across all sources; the sorted,
   de-duplicated list maps each number to a name, and a later name with the same number
-  replaces an earlier one ([`script_name.c` 40–80, 112–135](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script_name.c#L40-L80)).
+  replaces an earlier one (`script_name_init` 0x4CEC10, `script_name_mod_load` 0x4CECE0).
   Numbers from 1000 up are listed at game start, before the module is mounted, so only
   names held by `tig.dat`, the game folder, `arcanum*.dat` and `data/` count for them;
   1..999 are listed at module load, over every source. Checked in the 1.0.7.4 executable
@@ -86,13 +87,13 @@ module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-n
   0x4CECE0 keeps 1..999, both replace an earlier name and report the duplicate, and
   `script_name_build_scr_name` 0x4CEDC0 looks up ≥ 1000 in the first table and 1..999 in
   the second. The mount timing (checked in the executable by ARC-DATA-026): `gamelib_init`
-  loads the base data ([`gamelib.c` 330](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L330)) before it runs the init functions
-  ([381](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L381)), and `gamelib_mod_load` mounts the module ([662–673](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L662-L673)) before
-  it runs the module-load functions ([710](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L710)).
+  (0x4020F0) loads the base data before it runs the init functions, and
+  `gamelib_mod_load` (0x402A50) mounts the module before it runs the module-load
+  functions.
   The dialog name is the script name with `scr` swapped for `dlg`
-  ([`script_name.c` 185–209](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script_name.c#L185-L209)); the `dlg\*.dlg`
-  listing in [`dialog.c` 2968](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2968) is a debug check only. Both
-  files are then opened through the rule above ([`script.c` 3440](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L3440)).
+  (`script_name_build_dlg_name` 0x4CEE60); the `dlg\*.dlg`
+  listing in `dialog_check` (0x418030) is a debug check only. Both
+  files are then opened through the rule above (the script cache, 0x44C4E0).
 - Prototypes (`proto\*.pro`) are all listed and read once at game start, before the
   module is mounted, and never at module load: only `tig.dat`, the game folder,
   `arcanum*.dat` and `data/` count for them, and a module's copy is never read.

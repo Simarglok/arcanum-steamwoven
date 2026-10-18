@@ -13,11 +13,10 @@ file, and it adds no consent evaluator or party state. Requirements:
 
 Categories, as in [ARC-RES-023](crash-site-item-inventory.md):
 
-- **Source (S):** read from `alexbatalov/arcanum-ce` at
-  [`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd)
-  (Sustainable Use License 1.0, not MIT). It is a reconstruction lineage, not
-  original-executable parity; decompiler names (`sub_…`) are read for intent
-  and marked as such. No CE code or structure is copied.
+- **Source (S):** an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a ledger row is cited; the intent of unnamed
+  functions is a reading and marked as such.
 - **Data (D):** the authenticated normal-game Crash Site aggregate, the six
   pinned archives and the installed content stack, read by the probe below. T0
   is the serialized state before any tick, script or player action.
@@ -93,13 +92,13 @@ The DLG is the same payload as in the [NPC dialog evidence](crash-site-npc-dialo
 
 | ID | Claim | Source |
 | --- | --- | --- |
-| S1 | The NPC's `OBJ_F_NPC_AI_DATA` value is a row index into one table of 17-integer rows. | [ai.c 36–59](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L36-L59), [ai.c 1564–1573](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1564-L1573) |
-| S2 | Rows 0..99 come from `rules\ai_params.mes`, rows 100..149 from the module's `rules\gameai.mes`. Loading needs an entry numbered exactly 0 (100); each later entry in number order takes the next row, and each row reads up to 17 integers split on space, tab and newline with `atoi`. | [ai.c 192–228](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L192-L228), [ai.c 236–275](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L236-L275), [mes.c 191–215](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L191-L215), [mes.c 287–305](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L287-L305) |
-| S3 | Level, alignment and charisma are stored stats (`OBJ_F_CRITTER_STAT_BASE_IDX` entries 17, 19 and 7), then adjusted by the critter's effects and clamped. Alignment is clamped to −1000..1000. Max followers is derived as charisma / 4, +1 at Persuasion expert, then clamped to **1..7**. | [stat.c 43–72](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L43-L72), [stat.c 336–381](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L336-L381), [stat.c 79–108](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L79-L108), [stat.c 512–530](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L512-L530), [stat.c 891–896](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L891-L896), [stat.c 601–613](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L601-L613) |
-| S4 | Effects come from `rules\effect.mes` (50..399) and the module's `rules\gameeffect.mes` (0..49). An entry names the stats it changes by symbol (`level`, `alignment`, `ch`, …); the NPC-side reaction adjustment is the special `reaction` symbol. | [effect.c 87–116](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L87-L116), [effect.c 174–185](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L174-L185), [effect.c 257–330](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L257-L330), [effect.c 360–470](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L360-L470), [effect.c 732–830](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L732-L830), [effect.c 930–933](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L930-L933) |
-| S5 | The reaction the check compares is, as we read the decompiled helpers: the stored level for this PC, or the NPC's reaction base when he has none, plus (unless the NPC is aloof or monstrous) a race-pair term and the PC's beauty reaction modifier, plus the PC's reputation term, then the NPC's reaction effects. A PC on the NPC's shit list reads 0. | [reaction.c 205–235](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/reaction.c#L205-L235), [reaction.c 442–475](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/reaction.c#L442-L475), [reaction.c 545–570](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/reaction.c#L545-L570), [race table 30–142](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/reaction.c#L30-L142), [beauty modifier stat.c 179–200, 588–600](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L179-L200) |
-| S6 | A dialog action reads its first operand with `atoi` right after the two-letter code. `JO` / `UW` read the node by skipping spaces and the first operand's digits, then `atoi` again; a sign is not skipped and a comma before the node reads 0. `JO a n` checks with `a` as "ignore the charisma limit" and joins with `a` as `force`; `UW a n` does the same for unwait. | [dialog.c 1862–1900](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1862-L1900), [dialog.c 2081–2141](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2081-L2141), [dialog.c 2246–2257](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2246-L2257) |
-| S7 | An unforced join and an unforced unwait each run the same check again (with the charisma limit), so a `JO 0` / `UW 0` is decided by one consent result. | [critter.c 877–928](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L877-L928), [ai.c 1505–1530](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1505-L1530) |
+| S1 | The NPC's `OBJ_F_NPC_AI_DATA` value is a row index into one table of 17-integer rows. | AI parameter table, AI 0x4AAA60 |
+| S2 | Rows 0..99 come from `rules\ai_params.mes`, rows 100..149 from the module's `rules\gameai.mes`. Loading needs an entry numbered exactly 0 (100); each later entry in number order takes the next row, and each row reads up to 17 integers split on space, tab and newline with `atoi`. | AI 0x4A8320, 0x4A83F0, 0x4A8400, MES 0x4D4460, 0x4D45E0 |
+| S3 | Level, alignment and charisma are stored stats (`OBJ_F_CRITTER_STAT_BASE_IDX` entries 17, 19 and 7), then adjusted by the critter's effects and clamped. Alignment is clamped to −1000..1000. Max followers is derived as charisma / 4, +1 at Persuasion expert, then clamped to **1..7**. | stat tables, stat 0x4B0490, 0x4B0FC0, 0x4B0740 |
+| S4 | Effects come from `rules\effect.mes` (50..399) and the module's `rules\gameeffect.mes` (0..49). An entry names the stats it changes by symbol (`level`, `alignment`, `ch`, …); the NPC-side reaction adjustment is the special `reaction` symbol. | effect tables, effect 0x4E99F0, 0x4E9AE0, 0x4E9C20, 0x4EA690, 0x4EA6C0, 0x4EAA80 |
+| S5 | The reaction the check compares is, as we read the decompiled helpers: the stored level for this PC, or the NPC's reaction base when he has none, plus (unless the NPC is aloof or monstrous) a race-pair term and the PC's beauty reaction modifier, plus the PC's reputation term, then the NPC's reaction effects. A PC on the NPC's shit list reads 0. | reaction 0x4C0D00, 0x4C1290, 0x4C12D0, 0x4C12F0, 0x4C1500, the race table, the beauty modifier table, stat 0x4B0740 |
+| S6 | A dialog action reads its first operand with `atoi` right after the two-letter code. `JO` / `UW` read the node by skipping spaces and the first operand's digits, then `atoi` again; a sign is not skipped and a comma before the node reads 0. `JO a n` checks with `a` as "ignore the charisma limit" and joins with `a` as `force`; `UW a n` does the same for unwait. | dialog 0x415BA0, 0x4167C0 |
+| S7 | An unforced join and an unforced unwait each run the same check again (with the charisma limit), so a `JO 0` / `UW 0` is decided by one consent result. | critter 0x45DE90, AI 0x4AA8C0 |
 
 ## 2. Virgil at T0 (D)
 
@@ -132,7 +131,7 @@ the entry number agree here):
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Value | 0 | 1000 | 1000 | 101 | 1 | **−1000** | **2001** | **2001** | **30** | 0 | −1000 | 2001 | 2001 | 50 | 20 | 0 | 1 |
 
-Field meanings follow the source's comments on [ai.c 36–59](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L36-L59):
+Field meanings follow the earlier reading's comments on the AI parameter table:
 5 = refuse at reaction ≤ value, 6 / 7 = largest PC-above / PC-below alignment
 gap, 8 = refused when the NPC is at least this many levels above the PC,
 9 = reaction drop when his leader hits him.
@@ -178,13 +177,13 @@ real PC talking to Virgil at T0:
 While he follows, two checks of C13 apply. The armed "check leader" test
 (reaction ≤ −980, alignment gap > 1901) only floats a warning. Leaving goes
 through the consent check without the charisma limit
-([ai.c 2412–2443](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2412-L2443),
-also after a hit, [ai.c 996–1015](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L996-L1015)),
+(AI 0x4AC380,
+also after a hit, AI 0x4A9650),
 so it refuses only on dislike (≤ −1000), an alignment gap above 2001 or the
 30-level gate. As read Virgil therefore never leaves on his own (the level gap
 cannot arise, [ARC-RES-031](virgil-auto-level.md)); `LV` or a script disband ends the link. A hit from his
 leader lowers his reaction by 0 (field 9). Wait index 6 schedules no timer
-under any Persuasion bonus ([ai.c 1472–1485](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1472-L1485)),
+under any Persuasion bonus (AI 0x4AA7A0),
 so the timeout question O3 does not apply to him.
 
 The project's diagnostic PROJECT profile accepts every follow request. For
@@ -220,8 +219,8 @@ PC is already at his follower limit.
 
 ## Method
 
-Source reading at the pinned commit, through the call chains named in each
+The earlier source reading (cited by executable address, level F0), through the call chains named in each
 row, plus the read-only probe `--companion-consent` (self-test
 `--companion-consent-self-test` covers the operand reader, the code scan, the
-AI row rule and the effect symbol scan). No CE code or structure was copied;
+AI row rule and the effect symbol scan). Earlier provenance is in git history;
 names in this document are descriptive.

@@ -1,7 +1,7 @@
 # NPC combat AI: source map and decomposition
 
 Status: **Research plan**, work item ARC-RES-039 (2026-10-16). This document
-maps how the pinned source organizes NPC behaviour in and around combat and
+maps how the game organizes NPC behaviour in and around combat and
 breaks the owner's goal into ordered work: **phase 1** rebuilds the original
 system stage by stage with the source plus the recorded D2 fixes as the
 default, **phase 2** adds
@@ -24,18 +24,19 @@ its subturn early") is what this plan answers.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the pinned CE specification
-  [`a7ff41b300ef712f0e7d088183a3d08957110cdd`][ce] (Sustainable Use License
-  v1.0) at the line ranges linked below. CE is a reconstruction lineage, not an
-  original-executable observation, and keeps decompiler names (`sub_…`); a
-  reading of their intent is marked as such.
+- **Source fact**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a row of the
+  [original verification ledger](original-verification-ledger.md) is cited.
+  Unnamed functions keep decompiler names (`sub_…`); a reading of their intent
+  is marked as such.
 - **First-pass finding**: what one reading of a function shows. Each is
   re-read and either confirmed or corrected by the stage research that owns
   it; nothing here is a contract.
-- **CE anomaly**: a branch that looks inconsistent. Under decision D2 phase 1
+- **Anomaly**: a branch that looks inconsistent. Under decision D2 phase 1
   fixes a confirmed slip and records it in the [anomaly
   decisions](#anomaly-decisions); a bug the retail game really has stays
-  reachable behind a named switch of the "Original" setting (D8), while a CE
+  reachable behind a named switch of the "Original" setting (D8), while a
   reconstruction slip the original does not have gets no switch.
 - **Project policy**: a choice this project makes where the source leaves one
   open. Every policy below is a proposal unless the [owner
@@ -57,14 +58,14 @@ executable parity is **NOT_VERIFIED**.
   its subturn ends (the "ends its subturn early" part of ARC-RES-030 O5). In
   real time an NPC that is attacked (missed or damaged) also gets a pass at
   once; in a round that extra pass stops at the gate unless it is the NPC's
-  turn ([tick][timeevent], [activity][activity], [delay][delay],
-  [subturn][cb-tb], [attacked: miss][cb-hit], [attacked: damage][cb-dmg]).
+  turn (tick (0x4AD200, 0x4AD420, 0x4AD4D0, 0x4AD5D0, 0x4AD610, 0x4AD6B0, 0x4AD6E0, 0x4AD700, 0x4AD730, 0x4AD790, 0x4AD7D0), activity (0x4AD420, 0x4AD4D0), delay (0x4AD5D0, 0x4AD610),
+  subturn (0x4B7010), attacked: miss (0x4B2F60), attacked: damage (0x4B4390)).
 - **Fixed pipeline.** Each pass: gate (dead, off, stoned, unconscious, PC
   off, in a conversation, someone else's turn, busy animation, generator) →
   refresh wield/weapon flags → **heal** (self, leader, other followers); if no
   heal was chosen, **look for items** (ammo, weapon, armour when flagged); if
   no pickup started either, **update the danger state** (which also picks a
-  spell or item, below) → **perform** ([pipeline][process], [gate][gate]).
+  spell or item, below) → **perform** (pipeline (0x4A84F0, 0x4A8570, 0x4A88D0), gate (0x4A8570)).
 - **Four danger states.** Every NPC is in one of NONE, COMBAT_FOCUS (fighting
   a target), FLEE or SURRENDER, stored as critter/NPC flags plus a
   combat-focus or fleeing-from handle. One setter owns all transitions; it
@@ -72,22 +73,22 @@ executable parity is **NOT_VERIFIED**.
   reaction drop toward a PC enemy, and it is where invulnerable critters, the
   clockwork decoy, the "no flee" flag, a leader with extraordinary charisma
   (followers never flee) and the global "NPC fighting" switch are applied
-  ([state read][danger-get], [setter][danger-set]).
+  (state read (0x4AAB00), setter (0x4AABE0)).
 - **Hostility is decided per candidate.** A peaceful NPC scans critters in
   the square of half-size `clamp(Perception, 1, 10)` cells, nearest first
   (decoys first, unconscious ones last), keeps only those it can see or hear,
   and attacks the first that is kill-on-sight (script veto, KOS flag and
   faction, reaction at or below AI parameter 10, alignment gap at or above
   parameter 11, decoy, guard duty), or helps an ally under attack, or avenges
-  a dead ally ([find target][find-target], [KOS][kos], [protect][protect]).
+  a dead ally (find target (0x4AB460), KOS (0x4AE120), protect (0x4AE3A0, 0x4AE450)).
 - **A fight keeps a target and an enemy list.** A fighting NPC keeps its
   current focus while it stays valid (alive, not stoned, not its own leader or
   party, within 20 cells of it and of its leader, a master prowler it cannot
   see is dropped); else it unlocks the target and scans afresh as a peaceful
   NPC does; else it takes the last critter that hit it, else a random valid
   entry of its enemy list (the "shit list", which holds the attacker's whole
-  team), else it calms down ([danger update][danger-update],
-  [validity][valid], [enemy list][shitlist]).
+  team), else it calms down (danger update (0x4A92D0),
+  validity (0x4AB990, 0x4ABBC0), enemy list (0x4AF8C0, 0x4AF930, 0x4AF9D0, 0x4AFA90, 0x4AFB30, 0x4AFBB0, 0x4AFBD0, 0x4AFC70)).
 - **Morale.** When an NPC is attacked, joins an ally's fight or witnesses
   one, it first asks whether to flee; a target it finds by its own scan is
   fought without that check. It never flees with "no flee" or under mind
@@ -98,9 +99,9 @@ executable parity is **NOT_VERIFIED**.
   a new attacker is weighed afresh. A fleeing NPC's next action converts it
   to SURRENDER (which also leaves combat mode) while it keeps running;
   surrender ends when the danger source is dead or unconscious, or at random
-  (1 in 500 per pass) once HP is at least 80 % ([reaction to an
-  attack][react], [should flee][should-flee], [flee/surrender
-  perform][perform]).
+  (1 in 500 per pass) once HP is at least 80 % (reaction to an
+  attack (0x4AA620), should flee (0x4AB2A0, 0x4AB2F0, 0x4AB400, 0x4AB430), flee/surrender
+  perform (0x4AC620, 0x4AC660)).
 - **Actions, in source order.** (1) The heal ladder by HP% runs first in the
   pipeline (in combat a target above 30 % HP is healed only with parameter 14
   chance). (2) During the danger update a fighting NPC may pick a spell or
@@ -115,21 +116,21 @@ executable parity is **NOT_VERIFIED**.
   starts backing off; else a grenade throw when a fight has just started or
   after backing off, with throwing skill, the target out of its own blast, a
   clear line of fire and no protected critter in the blast; else the attack
-  goal on its target ([heal][heal], [spell choice][spell-choice], [list
-  chooser][chooser], [action][action], [combat perform][perform-combat],
-  [back off][back-off], [grenade][grenade]).
+  goal on its target (heal (0x4A8940, 0x4A8AA0), spell choice (0x4ABC20, 0x4ABC70, 0x4ABE20, 0x4ABEB0), list
+  chooser (0x4ABF10), action (0x4AC180, 0x4AC250, 0x4AC320, 0x4AC350), combat perform (0x4AC6E0),
+  back off (0x4AC7B0), grenade (0x4AC910)).
 - **Spell and item eligibility** is a typed refusal list: unknown spell, too
   tired or no charge (an NPC without a PC leader below 20 % fatigue never
   casts; cost at or above current fatigue; an empty mana store), not enough
   intelligence or willpower, "cast highest only", a maintained spell with no
   free maintenance slot, fail chance at or above 38 % (not checked for
   healing spells on a target at or below 30 % HP), and a blocked line of fire
-  ([eligibility][cast-check]). The ten lists come from per-spell `AI_*`
+  (eligibility (0x4AE720)). The ten lists come from per-spell `AI_*`
   priorities in the spell data and from items' mana stores or AI action
   field. Each list holds either items or spells: in combat at or below 50 %
   fatigue items, and spells only when no item qualifies; otherwise spells,
-  and items only when no spell qualifies ([mt_ai lists][mt-lists],
-  [populate][mt-populate], [spell fields][spell-ai]).
+  and items only when no spell qualifies (mt_ai lists (0x4CC2A0, 0x4CC2D0, 0x4CC310, 0x4CC350, 0x4CC380, 0x4CC470, 0x4CC4C0, 0x4CC4F0, 0x4CC520, 0x4CC580, 0x4CC6F0, 0x4CC740, 0x4CC770, 0x4CC810, 0x4CC8A0, 0x4CC930, 0x4CCA30, 0x4CCA90, 0x4CCAD0, 0x4CCB10, 0x4CCB50, 0x4CCB90, 0x4CCBF0, 0x4CCC00, 0x4CCC40),
+  populate (0x4CC580), spell fields (0x457E70)).
 - **Combat is contagious.** Every attack (and a fight start) notifies: the
   attacker's and the victim's followers join or complain ("upset attacking"
   their own party, origin, faction or a good target), the victim records who
@@ -137,74 +138,74 @@ executable parity is **NOT_VERIFIED**.
   follower changes its reaction by parameter 9 (the follower-hit anomaly of
   ARC-RES-028) and may make it leave, and nearby NPCs who see or hear (radius
   2/8/15 by loudness) either join to protect their faction/group or flee
-  ([attack event][attack], [followers][follow-join], [noise][noise]). When a
+  (attack event (0x4A94C0, 0x4A9530, 0x4A9560, 0x4A9650), followers (0x4A9B80, 0x4A9C00), noise (0x4A9E10, 0x4A9F10)). When a
   PC kills, same-faction NPCs within 3 cells already fighting that PC back
   off. Dynamite counts as an attack by the PC on every NPC within 10 cells
   that sees or hears it (not its followers, not mind-controlled ones);
-  portal and container crimes alert guards ([killed][killed],
-  [dynamite][dynamite], [guards][guards]).
+  portal and container crimes alert guards (killed (0x4AA1B0),
+  dynamite (0x4AA0D0), guards (0x4AEE50)).
 - **Parameters are data.** The 17 AI parameters per row come from
   `rules\ai_params.mes` (rows 0..99) and the module's `rules\gameai.mes`
   (rows 100..149), filled in file order from the first entry found rather
   than by entry number; each NPC names its row in `OBJ_F_NPC_AI_DATA`
-  ([table][params], [load][params-load], [module load][params-mod]). The local
+  (load (0x4A8320), module load (0x4A8400)). The local
   data has 41 base rows and one module row
   ([ARC-RES-028 L3](npc-reaction-reputation-evidence.md)).
 
 ## Source map
 
-Every row is a self-contained unit that a stage below owns. Line ranges are
-in `src/game/ai.c` unless named.
+Every row is a self-contained unit that a stage below owns. Addresses are of
+the AI functions (0x4A8320–0x4AFC70) unless named.
 
 | # | Unit | Source | First-pass summary | Stage |
 | --- | --- | --- | --- | --- |
-| S1 | AI parameter table | [36–59][params], [192–274][params-load] | 17 named integers per row; 150 rows, base file fills 0..99, module 100..149. | A1 (done: [core loop](npc-ai-core-loop.md)) |
-| S2 | Tick and activity | [2859–3066][timeevent] | Heartbeat scripts, generator branch, 30-cell activity, distance-scaled delay, follower catch-up. | A1 (done: [core loop](npc-ai-core-loop.md)) |
-| S3 | Gate and pipeline | [288–436][process] | Heal, else item search, else danger update; then perform; status recoveries (blind 1/160, crippled 1/8000 per pass, stun end). | A1 (done: [core loop](npc-ai-core-loop.md)) |
-| S4 | Danger state and setter | [1586–1610][danger-get], [1612–1730][danger-set] | Four states, flags, scripts, sound, reaction drop, global switch. | A1 (done: [core loop](npc-ai-core-loop.md)) |
-| S5 | Turn-based hooks | combat.c [3024–3038][cb-tb], [762–775][cb-hit], [1868–1876][cb-dmg] | AI pass at subturn start after the heartbeat script, AP to 0 when it starts no goal; immediate pass for an attacked NPC (real time only in effect); AP rules in ARC-RES-030 C8/C11. | A1 (done: [core loop](npc-ai-core-loop.md)) |
-| S6 | Sight | [3994–4076][see] | Facing, invisibility vs extraordinary PE or detect-invisible, prowling against concealment, clamp 1..10, +1 when blocked; returns excess distance, 0 = seen. | A2 |
-| S7 | Hearing | [4078–4197][hear] | Loudness 2/8/15, sleeping halves PE, moving silently, sound traversal cost along a straight path. | A2 |
-| S8 | Line of fire | [3305–3369][lof] | Shared with combat O4; blocker and cover rating. | A2 |
-| S9 | Noise and witnesses | [1157–1224][noise], [1226–1247][dynamite] | Witness joins a protected side or flees; dynamite. | A2 |
-| S10 | KOS, protect, upset | [3259–3303][upset], [3423–3496][kos], [3498–3541][protect] | Reasons KOS_FACTION/REACTION/ALIGNMENT/GUARD/DECOY; protect FACTION/ORIGIN/GROUP/SELF; upset GOOD/ORIGIN/FACTION/PARTY. | A3 |
-| S11 | Target search and choice | [1775–1838][choose], [1903–2044][find-target], [2046–2154][valid] | Nearest-first scan in a square box, KOS, ally help, avenge; two-candidate choice: 50 % nearest, 50 % level − distance; 20-cell leash. | A3 |
-| S12 | Enemy list and target lock | [4223–4370][shitlist] | Team added on attack, random valid pick, lock for orders. | A3 |
-| S13 | Attack event fan-out | [849–1052][attack], [1081–1155][follow-join], [1285–1454][peace] | Redirect, followers, reaction changes, jilted follower, peace (focus cleared, reaction raised to 50). | A3 |
-| S14 | Morale | [1732–1773][spell-flee], [1840–1901][should-flee], [2458–2477][perform], [3950–3992][flee-api] | Flee rule, spell-assisted flee, flee → surrender, recovery. | A4 |
-| S15 | Back off and min distance | [2479–2496][perform-combat], [2498–2533][back-off] | Parameter 15, path away, kill-triggered back off. | A4 |
-| S16 | Heal and support | [438–617][heal] | Resurrect, healer's own fatigue < 20 %, heal skill < 90 % out of combat, heavy < 40, medium < 55, poison, light < 70 (< 90 out of combat); self, leader, followers. | A5 |
-| S17 | Spell/item choice | [2156–2257][spell-choice], [2259–2315][chooser], [3606–3681][cast-check], mt_ai.c [134–591][mt-lists] | Summon when alone, defensive by parameter 13 (see P7), offensive; chooser takes the first entry, 21 % a random start; item entries without a spell are used at once, unchecked; refusal codes 1–8. | A5 |
-| S18 | Items, weapons, grenades | [619–773][items], [2535–2597][grenade], [3371–3381][switch] | Look for ammo/weapon/armour, wield best, grenade with friendly-fire check. | A5 |
-| S19 | Action execution | [2317–2401][action], anim.c [13932–14023][anim-attack] | Cast through invocation, item/skill goals, attack goal (approach, ranged, real-time repeat). | A6 |
-| S20 | Followers and orders | broadcast.c [184–370][broadcast], ai.c [1340–1407][stop] | Attack/stop orders, no-attack flag, demaintain spells after the fight, witness/near-death floats. | A7 |
-| S21 | Script and dialog surface | script.c [1774–1780][sat-attack], [2543][sat-stop], dialog.c callers | `WILL_KOS`, `ENTER/EXIT/START/END_COMBAT`, heartbeat; dialog refusal in combat; cheat toggle "NPC fighting" (cheat level ≥ 3, key P). | A8 |
-| S22 | Non-combat routine | [2599–2858][routine], [3725–3948][portals] | Waypoints, standpoints, beds, portals and containers: FR-AI-001/003, out of this plan except where combat interrupts them. | — |
+| S1 | AI parameter table | 0x4A8320 | 17 named integers per row; 150 rows, base file fills 0..99, module 100..149. | A1 (done: [core loop](npc-ai-core-loop.md)) |
+| S2 | Tick and activity | 0x4AD200, 0x4AD420, 0x4AD4D0, 0x4AD5D0, 0x4AD610, 0x4AD6B0, 0x4AD6E0, 0x4AD700, 0x4AD730, 0x4AD790, 0x4AD7D0 | Heartbeat scripts, generator branch, 30-cell activity, distance-scaled delay, follower catch-up. | A1 (done: [core loop](npc-ai-core-loop.md)) |
+| S3 | Gate and pipeline | 0x4A84F0, 0x4A8570, 0x4A88D0 | Heal, else item search, else danger update; then perform; status recoveries (blind 1/160, crippled 1/8000 per pass, stun end). | A1 (done: [core loop](npc-ai-core-loop.md)) |
+| S4 | Danger state and setter | 0x4AAB00, 0x4AABE0 | Four states, flags, scripts, sound, reaction drop, global switch. | A1 (done: [core loop](npc-ai-core-loop.md)) |
+| S5 | Turn-based hooks | combat (0x4B7010, 0x4B2F60, 0x4B4390) | AI pass at subturn start after the heartbeat script, AP to 0 when it starts no goal; immediate pass for an attacked NPC (real time only in effect); AP rules in ARC-RES-030 C8/C11. | A1 (done: [core loop](npc-ai-core-loop.md)) |
+| S6 | Sight | 0x4AF240, 0x4AF260 | Facing, invisibility vs extraordinary PE or detect-invisible, prowling against concealment, clamp 1..10, +1 when blocked; returns excess distance, 0 = seen. | A2 |
+| S7 | Hearing | 0x4AF470, 0x4AF640 | Loudness 2/8/15, sleeping halves PE, moving silently, sound traversal cost along a straight path. | A2 |
+| S8 | Line of fire | 0x4ADE00 | Shared with combat O4; blocker and cover rating. | A2 |
+| S9 | Noise and witnesses | 0x4A9E10, 0x4A9F10, 0x4AA0D0 | Witness joins a protected side or flees; dynamite. | A2 |
+| S10 | KOS, protect, upset | 0x4ADCC0, 0x4AE120, 0x4AE3A0, 0x4AE450 | Reasons KOS_FACTION/REACTION/ALIGNMENT/GUARD/DECOY; protect FACTION/ORIGIN/GROUP/SELF; upset GOOD/ORIGIN/FACTION/PARTY. | A3 |
+| S11 | Target search and choice | 0x4AB0B0, 0x4AB460, 0x4AB990, 0x4ABBC0 | Nearest-first scan in a square box, KOS, ally help, avenge; two-candidate choice: 50 % nearest, 50 % level − distance; 20-cell leash. | A3 |
+| S12 | Enemy list and target lock | 0x4AF8C0, 0x4AF930, 0x4AF9D0, 0x4AFA90, 0x4AFB30, 0x4AFBB0, 0x4AFBD0, 0x4AFC70 | Team added on attack, random valid pick, lock for orders. | A3 |
+| S13 | Attack event fan-out | 0x4A94C0, 0x4A9530, 0x4A9560, 0x4A9650, 0x4A9B80, 0x4A9C00, 0x4AA300, 0x4AA420, 0x4AA4A0, 0x4AA580, 0x4AA620 | Redirect, followers, reaction changes, jilted follower, peace (focus cleared, reaction raised to 50). | A3 |
+| S14 | Morale | 0x4AAF50, 0x4AB030, 0x4AB2A0, 0x4AB2F0, 0x4AB400, 0x4AB430, 0x4AC620, 0x4AC660, 0x4AF130, 0x4AF170, 0x4AF1D0, 0x4AF210 | Flee rule, spell-assisted flee, flee → surrender, recovery. | A4 |
+| S15 | Back off and min distance | 0x4AC6E0, 0x4AC7B0 | Parameter 15, path away, kill-triggered back off. | A4 |
+| S16 | Heal and support | 0x4A8940, 0x4A8AA0 | Resurrect, healer's own fatigue < 20 %, heal skill < 90 % out of combat, heavy < 40, medium < 55, poison, light < 70 (< 90 out of combat); self, leader, followers. | A5 |
+| S17 | Spell/item choice | 0x4ABC20, 0x4ABC70, 0x4ABE20, 0x4ABEB0, 0x4ABF10, 0x4AE720, AI spell lists (0x4CC2A0, 0x4CC2D0, 0x4CC310, 0x4CC350, 0x4CC380, 0x4CC470, 0x4CC4C0, 0x4CC4F0, 0x4CC520, 0x4CC580, 0x4CC6F0, 0x4CC740, 0x4CC770, 0x4CC810, 0x4CC8A0, 0x4CC930, 0x4CCA30, 0x4CCA90, 0x4CCAD0, 0x4CCB10, 0x4CCB50, 0x4CCB90, 0x4CCBF0, 0x4CCC00, 0x4CCC40) | Summon when alone, defensive by parameter 13 (see P7), offensive; chooser takes the first entry, 21 % a random start; item entries without a spell are used at once, unchecked; refusal codes 1–8. | A5 |
+| S18 | Items, weapons, grenades | 0x4A8E70, 0x4A8F90, 0x4AC910, 0x4ADFF0 | Look for ammo/weapon/armour, wield best, grenade with friendly-fire check. | A5 |
+| S19 | Action execution | 0x4AC180, 0x4AC250, 0x4AC320, 0x4AC350, animation (0x434AE0, 0x434B00) | Cast through invocation, item/skill goals, attack goal (approach, ranged, real-time repeat). | A6 |
+| S20 | Followers and orders | broadcast (0x4C31A0), AI (0x4AA4A0, 0x4AA580) | Attack/stop orders, no-attack flag, demaintain spells after the fight, witness/near-death floats. | A7 |
+| S21 | Script and dialog surface | script (0x447220), the dialog callers | `WILL_KOS`, `ENTER/EXIT/START/END_COMBAT`, heartbeat; dialog refusal in combat; cheat toggle "NPC fighting" (cheat level ≥ 3, key P). | A8 |
+| S22 | Non-combat routine | 0x4ACBB0, 0x4ACD90, 0x4ACDB0, 0x4AD060, 0x4AD0B0, 0x4AD140, 0x4AD1B0, 0x4AEB10, 0x4AEB70, 0x4AECA0, 0x4AED80, 0x4AEE50 | Waypoints, standpoints, beds, portals and containers: FR-AI-001/003, out of this plan except where combat interrupts them. | — |
 
-## First-pass CE anomalies (to confirm, not adopted)
+## First-pass anomalies (to confirm, not adopted)
 
-**Original check (ARC-RES-048):** P1, P2 and P3 are CE slips (P3 tests the redirect target's intelligence, not the candidate's), P4–P7 are the original's behaviour. The verdicts in the [verification ledger](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024) supersede the CE readings below where they differ.
+**Original check (ARC-RES-048):** P1, P2 and P3 are reconstruction slips (P3 tests the redirect target's intelligence, not the candidate's), P4–P7 are the original's behaviour. The verdicts in the [verification ledger](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024) supersede the earlier readings below where they differ.
 
 - **P1** The item search keeps the candidate with the **largest** distance
-  although it tracks a "nearest" variable ([items][items]).
+  although it tracks a "nearest" variable (items (0x4A8E70, 0x4A8F90)).
 - **P2** The party-level sum adds the leader's level once per follower instead
   of each follower's level, which skews the "outlevelled" flee test
-  ([party][party]).
+  (party (0x4AE020, 0x4AE0A0)).
 - **P3** The redirect filter compares the intelligence of the threshold number
-  instead of the candidate's ([redirect][attack]).
+  instead of the candidate's (redirect (0x4A94C0, 0x4A9530, 0x4A9560, 0x4A9650)).
 - **P4** The heal step tests an NPC-flag constant (no-attack) against the
   critter-flag field, where the same bit means "mechanical"; the effect is
-  that mechanical critters are never healed by AI ([heal][heal]).
+  that mechanical critters are never healed by AI (heal (0x4A8940, 0x4A8AA0)).
 - **P5** While an NPC is in combat mode every pass runs its start-combat
   script, and in real time the end-combat script just before it; the intent
-  is unclear ([gate][gate]). Settled by ARC-RES-054: the original's design,
+  is unclear (gate (0x4A8570)). Settled by ARC-RES-054: the original's design,
   kept ([core loop](npc-ai-core-loop.md#7-anomalies-and-decisions)).
 - **P6** Whether FLEE → SURRENDER on the first fleeing action is the intended
   morale model or a reconstruction slip needs a second reading against
-  `tb_ui.c` and the scripts that test "surrendered" ([perform][perform]).
+  the turn-based UI functions and the scripts that test "surrendered" (perform (0x4AC620, 0x4AC660)).
 - **P7** Parameter 13 is described as the chance of a defensive spell, but
   the defensive list is tried when the roll is **above** it, so the chance is
-  `100 − parameter 13` % ([spell choice][spell-choice]).
+  `100 − parameter 13` % (spell choice (0x4ABC20, 0x4ABC70, 0x4ABE20, 0x4ABEB0)).
 
 ## Phase 1: faithful reconstruction
 
@@ -230,13 +231,13 @@ Codes are allocated when each task is created (D6).
 
 | Stage | Code | Scope (source units) | Output |
 | --- | --- | --- | --- |
-| A0 | ARC-RES-040 (allocated 2026-10-16 with the task, D7) for the CE half; ARC-RES-041 for the census | What the original and CE load and run for combat, AI, skills, magic and technology: init order, every data file and prototype field these modules read, when and how, and which module owns it at runtime; original data census on the Mac (absorbs A9). | CE half: [load map](combat-domain-load-map.md); census: [data census](combat-data-census.md) with data aggregates and first real fight candidates. |
+| A0 | ARC-RES-040 (allocated 2026-10-16 with the task, D7) for the source-reading half; ARC-RES-041 for the census | What the original loads and runs for combat, AI, skills, magic and technology: init order, every data file and prototype field these modules read, when and how, and which module owns it at runtime; original data census on the Mac (absorbs A9). | Source-reading half: [load map](combat-domain-load-map.md); census: [data census](combat-data-census.md) with data aggregates and first real fight candidates. |
 | A1 | ARC-RES-054 | Core loop: S1–S5. Parameter semantics, tick cadence, pipeline order, danger state machine with every flag and script, turn-based and real-time entry points. | State diagram, transition table, cadence formula, parameter dictionary: [core loop](npc-ai-core-loop.md) (done). |
 | A2 | on creation | Awareness: S6–S9. See/hear formulas, loudness, line of fire, witnesses. | Pure-function specs with worked numbers; closes combat O4. |
 | A3 | on creation | Hostility and targeting: S10–S13. | KOS/protect/upset decision tables, target scan order, enemy-list lifecycle. |
 | A4 | on creation | Morale: S14–S15. | Flee/surrender/back-off rules, P2 and P6 settled. |
 | A5 | on creation | Support and magic: S16–S18. | Heal ladder, ten action lists, eligibility codes, item search (P1, P4, P7). |
-| A6 | on creation | Execution: S19 and the `anim.c` attack, approach, flee and run goals. | How an intention becomes movement and attacks in both modes; closes companion O5. |
+| A6 | on creation | Execution: S19 and the animation attack, approach, flee and run goals. | How an intention becomes movement and attacks in both modes; closes companion O5. |
 | A7 | on creation | Followers in combat and orders: S20. | Order effects, follower join rules, post-fight cleanup. |
 | A8 | on creation | Script and dialog surface: S21. | Every SAP event and SCR action that reads or writes AI state. |
 | A9 | in A0 (ARC-RES-041) | Data census: `ai_params.mes`/`gameai.mes` rows, spell `AI_*` fields, item AI action field, KOS/no-flee/guard/AI-row of the Crash Site and cave NPCs and creatures. | Local aggregates only, like ARC-RES-028 L3; picks the first real fight: [data census](combat-data-census.md#7-first-fight-candidates-plan-slice-i10). |
@@ -266,11 +267,11 @@ A9 is part of A0.
 1. **Every decision is a named, pure policy.** Target choice, KOS, flee,
    action choice and heal thresholds are functions over explicit records;
    the source behaviour is the default policy, not inline code.
-2. **Every CE anomaly is a recorded decision.** A confirmed slip (P1..P7, the
+2. **Every anomaly is a recorded decision.** A confirmed slip (P1..P7, the
    load-map anomalies LM1..LM20 of ARC-RES-040 and those A1–A8 find) is fixed in phase 1 (D2), with an entry naming the source
    behaviour, the chosen behaviour and the reason; a retail bug stays behind a
    named switch of the "Original" setting (D8) so runs can still be compared
-   with the original game, and a CE-only slip gets none.
+   with the original game, and a reconstruction-only slip gets none.
 3. **Randomness is injected and logged.** Each roll has a purpose label, so
    a seeded run replays exactly and a trace shows which roll decided what.
 4. **Decisions return reason codes.** The overlay, tests and mods read the
@@ -314,35 +315,35 @@ before the matching phase 1 slice exists.
 
 Each confirmed anomaly gets a row here when its stage research settles it:
 source behaviour, chosen behaviour, reason and the switch name. Until then
-P1..P7 above and LM1..LM20 of the [load map](combat-domain-load-map.md#8-ce-anomalies-found-by-this-reading)
+P1..P7 above and LM1..LM20 of the [load map](combat-domain-load-map.md#8-anomalies-found-by-this-reading)
 are open, and the combat-core anomalies A1–A9 of
-[ARC-RES-030](combat-core-evidence.md#ce-anomalies-recorded-not-adopted) follow
+[ARC-RES-030](combat-core-evidence.md#anomalies-recorded-not-adopted) follow
 the same rule when combat slice 2 settles them, as do the magic-core anomalies
-MG1..MG20 of [ARC-RES-043](magic-core-evidence.md#ce-anomalies-recorded-not-adopted)
+MG1..MG20 of [ARC-RES-043](magic-core-evidence.md#anomalies-recorded-not-adopted)
 when the magic slices settle them.
 
 The combat-core rows below were also checked against the original 1.0.7.4
 executable ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)).
-"CE only" marks a reconstruction slip the original does not have, so both
+"Reconstruction only" marks a reconstruction slip the original does not have, so both
 settings of D8 follow the original and there is no switch; "Original setting"
 marks a switch that the Original setting turns on to keep a bug the retail
 game really has.
 
 | Anomaly | Source behaviour | Chosen behaviour | Reason | Switch |
 | --- | --- | --- | --- | --- |
-| A1 (ARC-RES-030) | CE only: `sort_combat_list` moves only PCs to the round's tail; PC followers keep their scan position. The original 1.0.7.4 tests the PC leader's type ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | PCs and the PCs' followers move to the tail; scan order kept within each group, as in the original. | CE reconstruction slip; settled 2026-10-16 after the owner asked for the original behaviour. Implemented by ARC-COMBAT-003 (`TurnBasedRules.Order`). | none: both settings follow the original |
-| A2 (ARC-RES-030) | CE and original 1.0.7.4: the bed's −30 invocation modifier is counted twice (−60). | Counted once (−30). | The run adds the modifier to a difficulty that already starts from it. ARC-COMBAT-001. | `InvocationModifierCountedTwice` (Original setting) |
-| A3 (ARC-RES-030) | CE only: getting up in a round is refused on the critter's own subturn and free on any other. The original allows it only on the own turn for 5 AP ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Only on the critter's own subturn, for 5 AP, as in the original. | CE reconstruction slip; settled 2026-10-16 after the owner asked for confirmation. ARC-COMBAT-003 provides the cost (`TurnBasedRules.GetUpCost`) and the own-subturn gate; the get-up animation lands with its host. | none: both settings follow the original |
-| A4 (ARC-RES-030) | CE only: the every-fifth-run-step fatigue charge in combat mode writes back the unchanged fatigue damage, so running costs no fatigue and a critter without fatigue damage fails the step. The original writes fatigue damage + 1 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Each charge adds 1 fatigue damage (every 5th run step, ×4 when fatigue-limiting, then ÷4 (at least 1) when fatigue-draining), as in the original. | CE reconstruction slip; settled 2026-10-16 after the owner asked to confirm or refute. Lands with the movement/real-time slice. | none: both settings follow the original |
-| A5 (ARC-RES-030) | CE only: a crippled-arm critical drops the weapon when only the shield qualifies; partial healing of crippled legs clears blindness. The original drops the shield and clears crippled legs ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Drop the shield; clear crippled legs, as in the original. | CE reconstruction slips; owner confirmed 2026-10-16. The healing half landed with ARC-COMBAT-002 (`LifeRules.Heal`); the shield drop lands with the critical-effect (FR-COMBAT-009) and item slices. | none: both settings follow the original |
-| A6 (ARC-RES-030) | CE and original 1.0.7.4: `object_get_ac` applies AC-adjustment effects to the whole AC and adds the effective AcAdjustment stat, which already carries them. | Effects once, through the effective AcAdjustment stat (`AttackRules.ArmorClass`). | Double count. ARC-COMBAT-001. | `ArmorClassEffectsCountedTwice` (Original setting) |
-| A7 (ARC-RES-030) | CE and original 1.0.7.4: a critical self-hit rolls the critical-hit procedure twice (critical-miss branch and damage step); the flags add up. | Rolled once, at the damage step. | Double processing. ARC-COMBAT-001. | `CriticalSelfHitRolledTwice` (Original setting) |
-| A8 (ARC-RES-030) | CE only: the critical effect chance is never assigned when the weapon's magic was cancelled. The original sets it to 0 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | 0, as in the original. | CE reconstruction slip. ARC-COMBAT-001. | none: both settings follow the original (CE's value is undefined) |
-| A9 (ARC-RES-030) | CE and original 1.0.7.4: when the skip loop of `combat_turn_based_next_subturn` runs past the last entry, the new round's first subturn starts twice (heartbeat and AI twice). | Started once. | `combat_turn_based_begin_turn` already starts it; owner confirmed 2026-10-16. Implemented by ARC-COMBAT-003. | `FirstSubturnStartedTwice` (Original setting) |
-| A10 (ARC-COMBAT-001) | CE and original 1.0.7.4: `combat_calc_dmg` keeps the backstab flags after a critical miss retargets the attack to the attacker, so the self-hit gets the backstab damage bonus. | No backstab bonus on a self-hit. | The self-hit is not a backstab. Found by ARC-COMBAT-001; fixed under D2. | `BackstabDamageOnSelfHit` (Original setting) |
-| A11 (ARC-COMBAT-003) | CE and original 1.0.7.4: the stalled-actor check records a new actor without its action points, so its second check compares with the previous actor's last value (0 after a round start) and may force a critter that spent to stop. | The new actor's own action points are the reference. | A stale reference from another critter; fixed under D2 by ARC-COMBAT-003 ([ledger TB6](original-verification-ledger.md#turn-based-round-arc-combat-003)). | `StallCheckKeepsPreviousActionPoints` (Original setting) |
-| A12 (ARC-COMBAT-003) | CE and original 1.0.7.4: an overexertion that knocks the PC out passes the turn on inside its damage step, then sets the action points, by now the next participant's, to 0. | The next participant keeps the action points its subturn granted. | The zero was meant for the overexerting PC; fixed under D2 by ARC-COMBAT-003 ([ledger TB9](original-verification-ledger.md#turn-based-round-arc-combat-003)). | `OverexertionKnockoutClearsNextActionPoints` (Original setting) |
-| Reputation A2 (ARC-RES-028) | CE and original 1.0.7.4: a deliberate hit by the PC on its own follower adds AI parameter 9 to the follower's reaction, although the field describes how much the hit lowers it. | Lowered by parameter 9. | Owner decision 2026-10-17 (PR #184); implemented by ARC-WORLD-026 in `ReactionRules.PcHit`. | `FollowerHitRaisesReaction` (Original setting) |
+| A1 (ARC-RES-030) | Reconstruction only: `sort_combat_list` moves only PCs to the round's tail; PC followers keep their scan position. The original 1.0.7.4 tests the PC leader's type ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | PCs and the PCs' followers move to the tail; scan order kept within each group, as in the original. | Reconstruction slip; settled 2026-10-16 after the owner asked for the original behaviour. Implemented by ARC-COMBAT-003 (`TurnBasedRules.Order`). | none: both settings follow the original |
+| A2 (ARC-RES-030) | Original 1.0.7.4: the bed's −30 invocation modifier is counted twice (−60). | Counted once (−30). | The run adds the modifier to a difficulty that already starts from it. ARC-COMBAT-001. | `InvocationModifierCountedTwice` (Original setting) |
+| A3 (ARC-RES-030) | Reconstruction only: getting up in a round is refused on the critter's own subturn and free on any other. The original allows it only on the own turn for 5 AP ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Only on the critter's own subturn, for 5 AP, as in the original. | Reconstruction slip; settled 2026-10-16 after the owner asked for confirmation. ARC-COMBAT-003 provides the cost (`TurnBasedRules.GetUpCost`) and the own-subturn gate; the get-up animation lands with its host. | none: both settings follow the original |
+| A4 (ARC-RES-030) | Reconstruction only: the every-fifth-run-step fatigue charge in combat mode writes back the unchanged fatigue damage, so running costs no fatigue and a critter without fatigue damage fails the step. The original writes fatigue damage + 1 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Each charge adds 1 fatigue damage (every 5th run step, ×4 when fatigue-limiting, then ÷4 (at least 1) when fatigue-draining), as in the original. | Reconstruction slip; settled 2026-10-16 after the owner asked to confirm or refute. Lands with the movement/real-time slice. | none: both settings follow the original |
+| A5 (ARC-RES-030) | Reconstruction only: a crippled-arm critical drops the weapon when only the shield qualifies; partial healing of crippled legs clears blindness. The original drops the shield and clears crippled legs ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Drop the shield; clear crippled legs, as in the original. | Reconstruction slips; owner confirmed 2026-10-16. The healing half landed with ARC-COMBAT-002 (`LifeRules.Heal`); the shield drop lands with the critical-effect (FR-COMBAT-009) and item slices. | none: both settings follow the original |
+| A6 (ARC-RES-030) | Original 1.0.7.4: `object_get_ac` applies AC-adjustment effects to the whole AC and adds the effective AcAdjustment stat, which already carries them. | Effects once, through the effective AcAdjustment stat (`AttackRules.ArmorClass`). | Double count. ARC-COMBAT-001. | `ArmorClassEffectsCountedTwice` (Original setting) |
+| A7 (ARC-RES-030) | Original 1.0.7.4: a critical self-hit rolls the critical-hit procedure twice (critical-miss branch and damage step); the flags add up. | Rolled once, at the damage step. | Double processing. ARC-COMBAT-001. | `CriticalSelfHitRolledTwice` (Original setting) |
+| A8 (ARC-RES-030) | Reconstruction only: the critical effect chance is never assigned when the weapon's magic was cancelled. The original sets it to 0 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | 0, as in the original. | Reconstruction slip. ARC-COMBAT-001. | none: both settings follow the original (the reconstruction's value is undefined) |
+| A9 (ARC-RES-030) | Original 1.0.7.4: when the skip loop of `combat_turn_based_next_subturn` runs past the last entry, the new round's first subturn starts twice (heartbeat and AI twice). | Started once. | `combat_turn_based_begin_turn` already starts it; owner confirmed 2026-10-16. Implemented by ARC-COMBAT-003. | `FirstSubturnStartedTwice` (Original setting) |
+| A10 (ARC-COMBAT-001) | Original 1.0.7.4: `combat_calc_dmg` keeps the backstab flags after a critical miss retargets the attack to the attacker, so the self-hit gets the backstab damage bonus. | No backstab bonus on a self-hit. | The self-hit is not a backstab. Found by ARC-COMBAT-001; fixed under D2. | `BackstabDamageOnSelfHit` (Original setting) |
+| A11 (ARC-COMBAT-003) | Original 1.0.7.4: the stalled-actor check records a new actor without its action points, so its second check compares with the previous actor's last value (0 after a round start) and may force a critter that spent to stop. | The new actor's own action points are the reference. | A stale reference from another critter; fixed under D2 by ARC-COMBAT-003 ([ledger TB6](original-verification-ledger.md#turn-based-round-arc-combat-003)). | `StallCheckKeepsPreviousActionPoints` (Original setting) |
+| A12 (ARC-COMBAT-003) | Original 1.0.7.4: an overexertion that knocks the PC out passes the turn on inside its damage step, then sets the action points, by now the next participant's, to 0. | The next participant keeps the action points its subturn granted. | The zero was meant for the overexerting PC; fixed under D2 by ARC-COMBAT-003 ([ledger TB9](original-verification-ledger.md#turn-based-round-arc-combat-003)). | `OverexertionKnockoutClearsNextActionPoints` (Original setting) |
+| Reputation A2 (ARC-RES-028) | Original 1.0.7.4: a deliberate hit by the PC on its own follower adds AI parameter 9 to the follower's reaction, although the field describes how much the hit lowers it. | Lowered by parameter 9. | Owner decision 2026-10-17 (PR #184); implemented by ARC-WORLD-026 in `ReactionRules.PcHit`. | `FollowerHitRaisesReaction` (Original setting) |
 | LM14 (ARC-RES-040) | The melee damage scaling helper always returns 100, so it changes nothing. | Kept: no scaling. | The intended factor is unknown, so there is no confirmed slip to fix. ARC-COMBAT-001. | none |
 | P5 (ARC-RES-039) | Original 1.0.7.4: in combat mode every pass that reaches the gate's combat test runs the start-combat script, in real time after the end-combat script; the end-combat script also runs at the end of the NPC's subturn ([core loop](npc-ai-core-loop.md#3-one-pass)). | Kept: per-pass hooks in both settings. | The original's design, which scripts are written against; nothing marks it as a slip ([ledger P5](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024), re-read by ARC-RES-054). Proposed by ARC-RES-054. | none |
 | LM3 (ARC-RES-040) | Original 1.0.7.4: AI rows fill by position from the first entry's number, and an NPC's row is copied without a bounds check. | Rows by position as in the original; a row outside the table is refused in both settings (no out-of-bounds read, owner rule). | A latent bug of the original; the installed tables have no gap, so positional and by-number filling agree on shipped data ([census](combat-data-census.md#2-ai-parameter-rows)). Implemented by ARC-DATA-033 ([AI parameter table](../world/ai-parameters.md)); confirmed by ARC-RES-054. | none |
@@ -354,14 +355,16 @@ game really has.
 
 ## Owner decisions (2026-10-16)
 
-- **D1 Parity target: CE first.** (Since D8 the "Original" setting follows the
-  retail executable where the two differ.) The CE reading is the reference; original
-  runtime observations (I11) are added later as checks.
+- **D1 Parity target: the source reading first.** (Since D8 the "Original"
+  setting follows the retail executable where the two differ; since the
+  2026-10-18 owner decision "Reconstruction removed" the executable is the only
+  reference.) The source reading was the reference; original runtime
+  observations (I11) are added later as checks.
 - **D2 Anomalies: fix in phase 1 and document.** A confirmed slip is fixed in
   the default behaviour and recorded under [anomaly
   decisions](#anomaly-decisions); this also covers the combat-core anomalies.
 - **D3 Mod format: open.** For now the base is fixing the original logic and
-  CE errors (phase 1, D2). A later qualitative AI rework (NPC logic, group patterns with
+  reconstruction errors (phase 1, D2). A later qualitative AI rework (NPC logic, group patterns with
   allies and enemies) may need C# or Lua, as a new combat system over the old
   one or as a full replacement based on Godot; design rules 7 and 8 keep both
   open.
@@ -372,12 +375,12 @@ game really has.
   `COMBAT`, magic slices such as I8's spell half `MAGIC`, and research stays
   `RES`.
 - **D6 Codes: allocated on task creation**, not reserved in advance.
-- **D7 Next step:** first a detailed study of what the original and CE load
-  and run (stage A0), before stage A1.
+- **D7 Next step:** first a detailed study of what the original loads and
+  runs (stage A0), before stage A1.
 - **D8 Two rule settings (2026-10-17): "Original" and "Steamwoven".**
   "Original" is the retail 1.0.7.4 behaviour, bugs included; "Steamwoven" is
   the original with the recorded D2 fixes and is the default. They replace the
-  earlier "Source" and "Default" names. A CE reconstruction slip that the
+  earlier "Source" and "Default" names. A reconstruction slip that the
   original game does not have (checked in the original executable) gets no
   switch: both settings follow the original there. First used by
   ARC-COMBAT-001 (`CombatAnomalyProfile.Original` / `.Steamwoven`). On 2026-10-17
@@ -388,69 +391,12 @@ game really has.
 
 ## Method
 
-Source reading only at the pinned commit: `ai.c` (function list in full;
-bodies of S1–S21 read once), `ai.h`, `mt_ai.c` and `mt_ai.h` (list building
-and cache), and the AI call sites found by searching `src/` (`combat.c`,
-`anim.c`, `broadcast.c`, `script.c`, `dialog.c`, `magictech.c`, `critter.c`,
-`skill.c`, `trap.c`, `main.c`, UI files). Steamwoven inputs are the
-requirements and research documents linked above. No CE code or structure
-was copied; names in this document are descriptive.
+An earlier source reading (provenance in git history), covering, by executable
+address, the AI functions (0x4A8320–0x4AFC70; the whole
+function list, the units S1–S21 once each), the AI spell list functions
+(0x4CC1F0–0x4CCC40; list building and cache), and the AI call sites in the combat, animation, broadcast, script, dialog, magick/tech,
+critter, skill, trap, start-up and UI functions. Steamwoven inputs are the
+requirements and research documents linked above. Evidence level F0 unless a
+ledger row is cited. Names in this document are descriptive.
 
-[ce]: https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd
-[params]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L36-L59
-[params-load]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L192-L233
-[params-mod]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L240-L274
-[process]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L288-L436
-[gate]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L310-L421
-[heal]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L438-L617
-[items]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L619-L773
-[danger-update]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L775-L847
-[attack]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L849-L1052
-[follow-join]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1081-L1155
-[noise]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1157-L1224
-[dynamite]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1226-L1247
-[killed]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1249-L1283
-[peace]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1285-L1454
-[stop]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1340-L1407
-[danger-get]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1586-L1610
-[danger-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1612-L1730
-[spell-flee]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1732-L1773
-[choose]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1775-L1838
-[should-flee]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1840-L1901
-[find-target]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1903-L2044
-[valid]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2046-L2154
-[spell-choice]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2156-L2257
-[chooser]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2259-L2315
-[action]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2317-L2401
-[perform]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2458-L2477
-[perform-combat]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2479-L2496
-[back-off]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2498-L2533
-[grenade]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2535-L2597
-[routine]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2599-L2858
-[timeevent]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2859-L3066
-[activity]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2940-L2996
-[delay]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2998-L3012
-[upset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3259-L3303
-[lof]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3305-L3369
-[switch]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3371-L3381
-[party]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3383-L3421
-[kos]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3423-L3496
-[protect]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3498-L3541
-[cast-check]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3606-L3681
-[portals]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3725-L3948
-[guards]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3868-L3948
-[flee-api]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3950-L3992
-[see]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3994-L4076
-[hear]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L4078-L4197
-[shitlist]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L4223-L4370
-[mt-lists]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_ai.c#L134-L591
-[mt-populate]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_ai.c#L297-L346
-[spell-ai]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L5826-L5866
-[cb-tb]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L3024-L3038
-[cb-hit]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L762-L775
-[cb-dmg]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L1868-L1876
-[react]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1409-L1454
-[anim-attack]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L13932-L14023
-[broadcast]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/broadcast.c#L184-L370
-[sat-attack]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1774-L1780
-[sat-stop]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2543-L2550
+

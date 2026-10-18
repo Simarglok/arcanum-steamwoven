@@ -16,13 +16,13 @@ copy.
 | Bounded loose-ART check | three explicit relevant installation ART roots: root, `data`, and `modules` | direct generated-path check for the corrected and historical sets | all three roots existed, but none contained a generated corrected or historical candidate file; zero candidates for both sets; no recursive scan or loose-file precedence policy inferred |
 | Project reader | `src/Arcanum.Data/DatArchive.cs` | bounded DAT opening and in-memory entry decode | independently authored project implementation |
 | Project ART decoder | `src/Arcanum.Data/ArtDecoder.cs` | bounded selected-frame metadata/decode for representative terrain paths | no scene-parity or general precedence claim |
-| Pinned CE source | `a7ff41b300ef712f0e7d088183a3d08957110cdd` | sector sequence, coordinate packing, isometric relation, ART-ID context | one external lineage, not independent corroboration |
+| Earlier source reading | sector, location and name functions, cited by executable address; level F0 (not checked in the executable) | sector sequence, coordinate packing, isometric relation, ART-ID context | not independent corroboration; earlier provenance in git history |
 | Community catalogue | preserved toolkit metadata | Crash Site context | reported only; not byte-level map proof |
 
-The CE revision was resolved by its full immutable commit ID before inspecting
-these focused paths: `src/game/sector.c`, its light/tile/roof/script/sound/block
-and object-list modules, `src/game/location.c`, `src/game/name.c`,
-`src/game/a_name.c`, and `first_party/tig/src/art.c`.
+The functions cited were the sector functions (0x4CEF70–0x4D31C0) with their
+light, tile, roof, script, sound, block and object lists, the location functions
+(0x4B8440–0x4B99C0), the name functions (0x41CA40–0x41F240, 0x4EAC80–0x4ED440),
+and the ART library's identifier functions (earlier source reading, F0).
 
 ## Reproduction commands
 
@@ -60,9 +60,9 @@ and must not be committed or reported.
 | Check | Result |
 | --- | --- |
 | Crash Site probe synthetic suite | PASS: framing branches, checked count/length bounds, roof and placeholder discriminators, and the bounded v119 delimiter are exercised without retaining real payloads; direct and inherited object-flag cases independently write distinct sentinels to literal raw serialized slots 18 and 19 before parsing. |
-| Read-only selected-sector object run | PASS: module and explicit resource SHA-256 values matched before and after; ordinal 463 decoded to 47,291 bytes; all contiguous sections led to object window `17140..47287`; 317 v119 type-3 records reached the terminal count. Current ART resolved directly for 288 and through six validated prototype files for 29; object flags resolved directly for 31 and through those six files for 286. All passed the bounded static predicate using serialized common slot 18 (CE `OBJ_F_FLAGS` enum ID 19), not adjacent slot 19 spell flags. Five selected numeric source examples completed exact resource/mapping/ART metadata chains. The word at `16388` was correctly treated as roof `empty=1`, not an object version. |
+| Read-only selected-sector object run | PASS: module and explicit resource SHA-256 values matched before and after; ordinal 463 decoded to 47,291 bytes; all contiguous sections led to object window `17140..47287`; 317 v119 type-3 records reached the terminal count. Current ART resolved directly for 288 and through six validated prototype files for 29; object flags resolved directly for 31 and through those six files for 286. All passed the bounded static predicate using serialized common slot 18 (`OBJ_F_FLAGS` enum ID 19), not adjacent slot 19 spell flags. Five selected numeric source examples completed exact resource/mapping/ART metadata chains. The word at `16388` was correctly treated as roof `empty=1`, not an object version. |
 | Terrain probe synthetic suite | PASS: fail-closed MES initialization (malformed, missing, duplicate, non-zero facade start, each shifted/missing tile anchor, range/capacity cases), no name trimming, type-specific palette selection, unsupported-class/invalid-selector rejection, every resolver branch through exact raw-path archive lookup, separate corrected/historical candidate inventory through the production archive reader, projection arithmetic, and successful no-draw results for empty footprint/viewport and source/frame intersections. |
-| Read-only terrain run with explicit `arcanum2.dat` source | PASS: module `355,938,305` bytes / `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` and resource `147,991,122` bytes / `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d` matched before and after; all 3,033 tile and 1,063 facade cells resolved uniquely; zero missing/ambiguous/bad-selector/unsupported outcomes; all 4,096 selected frames inspected; seven bounded identifier-to-ART/frame/metadata/anchor chains include one normalization recovery. The explicit non-Windows/macOS CE pathname profile reported 220 corrected paths only in `arcanum2.dat`, zero historical paths in all eight archives, and zero candidates under three existing relevant loose ART roots, none of which contained a generated candidate file. |
+| Read-only terrain run with explicit `arcanum2.dat` source | PASS: module `355,938,305` bytes / `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` and resource `147,991,122` bytes / `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d` matched before and after; all 3,033 tile and 1,063 facade cells resolved uniquely; zero missing/ambiguous/bad-selector/unsupported outcomes; all 4,096 selected frames inspected; seven bounded identifier-to-ART/frame/metadata/anchor chains include one normalization recovery. The explicit non-Windows/macOS pathname profile reported 220 corrected paths only in `arcanum2.dat`, zero historical paths in all eight archives, and zero candidates under three existing relevant loose ART roots, none of which contained a generated candidate file. |
 | Existing DAT synthetic tests | PASS: canonical SDK 8.0.425 locked run with `DAT_ROOT` set to user-owned inputs: Arcanum.Data.Tests 25/25 and Arcanum.Presentation.Tests 14/14. |
 | Existing Python DAT probe synthetic suite | PASS: `python3 tools/research/dat_probe.py --self-test`. |
 
@@ -99,7 +99,7 @@ the selected `arcanum2.dat` contained the 220 corrected candidate entries; the
 direct, non-recursive check of those two sets at the three relevant loose ART
 roots found all three roots existed but neither generated candidate set had a
 candidate file below any of them. The probe's pathname
-comparison is explicitly the CE non-Windows/macOS branch: lowercasing plus
+comparison is explicitly the non-Windows/macOS branch: lowercasing plus
 backslash-to-slash conversion; Windows behavior was not claimed. No precedence
 rule was inferred from these observations.
 
@@ -117,7 +117,7 @@ rule was inferred from these observations.
   footprints, source/destination crop, raw-tile flip, and a mode-qualified
   order. Lighting/palette behavior, camera/dirty-rectangle policy, normal-game
   facade rendering, and scene comparison remain unmeasured.
-- The CE location formula is source-derived and numeric synthetic checks verify
+- The location formula comes from an earlier source reading of `location_xy` (0x4B8680, F0) and numeric synthetic checks verify
   only its relative arithmetic, not visual parity.
 
 The three deliverables have separate readiness verdicts:

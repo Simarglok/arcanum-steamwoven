@@ -8,7 +8,7 @@ through read-only `Arcanum.Data` access and an independently authored research
 probe. It does not publish or retain original ART bytes, decoded pixels,
 original entry names, payload hashes, previews, or installation paths.
 
-No CE application, legacy executable, Windows tool, game runtime, renderer, or
+No other application, legacy executable, Windows tool, game runtime, renderer, or
 community binary was run. ArtConverter, ArcNET, and archived ArtView material
 were read only for provenance and source claims; no external decoder code was
 copied into this repository.
@@ -18,7 +18,7 @@ copied into this repository.
 | Source | URL / stable reference | Saved version and integrity | Availability | Provenance / license status | Claims considered |
 | --- | --- | --- | --- | --- | --- |
 | ArtConverter source | https://github.com/AxelStrem/ArtConverter/tree/0a7572480066c7d15a88cf51c075c250b9e49ee6 | commit `0a7572480066c7d15a88cf51c075c250b9e49ee6`; archived bundle SHA-256 `430aacd4e23247455348914ddae1efbe75bc67ad3c1f89d02278e078a4c026b5` | Local bare mirror and verified bundle available in ignored `toolkit/` | Author Alexey Stremov; no `LICENSE` path at pinned tree. Reuse permission is not established. | 132-byte header sequence, present palette tables, 28-byte frame headers, raw/RLE hypothesis, and its names for geometry fields. Source claim only until the bounded byte test below. |
-| ArcNET source | https://github.com/Bia10/ArcNET/tree/baa7cb5a7b8d1498344cdb5e3170bce8f191fd3c | commit `baa7cb5a7b8d1498344cdb5e3170bce8f191fd3c`; archived bundle SHA-256 `398b0daa72fe69eb526bf4ad3a4fb6c33091bc6b233ab065c9cd1f698098dba6` | Local bare mirror and verified bundle available in ignored `toolkit/` | MIT repository, but its README identifies `arcanum-ce` as a primary format-research route and credits ArtConverter as ART reference. It is CE-derived/dependent corroboration, not an independent confirmation or reuse basis. | A matching 132-byte/header-table/RLE implementation and labels such as frame rate, action frame, palette index 0 transparency, and geometry names. Labels were not adopted as facts. |
+| ArcNET source | https://github.com/Bia10/ArcNET/tree/baa7cb5a7b8d1498344cdb5e3170bce8f191fd3c | commit `baa7cb5a7b8d1498344cdb5e3170bce8f191fd3c`; archived bundle SHA-256 `398b0daa72fe69eb526bf4ad3a4fb6c33091bc6b233ab065c9cd1f698098dba6` | Local bare mirror and verified bundle available in ignored `toolkit/` | MIT repository, but its README names another project as a primary format-research route and credits ArtConverter as ART reference. It is derived/dependent corroboration, not an independent confirmation or reuse basis. | A matching 132-byte/header-table/RLE implementation and labels such as frame rate, action frame, palette index 0 transparency, and geometry names. Labels were not adopted as facts. |
 | Arkanum ART wiki | https://github.com/vleon1/Arkanum/wiki/art | wiki commit `8248418aef9fb5bcbb13d387ff318dfd4bd31249`; archived bundle SHA-256 `7370bf7058c107e1eb844be5edd8d3b857ddc58d76cc9ce48fe1590f8b8ded44` | Local mirror/bundle available in ignored `toolkit/` | No reuse license established for this route. It is a community observation note, not a binary-layout reference. | Category/type observations used only to choose local `item` and `critter` groups; it provides no header, codec, timing, or renderer proof. |
 | ArtView.Fixed documentation | https://terra-arcanum.com/downloads/arcanum/tools/ArtView.Fixed.zip | package SHA-256 `9acbffee54790144e2b8ced8dd6edce4728c1b76c37e3290a7342a3df2debb2b`; manifest records ZIP CRC pass | Preserved package/documentation in ignored toolkit; executable/source not run | Original by eml78; changes attributed to Drog Black Tooth. License not reviewed. | Publication history and an `-X`/`-Y` bug-fix statement only; not a format oracle. |
 | Terra-Arcanum / Arcanum Club ART-tool catalogues | https://terra-arcanum.com/downloads.handler/index.php?section=modding and https://arcanumclub.org/workshop/tools | URLs, acquisition times, hashes, and package availability in `toolkit/manifest.json` and `toolkit/SHA256SUMS` | Local preserved packages available, unexecuted | Individual package licenses not reviewed. | Historical availability of ART viewers/converters only; catalogue listings do not prove layout or runtime semantics. |
@@ -27,7 +27,7 @@ copied into this repository.
 The ArtConverter and ArcNET implementations share a direct declared ART source
 route. They are therefore not counted as two independent confirmations.
 ArtConverter has no pinned-tree license, and ArcNET's MIT label does not erase
-its stated CE ancestry. Neither was copied, executed, or treated as a runtime
+its stated ancestry. Neither was copied, executed, or treated as a runtime
 oracle.
 
 ## Toolkit integrity checks
@@ -164,7 +164,7 @@ bytes, reads the selected raw B/G/R/X table bytes, and requires both index 0
 transparent black and nonzero `(R,G,B,255)` output in the bounded samples. The
 recorded 12-entry run exercised 74 RGBA samples across 30 present palette slots.
 This is a same-input local regression check for the adopted decoder contract;
-it is not a CE comparison, pixel-parity claim, or independent pixel oracle.
+it is not a comparison with another decoder, pixel-parity claim, or independent pixel oracle.
 
 ## Input immutability and observed result
 
@@ -193,13 +193,14 @@ input, output, or preview. It never writes next to a game archive.
 - PATCH0 was available but has zero `.art` entries in this bounded inventory;
   this is not evidence about patch precedence, replacement behavior, or other
   ART-bearing patch variants.
-- No independent macOS-safe ART comparator with known non-CE, non-ArtConverter
-  lineage was found or executed. Structural and synthetic tests are therefore
+- No independent macOS-safe ART comparator with known lineage independent of
+  ArtConverter and ArcNET was found or executed. Structural and synthetic tests are therefore
   additional safeguards, not an independent decoder comparison.
 - R2 did not independently establish palette channel order, transparency,
   direction order, row orientation, anchors/offsets, action frame, or timing.
   The implemented decoder's BGRX, index-0, and stored-row-order rules remain
-  separately CE-source-derived; a visually plausible local preview would not by
+  separately from an earlier source reading (provenance in git history), level F0
+  (not checked in the executable); a visually plausible local preview would not by
   itself settle broader renderer semantics.
 - Future decoder changes must retain the admitted subset and this contradiction
   ledger; they must not broaden the format or start renderer work implicitly.

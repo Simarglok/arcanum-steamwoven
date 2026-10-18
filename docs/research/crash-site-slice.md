@@ -19,12 +19,11 @@ that record's start coordinate. No neighbouring sector is included.
 | Community context | The preserved Terra-Arcanum catalogue records a historical Crash Site page and image URL. | reported; context only |
 | Map selector | Raw DAT entry `Rules\MapList.mes` is ordinal 14,935, compressed with `0x00000002`, and decodes to 5,454 bytes. Record 5,000 is the observed module's sole `START_MAP`; it names `Arcanum1-024-fixed` and gives `(92958, 82592)`. | experimentally verified locally; high |
 | Map properties | Raw entry `maps\Arcanum1-024-fixed\map.prp` is ordinal 8,023; its 24 decoded bytes begin with observed words `2`, `1`, and a little-endian pair `(128000, 128000)`. No semantic labels are assigned. | experimentally verified byte observation; high |
-| Sector selector | Pinned CE's `sector_id_from_loc` shifts both location coordinates by six and packs the results. Applied to the start coordinate, that gives `(1452, 1290)` and `86570436012`. The matching sector entry is ordinal 463 and decodes to 47,291 bytes. | entry and size experimentally verified; coordinate interpretation CE-derived; medium |
-| Framed object window | The final signed little-endian word is `317`. The corrected CE-derived section order places the object window at `17140..47287`; the bounded v119 delimiter consumes 317 records to the terminal count. | byte experiment plus CE-derived order; medium |
+| Sector selector | `sector_id_from_loc` (0x4CFC50) shifts both location coordinates by six and packs the results. Applied to the start coordinate, that gives `(1452, 1290)` and `86570436012`. The matching sector entry is ordinal 463 and decodes to 47,291 bytes. | entry and size experimentally verified; coordinate interpretation F0 (earlier source reading, not checked in the executable); medium |
+| Framed object window | The final signed little-endian word is `317`. The corrected section order of `sector_load_game` (0x4D1A30; earlier source reading, F0) places the object window at `17140..47287`; the bounded v119 delimiter consumes 317 records to the terminal count. | byte experiment plus F0 order; medium |
 
-CE is a single source lineage, not independent corroboration. Its Sustainable
-Use License remains applicable to that source; this document does not change
-it or assert a legal clean-room conclusion.
+The facts here come from an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited; they are not
+independent corroboration.
 
 ## Frozen input
 
@@ -40,7 +39,7 @@ it or assert a legal clean-room conclusion.
 | Sector entry | module DAT ordinal 463, flag `0x00000002`, decoded length 47,291 |
 | Terminal object count | 317; not a count of static scenery |
 
-The one-sector extent follows the CE source's sector shift, not a claim about
+The one-sector extent follows the sector shift of the earlier source reading (F0), not a claim about
 all formats or maps.
 
 ## Bounded selector and safety limits
@@ -52,7 +51,7 @@ It opens the archive through `Arcanum.Data.DatArchive`, raw-name matches exactly
 one selected `.sec` entry, limits both stored and decoded payloads to 1 MiB,
 and fingerprints the input before and after its in-memory read.
 
-It frames only this small CE-correlated sector subset:
+It frames only this small sector subset, in the order of `sector_load_game`:
 
 1. signed little-endian light count, capped at 1,024;
 2. `count * 48` bytes of opaque serialized lights, skipped only after checked
@@ -72,7 +71,7 @@ It records no raw IDs or game payloads in the repository.
 
 The selected sector contains a measured object window rather than an
 undifferentiated suffix. With zero lights, the tile table ends at decoded offset
-16,388; its LE word `1` is the CE-derived roof `empty` discriminator, not an
+16,388; its LE word `1` is the roof `empty` discriminator (F0), not an
 object version. The subsequent placeholder `0xAA0004` enables tile scripts,
 sector script, metadata/sound, and block-mask sections. The object window is
 therefore `17140..47287` (30,147 bytes), followed by the terminal count `317`.
@@ -85,7 +84,7 @@ separate selected-v119 object/current-ART result in
 result.
 
 The two observed terrain classes are no longer blocked at raw-ID decomposition:
-the companion investigation records their CE-attributed MES callback lookup,
+the companion investigation records their MES callback lookup (F0),
 one-source exact ART selection, physical frame selection, coverage failures,
 and projected anchors in `crash-site-terrain-resolution.md`. It remains
 unacceptable to promote a raw word to a filename, invent multi-source
@@ -127,10 +126,10 @@ silently guess.
 
 - User-owned module archive: local, read-only evidence above.
 - Existing project reader: `src/Arcanum.Data/DatArchive.cs`.
-- Pinned `arcanum-ce` revision
-  `a7ff41b300ef712f0e7d088183a3d08957110cdd`: `src/game/sector.c`,
-  `src/game/sector_tile_list.c`, `src/game/sector_object_list.c`,
-  `src/game/location.c`, and `first_party/tig/src/art.c`.
+- Earlier source reading (F0), cited by executable address: the sector functions
+  0x4CEF70–0x4D31C0, the sector tile list 0x4F7BA0–0x4F7DF0, the sector object
+  list 0x4F1150–0x4F2330, the location functions 0x4B8440–0x4B99C0, and the ART
+  library's identifier functions; earlier provenance is in git history.
 - Community catalogue: toolkit metadata record; contextual only.
 
 No original bytes, extracted assets, name inventory, or user installation path

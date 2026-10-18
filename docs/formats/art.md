@@ -7,7 +7,7 @@ implemented C# decoder of **one physical 8-bpp ART frame** into RGBA. It is not 
 renderer, animator, writer, extractor, or viewer. Experimental observations remain
 in [the ART evidence record](../research/art-evidence.md); API rules derived
 from a reading of the original's ART functions (evidence level F0, not checked in
-the executable) are recorded in [the ART specification record](../research/art-ce-spec.md).
+the executable) are recorded in [the ART specification record](../research/art-decoder-spec.md).
 
 Status vocabulary follows [the research method](../research/method.md):
 reported, corroborated, experimentally verified, disputed, and unknown. The

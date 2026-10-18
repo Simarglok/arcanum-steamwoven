@@ -12,9 +12,9 @@ mode and this note. It changes no production API, viewer, conversation
 runtime, `Arcanum.Session` or launcher file.
 
 Categories as in [ARC-RES-032](virgil-level-replay.md): **Source (S)** is
-`alexbatalov/arcanum-ce` at
-[`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd),
-read for the meaning of numbers only; **Data (D)** is the installed 1.0.7.4
+an earlier source reading (provenance in git history), cited by the executable
+address of its function; level F0 (not checked in the executable) unless a
+ledger row is cited; for the meaning of numbers only; **Data (D)** is the installed 1.0.7.4
 `Arcanum` module read through the [content stack](content-precedence.md) by
 the probe, so every map, sector, mobile, aggregate, terrain template,
 prototype, script and DLG is the winner of its path; **Unknown (U)** as before.
@@ -79,12 +79,12 @@ catalogue (`rules/MapList.mes`) has 81 entries from 5000.
 
 | ID | Claim | Source |
 | --- | --- | --- |
-| A1 | A sector holds a list of tile scripts: each 24-byte node is flags, the tile within the sector (x + 64·y), then a script attachment (flags, counters, number). | [tile_script_list.c 8–16][tile-node-file], [tile_script_list.h 8–13][tile-node] |
-| A2 | When any critter moves onto a tile, that tile's script runs with the critter as triggerer, no attachee, attachment point "use". | [object.c 5248–5250][move], [tile_script.c 360–389][tile-exec] |
-| A3 | A sector file name is the sector key: x in the low 26 bits, y above. | [sector.h 84–86][sector-key] |
-| A4 | Catalogue maps are the `MapList.mes` entries read as an unbroken run from 5000; a teleport or standpoint map operand is a catalogue number. | [map.c 2003–2060][maplist], [script.c 1875–1889][teleport] |
-| A5 | Call-ex runs the script that its first object operand has on the attachment point given by the second operand, from the line in the third, with the fourth operand as triggerer. | [script.c 2246–2248][call-ex-case], [script.c 2880–2887][call-ex], [object.c 3866][script-exec] |
-| A6 | The conditions and actions read below: quest state (6), named (20), compare (4, 5); goto (3), remove this script (5), call script (7), assign (10), get stat (33), get story state (42), change script (99), set scheme (139), standpoints (140, 141), teleport (44); focus 0 triggerer, 1 attachee, 10 current looped object, 21 player. | [script.c 631–668][conditions], [script.c 904–925][named], [script.c 1511–1575][actions], [script.c 1535–1543][call-script], [script.c 1746–1757][handlers], [script.c 1865–1869][story], [script.c 2380–2394][change-set], [script.c 2789–2821][scheme-standpoints], [script.h 46–71][focus], [script.h 95–294][enums] |
+| A1 | A sector holds a list of tile scripts: each 24-byte node is flags, the tile within the sector (x + 64·y), then a script attachment (flags, counters, number). | tile script list functions (0x4F6310–0x4F6750) and their node record |
+| A2 | When any critter moves onto a tile, that tile's script runs with the critter as triggerer, no attachee, attachment point "use". | object 0x444270, tile script 0x4C0980 |
+| A3 | A sector file name is the sector key: x in the low 26 bits, y above. | the sector key definition |
+| A4 | Catalogue maps are the `MapList.mes` entries read as an unbroken run from 5000; a teleport or standpoint map operand is a catalogue number. | map 0x4125C0, script 0x447220 |
+| A5 | Call-ex runs the script that its first object operand has on the attachment point given by the second operand, from the line in the third, with the fourth operand as triggerer. | script 0x447220, 0x44B170, object 0x441980 |
+| A6 | The conditions and actions read below: quest state (6), named (20), compare (4, 5); goto (3), remove this script (5), call script (7), assign (10), get stat (33), get story state (42), change script (99), set scheme (139), standpoints (140, 141), teleport (44); focus 0 triggerer, 1 attachee, 10 current looped object, 21 player. | script 0x4451B0, 0x447220 and the condition, action and focus enumerations |
 
 ## 2. The attachments (D)
 
@@ -134,8 +134,8 @@ its teleport and both standpoints name catalogue map 5023, tile (92, 95).
 
 ## 4. The numbers checked against editor sources (X)
 
-Every number this note and ARC-RES-031/032 read through the CE enums was
-checked against two sources that do not come from CE, both kept in the
+Every number this note and ARC-RES-031/032 read through the source
+enumerations was checked against two independent sources, both kept in the
 project's local toolkit archive (ignored by git; nothing from them is copied
 here beyond names):
 
@@ -146,7 +146,7 @@ here beyond names):
   [Terra-Arcanum](https://terra-arcanum.com/downloads/arcanum/resources/editdocs.zip)
   (SHA-256 `a237d7f6…b1137b`): the event-script guide and the reference sheet.
 
-| Table | CE entries | ScriptEd entries | Checked indices | Result |
+| Table | Source entries | ScriptEd entries | Checked indices | Result |
 | --- | ---: | ---: | --- | --- |
 | Actions | 142 | 142 | 3, 5, 7, 10, 12, 33, 40, 42, 44, 68, 81, 99, 100, 101, 137, 139, 140, 141 | all name the same action (goto, remove this script, call script, assign, subtract, store stat, transform to basic prototype, store story state, teleport, destroy, call script attached to object at point, change script at point, set/clear global flag, adjust stat, change autolevel scheme, day/night standpoint on map) |
 | Conditions | 53 (0 = always) | 52 (1..52) | 4, 5, 6, 20 | same: equals, less or equal, PC has quest in state, object is named |
@@ -187,27 +187,7 @@ numbering without proving runtime behaviour.
 
 The read-only probe `--script-attachments` (self-test
 `--script-attachments-self-test` covers the lenient GF scan, the number search
-and the sector key), the editor sources of section 4, source reading at the pinned commit for the meaning of numbers, and the
-line decoder of [ARC-RES-032](virgil-level-replay.md). No CE code or
-structure was copied.
+and the sector key), the editor sources of section 4, the earlier source reading (cited by executable address, level F0;
+provenance in git history) for the meaning of numbers, and the
+line decoder of [ARC-RES-032](virgil-level-replay.md).
 
-[tile-node]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile_script_list.h#L8-L13
-[move]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L5248-L5250
-[tile-exec]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile_script.c#L360-L389
-[maplist]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L2003-L2060
-[teleport]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1875-L1889
-[call-ex-case]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2246-L2248
-[call-ex]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2880-L2887
-[script-exec]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3866
-[conditions]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L631-L668
-[named]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L904-L925
-[actions]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1511-L1575
-[call-script]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1535-L1543
-[enums]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L95-L294
-[focus]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L46-L71
-[handlers]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1746-L1757
-[story]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1865-L1869
-[change-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2380-L2394
-[scheme-standpoints]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2789-L2821
-[sector-key]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.h#L84-L86
-[tile-node-file]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile_script_list.c#L8-L16

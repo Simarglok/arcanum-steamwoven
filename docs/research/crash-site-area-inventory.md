@@ -9,14 +9,13 @@ loaded/live readiness remains NOT_READY.
 ARC-RES-015 expands the [frozen initial sector](crash-site-slice.md) into a
 reproducible **research area**, not a production loader, scene or gameplay implementation.
 
-- **Source fact** means the attributed pinned CE specification, not original execution.
+- **Source fact** means an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited; not original execution.
 - **Local observation** means a bounded read of the identified unchanged installation.
 - **Project policy** means this research selection or diagnostic convention, not a stored engine boundary.
 - **Unknown / NOT_VERIFIED** remains separate from parsed, resource-resolved and numerically placed.
 
-Code was independently authored after inspecting specification sources. CE and its
-Sustainable Use License are attributed; this is not a clean-room or MIT relicense claim.
-The preserved toolkit manifest has SHA-256
+Code was independently authored after inspecting specification sources; earlier
+provenance is in git history. The preserved toolkit manifest has SHA-256
 `491b84d31ff83fa346833965d246031c3c8a96fd91502d70e70cfb9dd939cc29`;
 its community tools are context, not executed or translated here. See the
 [research method](method.md), [framing](crash-site-framing.md),
@@ -51,7 +50,7 @@ personal paths are included in this document.
 Local observation: catalogue record 5000 is the start map, runtime map 1, start
 `(92958,82592)`. Map properties ordinal 8023 preserves numeric map extent
 `(128000,128000)`; it does not define a Crash Site polygon. Area record 2 gives
-origin `(92960,82592)` without an explicit radius. CE's default area-radius
+origin `(92960,82592)` without an explicit radius. The game's default area-radius
 behavior is not used as a census rectangle.
 
 Project policy: survey **all 621 sector entries** of the start map, collect the
@@ -134,7 +133,7 @@ mean a displayed sprite. Diagnostic placement means arithmetic only.
 The base regression remains **4096 terrain cells and 317 static records**, not an
 area total. Core static current ART is inherited in 39 cases and direct in 387.
 All 426 resolved static frames reference 32 distinct resource2 ART entries.
-Vegetation is confirmed by packed scenery category plus pinned enum: category1
+Vegetation is confirmed by packed scenery category plus the enum of the earlier source reading (F0): category1
 large trees=13, category2 medium trees=25, category3 small trees=27, category5
 plants=331. Remaining category counts are 6:5, 8:1, 9:3, 10:1, 11:2, 12:1,
 13:8, 15:3, 16:4, 17:1, 20:1. Category20 alone does not prove an active connector.
@@ -159,7 +158,7 @@ NOT_VERIFIED, not consequences of resource resolution or sprite bounds.
 
 ### Normal-game mobile provenance
 
-Source fact: CE distinguishes editor loose `.mob` loading from normal-game
+Source fact: the game distinguishes editor loose `.mob` loading from normal-game
 aggregate loading and transforms a map selector into the game filename. Ordinary
 ROT13 was not a successful selector; the observed game file was supplied explicitly
 and authenticated by size/hash, not guessed from an editor path.
@@ -175,8 +174,8 @@ Source-supported narrow research normalization excludes only runtime sparse-arra
 bitset handles and trailing zero bitset-capacity words. It preserves ID/header,
 field presence, element width/count, ordered sparse keys and complete values;
 interior zero words, absence versus present-empty, nonzero suffixes and all other
-bytes remain significant. Present arrays with zero storage words fail the pinned
-FILE loader and are rejected; one word is admitted. This is not raw identity and
+bytes remain significant. Present arrays with zero storage words fail the FILE
+loader of the earlier source reading (F0) and are rejected; one word is admitted. This is not raw identity and
 not a general tolerance rule. Original hashes remain distinct. The aggregate is
 counted once; loose correspondents are validation evidence, not extra area objects.
 
@@ -221,7 +220,8 @@ ordinal10236. An effective object script on exterior sector86570436011/index7,
 prototype4047, world `(92910,82598)`, SAP1, script2793 has a literal action44 at
 line0/true targeting catalogue5078 at `(2087,2018)`. Cave sector/index99,
 prototype4047, world `(2093,2019)`, SAP1, script1532 has line0/true action44 targeting
-catalogue5000 at `(92913,82598)`. CE converts these script map IDs by subtracting4999.
+catalogue5000 at `(92913,82598)`. The game converts these script map IDs by subtracting4999
+(ledger [TR1 of map transitions](original-verification-ledger.md#map-transitions-arc-data-025)).
 These are **directed potential endpoints**, not an executed round trip; attached
 object position and destination position intentionally differ.
 
@@ -289,7 +289,7 @@ and zero-capacity equivalence with negative key/value/ID/presence cases, high-bi
 static rebasing, half-open mobile boundaries and script/default inheritance.
 Topology fixtures distinguish action operands from header/condition sentinels,
 both branches, computed endpoints, one-hop calls and SAP/object-focus gaps.
-Independent private probes frame all7399 pairs using pinned field declarations,
+Independent private probes frame all7399 pairs using the field declarations of the earlier source reading (F0),
 not candidate schemas, prove the full621 selector and check selected field/default,
 ART/RGBA and numeric placement results. Independent native review remains a
 separate acceptance step. No unchanged GUI/lab rebuild, Godot export or original

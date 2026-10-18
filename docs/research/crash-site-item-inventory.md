@@ -12,9 +12,7 @@ does not repeat, the [negative IN contract](../scripting/negative-inventory-tran
 
 Categories, as in RES-021:
 
-- **Source (S):** read branches of `alexbatalov/arcanum-ce` at
-  `a7ff41b300ef712f0e7d088183a3d08957110cdd` (Sustainable Use License 1.0, not MIT),
-  not original-executable parity. No CE code or structure is copied.
+- **Source (S):** branches from an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited; not original-executable parity.
 - **Data (D):** the authenticated normal-game Crash Site aggregate and archives,
   read by the probe below. T0 means the serialized state before any tick, script,
   AI step or player action, the same T0 as the [passability closure](area-passability-closure.md).
@@ -68,10 +66,10 @@ of 8 NPCs**. Both containers are empty. Field mapping (S): the container and
 critter lists are `OBJ_F_CONTAINER_INVENTORY_LIST_IDX` / `OBJ_F_CRITTER_INVENTORY_LIST_IDX`
 (object-ID arrays, dense keys 0..n-1) with their `*_INVENTORY_NUM` counts; each
 item carries `OBJ_F_ITEM_PARENT`, `OBJ_F_ITEM_INV_LOCATION` and the common
-`OF_INVENTORY` flag ([container](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h#L66-L78),
-[item](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h#L97-L121), [critter](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h#L228-L262) fields,
-[flag](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_flags.h#L23),
-[list fields by owner type](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1068-L1101)).
+`OF_INVENTORY` flag (container,
+item, critter fields,
+flag,
+list fields by owner type (0x462480)).
 
 Reconciliation over the whole loaded area (core plus context ring, 53 items and
 45 owners) has no exception: every one of the 16 listed elements resolves to
@@ -115,23 +113,23 @@ Item attachments exist only on inventory items: the ring (1714) has only an
 and 6536 (prototype 3067, source 56) have an empty list. Their flags are
 `OCOF_LOCKED|OCOF_NEVER_LOCKED|OCOF_INVEN_SPAWN_ONCE` with key ID 0. `object_locked_get`
 returns unlocked whenever `NEVER_LOCKED` is set, so the lock bit has no effect and
-no key is needed ([lock query](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L4024-L4057)).
+no key is needed (lock query (0x441D40)).
 Their contents do not exist at T0: opening a spawn-once container in loot mode
-generates them once ([loot open](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L690-L702)),
+generates them once (loot open (0x572640)),
 from the inventory-source set's coin range and per-prototype rates, with the
 random generator seeded from the container location plus the PC's race,
 background, gender and name characters, then the source and spawn flag are cleared
-([generation](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2073-L2164)).
+(generation (0x463E20)).
 So chest contents are a function of the created character, not stored data.
 
 **NPC inventory sources (S).** The generator's callers that can reach a Crash Site
 NPC are object creation/duplication and the NPC respawn timer, which closing an
 inventory UI on that NPC arms for 12 to 24 game hours
-([UI close](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L1080-L1084)); loading a saved map object does
+(UI close (0x5727B0)); loading a saved map object does
 not call it. PC creation and the new-game shop are separate callers
-([creation call](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L4237-L4298),
-[gate](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2004-L2070),
-[respawn timer](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2167-L2201)).
+(creation call (0x442260),
+gate (0x463C60),
+respawn timer (0x4640C0, 0x464150, 0x464180)).
 Only NPC 6460 has a source (84); at T0 its serialized one-item list is
 authoritative, and a later respawn could regenerate it.
 
@@ -139,19 +137,19 @@ authoritative, and a later respawn could regenerate it.
 
 - **Ground items.** A left click on any item type queues
   `AG_PICKUP_ITEM`, in or out of combat; out of combat Alt+click takes a
-  different action instead ([click dispatch](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/intgame.c#L3317-L3497)).
+  different action instead (click dispatch (0x54ED30)).
   The goal accepts only an unparented or junk-pile item, needs the item decay
   process enabled (its counter starts at 1), consumes one action point (a combat
   cost) and calls `item_transfer(item, pc)`
-  ([goal](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L7850-L7891)).
+  (goal (0x42AA70)).
   For an unparented item that runs `SAP_GET` (triggerer PC, attachee item),
   `item_check_insert` (weight against carry limit; a technology item, complexity
   below 0, is refused to a PC with the Technophobia background; free grid room),
   `object_pickup`,
   `item_insert` into the chosen slot, then cancels decay
-  ([transfer](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L603-L688),
-  [insert check](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3639-L3677),
-  [insert](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3680-L3777)).
+  (transfer (0x4617F0, 0x461810),
+  insert check (0x466510),
+  insert (0x466640)).
   All 37 Crash Site ground items have no attachment, and an absent attachment
   counts as script success, so only the insert check can refuse (D + S). 34 of the
   37 ground items have negative complexity, so a technophobe cannot pick them up.
@@ -159,7 +157,7 @@ authoritative, and a later respawn could regenerate it.
   as a container (`AG_USE_CONTAINER` → loot inventory UI); in combat it needs Alt.
   Loot admission checks the PC, target visibility and the target's `SAP_USE`
   script (none of the four dead NPCs has one) before the UI opens
-  ([UI admission](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L475-L599)).
+  (UI admission (0x572240, 0x572340, 0x572370)).
   Moving 2527 into the PC fires its own `SAP_INSERT_ITEM` script: a U frontier.
 - **Living NPCs.** Virgil's ring arrives through dialog (section 4). No other
   item of a living NPC (gold, food, two weapons, worn armor) is named by a dialog
@@ -177,15 +175,15 @@ ID; an item that is not identified (`OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY > 0` and n
 `OIF_IDENTIFIED`) uses `OBJ_F_ITEM_DESCRIPTION_UNKNOWN`; everything else uses
 `OBJ_F_DESCRIPTION`. `description_get` reads numbers below 30000 from
 `description.mes` and numbers from 30000 up from the module's `gamedesc.mes`
-([examine](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3934-L3992),
-[identified](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2285-L2294),
-[description files](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/description.c#L123-L165)).
+(examine (0x441B60),
+identified (0x464370),
+description files (0x4D4210, 0x4D4260)).
 
 `OBJ_F_NAME` is **not** display text. It is a numeric name class the prototype
 initializer sets from a per-type base (generic 5600, food 3600, gold 3200 and so
 on) or a specific number, and it is the key that `IN` and other name lookups
-compare ([type bases](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L419-L465),
-[assignment](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L494), with per-prototype overrides further down).
+compare (type bases (0x468720),
+assignment (0x468890), with per-prototype overrides further down).
 All 16 Crash Site generic ground items share 5600, so a name lookup cannot
 distinguish them.
 
@@ -202,9 +200,9 @@ Only Virgil has an `SAP_DIALOG` attachment in the core (script 1324). Its DLG
 (resource3, 56,782 bytes, `34a49a2c…5e53a`, 409 records) was scanned with the
 source rule for conditions and actions: skip to a letter or `$`, take two
 characters as the code, read a C integer after it
-([condition scanner](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1360-L1406),
-[action scanner](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1861-L1895)). Player replies whose text
-is the barter directive `b:` were counted separately ([options](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2405-L2415)).
+(condition scanner (0x4150D0),
+action scanner (0x415BA0)). Player replies whose text
+is the barter directive `b:` were counted separately (options (0x416C10)).
 Player conditions and all actions were scanned; NPC condition fields were not,
 because they are speech metadata.
 
@@ -220,8 +218,8 @@ the PC, removes it and places it at the PC's location; positive `IN` takes the
 item from the PC or a follower and gives it to the NPC; if the NPC did not receive
 it, it is dropped at the NPC's location when the NPC has a PC leader and destroyed
 otherwise
-([action](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2004-L2056),
-[condition](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1519-L1546)).
+(action (0x415BA0),
+condition (0x4150D0)).
 
 For this one operand the probe closes the RES-021 Unknowns that depend on data:
 

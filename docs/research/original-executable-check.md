@@ -3,32 +3,31 @@
 Status: **Method**, adopted by the owner on 2026-10-17 for every part of the
 game and amended the same day (ARC-RES-051): the executable is the only
 reference for original behaviour, a function may be executed in an emulator as
-an [oracle](#function-emulation-oracle), and CE is being phased out of the
-process and the documents ([research](original-oracle-research.md)). Until a
-domain is migrated, CE stays its first reading (D1) and new work there cites CE
-only for the function it checks; the executable settles what
-the original does. First used by ARC-COMBAT-001
+an [oracle](#function-emulation-oracle). Since 2026-10-18 the project uses no
+source reconstruction at all (owner decision, [research](original-oracle-research.md)):
+facts not yet read in the executable keep their address at level F0 until their
+domain is re-read. First used by ARC-COMBAT-001
 ([combat anomalies A1–A10](combat-core-evidence.md#original-executable-check-arc-combat-001)).
 
-CE is a reconstruction. Where its code looks wrong, or where a task must say
-how **the original game** behaves, read the original executable at the same
-function instead of trusting CE. CE comments give each function's address in
-the retail binary (`// 0x4B7EB0` above `sort_combat_list`), and the retail
-1.0.7.4 `Arcanum.exe` keeps that layout, so the same function can be read in
-both and compared. A reading is static: nothing is run, patched or copied. The
-oracle runs single functions of the unchanged file in an emulator under the rules
-below.
+Where a task must say how **the original game** behaves, or where an earlier
+reading (F0) looks wrong, read the original executable at the function's address
+in the retail 1.0.7.4 `Arcanum.exe`. Addresses come from the
+[function registry](../verification/functions.csv), the research documents and
+the [verification ledger](original-verification-ledger.md). A reading is static:
+nothing is run, patched or copied. The oracle runs single functions of the
+unchanged file in an emulator under the rules below.
 
 ## When to use it
 
-- A CE branch looks like a slip (an anomaly): decide whether it is a **CE
-  reconstruction slip** or **a bug of the original game**. Only the second
-  kind gets a switch of the "Original" setting (owner decision D8 in the
+- A recorded F0 fact looks like a slip (an anomaly): decide whether it is a
+  **reconstruction slip** (the earlier reading was wrong) or **a bug of the
+  original game**. Only the second kind gets a switch of the "Original" setting
+  (owner decision D8 in the
   [NPC combat AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16));
-  for a CE-only slip both settings follow the original.
-- The owner asks "how is it in the original, not in CE".
-- A rule matters for parity and the CE reading has decompiler names, unclear
-  intent or a `TODO`/`FIXME`.
+  for a reconstruction slip both settings follow the original.
+- The owner asks "how is it in the original".
+- A rule matters for parity and its recorded reading is F0, has unclear intent
+  or an open question.
 
 Any area can use it: combat, AI, skills, magic and technology, scripts,
 dialog, items, rendering logic, loading. It answers questions about code;
@@ -42,8 +41,8 @@ on the original files.
   `9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52`;
   GOG adds an `.IIDKing` section holding a second `ddraw.dll` import, which no
   checked function branches into.
-- The CE research clone at the pinned commit
-  `a7ff41b300ef712f0e7d088183a3d08957110cdd` (path in CLAUDE.md §4).
+- The function's address (see above) and the project's own records of the
+  callees, globals and constants it uses.
 - Xcode's `llvm-objdump` (`xcrun -f llvm-objdump`). Ghidra (Apache-2.0) may be
   used instead for the same reading, headless and with names from the project's
   own records; its project stays in `research-private/`. Only free tools with
@@ -52,11 +51,13 @@ on the original files.
 
 ## Steps
 
-1. Find the function in CE and its address comment; the stop address is the
-   address comment of the next function in the same CE file. The listing shows
-   no names (calls read `<.text+0x5ca0>`), so note the callees' and globals'
-   addresses from their CE comments too (for example `obj_field_int32_get`
-   0x406CA0, `critter_pc_leader_get` 0x45DDA0).
+1. Find the function's start address; the stop address is the start of the
+   next function in the executable (Ghidra's analysis, or the prologue and call
+   target scan of the [oracle research](original-oracle-research.md#findings)).
+   The listing shows no names (calls read `<.text+0x5ca0>`), so note the
+   callees' and globals' addresses from the registry and the research documents
+   too (for example the object field getter 0x406CA0 and the PC leader getter
+   0x45DDA0).
 2. Disassemble only that function, read-only, into the session scratchpad or
    the ignored `research-private/` folder, never into tracked files:
 
@@ -64,10 +65,10 @@ on the original files.
    "$(xcrun -f llvm-objdump)" -d --x86-asm-syntax=intel --start-address=0x4B7EB0 --stop-address=0x4B8040 "$DAT_ROOT/Arcanum.exe" > "$SCRATCH/sort_combat_list.asm"
    ```
 
-3. Resolve constants from CE's headers: object field indices (`obj.h`), flag
-   bits (`obj_flags.h`, `combat.h`), stat numbers (`stat.h`), inventory slots
-   (`item.h`).
-4. Compare the instruction flow with the CE branch in question: which values
+3. Resolve constants from the project's own records: object field indices and
+   flag bits in the format documents (`docs/formats`), stat numbers and inventory
+   slots in the domain contracts, and values the oracle observed in real calls.
+4. Compare the instruction flow with the recorded reading in question: which values
    are tested, which handle is passed, what is written back, which calls are
    made and in what order. Check the arithmetic too: operand width (8, 16 or 32
    bits), signed or unsigned compares and division, where a product or sum can
@@ -82,7 +83,7 @@ on the original files.
 
 In the research or evidence document of the task, one row per question:
 function and address, the behaviour observed in the original (in prose), and
-the verdict, "CE reconstruction slip" or "in the original" (a bug of the
+the verdict, "reconstruction slip" or "in the original" (a bug of the
 original game). Add the decision
 to the owning decision table (for combat and AI, the
 [anomaly decisions](npc-combat-ai-plan.md#anomaly-decisions)). The original
@@ -139,7 +140,7 @@ code changes after its receipt.
 
 | Level | Evidence |
 | --- | --- |
-| F0 | Implemented from a CE reading only (NOT_VERIFIED) |
+| F0 | Implemented from an earlier reading only, not checked in the executable (NOT_VERIFIED) |
 | F1 | One reading of the whole function in the executable |
 | F2 | Two independent readings (step 6) |
 | F3 | Oracle: the function and Steamwoven compared on recorded inputs, mutants caught |
@@ -153,7 +154,7 @@ code changes after its receipt.
 - No bytes, instruction listings, decompiled code or dumps go into git, PRs,
   issues or chat; scratch output stays in the session scratchpad or
   `research-private/`. Documents describe behaviour in their own words.
-- No structure or code is translated from the binary or from CE into
+- No structure or code is translated from the binary into
   Steamwoven; implementations follow the recorded behaviour and the project's
   own design.
 - A static reading shows what the code does, not how often a branch is reached

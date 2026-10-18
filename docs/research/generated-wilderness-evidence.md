@@ -10,10 +10,7 @@ the input for the later loader slices listed at the end.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the pinned CE specification
-  [`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd)
-  (Sustainable Use License v1.0). Line ranges below are what was read. It is one
-  lineage, not an observation of the original executable.
+- **Source fact**: an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. It is not an observation of the running original.
 - **Local observation**: measured by `tools/research/terrain_template_probe.py` on
   the owner's unchanged installation. The probe prints counts, map and template
   folder names (DAT member paths), terrain type names and SHA-256 digests only,
@@ -21,7 +18,7 @@ the input for the later loader slices listed at the end.
 - **Inference**: a reading of observations that the data supports but does not
   prove. Each is marked as such.
 
-The probe was written from the rules stated here and does not translate CE code.
+The probe was written from the rules stated here.
 Its v119 record walker uses this project's own wire descriptors
 (`src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs`).
 
@@ -37,8 +34,13 @@ The real run opens the content stack in the documented mount order
 module `.dat`, `data/`, `arcanum4..1.dat`, game folder, `tig.dat`), hashes every
 archive before and after (refusing if one changed), and runs in about 8 seconds.
 It refuses an installation with archives it does not model (`arcanum5+.dat`,
-`Arcanum.patch1..9`). Report digest of the run below: `6740b9b9eaf79c80cb3f03b84b5c71322d3b0f89dd6e65770b3e66baef74a221`
-(two runs, identical).
+`Arcanum.patch1..9`). The run below gave identical reports twice; the current
+report digest is not recorded here (earlier digests are in git history). The
+self-test covers the MES type and transition rules, the word fields, the path rule
+for codes 0..15, the object relocation rule (which lights follow, ledger Wilderness
+A1), `terrain.tdf` flat and row-zlib bodies and their refusals, sector framing, the
+v119 walker, an end-to-end survey, mount precedence and case folding, and the
+refusal of unsupported mounts.
 
 | Input | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -54,8 +56,8 @@ It refuses an installation with archives it does not model (`arcanum5+.dat`,
 
 ## 1. Where a sector comes from
 
-For every sector the game loads (source: [`sector_load_game`, `sector.c` 1453–1491](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1453-L1491) for the choice,
-[1501–1530](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1501-L1530) and [1694–1702](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1694-L1702) for the `.dif` and the real id passed to the light and object loaders):
+For every sector the game loads (source: `sector_load_game` (0x4D1A30) for the choice, the `.dif` and the
+real id passed to the light and object loaders):
 
 1. `maps/<map>/<sector id>.sec` through the content stack, where
    `sector id = x | y << 26` in decimal. If it exists, it is used as is.
@@ -70,10 +72,10 @@ For every sector the game loads (source: [`sector_load_game`, `sector.c` 1453–
 
 A demo-limits branch skips step 1 for sectors outside configured bounds. The limits
 come from a special `134217730001.sec` in the map folder
-([`sector_load_demo_limits`, `sector.c` 2158+](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L2158)); the main
+(`sector_load_demo_limits`, 0x4D2D70); the main
 map has no such file (report: `own_files_outside_grid` is 0), so it does not apply.
 
-`sector_exists` (the "hand-made?" test used elsewhere, [`sector.c` 836–841](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L836-L841)) checks step 1 only.
+`sector_exists` (the "hand-made?" test used elsewhere, 0x4D04A0) checks step 1 only.
 
 Observed on the main map `Arcanum1-024-fixed` (2000 × 2000 = 4,000,000 sectors):
 
@@ -90,11 +92,11 @@ main map, 212 by all maps together, of 413 template `.sec` files present.
 
 ## 2. terrain.tdf
 
-Source: header [`terrain.c` 14–21](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L14-L21),
-[`terrain_open` 198–271](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L198-L271),
-[row read 469–499](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L469-L499),
-[row cache 886–946](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L886-L946),
-[editor decompress 949–987](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L949-L987).
+Source: the terrain header layout,
+`terrain_open` (0x4E7CB0),
+row read (0x4E87F0),
+row cache (0x4E9410, 0x4E9470, 0x4E9490, 0x4E9540),
+editor decompress (0x4E9580).
 
 | Offset | Field | Rule |
 | ---: | --- | --- |
@@ -111,8 +113,8 @@ inflates rows on demand into a four-row round-robin cache; a missing row is foun
 by walking the size prefixes from row 0. A sector outside `width × height` reads
 as `0xFFFF`. Any `terrain_open` failure (missing file, wrong version, short read)
 makes `map_open` try `terrain_map_new` from `map.prp`
-([`map.c` 701–713](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L701-L713)), but that file is written only in the
-editor ([`terrain_flush` 434–466](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L434-L466)); in the game the reopen
+(`map_open`, 0x40F4E0), but that file is written only in the
+editor (`terrain_flush`, 0x4E8740); in the game the reopen
 fails and the map does not open. A loader should therefore refuse a missing or bad
 grid rather than synthesise one.
 
@@ -127,7 +129,7 @@ body of the wrong size.
 
 ### Fields of the 16-bit word
 
-Source: [accessors `terrain.c` 605–626](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L605-L626).
+Source: accessors (0x4E8DC0, 0x4E8DD0, 0x4E8DE0, 0x4E8DF0; ledger TR4).
 
 | Bits | Field |
 | --- | --- |
@@ -143,9 +145,9 @@ agree with the readers, not the encoder.
 
 ### Terrain types (`terrain/terrain.mes`)
 
-Source: [`terrain_init_types` 658–683](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L658-L683),
-[variant count 686–725](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L686-L725),
-[transitions 728–807](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L728-L807).
+Source: `terrain_init_types` (0x4E8EA0),
+variant count (0x4E8F40),
+transitions (0x4E90B0, 0x4E9240); ledger TR1–TR3.
 Messages 0.. (consecutive, at most 32) name the types. A `/b` in the text marks the
 type blocked and is cut off together with the whitespace before it; the remaining
 text is the folder name. Messages 100+ are editor colours. Messages 200 onward
@@ -154,7 +156,7 @@ editor helper table. The original matches each name against every message of the
 file; the probe is stricter and accepts only type names. The runtime counts how
 many plain variants exist per type and never reads that count back, but the same
 loop fails initialisation if type 0 has no `0.sec` and fixes the type count that
-A6 depends on (terrain.c 713–722).
+A6 depends on (0x4E8F40).
 
 | Type | Folder name | `/b` | Plain variants present | Main-map base count |
 | ---: | --- | :---: | :---: | ---: |
@@ -182,9 +184,9 @@ A6 depends on (terrain.c 713–722).
 
 ### Path rule
 
-Source: [`terrain_sector_path` 367–418](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L367-L418),
-[slot table 50–67](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L50-L67),
-[variant slot 650–655](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L650-L655).
+Source: `terrain_sector_path` (0x4E84C0),
+slot table (0x5B9968),
+variant slot (0x4E8E60); ledger TR5.
 A template folder is a small map of its own; its file names are sector ids
 `x | y << 26` of a **slot** inside that folder.
 
@@ -271,7 +273,7 @@ exactly at its terminal count.
 So the template objects are stored at the template's own coordinates (a variant-3
 plain file at slot (1, 1) holds objects at x, y 64..127), carry no permanent object
 ID (the original registers a permanent ID only for a non-null kind,
-[`obj.c` 3080–3082](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L3080-L3082)),
+`obj_inst_read_file`, 0x409AA0),
 and are walls and scenery only. One template can therefore be instantiated at many
 real sectors without identity collisions.
 
@@ -284,43 +286,41 @@ Per-folder counts in the table come from the report's `per_folder` and
 
 ## 5. Moving template records to the real sector
 
-Source: [`objlist_load`, `sector_object_list.c` 115–186](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_object_list.c#L115-L186),
-[`sector_light_list_load`, `sector_light_list.c` 111–154](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_light_list.c#L111-L154).
+Source: `objlist_load` (0x4F1350),
+`sector_light_list_load` (0x4F72C0).
 
 - **Objects:** new location = `(real x << 6) + (old x & 63), (real y << 6) + (old y & 63)`;
   the object's modified flags are cleared and it gets the next temporary id of the
   sector. Offsets and every other field are unchanged.
-- **Lights:** CE's loader, marked "TODO: Check" at the pin, adds the *unshifted*
-  sector x/y to the tile index `x & 63 | (y & 63) << 6` (anomaly A1). Taken
-  literally it would put all 128 template lights far from their sector (for sector
-  (1451, 1302): x ≈ 1451..5546, y = 1302). Since the lights are stored in their own
-  slot exactly like the objects, the object rule is the intended reading
-  (inference). Proposed project policy: relocate lights with the object rule.
+- **Lights:** the original moves them with the object rule, sector × 64 + local
+  tile ([ledger Wilderness A1](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock), anomaly A1). The lights are
+  stored in their own slot exactly like the objects, so the data agree. Proposed
+  project policy: relocate lights with the object rule.
 - **Not moved, sector-local by construction:** the 4,096 tile words, roof array,
   block mask (tile bits), tile scripts (keyed by local tile; none in templates),
   sector script, sound and light-scheme words.
 - After loading, objects and lights are folded under the real sector id like a
-  hand-made sector ([`sector.c` 1717–1719](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1717-L1719)).
+  hand-made sector (`sector_load_game`, 0x4D1A30).
 
 ## 6. Fill fallback
 
-Source: [`terrain_fill` 421–431](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L421-L431).
+Source: `terrain_fill` (0x4E86F0).
 When the template path does not exist, every tile gets a tile ART of one family
 (tile numbers 7/7, edge 15) whose variation the tile helper picks at random per
-tile ([`tile.c` 289–296](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile.c#L289-L296)); the sector has no lights, roofs,
+tile (0x4D7480); the sector has no lights, roofs,
 scripts, blocks or objects and no `.dif` is applied. A deterministic loader needs a
 policy for that variation. Retail data never reaches it (0 sectors), but a module
 or mod that names a missing type or slot would.
 
 ## 7. What `/b` blocks
 
-Source: [`terrain_is_blocked` 629–647](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L629-L647),
-[world-map path `path.c` 781–842, 953](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/path.c#L781-L842),
-encounter terrain [`wmap_rnd.c` 163–183](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/wmap_rnd.c#L163-L183) and [708–726](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/wmap_rnd.c#L708-L726).
+Source: `terrain_is_blocked` (0x4E8E00),
+world-map path (0x4207D0, 0x420900, 0x4209C0),
+encounter terrain table and `wmap_rnd_terrain_clear` (0x5589E0).
 
 A sector is terrain-blocked when its word is `0xFFFF` (outside the map) or its base
 or second type carries `/b`. The only caller is world-map travel routing
-(path.c 801, 838, 953), which treats a blocked sector as impassable **only if it has
+(0x4207D0, 0x420900, 0x4209C0), which treats a blocked sector as impassable **only if it has
 no own sector file**. Random encounters ignore `/b`: they read the terrain word and
 use their own per-type table, which marks water, all five mountain types and
 scorched earth (no `/b`) invalid. Walking on the local tile grid never consults it; there the template's
@@ -355,16 +355,16 @@ missing (anomaly A5). No retail sector needs any of these.
 
 ## Anomalies
 
-**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock) supersede the CE readings below where they differ.
+**Original check (ARC-RES-048):** A1, A3 and A6 were checked in the retail 1.0.7.4 executable ([verification ledger](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock)); A2 is level F0 and A4, A5 are data facts.
 
 | Id | Where | Observation | Consequence |
 | --- | --- | --- | --- |
-| A1 | CE `sector_light_list_load` | Adds unshifted sector x/y to a local tile index | Literal reading misplaces all 128 template lights; use the object rule (policy above) |
-| A2 | CE `terrain.c` 587–596 (editor encoder) | Second type packed at bit 4, readers use bit 6 | Editor-only; data follow the readers |
-| A3 | CE path rule | Code 15 with base ≠ second has no slot either way and builds `-1.sec` | Never in data; would fall to fill |
+| A1 | `sector_light_list_load` (0x4F72C0) | Moves lights with the object rule (sector × 64 + local tile), ledger Wilderness A1 | All 128 template lights land in their sector; use the object rule (policy above) |
+| A2 | editor encoder `sub_4E8CE0` (0x4E8CE0) | Second type packed at bit 4, readers use bit 6 (F0, not checked) | Editor-only; data follow the readers |
+| A3 | `terrain_sector_path` (0x4E84C0) | Code 15 with base ≠ second has no slot either way and builds `-1.sec` (ledger Wilderness A3) | Never in data; would fall to fill |
 | A4 | `arcanum2.dat` | `desert moutains to desert` misspelled | Folder unreachable; unused by retail maps |
 | A5 | `arcanum2.dat` | `tropical jungle to tropical mountains` has only the referenced slot (0,0) of nine | Unused by retail maps; would fall to fill |
-| A6 | CE path rule | A base or second type ≥ type count has no name (CE prints an error only for an invalid base; either case continues with a null name, undefined behaviour) | Never in data; a loader should refuse or fill, not crash |
+| A6 | `terrain_sector_path` (0x4E84C0) | A base or second type ≥ type count has no name; the path then appends a null name and faults, an original crash bug (ledger Wilderness A6, TR5) | Never in data; a loader should refuse or fill, not crash |
 
 ## Proposed slices (for the whole-world plan)
 
@@ -398,15 +398,17 @@ checked in the executable ([ledger TR1–TR5](original-verification-ledger.md#te
 - `.dif` files for generated sectors (save state) are not examined here; the executable
   looks one up under the real sector id for template sectors too
   ([main-map streaming](main-map-streaming.md), SS5).
-- Only the owner's GOG + CE installation and its one module were measured;
+- Only the owner's GOG installation and its one module were measured;
   `Vormantown` and other modules are out of scope.
 
-## Sources and lineage
+## Sources
 
-- Pinned CE `a7ff41b300ef712f0e7d088183a3d08957110cdd`: `src/game/terrain.c`,
-  `src/game/sector.c`, `src/game/sector_object_list.c`,
-  `src/game/sector_light_list.c`, `src/game/light.c`, `src/game/obj.c`,
-  `src/game/tile.c`, `src/game/path.c`, `src/game/map.c`, `src/ui/wmap_rnd.c`.
+- Earlier source reading, cited by executable address (F0 unless a ledger row is cited): terrain 0x4E7B00–0x4E9680,
+  sectors 0x4CEF70–0x4D31C0, sector object list 0x4F1150–0x4F2330, sector light
+  list 0x4F7110–0x4F7B50, lights 0x4D7F30–0x4DF310, object storage
+  0x405110–0x40D670, tiles 0x4D6840–0x4D7E90, paths 0x41F3C0–0x421AE0, maps
+  0x40EA90–0x412C90 and random encounters 0x5581B0–0x559640; earlier provenance is
+  in git history.
 - Project: `tools/research/terrain_template_probe.py`,
   `tools/research/dat_probe.py`, the v119 descriptors in
   `src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs`, and
