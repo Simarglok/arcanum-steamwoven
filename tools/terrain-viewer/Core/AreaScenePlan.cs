@@ -38,13 +38,23 @@ public sealed record AreaDrawCommand(AreaVisualKey Visual, AreaFrameKey Frame, A
     public bool Blended => Additive || Multiply || Alpha != 255 || WadeRows > 0;
 }
 
+/// <summary>ARC-RENDER-022: one roof block and the command that draws its frame (drawn after every body, when the block is
+/// not filled; ledger RF1, RF2, RF7).</summary>
+public sealed record AreaRoofDraw(AreaRoofRecord Roof, AreaDrawCommand Command);
+
 /// <summary>One world chart and one stable immutable body policy. Body appearance
 /// belongs to DATA009; footprint terrain cropping belongs to the established
 /// diagnostic TerrainGeometry seam. No ART/resource lookup occurs here.</summary>
 public sealed class AreaScenePlan
 {
-    private AreaScenePlan(TerrainRect bounds, IReadOnlyList<AreaDrawCommand> commands, IReadOnlyList<AreaCoverage> coverage, AreaChart chart)
-    { WorldBounds = bounds; Commands = commands; Coverage = coverage; Chart = chart; }
+    private AreaScenePlan(TerrainRect bounds, IReadOnlyList<AreaDrawCommand> commands, IReadOnlyList<AreaCoverage> coverage, AreaChart chart,
+        IReadOnlyList<AreaRoofDraw> roofs)
+    { WorldBounds = bounds; Commands = commands; Coverage = coverage; Chart = chart; Roofs = roofs; }
+    /// <summary>ARC-RENDER-022: the roof blocks of a whole map, outside <see cref="Commands"/> (they are neither terrain nor
+    /// bodies); none for a pinned profile.</summary>
+    public IReadOnlyList<AreaRoofDraw> Roofs { get; }
+    /// <summary>The frames the plan draws: its commands' and its roofs'.</summary>
+    public IEnumerable<AreaFrameKey> Frames => Commands.Select(command => command.Frame).Concat(Roofs.Select(roof => roof.Command.Frame));
     /// <summary>The chart whose origin every projection and sort key of this plan is relative to.</summary>
     public AreaChart Chart { get; }
     public TerrainRect WorldBounds { get; }
@@ -55,12 +65,12 @@ public sealed class AreaScenePlan
     public const int CameraOriginY = 82560;
 
     public static AreaScenePlan Create(AreaSnapshot snapshot, AreaChart? chart = null)
-        => Create(snapshot.Terrain, snapshot.Objects, snapshot.Visuals, chart);
+        => Create(snapshot.Terrain, snapshot.Objects, snapshot.Visuals, chart, snapshot.Roofs);
 
     // A value-input seam, also used by synthetic tests. It runs the complete
     // production disposition, placement and ordering rules, not pre-made draws.
     public static AreaScenePlan Create(IEnumerable<AreaTerrainRecord> terrain, IEnumerable<AreaObjectRecord> objects,
-        IEnumerable<AreaVisualRecord> visuals, AreaChart? chart = null)
+        IEnumerable<AreaVisualRecord> visuals, AreaChart? chart = null, IEnumerable<AreaRoofRecord>? roofs = null)
     {
         chart ??= AreaChart.Exterior;
         var catalog = visuals.ToDictionary(visual => visual.Key);
@@ -127,7 +137,25 @@ public sealed class AreaScenePlan
         var left = commands.Min(command => command.Destination.X); var top = commands.Min(command => command.Destination.Y);
         var right = commands.Max(command => checked(command.Destination.X + command.Destination.Width));
         var bottom = commands.Max(command => checked(command.Destination.Y + command.Destination.Height));
-        return new(new(left, top, checked(right - left), checked(bottom - top)), Array.AsReadOnly(ordered), coverage.AsReadOnly(), chart);
+        // A roof block is drawn from its normalized tile's screen origin moved 120 left and 200 up, less the frame's hot spot
+        // (a mirrored roof frame takes hot spot x 0); the original passes no object offset (ledger RF1, RF7).
+        var roofDraws = new List<AreaRoofDraw>();
+        foreach (var roof in roofs ?? [])
+        {
+            var visual = catalog[roof.Visual];
+            var (x, y) = AreaRoofGrid.ScreenPosition(roof.BlockX, roof.BlockY, (tx, ty) =>
+            {
+                var projected = TerrainGeometry.Project(checked((int)(tx - chart.OriginX)), checked((int)(ty - chart.OriginY)));
+                return (projected.X, projected.Y);
+            });
+            var (hotX, hotY, _) = AreaRoofGrid.HotSpot(visual);
+            var (nx, ny) = AreaRoofGrid.Normalize(roof.BlockX, roof.BlockY);
+            roofDraws.Add(new(roof, new(visual.Key, AreaFrameKey.From(visual), null, new(0, 0, visual.Width, visual.Height),
+                new(checked((int)(x - hotX)), checked((int)(y - hotY)), visual.Width, visual.Height), visual.Mirrored, false, 5,
+                checked((int)nx), checked((int)ny), 0, 0, 255, false) { ArtClass = 10 }));
+        }
+        return new(new(left, top, checked(right - left), checked(bottom - top)), Array.AsReadOnly(ordered), coverage.AsReadOnly(), chart,
+            roofDraws.AsReadOnly());
     }
 
     /// <summary>

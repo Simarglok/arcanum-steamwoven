@@ -87,6 +87,23 @@ public sealed class AreaRoofGridTests
     }
 
     [TestMethod]
+    public void Walls_of_the_wall_check_fade_their_roof_by_count_and_a_hit_needs_an_unfilled_roof()
+    {
+        var grid = new AreaRoofGrid([Roof(64, 64, 8)]);
+        grid.AddWallFade(64, 64); grid.AddWallFade(67, 67);
+        Assert.IsTrue(grid.IsFaded(65, 65));
+        grid.ReleaseWallFade(64, 64);
+        Assert.IsTrue(grid.IsFaded(65, 65), "one wall still counts");
+        grid.ReleaseWallFade(67, 67);
+        Assert.IsFalse(grid.IsFaded(65, 65));
+        grid.ReleaseWallFade(67, 67); // a release without a count is ignored
+        Assert.AreEqual(64, grid.HitCandidate(66, 67)!.BlockX);
+        Assert.IsNull(grid.HitCandidate(70, 70));
+        grid.FillOn(64, 64);
+        Assert.IsNull(grid.HitCandidate(66, 67), "a filled roof is not hit");
+    }
+
+    [TestMethod]
     public void Slots_blocks_screen_positions_and_fade_corners_follow_the_original()
     {
         Assert.AreEqual(0, AreaRoofGrid.Slot(0));

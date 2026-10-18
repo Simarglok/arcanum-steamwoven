@@ -177,6 +177,7 @@ public partial class TerrainViewerApp
                     return false;
                 }
             }
+            _areaRoofDeparture = session.Chart.ToWorld(session.State.CommittedCell);
             ConfigureAreaActor(map, map.Chart.ToChart(transfer.Arrival), session.State.Facing);
             _mapEntered.Clear();
             _worldFitView = false; _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
@@ -304,7 +305,8 @@ public partial class TerrainViewerApp
         CellCoord? goal = null;
         while (queue.TryDequeue(out var cell) && seen.Count < 50000)
         {
-            if (cell != start && transfers.CellSite(map.Chart.ToWorld(cell)) is { Trigger: Arcanum.Data.Maps.MapTransitionTrigger.JumpPoint })
+            if (cell != start && transfers.CellSite(map.Chart.ToWorld(cell)) is { Trigger: Arcanum.Data.Maps.MapTransitionTrigger.JumpPoint } jumpSite
+                && transfers.Refusal(jumpSite) is null)
             { goal = cell; break; }
             foreach (var direction in Enum.GetValues<NeighborDirection>())
             {

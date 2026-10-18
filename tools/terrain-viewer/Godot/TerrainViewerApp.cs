@@ -114,7 +114,7 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        if (_readyMapName is not null) { await RunAreaMapSmokeAsync(result); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); }
+                        if (_readyMapName is not null) { await RunAreaMapSmokeAsync(result); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); }
                         else await RunAreaSmokeAsync(result);
                         // S5 must observe the retired generation become
                         // collectable; this frame may not keep it reachable.
@@ -931,7 +931,7 @@ public partial class TerrainViewerApp : Node
     {
         // The conversation host borrows the area session, so it is unbound before the session is disposed.
         UnbindAreaConversations(); UnbindAreaHover();
-        StopAreaAmbient(); StopAreaTransitions(); StopAreaWalls();
+        StopAreaAmbient(); StopAreaTransitions(); StopAreaWalls(); StopAreaRoofs();
         _readyArea = null; _readyMapName = null;
         _readySourceId = null;
         _readyDecodedCount = 0;

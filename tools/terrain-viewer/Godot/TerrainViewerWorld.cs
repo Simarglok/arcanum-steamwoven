@@ -445,7 +445,7 @@ public partial class TerrainViewerApp
         if (_readyArea is not null)
         {
             _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current;
-            FollowAreaAmbient(); FollowAreaWalls();
+            FollowAreaAmbient(); FollowAreaWalls(); FollowAreaRoofs();
             // ARC-COMBAT-005: fallen bodies move like companions, from the frame repository with their poses.
             SyncAreaCombatBodies();
             _canvas!.SetAreaMovingBodies(AreaMovingCommands()); _canvas.SetAreaAbsent(_areaCompanions?.Absent);
@@ -519,7 +519,7 @@ public partial class TerrainViewerApp
             {
                 if (_worldReloadPending) throw new InvalidOperationException("GRID_RELOAD_ARGUMENTS_REQUIRED");
                 RetireWorldLifecycle();
-                if (session is AreaGridSession area) { _worldActor.Configure(area.Snapshot, time, chart: area.Chart); BindAreaCompanions(); }
+                if (session is AreaGridSession area) { _worldActor.Configure(area.Snapshot, time, chart: area.Chart); BindAreaCompanions(); ResetAreaRoofs(); }
                 else _worldActor.Configure(((DiagnosticGridSession)session).Snapshot, time);
                 _worldGridInput = new(); _worldGate.Close();
                 PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);

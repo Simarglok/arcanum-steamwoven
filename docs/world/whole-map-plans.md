@@ -32,6 +32,10 @@ snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
   64 MiB for the aggregate) and the owner authenticates those bytes against the
   plan. A sector or editor mobile (`.mob`) file overridden outside the module
   archive is refused, because the owner reads both from the module archive.
+- **Map patch:** the stack's winner of `rules/map.patch` (read when a map opens)
+  is an input (`AreaSourceRole.MapPatch`), with the headers of the scripts its
+  lines attach; the owner applies its lines to the map's mobile objects before
+  building them ([map patch](map-patch.md), ARC-DATA-028).
 - **Mappings:** the ten MES/policy files the pinned profiles bind. The original
   reads all of them in Name's init, before the module is mounted (ARC-DATA-027,
   exe-checked), so each is the first base source's copy: a module copy is never
