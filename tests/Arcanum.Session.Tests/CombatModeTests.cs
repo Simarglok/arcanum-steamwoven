@@ -246,7 +246,7 @@ public sealed class CombatModeTests
         Changed(owner.SetCombatMode(owner.Version, Wolf, true, For(Npc())), owner, true);
         Changed(owner.SetCombatMode(owner.Version, SessionCombatant.Critter("oid:bandit"), true, For(Npc())), owner, true);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        const string saved = ",\"combat\":null,\"combatMode\":{\"hero\":true,\"critters\":[\"oid:bandit\",\"oid:wolf\"]},\"events\":";
+        const string saved = ",\"combat\":null,\"combatMode\":{\"hero\":true,\"critters\":[\"oid:bandit\",\"oid:wolf\"]},\"sound\":";
         StringAssert.Contains(text, saved);
         using var restored = Restore(Decode(text), RestoreOptions());
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
@@ -257,11 +257,11 @@ public sealed class CombatModeTests
             var result = GameSessionSnapshotCodec.TryDecode(text.Replace(saved, replacement));
             Assert.AreEqual((failure, path), (result.Failure, result.Path), replacement);
         }
-        DecodeFails(",\"combat\":null,\"combatMode\":{\"hero\":true,\"critters\":[\"oid:wolf\",\"oid:bandit\"]},\"events\":", SnapshotDecodeFailure.NotCanonical, "$.combatMode.critters[1]");
-        DecodeFails(",\"combat\":null,\"combatMode\":{\"hero\":true,\"critters\":[\"oid:wolf\",\"oid:wolf\"]},\"events\":", SnapshotDecodeFailure.NotCanonical, "$.combatMode.critters[1]");
-        DecodeFails(",\"combat\":null,\"combatMode\":{\"hero\":1,\"critters\":[]},\"events\":", SnapshotDecodeFailure.WrongType, "$.combatMode.hero");
-        DecodeFails(",\"combat\":null,\"combatMode\":{\"hero\":true},\"events\":", SnapshotDecodeFailure.MissingField, "$.combatMode.critters");
-        DecodeFails(",\"combat\":null,\"combatMode\":{\"hero\":true,\"critters\":[],\"npcs\":[]},\"events\":", SnapshotDecodeFailure.UnknownField, "$.combatMode.npcs");
+        DecodeFails(",\"combat\":null,\"combatMode\":{\"hero\":true,\"critters\":[\"oid:wolf\",\"oid:bandit\"]},\"sound\":", SnapshotDecodeFailure.NotCanonical, "$.combatMode.critters[1]");
+        DecodeFails(",\"combat\":null,\"combatMode\":{\"hero\":true,\"critters\":[\"oid:wolf\",\"oid:wolf\"]},\"sound\":", SnapshotDecodeFailure.NotCanonical, "$.combatMode.critters[1]");
+        DecodeFails(",\"combat\":null,\"combatMode\":{\"hero\":1,\"critters\":[]},\"sound\":", SnapshotDecodeFailure.WrongType, "$.combatMode.hero");
+        DecodeFails(",\"combat\":null,\"combatMode\":{\"hero\":true},\"sound\":", SnapshotDecodeFailure.MissingField, "$.combatMode.critters");
+        DecodeFails(",\"combat\":null,\"combatMode\":{\"hero\":true,\"critters\":[],\"npcs\":[]},\"sound\":", SnapshotDecodeFailure.UnknownField, "$.combatMode.npcs");
 
         using var golden = GoldenSession();
         var heroless = GameSessionSnapshotCodec.Encode(golden.Capture()).Replace(NoCombatMode, ",\"combatMode\":{\"hero\":true,\"critters\":[]}");
