@@ -174,7 +174,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// The exit gate (the source's <c>combat_can_exit_combat_mode</c>) for the hero: true out of combat mode or when not
+    /// The exit gate (the source's 0x4B3D90) for the hero: true out of combat mode or when not
     /// active; false while it attempts an attack or when an active, fighting NPC of <paramref name="exit"/> has the hero or
     /// one of its followers as combat focus. False without a hero is never returned: without one it is true.
     /// </summary>

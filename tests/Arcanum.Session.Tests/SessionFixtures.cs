@@ -17,7 +17,7 @@ internal static class SessionFixtures
     internal static readonly ActorPlacement Start = new(Exterior, new(100, 200), NeighborDirection.XPlus);
 
     internal static ProfileBinding Profile(int hour = 15) => new(1, "steamwoven-normalized-clock-v1",
-        "a7ff41b300ef712f0e7d088183a3d08957110cdd", new string('a', 64), new string('c', 64), 1885, hour);
+        "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52", new string('a', 64), new string('c', 64), 1885, hour);
 
     internal static GlobalFlagOwnerDescriptor Flags(GlobalFlagIdentity? identity = null) => new(identity ?? Identity, Epoch, 0,
         [new FlagId(3), new FlagId(7), new FlagId(9)],
@@ -76,10 +76,10 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":15," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":16," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
-        "\"sourceRevision\":\"a7ff41b300ef712f0e7d088183a3d08957110cdd\"," +
+        "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
         "\"sourceDataSha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"," +
         "\"startupResourceSha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"," +
         "\"startYear\":1885,\"startHour\":15,\"timestampMs\":54000000,\"paused\":false,\"pauseReason\":\"None\",\"revision\":0}," +

@@ -4,8 +4,8 @@ namespace Arcanum.Simulation.Combat;
 /// The two combat rule settings of owner decision D8: <see cref="Steamwoven"/> (the original with the recorded D2
 /// fixes, the default) and <see cref="Original"/> (the retail 1.0.7.4 behaviour, bugs included). Each switch is one
 /// bug of the original game that the attack resolver or the turn-based round touches, confirmed in the original executable and recorded in
-/// docs/research/npc-combat-ai-plan.md#anomaly-decisions. CE-only reconstruction slips (A1, A3, A4, A5, A8) have no
-/// switch: both settings behave as the original there. The profile holds no state, so it may change between attacks.
+/// docs/research/npc-combat-ai-plan.md#anomaly-decisions. Where only the reconstruction read differently (A1, A3, A4,
+/// A5, A8) there is no switch: both settings behave as the original there. The profile holds no state, so it may change between attacks.
 /// </summary>
 public sealed record CombatAnomalyProfile
 {

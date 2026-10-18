@@ -14,7 +14,7 @@ internal enum OriginalFunctionScope
 /// docs/verification/README.md). This assembly cannot reference <c>Arcanum.Simulation</c>, so it declares its own attribute
 /// of the same name and shape; the registry test recognises it by name.
 /// </summary>
-[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
 internal sealed class OriginalFunctionAttribute(uint address, OriginalFunctionScope scope) : Attribute
 {
     public uint Address { get; } = address;

@@ -17,16 +17,16 @@ public static class EquipmentLimits
 
 /// <summary>
 /// ARC-WORLD-028: which item may take which wear slot, and what the worn items give a wearer in combat. Pure functions over
-/// stored item values (<see cref="EquipmentItem"/>) and the wearer's facts. Each rule is the reading of pinned CE
-/// <c>a7ff41b300ef712f0e7d088183a3d08957110cdd</c> (<c>item.c</c>, <c>object.c</c>) checked against the retail 1.0.7.4
-/// executable at the same functions (verification ledger, "Equipment (ARC-WORLD-028)"); no code or structure was copied.
+/// stored item values (<see cref="EquipmentItem"/>) and the wearer's facts. Each rule is checked in the retail 1.0.7.4
+/// executable (verification ledger, "Equipment (ARC-WORLD-028)").
 /// Art existence (whether the wearer's art has the weapon, shield or armour) is not a rule here: the caller answers it after
 /// <see cref="CheckWear"/> when <see cref="NeedsArtCheck"/> says so.
 /// </summary>
 public static class EquipmentRules
 {
-    /// <summary>The slot an item belongs in (the source's <c>item_location_get</c>): a weapon the weapon slot, armour the slot of its
+    /// <summary>The slot an item belongs in (the source's 0x4655D0): a weapon the weapon slot, armour the slot of its
     /// coverage (a ring <see cref="EquipmentSlot.Ring1"/>), a generic item that uses the shield location the shield slot; else null.</summary>
+    [OriginalFunction(0x4655D0, OriginalFunctionScope.Full)]
     public static EquipmentSlot? WearSlot(EquipmentItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -61,13 +61,14 @@ public static class EquipmentRules
     };
 
     /// <summary>
-    /// The source's wear check (<c>sub_464D20</c>) without its art lookups, in its order: a transformed wearer, a magickal item
+    /// The source's wear check (0x464D20) without its art lookups, in its order: a transformed wearer, a magickal item
     /// against Magick Allergy, a broken item, the wrong slot (either ring slot takes a ring); then by slot. Weapon: a two-handed
     /// weapon with a fixed hand count is refused next to a shield and with any crippled arm, any other weapon only with both arms
     /// crippled. Shield: refused next to such a two-handed weapon and with any crippled arm (the original tests both arm flags;
-    /// CE reads only "both", a reconstruction slip). Body armour: the race's size, male-only before female-only, unique NPC art.
+    /// ledger EQ1). Body armour: the race's size, male-only before female-only, unique NPC art.
     /// Minimum strength is not checked. <paramref name="worn"/> is what the wearer wears now.
     /// </summary>
+    [OriginalFunction(0x464D20, OriginalFunctionScope.Partial)]
     public static EquipmentRefusal CheckWear(EquipmentItem item, EquipmentSlot slot, EquipmentWearer wearer,
         IReadOnlyDictionary<EquipmentSlot, EquipmentItem> worn)
     {
@@ -120,8 +121,9 @@ public static class EquipmentRules
         };
     }
 
-    /// <summary>Whether the item may leave its place (the source's <c>item_check_remove</c>): never with the no-drop flag. Taking a
+    /// <summary>Whether the item may leave its place (the source's 0x466DA0): never with the no-drop flag. Taking a
     /// worn item off is otherwise always allowed: the original's hexed-item check is a stub that always allows it.</summary>
+    [OriginalFunction(0x466DA0, OriginalFunctionScope.Full)]
     public static EquipmentRefusal CheckRemove(EquipmentItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -129,10 +131,11 @@ public static class EquipmentRules
     }
 
     /// <summary>
-    /// The power a critter draws from an item (the source's <c>item_effective_power</c>): <c>(complexity + aptitude) / 2</c>,
+    /// The power a critter draws from an item (the source's 0x4614A0): <c>(complexity + aptitude) / 2</c>,
     /// truncated toward zero, clamped to 0 .. complexity on the item's side (a magickal item gives a technologist nothing, a
     /// technological item a mage nothing).
     /// </summary>
+    [OriginalFunction(0x4614A0, OriginalFunctionScope.Partial)]
     public static int EffectivePower(int complexity, int aptitude)
     {
         CheckComplexity(complexity);
@@ -146,10 +149,11 @@ public static class EquipmentRules
         complexity == 0 ? 100 : 100 * EffectivePower(complexity, aptitude) / complexity;
 
     /// <summary>
-    /// A magic adjustment as the wearer gets it (the source's <c>item_adjust_magic</c>): a magickal item gives
+    /// A magic adjustment as the wearer gets it (the source's 0x461590): a magickal item gives
     /// <c>value × power / complexity</c>, a technological one <c>value − value × power / complexity</c> (nothing to a perfect
     /// technologist), a neutral one the whole value; integer division truncates toward zero.
     /// </summary>
+    [OriginalFunction(0x461590, OriginalFunctionScope.Full)]
     public static int AdjustMagic(int value, int complexity, int aptitude)
     {
         if (value is < -EquipmentLimits.MaxMagnitude or > EquipmentLimits.MaxMagnitude) throw new ArgumentOutOfRangeException(nameof(value));
@@ -157,9 +161,10 @@ public static class EquipmentRules
         return complexity > 0 ? value * power / complexity : complexity < 0 ? value - value * power / complexity : value;
     }
 
-    /// <summary>The worn items' armour-class adjustment (the worn part of the source's <c>object_get_ac</c>): every worn armour item's
+    /// <summary>The worn items' armour-class adjustment (the worn part of the source's 0x43D880): every worn armour item's
     /// AC adjustment plus its magic AC adjustment for this wearer. Base AC, effects and the AcAdjustment stat are the caller's
     /// (<see cref="AttackRules.ArmorClass"/>).</summary>
+    [OriginalFunction(0x43D880, OriginalFunctionScope.Partial)]
     public static int ArmorClassAdjustment(IEnumerable<EquipmentItem> worn, int aptitude)
     {
         ArgumentNullException.ThrowIfNull(worn);
@@ -169,7 +174,7 @@ public static class EquipmentRules
         return total;
     }
 
-    /// <summary>The worn items' resistance adjustments (the worn part of the source's <c>object_get_resistance</c>): every worn
+    /// <summary>The worn items' resistance adjustments (the worn part of the source's 0x43D6D0): every worn
     /// armour item's adjustment plus its magic adjustment for this wearer, per type. The base, the poison bonus of
     /// constitution, effects and the 0..95 clamp are the caller's.</summary>
     public static EquipmentResistances ResistanceAdjustments(IEnumerable<EquipmentItem> worn, int aptitude)
@@ -187,10 +192,11 @@ public static class EquipmentRules
     }
 
     /// <summary>
-    /// The light a wearer gives off from its worn items (the source's <c>item_recalc_light</c>): each worn item's light flags shrink
+    /// The light a wearer gives off from its worn items (the source's 0x467E80): each worn item's light flags shrink
     /// by one size at an effective power ratio of 75 % or less, two at 50 % or less, three at 25 % or less (a small light then goes
     /// out); the largest remaining size wins.
     /// </summary>
+    [OriginalFunction(0x467E80, OriginalFunctionScope.Full)]
     public static LightEmission Light(IEnumerable<EquipmentItem> worn, int aptitude)
     {
         ArgumentNullException.ThrowIfNull(worn);
@@ -208,10 +214,11 @@ public static class EquipmentRules
     }
 
     /// <summary>
-    /// A weapon's minimum strength for this wielder (the source's <c>item_weapon_min_strength</c>): the stored value plus its magic
+    /// A weapon's minimum strength for this wielder (the source's 0x465E90): the stored value plus its magic
     /// adjustment; unless the hand count is fixed, a two-handed weapon needs 4 more next to a shield and a one-handed weapon 2 less
     /// without one.
     /// </summary>
+    [OriginalFunction(0x465E90, OriginalFunctionScope.Full)]
     public static int MinimumStrength(EquipmentItem weapon, int aptitude, bool shieldWorn)
     {
         var facts = WeaponFacts(weapon);
@@ -220,8 +227,9 @@ public static class EquipmentRules
         return facts.TwoHanded ? (shieldWorn ? strength + 4 : strength) : (shieldWorn ? strength : strength - 2);
     }
 
-    /// <summary>The weapon speed of a wielded weapon (the source's <c>item_weapon_magic_speed</c> with an owner): speed factor plus
+    /// <summary>The weapon speed of a wielded weapon (the source's 0x465CF0 with an owner): speed factor plus
     /// the magic speed adjustment for this wielder, +5 with at least apprentice training in its skill; 10 bare-handed.</summary>
+    [OriginalFunction(0x465CF0, OriginalFunctionScope.Partial)]
     public static int WeaponSpeed(EquipmentItem? weapon, int aptitude, SkillTraining training)
     {
         if (weapon is null)
