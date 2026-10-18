@@ -46,7 +46,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Поведение и приёмка.** Для каждого обычного статического объекта в выбранной области сцена должна связать instance с current ART, mapping, resource identity, группой/кадром и palette. Ошибка или неоднозначность должна быть видимой диагностикой с исходным индексом, а не fallback-картинкой. Приёмка для сектора со всеми его статическими объектами показывает, какая доля цепочек разрешена, и не объявляет сцену полной при непокрытых записях.
 
-**Оригинал и данные.** Отрисовка объекта (0x43B390) читает `OBJ_F_CURRENT_AID`, затем подготавливает ART blit (0x443170; выбор blend сверен с exe, строка [BL1](../research/original-verification-ledger.md#rendering-body-blends-and-wading-arc-render-018)); загрузчик сектора помещает объекты в его списки (0x4D1530). Требуются instance/prototype current ART, выбранный mapping и resource archive с валидными group/frame/palette.
+**Оригинал и данные.** Отрисовка объекта (0x43B390) читает `OBJ_F_CURRENT_AID`, затем подготавливает ART blit (0x443170; выбор blend сверен с exe, строка [BL1](../research/original-verification-ledger.md#rendering-body-blends-and-wading-arc-render-018)); загрузчик сектора помещает объекты в его списки (0x4D1A30). Требуются instance/prototype current ART, выбранный mapping и resource archive с валидными group/frame/palette.
 
 **Steamwoven сейчас.** Area API разрешает все 2,444 требуемые selected terrain/object chains объявленного original profile, actual defaults, физическую frame selection и identity-bound leases. Пять-only `StaticSceneryScenePlan` остаётся отдельной frozen регрессией; general original resource precedence не реализован. [API](../world/crash-site-area-loader.md).
 
@@ -128,7 +128,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Поведение и приёмка.** Крыша должна строиться из sector roof data с её piece, fill/fade state и кадрами, а не из статического объекта с похожими пикселями. Приёмка покрывает собранный участок крыши с внутренними и внешними углами, заполненными и незаполненными частями; неизвестная крыша не заменяется вымышленным спрайтом.
 
-**Оригинал и данные.** Оригинал загружает roofs как отдельную секцию сектора; отрисовка крыш (0x439140) выбирает записи на 4-клеточной сетке и blit-ит roof ART, включая piece-specific fade alpha (roof load (0x4D1530), draw и piece fade (0x439140); сетка, отрисовка и fade сверены с exe, строки [RF1, RF2](../research/original-verification-ledger.md#roofs-arc-render-021)).
+**Оригинал и данные.** Оригинал загружает roofs как отдельную секцию сектора; отрисовка крыш (0x439140) выбирает записи на 4-клеточной сетке и blit-ит roof ART, включая piece-specific fade alpha (roof load (0x4D1A30), draw и piece fade (0x439140); сетка, отрисовка и fade сверены с exe, строки [RF1, RF2](../research/original-verification-ledger.md#roofs-arc-render-021)).
 
 **Steamwoven сейчас.** Для выбранной секции зафиксирован только framing roof section и empty discriminator; нет roof data model, ART-resolution chain, roof renderer или synthetic roof piece matrix. [Static scene scope](../rendering/static-scenery-contract.md#scope-and-status), [loader boundary](../world/static-object-loader.md#scope).
 
