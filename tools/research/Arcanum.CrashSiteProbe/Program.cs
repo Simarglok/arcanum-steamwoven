@@ -180,7 +180,7 @@ internal static partial class Program
                 new StaticObjectPrototypeSource(prototypeRoot));
             var selector = new TerrainSectorSelector(SectorEntryName, "Arcanum1-024-fixed", 1452, 1290, 86_570_436_012, 92_928, 82_560, 64, 64,
                 new TerrainEntryExpectation(ExpectedSectorOrdinal, 0x00000002, ExpectedSectorDecodedBytes));
-            var source = new TerrainTileNameSource(resource, "arcanum2-base", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs);
+            var source = new TerrainTileNameSource(resource, "arcanum2-base", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs);
             var report = TerrainObstructionInspector.InspectSector(archive, "arcanum-module", selector, source, new TerrainLoaderOptions
             {
                 MaxSectorDecodedEntryBytes = MaxDecodedSectorBytes,

@@ -356,7 +356,7 @@ internal static class CardinalTraversalProbe
             using var resource = DatArchive.Open(new MemoryStream(FixtureDat("art\\tile\\tilename.mes", System.Text.Encoding.ASCII.GetBytes("{0}{" + value + "}"))), leaveOpen: false);
             var selector = new TerrainSectorSelector("maps\\fixture\\test.sec", "fixture", 1452, 1290, 86570436012, 92928, 82560, 64, 64);
             var report = TerrainObstructionInspector.InspectSector(module, "SYNTHETIC_MODULE", selector,
-                new TerrainTileNameSource(resource, "SYNTHETIC_RESOURCE", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+                new TerrainTileNameSource(resource, "SYNTHETIC_RESOURCE", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs));
             var snapshot = new Snapshot("SYNTHETIC", new(), new(4, 0), new(8, 3), ProjectTerrain(report, sector, 4, 16436), [], 0);
             var result = Assess(snapshot, MakeRequest(snapshot, new(6, 1), new(5, 1)));
             if (result.Result != expected || result.Coverage != (expected.HasValue ? Coverage.Supported : Coverage.Unknown))
@@ -368,7 +368,7 @@ internal static class CardinalTraversalProbe
             using var resource = DatArchive.Open(new MemoryStream(FixtureDat(names, "{0}{abc}"u8.ToArray())), leaveOpen: false);
             var report = TerrainObstructionInspector.InspectSector(module, "SYNTHETIC_MODULE",
                 new("maps\\fixture\\test.sec", "fixture", 1452, 1290, 86570436012, 92928, 82560, 64, 64),
-                new(resource, "SYNTHETIC_RESOURCE", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+                new(resource, "SYNTHETIC_RESOURCE", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs));
             var snapshot = new Snapshot("SYNTHETIC", new(), new(4, 0), new(8, 3), ProjectTerrain(report, sector, 4, 16436), [], 0);
             var result = Assess(snapshot, MakeRequest(snapshot, new(6, 1), new(5, 1)));
             if (result.Coverage != Coverage.Unknown || result.Result is not null) throw new InvalidOperationException("CARDINAL_NAME_SELECTION_FIXTURE");
@@ -394,7 +394,7 @@ internal static class CardinalTraversalProbe
             using var resource = DatArchive.Open(new MemoryStream(FixtureDat("art\\tile\\tilename.mes", "{0}{abc}"u8.ToArray())), leaveOpen: false);
             var report = TerrainObstructionInspector.InspectSector(maskedModule, "SYNTHETIC_MODULE",
                 new("maps\\fixture\\test.sec", "fixture", 1452, 1290, 86570436012, 92928, 82560, 64, 64),
-                new(resource, "SYNTHETIC_RESOURCE", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+                new(resource, "SYNTHETIC_RESOURCE", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs));
             var snapshot = new Snapshot("SYNTHETIC", new(), new(4, 0), new(8, 3), ProjectTerrain(report, masked, 4, 16436), [], 0);
             var result = Assess(snapshot, MakeRequest(snapshot, new(6, 1), new(5, 1)));
             if (result.Coverage != Coverage.Supported || result.Result != (ordinal == 69 ? Disposition.Blocked : Disposition.Open))

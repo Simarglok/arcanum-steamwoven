@@ -6,7 +6,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>
 /// Screen-to-cell picking for the whole-core AREA chart (ARC-WORLD-007, Project policy). A chart cell (x,y) is the
 /// terrain diamond the AREA plan draws: its tile rectangle starts at <c>(40(y-x)+1, 20(y+x))</c>, so the diamond
-/// centre is <c>(40(y-x)+40, 20(y+x)+20)</c>, the same point AREA scenery anchors use (CE <c>location_xy</c> plus
+/// centre is <c>(40(y-x)+40, 20(y+x)+20)</c>, the same point AREA scenery anchors use (the source's 0x4B8680 plus
 /// the object <c>+40,+20</c>). Since ARC-RENDER-011 the HumanFixed actor stands on the same centre
 /// (<see cref="AreaGridSession.LocationOriginX"/>); picking follows the drawn ground, not the actor sprite.
 /// </summary>

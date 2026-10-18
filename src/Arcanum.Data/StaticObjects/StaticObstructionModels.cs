@@ -7,7 +7,7 @@ public enum StaticObstructionApplicability { Applicable, NotApplicable, Unknown 
 public enum StaticObstructionDisposition { Blocker, NoBlock }
 public enum StaticObstructionFlagsSource { Unresolved, Direct, Prototype }
 public enum StaticObstructionLocationStatus { InRange, Absent, OutOfRange, Overflow, OutsideTypeScope }
-public enum StaticObstructionProvenanceKind { SerializedInstance, PrototypeDefault, PinnedCeSpecification, ProjectPolicy, OriginalDataIdentity }
+public enum StaticObstructionProvenanceKind { SerializedInstance, PrototypeDefault, PinnedSpecification, ProjectPolicy, OriginalDataIdentity }
 
 /// <summary>Only NormalCardinalZeroFlags admits non-editor ordinary-ground-critter traversal.</summary>
 public enum StaticObstructionContext

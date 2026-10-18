@@ -39,7 +39,7 @@ public sealed class AreaCellPickingTests
     [TestMethod]
     public void TheAreaActorStandsOnTheDiamondCentreLikeEveryBody()
     {
-        // ARC-RENDER-011: the AREA placement restates CE location_xy (40(y-x-1)) from the chart's location origin
+        // ARC-RENDER-011: the AREA placement restates the source's location-to-screen rule 0x4B8680 (40(y-x-1)) from the chart's location origin
         // (+40,0), so the drawn anchor and the followed foot point are the picked diamond's centre.
         var frame = new ActorDiagnosticFrame(new(2667, 0x20000000u, 5, 0, 0), 10, 9, 3, 7, 29, -13, 1, 6);
         foreach (var (x, y) in new[] { (6.0, 1.0), (-3.0, 100.0), (12.0, 6.0) })

@@ -42,7 +42,7 @@ public sealed record EffectRule(int Number, bool Defined, IReadOnlyList<EffectCh
 public sealed record EffectRuleRead(EffectRuleStatus Status, EffectRule? Rule);
 
 /// <summary>
-/// <c>rules\effect.mes</c> entries (ARC-RES-027; CE <c>effect_parse</c> at the pinned revision): tokens separated by
+/// <c>rules\effect.mes</c> entries (ARC-RES-027; the source's effect parser 0x4E9C20, ledger LM9): tokens separated by
 /// spaces and commas; an attribute keyword (ASCII case-insensitive, first collection that has it wins) followed by its
 /// operator: <c>+n</c>/<c>-n</c> add, the same with a trailing <c>%</c> percent, <c>min n</c>, <c>max n</c>, <c>*n</c> multiply,
 /// <c>/n</c> divide (n with an optional sign). Numbers are 1..9 digits. Project admission policy, stricter than the source's scanner: anything else is a typed refusal instead
@@ -93,6 +93,7 @@ public static class EffectRules
     }
 
     /// <summary>Parses one entry's text (the bytes of a MES message).</summary>
+    [OriginalFunction(0x4E9C20, OriginalFunctionScope.Partial)]
     public static EffectRuleStatus Parse(ReadOnlySpan<byte> text, out IReadOnlyList<EffectChange> changes)
     {
         changes = [];
