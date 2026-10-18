@@ -82,9 +82,11 @@ digest and epoch.
 - **Objects** (F4, F5, F6): inventory, destroyed/off and item types are retained
   as `NotApplicable`. Containers, scenery, projectiles and traps block unless
   `OF_NO_BLOCK` is set. An NPC blocks while alive; life uses the exact or
-  interval HP rule, and effect grammar outside add/percent/min/max, an
-  out-of-range effect index, a max-HP effect or an interval straddling zero are
-  `Unknown`. Portals, PC records, unresolved flags or stats and any
+  interval HP rule. Since ARC-DATA-035 effects are read with the shared effect grammar (`EffectRules`, the original's
+  parser 0x4E9C20, ledger LM9; its attribute table holds the original's stat, skill, resistance, discipline and special
+  names), and only the changes the HP rule reads count: strength, willpower, level, poison level and maximum hit points;
+  any other attribute (speed, a skill…) is ignored. An effect the grammar refuses, a multiply or divide or a −1 bound
+  on a counted attribute, an out-of-range effect index, a max-HP effect or an interval straddling zero are `Unknown`. Portals, PC records, unresolved flags or stats and any
   mobile named by `map.patch` (in either GUID byte order, or when the patch has
   an unsupported line) are `Unknown` in the pinned profiles; a whole map reads the
   object as the owner patched it ([map patch](map-patch.md), ARC-DATA-028), and only a
@@ -251,7 +253,8 @@ profiles `arc-data-032-window-original-rules-v1` and `arc-data-032-window-v1`) a
 from the module archive as for a whole map. A generated core sector is read again from the archive that holds its
 template in the stack (the window names each template's virtual path, `AreaWindowSector.TemplatePath`; `AreaSnapshot.Window`
 exposes the window), bound to the snapshot's payload digest (`FingerprintMismatch` otherwise), and inspected at the real
-sector's coordinates; a template that is no archive member is `InputUnavailable`. The template inputs are among the
+sector's coordinates; since ARC-DATA-035 a template the stack holds as a loose file is read through the stack the same
+way (entry 0 of its source). The template inputs are among the
 evidence's sources (`area-terraintemplate-N`).
 
 Installed original (opt-in `AreaWindowStepRealDataTests`):
@@ -260,9 +263,10 @@ Installed original (opt-in `AreaWindowStepRealDataTests`):
   every one of the 36,864 core cells and for every object evaluation, with no Unknown cell or object and no wall edge;
   7,150 cells are reachable from the spawn in both, the pinned profile's frozen count.
 - **Town (1409, 1314), elven forest wilderness (1384, 239, all nine core sectors generated) and a generated centre
-  (1450, 1290, five core sectors generated).** Evidence builds for all 36,864 core cells with no Unknown terrain; the only Unknown object is one town
-  critter whose effect the step rules do not model (`CRITTER_EFFECT_UNSUPPORTED`). The wilderness has 3,539 wall edges
-  from its templates' walls, the town 717, the generated centre none.
+  (1450, 1290, five core sectors generated).** Evidence builds for all 36,864 core cells with no Unknown terrain or
+  object (before ARC-DATA-035 one town critter was `CRITTER_EFFECT_UNSUPPORTED`: its speed effect, which the HP rule does
+  not read, is now ignored). The wilderness has 3,539 wall edges from its templates' walls, the town 717, the generated
+  centre none.
 
 ## Not delivered
 

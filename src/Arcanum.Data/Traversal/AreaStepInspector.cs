@@ -78,15 +78,23 @@ public static class AreaStepInspector
             var archives = new Dictionary<string, DatArchive>(StringComparer.Ordinal);
             try
             {
-                // A generated sector's template: the stack's winner, which must be an archive member.
-                (DatArchive, DatEntry) Template(AreaSectorRecord sector)
+                // A generated sector's template: the stack's winner, an archive member or (ARC-DATA-035) a loose file.
+                TemplateSector Template(AreaSectorRecord sector)
                 {
                     var path = area.Window?.Sectors.SingleOrDefault(s => s.Coordinate == sector.Coordinate)?.TemplatePath
                         ?? throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Terrain);
                     var winner = stack.Resolve(path).Winner ?? throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Terrain);
-                    if (winner.Entry is not { } entry) throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Terrain);
+                    if (winner.Entry is not { } member)
+                    {
+                        if (winner.Length > new TerrainLoaderOptions().MaxSectorDecodedEntryBytes) throw Fail(AreaStepInvocationCode.LimitExceeded, AreaStepInvocationStage.Terrain);
+                        var read = stack.Read(winner);
+                        return read.Status == ContentReadStatus.Read ? new(read.Bytes!, path, 0, null)
+                            : throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Terrain);
+                    }
                     if (!archives.TryGetValue(winner.Source.Path, out var archive)) archives.Add(winner.Source.Path, archive = DatArchive.Open(winner.Source.Path));
-                    return (archive, archive.Entries[entry.Ordinal]);
+                    var entry = archive.Entries[member.Ordinal];
+                    return new(archive.ReadEntry(entry), Encoding.ASCII.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0'), entry.Ordinal,
+                        new(entry.Ordinal, entry.Flags, entry.DeclaredOutputSize));
                 }
                 return Build(stage, AreaStepInputKind.Structural, area, moduleArchive, Rule, mobile, evidenceEpoch, Template);
             }
@@ -149,7 +157,7 @@ public static class AreaStepInspector
     };
 
     private static AreaStepSnapshot Build(StageCursor stage, AreaStepInputKind kind, AreaSnapshot area, DatArchive module,
-        Func<string, bool, byte[]?> readRule, ReadOnlyMemory<byte> mobileFile, long epoch, Func<AreaSectorRecord, (DatArchive Archive, DatEntry Entry)>? template = null)
+        Func<string, bool, byte[]?> readRule, ReadOnlyMemory<byte> mobileFile, long epoch, Func<AreaSectorRecord, TemplateSector>? template = null)
     {
         stage.Current = AreaStepInvocationStage.Selection;
         // Only a strict-complete publication: an inspected snapshot with issues may omit unlocated objects.
@@ -196,26 +204,27 @@ public static class AreaStepInspector
         var terrainByCell = area.Terrain.GroupBy(t => t.Key.Sector).ToDictionary(g => g.Key, g => g.ToArray());
         foreach (var sector in sectors)
         {
-            var (archive, label) = (module, "AREA_MODULE");
-            DatEntry entry;
+            TemplateSector source;
             if (sector.Template is not null)
             {
                 // ARC-DATA-034: a generated window sector is its template, moved into the sector (ARC-DATA-032).
                 if (template is null || sector.PayloadSha256 is null) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Terrain);
-                (archive, entry) = template(sector); label = "AREA_TEMPLATE";
+                source = template(sector);
             }
             else
             {
                 var entries = module.Entries.Where(e => e.Ordinal == sector.DatOrdinal).ToArray();
                 if (entries.Length != 1 || sector.PayloadSha256 is null) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Terrain);
-                entry = entries[0];
+                var entry = entries[0];
+                source = new(module.ReadEntry(entry), Encoding.ASCII.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0'), entry.Ordinal,
+                    new(entry.Ordinal, entry.Flags, entry.DeclaredOutputSize));
             }
-            if (Sha(archive.ReadEntry(entry)) != sector.PayloadSha256) throw Fail(AreaStepInvocationCode.FingerprintMismatch, AreaStepInvocationStage.Terrain);
-            var selector = new TerrainSectorSelector(Encoding.ASCII.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0'), "area",
+            if (Sha(source.Bytes) != sector.PayloadSha256) throw Fail(AreaStepInvocationCode.FingerprintMismatch, AreaStepInvocationStage.Terrain);
+            var selector = new TerrainSectorSelector(source.Name, "area",
                 checked((int)sector.Coordinate.X), checked((int)sector.Coordinate.Y), sector.Key.Packed,
-                checked((int)sector.Coordinate.OriginX), checked((int)sector.Coordinate.OriginY), 64, 64,
-                new(entry.Ordinal, entry.Flags, entry.DeclaredOutputSize));
-            var report = TerrainObstructionInspector.InspectSector(archive, label, selector, null);
+                checked((int)sector.Coordinate.OriginX), checked((int)sector.Coordinate.OriginY), 64, 64, source.Expectation);
+            var report = TerrainObstructionInspector.InspectBytes(source.Bytes, source.Ordinal, sector.Template is null ? "AREA_MODULE" : "AREA_TEMPLATE",
+                selector, null, new TerrainLoaderOptions());
             var words = report.CopyTileWords(); var mask = report.CopyBlockWords();
             var records = terrainByCell.GetValueOrDefault(sector.Key, []);
             if (records.Length != 4096 || records.Select(r => r.LocalX + 64 * r.LocalY).Distinct().Count() != 4096 ||
@@ -336,6 +345,9 @@ public static class AreaStepInspector
     internal const string WallEdgeReason = "WALL_EDGE_COMPONENT";
     internal const string PortalEdgeReason = "PORTAL_EDGE_COMPONENT";
     internal const string LockedLeavingOnlyReason = "PORTAL_LOCKED_LEAVING_ONLY";
+    /// <summary>The bytes of a sector read for evidence, its source name and entry ordinal (0 for a loose file), and the
+    /// member's metadata when it is an archive member.</summary>
+    private sealed record TemplateSector(byte[] Bytes, string Name, int Ordinal, TerrainEntryExpectation? Expectation);
     private const string WholeMapProfilePrefix = "arc-data-019-", WindowProfilePrefix = "arc-data-032-";
     /// <summary>A whole-map (ARC-DATA-019) or window (ARC-DATA-032) snapshot: universal plans with the whole-map rules.</summary>
     private static bool Universal(string profile) =>

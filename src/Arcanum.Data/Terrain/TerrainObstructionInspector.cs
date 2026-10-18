@@ -18,8 +18,17 @@ public static class TerrainObstructionInspector
         var entry = TerrainLoader.SelectModule(moduleArchive, selector);
         if (entry.DeclaredOutputSize > limits.MaxSectorDecodedEntryBytes)
             throw new TerrainLimitExceededException("The selected sector exceeds the decoded byte limit.");
-        var sector = TerrainLoader.ParseSector(moduleArchive.ReadEntry(entry), limits);
-        var moduleProvenance = new TerrainObstructionProvenance(TerrainObstructionProvenanceKind.SerializedSector, moduleSourceId, entry.Ordinal);
+        return InspectBytes(moduleArchive.ReadEntry(entry), entry.Ordinal, moduleSourceId, selector, tileNameSource, limits);
+    }
+
+    /// <summary>ARC-DATA-035: the same inspection of sector bytes already read (a loose file is entry 0 of its source).</summary>
+    internal static TerrainObstructionSectorReport InspectBytes(byte[] bytes, int ordinal, string moduleSourceId,
+        TerrainSectorSelector selector, TerrainTileNameSource? tileNameSource, TerrainLoaderOptions limits)
+    {
+        TerrainObstructionSourceId.Validate(moduleSourceId, nameof(moduleSourceId));
+        if (bytes.Length > limits.MaxSectorDecodedEntryBytes) throw new TerrainLimitExceededException("The selected sector exceeds the decoded byte limit.");
+        var sector = TerrainLoader.ParseSector(bytes, limits);
+        var moduleProvenance = new TerrainObstructionProvenance(TerrainObstructionProvenanceKind.SerializedSector, moduleSourceId, ordinal);
 
         TerrainTileNameRuleTable? table = null;
         TerrainEntryExpectation? nameEntry = null;
@@ -36,8 +45,8 @@ public static class TerrainObstructionInspector
                 var selectedMesEntry = TerrainLoader.SelectSelected(tileNameSource.Archive, tileNameSource.MesEntryPath, "tile-name MES", limits.MaxMesDecodedEntryBytes);
                 var sourceProvenance = new TerrainObstructionProvenance(TerrainObstructionProvenanceKind.TileNameMes, tileNameSource.SourceId, selectedMesEntry.Ordinal);
                 nameEntry = new(selectedMesEntry.Ordinal, selectedMesEntry.Flags, selectedMesEntry.DeclaredOutputSize);
-                var bytes = tileNameSource.Archive.ReadEntry(selectedMesEntry);
-                var records = TerrainLoader.ParseMes(bytes, limits);
+                var names = tileNameSource.Archive.ReadEntry(selectedMesEntry);
+                var records = TerrainLoader.ParseMes(names, limits);
                 table = TerrainTileNameRuleTable.Create(records, sourceProvenance);
                 unavailable = TerrainObstructionSectorReport.Unknown("TILE_NAME_TABLE_UNAVAILABLE", sourceProvenance);
             }

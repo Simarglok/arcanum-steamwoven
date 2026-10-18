@@ -8,8 +8,9 @@ using static Arcanum.Data.Tests.Area.AreaIdentityTests;
 
 namespace Arcanum.Data.Tests.Traversal;
 
-/// <summary>ARC-DATA-034 on a synthetic installation: step evidence of a window whose core sector is generated from a
-/// terrain template held by a base archive, bound to the snapshot's payload; a changed or loose template is refused.</summary>
+/// <summary>ARC-DATA-034/035 on a synthetic installation: step evidence and lighting of a window whose core sector is generated
+/// from a terrain template held by a base archive or as a loose file, bound to the snapshot's payload; a changed template is
+/// refused.</summary>
 [TestClass]
 public sealed class AreaWindowStepTests
 {
@@ -41,23 +42,54 @@ public sealed class AreaWindowStepTests
     }
 
     [TestMethod]
-    public void A_template_changed_since_loading_or_held_as_a_loose_file_is_refused()
+    public void A_template_changed_since_loading_is_refused()
     {
         Install(Sector());
-        using (var stack = Stack())
+        using var stack = Stack();
+        var (snapshot, plan) = Load(stack);
+        // The archive is rewritten with another template payload after the snapshot was built.
+        File.WriteAllBytes(Path.Combine(_root, "arcanum1.dat"), Base(Sector(Record(Id(0)))));
+        var error = Assert.ThrowsExactly<AreaStepInvocationException>(() => AreaStepInspector.InspectWholeMap(snapshot, stack, plan.Map.AggregatePath, 3));
+        Assert.AreEqual((AreaStepInvocationCode.FingerprintMismatch, AreaStepInvocationStage.Terrain), (error.Code, error.Stage));
+    }
+
+    [TestMethod]
+    public void A_loose_template_is_read_through_the_stack_for_evidence_and_lighting()
+    {
+        // ARC-DATA-035: a template the stack holds as a loose file, with its own light scheme 5 (the map default is 2).
+        Install(Sector());
+        Loose("data/terrain/grass/0.sec", WithScheme(Sector(), 5));
+        using var stack = Stack();
+        var (snapshot, plan) = Load(stack);
+        var steps = AreaStepInspector.InspectWholeMap(snapshot, stack, plan.Map.AggregatePath, 3);
+        Assert.AreEqual(4096, steps.AdmittedCells);
+        var lighting = Arcanum.Data.Lighting.AreaLightingReader.Read(stack, snapshot);
+        Assert.AreEqual(Arcanum.Data.Lighting.LightingFailure.None, lighting.Failure);
+        Assert.AreEqual(5, lighting.Source!.SectorSchemes[new AreaSectorCoordinate(0, 0).Packed]);
+    }
+
+    [TestMethod]
+    public void A_generated_core_sector_takes_its_light_scheme_from_its_template()
+    {
+        // Scheme word 0 is the map default's sentinel; 5 is the template's own scheme.
+        foreach (var (scheme, expected) in new[] { (0, 0), (5, 5) })
         {
-            var (snapshot, plan) = Load(stack);
-            // The archive is rewritten with another template payload after the snapshot was built.
-            File.WriteAllBytes(Path.Combine(_root, "arcanum1.dat"), Base(Sector(Record(Id(0)))));
-            var error = Assert.ThrowsExactly<AreaStepInvocationException>(() => AreaStepInspector.InspectWholeMap(snapshot, stack, plan.Map.AggregatePath, 3));
-            Assert.AreEqual((AreaStepInvocationCode.FingerprintMismatch, AreaStepInvocationStage.Terrain), (error.Code, error.Stage));
+            Install(WithScheme(Sector(), scheme));
+            using var stack = Stack();
+            var (snapshot, _) = Load(stack);
+            var lighting = Arcanum.Data.Lighting.AreaLightingReader.Read(stack, snapshot);
+            Assert.AreEqual(Arcanum.Data.Lighting.LightingFailure.None, lighting.Failure, $"scheme {scheme}");
+            Assert.AreEqual(expected, lighting.Source!.SectorSchemes[new AreaSectorCoordinate(0, 0).Packed]);
+            Assert.AreEqual(2, lighting.Source.MapDefaultScheme);
         }
-        File.WriteAllBytes(Path.Combine(_root, "arcanum1.dat"), Base(Sector()));
-        Loose("data/terrain/grass/0.sec", Sector());
-        using var loose = Stack();
-        var (looseSnapshot, loosePlan) = Load(loose);
-        var refused = Assert.ThrowsExactly<AreaStepInvocationException>(() => AreaStepInspector.InspectWholeMap(looseSnapshot, loose, loosePlan.Map.AggregatePath, 3));
-        Assert.AreEqual((AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Terrain), (refused.Code, refused.Stage));
+    }
+
+    /// <summary>The sector of <see cref="AreaIdentityTests.Sector"/> (format 3) with its light scheme word set.</summary>
+    private static byte[] WithScheme(byte[] sector, int scheme)
+    {
+        // Light count, 4,096 tiles, roof discriminator, placeholder, tile scripts, sector script, then townmap, aptitude, scheme.
+        BinaryPrimitives.WriteInt32LittleEndian(sector.AsSpan(4 + 16384 + 4 + 4 + 4 + 12 + 8), scheme);
+        return sector;
     }
 
     private static (AreaSnapshot Snapshot, AreaMapPlan Plan) Load(ContentStack stack)
@@ -81,7 +113,8 @@ public sealed class AreaWindowStepTests
         var prp = new byte[24];
         BinaryPrimitives.WriteInt64LittleEndian(prp.AsSpan(8), 3 * 64); BinaryPrimitives.WriteInt64LittleEndian(prp.AsSpan(16), 3 * 64);
         File.WriteAllBytes(Path.Combine(_root, "modules", "Mod.dat"), Dat([.. new[] { ($"maps/{Map}/67108865.sec", Sector()), ($"maps/{Map}/map.prp", prp),
-            ($"maps/{Map}/terrain.tdf", tdf), ("rules/maplist.mes", "{5000}{test, 64, 64}"u8.ToArray()) }.OrderBy(e => e.Item1, StringComparer.Ordinal)]));
+            ($"maps/{Map}/terrain.tdf", tdf), ("rules/maplist.mes", "{5000}{test, 64, 64}"u8.ToArray()),
+            ($"maps/{Map}/mapinfo.txt", "LightScheme:2\r\n"u8.ToArray()) }.OrderBy(e => e.Item1, StringComparer.Ordinal)]));
         Loose("data/proto/007001 - test.pro", Prototype());
     }
 
@@ -97,9 +130,13 @@ public sealed class AreaWindowStepTests
             ("art/tile/tilename.mes", "{0}{stone/}{100}{stone/}{200}{stone/}{300}{stone/}{400}{end/}"u8.ToArray()),
             ("art/unique_npc/unique_npc.mes", table), ("art/wall/structure.mes", table), ("art/wall/wallname.mes", table),
             ("rules/effect.mes", "{1}{x}"u8.ToArray()), ("terrain/grass/0.sec", template), ("terrain/terrain.mes", "{0}{grass}"u8.ToArray()),
+            ("rules/gameinit.mes", "{4}{1885}{5}{15}"u8.ToArray()), ("rules/lighting schemes.mes", "{2}{Lighting Two}{5}{Lighting Five}"u8.ToArray()),
+            ("rules/lighting two.mes", Rows(2)), ("rules/lighting five.mes", Rows(5)),
         };
         return Dat([.. entries.OrderBy(e => e.Item1, StringComparer.Ordinal)]);
     }
+
+    private static byte[] Rows(int value) => System.Text.Encoding.ASCII.GetBytes(string.Concat(Enumerable.Range(0, 24).Select(h => $"{{{h}}}{{{value},{value},{value},1,1,1}}\n")));
 
     private ContentStack Stack()
     {

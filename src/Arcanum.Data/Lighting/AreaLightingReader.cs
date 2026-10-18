@@ -92,7 +92,13 @@ public static class AreaLightingReader
         {
             token.ThrowIfCancellationRequested();
             if (sectors.Count == MaxSectors) return LightingFailure.LimitExceeded;
-            failure = SectorScheme(files, sector, "maps/" + directory.ToLowerInvariant() + "/", out var raw);
+            // ARC-DATA-035: a generated window sector reads its scheme word from its template, which the original reads like a
+            // sector file (ledger SS5); the window names the template's path.
+            var template = sector.Template is null ? null : snapshot.Window?.Sectors.SingleOrDefault(s => s.Coordinate == sector.Coordinate)?.TemplatePath;
+            int raw;
+            if (sector.Template is null) failure = SectorScheme(files, sector, "maps/" + directory.ToLowerInvariant() + "/", out raw);
+            else if (template is null) { failure = LightingFailure.SectorIdentityMismatch; raw = 0; }
+            else failure = TemplateScheme(files, sector, template, out raw);
             if (failure != LightingFailure.None) return failure;
             if (!sectors.TryAdd(sector.Key.Packed, raw)) return LightingFailure.SectorIdentityMismatch;
         }
@@ -146,7 +152,21 @@ public static class AreaLightingReader
         if (!sector.Present || sector.Entry is not { } identity || sector.PayloadSha256 is null || identity.Source.Role != AreaSourceRole.Module)
             return LightingFailure.SectorIdentityMismatch;
         var failure = files.Sector(sector, identity, mapPrefix, out var bytes);
-        if (failure != LightingFailure.None) return failure;
+        return failure != LightingFailure.None ? failure : Scheme(sector, bytes, out scheme);
+    }
+
+    private static LightingFailure TemplateScheme(ILightingFiles files, AreaSectorRecord sector, string path, out int scheme)
+    {
+        scheme = 0;
+        if (!sector.Present || sector.PayloadSha256 is null) return LightingFailure.SectorIdentityMismatch;
+        var failure = files.Template(path, out var bytes);
+        return failure != LightingFailure.None ? failure : Scheme(sector, bytes, out scheme);
+    }
+
+    // The sector's bytes must be the payload the snapshot read; the scheme word is metadata + 8.
+    private static LightingFailure Scheme(AreaSectorRecord sector, byte[] bytes, out int scheme)
+    {
+        scheme = 0;
         if (LightingMes.Hash(bytes) != sector.PayloadSha256) return LightingFailure.SectorIdentityMismatch;
         TerrainByteRange metadata;
         try { metadata = TerrainLoader.ParseSector(bytes, new TerrainLoaderOptions()).Framing[TerrainSection.MetadataAndSound]; }
@@ -204,6 +224,9 @@ public static class AreaLightingReader
         /// <summary>The bytes of the module-archive member <paramref name="identity"/> names, which must lie under
         /// <paramref name="mapPrefix"/> (the map directory of the default scheme).</summary>
         LightingFailure Sector(AreaSectorRecord sector, AreaEntryIdentity identity, string mapPrefix, out byte[] bytes);
+
+        /// <summary>ARC-DATA-035: the bytes of a window's terrain template, as the original reads it when the sector loads.</summary>
+        LightingFailure Template(string path, out byte[] bytes);
     }
 
     /// <summary>The pinned profiles' source: one archive, a name it holds twice is ambiguous; the phase is not modelled.</summary>
@@ -243,6 +266,9 @@ public static class AreaLightingReader
                 return LightingFailure.MapDirectoryMismatch;
             return ReadEntry(_archive, entry, out bytes);
         }
+
+        // The pinned profiles generate no sector.
+        public LightingFailure Template(string path, out byte[] bytes) { bytes = Array.Empty<byte>(); return LightingFailure.SectorIdentityMismatch; }
     }
 
     /// <summary>ARC-DATA-027: the content stack. A file is the candidate of its load phase; a sector is the stack's
@@ -268,6 +294,9 @@ public static class AreaLightingReader
             return winner is null || (winner.Entry is { } other && LightingMes.Hash(other.RawNameBytes.ToArray()) != identity.NameSha256)
                 ? LightingFailure.MapDirectoryMismatch : LightingFailure.SectorIdentityMismatch;
         }
+
+        // A template is read while the game runs, so from the stack's winner, an archive member or a loose file.
+        public LightingFailure Template(string path, out byte[] bytes) => Read(path, ContentLoadPhase.ModuleLoaded, out bytes);
 
         private LightingFailure ReadCandidate(ContentCandidate candidate, out byte[] bytes)
         {

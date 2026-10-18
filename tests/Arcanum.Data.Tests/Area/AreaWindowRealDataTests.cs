@@ -86,10 +86,13 @@ public sealed class AreaWindowRealDataTests
             Assert.IsTrue(window.Objects.Where(o => o.Key.Kind == AreaSourceKind.Static && o.Key.Sector == sector.Coordinate.Packed)
                 .All(o => o.WorldX >> 6 == sector.Coordinate.X && o.WorldY >> 6 == sector.Coordinate.Y), what);
         }
-        // Consumers not taught windows yet answer with typed results, never an exception.
+        // ARC-DATA-035: the lighting of every window reads, generated core sectors included (their scheme word from the template).
         var lighting = Arcanum.Data.Lighting.AreaLightingReader.Read(stack, window);
         var lights = Arcanum.Data.Lighting.StationaryLightReader.Read(stack, window);
         Console.WriteLine($"ARC-DATA-032 {what} lighting={lighting.Failure} stationary={lights.Failure}");
+        Assert.AreEqual(Arcanum.Data.Lighting.LightingFailure.None, lighting.Failure, what);
+        Assert.AreEqual(Arcanum.Data.Lighting.LightingFailure.None, lights.Failure, what);
+        Assert.AreEqual(9, lighting.Source!.SectorSchemes.Count, what);
         if (templates == 25)
         {
             Assert.IsTrue(window.Objects.Any(o => o.Key.Kind == AreaSourceKind.Static), what);

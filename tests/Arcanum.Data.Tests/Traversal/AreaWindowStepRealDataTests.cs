@@ -72,12 +72,10 @@ public sealed class AreaWindowStepRealDataTests
         var reasons = Evaluations(steps).Where(e => e.Contains("|Unknown|", StringComparison.Ordinal)).Select(e => e.Split('|')[^1]).GroupBy(r => r)
             .Select(g => $"{g.Key}={g.Count()}");
         Console.WriteLine($"ARC-DATA-034 {what} unknown reasons: {string.Join(", ", reasons)}");
-        // No gap comes from the window itself: terrain is known everywhere, generated sectors included, and the only
-        // unknown object anywhere is the town's one critter with an effect the step rules do not model.
+        // No gap: terrain is known everywhere, generated sectors included, and so is every object (ARC-DATA-035: the town's
+        // critter with a speed effect, which the hit-point rule does not read, is no longer Unknown).
         Assert.AreEqual(0, steps.TerrainUnknownCells, what);
-        Assert.AreEqual(x == 1409 ? 1 : 0, steps.UnknownObjects, what);
-        Assert.IsTrue(Evaluations(steps).Where(e => e.Contains("|Unknown|", StringComparison.Ordinal) || e.Contains("|Unsupported|", StringComparison.Ordinal))
-            .All(e => e.EndsWith("|CRITTER_EFFECT_UNSUPPORTED", StringComparison.Ordinal)), what);
+        Assert.AreEqual(0, steps.UnknownObjects, what);
         // The generated core sectors and the wall edges.
         var generated = planned.Plan.Plan.Window!.Sectors.Count(s => s.Scope == AreaScope.Core && s.Template is not null);
         Console.WriteLine($"ARC-DATA-034 {what} generated core={generated}");

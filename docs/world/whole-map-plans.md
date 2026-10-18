@@ -270,10 +270,12 @@ Step evidence (ARC-DATA-034, [windows](area-step-assessment.md#windows-arc-data-
 takes a window snapshot and reads its generated core sectors from their template archive; the Crash Site window's evidence
 equals the pinned exterior's on every core cell and object (7,150 cells reachable from the spawn in both).
 
-**NOT READY:** step evidence of a generated core sector whose template the stack holds as a loose file (the plan admits
-it; the evidence is `InputUnavailable`); the area lighting reader re-reads each core sector from the module
-archive, so a window with a generated core sector gets `SectorIdentityMismatch` (the stationary-light reader reads the
-moved lights); the viewer does not stream windows; saved differences are not modelled.
+Lighting (ARC-DATA-035): `AreaLightingReader.Read(stack, snapshot)` reads a generated core sector's light scheme word
+from its template (metadata + 8, read through the stack like the sector file the original reads it as, ledger SS5; 0 is
+the map default, as for an own sector); the stationary-light reader reads the moved lights. Every installed test window
+lights, and a template held as a loose file is read for lighting and step evidence alike.
+
+**NOT READY:** the viewer does not stream windows; saved differences are not modelled.
 
 ## Limits
 

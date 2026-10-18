@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Arcanum.Data.Characters;
 using Arcanum.Data.Messages;
 
 namespace Arcanum.Data.Traversal;
@@ -16,13 +17,6 @@ internal static class AreaStepRules
     internal const int MaxMesBytes = 1 << 20;
     internal const int EffectTableSize = 400;
     internal const int StatCount = 28, StatStrength = 0, StatWillpower = 6, StatLevel = 17, StatPoison = 24;
-    // Attribute tokens checked against the pinned source symbol tables; others fail closed.
-    private static readonly HashSet<string> EffectVocabulary = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "st", "dx", "cn", "be", "in", "pe", "wp", "ch", "level", "poisonlevel", "age", "magicpts", "techpts",
-        "melee", "dodge", "prowling", "haggle", "repair", "firearms", "picklock", "armtrap",
-        "resistdamage", "resistpoison", "maxhps", "crithitchance", "badreactionadj",
-    };
 
     internal sealed record EffectChange(string Attribute, char Operator, int Parameter);
     internal sealed record PatchTarget(byte[] TextOrder, byte[] MixedEndian);
@@ -71,29 +65,30 @@ internal static class AreaStepRules
         return material < table[category].Length ? table[category][material] : null;
     }
 
-    /// <summary>Space/comma tokens; admitted operators are signed add, signed percent and min/max (not -1).
-    /// Multiply/divide (factor read as zero by the pinned parser) and other forms return null.</summary>
+    /// <summary>ARC-DATA-035: an effect read by the executable-checked effect grammar (<see cref="EffectRules"/>, the original's
+    /// parser 0x4E9C20, ledger LM9), keeping the changes the hit-point rule reads: strength, willpower, level, poison level and
+    /// maximum hit points. Any other attribute (speed, a skill, a resistance…) has no part in it and is ignored. Null when the
+    /// grammar refuses the text, or a kept change multiplies, divides or names the bound −1 (which the original reads as no
+    /// bound, ledger EF6): the step's life rule models only add, percent and bounds.</summary>
     internal static IReadOnlyList<EffectChange>? ParseEffect(string text)
     {
-        var tokens = text.Split([' ', ','], StringSplitOptions.RemoveEmptyEntries);
-        if (tokens.Any(t => t.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))) return null;
+        if (EffectRules.Parse(Encoding.Latin1.GetBytes(text), out var parsed) != EffectRuleStatus.Parsed) return null;
         var changes = new List<EffectChange>();
-        for (var i = 0; i < tokens.Length; i++)
+        foreach (var change in parsed)
         {
-            if (!EffectVocabulary.Contains(tokens[i]) || i + 1 >= tokens.Length) return null;
-            var attribute = tokens[i].ToLowerInvariant(); var op = tokens[++i];
-            if (op.Equals("min", StringComparison.OrdinalIgnoreCase) || op.Equals("max", StringComparison.OrdinalIgnoreCase))
+            var attribute = (change.Kind, change.Attribute) switch
             {
-                if (i + 1 >= tokens.Length || !int.TryParse(tokens[++i], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var bound) || bound == -1) return null;
-                changes.Add(new(attribute, char.ToLowerInvariant(op[1]) == 'i' ? 'n' : 'x', bound));
-            }
-            else if (op[0] is '+' or '-')
+                (EffectAttributeKind.Stat, 0) => "st", (EffectAttributeKind.Stat, 6) => "wp", (EffectAttributeKind.Stat, 17) => "level",
+                (EffectAttributeKind.Stat, 24) => "poisonlevel", (EffectAttributeKind.Special, 0) => "maxhps", _ => null,
+            };
+            if (attribute is null) continue;
+            var @operator = change.Operator switch
             {
-                var percent = op.EndsWith('%');
-                if (!int.TryParse(percent ? op[..^1] : op, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var amount)) return null;
-                changes.Add(new(attribute, percent ? '%' : '+', amount));
-            }
-            else return null;
+                EffectChangeOperator.Add => '+', EffectChangeOperator.Percent => '%',
+                EffectChangeOperator.Minimum when change.Value != -1 => 'n', EffectChangeOperator.Maximum when change.Value != -1 => 'x', _ => '\0',
+            };
+            if (@operator == '\0') return null;
+            changes.Add(new(attribute, @operator, change.Value));
         }
         return changes;
     }
