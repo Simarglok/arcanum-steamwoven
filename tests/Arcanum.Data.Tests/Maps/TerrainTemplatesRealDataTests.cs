@@ -34,8 +34,9 @@ public sealed class TerrainTemplatesRealDataTests
             var grid = catalog.ReadTerrain(map).Grid;
             Assert.IsNotNull(grid, map.Name);
             var counts = new Dictionary<string, long>(StringComparer.Ordinal);
-            for (var y = 0; y < grid.Header.HeightSectors; y++)
-                for (var x = 0; x < grid.Header.WidthSectors; x++)
+            // Every sector the original can lock: the map.prp size, which may differ from the grid's.
+            for (var y = 0; y < map.Properties.HeightTiles / 64; y++)
+                for (var x = 0; x < map.Properties.WidthTiles / 64; x++)
                 {
                     var source = catalog.ResolveSector(map, new(x, y), grid);
                     var key = source.Kind == WorldSectorSourceKind.Template ? source.Template!.Kind.ToString() : source.Kind.ToString();
@@ -58,6 +59,7 @@ public sealed class TerrainTemplatesRealDataTests
         Console.WriteLine($"ARC-DATA-031 templates main={usedMain.Count} all={used.Count} generatedOtherMaps={generatedOther}");
         Assert.AreEqual(208, usedMain.Count);
         Assert.AreEqual(212, used.Count);
+        // The study's generated sectors of the other maps by base type (section 8): water, broad leaf forest, forest, mountains.
         Assert.AreEqual(23_481 + 4_094 + 548 + 120, generatedOther);
 
         // Each used template read once at its first sector: every record is a wall or scenery without an object id and

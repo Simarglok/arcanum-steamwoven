@@ -120,7 +120,8 @@ readers: [ledger](../research/original-verification-ledger.md#terrain-templates-
 [SS2, SS5, SS6](../research/original-verification-ledger.md#main-map-streaming-arc-data-030); facts and counts in the
 [generated-wilderness study](../research/generated-wilderness-evidence.md)).
 
-- **Types.** `TerrainTypeTable.Open(stack)` reads `terrain/terrain.mes` from the first base source only: the original
+- **Types.** `TerrainTypeTable.Open(stack)` reads `terrain/terrain.mes` from the base sources only (the highest-ranked
+  base source that holds it): the original
   loads it once at game start, before the module is mounted. Types are messages 0, 1, … (at most 32) up to the first
   missing number; `/b` marks a type blocked and is cut with what follows it and the white space before it. Typed
   failures where the original's terrain initialisation fails: `Missing`, `ReadFailed`, `ParseFailed`, `NoTypes`,
@@ -139,10 +140,12 @@ readers: [ledger](../research/original-verification-ledger.md#terrain-templates-
   optional demo limits are not modelled; retail data has none.
 - **Read.** `ReadResolvedSector` reads a template like a sector file and moves its objects (location field) and lights
   (words 2 and 3) to the real sector: the sector's origin plus the tile inside the template slot. The tiles, roofs,
-  block mask, scripts and sounds stay sector-local. Record hashes stay those of the template's records, and
-  `WorldSector.SourceKind` says `Template`.
+  block mask, scripts and sounds stay sector-local. Record hashes stay those of the template's records (so one
+  template's records hash alike in every sector built from it: a consumer keys them by sector and index, not by hash),
+  and `WorldSector.SourceKind` says `Template`. A template source without a `terrain/` path is refused.
 - **Not modelled.** Fill's tiles (one tile family with a random variation per tile), the init's transition-message check,
-  the variant counts beyond type 0, saved differences (`.dif`) and the original's log lines.
+  the variant counts beyond type 0, the change bits the original clears on moved objects and the "modified" mark on
+  moved lights, temporary object ids, saved differences (`.dif`) and the original's log lines.
 
 Installed original (opt-in `TerrainTemplatesRealDataTests`, about 3 s): 19 types, 6 blocked; every sector of every map
 resolves with no `Fill`, `Unresolved` or `OutsideMap`. The main map has 621 own, 3,954,569 plain and 44,810 transition
@@ -157,7 +160,8 @@ templates.
   loose-file installations covering missing and malformed map files, refused
   sectors and object records, trailing object bytes, the map and option limits,
   prototype names, the lenient small-file rules, terrain decoding, aggregate and
-  editor mobiles, prototype lookup and stack shadowing; base-source order,
+  editor mobiles, prototype lookup and stack shadowing; terrain types, the template path rule, sector sources and moved
+  template records (`tests/Arcanum.Data.Tests/Maps/TerrainTemplateTests.cs`); base-source order,
   ignored module copies, duplicates, names and sizes of prototypes
   (`tests/Arcanum.Data.Tests/Content/ContentPrototypesTests.cs`).
 - Opt-in `RealData` tests with `DAT_ROOT`: all 81 maps of `Arcanum` (1,680

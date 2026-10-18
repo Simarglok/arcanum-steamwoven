@@ -110,14 +110,16 @@ public sealed class WorldCatalog
 
     /// <summary>ARC-DATA-031: reads a sector from its source: an own file as <see cref="ReadSector(WorldMap, WorldSectorCoordinate)"/>
     /// does, a template file read like a sector file with its objects and lights moved to the real sector. Another source
-    /// kind is <see cref="WorldSectorStatus.NoFile"/>.</summary>
+    /// kind is <see cref="WorldSectorStatus.NoFile"/>; a template source without a path under <c>terrain/</c> is refused.</summary>
     public WorldSectorResult ReadResolvedSector(WorldMap map, WorldSectorSource source)
     {
         ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(source);
         return source.Kind switch
         {
             WorldSectorSourceKind.Own => ReadSector(map, source.Coordinate),
-            WorldSectorSourceKind.Template => Read(source.Path!, source.Coordinate, relocate: true),
+            WorldSectorSourceKind.Template when source.Path is { } path && path.StartsWith("terrain/", StringComparison.Ordinal)
+                => Read(path, source.Coordinate, relocate: true),
+            WorldSectorSourceKind.Template => new(WorldSectorStatus.Refused, null, new(WorldIssueCode.Malformed, source.Path ?? "terrain/", null, "not a template path")),
             _ => new(WorldSectorStatus.NoFile, null, null),
         };
     }

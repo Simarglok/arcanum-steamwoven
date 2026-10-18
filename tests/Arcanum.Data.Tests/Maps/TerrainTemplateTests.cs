@@ -144,6 +144,8 @@ public sealed class TerrainTemplateTests
         Assert.AreEqual("terrain/grass/67108865.sec", generated.Path);
         // Object (70, 80) of slot (1, 1) moves to sector (1, 0): (64 + 6, 0 + 16); the light (65, 66) to (65, 2).
         Assert.AreEqual(new WorldLocation(70, 16), generated.Objects[0].Location);
+        var templateRecord = AreaIdentityTests.Record(AreaIdentityTests.Id(0), location: 70L | (80L << 32));
+        Assert.AreEqual(Arcanum.Data.Objects.ObjectWireReader.Hash(templateRecord), generated.Objects[0].Sha256, "the template record's hash");
         Assert.AreEqual((65, 2), (generated.Lights[0][2], generated.Lights[0][3]));
         CollectionAssert.AreEqual(Light(65, 66)[4..], generated.Lights[0].Skip(4).ToArray(), "only the location moves");
 
@@ -156,6 +158,8 @@ public sealed class TerrainTemplateTests
         Assert.AreEqual(WorldSectorSourceKind.Fill, fill.Kind);
         Assert.AreEqual(TerrainTemplateKind.NoSlot, fill.Template!.Kind);
         Assert.AreEqual(WorldSectorStatus.NoFile, catalog.ReadResolvedSector(map, fill).Status);
+        Assert.AreEqual(WorldSectorStatus.Refused, catalog.ReadResolvedSector(map, own with { Kind = WorldSectorSourceKind.Template }).Status);
+        Assert.AreEqual(WorldSectorStatus.Refused, catalog.ReadResolvedSector(map, plain with { Path = null }).Status);
 
         // Inside map.prp but outside the grid: the word reads 0xFFFF, whose types have no name.
         var beyondGrid = catalog.ResolveSector(map, new(4, 0), grid);
