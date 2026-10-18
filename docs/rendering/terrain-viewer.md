@@ -514,7 +514,9 @@ step.
 While `crash-site-area` has a game session (every published area since ARC-SCRIPT-006),
 the original **F7** saves and **F8** loads one quick-save slot,
 `user://saves/quicksave.json` (Godot user data of the viewer). There is no save
-list, naming, confirmation or autosave. Elsewhere F7/F8 stay reserved.
+list, naming, confirmation or autosave. Elsewhere F7/F8 stay reserved. Map mode
+has its own slot and also loads a save of another map
+([ARC-WORLD-038](area-map-mode.md#quick-save-arc-world-038)).
 
 - **Keys.** Both act on key release, as the source does
   ([keyboard requirements](../requirements/original-keyboard-mouse.md)). A key acts
