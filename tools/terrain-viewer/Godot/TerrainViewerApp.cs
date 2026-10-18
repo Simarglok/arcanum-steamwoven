@@ -74,6 +74,7 @@ public partial class TerrainViewerApp : Node
             (_nativeSmoke, _nativeSmokeScreenshot) = TakeNativeSmokeArguments(args);
             _arguments = TerrainViewerArguments.Parse(args);
             ConfigureVisualProfile();
+            ConfigureAudio();
             _hud.SetMode(_arguments.Mode);
             if (IsWorld) InitializeWorld();
             _lastLoad = StartLoadAsync(_arguments);
@@ -113,7 +114,7 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        if (_readyMapName is not null) { await RunAreaMapSmokeAsync(result); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); }
+                        if (_readyMapName is not null) { await RunAreaMapSmokeAsync(result); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); }
                         else await RunAreaSmokeAsync(result);
                         // S5 must observe the retired generation become
                         // collectable; this frame may not keep it reachable.
@@ -845,6 +846,7 @@ public partial class TerrainViewerApp : Node
     public override void _Process(double delta)
     {
         PaceFrames();
+        TickAudio();
         if (IsWorld)
         {
             try { TickAreaClock(); ProcessWorld(delta); SyncAreaSheet(); }
@@ -1008,6 +1010,7 @@ public partial class TerrainViewerApp : Node
         cancellation?.Dispose();
         _canvas?.ReleaseHd(); _hdSource?.Dispose();
         _conversationHost = null; ReleaseConversationContent();
+        DisposeAudio();
         _cache.Dispose();
     }
 }

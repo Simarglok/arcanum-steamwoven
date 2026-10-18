@@ -30,6 +30,8 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public event Action? LightingToggleRequested;
     public event Action? VisualToggleRequested;
     public event Action? AlwaysRunToggleRequested;
+    public event Action? SoundTestRequested;
+    private Label _sound = null!;
     private Label _gait = null!;
     private Label _visual = null!;
     private Label _lighting = null!;
@@ -95,6 +97,9 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         // ARC-WORLD-020: the original's Always Run option (Num Lock and Ctrl act on top of it).
         AddAction("Always Run on/off", () => AlwaysRunToggleRequested?.Invoke());
         _gait = new Label { Name = "PaletteGait", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_gait);
+        // ARC-UI-040: sound output and the original's fixed interface sounds, played by id from the module's catalogue.
+        AddAction("Sound test: next interface sound", () => SoundTestRequested?.Invoke());
+        _sound = new Label { Name = "PaletteSound", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_sound);
         // ARC-RENDER-008 overlay checkbox: the host binds availability/state (BindOverlay);
         // without a movement authority it is visibly unavailable, not navigable, not toggleable.
         _overlay = new CheckButton { Name = "PassabilityOverlay", Text = "Show passability (unavailable)", Disabled = true, FocusMode = Control.FocusModeEnum.None };
@@ -159,6 +164,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public void SetLightingStatus(string text) => _lighting.Text = text;
     public void SetVisualStatus(string text) => _visual.Text = text;
     public void SetGaitStatus(string text) => _gait.Text = text;
+    public void SetSoundStatus(string text) => _sound.Text = text;
     /// <summary>The overlay state/action seam for ARC-RENDER-008: the host binds
     /// availability and state; a user toggle is reported once through OverlayToggled.
     /// Unavailable (the ARC-INPUT-001 default), the row is disabled and not navigable.</summary>

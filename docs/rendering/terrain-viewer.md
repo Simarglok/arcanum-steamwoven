@@ -996,6 +996,17 @@ key. Self-test `ARC-UI-007 self-test PASS` (synthetic hero session: no-hero refu
 while open, rebuild on change, dead-hero close and refusal); native smoke with `--hero` after the hero stage:
 `ARC-UI-007 native-smoke character sheet PASS`.
 
+### Sound output (ARC-UI-040)
+
+The viewer plays the original's sounds through the module's [sound catalogue](../audio/sound-catalog.md)
+on the original's three channels (effects, voice, music) at the original's volumes
+([contract](../audio/viewer-audio.md)). Nothing plays by itself yet. The palette action **Sound test: next
+interface sound** plays the next fixed interface sound by id and reports the outcome; the palette's sound
+line shows the output device (or "no output device" in a headless run), the three settings (0–10, default
+5, `user://audio_volumes_v1.json`; automated runs use no file unless `AUDIO_VOLUMES_TEST_PATH` is set),
+the catalogue and the last result. Self-test marker `ARC-UI-040 self-test audio PASS`; native smoke
+marker `ARC-UI-040 native-smoke audio PASS` (exterior AREA and `--area-map`).
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)
