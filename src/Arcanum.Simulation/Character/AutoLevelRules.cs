@@ -36,11 +36,29 @@ public readonly record struct AutoLevelParse(AutoLevelParseStatus Status, AutoLe
 /// The stored values a scheme buys with (a PC's or an NPC's, ARC-WORLD-036): race (for the stat maxima), the monstrous flag
 /// (melee level 20), the eight primary stats and the stored magick and tech points, level and unspent points, the stored
 /// basic and tech skill fields (points in bits 0..5, training in bits 6..7), the sixteen college levels (0..5), the eight
-/// tech degrees (0..7), and the hit and fatigue points and adjustments.
+/// tech degrees (0..7), and the hit and fatigue points and adjustments. Equality compares the arrays' values.
 /// </summary>
 public sealed record AdvancementSheet(CharacterRace Race, bool Monstrous, ImmutableArray<int> Stats, int MagickPoints, int TechPoints,
     int Level, int UnspentPoints, ImmutableArray<int> BasicSkills, ImmutableArray<int> TechSkills, ImmutableArray<int> Colleges,
-    ImmutableArray<int> TechDegrees, int HitPointPoints, int HitPointAdjustment, int FatiguePoints, int FatigueAdjustment);
+    ImmutableArray<int> TechDegrees, int HitPointPoints, int HitPointAdjustment, int FatiguePoints, int FatigueAdjustment)
+{
+    public bool Equals(AdvancementSheet? other) => other is not null && Race == other.Race && Monstrous == other.Monstrous &&
+        Same(Stats, other.Stats) && MagickPoints == other.MagickPoints && TechPoints == other.TechPoints && Level == other.Level &&
+        UnspentPoints == other.UnspentPoints && Same(BasicSkills, other.BasicSkills) && Same(TechSkills, other.TechSkills) &&
+        Same(Colleges, other.Colleges) && Same(TechDegrees, other.TechDegrees) && HitPointPoints == other.HitPointPoints &&
+        HitPointAdjustment == other.HitPointAdjustment && FatiguePoints == other.FatiguePoints && FatigueAdjustment == other.FatigueAdjustment;
+
+    public override int GetHashCode() => HashCode.Combine(Race, Level, UnspentPoints, HitPointPoints, FatiguePoints, Hash(Stats), Hash(BasicSkills), Hash(Colleges));
+
+    internal static bool Same(ImmutableArray<int> a, ImmutableArray<int> b) => a.IsDefault ? b.IsDefault : !b.IsDefault && a.SequenceEqual(b);
+
+    internal static int Hash(ImmutableArray<int> values)
+    {
+        var hash = new HashCode();
+        if (!values.IsDefault) foreach (var value in values) hash.Add(value);
+        return hash.ToHashCode();
+    }
+}
 
 /// <summary>A change of one basic or tech skill's level (the effect collections of skills), in level units.</summary>
 public readonly record struct SkillModifier(int Skill, StatModifierOperator Operator, int Value);

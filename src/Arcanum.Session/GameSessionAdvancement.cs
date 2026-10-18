@@ -24,6 +24,22 @@ public static class SessionAdvancementLimits
 public sealed record SessionHeroAdvancement(ImmutableArray<int> BasicSkills, ImmutableArray<int> TechSkills, ImmutableArray<int> Colleges,
     ImmutableArray<int> TechDegrees, int HitPointPoints, int FatiguePoints, int AutoLevelScheme)
 {
+    /// <summary>Equality compares the arrays' values.</summary>
+    public bool Equals(SessionHeroAdvancement? other) => other is not null && Same(BasicSkills, other.BasicSkills) &&
+        Same(TechSkills, other.TechSkills) && Same(Colleges, other.Colleges) && Same(TechDegrees, other.TechDegrees) &&
+        HitPointPoints == other.HitPointPoints && FatiguePoints == other.FatiguePoints && AutoLevelScheme == other.AutoLevelScheme;
+
+    public override int GetHashCode() => HashCode.Combine(HitPointPoints, FatiguePoints, AutoLevelScheme, Hash(BasicSkills), Hash(Colleges));
+
+    private static bool Same(ImmutableArray<int> a, ImmutableArray<int> b) => a.IsDefault ? b.IsDefault : !b.IsDefault && a.SequenceEqual(b);
+
+    private static int Hash(ImmutableArray<int> values)
+    {
+        var hash = new HashCode();
+        if (!values.IsDefault) foreach (var value in values) hash.Add(value);
+        return hash.ToHashCode();
+    }
+
     public static SessionHeroAdvancement None { get; } = new([.. new int[AutoLevelRules.BasicSkills]], [.. new int[AutoLevelRules.TechSkills]],
         [.. new int[AutoLevelRules.Colleges]], [.. new int[AutoLevelRules.TechDisciplines]], 0, 0, 0);
 
