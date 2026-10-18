@@ -11,7 +11,9 @@ from . import config, manifests
 
 # Single source of the ordinary launcher's original-input roles. Keep it in step with the viewer's
 # `TerrainViewerArguments` (tools/local_dev/test_launcher_sync.py fails on any drift):
-# a role -> (relative path inside the installed game root, expected bytes, SHA-256); directories carry None.
+# a role -> (relative path inside the installed game root, pinned bytes, pinned SHA-256); directories carry None.
+# ARC-DEV-015: the bytes and SHA-256 are the pinned Crash Site profiles' identities. Only the pinned modes (every mode
+# but map mode) require them; map mode needs its roles present (UNIVERSAL_ROLES), whatever their identity.
 GAME_ROLES: dict[str, tuple[str, int | None, str | None]] = {
     "module": ("modules/Arcanum.dat", 355938305, "8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f"),
     "actorResource": ("arcanum1.dat", 447470816, "6dd9d10ef0932e02fc88f0eb5367b1bc37275db51d60bd68ac9bd7ef2d478576"),
@@ -42,6 +44,11 @@ TASK_MODES: dict[str, str] = {"ARC-WORLD-009": "crash-site-area", "ARC-RENDER-00
 # ARC-RENDER-017: `crash-site-area --area-map NAME` shows one whole interior; its inputs come from the game folder's
 # content stack, so it takes these roles (no prototype folder, Crash Site mobile, effects, patch or cave).
 MAP_ROLES: tuple[str, ...] = ("module", "terrainResource", "actorResource", "gameRoot")
+# ARC-DEV-015: the roles setup requires (map mode's); every other role is optional and pinned.
+UNIVERSAL_ROLES: tuple[str, ...] = MAP_ROLES
+# ARC-DEV-015: the terrain export task of universal builds: exported with the synthetic gates only (no pinned Crash Site
+# run), launched in map mode only.
+UNIVERSAL_TASK = "ARC-DEV-015"
 MAX_MAP_NAME = 128
 # ARC-WORLD-027: `--hero NAME` starts the AREA session as one original pre-made hero (main-menu order, basic prototypes
 # 16067..16078). Keep in step with `AreaStartingHero.Premade` in tools/terrain-viewer/Core/AreaStartingHero.cs
@@ -160,13 +167,21 @@ def _local(inputs: dict[str, Any], role: str, *, directory: bool = False) -> str
     return str(path.resolve(strict=True))
 
 
+def pinned_roles(mode: str, task: str | None = None) -> tuple[str, ...]:
+    """ARC-DEV-015: the roles of a pinned mode whose pinned identity it requires (files with a pinned size and SHA-256)."""
+    roles = MODE_ROLES[mode] + (TASK_ROLES.get(task, ()) if TASK_MODES.get(task) == mode else ())
+    return tuple(role for role in roles if GAME_ROLES[role][1] is not None)
+
+
 def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, Any] | None = None, *, task: str | None = None,
-                      hero: str | None = None) -> list[str]:
+                      hero: str | None = None, verified: Any = None) -> list[str]:
     """Build the complete, explicit ordinary terrain diagnostic argument set.
 
     Inputs are revalidated on every launch because local configuration is not a
     trust boundary.  The actor values are the documented diagnostic defaults,
-    never recovered world state.
+    never recovered world state.  ARC-DEV-015: `verified` is the roles whose pinned identity setup confirmed (the
+    configuration's installation record); when given, every pinned role of the mode must be among them.  None keeps a
+    configuration written before the record existed, whose inputs were all verified when written.
     """
     if mode not in MODE_ROLES:
         raise ValueError("unsupported terrain diagnostic mode")
@@ -182,6 +197,11 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     if missing:
         raise ValueError("configure explicit terrain input roles before launch (missing " + ", ".join(missing)
                          + "; run ./arcanum setup again)")
+    if verified is not None:
+        unverified = [role for role in pinned_roles(mode, task if isinstance(task, str) else None) if role not in verified]
+        if unverified:
+            raise ValueError("this mode needs the pinned Crash Site inputs; these differ from the pinned identity: " + ", ".join(unverified)
+                             + " (map mode works with any installation)")
 
     def local_file(role: str, *, directory: bool = False) -> str:
         return _local(inputs, role, directory=directory)
@@ -212,30 +232,43 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     return arguments
 
 
-def discover_inputs(game_root: Path) -> tuple[dict[str, str], list[str]]:
-    """Map every GAME_ROLES role found with its exact identity inside an installed game root.
+def discover_inputs(game_root: Path) -> tuple[dict[str, str], list[str], dict[str, Any]]:
+    """Map every GAME_ROLES role present inside an installed game root, and record what was found.
 
-    Files must be regular, link-free and match bytes and SHA-256; the prototype directory must
-    hold .pro files. Returns (role -> canonical path, missing roles); nothing is guessed.
+    ARC-DEV-015: a role is found when its file is regular and link-free (the prototype directory must hold .pro
+    files, the game root a modules folder); its size and SHA-256 are recorded as evidence, and a pinned role is
+    "pinned" when they equal the pinned identity. Returns (role -> canonical path, missing roles, installation
+    record); nothing is guessed and nothing is required to match.
     """
     root = config.canonical_existing(str(game_root), directory=True)
     found: dict[str, str] = {}
     missing: list[str] = []
+    roles: dict[str, dict[str, Any]] = {}
     for role, (relative, size, sha256) in GAME_ROLES.items():
         candidate = (root / relative).absolute()
         if candidate.is_symlink() or config._has_symlink_component(candidate):
             missing.append(role); continue
         if role == "gameRoot":
             ok = candidate.is_dir() and (candidate / "modules").is_dir()
+            record: dict[str, Any] = {"path": relative}
         elif size is None:
-            ok = candidate.is_dir() and any(candidate.glob("*.pro"))
+            files = sorted(candidate.glob("*.pro")) if candidate.is_dir() else []
+            ok = bool(files)
+            record = {"path": relative, "files": len(files)}
         else:
-            ok = candidate.is_file() and candidate.stat().st_size == size and manifests.sha256(candidate) == sha256
+            ok = candidate.is_file()
+            record = {"path": relative}
+            if ok:
+                measured, digest = candidate.stat().st_size, manifests.sha256(candidate)
+                record.update(bytes=measured, sha256=digest, pinned=measured == size and digest == sha256)
         if ok:
             found[role] = str(candidate.resolve(strict=True))
+            roles[role] = record
         else:
             missing.append(role)
-    return found, missing
+    verified = sorted(role for role, record in roles.items() if record.get("pinned") is True)
+    installation = {"schema": "arcanum-installation-v1", "gameRoot": str(root), "roles": roles, "pinnedVerified": verified}
+    return found, missing, installation
 
 
 def exact_executable_in_use(executable: Path) -> bool:

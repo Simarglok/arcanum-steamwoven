@@ -27,8 +27,9 @@ Players provide their own legally acquired copy. Original game assets, third-par
 With the game installed at `/Applications/Arcanum` and an exported build present:
 
 ```sh
-./arcanum setup    # verify the installed game and configure the launcher inputs
-./arcanum area     # walk the Crash Site exterior and cave
+./arcanum setup    # find the installed game's inputs and configure the launcher
+./arcanum map "crash site cave"   # one whole map, on any installation
+./arcanum area     # walk the Crash Site exterior and cave (the pinned installation)
 ./arcanum world    # the WORLD diagnostic
 ./arcanum status   # which modes have every input configured
 ```

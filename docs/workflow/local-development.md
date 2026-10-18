@@ -7,10 +7,10 @@
 `./arcanum` in the repository root is a thin wrapper over `tools/arcanum-local`;
 every identity, artifact-authority and ordinary-launch check stays there.
 
-    ./arcanum setup [--game-root /Applications/Arcanum]   # verify the game, write every input role, register artifacts/world-builds as root "world"
+    ./arcanum setup [--game-root /Applications/Arcanum]   # find the game's inputs, record their identities, register artifacts/world-builds as root "world"
     ./arcanum area [--hero NAME] [--dry-run]              # crash-site-area from the current ARC-RENDER-008 build, else ARC-WORLD-009, ARC-WORLD-007, ARC-INPUT-001, ARC-RENDER-007
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
-    ./arcanum map NAME [--hero NAME] [--dry-run]          # one whole interior (a maps/ folder name) in crash-site-area map mode, ARC-RENDER-008 build only
+    ./arcanum map NAME [--hero NAME] [--dry-run]          # one whole interior (a maps/ folder name) in map mode, from the ARC-DEV-015 build, else ARC-RENDER-008; any installation
     ./arcanum oracle [--function ADDR|--all] [--exe PATH] # function oracle on the installed Arcanum.exe, then the OriginalExe tests (ARC-DEV-007)
     ./arcanum status                                      # which modes have every input configured
 
@@ -29,17 +29,26 @@ folder itself (map mode reads its module content stack).
 `launch.map_arguments` (module, `arcanum2.dat`, `arcanum1.dat`, `--game-root` and
 `--area-map NAME`, no prototype folder or Crash Site inputs) through
 `tools/arcanum-local launch terrain --mode crash-site-area --area-map NAME`, which
-accepts it only for an ARC-RENDER-008 build; a build exported before map mode
-refuses the arguments, so `map` needs an ARC-RENDER-008 export made after this
-change. An existing configuration lacks `gameRoot` until `./arcanum setup` runs
-again. `--hero NAME` (ARC-WORLD-027, [starting hero](../rendering/terrain-viewer.md#starting-hero-arc-world-027)) starts
+accepts it for an ARC-DEV-015 (universal) or ARC-RENDER-008 build; `map` tries the universal build first. A build
+exported before map mode refuses the arguments. An existing configuration lacks `gameRoot` until `./arcanum setup` runs
+again.
+
+**Any installation (ARC-DEV-015).** Map mode needs only the game folder: `setup` writes every role it finds and
+requires only map mode's roles (`UNIVERSAL_ROLES`: the module, `arcanum1.dat`, `arcanum2.dat` and the game folder). It
+records an installation manifest in the configuration (`installation`, schema `arcanum-installation-v1`: each role's
+relative path, size and SHA-256, and whether it equals the pinned identity in `GAME_ROLES`; `pinnedVerified` lists the
+roles that do). The pinned identities stay the pinned Crash Site profiles': `area`, `world` and the older diagnostic
+modes are the regression of those profiles and refuse to launch when a role they read differs from its pin
+(`launch.pinned_roles`); `./arcanum status` names such roles. A configuration written before the record, or by
+`configure inputs`, has no record and keeps its earlier meaning. The universal build (export task ARC-DEV-015, below)
+is exported without the pinned Crash Site gates and launches map mode only. `--hero NAME` (ARC-WORLD-027, [starting hero](../rendering/terrain-viewer.md#starting-hero-arc-world-027)) starts
 `area` or `map` as one of the twelve pre-made heroes (`PREMADE_HEROES` in `tools/local_dev/launch.py`: `halfling-male`,
 `gnome-male`, `half-elf-male`, `half-ogre-male`, `elf-male`, `human-male`, `half-orc-male`, `dwarf-male`, `human-female`,
 `elf-female`, `half-orc-female`, `half-elf-female`; `./arcanum status` lists them); without it the viewer keeps the
 diagnostic PC profile. It needs no new input role (the viewer reads the hero from the module archive's game folder) and
-is passed as `tools/arcanum-local launch terrain --mode crash-site-area --hero NAME`, which accepts it only for an
-ARC-RENDER-008 build, like map mode: a build exported before ARC-WORLD-027 refuses the argument, so `--hero` needs a new
-export. `oracle` ([function oracle](toolchain.md#function-oracle), ARC-DEV-007) runs
+is passed as `tools/arcanum-local launch terrain --mode crash-site-area --hero NAME`, which accepts it for an
+ARC-RENDER-008 build or, with map mode, an ARC-DEV-015 build: a build exported before ARC-WORLD-027 refuses the
+argument, so `--hero` needs a new export. `oracle` ([function oracle](toolchain.md#function-oracle), ARC-DEV-007) runs
 `tools/original-oracle/oracle.py generate` for the chosen functions (`ORACLE_FUNCTIONS` in
 `tools/local_dev/launch.py`, default all) into `research-private/oracle/`, then their `OriginalExe` tests in
 `tests/Arcanum.Simulation.Tests` with `ARCANUM_ORACLE_REQUIRED=1`, which write their receipts to `docs/verification/receipts`
@@ -50,7 +59,8 @@ or changes a viewer mode's arguments or original inputs updates `GAME_ROLES`,
 `MODE_ROLES` and `ROLE_FLAGS` in `tools/local_dev/launch.py`, `./arcanum` when it
 adds a mode, and this section, in the same PR. `test_launcher_sync.py` fails when
 the viewer's `TerrainViewerArguments` flags and the launcher drift apart, or when a
-pinned role identity disagrees with the Data layer.
+pinned role identity disagrees with the Data layer; `test_universal_dev.py` covers the installation record, the
+pinned-mode refusal and the universal build.
 
 ## Configuration and privacy
 
@@ -61,7 +71,7 @@ The only persistent files are owner-only (0600), atomically replaced JSON docume
 
 They have schemas `arcanum-local-config-v1` and `build-registry-v1`. They hold registered artifact-root identifiers, explicit original-input roles, a safe non-path source label, preferences, selection, and acceptance lifecycle records. They never belong in Git. Test runs may set `ARCANUM_LOCAL_HOME` to an owned temporary directory.
 
-Configuration does not scan a machine. `configure discover --game-root PATH` examines only that caller-selected directory and the known role candidates in `GAME_ROLES` (`tools/local_dev/launch.py`: module, the three resource archives, the module patch, the normal-game mobile file, the cave object file and the prototype directory), without following symlinks; a result requires the documented candidate's exact size and SHA-256 gate (the prototype directory must hold `.pro` files). `--write-inputs` replaces the configured inputs with every verified role and fails closed, writing nothing, when any role is missing. `configure inputs` sets roles explicitly instead. The original installation is never changed and paths are not printed unless an inventory has the explicit local-only `--show-paths` option.
+Configuration does not scan a machine. `configure discover --game-root PATH` examines only that caller-selected directory and the known role candidates in `GAME_ROLES` (`tools/local_dev/launch.py`: module, the three resource archives, the module patch, the normal-game mobile file, the cave object file and the prototype directory), without following symlinks; a role is found when its file is regular (the prototype directory must hold `.pro` files, the game folder a `modules` folder), and its size and SHA-256 are recorded with whether they equal the pin (ARC-DEV-015). `--write-inputs` replaces the configured inputs with every role found and the installation record, and fails closed, writing nothing, only when a role map mode needs is missing. `configure inputs` sets roles explicitly instead and drops the record. The original installation is never changed and paths are not printed unless an inventory has the explicit local-only `--show-paths` option.
 
     tools/arcanum-local list [--json]
     tools/arcanum-local configure discover --game-root PATH [--write-inputs]
@@ -71,7 +81,7 @@ Configuration does not scan a machine. `configure discover --game-root PATH` exa
 
 ## Ordinary diagnostics launch
 
-The supported logical mappings are ART `ARC-RENDER-001/002`, terrain `ARC-RENDER-003/004/005/006`, `ARC-DEV-001`, `ARC-WORLD-001/003` and `ARC-GPAD-004`, Gamepad `ARC-GPAD-001/002/003/005`, and Display `ARC-UI-001`. The resolver supports only their observed schema-v1 pointers and immutable `arcanum-build-manifest-v2`/`arcanum-build-current-v2` bindings. Unknown/mixed schemas, a missing or stale digest, an escape from a configured root, or ambiguous current selection fails closed. Required hashes must be full lowercase SHA-256; empty/malformed hashes cannot disable verification. Only observed ART/UI legacy pointers may omit the hash entirely; a supplied hash is always validated. It never chooses by modification time.
+The supported logical mappings are ART `ARC-RENDER-001/002`, terrain `ARC-RENDER-003/004/005/006`, `ARC-DEV-001`, `ARC-DEV-015`, `ARC-WORLD-001/003` and `ARC-GPAD-004`, Gamepad `ARC-GPAD-001/002/003/005`, and Display `ARC-UI-001`. The resolver supports only their observed schema-v1 pointers and immutable `arcanum-build-manifest-v2`/`arcanum-build-current-v2` bindings. Unknown/mixed schemas, a missing or stale digest, an escape from a configured root, or ambiguous current selection fails closed. Required hashes must be full lowercase SHA-256; empty/malformed hashes cannot disable verification. Only observed ART/UI legacy pointers may omit the hash entirely; a supplied hash is always validated. It never chooses by modification time.
 
     tools/arcanum-local launch art --dry-run
     tools/arcanum-local launch gamepad --dry-run
@@ -200,6 +210,17 @@ they take the `caveMobile` role (`launch.TASK_ROLES`) and their area-original ga
 the cave transition smoke. Its synthetic gates also require the overlay matrix/invalidation
 markers, and every native WORLD/AREA observation must print the `ARC-RENDER-008 original overlay PASS`
 check ([overlay](../rendering/passability-overlay.md)).
+
+## Universal map-mode candidate (ARC-DEV-015)
+
+ARC-DEV-015 uses the same terrain endpoint and `world-builds` root with literal
+`ARCANUM_TERRAIN_EXPORT_TASK=ARC-DEV-015`. It is the build for any installation: its gates are the terrain gates
+(locked build, source and exported synthetic self-tests through `world_validate.py --kind synthetic`, export,
+deep/strict codesign) plus the focused viewer tests and the exported host check (`focused-tests`, `dual-hostfxr`), and
+none that reads the pinned Crash Site inputs (no world, human, grid or area original gate, no persistence gate), so
+neither the export nor its registration needs the pinned installation. The pinned AREA/WORLD tasks keep their gates as
+the opt-in regression of the pinned profiles. `tools/arcanum-local launch` runs an ARC-DEV-015 build in map mode only
+(`--mode crash-site-area --area-map NAME`, with or without `--hero`), and `./arcanum map` prefers it.
 
 ## Bounded original grid candidate (ARC-WORLD-003)
 

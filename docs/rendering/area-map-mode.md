@@ -11,7 +11,7 @@ from the module's content stack and the
 (ARC-WORLD-018) decides every step. The Crash Site exterior path, its pinned
 profiles and every exterior smoke stay as they were.
 
-    ./arcanum map "elven ruins"            # needs ./arcanum setup (game root role) and an ARC-RENDER-008 build with map mode
+    ./arcanum map "elven ruins"            # needs ./arcanum setup (any installation) and an ARC-DEV-015 or ARC-RENDER-008 build with map mode
     viewer: --mode crash-site-area --module … --resource … --source-id … --actor-resource … --game-root GAME --area-map "elven ruins"
 
 ## What it does

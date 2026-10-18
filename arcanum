@@ -27,8 +27,9 @@ ROOT_ID = "world"
 # which supersedes ARC-RENDER-007, on the same whole-core AREA mode when its build exists.
 MODES = {"area": ("crash-site-area", ("ARC-RENDER-008", "ARC-WORLD-009", "ARC-WORLD-007", "ARC-INPUT-001", "ARC-RENDER-007")), "world": ("world-diagnostic", ("ARC-WORLD-003",))}
 # ARC-RENDER-017: `map NAME` shows one whole interior in crash-site-area map mode; only an ARC-RENDER-008 build
-# exported with map mode understands it (an older one refuses the arguments).
-MAP_MODE = ("crash-site-area", ("ARC-RENDER-008",))
+# exported with map mode understands it (an older one refuses the arguments). ARC-DEV-015: a universal build, exported
+# without the pinned Crash Site gates, is preferred; it runs on any installation.
+MAP_MODE = ("crash-site-area", (launch.UNIVERSAL_TASK, "ARC-RENDER-008"))
 
 
 def main_checkout() -> Path:
@@ -139,6 +140,7 @@ def oracle(args: argparse.Namespace) -> int:
 def status(_: argparse.Namespace) -> int:
     conf = config.load_config()
     inputs = conf.get("inputs", {}) if isinstance(conf.get("inputs"), dict) else {}
+    installation = conf.get("installation")
     roots = conf.get("artifactRoots", {})
     for name, (mode, tasks) in MODES.items():
         # A task's own roles (the ARC-WORLD-009 cave input) count when `run` would choose its build.
@@ -154,10 +156,18 @@ def status(_: argparse.Namespace) -> int:
         extra = launch.TASK_ROLES.get(chosen, ()) if chosen else ()
         missing = [role for role in launch.MODE_ROLES[mode] + extra + ("sourceId",) if role not in inputs]
         build = f" ({chosen} build)" if chosen else ""
-        print(f"{name}{build}: {'ready' if not missing else 'missing ' + ', '.join(missing) + ' (run ./arcanum setup)'}")
+        # ARC-DEV-015: the pinned modes need their pinned roles to match the pinned identity (setup's installation record).
+        verified = installation.get("pinnedVerified") if isinstance(installation, dict) else None
+        differ = [role for role in launch.pinned_roles(mode, chosen) if isinstance(verified, list) and role in inputs and role not in verified]
+        state = ("missing " + ", ".join(missing) + " (run ./arcanum setup)" if missing
+                 else "pinned identity differs: " + ", ".join(differ) + " (this mode is the pinned Crash Site regression; use map)" if differ
+                 else "ready")
+        print(f"{name}{build}: {state}")
     missing = [role for role in launch.MAP_ROLES + ("sourceId",) if role not in inputs]
-    print(f"map: {'ready' if not missing else 'missing ' + ', '.join(missing) + ' (run ./arcanum setup)'} (needs an ARC-RENDER-008 build with map mode)")
-    print("heroes (area/map --hero NAME, needs an ARC-RENDER-008 build with the hero start):", ", ".join(launch.PREMADE_HEROES))
+    print(f"map: {'ready' if not missing else 'missing ' + ', '.join(missing) + ' (run ./arcanum setup)'} "
+          f"(needs an {launch.UNIVERSAL_TASK} or ARC-RENDER-008 build with map mode; any installation)")
+    print(f"heroes (area/map --hero NAME, needs an ARC-RENDER-008 build with the hero start, or {launch.UNIVERSAL_TASK} for map):",
+          ", ".join(launch.PREMADE_HEROES))
     exe = original_exe(None)
     print(f"oracle: {'ready' if exe.is_file() else 'missing ' + str(exe) + ' (set ARCANUM_EXE)'} ({len(launch.ORACLE_FUNCTIONS)} functions)")
     print("selection:", conf.get("launchSelection", {}).get("terrain", "none"))
@@ -167,7 +177,7 @@ def status(_: argparse.Namespace) -> int:
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(prog="arcanum", description="Launch the Arcanum Steamwoven diagnostic viewer.")
     commands = result.add_subparsers(dest="command", required=True)
-    configure = commands.add_parser("setup", help="verify the installed game and configure every launcher input")
+    configure = commands.add_parser("setup", help="find the installed game's inputs, record their identities and configure the launcher")
     configure.add_argument("--game-root", type=Path, default=DEFAULT_GAME_ROOT)
     configure.set_defaults(func=setup)
     for name, (mode, tasks) in MODES.items():
@@ -177,7 +187,7 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--hero", choices=launch.PREMADE_HEROES,
                                  help="start as this pre-made hero (default: the diagnostic PC profile)")
         command.set_defaults(func=run, mode=name)
-    command = commands.add_parser("map", help="launch one whole interior (a maps/ folder name) from the current ARC-RENDER-008 build")
+    command = commands.add_parser("map", help=f"launch one whole interior (a maps/ folder name) from the current {launch.UNIVERSAL_TASK} or ARC-RENDER-008 build")
     command.add_argument("name", help='the map folder name, e.g. "crash site cave"')
     command.add_argument("--hero", choices=launch.PREMADE_HEROES, help="start as this pre-made hero (default: the diagnostic PC profile)")
     command.add_argument("--dry-run", action="store_true")
