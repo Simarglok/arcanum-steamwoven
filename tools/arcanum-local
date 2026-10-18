@@ -33,22 +33,29 @@ def command_configure(args: argparse.Namespace) -> None:
     conf = config.load_config()
     if args.configure == "discover":
         root = config.canonical_existing(args.game_root, directory=True)
-        roles, missing = launch.discover_inputs(root)
+        roles, missing, installation = launch.discover_inputs(root)
         conf["preferences"]["discoveredGameRoot"] = str(root)
         if args.write_inputs:
-            # Fail closed: write nothing unless every launcher role was found with its exact identity.
-            if missing:
-                raise ValueError("game root lacks verified roles: " + ", ".join(missing))
+            # ARC-DEV-015: fail closed only without a role map mode needs; write every present role and the installation
+            # record (sizes, digests, which pinned identities match), which the pinned modes consult at launch.
+            absent = [role for role in launch.UNIVERSAL_ROLES if role in missing]
+            if absent:
+                raise ValueError("game root lacks the roles every mode needs: " + ", ".join(absent))
             source_id = conf.get("inputs", {}).get("sourceId") if isinstance(conf.get("inputs"), dict) else None
             conf["inputs"] = {**roles, "sourceId": config.safe_source_id(source_id or "local-original")}
+            conf["installation"] = installation
         config.save_config(conf)
-        emit({"discovered": sorted(roles), "missing": missing, "inputsWritten": bool(args.write_inputs)})
+        pinned = [role for role, (_, size, _) in launch.GAME_ROLES.items() if size is not None and role in roles]
+        emit({"discovered": sorted(roles), "missing": missing, "inputsWritten": bool(args.write_inputs),
+              "pinnedVerified": installation["pinnedVerified"], "pinnedDiffer": sorted(set(pinned) - set(installation["pinnedVerified"]))})
     elif args.configure == "inputs":
         conf["inputs"] = {"module": str(config.canonical_existing(args.module, directory=False)),
                           "terrainResource": str(config.canonical_existing(args.terrain_resource, directory=False)),
                           "actorResource": str(config.canonical_existing(args.actor_resource, directory=False)),
                           "prototypes": str(config.canonical_existing(args.prototypes, directory=True)),
                           "sourceId": config.safe_source_id(args.source_id or "local-input")}
+        # Explicit inputs are the caller's choice: no installation record, so no pinned-identity gate at launch.
+        conf.pop("installation", None)
         if args.area_mobile is not None:
             conf["inputs"]["areaMobile"] = str(config.canonical_existing(args.area_mobile, directory=False))
         if args.area_effects is not None:
@@ -84,7 +91,7 @@ def selected_root(conf: dict, registry: dict, tool: str) -> Path:
         raise ValueError("configure an explicit launch selection before launch")
     matches: list[Path] = []
     parts = selection.split(":")
-    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008") else None
+    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008", launch.UNIVERSAL_TASK) else None
     for root_id, root_text in roots.items():
         if not isinstance(root_id, str) or not isinstance(root_text, str):
             continue
@@ -111,26 +118,34 @@ def command_launch(args: argparse.Namespace) -> None:
     root = selected_root(conf, registry, tool)
     selection = conf.get("launchSelection", {}).get(tool, "")
     parts = selection.split(":")
-    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008") else None
+    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008", launch.UNIVERSAL_TASK) else None
     _, manifest, _ = manifests.resolve_current(root, tool, selected_task=selected_task)
-    if tool == "terrain" and args.mode == "crash-site-area" and (manifest.get("schema"), manifest.get("task")) not in (("arcanum-build-manifest-v2", "ARC-RENDER-007"), ("arcanum-build-manifest-v2", "ARC-INPUT-001"), ("arcanum-build-manifest-v2", "ARC-WORLD-007"), ("arcanum-build-manifest-v2", "ARC-WORLD-009"), ("arcanum-build-manifest-v2", "ARC-RENDER-008")):
+    v2 = manifest.get("schema") == "arcanum-build-manifest-v2"
+    # ARC-DEV-015: a universal build (exported without the pinned Crash Site gates) runs map mode only.
+    universal = tool == "terrain" and v2 and manifest.get("task") == launch.UNIVERSAL_TASK
+    if universal and (args.mode != "crash-site-area" or args.area_map is None):
+        raise ValueError(f"an {launch.UNIVERSAL_TASK} build runs map mode only (--mode crash-site-area --area-map NAME)")
+    if tool == "terrain" and args.mode == "crash-site-area" and not universal and (manifest.get("schema"), manifest.get("task")) not in (("arcanum-build-manifest-v2", "ARC-RENDER-007"), ("arcanum-build-manifest-v2", "ARC-INPUT-001"), ("arcanum-build-manifest-v2", "ARC-WORLD-007"), ("arcanum-build-manifest-v2", "ARC-WORLD-009"), ("arcanum-build-manifest-v2", "ARC-RENDER-008")):
         raise ValueError("crash-site-area requires an exact ARC-RENDER-007, ARC-INPUT-001, ARC-WORLD-007, ARC-WORLD-009 or ARC-RENDER-008 v2 artifact")
     if tool == "terrain" and args.mode == "world-diagnostic" and (manifest.get("task") or manifest.get("taskId")) not in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"):
         raise ValueError("world-diagnostic requires an ARC-WORLD-001, ARC-GPAD-004, ARC-RENDER-006 or ARC-WORLD-003 artifact")
     # ARC-RENDER-017: one whole interior; only the newest AREA builds (ARC-RENDER-008 exports) carry map mode.
     if args.area_map is not None and (tool != "terrain" or args.mode != "crash-site-area"
-                                   or (manifest.get("schema"), manifest.get("task")) != ("arcanum-build-manifest-v2", "ARC-RENDER-008")):
-        raise ValueError("--area-map requires terrain --mode crash-site-area from an ARC-RENDER-008 build exported with map mode")
+                                   or not v2 or manifest.get("task") not in ("ARC-RENDER-008", launch.UNIVERSAL_TASK)):
+        raise ValueError(f"--area-map requires terrain --mode crash-site-area from an ARC-RENDER-008 or {launch.UNIVERSAL_TASK} build exported with map mode")
     # ARC-WORLD-027: the pre-made hero start; only AREA builds exported with it (ARC-RENDER-008 exports) accept --hero.
     if args.hero is not None and (tool != "terrain" or args.mode != "crash-site-area"
-                               or (manifest.get("schema"), manifest.get("task")) != ("arcanum-build-manifest-v2", "ARC-RENDER-008")):
-        raise ValueError("--hero requires terrain --mode crash-site-area from an ARC-RENDER-008 build exported with the hero start")
+                               or not v2 or manifest.get("task") not in ("ARC-RENDER-008", launch.UNIVERSAL_TASK)):
+        raise ValueError(f"--hero requires terrain --mode crash-site-area from an ARC-RENDER-008 or {launch.UNIVERSAL_TASK} build exported with the hero start")
     executable, argv = launch.argv_from_manifest(manifest)
     if tool == "terrain":
         separator = argv.index("--")
         inputs = conf.get("inputs", {})
+        # ARC-DEV-015: a pinned mode needs its pinned roles verified by setup's installation record (absent for older or
+        # explicit configurations, whose inputs keep their earlier meaning).
         argv = [*argv[:separator + 1], *(launch.map_arguments(inputs, args.area_map, args.hero) if args.area_map is not None
-                else launch.terrain_arguments(inputs, args.mode or "terrain-only", preview, task=manifest.get("task"), hero=args.hero))]
+                else launch.terrain_arguments(inputs, args.mode or "terrain-only", preview, task=manifest.get("task"), hero=args.hero,
+                                              verified=launch.verified_roles(conf)))]
     emit(launch.start(executable, argv, allow_duplicate=args.allow_duplicate, lock_root=config.home(), tool=tool,
                       dry_run=args.dry_run, show_paths=args.show_paths))
 
@@ -184,7 +199,7 @@ def parser() -> argparse.ArgumentParser:
     listed = top.add_parser("list"); listed.add_argument("--json", action="store_true"); listed.set_defaults(func=command_list)
     configure = top.add_parser("configure"); configure_sub = configure.add_subparsers(dest="configure", required=True)
     discover = configure_sub.add_parser("discover"); discover.add_argument("--game-root", required=True)
-    discover.add_argument("--write-inputs", action="store_true", help="replace configured inputs with every verified role")
+    discover.add_argument("--write-inputs", action="store_true", help="replace configured inputs with every role found and record the installation")
     inputs = configure_sub.add_parser("inputs"); inputs.add_argument("--module", required=True); inputs.add_argument("--terrain-resource", required=True); inputs.add_argument("--actor-resource", required=True); inputs.add_argument("--prototypes", required=True); inputs.add_argument("--source-id")
     inputs.add_argument("--area-mobile")
     inputs.add_argument("--area-effects")

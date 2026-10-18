@@ -16,6 +16,8 @@ TASKS["ARC-INPUT-001"] = "world-builds"
 TASKS["ARC-WORLD-007"] = "world-builds"
 TASKS["ARC-WORLD-009"] = "world-builds"
 TASKS["ARC-RENDER-008"] = "world-builds"
+# ARC-DEV-015: universal map-mode builds, exported with the synthetic gates only (no pinned Crash Site run).
+TASKS["ARC-DEV-015"] = "world-builds"
 AREA_TASKS = ("ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008")
 GATES = {
     "locked-build": "locked-build.log", "source-headless": "source-headless.log",
@@ -53,6 +55,8 @@ def main() -> None:
         gates.update({"focused-tests": "tests.log", "source-world-original": "source-world-original.log",
                       "exported-world-original": "exported-world-original.log", "source-world-persistence": "source-world-persistence.log",
                       "exported-world-persistence": "exported-world-persistence.log", "dual-hostfxr": "hostfxr.log"})
+    if task == "ARC-DEV-015":
+        gates.update({"focused-tests": "tests.log", "dual-hostfxr": "hostfxr.log"})
     if task in ("ARC-RENDER-006", "ARC-WORLD-003", *AREA_TASKS):
         gates.update({"human-metadata": "human-metadata.log", "source-human-original": "source-human-original.log", "exported-human-original": "exported-human-original.log"})
     if task in ("ARC-WORLD-003", *AREA_TASKS):
@@ -112,7 +116,7 @@ def main() -> None:
         "candidate": {"baseCommit": git(candidate_root, "merge-base", "HEAD", "origin/main"), "commit": head,
                       "tree": git(candidate_root, "rev-parse", "HEAD^{tree}"), "branch": git(candidate_root, "branch", "--show-current")},
         "app": {"relativePath": "ArcanumTerrainViewer.app", "executableRelativePath": app.relative_to(build_root).as_posix(),
-                "ordinaryArgs": ["--mode", "crash-site-area"] if task in AREA_TASKS else ["--mode", "world-diagnostic"] if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003") else []},
+                "ordinaryArgs": ["--mode", "crash-site-area"] if task in (*AREA_TASKS, "ARC-DEV-015") else ["--mode", "world-diagnostic"] if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003") else []},
         "payloadInventory": payload_inventory, "evidence": evidence_inventory,
         "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": f"evidence/{path}"} for name, path in gates.items()],
         "exportBudget": bound_budget(build_root, "terrain", expected_candidate_id, payload_bytes),
