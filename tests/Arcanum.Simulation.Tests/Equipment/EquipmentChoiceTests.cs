@@ -94,14 +94,15 @@ public sealed class EquipmentChoiceTests
         EquipmentCandidate[] weapons = [Weapon(1, 3), Weapon(4, 8), Weapon(4, 8), Weapon(9, 20, CombatSkill.Bow)];
         Assert.AreEqual(2, EquipmentChoice.ChooseBest(EquipmentSlot.Weapon, weapons, _ => true, null, Plain), "1 and 2 tie: the later one");
         Assert.AreEqual(1, EquipmentChoice.ChooseBest(EquipmentSlot.Weapon, weapons, i => i != 2, null, Plain));
-        Assert.AreEqual(3, EquipmentChoice.ChooseBest(EquipmentSlot.Weapon, [weapons[3]], _ => true, null, Plain), "the first scored wins over nothing, even negative");
+        Assert.AreEqual(0, EquipmentChoice.ChooseBest(EquipmentSlot.Weapon, [weapons[3]], _ => true, null, Plain), "the first scored wins over nothing, even negative");
         Assert.IsNull(EquipmentChoice.ChooseBest(EquipmentSlot.Weapon, weapons, _ => false, null, Plain));
     }
 
     [TestMethod]
     public void WithATargetTheBestWeaponThatReachesItWins()
     {
-        EquipmentCandidate[] weapons = [Weapon(10, 20), Weapon(1, 3, range: 5), Weapon(2, 4, range: 6), Weapon(1, 1, range: 7)];
+        // Scores 37, 5, 7, 0 (effectiveness 25).
+        EquipmentCandidate[] weapons = [Weapon(100, 200), Weapon(10, 30, range: 5), Weapon(20, 40, range: 6), Weapon(1, 1, range: 7)];
         // The original stores the in-range score (the reconstruction keeps the last in-range weapon).
         Assert.AreEqual(2, EquipmentChoice.ChooseBest(EquipmentSlot.Weapon, weapons, _ => true, null, Plain, targetDistance: 4));
         Assert.AreEqual(0, EquipmentChoice.ChooseBest(EquipmentSlot.Weapon, weapons, _ => true, null, Plain, targetDistance: 1));

@@ -11,10 +11,16 @@ public delegate SessionWearableItem? SessionWearableLookup(string entity);
 
 /// <summary>
 /// What <see cref="GameSessionOwner.EquipBest"/> did in one slot: the item it took off (to the inventory), the item it wielded, and,
-/// when a step was refused, the wear rule (<see cref="Refusal"/>) or the insert check's answer (<see cref="Verdict"/>). A slot where
-/// nothing happened is not listed.
+/// when a step was refused, the wear rule (<see cref="Refusal"/>) or the insert check's answer (<see cref="Verdict"/>). When the
+/// chosen item has a move script or item spells, which the session does not run, <see cref="Unsupported"/> names the item and
+/// <see cref="Failure"/> the reason (<see cref="GameSessionFailure.ItemScriptUnsupported"/> or
+/// <see cref="GameSessionFailure.ItemEffectUnsupported"/>), and the slot stays as it is. A slot where nothing happened is not listed.
 /// </summary>
-public sealed record SessionEquipBestStep(EquipmentSlot Slot, string? TakenOff, string? Wielded, EquipmentRefusal Refusal, SessionInsertVerdict? Verdict);
+public sealed record SessionEquipBestStep(EquipmentSlot Slot, string? TakenOff, string? Wielded, EquipmentRefusal Refusal, SessionInsertVerdict? Verdict)
+{
+    public string? Unsupported { get; init; }
+    public GameSessionFailure Failure { get; init; }
+}
 
 /// <summary>Outcome of <see cref="GameSessionOwner.EquipBest"/>: the steps in slot order (none when refused).</summary>
 public sealed record EquipBestResult(GameSessionDisposition Disposition, GameSessionFailure Failure, IReadOnlyList<SessionEquipBestStep> Steps,
@@ -28,11 +34,11 @@ public sealed partial class GameSessionOwner
     /// facts of every item the hero holds (<paramref name="items"/>), answers the art lookup and the insert check. Refused before any
     /// effect: version, no hero (<see cref="GameSessionFailure.EquipmentUnavailable"/>), an item whose facts are invalid
     /// (<see cref="GameSessionFailure.InvalidItem"/>) or of another kind than the saved one or, for a worn item, other values than the
-    /// saved ones (<see cref="GameSessionFailure.InventoryMismatch"/>), a callback that changed the session
-    /// (<see cref="GameSessionFailure.StaleVersion"/>), and a chosen item with a move script or item spells
-    /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>, <see cref="GameSessionFailure.ItemEffectUnsupported"/>). A step the
-    /// rules or the insert check refuse leaves its slot as it is and the call goes on, as in the source. One revision when the worn
-    /// items changed; NoChange otherwise.
+    /// saved ones (<see cref="GameSessionFailure.InventoryMismatch"/>), and a callback that changed the session
+    /// (<see cref="GameSessionFailure.StaleVersion"/>). A step the rules or the insert check refuse leaves its slot as it is and the call
+    /// goes on, as in the source. A chosen item with a move script or item spells is not wielded (project policy: the session runs no
+    /// item script or spell; the original would wear it and run them): its step names it (<see cref="SessionEquipBestStep.Unsupported"/>)
+    /// and the call goes on. One revision when the worn items changed; NoChange otherwise.
     /// </summary>
     [OriginalFunction(0x4654F0, OriginalFunctionScope.Partial)]
     public EquipBestResult EquipBest(GameSessionVersion expected, SessionWearableLookup items, SessionWearArtCheck artCheck, SessionInsertCheck insertCheck)
@@ -91,8 +97,10 @@ public sealed partial class GameSessionOwner
         internal string? Wielded { get; set; }
         internal EquipmentRefusal Refusal { get; set; }
         internal SessionInsertVerdict? Verdict { get; set; }
-        internal bool Happened => TakenOff is not null || Wielded is not null || Refusal != EquipmentRefusal.None || Verdict is not null;
-        internal SessionEquipBestStep Capture() => new(slot, TakenOff, Wielded, Refusal, Verdict);
+        internal string? Unsupported { get; set; }
+        internal GameSessionFailure Failure { get; set; }
+        internal bool Happened => TakenOff is not null || Wielded is not null || Refusal != EquipmentRefusal.None || Verdict is not null || Unsupported is not null;
+        internal SessionEquipBestStep Capture() => new(slot, TakenOff, Wielded, Refusal, Verdict) { Unsupported = Unsupported, Failure = Failure };
     }
 
     /// <summary>The planned equipment of one <see cref="EquipBest"/> call: the owner's state stays untouched until the call commits.</summary>
@@ -171,8 +179,9 @@ public sealed partial class GameSessionOwner
             Worn.TryGetValue(slot, out var current);
             if (current?.Entity == entity) return;
             var facts = Facts[entity];
-            if (EquipmentDomain.MoveScripts.Any(facts.ScriptPoints.Contains)) throw new Refused(GameSessionFailure.ItemScriptUnsupported);
-            if (facts.HasItemSpells) throw new Refused(GameSessionFailure.ItemEffectUnsupported);
+            var unsupported = EquipmentDomain.MoveScripts.Any(facts.ScriptPoints.Contains) ? GameSessionFailure.ItemScriptUnsupported
+                : facts.HasItemSpells ? GameSessionFailure.ItemEffectUnsupported : GameSessionFailure.None;
+            if (unsupported != GameSessionFailure.None) { step.Unsupported = entity; step.Failure = unsupported; return; }
             var worn = Worn.ToDictionary(pair => pair.Key, pair => pair.Value.Item);
             var refusal = EquipmentRules.CheckWear(facts.Item, slot, Wearer, worn);
             if (refusal == EquipmentRefusal.None && EquipmentRules.NeedsArtCheck(facts.Item, slot))

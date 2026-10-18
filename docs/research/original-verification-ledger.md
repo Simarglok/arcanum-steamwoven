@@ -549,6 +549,24 @@ and a second by its independent reviewer.
 | RF6 | roof fill off and on (0x439EA0, 0x439EC0), fade on and off (0x439EE0, 0x439F20), faded test (0x439FA0) | Fill off and on flood from the block of the tile; fade sets or clears the bit only when it differs (on a tile without a roof fade on still writes the empty slot back and marks the sector as having a roof list, a side effect `AreaRoofGrid` leaves out); a roof is faded when it exists, is not filled and carries the fade bit. | Original |
 | RF7 | frame data of art (0x5031C0, roof branch) | A mirrored roof frame (flag bit 0) is drawn with hot spot x 0 and offset x 0. | Original |
 
+## Starting kit (ARC-WORLD-034)
+
+Source: the [best items](../world/equipment-runtime.md#best-items-arc-world-034) of the equipment runtime: which items a
+critter wields when the game asks for its best ones, as a new game does for the pre-made hero. Read on 2026-10-18 by a first
+reader and, independently, a second reader that saw only the questions (method step 6); both agree on every row, and both
+confirm the earlier LM1 and LM2 verdicts. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| WB1 | best item for a slot (0x465170), the current item | The slot's item stays as the worth to beat when it still passes the wear check (0x464D20) and the slot is not the weapon slot; otherwise it is taken off (0x464C50), so the weapon slot always starts empty. | Original |
+| WB2 | best item for a slot, the candidates | Every item of the inventory list in turn that passes the wear check. Weapon slot: a weapon with an ammunition type needs at least its consumption in the carried quantity of that type. Other slots: an item worn anywhere is skipped; a strictly higher worth (0x461F20) wins, no tie rule. | Original |
+| WB3 | best item for a slot, the weapon score | Each damage type's `(min + max) / 2` of the weapon damage (0x465F70, with the magic adjustment) is **added** over the five types (LM1), times the skill effectiveness, divided by 100 (signed, truncated). The skill (0x465D80): a technological skill needs a tech level above 0, a basic skill other than melee a level above 0, else −1; an effectiveness of 0 counts −1 too. | Original (LM1: the reconstruction assigns) |
+| WB4 | best item for a slot, the choice | The best score starts at the lowest integer; a strictly higher score wins, an equal score wins when its object handle is larger (signed 64-bit). With a target, a weapon whose range (0x465E30) reaches the target's distance competes for the in-range best the same way and **its score is stored** (LM2); an in-range best overrides the overall best. | Original (LM2: the reconstruction never stores the in-range score); the handle order is not session state, so a tie goes to the later-created item (project substitute) |
+| WB5 | best item for a slot, the end | A best item is wielded (0x464AE0, also when it already is the slot's item); none in the weapon slot takes the weapon off again. | Original |
+| WB6 | best items for every slot (0x4654F0) | Slots 1000 to 1008 in increasing order, the target passed through. The pre-made menu step (0x545B60) calls it for the new PC without a target before the game starts; a custom character instead gets only weapon and body armour into empty slots (0x5412E0, under a flag the name-chosen step 0x545780 sets). | Original |
+| WB7 | item worth (0x461F20), item identified test (0x464370) | Not identified: 300; else the stored worth, at least 2. Identified: an item type with complexity ≤ 0, or item flag bit 0x1. | Original |
+| WB8 | thrown item damage (0x462330) | A weapon with the throwable flag (0x10) reads its own damage arrays; anything else has normal damage `(weight + 99) / 100 .. (weight + 49) / 50` from its weight (0x461370, with the owner) and no other type. | Original |
+
 ## Decisions to revisit
 
 These owner decisions or accepted proposals rest on a CE fact that the original does not share.

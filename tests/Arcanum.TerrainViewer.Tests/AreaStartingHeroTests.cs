@@ -63,10 +63,11 @@ public sealed class AreaStartingHeroTests
         Assert.AreEqual(1, session.Version.Revision, "one revision for the start's wield");
         Assert.AreEqual("hero: half-elf-male level 1 (5 points unspent), gold 385, kit 3, worn 2", AreaStartingHero.Summary(session));
 
-        wear[0] = wear[0]! with { HasItemSpells = true };
+        // A kit item whose facts do not match its saved kind fails the start, typed.
+        wear[0] = wear[1];
         var refused = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
             AreaGridSession.Cell(AreaGridSession.Spawn), 1, Ready() with { KitWear = wear });
-        Assert.AreEqual((null, GameSessionFailure.ItemEffectUnsupported), (refused.Owner, refused.Failure));
+        Assert.AreEqual((null, GameSessionFailure.InventoryMismatch), (refused.Owner, refused.Failure));
     }
 
     [TestMethod]
