@@ -168,7 +168,7 @@ public static class LifeRules
     [OriginalFunction(0x45E610, OriginalFunctionScope.Partial)]
     public static int FatigueRecoverySteps(long scheduledAtGameMs, long nowGameMs) => Steps(scheduledAtGameMs, nowGameMs, 80);
 
-    /// <summary>Hours of a resting event: <c>max(1, (now s − scheduled s) / 3600)</c> (0x45EA00, F0).</summary>
+    /// <summary>Hours of a resting event: <c>max(1, (now s − scheduled s) / 3600)</c> (0x45EA00, ledger IF9).</summary>
     [OriginalFunction(0x45EA00, OriginalFunctionScope.Partial)]
     public static int RestingHours(long scheduledAtGameMs, long nowGameMs) =>
         Math.Min(Steps(scheduledAtGameMs, nowGameMs, 3600), LifeLimits.MaxRestHours);

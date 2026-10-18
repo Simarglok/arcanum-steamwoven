@@ -31,7 +31,7 @@ read-only, and it never prints or returns MES/DLG text.
 `WorldSectorCoordinate` packs a sector as `X | Y << 26`;
 `WorldLocation.FromPacked` unpacks a tile location as `X | Y << 32`;
 `WorldCatalog.AggregateName` is the original's mobile-file name rule (rotate
-letters by 13 with its one-short wrap, then reverse). `ContentStack.Keys(prefix)`
+letters by 13, one that passes Z moving back by 24, not 26, then reverse). `ContentStack.Keys(prefix)`
 is the new enumeration the catalogue is built on.
 
 ## Refusal unit
