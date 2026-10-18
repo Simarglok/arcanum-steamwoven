@@ -38,6 +38,54 @@ public sealed class AreaStartingHeroTests
     }
 
     [TestMethod]
+    public void The_start_wields_the_kits_best_items_and_a_refusal_fails_it()
+    {
+        // ARC-WORLD-034: kit:1 a knife, kit:2 a medium coat, kit:3 armour of another size (invented values).
+        var knife = new Arcanum.Simulation.Equipment.EquipmentItem
+        {
+            Kind = Arcanum.Simulation.Equipment.EquipmentItemKind.Weapon,
+            Weapon = new Arcanum.Simulation.Equipment.EquipmentWeapon { Damage = Arcanum.Simulation.Combat.DamageRanges.None with { Normal = new(1, 4) } },
+        };
+        Arcanum.Simulation.Equipment.EquipmentItem Coat(Arcanum.Simulation.Equipment.ArmorSizes sizes) => new()
+        {
+            Kind = Arcanum.Simulation.Equipment.EquipmentItemKind.Armor,
+            Armor = new Arcanum.Simulation.Equipment.EquipmentArmor { Coverage = Arcanum.Simulation.Equipment.ArmorCoverage.Torso, Sizes = sizes, AcAdjustment = 4 },
+        };
+        var kit = Definition().Kit;
+        SessionWearableItem?[] wear =
+        [
+            new(kit[0].Kind, [], false, knife), new(kit[1].Kind, [], false, Coat(Arcanum.Simulation.Equipment.ArmorSizes.Medium)) { Worth = 40 },
+            new(kit[2].Kind, [], false, Coat(Arcanum.Simulation.Equipment.ArmorSizes.Small)) { Worth = 90 },
+        ];
+        using var session = Start(Ready() with { KitWear = wear });
+        CollectionAssert.AreEqual(new[] { ("kit:1", Arcanum.Simulation.Equipment.EquipmentSlot.Weapon), ("kit:2", Arcanum.Simulation.Equipment.EquipmentSlot.Armor) },
+            session.QueryEquipment().Worn.Select(worn => (worn.Entity, worn.Slot)).ToArray(), "the small coat is worth more but does not fit a half-elf");
+        Assert.AreEqual(1, session.Version.Revision, "one revision for the start's wield");
+        Assert.AreEqual("hero: half-elf-male level 1 (5 points unspent), gold 385, kit 3, worn 2", AreaStartingHero.Summary(session));
+
+        // A kit item whose facts do not match its saved kind fails the start, typed.
+        wear[0] = wear[1];
+        var refused = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, Ready() with { KitWear = wear });
+        Assert.AreEqual((null, GameSessionFailure.InventoryMismatch), (refused.Owner, refused.Failure));
+    }
+
+    [TestMethod]
+    public void Kit_wear_needs_every_kit_prototype()
+    {
+        // ARC-WORLD-034: a kit prototype that does not read refuses the hero load, typed (the readable path runs on the installed
+        // original in StartingHeroTests and on synthetic fields in the session's bridge test).
+        Arcanum.Data.Characters.PrototypeFile Missing(int number) => new(Arcanum.Data.Characters.PrototypeFileStatus.Missing, null);
+        Assert.IsNull(AreaStartingHero.KitWear(Missing, Definition(), out var detail));
+        StringAssert.StartsWith(detail, "kit prototype 6049 PrototypeMissing");
+        Arcanum.Data.Characters.PrototypeFile Junk(int number) => new(Arcanum.Data.Characters.PrototypeFileStatus.Found, [1, 2, 3]);
+        Assert.IsNull(AreaStartingHero.KitWear(Junk, Definition(), out detail));
+        StringAssert.StartsWith(detail, "kit prototype 6049 PrototypeInvalid");
+        var empty = Definition() with { Kit = [] };
+        Assert.AreEqual(0, AreaStartingHero.KitWear(Missing, empty, out detail)!.Count);
+    }
+
+    [TestMethod]
     public void The_twelve_heroes_are_the_main_menu_prototypes_in_order_with_unique_names()
     {
         CollectionAssert.AreEqual(Enumerable.Range(16067, 12).ToArray(), AreaStartingHero.Premade.Select(hero => hero.BasicPrototype).ToArray());
@@ -116,7 +164,7 @@ public sealed class AreaStartingHeroTests
             view.Pc.Select(line => line.Text).ToArray());
         Assert.AreEqual(385, view.Gold);
         Assert.AreEqual("[weapon: name unavailable]", AreaInventoryHost.KitName(session.QueryHeroKit()[0], null));
-        Assert.AreEqual("hero: half-elf-male level 1 (5 points unspent), gold 385, kit 3", AreaStartingHero.Summary(session));
+        Assert.AreEqual("hero: half-elf-male level 1 (5 points unspent), gold 385, kit 3, worn 0", AreaStartingHero.Summary(session));
 
         // ARC-WORLD-028 session equipment: a wielded kit item is marked worn.
         var blade = new Arcanum.Simulation.Equipment.EquipmentItem

@@ -37,7 +37,11 @@ public readonly record struct CombatDamageRange(int Minimum, int Maximum);
 /// <see cref="Name"/> is the numeric name class (<c>OBJ_F_NAME</c>), not display text. <see cref="CurrentArt"/> is the stored
 /// current art id (<c>OBJ_F_CURRENT_AID</c>); for an item its "destroyed" bit marks a broken item (see <see cref="CombatItemArt"/>).</summary>
 public sealed record CombatObjectFields(int Type, int Prototype, uint Flags, uint SpellFlags, int Name, int Description, int ArmorClass,
-    int HitPoints, int HitPointAdjustment, int HitPointDamage, int Material, IReadOnlyList<int> Resistances, uint CurrentArt);
+    int HitPoints, int HitPointAdjustment, int HitPointDamage, int Material, IReadOnlyList<int> Resistances, uint CurrentArt)
+{
+    /// <summary>The attachment points (0..35) that carry a script, ascending (ARC-WORLD-034: the wear moves refuse items with move scripts).</summary>
+    public IReadOnlyList<int> ScriptPoints { get; init; } = [];
+}
 
 /// <summary>Fields every item carries. <see cref="MagickTechComplexity"/> is positive for magickal, negative for
 /// technological items; <see cref="Spells"/> holds the five item spells (10000 is none); <see cref="InventoryLocation"/>

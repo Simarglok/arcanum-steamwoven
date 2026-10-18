@@ -24,7 +24,7 @@ public static class CombatFieldReader
     public const int DamageTypes = 5, Resistances = 5, ItemSpells = 5, BaseStats = 28, BasicSkills = 12, TechSkills = 4, SpellTech = 25;
 
     // Common block.
-    private const int CurrentArtSlot = 0, FlagsSlot = 18, SpellFlagsSlot = 19, NameSlot = 21, DescriptionSlot = 22, AcSlot = 25, HpSlot = 26, HpAdjustmentSlot = 27,
+    private const int CurrentArtSlot = 0, ScriptsSlot = 31, LastScriptPoint = 35, FlagsSlot = 18, SpellFlagsSlot = 19, NameSlot = 21, DescriptionSlot = 22, AcSlot = 25, HpSlot = 26, HpAdjustmentSlot = 27,
         HpDamageSlot = 28, MaterialSlot = 29, ResistanceSlot = 30;
     // Item block (36..58).
     private const int ItemFlagsSlot = 36, WeightSlot = 38, WorthSlot = 40, ManaStoreSlot = 41, InventoryArtSlot = 42, InventoryLocationSlot = 43,
@@ -143,7 +143,8 @@ public static class CombatFieldReader
             System.Array.AsReadOnly(Enumerable.Range(0, DamageTypes).Select(i => new CombatDamageRange(lower[i], upper[i])).ToArray());
 
         var common = new CombatObjectFields(type, prototype, Flags(FlagsSlot), Flags(SpellFlagsSlot), Int(NameSlot), Int(DescriptionSlot), Int(AcSlot),
-            Int(HpSlot), Int(HpAdjustmentSlot), Int(HpDamageSlot), Int(MaterialSlot), Array(ResistanceSlot, Resistances), Flags(CurrentArtSlot));
+            Int(HpSlot), Int(HpAdjustmentSlot), Int(HpDamageSlot), Int(MaterialSlot), Array(ResistanceSlot, Resistances), Flags(CurrentArtSlot))
+        { ScriptPoints = ScriptPoints(field(ScriptsSlot)) };
         if (type is PcType or NpcType)
         {
             var critter = new CombatCritterFields(Flags(CritterFlagsSlot), Flags(CritterFlags2Slot), Array(StatSlot, BaseStats),
@@ -189,6 +190,21 @@ public static class CombatFieldReader
         else if (type == GenericType)
             generic = new(Flags(GenericFlagsSlot), Int(UsageBonusSlot), Int(UsageCountSlot));
         return new(origin, common, item, weapon, ammo, armor, generic, null, null);
+    }
+
+    // ARC-WORLD-034: the attachment points of the script array (12-byte elements keyed by the point; the third word is the script
+    // number, 0 for none), in key order. A key outside 0..35 or an element of another width is malformed.
+    private static IReadOnlyList<int> ScriptPoints(Field? field)
+    {
+        if (field is null || field.Presence == Presence.Value) throw new Refusal(CombatFieldFailure.FieldUnresolved, ScriptsSlot);
+        if (field.Presence != Presence.Array) return [];
+        var points = new SortedSet<int>();
+        foreach (var (key, words) in field.Elements)
+        {
+            if (key is < 0 or > LastScriptPoint || words.Count != 3) throw new Refusal(CombatFieldFailure.ArrayMalformed, ScriptsSlot);
+            if (words[2] != 0) points.Add(key);
+        }
+        return System.Array.AsReadOnly(points.ToArray());
     }
 
     // A dense copy of a sparse int32 array: a null or empty array, or a missing key, is 0; a 32-bit word is reinterpreted

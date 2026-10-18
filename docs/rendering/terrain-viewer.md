@@ -917,8 +917,9 @@ The session's player character is that hero ([starting hero runtime](../world/st
 level 1, 5 points unspent, its race and gender effects, gold and starting kit, and its main-menu global flag (2350..2361)
 is true. Dialogs gate replies on the hero's own gender, effective intelligence and race (also after F8, which follows the
 loaded save's hero). The inventory window lists the kit first (`(starting kit)`, named from the item's description
-number; an item the session's equipment wears is marked `(worn)`) and shows the gold; the HUD adds `hero: NAME level 1 (5 points unspent), gold G, kit K` or `hero: none
-(diagnostic PC profile)`. The actor is still drawn with the fixed human body of the AREA profile, not the hero's own
+number; an item the session's equipment wears is marked `(worn)`) and shows the gold; the HUD adds `hero: NAME level 1 (5 points unspent), gold G, kit K, worn W` or `hero: none
+(diagnostic PC profile)`. ARC-WORLD-034: the start wields the kit's best items before the game begins, as the original's
+pre-made menu does ([best items](../world/equipment-runtime.md#best-items-arc-world-034)). The actor is still drawn with the fixed human body of the AREA profile, not the hero's own
 race/gender ART. Launcher: `./arcanum area --hero NAME`, `./arcanum map NAME --hero HERO`
 ([local development](../workflow/local-development.md#project-launcher)). Native smoke with `--hero` (after the
 inventory stage, and in map mode after the map stages): `ARC-WORLD-027 native-smoke hero PASS`.
@@ -995,6 +996,17 @@ followers' sheets (passive mode from dialog or the follower menu), switching str
 key. Self-test `ARC-UI-007 self-test PASS` (synthetic hero session: no-hero refusal, `C`/close/`Escape`, keys owned
 while open, rebuild on change, dead-hero close and refusal); native smoke with `--hero` after the hero stage:
 `ARC-UI-007 native-smoke character sheet PASS`.
+
+### Sound output (ARC-UI-040)
+
+The viewer plays the original's sounds through the module's [sound catalogue](../audio/sound-catalog.md)
+on the original's three channels (effects, voice, music) at the original's volumes
+([contract](../audio/viewer-audio.md)). Nothing plays by itself yet. The palette action **Sound test: next
+interface sound** plays the next fixed interface sound by id and reports the outcome; the palette's sound
+line shows the output device (or "no output device" in a headless run), the three settings (0–10, default
+5, `user://audio_volumes_v1.json`; automated runs use no file unless `AUDIO_VOLUMES_TEST_PATH` is set),
+the catalogue and the last result. Self-test marker `ARC-UI-040 self-test audio PASS`; native smoke
+marker `ARC-UI-040 native-smoke audio PASS` (exterior AREA and `--area-map`).
 
 ## Verification and evidence status
 
