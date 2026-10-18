@@ -22,12 +22,12 @@ ARC-RES-042.
   aggregate, terrain template and prototype is the winner of its path. The probe
   prints numbers only (no names, no text, no payload); the full report stays in
   the ignored `research-private/`, and only the aggregates below are published.
-- **Source (S)**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable) unless a
-  [verification ledger](original-verification-ledger.md) row is cited: the
-  type catalogue (the condition and action type enumerations), the clause
-  layout (the clause record) and how each operand is read (script 0x44BA70,
-  0x44BB50). Earlier provenance is in git history.
+- **Source (S)**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a [verification ledger](original-verification-ledger.md)
+  row is cited. It covers the type catalogue (the condition and action type
+  enumerations), the clause layout (the clause record) and how each operand
+  is read (script 0x44BA70, 0x44BB50).
 - **Operand signatures** (which operand slots of a type take a number, which an
   object) are format facts. The probe's table was taken from the order of number
   and object placeholders in the ScriptEd 1.50 editor data (`data/condition.mes`,
@@ -470,6 +470,6 @@ behaviour behind a switch of the Original setting).
 | ID | Source behaviour | Note |
 | --- | --- | --- |
 | X7 | Divide stores the **sum** of its operands when the divisor is not 0, and stores nothing when it is (script 0x447220). | A reconstruction slip: the original stores the signed quotient (ledger row X7); 14 divide clauses, 10 live. S1 admits the type; the interpreter slice (S2) chooses quotient or source sum. |
-| X8 | A counter write shifts the value into its byte without masking it (script 0x44BB50), so a value above 255 or negative spills into the higher counters. | S2 decides masking. |
+| X8 | A counter write shifts the value into its byte without masking it (script 0x44BB50), so a value above 255 or negative spills into the higher counters. | A reconstruction slip: the original masks counter writes to 8 bits (ledger row X8). S2 decides masking. |
 | X9 | Float newspaper headline (86) reads its object from slot 1, outside the editor signature (script 0x447220). | Not admitted in S1; the one installed clause has kind 1 in slot 0 and 0 (triggerer) in slot 1. |
 | X10 | A global-flag write shifts the value into the flag's bit without masking it (script 0x444D20), so an arithmetic or get-story-state result of 2 sets the neighbouring flag and a negative one every higher flag of the same 32-flag word. | Found in the ARC-SCRIPT-007 review; S1 admits global-flag write targets, S2 decides masking. |

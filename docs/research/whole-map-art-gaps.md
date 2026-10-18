@@ -1,8 +1,9 @@
 # Whole-map art gaps and the original's missing-art fallback
 
 Status: **Research**, work item ARC-RES-050 (2026-10-17). Census measured on the
-owner's installed original (GOG 1.0.7.4, `DAT_ROOT`); name rules read from the
-executable's functions at the addresses given and checked in the retail
+owner's installed original (GOG 1.0.7.4, `DAT_ROOT`); name rules from an earlier
+source reading (provenance in git history), cited by the executable address of
+each function, and checked in the retail
 `Arcanum.exe` (SHA-256 `9bd80511…8d52`) by the
 [original executable check](original-executable-check.md) where the ledger says so, rows MA1–MA8 of the
 [verification ledger](original-verification-ledger.md#art-names-and-missing-art-arc-res-050).
@@ -122,8 +123,8 @@ question only for animated effects at run time (spells, `animfx`).
 
 ## How the original names critter art and falls back
 
-These rules come from the executable's name functions (0x41CA40–0x41F240), its art
-name functions (0x4EAC80–0x4ED440) and its ART cache; N1–N3, N6 and the
+These rules come from an earlier source reading of the name functions
+(0x41CA40–0x41F240), the art name functions (0x4EAC80–0x4ED440) and the ART cache; N1–N3, N6 and the
 load fallback of N4 are checked in the retail executable, N5, N7 and N4's frame
 lookup are earlier readings, level F0 (not checked in the executable) (ledger rows in
 brackets).

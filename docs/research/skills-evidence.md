@@ -21,11 +21,12 @@ Requirements: [FR-CHAR-016](../requirements/characters-skills.md#fr-char-016)
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable) unless a row of the
+- **Source fact**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a row of the
   [original verification ledger](original-verification-ledger.md) is cited.
   Unnamed functions keep decompiler names (`sub_…`); a reading of their intent
-  is marked **inference**. Earlier provenance is in git history.
+  is marked **inference**.
 - **Anomaly**: a branch that looks like a slip, numbered
   SK1..SK8 in [section 8](#8-anomalies-found-by-this-reading). Under owner
   decision [D2](npc-combat-ai-plan.md#owner-decisions-2026-10-16) the slice
@@ -50,11 +51,11 @@ use of skill conditions) are listed for the census in
    gambling, haggle, heal, persuasion) and four technical skills (repair,
    firearms, pick locks, disarm traps). Each critter stores one 32-bit value
    per skill: bits 0..5 are points, bits 6..7 the training tier
-   (header, points (0x4C5FA0, 0x4C6000), training (0x4C60C0, 0x4C6170)).
+   (points (0x4C5FA0, 0x4C6000), training (0x4C60C0, 0x4C6170)).
 2. **A point is four levels, and the key stat caps the level.** Level =
    4 × points, then effects, then clamp 0..20, then the cap of the key stat:
    stat 1..5 → 3, 6..8 → 7, 9..11 → 11, 12..14 → 15, 15..17 → 19,
-   18..20 → 20 (level (0x4C5E50, 0x4C5EB0, 0x4C5F70), tables). Buying point
+   18..20 → 20 (level (0x4C5E50, 0x4C5EB0, 0x4C5F70)). Buying point
    *n* needs `4n ≤ cap`, so the key stat must be at least 6, 9, 12, 15 and 18
    for points 1..5. Every point costs one character point and refunds one
    (cost (0x4C64B0, 0x4C64C0, 0x4C64D0, 0x4C64E0)).
@@ -90,7 +91,7 @@ use of skill conditions) are listed for the census in
    Master, a longer "wait here" at Apprentice with extraordinary charisma.
 8. **Prowling is not rolled either.** Concealment lowers the observer's
    perception by the prowler's margin, in percent, in the AI's sight and
-   hearing checks (see (0x4AF260), hear (0x4AF470)).
+   hearing checks (sight (0x4AF260), hear (0x4AF470)).
 9. **Skill state lives in the critter; only the gambling roll is global.**
    Points and training are object fields saved with the object; the Skill
    module saves only the pre-drawn next gambling roll, which defeats
@@ -101,7 +102,7 @@ use of skill conditions) are listed for the census in
 
 ## 1. The sixteen skills
 
-Key stat (tables), effectiveness at level L
+Key stat (for basic skills table 0x5B6F04, ledger FA7), effectiveness at level L
 (basic (0x4C62E0), tech (0x4C69F0)), whether it is capped at 95 %, and how
 the game reaches it. "Opposed" uses the table of
 [section 5.2](#52-effectiveness).
@@ -128,8 +129,8 @@ the game reaches it. "Opposed" uses the table of
 Combat skills (bow, dodge, melee, throwing, firearms) also use the combat
 critical divisors of [section 5.4](#54-criticals-fate-and-forced-success).
 Each skill carries fixed flags that select which difficulty terms apply
-(awareness, hit location, distance, light, eyes, arms, legs)
-(flags). The prowling formula `5L + 25` exists in the code but
+(awareness, hit location, distance, light, eyes, arms, legs).
+The prowling formula `5L + 25` exists in the code but
 is unreachable, because prowling is opposed (effectiveness (0x4C62E0)).
 
 Names, descriptions and the four training names come from `mes\skill.mes`
@@ -191,8 +192,10 @@ successful set runs the Educator background update.
 | Monstrous melee | derived, not stored (answer 3) | — |
 
 The character editor shows training but has no control to change it
-(display (0x55BD10)). `skill_ui_set_training` swaps the basic and tech
-setters, but nothing calls it (SK3).
+(display (0x55BD10)). The earlier reading had `skill_ui_set_training` swap the
+basic and tech setters; the original routes them correctly except skill 12
+(repair), which goes to the basic setter and is refused, and this is harmless
+in single player (ledger SK3: called only from the multiplayer handler).
 
 ## 4. Technical skills and aptitude
 
@@ -218,7 +221,7 @@ The sector adjustment table and the magick side belong to the magic research.
 An invocation carries source, target, target location, item, skill, a
 modifier, a hit location and flags (aim, backstab, no magic adjustment,
 forced, hearing or seeing check, steal or plant mode)
-(header, init (0x4C6F90, 0x4C6FD0, 0x4C7010, 0x4C7050, 0x4C7090, 0x4C7120)). Starters:
+(init (0x4C6F90, 0x4C6FD0, 0x4C7010, 0x4C7050, 0x4C7090, 0x4C7120)). Starters:
 
 - **Animation goals.** `skill_use` and the steal and plant calls queue a
   "use skill on" goal that walks to the target; pick locks queues a variant
@@ -233,8 +236,7 @@ forced, hearing or seeing check, steal or plant mode)
   (gamble (0x579840, 0x579B60)); trap spotting from movement and use (section 6).
 - **Skill bar.** Four slots: prowling (toggle concealment on self and all followers,
   conceal (0x45EE30)), pick
-  pocket, disarm traps, repair (bar,
-  preprocess (0x57A0A0)).
+  pocket, disarm traps, repair (preprocess (0x57A0A0)).
 - **Others.** The AI (`ai_action_perform_skill`, AI (0x4AC350)), dialog
   skill services (service (0x419B50, 0x419C30, 0x419CB0)) and script command "use item with
   skill" with a modifier (script (0x447220)).
@@ -404,7 +406,7 @@ an attack by the thief on the victim (AI hostility). A master is never caught pl
 ### Prowling
 
 The skill bar toggles concealment (preprocess (0x57A0A0)). Sight
-(see (0x4AF260)) and hearing (hear (0x4AF470)) reduce the observer's perception
+(0x4AF260) and hearing (0x4AF470) reduce the observer's perception
 by `prowling effectiveness − difficulty`, clamped 0..100, in percent. In sight
 checks a blocking object makes it 100 %; without cover a non-expert gets +50
 difficulty; light counts only while untrained. In hearing checks worn armour's
@@ -469,7 +471,7 @@ backgrounds, `Rules\map.patch`, dialog files (`ps`, `ha`, `sk`, `tr`, `et`,
 `t:`, `u:`), lock and trap difficulty fields, item usage bonuses and charges.
 Everything else in this document is code: the key stats, caps, training
 minimums, formulas, opposed table, gambling limits, pick-pocket slot penalties
-and monstrous thresholds (tables).
+and monstrous thresholds.
 
 ## 8. Anomalies found by this reading
 
@@ -481,7 +483,7 @@ Recorded, not adopted. "Inference" marks a reading of intent.
 | --- | --- | --- | --- |
 | SK1 | script command "get skill" (script (0x447220)) | the case has no `return`, so after storing the level it falls into "cast spell" and casts with its own operands reinterpreted as caster, spell and target | return after storing; reachability depends on shipped scripts (census) |
 | SK2 | basic skill − button (dec (0x57ACD0, 0x57AEB0)) | the loop "until the level changes" re-sets the same `points − 1` and refunds a point on every pass; when one point does not change the level (an effect pins it at 0, at 20 or at the key-stat cap) it never ends and keeps refunding; reachable only after buying a point in the same editor session, since − stops at the accepted value | update the point count each pass, or refund once |
-| SK3 | `skill_ui_set_training` (dispatch (0x57AC90)) | sends a tech skill to the basic setter and a basic skill to the tech setter; `ui_set_skill_training` has no caller (ui (0x4603E0)) | swapped labels; dead code, so harmless (confirms the FR-CHAR-018 note; not new) |
+| SK3 | `skill_ui_set_training` (dispatch (0x57AC90)) | sends a tech skill to the basic setter and a basic skill to the tech setter; `ui_set_skill_training` has no single-player caller (ui (0x4603E0)) | swapped labels; harmless in single player (ledger SK3: called only from the multiplayer handler, where the repair off-by-one is an original bug) (confirms the FR-CHAR-018 note; not new) |
 | SK4 | `ai_check_use_skill` (check (0x4AE570)) | the disarm-traps case demands lockpicks (or a PC leader) and a lockable target; pick locks has no case | the case belongs to pick locks; disarm then has no check |
 | SK5 | gambling gates (gamble (0x579840, 0x579B60)) | worn (Expert) and "won't sell" (Master) gates read the **NPC's** gambling training, while the price limit reads the PC's; haggle's matching gates read the PC's (sell/buy (0x462170, 0x462230)) | the PC's training |
 | SK6 | skill effectiveness (effectiveness (0x4C62E0)) | the prowling formula is unreachable (prowling is opposed); backstab has no formula (0) | dead branches; prowling's opposed path is the live rule |
@@ -562,13 +564,13 @@ local aggregates only):
 
 ## Method
 
-Read from the skill functions (0x4C5BD0–0x4C91F0) in full and every caller of
-their public functions (combat, item, animation, AI, trap, stat, script, map,
+An earlier source reading (provenance in git history), organised by the
+executable functions at: the skill functions (0x4C5BD0–0x4C91F0) as a whole
+and every caller of their public functions (combat, item, animation, AI, trap, stat, script, map,
 critter, background, level, dialog, effect, tech, spell and object functions,
 and the skill, character editor, inventory, item, turn-based and general UI
 functions), found with a search for every exported skill function.
 Multiplayer branches were skipped. The rules above are restated in prose and
-tables; evidence level F0 unless a ledger row is cited, earlier provenance in
-git history.
+tables; evidence level F0 unless a ledger row is cited.
 
 

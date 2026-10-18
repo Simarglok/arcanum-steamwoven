@@ -9,14 +9,16 @@ executable. Heartbeat and dialog-override attachments are separate, excluded cal
 The installation and all selected archives/files were opened read-only. No original
 text, expressions, asset bytes, gameplay operand values or machine paths are published.
 
-Categories used below: **ObservedField** (selected bytes), **SourceClaim** (read from
-the executable's functions at the addresses given, level F0), **ProjectPolicy** (instrumentation or proposed contract), **Unknown**.
+Categories used below: **ObservedField** (selected bytes), **SourceClaim** (an earlier
+source reading, provenance in git history, cited by the executable address of
+its function; level F0, not checked in the executable), **ProjectPolicy** (instrumentation or proposed contract), **Unknown**.
 Original execution, original display, saved-world overrides and untraced branches
 are **NOT_VERIFIED**. An explicit selected archive is not the runtime precedence winner.
 
-Source claims were read from the executable's functions at the addresses given
-(level F0, not checked in the executable); they informed field and caller
-interpretation, and earlier provenance is in git history. Toolkit editor documentation is supporting
+Source claims come from an earlier source reading (provenance in git history),
+cited by the executable address of its function; level F0 (not checked in the
+executable) unless a ledger row is cited. They informed field and caller
+interpretation. Toolkit editor documentation is supporting
 provenance only; no legacy executable was run. The original fields and separately
 authored selected-byte worksheet check results, not independent source lineage.
 
@@ -24,7 +26,7 @@ authored selected-byte worksheet check results, not independent source lineage.
 
 | Claim | Category | Locator / observation | Disposition |
 |---|---|---|---|
-| NDE-01 | ObservedField + SourceClaim | Selected module MapList payload SHA-256 `3df16fd2bd186415da0738c25a6b7ea8a32134f5ea95817e3bcfafdbcf55843f`; exactly one START_MAP, map ID 5000. Its map basename transforms to the selected loose game aggregate basename by the pinned rotation/reversal rule. | Base-world map context; not an editor `.mob` or a guessed archive member. |
+| NDE-01 | ObservedField + SourceClaim | Selected module MapList payload SHA-256 `3df16fd2bd186415da0738c25a6b7ea8a32134f5ea95817e3bcfafdbcf55843f`; exactly one START_MAP, map ID 5000. Its map basename transforms to the selected loose game aggregate basename by the rotation/reversal rule of the earlier source reading (F0). | Base-world map context; not an editor `.mob` or a guessed archive member. |
 | NDE-02 | ObservedField | Aggregate SHA-256 `a548f611ff5de9842bba1f700f6614c0b9651cf3ab640a23d19efc7626dde6a5`, 1,823,280 bytes, 16-byte prefix then 7,399 records consumed exactly to EOF. Selected instance begins at 743644, ends at 744462, object type 16, prototype ID 17102, identity SHA-256 `bd0cff305f47b07e845a120966b402c5c44073aba7ffd1407b626f93733bf601`. | Unique matching instance. Complete census uses external explicit layout descriptors; selected fields separately reconciled without those descriptors. |
 | NDE-03 | ObservedField + SourceClaim | Instance location is present; its little-endian 8-byte value hashes to `5474307a69c758197cbcae7ee15276f82c4dae9e423a7496f1805b48405c5d10`. Private coordinate comparison places it adjacent to the selected START_MAP location. Description ID 31073 resolves to Virgil in module gamedesc; name hash `e3b7a5d30dcfe893ffafd9ef2407468b7e8253cf461bf728db69195ee282e3ba`. | Identity comes from object and description, not SCR filename. Module description payload hash `8254286b832d30cb1ce13a9ccffd4fc887ae7b4d0783f2251a2b8f4a85f68e60`. |
 | NDE-04 | ObservedField | Selected prototype identity/type matches instance prototype/type; prototype SHA-256 `084a85124a37c41097806dface638254194efd46a5b318009e1c841c42797ea4`. Script array is explicitly present on the instance, with six occupied event keys. Key 9 (SAP_DIALOG) binds script ID 1324. | Whole instance array overrides prototype array; absent overridden slots are NOT individually inherited. |
@@ -40,7 +42,7 @@ Payload fingerprints alone would not prove whole-file integrity.
 
 ### Source seams for NDE-01..06
 
-Executable addresses of the seams (level F0):
+Executable addresses of the seams (earlier source reading, level F0):
 
 - Game aggregate versus editor mobile load (0x410D10), name transform (0x411830).
 - Object version and reader dispatch (0x406600), prototype reader (0x4097B0), instance reader (0x409AA0). The blocked prototype identifier selects the prototype branch; the instance branch reads identity, type, field count and override masks before its field callbacks.
@@ -166,7 +168,7 @@ continuous bit numbering assumption. Source field types may be inspected against
 but that static reader is not an NPC loader. In particular container inventory
 must be an object-ID **array**, not a solitary handle; this research supplies the
 corrected descriptor externally and does not change the production static reader.
-Review the external layout against the pinned source; it is an evidence input,
+Review the external layout against the earlier source reading (F0); it is an evidence input,
 not proof of its own correctness. Never place the private manifest in a PR.
 
 Caps: aggregate 32 MiB / 16,384 records, prototype 2 MiB, SCR 1 MiB / 4,096

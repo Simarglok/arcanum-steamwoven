@@ -10,9 +10,7 @@ is described in [Proposed implementation](#proposed-implementation-not-authorize
 
 ## Vocabulary and boundary
 
-- **Source fact**: a claim read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable) unless a ledger row is cited;
-  earlier provenance is in git history. It is not an observation of the running
+- **Source fact**: a claim from an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. It is not an observation of the running
   original.
 - **Local observation**: an aggregate measured by the research probe on the
   owner's unchanged installation. No original text, names or bytes are
@@ -48,7 +46,7 @@ or window flags are relevant because the area has no walls or portals (F5).
 | F3 | Resource precedence | `map_load_mobile` (0x410D10), `map_open` (0x40F4E0), `gamelib_reset` and `gamelib_exit` (0x402380, 0x4024D0) | The four consumed rule/name resources and every present sector file occur exactly once across all seven archives. No loose override, sector or save difference file exists under the module and data folders. |
 | F4 | Patch file | `map_load_mobile` (0x410D10), object ID text conversion (0x4E6570) and GUID parser (0x4E67A0) | The PATCH archive's `map.patch` names 50 objects; none of the 98 core/context mobile records contains any of those IDs in either byte order. |
 | F5 | Exact-tile registry | `obj_inst_read_file` (0x409AA0), `objlist_load` (0x4F1350), `objlist_fold` (0x4F1CD0), `objlist_insert_internal` (0x4F2020), `object_init` (0x43A330), `object_list_location` (0x4407C0) | 98 mobile records re-verified in place; 0 walls or portals; 123 destination-blocker cells. |
-| F6 | Critter life | `critter_is_dead` (0x45D8D0), object hit point functions (0x43D5A0, 0x43D600, 0x43D630, 0x43D690), stat tables, `stat_level_get` (0x4B0490), `stat_base_get` (0x4B0740), effect loading and `effect_parse` (0x4E99F0, 0x4E9C20), `effect_adjust_func` (0x4EA6C0), `background_get` (0x4C2690) | 42 visible critters: 38 alive (minimum current HP 10), 4 dead (maximum current HP −31,952). None is Unknown. |
+| F6 | Critter life | `critter_is_dead` (0x45D8D0), object hit point functions (0x43D5A0, 0x43D600, 0x43D630, 0x43D690), stat tables, `stat_level_get` (0x4B0490), `stat_base_get` (0x4B0740), stat level minimum and maximum (0x4B0FC0, 0x4B0FD0), effect loading and `effect_parse` (0x4E99F0, 0x4E9C20), `effect_adjust_func` (0x4EA6C0), `background_get` (0x4C2690) | 42 visible critters: 38 alive (minimum current HP 10), 4 dead (maximum current HP −31,952). None is Unknown. |
 | F7 | Step composition | object traversal (0x43FD70, 0x43FDC0, 0x43FE00), `location_in_dir` (0x4B8FF0), `tile_art_id_at` and `tile_is_blocking` (0x4D70B0, 0x4D7110) | All seven frozen production observations at spawn are reproduced. |
 | F8 | Reachability | Composition of F1–F7 | 8,138 cells reachable from spawn; the only exits lead into an unsurveyed sector south of the context ring. |
 

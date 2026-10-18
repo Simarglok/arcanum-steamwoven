@@ -2,12 +2,11 @@
 
 ## Result and readiness
 
-**Research result: a conditional placement relation read from the executable's
-functions is identified; original-runtime placement parity remains NOT READY.**
+**Research result: a conditional placement relation from an earlier source
+reading is identified; original-runtime placement parity remains NOT READY.**
 This record closes the previously unknown relationship for the bounded direct,
 single-layer monster Idle/Walk chain only when its cached-render branch is
-inactive, at level F0 (read from the executable's functions, not checked in the
-executable). It does not claim that the original executable was observed, that
+inactive, as an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. It does not claim that the original executable was observed, that
 this reading is an independent oracle, or that a general production actor renderer is authorized. ARC-RENDER-005 later
 authorizes only a fixed-profile, caller-labelled diagnostic consumer; that
 prospective exception does not establish original placement parity.
@@ -26,20 +25,19 @@ has 8. No locomotion distance or movement speed is inferred from ART FPS.
 | AP-001 | The archived ArtConverter README identifies a converter only; it makes no actor-anchor, top-left, hotspot, or offset placement claim. | community description, silent | Local archived README, already catalogued in [ART evidence](art-evidence.md#source-matrix-and-lineage). |
 | AP-002 | The archived ArcNET README makes no independent actor-anchor or placement observation. | community description, not independent | Local archived ArcNET README; no ArcNET code was used or run. |
 | AP-003 | The preserved WorldEd/ArtView references document tooling availability or unrelated editor/dialogue material, not an actor top-left observation. | community description, silent | Existing ART/dialogue provenance records; no archived executable was run. |
-| AP-004 | The exact game draw route calls the generic object draw pass, which visits visible object nodes including NPCs. | F0 executable reading | `gamelib_draw_game` (0x4046F0); `object_draw` (0x43B390). The selected record is a type-16 NPC, so this is an actor-specific use of the generic object route, not scenery transfer. |
-| AP-005 | When the cached-render flag is clear, the source location projector, instance offsets, frame hotspot, scaling/shrunk state, and current ART select the object rectangle before its queued blit. | F0 executable reading | `location_xy` (0x4B8680); `object_draw` (0x43B390), `object_get_rect` (0x43DFD0), `object_setup_blit` (0x443170). |
-| AP-006 | ART frame lookup applies the admitted critter/monster/unique-NPC mirror mapping before returning hotspot and offset metadata; the final art blit horizontally samples reflected pixels. | F0 executable reading | The executable's ART frame-data lookup and blitter. |
+| AP-004 | The exact game draw route calls the generic object draw pass, which visits visible object nodes including NPCs. | F0 reading | `gamelib_draw_game` (0x4046F0); `object_draw` (0x43B390). The selected record is a type-16 NPC, so this is an actor-specific use of the generic object route, not scenery transfer. |
+| AP-005 | When the cached-render flag is clear, the source location projector, instance offsets, frame hotspot, scaling/shrunk state, and current ART select the object rectangle before its queued blit. | F0 reading | `location_xy` (0x4B8680); `object_draw` (0x43B390), `object_get_rect` (0x43DFD0), `object_setup_blit` (0x443170). |
+| AP-006 | ART frame lookup applies the admitted critter/monster/unique-NPC mirror mapping before returning hotspot and offset metadata; the final art blit horizontally samples reflected pixels. | F0 reading | The ART library's frame-data lookup and blitter. |
 | AP-007 | The recorded module/resource/prototype fingerprints, selected ordinal/ART/resources, all facing metadata, and sanitized reports are deterministic. | observed original bytes/metadata | Two opt-in read-only probe runs on the existing candidate produced byte-identical sanitized reports; both returned the documented exit 3 (`NOT_READY`). This is structural evidence, not a runtime placement observation. |
-| AP-008 | A synthetic formula test or a trace of the executable's functions establishes original-game pixel placement. | not established | No original executable was run and no independent original-runtime measurement is recorded. |
-| AP-009 | `ORF_08000000` selects a cached render rectangle instead of the current-ART hotspot path. | F0 executable reading; selected-state unknown | `object_get_rect` (0x43DFD0) sets rectangle X/Y from `RENDER_X/Y`, width/height from `RENDER_WIDTH/HEIGHT`, and returns before current-ART frame lookup. The selected metadata probe does not establish this runtime render-flag state, so cached-render placement is unsupported rather than inferred from frame metadata. |
+| AP-008 | A synthetic formula test or a trace from the earlier source reading establishes original-game pixel placement. | not established | No original executable was run and no independent original-runtime measurement is recorded. |
+| AP-009 | `ORF_08000000` selects a cached render rectangle instead of the current-ART hotspot path. | F0 reading; selected-state unknown | `object_get_rect` (0x43DFD0) sets rectangle X/Y from `RENDER_X/Y`, width/height from `RENDER_WIDTH/HEIGHT`, and returns before current-ART frame lookup. The selected metadata probe does not establish this runtime render-flag state, so cached-render placement is unsupported rather than inferred from frame metadata. |
 
-The executable readings above are level F0 (not checked in the executable);
-earlier provenance is in git history. No original data were copied into this
+The source readings above are an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. No original data were copied into this
 repository; no Windows, original, or archived-tool executable was run.
 
 ## Caller trace and coordinate relation
 
-The relation below describes the executable's route as read (F0), not a new project API.
+The relation below describes the route of the earlier source reading (F0), not a new project API.
 It is written in operation order to avoid silently importing the static-scenery
 rule.
 
@@ -164,7 +162,7 @@ source-line references.
 ## Readiness boundary and minimum future observation
 
 The conditional normal-branch relation is sufficient only as a
-**research rule read from the executable's functions (F0)**. It is not sufficient to mark the
+**research rule from an earlier source reading (F0)**. It is not sufficient to mark the
 actor contract `Ready`, authorize an expanded/general presentation consumer, or
 claim original-runtime parity. The fixed ARC-RENDER-005 diagnostic exception
 still labels caller policy and remains outside runtime readiness. The cached-render state must remain unsupported until
@@ -189,7 +187,7 @@ outcomes and immutable fingerprints after a separately authorized review.
 
 ## Implemented / not implemented / remaining work
 
-Implemented (research): caller trace of the executable's functions (F0); named coordinate
+Implemented (research): caller trace from an earlier source reading (F0); named coordinate
 relation and operation order; actor-specific proof that the generic object route
 uses location projection, instance offsets, effective hotspot, and the
 admitted reflection path; classified evidence/provenance; and repeatable,

@@ -10,9 +10,7 @@ the input for the later loader slices listed at the end.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses given,
-  level F0 (not checked in the executable) unless a ledger row is cited; earlier
-  provenance is in git history. It is not an observation of the running original.
+- **Source fact**: an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. It is not an observation of the running original.
 - **Local observation**: measured by `tools/research/terrain_template_probe.py` on
   the owner's unchanged installation. The probe prints counts, map and template
   folder names (DAT member paths), terrain type names and SHA-256 digests only,
@@ -405,7 +403,7 @@ checked in the executable ([ledger TR1–TR5](original-verification-ledger.md#te
 
 ## Sources
 
-- Executable functions (F0 unless a ledger row is cited): terrain 0x4E7B00–0x4E9680,
+- Earlier source reading, cited by executable address (F0 unless a ledger row is cited): terrain 0x4E7B00–0x4E9680,
   sectors 0x4CEF70–0x4D31C0, sector object list 0x4F1150–0x4F2330, sector light
   list 0x4F7110–0x4F7B50, lights 0x4D7F30–0x4DF310, object storage
   0x405110–0x40D670, tiles 0x4D6840–0x4D7E90, paths 0x41F3C0–0x421AE0, maps

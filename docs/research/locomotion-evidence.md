@@ -12,9 +12,8 @@ below change. Doors and window *passability* at T0 are already Data evidence
 ([ARC-WORLD-018](../world/area-step-assessment.md#whole-maps-arc-world-018)); this
 note adds what happens when the walker actually crosses.
 
-- **Source (S):** the executable's functions at the addresses given, read at level
-  F0 (not checked in the executable) unless an **O** entry or a ledger row says
-  otherwise; earlier provenance is in git history. The probe restates the rules in
+- **Source (S):** an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited or an **O** entry says
+  otherwise. The probe restates the rules in
   its own form.
 - **Original (O):** read-only disassembly of the GOG 1.0.7.4 `Arcanum.exe` at the
   addresses given (method of ARC-COMBAT-001, Xcode `llvm-objdump`). Only
@@ -117,8 +116,8 @@ across, and the ART animation letter.
 **Original check (ARC-RES-048):** LA1–LA3 are confirmed. For the leaving test the original swaps the portal and far tiles, so a walker from across can count as leaving (ledger LA4 (c)); W3's earlier "never from across" was wrong. ARC-RES-049 settled what that means for a step (W3) and recounted D3: the numbers do not change. The verdicts in the [verification ledger](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock) are authoritative.
 
 - **LA1** At Speed 8 the original returns the middle value (O `0x437A5C`, ledger
-  LA1). For the viewer's human that equals the ART's own rate (17 and 20 fps), so
-  only other bodies would notice. Proposal: follow the original.
+  LA1). For the viewer's human that equals the ART's own rate (17 and 20 fps); the
+  earlier reading differed only for other bodies. Proposal: follow the original.
 - **LA2** = combat **A4**: in combat mode the original charges 1 fatigue on every
   fifth run step (O, also checked in ARC-COMBAT-001; ledger LA2). Proposal: follow
   the original.

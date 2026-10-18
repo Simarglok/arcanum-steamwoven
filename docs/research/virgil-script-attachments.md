@@ -12,8 +12,9 @@ mode and this note. It changes no production API, viewer, conversation
 runtime, `Arcanum.Session` or launcher file.
 
 Categories as in [ARC-RES-032](virgil-level-replay.md): **Source (S)** is
-read from the executable's functions at the addresses given, level F0 (not
-checked in the executable), for the meaning of numbers only; **Data (D)** is the installed 1.0.7.4
+an earlier source reading (provenance in git history), cited by the executable
+address of its function; level F0 (not checked in the executable) unless a
+ledger row is cited; for the meaning of numbers only; **Data (D)** is the installed 1.0.7.4
 `Arcanum` module read through the [content stack](content-precedence.md) by
 the probe, so every map, sector, mobile, aggregate, terrain template,
 prototype, script and DLG is the winner of its path; **Unknown (U)** as before.
@@ -186,7 +187,7 @@ numbering without proving runtime behaviour.
 
 The read-only probe `--script-attachments` (self-test
 `--script-attachments-self-test` covers the lenient GF scan, the number search
-and the sector key), the editor sources of section 4, source reading of the executable's functions for the meaning of numbers, and the
-line decoder of [ARC-RES-032](virgil-level-replay.md). Earlier provenance is
-in git history.
+and the sector key), the editor sources of section 4, the earlier source reading (cited by executable address, level F0;
+provenance in git history) for the meaning of numbers, and the
+line decoder of [ARC-RES-032](virgil-level-replay.md).
 

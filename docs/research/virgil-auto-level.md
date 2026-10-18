@@ -14,11 +14,10 @@ level-up runtime, character-point purchase or party state. Requirements:
 
 Categories, as in [ARC-RES-026](virgil-follow-consent.md):
 
-- **Source (S):** read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable) unless a
-  [verification ledger](original-verification-ledger.md) row is cited; names
-  of unnamed functions are read for intent. Earlier provenance is in git
-  history.
+- **Source (S):** an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a [verification ledger](original-verification-ledger.md)
+  row is cited; names of unnamed functions are read for intent.
 - **Data (D):** the authenticated normal-game Crash Site aggregate, the six
   pinned archives and the installed content stack, read by the probe below. T0
   is the serialized state before any tick, script or player action.
@@ -256,7 +255,7 @@ matters only once both schemes are complete, since a running rule spends them.
 
 ## Method
 
-Source reading of the executable's functions through the call chains above, plus the
+The earlier source reading (cited by executable address, level F0 unless a ledger row is cited) through the call chains above, plus the
 read-only probe `--virgil-auto-level` (self-test
 `--virgil-auto-level-self-test` covers the rule grammar, the bonus-point rule,
 the follower-level rule with its gap invariant over every input, and the

@@ -15,8 +15,9 @@ they depend on loaded data.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable), or from the
+- **Source fact**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function, level F0 (not checked in
+  the executable), or from the
   [verification ledger](original-verification-ledger.md) (ARC-RES-048), where
   the retail 1.0.7.4 executable already settled the reading. Every parser in
   the probe follows the load map's reading.
@@ -217,7 +218,7 @@ Source fact (parse (0x4E9C20)): tokens split on space and comma, an
 attribute then its operator (`min`/`max` take the next token); the ledger
 (LM9, SH-07) records that the original reads the number after `*` and `/`
 (the earlier reading stored 0) and has no bound on pairs, while each attribute collection has
-seven slots (size).
+seven slots.
 
 | Measure | `effect.mes` | `gameeffect.mes` |
 | --- | ---: | ---: |
@@ -262,7 +263,7 @@ also use monster art.
 degree, 237 a monster damage table.
 
 **Items (798).** Seven carry the valid-AI-action item flag, each with a
-matching action number (order): food 10094 healing light, 10154
+matching action number: food 10094 healing light, 10154
 and 10158 healing heavy, 10157 cure poison, 10155 and 10156 fatigue recover,
 and generic 15179 offensive; no item has an action number without the flag.
 Items with at least one spell: 84 scrolls, 43 food, 16 generic, 7 weapons, 5

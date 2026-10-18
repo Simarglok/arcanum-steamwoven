@@ -17,25 +17,21 @@ links that narrow new admission separately.
 
 All claims use **Original/source-confirmed**, **Project policy**, **Hypothesis** or
 **Unknown**. Original/source-confirmed has an explicit subtype: **F0 reading**
-means the executable's functions at the addresses given were read, level F0 (not
-checked in the executable); **historical original metadata** means earlier
+means an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited; **historical original metadata** means earlier
 identity-bound observations, not a new read/runtime observation. Review must
 independently inspect sources and recompute tables, not infer a pass from this
 record or from source acquisition alone.
 
 ## Provenance
 
-The source trace below describes the executable's functions at the addresses
-given, level F0 (not checked in the executable) unless a ledger row is cited;
-earlier provenance is in git history. No archived tool, Windows environment or
+The source trace below is an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. No archived tool, Windows environment or
 original executable was run. No original input, payload, image or game capture was
 uploaded or copied.
 
 ## Bounded normal-path source trace
 
-Every S row is **Original/source-confirmed (F0 reading)**: read from the
-executable's functions at the addresses given, level F0 (not checked in the
-executable), conditional on the specified branch. Not original-runtime proof. The
+Every S row is **Original/source-confirmed (F0 reading)**: an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited,
+conditional on the specified branch. Not original-runtime proof. The
 reading retains cryptic symbols, explicit gaps and implementation caveats. No full
 combat/movement engine survey was performed. The table is prose specification
 evidence, not reusable code.
@@ -57,9 +53,9 @@ evidence, not reusable code.
 | Claim / classification | Supported conclusion / excluded inference |
 | --- | --- |
 | Original/source-confirmed (F0 reading), S1/S5 | Location and offsets change separately and may be rebased before segment completion; not original-runtime exact boundary proof. |
-| Project policy, P1–P3 | Normalized signed integer centers, linear interpolation, directed half-way equality, one diagonal commit/no shoulder ownership. No claim of integer-boundary equivalence with the executable's functions. |
+| Project policy, P1–P3 | Normalized signed integer centers, linear interpolation, directed half-way equality, one diagonal commit/no shoulder ownership. No claim of integer-boundary equivalence with the original. |
 | Project policy, P4–P6 | Owner smooth-return/finish rule, cancellation latch, pending replacement and timestamp ordering. Source press/release route was not established; do not label it original. |
-| Project policy, P7 | Explicit positive frozen step duration, return at same segment speed, Walk while moving and Idle settled, outbound/reverse-return facing. Separate from the executable's frame-offset displacement/stat scheduler (S4/S7, F0). |
+| Project policy, P7 | Explicit positive frozen step duration, return at same segment speed, Walk while moving and Idle settled, outbound/reverse-return facing. Separate from the frame-offset displacement/stat scheduler of the earlier source reading (S4/S7, F0). |
 | Original/source-confirmed (F0 reading), S2/S3 | Map delta to numeric path/current-ART rotation in inspected normal begin. Compass meaning/general facing/visual adapter remain Unknown. |
 | Original/source-confirmed (F0 reading), S4/S6 | Frame offsets accumulate in motion fields; normal completion restores previous action. The actor placement formula still does not add frame offset a second time in the final normal rectangle. |
 | Unknown | Original executable interpolation, release/tie/turn parity, frame-distance/speed, dynamic invalidation/recovery and generalized motion. No unexplained source branch filled from diagnostic defaults. |
@@ -155,13 +151,13 @@ accepted original-runtime NOT_VERIFIED survive review/publication handoffs.
 
 | ID / required behavior | Production/spec seam | Independent oracle | Actual check / result | Disposition |
 | --- | --- | --- | --- | --- |
-| AC1 Classified coordinates/bounds/centers/neighbors/facing/interpolation/start-stop-turn/time/Idle-Walk; FPS not speed | Contract P1–P7; exact normal location/animation definitions/callers S1–S7, not diagnostic motion | Direct definitions and normal caller trace (F0); Reviewer independently audits | Source ranges read; conditions, frame-offset motion and previous-action completion conflicts preserved; all contract claims classified; runtime NOT_VERIFIED | Developer checked; pending independent source/table review |
+| AC1 Classified coordinates/bounds/centers/neighbors/facing/interpolation/start-stop-turn/time/Idle-Walk; FPS not speed | Contract P1–P7; exact normal location/animation definitions/callers S1–S7, not diagnostic motion | Earlier source reading of definitions and normal caller trace (F0); Reviewer independently audits | Source ranges read; conditions, frame-offset motion and previous-action completion conflicts preserved; all contract claims classified; runtime NOT_VERIFIED | Developer checked; pending independent source/table review |
 | AC2 Explicit engine-independent states/API; before/on/after/corner/repeat/turn/re-input/time/rejection examples | Contract P1–P8 and synthetic worksheet only | Literal exact/rational anchors and motion transcripts; Reviewer recomputation | Executed53 cases incl signed directions, cancellation/settlement arithmetic, multi-event/partition equivalence, duration validation and separate traversal rejection; no shared production constants; API-only boundaries explicitly not implemented | Developer checked; pending independent recomputation/specification audit |
 | AC3 91 Unknown frontier, cardinal edges, diagonals, actor/context/static/dynamic/cross-sector; Unknown never Open | Contract readiness table; existing passability/component/static boundaries; S8/S9 | Historical admitted-profile vocabulary/results plus directly inspected source dependencies | Current91 vs historical3033 attributed separately; destination-only static boundary, all missing contributors and incomplete branch retained; no total Open inference | Developer checked; real traversal NOT READY, not a required implementation |
-| AC4 Exact function names/addresses, historical local metadata, conflicts and limits | Source matrix/historical identities | Direct reads of the cited functions; no new original inputs opened | Functions at the cited addresses read (F0); earlier provenance in git history; original-runtime NOT_VERIFIED explicitly accepted | Developer checked; pending Reviewer provenance audit |
+| AC4 Exact function names/addresses, historical local metadata, conflicts and limits | Source matrix/historical identities | Earlier source reading cited by function address; no new original inputs opened | Functions cited by executable address (F0); earlier provenance in git history; original-runtime NOT_VERIFIED explicitly accepted | Developer checked; pending Reviewer provenance audit |
 | AC5 Local doc/link/probe/privacy checks and independent whole-contract exact-head review | Three docs plus synthetic worksheet; native review | Exercised link checker with negative controls, Git diff/scope and independent dev-reviewer | Probe executed; local link/source/hash/privacy/diff outputs bound in handoff; no CI/build/export needed; review NOT_VERIFIED until native verdict | Local gates checked; OPEN independent native review |
 | F-POLICY Ratification before freeze, conformant P1–P8 | Root decision and contract | Orchestrator ratification720 with controlling clarifications | Root decision read; directed equality, immutable cancellation, batch ordering, explicit timing/permit boundaries carried into candidate | CLOSED ratification; Developer conformance checked, independent audit pending |
-| F-EVIDENCE Actual source access | Source trace (earlier acquisition record in git history) | Direct reads of the cited functions | Planner's missing execution evidence resolved by actual reading; no fake source pass or derived independent oracle | CLOSED access gap; reading-to-original parity still Unknown |
+| F-EVIDENCE Actual source access | Source trace (earlier acquisition record in git history) | Earlier source reading cited by function address | Planner's missing execution evidence resolved by actual source reading; no fake source pass or derived independent oracle | CLOSED access gap; reading-to-original parity still Unknown |
 | F-HISTORY Preserve distinct historical/current tile-name admissions | Historical section and readiness table | Sector evidence historical3033 and component evidence current91 | Both retained as different probe stages, neither relabelled fresh nor total Open | CLOSED candidate check; independent audit pending |
 | F-SEAMS No diagnostic free-motion/floor/facing/FPS rebranding or production change | Candidate diff and explicit contract boundary | Exact allowed-path diff and Reviewer source inspection | Documentation plus independently authored synthetic worksheet only; diagnostic production code unchanged | CLOSED candidate scope check; independent audit pending |
 

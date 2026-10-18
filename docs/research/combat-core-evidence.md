@@ -20,11 +20,12 @@ Critical-effect tables (FR-COMBAT-009), projectiles and ammunition
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable) unless a row of the
+- **Source fact**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a row of the
   [original verification ledger](original-verification-ledger.md) is cited.
   Many functions keep decompiler names (`sub_…`), so a reading of their
-  intent is marked as such. Earlier provenance is in git history.
+  intent is marked as such.
 - **Anomaly**: a branch that looks inconsistent (a likely decompilation or
   reconstruction slip). It is recorded, never adopted silently; the retail
   behaviour is unknown except for A1–A10, which were checked against the
@@ -120,7 +121,7 @@ truncating toward zero. Distances are Chebyshev cell distances, as in the
   (`1000 / rate`, 30..800 ms) minus `10 × (weapon speed − 10)` ms, clamped
   again to 30..800 ms
   (attack begin/update (0x432700, 0x432990)). Damage is applied once, by the hit
-  step of the attack goal (goal, hit step (0x42A630)).
+  step of the attack goal (hit step (0x42A630)).
 - **C5** Real-time repetition: the PC's attack goal restarts on the same
   target while combat mode and the `auto_attack` setting are on, the target is
   alive and not busted, no round is active, the PC is not flagged non-lethal
@@ -225,7 +226,7 @@ Order of resolution in `sub_4B3170` (0x4B3170):
 1. **Hit location.** Torso means "not aimed": the location is rolled
    (d100 ≤ 70 torso, ≤ 85 leg, ≤ 95 arm, else head) (roll (0x4B65A0)). Any
    other location marks an aimed attack with penalty head −50, arm −30,
-   leg −30 (penalties).
+   leg −30.
 2. **Ammunition.** Only a PC or a PC's follower consumes ammunition; on
    shortage the attack ends with an out-of-ammo sound and the weapon switch
    (ammo (0x4B65D0)).
@@ -540,12 +541,11 @@ take randomness from an injected, seedable source so tests can pin every roll.
 
 ## Method
 
-Reading of the executable's functions only, through the call chains named in
-each row: the combat functions (0x4B1D50–0x4B83E0) in full, and the called
-parts of the skill, item, object, critter, animation, AI, fate, random and
-time-event functions and the UI callers. Evidence level F0 unless a ledger row
-is cited; earlier provenance is in git history. Names in this document are
-descriptive.
- The open questions are the parts this reading
-could not settle.
+An earlier source reading (provenance in git history), organised by the
+executable functions it cites, through the call chains named in each row: the
+combat functions (0x4B1D50–0x4B83E0) as a whole, and the called parts of the
+skill, item, object, critter, animation, AI, fate, random and time-event
+functions and the UI callers. Evidence level F0 unless a ledger row is cited.
+Names in this document are descriptive. The open questions are the parts this
+reading could not settle.
 

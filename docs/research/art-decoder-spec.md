@@ -3,11 +3,11 @@
 ## Purpose and provenance boundary
 
 ARC-DATA-002 independently implemented the bounded public `Arcanum.Data`
-8-bpp ART one-physical-frame decoder. Its contract was read from the
-executable's ART functions (header and frame handling, palette selection,
-unflipped source addressing, the frame-data lookup and the header reader) and
-its colour-index lookup, level F0 (not checked in the executable); earlier
-provenance is in git history. The project makes no claim of measured pixel
+8-bpp ART one-physical-frame decoder. Its contract comes from an earlier source
+reading (provenance in git history) of the ART functions (header and frame
+handling, palette selection, unflipped source addressing, the frame-data lookup
+and the header reader) and the colour-index lookup; level F0 (not checked in the
+executable). The project makes no claim of measured pixel
 parity. ArcNET is not an independent confirmation.
 
 ## Contract adopted for this bounded decoder

@@ -21,11 +21,12 @@ for the module layer.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable) unless a row of the
+- **Source fact**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a row of the
   [original verification ledger](original-verification-ledger.md) is cited.
   Unnamed functions keep decompiler names (`sub_…`); a reading of their intent
-  is marked as such. Earlier provenance is in git history.
+  is marked as such.
 - **Anomaly**: a branch that looks like a slip. It is
   recorded under [section 8](#8-anomalies-found-by-this-reading), never
   adopted silently; under D2 its stage decides the fix and logs it in the
@@ -65,7 +66,7 @@ not repeated here.
    (they read its spell table and `spell.mes`); Map (with Proto inside it)
    before MagicTech-Post (summon prototypes) and Inven-Source (prototype
    checks). `spelllist.mes` is therefore read in two passes, one on each side
-   of Map (table, spell list (0x44FE30, 0x44FFA0, 0x450090, 0x4501D0)). Bless and Curse only load
+   of Map (spell list (0x44FE30, 0x44FFA0, 0x450090, 0x4501D0)). Bless and Curse only load
    texts; they reach Effect at run time, not at load.
 4. **The AI owns 150 parameter rows and nothing else on disk.** Rows load
    positionally, not by entry number: the first entry must be 0 (base) or 100
@@ -88,14 +89,14 @@ not repeated here.
    flags), TimeEvent (timers), Anim (running animations) and MonsterGen
    (spawn counters).
 7. **AI timers are never saved.** The AI time event is marked not saveable
-   (event table); every NPC gets an immediate AI event again when
+   (event type table 0x5B2188, ledger OQ2); every NPC gets an immediate AI event again when
    its sector's objects are listed (reschedule (0x4AD730, 0x4AD790), sector (0x4F1CD0)).
    Combat-focus wipes and NPC "wait here" timers are saved.
 8. **The parsers are strict in the wrong way.** A missing `.mes` line yields a
    shared "Error! Missing line" string rather than a failure
    (mes (0x4D43A0)); an unknown flag or list token in a named-key line ends the
-   process (parser); named keys are case-sensitive and must appear
-   in the expected order, or they are skipped silently (named).
+   process; named keys are case-sensitive and must appear
+   in the expected order, or they are skipped silently.
 9. **Much of the combat domain is code, not data.** Critical tables, hit
    locations, dodge criticals, material damage reduction, skill caps, training
    thresholds, tech degree tables, reaction race table, trap encodings and
@@ -109,9 +110,9 @@ not repeated here.
 
 The game library holds one table of 63 modules, each with up to ten hooks:
 init, reset, mod_load, mod_unload, exit, ping, update_view, save, load and
-resize (table). Map holds a nested table of 17 sub-modules,
-among them Effect (row 120) and Proto (row 124), run by Map's own hooks
-(map table, map init (0x40EA90), map mod load (0x40ED10)).
+resize. Map holds a nested table of 17 sub-modules,
+among them Effect and Proto, run by Map's own hooks
+(map init (0x40EA90), map mod load (0x40ED10)).
 
 | Phase | When | Order | On failure |
 | --- | --- | --- | --- |
@@ -131,51 +132,50 @@ O_Name's (map mod load (0x40ED10)).
 
 ### Combat-domain modules
 
-Rows are lines of the module table of the game library functions
-(0x4020F0–0x405070); "per game" means cleared by `reset` or
-rebuilt by `load`.
+Modules are listed in the order of the game library's module table
+(game library functions 0x4020F0–0x405070); "per game" means cleared by
+`reset` or rebuilt by `load`.
 
-| Module | Row | Hooks | Reads | Runtime state | Saved |
-| --- | --- | --- | --- | --- | --- |
-| Item-Effect | 132 | init, mod_load, mod_unload, exit | `mes\item_effect.mes`; module `mes\gameitemeffect.mes` | text tables | no |
-| Critter | 136 | init, exit | `Rules\xp_critter.mes`, `mes\critter.mes` | XP worth by level, texts | no |
-| Script | 141 | init, reset, mod_load, mod_unload, exit, save, load | `Rules\ScriptEyeCandy.mes`; module `mes\storystate.mes` | 100-entry script cache, 2000 globals, 3200 flag bits, story state | yes |
-| MagicTech | 142 | init, reset, exit | `Rules\magictech.mes`, `mes\spell.mes`, `Rules\SpellEyeCandy.mes`, `Rules\spelllist.mes` pass A | 223 spells, 25 component names, 512 run slots | via MagicTech-Post |
-| MT-AT | 143 | init, reset, exit | none | ten sorted action lists, 40-entry per-critter cache | no |
-| MT-Item | 144 | init, exit | none | 26 item triggers | no |
-| Spell | 145 | init, exit | `mes\spell.mes` through MagicTech | college and spell texts, icons | no |
-| Stat | 146 | init, exit | `mes\stat.mes` | texts | no |
-| Level | 147 | init, exit | `rules\xp_level.mes`, `rules\gamelevel.mes`, `rules\userlevel.mes`, `mes\gamelevelname.mes`, `mes\userlevelname.mes`, `mes\level.mes` | XP table, auto-level schemes | no |
-| Map › Effect | 148 › 120 | init, mod_load, mod_unload, exit | `rules\effect.mes`; module `rules\gameeffect.mes` | six effect tables of 400 | no |
-| Map › Proto | 148 › 124 | init, exit | every `proto\*.pro`; generates missing ones | permanent prototype pool | no (prototypes are written to disk only when generated) |
-| MagicTech-Post | 150 | init, save, load | `Rules\spelllist.mes` pass B | active spell runs | yes, plus per map `MT.dat` |
-| Skill | 156 | init, exit, save, load | `mes\skill.mes` | next gambling roll | yes |
-| Item | 158 | init, exit, resize | `mes\item.mes` | texts | no |
-| Combat | 159 | init, reset, exit, save, load | `mes\combat.mes`, `Rules\CombatEyeCandy.mes` | turn-based flags, turn, action points, critter list | yes |
-| TimeEvent | 160 | init, reset, exit, ping, save, load | none | timer lists for three clocks | yes, saveable types only |
-| Bless, Curse | 163, 164 | mod_load, mod_unload | module `mes\gamebless.mes`, `mes\gamecurse.mes` | texts and effect numbers | no |
-| AI | 165 | init, mod_load, mod_unload, exit | `rules\ai_params.mes`; module `rules\gameai.mes` | 150 parameter rows | no |
-| Anim | 167 | init, reset, exit, save, load | `Rules\AnimEyeCandy.mes`, `Rules\WeaponEyeCandy.mes` | 216 animation runs | yes |
-| Tech | 170 | init, exit | `mes\tech.mes` | texts | no |
-| Background | 171 | init, exit | `rules\backgrnd.mes`, `mes\gameback.mes` | background table | no |
-| Reputation | 172 | init, mod_load, mod_unload, exit | module `rules\gamerep.mes`, `mes\gamereplog.mes`, `mes\game_rp_npc_*.mes` | 1000 records | no |
-| Reaction | 173 | init, exit | `mes\reaction.mes` | texts | no |
-| Inven-Source | 177 | init, exit | `Rules\InvenSource.mes`, `Rules\InvenSourceBuy.mes` | inventory sets | no |
-| Trap | 184 | init, exit | `Rules\TrapEyeCandy.mes`, `mes\trap.mes` | texts, effects | no |
-| MT-Obj-Node | 189 | init, exit | none | node pool for spell runs | inside MagicTech-Post records |
-| MonsterGen | 190 | init, reset, exit, save, load, resize | none | 256 spawn counters | yes |
-| Party | 191 | init, reset, exit | none | 8 multiplayer slots | no: save and load exist but are not registered (party (0x4B9E50, 0x4B9EC0)) |
+| Module | Hooks | Reads | Runtime state | Saved |
+| --- | --- | --- | --- | --- |
+| Item-Effect | init, mod_load, mod_unload, exit | `mes\item_effect.mes`; module `mes\gameitemeffect.mes` | text tables | no |
+| Critter | init, exit | `Rules\xp_critter.mes`, `mes\critter.mes` | XP worth by level, texts | no |
+| Script | init, reset, mod_load, mod_unload, exit, save, load | `Rules\ScriptEyeCandy.mes`; module `mes\storystate.mes` | 100-entry script cache, 2000 globals, 3200 flag bits, story state | yes |
+| MagicTech | init, reset, exit | `Rules\magictech.mes`, `mes\spell.mes`, `Rules\SpellEyeCandy.mes`, `Rules\spelllist.mes` pass A | 223 spells, 25 component names, 512 run slots | via MagicTech-Post |
+| MT-AT | init, reset, exit | none | ten sorted action lists, 40-entry per-critter cache | no |
+| MT-Item | init, exit | none | 26 item triggers | no |
+| Spell | init, exit | `mes\spell.mes` through MagicTech | college and spell texts, icons | no |
+| Stat | init, exit | `mes\stat.mes` | texts | no |
+| Level | init, exit | `rules\xp_level.mes`, `rules\gamelevel.mes`, `rules\userlevel.mes`, `mes\gamelevelname.mes`, `mes\userlevelname.mes`, `mes\level.mes` | XP table, auto-level schemes | no |
+| Map › Effect | init, mod_load, mod_unload, exit | `rules\effect.mes`; module `rules\gameeffect.mes` | six effect tables of 400 | no |
+| Map › Proto | init, exit | every `proto\*.pro`; generates missing ones | permanent prototype pool | no (prototypes are written to disk only when generated) |
+| MagicTech-Post | init, save, load | `Rules\spelllist.mes` pass B | active spell runs | yes, plus per map `MT.dat` |
+| Skill | init, exit, save, load | `mes\skill.mes` | next gambling roll | yes |
+| Item | init, exit, resize | `mes\item.mes` | texts | no |
+| Combat | init, reset, exit, save, load | `mes\combat.mes`, `Rules\CombatEyeCandy.mes` | turn-based flags, turn, action points, critter list | yes |
+| TimeEvent | init, reset, exit, ping, save, load | none | timer lists for three clocks | yes, saveable types only |
+| Bless, Curse | mod_load, mod_unload | module `mes\gamebless.mes`, `mes\gamecurse.mes` | texts and effect numbers | no |
+| AI | init, mod_load, mod_unload, exit | `rules\ai_params.mes`; module `rules\gameai.mes` | 150 parameter rows | no |
+| Anim | init, reset, exit, save, load | `Rules\AnimEyeCandy.mes`, `Rules\WeaponEyeCandy.mes` | 216 animation runs | yes |
+| Tech | init, exit | `mes\tech.mes` | texts | no |
+| Background | init, exit | `rules\backgrnd.mes`, `mes\gameback.mes` | background table | no |
+| Reputation | init, mod_load, mod_unload, exit | module `rules\gamerep.mes`, `mes\gamereplog.mes`, `mes\game_rp_npc_*.mes` | 1000 records | no |
+| Reaction | init, exit | `mes\reaction.mes` | texts | no |
+| Inven-Source | init, exit | `Rules\InvenSource.mes`, `Rules\InvenSourceBuy.mes` | inventory sets | no |
+| Trap | init, exit | `Rules\TrapEyeCandy.mes`, `mes\trap.mes` | texts, effects | no |
+| MT-Obj-Node | init, exit | none | node pool for spell runs | inside MagicTech-Post records |
+| MonsterGen | init, reset, exit, save, load, resize | none | 256 spawn counters | yes |
+| Party | init, reset, exit | none | 8 multiplayer slots | no: save and load exist but are not registered (party (0x4B9E50, 0x4B9EC0)) |
 
 Fate is not a module and reads nothing; critical hit and miss types are enums
-only, and every critical table is code in the combat functions (tables).
-Description (row 131) and O_Name (Map sub-module) supply the names and
+only, and every critical table is code in the combat functions.
+Description and O_Name (Map sub-module) supply the names and
 descriptions of [section 5](#5-prototypes-and-object-fields).
 
 ## 2. Where each file comes from
 
 The mount order and the loose-over-archive rule are in
-[content precedence](content-precedence.md); the executable's functions are
-repository add and open. What this reading adds is
+[content precedence](content-precedence.md). What this reading adds is
 the time axis:
 
 - **Init files see the base only.** `gamelib_init` mounts `arcanum*.dat` and
@@ -199,7 +199,7 @@ means a missing file fails that phase.
 
 | File | Module, phase | Keys | Req. | Content |
 | --- | --- | --- | --- | --- |
-| `rules\ai_params.mes` | AI, init | pos. from 0, rows 0..99 | yes | 17 integers per row (params, init (0x4A8320)) |
+| `rules\ai_params.mes` | AI, init | pos. from 0, rows 0..99 | yes | 17 integers per row (init (0x4A8320)) |
 | `rules\gameai.mes` | AI, mod_load | pos. from 100, rows 100..149 | no | same (module (0x4A8400)) |
 | `Rules\magictech.mes` | MagicTech, init | num. 10..34 | yes, each | 25 component type names for `Type:` (init (0x44EF50, 0x44F150, 0x44F160)) |
 | `mes\spell.mes` | MagicTech + Spell, init | num. 0..222, 500..515, 700..779, 8000..8015, 9000..9015 | yes | spell names, college names, spell, college and mastery descriptions (spell (0x4B1440)) |
@@ -245,15 +245,15 @@ means a missing file fails that phase.
 - **Named keys** (`Key:` value lines, used by `spelllist.mes` and the eye
   candy files). A key must start exactly at the cursor after whitespace, the
   match is a case-sensitive prefix, and values end at `,`. A key out of the
-  expected order is skipped without advancing (named).
+  expected order is skipped without advancing.
 - **Value forms.** `(a@b)` pairs, with `b = a` when `@` is absent; a missing
-  `(` ends the process (pairs). Flag lists separate names by
-  spaces or `|`, case-insensitively; any unknown name ends the process
-  (flags). `a-b` ranges.
+  `(` ends the process. Flag lists separate names by
+  spaces or `|`, case-insensitively; any unknown name ends the process.
+  `a-b` ranges.
 - **Other formats** are tokenised by hand per module: whitespace integers (AI
   rows), `attribute operator` pairs (effects), `token value,` pairs (level
   schemes), `name: min max, rate proto, …` (inventory sources) and digit-only
-  scanners (reputation).
+  scanners (reputations).
 
 ### 4.2 Spell records
 
@@ -276,18 +276,18 @@ technology.
 Pass B runs after Map because `Proto:` needs the prototype pool
 (parse (0x457650, 0x4578F0, 0x457B20, 0x457D00, 0x457E70, 0x458060)); everything the AI and item triggers read is complete
 after pass A. Summon lists 0..2 are weighted random, 3..5 chosen by aptitude
-threshold, from tables in code (summon).
+threshold, from tables in code.
 
 ### 4.3 AI parameter rows
 
 Each row has 17 whitespace-separated integers; missing trailing values keep
-the row's previous value or zero (params, init (0x4A8320)). The
+the row's previous value or zero (init (0x4A8320)). The
 first entry must be number 0 (base) or 100 (module); if it is absent, nothing
 loads. Later entries fill rows by position until row 100 or 150 or the end of
 the file, so a gap in numbering shifts every later row (LM3). The 17th value
 says whether the NPC may open portals. The field meanings are stage A1's
 work (plan I1). Two related tables are code: "wait here" durations {0,
-15 min, 2 h, 1 day, 7 days, 30 days} by `OBJ_F_NPC_WAIT` (wait)
+15 min, 2 h, 1 day, 7 days, 30 days} by `OBJ_F_NPC_WAIT`
 and loudness radii {2, 8, 15}.
 
 ### 4.4 Effects
@@ -337,7 +337,7 @@ field is read from its prototype, resolved lazily by ID
 (inherit (0x408F40)). Which field groups a type carries is fixed per type
 (valid (0x40C260)).
 
-**Ranges** (description numbers, end exclusive, ranges):
+**Ranges** (description numbers, end exclusive):
 walls 1000..1008, portals 2008..2023, containers 3023..3061, scenery
 4006..4051, projectiles 5028..5029, weapons 6029..6179, ammo 7038..7042,
 armour 8042..8293, gold 9056..9057, food 10057..10145, scrolls 11059..11143,
@@ -367,7 +367,7 @@ the census).
 | Weapon | weapon flags (loud, silent, two-handed, throwable, boomerangs, ignore resistance, damage armour and others), to-hit bonus, damage minimum, maximum and magic adjustment for five types (normal, poison, electrical, fire, fatigue), speed, range, minimum strength (each with its magic adjustment), ammo type and use, missile and visual effect, critical hit and miss charts, magic critical chances and effects |
 | Ammo, armour, generic | ammo type and quantity; armour size and gender flags, AC and resistance adjustments, silent-move adjustment, unarmed bonus damage; generic flags (lockpick, trap device, healing item, grenade), usage bonus and count |
 
-Flag definitions: object flags. The AI finds grenades
+The AI finds grenades
 (grenades (0x4AC910)) and healing items (healing (0x4AE570)) by
 generic flags, and spell items as Answer item 5 describes
 (MT-AT items (0x4CC810, 0x4CC8A0, 0x4CC930, 0x4CCA30)).
@@ -409,7 +409,7 @@ take the highest worth. Two slips: LM1, LM2.
 | Followers | objects (leader, follower list) | object data; Party's own save is unregistered |
 | Per-critter spell/item AI cache | MT-AT | not saved; cleared on reset (reset (0x4CC210)) and on teleport (teleport (0x459F50)) |
 
-**Timers** (table). Saved: animation, script, magic/tech, poison,
+**Timers** (event type table 0x5B2188). Saved: animation, script, magic/tech, poison,
 resting, fatigue, aging, turn-based combat, NPC wait here, lock, NPC respawn,
 magic item recharge, body decay, item decay, combat-focus wipe, traps, scenery
 respawn, random encounter and others. Not saved: **AI**, debug, background
@@ -432,25 +432,25 @@ loader does not look for one:
 - **Combat**: hit location penalties (torso 0, head −50, arm and leg −30),
   random location (torso 70, leg 15, arm 10, head 5), dodge critical chance
   by training, material damage reduction for portals and containers, damage
-  type to resistance (fatigue uses normal) (tables,
-  location (0x4B65A0)), weapon wear by material, critical ladders, action
+  type to resistance (fatigue uses normal)
+  (location (0x4B65A0)), weapon wear by material, critical ladders, action
   points `max(5, Speed)`, attack cost from weapon speed, perception range
   (formulas in the [combat core research](combat-core-evidence.md)).
 - **Skills**: key stat per skill, training minimums 0/1/9/18, maximum level by
   stat, opposed-skill table, gambling costs, pick-pocket penalties, monster
-  melee thresholds (tables).
+  melee thresholds.
 - **Stats**: limits and defaults, per-level cost, beauty to reaction, race
   maxima, background modifiers, derived formulas (derived (0x4B0740)).
 - **Technology**: degree cost, level percentage {0, 10, 20, 35, 50, 65, 80,
   100}, minimum intelligence {0, 5, 8, 11, 13, 15, 17, 19}, schematic number
-  1990 + 200·discipline + 10·degree (tables).
+  1990 + 200·discipline + 10·degree.
 - **Magic**: minimum level per spell rank {1, 1, 5, 10, 15}, college icons,
   spell price 100, dwarves pay double, mastery halves the cost and doubles
-  the maintenance period (levels, cost (0x4B1660, 0x4B16C0, 0x4B1740)); summon
-  tables (summon).
-- **Reaction**: an 11×8 race table (race table). **Traps**:
+  the maintenance period (cost (0x4B1660, 0x4B16C0, 0x4B1740)); summon
+  tables.
+- **Reaction**: an 11×8 race table (0x5B684C, ledger R1 term). **Traps**:
   scripts 30000..30007, placed prototypes 26000..26007, disarm items
-  (trap (0x4BBD00)). **Spawners**: rate intervals (rates).
+  (trap (0x4BBD00)). **Spawners**: rate intervals.
 - **Items**: race to armour size table (wield (0x465170)).
 
 ## 8. Anomalies found by this reading
@@ -472,12 +472,12 @@ Recorded, not adopted. "Inference" marks a reading of intent.
 | LM9 | effects (parse (0x4E9C20)) | `*N` and `/N` parse to 0 (the operator character reaches `atoi`), so a divide would be by zero; no bound on seven pairs; an unknown operator still counts | parse the number after the operator |
 | LM10 | item effects (item effect (0x4D3F60, 0x4D3FE0, 0x4D3FF0, 0x4D4050, 0x4D4080)) | the module file's last number overwrites the base maximum and is not restored on unload | keep both maxima |
 | LM11 | level cap (cap (0x4A69C0)) | when a level-up reaches the level maximum (51), the XP is capped but the level is not set, so the reachable cap is 50 | cap 50 or 51; one of the two is a slip |
-| LM12 | backgrounds (race codes) | an 8-entry race code table is indexed by the PC's race; only races 8..10 (not playable) would read out of bounds. The reaction race table has the same 11×8 shape (race table) | latent; full tables if NPC races ever reach it |
+| LM12 | backgrounds (legality (0x4C2B50)) | an 8-entry race code table is indexed by the PC's race; only races 8..10 (not playable) would read out of bounds. The reaction race table has the same 11×8 shape (table 0x5B684C) | latent; full tables if NPC races ever reach it |
 | LM13 | inventory sources (sets (0x4BF390, 0x4BF510, 0x4BF5D0, 0x4BF640)) | `id < count` makes the last set unreachable | `id <= count` |
 | LM14 | melee damage scaling (helper (0x4C6510)) | a helper always returns 100, so melee damage range scaling does nothing | a real factor; unknown |
-| LM15 | prototype ranges (ranges) | the earlier reading's range comments call 27309.. "monster" and 28310.. "unique", the description header says the opposite (header) | labels only; the census decides |
+| LM15 | prototype ranges | the earlier reading's range comments call 27309.. "monster" and 28310.. "unique", the description header says the opposite | labels only; the census decides |
 | LM16 | fatigue adjustment (setter (0x45D4F0)) | the setter named for the adjustment writes fatigue points; the earlier reading flagged the name as wrong, and nothing calls it | dead code; name only |
-| LM17 | stat lookup keys (keys) | unspent points map to the poison key and magick points to age; `Resist:` in `spelllist.mes` uses this table | correct names |
+| LM17 | stat lookup keys (stat key table 0x5B5384) | unspent points map to the poison key and magick points to age; `Resist:` in `spelllist.mes` uses this table | correct names |
 | LM18 | script cache (cache (0x44C390, 0x44C450, 0x44C480, 0x44C4B0, 0x44C4E0)) | unlock decrements only in editor mode | decrement always |
 | LM19 | spell run load (save (0x44F250, 0x44F3C0, 0x44F540)) | skipped slots are not cleared on load; latent, because a load first runs the reset that clears all 512 slots | clear them in the loader itself |
 | LM20 | bless/curse (bless (0x4C4110, 0x4C4130, 0x4C4150, 0x4C4170)) | a missing module file leaves an invalid handle that is searched anyway; curse copies its name unbounded (curse (0x4C3CC0)) | guard both |
@@ -542,15 +542,16 @@ stack and recorded local aggregates only, as [ARC-RES-036](data-census.md) and
 
 ## Method
 
-Reading of the executable's functions only, in three parallel passes with spot
-checks of the cited functions: the game library and map functions (module
+An earlier source reading (provenance in git history), organised by the
+executable functions it cites, in three parallel passes with spot checks of
+the cited functions: the game library and map functions (module
 tables and phases), the file functions (mounting), the prototype and object
 functions and object flags (prototypes and fields), and the AI, AI spell list,
 magick/tech, item spell, spell, tech, effect, item effect, bless, curse,
 spell-run node, combat, skill, stat, level, critter, background, reaction,
 reputation, inventory source, trap, monster generator, party, fate, item,
 animation, script, script name, time event, message file and string parser
-functions. Evidence level F0 unless a ledger row is cited; earlier provenance
-is in git history. Names in this document are descriptive.
+functions. Evidence level F0 unless a ledger row is cited. Names in this
+document are descriptive.
 
 

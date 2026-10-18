@@ -8,9 +8,7 @@ Crash Site sector. It corrects the earlier *hypothesis* that the byte after the
 specification, a production loader, an asset resolver, or a static-scene
 claim.
 
-The behavior below is read from the executable's functions at the addresses
-given, level F0 (not checked in the executable); earlier provenance is in git
-history. It is not independent confirmation. The numeric results are an experiment on the one
+The behavior below is an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. It is not independent confirmation. The numeric results are an experiment on the one
 fingerprinted user-owned input. No game bytes, names, object IDs, or extracted
 assets are committed.
 
@@ -43,7 +41,7 @@ not write the input or extract its payload.
 
 ## Source map and loader order
 
-The map is a behavioral attribution to the executable's functions (F0).
+The map is a behavioral attribution from an earlier source reading (F0), cited by function address.
 
 | Stage | Source map | What it establishes for the base `.sec` stream |
 | --- | --- | --- |
@@ -87,7 +85,7 @@ framing result.
 ## Resolution of the earlier `1 / 119` discrepancy
 
 The prior `1` at offset 16,388 was a raw observation but not evidence of a
-retail object version. The loader order read from `sector_load_game` (F0) places the roof `empty`
+retail object version. The loader order of `sector_load_game` (earlier source reading, F0) places the roof `empty`
 discriminator at that offset. Its observed value is `1`, which selects the
 empty-roof branch and consumes no roof ART array. The next placeholder enables
 four further base-stream sections before `objlist_load` is reached. Therefore

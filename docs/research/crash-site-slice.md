@@ -19,11 +19,11 @@ that record's start coordinate. No neighbouring sector is included.
 | Community context | The preserved Terra-Arcanum catalogue records a historical Crash Site page and image URL. | reported; context only |
 | Map selector | Raw DAT entry `Rules\MapList.mes` is ordinal 14,935, compressed with `0x00000002`, and decodes to 5,454 bytes. Record 5,000 is the observed module's sole `START_MAP`; it names `Arcanum1-024-fixed` and gives `(92958, 82592)`. | experimentally verified locally; high |
 | Map properties | Raw entry `maps\Arcanum1-024-fixed\map.prp` is ordinal 8,023; its 24 decoded bytes begin with observed words `2`, `1`, and a little-endian pair `(128000, 128000)`. No semantic labels are assigned. | experimentally verified byte observation; high |
-| Sector selector | `sector_id_from_loc` (0x4CFC50) shifts both location coordinates by six and packs the results. Applied to the start coordinate, that gives `(1452, 1290)` and `86570436012`. The matching sector entry is ordinal 463 and decodes to 47,291 bytes. | entry and size experimentally verified; coordinate interpretation F0 (read from the executable's function, not checked in the executable); medium |
-| Framed object window | The final signed little-endian word is `317`. The corrected section order read from `sector_load_game` (0x4D1A30, F0) places the object window at `17140..47287`; the bounded v119 delimiter consumes 317 records to the terminal count. | byte experiment plus F0 order; medium |
+| Sector selector | `sector_id_from_loc` (0x4CFC50) shifts both location coordinates by six and packs the results. Applied to the start coordinate, that gives `(1452, 1290)` and `86570436012`. The matching sector entry is ordinal 463 and decodes to 47,291 bytes. | entry and size experimentally verified; coordinate interpretation F0 (earlier source reading, not checked in the executable); medium |
+| Framed object window | The final signed little-endian word is `317`. The corrected section order of `sector_load_game` (0x4D1A30; earlier source reading, F0) places the object window at `17140..47287`; the bounded v119 delimiter consumes 317 records to the terminal count. | byte experiment plus F0 order; medium |
 
-The F0 readings of the executable's functions are not independent
-corroboration; earlier provenance is in git history.
+The source readings here are an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited; they are not
+independent corroboration.
 
 ## Frozen input
 
@@ -39,7 +39,7 @@ corroboration; earlier provenance is in git history.
 | Sector entry | module DAT ordinal 463, flag `0x00000002`, decoded length 47,291 |
 | Terminal object count | 317; not a count of static scenery |
 
-The one-sector extent follows the executable's sector shift (F0), not a claim about
+The one-sector extent follows the sector shift of the earlier source reading (F0), not a claim about
 all formats or maps.
 
 ## Bounded selector and safety limits
@@ -126,7 +126,7 @@ silently guess.
 
 - User-owned module archive: local, read-only evidence above.
 - Existing project reader: `src/Arcanum.Data/DatArchive.cs`.
-- Executable functions, read at level F0: the sector functions
+- Earlier source reading (F0), cited by executable address: the sector functions
   0x4CEF70–0x4D31C0, the sector tile list 0x4F7BA0–0x4F7DF0, the sector object
   list 0x4F1150–0x4F2330, the location functions 0x4B8440–0x4B99C0, and the ART
   library's identifier functions; earlier provenance is in git history.

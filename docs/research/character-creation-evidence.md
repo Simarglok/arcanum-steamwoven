@@ -10,10 +10,10 @@ rules (FR-CHAR-008..011) are only touched where creation resets them.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable) unless a row of the
+- **Source fact**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a row of the
   [original verification ledger](original-verification-ledger.md) is cited.
-  Earlier provenance is in git history.
 - **Local observation**: read on the owner's unchanged installation
   (`arcanum1..4.dat`, module `Arcanum.dat`/`Arcanum.PATCH0`, loose `data/proto`)
   with the bounded entry reader of `tools/research/dat_probe.py`
@@ -46,7 +46,7 @@ installation that is record 5000 `Arcanum1-024-fixed`, location
 `(92958, 82592)`, the same Crash Site selector the
 [Crash Site slice](crash-site-slice.md) already uses.
 
-## The sequence in the executable
+## The sequence
 
 1. **Game reset.** `gameinit_reset` opens the map list's `SHOPPING_MAP` (falls
    back to `START_MAP`) and calls `player_create`, which makes a PC from the
@@ -54,11 +54,9 @@ installation that is record 5000 `Arcanum1-024-fixed`, location
    placeholder ART id
    (gameinit_reset (0x4B9BE0),
    player_create (0x40D8A0),
-   type→default prototype,
    map types in the map list (0x4125C0)).
 2. **Single player → New game** opens a screen with pre-made, new and a third button (target −2, presumably back)
-   (buttons,
-   screen (0x5446D0)).
+   (screen (0x5446D0)).
 3. **Every new PC** is made by `player_obj_create_player`: the old PC is
    destroyed, a new object is created from the chosen prototype at the old
    PC's location, it becomes the local PC, then `level_set(pc, 1)`, then
@@ -70,8 +68,8 @@ installation that is record 5000 `Arcanum1-024-fixed`, location
    stat, skill, spell and tech to its default, sets level 1 and its XP, adds the
    level bonus points (none at level 1), and runs the object's auto-level
    scheme (none for the generic PC)
-   (level_set (0x4A6F00),
-   defaults: primary stats 8, level 1, 5 unspent points).
+   (level_set (0x4A6F00); defaults: primary stats 8, level 1, 5 unspent
+   points).
    Whatever stats a prototype stores are therefore not the hero's stats; the
    scheme and the editor are.
 5. **Start.** Leaving the last screen calls `sub_5412E0`: if the new-character
@@ -85,9 +83,7 @@ installation that is record 5000 `Arcanum1-024-fixed`, location
 
 - The browser starts at index 1 and cycles 1..`count−1`; index *i* is
   prototype `16066 + i`. `count` is 9 (eight heroes)
-  (browse (0x545870, 0x5458D0, 0x5459F0),
-  count,
-  ids).
+  (browse (0x545870, 0x5458D0, 0x5459F0)).
 - The program's start-up code clears the gender-lock flag (initially set) before menu init, and
   then at menu init `sub_549A80` checks whether prototype 16075 exists and its ART
   exists. If so, `count` becomes 13 (twelve heroes, the last four female) **and
@@ -95,7 +91,6 @@ installation that is record 5000 `Arcanum1-024-fixed`, location
   gender buttons; otherwise gender cannot be changed at all. This answers the
   earlier reading's "only 8 buttons" question
   (gate (0x549A70, 0x549A80),
-  window, 8 of 10 buttons,
   gender buttons guarded by the flag (0x544FF0)).
 - Picking one: `player_obj_create_player` with that prototype; then for
   `j = 0..count−2` the message `551 + j` of the main-menu messages is read as a
@@ -145,8 +140,7 @@ document.
   Changing race or gender **clears the background first**, sets the body type
   from the race table, keeps female only where the table allows it (human,
   elf, half-elf, half-orc), and selects the first matching portrait
-  (race/gender (0x545350, 0x5453A0, 0x545440, 0x545490, 0x545550, 0x5455D0),
-  race table).
+  (race/gender (0x545350, 0x5453A0, 0x545440, 0x545490, 0x545550, 0x5455D0)).
 - Background step: `background_clear` (fields to 0, removes the effect caused
   by background) then `background_set` (stores the id and its description id
   and adds the background's effect). Re-selection therefore never stacks
@@ -165,8 +159,7 @@ document.
   (accept (0x544FF0)); creation mode
   spends the 5 points. The editor's accept advances the window index by one,
   to the shop
-  (window order,
-  editor button (0x545C70),
+  (editor button (0x545C70),
   advance (0x5480C0)).
 - **Shop.** Opening it calls `item_generate_inventory(pc)`: it destroys the
   PC's whole inventory, applies the background's money and items, and if no
@@ -180,16 +173,15 @@ document.
   (shop (0x545E80),
   inventory (0x460FF0)).
   With no shop map at all the function starts the game before the
-  new-game flag is set, so the start-map teleport is skipped (ledger row
-  "Character creation", Original); this
+  new-game flag is set (ledger row "Character creation", Original), so by the
+  start code above the start-map teleport is skipped; this
   installation has a shop map, so the normal path applies.
 
 ### Backgrounds and starting gold
 
 `rules/backgrnd.mes` holds blocks of 10 messages per background `b`: `10b+0`
 description id (in `mes/gameback.mes`), `+1` effect id, `+2` condition string,
-`+3` money, `+4` item prototype list
-(layout).
+`+3` money, `+4` item prototype list.
 A background is offered when its condition is empty or contains the
 two-letter race code plus `M`/`F`, or `ANY`; `NPC` admits only NPC objects
 (legality (0x4C2B50),

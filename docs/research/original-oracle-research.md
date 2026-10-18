@@ -27,11 +27,11 @@ The question: how to build a complete, checkable evidence base that Steamwoven b
 - **The executable carries most of what the reconstruction was used for.**
   - Ghidra 12.1.4 with its full auto-analysis plus a small script that creates functions at pointers found in `.data`
     and `.rdata` found 5,551 functions without any reconstruction input. 4,608 of them start at one of the 4,981 function
-    addresses the reconstruction annotated (92.5 %); 373 of those were not found yet (most near 0x570000, the interface
+    addresses the reconstruction annotated (92.5 %); 373 of the 4,981 annotated addresses were not found yet (most near 0x570000, the interface
     code) and 943 functions had no annotated address. The annotated addresses were used only to measure this.
   - The object field names are in the executable as a table of 338 string pointers at 0x59BEA8, from `obj_f_begin` to
     `obj_f_max`, in field order; the stat names are a table of 22 pointers at 0x5B5384 in stat order (`stat_level` is
-    17, `stat_experience_points` 18, the numbers the oracle saw in real calls). These replace the reconstruction's field and stat headers.
+    17, `stat_experience_points` 18, the numbers the oracle saw in real calls). These can replace the reconstruction's field and stat headers.
   - The reconstruction gave 4,980 distinct names for its 4,981 addresses. Of its 3,820 descriptive names, 279 occur
     verbatim in the executable's own strings (animation and magic messages), and five Troika source paths appear
     (`GameLibX\Anim.c` and others). The other names were its own; 1,160 more functions had only `sub_…` names.

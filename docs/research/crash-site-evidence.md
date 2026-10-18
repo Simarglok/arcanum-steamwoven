@@ -16,13 +16,13 @@ copy.
 | Bounded loose-ART check | three explicit relevant installation ART roots: root, `data`, and `modules` | direct generated-path check for the corrected and historical sets | all three roots existed, but none contained a generated corrected or historical candidate file; zero candidates for both sets; no recursive scan or loose-file precedence policy inferred |
 | Project reader | `src/Arcanum.Data/DatArchive.cs` | bounded DAT opening and in-memory entry decode | independently authored project implementation |
 | Project ART decoder | `src/Arcanum.Data/ArtDecoder.cs` | bounded selected-frame metadata/decode for representative terrain paths | no scene-parity or general precedence claim |
-| Executable functions | sector, location and name functions, read at level F0 (not checked in the executable) | sector sequence, coordinate packing, isometric relation, ART-ID context | not independent corroboration; earlier provenance in git history |
+| Earlier source reading | sector, location and name functions, cited by executable address; level F0 (not checked in the executable) | sector sequence, coordinate packing, isometric relation, ART-ID context | not independent corroboration; earlier provenance in git history |
 | Community catalogue | preserved toolkit metadata | Crash Site context | reported only; not byte-level map proof |
 
-The functions read were the sector functions (0x4CEF70–0x4D31C0) with their
+The functions cited were the sector functions (0x4CEF70–0x4D31C0) with their
 light, tile, roof, script, sound, block and object lists, the location functions
 (0x4B8440–0x4B99C0), the name functions (0x41CA40–0x41F240, 0x4EAC80–0x4ED440),
-and the ART library's identifier functions.
+and the ART library's identifier functions (earlier source reading, F0).
 
 ## Reproduction commands
 
@@ -117,7 +117,7 @@ rule was inferred from these observations.
   footprints, source/destination crop, raw-tile flip, and a mode-qualified
   order. Lighting/palette behavior, camera/dirty-rectangle policy, normal-game
   facade rendering, and scene comparison remain unmeasured.
-- The location formula is read from `location_xy` (0x4B8680, F0) and numeric synthetic checks verify
+- The location formula comes from an earlier source reading of `location_xy` (0x4B8680, F0) and numeric synthetic checks verify
   only its relative arithmetic, not visual parity.
 
 The three deliverables have separate readiness verdicts:

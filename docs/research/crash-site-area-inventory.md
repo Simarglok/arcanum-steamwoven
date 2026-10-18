@@ -9,7 +9,7 @@ loaded/live readiness remains NOT_READY.
 ARC-RES-015 expands the [frozen initial sector](crash-site-slice.md) into a
 reproducible **research area**, not a production loader, scene or gameplay implementation.
 
-- **Source fact** means a reading of the executable's functions, level F0 (not checked in the executable) unless a ledger row is cited, not original execution.
+- **Source fact** means an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited; not original execution.
 - **Local observation** means a bounded read of the identified unchanged installation.
 - **Project policy** means this research selection or diagnostic convention, not a stored engine boundary.
 - **Unknown / NOT_VERIFIED** remains separate from parsed, resource-resolved and numerically placed.
@@ -133,7 +133,7 @@ mean a displayed sprite. Diagnostic placement means arithmetic only.
 The base regression remains **4096 terrain cells and 317 static records**, not an
 area total. Core static current ART is inherited in 39 cases and direct in 387.
 All 426 resolved static frames reference 32 distinct resource2 ART entries.
-Vegetation is confirmed by packed scenery category plus pinned enum: category1
+Vegetation is confirmed by packed scenery category plus the enum of the earlier source reading (F0): category1
 large trees=13, category2 medium trees=25, category3 small trees=27, category5
 plants=331. Remaining category counts are 6:5, 8:1, 9:3, 10:1, 11:2, 12:1,
 13:8, 15:3, 16:4, 17:1, 20:1. Category20 alone does not prove an active connector.
@@ -174,8 +174,8 @@ Source-supported narrow research normalization excludes only runtime sparse-arra
 bitset handles and trailing zero bitset-capacity words. It preserves ID/header,
 field presence, element width/count, ordered sparse keys and complete values;
 interior zero words, absence versus present-empty, nonzero suffixes and all other
-bytes remain significant. Present arrays with zero storage words fail the pinned
-FILE loader and are rejected; one word is admitted. This is not raw identity and
+bytes remain significant. Present arrays with zero storage words fail the FILE
+loader of the earlier source reading (F0) and are rejected; one word is admitted. This is not raw identity and
 not a general tolerance rule. Original hashes remain distinct. The aggregate is
 counted once; loose correspondents are validation evidence, not extra area objects.
 
@@ -289,7 +289,7 @@ and zero-capacity equivalence with negative key/value/ID/presence cases, high-bi
 static rebasing, half-open mobile boundaries and script/default inheritance.
 Topology fixtures distinguish action operands from header/condition sentinels,
 both branches, computed endpoints, one-hop calls and SAP/object-focus gaps.
-Independent private probes frame all7399 pairs using pinned field declarations,
+Independent private probes frame all7399 pairs using the field declarations of the earlier source reading (F0),
 not candidate schemas, prove the full621 selector and check selected field/default,
 ART/RGBA and numeric placement results. Independent native review remains a
 separate acceptance step. No unchanged GUI/lab rebuild, Godot export or original

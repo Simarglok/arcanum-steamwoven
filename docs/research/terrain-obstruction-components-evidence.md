@@ -2,7 +2,7 @@
 
 ## Boundary and provenance
 
-This is a bounded production-data record for three independent terrain obstruction components in one selected 64×64 base sector. It does not establish combined occupancy, actor traversal, navigation, collision, runtime state, source precedence, or original-runtime parity. The underlying serialized-mask, facade-bit, and tile-name claims are read from the executable's functions listed in [selected-sector passability evidence](sector-passability-evidence.md#source-trace-and-exact-mapping), level F0 (not checked in the executable); earlier provenance is in git history.
+This is a bounded production-data record for three independent terrain obstruction components in one selected 64×64 base sector. It does not establish combined occupancy, actor traversal, navigation, collision, runtime state, source precedence, or original-runtime parity. The underlying serialized-mask, facade-bit, and tile-name claims come from an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited; the functions are listed in [selected-sector passability evidence](sector-passability-evidence.md#source-trace-and-exact-mapping).
 
 The precise fixed selector and immutable input fingerprints remain in [selected-sector passability evidence](sector-passability-evidence.md). The public component API and admitted grammar are in [terrain obstruction components](../world/terrain-obstruction-components.md). Original files were read only; this record intentionally contains no local paths, original names, MES values, decoded bytes, masks, grids, or visual assets.
 

@@ -16,8 +16,7 @@ Categories:
   [ARC-DATA-011](content-precedence.md) (game folder, `tig.dat`,
   `arcanum1..4.dat`, `data/`, module `.dat`, `.patch0..9`, module folder),
   winner per virtual path only.
-- **Source (S):** a reading of the executable's functions, level F0 (not checked
-  in the executable), read for intent.
+- **Source (S):** an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited; read for intent.
 - **Proposal (P):** a project recommendation for ARC-DATA-015, not yet accepted.
 - **Unknown (U):** a named gap with its next check.
 

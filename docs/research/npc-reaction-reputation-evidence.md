@@ -1,7 +1,7 @@
 # NPC reaction and PC reputation
 
 Status: **Research**, work item ARC-RES-028 (2026-10-16). This document fixes
-how the pinned source specifies an NPC's reaction to a PC and the PC's
+how the earlier source reading (F0) specifies an NPC's reaction to a PC and the PC's
 reputations: what is stored, how the value a dialog `RE` gate or the companion
 consent reads is computed, which events change it, and how reputations feed
 reaction, greetings and faction membership. It prepares a reaction owner and a
@@ -15,11 +15,11 @@ follow consent of the [companion research](companion-follow-evidence.md).
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable) unless a
-  [verification ledger](original-verification-ledger.md) row is cited; earlier
-  provenance is in git history. Several functions have no known name; a
-  reading of their intent is marked as such.
+- **Source fact**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a [verification ledger](original-verification-ledger.md)
+  row is cited. Several functions have no known name; a reading of their
+  intent is marked as such.
 - **Local observation**: aggregate counts and SHA-256 digests measured on the
   owner's unchanged installation by an uncommitted scratch reading through the
   merged [`ContentStack`](content-precedence.md) and
@@ -260,10 +260,11 @@ Godot.
 
 ## Method
 
-Source reading: the reaction functions (0x4C0BD0–0x4C15A0) and the reputation
-functions (0x4C15D0–0x4C21E0) in full, every caller of their public functions,
-and the helpers named in each row; earlier provenance is in git history. Names
-in this document are descriptive.
+Source reading: an earlier source reading (provenance in git history) of the
+reaction functions (0x4C0BD0–0x4C15A0) and the reputation functions
+(0x4C15D0–0x4C21E0) in full, every caller of their public functions, and the
+helpers named in each row, cited by executable address; level F0 unless a
+ledger row is cited. Names in this document are descriptive.
 
 The local observations come from a scratch program (not committed) that opened
 the owner's installation with `ContentMountPlan.Discover` + `ContentStack.Open`

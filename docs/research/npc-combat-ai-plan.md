@@ -24,11 +24,12 @@ its subturn early") is what this plan answers.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable) unless a row of the
+- **Source fact**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a row of the
   [original verification ledger](original-verification-ledger.md) is cited.
   Unnamed functions keep decompiler names (`sub_…`); a reading of their intent
-  is marked as such. Earlier provenance is in git history.
+  is marked as such.
 - **First-pass finding**: what one reading of a function shows. Each is
   re-read and either confirmed or corrected by the stage research that owns
   it; nothing here is a contract.
@@ -147,7 +148,7 @@ executable parity is **NOT_VERIFIED**.
   `rules\ai_params.mes` (rows 0..99) and the module's `rules\gameai.mes`
   (rows 100..149), filled in file order from the first entry found rather
   than by entry number; each NPC names its row in `OBJ_F_NPC_AI_DATA`
-  (table, load (0x4A8320), module load (0x4A8400)). The local
+  (load (0x4A8320), module load (0x4A8400)). The local
   data has 41 base rows and one module row
   ([ARC-RES-028 L3](npc-reaction-reputation-evidence.md)).
 
@@ -390,13 +391,12 @@ game really has.
 
 ## Method
 
-Reading of the executable's functions only: the AI functions
-(0x4A8320–0x4AFC70; list in full, bodies of S1–S21 read once), the AI spell
-list functions (0x4CC1F0–0x4CCC40; list building and cache), and the AI call
-sites in the combat, animation, broadcast, script, dialog, magick/tech,
+An earlier source reading (provenance in git history), organised by the
+executable functions at: the AI functions (0x4A8320–0x4AFC70; the whole
+function list, the units S1–S21 once each), the AI spell list functions
+(0x4CC1F0–0x4CCC40; list building and cache), and the AI call sites in the combat, animation, broadcast, script, dialog, magick/tech,
 critter, skill, trap, start-up and UI functions. Steamwoven inputs are the
 requirements and research documents linked above. Evidence level F0 unless a
-ledger row is cited; earlier provenance is in git history. Names in this
-document are descriptive.
+ledger row is cited. Names in this document are descriptive.
 
 

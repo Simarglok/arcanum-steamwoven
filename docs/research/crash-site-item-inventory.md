@@ -12,8 +12,7 @@ does not repeat, the [negative IN contract](../scripting/negative-inventory-tran
 
 Categories, as in RES-021:
 
-- **Source (S):** branches read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable), not original-executable parity.
+- **Source (S):** branches from an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited; not original-executable parity.
 - **Data (D):** the authenticated normal-game Crash Site aggregate and archives,
   read by the probe below. T0 means the serialized state before any tick, script,
   AI step or player action, the same T0 as the [passability closure](area-passability-closure.md).

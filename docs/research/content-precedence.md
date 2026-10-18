@@ -11,10 +11,11 @@ Area loader, NPC conversation and viewer are **not** rewired by this work.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses given
-  (the file and archive functions of its tig library are named in words, without
-  an address), level F0 (not checked in the executable) unless a check is cited.
-  It is a reading, not an observation of the running original.
+- **Source fact**: an earlier source reading (provenance in git history), cited by
+  the executable address of its function (the file and archive functions of the tig
+  library are named in words, without an address); level F0 (not checked in the
+  executable) unless a ledger row or check is cited. It is not an observation of
+  the running original.
 - **Local observation**: measured by `tools/research/Arcanum.ContentProbe` on the
   owner's unchanged installation (GOG files). The probe prints paths, member
   names, sizes and SHA-256 digests only, never payload bytes.
@@ -52,7 +53,8 @@ module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-n
 ## Lookup rule (source facts and derivation)
 
 - **Archive member names** are ASCII-lowercased when an archive is opened (the
-  Windows build keeps backslashes; a non-Windows port must turn them into slashes),
+  Windows build keeps backslashes; the earlier reading's non-Windows port turned them
+  into slashes),
   and every member gets the "check loose first" flag `0x100`
   (the archive open function). Lookup is a
   binary search over the lowercased names; a member flagged `0x800` is treated as
@@ -65,8 +67,8 @@ module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-n
   (and the member is marked `0x200`). Otherwise the archive wins and both flags are
   cleared, so later opens never look for a loose file again. With no archive holding
   the name, the topmost folder holding it wins. Folder names match without regard to
-  letter case: the Windows original relies on its file system; a non-Windows port
-  must resolve each segment itself.
+  letter case: the Windows original relies on its file system; the earlier reading's
+  non-Windows port resolved each segment itself.
 - **Exists** (the file layer's exists test) and
   **extract**, used for sounds and movies (the file layer's extract function,
   called by the sound library and by `gmovie_play_path` 0x40DEE0),

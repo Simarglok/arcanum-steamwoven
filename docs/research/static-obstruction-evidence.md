@@ -9,7 +9,7 @@ actor movement, renderer geometry, or original-runtime validation.
 
 The context is one immutable Crash Site 64x64 base sector: a normal,
 non-editor ordinary ground critter makes one adjacent cardinal step on the
-executable's non-recursive odd-rotation path (F0), with traversal flags exactly zero.
+non-recursive odd-rotation path of the earlier source reading (F0), with traversal flags exactly zero.
 The component considers only a type-3 scenery contribution registered in the
 step destination cell. Projectile, sound, skip-objects, ignore-critters,
 wall/window/portal branches, critters, traps, spells, combat, mutable state,
@@ -17,7 +17,7 @@ diagonals, same-cell/non-adjacent requests, and cross-sector traversal are
 outside this component.
 
 This evidence has source-supported and identity-bound original-data aggregate
-status. The F0 reading of the executable's functions is not independent
+status. The earlier source reading (F0) is not independent
 confirmation or a proof of the running original. The original installation was read only; this record
 contains no local path, original payload, text, image, raw object bytes, names,
 or full grid.
@@ -27,7 +27,7 @@ or full grid.
 | Provenance kind | Immutable identity / trace | Role and limit |
 | --- | --- | --- |
 | Archived report | WorldEd manual archive, SHA-256 `049faa6956bab507f99d6174ce14b2b4feb49a49b0dcf7b69bec3203a3df72cb`; lines 850-858, 878-884, and 1034-1036 | Corroborates the reported “No Block” scenery/editor concept and a blocking tile where placed. It is not runtime proof. |
-| Executable functions | The functions at the addresses below, read at level F0 (not checked in the executable) | Earlier provenance is in git history. |
+| Earlier source reading | Functions cited by executable address below | An earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. |
 | Serialized instance | Fixed selected-sector v119 records parsed by `StaticObjectLoader.Inspect` | Direct location and direct slot-18 flags are observed only in the authenticated input. |
 | Prototype default | Exactly one matching type-A prototype when direct slot 18 is absent | Resolves only the missing object-flags default; it never supplies location. |
 | Synthetic check | `Arcanum.CrashSiteProbe --self-test` | Independently asserted boundary and aggregation cases, not an original-data oracle. |

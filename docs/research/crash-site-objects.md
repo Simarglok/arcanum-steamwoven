@@ -42,12 +42,13 @@ before/after use. It outputs only aggregates and selected numeric metadata.
 | Common fields begin with current ART and location; `OBJ_F_FLAGS` field ID 19 serializes at zero-based common slot 18 | the common object field order | v119 field-mask parser retains current ART, location, and slot-18 object flags; test-only fixtures independently write distinct sentinels at literal raw slots 18 and 19 | source-supported plus measured parser scope and independently framed synthetic evidence |
 | Object type `3` is scenery; a static object excludes dynamic flags after type eligibility | static test `object_is_static` (0x43D990); the `OF_DYNAMIC` flag bit | 317 parsed type-3 records all had an effective slot-18 object-flags value without `0x00002000`; direct and inherited fixtures independently write reversed static/dynamic sentinels at literal raw slots 18 and 19 | source-supported plus measured |
 | Current ART is used by the object-list art precache | object-list art precache `objlist_precache_art` (0x4F1F00) | Instance override or prototype default resolved for all 317 records | source-supported plus measured |
-| Scenery ART lookup key and path family derive from scenery category/number | path resolver `name_resolve_path` (0x41DAE0); the executable's ART path builder | Five exact selected metadata chains resolved uniquely in the explicit resource archive | source-supported plus measured |
-| ART type/frame/palette and physical-frame metadata | the executable's ART header and frame functions; project `ArtDecoder` | Five selected group/frame/palette values passed physical-table bounds and metadata inspection | source-supported plus measured |
+| Scenery ART lookup key and path family derive from scenery category/number | path resolver `name_resolve_path` (0x41DAE0); the ART path builder (earlier source reading) | Five exact selected metadata chains resolved uniquely in the explicit resource archive | source-supported plus measured |
+| ART type/frame/palette and physical-frame metadata | the ART header and frame functions (earlier source reading); project `ArtDecoder` | Five selected group/frame/palette values passed physical-table bounds and metadata inspection | source-supported plus measured |
 | Coordinate rebasing happens after object read | object-list load `objlist_load` (0x4F1350) | Local source coordinates are reported below only; no global/runtime placement is claimed | source-supported; placement remains open |
 
-The functions above were read at level F0 (not checked in the executable);
-earlier provenance is in git history. This note makes no clean-room or
+The attributions above are an earlier source reading (provenance in git
+history), cited by the executable address of each function; level F0 (not
+checked in the executable). This note makes no clean-room or
 runtime-parity claim.
 
 ## Record envelope: admitted fields and deliberate omissions

@@ -12,9 +12,9 @@ adds the transition layer on top of the same data.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable); earlier provenance is in
-  git history.
+- **Source fact**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a ledger row is cited.
 - **Local observation**: measured by the probe on the owner's unchanged
   installation through the [ARC-DATA-011 content stack](content-precedence.md)
   (winner per virtual path). The probe prints only numbers, booleans and SHA-256
@@ -93,7 +93,7 @@ reachable teleport), `orphan_sites`, `graph`, `unresolved_steps`,
 | W5 | Script control flow | script 0x4449B0, 0x4451B0, 0x447220 | A script runs from an entry line; each line evaluates its condition and runs the true or the false action; the next line follows unless the action returns, starts a dialog (which also returns) or jumps (`goto` to a literal line). Condition type 0 is always true. Loops repeat over the objects their focus resolves to. From line 0, 265 teleport actions lie on the forced path, 84 behind a condition, 108 are not reached (most only by dialog resumption, W7). |
 | W6 | Who runs a script | attachment-point enumeration, tile script 0x4C0980, tile script node record, sector object list 0x4F2330, object 0x43F1C0, portal 0x4F06E0 | An object's script slot index is its attachment point: 1 use, 2 destroy, 9 dialog, 12 dying, 19 heartbeat, 30 bust (the object is broken). A tile script (24-byte node: node flags, tile index, the attachment's own script header flags and counters, script number) runs at line 0 for any critter entering the tile; a sector script runs at line 0 when the PC enters the sector; both as a use. 9,854 attachments in 1,662 sector files and 12,702 mobiles; 554 run a script that holds or calls a teleport, 530 of them reach one: 303 scenery and 6 portals in sectors, 170 tiles, 46 NPCs and 5 containers among the mobiles, no sector script. |
 | W7 | Dialog resumption | script 0x447220, dialog UI 0x567E30, 0x568480, dialog 0x416C10, 0x417590 | A dialog action starts the conversation of the DLG with the same number and returns. A player response of 0 ends it and resumes the NPC's dialog script on the line after the dialog action; a response of −N resumes it on line N. 501 negative responses in the DLGs of the dialog-attached teleport scripts; 121 paths start this way. |
-| W8 | Other transfers (not catalogued as edges) | world map UI 0x561860, magic-tech 0x452650, main menu UI 0x5412E0, AI 0x4AC910, 0x4ACBB0 | World-map travel always lands on the start map. The teleportation spell takes the player to an area location on the start map (from another map only through that map's `Area:`), unless the place blocks teleports. A new game places the PC on the start map at the catalogue start. NPC waypoints and standpoints teleport NPCs between maps. None of these needs map-pair data. |
+| W8 | Other transfers (not catalogued as edges) | world map UI 0x561860, magic-tech 0x452650, main menu UI 0x5412E0, AI 0x4ACBB0 | World-map travel always lands on the start map. The teleportation spell takes the player to an area location on the start map (from another map only through that map's `Area:`), unless the place blocks teleports. A new game places the PC on the start map at the catalogue start. NPC waypoints and standpoints teleport NPCs between maps. None of these needs map-pair data. |
 | W9 | What a teleport does | teleport 0x4D3380, 0x4D3460 | As the [cave research](cave-transition-evidence.md#t4--what-the-teleport-does): one pending PC teleport at a time, followers that do not wait travel along, the destination map opens with its saved differences, no passability check at the arrival. All 873 arrivals lie inside their map's bounds; 872 land in a sector that has a file, one lands on a generated sector of the start map. |
 
 ## Unconditional (project policy)

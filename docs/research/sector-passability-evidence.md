@@ -4,7 +4,7 @@
 
 This is a bounded research record for the fixed 64×64 Crash Site **base-sector** profile. It is not a collision implementation, a route finder, a generalized map reader, a `.dif`/PATCH/loose-file precedence rule, a dynamic-object system, or original-runtime validation.
 
-The source study describes the executable's functions at the addresses given, read at level F0 (not checked in the executable) unless a ledger row is cited; earlier provenance is in git history. This record does not make an independent-corroboration or original-executable-parity claim.
+The source study is an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. This record does not make an independent-corroboration or original-executable-parity claim.
 
 The candidate implements a fixed-profile, aggregate-only `--passability` mode in `Arcanum.CrashSiteProbe`. It decodes the already-framed 512-byte block section and raw facade bit 0, and now reports the separate bounded ordinary-static-scenery component recorded in [ARC-RES-012](static-obstruction-evidence.md). Tile-name, dynamic/state, actor, diagonal, edge, precedence, and cross-sector dependencies remain visible as unknown or unsupported; the combined result is still not passability.
 
@@ -29,7 +29,7 @@ The probe binds the selector to ordinal 463, flag `0x00000002`, and exactly 47,2
 
 ## Source trace and exact mapping
 
-| Claim | Executable functions (F0) | Classification | Consequence |
+| Claim | Earlier source reading (F0), by function address | Classification | Consequence |
 | --- | --- | --- | --- |
 | Serialized shape | The sector block list's `mask[128]` and `sector_block_list_load` (0x4F8250) read 128 `uint32_t` values. | Serialized base-sector fact (F0) | The probe admits exactly 512 bytes, never an inferred variable mask. |
 | Index and polarity | `tileblock_is_tile_blocked` (0x4BB410) tests `mask[tile / 32] & (1u << (tile % 32))`; its setter sets that bit for `blocked` and clears it otherwise (0x4BB490). | Serialized base-sector fact (F0) | Word `ordinal / 32`, least-significant-bit-first `ordinal % 32`; set means explicit blocked in this reading. |
@@ -42,9 +42,9 @@ The selected facade anchors retain their existing raw-word evidence: `(27,30)` /
 
 ## Object and step dependency matrix
 
-`object_traversal_is_blocked` is not an occupancy predicate: it returns true when `object_calc_traversal_cost` (0x43FD70, 0x43FDC0) yields a nonzero cost **or** returns a non-null blocking object. Cost-only sound/window/projectile outcomes therefore have the same boolean result at that caller while retaining distinct source semantics. The rows below are an F0 reading of the executable's functions, not original-runtime validation.
+`object_traversal_is_blocked` (0x43FD70) is not an occupancy predicate: it returns true when `object_calc_traversal_cost` (0x43FDC0) yields a nonzero cost **or** returns a non-null blocking object. Cost-only sound/window/projectile outcomes therefore have the same boolean result at that caller while retaining distinct source semantics. The rows below are an earlier source reading (F0), not original-runtime validation.
 
-| Dependency | Executable functions (F0) and serialized/default status | Classification | Selected-profile status |
+| Dependency | Earlier source reading (F0) and serialized/default status | Classification | Selected-profile status |
 | --- | --- | --- | --- |
 | Admitted v119 facts | The object field numbering puts current ART first: slot 0 is retained direct or from one matching prototype default; slot 1 location and slots 2/3 offsets are retained only when direct; `OBJ_F_FLAGS` enum 19 is zero-based slot 18 and retained direct or prototype-default. | Serialized base-sector/prototype fact | Only slot 0 and slot 18 participate in the bounded direct/default resolution. Location/offsets identify finite examples only, not footprint or traversal contribution. |
 | Unadmitted serialized fields | `OBJ_F_SPELL_FLAGS` is zero-based common slot 19, but this probe does not retain it; fields after slot 18 are safely skipped only to delimit v119 records. No direct/prototype default is inferred for any unretained traversal field. | Unknown/unverified original behavior | `OSF_PASSWALLED` and `OSF_POLYMORPHED` remain Unknown, never supplied as default facts. |
@@ -72,4 +72,4 @@ The run also records a cardinal `(30,32)->(31,32)` result as `Unknown + null`, a
 
 The implementation rejects selector/fingerprint mismatch, wrong ordinal/compressed flag/decoded length, a substituted six-prototype ID/length/SHA manifest before parsing, mutation of every fixed input after use, malformed framing, missing/excess block bytes, invalid local coordinates, and overflow. It preserves the original probe CLI unchanged unless `--passability` is explicit.
 
-The evidence supports a **terrain component** fact: a set block bit is an explicit blocking condition in the executable's functions as read (F0). ARC-RES-012 additionally supports only the separately named `ordinary-static-scenery/base-sector/cardinal-normal-critter` destination-cell component; see its [evidence](static-obstruction-evidence.md) and [contract](../world/static-obstruction-contract.md). Clear masks and static NoBlock still do not support combined occupancy or traversal: facade/name, dynamic/state, actor, edge, movement-context, and precedence evidence remain required. The fixed base entry also cannot answer `.dif`, PATCH, loose-file, generalized dynamic-object, neighboring-sector, or original-runtime questions.
+The evidence supports a **terrain component** fact: a set block bit is an explicit blocking condition in the earlier source reading (F0). ARC-RES-012 additionally supports only the separately named `ordinary-static-scenery/base-sector/cardinal-normal-critter` destination-cell component; see its [evidence](static-obstruction-evidence.md) and [contract](../world/static-obstruction-contract.md). Clear masks and static NoBlock still do not support combined occupancy or traversal: facade/name, dynamic/state, actor, edge, movement-context, and precedence evidence remain required. The fixed base entry also cannot answer `.dif`, PATCH, loose-file, generalized dynamic-object, neighboring-sector, or original-runtime questions.

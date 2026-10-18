@@ -2,7 +2,7 @@
 
 Status: **Research**, work item ARC-RES-046 (2026-10-16), the research part of
 item 3 of the owner's top-20 task list (project planning, outside the
-repository). It reads how the pinned source schedules, orders, fires, cancels
+repository). It reads how the earlier source reading (F0) schedules, orders, fires, cancels
 and saves its time events, how the three source clocks behave in real time and
 in turn-based combat, and what each event kind is for. It maps the consumers
 that wait for a queue (the AI tick of [ARC-RES-039](npc-combat-ai-plan.md)
@@ -21,10 +21,11 @@ the same state at any frame rate). The clock it builds on is the
 
 ## Vocabulary and evidence discipline
 
-- **Source (S)**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable), for the meaning of the
-  mechanism only; earlier provenance is in git history. Several functions have
-  no known name; a reading of their intent is marked **inference**.
+- **Source (S)**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a ledger row is cited; for the meaning of the
+  mechanism only. Several functions have no known name; a reading of their
+  intent is marked **inference**.
   Original-executable parity is **NOT_VERIFIED** throughout, except the rows
   the [verification ledger](original-verification-ledger.md) checked (section 7).
 - **Code (C)**: this repository at `origin/main` f500b76.
@@ -101,7 +102,7 @@ session, no installed game).
   close (0x45BCE0), park (0x45C2F0, 0x45C500), map open (0x45C580, 0x45C610)). A parked
   event fires late, at the first ping after the PC returns. AI ticks are never
   saved: every NPC gets a new immediate tick when its sector's objects are
-  folded in (AI tick (0x4AD730, 0x4AD790, 0x4AD7D0), fold (0x4F1A90, 0x4F1CD0)).
+  folded in (AI tick (0x4AD730, 0x4AD790, 0x4AD7D0), fold (0x4F1CD0)).
 - **Consumers.** The AI tick (250..5000 ms by distance, +0..5 s jitter on the
   tick after the first), deferred script calls (call-in multiplies its seconds
   by 8, read as real seconds by inference; call-at a time of day), magic
@@ -216,7 +217,7 @@ Neither group replays each missed period.
 | P4 | When the old map closes: the seven kinds of the "map close" column are cleared; during a teleport every event that has an object parameter **not** travelling (a null handle counts as not travelling) is appended to the old map's file and removed. Events of kinds without object parameters stay in memory and keep running on any map. | map close (0x45BCE0), park (0x45C2F0, 0x45C500), clear objects (0x411520) |
 | P5 | When a map opens in game: object handles of all queued events are force-recovered (a failure nulls the handle and the event later fires with a null object, TE9), then the map's file (if any) is loaded into the queue and deleted. Overdue events from it fire at the first ping. | map open (0x45C580, 0x45C610), caller (0x40FC70) |
 | P6 | The magic module parks and restores its own active runs with the same map-file mechanism; the reading does not follow it further. | teleport notify (0x45C720, 0x45C7B0) |
-| P7 | AI ticks are not saved and are cleared on map close (except those carried by P3); folding a sector's objects schedules an immediate first tick per non-destroyed NPC (its "first" marker compares the sector's stored time with now + 3 s, ARC-RES-042 H1), and creating an NPC schedules a normal one. A load therefore restarts every NPC's tick with fresh jitter. | type table, fold (0x441FC0), fold list (0x4F1A90, 0x4F1CD0), create (0x442260) |
+| P7 | AI ticks are not saved and are cleared on map close (except those carried by P3); folding a sector's objects schedules an immediate first tick per non-destroyed NPC (its "first" marker compares the sector's stored time with now + 3 s, ARC-RES-042 H1), and creating an NPC schedules a normal one. A load therefore restarts every NPC's tick with fresh jitter. | type table, fold (0x441FC0), fold list (0x4F1CD0), create (0x442260) |
 
 Consequence (inference): as read, an event belongs to the map of the objects it
 names, not to the map where it was scheduled, and time on a parked map is not
@@ -259,7 +260,7 @@ body decay fire at once and a resting NPC heal for the whole absence.
 | TE5 | The loop guard is shared across the three lists and resets when it trips, so the per-list budget depends on earlier lists (Q8). | Default: a fixed per-pass budget, reported in the pass result. |
 | TE6 | A side-list event with a stale handle is dropped at merge without the object-ID recovery that a firing event gets (Q4 against Q6). | Default: one validation rule at fire time, with a typed "entity missing" outcome. |
 | TE7 | Handler results are ignored and dropped events leave at most a debug line (Q6, Q7); nothing tells the caller or a trace that a timer did not run. | Default: typed outcomes in the pass result and the trace. |
-| TE8 | The companion wait timer is scheduled only for an extraordinary-charisma leader and never gets its NPC parameter (wait (0x4AA7A0, 0x4AA8C0, 0x4AA990, 0x4AAA30)). | Already open as [ARC-RES-024 O3](companion-follow-evidence.md#open-questions); listed here for completeness. |
+| TE8 | As first read, the companion wait timer is scheduled only for an extraordinary-charisma leader and never gets its NPC parameter (wait (0x4AA7A0, 0x4AA8C0, 0x4AA990, 0x4AAA30)). | A reconstruction slip: the original schedules the timer when the leader's charisma is **not** extraordinary and the NPC is not mind-controlled, and it carries the NPC's handle (ledger row Wait timer (C12, O3, TE8)); this answers [ARC-RES-024 O3](companion-follow-evidence.md#open-questions). |
 | TE9 | An object lost before the event fires — not found when the event was loaded (P2), or whose handle fails the force recovery at map open (P5) — turns into a null parameter, and the handler runs with a null object instead of the event being dropped like one whose object is destroyed (Q6). Most life-state handlers return early on a null object, but the deferred script call still runs `SAP_USE` with a null triggerer or attachee (script call (0x445140), handle reader (0x443AD0), recover (0x45B610, 0x45B620)). | Default: one rule, "entity missing" is a typed drop at fire time, whatever the path. |
 | TE10 | The poison recovery handler writes the new level through the stat setter, which schedules a recovery event because none is pending (the firing one already left its list), and then adds another itself, so from the first tick on two recovery events run every 120 s (poison (0x4B1170), poison schedule (0x4B1350), stat write (0x4B0980)). Found by ARC-WORLD-024. | The original 1.0.7.4 executable does the same (`stat_poison_timeevent_process` 0x4B1170, `stat_base_set` 0x4B0980, `poison_timeevent_schedule` 0x4B1350; [ledger](original-verification-ledger.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019)): a bug of the original. Decided in ARC-WORLD-024 under D2: Steamwoven applies one tick per period; the Original rule mode keeps two (switch `PoisonRecoveryTwice`). |
 
@@ -331,8 +332,8 @@ The owner accepted the three recommendations; slices E1..E2 follow them.
 ## Unknowns
 
 - **U1** Whether the original executable orders tied events and caps a ping
-  as read here (Q3, Q8) is NOT_VERIFIED (since checked: ledger rows TE3 and
-  TE4–TE7).
+  as read here (Q3, Q8) was NOT_VERIFIED; since checked in ledger rows TE3
+  and TE4–TE7 (Original).
 - **U2** The intent of the call-at reference (TE2); the census finds no live
   call-at line, so it matters only for mods.
 - **U3** How the magic module re-creates its tick events for runs parked with
@@ -344,7 +345,8 @@ The owner accepted the three recommendations; slices E1..E2 follow them.
 
 ## Method
 
-Read: the time-event functions (0x45A7C0–0x45CC10) and their types in full,
+Read (an earlier source reading, cited by executable address; level F0 unless
+a ledger row is cited): the time-event functions (0x45A7C0–0x45CC10) and their types in full,
 and the scheduling and handler sites of every kind in the AI, script,
 critter, stat, combat, magic-tech, item, object, trap, light, newspaper,
 teleport, map, sector object list, game library, object pool, animation,

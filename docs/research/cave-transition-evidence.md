@@ -12,8 +12,7 @@ found the two literal script actions; this closes the three gaps it listed
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses given,
-  level F0 (not checked in the executable); earlier provenance is in git history.
+- **Source fact**: an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited.
   It is not an observation of the running original.
 - **Local observation**: measured by the probe below on the owner's unchanged
   installation at T0 (new game, nothing executed; as defined in the
@@ -53,8 +52,8 @@ cells east of the exterior trigger, not on the trigger itself.
 | --- | --- | --- | --- |
 | T1 | Script file and line format | script cache and file loading (0x44C4E0, 0x44C710, 0x44C730), the script file layout, `script_name_init` (0x4CEC10), module data loading (0x404A20, 0x404C10) | Both scripts are 328 bytes: a 64-byte header and two 132-byte lines; file flags 0. Each occurs once across the six pinned archives (resource2 only). The data and module folders hold no loose copy of these two scripts, of any script scanned in T9, of the map catalogue or of the tile-name table. |
 | T2 | What the two lines do | script condition, action and value numbering; `script_execute_condition` (0x4451B0), `script_execute_action` (0x447220), `script_resolve_focus_obj` (0x44B4E0), `script_get_value` (0x44BA70) | Line 0: always-true condition → teleport of the **triggerer** to three literal numbers. Line 1: always-true → return, run default (2793) / return, skip default (1532). False branches do nothing. |
-| T3 | What triggers the script | script attachment slots, object click (0x54ED30), the use goal and its animation functions (0x425130, 0x425840, 0x428930, 0x428A10), `location_dist` (0x4B96F0), `object_script_execute` (0x441980), trap script tests (0x4BBDD0, 0x4BBE00, 0x4BBE40), object flag values, the ART scenery type numbering | Each trigger is scenery whose only attachment is slot 1 (use) and whose art is of the teleport-facade scenery type (20), not a bed (22). It is drawn and clickable: no off, don't-draw, invisible or click-through flag. Both trigger cells are terrain-passable. |
-| T4 | Teleport lifecycle | `teleport_ping`, `teleport_process` and arrival (0x4D3330, 0x4D3460, 0x4D39A0), `map_open_in_game` and `map_precache_sectors` (0x40FC70, 0x40FE00) | The script passes flags 0: no fade, sound, movie or time advance. Source and destination maps differ, so both directions take the cross-map branch. |
+| T3 | What triggers the script | script attachment slots, object click (0x54ED30), the use goal and its animation functions (0x425130, 0x425840, 0x428930, 0x428A10), `location_dist` (0x4B96F0), `object_script_execute` (0x441980), trap script tests (0x4BBDD0, 0x4BBE00), object flag values, the ART scenery type numbering | Each trigger is scenery whose only attachment is slot 1 (use) and whose art is of the teleport-facade scenery type (20), not a bed (22). It is drawn and clickable: no off, don't-draw, invisible or click-through flag. Both trigger cells are terrain-passable. |
+| T4 | Teleport lifecycle | `teleport_ping`, `teleport_process` and arrival (0x4D3330, 0x4D3380, 0x4D3460, 0x4D39A0), `map_open_in_game` and `map_precache_sectors` (0x40FC70, 0x40FE00) | The script passes flags 0: no fade, sound, movie or time advance. Source and destination maps differ, so both directions take the cross-map branch. |
 | T5 | Map identity | `map_list_info_load` (0x4125C0), `script_execute_action` (0x447220), `map_open_in_game` (0x40FC70) | The catalogue has 81 unbroken rows from 5000. Row 5000: start (92958,82592), start-map flag. Row 5078: start (2087,2018), area 2. The cave's catalogue start equals the teleport arrival. |
 | T6 | Arrival cells | teleport arrival (0x4D39A0), F1 of [passability closure](area-passability-closure.md#f1--tile-name-flags) | Cave (2087,2018): mask clear, class-0 tile not blocking, one wall on the tile (edge 7), no aggregate object. Exterior (92913,82598): mask clear, facade tile not blocking, no sector or aggregate object. |
 | T7 | Walls are edge blockers | object traversal (0x43FD70, 0x43FDC0, 0x43FE00), `location_in_dir` (0x4B8FF0), the ART library's wall identifier fields | 125 walls, one prototype (1020), one wall number (11); edges 1/3/5/7 = 33/31/28/33; 0 window/opening pieces; 8 tiles carry two walls (corners). |
@@ -139,9 +138,9 @@ The tile under a wall stays walkable.
 
 Rendering is a separate question. The normal game view draws walls through
 the general object pass; the dedicated wall routine is called only from the
-editor's draw path (draw functions 0x404650, 0x4046F0, 0x404740).
+editor's draw path (draw functions 0x4046F0, 0x404740).
 Wall art is located through a structure table and a wall-name table in
-resource2 (wall name functions 0x4ECEB0, 0x4ECFC0, 0x4ED070),
+resource2 (wall names 0x4ECA60, wall structures 0x4ECC10, wall name functions 0x4ECEB0, 0x4ECFC0, 0x4ED070),
 keyed by wall number, rotation half, piece, damage and variation. This
 research does not resolve those names; the walls step does.
 

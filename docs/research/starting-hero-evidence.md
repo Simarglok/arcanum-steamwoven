@@ -14,10 +14,10 @@ session or dialog profile. Requirements:
 The three evidence levels are those of
 [ARC-RES-025](character-creation-evidence.md#vocabulary-and-boundary):
 
-- **Source fact**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable) unless a row of the
+- **Source fact**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a row of the
   [original verification ledger](original-verification-ledger.md) is cited.
-  Earlier provenance is in git history.
 - **Local observation**: read on the owner's unchanged installation with
   [`tools/research/starting_hero_probe.py`](../../tools/research/starting_hero_probe.py)
   (below). Only numbers, identifiers, engine keywords, counts and SHA-256
@@ -51,7 +51,7 @@ writes nothing. Limits: it mounts only these eight names, so the game folder,
 them is needed on this installation); background conditions are printed only
 when every token is a race/gender code, `NPC` or `ANY`, otherwise as a digest;
 player names only as lengths. The rule
-parsers are independently written from the functions cited below.
+parsers are independently written from the rules cited below.
 
 ## Answer
 
@@ -92,7 +92,7 @@ parsers are independently written from the functions cited below.
    is **not computed** here (it needs the key-stat caps, spell and tech
    prerequisites and the hit-point/fatigue formulas).
 
-## Executable rules used
+## Rules used
 
 ### Pre-made inventory: `sub_463E20`
 
@@ -129,7 +129,6 @@ unspent points, age 20), restores gender, race, alignment and age through the
 stat setter (which removes and re-adds the race and gender effects), resets
 skills, spells and tech, and runs the scheme
 (level_set (0x4A6F00),
-defaults,
 stat setter effects (0x4B0980)).
 Effects stored in the prototype survive the reset (`stat_set_defaults` writes
 the array directly).
@@ -144,12 +143,10 @@ Each step buys until the target is reached; the first step that cannot be paid
 ends the whole rule
 (stat (0x4A75E0),
 skill and others (0x4A76B0, 0x4A77A0, 0x4A7890, 0x4A79C0, 0x4A7AA0)).
-Costs are one point per unit: stat cost table all 1
-(stat_cost),
+Costs are one point per unit: stat cost table all 1,
 `basic_skill_cost_inc` and `tech_skill_cost_inc` 1
 (basic (0x4C64B0),
-tech (0x4C6AF0)), tech degrees 1 each
-(tech_degree_cost_tbl), misc steps one
+tech (0x4C6AF0)), tech degrees 1 each, misc steps one
 point per hit or fatigue point
 (auto_level_misc (0x4A7AA0)),
 `spell_cost` 1
@@ -158,9 +155,11 @@ A skill level is 4 × points
 (basic_skill_base (0x4C5E50)),
 so a skill target 4 is one point when no effect already adjusts that skill (a
 race effect such as halfling prowling +2 changes the count). Two details matter for an exact replay: a
-stat step starts from the **base** value but continues from the **effective**
-value, and a skill/spell/tech step that cannot be raised first raises its key
-stat instead.
+stat step starts from the **base** value, and the earlier reading continued it
+from the **effective** value, but the original goes on from the read-back
+**base** value and pays from the base unspent points (ledger AL4); and a
+skill/spell/tech step that cannot be raised first raises its key stat instead
+(ledger AL5 for basic and tech skills).
 
 ### Effects
 
@@ -181,8 +180,7 @@ backgrounds that use `*` (SH-07) double the adjustment before the additions
 
 Innate effects: the stat setter adds effect `64 + race` with cause race and,
 for female, effect 330 with cause gender
-(stat setter (0x4B0980),
-ids).
+(stat setter (0x4B0980)).
 `background_set` always reads slot `+1` and adds `atoi` of it with cause
 background, so an empty slot adds effect 0
 (background_set (0x4C25E0)).
@@ -218,7 +216,7 @@ destroys them and creates a jacket (8118, 8110, 8126) instead
 (item_generate_inventory (0x460FF0)). Armour size
 by race: small for dwarf, gnome and halfling; large for half-ogre and ogre;
 medium for human, elf, half-elf, half-orc, dark elf and orc
-(size table). These are source facts;
+(armour size table 0x5B32C0, ledger EQ14). The clothes prototypes are source facts;
 the probe only checks that the prototypes exist (SH-10) and prints the size
 table as a built-in constant.
 
@@ -238,8 +236,7 @@ fallback (0x41DA40),
 table rebuild (0x41CE60),
 table load and count check (0x41D1F0),
 file count (0x41D390),
-path (0x41DAE0),
-id fields).
+path (0x41DAE0)).
 The probe models the body/gender normalisation, the stand/no-weapon fallback
 (from `missing.dat` when its count matches, else derived) and the name; it
 refuses any other animation, so the other fallback rows are not modelled.

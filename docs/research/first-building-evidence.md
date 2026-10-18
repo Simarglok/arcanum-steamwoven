@@ -3,8 +3,8 @@
 ## Status, scope and evidence discipline
 
 ARC-RES-029 picks the first building the player can reach from the Crash Site and
-describes how its walls, doors, windows and roof are stored and how the pinned
-source makes them behave. It answers FR-SCENE-008, 010, 011, 014 and 015 for that
+describes how its walls, doors, windows and roof are stored and how the earlier
+source reading (F0) makes them behave. It answers FR-SCENE-008, 010, 011, 014 and 015 for that
 one building. It is **research, not a runtime**: no `src/**`, viewer,
 `Arcanum.Session` or launcher file changes. It builds on the cave wall facts of
 [ARC-WORLD-009](cave-transition-evidence.md) and the wall fade port of ARC-RENDER-011
@@ -12,9 +12,9 @@ one building. It is **research, not a runtime**: no `src/**`, viewer,
 
 Categories, as in the [item research](crash-site-item-inventory.md):
 
-- **Source (S):** branches read from the executable's functions, level F0 (not
-  checked in the executable) unless a ledger row is cited; earlier provenance is in
-  git history. The probe restates rules in its own form (for example roof pieces as
+- **Source (S):** branches of an earlier source reading (provenance in git history),
+  cited by the executable address of their function; level F0 (not checked in the
+  executable) unless a ledger row is cited. The probe restates rules in its own form (for example roof pieces as
   edge bands, below).
 - **Data (D):** the six pinned archives, the normal-game exterior aggregate and the
   prototype directory, read by the probe below. T0 is the serialized state before any

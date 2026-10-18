@@ -199,8 +199,8 @@ input, output, or preview. It never writes next to a game archive.
 - R2 did not independently establish palette channel order, transparency,
   direction order, row orientation, anchors/offsets, action frame, or timing.
   The implemented decoder's BGRX, index-0, and stored-row-order rules remain
-  separately read from the executable's ART functions, level F0 (not checked in
-  the executable); a visually plausible local preview would not by
+  separately from an earlier source reading (provenance in git history), level F0
+  (not checked in the executable); a visually plausible local preview would not by
   itself settle broader renderer semantics.
 - Future decoder changes must retain the admitted subset and this contradiction
   ledger; they must not broaden the format or start renderer work implicitly.

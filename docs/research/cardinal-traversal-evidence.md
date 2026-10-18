@@ -5,8 +5,8 @@
 The cardinal research evidence below remains historical and does not silently
 admit diagonals. The separate opt-in [production policy](../world/cardinal-traversal-assessment.md)
 composes final terrain with both object-only shoulder paths within the same zone,
-context and guarded identities. Source rationale remains the adjacent predicate of
-the executable's object traversal functions (0x43FD70, 0x43FDC0, 0x43FE00; F0)
+context and guarded identities. Source rationale remains the adjacent object traversal predicate of an earlier
+source reading (0x43FD70, 0x43FDC0, 0x43FE00; F0)
 (direction retained for each object constraint), not executable parity. All
 original input integrity requirements below remain unchanged. Numeric original
 observations discriminate shoulder scenery corner denial at spawn from Open
@@ -18,13 +18,13 @@ implementation checks, not independent review, ordinary acceptance or delivery.
 One independently authored research candidate implements the
 [bounded contract](../world/cardinal-traversal-contract.md) in the existing
 [standalone probe](../../tools/research/Arcanum.CrashSiteProbe/Program.cs).
-**Original structural observations + interpretation read from the executable's functions (F0)**, under
+**Original structural observations + interpretation from an earlier source reading (F0)**, under
 explicit **Project diagnostic policy**, establish the four gap-free directed rows
 below in one immutable declared context. This is not an installed-game snapshot,
 production permission API, path cost/route admission or an original-executable pass.
 Original runtime/source-to-original parity on macOS is **NOT_VERIFIED**.
 
-Classification is explicit: source facts are F0 readings of the executable's functions; structural
+Classification is explicit: source facts are an earlier source reading (F0); structural
 facts are newly authenticated local input observations; declarations/selection and
 composition are project policy. No unresolved hypothesis is used as an Open fact.
 Developer checks do not replace independent exact-head native review. Private PR
@@ -64,14 +64,12 @@ its relevant flags are a **direct override**, not an invented seventh default in
 
 ## Provenance
 
-The worksheet below was read from the executable's functions at the addresses
-given, level F0 (not checked in the executable); the earlier acquisition record and
-file digests are in git history. The probe is evidence composition using existing
+The worksheet below is an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. The probe is evidence composition using existing
 parsers. No independent-source-corroboration claim is made.
 
 ## Definition, caller and contributor worksheet
 
-Source facts below are F0 readings of the executable's functions, not executable parity.
+Source facts below are an earlier source reading (F0), not executable parity.
 
 | Source seam / immutable reference | Independently authored interpretation and disposition |
 | --- | --- |
@@ -183,7 +181,7 @@ Task-local scripts/logs are retained for that review, outside any sealed bundle.
 Command evidence is bound to task/run981/session, preserved workspace, exact candidate
 head/tree, command, UTC start/finish, exit and SHA in the native handoff. Actual outputs
 must be read, not merely an exit code. A source/hash/link/privacy check additionally
-validates relative files/headings, source-line bounds/file hashes, scope and
+validates relative files/headings, cited function references, scope and
 no personal paths/raw original content. Changes after candidate freeze invalidate
 affected checks. Native dev-reviewer must reproduce full source/numeric original
 contract, not only Markdown links or static subset tests.

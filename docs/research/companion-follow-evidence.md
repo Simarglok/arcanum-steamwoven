@@ -1,7 +1,7 @@
 # Virgil as a companion: join, follow, wait and map change
 
 Status: **Research**, work item ARC-RES-024 (2026-10-16). This document fixes
-how the pinned source specifies an NPC companion such as Virgil: the JO
+how the earlier source reading (F0) specifies an NPC companion such as Virgil: the JO
 consent, how the leader link is assigned, at what distance the follower keeps
 up, how waiting works and how followers cross a map change. It prepares a
 later companion implementation and changes no production API, viewer, dialog
@@ -13,11 +13,11 @@ port or session schema. Requirements:
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable) unless a
-  [verification ledger](original-verification-ledger.md) row is cited; earlier
-  provenance is in git history. Several functions have no known name, so a
-  reading of their intent is marked as such.
+- **Source fact**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a [verification ledger](original-verification-ledger.md)
+  row is cited. Several functions have no known name, so a reading of their
+  intent is marked as such.
 - **Local observation**: only results already recorded by merged evidence for
   Virgil are reused (named per row). This work item ran no new probe and read
   no original file.
@@ -77,7 +77,7 @@ flag.
 
 | ID | Claim | Source fact | Consequence for Steamwoven |
 | --- | --- | --- | --- |
-| C1 | JO, UW, WA, LV, SC, SO dialog actions | dialog 0x415BA0, action names 316–345 | `JO a n` and `UW a n`: the first operand is passed both as "ignore charisma limit" to the check and as `force` to the join/unwait. On success the dialog continues at node `n` and skips the reply's own response. On refusal it shows the reason line plus one generated PC reply that, as we read the copied option fields, keeps the chosen reply's response type and target. `WA` waits, `LV` leaves (forced), `SC` / `SO` clear / set spread out. The conversation runtime accepts only `JO 0 node` today; `JO a≠0` and `UW`, `WA`, `LV`, `SC`, `SO` are `UnsupportedOperation`. |
+| C1 | JO, UW, WA, LV, SC, SO dialog actions | dialog 0x415BA0, the action name table | `JO a n` and `UW a n`: the first operand is passed both as "ignore charisma limit" to the check and as `force` to the join/unwait. On success the dialog continues at node `n` and skips the reply's own response. On refusal it shows the reason line plus one generated PC reply that, as we read the copied option fields, keeps the chosen reply's response type and target. `WA` waits, `LV` leaves (forced), `SC` / `SO` clear / set spread out. The conversation runtime accepts only `JO 0 node` today; `JO a≠0` and `UW`, `WA`, `LV`, `SC`, `SO` are `UnsupportedOperation`. |
 | C2 | Follow check and its order | AI 0x4AD950 and the AI parameter fields | First match wins: (1) mind control by this PC → OK; a mind-controlled NPC whose controller cannot be resolved is OK when it has a PC leader (our reading of the decompiled lookup), while one controlled by another PC falls through; (2) PC Persuasion training ≥ master → OK; (3) another leader whose charisma ≥ PC's → already in group; (4) forced follower → OK; (5) reaction ≤ AI param 5 → dislike; (6) PC alignment above NPC's by more than param 6 → too good, below by more than param 7 → too bad; (7) NPC level ≥ PC level + param 8 → "low level"; (8) unless the limit is ignored: max followers 0 → not allowed, non-forced follower count ≥ max → limit reached. Eight typed results, OK plus seven refusals. |
 | C3 | AI parameter rows | AI parameter table, AI 0x4A8320, 0x4A83F0, 0x4A8400, 0x4AAA60 | The NPC's AI-data field indexes a table of 17-integer rows from `rules\ai_params.mes` (rows 0..99) and the module's `rules\gameai.mes` (rows from 100 to 149). As read, each row index is the first entry's number plus a running count, not each entry's own number. The follow thresholds are row fields 5..8. |
 | C4 | Follower limit | stat 0x4B0490, 0x4B0740, critter 0x45E3F0 | Max followers = charisma / 4 (integer), +1 at Persuasion expert or above. Forced followers do not count. Waiting followers are outside the array, so they do not count either. |
@@ -87,7 +87,7 @@ flag.
 | C8 | How close it gets | animation goal table, animation 0x42BF40, 0x42BFD0, 0x425130, 0x425270, 0x425340, 0x425840, goal stepping (0x423560) | The follow goal's range is 2 (5 spread out). Within range, with the step toward the leader not blocked, it waits 100 ms and re-evaluates; the goal stays alive. Otherwise it pushes a walk-near goal when within range + 2, and a run-near goal beyond. Our reading of the decompiled goal table is consistent across the four step functions; the move-near goals themselves were not read. |
 | C9 | AI cadence and the 30-cell rule | AI 0x4AD200, 0x4AD420, 0x4AD4D0, 0x4AD5D0, 0x4AD610, object 0x43E770 | The next AI tick is due after `250 + 4750 × min(d, 30) / 30` ms, `d` = distance to the local PC (250 ms on the same cell, about 408 ms adjacent, 5 s at 30+). Within 30 cells (real-time only) the heartbeat script and AI run. Beyond 30, a living, active, non-paralysed, non-waiting follower is moved onto its PC leader's cell (our reading of the decompiled move helper), at that tick; it does not walk. The first tick after a heartbeat start adds a random 0–5 s. |
 | C10 | Shared cell | animation 0x4364D0 | When several living critters stand on one cell, one stays (a PC first) and the NPCs are asked to step away. It is called from the in-range branch of the follow request and for leaderless NPCs, not by the 30-cell move or the teleport; our reading is that a group stacked on one cell separates at the followers' next follow request. |
-| C11 | Waiting | AI 0x4AA7A0, 0x4AA8C0, 0x4AA0D0, 0x4AA1B0 | Wait: forced leave, leader handle restored, wait flag set (no-op if already waiting). Unwait: needs a leader and the flag. Unforced unwait re-runs the follow check and stays waiting on refusal. Success clears the flag and the wait timer, then joins again (re-appended at the end of the array). Death force-unwaits the NPC before the death handling of C17. |
+| C11 | Waiting | AI 0x4AA7A0, 0x4AA8C0, 0x4AA1B0 | Wait: forced leave, leader handle restored, wait flag set (no-op if already waiting). Unwait: needs a leader and the flag. Unforced unwait re-runs the follow check and stays waiting on refusal. Success clears the flag and the wait timer, then joins again (re-appended at the end of the array). Death force-unwaits the NPC before the death handling of C17. |
 | C12 | Wait timeout | wait-duration table, AI 0x4AA7A0, 0x4AA990, 0x4AAA30, prototype 0x49B5A0 | Durations by the NPC wait field: 0, 15 min, 2 h, 1 day, 7 days, 30 days; the prototype default is index 2. Any Persuasion training of the leader adds one step, and index ≥ 6 means no timeout. On expiry the NPC drops waiting, becomes jilted, has its reaction changed by `2 × (charisma − max charisma)` (zero or negative) and loses the leader. **Source anomaly**: as first read, the timer is scheduled only when the leader's charisma *is* extraordinary, and the event's NPC parameter is never filled. That contradicts the earlier reading's own comment that extraordinary charisma means followers never leave of their own accord (critter 0x45DFC0), and a negative reaction change is dropped for such a leader anyway (reaction 0x4C0DE0, ledger row R2 of the reaction runtime). The timeout is therefore an open question, not a contract (O3). |
 | C13 | Loyalty while following | AI 0x4AC380, 0x4ADB50, reaction 0x4C0DE0, stat 0x4B0980, animation 0x423300 | Only when the NPC has no active animation goal: the follow check without the charisma limit runs. A refusal plus a permitted unforced leave makes it jilted and floats a warning line. Otherwise a pending "check leader" runs a check that **only warns**. A negative reaction change while following arms the reaction test (reaction ≤ param 5 + 20). A PC alignment change arms the alignment test in its direction (gap > param 6 or 7 − 100). "No active animation goal" is our reading of the decompiled goal test; because the follow goal of C8 stays alive, how often this check runs during normal following is open (O4). Separately, when the PC leader hits its follower, reaction changes by param 9 unless the hit is accidental (the field comment says it drops, the code adds it: [ARC-RES-028 A2](npc-reaction-reputation-evidence.md#source-anomalies-and-decisions)), and the same charisma-free check can make it leave, jilted, with the refusal line (AI 0x4A9650). |
 | C14 | Orders | broadcast 0x4C31A0, follower menu table, follower UI 0x56A9D0 | Orders reach only followers in the array within **10** cells of the PC: leave, wait, follow, move, stay close, spread out, curse, attack, walk here, back off. Mind control blocks leave, wait and curse. The portrait menu offers walk, attack, stay close, spread out, back off, wait, inventory and character sheet; there is no "follow" item. A waiting NPC is outside the array, so orders cannot reach it; dialog `UW` or a script follow (C17) brings it back. |
@@ -165,6 +165,7 @@ of Godot.
 
 ## Method
 
-Source reading only, of the executable's functions through the call chains
-named in each row; earlier provenance is in git history. Names in this
+Source reading only: an earlier source reading (provenance in git history)
+through the call chains named in each row, cited by executable address; level
+F0 unless a ledger row is cited. Names in this
 document are descriptive. The open questions are the parts this reading could not settle.

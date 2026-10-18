@@ -18,11 +18,12 @@ core calls them.
 
 ## Vocabulary and boundary
 
-- **Source fact**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable) unless a row of the
+- **Source fact**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a row of the
   [original verification ledger](original-verification-ledger.md) is cited.
   Unnamed functions keep decompiler names (`sub_…`); a reading of their intent
-  is marked as such. Earlier provenance is in git history.
+  is marked as such.
 - **Anomaly**: a branch that looks like a slip. It is
   recorded under [Anomalies](#anomalies-recorded-not-adopted) as
   MG1..MG20, never adopted silently; under owner decision D2 the slice that
@@ -50,7 +51,7 @@ a tile. "Magic" means a spell record without the technology flag.
 
 1. **One table of 223 records serves magic and technology.** Records 0..79 are
    the 80 college spells: 16 colleges × 5 ranks, college = `n / 5`, rank =
-   `n % 5 + 1` (spell header). Records 80..139 are magic records
+   `n % 5 + 1`. Records 80..139 are magic records
    outside any college (their willpower minimum is forced to 0; what they hold
    is a census question). Records 140..222 are technology (forced tech flag,
    no willpower minimum) (load (0x44FE30, 0x44FFA0, 0x450090, 0x4501D0)).
@@ -125,7 +126,7 @@ a tile. "Magic" means a spell record without the technology flag.
 | Item mana | `OBJ_F_ITEM_MANA_STORE` (worn items: a pool that pays casting costs), `OBJ_F_ITEM_SPELL_MANA_STORE` (charges of the item's own spells; negative means unlimited) | pay (0x450420) |
 | Spell flags | `OBJ_F_SPELL_FLAGS`, 32 states (invisible, body of air/earth/fire/water, shielded, anti-magic shell, bonds of magick, full reflection, summoned, stoned, charmed, entangled, mind controlled, …) | set and cleared by object-flag components |
 | Active spells | 512 run slots: spell, action, source, parent, target (object or tile), attacker, object list, summoned list, flags, resistance margin, trigger, next tick time, remaining tick count | saved in the MagicTech-Post blob ([load map](combat-domain-load-map.md#6-runtime-owners-and-persistence)) |
-| Timers | game-time MagicTech event (maintain or END tick, delayed interrupt, deferred BEGIN) and "recharge magic item" event, both saved | timer table |
+| Timers | game-time MagicTech event (maintain or END tick, delayed interrupt, deferred BEGIN) and "recharge magic item" event, both saved | event type table 0x5B2188 (ledger OQ2) |
 
 ## Findings
 
@@ -162,7 +163,7 @@ drives the resistance rules below.
 
 - **Order.** Learning rank r of a college requires knowing exactly r − 1
   ranks, character level ≥ {1, 1, 5, 10, 15}[r − 1], intelligence ≥ 5 and
-  willpower ≥ the record's `IQ:` (add (0x4B1530, 0x4B1570, 0x4B15A0, 0x4B1600, 0x4B1620, 0x4B1650, 0x4B1660, 0x4B16C0, 0x4B1740, 0x4B1750, 0x4B1760, 0x4B1770, 0x4B1790, 0x4B1950, 0x4B19B0, 0x4B1A40), levels).
+  willpower ≥ the record's `IQ:` (add (0x4B1530, 0x4B1570, 0x4B15A0, 0x4B1600, 0x4B1620, 0x4B1650, 0x4B1660, 0x4B16C0, 0x4B1740, 0x4B1750, 0x4B1760, 0x4B1770, 0x4B1790, 0x4B1950, 0x4B19B0, 0x4B1A40)).
   The UI first requires one unspent character point (`spell_cost` is always
   1) and names the failing check (UI (0x57C540, 0x57C670)).
 - **Effect of learning.** College level becomes r and `MAGICK_POINTS` rises
@@ -454,8 +455,8 @@ undead sets "animated dead"; fleeing and blinded call the AI and combat;
 "don't draw" also paralyses; unlocking checks aptitude against the lock and
 alerts guards.
 
-**Summons** (summon (0x450C40), list (0x452830, 0x452900),
-tables). The summoned object is flagged summoned, with
+**Summons** (summon (0x450C40), list (0x452830, 0x452900)).
+The summoned object is flagged summoned, with
 the record's palette, no pickpocketing, no experience, concealed until it
 appears, alignment of the parent and faction of an NPC caster, or faction 0
 when the faction switch is on (MG8). Lists 0..2 are weighted (forest animals;
@@ -492,7 +493,7 @@ deliberate changes are listed after the table.
 | MG15 | reflection cost (reflect (0x455550)) | the reflection caster pays "the last cost charged" from a global, stale for free or item casts | the reflected spell's cost |
 | MG16 | no-stack refusal (stage (0x452F20)) | the BEGIN cost is paid before the no-stack test, so a refused recast is paid | test before paying; low confidence that it is a slip |
 | MG17 | fate maximisation (process (0x4510F0)) | evaluated on every action with components, so an END can be maximised when its BEGIN was not and then removes more scaled effect entries than were added | capture once at BEGIN |
-| MG18 | target names (names) | `Tgt_Obj_No_ST_Critter_Dead` lacks the critter type bit that its siblings carry (flagged in the earlier reading) | add the bit |
+| MG18 | target names (target table 0x596140) | `Tgt_Obj_No_ST_Critter_Dead` lacks the critter type bit that its siblings carry (flagged in the earlier reading) | add the bit |
 | MG19 | unresistable runs (flags (0x455C30), schedule (0x453FA0)) | one run flag means both "unresistable" (`No_Resist:`, script unresistable casts) and "final END scheduled"; the scheduler tests it before maintenance and duration, so an unresistable spell ends right after BEGIN whatever its `Duration:` or `Maintain:` | separate flags; an unresistable spell keeps its duration (the census sizes which records combine them) |
 | MG20 | mana stores (pay (0x450420)) | worn mana stores are drained and their recharge scheduled before the fatigue refusal (≤ −15), so a refused cast still costs the stored mana | test fatigue before draining; low confidence that it is a slip |
 
@@ -635,7 +636,8 @@ mastery; per item its mana store, spell charges and spells.
 
 ## Method
 
-Reading of the executable's functions only: the magick/tech functions
+An earlier source reading (provenance in git history), organised by the
+executable functions at: the magick/tech functions
 (0x44EF50–0x45A760: tables, getters, payment, process, all 25 component
 functions, stage checks, resistance and predictor, scheduling, run slots,
 invocation, check, line of fire, interrupts, parse of record lines +1, +3, +4
@@ -645,7 +647,6 @@ apply, maintain bar, learning), and the called parts of the stat, object,
 item, critter, combat, AI, animation, script, dialog, fate, effect, target,
 location and time-event functions. Steamwoven inputs are the requirements and
 the research and runtime documents linked above. Evidence level F0 unless a
-ledger row is cited; earlier provenance is in git history. Names in this
-document are descriptive.
+ledger row is cited. Names in this document are descriptive.
 
 

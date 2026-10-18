@@ -13,10 +13,10 @@ file, and it adds no consent evaluator or party state. Requirements:
 
 Categories, as in [ARC-RES-023](crash-site-item-inventory.md):
 
-- **Source (S):** read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable); the intent of unnamed
-  functions is a reading and marked as such. Earlier provenance is in git
-  history.
+- **Source (S):** an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a ledger row is cited; the intent of unnamed
+  functions is a reading and marked as such.
 - **Data (D):** the authenticated normal-game Crash Site aggregate, the six
   pinned archives and the installed content stack, read by the probe below. T0
   is the serialized state before any tick, script or player action.
@@ -219,7 +219,7 @@ PC is already at his follower limit.
 
 ## Method
 
-Source reading of the executable's functions, through the call chains named in each
+The earlier source reading (cited by executable address, level F0), through the call chains named in each
 row, plus the read-only probe `--companion-consent` (self-test
 `--companion-consent-self-test` covers the operand reader, the code scan, the
 AI row rule and the effect symbol scan). Earlier provenance is in git history;

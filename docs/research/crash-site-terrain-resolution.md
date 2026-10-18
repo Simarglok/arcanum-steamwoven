@@ -11,14 +11,13 @@ repository.
 packed identifier classes and, after applying the callback's tile
 name normalization, resolves all 4,096 cells to one candidate in the explicit
 `arcanum2.dat` source. Every selected frame was boundedly inspected before the
-representative decodes. The executable's functions as read also establish a bounded,
+representative decodes. The earlier source reading (F0) also establishes a bounded,
 renderer-independent diagnostic footprint/crop/flip specification for the
 tile and editor-facade draw calls below. This does not establish source
 precedence, lighting/palette parity, a general runtime facade layer, or static
 scenery readiness.
 
-All statements about the executable's functions below are read at level F0
-(not checked in the executable); earlier provenance is in git history. They are
+All statements about the original's functions below are an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. They are
 not independent format confirmation. Retail byte measurements are labelled as
 such.
 
@@ -57,8 +56,8 @@ measurements; no raw identifier list is retained.
 
 ### Dispatch and packed fields
 
-The executable's ART identifier functions are the behavioral source for these
-field interpretations (F0).
+An earlier source reading of the ART library's identifier functions (F0) is the
+behavioral source for these field interpretations.
 
 * `tig_art_type` reads bits `28..31`. The selected classes
   are `TIG_ART_TYPE_TILE` (0) and `TIG_ART_TYPE_FACADE` (11).
@@ -82,7 +81,7 @@ fail-closed error; no default resource or placeholder is selected.
 The real chain is callback based, not a filename guess:
 
 1. `main` (0x401000) installs `name_resolve_path` (0x41DAE0) as the ART
-   library's file-path resolver; the executable's ART initialization stores that
+   library's file-path resolver; the ART library's initialization stores that
    callback.
 2. The ART library's path builder delegates every non-misc ART ID to that
    callback, and its existence check uses that resolved path.
@@ -298,8 +297,8 @@ geometry to `ArtDecoder` metadata alone. Therefore:
 
 ## R2 renderer-independent tile/facade placement specification
 
-This diagnostic specification is read from the executable's functions at
-level F0; it is not an execution of the original, a renderer, or a
+This diagnostic specification is an earlier source reading (F0), cited by
+function address; it is not an execution of the original, a renderer, or a
 pixel/lighting-parity result. `location_xy` (0x4B8680) gives the relative point `(40 * (localY - localX), 20 * (localY + localX))`.
 Both callers add one X pixel, therefore the diagnostic anchor is
 `A = (40 * (localY - localX) + 1, 20 * (localY + localX))`. Arithmetic is
@@ -404,6 +403,6 @@ renderer parity remain separate evidence.
   measured renderer comparison before claiming terrain scene or original visual
   parity. The source shows editor-only facade layering, not a normal game
   facade pass.
-* Preserve the distinction between these F0 rules read from the executable's
-  functions and any independent retail-byte evidence. An implementation or
+* Preserve the distinction between these F0 rules from an earlier source
+  reading and any independent retail-byte evidence. An implementation or
   catalogue derived from them does not create a second corroborating source.

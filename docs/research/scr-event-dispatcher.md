@@ -1,7 +1,7 @@
 # Shared SCR event dispatcher: source reading and slices
 
 Status: **Research**, work item ARC-RES-042 (2026-10-16), the research part of
-top-20 item 15. It reads how the pinned source runs a script for an event
+top-20 item 15. It reads how the earlier source reading (F0) runs a script for an event
 (use, heartbeat, combat enter and exit, dialogue and the other attachment
 points), what the result of that run does to the caller, what is written back,
 and what happens on a command the interpreter does not know. It maps what the
@@ -17,10 +17,11 @@ actions and the explicit refusal of an unknown command); deferred calls touch
 
 ## Vocabulary and evidence discipline
 
-- **Source (S)**: read from the executable's functions at the addresses
-  given, level F0 (not checked in the executable), for the meaning of the
-  mechanism only; earlier provenance is in git history. Several functions have
-  no known name; a reading of their intent is marked as such.
+- **Source (S)**: an earlier source reading (provenance in git history),
+  cited by the executable address of its function; level F0 (not checked in
+  the executable) unless a ledger row is cited; for the meaning of the
+  mechanism only. Several functions have no known name; a reading of their
+  intent is marked as such.
   Original-executable parity is **NOT_VERIFIED** throughout, except the rows
   the [verification ledger](original-verification-ledger.md) checked (section 11).
 - **Code (C)**: this repository at `origin/main` 55ed52a.
@@ -213,7 +214,7 @@ game-time events and saved with the time-event queue.
 
 | ID | Claim | Source |
 | --- | --- | --- |
-| H1 | An NPC's AI time event carries the NPC and a "first" marker. When a loaded sector's objects are folded in, each NPC gets an immediate event whose marker comes from comparing the sector's stored time with the current time plus 3 s (meaning not read further); creating an NPC schedules a normal delayed one. | AI 0x4AD730, 0x4AD790, object 0x441FC0, sector object list 0x4F1A90, 0x4F1CD0, sector 0x4D1530, object 0x442260 |
+| H1 | An NPC's AI time event carries the NPC and a "first" marker. When a loaded sector's objects are folded in, each NPC gets an immediate event whose marker comes from comparing the sector's stored time with the current time plus 3 s (meaning not read further); creating an NPC schedules a normal delayed one. | AI 0x4AD730, 0x4AD790, object 0x441FC0, sector object list 0x4F1CD0, sector 0x4D1530, object 0x442260 |
 | H2 | On a first tick of a living NPC: it gets the re-check-weapon flag, a leaderless NPC outside combat moves to its waypoints or standpoints, then `SAP_FIRST_HEARTBEAT` runs; *skip default* skips the heartbeat for this tick. | AI 0x4AD200 |
 | H3 | `SAP_HEARTBEAT` runs only when the NPC is alive, real-time mode is on and it is within 30 cells of the local PC; *run default* then runs the generator logic for a generator NPC or the AI pass for others. | AI 0x4AD200, 0x4AD420 |
 | H4 | Otherwise (skipped, out of range, turn-based) the follower catch-up and encounter clean-up rules apply and the next event is scheduled, except for an NPC out of range in an unloaded sector without catch-up, and a generator whose spawn did not succeed, which return without the normal reschedule; a first tick adds 0–5 s. | AI 0x4AD200 |
