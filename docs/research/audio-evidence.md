@@ -160,7 +160,7 @@ payload or table text is reproduced.
 - **Prototype sound fields** (ARC-WORLD-041, all 1,423 prototypes read): a sound base on 15 of
   15 portals, 38 of 38 containers, 3 of 45 scenery, 150 of 150 weapons, 13 of 13 PCs and 496 of 497
   NPCs; none on walls, projectiles, traps or items other than weapons; one gold prototype. 22
-  weapons have a base no table holds (their hits use the material sounds); every other weapon's
+  weapons have a base no table holds, nor their hit ids (their hits use the material sounds); every other weapon's
   hit and critical ids (base + 4, 5, 6) are **empty records**, so per SN23 their hits play nothing.
   Every footstep id 2900–2939, pickup and drop id and material hit id names an installed file.
 - **Tile sound classes** (ARC-WORLD-041): 31, 6, 2 and 13 tiles by category; 21 dirt, 3 sand,

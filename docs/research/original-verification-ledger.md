@@ -489,7 +489,7 @@ the function oracle of ARC-DEV-007 finds no difference in Original mode).
 ## Audio (ARC-RES-052)
 
 Source: the [audio study](audio-evidence.md#what-the-original-does), rows SN1–SN34, which keeps the
-full table. Three domains (resources and positional sound, schemes and combat music, voice and
+full table (SN34: one reading, ARC-WORLD-041). Three domains (resources and positional sound, schemes and combat music, voice and
 event sounds) were each read by a first reader and, independently, a second reader that saw only
 the questions (method step 6); the three differences are settled in the study. Every direct
 branch of the functions read stays inside `.text`.

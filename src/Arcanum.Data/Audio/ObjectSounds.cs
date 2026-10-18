@@ -16,8 +16,13 @@ public sealed record ObjectSoundFields(int Type, int Prototype, int SoundEffect,
 }
 
 /// <summary>An item's fields for its pickup, drop and hit sounds: the stored weight, the unknown-description number (gold is
-/// told by it) and, for ammunition (type 6), the stack quantity.</summary>
-public sealed record ObjectSoundItemFields(int Weight, int UnknownDescription, int? AmmoQuantity);
+/// told by it), for ammunition (type 6) the stack quantity, and the magic weight adjustment with the item's magick/tech
+/// complexity (scaled by a holder's aptitude).</summary>
+public sealed record ObjectSoundItemFields(int Weight, int UnknownDescription, int? AmmoQuantity)
+{
+    public int MagicWeightAdjustment { get; init; }
+    public int MagickTechComplexity { get; init; }
+}
 
 public enum ObjectSoundFailure
 {
@@ -39,14 +44,14 @@ public sealed record ObjectSoundRead(ObjectSoundFailure Failure, ObjectSoundFiel
 /// ARC-WORLD-041: reads <see cref="ObjectSoundFields"/> from a prototype file by number (in play the lookup is
 /// <see cref="Content.ContentPrototypes.Read"/>, base sources only) or from an Area object's effective fields (an instance's
 /// own field over its prototype's), in the v119 slot layout of the combat field reader (docs/formats/combat-fields.md):
-/// common slots 0 current art, 18 flags, 29 material, 32 sound; item slots 38 weight, 47 unknown description; ammunition
-/// slot 60 quantity. Fail-closed: a field that is not a plain number refuses the object.
+/// common slots 0 current art, 18 flags, 29 material, 32 sound; item slots 38 weight, 39 magic weight adjustment, 45
+/// complexity, 47 unknown description; ammunition slot 60 quantity. Fail-closed: a field that is not a plain number refuses the object.
 /// </summary>
 public static class ObjectSoundReader
 {
     public const int WeaponType = 5, AmmoType = 6, GenericType = 14, LastType = 17;
     private const int CurrentArtSlot = 0, FlagsSlot = 18, MaterialSlot = 29, SoundSlot = 32, WeightSlot = 38, UnknownDescriptionSlot = 47,
-        AmmoQuantitySlot = 60;
+        AmmoQuantitySlot = 60, MagicWeightSlot = 39, ComplexitySlot = 45;
 
     public static ObjectSoundRead ReadPrototype(Func<int, PrototypeFile> lookup, int prototype)
     {
@@ -81,7 +86,13 @@ public static class ObjectSoundReader
         }
         var fields = new ObjectSoundFields(type, prototype, Int(SoundSlot), Int(MaterialSlot), unchecked((uint)Int(CurrentArtSlot)), unchecked((uint)Int(FlagsSlot)));
         if (type is >= WeaponType and <= GenericType)
-            fields = fields with { Item = new(Int(WeightSlot), Int(UnknownDescriptionSlot), type == AmmoType ? Int(AmmoQuantitySlot) : null) };
+            fields = fields with
+            {
+                Item = new(Int(WeightSlot), Int(UnknownDescriptionSlot), type == AmmoType ? Int(AmmoQuantitySlot) : null)
+                {
+                    MagicWeightAdjustment = Int(MagicWeightSlot), MagickTechComplexity = Int(ComplexitySlot),
+                },
+            };
         return failed is { } slot ? new(ObjectSoundFailure.FieldUnresolved, null, slot) : new(ObjectSoundFailure.None, fields);
     }
 }

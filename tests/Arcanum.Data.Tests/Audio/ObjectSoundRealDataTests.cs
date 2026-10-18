@@ -38,7 +38,9 @@ public sealed class ObjectSoundRealDataTests
 
         SfxStatus Status(int id) => catalog.ResolveSfx(id).Status;
         var weapons = fields.Where(f => f.Type == 5).ToArray();
-        Assert.AreEqual(22, weapons.Count(w => Status(w.SoundEffect) == SfxStatus.UnknownId), "weapons whose base is in no table: hits use the material sounds");
+        Assert.AreEqual(22, weapons.Count(w => Status(w.SoundEffect) == SfxStatus.UnknownId), "weapons whose base is in no table");
+        Assert.IsTrue(weapons.Where(w => Status(w.SoundEffect) == SfxStatus.UnknownId)
+            .All(w => Enumerable.Range(4, 3).All(o => Status(w.SoundEffect + o) == SfxStatus.UnknownId)), "nor their hit ids: they hit with the material sounds");
         Assert.IsTrue(weapons.Where(w => Status(w.SoundEffect) != SfxStatus.UnknownId)
             .All(w => Enumerable.Range(4, 3).All(o => Status(w.SoundEffect + o) == SfxStatus.EmptyRecord)), "every other weapon's hit and critical ids are empty records");
         Assert.IsTrue(fields.Where(f => f.Type is 1 or 2 && f.SoundEffect != 0).All(f => Enumerable.Range(0, 3).All(o => Status(f.SoundEffect + o) != SfxStatus.UnknownId)));

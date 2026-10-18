@@ -23,7 +23,7 @@ public sealed class ObjectSoundTests
     // Common slots 0 current art, 18 flags, 29 material, 32 sound; item 38 weight, 47 unknown description; ammunition 60 quantity.
     private static Dictionary<int, object> Values(int type) => new()
     {
-        [0] = 0x20300000, [18] = 0x2, [29] = 5, [32] = 7300, [38] = 2100, [47] = 9056, [60] = 30, [36] = 11, [46] = 12, [59] = 13,
+        [0] = 0x20300000, [18] = 0x2, [29] = 5, [32] = 7300, [38] = 2100, [39] = 14, [45] = 15, [47] = 9056, [60] = 30, [36] = 11, [46] = 12, [59] = 13,
     };
 
     private static Func<int, PrototypeFile> Files(params (int Number, int Type)[] prototypes)
@@ -39,8 +39,9 @@ public sealed class ObjectSoundTests
         var npc = ObjectSoundReader.ReadPrototype(files, 1001).Fields!;
         Assert.AreEqual((16, 1001, 7300, 5, 0x20300000u, 0x2u), (npc.Type, npc.Prototype, npc.SoundEffect, npc.Material, npc.CurrentArt, npc.Flags));
         Assert.IsNull(npc.Item, "a critter has no item fields");
-        Assert.AreEqual(new ObjectSoundItemFields(2100, 9056, null), ObjectSoundReader.ReadPrototype(files, 1002).Fields!.Item);
-        Assert.AreEqual(new ObjectSoundItemFields(2100, 9056, 30), ObjectSoundReader.ReadPrototype(files, 1003).Fields!.Item, "ammunition has its quantity");
+        var weapon = ObjectSoundReader.ReadPrototype(files, 1002).Fields!.Item!;
+        Assert.AreEqual((2100, 9056, (int?)null, 14, 15), (weapon.Weight, weapon.UnknownDescription, weapon.AmmoQuantity, weapon.MagicWeightAdjustment, weapon.MagickTechComplexity));
+        Assert.AreEqual(30, ObjectSoundReader.ReadPrototype(files, 1003).Fields!.Item!.AmmoQuantity, "ammunition has its quantity");
         Assert.IsNull(ObjectSoundReader.ReadPrototype(files, 1004).Fields!.Item);
         Assert.AreEqual(7300, ObjectSoundReader.ReadPrototype(files, 1005).Fields!.SoundEffect, "a trap reads its common fields");
         Assert.AreEqual(ObjectSoundFailure.PrototypeMissing, ObjectSoundReader.ReadPrototype(files, 1009).Failure);
@@ -86,6 +87,10 @@ public sealed class ObjectSoundTests
         Assert.AreEqual(-2, table.SoundClass(Tile(false, false, 2)));
         Assert.IsNull(table.SoundClass(Tile(false, true, 1)), "a position beyond its category");
         Assert.IsNull(table.SoundClass(Tile(true, true, 0) | 0x10000000), "not a tile art id");
+        var sparse = Table(new() { [0] = "aaa1", [100] = "bbb2", [150] = "ccc3", [200] = "ddd4", [300] = "eee5", [350] = "fff0" });
+        Assert.AreEqual(3, sparse.SoundClass(Tile(true, false, 1)), "record 150 is position 1: gaps do not count");
+        Assert.AreEqual(0, sparse.SoundClass(Tile(false, false, 1)));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => sparse.Category(4));
     }
 
     [TestMethod]

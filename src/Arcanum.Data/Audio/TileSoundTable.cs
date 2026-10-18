@@ -39,7 +39,8 @@ public sealed class TileSoundTable
     private TileSoundTable(int[][] classes) => _classes = classes;
 
     /// <summary>The sound numbers of a category (0 outdoor flippable, 1 outdoor, 2 indoor flippable, 3 indoor), by position.</summary>
-    public IReadOnlyList<int> Category(int category) => Array.AsReadOnly(_classes[category]);
+    public IReadOnlyList<int> Category(int category) =>
+        category is >= 0 and < Categories ? Array.AsReadOnly(_classes[category]) : throw new ArgumentOutOfRangeException(nameof(category));
 
     public static TileSoundTableResult Open(ContentStack stack, MesReaderOptions? options = null)
     {
@@ -56,8 +57,8 @@ public sealed class TileSoundTable
     public static TileSoundTableResult Parse(IReadOnlyDictionary<int, string> records)
     {
         ArgumentNullException.ThrowIfNull(records);
-        // The original requires record 0; without 100, 200 or 300 its position count would run on into the next category's
-        // table, past the end it allocated (project policy: refused).
+        // The original requires record 0; a category with records but without its start record (100, 200 or 300) would run
+        // the position count on past the end of its table. Any missing start is refused (project policy).
         if (!records.ContainsKey(0) || !records.ContainsKey(100) || !records.ContainsKey(200) || !records.ContainsKey(300))
             return new(TileSoundTableStatus.Invalid, null);
         var categories = Enumerable.Range(0, Categories).Select(_ => new List<int>()).ToArray();

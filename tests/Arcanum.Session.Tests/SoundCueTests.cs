@@ -27,6 +27,14 @@ public sealed class SoundCueTests
         var gold = Object(8, 0, 5) with { Item = new(500, 9056, null) };
         Assert.AreEqual(5958, SoundCueRules.Item(ItemSoundAction.Pickup, SessionSoundCues.Item(gold))!.Id);
         Assert.IsNull(SessionSoundCues.Item(Object(16)));
+        var stack = Object(6, 0, 5) with { Item = new(9, 0, 900) };
+        Assert.AreEqual(5952, SoundCueRules.Item(ItemSoundAction.Pickup, SessionSoundCues.Item(stack))!.Id, "9 × 900 / 4 = 2025: heavy metal");
+        var magic = Object(5, 0, 5) with { Item = new(1900, 0, null) { MagicWeightAdjustment = 200, MagickTechComplexity = 50 } };
+        Assert.AreEqual(1900, SessionSoundCues.Item(magic)!.Weight, "nobody holds it: no adjustment");
+        Assert.AreEqual(2000, SessionSoundCues.Item(magic, 0)!.Weight, "aptitude 0 draws power 25 of 50: 200 × 25 / 50 = 100");
+        Assert.AreEqual(5951, SoundCueRules.Item(ItemSoundAction.Pickup, SessionSoundCues.Item(magic, 0))!.Id, "still light metal at 2000");
+        Assert.AreEqual(5952, SoundCueRules.Item(ItemSoundAction.Pickup, SessionSoundCues.Item(magic with { Item = magic.Item! with { MagicWeightAdjustment = 202 } }, 0))!.Id, "2001 is heavy");
+        Assert.IsNull(SessionSoundCues.Item(magic with { Item = magic.Item! with { MagickTechComplexity = 5000 } }, 50), "complexity past the equipment bound");
         Assert.AreEqual(new SoundCritter(16, 4500, 0x20300000, 3), SessionSoundCues.Critter(Object(16, 4500, art: 0x20300000), 3));
         Assert.AreEqual(SoundLocalPc.Absent, SessionSoundCues.LocalPc(null));
         Assert.AreEqual(SoundLocalPc.Off, SessionSoundCues.LocalPc(Object(15, flags: 0x3)));
@@ -51,5 +59,9 @@ public sealed class SoundCueTests
         Assert.AreEqual((7000 + 3 * 0, 2), (unarmed.Single().Cue.Id, unarmed.Single().Cue.Variants), "fists on flesh, no use sound");
         Assert.AreEqual(0, SessionSoundCues.Attack(Resolution(AttackOutcome.Refused), sword, target, null, SoundLocalPc.Present).Count);
         Assert.AreEqual(0, SessionSoundCues.Attack(null, sword, target, null, SoundLocalPc.Present).Count);
+        var chest = Object(2, 3100, 2);
+        CollectionAssert.AreEqual(new[] { 7300, 7306 }, SessionSoundCues.Attack(Resolution(AttackOutcome.CriticalHit), sword, chest, armor, SoundLocalPc.Present)
+            .Select(c => c.Cue.Id).ToArray(), "no bark from an object; its own material, not the armour, is hit");
+        Assert.AreEqual(7000 + 20 * 2 + 3 * 4, SessionSoundCues.Attack(Resolution(AttackOutcome.CriticalHit), sword, chest, armor, SoundLocalPc.Present)[1].Cue.Unresolved!.Id);
     }
 }
