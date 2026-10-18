@@ -186,7 +186,7 @@ class GridEndpointOrderTests(unittest.TestCase):
             # Exercise the production cleanup function. Lock restoration is a
             # recorded no-op in this synthetic workspace, not a real git write.
             git = root / 'git'
-            git.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$project_root/git-args"\n'); git.chmod(0o700)
+            git.write_text('#!/bin/sh\nprintf "%s\\n" "$@" >> "$project_root/git-args"\n'); git.chmod(0o700)
             script = root / 'cleanup.sh'
             script.write_text('set -eu\ncleanup_candidate() {' + cleanup + '\n}\ncleanup_candidate\n')
             subprocess.run(['/bin/sh', str(script)], check=True,
@@ -200,6 +200,8 @@ class GridEndpointOrderTests(unittest.TestCase):
             # The viewer Core references Arcanum.Session (ARC-WORLD-009), so the export's RID restore touches it and Scripting.
             for lock in ('src/Arcanum.Scripting/packages.lock.json', 'src/Arcanum.Session/packages.lock.json'):
                 self.assertIn(lock, (root / 'git-args').read_text().splitlines())
+            # ARC-DEV-015: then git removes only the untracked .uid files Godot generated (git clean never touches a tracked file).
+            self.assertIn('\n'.join(['clean', '-f', '-q', '--', 'tools/terrain-viewer/Godot/*.uid']), (root / 'git-args').read_text())
 
     root: Path
     setUp=fixtures.LocalDevTests.setUp
