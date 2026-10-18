@@ -91,7 +91,9 @@ public sealed class AreaInventoryOriginalDataTests
         int[] ScriptsOf(int item) => inventory.TryGetItem(item, out var row) ? row.Scripts.Select(s => s.Script).Distinct().Order().ToArray() : [];
         CollectionAssert.AreEqual(new[] { 1327 }, ScriptsOf(3312)); CollectionAssert.AreEqual(new[] { 1118 }, ScriptsOf(6177));
         CollectionAssert.AreEqual(new[] { 2014 }, ScriptsOf(4201)); CollectionAssert.Contains(ScriptsOf(2527), 1341);
-        Assert.AreEqual(2, inventory.Items.Single(i => i.SourceIndex == 2527).Scripts.Count);
+        // ARC-RES-055: the same script on the examine (0) and insert-item (21) points.
+        CollectionAssert.AreEqual(new[] { new AreaInventoryScript(0, 1341), new AreaInventoryScript(21, 1341) },
+            inventory.Items.Single(i => i.SourceIndex == 2527).Scripts.ToArray());
         CollectionAssert.AreEquivalent(new[] { 4201, 6177 }, core.Where(i => (i.ItemFlags & NoDecay) != 0).Select(i => i.SourceIndex).ToArray());
 
         // The one context list: holder 1382 with item 3488.

@@ -125,7 +125,8 @@ in schema 4 to lose (its `IN` record was in memory only).
   exactly the four research NPCs with items dead (5699, 4457, 4200, 1201). Virgil's original first conversation, opened
   by the viewer's conversation host, runs node 1's `IN -2804` through the session port and the ring (1714) enters the
   PC's list, leaving his weapon and worn armor. Five of the six dead-NPC items loot; 2527 is refused for its `SAP_INSERT_ITEM` script (the research's open
-  question). All 37 core ground items pick up. Virgil and a chest are not lootable. A save and load keep the 43 items,
+  question, answered by [ARC-RES-055](../research/item-insert-script.md): the script only prints a message line, so
+  admitting it needs that line delivered through the SCR dispatcher). All 37 core ground items pick up. Virgil and a chest are not lootable. A save and load keep the 43 items,
   the re-attached seed agrees, and a second `IN -2804` changes nothing.
 
 ## Next steps

@@ -778,6 +778,17 @@ while the code reads the poison level as stat 24 (the setter and the strength an
 | IF11 | weapon skill of an item (0x465D80) | No item: melee. Not a weapon: throwing. A weapon: the boomerang flag gives throwing; complexity below 0 with range 3 or more and ammunition type 1–3 gives firearms; ammunition type 0 gives bow; anything else melee. | Original; Steamwoven implements the weapon branch only and reads complexity −2^31 as firearms (the original: melee; no data has it) |
 | IF12 | stat getter (0x4B0490) | Before effects and the clamp: poison lowers strength and dexterity by min(3, poison / 100), the poison being the effective level of stat 24; both crippled legs lower speed by 5. The getter also adds ±10 speed under the Tempus Fugit flag, one follower for a training of 2 or more in skill 11 and the PC background's ±2 (stats 0, 1, 4, 6) and ±4 (stat 22). | Original; Steamwoven implements poison (from the stored level; no Steamwoven effect targets poison) and crippled legs only |
 
+## Item insert script (ARC-RES-055)
+
+Source: [item insert script](item-insert-script.md). Question: what the `print_line` action (type 24) of a script does,
+for script 1341 on the Crash Site amulet's insert-item and examine points. Read on 2026-10-18 by a first reader and,
+independently, a second reader that saw only the question and the addresses (method step 6). SECOND_READER_RESULT
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| IS1 | `script_execute_action` (0x447220), jump table 0x44ADBC | The table is indexed by action type − 1 (entry 43 is the teleport case of TR1); entry 23, type 24 `print_line`, is the case at 0x447822, which only calls 0x44B390 with the action and the run state. | Original |
+| IS2 | print line (0x44B390) | Loads the DLG named after the running attachment's script (0x4CEE60, `dialog_load` 0x412E10) and does nothing without a script number, on a failed load or when the run object it tests is null; operand 0 (`script_get_value` 0x44BA70) selects the DLG line, whose text the NPC-entry step builds (0x413A30 → 0x416840); operand 1 travels with the text to the interface's message callback (0x460630, slot 0x5E86D8 of the table installed at 0x45FD40), or on a network game (0x62AC6C bit 0) through 0x4A2B10 and 0x4EDA60; the DLG is freed (0x412F40). Nothing but its own stack is written. | Original |
+
 ## Decisions to revisit
 
 These owner decisions or accepted proposals rest on a fact of the earlier reading that the original does not share.
