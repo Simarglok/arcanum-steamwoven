@@ -1,4 +1,4 @@
-"""Synthetic ARC-RES-013 worksheet; not CE code or a production movement API.
+"""Synthetic ARC-RES-013 worksheet; not source code or a production movement API.
 
 Run: python3 -B tools/research/grid_movement_probe.py --self-test
 Exact fractions, fixture-only eight-unit steps, no devices/assets/engine imports.

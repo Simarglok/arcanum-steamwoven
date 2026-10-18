@@ -8,7 +8,7 @@ using Arcanum.Data.Terrain;
 namespace Arcanum.CrashSiteProbe;
 
 // Research-only closure probe for the whole-exterior step frontier. Independently authored from the
-// semantics recorded in docs/research/area-passability-closure.md (CE pin a7ff41b3, read as a
+// semantics recorded in docs/research/area-passability-closure.md (read as a
 // specification, not translated). It emits aggregate counts only: no original text, names, payload
 // bytes or input paths. It is not a production admission API and grants no movement permission.
 internal static partial class Program
@@ -21,8 +21,8 @@ internal static partial class Program
     private const int ClosureEffectTableSize = 400;
     // Semantic direction order 0..7 (XMinusYMinus .. YMinus), as in the area traversal contract.
     private static readonly (int Dx, int Dy)[] ClosureDeltas = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
-    // Effect attribute tokens admitted by this probe. Each was checked against the pinned CE symbol tables
-    // (effect.c 87-185); any other token makes the effect fail closed instead of guessing parser recovery.
+    // Effect attribute tokens admitted by this probe. Each is an attribute keyword of the source's effect
+    // parser 0x4E9C20 (ledger LM9); any other token makes the effect fail closed instead of guessing parser recovery.
     private static readonly HashSet<string> ClosureEffectVocabulary = new(StringComparer.OrdinalIgnoreCase)
     {
         "st", "dx", "cn", "be", "in", "pe", "wp", "ch", "level", "poisonlevel", "age", "magicpts", "techpts",

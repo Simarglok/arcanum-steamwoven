@@ -8,7 +8,7 @@ namespace Arcanum.CrashSiteProbe;
 
 // ARC-RES-035 research only: a catalogue of every map in the module's map list and of
 // every map-to-map transition the data can express. Independently authored from the
-// pinned CE locators cited in docs/research/world-transitions.md; no CE code or
+// source locators cited in docs/research/world-transitions.md; no code or
 // structure is reused. It decodes, it does not execute: no script VM, movement, dialog
 // or map lifecycle runs. Inputs resolve through the ARC-DATA-011 content stack, so the
 // winner of every name is what the original opens on a static installation.

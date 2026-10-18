@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ARC-RES-019 read-only worksheet, not a dialog/state runtime or CE translation.
+"""ARC-RES-019 read-only worksheet, not a dialog/state runtime or a translation of the source.
 
 Public inputs in self-test are invented. Original mode publishes only hashes,
 identifiers and operation shapes; it never writes extracted payloads or text.
@@ -15,8 +15,6 @@ import struct
 import tempfile
 
 import dat_probe
-
-PIN = "a7ff41b300ef712f0e7d088183a3d08957110cdd"
 
 
 class WorksheetFailure(ValueError):
@@ -267,8 +265,7 @@ def original(scripts: Path, dialogs: Path) -> dict:
                       for gender in (0, 1) for iq in iq_points for reaction in reaction_points})
     after = [digest(scripts), digest(dialogs)]
     require(before == after, "InputChanged")
-    return {"category": "ObservedFieldsAndSourcePredicateWorksheet", "cePin": PIN,
-            "archiveHashes": before, "integrityUnchanged": True,
+    return {"category": "ObservedFieldsAndSourcePredicateWorksheet", "archiveHashes": before, "integrityUnchanged": True,
             "scriptId": 1324, "scriptLine": 4, "npcNode": 1, "records": len(rows),
             "replyIds": [2, 3, 4, 5, 6, 7], "directTarget": 9,
             "entryShapes": entry_ops, "replyActionShapes": reply_ops,

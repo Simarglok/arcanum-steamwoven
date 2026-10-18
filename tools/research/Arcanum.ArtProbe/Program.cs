@@ -443,7 +443,7 @@ internal static class Program
     }
 
     // This uses direct ART bytes only to cross-check the production API on a bounded
-    // sample. It is not a CE comparison or an independent pixel oracle.
+    // sample. It is not an independent pixel oracle.
     private static PixelEvidence VerifySampleRgba(byte[] bytes, int totalFrames, int framesPerGroup, int paletteSlot, DecoderSample sample, ArtFrame frame)
     {
         var paletteOffset = HeaderBytes;

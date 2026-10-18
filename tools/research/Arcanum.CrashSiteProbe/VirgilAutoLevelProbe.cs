@@ -10,8 +10,8 @@ namespace Arcanum.CrashSiteProbe;
 
 // ARC-RES-031 research only: what Virgil's auto-level scheme 91 is, when his level
 // can change, and which installed rules, effects and scripts could move his level
-// relative to the PC's. Independently authored from the pinned CE locators cited in
-// docs/research/virgil-auto-level.md; no CE code or structure is reused. No level-up
+// relative to the PC's. Independently authored from the source locators cited in
+// docs/research/virgil-auto-level.md; no code or structure is reused. No level-up
 // runtime; ARC-RES-032 adds a research replay (VirgilLevelReplay.cs). Only numbers, booleans, engine rule tokens and SHA-256
 // digests leave the probe; MES text other than parsed rule tokens stays in memory.
 internal static partial class Program
@@ -399,7 +399,7 @@ internal static partial class Program
         }).ToArray();
         var replay = new
         {
-            model = "follower matching the PC one level at a time from T0; CE-as-read purchase helpers",
+            model = "follower matching the PC one level at a time from T0; purchase helpers as read (docs/research/virgil-auto-level.md)",
             effects = virgilEffects.Select(c => new { category = c.Category, index = c.Index, op = c.Op.ToString(), param = c.Param }).ToArray(),
             hp_pts = sheet.HpPts, hp_adj = sheet.HpAdj, fatigue_pts = sheet.FatiguePts, fatigue_adj = sheet.FatigueAdj, training_bits_present = trainingBits,
             spell_willpower_overrides = overrides, necro_good_willpower = Enumerable.Range(60, 5).Select(id => willpower[id]).ToArray(),

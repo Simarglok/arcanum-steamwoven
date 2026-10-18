@@ -7,8 +7,8 @@ namespace Arcanum.CrashSiteProbe;
 // ARC-RES-047 research only: walking versus running (frame rate by Speed, ART frame
 // offsets, the resulting time per tile) for the viewer's human body, and which windows
 // of the start map a walker can jump through at T0. Independently authored from the
-// pinned CE locators cited in docs/research/locomotion-evidence.md, checked against the
-// original executable where noted there; no CE code or table is reused. No movement,
+// source locators cited in docs/research/locomotion-evidence.md, checked against the
+// original executable where noted there; no code or table is reused. No movement,
 // animation or admission is implemented. Only numbers, booleans and SHA-256 digests
 // leave the probe.
 internal static partial class Program
@@ -22,10 +22,9 @@ internal static partial class Program
     internal enum LocomotionAnim { Walk = 1, StealthWalk = 3, Run = 6 }
 
     /// <summary>Frames per second of a walking or running human (not dwarf or halfling)
-    /// at the given Speed. <paramref name="ceSpeedEight"/> selects the pinned CE reading,
-    /// where Speed 8 keeps the ART's own rate; the original executable returns the middle
-    /// value instead.</summary>
-    internal static int LocomotionFps(LocomotionAnim anim, int speed, int artFps, bool ceSpeedEight)
+    /// at the given Speed, as the original executable computes it (ledger LA1: Speed 8 gives
+    /// the middle value).</summary>
+    internal static int LocomotionFps(LocomotionAnim anim, int speed, int artFps)
     {
         var (mid, low, high) = anim switch
         {
@@ -35,7 +34,7 @@ internal static partial class Program
             _ => throw new ArgumentOutOfRangeException(nameof(anim)),
         };
         if (speed < 8) return low + speed * (mid - low) / 8;
-        if (speed == 8) return ceSpeedEight ? artFps : mid;
+        if (speed == 8) return mid;
         return speed < 30 ? mid + speed * (high - mid) / 30 : high;
     }
 
@@ -85,8 +84,8 @@ internal static partial class Program
     /// <summary>Leaving a building through a closed locked portal, as the original 1.0.7.4 sees it
     /// (ARC-RES-049): both open attempts on the step must say so. Each compares the portal's tile
     /// with the tile one step along its raw rotation and leaves when the first is indoor and the
-    /// second is not; it exchanges the two (the original really swaps them; CE copies one into
-    /// both) when its direction is opposite the rotation or next to opposite. The traversal attempt
+    /// second is not; it exchanges the two (the original really swaps them, ledger
+    /// LV1–LV5) when its direction is opposite the rotation or next to opposite. The traversal attempt
     /// passes the step's edge direction, so it exchanges them for a walker from across; the jump or
     /// door goal passes the direction from the walker to the portal, 5 on the portal's own tile, so
     /// a portal of rotation 0..2 is tested in reverse there and the two never agree.
@@ -166,21 +165,21 @@ internal static partial class Program
             var walk = ArtRow("walk", 1); var run = ArtRow("run", 6); var vault = ArtRow("vault", 13);
             JsonElement Element(object value) => JsonSerializer.SerializeToElement(value);
             var walkJson = Element(walk); var runJson = Element(run); var vaultJson = Element(vault);
-            object Timing(JsonElement art, LocomotionAnim anim, int speed, bool ce)
+            object Timing(JsonElement art, LocomotionAnim anim, int speed)
             {
                 var frames = art.GetProperty("frames_per_group").GetInt32(); var artFps = art.GetProperty("art_fps").GetInt32();
-                var fps = LocomotionFps(anim, speed, artFps, ce); var ms = FrameMilliseconds(fps);
+                var fps = LocomotionFps(anim, speed, artFps); var ms = FrameMilliseconds(fps);
                 var perRotation = art.GetProperty("groups").EnumerateArray().Select(g =>
                 {
                     var steps = g.GetProperty("tile_steps_per_cycle").GetDouble();
                     return new { rotation = g.GetProperty("group").GetInt32(), ms_per_tile = steps > 0 ? Math.Round(frames * ms / steps, 1) : (double?)null };
                 }).ToArray();
-                return new { anim = anim.ToString(), speed, ce_reading = ce, fps, frame_ms = ms, cycle_ms = frames * ms, per_rotation = perRotation };
+                return new { anim = anim.ToString(), speed, fps, frame_ms = ms, cycle_ms = frames * ms, per_rotation = perRotation };
             }
             var timings = new[] { 7, 8, 9, 10, 12 }.SelectMany(speed => new[]
             {
-                Timing(walkJson, LocomotionAnim.Walk, speed, false), Timing(runJson, LocomotionAnim.Run, speed, false),
-            }).Concat([Timing(walkJson, LocomotionAnim.Walk, 8, true), Timing(runJson, LocomotionAnim.Run, 8, true)]).ToArray();
+                Timing(walkJson, LocomotionAnim.Walk, speed), Timing(runJson, LocomotionAnim.Run, speed),
+            }).ToArray();
             var vaultFrames = vaultJson.GetProperty("frames_per_group").GetInt32(); var vaultFps = vaultJson.GetProperty("art_fps").GetInt32();
             var vaultTiming = new { frame_ms = 1000 / vaultFps, total_ms = vaultFrames * (1000 / vaultFps), action_frame = vaultJson.GetProperty("action_frame").GetInt32() };
 
@@ -272,8 +271,7 @@ internal static partial class Program
             var house = rows.Where(r => r.sector == BuildingSectorId).ToArray();
 
             // ARC-RES-049: closed locked doors whose lock the leaving shortcut can skip (not busted, jammed, held,
-            // never-locked or always-locked, no unlock script), by the original's leaving test from each side, against the pinned CE
-            // reading (no leaving from across; on the portal's own tile rotation 0..2 never). The test steps by the raw
+            // never-locked or always-locked, no unlock script), by the original's leaving test from each side (ledger LV1–LV5). The test steps by the raw
             // rotation, so an even rotation reads the diagonal tile.
             static (int X, int Y) Along((int X, int Y) c, int r) => r switch
             {
@@ -289,7 +287,6 @@ internal static partial class Program
                 by_rotation = resolvedDoors.GroupBy(d => d.Rotation).OrderBy(g => g.Key).ToDictionary(g => g.Key.ToString(), g => g.Count()),
                 leaving_from_portal_tile = resolvedDoors.Count(d => PortalLeaves(d.Rotation, true, d.Here, d.Along)),
                 leaving_from_across = resolvedDoors.Count(d => PortalLeaves(d.Rotation, false, d.Here, d.Along)),
-                ce_leaving_from_portal_tile = resolvedDoors.Count(d => d.Rotation > 2 && d.Here && !d.Along),
                 portal_tile_indoor_rotation_0_to_2 = resolvedDoors.Count(d => d.Rotation <= 2 && d.Here && !d.Along),
             };
 
@@ -336,13 +333,12 @@ internal static partial class Program
     private static void LocomotionSelfTest()
     {
         static void Check(bool condition, string label) { if (!condition) throw new InvalidDataException("LOCOMOTION_SELF_TEST " + label); }
-        // Rates: below 8 interpolate from the low value, 8 is the middle value (CE: ART
-        // rate), above 8 add Speed/30 of the upper span, 30 and more the high value.
-        Check(LocomotionFps(LocomotionAnim.Walk, 0, 99, false) == 6 && LocomotionFps(LocomotionAnim.Walk, 4, 99, false) == 11 && LocomotionFps(LocomotionAnim.Walk, 7, 99, false) == 15, "walk below 8");
-        Check(LocomotionFps(LocomotionAnim.Walk, 8, 99, false) == 17 && LocomotionFps(LocomotionAnim.Walk, 8, 99, true) == 99, "speed 8 original and CE");
-        Check(LocomotionFps(LocomotionAnim.Walk, 9, 99, false) == 20 && LocomotionFps(LocomotionAnim.Walk, 29, 99, false) == 29 && LocomotionFps(LocomotionAnim.Walk, 30, 99, false) == 30 && LocomotionFps(LocomotionAnim.Walk, 90, 99, false) == 30, "walk above 8");
-        Check(LocomotionFps(LocomotionAnim.Run, 7, 0, false) == 18 && LocomotionFps(LocomotionAnim.Run, 8, 0, false) == 20 && LocomotionFps(LocomotionAnim.Run, 9, 0, false) == 23 && LocomotionFps(LocomotionAnim.Run, 30, 0, false) == 30, "run");
-        Check(LocomotionFps(LocomotionAnim.StealthWalk, 8, 0, false) == 10 && LocomotionFps(LocomotionAnim.StealthWalk, 15, 0, false) == 13, "stealth");
+        // Rates: below 8 interpolate from the low value, 8 is the middle value, above 8 add Speed/30 of the upper span, 30 and more the high value.
+        Check(LocomotionFps(LocomotionAnim.Walk, 0, 99) == 6 && LocomotionFps(LocomotionAnim.Walk, 4, 99) == 11 && LocomotionFps(LocomotionAnim.Walk, 7, 99) == 15, "walk below 8");
+        Check(LocomotionFps(LocomotionAnim.Walk, 8, 99) == 17, "speed 8 original");
+        Check(LocomotionFps(LocomotionAnim.Walk, 9, 99) == 20 && LocomotionFps(LocomotionAnim.Walk, 29, 99) == 29 && LocomotionFps(LocomotionAnim.Walk, 30, 99) == 30 && LocomotionFps(LocomotionAnim.Walk, 90, 99) == 30, "walk above 8");
+        Check(LocomotionFps(LocomotionAnim.Run, 7, 0) == 18 && LocomotionFps(LocomotionAnim.Run, 8, 0) == 20 && LocomotionFps(LocomotionAnim.Run, 9, 0) == 23 && LocomotionFps(LocomotionAnim.Run, 30, 0) == 30, "run");
+        Check(LocomotionFps(LocomotionAnim.StealthWalk, 8, 0) == 10 && LocomotionFps(LocomotionAnim.StealthWalk, 15, 0) == 13, "stealth");
         Check(FrameMilliseconds(17) == 58 && FrameMilliseconds(40) == 30 && FrameMilliseconds(1) == 800, "frame clamp");
         // One tile step per rotation, and the projection of a cycle on it.
         Check(TileStepPixels(1) == (40, -20) && TileStepPixels(6) == (-80, 0) && Enumerable.Range(0, 8).All(r => TileStepPixels(r) == (-TileStepPixels((r + 4) % 8).X, -TileStepPixels((r + 4) % 8).Y)), "tile steps");

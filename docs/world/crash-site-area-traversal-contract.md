@@ -202,10 +202,11 @@ SHA256: `9dfa1a228beb1f04a35bf03da67f70e135a2ed0365f57517a8b8eeaeab68cce7`.
 The empty structural SELECTED_EVIDENCE **encoding-only** fixture is exactly:
 
 ```json
-["AREA_TRAVERSAL_RESEARCH_V1","SELECTED_EVIDENCE",1,"S1_NORMAL_GROUND_FILE_FRONTIER_V1","a7ff41b300ef712f0e7d088183a3d08957110cdd","Structural",1,1,"fixture",[],[],[],[],[],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[],null,[]]
+["AREA_TRAVERSAL_RESEARCH_V1","SELECTED_EVIDENCE",1,"S1_NORMAL_GROUND_FILE_FRONTIER_V1","9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52","Structural",1,1,"fixture",[],[],[],[],[],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[],null,[]]
 ```
 
-SHA256: `5491cd236bfd9a2e8424643da97f4928e30cce2d90ee1bb027bf4b31bfee5ade`.
+SHA256: `5d7826e4e9138e37d678276f8b1b59e0a056539d4c2f3e6e24a3a0eb17f92aaf`. Its `sourcePin` is the SHA-256 of the retail 1.0.7.4
+`Arcanum.exe` (ARC-DEV-011).
 It is not a valid original area/registration declaration. Field payload
 `[18,"Value","Instance",0,[],null]` hashes to
 `df80171b2be70e88bf4c1446cb75eaa8ee9bb47dff745bd12fae482196e91f77`;

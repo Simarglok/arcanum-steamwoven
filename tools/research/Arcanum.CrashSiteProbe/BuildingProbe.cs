@@ -6,8 +6,8 @@ namespace Arcanum.CrashSiteProbe;
 
 // ARC-RES-029 research only: the first building the player can reach from the Crash
 // Site, and how its walls, doors, windows and roofs are stored and behave. Independently
-// authored from the pinned CE locators cited in docs/research/first-building-evidence.md;
-// no CE code or table is reused. No renderer, movement, door action or roof state is
+// authored from the source locators cited in docs/research/first-building-evidence.md;
+// no code or table is reused. No renderer, movement, door action or roof state is
 // implemented. Only numbers, booleans and SHA-256 digests leave the probe.
 internal static partial class Program
 {
@@ -346,8 +346,7 @@ internal static partial class Program
                 var across = CaveStep((p.X, p.Y), art.EdgeRotation)!.Value;
                 var unlockScript = p.Scripts.Any(s => s.sap == 3 && s.script != 0);
                 // Leaving as the original's traversal and door goal both see it (PortalLeaves, ARC-RES-049):
-                // the original swaps the two tiles for a mover from across, where the pinned CE source
-                // copies one into both and never counts that side as leaving.
+                // the original swaps the two tiles for a mover from across (ledger LV1–LV5).
                 // The source steps by the raw ART rotation; it equals the edge for odd rotations.
                 if (art.Rotation != art.EdgeRotation || Indoor(p.X, p.Y) is null || Indoor(across.X, across.Y) is null) throw new InvalidDataException("BUILDING_DOOR_EDGE_NOT_ADMITTED");
                 bool Leaving(bool fromPortalTile) => PortalLeaves(art.Rotation, fromPortalTile, Indoor(p.X, p.Y) == true, Indoor(across.X, across.Y) == true);
