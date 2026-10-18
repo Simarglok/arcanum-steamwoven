@@ -283,8 +283,10 @@ public partial class TerrainViewerApp
     {
         if (award?.Followers is null || _areaSession is null || _combatHost is null || _areaEffectRules is not { } effects) return;
         var map = CurrentAreaMap;
-        var raised = AreaAdvancement.LevelFollowers(_areaSession, award,
-            entity => _combatHost.Fields(map, entity) is { } fields ? AreaAdvancement.Npc(entity, fields, effects) : null);
+        var followers = _areaSession.QueryParty().Followers.Select(f => f.Entity).ToHashSet(StringComparer.Ordinal);
+        // A follower is with the hero wherever its fields were loaded; a waiting NPC only counts on this map.
+        var raised = AreaAdvancement.LevelFollowers(_areaSession, award, entity =>
+            _combatHost.Fields(map, entity, anyMap: followers.Contains(entity)) is { } fields ? AreaAdvancement.Npc(entity, fields, effects) : null);
         foreach (var follower in raised)
             GD.Print($"ARC-WORLD-036 follower-level entity={follower.Record!.Entity} level={follower.Level!.Value.Level}"
                 + $" points={follower.Level.Value.PointsGained} purchases={follower.Scheme?.Purchases.Length ?? 0} completed={follower.Scheme?.Completed}");

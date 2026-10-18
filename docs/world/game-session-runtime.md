@@ -3,7 +3,7 @@
 Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
 inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019; life state ARC-COMBAT-002;
 event queue ARC-WORLD-024; NPC reaction ARC-WORLD-026; turn-based round ARC-COMBAT-003; equipment ARC-WORLD-028;
-durable effects ARC-WORLD-029.
+durable effects ARC-WORLD-029; experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036.
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
@@ -147,7 +147,7 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 16
+## Snapshot schema 17
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -161,6 +161,7 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 `Equipment` (the hero's worn items in slot order; [equipment](equipment-runtime.md#snapshot-schema-12)),
 `Effects` (the hero's durable entries in list order and the rule of each number; [durable effects](durable-effects-runtime.md#snapshot-schema-13)),
 `Experience` (the changed NPCs' experience worth and pool in ordinal order; the hero's experience is in `Hero`; [experience](experience-runtime.md#snapshot-schema-14)),
+`Advancement` (the levelled NPCs' sheets and schemes in ordinal order; the hero's fields are in `Hero`; [auto-level schemes](advancement-runtime.md#snapshot-schema-17)),
 `Random` (the generator's seed and draws made; [session randomness](session-random-runtime.md#snapshot-schema-7)),
 `Life` (the hero's life record and the changed NPCs' in ordinal order; [life state](life-state-runtime.md#snapshot-schema-8)),
 `Reactions` (the changed NPCs' reaction slots in ordinal order; [NPC reaction](npc-reaction-runtime.md#snapshot-schema-10)),
@@ -172,7 +173,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":14,
+{"format":"arcanum-steamwoven-session","schemaVersion":17,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -191,10 +192,12 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
  "equipment":[],
  "effects":{"hero":[],"definitions":[]},
  "experience":{"npcs":[]},
+ "advancement":{"npcs":[]},
  "random":{"seed":"0000000000000000","draws":0},
  "life":{"hero":null,"critters":[]},
  "reactions":{"records":[]},
  "combat":null,
+ "combatMode":{"hero":false,"critters":[]},
  "events":{"registry":1,"nextSequence":1,"pending":[]},
  "lighting":{"schemeId":1,"hour":15}}
 ```
@@ -225,7 +228,7 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 13 is the only accepted version. ARC-WORLD-029 added the required
+**Migration decision: none.** Schema 17 is the only accepted version. ARC-WORLD-029 added the required
 `effects` section; schema 12 is refused like the earlier ones (see [durable effects](durable-effects-runtime.md#snapshot-schema-13)).
 ARC-WORLD-028 had added the required `equipment` list and refused schema 11 (see [equipment](equipment-runtime.md#snapshot-schema-12)).
 ARC-COMBAT-003 had added the required, nullable `combat` section and refused schema 10 (see
@@ -253,7 +256,9 @@ dialog. ARC-WORLD-030 added the hero's experience and the NPCs' experience recor
 ARC-COMBAT-004 added the combat-mode flags as schema 15 and refuses schema 14
 ([real-time combat](real-time-combat-runtime.md#snapshot-schema-15)). ARC-DEV-009 binds the clock profile to the retail
 executable (`sourceRevision` is its SHA-256, [clock policy](game-clock-policy.md)) as schema 16, with no structural change, and
-refuses schema 15. Adding another domain needs schema 17 with its own explicit migration decision.
+refuses schema 15. ARC-WORLD-036 added the hero's advancement fields and the levelled NPCs' sheets as schema 17 and refuses
+schema 16 ([auto-level schemes](advancement-runtime.md#snapshot-schema-17)). Adding another domain needs schema 18 with its
+own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
 

@@ -54,9 +54,16 @@ public sealed class AreaCombatHost
         return holders;
     }
 
-    /// <summary>ARC-WORLD-036: an NPC's stored fields on a map this host covers (a follower's loaded sheet), or null.</summary>
-    public CombatFields? Fields(int runtimeMap, string entity) =>
-        _maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(entity, out var row) ? CombatFieldReader.Read(row).Fields : null;
+    /// <summary>ARC-WORLD-036: an NPC's stored fields on a map this host covers (a follower's loaded sheet), or null. With
+    /// <paramref name="anyMap"/> the other maps are searched too (a follower who came along from its home map).</summary>
+    public CombatFields? Fields(int runtimeMap, string entity, bool anyMap = false)
+    {
+        if (_maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(entity, out var row)) return CombatFieldReader.Read(row).Fields;
+        if (!anyMap) return null;
+        foreach (var other in _maps.Values)
+            if (other.RuntimeMap != runtimeMap && other.TryGetRow(entity, out var found)) return CombatFieldReader.Read(found).Fields;
+        return null;
+    }
 
     /// <summary>The NPC's combat values, read once per entity and map.</summary>
     public SessionCritterCombatBuild Build(int runtimeMap, string entity) => _maps.TryGetValue(runtimeMap, out var map)
