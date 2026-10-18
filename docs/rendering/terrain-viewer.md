@@ -1047,7 +1047,7 @@ on the live session; on a detached copy every quest and rumor that has a text is
 
 The viewer plays the original's sounds through the module's [sound catalogue](../audio/sound-catalog.md)
 on the original's three channels (effects, voice, music) at the original's volumes
-([contract](../audio/viewer-audio.md)). Nothing plays by itself yet. The palette action **Sound test: next
+([contract](../audio/viewer-audio.md)); music and ambient play since ARC-UI-041 (below). The palette action **Sound test: next
 interface sound** plays the next fixed interface sound by id and reports the outcome; the palette's sound
 line shows the output device (or "no output device" in a headless run), the three settings (0–10, default
 5, `user://audio_volumes_v1.json`; automated runs use no file unless `AUDIO_VOLUMES_TEST_PATH` is set),

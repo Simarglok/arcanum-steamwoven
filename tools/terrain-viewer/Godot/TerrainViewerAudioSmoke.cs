@@ -87,6 +87,7 @@ public partial class TerrainViewerApp
             }
             Require(_ambientStarts > before, $"no ambient of scheme {ambientScheme.Id} fired with the first draw");
             var requested = ambientScheme.Id;
+            session.PlaySoundScheme(session.Version, state.Slot0, state.Slot1); // the map's pair again for later stages
             Execute(new SchemeCommand(SchemeCommandKind.StartCombat, Stinger: 1), catalog, session);
             Require(_combatStinger is not null && _combatLoop is not null, "combat stinger or loop did not start");
             for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

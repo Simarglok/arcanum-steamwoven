@@ -76,6 +76,8 @@ public sealed class SchemePlayer
     private long? _lastTick;
     private long _combatStarts;
     private bool _combatPlaying;
+    // Voices started during the current Update: the host has not played them yet, so they cannot have ended.
+    private readonly HashSet<long> _startedNow = [];
 
     /// <param name="wrapReversedWindows">The Steamwoven setting of ledger SN14: a reversed hour window runs past midnight.</param>
     public SchemePlayer(bool wrapReversedWindows, long combatStarts = 0)
@@ -106,13 +108,20 @@ public sealed class SchemePlayer
         ArgumentNullException.ThrowIfNull(input); ArgumentNullException.ThrowIfNull(playing); ArgumentNullException.ThrowIfNull(random);
         if (hour is < 0 or > 23) throw new ArgumentOutOfRangeException(nameof(hour));
         var commands = new List<SchemeCommand>();
+        _startedNow.Clear();
         Rebind(_slots[0], input.Slot0, commands);
         Rebind(_slots[1], input.Slot1, commands);
 
         if (input.CombatStarts != _combatStarts)
         {
             _combatStarts = input.CombatStarts;
-            if (input.CombatMusic) { commands.Add(new(SchemeCommandKind.StartCombat, Stinger: random.Next(1, StingerCount))); _combatPlaying = true; }
+            if (input.CombatMusic)
+            {
+                // A stop and a new start between two frames: the old combat music is cut before the new one starts.
+                if (_combatPlaying) commands.Add(new(SchemeCommandKind.StopCombat));
+                commands.Add(new(SchemeCommandKind.StartCombat, Stinger: random.Next(1, StingerCount)));
+                _combatPlaying = true;
+            }
         }
         if (!input.CombatMusic && _combatPlaying) { commands.Add(new(SchemeCommandKind.StopCombat)); _combatPlaying = false; }
 
@@ -154,7 +163,7 @@ public sealed class SchemePlayer
                         Volume: Draw(sound.VolumeMin, sound.VolumeMax, random), Balance: Draw(sound.BalanceLeft, sound.BalanceRight, random)));
                     return; // the original leaves the slot for this tick once an ambient fired
                 case SchemeSoundKind.TransitionSong:
-                    if (slot.Voices.TryGetValue(sound.ListNumber, out var transition) && !playing(transition) && restorePending)
+                    if (slot.Voices.TryGetValue(sound.ListNumber, out var transition) && !_startedNow.Contains(transition) && !playing(transition) && restorePending)
                     {
                         slot.Voices.Remove(sound.ListNumber);
                         commands.Add(new(SchemeCommandKind.TransitionFinished, transition, sound));
@@ -176,6 +185,7 @@ public sealed class SchemePlayer
     {
         var voice = ++_nextVoice;
         slot.Voices[sound.ListNumber] = voice;
+        _startedNow.Add(voice);
         return new(SchemeCommandKind.StartSong, voice, sound, loop, sound.VolumeMin);
     }
 

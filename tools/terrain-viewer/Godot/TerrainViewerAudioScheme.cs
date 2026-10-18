@@ -146,6 +146,8 @@ public partial class TerrainViewerApp
     {
         if (_areaSession is not { } session || _audio is null || _schemePlayer is null || AreaSoundCatalog() is not { } catalog) return;
         FollowAreaSound();
+        // Song voices the backend released (a finished one-shot, a faded loop) leave the map.
+        foreach (var (voice, handle) in _schemeVoices.ToArray()) if (_audio.Volume(handle) is null) _schemeVoices.Remove(voice);
         var view = session.QuerySound();
         var state = view.State;
         var input = new SchemeInput(SchemeContent(state.Slot0), SchemeContent(state.Slot1), state.RestorePending, state.CombatMusic, view.CombatStarts);
@@ -178,9 +180,12 @@ public partial class TerrainViewerApp
                 }
                 break;
             case SchemeCommandKind.TransitionFinished:
+                _schemeVoices.Remove(command.Voice);
                 session.FinishSoundTransition(session.Version);
                 break;
             case SchemeCommandKind.StartCombat:
+                if (_combatStinger is { } oldStinger) _audio!.Stop(oldStinger);
+                if (_combatLoop is { } oldLoop) _audio!.Stop(oldLoop);
                 _combatStinger = Play(catalog.OpenPayload(catalog.ResolveSoundFile(SoundCatalog.CombatStingerName(command.Stinger))), AudioChannel.Music, music, false);
                 _combatLoop = Play(catalog.OpenPayload(catalog.ResolveSoundFile(SoundCatalog.CombatLoopName)), AudioChannel.Music, music, true);
                 _schemeNotice = $"combat music (stinger {command.Stinger})";

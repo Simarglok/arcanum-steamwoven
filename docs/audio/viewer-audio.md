@@ -4,9 +4,8 @@ Status: **Implemented bounded component**, task 3 of the
 [audio plan](../research/audio-evidence.md#task-plan). The AREA viewer (exterior, cave and map
 mode) can play the original's sounds: the module's [sound catalogue](sound-catalog.md) resolves
 an id or a file, the payload is admitted, and the engine decodes and plays it on one of the
-original's three channels at the original's volumes. Nothing plays by itself yet; music and
-ambient (ARC-UI-041), positional effects (ARC-UI-042), voice (ARC-UI-043) and interface sounds
-(ARC-UI-044) use this output.
+original's three channels at the original's volumes. Music and ambient play through it since ARC-UI-041 ([scheme player](scheme-player.md)); positional effects
+(ARC-UI-042), voice (ARC-UI-043) and interface sounds (ARC-UI-044) will use it too.
 
 ## Volume rules (Godot-free)
 
@@ -34,6 +33,10 @@ The original has no master or separate ambient bar; none is added here.
   its whole sample range, a looped MP3 the whole file. Statuses: `Playing`, `Silent` (decoded
   and started, but the engine has no output device: the Dummy driver of a headless run),
   `NotAdmitted`, `DecodeFailed`, `VoiceLimit` (nothing is stolen), `Disposed`.
+- `Play(..., pan)`: a pan −1…1 routes the voice through one of nine panning buses of its channel (`Effects pan −4` …
+  `+4`, an `AudioEffectPanner` at each quarter, sending to the channel bus; a Steamwoven choice, the original pans
+  continuously). Pan buses are created on first use and removed with the others.
+- `FadeOut(handle, ms)`: fades a voice to silence and releases it (25 ms for scheme songs); a stale handle is a no-op.
 - Handles carry a slot and a generation: a stale handle never stops a later sound in its slot.
   `Stop`, `StopAll`, `IsPlaying`, `Volume`.
 - `FlattenChannel(channel, channelVolume)`: when a setting changes, the original sets every live

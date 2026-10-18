@@ -44,14 +44,20 @@ executable):
   buses per channel, steps of 0.25, a Steamwoven choice); the combat stinger and loop at the bare
   music volume. Ambient payloads are kept per module; songs are read when they start.
 - The AREA status line shows `music/ambient: slots A/B[, combat], voices N`.
+- Known limits: only the pair the session holds when a frame begins reaches the player, so the once-songs of a pair
+  replaced within the same frame (a map default immediately replaced by the arrival sector's pair) never start; the
+  original's order there is not recorded. A loop song whose start failed is not retried until its window or slot
+  changes. A first entry into a sector parses that sector once on the main thread (cached), and songs open their
+  payload when they start; ambient payloads are cached per module (bounded by the module's ambient files).
 
 ## Checks
 
 - `tests/Arcanum.Presentation.Tests/SchemePlayerTests.cs`: once-songs at load, loops by window and
   tick, the 250 ms rule, ambient chance, draws and one ambient per slot per tick, per-slot ambients,
   reversed windows in both settings, slot changes, the transition report, combat start and stop.
-- Native smoke on the original installation (map mode `fal'kins maze`): `ARC-UI-041 native-smoke
+- Native smoke on the original installation (map mode `fal'kins maze`; the same stage is chained into the exterior
+  AREA smoke, which was not run because its first pixel stage fails on main for unrelated reasons): `ARC-UI-041 native-smoke
   schemes PASS`: the session holds the map default (15/39 at 15:00), its day loop song plays; a
   requested scheme with an ambient sound at this hour fires within the first ticks with draws
-  pinned to their minimum; the combat stinger and loop start together and stop at once. Hearing
-  itself is not checked.
+  pinned to their minimum (the map's pair is requested again afterwards); the combat stinger and loop
+  start together and stop at once. Hearing itself is not checked.

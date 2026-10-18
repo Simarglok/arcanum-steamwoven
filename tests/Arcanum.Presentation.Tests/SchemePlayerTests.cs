@@ -112,8 +112,9 @@ public sealed class SchemePlayerTests
     {
         var player = new SchemePlayer(false);
         var scheme = new SchemeSounds(1, [Song(10, SchemeSoundKind.TransitionSong)]);
-        var start = player.Update(Input(scheme, pending: true), 0, 12, Playing, new Draws());
+        var start = player.Update(Input(scheme, pending: true), 0, 12, _ => false, new Draws());
         var voice = start.Single().Voice;
+        Assert.AreEqual(SchemeCommandKind.StartSong, start.Single().Kind, "a song started in this update is not reported finished before the host plays it");
         Assert.AreEqual(0, player.Update(Input(scheme, pending: true), 300, 12, _ => true, new Draws()).Count, "still playing");
         Assert.AreEqual(0, player.Update(Input(scheme, pending: false), 600, 12, _ => false, new Draws()).Count, "no restore pending");
         var finished = player.Update(Input(scheme, pending: true), 900, 12, v => v != voice, new Draws());
@@ -129,8 +130,10 @@ public sealed class SchemePlayerTests
         var start = player.Update(Input(null, combat: true, starts: 3), 10, 12, Playing, new Draws(4));
         Assert.AreEqual((SchemeCommandKind.StartCombat, 4), (start.Single().Kind, start.Single().Stinger));
         Assert.AreEqual(0, player.Update(Input(null, combat: true, starts: 3), 20, 12, Playing, new Draws()).Count);
-        Assert.AreEqual(SchemeCommandKind.StopCombat, player.Update(Input(null, starts: 3), 30, 12, Playing, new Draws()).Single().Kind);
-        Assert.AreEqual(0, player.Update(Input(null, starts: 3), 40, 12, Playing, new Draws()).Count);
+        CollectionAssert.AreEqual(new[] { SchemeCommandKind.StopCombat, SchemeCommandKind.StartCombat },
+            player.Update(Input(null, combat: true, starts: 4), 25, 12, Playing, new Draws(2)).Select(c => c.Kind).ToArray(), "a restart between frames cuts the old music first");
+        Assert.AreEqual(SchemeCommandKind.StopCombat, player.Update(Input(null, starts: 4), 30, 12, Playing, new Draws()).Single().Kind);
+        Assert.AreEqual(0, player.Update(Input(null, starts: 4), 40, 12, Playing, new Draws()).Count);
         player.Reset(7);
         Assert.AreEqual(0, player.Update(Input(null, combat: true, starts: 7), 50, 12, Playing, new Draws()).Count, "a reset adopts the counter");
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => player.Update(Input(null), 60, 24, Playing, new Draws()));
