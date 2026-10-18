@@ -6,14 +6,15 @@ generated images, including the SDXL material textures below and the ARC-RES-038
 for now; it stays a 4× pack without generated images (the non-generative 4× base of the "1 + 3" decision; see
 [outcome](#c-method-per-category-outcome)).
 
-This note follows the [generative re-detailing](hd-generative-redetail.md) (ARC-RES-038) and the owner's
-review of its Crash Site pack. It tests three things. The first is an edge fix for sprites without diffusion. The second is stronger open image-editing models run as "redraw + fit". The
-third is a terrain method that avoids per-tile generation. It then records the outcome per category.
+This note follows the [generative re-detailing](hd-generative-redetail.md) (ARC-RES-038) and the owner's review of
+its Crash Site pack. It tests three things. The first is an edge fix for sprites without diffusion. The second is
+stronger open image-editing models run as "redraw + fit". The third is a terrain method that avoids per-tile
+generation. It then records the outcome per category.
 
-It adds no pack format change, build tool, loader or renderer path. No original, generated or derived frame,
-crop, sheet, GIF, model weight or harness file is in this repository or its PR. Everything stayed under the
-ignored `local/` directories of the owner's two Macs and was moved to the Trash on 2026-10-18. The owner
-judged the sheets and animations in the project discussion. That review is not a merge gate; the human before/after review stays
+It adds no pack format change, build tool, loader or renderer path. No original, generated or derived frame, crop,
+sheet, GIF, model weight or harness file is in this repository or its PR. Everything stayed under the ignored
+`local/` directories of the owner's two Macs and was moved to the Trash on 2026-10-18. The owner judged the sheets
+and animations in the project discussion. That review is not a merge gate; the human before/after review stays
 [ARC-RENDER-015](terrain-viewer.md).
 
 Evidence vocabulary as in ARC-RES-033/038:
@@ -43,12 +44,12 @@ From the project discussion, 2026-10-17..18:
   only. Fix 2, de-matting the ring, must not touch dark materials.
 - **Repeated parts.** Identical man-made parts (the chest's three bronze bands) must stay identical. This led to
   the repeated-part step below.
-- **Qwen-Image-Edit-2511 is rejected** (2026-10-18, after the full klein walk sheets and the Qwen sheets: "unacceptably
-  low quality, many errors"), with and without the Lightning LoRA.
-- **Local generator checks are closed** (2026-10-18). HD support in the code stays; the pack is
-  a 4× pack without generated images (the non-generative 4× base of the "1 + 3" decision) for now; building it is a separate, later task. On the
-  second Mac the downloaded models, outputs and harness were moved to the Trash; the main Mac's models and
-  outputs were moved to its Trash by the thread that ran them there (as reported in the handover).
+- **Qwen-Image-Edit-2511 is rejected** (2026-10-18, after the full klein walk sheets and the Qwen sheets:
+  "unacceptably low quality, many errors"), with and without the Lightning LoRA.
+- **Local generator checks are closed** (2026-10-18). HD support in the code stays; the pack is a 4× pack without
+  generated images (the non-generative 4× base of the "1 + 3" decision) for now; building it is a separate, later
+  task. On the second Mac the downloaded models, outputs and harness were moved to the Trash; the main Mac's models
+  and outputs were moved to its Trash by the thread that ran them there (as reported in the handover).
 - **Machines.** On 2026-10-18 the owner moved generation to a second Mac (M1 Max, 32 GiB) and had the models and
   outputs removed from the main Mac. The walk_v3 and all Qwen heroine and Lightning runs below are from the
   second Mac.
