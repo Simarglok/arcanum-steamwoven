@@ -158,11 +158,11 @@ in `src/game/ai.c` unless named.
 
 | # | Unit | Source | First-pass summary | Stage |
 | --- | --- | --- | --- | --- |
-| S1 | AI parameter table | [36–59][params], [192–274][params-load] | 17 named integers per row; 150 rows, base file fills 0..99, module 100..149. | A1 |
-| S2 | Tick and activity | [2859–3066][timeevent] | Heartbeat scripts, generator branch, 30-cell activity, distance-scaled delay, follower catch-up. | A1 |
-| S3 | Gate and pipeline | [288–436][process] | Heal, else item search, else danger update; then perform; status recoveries (blind 1/160, crippled 1/8000 per pass, stun end). | A1 |
-| S4 | Danger state and setter | [1586–1610][danger-get], [1612–1730][danger-set] | Four states, flags, scripts, sound, reaction drop, global switch. | A1 |
-| S5 | Turn-based hooks | combat.c [3024–3038][cb-tb], [762–775][cb-hit], [1868–1876][cb-dmg] | AI pass at subturn start after the heartbeat script, AP to 0 when it starts no goal; immediate pass for an attacked NPC (real time only in effect); AP rules in ARC-RES-030 C8/C11. | A1 |
+| S1 | AI parameter table | [36–59][params], [192–274][params-load] | 17 named integers per row; 150 rows, base file fills 0..99, module 100..149. | A1 (done: [core loop](npc-ai-core-loop.md)) |
+| S2 | Tick and activity | [2859–3066][timeevent] | Heartbeat scripts, generator branch, 30-cell activity, distance-scaled delay, follower catch-up. | A1 (done: [core loop](npc-ai-core-loop.md)) |
+| S3 | Gate and pipeline | [288–436][process] | Heal, else item search, else danger update; then perform; status recoveries (blind 1/160, crippled 1/8000 per pass, stun end). | A1 (done: [core loop](npc-ai-core-loop.md)) |
+| S4 | Danger state and setter | [1586–1610][danger-get], [1612–1730][danger-set] | Four states, flags, scripts, sound, reaction drop, global switch. | A1 (done: [core loop](npc-ai-core-loop.md)) |
+| S5 | Turn-based hooks | combat.c [3024–3038][cb-tb], [762–775][cb-hit], [1868–1876][cb-dmg] | AI pass at subturn start after the heartbeat script, AP to 0 when it starts no goal; immediate pass for an attacked NPC (real time only in effect); AP rules in ARC-RES-030 C8/C11. | A1 (done: [core loop](npc-ai-core-loop.md)) |
 | S6 | Sight | [3994–4076][see] | Facing, invisibility vs extraordinary PE or detect-invisible, prowling against concealment, clamp 1..10, +1 when blocked; returns excess distance, 0 = seen. | A2 |
 | S7 | Hearing | [4078–4197][hear] | Loudness 2/8/15, sleeping halves PE, moving silently, sound traversal cost along a straight path. | A2 |
 | S8 | Line of fire | [3305–3369][lof] | Shared with combat O4; blocker and cover rating. | A2 |
@@ -197,7 +197,8 @@ in `src/game/ai.c` unless named.
   that mechanical critters are never healed by AI ([heal][heal]).
 - **P5** While an NPC is in combat mode every pass runs its start-combat
   script, and in real time the end-combat script just before it; the intent
-  is unclear ([gate][gate]).
+  is unclear ([gate][gate]). Settled by ARC-RES-054: the original's design,
+  kept ([core loop](npc-ai-core-loop.md#7-anomalies-and-decisions)).
 - **P6** Whether FLEE → SURRENDER on the first fleeing action is the intended
   morale model or a reconstruction slip needs a second reading against
   `tb_ui.c` and the scripts that test "surrendered" ([perform][perform]).
@@ -230,7 +231,7 @@ Codes are allocated when each task is created (D6).
 | Stage | Code | Scope (source units) | Output |
 | --- | --- | --- | --- |
 | A0 | ARC-RES-040 (allocated 2026-10-16 with the task, D7) for the CE half; ARC-RES-041 for the census | What the original and CE load and run for combat, AI, skills, magic and technology: init order, every data file and prototype field these modules read, when and how, and which module owns it at runtime; original data census on the Mac (absorbs A9). | CE half: [load map](combat-domain-load-map.md); census: [data census](combat-data-census.md) with data aggregates and first real fight candidates. |
-| A1 | on creation | Core loop: S1–S5. Parameter semantics, tick cadence, pipeline order, danger state machine with every flag and script, turn-based and real-time entry points. | State diagram, transition table, cadence formula, parameter dictionary. |
+| A1 | ARC-RES-054 | Core loop: S1–S5. Parameter semantics, tick cadence, pipeline order, danger state machine with every flag and script, turn-based and real-time entry points. | State diagram, transition table, cadence formula, parameter dictionary: [core loop](npc-ai-core-loop.md) (done). |
 | A2 | on creation | Awareness: S6–S9. See/hear formulas, loudness, line of fire, witnesses. | Pure-function specs with worked numbers; closes combat O4. |
 | A3 | on creation | Hostility and targeting: S10–S13. | KOS/protect/upset decision tables, target scan order, enemy-list lifecycle. |
 | A4 | on creation | Morale: S14–S15. | Flee/surrender/back-off rules, P2 and P6 settled. |
@@ -343,6 +344,13 @@ game really has.
 | A12 (ARC-COMBAT-003) | CE and original 1.0.7.4: an overexertion that knocks the PC out passes the turn on inside its damage step, then sets the action points, by now the next participant's, to 0. | The next participant keeps the action points its subturn granted. | The zero was meant for the overexerting PC; fixed under D2 by ARC-COMBAT-003 ([ledger TB9](original-verification-ledger.md#turn-based-round-arc-combat-003)). | `OverexertionKnockoutClearsNextActionPoints` (Original setting) |
 | Reputation A2 (ARC-RES-028) | CE and original 1.0.7.4: a deliberate hit by the PC on its own follower adds AI parameter 9 to the follower's reaction, although the field describes how much the hit lowers it. | Lowered by parameter 9. | Owner decision 2026-10-17 (PR #184); implemented by ARC-WORLD-026 in `ReactionRules.PcHit`. | `FollowerHitRaisesReaction` (Original setting) |
 | LM14 (ARC-RES-040) | The melee damage scaling helper always returns 100, so it changes nothing. | Kept: no scaling. | The intended factor is unknown, so there is no confirmed slip to fix. ARC-COMBAT-001. | none |
+| P5 (ARC-RES-039) | Original 1.0.7.4: in combat mode every pass that reaches the gate's combat test runs the start-combat script, in real time after the end-combat script; the end-combat script also runs at the end of the NPC's subturn ([core loop](npc-ai-core-loop.md#3-one-pass)). | Kept: per-pass hooks in both settings. | The original's design, which scripts are written against; nothing marks it as a slip ([ledger P5](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024), re-read by ARC-RES-054). Proposed by ARC-RES-054. | none |
+| LM3 (ARC-RES-040) | Original 1.0.7.4: AI rows fill by position from the first entry's number, and an NPC's row is copied without a bounds check. | Rows by position as in the original; a row outside the table is refused in both settings (no out-of-bounds read, owner rule). | A latent bug of the original; the installed tables have no gap, so positional and by-number filling agree on shipped data ([census](combat-data-census.md#2-ai-parameter-rows)). Implemented by ARC-DATA-033 ([AI parameter table](../world/ai-parameters.md)); confirmed by ARC-RES-054. | none |
+| LM4 (ARC-RES-040) | Original 1.0.7.4: the module unload of the AI rows does nothing, so rows 100..149 survive into the next module. | Not reachable: Steamwoven builds the module rows with each module's content layer and models no module change inside a session. | Load-map policy 1. Proposed by ARC-RES-054. | none |
+| CL1 (ARC-RES-054) | Reconstruction only: a still-stunned NPC passes the gate and acts. The original ends every pass while the NPC is stunned, also the pass that clears the flag ([ledger CL1](original-verification-ledger.md#npc-ai-core-loop-arc-res-054)). | As the original. | Reconstruction slip. Lands with slice I6. | none: both settings follow the original |
+| CL2 (ARC-RES-054) | Reconstruction only: after the full re-wield only "check wield" is cleared, so the next pass re-wields the weapon. The original clears "check weapon" too ([ledger CL2](original-verification-ledger.md#npc-ai-core-loop-arc-res-054)). | As the original. | Reconstruction slip. Lands with slice I6. | none: both settings follow the original |
+| CL4 (ARC-RES-054) | Original 1.0.7.4: a surrender leaves combat mode and then writes back critter flags read before, so the combat-mode bit is set again and the surrendered NPC still counts as in combat mode ([ledger CL4](original-verification-ledger.md#npc-ai-core-loop-arc-res-054)). | A surrender leaves the combat-mode bit cleared. | A stale write; the setter clearly means to leave combat mode. Proposed by ARC-RES-054; lands with slice I2. | `SurrenderKeepsCombatModeFlag` (Original setting), proposed |
+| CL5 (ARC-RES-054) | Original 1.0.7.4: the gate's blind, crippled and stun writes use critter flags read before the combat scripts of the same pass, undoing a script's flag change ([ledger CL5](original-verification-ledger.md#npc-ai-core-loop-arc-res-054)). | Each write changes only its own bits of the current flags. | A stale write (latent). Proposed by ARC-RES-054; lands with slice I6. | `GateRecoveryWritesStaleFlags` (Original setting), proposed |
 
 ## Owner decisions (2026-10-16)
 
