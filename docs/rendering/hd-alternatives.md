@@ -1,14 +1,20 @@
 # HD alternatives for characters, objects and terrain (ARC-RES-053)
 
-Status: **research only.** This note follows the [generative re-detailing](hd-generative-redetail.md)
-(ARC-RES-038) and the owner's review of its Crash Site pack. It tests three things. The first is an edge fix
-for sprites without diffusion. The second is stronger open image-editing models run as "redraw + fit". The
-third is a terrain method that avoids per-tile generation. It then proposes a method per category.
+Status: **research only; closed 2026-10-18.** The owner rejected the three edit models tested (Z-Image-Turbo,
+FLUX.2 klein-4B, Qwen-Image-Edit-2511 with and without Lightning) and closed the local generator checks. No
+generated images, including the SDXL material textures below and the ARC-RES-038 SDXL pipeline, go into the pack
+for now; it stays a 4× pack without generated images (the non-generative 4× base of the "1 + 3" decision; see
+[outcome](#c-method-per-category-outcome)).
 
-It adds no pack format change, build tool, loader or renderer path. No original, generated or derived frame,
-crop, sheet, GIF, model weight or harness file is in this repository or its PR. Everything stayed under the
-ignored `local/` directories of the owner's two Macs. The owner judged the sheets and animations in the
-project discussion. That review is not a merge gate; the human before/after review stays
+This note follows the [generative re-detailing](hd-generative-redetail.md) (ARC-RES-038) and the owner's review of
+its Crash Site pack. It tests three things. The first is an edge fix for sprites without diffusion. The second is
+stronger open image-editing models run as "redraw + fit". The third is a terrain method that avoids per-tile
+generation. It then records the outcome per category.
+
+It adds no pack format change, build tool, loader or renderer path. No original, generated or derived frame, crop,
+sheet, GIF, model weight or harness file is in this repository or its PR. Everything stayed under the ignored
+`local/` directories of the owner's two Macs and was moved to the Trash on 2026-10-18. The owner judged the sheets
+and animations in the project discussion. That review is not a merge gate; the human before/after review stays
 [ARC-RENDER-015](terrain-viewer.md).
 
 Evidence vocabulary as in ARC-RES-033/038:
@@ -38,6 +44,12 @@ From the project discussion, 2026-10-17..18:
   only. Fix 2, de-matting the ring, must not touch dark materials.
 - **Repeated parts.** Identical man-made parts (the chest's three bronze bands) must stay identical. This led to
   the repeated-part step below.
+- **Qwen-Image-Edit-2511 is rejected** (2026-10-18, after the full klein walk sheets and the Qwen sheets:
+  "unacceptably low quality, many errors"), with and without the Lightning LoRA.
+- **Local generator checks are closed** (2026-10-18). HD support in the code stays; the pack is a 4× pack without
+  generated images (the non-generative 4× base of the "1 + 3" decision) for now; building it is a separate, later
+  task. On the second Mac the downloaded models, outputs and harness were moved to the Trash; the main Mac's models
+  and outputs were moved to its Trash by the thread that ran them there (as reported in the handover).
 - **Machines.** On 2026-10-18 the owner moved generation to a second Mac (M1 Max, 32 GiB) and had the models and
   outputs removed from the main Mac. The walk_v3 and all Qwen heroine and Lightning runs below are from the
   second Mac.
@@ -56,8 +68,8 @@ Local observation.
   mirrors, as in ARC-RES-038.
 - **Reproduction on the second Mac.** It exported the frames from its own installation and got byte-identical
   PNGs for all five evaluation frames and the 80 exported walk frames, all eight groups (SHA-256 compared). It
-  reproduced the klein chest to the reported precision: IoU 0.979, mean contour deviation 0.33 source px, repeated-part residual
-  47.2 → 9.8, HD offset (57, 27).
+  reproduced the klein chest to the reported precision: IoU 0.979, mean contour deviation 0.33 source px,
+  repeated-part residual 47.2 → 9.8, HD offset (57, 27).
 - **Harness:** Python scripts under `local/hd-gen/lib`, plus throwaway C# exporters over `Arcanum.Data` and the
   terrain viewer core. Not committed.
 
@@ -170,8 +182,8 @@ Licence facts are under [Licences](#licences).
 | --- | --- | --- |
 | FLUX.2 klein-4B | 4 steps (distilled), bf16, 1024 canvas | rejected by the owner |
 | Z-Image-Turbo | img2img strength 0.5, 9 steps, guidance 0, prompt embeddings computed first (two-phase load) | rejected |
-| Qwen-Image-Edit-2511 | transformer GGUF Q4_0 (unsloth), text encoder bf16 in a separate phase, 20 steps, true CFG 4 | most faithful on the chest (judgement); 57 min (main Mac, chest) and 28 min (second Mac, heroine) per image |
-| Qwen-Image-Edit-2511 + Lightning LoRA | as above plus the 8-step bf16 LoRA (lightx2v), 8 steps, true CFG 1 | as faithful on the chest (judgement); 6–8 min per image (second Mac) |
+| Qwen-Image-Edit-2511 | transformer GGUF Q4_0 (unsloth), text encoder bf16 in a separate phase, 20 steps, true CFG 4 | most faithful on the chest (judgement); 57 min (main Mac, chest) and 28 min (second Mac, heroine) per image; rejected by the owner (2026-10-18) |
+| Qwen-Image-Edit-2511 + Lightning LoRA | as above plus the 8-step bf16 LoRA (lightx2v), 8 steps, true CFG 1 | as faithful on the chest (judgement); 6–8 min per image (second Mac); rejected by the owner (2026-10-18) |
 
 **Z-Image-Turbo** (local observation, owner verdict).
 - **Detail fell:** chest 14.1 → 7.4, heroine 11.6 → 9.1.
@@ -266,7 +278,9 @@ Mean contour deviation 0.50–0.74 source px per frame and 0.53–0.86 with the 
 What changes between frames:
 - face, hair and swimsuit highlights change from frame to frame;
 - judgement from the earlier klein GIFs: group 4 (front) changed most; by the walk_v3 numbers per-frame flicker
-  is highest in group 6 (35.6).
+  is highest in group 6 (35.6);
+- judgement from the full walk_v3 sheets: on the front-facing group 4 klein drew the heroine from the back in
+  many frames, in both modes.
 
 Findings:
 - **The reference image does not hold the walk together.** Flicker stays at the per-frame level in every group,
@@ -355,39 +369,36 @@ The context fallback (each tile generated in its 8-neighbour context) was not ru
 **Large painted backdrops (Quintarra and similar facades):** note only. They need a separate task: reassemble
 the backdrop, run tiled diffusion with overlap, cut it back into frames.
 
-## C. Method per category (recommendation)
+## C. Method per category (outcome)
 
-Judgement from the numbers and the owner's verdicts; the owner's look decides. klein and Z-Image-Turbo are
-rejected, so the only generative candidate left is Qwen-Image-Edit-2511 with the Lightning LoRA.
+Owner decision, 2026-10-18: no generated images in the pack for now. Every local generator tested here is
+rejected (Z-Image-Turbo, FLUX.2 klein-4B, Qwen-Image-Edit-2511 with and without Lightning), and the local
+generator checks are closed. HD support in the code stays. Building the pack is a separate, later task, which
+picks the exact non-generative variant.
 
-- **Characters and animation.**
-  - **No generative method is ready.** With the 8× fixes and the v3 finish the klein walks flicker at 1× by
-    18–38 against 0.4–0.5 for the A edge fix, per frame and with a reference frame alike. The per-pixel lock
-    (1.5) and the sheet mode (1.1) hold only by re-imposing the original's look or by losing detail and IoU.
-  - Qwen keeps the pose on a still but redraws the body (hair length, a zip, fuller figure; IoU 0.83–0.84), so
-    it fails both the semantics and the pack's silhouette check for characters.
-  - Until a consistent method exists, the pack keeps the A edge fix (interior bleed + colour lock) for animated
-    bodies.
-  - Next candidates, none run: Qwen-Edit with an owner-approved HD exemplar of the body as a second image;
-    stronger per-body hints for hair and outfit; a per-body LoRA (judgement: Qwen-Edit is too large to train on
-    either Mac).
-- **Hard-surface, man-made objects** (chests, furniture, machines).
-  - Method: Qwen-Image-Edit-2511 Q4_0 + Lightning, 8 steps, true CFG 1; the v3 finish; then the repeated-part
-    step for any repeats. Input: the ring de-matted on light materials only, as the owner's fix-2 rule asks.
-    The Qwen chest here used the full de-matte base instead; the light-only input is not yet run with Qwen.
-  - About 6–8 min per chest-sized frame on the second Mac. For scale only: the 59 distinct Crash Site character
-    and object frames of ARC-RES-038 would be roughly 6–8 h at that rate; the object frames this method covers
-    are fewer (judgement from the rate).
-  - Invented plank lines remain a semantic error; such frames should carry both versions (generation and A) in
-    the pack for the ARC-RENDER-015 review.
-- **Natural objects** (trees, bushes, rocks): **open.** klein gained the most on the tree (detail 6.1 → 21.3) but
-  is rejected; Qwen was not run on the tree. Until it is, A or the ARC-RES-038 generation.
-- **Walls and cave rock.** A or the ARC-RES-038 generation. klein drew masonry on the cave wall (IoU 0.70); Qwen
-  was not run on walls, so do not use an edit model there without a material-specific hint test.
-- **Terrain:** material detail by world coordinates (gain about 2.5) over the x4plus + lock base; no per-tile or
-  whole-map generation.
+- **Characters, objects, natural objects, walls.** Candidate (judgement): the `realesrgan-x4plus` soft 4× base
+  with the shading lock and smooth alpha (ARC-RES-038), with the section A edge fix (interior bleed + colour lock
+  for characters, de-matte + colour lock for objects). The owner judged the A variants short of the target look;
+  whether they are acceptable for now is the owner's call in the pack-build task.
+- **Terrain.** Candidate (judgement): the x4plus + lock base. The material detail of section D uses
+  SDXL-generated textures, so it is out of the pack for now, although it had the best seam and border-line
+  ratios (local observation).
 - **Viewing:** propose filtered HD minification for zooms below 4× (contract and renderer task) before judging
   HD at 200–300 % in the game; 4× stays the pack scale.
+
+What the rejected generators showed, for the record (judgement from the numbers and the sheets):
+- **Animation.** The klein walks flicker at 1× by 18–38 against 0.4–0.5 for the A edge fix, per frame and with a
+  reference frame alike; on the front-facing group 4 klein drew the heroine from the back in many frames
+  (see Animation). The per-pixel lock (1.5) and the sheet mode (1.1) hold only by
+  re-imposing the original's look or by losing detail and IoU.
+- **Characters.** Qwen keeps the pose on a still but redraws the body (hair length, a zip, fuller figure; IoU
+  0.83–0.84).
+- **Man-made objects.** Qwen + Lightning (8 steps, about 6–8 min per chest-sized frame on the second Mac) was the
+  most faithful in content on the chest (judgement from the sheets; by IoU and deviation klein v3 was marginally
+  closer); the repeated-part step brings its bands from 32.5 to 7.8. It still
+  invents plank lines.
+- **Natural objects and walls.** klein gained most on the tree (detail 6.1 → 21.3) but drew masonry on the cave
+  wall; Qwen was not run on either.
 
 ## Time and memory
 
@@ -416,9 +427,9 @@ them locally. Not legal advice.
 | --- | --- | --- | --- |
 | FLUX.2 klein-4B (`black-forest-labs/FLUX.2-klein-4B`) | `e7b7dc27`, diffusers parts | Apache-2.0 (card) | Tried, rejected. FLUX.2 dev and klein-9B are non-commercial and were **excluded**. |
 | Z-Image-Turbo (`Tongyi-MAI/Z-Image-Turbo`) | `f332072a` | Apache-2.0 (card) | Tried, rejected. |
-| Qwen-Image-Edit-2511 (`Qwen/Qwen-Image-Edit-2511`) | `6f3ccc0b`, text encoder, VAE, configs | Apache-2.0 (card) | Local redraw (chest, heroine). |
-| Qwen-Image-Edit-2511 GGUF (`unsloth/Qwen-Image-Edit-2511-GGUF`) | `0d33d969`, `qwen-image-edit-2511-Q4_0.gguf` | Apache-2.0 (card) | 4-bit transformer. |
-| Qwen-Image-Edit-2511 Lightning (`lightx2v/Qwen-Image-Edit-2511-Lightning`) | `107d238d`, `Qwen-Image-Edit-2511-Lightning-8steps-V1.0-bf16.safetensors` | Apache-2.0 (card metadata; the card text states no other terms) | 8-step LoRA on the second Mac (chest, heroine). |
+| Qwen-Image-Edit-2511 (`Qwen/Qwen-Image-Edit-2511`) | `6f3ccc0b`, text encoder, VAE, configs | Apache-2.0 (card) | Local redraw (chest, heroine). Tried, rejected. |
+| Qwen-Image-Edit-2511 GGUF (`unsloth/Qwen-Image-Edit-2511-GGUF`) | `0d33d969`, `qwen-image-edit-2511-Q4_0.gguf` | Apache-2.0 (card) | 4-bit transformer. Tried, rejected. |
+| Qwen-Image-Edit-2511 Lightning (`lightx2v/Qwen-Image-Edit-2511-Lightning`) | `107d238d`, `Qwen-Image-Edit-2511-Lightning-8steps-V1.0-bf16.safetensors` | Apache-2.0 (card metadata; the card text states no other terms) | 8-step LoRA on the second Mac (chest, heroine). Tried, rejected. |
 | SDXL base 1.0, SDXL VAE fix, ControlNet Tile, style LoRA | as ARC-RES-038 | as ARC-RES-038 | Terrain material textures (D). |
 | Real-ESRGAN `realesrgan-x4plus` + ncnn-vulkan | as ARC-RES-033 | BSD-3-Clause / MIT | 4× base. Copied to the second Mac with the owner's approval. |
 | PyTorch, diffusers, transformers, accelerate, peft, huggingface_hub, gguf 0.19.0, SciPy 1.17.1, NumPy, Pillow | pip wheels | permissive (gguf MIT, SciPy BSD-3-Clause, others as ARC-RES-038) | Local tooling. |
@@ -433,8 +444,8 @@ them locally. Not legal advice.
   klein-4B LoRA might have fit 24 GiB, but klein is rejected.)
 - Qwen was not run on the tree, the cave walls, the walk or with a reference image. The Lightning settings
   (8 steps, true CFG 1) were not swept, and the 4-step file was not tried.
-- The Qwen and klein chests had different inputs (full de-matte against light-only de-matte); the recommended
-  light-only input was not run with Qwen.
+- The Qwen and klein chests had different inputs (full de-matte against light-only de-matte); the light-only
+  input (the owner's fix-2 rule) was not run with Qwen.
 - The 20-step Qwen chest ran only on the main Mac, so its 57 min against 8 min for Lightning is a cross-machine
   comparison. Several main-Mac numbers (the Qwen chest's v3 metrics among them) rest on runs whose outputs were
   removed with the models; only their recorded metrics remain.
@@ -446,7 +457,8 @@ them locally. Not legal advice.
 - The terrain context fallback was not run. Terrain metrics are proxies on 9 chunks of one map.
 - Seeds are fixed. MPS output is not bit-exact across M1 and M4; the second Mac matched the chest to the
   reported precision only.
-- All outputs, sheets, GIFs, weights and the harness are only in the owner's ignored `local/` directories.
+- None of the outputs, sheets, GIFs, weights or the harness is in git. They lived in the ignored `local/`
+  directories and were moved to the Trash on 2026-10-18 (see the owner decisions above).
 
 Provenance: frames from this repository's own decoder and Area code on the owner's installations; models and
 tools used as external programs and libraries; no CE source used.

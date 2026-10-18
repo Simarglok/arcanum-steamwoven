@@ -13,7 +13,9 @@ merge gate, and the human before/after review remains ARC-RENDER-015.
 
 Follow-up (2026-10-18): the owner was not satisfied with characters; the edge fix, open
 edit models, repeated-part consistency and terrain material detail are compared in
-[hd-alternatives.md](hd-alternatives.md) (ARC-RES-053).
+[hd-alternatives.md](hd-alternatives.md) (ARC-RES-053). Superseded 2026-10-18: the owner closed the local
+generator checks, and no generated images go into the pack for now, so the pipeline recommended below is not
+used ([decisions](../architecture/decisions.md)).
 
 Owner decisions this note works under ([decisions](../architecture/decisions.md), HD pack;
 project discussion, 2026-10-16):
