@@ -11,6 +11,10 @@ everything stayed under the ignored `local/` directory on the owner's Mac. The o
 reviewed same-size comparison sheets in the project discussion; that review is not a
 merge gate, and the human before/after review remains ARC-RENDER-015.
 
+Follow-up (2026-10-18): the owner was not satisfied with characters; the edge fix, open
+edit models, repeated-part consistency and terrain material detail are compared in
+[hd-alternatives.md](hd-alternatives.md) (ARC-RES-053).
+
 Owner decisions this note works under ([decisions](../architecture/decisions.md), HD pack;
 project discussion, 2026-10-16):
 
