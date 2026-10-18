@@ -46,9 +46,11 @@ public partial class TerrainViewerApp
             for (var y = bounds.Y + viewport.Y / 2d; y < bounds.Y + bounds.Height + viewport.Y / 2d; y += viewport.Y)
             for (var x = bounds.X + viewport.X / 2d; x < bounds.X + bounds.Width + viewport.X / 2d; x += viewport.X)
             {
-                _camera!.ResetWorld(new Vec2(x, y), viewport, 1);
+                _camera!.ResetWorld(new Vec2(x, y), viewport, 1); var view = _camera.State;
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                // ARC-RENDER-023: the view must still be the one set (the sweep holds the camera).
+                Require(_camera.State == view, "CAMERA_MOVED");
                 steps++; seen.UnionWith(_canvas.AreaVisibleCommands);
                 Require(!_canvas.AreaVisibleCommands.Any(_canvas.AreaHiddenOf), "TAKEN_ITEM_DRAWN");
                 maxLive = Math.Max(maxLive, _cache.AreaCount); maxVisible = Math.Max(maxVisible, _canvas.AreaVisibleCount);
@@ -76,7 +78,7 @@ public partial class TerrainViewerApp
         // The exterior is sized to overflow every cache; a smaller whole interior (ARC-RENDER-017) may fit in them, so
         // there eviction is not required, while every per-view budget and the ownership balance still are.
         var mustEvict = _readyMapName is null;
-        var chunkedSweep = await Sweep(true);
+        var chunkedSweep = await WithAreaSmokeCameraHeld(() => Sweep(true));
         Require(chunkedSweep.Swept + taken == old.Commands, "SWEEP_COVERAGE");
         // The envelope needs more chunks than the chunk cap, so the chunk LRU must have
         // evicted, and its own create/dispose accounting must balance.
@@ -84,7 +86,7 @@ public partial class TerrainViewerApp
         Require(chunkComposed > 0 && (chunkEvictions > 0 || !mustEvict)
             && _canvas.AreaChunkCreatedCount - _canvas.AreaChunkDisposedCount == _canvas.AreaChunkResidentCount, "CHUNK_OWNERSHIP");
         var created = _cache.CreatedCount; var disposed = _cache.DisposedCount;
-        var commandSweep = await Sweep(false);
+        var commandSweep = await WithAreaSmokeCameraHeld(() => Sweep(false));
         _canvas.AreaTerrainChunksEnabled = true;
         Require(commandSweep.Swept + taken == old.Commands, "SWEEP_COVERAGE");
         Require(ReferenceEquals(old.Result.Target, _readyArea) && _readyArea!.Frames.Count == old.CpuFrames
