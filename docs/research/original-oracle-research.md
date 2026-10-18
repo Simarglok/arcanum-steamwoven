@@ -30,8 +30,9 @@ The question: how to build a complete, checkable evidence base that Steamwoven b
     addresses the reconstruction annotated (92.5 %); 373 of the 4,981 annotated addresses were not found yet (most near 0x570000, the interface
     code) and 943 functions had no annotated address. The annotated addresses were used only to measure this.
   - The object field names are in the executable as a table of 338 string pointers at 0x59BEA8, from `obj_f_begin` to
-    `obj_f_max`, in field order; the stat names are a table of 22 pointers at 0x5B5384 in stat order (`stat_level` is
-    17, `stat_experience_points` 18, the numbers the oracle saw in real calls). These can replace the reconstruction's field and stat headers.
+    `obj_f_max`, in field order; the stat names are a table at 0x5B5384 that names stats 0–20 in stat order (`stat_level` is
+    17, `stat_experience_points` 18, the numbers the oracle saw in real calls; from 21 on the table and the code disagree,
+    the poison level being stat 24 in code, ledger [IF12](original-verification-ledger.md#implemented-functions-arc-dev-025)). These can replace the reconstruction's field and stat headers.
   - The reconstruction gave 4,980 distinct names for its 4,981 addresses. Of its 3,820 descriptive names, 279 occur
     verbatim in the executable's own strings (animation and magic messages), and five Troika source paths appear
     (`GameLibX\Anim.c` and others). The other names were its own; 1,160 more functions had only `sub_…` names.

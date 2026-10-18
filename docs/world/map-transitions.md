@@ -22,7 +22,9 @@ this in ARC-WORLD-031.
   numbered from 5000 up to the first missing number, at most 200 (the map list
   load, 0x4125C0, ledger LC1). Each `MapListEntry` has the catalogue number, the folder
   name as the row spells it (trimmed), the start tile (the second and third
-  values read like C `strtoll`; null when missing or negative) and the runtime
+  values read like C `strtoll`, where the original's 64-bit `atoi` wraps on overflow; null
+  when missing or negative, where the original crashes on a short row and keeps a negative
+  value, ledger IF2) and the runtime
   number (catalogue − 4999). `Find(name)` compares without case and returns the
   first row; `ByCatalogue` and `ByRuntime` look a row up by number. A list that
   is missing, unreadable or not a MES file is empty with a typed `Status`.
