@@ -81,14 +81,50 @@ public sealed class EffectRealDataTests
         int Special(int attribute) => rules.Count(r => r.Changes.Any(c => c.Kind == EffectAttributeKind.Special && c.Attribute == attribute));
         var specials = (MaxHp: Special(0), MaxFatigue: Special(1), Reaction: Special(2), Bad: Special(7), Good: Special(8));
         Console.WriteLine($"rules {rules.Count}, with modelled stat changes {modelled}, specials {specials}");
-        // 309 effect.mes entries and the module's one; five use * or /, which the effect rules refuse (SH-07, decision open).
-        Assert.AreEqual((305, 5), (statuses["Parsed"], statuses["UnsupportedOperator"]));
-        // Every parsed rule is admitted, but the fixture hero's own race effect 67 (innate).
-        Assert.AreEqual((304, 1, 2), (outcomes["None"], outcomes["InnateEffect"], outcomes.Count));
-        // 191 rules change a stat the character owner models; 7 the maximum hit points, 7 the maximum fatigue, 5 the reaction,
-        // 4 the bad and 3 the good reaction adjustment.
-        Assert.AreEqual((191, 7, 7, 5, 4, 3), (modelled, specials.MaxHp, specials.MaxFatigue, specials.Reaction, specials.Bad, specials.Good));
+        // 309 effect.mes entries and the module's one, all parsed (decision 7: `*n` and `/n` read as the original reads them;
+        // 5 rules use them, all on stats or the reaction adjustments).
+        Assert.AreEqual((310, 1), (statuses["Parsed"], statuses.Count));
+        Assert.AreEqual(5, rules.Count(r => r.Changes.Any(c => c.Operator is EffectChangeOperator.Multiply or EffectChangeOperator.Divide)));
+        Assert.IsFalse(rules.Any(r => r.Changes.Any(c => c.Operator is EffectChangeOperator.Multiply or EffectChangeOperator.Divide &&
+            c.Kind == EffectAttributeKind.Special && c.Attribute is 0 or 1)), "no factor on a maximum");
+        // Every rule is admitted, but the fixture hero's own race effect 67 (innate).
+        Assert.AreEqual((309, 1, 2), (outcomes["None"], outcomes["InnateEffect"], outcomes.Count));
+        // 194 rules change a stat the character owner models; 7 the maximum hit points, 7 the maximum fatigue, 5 the reaction,
+        // 7 the bad and 5 the good reaction adjustment.
+        Assert.AreEqual((194, 7, 7, 5, 7, 5), (modelled, specials.MaxHp, specials.MaxFatigue, specials.Reaction, specials.Bad, specials.Good));
         // No rule uses −1 as a minimum or maximum, the aggregation's "unset" mark (EF6).
         Assert.AreEqual(0, rules.Sum(r => r.Changes.Count(c => c.Operator is EffectChangeOperator.Minimum or EffectChangeOperator.Maximum && c.Value == -1)));
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void Installed_blessings_and_curses_are_received_and_taken_back()
+    {
+        // ARC-WORLD-035: every blessing and curse of the module, each given to the fixture hero alone and taken back.
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required.");
+        var opened = ContentStack.Open(ContentMountPlan.Discover(root).Plan!);
+        Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
+        using var stack = opened.Stack!;
+        MesFile Table(string path) => MesFile.Parse(stack.Read(stack.Resolve(path).Candidates[0]).Bytes).File!;
+        var effects = Table("rules/effect.mes");
+        var module = Table("rules/gameeffect.mes");
+        var outcomes = new Dictionary<string, int>();
+        foreach (var (path, kind) in new[] { ("mes/gamebless.mes", SessionBlessingKind.Blessing), ("mes/gamecurse.mes", SessionBlessingKind.Curse) })
+        {
+            var table = Table(path);
+            foreach (var number in BlessingRules.Numbers(table))
+            {
+                using var owner = CreateWith(HalfElf());
+                var effect = BlessingRules.EffectOf(table, number).Effect!.Value;
+                var rule = EffectRules.ReadAny(effects, module, effect).Rule!;
+                var added = owner.AddHeroBlessing(owner.Version, kind, number, SessionEffectDefinition.FromRule(rule));
+                outcomes[$"{kind} {added.Failure}"] = outcomes.GetValueOrDefault($"{kind} {added.Failure}") + 1;
+                if (added.Disposition != GameSessionDisposition.Changed) continue;
+                Assert.AreEqual(GameSessionDisposition.Changed, owner.RemoveHeroBlessing(owner.Version, kind, number).Disposition);
+                Assert.AreEqual((0, 0), (owner.QueryHeroBlessings(kind)!.Count, owner.QueryHeroEffects()!.Effects.Count));
+            }
+        }
+        Console.WriteLine(JsonSerializer.Serialize(outcomes.OrderBy(p => p.Key)));
+        Assert.AreEqual((18, 17, 2), (outcomes["Blessing None"], outcomes["Curse None"], outcomes.Count));
     }
 }
