@@ -48,8 +48,9 @@ the full rule of that function.
 3. **Turn-based: the subturn drives the AI (S5).** The real-time event still
    fires but never thinks during a round. At the start of an NPC's subturn the
    heartbeat runs and, on "continue", one AI pass; the same pair runs again
-   after every animation the NPC finishes in its subturn. When a pass leaves no
-   animation running, the NPC's action points become 0 and its subturn ends.
+   after every animation the NPC finishes in its subturn. When no animation runs
+   after that hook (also when the heartbeat stopped the pass), the NPC's action
+   points become 0 and its subturn ends.
 4. **One pass has a fixed order (S3).** Early exits, then a gate of fifteen
    tests (dead, hidden, PC hidden, stoned, in a conversation, combat scripts,
    someone else's turn, busy animation, blind and crippled recovery, stun,
@@ -135,7 +136,7 @@ It carries the NPC and a wake-up marker.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Delay (ms) | 250 | 408 | 1041 | 1833 | 3416 | 5000 |
 
-So a dead NPC on a loaded sector keeps an AI event every 5 s at most, which does
+So a dead NPC on a loaded sector keeps getting an AI event at least every 5 s (up to 10 s after a wake-up), which does
 nothing; an NPC outside the 30-tile ring keeps one as long as its sector is
 loaded; a generator whose spawner refuses stops ticking until its sector is
 folded in again (all original behaviour, read in the executable).
@@ -185,8 +186,10 @@ have rows 0..40 without a gap and module row 100 with 14 values
 ([census](combat-data-census.md#2-ai-parameter-rows)).
 
 Names below are this project's. "Reader" is the function that reads the slot
-(the slot offset was checked in each); "use" is the reader's comparison as the
-owning stage reads it (only the danger setter's use is part of A1).
+(the slot offset was checked in each, by both readers); "use" is the reader's
+comparison as both readers saw it at that offset. Only the danger setter's use
+is part of A1; for the other readers the use is first-pass and their full rule
+is unverified until their stage (U2).
 
 | # | Name | Unit | Reader (address) | Use | Stage |
 | ---: | --- | --- | --- | --- | --- |
@@ -231,10 +234,10 @@ stateDiagram-v2
     [*] --> NONE
     NONE --> COMBAT_FOCUS: fight (enter-combat script, alerted sound)
     NONE --> FLEE: flee
-    NONE --> SURRENDER: surrender (leaves combat mode)
+    NONE --> SURRENDER: surrender (leaves combat mode, bit set again, CL4)
     COMBAT_FOCUS --> COMBAT_FOCUS: new target (focus and reaction updated)
     COMBAT_FOCUS --> FLEE: flee (exit-combat script)
-    COMBAT_FOCUS --> SURRENDER: surrender (exit-combat script, demaintain)
+    COMBAT_FOCUS --> SURRENDER: surrender (leaves combat mode, bit set again, CL4, exit-combat script, demaintain)
     COMBAT_FOCUS --> NONE: calm down (exit-combat script, demaintain)
     FLEE --> SURRENDER: next fleeing pass (A4)
     FLEE --> COMBAT_FOCUS: fight
@@ -252,7 +255,7 @@ stateDiagram-v2
 | 2 | R is FLEE and the NPC has NO_FLEE | R becomes COMBAT_FOCUS, rule 3 skipped |
 | 3 | R is FLEE or SURRENDER and the NPC's leader has extraordinary charisma | R becomes COMBAT_FOCUS (followers of such a leader never flee or surrender) |
 | 4 | R is COMBAT_FOCUS and the global "NPC fighting" switch is off or the NPC has NO_ATTACK | R becomes NONE |
-| 5 | R is FLEE or SURRENDER | the fleeing float line toward the target, once (only when not already fleeing or surrendered, the NPC is active and the UI callback is set), also for a surrender; FLEEING or SURRENDERED set and the other cleared; SURRENDER also leaves combat mode, but the critter flags are then written from the copy read before that, so the combat-mode bit (critter flag bit 18) is set again while the rest of leaving combat mode stays done (CL4); fleeing-from := target |
+| 5 | R is FLEE or SURRENDER | the fleeing float line toward the target, once (only when not already fleeing or surrendered, the NPC is active and the UI callback is set), also for a surrender; FLEEING or SURRENDERED set and the other cleared; SURRENDER also leaves combat mode (0x4B3F20, when in combat mode and the toggle acts), but the critter flags are then written from the copy read before that, so the combat-mode bit (critter flag bit 18) is set again while the rest of leaving combat mode stays done (CL4); fleeing-from := target |
 | 5′ | R is NONE or COMBAT_FOCUS | FLEEING and SURRENDERED cleared |
 | 6 | R is COMBAT_FOCUS and the NPC has TARGET_LOCK (critter flag 2) | stop: no NPC flag, focus or reaction change |
 | 7 | R is COMBAT_FOCUS, NPC not yet FIGHTING | FIGHTING, CHECK_WIELD and CHECK_GRENADE set; the enter-combat script runs (point 13, the target as triggerer); the alerted sound is returned when asked |
@@ -272,7 +275,7 @@ the state read; whether any caller relies on it is stage A3's question).
 | What starts a pass | the NPC's AI event (cadence above); an attack on it | the NPC's subturn start; each animation it finishes in its subturn; an attack on it (stops at the turn test) |
 | Heartbeat | first-heartbeat on wake-up, heartbeat per event within 30 tiles | heartbeat before each subturn pass; first-heartbeat only from AI events, which skip thinking in a round |
 | Combat scripts in combat mode | end-combat then start-combat on every pass that reaches gate step 6 | start-combat on every pass that reaches gate step 6, in or out of turn; end-combat at the end of the NPC's subturn |
-| End of the NPC's action | the next AI event | no animation running after a pass → action points 0, subturn over |
+| End of the NPC's action | the next AI event | no animation running after the subturn hook → action points 0, subturn over |
 
 ## 7. Anomalies and decisions
 
@@ -284,13 +287,13 @@ original and there is no switch.
 | ID | Original 1.0.7.4 | Verdict | Proposed decision |
 | --- | --- | --- | --- |
 | P5 | In combat mode every pass that reaches the gate's combat test runs the start-combat script, in real time preceded by the end-combat script; in a round the end-combat script also runs at the end of the NPC's subturn. | Original | Kept in both settings: scripts are written against these per-pass hooks, and nothing marks it as a slip. No switch. |
-| LM3 | Rows fill by position from the first entry's number; the copy is not bounds-checked. | Original bug (latent) | Steamwoven keys rows by entry number and refuses a row outside the table; the Original setting fills by position (`AiRowsByPosition`). Identical for the installed data. An out-of-range row is refused in both settings (owner rule: Original never reproduces an out-of-bounds read). |
+| LM3 | Rows fill by position from the first entry's number; the copy is not bounds-checked. | Original bug (latent) | The out-of-bounds part stays fixed in both settings, as the [rule-mode registry](../world/rule-modes.md) already records: a row outside the table is refused (owner rule: Original never reproduces an out-of-bounds read). New: Steamwoven keys in-bounds rows by entry number, and the Original setting keeps the positional fill (`AiRowsByPosition`, proposed). Identical for the installed data. |
 | LM4 | The module unload does nothing, so module rows 100..149 survive into the next module. | Original | Steamwoven rebuilds the module rows with each module's content layer, so rows of a previous module never leak; no switch, because a module change inside one session is not modelled (load-map policy 1). |
 | CL1 | A stunned NPC never passes the gate; the pass on which the stun animation has ended clears the flag and still ends. | The reconstruction lets a still-stunned NPC act: slip | Follow the original in both settings. No switch. |
 | CL2 | After the full re-wield both "check wield" and "check weapon" are cleared. | The reconstruction clears only "check wield", so the next pass re-wields the weapon again: slip | Follow the original in both settings. No switch. |
-| CL4 | On a surrender the setter leaves combat mode, then writes back critter flags it read before, so the combat-mode bit is set again; the NPC still counts as in combat mode (gate step 6 keeps running its combat scripts) while the rest of leaving combat mode was done. The reconstruction has the same code. | Bug of the original | Steamwoven: a surrender leaves the combat-mode bit cleared. Original setting keeps it (`SurrenderKeepsCombatModeFlag`). Lands with slice I2. |
+| CL4 | On a surrender the setter leaves combat mode (0x4B3F20, which runs the toggle 0x4B3F80 when the NPC is in combat mode and the toggle acts), then writes back critter flags it read before, so the combat-mode bit is set again; the NPC still counts as in combat mode (gate step 6 keeps running its combat scripts) while the rest of leaving combat mode was done. The reconstruction has the same code. | Bug of the original | Steamwoven: a surrender leaves the combat-mode bit cleared. Original setting keeps it (`SurrenderKeepsCombatModeFlag`). Lands with slice I2. |
 | CL5 | The gate's blind, crippled and stun writes use a copy of the critter flags read before the combat scripts of step 6, so a flag a script changed in that pass is undone when one of the writes happens. The reconstruction has the same code. | Bug of the original (latent: needs a combat script that changes critter flags in the same pass as a recovery) | Steamwoven: each write changes only its own bits of the current flags. Original setting keeps the stale write (`GateRecoveryWritesStaleFlags`). Lands with slice I6. |
-| CL3 | On a network client (network active, not host) the AI event, the pass, the danger setter and the follower catch-up's conversation end behave differently: the first three do nothing. | The reconstruction leaves multiplayer out | Not applicable: Steamwoven is single player. Recorded so a network mode would start from it. |
+| CL3 | On a network client (network active, not host) the AI event, the pass and the danger setter do nothing and the delayed scheduler adds no event; in any network game the follower catch-up ends the follower's conversation first. | The reconstruction leaves multiplayer out | Not applicable: Steamwoven is single player. Recorded so a network mode would start from it. |
 
 CL4 refines ledger row P6: a surrender does leave combat mode in the toggle's
 other effects, but not in the combat-mode bit, which the original sets again.
