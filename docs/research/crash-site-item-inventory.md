@@ -158,7 +158,8 @@ authoritative, and a later respawn could regenerate it.
   Loot admission checks the PC, target visibility and the target's `SAP_USE`
   script (none of the four dead NPCs has one) before the UI opens
   (UI admission (0x572240, 0x572340, 0x572370)).
-  Moving 2527 into the PC fires its own `SAP_INSERT_ITEM` script: a U frontier.
+  Moving 2527 into the PC fires its own `SAP_INSERT_ITEM` script: a U frontier, answered by
+  [ARC-RES-055](item-insert-script.md) (it only prints a message line while global flag 1085 is clear).
 - **Living NPCs.** Virgil's ring arrives through dialog (section 4). No other
   item of a living NPC (gold, food, two weapons, worn armor) is named by a dialog
   `IN` operand. Virgil's DLG has one barter reply (`b:`), so barter can reach his
@@ -268,7 +269,7 @@ carry/room check against the ring.
    transfer and the negative-`IN` give, and refusal before effects when an
    unadmitted attachment, a stack/key type or an insert check is involved. Admit
    first only what the Crash Site needs: unscripted ground pickup, loot from the
-   four dead NPCs (excluding 2527 until its insert script is resolved) and the
+   four dead NPCs (excluding 2527 until its insert script is resolved; [ARC-RES-055](item-insert-script.md)) and the
    one negative `IN` for the ring.
 3. **Conversation binding.** Delivered by ARC-WORLD-014 (`IDialogInventoryPort`, viewer not wired yet).
    ARC-SCRIPT-005 already records `IN` as a typed

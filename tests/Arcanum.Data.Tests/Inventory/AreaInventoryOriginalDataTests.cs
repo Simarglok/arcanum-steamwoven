@@ -91,7 +91,17 @@ public sealed class AreaInventoryOriginalDataTests
         int[] ScriptsOf(int item) => inventory.TryGetItem(item, out var row) ? row.Scripts.Select(s => s.Script).Distinct().Order().ToArray() : [];
         CollectionAssert.AreEqual(new[] { 1327 }, ScriptsOf(3312)); CollectionAssert.AreEqual(new[] { 1118 }, ScriptsOf(6177));
         CollectionAssert.AreEqual(new[] { 2014 }, ScriptsOf(4201)); CollectionAssert.Contains(ScriptsOf(2527), 1341);
-        Assert.AreEqual(2, inventory.Items.Single(i => i.SourceIndex == 2527).Scripts.Count);
+        // ARC-RES-055 D1: the amulet 2527 (pack slot 0 of NPC 1201, which has no script) and the context copy 3488 carry the
+        // same script on the examine (0) and insert-item (21) points.
+        var pair = new[] { new AreaInventoryScript(0, 1341), new AreaInventoryScript(21, 1341) };
+        Assert.IsTrue(inventory.TryGetItem(2527, out var amulet));
+        Assert.AreEqual((AreaItemType.Armor, 2807, 8159, 0, 1201, 0), (amulet.Type, amulet.Name, amulet.Description, amulet.InventoryLocation, amulet.Holder!.Value, amulet.ListIndex!.Value));
+        CollectionAssert.AreEqual(pair, amulet.Scripts.ToArray());
+        Assert.IsTrue(inventory.TryGetItem(3488, out var copy));
+        Assert.AreEqual((amulet.Prototype, 1382), (copy.Prototype, copy.Holder!.Value));
+        CollectionAssert.AreEqual(pair, copy.Scripts.ToArray());
+        Assert.IsTrue(inventory.TryGetHolder(1201, out var bearer));
+        Assert.AreEqual(0, bearer.Scripts.Count);
         CollectionAssert.AreEquivalent(new[] { 4201, 6177 }, core.Where(i => (i.ItemFlags & NoDecay) != 0).Select(i => i.SourceIndex).ToArray());
 
         // The one context list: holder 1382 with item 3488.
