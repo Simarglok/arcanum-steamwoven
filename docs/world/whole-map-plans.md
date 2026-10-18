@@ -228,7 +228,8 @@ main world map included, through the same area owner. It is how the main map loa
   authenticated `AreaSourceRole.TerrainTemplate` input (one per distinct template, read from the stack's winner). A
   sector the original would fill, or cannot resolve, refuses the plan (`UnsupportedSource`); retail data has none.
 - **Owner.** `AreaSourcePlan.Selection = Window` with `AreaSourcePlan.Window` listing each sector, its scope and its
-  template. The owner surveys only the window's own sector files (all must be in the module archive, else
+  template (input and virtual path, ARC-DATA-034; a template without its path, a path without a template, or a path
+  that is not a lower-case virtual path under `terrain/` is `InvalidSelection`). The owner surveys only the window's own sector files (all must be in the module archive, else
   `MissingSource` at selection), reads a generated sector from its template input like a sector file, places its
   objects at the sector's origin plus their tile (ledger SS6) and moves its lights (words 2 and 3, Wilderness A1).
   `AreaSectorRecord.Template` names the template input of a generated sector, which has no module ordinal or entry.
@@ -265,8 +266,12 @@ has files for, the same 524 objects and the same 2,444 visuals by RGBA digest. T
 context sectors as absent; the window generates them (four mountain templates, one forest-to-mountains transition), and
 they add terrain only.
 
-**NOT READY:** step evidence for a window (`AreaStepInspector` re-reads core sectors from the module archive and does
-not accept the window profile yet: ARC-DATA-033); the area lighting reader re-reads each core sector from the module
+Step evidence (ARC-DATA-034, [windows](area-step-assessment.md#windows-arc-data-034)): `AreaStepInspector.InspectWholeMap`
+takes a window snapshot and reads its generated core sectors from their template archive; the Crash Site window's evidence
+equals the pinned exterior's on every core cell and object (7,150 cells reachable from the spawn in both).
+
+**NOT READY:** step evidence of a generated core sector whose template the stack holds as a loose file (the plan admits
+it; the evidence is `InputUnavailable`); the area lighting reader re-reads each core sector from the module
 archive, so a window with a generated core sector gets `SectorIdentityMismatch` (the stationary-light reader reads the
 moved lights); the viewer does not stream windows; saved differences are not modelled.
 

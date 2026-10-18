@@ -300,7 +300,7 @@ public static class AreaMapPlans
                 }
                 template = key;
             }
-            windowPlan.Add(new(new(source.Coordinate.X, source.Coordinate.Y), scope, template));
+            windowPlan.Add(new(new(source.Coordinate.X, source.Coordinate.Y), scope, template, template is null ? null : source.Path));
         }
 
         var (catalogueMap, runtimeMap, startTile) = CatalogueEntry(stack, map.Name);

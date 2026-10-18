@@ -13,13 +13,14 @@ public sealed class AreaWindowTests
 {
     private const long Own = 67108865; // sector (1, 1)
     private static readonly AreaInputKey Template = new(AreaSourceRole.TerrainTemplate);
+    private const string TemplatePath = "terrain/grass/67108865.sec";
 
     [TestMethod]
     public void A_window_loads_its_own_sectors_and_moves_a_template_into_a_generated_one()
     {
         // The template is its folder's sector (1, 1): its record lies at tile (70, 80), its light at (65, 66).
         var template = SectorWithLight(65, 66, Record(Id(0), location: 70L | (80L << 32)));
-        var window = new AreaWindow([new(new(1, 1), AreaScope.Core, null), new(new(0, 0), AreaScope.Context, Template)]);
+        var window = new AreaWindow([new(new(1, 1), AreaScope.Core, null), new(new(0, 0), AreaScope.Context, Template, TemplatePath)]);
         using var f = new Fixture([(Own, [])], selection: AreaSectorSelection.Window, window: window, extraInputs: [(Template, template)],
             limits: new() { MaxTerrainTemplates = 1 }, resourceEntries: Resources());
         var snapshot = f.Owner.LoadStrict();
@@ -43,7 +44,7 @@ public sealed class AreaWindowTests
     public void The_owner_refuses_an_inconsistent_window()
     {
         var template = Sector();
-        var window = new AreaWindow([new(new(1, 1), AreaScope.Core, null), new(new(0, 0), AreaScope.Context, Template)]);
+        var window = new AreaWindow([new(new(1, 1), AreaScope.Core, null), new(new(0, 0), AreaScope.Context, Template, TemplatePath)]);
         AreaErrorCode Refused(AreaSectorSelection selection, AreaWindow? plan, (AreaInputKey, byte[])[]? inputs, int templates = 1) =>
             Throws<AreaException>(() => new Fixture([(Own, [])], selection: selection, window: plan, extraInputs: inputs,
                 limits: new() { MaxTerrainTemplates = templates }).Dispose()).Issue.Code;
@@ -55,15 +56,21 @@ public sealed class AreaWindowTests
         // A window template that is no input, a template input the window does not use, no core sector, a repeated sector.
         Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window, window, null));
         Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window, new([new(new(1, 1), AreaScope.Core, null)]), [(Template, template)]));
-        Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window, new([new(new(0, 0), AreaScope.Context, Template)]), [(Template, template)]));
+        Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window, new([new(new(0, 0), AreaScope.Context, Template, TemplatePath)]), [(Template, template)]));
         Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window,
-            new([new(new(1, 1), AreaScope.Core, null), new(new(1, 1), AreaScope.Context, Template)]), [(Template, template)]));
+            new([new(new(1, 1), AreaScope.Core, null), new(new(1, 1), AreaScope.Context, Template, TemplatePath)]), [(Template, template)]));
         // A template key of another role, a scope other than core or context, a missing entry.
         Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window,
             new([new(new(1, 1), AreaScope.Core, null), new(new(0, 0), AreaScope.Context, new AreaInputKey(AreaSourceRole.Prototype, 7001))]), null));
         Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window,
-            new([new(new(1, 1), AreaScope.Core, null), new(new(0, 0), AreaScope.Outside, Template)]), [(Template, template)]));
+            new([new(new(1, 1), AreaScope.Core, null), new(new(0, 0), AreaScope.Outside, Template, TemplatePath)]), [(Template, template)]));
         Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window, new([new(new(1, 1), AreaScope.Core, null), null!]), null));
+        // A template without its path, a path without a template, a path outside terrain/.
+        Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window,
+            new([new(new(1, 1), AreaScope.Core, null), new(new(0, 0), AreaScope.Context, Template)]), [(Template, template)]));
+        Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window, new([new(new(1, 1), AreaScope.Core, null, TemplatePath)]), null));
+        Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window,
+            new([new(new(1, 1), AreaScope.Core, null), new(new(0, 0), AreaScope.Context, Template, "maps/x/1.sec")]), [(Template, template)]));
         // More templates, or more window sectors, than the limits admit.
         Assert.AreEqual(AreaErrorCode.BudgetExceeded, Refused(AreaSectorSelection.Window, window, [(Template, template)], templates: 0));
         var wide = new AreaWindow(Enumerable.Range(0, 21).Select(i => new AreaWindowSector(new(i, 0), i == 0 ? AreaScope.Core : AreaScope.Context, null)).ToArray());

@@ -87,7 +87,7 @@ public sealed class AreaSnapshot
         IEnumerable<AreaRoofRecord>? roofs = null, AreaRoofShades? roofShades = null)
     {
         Roofs = Array.AsReadOnly((roofs ?? []).ToArray()); RoofShades = roofShades;
-        Owner = owner; Generation = generation; CatalogueMap = plan.CatalogueMap; RuntimeMap = plan.RuntimeMap; Profile = plan.Profile; MapPatch = plan.MapPatch;
+        Owner = owner; Generation = generation; CatalogueMap = plan.CatalogueMap; RuntimeMap = plan.RuntimeMap; Profile = plan.Profile; MapPatch = plan.MapPatch; Window = plan.Window;
         Inputs = Array.AsReadOnly(plan.Identities.ToArray());
         Sectors = Array.AsReadOnly(sectors.ToArray()); Terrain = Array.AsReadOnly(terrain.ToArray()); Objects = Array.AsReadOnly(objects.ToArray());
         Visuals = Array.AsReadOnly(visuals.ToArray()); Reconciliation = counts; Endpoints = Array.AsReadOnly(endpoints.ToArray());
@@ -102,6 +102,8 @@ public sealed class AreaSnapshot
     public string Profile { get; }
     /// <summary>ARC-DATA-028: the map patch the owner applied to the mobile objects, or null.</summary>
     public AreaMapPatchBinding? MapPatch { get; }
+    /// <summary>ARC-DATA-034: the window of a window plan (its sectors and their template paths), else null.</summary>
+    public AreaWindow? Window { get; }
     public IReadOnlyList<AreaInputIdentity> Inputs { get; }
     public IReadOnlyList<AreaSectorRecord> Sectors { get; }
     public IReadOnlyList<AreaTerrainRecord> Terrain { get; }
@@ -265,8 +267,10 @@ internal enum OriginalAreaMap { None, CrashSiteExterior, CrashSiteCave }
 public enum AreaSectorSelection { TownmapComponent, AllSectors, Window }
 
 /// <summary>ARC-DATA-032: one sector of a window: a core sector (loaded whole) or a context sector (its objects only as
-/// context), read from the module archive (<see cref="Template"/> null) or generated from a terrain template input.</summary>
-public sealed record AreaWindowSector(AreaSectorCoordinate Coordinate, AreaScope Scope, AreaInputKey? Template);
+/// context), read from the module archive (<see cref="Template"/> null) or generated from a terrain template input.
+/// ARC-DATA-034: <see cref="TemplatePath"/> is that template's lower-case virtual path (null exactly when there is no
+/// template), which step evidence reads the template again from.</summary>
+public sealed record AreaWindowSector(AreaSectorCoordinate Coordinate, AreaScope Scope, AreaInputKey? Template, string? TemplatePath = null);
 
 /// <summary>ARC-DATA-032: the sectors a window plan loads, around its <see cref="AreaSourcePlan.Start"/>.</summary>
 public sealed record AreaWindow(IReadOnlyList<AreaWindowSector> Sectors);
