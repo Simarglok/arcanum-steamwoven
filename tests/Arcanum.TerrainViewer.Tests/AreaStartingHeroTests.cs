@@ -71,6 +71,21 @@ public sealed class AreaStartingHeroTests
     }
 
     [TestMethod]
+    public void Kit_wear_needs_every_kit_prototype()
+    {
+        // ARC-WORLD-034: a kit prototype that does not read refuses the hero load, typed (the readable path runs on the installed
+        // original in StartingHeroTests and on synthetic fields in the session's bridge test).
+        Arcanum.Data.Characters.PrototypeFile Missing(int number) => new(Arcanum.Data.Characters.PrototypeFileStatus.Missing, null);
+        Assert.IsNull(AreaStartingHero.KitWear(Missing, Definition(), out var detail));
+        StringAssert.StartsWith(detail, "kit prototype 6049 PrototypeMissing");
+        Arcanum.Data.Characters.PrototypeFile Junk(int number) => new(Arcanum.Data.Characters.PrototypeFileStatus.Found, [1, 2, 3]);
+        Assert.IsNull(AreaStartingHero.KitWear(Junk, Definition(), out detail));
+        StringAssert.StartsWith(detail, "kit prototype 6049 PrototypeInvalid");
+        var empty = Definition() with { Kit = [] };
+        Assert.AreEqual(0, AreaStartingHero.KitWear(Missing, empty, out detail)!.Count);
+    }
+
+    [TestMethod]
     public void The_twelve_heroes_are_the_main_menu_prototypes_in_order_with_unique_names()
     {
         CollectionAssert.AreEqual(Enumerable.Range(16067, 12).ToArray(), AreaStartingHero.Premade.Select(hero => hero.BasicPrototype).ToArray());

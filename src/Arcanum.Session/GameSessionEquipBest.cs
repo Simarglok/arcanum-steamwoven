@@ -14,7 +14,8 @@ public delegate SessionWearableItem? SessionWearableLookup(string entity);
 /// when a step was refused, the wear rule (<see cref="Refusal"/>) or the insert check's answer (<see cref="Verdict"/>). When the
 /// chosen item has a move script or item spells, which the session does not run, <see cref="Unsupported"/> names the item and
 /// <see cref="Failure"/> the reason (<see cref="GameSessionFailure.ItemScriptUnsupported"/> or
-/// <see cref="GameSessionFailure.ItemEffectUnsupported"/>), and the slot stays as it is. A slot where nothing happened is not listed.
+/// <see cref="GameSessionFailure.ItemEffectUnsupported"/>), and the slot keeps what it held when the call began (a weapon taken off
+/// for the choice goes back on). A slot where nothing happened is not listed.
 /// </summary>
 public sealed record SessionEquipBestStep(EquipmentSlot Slot, string? TakenOff, string? Wielded, EquipmentRefusal Refusal, SessionInsertVerdict? Verdict)
 {
@@ -76,6 +77,7 @@ public sealed partial class GameSessionOwner
     {
         var step = new StepRecord(slot);
         int? keptWorth = null;
+        var start = plan.Worn.GetValueOrDefault(slot);
         if (plan.Worn.TryGetValue(slot, out var current))
         {
             var facts = plan.Facts[current.Entity];
@@ -86,6 +88,12 @@ public sealed partial class GameSessionOwner
         var candidates = held.Select(plan.Candidate).ToArray();
         var best = EquipmentChoice.ChooseBest(slot, candidates, i => plan.Eligible(held[i], plan.Facts[held[i]], slot), keptWorth, plan.Wielder);
         if (best is { } index) plan.Wield(held[index], slot, step);
+        // An unsupported choice leaves the slot as the call found it: an item taken off for it goes back on.
+        if (step.Unsupported is not null && start is not null && step.TakenOff == start.Entity)
+        {
+            plan.Worn[slot] = start;
+            step.TakenOff = null;
+        }
         if (step.Happened) plan.Steps.Add(step.Capture());
     }
 

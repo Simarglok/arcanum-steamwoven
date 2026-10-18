@@ -179,6 +179,24 @@ public sealed class EquipBestTests
     }
 
     [TestMethod]
+    public void AnUnsupportedBetterWeaponLeavesTheWieldedOneOn()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, Offer(1, Knife), Drawn, Accept).Disposition);
+        var club = new SessionItemFacts(new(SessionItemType.Weapon, 6100, 4100, 6101), 1, 0, 0, null, []);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior,
+            new([], [new SessionSeedItem("oid:club", club, new CellCoord(100, 200))])).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:club", Accept).Disposition);
+        var better = Knife with { Weapon = Knife.Weapon! with { Damage = DamageRanges.None with { Normal = new(40, 80) } } };
+        var kit = Lookup(Offer(1, Knife));
+        var result = owner.EquipBest(owner.Version, entity => entity == "oid:club" ? new(club.Kind, [], true, better) : kit(entity), Drawn, Accept);
+        Assert.AreEqual(GameSessionDisposition.NoChange, result.Disposition);
+        Assert.AreEqual(new SessionEquipBestStep(EquipmentSlot.Weapon, null, null, EquipmentRefusal.None, null)
+            { Unsupported = "oid:club", Failure = GameSessionFailure.ItemEffectUnsupported }, result.Steps.Single());
+        CollectionAssert.AreEqual(new[] { (EquipmentSlot.Weapon, "kit:1") }, Worn(owner), "the knife goes back on");
+    }
+
+    [TestMethod]
     public void AChosenItemWithAScriptOrSpellsIsNotWieldedAndTheCallGoesOn()
     {
         using var owner = Owner();

@@ -136,7 +136,7 @@ public static class AreaStartingHero
             }
             var wearable = item.Kind.Type is SessionItemType.Weapon or SessionItemType.Armor or SessionItemType.Generic
                 ? SessionEquipmentFacts.Wearable(item.Kind, fields) : null;
-            if (wearable is null && item.Kind.Type is SessionItemType.Weapon or SessionItemType.Armor)
+            if (wearable is null && item.Kind.Type is SessionItemType.Weapon or SessionItemType.Armor or SessionItemType.Generic)
             {
                 detail = $"kit prototype {item.Kind.Prototype} wear values out of bounds";
                 return null;

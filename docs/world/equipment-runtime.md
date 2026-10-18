@@ -105,10 +105,11 @@ stays as the worth to beat, except in the weapon slot; any other comes off (no-d
 then the choice over the hero's items in creation order (the kit, then the items taken from the world), wielded as by
 `Equip`. The host gives every held item's facts (`SessionWearableLookup`; `SessionEquipmentFacts.Wearable` builds them from
 the stored combat fields, which now also read the script points) and answers the art and insert checks. The hero's weapon
-skill levels come from its stored 0 points (skills are not session state), its tech level is 0, and it carries no
-ammunition. `SessionEquipBestStep` lists what happened per slot. Refused before any effect: version, no hero, invalid or
+skill levels come from its stored 0 points under the dexterity cap without the race and gender effects on skills, which the
+session drops (skills are not session state), its tech level is 0, and it carries no ammunition. `SessionEquipBestStep` lists what happened per slot. Refused before any effect: version, no hero, invalid or
 mismatched facts, a callback that moved the session. **Project policy:** a chosen item with a move script or item spells
-is not wielded (the session runs neither; the original wears it and runs them): its step names it and the call goes on.
+is not wielded (the session runs neither; the original wears it and runs them): its step names it, the slot keeps what it
+held when the call began (a weapon taken off for the choice goes back on) and the call goes on.
 
 The AREA viewer's pre-made start (`--hero`, ARC-WORLD-027) runs it after creating the session, with the kit's facts read
 from the hero's content prototypes and yes to the art and insert checks (one diagnostic body art, no grid); the HUD shows
@@ -130,9 +131,11 @@ pack.
   weapon score (every type summed, DamageBonus, difficulty, untrained skills, ammunition), the choice with its tie rule, a
   target, and the other slots' strict worth.
 - `Arcanum.Session.Tests/EquipBestTests` (ARC-WORLD-034): the start in one revision and a repeated call, a more valuable
-  item replacing a kept one, ineligible items and a refused swap, a no-drop weapon and a shield that crippled arms take
-  off, the tie to the later item, refusals and a meddling callback, unsupported items left in the pack.
-  `Arcanum.TerrainViewer.Tests/AreaStartingHeroTests`: the viewer start wears the kit; mismatched facts fail it.
+  item replacing a kept one, ineligible items and a refused swap, a no-drop weapon that stays on and a shield that crippled
+  arms take off, the tie to the later item, refusals and a meddling callback, unsupported items left in the pack.
+  `Arcanum.TerrainViewer.Tests/AreaStartingHeroTests`: the viewer start wears the kit; mismatched facts and an unreadable
+  kit prototype fail it. `EquipBestTests` also keeps the knife on when the better weapon is unsupported; the session's bridge
+  test reads the wearable facts and the Data reader test the script points.
 - `Arcanum.Data.Tests/Combat/CombatFieldReaderTests`: the art fields and their bits.
 - Real data (opt-in `RealData`, `ARC_AREA_PROTOTYPES`): `EquipmentRealDataTests`. All 549 weapon, armour and generic
   prototypes convert (slots: 150 weapon, 165 body armour, 13 shields and 2 torches, 19 helmets, 15 gauntlets, 10 boots,
