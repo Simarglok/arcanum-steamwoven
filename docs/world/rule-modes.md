@@ -78,6 +78,7 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Game data | `DataFixProfile` | `StoneExamineTextLost` | DF1 | four stone-examination DLGs lack their record's effects field, so the game opens none and examining the stones shows nothing ([data fixes](../formats/data-fixes.md), ARC-DATA-022) |
 | Game data | `DataFixProfile` | `NpcLineEffectsInResponseLost` | DF2 | an NPC line's effects written in its response field are never applied (ARC-DATA-022) |
 | Game data | `DataFixProfile` | `ReplyFinalLineInResponseLost` | DF3 | a reply's final-line action written in its response field reads as 0 and ends the talk without the final line (ARC-DATA-022) |
+| Music and ambient | `SoundRuleProfile` | `CombatSaveLosesSchemes` | SN18 | a save made while combat music plays stores empty scheme slots; on load they replace the saved pre-combat pair, so combat stays silent and leaving it restores silence ([audio study](../research/audio-evidence.md), ARC-WORLD-040) |
 | Experience | `ExperienceRuleProfile` | `ProgressProductWraps` | XP3 | the progress toward the next level multiplies `1000 × to-next` in 32 bits and wraps above 2,147,483 to-next (found by the function oracle of ARC-RES-051; ARC-WORLD-033, checked by the oracle in both modes) |
 
 Reserved and candidate differences, added by the slice that implements the rule (the slice records the D2 decision;

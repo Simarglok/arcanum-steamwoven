@@ -148,7 +148,7 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 17
+## Snapshot schema 18
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -167,6 +167,7 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 `Reactions` (the changed NPCs' reaction slots in ordinal order; [NPC reaction](npc-reaction-runtime.md#snapshot-schema-10)),
 `Combat` (the active round or `null`; [turn-based round](turn-based-round-runtime.md#snapshot-schema-11)),
 `CombatMode` (the hero's flag and the NPCs in combat mode; [real-time combat](real-time-combat-runtime.md#snapshot-schema-15)),
+`Sound` (the music and ambient scheme slots, the transition restore and combat music; [session sound](session-sound-runtime.md#snapshot-schema-18)),
 `Events` (the registry version, the next sequence and the pending timers; [event queue](game-event-queue-runtime.md#snapshot-schema-9))
 and `Lighting` (applied scheme and hour, or `null`). Collections are read-only copies.
 
@@ -259,8 +260,9 @@ dialog. ARC-WORLD-030 added the hero's experience and the NPCs' experience recor
 ARC-COMBAT-004 added the combat-mode flags as schema 15 and refuses schema 14
 ([real-time combat](real-time-combat-runtime.md#snapshot-schema-15)). ARC-DEV-009 binds the clock profile to the retail
 executable (`sourceRevision` is its SHA-256, [clock policy](game-clock-policy.md)) as schema 16, with no structural change, and
-refuses schema 15. ARC-WORLD-035 added the hero's blessings and curses as schema 17 and refuses schema 16. Adding another
-domain needs schema 18 with its own explicit migration decision.
+refuses schema 15. ARC-WORLD-035 added the hero's blessings and curses as schema 17 and refuses schema 16. ARC-WORLD-040
+added the sound state as schema 18 and refuses schema 17. Adding another domain needs schema 19 with its own explicit
+migration decision.
 
 ## Save slot (ARC-WORLD-011)
 

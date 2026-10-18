@@ -150,6 +150,8 @@ public enum GameSessionFailure
     CombatModeInactive, InvalidCombatMode,
     // Hero attack (ARC-COMBAT-005).
     AttackUnavailable, InvalidAttack, AttackUnsupported,
+    // Music and ambient (ARC-WORLD-040).
+    InvalidSound,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -256,19 +258,19 @@ public sealed class GameSessionSnapshot
     /// schema 13 added <see cref="Effects"/> (ARC-WORLD-029); schema 14 added the hero's experience and
     /// <see cref="Experience"/> (ARC-WORLD-030); schema 15 added <see cref="CombatMode"/> (ARC-COMBAT-004); schema 16 binds the clock profile
     /// to the retail executable (<see cref="Arcanum.Simulation.Clock.GameClockOwner.RetailExecutableSha256"/>, ARC-DEV-009); schema 17
-    /// adds the hero's blessings and curses to <see cref="Effects"/> (ARC-WORLD-035). Schemas 1..16 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 17;
+    /// adds the hero's blessings and curses to <see cref="Effects"/> (ARC-WORLD-035); schema 18 adds <see cref="Sound"/> (ARC-WORLD-040). Schemas 1..17 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 18;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
         SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionEquipmentState equipment,
         SessionEffectState effects, SessionExperienceState experience, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
-        SessionEventState events, SessionLightingState? lighting)
+        SessionEventState events, SessionLightingState? lighting, SessionSoundState sound)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Equipment = equipment; Effects = effects; Experience = experience; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Events = events; Lighting = lighting;
+        Hero = hero; Inventory = inventory; Equipment = equipment; Effects = effects; Experience = experience; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Events = events; Lighting = lighting; Sound = sound;
     }
 
     public int SchemaVersion { get; }
@@ -304,6 +306,8 @@ public sealed class GameSessionSnapshot
     public SessionEventState Events { get; }
     /// <summary>Applied ambient lighting, or null when none was recorded (an unlit session).</summary>
     public SessionLightingState? Lighting { get; }
+    /// <summary>The music and ambient scheme slots, the transition restore and combat music (ARC-WORLD-040).</summary>
+    public SessionSoundState Sound { get; }
 }
 
 internal static class SessionValidation

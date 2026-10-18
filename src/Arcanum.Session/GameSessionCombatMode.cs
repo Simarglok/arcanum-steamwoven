@@ -267,6 +267,9 @@ public sealed partial class GameSessionOwner
                 return RejectCombatMode(round.Failure) with { Round = round };
         }
         SetFlag(combatant, entering);
+        // ARC-WORLD-040: the toggle starts combat music for an NPC entering combat mode and stops it when the PC leaves.
+        if (!combatant.IsHero && entering) _sound.StartCombatMusic();
+        else if (combatant.IsHero && !entering) _sound.StopCombatMusic(_soundSchemes);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, SessionCombatModeRefusal.None, entering, Version) { Round = round };
     }
@@ -298,6 +301,7 @@ public sealed partial class GameSessionOwner
     {
         if (!target.IsHero) { _combat.Critters.Remove(target.Entity!); return; }
         if (_combat.HeroCombatMode && _combat.Round is not null) { _combat.Round = null; _combat.Stall = default; }
+        if (_combat.HeroCombatMode) _sound.StopCombatMusic(_soundSchemes);
         _combat.HeroCombatMode = false;
     }
 

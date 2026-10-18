@@ -30,7 +30,7 @@ public enum RuleMode
 public sealed class GameRules
 {
     private GameRules(RuleMode mode, CombatAnomalyProfile combat, GameEventQueueProfile events, ScrRuleProfile scripts,
-        ReactionRuleProfile reaction, DataFixProfile data, ExperienceRuleProfile experience)
+        ReactionRuleProfile reaction, DataFixProfile data, ExperienceRuleProfile experience, SoundRuleProfile sound)
     {
         Mode = mode;
         Combat = combat;
@@ -39,6 +39,7 @@ public sealed class GameRules
         Reaction = reaction;
         Data = data;
         Experience = experience;
+        Sound = sound;
     }
 
     public RuleMode Mode { get; }
@@ -64,13 +65,16 @@ public sealed class GameRules
     /// <summary>Experience and levels (ARC-WORLD-033): XP3, the progress product wraps in 32 bits.</summary>
     public ExperienceRuleProfile Experience { get; }
 
+    /// <summary>Music and ambient (ARC-WORLD-040): SN18, a save made during combat music loses the pre-combat schemes.</summary>
+    public SoundRuleProfile Sound { get; }
+
     /// <summary>The default mode: the original with every recorded fix.</summary>
     public static GameRules Steamwoven { get; } = new(RuleMode.Steamwoven, CombatAnomalyProfile.Steamwoven, GameEventQueueProfile.Steamwoven, ScrRuleProfile.Steamwoven,
-        ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven, ExperienceRuleProfile.Steamwoven);
+        ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven, ExperienceRuleProfile.Steamwoven, SoundRuleProfile.Steamwoven);
 
     /// <summary>The retail 1.0.7.4 behaviour in every domain.</summary>
     public static GameRules Original { get; } = new(RuleMode.Original, CombatAnomalyProfile.Original, GameEventQueueProfile.Original, ScrRuleProfile.Original,
-        ReactionRuleProfile.Original, DataFixProfile.Original, ExperienceRuleProfile.Original);
+        ReactionRuleProfile.Original, DataFixProfile.Original, ExperienceRuleProfile.Original, SoundRuleProfile.Original);
 
     /// <summary>Both modes, default first.</summary>
     public static IReadOnlyList<GameRules> All { get; } = [Steamwoven, Original];
