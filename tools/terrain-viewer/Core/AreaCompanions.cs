@@ -33,11 +33,12 @@ public static class AreaCompanionRoster
         return speaker.Row.PrototypeNumber == Virgil.Prototype && speaker.ScriptId == Virgil.ScriptId ? Virgil : null;
     }
 
-    /// <summary>The follow-check facts for <paramref name="npc"/> against the diagnostic PC.</summary>
-    public static PartyConsentFacts Facts(AreaCompanionFacts npc, int pcAlignment, int reaction) => new(
+    /// <summary>The follow-check facts for <paramref name="npc"/> against the diagnostic PC; <paramref name="level"/> is the NPC's
+    /// level now when the session levelled it (ARC-WORLD-036, <see cref="AreaAdvancement.Level"/>), else its T0 level.</summary>
+    public static PartyConsentFacts Facts(AreaCompanionFacts npc, int pcAlignment, int reaction, int? level = null) => new(
         MindControlledByPc: false, PcPersuasion: PersuasionTraining.None, PcCharisma: DiagnosticPcCharisma, PcAlignment: pcAlignment,
         PcLevel: DiagnosticPcLevel, OtherLeaderCharisma: null, Reaction: reaction, Thresholds: npc.Thresholds,
-        NpcAlignment: npc.Alignment, NpcLevel: npc.Level, MaxFollowers: FollowConsentRules.MaxFollowers(DiagnosticPcCharisma, PersuasionTraining.None));
+        NpcAlignment: npc.Alignment, NpcLevel: level ?? npc.Level, MaxFollowers: FollowConsentRules.MaxFollowers(DiagnosticPcCharisma, PersuasionTraining.None));
 }
 
 /// <summary>

@@ -61,7 +61,8 @@ by level, `critter_xp_worth`); the session never reads it.
 `ExperienceTable.Create` admits 51 thresholds that start at 0, rise strictly and stay within 2,000,000,000 (project
 admission: an equal step would divide by zero in the progress formula; the installed table qualifies). `ToNextLevel`,
 `Progress`, `BonusPoints`, `Advance` (the recalculation for a PC without an auto-level scheme and without level effects:
-level, experience, unspent points, levels and points gained, and the step for the followers or null when it stopped early),
+level, experience, unspent points, levels and points gained, and the step for the followers or null when it stopped early;
+an optional callback spends each level's points as it is written, ARC-WORLD-036),
 `FollowerLevel`, `AdjustForDifficulty`, `KillAward` and `DamageShare`. `DamageShare` computes without the original's
 32-bit wrap of worth × percentage, which installed worths (a few thousand) reach only with a hit thousands of times larger
 than the maximum hit points.
@@ -82,7 +83,7 @@ than the maximum hit points.
 | `QueryNpcExperience(entity)` | The NPC's saved record, null while it has none. |
 
 Refusals come in the order named in the API comments; every one leaves the session unchanged. An NPC's worth and pool are
-0..100,000,000 (`InvalidExperienceTarget`); new records stop at `GameSessionLimits.MaxExperienceRecords` (4096,
+0..100,000,000 (`InvalidExperienceTarget`); new records stop at `GameSessionLimits.MaxExperienceRecords` (8192 since ARC-DATA-029,
 `BudgetExceeded`). A level raises the hero's maximum hit points and fatigue through the [life rules](life-state-runtime.md)
 formulas (level is one of their inputs), keeping the damage, so the current values rise with them.
 
@@ -111,10 +112,10 @@ refused, not migrated.
 - Viewer host, partial (ARC-UI-007): with `--hero` the AREA session gets the three tables (`AreaStartingHero.Experience`,
   kept over F8), so a dialog's quest completion gives quest experience and the
   [character sheet](../rendering/terrain-viewer.md#character-sheet-arc-ui-007) shows the experience to the next level. Not
-  wired: the dialog `XP` action, combat damage and kills, a level-up message, spending the points.
-- The hero's auto-level scheme (pre-made heroes have one, ARC-RES-027) is not run: level points stay unspent until the scheme
-  runtime ([FR-CHAR-021](../requirements/characters-skills.md#fr-char-021)) or point purchases exist.
-- NPC levels are not session state: the followers' level step is reported, not applied; the Educator background and the
-  NPCs' auto-level schemes are not modelled.
+  wired: the dialog `XP` action and a level-up message; hits and kills give experience since ARC-COMBAT-005 and the
+  points are spent by the hero's scheme since ARC-WORLD-036.
+- Auto-level schemes are [ARC-WORLD-036](advancement-runtime.md): the hero's scheme spends its points at creation and at
+  each level, and the followers' level step is applied to their saved sheets with their schemes. Point purchases by the
+  player and the Educator background are not modelled.
 - Effects on the level stat (none in the installed rules) are not modelled; the recalculation reads the stored level.
 - Quest alignment and the quest reaction effects belong to their own owners.

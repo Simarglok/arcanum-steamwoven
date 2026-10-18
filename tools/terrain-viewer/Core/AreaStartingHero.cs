@@ -32,6 +32,9 @@ public enum AreaHeroStatus
     /// <summary>ARC-UI-007: an experience table entry is not a number, or the level table is not strictly increasing from 0
     /// (<see cref="AreaHeroLoad.Detail"/> names it).</summary>
     ExperienceInvalid,
+    /// <summary>ARC-WORLD-036: a scheme rule the grammar refuses, or a spell willpower that is not a number
+    /// (<see cref="AreaHeroLoad.Detail"/> names it).</summary>
+    AutoLevelInvalid,
     /// <summary>ARC-WORLD-034: a kit item's prototype does not read as combat fields, or a weapon, armour or generic kit item has
     /// values outside the wear rules' bounds (<see cref="AreaHeroLoad.Detail"/> names the prototype).</summary>
     KitUnreadable,
@@ -42,11 +45,15 @@ public enum AreaHeroStatus
 /// <param name="DroppedChanges">Effect changes on attributes the character owner does not model (see <see cref="AreaStartingHero.Definition"/>).</param>
 /// <param name="Experience">ARC-UI-007: the session's experience data (<c>rules\xp_level.mes</c>, <c>rules\xp_quest.mes</c>,
 /// <c>rules\gamequest.mes</c>), or null unless ready.</param>
+/// <param name="AutoLevel">ARC-WORLD-036: the session's scheme data (<c>rules\gamelevel.mes</c>, <c>rules\userlevel.mes</c>,
+/// <c>rules\spelllist.mes</c>), or null unless ready.</param>
+/// <param name="Effects">ARC-WORLD-036: the effect rule of a number (<c>rules\effect.mes</c> 50..399, the module's
+/// <c>rules\gameeffect.mes</c> 0..49), for the followers' effects; null unless ready.</param>
 /// <param name="KitWear">ARC-WORLD-034: the wear facts of each kit item in kit order (null for an item that is worn nowhere), which
 /// <see cref="AreaTransitionCoordinator.CreateSession"/> gives the session's best-items call; null unless ready.</param>
 public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, SessionHeroDefinition? Definition, int? Flag,
     int DroppedChanges, PremadeHeroRead? Read, string Detail, SessionExperienceRules? Experience = null,
-    IReadOnlyList<SessionWearableItem?>? KitWear = null);
+    SessionAutoLevelRules? AutoLevel = null, Func<int, EffectRule?>? Effects = null, IReadOnlyList<SessionWearableItem?>? KitWear = null);
 
 /// <summary>
 /// ARC-WORLD-027: the AREA viewer's start as an original pre-made hero (<c>--hero</c>). Reads the hero with
@@ -65,7 +72,7 @@ public static class AreaStartingHero
     public const int FirstFlagMessage = 551;
     public const string EffectsPath = "rules/effect.mes", SourcesPath = "rules/InvenSource.mes", SourcesBuyPath = "rules/InvenSourceBuy.mes",
         MainMenuPath = "mes/MainMenu.mes", LevelsPath = "rules/xp_level.mes", QuestExperiencePath = "rules/xp_quest.mes",
-        QuestLevelsPath = "rules/gamequest.mes";
+        QuestLevelsPath = "rules/gamequest.mes", ModuleEffectsPath = "rules/gameeffect.mes";
 
     /// <summary>The twelve heroes in main-menu order. Keep in step with <c>PREMADE_HEROES</c> in
     /// <c>tools/local_dev/launch.py</c> (tools/local_dev/test_launcher_sync.py fails on any drift).</summary>
@@ -104,6 +111,19 @@ public static class AreaStartingHero
         if (effects is null || sources is null || menu is null || questLevels is null || detail is not null)
             return Refused(AreaHeroStatus.TableUnavailable, hero, detail ?? "table");
         if (Experience(levels!, quests!, questLevels, out detail) is not { } experience) return Refused(AreaHeroStatus.ExperienceInvalid, hero, detail!);
+        // ARC-WORLD-036: the scheme rules and spell records at game start, the module's own effects at module load.
+        var game = Table(stack, AreaAdvancement.GameSchemesPath, start, required: true, out detail);
+        var user = game is null ? null : Table(stack, AreaAdvancement.UserSchemesPath, start, required: true, out detail);
+        var spells = user is null ? null : Table(stack, AreaAdvancement.SpellsPath, start, required: true, out detail);
+        var moduleEffects = spells is null ? null : Table(stack, ModuleEffectsPath, module, required: false, out detail);
+        if (spells is null || detail is not null) return Refused(AreaHeroStatus.TableUnavailable, hero, detail ?? "table");
+        if (AreaAdvancement.Rules(game!, user!, spells, out detail) is not { } autoLevel) return Refused(AreaHeroStatus.AutoLevelInvalid, hero, detail!);
+        EffectRule? Effect(int number)
+        {
+            if (number >= EffectRules.FirstNumber) return EffectRules.Read(effects!, number).Rule;
+            if (moduleEffects?.Find(number) is not { } message || EffectRules.Parse(message.Bytes.Span, out var changes) != EffectRuleStatus.Parsed) return null;
+            return new(number, true, changes);
+        }
         // ARC-DATA-026: prototypes from the content stack's base sources, as the original reads them.
         var prototypes = ContentPrototypes.Open(stack);
         var read = PremadeHeroReader.Read(new(prototypes.Read, effects, sources, buy), hero.BasicPrototype);
@@ -112,7 +132,7 @@ public static class AreaStartingHero
         if (Flag(menu, hero) is not { } flag) return new(AreaHeroStatus.FlagInvalid, hero, null, null, 0, read, $"message {FirstFlagMessage + hero.Index}");
         var definition = Definition(read.Hero, out var dropped);
         if (KitWear(prototypes.Read, definition, out detail) is not { } wear) return new(AreaHeroStatus.KitUnreadable, hero, null, null, 0, read, detail!);
-        return new(AreaHeroStatus.Ready, hero, definition, flag, dropped, read, "hero ready", experience, wear);
+        return new(AreaHeroStatus.Ready, hero, definition, flag, dropped, read, "hero ready", experience, autoLevel, Effect, wear);
     }
 
     /// <summary>
@@ -264,7 +284,8 @@ public static class AreaStartingHero
         return new(hero.Prototype, Races[hero.Race], hero.Gender == 0 ? CharacterGender.Female : CharacterGender.Male,
             [.. Enumerable.Repeat(PremadeHero.StartPrimaryStat, 8), 0, 0], PremadeHero.StartLevel, PremadeHero.StartUnspentPoints, hero.Alignment,
             raceEffect, genderEffect, hero.Gold,
-            [.. hero.Items.Select(item => new SessionHeroKitItem(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description)))]);
+            [.. hero.Items.Select(item => new SessionHeroKitItem(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description)))],
+            Advancement: SessionHeroAdvancement.WithScheme(hero.AutoLevelScheme is >= 0 and <= SessionAdvancementLimits.MaxScheme ? hero.AutoLevelScheme : 0));
     }
 
     /// <summary>A one-line HUD summary of the session's hero (no original text), or "diagnostic PC" without one.</summary>

@@ -914,12 +914,17 @@ content stack's base sources (`ContentPrototypes`, ARC-DATA-026), `rules\effect.
 the diagnostic profile.
 
 The session's player character is that hero ([starting hero runtime](../world/starting-hero-runtime.md#viewer-start-arc-world-027)):
-level 1, 5 points unspent, its race and gender effects, gold and starting kit, and its main-menu global flag (2350..2361)
+level 1, its race and gender effects, gold and starting kit, and its main-menu global flag (2350..2361)
 is true. Dialogs gate replies on the hero's own gender, effective intelligence and race (also after F8, which follows the
 loaded save's hero). The inventory window lists the kit first (`(starting kit)`, named from the item's description
-number; an item the session's equipment wears is marked `(worn)`) and shows the gold; the HUD adds `hero: NAME level 1 (5 points unspent), gold G, kit K, worn W` or `hero: none
+number; an item the session's equipment wears is marked `(worn)`) and shows the gold; the HUD adds `hero: NAME level L (U points unspent), gold G, kit K, worn W` or `hero: none
 (diagnostic PC profile)`. ARC-WORLD-034: the start wields the kit's best items before the game begins, as the original's
-pre-made menu does ([best items](../world/equipment-runtime.md#best-items-arc-world-034)). The actor is still drawn with the fixed human body of the AREA profile, not the hero's own
+pre-made menu does ([best items](../world/equipment-runtime.md#best-items-arc-world-034)). ARC-WORLD-036: the load also reads
+`rules\gamelevel.mes`, `rules\userlevel.mes`, `rules\spelllist.mes` and the module's `rules\gameeffect.mes`, so the hero's
+auto-level scheme spends its 5 starting points at the start and each level's points as it is reached, and after every
+experience award (a dialog's quest completion, a hit, a kill) the followers and the NPCs waiting on this map follow the
+hero's level step with their own schemes ([auto-level schemes](../world/advancement-runtime.md#viewer-host); the log prints
+`ARC-WORLD-036 follower-level`). The actor is still drawn with the fixed human body of the AREA profile, not the hero's own
 race/gender ART. Launcher: `./arcanum area --hero NAME`, `./arcanum map NAME --hero HERO`
 ([local development](../workflow/local-development.md#project-launcher)). Native smoke with `--hero` (after the
 inventory stage, and in map mode after the map stages): `ARC-WORLD-027 native-smoke hero PASS`.
@@ -997,16 +1002,69 @@ key. Self-test `ARC-UI-007 self-test PASS` (synthetic hero session: no-hero refu
 while open, rebuild on change, dead-hero close and refusal); native smoke with `--hero` after the hero stage:
 `ARC-UI-007 native-smoke character sheet PASS`.
 
+### Logbook (ARC-UI-008)
+
+The original Logbook key `L` (logical key down; the original's in-game key handler toggles the logbook for the local PC on
+`l`/`L`, ledger [LB1](../research/original-verification-ledger.md#logbook-arc-ui-008)) toggles a read-only diagnostic
+logbook of the session's PC in crash-site-area (exterior, cave and `--area-map`), with the two tabs of the original that
+the session can fill: **rumors** and **quests**. What it lists and how each entry looks follow the original logbook
+(ledger rows LB2–LB13):
+
+- **Rumors:** every rumor the PC knows, oldest first by the game time it was learned, struck through when the rumor is
+  quelled (proven false, the dialog action `RQ`). The text is message 20 × number of `mes\game_rd_npc_m2m.mes`, or of
+  `mes\game_rd_npc_m2m_dumb.mes` for a hero of intelligence 4 or less (no fallback to the other file).
+- **Quests:** every quest whose state is not Unknown, oldest first by the time of its last change, with its state label;
+  accepted and achieved in blue, completed struck through in green, completed by someone else and botched struck through
+  in red, mentioned in black. The description is the low-intelligence one of `mes\gamequestlogdumb.mes` when it exists and
+  the hero's intelligence is 4 or less, otherwise the normal one of `mes\gamequestlog.mes`; both are read only when the
+  module's `rules\gamequest.mes` loads (a file that cannot be read or parsed refuses the texts, project policy).
+- Each entry starts with the original's date line (month, day, year, 12-hour time, `January 1, 1885  3:00pm`), the
+  quest's state label right after it, and the text on the next line. Equal times are ordered by number (the original's
+  order for them is its unstable sort's).
+
+The texts come from the module's own data through the game folder's content stack at the module-load phase
+(`LogbookTexts`, loaded once per module in the background, kept over the cave, map transfers and F8); every module and
+map works the same, nothing is location-specific. A missing text shows an empty line; the header names what is missing
+(no hero: normal texts; no texts loaded; no quest table; texts not decodable as Windows-1252). Month names and state
+labels are the project's English words, not the player's `mes\logbk_ui.mes`.
+
+The logbook opens from the world only (no palette, dialog, inventory window, character sheet or UI focus), with or without
+a hero (without one the normal texts are read), and never for a dead hero (the original refuses a dead local PC). Like the
+character sheet it is modal: the actor gate closes, the clock pauses, a walk stops (the original does not pause; the
+viewer's modal windows do). While it is open it owns every key: `L`, `Escape` or a controller cancel closes it, `Tab` or a
+controller confirm switches the tab, and the tab buttons switch it with the mouse. The tab is kept across close and open
+and starts at the rumors for a new session (a quick load), as the original keeps it until a game reset. It rebuilds
+whenever the session, the tab or the loaded texts change and closes when the session ends or its hero dies. The HUD adds
+`L logbook` and the last refusal.
+
+The session holds the quelled rumors (game-wide, [story domain](../world/game-session-runtime.md#story-domain), snapshot
+schema 19) and the conversation's `RQ` action writes them (`IDialogRumorPort`).
+
+**Not implemented:** the other five tabs (reputations, blessings and curses, kills and injuries, background, keys), the
+book pages and page buttons (the viewer scrolls one list), the developer quotes page, the logbook button's highlight, the
+sounds, the PC lens, `RU`/`RQ` as reply conditions, scripts' rumor actions. Self-test `ARC-UI-008 self-test PASS`
+(synthetic texts: open without a hero, order and styles, `Tab`/controller tab switch, keys owned, tab kept and reset,
+low-intelligence texts, rebuild on change, dead-hero close and refusal); native smoke after the hero stage (exterior and
+map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`
+on the live session; on a detached copy every quest and rumor that has a text is listed with it).
+
 ### Sound output (ARC-UI-040)
 
 The viewer plays the original's sounds through the module's [sound catalogue](../audio/sound-catalog.md)
 on the original's three channels (effects, voice, music) at the original's volumes
-([contract](../audio/viewer-audio.md)). Nothing plays by itself yet. The palette action **Sound test: next
+([contract](../audio/viewer-audio.md)); music and ambient play since ARC-UI-041 (below). The palette action **Sound test: next
 interface sound** plays the next fixed interface sound by id and reports the outcome; the palette's sound
 line shows the output device (or "no output device" in a headless run), the three settings (0–10, default
 5, `user://audio_volumes_v1.json`; automated runs use no file unless `AUDIO_VOLUMES_TEST_PATH` is set),
 the catalogue and the last result. Self-test marker `ARC-UI-040 self-test audio PASS`; native smoke
 marker `ARC-UI-040 native-smoke audio PASS` (exterior AREA and `--area-map`).
+
+### Music and ambient (ARC-UI-041)
+
+The session's music and ambient schemes play in crash-site-area (exterior, cave, `--area-map`) as in the original:
+the map's default pair when a map opens, a sector's pair when the PC enters it, songs by their hour windows, ambient
+sounds by chance every 250 ms, combat music when an NPC enters combat mode ([contract](../audio/scheme-player.md)). The
+status line shows the slots and voices. Native smoke marker `ARC-UI-041 native-smoke schemes PASS` (map mode).
 
 ## Verification and evidence status
 

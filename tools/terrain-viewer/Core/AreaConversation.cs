@@ -229,7 +229,7 @@ public sealed class AreaConversationHost
         var party = PartyPort(speaker);
         var conversation = DialogConversation.Start(document!,
             new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
-            new DialogConversationPorts(State, State, _session.Flags, State, party, _inventory?.DialogPort(_session, SpeakerEntity)));
+            new DialogConversationPorts(State, State, _session.Flags, State, party, _inventory?.DialogPort(_session, SpeakerEntity), State));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party);
     }
 
@@ -241,7 +241,8 @@ public sealed class AreaConversationHost
         var entity = AreaConversationState.EntityId(speaker.Row);
         return new SessionDialogPartyPort(_session, AreaConversationState.PcParticipant,
             participant => participant == npc ? entity : null,
-            participant => participant == npc ? AreaCompanionRoster.Facts(facts, State.Alignment, State.Reaction(speaker.Index)) : null);
+            participant => participant == npc ? AreaCompanionRoster.Facts(facts, State.Alignment, State.Reaction(speaker.Index),
+                AreaAdvancement.Level(_session, entity, facts.Level)) : null);
     }
 
     private string? SpeakerEntity(DialogParticipantId npc) =>
@@ -250,8 +251,8 @@ public sealed class AreaConversationHost
 
 /// <summary>
 /// Dialog state ports over a <see cref="GameSessionOwner"/> (ARC-SCRIPT-006). Session-owned and therefore kept across
-/// talks, map changes and snapshots: global flags (through the conversation's GF port), PC quest states and known
-/// rumors (the session story domain), the NPC→PC reaction (the session reaction domain, ARC-WORLD-026: the speaker's
+/// talks, map changes and snapshots: global flags (through the conversation's GF port), PC quest states, known
+/// rumors and quelled rumors (RQ, ARC-UI-008; the session story domain), the NPC→PC reaction (the session reaction domain, ARC-WORLD-026: the speaker's
 /// record, else the profile's initial reaction as its base), and, per speaker, the attachment local flags and the
 /// follow consent as map-local entity changes on the speaker's map (absent = loaded baseline: attachment flags
 /// from the area, not following). Reaction facts are diagnostic: every speaker is a human, not aloof NPC with the
@@ -261,7 +262,7 @@ public sealed class AreaConversationHost
 /// lost with this object: PC alignment, items given (IN) when the host has no session inventory (ARC-UI-004 wires it),
 /// and areas marked (MM); they wait for their own owners.
 /// </summary>
-public sealed class AreaConversationState : IDialogStateQueryPort, IDialogCommandPort, IDialogWorldPort
+public sealed class AreaConversationState : IDialogStateQueryPort, IDialogCommandPort, IDialogWorldPort, IDialogRumorPort
 {
     public const string LocalFlagsProperty = "dialog.lf";
     public const string FollowProperty = "follow.pc";
@@ -282,6 +283,16 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     private readonly Guid _attachmentEpoch = Guid.NewGuid();
     private readonly int _initialReaction;
     private readonly HashSet<int> _party;
+    private readonly List<SessionExperienceAward> _awards = [];
+
+    /// <summary>ARC-WORLD-036: the experience awards the talk's commands gave (a completed quest) since the last call, in order;
+    /// the host passes their follower steps on (<see cref="AreaAdvancement.LevelFollowers"/>).</summary>
+    public IReadOnlyList<SessionExperienceAward> TakeAwards()
+    {
+        var awards = _awards.ToArray();
+        _awards.Clear();
+        return awards;
+    }
 
     /// <param name="speakerEntities">Stable session entity id of each speaker index (see <see cref="EntityId"/>).</param>
     /// <param name="partySpeakers">ARC-WORLD-016: speaker indexes whose "following" is the session party standing
@@ -375,7 +386,8 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     {
         var speaker = Speaker(command.NpcContext);
         if (!Enum.IsDefined((SessionQuestState)command.State)) return DialogCommandResult.Rejected;
-        var result = _session.SetQuestState(_session.Version, command.QuestId, (SessionQuestState)command.State);
+        var result = _session.SetQuestState(_session.Version, command.QuestId, (SessionQuestState)command.State, out var award);
+        if (award is not null) _awards.Add(award);
         if (result.Disposition != GameSessionDisposition.Changed) return Result(result);
         var entity = _entities[speaker];
         // Source quest rules: accepted raises the effective reaction to at least 41 (a delta), completed adds 10.
@@ -392,6 +404,8 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     }
 
     public DialogCommandResult Execute(RumorLogCommand command) => Result(_session.LearnRumor(_session.Version, command.RumorId));
+
+    public DialogCommandResult Execute(QuellRumorCommand command) => Result(_session.QuellRumor(_session.Version, command.RumorId));
 
     public DialogReactionReadResult ReadReaction(DialogReactionQuery query) => DialogReactionReadResult.Of(Reaction(Speaker(query.Npc)));
 
@@ -453,6 +467,7 @@ public static class AreaConversationText
             LocalFlagWriteCommand local => $"LF {local.Index} = {local.Value}",
             QuestStateCommand quest => $"QU {quest.QuestId} -> {quest.State}",
             RumorLogCommand rumor => $"RU {rumor.RumorId} logged",
+            QuellRumorCommand quell => $"RQ {quell.RumorId} quelled",
             ReactionCommand reaction => reaction.Mode == DialogReactionMode.Target ? $"RE target {reaction.Value}" : $"RE adjust {reaction.Value:+0;-0;+0}",
             GiveItemCommand item => $"IN item name {item.ItemName} NPC -> PC",
             MarkAreaCommand area => $"MM area {area.Area} known",

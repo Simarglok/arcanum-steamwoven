@@ -8,7 +8,7 @@ and its verdicts decide which differences become switches of the two rule settin
 decision D8 (see [the AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)).
 
 The combat-core anomalies A1–A10 were checked by ARC-COMBAT-001 and are not repeated here (A11 and A12 are in
-[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029), blessings and curses in [Blessings and curses](#blessings-and-curses-arc-world-035); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026); the phase of other rule files in [Load phases](#load-phases-arc-data-027); `map.patch` in [Map patch](#map-patch-arc-data-028); audio in [Audio](#audio-arc-res-052))
+[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029), blessings and curses in [Blessings and curses](#blessings-and-curses-arc-world-035); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); auto-level schemes in [Auto-level schemes](#auto-level-schemes-arc-world-036); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026); the phase of other rule files in [Load phases](#load-phases-arc-data-027); `map.patch` in [Map patch](#map-patch-arc-data-028); audio in [Audio](#audio-arc-res-052); the logbook in [Logbook](#logbook-arc-ui-008); the map list size in [Limits census](#limits-census-arc-data-029))
 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). Domain
 documents keep their own tables; where a row below contradicts a domain document, this ledger is
 the newer evidence, and the domain document's "likely intent" column is superseded by the verdict.
@@ -500,7 +500,7 @@ branch of the functions read stays inside `.text`.
 | SN4 | `gsound_calc_positional_params` (0x41B420) | The attenuated volume is multiplied by the size's volume % (small 40, medium 70, large 100). | CE slip |
 | SN12 | `gsound_scheme_load` (0x41BE20), `gsound_scheme_parse_entry` (0x41BF70) | A 26th entry in one scheme dereferences a null pointer (crash). | Original bug (no installed scheme reaches it; both settings refuse) |
 | SN13 | `gsound_scheme_parse_entry` (0x41BF70) | `/over` wins over `/loop`; a balance-left above 127 clamps to 127. | CE slip |
-| SN14 | `gsound_update` (0x41BAF0) | At most one ambient per slot per tick; hour windows never wrap, so 20 installed night entries never play. | CE slip (one per tick); original bug (windows), switch candidate |
+| SN14 | `gsound_update` (0x41BAF0) | At most one ambient per slot per tick; hour windows never wrap, so 20 installed night entries never play. | CE slip (one per tick); original bug (windows), rule switch (ARC-UI-041) |
 | SN17 | `gsound_start_combat_music` (0x41C4D0) | An NPC entering combat starts stinger and loop together; the local PC leaving combat restores the latest request. | Original |
 | SN18 | `gsound_save` (0x41B1D0), `gsound_load` (0x41B0F0) | A save made during combat loses the pre-combat schemes. | Original bug, rule switch (ARC-WORLD-040) |
 | SN22 | `dialog_ui_speech_start` (0x5688D0) | Voice gender is the PC's; closing the dialog does not stop the voice. | Original |
@@ -587,6 +587,31 @@ is true in single player, so it is never taken. Every direct branch stays inside
 | BC4 | add (0x4C42F0 / 0x4C3E40) | A PC only; nothing when held; appends the number and the game time, the effect add (0x4E9F70) with the effect of BC2 and the bless or curse cause; for the local PC message 1000, a UI message and the logbook button. | Original |
 | BC5 | remove (0x4C4450 / 0x4C3FA0) | A PC only; the first entry only; later numbers and times move up; both lengths shortened; the typed removal (0x4EA100) with BC2's effect of the number; the logbook button for the local PC. Not held: nothing. | Original |
 | BC6 | BC2 with the installed `gamecurse.mes` | Curses 52, 53 and 54 hold a placeholder text that is no number, so receiving one adds the module's effect 0 (strength +6, beauty −6, intelligence −6, prowling −3, age +20). | Original bug (data); switch candidate, owner decision open; both modes follow the original until then |
+## Auto-level schemes (ARC-WORLD-036)
+
+Source: [advancement runtime](../world/advancement-runtime.md) and
+[FR-CHAR-021](../requirements/characters-skills.md#fr-char-021). Read on 2026-10-17 by a first reader and, independently, a
+second reader that saw only the questions (method step 6). They agree on every behaviour below. The second reader also
+noted that the original logs each bought spell in the purchase text and keeps an unreferenced scheme preview (0x4A6E90:
+a copy of the critter with 1,000,000 points runs the scheme); neither changes a purchase. Several functions begin with a
+network branch (a client returns at once, a multiplayer PC reads its scheme elsewhere); a single-player game never takes it.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| AL1 | scheme run (0x4A7030) | Scheme 0 or no rule: nothing, not completed. Otherwise the rule runs; only when it completes and the critter is an NPC does the standard rule 70 run after it, and its result is returned. A PC never runs rule 70. | Original |
+| AL2 | scheme rule lookup (0x4A6E40), scheme read (0x4A6D40) | Scheme numbers below 1 or from 200 give no rule; 1..49 come from `rules\userlevel.mes`, 50..199 from `rules\gamelevel.mes`; a missing entry gives none. | Original |
+| AL3 | scheme rule run (0x4A7340) | A token up to the next space, its target the C library's `atoi` of the text up to the next comma (a missing number passes a null pointer, A3; both modes refuse such a rule at read time); tokens compared ASCII case-insensitively against stats, basic skills, tech skills, colleges, tech disciplines and `maxhps`/`maxfatigue` in that order. A step that runs out of points ends the rule (not completed); one that fails otherwise goes on to the next token; an unknown token ends the rule (not completed). | Original (a missing comma lets `atoi` swallow the next step: data, AL14) |
+| AL4 | stat purchase (0x4A75E0) | From the **base** value, each unit costs the stat cost of the next value and is paid from the **base** unspent points; the base is written and read back (a value the race maximum clamps fails the step); the loop goes on from the read-back **base** value. The reconstruction continues from the effective value and reads the effective unspent points, so an effect that lowers the stat would make it pay for the same unit again. | Reconstruction slip |
+| AL5 | basic and tech skill purchases (0x4A76B0, 0x4A77A0), points setters (0x4C6000, 0x4C66E0), skill levels (0x4C5EB0, 0x4C65E0), key-stat cap (0x4C5F70) | One point (cost 1) while the skill's level is below the target; a point whose `4 × points` is above the key stat's cap (3, 7, 11, 15, 19, 20 for stats up to 5, 8, 11, 14, 17, 20) is refused and the key stat is raised by one instead (AL4), any failure of that ending the step; the loop compares the level read before the stat raise. Levels: 4 × points (melee 20 for a monster), then the skill's effects, clamped 0..20, capped by the effective key stat. The tech setter moves the tech points by the change. Key stats as the skill tables give them. | Original |
+| AL6 | spell purchase (0x4A7890), spell add (0x4B1790), spell level minimum (0x4B1770), spell minima (0x4502E0, 0x4502F0) | The college's next rank while below the target, cost 1; the add needs the next rank, character level 1, 1, 5, 10, 15 by rank, intelligence 5 and the spell's willpower (the record's value, before the table loads 6, 9, 12, 15, 18 by rank) and raises the magick points by 1. A rank the level refuses fails the step; one refused otherwise raises intelligence (when below 5) or else willpower by one. | Original |
+| AL7 | AL6 with a target above 5 | The spell number runs on into the next college's first spell (past the last college, the mastery field). | Original bug (no installed scheme has one; both modes refuse such a rule) |
+| AL8 | tech degree purchase (0x4A79C0), degree raise (0x4AFEC0) | The next degree while below the target, cost 1; the raise needs intelligence 0, 5, 8, 11, 13, 15, 17, 19 by degree and stops at 7, and adds its cost to the tech points; a refused degree raises intelligence by one. A target above 7 at degree 7 reads the cost one entry past its table. | Original; the read past the table is an original bug (no installed scheme has one; both modes refuse such a rule) |
+| AL9 | hit and fatigue point purchase (0x4A7AA0) | While the maximum is below the target and the base unspent points are at least 1: the bought points rise by one (each adds 4 to the maximum before effects), then a maximum that did not rise by at least one fails the step (the point stays written, unpaid); otherwise 1 point is paid. | Original |
+| AL10 | stat cost (0x4B0F50) | The value is clamped to 1..20; reaching 1 costs 0, every higher value 1. | Original |
+| AL11 | level set (0x4A6F00) | Resets the sheet to its defaults (keeping gender, race, alignment and age), sets the level, no bought points, the level's experience and the points of the levels above 1, then runs the scheme and clears the damage. Its only caller is the player creation (0x40DDDA, level 1), so a new PC's scheme spends its five starting points. | Original |
+| AL12 | level recalculation (0x4A69C0), follower level update (0x4A6CB0) | A PC's scheme runs once for each level written, after its points, never in the last-level branch; a follower's after its new level and points, only when the level rose. | Original (as XP5, XP7) |
+| AL13 | network branches of AL1, AL3, AL5, AL8 | A network client returns before any purchase; a multiplayer PC reads its scheme from another table. | Out of scope (single player) |
+| AL14 | data (`DAT_ROOT`) | All 58 installed rules parse (57 in `gamelevel.mes`, one in `userlevel.mes`); no college target is above 5 and no degree target above 7; scheme 76 (a pre-made hero's) has one missing comma, so one step is lost as the original reads it; no spell record names its own willpower. Every pre-made hero has a scheme (76..87) that spends its five starting points; Virgil carries two effects and scheme 91. | Data |
 
 ## Map patch (ARC-DATA-028)
 
@@ -605,6 +630,47 @@ the npc-flag table's null entry and the editor-mode branch. Every direct branch 
 | MP6 | `basic_skill_training_set` (0x4C6170), `tech_skill_training_set` (0x4C6850) | `training` takes a tier word (`st_untrained`, `st_beginner`, `st_expert`, `st_master`) and a skill name; the tier may rise one step at a time and needs a skill level of 0/1/9/18; the educator background then teaches followers. Another word leaves the skill name to be read as a key. | Original |
 | MP7 | `script_load_hdr` (0x44BCC0), `script_name_build_scr_name` (0x4CEDC0) | `script` attaches at the given slot the script's 8-byte file header (flags, counters) and its number, but only when the number names a script file: number 0 or an unlisted number attaches nothing and logs nothing, so `script N 0` cannot clear an attachment. | Original bug (switch candidate: the installed patch has five such lines) |
 | MP8 | `obj_arrayfield_store` (0x4088B0), 0x40D2A0 | Writing one element of an array field the instance does not hold first copies the prototype's whole array. | Original |
+
+## Logbook (ARC-UI-008)
+
+Source: the [viewer logbook](../rendering/terrain-viewer.md#logbook-arc-ui-008), the [story domain](../world/game-session-runtime.md#story-domain)
+and [FR-SOCIAL-008](../requirements/story-social-ai.md). Question: what the original logbook shows on its rumors and quests
+pages, which text it reads, how it opens and how a rumor is quelled. Read on 2026-10-18 by a first reader and,
+independently, a second reader that saw only the questions (method step 6); both agree on every row. Every direct branch
+stays inside `.text`; the indirect ones (the key handler's character table, the tab switch of the list builder, the dialog
+action table) stay inside their functions. LB8 is a slip of the reconstruction (the first verdict of the table above), so
+no rule switch; Steamwoven reads both files as the original does.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| LB1 | in-game message filter (0x54B5D0) | The character messages `l` and `L` (one case of the filter's character table, next to `c`/`C` of CS1) call the logbook toggle with the local PC, under the guards of CS1 (not while another critter acts in turn-based combat, a text edit owns the keys or the main menu is active); an interface sound follows every handled letter. The interface's logbook button calls the same toggle. A keyboard key for the logbook was not found in the earlier reading of the key handlers; the executable has one. | Original |
+| LB2 | logbook toggle (0x53F020), logbook close (0x53F090) | Already open: closes it (a toggle). Otherwise a null object returns; a dead **local PC** (not the argument) refuses; the interface mode is set to main, then to the logbook, either refusal refuses; then the object is stored and the window created. Close sets the main mode, then destroys the window and forgets the object. | Original |
+| LB3 | logbook create (0x53F0E0), destroy (0x53F2F0), panel draw (0x53F490), tab switch (0x53F5F0), reset (0x53EFD0) | The tab and the page spread are kept across close and open: opening rebuilds the lists and redraws the kept spread. Clicking a tab resets the page to the first spread; a game reset (load, new game) sets the rumors tab and the first page. Holding left Ctrl and left Alt while opening shows a hidden page of developer quotes in place of the rumors. Neither opening nor creating pauses the game. | Original |
+| LB4 | entry timestamp (0x5403C0), rumor entry (0x540310), quest entry (0x540470) | An entry starts with a date line: the month name (message month + 6 of `mes\logbk_ui.mes`), the day, a comma, the year, two spaces, the hour on a 12-hour clock (hour 0 is 12 am, hour 12 is 12 pm) with two minute digits and "am"/"pm", then four spaces. A quest entry appends its state label (message state + 19) right after it. A newline follows, then the rumor's text or the quest's description. | Original |
+| LB5 | logbook list builder (0x53FBB0), rumors and quests tabs | Rumors: struck through in black when quelled, plain black otherwise. Quests: accepted and achieved in blue; completed struck through in green; completed by someone else and botched struck through in red; mentioned in plain black. | Original |
+| LB6 | quest logbook list (0x4C52E0), its comparator (0x4C53A0) | Only a PC has quests. Every quest record whose state without the botched bit is not Unknown is listed (a quest botched while still Unknown is not), reported Botched when the botched bit is set and with its stored state otherwise, then sorted by the date-time of its last change, oldest first, with the run-time library's sort, which is not stable: the order of equal times is the sort's. | Original |
+| LB7 | quest description (0x4C5250) | The output starts empty; the low-intelligence description is used when one is loaded and the object's intelligence is 4 or less, otherwise the normal one; with neither the description stays empty. | Original |
+| LB8 | quest module load (0x4C4670) | `rules\gamequest.mes` is parsed for quests 1000..1999; only when that file loads are `mes\gamequestlog.mes` (normal descriptions) and `mes\gamequestlogdumb.mes` (low-intelligence descriptions) loaded, each searched for 1000..1999 in its own file; the second is tried even when the first is missing. The earlier reading searched the normal file for both, which made the low-intelligence descriptions the normal ones. | Reconstruction slip |
+| LB9 | rumor logbook list (0x4C5A40), its comparator (0x4C5AF0) | Every rumor 1000..2999 with a non-zero learning time is listed with its quelled mark, sorted by that time, oldest first, with the same unstable sort. | Original |
+| LB10 | rumor logbook text (0x4C5920, 0x4C5960, 0x4C59D0), rumor module load (0x4C5570) | Module load reads `mes\game_rd_npc_m2m.mes`, `…_m2f`, `…_f2f`, `…_f2m` and `…_m2m_dumb`. A rumor's logbook text is message 20 × number of the first file, or of the last one when the object's intelligence is 4 or less; a missing message gives an empty text, with no fallback to the other file. | Original |
+| LB11 | rumor quell (0x4C5690), multiplayer lock test (0x4A2BA0) | In single player the rumor's bit (number − 1000) of a game-wide bitmap is set; there is no range check. A multiplayer game sends a message as well. No function clears a bit except the module load. | Original |
+| LB12 | dialog action executor (0x415BA0) | `RQ n` quells rumor *n* with no participant and no PC test; `RU n` marks rumor *n* known to the dialog's PC. | Original |
+| LB13 | date-time hour (0x45A870), minute (0x45A8B0), day (0x45A8E0), month (0x45A900), year (0x45A920) | From the (days, milliseconds) pair, unsigned: hour = ms / 3,600,000 mod 24, minute = ms / 60,000 mod 60, day = days mod 30 + 1, month = days / 30 mod 12 + 1, year = start year + days / 360. | Original |
+
+Not modelled by Steamwoven: the order of equal times (Steamwoven orders them by number), a rumor learned at game time 0
+(the original's zero time means not known; no profile starts there), the developer quotes page, the
+other five tabs, the book page spreads, the month and state labels of `logbk_ui.mes` (the viewer uses its own), the
+logbook button's highlight and the sounds.
+
+## Limits census (ARC-DATA-029)
+
+Source: the [limits census](../world/limits-census.md). Question: how many maps can the original's map list hold, which
+bounds the maps a session can have changes on? Read on 2026-10-18 by a first reader and, independently, a second reader
+that saw only the question (method step 6); both agree.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| LC1 | `map_init` (0x40EA90), `map_list_info_load` (0x4125C0), `map_list_info_add_internal` (0x412C90) | The map list is one table of 200 entries of 280 bytes, allocated at map initialisation. The loader reads the map list rules from message number 5000 upwards and stops at the first gap; after each entry it stops when 200 are stored, unloads the file and reports success, so further entries are ignored without a log. Adding one map later refuses when the table is full. No other path adds an entry (the other writers reuse an existing slot found by name; the unload resets the count). A name of 256 characters or more fails the load. | Original |
 
 ## Decisions to revisit
 

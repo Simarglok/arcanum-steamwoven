@@ -182,7 +182,7 @@ public sealed class AreaTransitionCoordinator
         var identity = new GlobalFlagIdentity(new WorldId(world), new ModuleId(module));
         var flags = AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), hero?.Flag);
         var created = GameSessionOwner.Create(new(clock, flags, new(new(runtimeMap), new(checked((int)actor.X), checked((int)actor.Y)), NeighborDirection.XPlus),
-            Hero: hero?.Definition, Experience: hero?.Experience));
+            Hero: hero?.Definition, Experience: hero?.Experience, AutoLevel: hero?.AutoLevel));
         if (hero?.KitWear is not { } wear || created.Owner is not { } owner) return created;
         // ARC-WORLD-034: the pre-made start wields the hero's best items before the game begins (the original's best-items call,
         // 0x4654F0, from the pre-made menu step 0x545B60). The viewer has one diagnostic body art and no inventory grid, so it answers

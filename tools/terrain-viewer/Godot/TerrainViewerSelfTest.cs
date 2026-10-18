@@ -119,6 +119,7 @@ public static partial class TerrainViewerSelfTest
             await AssertAreaHoverAsync(host);
             await AssertAreaInventoryAsync(host);
             await AssertAreaSheetAsync(host);
+            await AssertAreaLogbookAsync(host);
             await AssertViewerAudioAsync(host);
             await AssertVisualToggleAppAsync(host);
 

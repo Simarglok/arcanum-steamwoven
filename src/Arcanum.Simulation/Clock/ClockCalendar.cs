@@ -1,10 +1,11 @@
 namespace Arcanum.Simulation.Clock;
 
-internal static class ClockCalendar
+/// <summary>The calendar of a game time: 30-day months, 12-month years from the profile's start year.</summary>
+public static class ClockCalendar
 {
-    // Shared by bootstrap and advance. Extended startYear is an arithmetic capacity seam,
-    // not a supported public profile or owner construction range.
-    internal static ClockFailure TryDerive(long timestampMs, long startYear, out ClockCalendarFields calendar)
+    // Shared by bootstrap and advance, and since ARC-UI-008 by the logbook's dates. Extended startYear is an arithmetic
+    // capacity seam, not a supported public profile or owner construction range.
+    public static ClockFailure TryDerive(long timestampMs, long startYear, out ClockCalendarFields calendar)
     {
         calendar = default;
         if (timestampMs < 0 || startYear < 0) return ClockFailure.InvalidState;

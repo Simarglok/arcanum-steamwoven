@@ -114,7 +114,7 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        if (_readyMapName is not null) { await RunAreaMapSmokeAsync(result); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); }
+                        if (_readyMapName is not null) { await RunAreaMapSmokeAsync(result); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLogbookSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); }
                         else await RunAreaSmokeAsync(result);
                         // S5 must observe the retired generation become
                         // collectable; this frame may not keep it reachable.
@@ -849,7 +849,7 @@ public partial class TerrainViewerApp : Node
         TickAudio();
         if (IsWorld)
         {
-            try { TickAreaClock(); ProcessWorld(delta); SyncAreaSheet(); }
+            try { TickAreaClock(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaAwards(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");

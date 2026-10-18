@@ -160,9 +160,9 @@ public sealed class SessionOwnerTests
         Changed(total.ClearMapChange(total.Version, Exterior, MapChangeKey.ForSector(1, "p")), total, 3);
         Changed(total.SetMapChange(total.Version, Cave, MapChangeKey.ForSector(2, "p"), 1), total, 4);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new GameSessionLimits(maxMaps: 65));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new GameSessionLimits(maxMaps: GameSessionLimits.PolicyMaxMaps + 1));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new GameSessionLimits(maxChangesPerMap: 0));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new GameSessionLimits(maxTotalChanges: 16385));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new GameSessionLimits(maxTotalChanges: GameSessionLimits.PolicyMaxTotalChanges + 1));
     }
 
     // ARC-WORLD-017: a map transfer that carries followers is one atomic step.

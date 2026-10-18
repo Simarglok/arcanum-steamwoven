@@ -85,8 +85,10 @@ public sealed class ViewerAudioBackend : IDisposable
     };
 
     /// <summary>Starts <paramref name="payload"/> on <paramref name="channel"/> at <paramref name="volume"/> (0–127, mapped
-    /// linearly to amplitude). A looped WAV repeats its whole sample range, a looped MP3 the whole file.</summary>
-    public ViewerAudioResult Play(SoundPayload payload, AudioChannel channel, int volume, bool loop = false)
+    /// linearly to amplitude). A looped WAV repeats its whole sample range, a looped MP3 the whole file. <paramref name="pan"/>
+    /// (−1 left … 1 right) routes the voice through one of nine panning buses of the channel (steps of 0.25, a Steamwoven
+    /// choice; the original's mixer pans continuously).</summary>
+    public ViewerAudioResult Play(SoundPayload payload, AudioChannel channel, int volume, bool loop = false, double pan = 0)
     {
         ArgumentNullException.ThrowIfNull(payload);
         if (_disposed) return new(ViewerAudioStatus.Disposed, null);
@@ -97,7 +99,7 @@ public sealed class ViewerAudioBackend : IDisposable
         if (stream is null) return new(ViewerAudioStatus.DecodeFailed, null);
         var voice = _voices[slot];
         voice.Generation++; voice.Channel = channel; voice.Loop = loop;
-        voice.Player = new AudioStreamPlayer { Stream = stream, Bus = BusName(channel), ProcessMode = Node.ProcessModeEnum.Always };
+        voice.Player = new AudioStreamPlayer { Stream = stream, Bus = PanBus(channel, pan), ProcessMode = Node.ProcessModeEnum.Always };
         SetVolume(voice.Player, volume);
         _parent.AddChild(voice.Player);
         voice.Player.Play();
@@ -128,6 +130,36 @@ public sealed class ViewerAudioBackend : IDisposable
             return mp3;
         }
         catch (Exception exception) when (exception is InvalidOperationException or ArgumentException) { return null; }
+    }
+
+    public const int PanSteps = 4;
+
+    /// <summary>The bus for a pan: the channel bus at the centre, else a child bus with a panner at the nearest quarter.</summary>
+    private string PanBus(AudioChannel channel, double pan)
+    {
+        var step = (int)Math.Round(Math.Clamp(double.IsFinite(pan) ? pan : 0, -1, 1) * PanSteps);
+        if (step == 0) return BusName(channel);
+        var name = $"{BusName(channel)} pan {step:+0;-0}";
+        if (AudioServer.GetBusIndex(name) >= 0) return name;
+        var index = AudioServer.BusCount;
+        AudioServer.AddBus(index); AudioServer.SetBusName(index, name); AudioServer.SetBusSend(index, BusName(channel));
+        AudioServer.AddBusEffect(index, new AudioEffectPanner { Pan = (float)step / PanSteps });
+        _createdBuses.Add(name);
+        return name;
+    }
+
+    /// <summary>Fades the handle's sound to silence over <paramref name="milliseconds"/> and releases it; a stale handle is a
+    /// no-op (false). A one-shot keeps playing until it ends unless faded.</summary>
+    public bool FadeOut(ViewerAudioHandle handle, int milliseconds)
+    {
+        if (Current(handle) is not { } voice) return false;
+        if (milliseconds <= 0) { Release(voice); return true; }
+        var player = voice.Player!;
+        voice.Loop = false;
+        var tween = player.CreateTween();
+        tween.TweenProperty(player, "volume_db", -80.0, milliseconds / 1000.0);
+        tween.TweenCallback(Callable.From(() => { if (Current(handle) is { } current) Release(current); }));
+        return true;
     }
 
     /// <summary>True while the handle's sound is still the one in its slot and the engine is playing it.</summary>

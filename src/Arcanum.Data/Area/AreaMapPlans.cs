@@ -80,7 +80,7 @@ public static class AreaMapPlans
     internal const double MaxLimitScale = 16;
     private const string ResourcePrefix = "art/";
     // Largest mobile aggregate read from an archive member (installed ones are under 2 MiB).
-    private const long MaxMemberBytes = 64L * 1048576;
+    internal const long MaxMemberBytes = 64L * 1048576;
 
     private static readonly (AreaMappingRole Role, string Path)[] MappingPaths =
     [

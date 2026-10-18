@@ -149,6 +149,8 @@ public sealed partial class AreaDataOwner : IDisposable
     }
 
     public AreaBudgetUsage Usage { get { lock (_gate) { return _budget.Usage; } } }
+    /// <summary>ARC-DATA-029: the largest retained ownership so far (the limits census).</summary>
+    internal long RetainedHighWater { get { lock (_gate) { return _budget.RetainedHighWater; } } }
     public AreaBudgetRejection? FirstBudgetRejection { get { lock (_gate) { return _budget.FirstRejection; } } }
     public IReadOnlyList<AreaBudgetPhaseUsage> PhaseHistory { get { lock (_gate) { return _budget.History; } } }
     // Unsynchronized, for stream callbacks in tests that run on parallel authentication workers.

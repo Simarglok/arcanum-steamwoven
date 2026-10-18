@@ -128,9 +128,10 @@ only NPCs. Sources: [fatigue][cr-fatigue], [resting][cr-rest], [poison][st-poiso
 Rules of the wiring:
 
 - **Scheduling with the step.** Every life call (`ApplyDamage`, `Kill`, `Heal`, the ticks) sets its timers in the same
-  step. The session's queue holds 16,387 events (`SessionEventKinds.MaxPending`: four per NPC life record and three for
-  the hero), so the timers of a step always fit; a step whose timers would not fit, or whose deadline would pass the
-  clock's range, is refused whole (`EventBudgetExceeded`) with nothing drawn or changed.
+  step. The session's queue holds 33,859 events (`SessionEventKinds.MaxPending`: four per NPC life record, 8,192 records
+  since ARC-DATA-029, and three for the hero, plus the 1,024 deferred script calls and 64 timed-effect ENDs), so the
+  timers of a step always fit; a step whose timers would not fit, or whose deadline would pass the clock's range, is
+  refused whole (`EventBudgetExceeded`) with nothing drawn or changed.
 - **Map of an NPC timer.** The map the NPC is on: the actor's map when a life call sets it (the host acts on NPCs of the
   map the PC is on), the timer's own map when a handler sets the next one. An NPC keeps all its timers on one map and
   one per kind whatever the map: a life step on another map than its pending timers' (a move the session did not see,
@@ -182,7 +183,7 @@ D2: the Steamwoven mode applies one tick per period, the Original mode keeps two
 ```
 
 Pending events are in queue order. Decoding checks shapes and ranges: registry and next sequence at least 1, at most
-16,387 events, 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
+33,859 events, 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
 (`OutOfRange`, `BudgetExceeded`, missing, unknown and wrongly typed fields). Restore refuses (`InvalidEvents`) another
 registry version, an unknown kind, a value count other than the kind's (2 for poison recovery, else 1), a recovery
 value other than 1 or 2, an NPC with timers on two maps, a timer whose deadline is not its kind's delay after its scheduling time or that was
