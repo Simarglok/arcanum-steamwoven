@@ -264,7 +264,7 @@ public sealed class ReactionStateTests
         Changed(owner.AdjustReaction(owner.Version, "oid:a", Human60, Pc, 1), owner, 1);
         Changed(owner.AdjustReaction(owner.Version, "oid:a", Human60, Pc, 1), owner, 2);
         Refused(owner.AdjustReaction(owner.Version, "oid:b", Human60, Pc, 1), owner, GameSessionFailure.BudgetExceeded, 2);
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new GameSessionLimits(maxReactionRecords: 4097));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new GameSessionLimits(maxReactionRecords: GameSessionLimits.PolicyMaxReactionRecords + 1));
     }
 
     [TestMethod]

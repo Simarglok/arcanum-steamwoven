@@ -82,7 +82,7 @@ than the maximum hit points.
 | `QueryNpcExperience(entity)` | The NPC's saved record, null while it has none. |
 
 Refusals come in the order named in the API comments; every one leaves the session unchanged. An NPC's worth and pool are
-0..100,000,000 (`InvalidExperienceTarget`); new records stop at `GameSessionLimits.MaxExperienceRecords` (4096,
+0..100,000,000 (`InvalidExperienceTarget`); new records stop at `GameSessionLimits.MaxExperienceRecords` (8192 since ARC-DATA-029,
 `BudgetExceeded`). A level raises the hero's maximum hit points and fatigue through the [life rules](life-state-runtime.md)
 formulas (level is one of their inputs), keeping the damage, so the current values rise with them.
 

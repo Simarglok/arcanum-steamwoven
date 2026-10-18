@@ -243,8 +243,9 @@ public sealed class SnapshotRestoreTests
             "\"maps\":[{\"map\":79,\"changes\":[" + changes + "]}]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoEvents + LightingTail;
         using var restored = Restore(Decode(text));
         Assert.AreEqual(GameSessionLimits.PolicyMaxChangesPerMap, restored.QueryMapChanges(Exterior).Count);
-        Assert.AreEqual(4095, restored.QueryMapChange(Exterior, MapChangeKey.ForSector(4095, "p")));
-        Rejected(restored.SetMapChange(restored.Version, Exterior, MapChangeKey.ForSector(4096, "p"), 1), restored,
+        var last = GameSessionLimits.PolicyMaxChangesPerMap - 1;
+        Assert.AreEqual(last, restored.QueryMapChange(Exterior, MapChangeKey.ForSector(last, "p")));
+        Rejected(restored.SetMapChange(restored.Version, Exterior, MapChangeKey.ForSector(last + 1, "p"), 1), restored,
             GameSessionFailure.BudgetExceeded, 2);
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
     }

@@ -34,9 +34,11 @@ profiles and every exterior smoke stay as they were.
 - **Budgets.** A whole map may retain up to 16,384 frames and 160 MiB of CPU
   frames (`AreaRepositoryPolicy.MaxMapFrames`/`MaxMapCpuBytes`; the exterior
   keeps 2,444 frames and 81,853,096 bytes); the CPU frames plus the actor stay
-  within `TerrainCachePolicy.MaxRgbaBytes` (256 MiB). GPU residency stays within
-  the exterior's visible-frame caps; terrain chunks and the frame LRU are the
-  exterior's.
+  within `TerrainCachePolicy.MaxRgbaBytes` (256 MiB). Since ARC-DATA-029 the
+  frames visible at once on the GPU are bounded by the same map caps (two interiors
+  draw more than the exterior's 2,444 frames: 2,622 and 4,562); terrain chunks and
+  the frame LRU are the exterior's. Census of all interiors:
+  [limits census](../world/limits-census.md).
 - **Chart.** The map's chart starts at its first core sector row and column and
   covers every core sector (`AreaChart.MinimumCell = 0`,
   `MaximumCell = 64 × span − 1`, up to 896 cells for the 14-sector K'na Tha;

@@ -99,7 +99,9 @@ public sealed class TerrainTextureCache : IDisposable
     public void UploadAreaVisible(IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames, IReadOnlySet<AreaFrameKey> visible)
     {
         var bytes = visible.Sum(key => checked((long)frames[key].Width * frames[key].Height * 4));
-        if (visible.Count > AreaRepositoryPolicy.MaxFrames || bytes > AreaRepositoryPolicy.MaxCpuBytes) throw new InvalidOperationException("AREA_GPU_BUDGET");
+        // ARC-DATA-029: the visible frames are a subset of a CPU repository admitted under its own caps; the GPU bound is
+        // the largest repository policy (a whole map's), not the pinned exterior's totals.
+        if (visible.Count > AreaRepositoryPolicy.MaxMapFrames || bytes > AreaRepositoryPolicy.MaxMapCpuBytes) throw new InvalidOperationException("AREA_GPU_BUDGET");
         if (!ReferenceEquals(_areaRepository, frames))
         {
             foreach (var texture in _areaTextures.Values) DisposeTexture(texture);

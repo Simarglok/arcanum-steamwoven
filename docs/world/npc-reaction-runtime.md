@@ -62,7 +62,7 @@ Single PC: the source's ten-slot memory with eviction of the slot closest to 50 
 Every mutation takes the expected version and refuses in this order: entity (`InvalidReactionTarget`), facts
 (`InvalidReactionFacts`, also AI parameters of a hit beyond the bounds), version (`StaleVersion`), the requested delta or
 target and the new stored value (`InvalidReactionAmount` beyond ±1,000,000), then NoChange (a skip or an unchanged record,
-with the `Adjustment` still reported), the record budget (`GameSessionLimits.MaxReactionRecords`, policy 4096, `BudgetExceeded`) and the revision
+with the `Adjustment` still reported), the record budget (`GameSessionLimits.MaxReactionRecords`, policy 8192 since ARC-DATA-029, `BudgetExceeded`) and the revision
 capacity. One revision per changed record; a record back at the baseline is removed. A hit's `FollowCheck` is reported
 whenever the hit was decided, also when its reaction write is then refused, because the source runs the follow check
 whatever the write does.
@@ -92,7 +92,7 @@ The state has one schema for both modes, so `SelectRules` changes only the next 
 ```
 
 The codec refuses unsorted or repeated entities and a record with both slots `null` (`NotCanonical`), a slot beyond
-±1,000,000 (`OutOfRange`) and more than 4096 records (`BudgetExceeded`); `Restore` applies the caller's budget.
+±1,000,000 (`OutOfRange`) and more than 8192 records (`BudgetExceeded`); `Restore` applies the caller's budget.
 **Migration decision: none.** Schema 9 and older are refused. The viewer's `reaction.pc` map changes of schema 9 saves
 are therefore never read; a quick save of schema 9 loads as "written by an incompatible version".
 

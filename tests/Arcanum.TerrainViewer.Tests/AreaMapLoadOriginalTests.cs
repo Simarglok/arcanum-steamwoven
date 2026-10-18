@@ -40,17 +40,31 @@ public sealed class AreaMapLoadOriginalTests
         using var stack = ContentStack.Open(discovery.Plan!).Stack!;
         var catalog = WorldCatalog.Open(stack);
         var loaded = new List<string>(); var failed = new List<string>();
+        (string Map, long Value) frames = default, bytes = default, span = default;
         foreach (var map in catalog.Maps.Where(m => m.Name != "arcanum1-024-fixed"))
         {
             using (var owner = AreaMapPlans.Create(stack, catalog, map.Name).Plan!.Open())
                 if (!owner.Inspect().IsComplete) continue;
-            try { _ = AreaLoadOperation.Execute(1, Arguments(root, map.Name), default); loaded.Add(map.Name); }
+            try
+            {
+                var area = AreaLoadOperation.Execute(1, Arguments(root, map.Name), default).Area!;
+                loaded.Add(map.Name);
+                if (area.Frames.Count > frames.Value) frames = (map.Name, area.Frames.Count);
+                var rgba = area.Frames.Values.Sum(frame => (long)frame.Width * frame.Height * 4);
+                if (rgba > bytes.Value) bytes = (map.Name, rgba);
+                if ((area.Plan.Chart.MaximumCell + 1) / 64 > span.Value) span = (map.Name, (area.Plan.Chart.MaximumCell + 1) / 64);
+            }
             catch (Exception exception) when (exception is InvalidOperationException or AreaException) { failed.Add($"{map.Name}: {exception.Message}"); }
         }
         // Since ARC-RENDER-018 the wading, multiply and constant-alpha bodies are drawn, so every complete interior loads;
         // since ARC-DATA-023 every interior but K'na Tha is complete, and since ARC-DATA-024 K'na Tha too.
         Assert.AreEqual(0, failed.Count, string.Join("; ", failed));
         Assert.AreEqual(80, loaded.Count, string.Join(", ", loaded));
+        // ARC-DATA-029: the map-mode caps keep at least 1.5 times the largest interior (docs/world/limits-census.md).
+        Console.WriteLine($"ARC-DATA-029 viewer frames={frames} rgba={bytes} chart={span}");
+        Assert.IsTrue(frames.Value * 3 <= AreaRepositoryPolicy.MaxMapFrames * 2L, $"{frames}");
+        Assert.IsTrue(bytes.Value * 3 <= AreaRepositoryPolicy.MaxMapCpuBytes * 2, $"{bytes}");
+        Assert.IsTrue(span.Value * 3 <= AreaMapLoadOperation.MaxChartSectors * 2L, $"{span}");
     }
 
     [TestMethod, TestCategory("RealData")]
