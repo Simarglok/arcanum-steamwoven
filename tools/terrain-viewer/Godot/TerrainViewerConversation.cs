@@ -14,6 +14,9 @@ namespace Arcanum.TerrainViewer;
 // chosen by mouse (as in the source) or controller menu, and keyboard keys are not redirected to dialog actions
 // (the WORLD keyboard route reserves them). Speakers come from the exterior map; in the cave only a companion that
 // stands there (ARC-WORLD-017) can be talked to, and on the exterior a companion away in the cave cannot.
+// ARC-WORLD-032: in map mode (--area-map) the speakers are the dialog NPCs of the map's own snapshot, talking through
+// the same host with the game's script content and the session the map carries, so their consequences go with it to
+// the next map; the party commands keep the diagnostic follow key until companions follow in map mode.
 public partial class TerrainViewerApp
 {
     private AreaConversationHost? _conversationHost;
@@ -32,12 +35,11 @@ public partial class TerrainViewerApp
         _conversationNotice = null; _talkAfterRoute = null;
         // ARC-SCRIPT-006: dialog consequences live in the area session, which outlives map changes.
         // ARC-WORLD-016: Virgil's JO/WA/UW go through the session party with his measured follow inputs.
-        // ARC-SCRIPT-011: scripts and dialogs come from the game's content stack, found from the module archive. Map mode
-        // (--area-map) does not wire dialogs yet (docs/rendering/area-map-mode.md).
-        if (_areaSession is { } session && arguments.AreaMapName is null)
+        // ARC-SCRIPT-011: scripts and dialogs come from the game's content stack, found from the module archive.
+        if (_areaSession is { } session)
         {
             var content = ConversationContent(arguments.ModulePath, area.Snapshot.Inputs.SingleOrDefault(input => input.Key.Role == AreaSourceRole.Module)?.Sha256);
-            _conversationHost = new AreaConversationHost(area.Snapshot, content.Content, session, inventory: _inventoryHost, party: true,
+            _conversationHost = new AreaConversationHost(area.Snapshot, content.Content, session, inventory: _inventoryHost, party: arguments.AreaMapName is null,
                 contentDetail: $"{content.Status}: {content.Detail}");
         }
         else _conversationHost = null;
@@ -223,7 +225,7 @@ public partial class TerrainViewerApp
     private string ConversationPrompt()
     {
         if (_conversationNotice is { } notice) return $" | {notice}";
-        if (!TalkMapActive) return " | talk: no dialog NPC on this map";
+        if (!TalkMapActive || _conversationHost!.Speakers.Count == 0) return " | talk: no dialog NPC on this map";
         return ActorCell() is { } cell && _conversationHost!.Nearest(cell.X, cell.Y, SpeakerCell, SpeakerPresent) is { } speaker
             ? $" | dialog NPC script {speaker.ScriptId} in reach: left-click it to talk"
             : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count(SpeakerPresent)} on this map; walks within {_conversationHost.Profile.Reach} tiles first)";

@@ -154,6 +154,10 @@ each script number and the winning copy, so Virgil's script is `Arcanum4.dat`'s,
 the session, Jilted false, the dialog slot from the session's keys over the loaded attachment), and reads the
 DLG named after the script, refusing a node that is not an NPC record.
 
+Since ARC-WORLD-032 the same host serves the viewer's map mode: the speakers are the dialog NPCs of the
+map's own snapshot, and the consequences stay in the session the map carries
+([dialogs in map mode](../rendering/area-map-mode.md#dialogs-arc-world-032), with a census of all interiors).
+
 `AreaConversationProfile.Diagnostic` is a **project diagnostic, not original state**: male
 human PC, intelligence 8, not dumb, alignment 0, initial NPC→PC reaction 50, names
 `[PC]`/`[NPC]`, follow requests accepted. No item, party, map or AI simulation runs. The
