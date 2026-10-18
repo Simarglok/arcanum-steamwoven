@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Arcanum.Data.Area;
+using Arcanum.Data.Content;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Data.Tests.Area.AreaIdentityTests;
 
@@ -57,8 +58,16 @@ public sealed class AreaWindowTests
         Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window, new([new(new(0, 0), AreaScope.Context, Template)]), [(Template, template)]));
         Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window,
             new([new(new(1, 1), AreaScope.Core, null), new(new(1, 1), AreaScope.Context, Template)]), [(Template, template)]));
-        // More templates than the limit admits.
+        // A template key of another role, a scope other than core or context, a missing entry.
+        Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window,
+            new([new(new(1, 1), AreaScope.Core, null), new(new(0, 0), AreaScope.Context, new AreaInputKey(AreaSourceRole.Prototype, 7001))]), null));
+        Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window,
+            new([new(new(1, 1), AreaScope.Core, null), new(new(0, 0), AreaScope.Outside, Template)]), [(Template, template)]));
+        Assert.AreEqual(AreaErrorCode.InvalidSelection, Refused(AreaSectorSelection.Window, new([new(new(1, 1), AreaScope.Core, null), null!]), null));
+        // More templates, or more window sectors, than the limits admit.
         Assert.AreEqual(AreaErrorCode.BudgetExceeded, Refused(AreaSectorSelection.Window, window, [(Template, template)], templates: 0));
+        var wide = new AreaWindow(Enumerable.Range(0, 21).Select(i => new AreaWindowSector(new(i, 0), i == 0 ? AreaScope.Core : AreaScope.Context, null)).ToArray());
+        Assert.AreEqual(AreaErrorCode.BudgetExceeded, Refused(AreaSectorSelection.Window, wide, null));
     }
 
     [TestMethod]
@@ -82,5 +91,84 @@ public sealed class AreaWindowTests
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4 + 8), x); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4 + 12), y);
         tail.CopyTo(bytes.AsSpan(52));
         return bytes;
+    }
+}
+
+/// <summary>ARC-DATA-032: the window plan's own refusals on a synthetic loose-file installation (no module archive, so a
+/// window that resolves stops at the module archive check).</summary>
+[TestClass]
+public sealed class AreaWindowPlanTests
+{
+    private string _root = null!;
+
+    [TestInitialize]
+    public void Create()
+    {
+        Directory.CreateDirectory(_root = Path.Combine(Path.GetTempPath(), "arc-window-" + Guid.NewGuid().ToString("N")));
+        File.WriteAllBytes(Path.Combine(_root, "tig.dat"), Dat());
+        Directory.CreateDirectory(Path.Combine(_root, "modules", "Mod"));
+    }
+
+    [TestCleanup]
+    public void Remove() => Directory.Delete(_root, recursive: true);
+
+    [TestMethod]
+    public void A_window_is_refused_for_an_unknown_map_missing_types_a_centre_outside_or_a_filled_sector()
+    {
+        // A 3×3-sector map of grass: variant 0 everywhere but (2, 2), whose variant 1 has no template.
+        Write("modules/Mod/maps/alpha/map.prp", Properties(3 * 64, 3 * 64));
+        Write("modules/Mod/maps/alpha/terrain.tdf", Grid(3, 3, [0, 0, 0, 0, 0, 0, 0, 0, 1]));
+        Write("modules/Mod/maps/alpha/1.sec", Sector());
+        using (var noTypes = Stack())
+        {
+            var catalog = Arcanum.Data.Maps.WorldCatalog.Open(noTypes);
+            var missing = AreaMapPlans.CreateWindow(noTypes, catalog, "alpha", new(1, 1));
+            Assert.AreEqual((AreaMapPlanStatus.MissingSource, "terrain types: Missing"), (missing.Status, missing.Detail));
+        }
+        Write("data/terrain/terrain.mes", "{0}{Grass}\n"u8.ToArray());
+        Write("data/terrain/grass/0.sec", Sector());
+        using var stack = Stack();
+        var map = Arcanum.Data.Maps.WorldCatalog.Open(stack);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaMapPlans.CreateWindow(stack, map, "alpha", new(1, 1), AreaMapPlans.MaxWindowRadius + 1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaMapPlans.CreateWindow(stack, map, "alpha", new(1, 1), -1));
+        Assert.AreEqual(AreaMapPlanStatus.UnknownMap, AreaMapPlans.CreateWindow(stack, map, "beta", new(1, 1)).Status);
+        Assert.AreEqual(AreaMapPlanStatus.OutsideMap, AreaMapPlans.CreateWindow(stack, map, "alpha", new(3, 0)).Status);
+        // Radius 0 around (0, 0): core (0, 0), ring (0..1, 0..1) clipped at the map's edge; every sector resolves, so the
+        // plan goes on to the module archive, which a loose installation lacks.
+        var edge = AreaMapPlans.CreateWindow(stack, map, "alpha", new(0, 0), radius: 0);
+        Assert.AreEqual((AreaMapPlanStatus.MissingSource, "module archive"), (edge.Status, edge.Detail));
+        // Radius 1 around (1, 1) reaches (2, 2), which the original would fill.
+        var filled = AreaMapPlans.CreateWindow(stack, map, "alpha", new(1, 1));
+        Assert.AreEqual((AreaMapPlanStatus.UnsupportedSource, "sector (2, 2) is Fill"), (filled.Status, filled.Detail));
+    }
+
+    private ContentStack Stack()
+    {
+        var discovery = ContentMountPlan.Discover(_root, "Mod");
+        Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+        return ContentStack.Open(discovery.Plan!).Stack!;
+    }
+
+    private void Write(string relative, byte[] bytes)
+    {
+        var path = Path.Combine(_root, relative.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, bytes);
+    }
+
+    private static byte[] Properties(long width, long height)
+    {
+        var prp = new byte[24];
+        BinaryPrimitives.WriteInt64LittleEndian(prp.AsSpan(8), width); BinaryPrimitives.WriteInt64LittleEndian(prp.AsSpan(16), height);
+        return prp;
+    }
+
+    private static byte[] Grid(int width, int height, ushort[] words)
+    {
+        var tdf = new byte[32 + words.Length * 2];
+        BinaryPrimitives.WriteSingleLittleEndian(tdf, 1.2f);
+        BinaryPrimitives.WriteInt64LittleEndian(tdf.AsSpan(8), width); BinaryPrimitives.WriteInt64LittleEndian(tdf.AsSpan(16), height);
+        for (var i = 0; i < words.Length; i++) BinaryPrimitives.WriteUInt16LittleEndian(tdf.AsSpan(32 + i * 2), words[i]);
+        return tdf;
     }
 }

@@ -27,6 +27,7 @@ public sealed partial class AreaDataOwner
         {
             var own = window.Values.Where(s => s.Template is null).Select(s => _plan.SectorPrefix + s.Coordinate.Packed.ToString(CultureInfo.InvariantCulture) + ".sec").ToHashSet(StringComparer.Ordinal);
             candidates = candidates.Where(e => own.Contains(Name(e))).ToArray();
+            if (candidates.Select(Name).Distinct(StringComparer.Ordinal).Count() != candidates.Length) throw Fail(AreaErrorCode.DuplicateIdentity, AreaStage.Selection);
             if (candidates.Length != own.Count) throw Fail(AreaErrorCode.MissingSource, AreaStage.Selection);
         }
         if (candidates.Length > _limits.MaxSurvey) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Selection);

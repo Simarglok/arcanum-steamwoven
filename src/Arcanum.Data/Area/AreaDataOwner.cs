@@ -64,7 +64,11 @@ public sealed partial class AreaDataOwner : IDisposable
             if (plan.Identities.Any(i => i.Key.Role == AreaSourceRole.MapPatch && i.Key.Number != 0) ||
                 (plan.MapPatch is not null) != plan.Identities.Any(i => i.Key.Role == AreaSourceRole.MapPatch) || plan.Original && plan.MapPatch is not null)
                 throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
-            // ARC-DATA-032: a window exactly for the window selection, never on a pinned profile; its sectors are distinct,
+            // ARC-DATA-032: a window is bounded by the present-sector limit before anything is built from it.
+            if (plan.Window is { } bounded && (bounded.Sectors is null || bounded.Sectors.Any(s => s is null)))
+                throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
+            if (plan.Window is { } large && large.Sectors.Count > limits.MaxPresentSectors) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Input);
+            // A window exactly for the window selection, never on a pinned profile; its sectors are distinct,
             // core or context, and its templates are exactly the plan's template inputs.
             if ((plan.Window is not null) != (plan.Selection == AreaSectorSelection.Window) || plan.Original && plan.Window is not null ||
                 plan.Window is { } window && (window.Sectors.Count == 0 || window.Sectors.Select(s => s.Coordinate).Distinct().Count() != window.Sectors.Count ||

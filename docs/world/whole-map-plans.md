@@ -233,10 +233,16 @@ main world map included, through the same area owner. It is how the main map loa
   objects at the sector's origin plus their tile (ledger SS6) and moves its lights (words 2 and 3, Wilderness A1).
   `AreaSectorRecord.Template` names the template input of a generated sector, which has no module ordinal or entry.
   It refuses an inconsistent window (no core sector, a repeated sector, a template that is no input or an input no
-  sector uses, a window on another selection or a pinned profile) with `InvalidSelection`, and more templates than
-  `AreaLoaderOptions.MaxTerrainTemplates` with `BudgetExceeded`. Profile `arc-data-032-window-original-rules-v1`.
+  sector uses, a window on another selection or a pinned profile, a missing sector list or entry) with
+  `InvalidSelection`, and more window sectors than `AreaLoaderOptions.MaxPresentSectors` or more templates than
+  `MaxTerrainTemplates` with `BudgetExceeded`, before building anything. Two module entries of one window sector are
+  `DuplicateIdentity`. Profile `arc-data-032-window-original-rules-v1`. A generated object keeps the template's
+  serialized location; only its world position moves. Retail templates hold no object ids; a template object with one,
+  serving two sectors, would be refused as a duplicate identity (temporary ids are not modelled).
 - **Rules.** A window follows the whole-map rules (original ART names and leniency, portals, small items, hidden
   objects, roofs read): `AreaSourcePlan.UniversalRules` covers both selections.
+- **Start.** The plan's `Start` is the window's centre; `AreaMapPlan.StartTile` stays the map list's start tile, which is
+  usually outside the window. The reconciliation's survey count is the window's own sector files.
 - **Objects.** The owner reads the map-wide mobile file (the original loads mobiles map-wide when the map opens, ledger
   SS7) and keeps the objects standing in the window's sectors; `map.patch`, prototypes, name tables and resources are
   bound as for a whole map.
