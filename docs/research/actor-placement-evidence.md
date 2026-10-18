@@ -32,7 +32,7 @@ has 8. No locomotion distance or movement speed is inferred from ART FPS.
 | AP-008 | A synthetic formula test or a trace from the earlier source reading establishes original-game pixel placement. | not established | No original executable was run and no independent original-runtime measurement is recorded. |
 | AP-009 | `ORF_08000000` selects a cached render rectangle instead of the current-ART hotspot path. | F0 reading; selected-state unknown | `object_get_rect` (0x43DFD0) sets rectangle X/Y from `RENDER_X/Y`, width/height from `RENDER_WIDTH/HEIGHT`, and returns before current-ART frame lookup. The selected metadata probe does not establish this runtime render-flag state, so cached-render placement is unsupported rather than inferred from frame metadata. |
 
-The source readings above are an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. No original data were copied into this
+The facts above come from an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. No original data were copied into this
 repository; no Windows, original, or archived-tool executable was run.
 
 ## Caller trace and coordinate relation

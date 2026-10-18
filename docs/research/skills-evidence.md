@@ -564,8 +564,8 @@ local aggregates only):
 
 ## Method
 
-An earlier source reading (provenance in git history), organised by the
-executable functions at: the skill functions (0x4C5BD0–0x4C91F0) as a whole
+An earlier source reading (provenance in git history), covering, by executable
+address, the skill functions (0x4C5BD0–0x4C91F0) as a whole
 and every caller of their public functions (combat, item, animation, AI, trap, stat, script, map,
 critter, background, level, dialog, effect, tech, spell and object functions,
 and the skill, character editor, inventory, item, turn-based and general UI

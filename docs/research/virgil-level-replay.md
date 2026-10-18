@@ -132,7 +132,7 @@ him. The model refuses a non-human sheet.
 | 17 | white necromancy 3 | heal 12 | 82 |
 | 18 | intelligence base 11 (effective 10) | heal 12 | 84 |
 | 19 | intelligence base 12 (effective 11) | heal 12 | 86 |
-| 20 | intelligence base 13 (effective 12), 1 point paid twice (R2) | heal 12 | 88 |
+| 20 | intelligence base 13 (effective 12), 1 point paid twice (R2, earlier model; the original pays once, ledger AL4) | heal 12 | 88 |
 | 21 | heal 12 | picklock 8 | 90 |
 | 22 | lock picking 8 | dodge 12 | 92 |
 | 23 | dodge 12 | melee 16 | 94 |
@@ -152,7 +152,7 @@ him. The model refuses a non-human sheet.
 | 37 | melee 20 | heal 20 | 125 |
 | 38 | intelligence base 17 (effective 16) | heal 20 | 127 |
 | 39 | intelligence base 18 (effective 17) | heal 20 | 129 |
-| 40 | intelligence base 19 (effective 18), 1 point paid twice (R2) | heal 20 | 131 |
+| 40 | intelligence base 19 (effective 18), 1 point paid twice (R2, earlier model; the original pays once, ledger AL4) | heal 20 | 131 |
 | 41 | heal 20 | picklock 12 | 133 |
 | 42 | lock picking 12 | dodge 20 | 135 |
 | 43 | dodge 20 | maxhps 200 | 137 |
@@ -165,8 +165,8 @@ him. The model refuses a non-human sheet.
 | 50 | 2 hit points | maxhps 200 | 187 |
 
 Each level also adds 2 hit points and 2 fatigue through the level term (R5).
-Two points are wasted in all by the intelligence effect (R2). Fatigue ends at
-135.
+Under the earlier model two points are wasted in all by the intelligence effect
+(R2); the original wastes none (ledger AL4). Fatigue ends at 135.
 
 The shadowed `arcanum3.dat` copy follows the same path to level 37, then
 spends levels 38–40 on willpower 16–18 and white necromancy 5, and ends at
@@ -209,12 +209,14 @@ the model where they agree.
 ## Anomalies (S)
 
 - **A7** R2: with intelligence lowered by his class effect, raising it can pay
-  twice for one base unit when he has two points (levels 20 and 40).
+  twice for one base unit when he has two points (levels 20 and 40). Superseded:
+  a reconstruction slip, the original pays once (ledger AL4).
 
 ## Proposal for implementation (P)
 
 1. A future follower level-up owner can take R1–R6 as its contract and this
-   replay's level 2..50 table as a real-data regression for Virgil.
+   replay's level 2..50 table as a real-data regression for Virgil, after
+   recomputing the intelligence steps under ledger AL4 (levels 20 and 40).
 2. Keep the ARC-RES-031 gate conclusion; add the level-50 follower rule from
    X2 as the installed-version behaviour, behind an explicit policy flag,
    since it contradicts the earlier reading (the original matches X2: ledger
@@ -239,7 +241,7 @@ the model where they agree.
 
 The earlier source reading (cited by executable address, level F0 unless a ledger row is cited; provenance in git history), the read-only probe `--virgil-auto-level`
 (self-test `--virgil-auto-level-self-test` now also covers the effect grammar
-and fold, the formulas, every purchase helper including the R2 loop, the
+and fold, the formulas, every purchase helper including the R2 loop of the earlier model, the
 tech-points side effect and a refused hit point, the spell gates, rule runs,
 the replay and the reach; the line decoder and the flag-writer scan are
 exercised only by the real data), and the outside sources above. The replay follows the purchase helpers'

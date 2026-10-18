@@ -126,7 +126,7 @@ a tile. "Magic" means a spell record without the technology flag.
 | Item mana | `OBJ_F_ITEM_MANA_STORE` (worn items: a pool that pays casting costs), `OBJ_F_ITEM_SPELL_MANA_STORE` (charges of the item's own spells; negative means unlimited) | pay (0x450420) |
 | Spell flags | `OBJ_F_SPELL_FLAGS`, 32 states (invisible, body of air/earth/fire/water, shielded, anti-magic shell, bonds of magick, full reflection, summoned, stoned, charmed, entangled, mind controlled, …) | set and cleared by object-flag components |
 | Active spells | 512 run slots: spell, action, source, parent, target (object or tile), attacker, object list, summoned list, flags, resistance margin, trigger, next tick time, remaining tick count | saved in the MagicTech-Post blob ([load map](combat-domain-load-map.md#6-runtime-owners-and-persistence)) |
-| Timers | game-time MagicTech event (maintain or END tick, delayed interrupt, deferred BEGIN) and "recharge magic item" event, both saved | event type table 0x5B2188 (ledger OQ2) |
+| Timers | game-time MagicTech event (maintain or END tick, delayed interrupt, deferred BEGIN) and "recharge magic item" event, both saved | event type table 0x5B2188 (address from ledger OQ2; saveability of these kinds F0) |
 
 ## Findings
 
@@ -636,8 +636,8 @@ mastery; per item its mana store, spell charges and spells.
 
 ## Method
 
-An earlier source reading (provenance in git history), organised by the
-executable functions at: the magick/tech functions
+An earlier source reading (provenance in git history), covering, by executable
+address, the magick/tech functions
 (0x44EF50–0x45A760: tables, getters, payment, process, all 25 component
 functions, stage checks, resistance and predictor, scheduling, run slots,
 invocation, check, line of fire, interrupts, parse of record lines +1, +3, +4

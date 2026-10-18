@@ -174,7 +174,7 @@ allowed.
 | AV-007 | A move animation starts with Walk, while scheduler pause can depend on speed. | F0 reading | `sub_42E9B0` (0x42E9B0), `sub_42EDC0` (0x42EDC0), `sub_42EE90` (0x42EE90); raw FPS is metadata, movement speed is not inferred. |
 | AV-008 | At RES009 completion, actor anchor-to-top-left delta was unmeasured. | historical unknown | Superseded only at the F0 reading level by [actor placement evidence](actor-placement-evidence.md); no original-runtime observation exists and static-scenery evidence remains excluded. |
 
-The F0 readings in this table are an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. This record makes no
+The facts in this table come from an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited. This record makes no
 independent corroboration or pixel/runtime-parity claim. Archived tools and
 WorldEd are community reports, not independent evidence.
 

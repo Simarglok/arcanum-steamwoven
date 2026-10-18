@@ -58,7 +58,7 @@ is executed. These declarations do not recover a human/equipment model or descri
 the WORLD rendered monster. Each directed query has the same immutable predicate
 context; no actor is actually moved to a potentially blocked starting cell.
 
-**Consequence read from the original's functions** (F0, not checked in the executable), not a chosen numeric shortcut: the normal
+**Consequence of an earlier source reading** (F0, not checked in the executable), not a chosen numeric shortcut: the normal
 adjacent animation helper starts traversal flags0, ORs polymorph/capability blocking
 bits; non-polymorph + PC portal capability + current CRITTER ART window capability
 contribute0, so the complete selected helper flags are0. Normal begin invocation is

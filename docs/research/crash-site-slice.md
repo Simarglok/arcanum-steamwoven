@@ -22,7 +22,7 @@ that record's start coordinate. No neighbouring sector is included.
 | Sector selector | `sector_id_from_loc` (0x4CFC50) shifts both location coordinates by six and packs the results. Applied to the start coordinate, that gives `(1452, 1290)` and `86570436012`. The matching sector entry is ordinal 463 and decodes to 47,291 bytes. | entry and size experimentally verified; coordinate interpretation F0 (earlier source reading, not checked in the executable); medium |
 | Framed object window | The final signed little-endian word is `317`. The corrected section order of `sector_load_game` (0x4D1A30; earlier source reading, F0) places the object window at `17140..47287`; the bounded v119 delimiter consumes 317 records to the terminal count. | byte experiment plus F0 order; medium |
 
-The source readings here are an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited; they are not
+The facts here come from an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited; they are not
 independent corroboration.
 
 ## Frozen input

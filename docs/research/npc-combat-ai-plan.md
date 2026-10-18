@@ -391,8 +391,8 @@ game really has.
 
 ## Method
 
-An earlier source reading (provenance in git history), organised by the
-executable functions at: the AI functions (0x4A8320–0x4AFC70; the whole
+An earlier source reading (provenance in git history), covering, by executable
+address, the AI functions (0x4A8320–0x4AFC70; the whole
 function list, the units S1–S21 once each), the AI spell list functions
 (0x4CC1F0–0x4CCC40; list building and cache), and the AI call sites in the combat, animation, broadcast, script, dialog, magick/tech,
 critter, skill, trap, start-up and UI functions. Steamwoven inputs are the
