@@ -228,20 +228,32 @@ public static class SessionStoryLimits
     public static bool IsRumor(int rumor) => rumor is >= FirstRumor and <= LastRumor;
 }
 
-/// <summary>Saved story state: PC quests, non-default shared quest states and known rumors, each ascending.</summary>
+/// <summary>Saved story state: PC quests, non-default shared quest states, known rumors and quelled rumors (ARC-UI-008),
+/// each ascending.</summary>
 public sealed class SessionStoryState
 {
-    internal SessionStoryState(SessionQuest[] quests, SessionGlobalQuest[] globalQuests, SessionRumor[] rumors)
+    internal SessionStoryState(SessionQuest[] quests, SessionGlobalQuest[] globalQuests, SessionRumor[] rumors, int[] quelledRumors)
     {
         Quests = Array.AsReadOnly(quests);
         GlobalQuests = Array.AsReadOnly(globalQuests);
         Rumors = Array.AsReadOnly(rumors);
+        QuelledRumors = Array.AsReadOnly(quelledRumors);
     }
 
     public IReadOnlyList<SessionQuest> Quests { get; }
     public IReadOnlyList<SessionGlobalQuest> GlobalQuests { get; }
     public IReadOnlyList<SessionRumor> Rumors { get; }
+    /// <summary>Rumors proven false: a game-wide set, independent of whether the PC knows the rumor.</summary>
+    public IReadOnlyList<int> QuelledRumors { get; }
 }
+
+/// <summary>ARC-UI-008: one quest of the PC's logbook: its number, the state the logbook shows (Botched when the botched mark
+/// is set, otherwise the stored state; never Unknown) and the game time of its last change.</summary>
+public readonly record struct SessionQuestLogEntry(int Quest, SessionQuestState State, long TimestampMs);
+
+/// <summary>ARC-UI-008: one rumor of the PC's logbook: its number, the game time the PC learned it and whether it is quelled
+/// (proven false).</summary>
+public readonly record struct SessionRumorLogEntry(int Rumor, long TimestampMs, bool Quelled);
 
 /// <summary>Changes of one map in canonical key order; a map without changes is not listed.</summary>
 public sealed class SessionMapState
@@ -271,9 +283,10 @@ public sealed class GameSessionSnapshot
     /// schema 13 added <see cref="Effects"/> (ARC-WORLD-029); schema 14 added the hero's experience and
     /// <see cref="Experience"/> (ARC-WORLD-030); schema 15 added <see cref="CombatMode"/> (ARC-COMBAT-004); schema 16 binds the clock profile
     /// to the retail executable (<see cref="Arcanum.Simulation.Clock.GameClockOwner.RetailExecutableSha256"/>, ARC-DEV-009); schema 17
-    /// adds the hero's blessings and curses to <see cref="Effects"/> (ARC-WORLD-035); schema 18 adds <see cref="Sound"/> (ARC-WORLD-040);
-    /// schema 19 adds the hero's advancement fields and <see cref="Advancement"/> (ARC-WORLD-036). Schemas 1..18 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 19;
+    /// adds the hero's blessings and curses to <see cref="Effects"/> (ARC-WORLD-035); schema 18 adds <see cref="Sound"/> (ARC-WORLD-040); schema 19 adds the
+    /// quelled rumors to the story (ARC-UI-008); schema 20 adds the hero's advancement fields and <see cref="Advancement"/> (ARC-WORLD-036).
+    /// Schemas 1..19 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 20;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

@@ -98,7 +98,7 @@ public sealed class SessionAutoLevelRules
 /// </summary>
 public sealed record SessionNpcAdvancement(string Entity, AdvancementSheet Sheet, int AutoLevelScheme);
 
-/// <summary>Saved advancement records of the NPCs the session levelled, in ordinal entity order (snapshot schema 19).</summary>
+/// <summary>Saved advancement records of the NPCs the session levelled, in ordinal entity order (snapshot schema 20).</summary>
 public sealed class SessionAdvancementState
 {
     internal SessionAdvancementState(SessionNpcAdvancement[] npcs) => Npcs = Array.AsReadOnly(npcs);

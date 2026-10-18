@@ -3,11 +3,11 @@
 Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
 inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019; life state ARC-COMBAT-002;
 event queue ARC-WORLD-024; NPC reaction ARC-WORLD-026; turn-based round ARC-COMBAT-003; equipment ARC-WORLD-028;
-durable effects ARC-WORLD-029; experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036.
+durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20).
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
-quest states, known rumors), the PC's [party](party-runtime.md) (followers, waiting NPCs), the
+quest states, known rumors, quelled rumors), the PC's [party](party-runtime.md) (followers, waiting NPCs), the
 [player character](starting-hero-runtime.md) (stats, level, alignment, gold and starting kit), the items the PC
 took from the world ([inventory](inventory-runtime.md): pickup, loot, negative dialog `IN`), the hero's worn items
 ([equipment](equipment-runtime.md): wear slots, wield and remove, worn values for combat), the hero's effect list
@@ -55,6 +55,7 @@ during an event pass, which must not call back into the owner (a `PlaceActor` or
 | `Flags` / `FlagVersion` | A forwarding `IVersionedGlobalFlagOwner` view of the session's GF owner (reads, writes, current version, `GlobalFlagAdapter`, dialog conversations; no Dispose or MarkFailed) and its current version. GF changes do not move the session revision. |
 | `SetQuestState` / `LearnRumor` | Story mutations with the same expected-version guard and refusal order (input, version, NoChange, revision capacity). One revision per change. See [Story domain](#story-domain). |
 | `QueryQuest` / `QueryGlobalQuest` / `QueryRumor` / `QueryStory` | PC quest record or `null` (never changed); shared state (`Accepted` by default); rumor time or `null`; a detached ascending copy of the whole domain. A number outside the source range throws `ArgumentOutOfRangeException`. |
+| `QuellRumor` / `QueryRumorQuelled` / `QueryQuestLog` / `QueryRumorLog` | ARC-UI-008: mark a rumor quelled (game-wide, same guard, one revision) and read the mark; the PC's logbook lists of quests and rumors in the original's order (see [Story domain](#story-domain)). |
 | `QueryCompanion` / `QueryParty` / `JoinParty` / `ForceJoinParty` / `UnwaitParty` / `WaitParty` / `LeaveParty` / `SetSpreadOut` | Party domain (ARC-WORLD-013) with the same guard and one revision per change; join and unwait run the follow check and return its reason. See [party runtime](party-runtime.md). |
 | `AttachMapInventory` / `QueryMapInventory` / `QueryPcInventory` / `PickUpItem` / `LootItem` / `GiveItemToPc` | Inventory domain (ARC-WORLD-014): a host-attached T0 seed per map (not state, no revision) and the PC's taken items; transfers take the expected version, refuse before any effect and add one revision each. See [inventory runtime](inventory-runtime.md). |
 | `QueryEquipment` / `QueryHeroEquipmentCombat` / `Equip` / `Unequip` | Equipment domain (ARC-WORLD-028): the hero's worn items, their part of its combat values (armour class and resistance adjustments, light, the attack it strikes with, weapon speed and attack cost), wielding or wearing an item it holds under the wear check with the host's art and insert checks, and taking it off; one revision per change. The worn normal resistance enters the hero's life facts. See [equipment runtime](equipment-runtime.md). |
@@ -134,7 +135,15 @@ rules ([quest state set][quest-set], [quest reset][quest-reset], [rumor known][r
   ARC-WORLD-030); the overload with `out SessionExperienceAward?` returns it.
 - **Rumors** are numbered 1000..2999. `LearnRumor` records the current game time once;
   learning a known rumor is `NoChange` and keeps the first time.
-- Quest alignment adjustments, logbook and sound are **not** applied: they need quest data
+- **Quelled rumors** (ARC-UI-008): `QuellRumor(expected, rumor)` sets a game-wide mark, as the original's dialog `RQ`
+  does with no participant (ledger [LB11–LB12](../research/original-verification-ledger.md#logbook-arc-ui-008)); the PC
+  need not know the rumor, quelling a quelled rumor is `NoChange`, nothing clears it, and a number outside 1000..2999 is
+  `InvalidRumor` (the original writes it unchecked).
+- **Logbook lists** (ARC-UI-008, LB6 and LB9): `QueryQuestLog` lists every PC record whose stored state is not `Unknown`
+  (a quest botched while still `Unknown` is left out) with its effective state and time; `QueryRumorLog` every known rumor
+  with its time and quelled mark. Both are ordered by time, oldest first; equal times by number (the original's
+  run-time library sort is not stable and its order for them is not modelled). Reading them changes nothing.
+- Quest alignment adjustments and sound are **not** applied: they need quest data
   and their own owners. The AREA viewer applies the reaction rule of the
   source (accepting lifts the NPC's reaction to 41, completing adds 10) in its own port.
 
@@ -149,21 +158,21 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 19
+## Snapshot schema 20
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
 pause, revision; no owner identity), `Flags` (revision and every admitted flag in
 ascending order, `null` = Unknown), `Actor`, `Maps` (ascending map, each with
 changes in canonical order: scope, sector, entity, property, ordinal), `Story`
-(PC quests, shared quests that left `Accepted`, known rumors; each ascending), `Party`
+(PC quests, shared quests that left `Accepted`, known rumors, quelled rumor numbers; each ascending), `Party`
 (the follower array in order, then waiting and flagged free NPCs; [party runtime](party-runtime.md#snapshot-schema-4)),
 `Hero` (the player character or `null`; [starting hero runtime](starting-hero-runtime.md#snapshot-schema-6)),
 `Inventory` (the PC's gold, the starting kit and the taken items in list order; [inventory runtime](inventory-runtime.md#snapshot-schema-5)),
 `Equipment` (the hero's worn items in slot order; [equipment](equipment-runtime.md#snapshot-schema-12)),
 `Effects` (the hero's durable entries in list order and the rule of each number; [durable effects](durable-effects-runtime.md#snapshot-schema-13)),
 `Experience` (the changed NPCs' experience worth and pool in ordinal order; the hero's experience is in `Hero`; [experience](experience-runtime.md#snapshot-schema-14)),
-`Advancement` (the levelled NPCs' sheets and schemes in ordinal order; the hero's fields are in `Hero`; [auto-level schemes](advancement-runtime.md#snapshot-schema-19)),
+`Advancement` (the levelled NPCs' sheets and schemes in ordinal order; the hero's fields are in `Hero`; [auto-level schemes](advancement-runtime.md#snapshot-schema-20)),
 `Random` (the generator's seed and draws made; [session randomness](session-random-runtime.md#snapshot-schema-7)),
 `Life` (the hero's life record and the changed NPCs' in ordinal order; [life state](life-state-runtime.md#snapshot-schema-8)),
 `Reactions` (the changed NPCs' reaction slots in ordinal order; [NPC reaction](npc-reaction-runtime.md#snapshot-schema-10)),
@@ -176,7 +185,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":19,
+{"format":"arcanum-steamwoven-session","schemaVersion":20,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -188,7 +197,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
    {"scope":"entity","entity":"npc-1","property":"hp","value":12}]}],
  "story":{"quests":[{"quest":1001,"state":"Accepted","botched":false,"timestampMs":54000000}],
           "globalQuests":[{"quest":1002,"state":"Completed"}],
-          "rumors":[{"rumor":1200,"timestampMs":54000000}]},
+          "rumors":[{"rumor":1200,"timestampMs":54000000}],"quelledRumors":[1200]},
  "party":{"followers":[{"entity":"oid:…","forced":false,"spreadOut":false}],"others":[]},
  "hero":null,
  "inventory":{"gold":0,"kit":[],"pc":[{"entity":"oid:…","map":79,"type":"Armor","prototype":3804,"name":2804,"description":32804}]},
@@ -213,7 +222,7 @@ throws on bad text and never builds an owner. It refuses: input over 8 MiB chara
 another `format` (`WrongFormat`) or `schemaVersion` (`UnsupportedSchema`); unknown,
 duplicate or missing fields; wrong JSON types; fractions, exponents and out-of-range
 integers; non-canonical GUIDs, enum names or identifiers (`OutOfRange`); unsorted or
-repeated flags, maps, change keys, quests or rumors (`NotCanonical`); quest or rumor
+repeated flags, maps, change keys, quests, rumors or quelled rumors (`NotCanonical`); quest or rumor
 numbers outside their ranges, a stored quest state `Botched`, an unmarked `Unknown` record
 or a shared state other than `Completed`/`Botched` (`OutOfRange`); and counts above the policy
 maxima (`BudgetExceeded`). `-0` is `OutOfRange`; a string with a lone UTF-16
@@ -232,9 +241,10 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 19 is the only accepted version. ARC-WORLD-036 added the hero's `advancement` fields
-and the root `advancement` section; schema 18 is refused like the earlier ones (see
-[auto-level schemes](advancement-runtime.md#snapshot-schema-19)). ARC-WORLD-040 had added the required `sound` section
+**Migration decision: none.** Schema 20 is the only accepted version. ARC-WORLD-036 added the hero's `advancement` fields
+and the root `advancement` section; schema 19 is refused like the earlier ones (see
+[auto-level schemes](advancement-runtime.md#snapshot-schema-20)). ARC-UI-008 had added the quelled rumors (schema 19) and
+refused schema 18. ARC-WORLD-040 had added the required `sound` section
 and refused schema 17. ARC-WORLD-035 had added the required `blessings` and
 `curses` lists to `effects`; schema 16 is refused like the earlier ones (see
 [durable effects](durable-effects-runtime.md#blessings-and-curses-arc-world-035)). ARC-DEV-009 had bound the clock profile
@@ -268,9 +278,11 @@ ARC-COMBAT-004 added the combat-mode flags as schema 15 and refuses schema 14
 ([real-time combat](real-time-combat-runtime.md#snapshot-schema-15)). ARC-DEV-009 binds the clock profile to the retail
 executable (`sourceRevision` is its SHA-256, [clock policy](game-clock-policy.md)) as schema 16, with no structural change, and
 refuses schema 15. ARC-WORLD-035 added the hero's blessings and curses as schema 17 and refuses schema 16. ARC-WORLD-040
-added the sound state as schema 18 and refuses schema 17. ARC-WORLD-036 added the hero's advancement fields and the
-levelled NPCs' sheets as schema 19 and refuses schema 18 ([auto-level schemes](advancement-runtime.md#snapshot-schema-19)).
-Adding another domain needs schema 20 with its own explicit migration decision.
+added the sound state as schema 18 and refuses schema 17. ARC-UI-008 added the quelled rumors to the story domain as
+schema 19 and refuses schema 18 (a quick save of an older schema loads as incompatible). ARC-WORLD-036 added the hero's
+advancement fields and the levelled NPCs' sheets as schema 20 and refuses schema 19
+([auto-level schemes](advancement-runtime.md#snapshot-schema-20)). Adding another domain needs schema 21 with its own
+explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
 
@@ -303,6 +315,8 @@ and a literal, independently written canonical JSON text:
   kept state, shared states that convert a request, rumor times, invalid and stale
   requests, survival across a map round trip and the snapshot, story decode failures,
   restore consistency checks, and the original new-game GF domain.
+- `LogbookStateTests` (ARC-UI-008): quelling (game-wide, final, range, stale), the quest and rumor logbook order with the
+  botched and quelled marks, and quelled rumors over a map round trip and the snapshot.
 - `PartyStateTests`, `SessionDialogPartyPortTests`: the party domain and its dialog port
   (see [party runtime](party-runtime.md#tests)).
 - `SessionRandomTests`: labelled rolls, their save and replay, and the combat roll source
@@ -337,8 +351,8 @@ and a literal, independently written canonical JSON text:
   sector-diff and mobile-object formats.
 - Movement mid-step persistence, follower movement and the cross-map group, the inventory beyond the PC's kit and taken
   items (stacks, drop, chests, barter; see [inventory runtime](inventory-runtime.md)), changes to the hero after the start
-  (alignment, purchases; levels and experience since ARC-WORLD-030, [experience](experience-runtime.md)), the quest logbook
-  and quest data beyond the experience level, gameplay rolls by any host, life timers
+  (alignment, purchases; levels and experience since ARC-WORLD-030, [experience](experience-runtime.md)), quest data
+  beyond the experience level (the logbook texts are read by the viewer, ARC-UI-008), gameplay rolls by any host, life timers
   and their consequences for other owners (see [life state](life-state-runtime.md#not-implemented)), and other
   domains.
 - Schema migration and compatibility with original saves.
