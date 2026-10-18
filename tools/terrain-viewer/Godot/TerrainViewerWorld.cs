@@ -141,6 +141,7 @@ public partial class TerrainViewerApp
         _worldPanel.LightingToggleRequested += PaletteLightingToggle;
         _worldPanel.VisualToggleRequested += PaletteVisualToggle;
         _worldPanel.AlwaysRunToggleRequested += PaletteAlwaysRunToggle;
+        _worldPanel.SoundTestRequested += PaletteSoundTest;
         _worldPanel.OverlayToggled += SetPassabilityOverlay; _overlayPanelState = null;
         _hud!.SettingsRequested += ToggleWorldSettings;
         Input.JoyConnectionChanged += WorldConnectionChanged;
@@ -244,7 +245,7 @@ public partial class TerrainViewerApp
         if (_worldPanel is null || !GodotObject.IsInstanceValid(_worldPanel)) return;
         var runtime = _worldActor.Session?.State;
         _worldPanel.SetSummary($"{(_worldActor.Session is AreaGridSession ? "Whole Crash Site core at T0" : "Bounded WORLD test area")}; cell {runtime?.CommittedCell} {runtime?.Phase}; camera {_camera?.FollowState.Mode}; last assessment: {_worldGridDiagnostic}");
-        BindVisualPalette(); BindGaitPalette();
+        BindVisualPalette(); BindGaitPalette(); BindAudioPalette();
     }
     private void BindWorldZoom()
     {
@@ -844,6 +845,7 @@ public partial class TerrainViewerApp
                     panel.ResetSceneRequested -= PaletteResetScene; panel.ReloadRequested -= PaletteReload; panel.OverlayToggled -= SetPassabilityOverlay;
                     panel.VisualToggleRequested -= PaletteVisualToggle;
                     panel.AlwaysRunToggleRequested -= PaletteAlwaysRunToggle;
+                    panel.SoundTestRequested -= PaletteSoundTest;
                     panel.Hide(); RemoveChild(panel); panel.QueueFree();
                 }
             }
