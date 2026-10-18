@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """ARC-RES-034 read-only probe: generated wilderness (terrain.tdf and terrain templates).
 
-Research only, not a loader or CE translation. The rules are independently
-written from the pinned CE locators cited in
+Research only, not a loader or a translation of the source. The rules are independently
+written from the source locators cited in
 docs/research/generated-wilderness-evidence.md. Original mode reads the owner's
 installation in memory and prints only numbers, map and template folder names
 (DAT member paths), counts and SHA-256 digests; sector payloads, object
@@ -24,9 +24,8 @@ import zlib
 
 import dat_probe
 
-PIN = "a7ff41b300ef712f0e7d088183a3d08957110cdd"
 
-# terrain.tdf (CE terrain.c TerrainHeader): float version, u32 flags, i64 width,
+# terrain.tdf header (docs/research/generated-wilderness-evidence.md): float version, u32 flags, i64 width,
 # i64 height, i32 base type, i32 padding. Version 1.2 compared as the float32 word.
 TDF_HEADER = struct.Struct("<4sIqqii")
 TDF_VERSION = struct.pack("<f", 1.2)
@@ -42,8 +41,8 @@ FIRST_TRANSITION_MESSAGE = 200
 VARIANTS = 4
 
 # Template slot (x, y) inside a "<from> to <to>" folder for each 4-bit transition
-# code; None means "swap the pair and use code 15 - c" (CE terrain_sector_path and
-# its 16-entry table). Codes 0 and 15 have no slot either way.
+# code; None means "swap the pair and use code 15 - c" (the source's sector path
+# function and its 16-entry table). Codes 0 and 15 have no slot either way.
 TRANSITION_SLOTS: list[tuple[int, int] | None] = [
     None, (1, 0), (1, 2), (1, 1), (3, 2), (0, 0), (2, 2), None,
     (3, 0), (2, 0), None, None, (3, 1), None, None, None,
@@ -316,7 +315,7 @@ def template_path(tid: int, types: TerrainTypes) -> tuple[str, str | None]:
 
 
 def terrain_blocked(tid: int, types: TerrainTypes) -> bool:
-    """World-map travel block of a sector without its own file (CE terrain_is_blocked)."""
+    """World-map travel block of a sector without its own file (the source's terrain block test)."""
     if tid == 0xFFFF:
         return True
     base, second, _, _ = tid_fields(tid)
@@ -327,14 +326,6 @@ def relocate_object(template_location: int, real_sector: int) -> tuple[int, int]
     """Object rule: keep the tile-local x/y (low six bits), take the real sector's origin."""
     x, y = template_location & 0xFFFFFFFF, template_location >> 32 & 0xFFFFFFFF
     return ((real_sector & SECTOR_X_MASK) << 6) + (x & 63), ((real_sector >> 26 & SECTOR_X_MASK) << 6) + (y & 63)
-
-
-def relocate_light_as_written(template_location: int, real_sector: int) -> tuple[int, int]:
-    """CE's light-list loader as written at the pin (marked "TODO: Check" there): it adds the
-    unshifted sector x/y to a local tile index instead of using the object rule."""
-    x, y = template_location & 0xFFFFFFFF, template_location >> 32 & 0xFFFFFFFF
-    tile = (x & 63) | (y & 63) << 6
-    return (tile & SECTOR_X_MASK) + (real_sector & SECTOR_X_MASK), (tile >> 26) + (real_sector >> 26 & SECTOR_X_MASK)
 
 
 # ---------------------------------------------------------------- sector framing
@@ -639,9 +630,6 @@ def census(stack: Stack, names: list[str], used: Counter) -> dict:
                 lx, ly = location & 0xFFFFFFFF, location >> 32 & 0xFFFFFFFF
                 if group == "all":
                     light_rules["lights_in_own_slot" if (lx >> 6, ly >> 6) == (slot_x, slot_y) else "lights_outside_own_slot"] += 1
-                    probe = sector_id(1451, 1302)
-                    light_rules["object_rule_differs_from_as_written"] += (
-                        relocate_object(location, probe) != relocate_light_as_written(location, probe))
     return {"totals": {g: dict(sorted(c.items())) for g, c in totals.items()},
             "object_types": {g: dict(sorted(c.items(), key=lambda i: int(i[0]))) for g, c in types.items()},
             "own_id_kinds": {g: dict(sorted(c.items())) for g, c in kinds_.items()},
@@ -700,7 +688,7 @@ def survey(root: Path, main_map: str) -> dict:
         number = int(path.rsplit("/", 1)[1][:-4])
         slot_use[f"{number & SECTOR_X_MASK},{number >> 26}"] += count
     report = {
-        "result": "PASS", "pin": PIN,
+        "result": "PASS",
         "mounts": [{"role": s.role, "kind": s.kind} for s in sources],
         "terrain_mes_sha256": sha(mes),
         "terrain_types": [{"type": i, "name": n, "world_map_blocked": b, "plain_variants": v}
@@ -832,10 +820,9 @@ def self_test() -> dict:
     assert terrain_blocked(make_tid(0, 2, 6, 0), types) and not terrain_blocked(make_tid(0, 0, 0, 0), types)
     assert terrain_blocked(0xFFFF, types)
 
-    # relocation: the object rule keeps tile-local x/y; the light loader as written does not
+    # relocation: the object rule keeps tile-local x/y; lights follow it too (ledger Wilderness A1)
     real = sector_id(1451, 1302)
     assert relocate_object(loc(64 + 5, 128 + 9), real) == ((1451 << 6) + 5, (1302 << 6) + 9)
-    assert relocate_light_as_written(loc(64 + 5, 128 + 9), real) == (5 + 9 * 64 + 1451, 1302)
 
     # terrain.tdf both layouts and refusals
     tids = [make_tid(0, 0, 0, v % 4) for v in range(6)]
@@ -895,7 +882,7 @@ def self_test() -> dict:
         assert main["generated_base_types"] == {"0": 6, "1": 1}
         (root / "arcanum5.dat").write_bytes(b"")
         expect_failure("UnsupportedMount", survey, root, "World")
-        assert census_["lights"] == {"lights_in_own_slot": 1, "object_rule_differs_from_as_written": 1}
+        assert census_["lights"] == {"lights_in_own_slot": 1}
         assert report["template_folders_named_by_mes_missing"] == ["cliff to grass", "grass to sea", "sea", "sea to grass"]
     return {"result": "PASS", "self_test": "mes types/transitions, tid fields, path rule for codes 0..15, "
             "relocation rules, tdf flat/row-zlib and refusals, sector framing, v119 walker, end-to-end survey, "

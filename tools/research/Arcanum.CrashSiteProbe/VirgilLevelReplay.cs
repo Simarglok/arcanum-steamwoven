@@ -5,9 +5,9 @@ namespace Arcanum.CrashSiteProbe;
 
 // ARC-RES-032 research only: a replay of what an NPC's auto-level rules buy at each
 // level-up, over an explicit character sheet, plus the script call-edge reach used to
-// bound which scripts can act on Virgil. Independently written from the pinned CE
-// locators cited in docs/research/virgil-level-replay.md (level.c purchase helpers,
-// skill.c / stat.c / spell.c / object.c / critter.c / effect.c formulas); no CE code or
+// bound which scripts can act on Virgil. Independently written from the source
+// locators cited in docs/research/virgil-level-replay.md (the purchase helpers and
+// the skill, stat, spell, object, critter and effect formulas); no code or
 // structure is reused. It is a model for research evidence, not a level-up runtime.
 internal static partial class Program
 {

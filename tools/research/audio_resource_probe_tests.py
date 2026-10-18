@@ -1,7 +1,7 @@
 """Independent literal synthetic oracles for the research seam (MIT).
 
 No original payloads. Tests exercise the real opt-in helpers and CLI; these
-are not production audio, CE execution or hardware/codec certification.
+are not production audio, execution of the original or hardware/codec certification.
 """
 import contextlib
 import io

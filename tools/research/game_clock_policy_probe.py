@@ -1,4 +1,4 @@
-"""ARC-RES-020 synthetic table conformance, NOT a production clock or CE port.
+"""ARC-RES-020 synthetic table conformance, NOT a production clock or a port of the source.
 
 Literal expectations live in the adjacent JSON. This independent, stateless
 relation checker reads no original resources or production helper constants.
@@ -19,7 +19,8 @@ from typing import Any
 
 
 MAX_I64 = 9223372036854775807
-PIN = "a7ff41b300ef712f0e7d088183a3d08957110cdd"
+# The source a clock profile binds to: the retail 1.0.7.4 executable (GameClockOwner.RetailExecutableSha256).
+PIN = "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52"
 POLICY = "steamwoven-normalized-clock-v1"
 FIXTURE = Path(__file__).with_name("game_clock_policy_cases.json")
 DOCUMENT = Path(__file__).resolve().parents[2] / "docs/world/game-clock-policy.md"
@@ -480,7 +481,7 @@ def validate(path):
                         parse_constant=lambda _: require(False, "invalid-json-number"))
     keys(matrix, {"schema", "policy", "source_worksheet", "profiles", "cases"})
     require(integer(matrix["schema"], 1, 1) and matrix["policy"] == POLICY)
-    require(matrix["source_worksheet"] == "ce-a7ff41b-source-observation-v1")
+    require(matrix["source_worksheet"] == "source-observation-v1")
     check_profiles(matrix["profiles"])
     cases: list[Any] = matrix["cases"]
     require(type(cases) is list and 0 < len(cases) <= 256, "case-cap")
@@ -497,8 +498,9 @@ def validate(path):
         refs = SOURCE_REFS if row["class"] == "Source" else PROPOSAL_REFS if row["class"] == "Proposal" else {}
         require(kind in refs and row["reference"] in refs[kind], "classification-reference")
         if row["class"] == "Source":
-            require(f'[{row["reference"]}]: https://github.com/alexbatalov/arcanum-ce/blob/{PIN}/' in doc,
-                    "missing-pinned-reference")
+            require(f'[{row["reference"]}]: #executable-functions' in doc
+                    and re.search(r"^\| " + re.escape(row["reference"]) + r" \|", doc, re.M) is not None,
+                    "missing-executable-reference")
         require(re.search(r"(?<![a-z0-9-])" + re.escape(case_id) + r"(?![a-z0-9-])", doc) is not None,
                 "missing-document-case")
         check_coverage(row)

@@ -27,8 +27,8 @@ not runtime proof. Exact-head review/publication/verified merge are separate gat
 
 ## Evidence classes and provenance
 
-**Source** means CE/TIG at `a7ff41b300ef712f0e7d088183a3d08957110cdd`, one
-attributed lineage under [Sustainable Use License 1.0][license], **not MIT**.
+**Source** means a reading of the original's functions listed under
+[executable functions](#executable-functions) (evidence level F0 unless the ledger lists them).
 Descriptions and synthetic worksheets here are independently authored, not copied
 or mechanically translated implementations. Source inspection is not original
 runtime observation. **Actual data** means the selected read-only startup identity
@@ -96,7 +96,7 @@ reads stored state and `AdvanceTo` validates complete explicit requests. Those
 APIs are not game clocks. Legacy/HD must eventually share one world clock;
 render frames, widgets and scenes must not create another authority.
 
-The bounded **Source** worksheet `ce-a7ff41b-source-observation-v1` covers only
+The bounded **Source** worksheet `source-observation-v1` covers only
 [non-network admission and nesting][admission]. Elapsed <5 rejects before updating
 the host reference. Admitted pings update that reference **before** clamping >250;
 excess is discarded, not a backlog. Real advances on every admitted ping. Counter
@@ -130,7 +130,7 @@ queue processing. Clock freeze does not establish global callback suppression.
 ## P1 — Proposed steamwoven-normalized-clock-v1
 
 Recommend one named bounded policy, not a selectable source implementation.
-`ce-a7ff41b-source-observation-v1` is solely a source worksheet identity.
+`source-observation-v1` is solely a source worksheet identity.
 
 `GameTimestampMs` is nonnegative signed64 milliseconds since selected module
 calendar day 0 **midnight**, not elapsed since startup, host epoch or Movement ticks.
@@ -362,19 +362,41 @@ clock or lighting readiness is claimed by this research.
 
 ## Pinned source index
 
-[license]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/LICENSE.md
-[wire]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.h#L64-L78
-[startup]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gameinit.c#L81-L122
-[static-start]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L130-L134
-[init]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L475-L529
-[calendar]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L235-L375
-[day-predicate]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L467-L471
-[admission]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L763-L897
-[menu-open]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L1554-L1568
-[menu-close]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L1703-L1715
-[network]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/net_compat.h#L40-L46
-[ambient-init]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/anim_ui.c#L36-L74
-[ambient-callback]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/anim_ui.c#L220-L276
-[delay-api]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L1011-L1047
-[delay-base]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L1120-L1150
-[event-kinds]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L92-L112
+## Executable functions
+
+The source references above name these functions of the retail 1.0.7.4 `Arcanum.exe` (evidence level F0 unless the
+[verification ledger](../research/original-verification-ledger.md) lists them):
+
+| Reference | Function address |
+| --- | --- |
+| wire | data layout or declaration (no function) |
+| startup | 0x4B9C30 |
+| static-start | data layout or declaration (no function) |
+| init | 0x45AD10, 0x45AD20, 0x45AD70, 0x45AD80, 0x45AD90 |
+| calendar | 0x45A840, 0x45A870, 0x45A890, 0x45A8B0, 0x45A8D0, 0x45A8E0, 0x45A900, 0x45A920, 0x45A950, 0x45A970, 0x45A9B0, 0x45A9E0, 0x45AA10, 0x45AA50, 0x45AAA0, 0x45AAC0, 0x45AAE0, 0x45AB00, 0x45AB20, 0x45AB40 |
+| day-predicate | 0x45ACF0 |
+| admission | 0x45B300, 0x45B320, 0x45B340, 0x45B360, 0x45B370 |
+| menu-open | 0x541180 |
+| menu-close | 0x5412E0 |
+| network | data layout or declaration (no function) |
+| ambient-init | 0x57D240, 0x57D2C0, 0x57D2D0 |
+| ambient-callback | 0x57D620, 0x57D640, 0x57D650, 0x57D660, 0x57D6C0 |
+| delay-api | 0x45B800, 0x45B820, 0x45B860, 0x45B880, 0x45B8A0 |
+| delay-base | 0x45BA30 |
+| event-kinds | data layout or declaration (no function) |
+
+[wire]: #executable-functions
+[startup]: #executable-functions
+[static-start]: #executable-functions
+[init]: #executable-functions
+[calendar]: #executable-functions
+[day-predicate]: #executable-functions
+[admission]: #executable-functions
+[menu-open]: #executable-functions
+[menu-close]: #executable-functions
+[network]: #executable-functions
+[ambient-init]: #executable-functions
+[ambient-callback]: #executable-functions
+[delay-api]: #executable-functions
+[delay-base]: #executable-functions
+[event-kinds]: #executable-functions

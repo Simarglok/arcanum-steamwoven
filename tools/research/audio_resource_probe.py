@@ -134,7 +134,7 @@ class SchemeEntry:
 
 
 def parse_scheme(text: str) -> SchemeEntry:
-    """Intentional strict proposed subset, not CE substring/atoi emulation."""
+    """Intentional strict proposed subset, not an emulation of the source's substring/atoi scan."""
     require(0 < len(text) <= 1024, 'SchemeTextLimit')
     parts = text.lower().split()
     require(bool(parts), 'SchemeTextLimit')

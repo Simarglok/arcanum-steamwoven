@@ -12,7 +12,7 @@ namespace Arcanum.CrashSiteProbe;
 internal static partial class Program
 {
     // Independently authored bounded research, NOT a game clock/light runtime.
-    // Schema specifications/prior art: pinned CE, attributed in the canonical contract.
+    // Schema specifications: the canonical contract (docs/world/time-lighting-contract.md).
     private static partial class TimeLightingProbe
     {
         private const int PayloadCap = 1_048_576;
@@ -166,7 +166,7 @@ internal static partial class Program
             public Scheme(Dictionary<int, string> values)
             {
                 // Strict research proposal: fresh table, all keys present, bounded interior gaps.
-                // Each gap uses its actual bracketing anchors. NOT CE's mutable running-color loop.
+                // Each gap uses its actual bracketing anchors. Not the source's mutable running-colour loop.
                 channels = new int[24][];
                 for (var h = 0; h < 24; h++)
                 {

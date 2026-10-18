@@ -10,7 +10,9 @@ for implementation slices I1 (parameters), I2 (danger state) and I6 (tick and
 turn-based hooks) of the plan.
 
 Earlier facts reused here: the [load map](combat-domain-load-map.md) (ARC-RES-040:
-two load phases, rows by position), the [data census](combat-data-census.md)
+two load phases, rows by position), the implemented
+[AI parameter table](../world/ai-parameters.md) (ARC-DATA-033: rows read as the
+original fills them, follow fields 5..8), the [data census](combat-data-census.md)
 (ARC-RES-041: rows 0..40 and 100 exist, no NPC uses a row above 40), the
 [script event dispatcher](scr-event-dispatcher.md) (ARC-RES-042: heartbeat and
 combat script points, triggerers), the [event queue](game-event-queue.md)
@@ -287,7 +289,7 @@ original and there is no switch.
 | ID | Original 1.0.7.4 | Verdict | Proposed decision |
 | --- | --- | --- | --- |
 | P5 | In combat mode every pass that reaches the gate's combat test runs the start-combat script, in real time preceded by the end-combat script; in a round the end-combat script also runs at the end of the NPC's subturn. | Original | Kept in both settings: scripts are written against these per-pass hooks, and nothing marks it as a slip. No switch. |
-| LM3 | Rows fill by position from the first entry's number; the copy is not bounds-checked. | Original bug (latent) | The out-of-bounds part stays fixed in both settings, as the [rule-mode registry](../world/rule-modes.md) already records: a row outside the table is refused (owner rule: Original never reproduces an out-of-bounds read). New: Steamwoven keys in-bounds rows by entry number, and the Original setting keeps the positional fill (`AiRowsByPosition`, proposed). Identical for the installed data. |
+| LM3 | Rows fill by position from the first entry's number; the copy is not bounds-checked. | Original bug (latent) | As already implemented by the [AI parameter table](../world/ai-parameters.md) (ARC-DATA-033) and recorded in the [rule-mode registry](../world/rule-modes.md): rows fill by position as in the original, and a row outside the table is refused, in both settings (owner rule: Original never reproduces an out-of-bounds read). No switch: the installed tables have no gap, so positional and by-number filling agree. |
 | LM4 | The module unload does nothing, so module rows 100..149 survive into the next module. | Original | Steamwoven rebuilds the module rows with each module's content layer, so rows of a previous module never leak; no switch, because a module change inside one session is not modelled (load-map policy 1). |
 | CL1 | A stunned NPC never passes the gate; the pass on which the stun animation has ended clears the flag and still ends. | The reconstruction lets a still-stunned NPC act: slip | Follow the original in both settings. No switch. |
 | CL2 | After the full re-wield both "check wield" and "check weapon" are cleared. | The reconstruction clears only "check wield", so the next pass re-wields the weapon again: slip | Follow the original in both settings. No switch. |
@@ -300,9 +302,9 @@ other effects, but not in the combat-mode bit, which the original sets again.
 
 ## 8. Consequences for Steamwoven (project policy proposals)
 
-1. **Slice I1** reads both tables into a typed 17-field record by entry number
-   (LM3 decision), names the fields as in the dictionary and keeps the raw
-   positional layout reachable for the Original setting.
+1. **Slice I1** is largely in place: the [AI parameter table](../world/ai-parameters.md)
+   (ARC-DATA-033) reads both tables as the original fills them. What remains is a
+   typed 17-field record with the dictionary's names for the AI runtime.
 2. **Slice I2** implements the state read and the setter as one pure function
    over the NPC's flags and handles, returning the new flags, handles, the
    script to run (enter or exit combat, with its triggerer), the sound request
