@@ -75,7 +75,7 @@ under `docs/research`. Details: `docs/project/status.md`.
   `Arcanum.Input.Godot` adapter source), `Arcanum.Session` (one game-session
   owner: clock, GF, actor placement, map changes, story, party, inventory,
   starting hero, randomness, life state, event queue with life timers, NPC reaction, turn-based round, equipment,
-  durable effects, experience and levels, combat mode, quelled rumors, snapshot schema 16), `Arcanum.Godot` (ART viewer and HD
+  durable effects, experience and levels, combat mode, quelled rumors, snapshot schema 17), `Arcanum.Godot` (ART viewer and HD
   before/after review). Data/Simulation/Scripting/Session must stay
   Godot-independent.
 - Tools: `tools/terrain-viewer` (Core + Godot; ordinary modes `crash-site-area`

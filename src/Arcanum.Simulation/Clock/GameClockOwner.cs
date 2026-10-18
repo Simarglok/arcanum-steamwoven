@@ -6,6 +6,10 @@ namespace Arcanum.Simulation.Clock;
 /// </summary>
 public sealed class GameClockOwner : IDisposable
 {
+    /// <summary>The source a clock profile binds to (<see cref="ProfileBinding.SourceRevision"/>): the SHA-256 of the retail
+    /// 1.0.7.4 <c>Arcanum.exe</c> whose clock functions were checked (verification ledger, second reading; ARC-DEV-009).</summary>
+    public const string RetailExecutableSha256 = "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52";
+
     private ClockSnapshot state;
     private bool disposed;
 
@@ -89,7 +93,7 @@ public sealed class GameClockOwner : IDisposable
     {
         if (profile.ClockSchemaVersion != 1) return ClockFailure.InvalidSchema;
         if (!string.Equals(profile.PolicyId, "steamwoven-normalized-clock-v1", StringComparison.Ordinal) ||
-            !string.Equals(profile.SourceRevision, "a7ff41b300ef712f0e7d088183a3d08957110cdd", StringComparison.Ordinal) ||
+            !string.Equals(profile.SourceRevision, RetailExecutableSha256, StringComparison.Ordinal) ||
             !IsFingerprint(profile.SourceDataSha256) || !IsFingerprint(profile.StartupResourceSha256) ||
             profile.StartYear < 0 || profile.StartHour is < 0 or > 23) return ClockFailure.InvalidProfile;
         return ClockFailure.None;

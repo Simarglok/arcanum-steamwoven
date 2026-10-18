@@ -16,7 +16,7 @@ public enum OriginalFunctionScope
 /// <c>OriginalFunctionAttribute(uint address, OriginalFunctionScope scope)</c> of the same shape: the test recognises the
 /// attribute by name.
 /// </summary>
-[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
 public sealed class OriginalFunctionAttribute(uint address, OriginalFunctionScope scope) : Attribute
 {
     /// <summary>The function's address in the executable.</summary>

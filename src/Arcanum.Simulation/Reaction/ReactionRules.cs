@@ -3,17 +3,15 @@ using Arcanum.Simulation.Character;
 namespace Arcanum.Simulation.Reaction;
 
 /// <summary>
-/// The NPC→PC reaction rules (ARC-RES-028 R1, R2, R4, R5, R8) as pure functions over explicit inputs. Read in CE at
-/// <see cref="SourceRevision"/> and checked against the retail 1.0.7.4 executable (ARC-WORLD-026, verification ledger):
-/// the effective value <c>reaction_get</c> 0x4C0D00 with its term 0x4C1500 and table 0x5B684C, the change
-/// <c>reaction_adj</c> 0x4C0DE0, the categories <c>reaction_translate</c> 0x4C0FC0, the conversation start 0x4C1020, the
-/// quest changes in 0x4C4E60 and the hit branch of <c>ai_attack</c> 0x4A9650 behave as CE reads them. The stored value and
+/// The NPC→PC reaction rules (ARC-RES-028 R1, R2, R4, R5, R8) as pure functions over explicit inputs, checked
+/// against the retail 1.0.7.4 executable (ARC-WORLD-026, verification ledger):
+/// the effective value 0x4C0D00 with its term 0x4C1500 and table 0x5B684C, the change
+/// 0x4C0DE0, the categories 0x4C0FC0, the conversation start 0x4C1020, the
+/// quest changes in 0x4C4E60 and the hit branch of 0x4A9650. The stored value and
 /// the memory of who the NPC met are state of the session, not of these rules.
 /// </summary>
 public static class ReactionRules
 {
-    public const string SourceRevision = "a7ff41b300ef712f0e7d088183a3d08957110cdd";
-
     /// <summary>The prototype default of the reaction base, the value of a query on a non-critter pair, and the floor of the
     /// reaction of an NPC this PC mind-controls.</summary>
     public const int Neutral = 50;
@@ -34,7 +32,7 @@ public static class ReactionRules
     /// <summary>Number of PC races (the table's columns): Human through HalfOgre.</summary>
     public const int PcRaceCount = 8;
 
-    // Rows: NPC race (11, Human..Orc); columns: PC race (8, Human..HalfOgre). Source table dword_5B684C (CE reaction.c), equal
+    // Rows: NPC race (11, Human..Orc); columns: PC race (8, Human..HalfOgre). Source table 0x5B684C, equal
     // value for value to the retail table at 0x5B684C.
     private static readonly int[,] RaceTable =
     {
@@ -53,6 +51,7 @@ public static class ReactionRules
 
     /// <summary>The race term of an NPC race toward a PC race. A PC race outside the eight PC races throws: the source indexes
     /// its 8-column table without a check (latent bug LM12, fixed in both rule modes).</summary>
+    [OriginalFunction(0x4C1500, OriginalFunctionScope.Partial)]
     public static int RaceReaction(CharacterRace npc, CharacterRace pc)
     {
         if (!CharacterStatRules.IsDefined(npc)) throw new ArgumentOutOfRangeException(nameof(npc));
@@ -64,6 +63,7 @@ public static class ReactionRules
 
     /// <summary>Category by the source thresholds: ≤ 0 hatred, ≤ 20 dislike, ≤ 40 suspicious, ≤ 60 neutral, ≤ 80 courteous,
     /// ≤ 100 amiable, above love.</summary>
+    [OriginalFunction(0x4C0FC0, OriginalFunctionScope.Full)]
     public static ReactionCategory Category(int reaction) => reaction switch
     {
         <= 0 => ReactionCategory.Hatred,
@@ -96,9 +96,10 @@ public static class ReactionRules
     /// The effective reaction (R1): 0 when the PC is on the NPC's enemy list; otherwise the stored value, plus the race term
     /// and the PC's reaction modifier (both skipped for an aloof or monstrous NPC; floored at −49 together in the hostility
     /// variant), plus the reputation sum, then the PC's <c>reaction</c> effects (the retail executable passes the PC to the
-    /// effect lookup; CE's NPC is a reconstruction slip, so both rule modes use the PC), and finally at least 50 when this PC
+    /// effect lookup, ledger R1, so both rule modes use the PC), and finally at least 50 when this PC
     /// mind-controls the NPC. There is no clamp: values below 0 and above 100 occur. Invalid facts throw.
     /// </summary>
+    [OriginalFunction(0x4C0D00, OriginalFunctionScope.Full)]
     public static int Effective(int stored, ReactionNpcFacts npc, ReactionPcFacts pc, ReactionQuery query = ReactionQuery.Standard)
     {
         if (!IsValid(npc)) throw new ArgumentException("Invalid NPC reaction facts.", nameof(npc));
@@ -124,6 +125,7 @@ public static class ReactionRules
     /// reaction effects and is added to the stored value; a negative change of a follower of this PC also asks for the
     /// leader check. Invalid facts or a delta outside <see cref="ReactionLimits.MaxMagnitude"/> throw.
     /// </summary>
+    [OriginalFunction(0x4C0DE0, OriginalFunctionScope.Full)]
     public static ReactionAdjustment Adjust(int delta, ReactionNpcFacts npc, ReactionPcFacts pc, bool ledByPc)
     {
         if (!IsValid(npc)) throw new ArgumentException("Invalid NPC reaction facts.", nameof(npc));
@@ -142,16 +144,18 @@ public static class ReactionRules
 
     /// <summary>The stored value a conversation starts from: the stored value, or 100 when it is below 100 and the PC spent its
     /// "force good reaction" fate point (R5).</summary>
+    [OriginalFunction(0x4C1020, OriginalFunctionScope.Partial)]
     public static int ConversationStart(int stored, bool forceGoodReaction) =>
         forceGoodReaction && stored < ForcedGoodReaction ? ForcedGoodReaction : stored;
 
     /// <summary>
-    /// The reaction effect of a PC's hit on an NPC (R8, <c>ai_attack</c>). An NPC that follows the attacker
+    /// The reaction effect of a PC's hit on an NPC (R8, 0x4A9650). An NPC that follows the attacker
     /// (<paramref name="ledByPc"/>) gets parameter 9 added on a deliberate hit in the Original setting and subtracted in
     /// Steamwoven (A2), nothing on an accidental one, and must re-run its follow check either way. Any other NPC loses 10 on
     /// an accidental hit, and on a deliberate one is lowered to parameter 10 when its hostility-variant reaction
     /// (<paramref name="stored"/> under the facts) is above it. The deltas still go through <see cref="Adjust"/>.
     /// </summary>
+    [OriginalFunction(0x4A9650, OriginalFunctionScope.Partial)]
     public static ReactionHit PcHit(int stored, ReactionNpcFacts npc, ReactionPcFacts pc, ReactionHitFacts ai, bool ledByPc,
         bool deliberate, ReactionRuleProfile profile)
     {

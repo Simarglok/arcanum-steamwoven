@@ -119,7 +119,7 @@ public sealed class ExperienceOriginalExeTests
         var address = Convert.ToUInt32(key, 16);
         var methods = typeof(ExperienceRules).Assembly.GetTypes()
             .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly))
-            .Where(m => m.GetCustomAttribute<OriginalFunctionAttribute>()?.Address == address)
+            .Where(m => m.GetCustomAttributes<OriginalFunctionAttribute>().Any(a => a.Address == address))
             .ToList();
         Assert.AreEqual(1, methods.Count, $"exactly one method must carry OriginalFunction(0x{key})");
         return methods[0];

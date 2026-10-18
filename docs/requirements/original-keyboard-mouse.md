@@ -57,7 +57,7 @@ Keyboard/mouse и gamepad передают семантические коман
 | C | Переключить лист/редактор текущего персонажа. | Logical key down вызывает character UI. [K3] |
 | F | Переключить Fate Point Window. | Logical key down вызывает Fate UI; не Fit Camera. [K3] |
 | I | Переключить инвентарь. | Logical key down вызывает inventory; не Inspect. [K3] |
-| L | Переключить Logbook. | В исследованном CE dispatch клавиатурного L не найдено. Требование M/Q сохраняется. |
+| L | Переключить Logbook. | Logical key down: в оригинальном exe символы `l`/`L` вызывают переключение журнала для локального PC (строка [LB1](../research/original-verification-ledger.md#logbook-arc-ui-008)); AREA viewer делает так же (ARC-UI-008). |
 | O | Открыть Options. | Physical scancode up; при text focus не выполняется. В options O может закрывать окно. [K1], [U3] |
 | R | Ready/Unready, режим Attack/Talk. | Logical key down переключает combat readiness; это не TB/RT и не Reset Scene. [K3] |
 | S | Sleep/Wait UI. | Logical key down вызывает sleep UI. Это не движение вниз. M PDF 52–53 / печатные 52–53. [K3] |
@@ -148,7 +148,7 @@ CE хранит одновременно logical key, physical scancode и press
 
 | Вопрос | Доказательство | Требование к следующей реализации/проверке |
 | --- | --- | --- |
-| L отсутствует в исследованном CE dispatch | M188/Q задают Logbook; поиск L в central handlers и logbook не дал binding. | Реализовать документированное действие, не считать CE полным каталогом оригинала. |
+| L в оригинальном exe | M188/Q задают Logbook; ранний поиск по реконструкции binding не нашёл, а таблица символов обработчика клавиш в exe вызывает журнал на `l`/`L` ([LB1](../research/original-verification-ledger.md#logbook-arc-ui-008)). | Решено ARC-UI-008: L переключает журнал; реконструкцию не считать полным каталогом оригинала. |
 | V находится под cheat gate | M189/Q задают ordinary version info; CE main.c требует cheat >= 1, стартовые cheat flags помечены removed from retail. [K1], [T2] | Ordinary version action не зависит от cheat mode; version string нового runtime — собственная информация, не скопированная версия CE. |
 | Space и закрытие интерфейсов | M188/Q явно описывают close UI + TB/RT; immediate CE callee меняет настройку TB без общего close UI вызова. [K3], [U13] | Отдельно проверить Space в inventory/character/Fate/других экранах и в мире; не вывести полноту из одного toggle call. |
 | F8: fixed auto-slot против save-list helper | M188/Q: auto-slot; CE helper возвращает первую запись date-sorted save list. [K8] | Сравнить auto-save и другое более позднее save в original baseline; до решения не представлять два способа выбора файла как эквивалентные. |

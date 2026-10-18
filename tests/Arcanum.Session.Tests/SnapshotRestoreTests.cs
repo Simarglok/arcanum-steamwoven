@@ -126,38 +126,41 @@ public sealed class SnapshotRestoreTests
         Fails(new string(' ', GameSessionSnapshotCodec.MaxEncodedCharacters + 1), SnapshotDecodeFailure.TooLarge, "$");
         Fails("[]", SnapshotDecodeFailure.WrongType, "$");
         Fails(With("arcanum-steamwoven-session", "other-save"), SnapshotDecodeFailure.WrongFormat, "$.format");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":17,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":18,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         // Schema 1 (no story, no lighting), schema 2 (story without lighting), schema 3 (no party), schema 4 (no inventory),
-        // schema 5 (no hero, no gold), schema 6 (no random), schema 7 (no life), schema 8 (no events), schema 9 (no reactions), schema 10 (no combat), schema 11 (no equipment), schema 12 (no effects), schema 13 (no experience), schema 14 (no combat mode) and schema 15 (no quelled rumors) are refused, not migrated.
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":1,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(EmptyStory + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents + LightingTail, "}"),
+        // schema 5 (no hero, no gold), schema 6 (no random), schema 7 (no life), schema 8 (no events), schema 9 (no reactions), schema 10 (no combat), schema 11 (no equipment), schema 12 (no effects), schema 13 (no experience), schema 14 (no combat mode), schema 15 (old clock source) and schema 16 (no quelled rumors) are refused, not migrated.
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":1,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(EmptyStory + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents + LightingTail, "}"),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":2,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(EmptyParty + NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents + LightingTail, "}"),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":2,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(EmptyParty + NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents + LightingTail, "}"),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":3,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(EmptyParty + NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents, ""),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":3,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(EmptyParty + NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":4,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents, ""),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":4,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":5,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents, ",\"inventory\":{\"pc\":[]}"),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":5,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents, ",\"inventory\":{\"pc\":[]}"),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":6,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents, ""),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":6,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":7,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoEquipment, "").Replace(NoLife + NoReactions + NoCombat + NoEvents, ""),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":7,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoEquipment, "").Replace(NoLife + NoReactions + NoCombat + NoEvents, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":8,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoEquipment, "").Replace(NoReactions + NoCombat + NoEvents, ""),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":8,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoEquipment, "").Replace(NoReactions + NoCombat + NoEvents, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":9,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoEquipment, "").Replace(NoReactions + NoCombat, ""),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":9,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoEquipment, "").Replace(NoReactions + NoCombat, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":10,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoEquipment, "").Replace(NoCombat, ""),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":10,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoEquipment, "").Replace(NoCombat, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":11,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoEquipment, ""),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":11,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, "").Replace(NoEquipment, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":12,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, ""),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":12,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":13,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, ""),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":13,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":14,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, ""),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":14,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":15,\"world\"").Replace(QuelledRumors, ""),
+        // ARC-UI-008: schema 16 has no quelled rumors; schema 15 also has the clock of the old source (ARC-DEV-009).
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":16,\"world\"").Replace(QuelledRumors, ""),
+            SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":15,\"world\"").Replace(QuelledRumors, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         Fails(With(EmptyParty, ""), SnapshotDecodeFailure.MissingField, "$.party");
         Fails(With(EmptyInventory, ""), SnapshotDecodeFailure.MissingField, "$.inventory");
@@ -218,9 +221,9 @@ public sealed class SnapshotRestoreTests
         Fails(With(LightingTail, ",\"lighting\":{\"hour\":15}}"), SnapshotDecodeFailure.MissingField, "$.lighting.schemeId");
 
         // A newer schema with different fields is reported as unsupported, not as damage.
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":17,\"wardrobe\":[],\"world\"").Replace("\"revision\":2,", ""),
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":18,\"wardrobe\":[],\"world\"").Replace("\"revision\":2,", ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":16,\"world\"", "\"schemaVersion\":4294967297,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, ""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":17,\"world\"", "\"schemaVersion\":4294967297,\"world\"").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, ""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
 
         var tooManyMaps = string.Join(",", Enumerable.Range(1, GameSessionLimits.PolicyMaxMaps + 1)
             .Select(map => $"{{\"map\":{map},\"changes\":[{{\"scope\":\"sector\",\"sector\":1,\"property\":\"p\",\"value\":1}}]}}"));

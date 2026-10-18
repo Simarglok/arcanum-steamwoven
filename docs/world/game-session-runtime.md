@@ -3,7 +3,7 @@
 Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
 inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019; life state ARC-COMBAT-002;
 event queue ARC-WORLD-024; NPC reaction ARC-WORLD-026; turn-based round ARC-COMBAT-003; equipment ARC-WORLD-028;
-durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008.
+durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 17).
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
@@ -156,7 +156,7 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 16
+## Snapshot schema 17
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -181,7 +181,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":16,
+{"format":"arcanum-steamwoven-session","schemaVersion":17,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -260,10 +260,11 @@ running session kept, and the next F7 overwrites it. The only earlier host (the 
 viewer) had a one-flag placeholder GF domain, so a migrated session could not run any
 dialog. ARC-WORLD-030 added the hero's experience and the NPCs' experience records as schema 14 and refuses schema 13.
 ARC-COMBAT-004 added the combat-mode flags as schema 15 and refuses schema 14
-([real-time combat](real-time-combat-runtime.md#snapshot-schema-15)).
-ARC-UI-008 added the quelled rumors to the story domain as schema 16 and refuses schema 15 (a quick save of an older
-schema loads as incompatible).
-Adding another domain needs schema 17 with its own explicit migration decision.
+([real-time combat](real-time-combat-runtime.md#snapshot-schema-15)). ARC-DEV-009 binds the clock profile to the retail
+executable (`sourceRevision` is its SHA-256, [clock policy](game-clock-policy.md)) as schema 16, with no structural change, and
+refuses schema 15. ARC-UI-008 added the quelled rumors to the story domain as schema 17 and refuses schema 16 (a quick
+save of an older schema loads as incompatible). Adding another domain needs schema 18 with its own explicit migration
+decision.
 
 ## Save slot (ARC-WORLD-011)
 

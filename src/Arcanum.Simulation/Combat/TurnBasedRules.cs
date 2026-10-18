@@ -44,8 +44,8 @@ public readonly record struct TurnBasedStall<TActor>(TActor? LastActor, int Last
 /// <summary>
 /// The turn-based round rules as pure functions (ARC-COMBAT-003; the source's turn-based combat, ARC-RES-030 C6–C14):
 /// who takes part and in which order, the action points a subturn grants, the cost of actions, charging a cost with the
-/// local PC's overexertion, and the NPC's low-fatigue gate. Numbers are the CE reading at
-/// <c>a7ff41b300ef712f0e7d088183a3d08957110cdd</c>, checked in the original 1.0.7.4 executable (see
+/// local PC's overexertion, and the NPC's low-fatigue gate. Numbers are checked in the
+/// original 1.0.7.4 executable (see
 /// docs/world/turn-based-round-runtime.md). Every function validates its inputs (<see cref="ArgumentException"/>).
 /// </summary>
 public static class TurnBasedRules

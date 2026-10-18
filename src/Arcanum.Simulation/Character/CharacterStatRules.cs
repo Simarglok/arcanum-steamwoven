@@ -1,13 +1,12 @@
 namespace Arcanum.Simulation.Character;
 
 /// <summary>
-/// Fixed rules profile <see cref="RulesId"/>. Numbers are source claims observed in CE at
-/// <see cref="SourceRevision"/> (see docs/world/character-stats-runtime.md); retail parity is NOT_VERIFIED.
+/// Fixed rules profile <see cref="RulesId"/>. Numbers are the claims of docs/world/character-stats-runtime.md, not yet
+/// checked in the retail executable (evidence level F0, docs/verification/functions.csv); retail parity is NOT_VERIFIED.
 /// </summary>
 internal static class CharacterStatRules
 {
     public const string RulesId = "steamwoven-character-stats-v1";
-    public const string SourceRevision = "a7ff41b300ef712f0e7d088183a3d08957110cdd";
     public const int ExtraordinaryThreshold = 20;
     public const int MaxSectorAptitudeAdjustment = 100;
     /// <summary>The poison level stat's range in the source (0..1000).</summary>
@@ -104,8 +103,9 @@ internal static class CharacterStatRules
 
     /// <summary>
     /// The source's situational adjustment of a base value before effects: poison lowers strength and dexterity by
-    /// <c>min(3, poison / 100)</c>, crippled legs lower speed by 5 (CE <c>stat_level_get</c>).
+    /// <c>min(3, poison / 100)</c>, crippled legs lower speed by 5 (the stat getter 0x4B0490, F0).
     /// </summary>
+    [OriginalFunction(0x4B0490, OriginalFunctionScope.Partial)]
     public static int Situational(CharacterStat stat, CharacterStatContext context) => stat switch
     {
         CharacterStat.Strength or CharacterStat.Dexterity => -Math.Min(3, context.PoisonLevel / 100),
