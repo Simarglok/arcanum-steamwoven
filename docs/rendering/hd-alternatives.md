@@ -55,7 +55,7 @@ Local observation.
 - **Walk:** the body's walk `hmfuwxab`, the five drawn groups 0, 4, 5, 6, 7 × 10 frames. Facings 1..3 are
   mirrors, as in ARC-RES-038.
 - **Reproduction on the second Mac.** It exported the frames from its own installation and got byte-identical
-  PNGs for all five evaluation frames and the 80 walk frames (SHA-256 compared). It reproduced the klein chest
+  PNGs for all five evaluation frames and the 80 exported walk frames, all eight groups (SHA-256 compared). It reproduced the klein chest
   to the reported precision: IoU 0.979, mean contour deviation 0.33 source px, repeated-part residual
   47.2 → 9.8, HD offset (57, 27).
 - **Harness:** Python scripts under `local/hd-gen/lib`, plus throwaway C# exporters over `Arcanum.Data` and the
@@ -133,6 +133,9 @@ Method (local observation), as the brief's "redraw + fit".
 
 **Redraw.**
 - The edge-fixed 4× base is placed on mid grey (128) on a canvas whose long side is 1024 px, a multiple of 16.
+- Bases: the klein v3 stills got the ring de-matted on light materials only, and the walk_v3 frames the
+  interior-bleed base. The Qwen runs got the A bases of `edit_fit.py`: interior bleed + colour lock for the heroine,
+  full de-matte + colour lock for the chest. So the klein and Qwen chests are not like-for-like inputs.
 - The edit model gets it with a per-object text hint, for example "a slim young woman with tanned skin seen from
   behind, long straight black hair falling below the shoulders, white strapless one-piece swimsuit with seams on
   the back, bare arms and legs, barefoot", and "keep the exact pose, proportions, silhouette, colours and lighting;
@@ -167,8 +170,8 @@ Licence facts are under [Licences](#licences).
 | --- | --- | --- |
 | FLUX.2 klein-4B | 4 steps (distilled), bf16, 1024 canvas | rejected by the owner |
 | Z-Image-Turbo | img2img strength 0.5, 9 steps, guidance 0, prompt embeddings computed first (two-phase load) | rejected |
-| Qwen-Image-Edit-2511 | transformer GGUF Q4_0 (unsloth), text encoder bf16 in a separate phase, 20 steps, true CFG 4 | most faithful on the chest; 28–57 min per image |
-| Qwen-Image-Edit-2511 + Lightning LoRA | as above plus the 8-step bf16 LoRA (lightx2v), 8 steps, true CFG 1 | as faithful on the chest; 6–8 min per image |
+| Qwen-Image-Edit-2511 | transformer GGUF Q4_0 (unsloth), text encoder bf16 in a separate phase, 20 steps, true CFG 4 | most faithful on the chest (judgement); 57 min (main Mac, chest) and 28 min (second Mac, heroine) per image |
+| Qwen-Image-Edit-2511 + Lightning LoRA | as above plus the 8-step bf16 LoRA (lightx2v), 8 steps, true CFG 1 | as faithful on the chest (judgement); 6–8 min per image (second Mac) |
 
 **Z-Image-Turbo** (local observation, owner verdict).
 - **Detail fell:** chest 14.1 → 7.4, heroine 11.6 → 9.1.
@@ -184,7 +187,7 @@ Licence facts are under [Licences](#licences).
 | --- | --- | --- | --- | --- |
 | Chest | 0.978 | 14.1 → 26.8 | 99–170 s | 22–23 GiB |
 | Tree | 0.909 | 6.1 → 21.3 | 190 s | 26 GiB |
-| Heroine (back) | 0.903–0.917 | 11.6 → 12–13 (v3) | 56–92 s | 18 GiB |
+| Heroine (back) | 0.907–0.917 (after the v3 finish 0.903–0.916) | 11.6 → 12–13 (v3) | 56–92 s | 18 GiB |
 | Cave wall | 0.70 (drew masonry) | 3.2 → 15.0 | 104 s | 19 GiB |
 
 Parameter sweep on the heroine and chest: canvas 1024 vs 1536, steps 4 vs 8, soft lock 1.5 vs 2.5.
@@ -215,13 +218,16 @@ finished 4× frame against the Legacy contour, as for klein v3.
 | Heroine (back) | 20 steps, CFG 4 | second | 0.829 | 0.79 / 5.6 | 11.1 % / 7.3 % | 9.0 | 28.3 min | 23.0 GiB |
 | Heroine (back) | Lightning, 8 steps, CFG 1 | second | 0.842 | 0.81 / 8.5 | 9.2 % / 7.8 % | 9.6 | 6.0 min | 23.7 GiB |
 
-- **Chest.** The most faithful redraw tested. The original's front gold swags became chains; the lock and the
+- **Chest.** The most faithful redraw tested in content (judgement from the sheets; by IoU and deviation klein v3
+  was marginally closer, 0.979 and 0.33). The original's front gold swags became chains; the lock and the
   proportions stayed. The bands are more uniform than klein's before any repeat step (residual 30.1–32.5 against
   47.3). It is softer than klein (detail 18–21 against 27.7) and still adds plank lines on the lid (judgement from
-  the sheets). The 8-step Lightning result is as faithful as 20 steps at a seventh of the time on the second Mac.
+  the sheets). The 8-step Lightning chest looks as faithful as the 20-step one (judgement). The step-count
+  speed-up measured on one machine is the heroine's: 28.3 → 6.0 min (about 4.7×) on the second Mac; the 20-step
+  chest ran only on the main Mac, with swap.
 - **Heroine.** The pose holds, but the model redraws the body. In the raw redraw the hair grows to mid-back over
   the swimsuit, a zip appears down the back, the arms bend differently and the figure is fuller (judgement from
-  the raw output). That is why IoU is 0.83–0.84 against 0.909 for klein v3, and detail at source scale is lower.
+  the raw output). That is why IoU is 0.83–0.84 against 0.909 for klein v3, and detail 4× is lower.
   Lightning leaves a few small detached specks next to the silhouette (the own-silhouette alpha keeps them).
 - **Text encoder phase:** 82–90 s per image on the main Mac; on the second Mac 3.8–10.1 s per image and 32 s for
   the whole phase with the model load (two images); 16.5 GiB.
@@ -259,7 +265,8 @@ Mean contour deviation 0.50–0.74 source px per frame and 0.53–0.86 with the 
 
 What changes between frames:
 - face, hair and swimsuit highlights change from frame to frame;
-- group 4 (front) changes most.
+- judgement from the earlier klein GIFs: group 4 (front) changed most; by the walk_v3 numbers per-frame flicker
+  is highest in group 6 (35.6).
 
 Findings:
 - **The reference image does not hold the walk together.** Flicker stays at the per-frame level in every group,
@@ -289,7 +296,8 @@ Local observation on the chest (owner's method).
      rim, handles and lock keep the generation.
    - A per-pixel median of the three bands was tried first. It averages three different ornaments into noise and
      was dropped.
-3. **Metric:** the residual between aligned instances, mean |RGB| over 4,596 HD pixel pairs.
+3. **Metric:** the residual between aligned instances, mean |RGB| over about 4,550–4,700 HD pixel pairs
+   (4,596 on the klein chest).
 
 | Run | Residual before → after | Transferred share of bronze |
 | --- | --- | --- |
@@ -333,7 +341,7 @@ Metrics:
 | Material detail, gain 2.5 | 0.998 | 0.998 | 0.83 | 1.23 | 8.1 |
 
 Per-tile generation:
-- blurs inside tiles (seam ratio below 1);
+- blurs inside tiles (detail 4× 5.7 against 6.0 for Legacy);
 - keeps a sharper line exactly on the tile border (1.083);
 - is coarser than the original (0.85), the owner's "fern leaves".
 
@@ -353,8 +361,9 @@ Judgement from the numbers and the owner's verdicts; the owner's look decides. k
 rejected, so the only generative candidate left is Qwen-Image-Edit-2511 with the Lightning LoRA.
 
 - **Characters and animation.**
-  - **No generative method is ready.** Every redraw tested flickers when each frame is drawn alone: 1× flicker
-    18–38 against 0.4–0.5 for the A edge fix. A reference image did not help (klein).
+  - **No generative method is ready.** With the 8× fixes and the v3 finish the klein walks flicker at 1× by
+    18–38 against 0.4–0.5 for the A edge fix, per frame and with a reference frame alike. The per-pixel lock
+    (1.5) and the sheet mode (1.1) hold only by re-imposing the original's look or by losing detail and IoU.
   - Qwen keeps the pose on a still but redraws the body (hair length, a zip, fuller figure; IoU 0.83–0.84), so
     it fails both the semantics and the pack's silhouette check for characters.
   - Until a consistent method exists, the pack keeps the A edge fix (interior bleed + colour lock) for animated
@@ -363,10 +372,12 @@ rejected, so the only generative candidate left is Qwen-Image-Edit-2511 with the
     stronger per-body hints for hair and outfit; a per-body LoRA (judgement: Qwen-Edit is too large to train on
     either Mac).
 - **Hard-surface, man-made objects** (chests, furniture, machines).
-  - Method: Qwen-Image-Edit-2511 Q4_0 + Lightning, 8 steps, true CFG 1, on the A de-matte + colour-lock 4× base
-    (as the Qwen runs here used it); the v3 finish; then the repeated-part step for any repeats.
-  - About 6–8 min per chest-sized frame on the second Mac; the 59 Crash Site character and object frames would
-    take roughly 6–8 h there (judgement from the rate).
+  - Method: Qwen-Image-Edit-2511 Q4_0 + Lightning, 8 steps, true CFG 1; the v3 finish; then the repeated-part
+    step for any repeats. Input: the ring de-matted on light materials only, as the owner's fix-2 rule asks.
+    The Qwen chest here used the full de-matte base instead; the light-only input is not yet run with Qwen.
+  - About 6–8 min per chest-sized frame on the second Mac. For scale only: the 59 distinct Crash Site character
+    and object frames of ARC-RES-038 would be roughly 6–8 h at that rate; the object frames this method covers
+    are fewer (judgement from the rate).
   - Invented plank lines remain a semantic error; such frames should carry both versions (generation and A) in
     the pack for the ARC-RENDER-015 review.
 - **Natural objects** (trees, bushes, rocks): **open.** klein gained the most on the tree (detail 6.1 → 21.3) but
@@ -416,21 +427,26 @@ them locally. Not legal advice.
 ## Not verified / open
 
 - **Animation consistency is unsolved.** Per-frame klein and klein with a reference frame both flicker
-  (27–38 at 1×); Qwen was not run on the walk.
+  (26–38 at 1×); Qwen was not run on the walk.
 - **The zoom-to-physical-pixel mapping** is inferred from screenshots, not measured in the viewer.
-- **LoRA training for klein-4B or Qwen-Edit was not attempted.** Judgement: a klein-4B LoRA with the text encoder
-  precomputed might fit 24 GiB; Qwen-Edit (20B) will not train on either Mac.
+- **LoRA training for Qwen-Edit was not attempted.** Judgement: Qwen-Edit (20B) will not train on either Mac. (A
+  klein-4B LoRA might have fit 24 GiB, but klein is rejected.)
 - Qwen was not run on the tree, the cave walls, the walk or with a reference image. The Lightning settings
   (8 steps, true CFG 1) were not swept, and the 4-step file was not tried.
+- The Qwen and klein chests had different inputs (full de-matte against light-only de-matte); the recommended
+  light-only input was not run with Qwen.
+- The 20-step Qwen chest ran only on the main Mac, so its 57 min against 8 min for Lightning is a cross-machine
+  comparison. Several main-Mac numbers (the Qwen chest's v3 metrics among them) rest on runs whose outputs were
+  removed with the models; only their recorded metrics remain.
 - **The repeated-part step is shown on one object** with one colour-rule material mask. Its generalisation to
   planks, rivets, windows, grilles, wheels and facades is a proposal.
 - **The own-silhouette alpha fails the pack's soft alpha check for characters.** The heroine's IoU is 0.90–0.92
-  with klein and 0.83–0.84 with Qwen against `minIoUPermille` 937 (the ARC-RES-038 walk minimum was 937). Packing such frames needs a lower
-  threshold for redraws or a model that keeps the silhouette.
+  with klein and 0.83–0.84 with Qwen against `minIoUPermille` 937 (the ARC-RES-038 walk minimum was 937).
+  Packing such frames needs a lower threshold for redraws or a model that keeps the silhouette.
 - The terrain context fallback was not run. Terrain metrics are proxies on 9 chunks of one map.
 - Seeds are fixed. MPS output is not bit-exact across M1 and M4; the second Mac matched the chest to the
   reported precision only.
-- All outputs, sheets, GIFs, weights and the harness are only in the owners' ignored `local/` directories.
+- All outputs, sheets, GIFs, weights and the harness are only in the owner's ignored `local/` directories.
 
 Provenance: frames from this repository's own decoder and Area code on the owner's installations; models and
 tools used as external programs and libraries; no CE source used.
