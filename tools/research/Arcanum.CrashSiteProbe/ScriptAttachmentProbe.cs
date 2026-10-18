@@ -10,8 +10,8 @@ namespace Arcanum.CrashSiteProbe;
 // (sector objects, mobiles, game-generated aggregates, tile and sector attachments,
 // prototypes, terrain templates), a lenient scan of every DLG for writes of given global
 // flags (including the files the strict DLG reader refuses), and what the call-ex actions
-// reachable from given root scripts run. Independently written from the pinned CE locators
-// cited in docs/research/virgil-script-attachments.md; no CE code or structure is reused.
+// reachable from given root scripts run. Independently written from the source locators
+// cited in docs/research/virgil-script-attachments.md; no code or structure is reused.
 // Only numbers, booleans, file names of the module's own map folders and SHA-256 digests
 // leave the probe; MES and DLG text stays in memory.
 internal static partial class Program

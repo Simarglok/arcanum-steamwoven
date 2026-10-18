@@ -174,7 +174,7 @@ reported:
 
 ```text
 input module_bytes=355938305 module_sha256=8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f resource_bytes=147991122 resource_sha256=4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d
-database_path_profile=ce-non-windows-macos ascii_lowercase=true backslash_to_slash=true
+database_path_profile=non-windows-macos ascii_lowercase=true backslash_to_slash=true
 lookup tables tile_categories=31,6,2,13 facade_entries=373
 module sector_ordinal=463 decoded_bytes=47291 tiles=4096
 resolution tile_cells=3033 facade_cells=1063 unique_tile_ids=284 unique_facade_ids=757 source_candidates=1 tile_unresolved_cells=0 facade_unresolved_cells=0

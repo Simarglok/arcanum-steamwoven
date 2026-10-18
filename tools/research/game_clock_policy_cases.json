@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "policy": "steamwoven-normalized-clock-v1",
-  "source_worksheet": "ce-a7ff41b-source-observation-v1",
+  "source_worksheet": "source-observation-v1",
   "profiles": {
-    "A": {"ClockSchemaVersion":1,"PolicyId":"steamwoven-normalized-clock-v1","SourceRevision":"a7ff41b300ef712f0e7d088183a3d08957110cdd","SourceDataSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","StartupResourceSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","StartYear":1885,"StartHour":15},
-    "B": {"ClockSchemaVersion":1,"PolicyId":"steamwoven-normalized-clock-v1","SourceRevision":"a7ff41b300ef712f0e7d088183a3d08957110cdd","SourceDataSha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","StartupResourceSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","StartYear":1885,"StartHour":15}
+    "A": {"ClockSchemaVersion":1,"PolicyId":"steamwoven-normalized-clock-v1","SourceRevision":"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52","SourceDataSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","StartupResourceSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","StartYear":1885,"StartHour":15},
+    "B": {"ClockSchemaVersion":1,"PolicyId":"steamwoven-normalized-clock-v1","SourceRevision":"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52","SourceDataSha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","StartupResourceSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","StartYear":1885,"StartHour":15}
   },
   "cases": [
     {"id":"boundary-dawn-before","kind":"normalized","class":"Proposal","requirement":"AC6","reference":"P1","input":[21599999,1885],"expected":[0,21599999,5,59,59,1,1,1885,false]},

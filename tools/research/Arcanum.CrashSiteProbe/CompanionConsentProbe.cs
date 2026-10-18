@@ -9,7 +9,7 @@ namespace Arcanum.CrashSiteProbe;
 // ARC-RES-026 research only: the inputs of the follow consent check for Virgil at
 // T0 (his AI-data row, level, alignment, wait index, reaction base, flags and
 // effects) and the operands of every JO/UW in his DLG. Independently authored from
-// the pinned CE locators cited in docs/research/virgil-follow-consent.md; no CE
+// the source locators cited in docs/research/virgil-follow-consent.md; no
 // code or structure is reused. No consent evaluator, no party state. Only numbers,
 // booleans, two-letter operation codes and SHA-256 digests leave the probe; MES and
 // DLG text stays in memory.
