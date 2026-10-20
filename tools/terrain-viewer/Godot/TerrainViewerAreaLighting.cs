@@ -19,7 +19,7 @@ public partial class TerrainViewerApp
     private AreaAmbientDriver? _areaAmbient;
     // ARC-WORLD-039: the event world the clock's pump asks; it reads the viewer's current combat and conversation hosts.
     private AreaEventWorld? _areaEventWorld;
-    private AreaEventWorld AreaEvents => _areaEventWorld ??= new AreaEventWorld(() => _combatHost, () => _conversationHost);
+    private AreaEventWorld AreaEvents => _areaEventWorld ??= new AreaEventWorld(() => _combatHost, () => _conversationHost, VisitorCallHost);
 
     private void StartAreaAmbient(AreaLoadResult area)
     {

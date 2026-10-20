@@ -26,7 +26,7 @@ public partial class TerrainViewerApp
     /// <summary>Rebuilds the companions of the shown map from the session (placement and standing), at the PC's time.</summary>
     private void BindAreaCompanions()
     {
-        _areaCompanions = null;
+        _areaCompanions = null; _unbodiedVisitors = [];
         if (_areaSession is not { } session || _conversationHost is not { PartyWired: true } || _worldActor.Session is not AreaGridSession grid) return;
         // ARC-WORLD-037: in map mode only the NPCs the party has touched move as companions (following, waiting, or recorded
         // elsewhere than their T0 cell); every other speaker stays its T0 body until it joins.
@@ -35,13 +35,20 @@ public partial class TerrainViewerApp
             : _companionTemplates.Where(t => CompanionIncluded(session, t) && !SpeakerDead(t.Speaker)).ToArray();
         _areaCompanions = AreaCompanionGroup.Create(templates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time, grid.Timing);
         if (_readyMapName is not null) AdoptTravellers(_areaCompanions);
+        // ARC-WORLD-048: a companion recorded here without a body kept in this run (after a quick load) cannot be talked to here.
+        if (_readyMapName is not null) _unbodiedVisitors = AreaVisitors.Unbodied(session, new(CurrentAreaMap), _companionTemplates,
+            world => grid.Chart.Contains(grid.Chart.ToChart(new(world.X, world.Y))));
+        foreach (var entity in _unbodiedVisitors) GD.Print("ARC-WORLD-048 visitor not talkable entity=" + entity + " reason=no body kept this run");
         foreach (var skipped in _areaCompanions.Skipped) GD.Print("ARC-WORLD-016 companion skipped " + skipped);
         GD.Print("ARC-WORLD-016 companions bound " + System.Text.Json.JsonSerializer.Serialize(_areaCompanions.Companions.Select(c => new {
             c.Speaker.ScriptId, Standing = c.Standing.ToString(), Cell = grid.Chart.ToWorld(c.Grid.State.CommittedCell), Visiting = c.Template.Home.RuntimeMap != CurrentAreaMap }).ToArray())
             + " map=" + CurrentAreaMap + " absent=" + _areaCompanions.Absent.Count);
     }
 
-    private void UnbindAreaCompanions() { _areaCompanions = null; _companionNotice = null; }
+    private void UnbindAreaCompanions() { _areaCompanions = null; _companionNotice = null; _unbodiedVisitors = []; }
+
+    // ARC-WORLD-048: companions recorded on the shown map that this run kept no body for (AreaVisitors.Unbodied).
+    private IReadOnlyList<string> _unbodiedVisitors = [];
 
     // ARC-WORLD-037: companions on any map (--area-map). Their follow facts come from the map's own data (AreaCompanionData:
     // the AI parameter table and the effect tables); a companion that follows the PC to another map goes with it, and its
@@ -164,7 +171,8 @@ public partial class TerrainViewerApp
     {
         if (_conversationHost is not { PartyWired: true }) return "";
         var text = _areaCompanions is { } group ? group.Status() : "companions: none";
-        return " | " + text + (_companionNotice is { } notice ? " | " + notice : "");
+        var unbodied = _unbodiedVisitors.Count == 0 ? "" : " | not talkable here (no body kept this run): " + string.Join(", ", _unbodiedVisitors);
+        return " | " + text + unbodied + (_companionNotice is { } notice ? " | " + notice : "");
     }
 
     // Native observation (ARC-WORLD-016) on the exterior: Virgil joins through his own dialog and the session party

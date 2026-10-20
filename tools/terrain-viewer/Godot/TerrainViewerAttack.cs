@@ -277,8 +277,9 @@ public partial class TerrainViewerApp
     /// </summary>
     private void SyncAreaAwards()
     {
-        if (_conversationHost?.State.TakeAwards() is not { Count: > 0 } awards) return;
-        foreach (var award in awards) LevelAreaFollowers(award);
+        // ARC-WORLD-048: a visitor's talk queues its awards on its own host.
+        foreach (var host in TalkHosts().ToArray())
+        foreach (var award in host.State.TakeAwards()) LevelAreaFollowers(award);
     }
 
     private void LevelAreaFollowers(SessionExperienceAward? award)

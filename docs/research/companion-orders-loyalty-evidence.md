@@ -233,7 +233,8 @@ its requirements. Codes were checked unused on 2026-10-21.
   ever hit a refusal: needs an observation in the running game (F4).
 - The dialog-file override of generated lines (0x418870, entry 11,999 + hundreds)
   and the three interface callbacks after a level-up were not traced.
-- Whether a companion's own dialog or scripts read the map it stands on (OL33).
+- Whether a companion's own dialog or scripts read the map it stands on (OL33). ARC-WORLD-048 runs a visiting companion's
+  dialog script on its home-map slot, with the same state as at home (a project choice until this is read).
 - The multiplayer phase of the broadcast (join, disband, follow other) is out of
   scope.
 
