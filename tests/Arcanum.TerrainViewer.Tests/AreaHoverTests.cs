@@ -130,11 +130,9 @@ public sealed class AreaHoverTests
         var actor = new CellCoord(0, 0);
         Assert.AreEqual(AreaHoverAction.Walk, AreaHover.Ground(steps, actor, actor), "the actor's own cell");
         Assert.AreEqual(AreaHoverAction.Walk, AreaHover.Ground(steps, actor, new(32, 0)), "at the axis reach");
-        Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(steps, actor, new(33, 0)), "beyond the axis reach: ROUTE_TARGET_OUT_OF_RANGE");
+        Assert.AreEqual(AreaHoverAction.Walk, AreaHover.Ground(steps, actor, new(40, 0)), "beyond the axis reach: a corridor (ARC-WORLD-042)");
         Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(steps, actor, new(0, 3)), "outside the area: ROUTE_TARGET_OUTSIDE_AREA");
         Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(steps, new(0, 9), new(1, 0)), "actor outside: ROUTE_SOURCE_OUTSIDE_AREA");
-        Assert.AreEqual(AreaHoverAction.Walk, AreaHover.Ground(steps, actor, new(5, 1), new RouteLimits(axisDistance: 5)));
-        Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(steps, actor, new(6, 1), new RouteLimits(axisDistance: 5)), "the follower's limits apply");
         Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(new Steps(cells, []), actor, new(3, 0)), "no entry: ROUTE_NOT_FOUND pre-check");
     }
 

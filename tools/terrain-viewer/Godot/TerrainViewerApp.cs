@@ -117,8 +117,8 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip) narrows a
-                        // map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all run.
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, walk) narrows a
+                        // map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but walk run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
@@ -136,6 +136,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && Stage("roundtrip")) await RunAreaMapRoundTripSmokeAsync();
                         // ARC-RENDER-024: last on a window map, as the window it ends on holds no exit to use afterwards.
                         if (_readyMapName is not null && Stage("stream")) await RunAreaMapStreamSmokeAsync();
+                        // ARC-WORLD-042: only when named, a long walk across the main map by its window route.
+                        if (_readyMapName is not null && only?.Contains("walk") == true) await RunAreaMapWalkSmokeAsync();
                         GetTree().Quit(0);
                     }
                     else await RunNativeSmokeAsync(result);

@@ -111,6 +111,55 @@ RouteDrive Drive(MovementState state, SimulationTime target, Func<SimulationTime
   at most 1,024 sub-advances per call, and returns every `MovementResult` in order for
   presentation.
 
+## Corridors beyond the local reach (ARC-WORLD-042)
+
+`RoutePlanner` stays bounded (32 cells per axis, a 64-cell window, 4,096 expansions). A goal the source holds that the
+local planner refuses for its reach (`ROUTE_TARGET_OUT_OF_RANGE`), its window (`ROUTE_WINDOW_EXHAUSTED`) or its
+expansions (`ROUTE_EXPANSION_LIMIT`) is followed along a `RouteCorridor` instead:
+
+- `RouteCorridor.Plan(source, from, target, limits)` searches every cell the source holds, eight directions, with the
+  local planner's costs (10 a step, the source's extra cost, 1 a turn) and a Chebyshev estimate, within
+  `RouteCorridorLimits` (65,536 expansions by default, at most 262,144; a 3×3-sector window has 36,864 cells). Its
+  cells are cut into waypoints at most 24 steps apart (`WaypointSteps`, at most 24), each one within the local
+  planner's reach of the one before, the last one the corridor's end.
+- Outcomes: `Found` (`ROUTE_CORRIDOR`, the end is the target); `Partial` when no route reaches the target within the
+  search: the end is the reached cell nearest it (Chebyshev, then cost), with `ROUTE_CORRIDOR_PARTIAL` (target held,
+  not reached), `ROUTE_TARGET_OUTSIDE_AREA` (the source does not hold it) or `ROUTE_CORRIDOR_EXPANSION_LIMIT`;
+  `NoRoute` when no cell was reached; `Refused` (`ROUTE_SOURCE_OUTSIDE_AREA`).
+- The follower builds the corridor once per goal and walks it from waypoint to waypoint with the local planner (the
+  same segments, step boundaries and denials as before). At the end of a partial corridor it stops with
+  `ROUTE_PARTIAL`. A goal outside the source is still refused (`ROUTE_TARGET_OUTSIDE_AREA`, no step): a host heads for
+  one through its own partial corridor, as the streamed main map does ([map mode](../rendering/area-map-mode.md#the-main-world-map-arc-render-024)).
+- Tests: `tests/Arcanum.Simulation.Tests/Navigation/RouteCorridorTests.cs` (a maze longer than the local reach cut into
+  waypoints, partial and refused corridors and the limits, the follower walking the maze through its gaps, a walled-in
+  goal beyond reach stopping `ROUTE_PARTIAL`, a goal outside the source refused).
+
+## World routes across windows (ARC-WORLD-042)
+
+A map too large to load whole (the main world map, streamed by window) has no single source to search. Its walking
+route is `Arcanum.Data.Traversal.AreaWindowRoute.Plan(stack, catalog, mapName, from, to, limits, token)`: an
+eight-direction search of one cell per step (Chebyshev estimate) over the
+[window step evidence](area-step-assessment.md#windows-arc-data-034), each step assessed by a window whose core holds
+both of its cells, loaded on demand around the step's sector and kept in a bounded cache. A step is taken only when
+the window assesses it `Open`. `AreaWindowRouteLimits`: window loads (256 by default, at most 1,024; a reload after
+eviction counts again), expansions (4,000,000, at most 8,000,000) and resident windows (24, at most 64, least recently
+used dropped first), so memory does not grow with the route. Statuses: `Found` (`ROUTE_WINDOWS`, cells from start to
+goal), `NoRoute`, `LimitExceeded` (`ROUTE_WINDOW_LIMIT`, `ROUTE_EXPANSION_LIMIT`) and `Refused`
+(`ROUTE_START_NOT_ADMITTED`, `ROUTE_WINDOW_EVIDENCE_<code>` when a window's evidence cannot be built). It is a planning
+aid for long walks (the native walk smoke steers by it), not the original's path search.
+
+- A goal carried across a window move of the streamed main map: `AreaMapGoalHandOff.Resume` (Terrain Viewer Core)
+  keeps a goal the new window holds; a goal outside it is approached through the end of a partial corridor over the new
+  window and handed on to the next move (`AreaMapGoalHandOffTests`).
+- The native walk smoke walks the route above in the viewer with no seam
+  ([walk smoke](../rendering/area-map-mode.md#the-main-world-map-arc-render-024)).
+
+- On the installed original (development Mac, 2026-10-21, `AreaWindowStepRealDataTests`): the new-game start
+  (92958, 82592) to the middle of the Shrouded Hills town sector (90208, 84128) is found: 3,106 cells (the straight
+  line is 2,750) through 88 sectors, off the plateau south first, with 49 window loads and 143,401 expansions in 170 s.
+- Synthetic: `AreaWindowStepTests` (the 3×3-sector fixture map: a route across sectors through windows loaded on
+  demand, one resident window, the window-load and expansion limits, a start off the map, a goal off it).
+
 ## Crash Site core adapter
 
 `AreaRouteSource` (Terrain Viewer Core) answers steps in `AreaGridSession` chart
@@ -201,5 +250,6 @@ everything else is synthetic and local software checks. No running,
 NPC/object goals, doors, windows, traps or state after T0 other than the live PC and companions of
 [ARC-WORLD-016](companion-follow-runtime.md#live-actors-over-t0-evidence-terrain-viewer-core),
 movement speed or original path choice. Unknown or unsupported evidence is
-reported, not explored. A target more than 32 cells away on an axis is refused,
-not approached.
+reported, not explored. A goal beyond the local planner's 32-cell reach is followed along a corridor over the
+source (ARC-WORLD-042); on the main map, a goal outside the shown window is approached by window moves. The corridor
+and the window route are this project's searches (shortest by their costs), not the original's path choice.

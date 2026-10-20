@@ -506,7 +506,11 @@ map.
   to use, talk or pick up (it runs to its end first), combat mode, or an open dialog, inventory, sheet, logbook or palette;
   no move starts in any of these either. The publication: the game session is carried as on a transfer (`MapTransferHandoff`, kind `Stream`), the
   companions' cells are written to the session first and they are bound again where they stand, the actor stands on
-  the cell it reached meanwhile, and a walk keeps its goal when the new window holds it. Music and ambient sound go on
+  the cell it reached meanwhile, and a walk keeps its goal when the new window holds it; when it does not (the walk bent
+away from the goal and the window followed, ARC-WORLD-042), the walk heads for the end of a partial
+[corridor](../world/click-route-runtime.md#corridors-beyond-the-local-reach-arc-world-042) toward the goal over the new
+window (its cell nearest the goal) and the goal is handed on to each later move until a window holds it; a new click
+replaces it. A click beyond the route follower's 32-cell reach is walked along a corridor over the window. Music and ambient sound go on
   (no map change). The margin keeps a walk along a border, or a path that bends back over it, from reloading the
   window at every step; the actor always has at least 48 loaded cells ahead. The original keeps no fixed window: its
   sector cache holds the 16 most recently used sectors and a teleport pre-caches the 3×3 around its target
@@ -521,8 +525,8 @@ map.
 - **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
   Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
   (92913, 82598). Every listed map is a destination.
-- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream`
-  narrows a run to those stages), in this order: the map battery at the new-game start (the Crash Site window: walk,
+- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,walk`
+  narrows a run to those stages; without it all but `walk` run), in this order: the map battery at the new-game start (the Crash Site window: walk,
   logbook, sound, dialog with Virgil, who then follows); the resource sweep and reload; the companion follow smoke and
   the map transfer smoke (exit to another map, jump point, F7/F8); `ARC-RENDER-024 native-smoke round-trip PASS`: into
   the cave and back onto the main map by the two exits; and last `ARC-RENDER-024 native-smoke stream PASS`: walks by the
@@ -532,6 +536,18 @@ map.
   wilderness sector (1384, 239). The smoke counts only the plan's own commands in the resource sweep (a companion
   visiting from another window is drawn from its kept body) and picks, for the follow smoke, a free NPC that can walk
   6 cells.
+- **Walk smoke** (ARC-WORLD-042; the stage `walk`, run only when named: `ARC_AREA_MAP_SMOKE_ONLY=walk`, on the main
+  map from the new-game start): plans the walk to the middle of the Shrouded Hills town sector (90208, 84128) over the
+  map's windows in the background ([window route](../world/click-route-runtime.md#world-routes-across-windows-arc-world-042)),
+  then walks it with the production route follower, which it gives the farthest route cell of the shown window each time
+  the follower stops or the window moves, while the window streams. A smoke frame is one second of walk; while a window
+  loads, one frame a second of wall time. It requires no seam: the actor's cell changes by no more than a second's walk
+  a frame (8 steps), every window move publishes the actor on the cell it stood on, inside the new core, drawn, with the
+  session carried, and no move fails or is given up. `ARC-WORLD-042 native-smoke walk PASS` on the owner's Mac
+  (2026-10-21): route planned in 207 s (3,106 cells, 88 sectors, 49 windows, 143,401 expansions), walked in 2,328
+  frames with at most 2 steps a frame, 72 window moves (loads 5.1 to 9.1 s, median 7.0 s), each resumed with its goal
+  held by the new window (the far-goal hand-over was not needed on this walk; unit tests cover it), at least 179 visible
+  bodies after each move, managed heap 254 MB before and 298 MB after (window contents, no growth with the route).
 - **Memory.** One window holds 1,300 to 4,900 visuals and 10 to 26 MB of CPU frames; after a full collection the
   managed heap of a run that moved the window seven times followed the window's contents (368 to 435 MB), with no
   growth from move to move; the resource stage's reload after the map battery leaves the heap 5.5 MB smaller (since
@@ -543,7 +559,8 @@ in progress ends on its committed cell); saved sector differences (`.dif`) are n
 (the original's world-map screen) is not implemented; a companion more than one sector from the actor when the window
 moves is bound only if the new window holds its cell; on the same map, an F8 save or a jump point or teleport whose cell
 lies outside the shown window is refused (the cell is not admitted in this window; another map's save or exit opens the
-window around it); routes reach 32 cells per axis (ARC-WORLD-042). Original parity NOT_VERIFIED.
+window around it); a click is a goal inside the shown window (a goal farther away is reached only by a host that plans
+it, as the walk smoke does with the window route). Original parity NOT_VERIFIED.
 
 ## Not yet
 

@@ -84,6 +84,28 @@ public sealed class AreaWindowStepRealDataTests
         Assert.AreEqual(generated > 0, steps.InputIdentity.Sources.Any(s => s.Role.StartsWith("area-terraintemplate-", StringComparison.Ordinal)), what);
     }
 
+    [TestMethod, TestCategory("RealData")]
+    public void A_window_route_walks_from_the_crash_site_to_shrouded_hills()
+    {
+        // ARC-WORLD-042: the new-game start (the map-list start tile) to the middle of the Shrouded Hills town sector
+        // (1409, 1314), through the generated wilderness south and west of the Crash Site plateau.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DAT_ROOT"))) Assert.Inconclusive("DAT_ROOT is required.");
+        using var stack = Stack();
+        var catalog = WorldCatalog.Open(stack);
+        AreaStepCell from = new(92958, 82592), to = new(1409 * 64 + 32, 1314 * 64 + 32);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var route = AreaWindowRoute.Plan(stack, catalog, MainMap, from, to);
+        var sectors = route.Cells.Select(c => (c.X >> 6, c.Y >> 6)).Distinct().Count();
+        Console.WriteLine($"ARC-WORLD-042 route {route.Status} {route.Detail} cells={route.Cells.Count} sectors={sectors} windows={route.WindowLoads} " +
+            $"expansions={route.Expansions} seconds={clock.Elapsed.TotalSeconds:F0}");
+        Assert.AreEqual(AreaWindowRouteStatus.Found, route.Status, route.Detail);
+        Assert.AreEqual((from, to), (route.Cells[0], route.Cells[^1]));
+        for (var i = 1; i < route.Cells.Count; i++)
+            Assert.AreEqual(1L, Math.Max(Math.Abs(route.Cells[i].X - route.Cells[i - 1].X), Math.Abs(route.Cells[i].Y - route.Cells[i - 1].Y)), $"step {i}");
+        // Far longer than the straight line (2,750 cells): the way off the plateau goes south first.
+        Assert.IsTrue(route.Cells.Count > 2751 && sectors > 40, $"cells {route.Cells.Count} sectors {sectors}");
+    }
+
     private static string Terrain(AreaStepTerrainEvidence? e) => e is null ? "-" : $"{e.RawArt}|{e.Coverage}|{e.Disposition}|{e.Source}|{e.ReasonCode}";
 
     private static IEnumerable<string> Evaluations(AreaStepSnapshot s) =>

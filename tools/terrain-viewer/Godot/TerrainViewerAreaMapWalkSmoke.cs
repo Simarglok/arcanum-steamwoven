@@ -1,0 +1,134 @@
+using Arcanum.Data.Area;
+using Arcanum.Data.Traversal;
+using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Navigation;
+using Arcanum.TerrainViewer.Core;
+using Godot;
+
+namespace Arcanum.TerrainViewer;
+
+// ARC-WORLD-042 native observation (the "walk" map-smoke stage, run only when named): from the new-game start on the main
+// map, the walk to the middle of the Shrouded Hills town sector (1409, 1314) through the generated wilderness. The route is
+// planned over the map's windows in the background (AreaWindowRoute); the walk is the production one: the route follower,
+// given the farthest route cell of the shown window each time it stops or the window moves (its corridor carries it
+// beyond its own 32-cell reach), and the window streaming as the actor goes. A smoke frame is one second of walk; while a
+// window loads, one frame a second of wall time, so the actor walks at its own speed meanwhile, as in play. No seam: the
+// actor's cell changes by no more than a second's walk a frame, a window move publishes it on the cell it stood on and
+// every window drawn holds it in its core.
+public partial class TerrainViewerApp
+{
+    private const string WalkMap = "Arcanum1-024-fixed";
+    private static readonly AreaStepCell WalkGoal = new(1409 * 64 + 32, 1314 * 64 + 32);
+    // A second's walk is at most 6 steps (a run, ARC-WORLD-020); 8 leaves a margin.
+    private const int WalkFrameLimit = 20000, WalkStallFrames = 300, WalkStepsPerFrame = 8;
+
+    private async Task RunAreaMapWalkSmokeAsync()
+    {
+        static void Require(bool value, string code)
+        {
+            if (value) return;
+            var space = code.IndexOf(' ');
+            if (space > 0) GD.Print("ARC-WORLD-042 smoke detail " + code);
+            throw new InvalidOperationException("AREA_WALK_SMOKE_" + (space > 0 ? code[..space] : code));
+        }
+        if (_mapWindowCentre is null || !SameMapName(_readyMapName, WalkMap)) { GD.Print($"ARC-WORLD-042 native-smoke walk NONE (map {_readyMapName})"); return; }
+        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
+        _worldFocusSimulationForSelfTest = true;
+        try
+        {
+            _worldFocused = true; SelectSimulatedPadForSelfTest(); _mapStreamSmokeActive = true;
+            var carried = _areaSession;
+            var start = (AreaGridSession)_worldActor.Session!;
+            AreaSmokePlace(new AreaMapRuntime(_readyArea!.Snapshot, start.Snapshot, start.Chart), start.State.CommittedCell);
+            var placed = (AreaGridSession)_worldActor.Session!;
+            var from = placed.Chart.ToWorld(placed.State.CommittedCell);
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var arguments = _arguments!;
+            var route = await Task.Run(() => AreaMapWalk.Plan(arguments, from, WalkGoal, default));
+            var planSeconds = clock.Elapsed.TotalSeconds;
+            GD.Print($"ARC-WORLD-042 walk route {route.Status} {route.Detail} cells={route.Cells.Count} windows={route.WindowLoads} expansions={route.Expansions} seconds={planSeconds:F0}");
+            Require(route.Status == AreaWindowRouteStatus.Found, "NO_ROUTE " + route.Detail);
+            var path = route.Cells;
+            var index = new Dictionary<AreaStepCell, int>(path.Count);
+            for (var i = 0; i < path.Count; i++) index.TryAdd(path[i], i);
+            _mapStreamLog.Clear();
+            var managedBefore = GC.GetTotalMemory(true);
+            var reached = 0; AreaGridSession? steered = null; var retargets = 0; var lastProgress = 0; var frames = 0;
+            var previous = from; var drawnMoves = 0; var minVisible = int.MaxValue; var maxLoad = 0L; var maxSteps = 0L;
+            // Each frame: on a new window or a stopped walk, the follower heads for the farthest route cell of the window that
+            // the route reaches without leaving it.
+            void Steer()
+            {
+                if (_worldActor.Session is not AreaGridSession walking || WorldRoute(walking) is not { } follower) return;
+                var here = walking.Chart.ToWorld(walking.State.CommittedCell);
+                if (follower.Status == RouteFollowStatus.Arrived && follower.Target is { } arrived && index.TryGetValue(walking.Chart.ToWorld(arrived), out var at) && at > reached)
+                { reached = at; lastProgress = frames; }
+                // The follower's own path may leave the route's cells (another path as short): progress is the route cell it
+                // stands on or the route cell it arrived at.
+                if (index.TryGetValue(here, out var on) && on > reached) { reached = on; lastProgress = frames; }
+                if (here == WalkGoal || ReferenceEquals(walking, steered) && follower.Status == RouteFollowStatus.Following) return;
+                bool Shown(int i) => walking.Chart.Contains(walking.Chart.ToChart(path[i]));
+                // The route's first cell inside the window from the progress on, then as far as the route stays inside it.
+                var first = reached;
+                while (first < path.Count - 1 && !Shown(first)) first++;
+                var next = first;
+                while (next + 1 < path.Count && Shown(next + 1)) next++;
+                steered = walking;
+                if (!Shown(next) || path[next] == here) return;
+                follower.SetTarget(walking.Chart.ToChart(path[next]), WorldTime); retargets++;
+            }
+            Steer();
+            Require(WorldRoute((AreaGridSession)_worldActor.Session!)?.Status == RouteFollowStatus.Following, "ROUTE_NOT_SET");
+            while (frames < WalkFrameLimit)
+            {
+                AreaSmokeFrame(); frames++; Steer();
+                var now = (AreaGridSession)_worldActor.Session!;
+                var cell = now.Chart.ToWorld(now.State.CommittedCell);
+                var steps = Math.Max(Math.Abs(cell.X - previous.X), Math.Abs(cell.Y - previous.Y));
+                Require(steps <= WalkStepsPerFrame, $"SEAM frame={frames} from={previous} to={cell}");
+                previous = cell; maxSteps = Math.Max(maxSteps, steps);
+                var moves = _mapStreamLog.Count;
+                if (MapStreamInFlight) await ToSignal(GetTree().CreateTimer(1.0), SceneTreeTimer.SignalName.Timeout);
+                else if (frames % 4 == 0) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(_readyMapName is not null && _mapStreamFailedAt is null, "WINDOW_NOT_LOADED " + _mapStreamStatus);
+                if (_mapStreamLog.Count > moves)
+                {
+                    // A window moved while no frame ran: it stands the actor on the cell it stood on, is drawn and holds it in
+                    // its core.
+                    var (_, to, actor, _, _, loadMs) = _mapStreamLog[^1];
+                    var shown = (AreaGridSession)_worldActor.Session!;
+                    Require(actor == cell && shown.Chart.ToWorld(shown.State.CommittedCell) == cell, $"SEAM_AT_MOVE {actor} {cell}");
+                    Require(Math.Abs(to.X - (cell.X >> 6)) <= 1 && Math.Abs(to.Y - (cell.Y >> 6)) <= 1, $"ACTOR_OUTSIDE_CORE {to} {cell}");
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    Require(_canvas!.AreaVisibleCount > 0, $"NOTHING_DRAWN move={_mapStreamLog.Count}");
+                    drawnMoves++; minVisible = Math.Min(minVisible, _canvas.AreaVisibleCount); maxLoad = Math.Max(maxLoad, loadMs);
+                }
+                if (!MapStreamInFlight && now.State.Phase == MovementPhase.Settled && cell == WalkGoal && ReferenceEquals(now, _worldActor.Session)) break;
+                Require(frames - lastProgress < WalkStallFrames, $"STALLED frame={frames} at={cell} reached={reached}/{path.Count - 1} route={_worldRouteDiagnostic} status={_mapStreamStatus}");
+            }
+            var end = (AreaGridSession)_worldActor.Session!;
+            var at = end.Chart.ToWorld(end.State.CommittedCell);
+            Require(at == WalkGoal, $"GOAL_NOT_REACHED frames={frames} at={at} reached={reached}/{path.Count - 1}");
+            foreach (var (fromCentre, to, _, _, session, _) in _mapStreamLog)
+            {
+                Require(to != fromCentre, "CENTRE");
+                Require(carried is null || ReferenceEquals(session, carried), "SESSION_NOT_CARRIED");
+            }
+            Require(carried is null || ReferenceEquals(_areaSession, carried), "SESSION_NOT_CARRIED");
+            Require(_mapStreamLog.Count >= 10 && drawnMoves == _mapStreamLog.Count, $"MOVES {_mapStreamLog.Count}");
+            var managedAfter = GC.GetTotalMemory(true);
+            GD.Print("ARC-WORLD-042 native-smoke walk PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Map = _readyMapName, From = from, To = WalkGoal, RouteCells = path.Count, RouteSectors = path.Select(c => (c.X >> 6, c.Y >> 6)).Distinct().Count(),
+                PlanWindows = route.WindowLoads, PlanExpansions = route.Expansions, PlanSeconds = Math.Round(planSeconds),
+                Frames = frames, MaxStepsPerFrame = maxSteps, Retargets = retargets, Moves = _mapStreamLog.Count, MaxLoadMs = maxLoad, MinVisible = minVisible,
+                Centre = new { _mapWindowCentre!.Value.X, _mapWindowCentre.Value.Y }, Session = _areaSession?.Version.Revision, Carried = carried is not null,
+                ManagedBefore = managedBefore, ManagedAfter = managedAfter }));
+        }
+        finally
+        {
+            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
+            _worldFocused = focused; RestoreWorldTestTime(testTime); _mapStreamSmokeActive = false;
+        }
+    }
+}
