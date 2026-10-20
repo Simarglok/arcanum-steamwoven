@@ -139,7 +139,8 @@ def _validate_v2_manifest(manifest: dict[str, Any], expected_tool: str) -> None:
             or any(not isinstance(preflight[key], int) or preflight[key] < 0
                    for key in ("outputBytes", "temporaryBytes", "reserveBytes", "requiredBytes", "observedFreeBytes"))
             or preflight.get("temporaryBasis") not in {"measured-low-water", "qualified-history-estimate", "fallback-two-times-output", "explicit-estimate"}
-            or preflight.get("outputBasis") not in {"accepted-measurement-plus-10-percent", "explicit-estimate"}
+            or preflight.get("outputBasis") not in {"accepted-measurement-plus-10-percent", "explicit-estimate",
+                                                    "first-export-owner-estimate"}
             or preflight["requiredBytes"] != preflight["outputBytes"] + preflight["temporaryBytes"] + preflight["reserveBytes"]
             or ("observation" not in budget and budget["temporaryLowWaterBytes"] != preflight["temporaryBytes"])):
         raise ValueError("v2 export preflight observation is invalid")

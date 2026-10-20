@@ -184,7 +184,17 @@ def command_builds(args: argparse.Namespace) -> None:
         destinations.update({f"build-cache-{index}": Path(path) for index, path in enumerate(args.write_root)})
         emit(retention.export_preflight(registry, args.tool, args.output_bytes, args.temporary_bytes,
              conf=conf, destinations=destinations,
-             estimate_manifest=config.regular_file(Path(args.estimate_manifest)) if args.estimate_manifest else None))
+             estimate_manifest=config.regular_file(Path(args.estimate_manifest)) if args.estimate_manifest else None,
+             first_export=args.first_export))
+    elif args.builds == "repair-registry":
+        # ARC-DEV-026: dry run by default; --apply rewrites only the registry and configuration records.
+        with config.registry_lock():
+            conf, registry = config.load_config(), config.load_registry()
+            report = retention.repair_registry(registry, conf, apply=args.apply)
+            if args.apply:
+                config.save_registry(registry)
+                config.save_config(conf)
+        emit(report)
     else:
         with config.registry_lock():
             registry = config.load_registry()
@@ -223,6 +233,8 @@ def parser() -> argparse.ArgumentParser:
     preflight = build_sub.add_parser("export-preflight"); preflight.add_argument("--tool", required=True, choices=manifests.SUPPORTED_TOOLS); preflight.add_argument("--output-bytes", type=int); preflight.add_argument("--temporary-bytes", type=int)
     preflight.add_argument("--root-id", required=True); preflight.add_argument("--temporary-root", required=True)
     preflight.add_argument("--estimate-manifest"); preflight.add_argument("--write-root", action="append", default=[])
+    preflight.add_argument("--first-export", action="store_true")
+    repair = build_sub.add_parser("repair-registry"); repair.add_argument("--apply", action="store_true")
     register = build_sub.add_parser("register-export"); register.add_argument("--tool", required=True, choices=manifests.SUPPORTED_TOOLS); register.add_argument("--candidate", required=True); register.add_argument("--manifest", required=True)
     builds.set_defaults(func=command_builds)
     return result
