@@ -495,7 +495,7 @@ public sealed class DialogConversationTests
     internal static DialogConversation Start(
         DlgDocument document, Ports ports, GlobalFlagOwner? owner, int entry = 10, int callerLine = 0,
         DialogPcGender gender = DialogPcGender.Male, int intelligence = 8, bool dumb = false, DialogConversationOptions? options = null,
-        World? world = null, int race = 0, IDialogPartyPort? party = null, IDialogInventoryPort? inventory = null) =>
+        World? world = null, int race = 0, IDialogPartyPort? party = null, IDialogInventoryPort? inventory = null, IDialogSkillPort? skills = null) =>
         DialogConversation.Start(document,
             new DialogConversationRequest(
                 new DialogNodeId(entry),
@@ -503,7 +503,7 @@ public sealed class DialogConversationTests
                 new DialogScriptLine(callerLine),
                 new DialogPcFacts(gender, intelligence, dumb, race),
                 new DialogSpeakerNames("Ada", "Bram")),
-            new DialogConversationPorts(ports, ports, owner, world, party, inventory), options);
+            new DialogConversationPorts(ports, ports, owner, world, party, inventory, Skills: skills), options);
 
     internal static GlobalFlagOwner Owner()
     {
