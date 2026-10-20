@@ -228,8 +228,10 @@ on it near the path's end, or a newly spotted trap lies on it (0x4270B0 → 0x42
 then a random 0..300 ms wait), or the step cannot start (0x42E9B0), their node 10
 charges 2 action points (0x433270) and then the plain walk (5) and the ranged
 approach (80) end the whole run, while the melee approach (61) pops back to its
-parent, which re-plans (EX20). A step whose action points cannot be paid ends the
-NPC's subturn (its action points become 0) and kills the run (0x430FC0, TB9).
+parent, which re-plans (EX20). A step the NPC cannot pay is refused by the step check (0x4B7790): the run is
+killed without an end step, its action points unchanged, and the unpaid cost stays
+pending (EX6). Only the consume inside 0x430FC0, reached after the check passed,
+zeroes the action points and ends the turn (TB9).
 
 <a id="casting-goal"></a>**The casting goal (26 or 82)** gets the caster up and
 unconcealed, charges 4 action points (0x429B50; when they cannot be paid the goal
@@ -444,7 +446,7 @@ within the range with a clear step and handle a missing path as above.
 | Action | Real time | Turn-based round (action points) |
 | --- | --- | --- |
 | start of any goal | gate passes | NPC: cost ≤ action points left, or fatigue above 35 % |
-| walked / run step | step animation time | 2 / 1 (run needs fatigue above 0, L9); checked before each step; a step it cannot pay sets the action points to 0, ends the subturn and kills the run |
+| walked / run step | step animation time | 2 / 1 (run needs fatigue above 0, L9); checked before each step; a step it cannot pay is refused by the step check: the run is killed without an end step, action points unchanged, the unpaid cost stays pending (EX6) |
 | blocked step (walk goals 5, 61, 80) | random 0..300 ms wait, then the walk gives up | 2 (node 10); then the run ends (5, 80) or the melee approach re-plans (61) |
 | attack | animation and pause (RT8); NPC's next attack at its next AI event | weapon cost at the attack's start; next attack from the subturn hook |
 | cast | casting animation | 4 at the casting goal's start |
