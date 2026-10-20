@@ -372,6 +372,10 @@ check, action-point or time cost and no experience.
 
 ### Item durability (FR-ITEM-011)
 
+Re-read for ARC-WORLD-053 by a second reader (F2, [ledger DU1–DU8](original-verification-ledger.md#item-durability-arc-world-053)): every row
+below agrees; the second reader added the price's final bounds (negative 0, exactly 1 is 2), that the unwield moves only items in wear
+slots and the item is dropped when it fails, and the repair table (training none 10, apprentice 5, expert 1, master 0; 5 for a broken item).
+
 - **Fields and formulas**: hp_pts (0x1B), hp_adj (0x1C) and hp_damage (0x1D)
   are ordinary saved object fields (an instance stores overrides). A
   non-critter's maximum is `pts + adj` (effects only for critters,
@@ -476,7 +480,7 @@ decided every row on 2026-10-20 ([owner decisions](#owner-decisions-2026-10-20))
 | TC7 | repair quote (0x578760) | Damage counts twice (sale price already × current / maximum, then × damage / maximum): a badly damaged item is nearly free to repair, the dearest is half damaged | Original (intent unknown) | **Decided** ([owner](#owner-decisions-2026-10-20)): switch. Steamwoven quotes from the undamaged sale price; Original keeps the double count; item durability slice |
 | TC8 | data: one schematic written prototype | Its schematic number is 0: reading registers a schematic 0 whose record reads all zeros and can never be built | Original (data) | **Decided** ([owner](#owner-decisions-2026-10-20)): switch, a recorded project improvement: Steamwoven refuses the registration and keeps the document; Original registers it; TECH-3 |
 | TC9 | use (0x462CC0), triggers (0x4CB830) | A broken item can still be used and its item spells fire | Original (intent unknown) | **Decided** ([owner](#owner-decisions-2026-10-20)): both follow the original (broken items still usable) |
-| TC10 | editor decrease (0x55F5F0, 0x55D940) → sell (0x589AF0), F2 | Selling a degree is not compared with the level-start snapshot (written to 0x64DF10, never read), unlike skills, tech skills and colleges, so degrees bought on earlier levels can be refunded | Original bug (if the button is reachable, O2) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes sell a degree only down to its value when the character window was opened; no switch; TECH-2 |
+| TC10 | editor decrease (0x55F5F0, 0x55D940) → sell (0x589AF0), F2 | Selling a degree is not compared with the editor-open snapshot, unlike skills, tech skills and colleges, so degrees bought on earlier levels could be refunded; the snapshot (0x64DEEC) is read only by the tech page's draw, which in the in-game editor hides the − button at it (ledger [CP2](original-verification-ledger.md#character-point-pool-arc-world-052); the 0x64DF10 named first is a per-player copy, never read) | Original bug (if the button is reachable, O2) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes sell a degree only down to its value when the character window was opened; no switch; TECH-2 |
 | TC11 | window init (0x56CD60), selection (0x56DB60), found by ARC-TECHNOLOGY-001 ([ledger](original-verification-ledger.md#schematic-data-arc-technology-001)) | The learned list has "count" (entries / 7) slots but is filled with every existing start without a bound and walked to the count; a start at 3600 or above counts past the eight-entry discipline table | Original bug (latent, out of bounds) | both fixed (owner rule of 2026-10-17): the schematic catalogue refuses such a file; the installed data has 56 starts for a count of 56 |
 
 ## Owner decisions (2026-10-20)
@@ -495,9 +499,11 @@ of the anomaly table above under D2; each is implemented by the slice named.
   executable's double count. Implemented in the item durability slice.
 - **TC10, no switch.** From the owner's play experience the original never lets a player take back a point invested
   earlier: choices can be undone only until the character window is closed. Both modes allow selling a degree only down
-  to the value it had when the character window was opened (the snapshot the executable writes at 0x64DF10, as for
-  skills and colleges). The reading's missing comparison is classified as not reachable in play by the owner's
-  observation (an owner report, not a game trace; O2 is answered by it). Implemented in TECH-2.
+  to the value it had when the character window was opened (the snapshot the executable takes at 0x64DEEC when the editor opens, as for
+  skills and colleges; ledger CP1). The reading's missing comparison is classified as not reachable in play by the owner's
+  observation (an owner report, not a game trace; O2 is answered by it), and ARC-WORLD-052 found why: the in-game editor
+  does not draw the − button at the snapshot (ledger CP2). The floor is in the shared point pool (ARC-WORLD-052); the
+  degree lane is TECH-2's.
 - **The other rows, as proposed** (the owner approved the remaining proposals the same day):
   - **TC2, both fixed.** Script action 129 opens the window with (PC, PC), or (NPC, its PC leader) and does nothing
     without a leader (TECH-5).
@@ -540,7 +546,8 @@ button state.
   unused in the data.
 - **O2** Whether the editor's "−" button is reachable for a degree bought on an
   earlier level (TC10): answered by the owner's play experience (not reachable;
-  [owner decisions](#owner-decisions-2026-10-20)), not by a game trace.
+  [owner decisions](#owner-decisions-2026-10-20)), not by a game trace; ARC-WORLD-052 read the reason, the tech page's
+  draw hides the button at the editor-open degree (ledger CP2).
 - **O3** The 5 found schematics without a written prototype: placed on maps or
   given by scripts (map instances and scripts were not counted).
 - **O4** Answered by a follow-up count: no record lists the same prototype in
@@ -573,8 +580,9 @@ button state.
   files; the [rule modes](../world/rule-modes.md) registry takes switches.
 
 Missing: degrees as live session state with expertise, the
-found list, the window, assembly, item durability, cell payment (schematic data:
-ARC-TECHNOLOGY-001, [schematics](../formats/schematics.md)).
+found list, the window, assembly, cell payment (schematic data:
+ARC-TECHNOLOGY-001, [schematics](../formats/schematics.md); item durability: ARC-WORLD-053,
+[runtime](../world/item-durability-runtime.md)).
 
 ## Proposed implementation slices (project policy, not accepted)
 
@@ -635,7 +643,7 @@ this document start at F1 or F2.
    item-spell items is lifted with the shared item trigger slice, which the
    magic research owns).
 
-**Item durability** (FR-ITEM-011) is one more slice, owned by this research and
+**Item durability** (FR-ITEM-011; done: ARC-WORLD-053, [runtime](../world/item-durability-runtime.md), ledger DU1–DU8) is one more slice, owned by this research and
 needed by ARC-SKILLS-011 (Repair). Its type is `WORLD` (item state in the
 session runtime; the next free `WORLD` number at task creation): hp fields per item in the session (prototype values with
 instance overrides), maximum and current, the damage setter, the two-step
