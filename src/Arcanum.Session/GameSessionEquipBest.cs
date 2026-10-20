@@ -143,6 +143,8 @@ public sealed partial class GameSessionOwner
                     continue;
                 }
                 if (!ValidWearable(facts) || facts.Weight is < 0 or > EquipmentChoice.MaxWeight) throw new Refused(GameSessionFailure.InvalidItem);
+                // The session's record of the item's condition (ARC-WORLD-053) wins over the host's data.
+                facts = owner.Conditioned(entity, facts);
                 if (facts.Kind != kind || !EquipmentDomain.Matches(kind.Type, facts.Item.Kind)) throw new Refused(GameSessionFailure.InventoryMismatch);
                 if (owner._equipment.SlotOf(entity) is { } slot && owner._equipment.Worn[slot].Item != facts.Item) throw new Refused(GameSessionFailure.InventoryMismatch);
                 Facts[entity] = facts;
