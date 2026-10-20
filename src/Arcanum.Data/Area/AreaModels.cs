@@ -11,7 +11,9 @@ public readonly record struct AreaInputKey(AreaSourceRole Role, int Number = 0);
 public sealed record AreaInputIdentity(AreaInputKey Key, long Length, string Sha256);
 public enum AreaScope { Core, Context, Outside, Unknown }
 public enum AreaSourceKind { Terrain, Static, Mobile }
-public enum AreaLayerKind { Body, Foreground, Background, Underlay, Roof }
+/// <summary>Layers of a visual. <see cref="PortalFrame"/> (ARC-WORLD-051) is another frame of a door or window's ART, its
+/// frame number in <see cref="AreaVisualKey.SparseIndex"/>: drawn only when the portal's runtime state selects that frame.</summary>
+public enum AreaLayerKind { Body, Foreground, Background, Underlay, Roof, PortalFrame }
 public enum AreaPresence { Absent, Null, Value, Empty, Array }
 public enum AreaValueOrigin { Instance, Prototype }
 public enum AreaDisposition { BodyEligibleConditionally, ExteriorSectorInsertionRefusedByInventory, BodySuppressedBySerializedState, ContextOnly, MissingMandatoryFact }
@@ -68,7 +70,12 @@ public sealed record AreaSectorRecord(AreaSectorKey Key, AreaSectorCoordinate Co
 public sealed record AreaTerrainRecord(AreaVisualKey Key, int LocalX, int LocalY, long WorldX, long WorldY, uint RawArt, uint LookupArt, AreaScope Scope, AreaVisualKey SelectedVisual);
 public sealed record AreaObjectRecord(AreaObjectKey Key, int Version, int Type, int PrototypeNumber, string PrototypeReferenceSha256, string PrototypeOwnSha256, string RawSha256, string SemanticSha256, AreaScope Scope, long? SerializedLocation, long? WorldX, long? WorldY, AreaDisposition Disposition, IReadOnlyList<AreaFieldValue> DirectFields, IReadOnlyList<AreaFieldValue> EffectiveFields, bool SchemaReady, bool PlacementReady, bool RequiredLayersReady,
     Maps.MapPatchApplication? MapPatch = null);
-public sealed record AreaVisualRecord(AreaVisualKey Key, uint RawArt, uint LookupArt, AreaEntryIdentity Entry, string PayloadSha256, int ViewLength, int NominalFacing, int SourceGroup, int PhysicalGroup, int Frame, int RequestedPalette, int EffectivePalette, bool Mirrored, int Width, int Height, int HotX, int HotY, int ArtOffsetX, int ArtOffsetY, int ObjectOffsetX, int ObjectOffsetY, int Scale, int EncodedBytes, int RgbaBytes, string RgbaSha256, string Policy);
+public sealed record AreaVisualRecord(AreaVisualKey Key, uint RawArt, uint LookupArt, AreaEntryIdentity Entry, string PayloadSha256, int ViewLength, int NominalFacing, int SourceGroup, int PhysicalGroup, int Frame, int RequestedPalette, int EffectivePalette, bool Mirrored, int Width, int Height, int HotX, int HotY, int ArtOffsetX, int ArtOffsetY, int ObjectOffsetX, int ObjectOffsetY, int Scale, int EncodedBytes, int RgbaBytes, string RgbaSha256, string Policy)
+{
+    /// <summary>ARC-WORLD-051: the frames of the ART's selected group and its frame rate (the header's), 0 when not read.</summary>
+    public int FrameCount { get; init; }
+    public int FramesPerSecond { get; init; }
+}
 /// <summary>ARC-RENDER-021: one roof block of a whole map: the sector's slot (block <c>x/4 + 16·(y/4)</c> of its local
 /// tiles), the block's first tile, the roof art as the sector stores it, its piece (0–12; 9–12 are pieces 0–3 drawn
 /// mirrored with palette 1), the fill and fade bits at T0, and the visual of its frame.</summary>
