@@ -130,14 +130,14 @@ public sealed class AreaScenePlanTests
     private static AreaDrawCommand Drawn(AreaObjectRecord body, int height = 240)
         => AreaScenePlan.Create([], [body], [BodyVisual(body, height: height)]).Commands.Single();
     [TestMethod]
-    public void BlendStatesFollowTheOriginalPrecedenceAndStayUnlitExceptAdditive()
+    public void BlendStatesFollowTheOriginalPrecedenceAndAreUnlit()
     {
         var body = Body(0);
         var multiply = Drawn(With(body, (8, 0x40)));
         Assert.IsTrue(multiply.Multiply && multiply.Unlit && !multiply.Additive && multiply.Alpha == 255 && multiply.Blended);
-        // Additive wins over multiply and constant alpha; it keeps the existing (lit) rule.
+        // Additive wins over multiply and constant alpha and is unlit too (ARC-RENDER-026, ledger BL2).
         var additive = Drawn(With(body, (8, 0x150)));
-        Assert.IsTrue(additive.Additive && !additive.Multiply && !additive.Unlit && additive.Alpha == 255);
+        Assert.IsTrue(additive.Additive && !additive.Multiply && additive.Unlit && additive.Alpha == 255);
         var constant = Drawn(With(body, (8, 0x101), (10, 95)));
         Assert.IsTrue(constant.Alpha == 95 && constant.Unlit && !constant.Multiply && !constant.Additive && constant.FlipX && constant.Blended);
         var mulOverAlpha = Drawn(With(body, (8, 0x140)));

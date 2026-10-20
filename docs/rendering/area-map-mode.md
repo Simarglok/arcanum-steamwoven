@@ -146,7 +146,8 @@ They are general rules of every body, not of these maps.
 - **Constant alpha.** The body is drawn at its blit alpha (`Alpha`, the source's
   weight; the shader divides by 255 where the original divides by 256, at most
   1/255 apart).
-- **Unlit.** Multiply and constant-alpha bodies are drawn with the base palette,
+- **Unlit.** Additive (since ARC-RENDER-026, ledger BL2), multiply and
+  constant-alpha bodies are drawn with the base palette,
   without ambient or stationary light (`Unlit`, the `Unlit` ambient channel), and
   a wall among them never fades.
 - **Wading.** A body with `OF_WADING` and without `OF_WATER_WALKING`, as
@@ -159,7 +160,8 @@ They are general rules of every body, not of these maps.
   multiply before constant alpha. That dispatch is a source reading, not checked in
   the executable (F0), and no installed body has the combination.
 
-On the installed original (opt-in test): 20 wading bodies in `caladons sewers`
+On the installed original (opt-in test): additive bodies, drawn unlit, on most
+interiors (115 in `bmc`, 86 in K'na Tha, 76 in `ashbury haunted castle`); 20 wading bodies in `caladons sewers`
 and 102 in `tarant sewers-02` (rats, lake scenery, a container), 12 and 42
 multiply scenery bodies in `void - arronax's interior` and
 `void-kerghans castle`, and one constant-alpha critter (alpha 95) in
@@ -181,9 +183,7 @@ Not covered: wading is the T0 flag only (the original recomputes it from the til
 an object moves, a source reading not checked in the executable, F0; the walking
 actor never wades); shadows (the original also darkens a wading body's shadow,
 source reading, F0); frozen, stoned, `OF_DONTLIGHT` and
-animated-dead tints. Additive bodies keep the earlier lit rule, although the
-original draws them unlit too (BL2); changing it touches the pinned Crash Site
-lighting and is left to its own task.
+animated-dead tints.
 
 ## Map transitions (ARC-WORLD-031)
 
