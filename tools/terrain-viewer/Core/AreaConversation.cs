@@ -79,7 +79,8 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
 /// </summary>
 public sealed class AreaConversationHost
 {
-    private readonly AreaSnapshot _snapshot;
+    private readonly AreaSnapshot? _snapshot;
+    private readonly SessionMapId _map;
     private readonly GameSessionOwner _session;
     private readonly ScriptContent? _content;
     private readonly string _contentDetail;
@@ -88,7 +89,10 @@ public sealed class AreaConversationHost
     private readonly AreaConversationProfile _baseProfile;
     private readonly Func<AreaSpeaker, AreaCompanionFacts?> _companions;
     private readonly Func<string, SessionNpcAdvancement?>? _npcAdvancement;
-    private readonly IReadOnlyList<AreaSpeaker>? _speakers;
+    // ARC-WORLD-048: a visitor host refuses negative IN when its home map's inventory seed is not attached.
+    private readonly bool _refuseUncoveredInventory;
+    // The inventory host as given (Rebind filters it again for the map).
+    private readonly AreaInventoryHost? _givenInventory;
     // ARC-WORLD-043: the speaker whose reaction conversation slot this host opened and has not closed yet.
     private int? _reactionOpen;
 
@@ -107,24 +111,46 @@ public sealed class AreaConversationHost
     public AreaConversationHost(AreaSnapshot snapshot, ScriptContent? content, GameSessionOwner session,
         AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, bool party = false, string contentDetail = "no script content",
         Func<AreaSpeaker, AreaCompanionFacts?>? companions = null, Func<string, SessionNpcAdvancement?>? npcAdvancement = null)
-        : this(snapshot, content, session, profile, inventory, party, contentDetail, companions, npcAdvancement, null)
+        : this(snapshot ?? throw new ArgumentNullException(nameof(snapshot)), new SessionMapId(snapshot.RuntimeMap), FindSpeakers(snapshot), content, session,
+            profile, inventory, party, contentDetail, companions, npcAdvancement, refuseUncoveredInventory: false)
     {
+    }
+
+    /// <summary>
+    /// ARC-WORLD-048: the host of one companion visiting another map (rows OL31–OL33 of the companion orders study: the original
+    /// keeps one object, wherever it stands). Its one speaker (index 0 of this host) keeps its home map's dialog state, the
+    /// map-local keys of <see cref="AreaConversationState"/> and <see cref="AreaScriptHost"/> on <paramref name="template"/>'s
+    /// home map, so a talk where it visits reads and writes the same state as a talk at home; JO, WA, UW and LV go through the
+    /// session party with the template's follow facts. Negative IN moves the item through the home map's inventory seed when
+    /// <paramref name="inventory"/> covers that map, and is refused (a rejected command) when it does not.
+    /// </summary>
+    public static AreaConversationHost ForVisitor(AreaCompanionTemplate template, ScriptContent? content, GameSessionOwner session,
+        AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, string contentDetail = "no script content",
+        Func<string, SessionNpcAdvancement?>? npcAdvancement = null)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        var facts = template.Facts;
+        return new(null, template.Home, [template.Speaker with { Index = 0 }], content, session, profile, inventory, party: true, contentDetail,
+            speaker => speaker.Row.Key == template.Key ? facts : null, npcAdvancement, refuseUncoveredInventory: true);
     }
 
     /// <summary>Test seam: the given speakers instead of the snapshot's dialog NPCs.</summary>
     internal AreaConversationHost(AreaSnapshot snapshot, IReadOnlyList<AreaSpeaker> speakers, ScriptContent? content, GameSessionOwner session)
-        : this(snapshot, content, session, null, null, false, "no script content", null, null, speakers ?? throw new ArgumentNullException(nameof(speakers)))
+        : this(snapshot ?? throw new ArgumentNullException(nameof(snapshot)), new SessionMapId(snapshot.RuntimeMap),
+            speakers ?? throw new ArgumentNullException(nameof(speakers)), content, session, null, null, false, "no script content", null, null,
+            refuseUncoveredInventory: false)
     {
     }
 
-    private AreaConversationHost(AreaSnapshot snapshot, ScriptContent? content, GameSessionOwner session, AreaConversationProfile? profile,
-        AreaInventoryHost? inventory, bool party, string contentDetail, Func<AreaSpeaker, AreaCompanionFacts?>? companions,
-        Func<string, SessionNpcAdvancement?>? npcAdvancement, IReadOnlyList<AreaSpeaker>? speakers)
+    private AreaConversationHost(AreaSnapshot? snapshot, SessionMapId map, IReadOnlyList<AreaSpeaker> speakers, ScriptContent? content, GameSessionOwner session,
+        AreaConversationProfile? profile, AreaInventoryHost? inventory, bool party, string contentDetail,
+        Func<AreaSpeaker, AreaCompanionFacts?>? companions, Func<string, SessionNpcAdvancement?>? npcAdvancement, bool refuseUncoveredInventory)
     {
-        _speakers = speakers;
         _npcAdvancement = npcAdvancement;
         _companions = companions ?? AreaCompanionRoster.For;
-        _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
+        _snapshot = snapshot;
+        _map = map;
+        _refuseUncoveredInventory = refuseUncoveredInventory;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _content = content;
         _contentDetail = contentDetail ?? throw new ArgumentNullException(nameof(contentDetail));
@@ -132,14 +158,18 @@ public sealed class AreaConversationHost
         // the given profile keeps the names, reaction and reach. Rebind applies the same rule to the new session.
         _baseProfile = profile ?? AreaConversationProfile.Diagnostic;
         Profile = session.QueryHeroDialogFacts() is { } hero ? _baseProfile with { Pc = hero } : _baseProfile;
-        _inventory = inventory is not null && inventory.Covers(snapshot.RuntimeMap) ? inventory : null;
-        Speakers = speakers ?? FindSpeakers(snapshot);
+        _inventory = inventory is not null && inventory.Covers(map.RuntimeMap) ? inventory : null;
+        _givenInventory = inventory;
+        Speakers = speakers;
         _party = party;
-        State = new AreaConversationState(session, new SessionMapId(snapshot.RuntimeMap),
+        State = new AreaConversationState(session, map,
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
             party ? Speakers.Where(speaker => _companions(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null);
-        Scripts = new AreaScriptHost(session, new SessionMapId(snapshot.RuntimeMap), Speakers, State, content, npcAdvancement);
+        Scripts = new AreaScriptHost(session, map, Speakers, State, content, npcAdvancement);
     }
+
+    /// <summary>The map whose dialog state this host reads and writes (ARC-WORLD-048: a visitor's home map).</summary>
+    public SessionMapId Map => _map;
 
     /// <summary>True when roster speakers talk through the session party (ARC-WORLD-016).</summary>
     public bool PartyWired => _party;
@@ -150,7 +180,8 @@ public sealed class AreaConversationHost
     /// the viewer cannot quick-load during a talk, whose panel takes every key).
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, _baseProfile, _inventory, _party, _contentDetail, _companions, _npcAdvancement, _speakers);
+    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _map, Speakers, _content, session, _baseProfile, _givenInventory, _party,
+        _contentDetail, _companions, _npcAdvancement, _refuseUncoveredInventory);
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;
@@ -331,7 +362,7 @@ public sealed class AreaConversationHost
         _reactionOpen = speaker.Index;
         var conversation = DialogConversation.Start(document!,
             new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
-            new DialogConversationPorts(State, State, _session.Flags, State, party, _inventory?.DialogPort(_session, SpeakerEntity), State,
+            new DialogConversationPorts(State, State, _session.Flags, State, party, InventoryPort(), State,
                 // ARC-SKILLS-004: the skill gates read the session hero; the diagnostic PC has no skills, so they stay unadmitted.
                 _session.QueryHero() is null ? null : new SessionDialogSkillPort(_session, AreaConversationState.PcParticipant), State));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
@@ -348,6 +379,16 @@ public sealed class AreaConversationHost
             participant => participant == npc ? entity : null,
             participant => participant == npc ? AreaCompanionRoster.Facts(facts, State.Alignment, State.Reaction(speaker.Index),
                 AreaAdvancement.Level(_session, entity, facts.Level)) : null);
+    }
+
+    // ARC-WORLD-048: a visitor whose home map's seed is not attached refuses negative IN instead of recording it only.
+    internal IDialogInventoryPort? InventoryPort() =>
+        (IDialogInventoryPort?)_inventory?.DialogPort(_session, SpeakerEntity) ?? (_refuseUncoveredInventory ? RefusedInventory.Instance : null);
+
+    private sealed class RefusedInventory : IDialogInventoryPort
+    {
+        internal static RefusedInventory Instance { get; } = new();
+        public DialogCommandResult Execute(GiveItemCommand command) => DialogCommandResult.Rejected;
     }
 
     private string? SpeakerEntity(DialogParticipantId npc) =>
