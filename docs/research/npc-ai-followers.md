@@ -68,7 +68,7 @@ mode is critter flag 0x40000. Setter rules are the numbered rules of the
    follower it addresses (within 10 tiles, by name or `#` for all) it applies
    the order and then runs one full AI pass on that follower at once, whatever
    the order, also when the order did nothing. The 200 limit counts walk steps
-   and cannot be reached ([section 1](#1-the-order-walk-and-the-immediate-ai-pass)).
+   and is never reached in play (it needs 200 followers) ([section 1](#1-the-order-walk-and-the-immediate-ai-pass)).
 2. **Attack** takes the object the interface currently highlights; outside the
    PC's combat mode a target in the PC's own party is refused. Otherwise the
    follower's NO_ATTACK is cleared and an *ordered* attack event runs, which
@@ -101,7 +101,9 @@ mode is critter flag 0x40000. Setter rules are the numbered rules of the
    spells once it has no leader, its leader is dead, or its leader has left
    combat mode. The non-combat perform leaves combat mode, which clears the
    target lock. The combat focus, who-hit-me-last and the enemy list are *not*
-   reset; peace is the only operation that clears them
+   reset; peace is the only operation that clears them. A lock that outlives a
+   flight ending in NONE makes the NPC attack its scan's target without the
+   fighting flags (FO14, bug of the original)
    ([section 7](#7-after-the-fight)).
 8. **Two follower comment lines.** With the "combat taunts" setting on, half of
    the PC's critical hits on the aimed target (and of hits that strike another
@@ -135,7 +137,7 @@ menu, typed text, OL1). For a PC speaker:
    pass).
 5. **The limit.** A counter of outer steps ends the walk above 200. Each step
    uses up at least one array entry, so it reaches at most the follower count
-   plus one: never in play. A second phase (other players by name, join and
+   plus one; reaching 200 needs 200 followers, so it is never reached in play. A second phase (other players by name, join and
    disband) runs when the last step found nobody (no name matched, a `#` walk
    whose last array entries were out of reach, or types 8 and 9); in single
    player it does nothing but a debug print, and has its own 200 limit.
@@ -214,9 +216,9 @@ makes peace with that stale focus (raising a PC head's reaction to 50 when it wa
 a PC's side) — harmless in practice, recorded with FO12.
 
 Callers of stop attacking: the order (0x4C3884), script action 109 on its object
-operand (call site 0x44A054; stage A8) and the world-map travel window when it
+operand (call site 0x44A054 in 0x447220; stage A8) and the world-map travel window when it
 opens with the PC visible: it hides the PC and its followers (0x45E1E0) and
-stops attacking for the PC (0x5616DA).
+stops attacking for the PC (call site 0x5616DA in 0x5615D0).
 
 After the stop, the immediate pass of a real-time follower sees state NONE; the
 danger update's scan may still find a target (a PC follower finds critters
@@ -263,7 +265,7 @@ stop earlier keeps NO_ATTACK after leaving and therefore never fights back (FO7)
 | allow attacking on an NPC with a PC leader (0x4AA580) | cleared |
 | the attack order, before its attack event | allow attacking on that follower |
 | the local player's PC enters combat mode (toggle 0x4B3F80, call at 0x4B42B2, after the interface callback) | allow attacking for the PC: every follower of the recursive list |
-| the world-map travel ends or its window closes with the party hidden (0x56174A, 0x560F71) | the party is shown again, then allow attacking for the PC |
+| the world-map travel ends or its window closes with the party hidden (call sites in 0x5615D0 and 0x560F40) | the party is shown again, then allow attacking for the PC |
 | the NPC leaves its leader (the leave's removal 0x45E040 and its unwait 0x4AA8C0) | unchanged |
 
 **Reader.** The setter's rule 4 is the only code that reads the flag (both
@@ -295,7 +297,8 @@ perform, which state NONE does not reach). Recorded as a bug of the original
 PC leader, the flag is not touched by a leave (the removal clears only the
 forced bit, the unwait only the wait bit). An NPC that leaves while stopped —
 dismissed, cursed, jilted by a hit or a loyalty refusal, its wait expired —
-keeps NO_ATTACK with no path left to clear it unless it joins a PC again and
+keeps NO_ATTACK: no engine path clears it (generic flag writers such as script
+flag actions and the map patch were not traced) unless it joins a PC again and
 that PC enters combat mode or orders it to attack. Until then it never takes
 COMBAT_FOCUS: it does not fight back when attacked, which for a cursed follower
 undoes the point of the curse. Recorded as a bug of the original (a stale flag).
@@ -328,7 +331,7 @@ or miss, repeats it.
 
 The −5 goes through the reaction change rules (R2): it changes the follower's
 reaction toward a PC leader and does nothing for an NPC leader. It depends on the
-line callback being set, which the game always does (FO10, latent). Upset's
+line callback being set, which the game always does (FO10). Upset's
 reasons are A3's: PARTY (T's leader is L), GOOD (F's alignment above 0 and T's at
 least parameter 12), ORIGIN, FACTION (faction-same, ARC-WORLD-044); a follower
 mind-controlled by L is never upset.
@@ -417,8 +420,8 @@ without writing anything (no FIGHTING, no focus, no script); the danger update
 stores that returned state, so perform runs combat perform on the scan's target
 while the NPC's flags still read NONE. When the scan finds nothing, the
 non-combat perform leaves combat mode and the lock goes. Both readers read the
-setter's locked return; the NONE composition is the first reader's. Rare and
-short-lived; kept.
+setter's locked return; the NONE composition is the first reader's. Recorded
+as a bug of the original (stale state; [anomalies](#9-anomalies-and-decisions)).
 
 ## 8. Follower comment lines
 
@@ -434,8 +437,11 @@ callback (0x5F8488):
 The line builders return no line when the speaker cannot speak (0x4AD800: for
 example dead without the speak-with-dead spell flag 0x2000000, unconscious,
 or busy). The near-death function tests neither the speaker's activity nor the
-callback for null (latent: the game always sets it), and floats an empty line for
-a follower killed straight through the 20 % mark (FO16).
+callback for null (a null call, latent: the game always sets it), and floats an
+empty line for a follower killed straight through the 20 % mark (FO16). The taunt
+function passes the drawn array entry to the activity test (0x45D790), which reads
+its flags with no null test (FO17, latent: the leave's removal compacts the array,
+so only a destroyed or unresolved handle leaves a null entry).
 
 ## 9. Anomalies and decisions
 
@@ -448,10 +454,11 @@ decides. No first-pass anomaly (P1–P7) belongs to A7.
 | FO7 | NO_ATTACK is set and cleared only while the NPC has a PC leader and no leave path clears it, so an NPC that leaves while stopped (dismissed, cursed, jilted, wait expired) never takes COMBAT_FOCUS again unless it rejoins a PC that then enters combat mode or orders it to attack. | Original bug | **(inference)** The flag is a party order; outliving the party leaves a stale flag that silently disables the NPC's fighting, and makes a cursed or jilted follower unable to fight back. Steamwoven clears NO_ATTACK whenever an NPC leaves its leader; Original keeps it (`NoAttackSurvivesLeaving`, proposed). Visible: a follower that was told to stop and then dismissed, cursed or jilted fights normally afterwards. Lands with slice I9. |
 | FO8 | The danger update chooses a spell or item for the found target before asking the setter for COMBAT_FOCUS and keeps that choice when setter rule 4 refuses (NO_ATTACK, or the global "NPC fighting" switch off); perform uses it, so a stopped follower still casts or uses items on enemies it scans. | Original bug | **(inference)** An ignored result: the refusal means "do not fight", and the action chosen for that fight is used anyway. Steamwoven drops the action the danger update chose for that target when rule 4 turns the request into NONE; Original keeps it (`NoAttackKeepsChosenAction`, proposed). Visible: followers told to stop no longer cast or use attack items; with the "NPC fighting" switch off NPCs no longer cast at targets (the switch itself is stage A8's). Lands with slices I3/I9. |
 | FO9 | The attack order clears NO_ATTACK before its attack event, so an order whose event does nothing (the PC as target, a dead or hidden target, an upsetting target) still lifts an earlier stop. | Original | Kept in both settings: an attack order means "fight again"; no switch. |
-| FO10 | The follower rule's −5 complaint depends on the line callback being set. | Original (latent) | Not reachable: Steamwoven always has the line output; the −5 is applied with the complaint. No switch. |
+| FO10 | The follower rule's −5 complaint is skipped when the line callback is unset, which never happens in the game (the rule tests the callback; no crash). | Original | Kept: Steamwoven always has the line output, so the −5 always comes with the complaint, in both settings. No switch. |
 | FO13 | No DEMAINTAIN_SPELLS for a fight left by FLEE, nor for the later NONE or SURRENDER; maintained spells survive a flight. | Original | Kept in both settings: the FLEE exception is explicit and the upkeep ends spells by itself; no switch (a phase 2 patch may revisit). |
-| FO14 | A locked NPC in state NONE (after a flight that ended in NONE) gets COMBAT_FOCUS back from the setter without any flag or focus write and attacks the scan's target by combat perform. | Original (latent) | Kept in both settings: rare and ends at the next pass without a target; no switch. |
-| FO16 | The near-death line function tests neither activity nor a null callback and floats an empty line for a killed follower. | Original bug (latent) | Not reachable / no effect: Steamwoven has no unset line output and shows nothing for an empty line, in both settings. No switch. |
+| FO14 | A locked NPC in state NONE (after a flight that ended in NONE) gets COMBAT_FOCUS back from the setter without any flag or focus write and attacks the scan's target by combat perform. | Original bug | **(inference)** The lock exists to keep an ordered follower on its target; here it outlives the fight and makes the NPC attack whatever its scan finds, through combat perform, with no FIGHTING flag, no focus write and no enter- or exit-combat script: stale state, as the A6/A7 precedent. Steamwoven clears the target lock whenever the setter applies a state other than COMBAT_FOCUS; Original keeps the lock (`LockedNoneStateFights`, proposed). Visible: a follower ordered to attack that flees and then calms down returns to normal targeting instead of attacking the nearest scanned critter without entering the fight. Lands with slices I3/I9. |
+| FO16 | The near-death line function calls the line callback with no null test (as HS22), tests no activity, and floats an empty line for a killed follower. | Original bug (latent) | Both fixed: null call, latent; never reproduce a crash (owner rule). Steamwoven has no unset line output and shows nothing for an empty line. No switch. |
+| FO17 | The taunt function passes the drawn follower-array entry to the activity test, which reads the object's flags with no null test; the leave's removal compacts the array, so only a destroyed or unresolved handle leaves a null entry. | Original bug (latent) | Both fixed: null object, latent; a null entry is skipped (no taunt). No switch. |
 
 ## 10. How A7 extends the order entry point (ARC-WORLD-046)
 
@@ -481,8 +488,8 @@ passing attack, back off and curse to A7. Proposals for slice I9:
 4. **Comment lines** are host outputs of the attack resolution and the damage
    step (combat taunts setting, the two draws labelled `TauntSpeak` and
    `TauntFollower`; near-death on the 20 % crossing).
-5. **Switches** FO7 and FO8 are checked where the leave and the danger update
-   run.
+5. **Switches** FO7, FO8 and FO14 are checked where the leave, the danger
+   update and the setter run.
 
 ## Open questions handed forward
 
@@ -518,7 +525,7 @@ setter's locked return and the two comment functions. Both readers agree on ever
 behaviour above. The second reader added that NO_ATTACK survives a leave (FO7),
 which the first reader then confirmed in the removal and unwait functions; the
 script action number (109) and the world-map callers' show and hide steps; the
-missing null test of the drawn follower in the taunt function; and the
+missing null test of the drawn follower in the taunt function (FO17); and the
 turn-based start failure in the toggle (open question 8). The second reader also
 flagged the enemy-list branch's spell-target focus, which is support's SP16 and is
 not repeated. Details are in the
