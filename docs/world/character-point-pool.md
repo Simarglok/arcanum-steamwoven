@@ -31,7 +31,7 @@ it. Opening is refused without a hero or for a dead one (CS2); an open editor ke
 restored session starts with the editor closed, so nothing bought before a save is refundable after loading it. Opening
 and closing do not move the revision. Other session paths still change the hero while the editor is open: an experience
 award raises the level and the unspent points and runs the hero's auto-level scheme, whose purchases sit above the floor
-and are refundable until the editor closes, as in the original. A hero who dies with the editor open can neither spend nor
+and are refundable until the editor closes (whether the original awards experience while its editor is open was not read, F0). A hero who dies with the editor open can neither spend nor
 refund (`HeroEditorUnavailable`); the editor stays open until closed.
 
 ## Spending and refunding
