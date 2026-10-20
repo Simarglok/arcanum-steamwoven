@@ -291,7 +291,9 @@ public static class AreaStepInspector
                     : o.Type == 1 ? PortalEdgeRule(art, Number(o, PortalFlagsSlot), HasUnlockScript(o))
                     : WallPieceRule(piece);
                 edges.Add(new(o.Key, cell, (int)((art >> 11) & 7) | 1, o.Type == 0 && OpeningWallPieces.Contains(piece), rule, reason,
-                    rule == AreaStepEdgeRule.Leaving ? (int)((art >> 11) & 7) : -1));
+                    // ARC-WORLD-051: every portal keeps its raw rotation, a runtime leaving-only passage steps by it (the
+                    // digest writes it for Leaving rules only, so the evidence digest is unchanged).
+                    rule == AreaStepEdgeRule.Leaving || (wholeMap && o.Type == 1) ? (int)((art >> 11) & 7) : -1));
             }
         }
 
@@ -418,8 +420,8 @@ public static class AreaStepInspector
     }
 
     /// <summary>A script attached at the unlock slot (SAP 3) with a non-zero script number; an
-    /// attachment too short to read counts as one (fail closed).</summary>
-    private static bool HasUnlockScript(AreaObjectRecord o) =>
+    /// attachment too short to read counts as one (fail closed). ARC-WORLD-051: the viewer's portals use the same test.</summary>
+    public static bool HasUnlockScript(AreaObjectRecord o) =>
         o.EffectiveFields.FirstOrDefault(f => f.Slot == ScriptsSlot) is { Presence: AreaPresence.Array } scripts &&
         scripts.Elements.Any(e => e.Key == UnlockScriptSap && (e.Words.Count < 3 || e.Words[2] != 0));
 

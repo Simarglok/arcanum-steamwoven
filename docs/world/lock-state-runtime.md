@@ -1,7 +1,9 @@
 # Lock state of portals and containers (ARC-WORLD-050)
 
 Status: **Implemented** (Godot-free rules and session owner). Callers: doors and windows at
-runtime in the viewer's map mode (ARC-WORLD-051) and the pick-locks skill (skills plan S9).
+runtime in the viewer's map mode since ARC-WORLD-051
+([doors and windows](../rendering/area-map-mode.md#doors-and-windows-arc-world-051)) and the
+pick-locks skill (skills plan S9).
 The rules follow the retail 1.0.7.4 executable as read in
 [ledger LK1–LK13](../research/original-verification-ledger.md#doors-containers-and-locks-arc-res-065).
 
@@ -67,7 +69,8 @@ whether it is a junk pile.
 
 - **Keys.** The session inventory holds no keys yet: ARC-WORLD-014 refuses keys and key rings.
   A lock that needs a key therefore stays locked, and `AttemptOpen` passes no keys.
-- **Bust and magic.** Busting (0x4F06E0) and magically held writes have no caller yet. The
-  busted bit and the frame are stored, but no destroyed state is stored.
+- **Bust and magic.** `SetOpenableBusted` (ARC-WORLD-051) sets the busted bit on frame 0, as the
+  original busts a window; its busted ART (bit 0x200) is not stored. A door the original destroys instead
+  has no destroyed state here, and magically held writes have no caller yet.
 - **Not modelled.** NPC open attempts (an NPC walker), the multiplayer key branch and the
   bust script (SAP 30).

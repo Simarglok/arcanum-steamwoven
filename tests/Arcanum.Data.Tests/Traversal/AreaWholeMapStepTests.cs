@@ -97,6 +97,39 @@ public sealed class AreaWholeMapStepTests
     }
 
     [TestMethod]
+    public void Runtime_portal_passages_replace_the_T0_rule_and_the_step_names_its_portals()
+    {
+        // ARC-WORLD-051: x <= 10 indoor; a jammed door (T0 Block) on the indoor tile, edge 5 to the outdoor tile.
+        const uint IndoorTile = 0, OutdoorTile = 1u << 8;
+        var door = new AreaObjectKey("s", 1, AreaSourceKind.Static, 0, 0, 0, "door", 1);
+        var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
+        for (var x = 0; x < 64; x++) for (var y = 0; y < 64; y++)
+            terrain[new(x, y)] = new(new(x, y), x <= 10 ? IndoorTile : OutdoorTile, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, AreaStepTerrainSource.TileName, "TEST");
+        var walls = new Dictionary<AreaStepCell, AreaStepWallEdge[]>
+        { [new(10, 10)] = [new(door, new(10, 10), 5, false, AreaStepEdgeRule.Block, "PORTAL_JAMMED_OR_HELD", 5)] };
+        var snapshot = new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)], terrain,
+            new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), walls);
+        string Verdict((long X, long Y) from, CardinalTraversalDirection direction, (long X, long Y) to, AreaPortalPassage? passage)
+        {
+            var step = snapshot.Assess(snapshot.Request(new(from.X, from.Y), new(to.X, to.Y), direction),
+                passage is { } p ? new Dictionary<AreaObjectKey, AreaPortalPassage> { [door] = p } : null);
+            CollectionAssert.AreEqual(new[] { door }, step.Portals.ToArray());
+            return step.Coverage != CardinalTraversalCoverage.Supported ? "Unknown" : step.Disposition == CardinalTraversalDisposition.Open ? "Open" : step.ReasonCode;
+        }
+        const CardinalTraversalDirection East = CardinalTraversalDirection.XPlus, West = CardinalTraversalDirection.XMinus;
+        Assert.AreEqual("WALL_EDGE_BLOCKED", Verdict((10, 10), East, (11, 10), null));
+        Assert.AreEqual("WALL_EDGE_BLOCKED", Verdict((10, 10), East, (11, 10), AreaPortalPassage.Unresolved));
+        Assert.AreEqual("Open", Verdict((10, 10), East, (11, 10), AreaPortalPassage.Open));
+        Assert.AreEqual("Open", Verdict((11, 10), West, (10, 10), AreaPortalPassage.Open));
+        // Locked: only the step leaving the building passes.
+        Assert.AreEqual("Open", Verdict((10, 10), East, (11, 10), AreaPortalPassage.LeavingOnly));
+        Assert.AreEqual("WALL_EDGE_BLOCKED", Verdict((11, 10), West, (10, 10), AreaPortalPassage.LeavingOnly));
+        Assert.AreEqual("WALL_EDGE_BLOCKED", Verdict((10, 10), East, (11, 10), AreaPortalPassage.Blocked));
+        // A step that crosses no portal names none.
+        Assert.AreEqual(0, snapshot.Assess(snapshot.Request(new(10, 10), new(10, 11), CardinalTraversalDirection.YPlus)).Portals.Count);
+    }
+
+    [TestMethod]
     public void Edge_rules_decide_cardinal_and_diagonal_legs()
     {
         // One open 3x3 patch; a single edge on the east side of the centre tile (edge 5 = +X).

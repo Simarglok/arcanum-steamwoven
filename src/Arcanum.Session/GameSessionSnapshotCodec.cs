@@ -67,7 +67,7 @@ public static class GameSessionSnapshotCodec
         "Gambling", "Haggle", "Heal", "Persuasion", "Repair", "Firearms", "PickLocks", "DisarmTraps"];
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
-    private static readonly string[] InventoryFields = ["gold", "kit", "pc"];
+    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made"];
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
     private static readonly string[] WornFields = ["slot", "entity", "item"];
@@ -306,6 +306,18 @@ public static class GameSessionSnapshotCodec
                 w.WriteStartObject();
                 w.WriteString("entity", item.Entity);
                 w.WriteNumber("map", item.Origin.RuntimeMap);
+                w.WriteString("type", ItemTypeName(item.Kind.Type));
+                w.WriteNumber("prototype", item.Kind.Prototype);
+                w.WriteNumber("name", item.Kind.Name);
+                w.WriteNumber("description", item.Kind.Description);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("made");
+            foreach (var item in snapshot.Inventory.Made)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", item.Entity);
                 w.WriteString("type", ItemTypeName(item.Kind.Type));
                 w.WriteNumber("prototype", item.Kind.Prototype);
                 w.WriteNumber("name", item.Kind.Name);
@@ -1123,7 +1135,18 @@ public static class GameSessionSnapshotCodec
             if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             pc[i] = new(entity, new(Int(item["map"], path + ".map", 1, int.MaxValue)), Kind(item, path));
         }
-        return new(gold, kit, pc);
+        var madeItems = Array(f["made"], p + ".made", GameSessionLimits.PolicyMaxPcItems);
+        if (kit.Length + items.Length + madeItems.Length > GameSessionLimits.PolicyMaxPcItems) throw new DecodeException(SnapshotDecodeFailure.BudgetExceeded, p + ".made");
+        var made = new SessionMadeItem[madeItems.Length];
+        for (var i = 0; i < madeItems.Length; i++)
+        {
+            var path = $"{p}.made[{i}]";
+            var item = Fields(madeItems[i], path, KitItemFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            made[i] = new(entity, Kind(item, path));
+        }
+        return new(gold, kit, pc, made);
     }
 
     private static void WriteWorn(Utf8JsonWriter w, SessionWornItem worn)

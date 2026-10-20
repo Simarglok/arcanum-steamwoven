@@ -30,7 +30,7 @@ repeated after every restore.
 
 **State.** The ordered list of items the PC took from the world (`SessionPcItem`: entity, origin map, kind);
 `QueryPcInventory` returns it. Since ARC-WORLD-015 the session also holds the hero's gold (`QueryGold`) and starting kit
-(`SessionKitItem`: `kit:1`, `kit:2`, … with no origin map; `QueryHeroKit`; [starting hero](starting-hero-runtime.md)),
+(`SessionKitItem`: `kit:1`, `kit:2`, … with no origin map; `QueryHeroKit`; [starting hero](starting-hero-runtime.md)), and since ARC-TECHNOLOGY-004 the items it made from schematics (`SessionMadeItem`: `made:1`, … with no origin map; `QueryMadeItems`; [schematic assembly](schematic-assembly-runtime.md#made-items-snapshot-schema-24)),
 which precedes the taken items in the PC's inventory and counts toward `MaxPcItems`. A taken item is hidden from its
 seed's ground and holder lists (`QueryMapInventory`). The PC object, its
 attachments and gold pickup are not session state yet; the hero's worn slots are ([equipment](equipment-runtime.md),

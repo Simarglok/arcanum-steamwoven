@@ -126,11 +126,11 @@ Master or for a forced follower; else reaction bit and reaction ≤ AI field 5 +
 higher, too-good bit and gap > field 6 − 100 or too-bad bit and gap > field 7 − 100), whose warning range the host shows
 (`WarningLines`: 5200, 5300, 5400). No reaction change; one revision when the record changed.
 
-**Snapshot schema 24.** Every party record carries `"loyalty"`, the marks' bit sum 0..15 (check-leader 1, reaction 2, too good 4,
+**Snapshot schema 25.** Every party record carries `"loyalty"`, the marks' bit sum 0..15 (check-leader 1, reaction 2, too good 4,
 too bad 8); decode refuses another value (`OutOfRange`) or a missing one (`MissingField`), restore an undefined one
 (`InvalidCompanion`). A free record with only marks is kept (OL22). A pending `party.wait` event is admitted only for an NPC the
 saved party records waiting, set no later than the saved clock, with a duration of the table exactly before its deadline, one per
-NPC (`InvalidEvents`). Schema 23 is refused, not migrated.
+NPC (`InvalidEvents`). Schema 24 is refused, not migrated.
 
 Not modelled: the network-client branch of the expiry; leading NPCs other than the PC; the loyalty step's host part (leaving combat
 mode, the follow request, the item search) and the lines' text and speech.
@@ -146,7 +146,7 @@ mode, the follow request, the item search) and the lines' text and speech.
                    {"entity":"virgil","standing":"Free","spreadOut":false,"jilted":true,"loyalty":0}]}
 ```
 
-(`loyalty` since schema 24, ARC-WORLD-045.)
+(`loyalty` since schema 25, ARC-WORLD-045.)
 
 Decoding keeps the follower order and refuses an entity listed twice anywhere or unsorted
 `others` (`NotCanonical`), a standing other than `Waiting`/`Free`, a waiting record marked
