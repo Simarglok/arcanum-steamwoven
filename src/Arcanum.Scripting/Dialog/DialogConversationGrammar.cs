@@ -18,6 +18,11 @@ internal sealed record ConversationJoin(DialogOperationSource Source, int Node) 
 internal sealed record ConversationFinalLine(DialogOperationSource Source, int Node) : ConversationOperation(Source);
 internal sealed record ConversationWaiting(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
 internal sealed record ConversationUnwait(DialogOperationSource Source, int Node) : ConversationOperation(Source);
+/// <summary>PS, HA, SK (a level gate) and TR (a training gate): a non-negative threshold is a minimum, a negative one a maximum
+/// of its absolute value (both inclusive).</summary>
+internal sealed record ConversationSkillGate(DialogOperationSource Source, int Skill, int Threshold, bool Training) : ConversationOperation(Source);
+internal sealed record ConversationSkillTraining(DialogOperationSource Source, int Skill, int Training) : ConversationOperation(Source);
+internal sealed record ConversationExpertTeacher(DialogOperationSource Source, int Skill, int Node) : ConversationOperation(Source);
 
 internal enum ConversationField
 {
@@ -30,11 +35,14 @@ internal enum ConversationField
 /// conversation-grammar-v1: the bounded DLG operation subset of ARC-SCRIPT-005.
 /// <list type="bullet">
 /// <item>Player condition: ordered conjunction of LF, GF, RE (signed reaction threshold) and RA (signed race selector);
-/// with a party port also WA 0/1 (the NPC is not / is waiting for the PC).</item>
+/// with a party port also WA 0/1 (the NPC is not / is waiting for the PC); with a skill port also PS n and HA n (persuasion and
+/// haggle level gates), SK skill n (a level gate) and TR skill n (a training gate), ARC-SKILLS-004.</item>
 /// <item>Actions: LF, GF, QU, RU, RQ (quell a rumor, ARC-UI-008), RE and AL (unsigned target or lexically signed delta),
 /// negative IN (NPC gives an item), MM; a Player action may end with one JO 0 node or FL node, and with a party port with
-/// one UW 0 node.</item>
+/// one UW 0 node; with a skill port TR skill tier (also in an NPC action), and a Player action may end with one ET skill node.</item>
 /// </list>
+/// SK, TR and ET read their second operand as the source does (0x4167C0, ledger DS3): spaces before it are optional
+/// ("tr4-1") and a missing one is 0; a negative first operand is refused (the source would read it as the second too).
 /// Without a party port WA and UW stay unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>), as before
 /// ARC-WORLD-013.
 /// Operations are separated by SP, HTAB, ',', ';', ':', '(' or ')'; inside one operation only SP/HTAB may
@@ -43,8 +51,11 @@ internal enum ConversationField
 /// </summary>
 internal static class DialogConversationGrammar
 {
+    // The source's basic skill numbers of the PS and HA shortcuts.
+    private const int HaggleSkill = 9, PersuasionSkill = 11;
+
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party)
+        bool party, bool skills = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -59,7 +70,9 @@ internal static class DialogConversationGrammar
             var start = index;
             if (index + 2 > bytes.Count || !IsAsciiLetter(bytes[index]) || !IsAsciiLetter(bytes[index + 1]))
             {
-                var kind = bytes[index] is (byte)'$' or (byte)'&' or (byte)'|' or (byte)'!' or (byte)'~'
+                // A stray number where an operation should start ("ha4, -4, $$250") is one the source's scanner skips: outside
+                // this subset, not damage (ARC-SKILLS-004, one installed reply).
+                var kind = bytes[index] is (byte)'$' or (byte)'&' or (byte)'|' or (byte)'!' or (byte)'~' or (byte)'-' or (byte)'+' or (>= (byte)'0' and <= (byte)'9')
                     ? DialogFailureKind.UnsupportedOperation
                     : DialogFailureKind.InvalidOperation;
                 throw Failure(kind, record, field, start, 1, operations.Count);
@@ -67,14 +80,14 @@ internal static class DialogConversationGrammar
             var opcode = new string([(char)ToUpper(bytes[index]), (char)ToUpper(bytes[index + 1])]);
             index += 2;
             var admitted = role == ConversationField.PlayerCondition
-                ? opcode is "LF" or "GF" or "RE" or "RA" || party && opcode == "WA"
-                : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM"
-                    || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW");
+                ? opcode is "LF" or "GF" or "RE" or "RA" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
+                : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR"
+                    || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET");
             if (!admitted)
             {
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
             }
-            if (operations.Count > 0 && operations[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine)
+            if (operations.Count > 0 && operations[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher)
             {
                 // The source keeps reading operations after JO/UW/FL, but JO/UW enter their node mid-field;
                 // operations after them are outside this conservative subset.
@@ -88,7 +101,19 @@ internal static class DialogConversationGrammar
             }
             var (first, sign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
             var second = 0;
-            if (opcode is "LF" or "GF" or "QU" or "JO" or "UW")
+            if (opcode is "SK" or "TR" or "ET")
+            {
+                if (sign == '-') throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
+                // The source's second operand (0x4167C0): atoi after the first operand's digits, so the spaces are optional and
+                // a missing operand reads 0.
+                while (index < bytes.Count && bytes[index] is (byte)' ' or (byte)'\t') index++;
+                if (index < bytes.Count && bytes[index] is (byte)'-' or (>= (byte)'0' and <= (byte)'9'))
+                {
+                    (second, var secondSign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
+                    if (secondSign == '+') throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
+                }
+            }
+            else if (opcode is "LF" or "GF" or "QU" or "JO" or "UW")
             {
                 SkipOperandSpace(bytes, ref index, record, field, start, operations.Count, required: true);
                 (second, var secondSign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
@@ -129,6 +154,12 @@ internal static class DialogConversationGrammar
                 "UW" when second > 0 => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "WA" when first is 0 or 1 => new ConversationWaiting(source, first == 1),
                 "FL" when first > 0 => new ConversationFinalLine(source, first),
+                "PS" when first != int.MinValue => new ConversationSkillGate(source, PersuasionSkill, first, false),
+                "HA" when first != int.MinValue => new ConversationSkillGate(source, HaggleSkill, first, false),
+                "SK" when second != int.MinValue => new ConversationSkillGate(source, first, second, false),
+                "TR" when role == ConversationField.PlayerCondition && second != int.MinValue => new ConversationSkillGate(source, first, second, true),
+                "TR" when role != ConversationField.PlayerCondition => new ConversationSkillTraining(source, first, second),
+                "ET" when second > 0 => new ConversationExpertTeacher(source, first, second),
                 _ => throw new DialogOperationParseException(DialogFailureKind.InvalidOperation, source),
             };
             operations.Add(operation);

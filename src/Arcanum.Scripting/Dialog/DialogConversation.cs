@@ -11,6 +11,8 @@ namespace Arcanum.Scripting.Dialog;
 public sealed class DialogConversation
 {
     private const int LowIntelligence = 4;
+    // The skill port's bounds and the expert-teacher gate (the source's training minimum of an expert, 0x4C69C0).
+    private const int MaxSkillLevel = 20, MaxSkillTraining = 3, ExpertMinimumLevel = 9;
     private const int MaxEligible = 5;
 
     private readonly DlgDocument _document;
@@ -151,6 +153,7 @@ public sealed class DialogConversation
         {
             case DialogOptionTransition.Direct:
             case DialogOptionTransition.Join:
+            case DialogOptionTransition.ExpertTeacher:
                 Enter(plan!.Target!);
                 return Result();
             case DialogOptionTransition.FinalLine:
@@ -298,6 +301,7 @@ public sealed class DialogConversation
                 ConversationGlobalFlag global => ReadGlobal(global),
                 ConversationReactionGate reaction => ReadReaction(reaction),
                 ConversationWaiting waiting => ReadWaiting(waiting),
+                ConversationSkillGate skill => ReadSkill(skill),
                 // RA n>0: the PC race is n-1; RA n<=0: the PC race is not -n-1.
                 ConversationRaceGate race => race.Selector > 0
                     ? _request.Pc.Race + 1L == race.Selector
@@ -390,10 +394,58 @@ public sealed class DialogConversation
         return waiting == operation.Value;
     }
 
+    /// <summary>
+    /// PS, HA, SK and TR (0x4150D0): the PC's effective level (training) in the skill against the threshold: at least it when
+    /// it is not negative, at most its absolute value otherwise.
+    /// </summary>
+    private bool? ReadSkill(ConversationSkillGate operation)
+    {
+        var value = ReadSkill(operation.Skill, operation.Training, operation.Source);
+        if (value is not { } read) return null;
+        return operation.Threshold < 0 ? read <= -(long)operation.Threshold : read >= operation.Threshold;
+    }
+
+    // A level 0..20 or a training 0..3 from the skill port; anything else is an invalid answer.
+    private int? ReadSkill(int skill, bool training, DialogOperationSource source)
+    {
+        int value;
+        try
+        {
+            var query = new DialogSkillQuery(_request.Participants.PlayerCharacter, skill);
+            value = training ? _ports.Skills!.Training(query) : _ports.Skills!.Level(query);
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, source));
+            return null;
+        }
+        if (value < 0 || value > (training ? MaxSkillTraining : MaxSkillLevel))
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.InvalidQueryResult, CurrentNode, source));
+            return null;
+        }
+        return value;
+    }
+
     private bool Execute(IReadOnlyList<ConversationOperation> operations)
     {
         foreach (var operation in operations)
         {
+            if (operation is ConversationExpertTeacher teacher)
+            {
+                // ET (0x415BA0): a level of at least the expert minimum (9) and any training let the dialog continue at the
+                // node; otherwise the source speaks a generated refusal.
+                if (ReadSkill(teacher.Skill, false, operation.Source) is not { } level || ReadSkill(teacher.Skill, true, operation.Source) is not { } trained)
+                {
+                    return false;
+                }
+                if (level < ExpertMinimumLevel || trained < 1)
+                {
+                    Stop(new DialogConversationFrontier(DialogFrontierKind.ExpertTeacherRefused, CurrentNode, operation.Source), null);
+                    return false;
+                }
+                continue;
+            }
             if (operation is ConversationFinalLine)
             {
                 // Control transfer, not a command: the caller enters the final line after this field.
@@ -465,6 +517,7 @@ public sealed class DialogConversation
                 ConversationGiveItem item => new GiveItemCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter, item.ItemName),
                 ConversationMarkArea area => new MarkAreaCommand(_request.Participants.PlayerCharacter, area.Area),
                 ConversationAlignment alignment => new AlignmentCommand(_request.Participants.PlayerCharacter, alignment.Mode, alignment.Value),
+                ConversationSkillTraining training => new SkillTrainingCommand(_request.Participants.PlayerCharacter, training.Skill, training.Training),
                 _ => throw new InvalidOperationException("Unadmitted action."),
             };
             DialogCommandResult result;
@@ -480,6 +533,7 @@ public sealed class DialogConversation
                     GiveItemCommand item => _ports.Inventory is { } inventory ? inventory.Execute(item) : _ports.World!.Execute(item),
                     MarkAreaCommand area => _ports.World!.Execute(area),
                     AlignmentCommand alignment => _ports.World!.Execute(alignment),
+                    SkillTrainingCommand training => _ports.Skills!.Execute(training),
                     _ => throw new InvalidOperationException("Unadmitted command."),
                 };
             }
@@ -538,7 +592,7 @@ public sealed class DialogConversation
         var node = new DialogNodeId(npc.Id);
         try
         {
-            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null);
+            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null);
             if (MissingCapability(action) is { } missing)
             {
                 frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing);
@@ -625,7 +679,7 @@ public sealed class DialogConversation
                     record.AlternateText.PayloadOffset, 0, record.AlternateText.Length, 0), response);
             return null;
         }
-        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null);
+        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null);
         if (MissingCapability(condition) is { } missing)
         {
             frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing, response);
@@ -708,7 +762,7 @@ public sealed class DialogConversation
         {
             try
             {
-                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null);
+                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null);
                 if (MissingCapability(action) is { } actionMissing)
                 {
                     block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedOperation, actionMissing);
@@ -721,13 +775,14 @@ public sealed class DialogConversation
                     exception.OperationSource);
             }
         }
-        if (block is null && action is { Count: > 0 } && action[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine)
+        if (block is null && action is { Count: > 0 } && action[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher)
         {
             // JO/UW/FL override the response: the source skips the response transition after them.
             var continuation = action[^1] switch
             {
                 ConversationJoin join => join.Node,
                 ConversationUnwait unwait => unwait.Node,
+                ConversationExpertTeacher teacher => teacher.Node,
                 _ => ((ConversationFinalLine)action[^1]).Node,
             };
             if (!_document.TryGetRecord(continuation, out var next) || next is null || next.Role != DlgRecordRole.Npc)
@@ -736,7 +791,12 @@ public sealed class DialogConversation
             }
             else
             {
-                transition = action[^1] is ConversationFinalLine ? DialogOptionTransition.FinalLine : DialogOptionTransition.Join;
+                transition = action[^1] switch
+                {
+                    ConversationFinalLine => DialogOptionTransition.FinalLine,
+                    ConversationExpertTeacher => DialogOptionTransition.ExpertTeacher,
+                    _ => DialogOptionTransition.Join,
+                };
                 target = next;
                 line = null;
             }
@@ -781,6 +841,7 @@ public sealed class DialogConversation
         ConversationJoin => _ports.World is null && _ports.Party is null,
         ConversationWaiting or ConversationUnwait => _ports.Party is null,
         ConversationQuellRumor => _ports.Rumors is null,
+        ConversationSkillGate or ConversationSkillTraining or ConversationExpertTeacher => _ports.Skills is null,
         _ => false,
     })?.Source;
 

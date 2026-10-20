@@ -171,6 +171,8 @@ public enum GameSessionFailure
     AttackUnavailable, InvalidAttack, AttackUnsupported,
     // Music and ambient (ARC-WORLD-040).
     InvalidSound,
+    // Skills (ARC-SKILLS-004).
+    SkillsUnavailable, InvalidSkill,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
