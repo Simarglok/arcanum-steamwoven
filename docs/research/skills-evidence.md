@@ -43,12 +43,12 @@ two readers and stand at F2 or F3: storage, levels, caps, key stats, training ge
 setters, cost and refund, the next point's key stat, the stat-lowering guard and its caller, the tech points side effect,
 the skill effect collections, the Educator update, the skill module (names, the "follower skills" setting, the saved
 gambling roll), the new-character kit and the aptitude formula ([ledger](original-verification-ledger.md#skill-rules-arc-skills-001)
-FA7–FA9, AL5, SR1–SR14). They agree with the reading below. The editor's + and − buttons, its floor, snapshot and
+FA7–FA9, AL5, SR1–SR14; since ARC-SKILLS-004 also the dialog skill conditions and the `tr` and `et` actions, [DS1–DS5](original-verification-ledger.md#dialog-skill-gates-arc-skills-004)). They agree with the reading below. The editor's + and − buttons, its floor, snapshot and
 hints (0x57ACD0, 0x57AEB0, 0x55D3A0, 0x55D6F0, 0x5597C0, 0x55AE70) stand at F2 since ARC-WORLD-052
 ([ledger CP1–CP12](original-verification-ledger.md#character-point-pool-arc-world-052)), with one correction to section 2: the
 floor does not hold through a − click whose level an effect pins (CP6). Still F0, apart from the − loop (SK2) and the training
 dispatch (SK3) already read by ARC-RES-048: the sheet's skill page (0x55BD10; task S6), the training sources (0x418CA0,
-0x418DE0, 0x418F30, 0x411940; S16), the dialog skill cases (0x4150D0, 0x415BA0; S4) and everything of sections 5 and 6
+0x418DE0, 0x418F30, 0x411940; S16), and everything of sections 5 and 6
 (the check and the uses; S3 and later).
 
 No original file, probe or game data was read for the research work item ARC-RES-044 itself. Original

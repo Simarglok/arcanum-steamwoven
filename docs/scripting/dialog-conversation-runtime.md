@@ -52,7 +52,9 @@ world port, and without it the grammar is unchanged. The optional `IDialogInvent
 (ARC-WORLD-014, [inventory runtime](../world/inventory-runtime.md#dialog-seam)), when present, takes negative `IN`
 instead of the world port; `IN` then needs only one of the two. The optional `IDialogRumorPort` (ARC-UI-008,
 [logbook](../rendering/terrain-viewer.md#logbook-arc-ui-008)) takes `RQ`; without it an `RQ` is a static
-`CapabilityUnavailable` frontier.
+`CapabilityUnavailable` frontier. The optional `IDialogSkillPort` (ARC-SKILLS-004, [skill gates](#skill-gates-arc-skills-004))
+answers the PC's skill levels and training and takes `TR`; when present it admits `PS`, `HA`, `SK`, `TR` and `ET`, and
+without it they stay `UnsupportedOperation`.
 
 ## Flow and source semantics
 
@@ -102,22 +104,54 @@ frontier. NPC `g:`/`m:`/`r:` (prefix) and exact `i:` are frontiers. Other text i
 separator = SP | HTAB | ',' | ';' | ':' | '(' | ')'      field = separator* (op (separator+ op)*)? separator*
 space     = SP | HTAB
 op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? DIGIT+
+          | ('SK' | 'TR' | 'ET') space* int (space* int)?   (ARC-SKILLS-004: digits are read greedily, so a second int
+                                                            without a space before it starts with '-': "tr4-1")
 ```
 
 | Field | Admitted operations (domains) |
 | --- | --- |
-| Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not). |
-| NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0). |
-| Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`) as the last operation (NPC node checked statically). |
+| Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not); with a skill port `PS n`, `HA n`, `SK s n`, `TR s t` ([skill gates](#skill-gates-arc-skills-004)). |
+| NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0); with a skill port `TR s t` (set the PC's training). |
+| Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically). |
 
 Unknown opcodes, `$`, combinators, `RE`/`AL` with `>`/`<`, non-negative `IN`, `JO`/`UW` with a non-zero
 first operand, `JO`/`UW`/`FL` in NPC actions or not last, `WA`/`UW` without a party port, and a non-space separator inside one
 operation (`GF 5,1`, `qu(5,6)`: the source's whitespace-skipping `atoi` would read 0 there)
-→ `UnsupportedOperation`; such forms are never reinterpreted. Wrong arity,
-missing separators, out-of-domain values, non-ASCII, `+` outside `RE`/`AL` actions,
-overflow → `InvalidOperation`. A field of separators only is empty. GF reads/writes use the
+→ `UnsupportedOperation`; such forms are never reinterpreted. A missing operand (except the optional second operand of
+`SK`/`TR`/`ET`, which reads 0), missing separators, out-of-domain values, non-ASCII, `+` outside `RE`/`AL` actions,
+overflow → `InvalidOperation`. Since ARC-SKILLS-004 a number where an operation should start, an extra operand (`LF 1 1 1`,
+`JO 0 30 5`) or a stray one (`ha4, -4, lf1 1`), which the source's scanner skips (DS1), is `UnsupportedOperation` (a frontier,
+not a failure). A field of separators only is empty. GF reads/writes use the
 owner's current version; `Unknown`/`Unavailable` is a frontier, `Failed`/`Stale` a failure,
 `NoChange` a successful receipt.
+
+## Skill gates (ARC-SKILLS-004)
+
+The source's dialog skill cases, read in the retail 1.0.7.4 executable by two readers
+([ledger DS1–DS5](../research/original-verification-ledger.md#dialog-skill-gates-arc-skills-004)). Skills are the source's
+numbers: 0..11 the basic skills, 12..15 the tech skills; the port reads any other number as level 0 and no training, as the
+source's getters answer 0 for it. Codes match case-insensitively.
+
+| Operation | Behaviour |
+| --- | --- |
+| `PS n`, `HA n` (condition) | Persuasion (skill 11) and haggle (skill 9) level shortcuts: n ≥ 0 passes at level ≥ n, n < 0 at level ≤ −n. |
+| `SK s n`, `TR s n` (condition) | The PC's effective level (`SK`) or training tier (`TR`, 0 none .. 3 master) in skill s against n, as above. |
+| `TR s t` (NPC or player action) | The PC's training in skill s is set to tier t through the source's training setter (one tier up at a time, any down, the tier's minimum level); a tier the rules refuse, an unknown skill or tier changes nothing and the dialog goes on. |
+| `ET s node` (player action tail) | The expert-teacher gate: a level of at least 9 (the expert minimum) and any training continue the dialog at the node; otherwise the source speaks a generated "won't teach" line (message ranges 6200..6299 for a low level, 6300..6399 for an untrained skill) with generated player options, which is the frontier `ExpertTeacherRefused` here. |
+
+The second operand of `SK`, `TR` and `ET` is read as the source reads it: the C library's `atoi` after the first operand's
+digits, so `tr4-1` is skill 4, tier ≤ 1, and a missing one (`tr41,`) is 0. A negative first operand is refused
+(`InvalidOperation`): the source would read it as the second operand as well. The source runs any operation after `ET`; this
+subset ends a player action there, as after `JO`.
+
+Session seam: `SessionDialogSkillPort` over `GameSessionOwner.QueryHeroSkills` and `SetHeroSkillTraining`
+([hero skills](../world/hero-skills-runtime.md)). The AREA viewer passes it when the session has a hero (`--hero`); the
+diagnostic PC has no skills, so the gates stay unadmitted there.
+
+Installed original (`DialogSkillRealDataTests`, `DAT_ROOT`, first observation 2026-10-21): over the 709 DLG files the content
+stack resolves, 937 `TR`, 440 `SK`, 354 `HA` and 275 `PS` conditions, 53 player and 62 NPC `TR` actions and 118 `ET`
+actions (in 20 files); every one parses on its own. Of the 1,582 fields that hold one, 1,215 parse whole and 367 stop at an
+operation outside this subset (money `$$` 121, rumors 84, quests 47, …), never at a skill operation.
 
 ## Bounds and failure accounting
 
@@ -203,6 +237,9 @@ original gameplay verification.
 
 ```sh
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogConversation"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogSkillTests"   # ARC-SKILLS-004
+DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogSkillRealData"
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogSkillPort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"
 ARC_AREA_CONVERSATION_GAME_ROOT=<installation> "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation&TestCategory=RealData"
 godot_canonical --path tools/terrain-viewer/Godot -- --self-test      # synthetic panel; AREA routing: off-NPC click, keys and polled levels, palette guard

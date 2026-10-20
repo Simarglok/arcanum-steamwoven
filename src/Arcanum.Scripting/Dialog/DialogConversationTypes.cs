@@ -34,6 +34,8 @@ public sealed record DialogConversationRequest(
 /// (ARC-WORLD-013) admits WA and UW and, when present, also takes JO instead of <paramref name="World"/>.
 /// <paramref name="Inventory"/> (ARC-WORLD-014), when present, takes negative IN instead of <paramref name="World"/>.
 /// <paramref name="Rumors"/> (ARC-UI-008) takes RQ; without it RQ is a static frontier.
+/// <paramref name="Skills"/> (ARC-SKILLS-004) admits the skill gates PS, HA, SK and TR and the actions TR and ET; without it
+/// they stay unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
@@ -42,7 +44,8 @@ public sealed record DialogConversationPorts(
     IDialogWorldPort? World = null,
     IDialogPartyPort? Party = null,
     IDialogInventoryPort? Inventory = null,
-    IDialogRumorPort? Rumors = null);
+    IDialogRumorPort? Rumors = null,
+    IDialogSkillPort? Skills = null);
 
 public enum DialogReactionMode
 {
@@ -82,6 +85,28 @@ public sealed record JoinCommand(DialogParticipantId Npc, DialogParticipantId Pl
 public sealed record UnwaitCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter) : DialogCommand;
 
 public readonly record struct DialogPartyQuery(DialogParticipantId Npc, DialogParticipantId PlayerCharacter);
+
+/// <summary>A skill of the PC by the source's number: 0..11 the basic skills, 12..15 the tech skills; any other number is a
+/// skill the source reads as level 0 and training none.</summary>
+public readonly record struct DialogSkillQuery(DialogParticipantId PlayerCharacter, int Skill);
+
+/// <summary>TR skill tier (action): the PC's training in the skill is set through the source's training setter; a tier the
+/// rules refuse (a skipped tier, a level below the tier's minimum, a skill or tier out of range) changes nothing and the
+/// dialog goes on.</summary>
+public sealed record SkillTrainingCommand(DialogParticipantId PlayerCharacter, int Skill, int Training) : DialogCommand;
+
+/// <summary>
+/// Skill seam (ARC-SKILLS-004): the PC's effective skill level (0..20) and training (0 none .. 3 master) for the skill gates
+/// and the expert-teacher gate, and the training action. Calls are synchronous and serialized by the host. Applied covers the
+/// training rules' refusal (nothing written); Rejected means the owner could not run the command at all; a thrown exception is
+/// recorded as indeterminate.
+/// </summary>
+public interface IDialogSkillPort
+{
+    int Level(DialogSkillQuery query);
+    int Training(DialogSkillQuery query);
+    DialogCommandResult Execute(SkillTrainingCommand command);
+}
 
 /// <summary>Result of JO and UW.</summary>
 public enum DialogJoinResult
@@ -183,6 +208,9 @@ public enum DialogOptionTransition
     Join,
     /// <summary>The reply action ends with FL: the NPC speaks <see cref="DialogOption.Target"/> and the dialog ends.</summary>
     FinalLine,
+    /// <summary>The reply action ends with ET (ARC-SKILLS-004): when the PC's skill is at least level 9 and trained, the dialog
+    /// continues at <see cref="DialogOption.Target"/>; otherwise the source speaks a generated refusal (a frontier here).</summary>
+    ExpertTeacher,
     /// <summary>Generated interaction (barter, training, …) this runtime does not perform.</summary>
     Unsupported,
 }
@@ -248,6 +276,9 @@ public enum DialogFrontierKind
     GlobalFlagUnknown,
     ReactionUnknown,
     JoinRefused,
+    /// <summary>ET refused (ARC-SKILLS-004): the PC's skill is below level 9 or untrained; the source then speaks a generated
+    /// "won't teach" line this runtime cannot produce.</summary>
+    ExpertTeacherRefused,
     TurnLimit,
     EffectLimit,
 }
