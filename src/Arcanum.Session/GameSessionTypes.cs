@@ -173,6 +173,8 @@ public enum GameSessionFailure
     InvalidSound,
     // Locks of portals and containers (ARC-WORLD-050).
     InvalidOpenable,
+    // Skills (ARC-SKILLS-004).
+    SkillsUnavailable, InvalidSkill,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
