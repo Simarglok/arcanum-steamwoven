@@ -232,7 +232,7 @@ in both modes); none of them is a slice of this plan.
 Agreed through the coordinator on 2026-10-20:
 
 - **Skills ([ARC-RES-061](skills-plan.md))**: one character-point pool, the session's unspent points; learning or
-  unlearning a rank spends or refunds through the editor-budget transaction that slice S5 of the [skills plan](skills-plan.md) builds (a WORLD code) (whichever lane
+  unlearning a rank spends or refunds through the editor-budget transaction that slice S5 of the [skills plan](skills-plan.md) builds (a WORLD code; whichever lane
   gets there first builds it, the other reuses it). The aptitude formula stays in `CharacterStatRules`; skills owns the
   tech points from tech skills, magic owns magick points from spells, the sector adjustment and the mage backgrounds.
   The shared fate owner (point count, armed fate per kind, consumed on use, saved) is slice S7 of the skills plan (a WORLD code); until it exists,
