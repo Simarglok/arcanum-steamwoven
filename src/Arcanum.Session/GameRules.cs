@@ -4,6 +4,7 @@ using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Reaction;
 
 namespace Arcanum.Session;
@@ -30,7 +31,8 @@ public enum RuleMode
 public sealed class GameRules
 {
     private GameRules(RuleMode mode, CombatAnomalyProfile combat, GameEventQueueProfile events, ScrRuleProfile scripts,
-        ReactionRuleProfile reaction, DataFixProfile data, ExperienceRuleProfile experience, SoundRuleProfile sound)
+        ReactionRuleProfile reaction, DataFixProfile data, ExperienceRuleProfile experience, SoundRuleProfile sound,
+        MagicAnomalyProfile magic)
     {
         Mode = mode;
         Combat = combat;
@@ -40,6 +42,7 @@ public sealed class GameRules
         Data = data;
         Experience = experience;
         Sound = sound;
+        Magic = magic;
     }
 
     public RuleMode Mode { get; }
@@ -69,13 +72,18 @@ public sealed class GameRules
     /// SN14, reversed hour windows never play.</summary>
     public SoundRuleProfile Sound { get; }
 
+    /// <summary>Magic (ARC-MAGIC-002): MG18, the no-dead-critter target lacks the critter bit.</summary>
+    public MagicAnomalyProfile Magic { get; }
+
     /// <summary>The default mode: the original with every recorded fix.</summary>
     public static GameRules Steamwoven { get; } = new(RuleMode.Steamwoven, CombatAnomalyProfile.Steamwoven, GameEventQueueProfile.Steamwoven, ScrRuleProfile.Steamwoven,
-        ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven, ExperienceRuleProfile.Steamwoven, SoundRuleProfile.Steamwoven);
+        ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven, ExperienceRuleProfile.Steamwoven, SoundRuleProfile.Steamwoven,
+        MagicAnomalyProfile.Steamwoven);
 
     /// <summary>The retail 1.0.7.4 behaviour in every domain.</summary>
     public static GameRules Original { get; } = new(RuleMode.Original, CombatAnomalyProfile.Original, GameEventQueueProfile.Original, ScrRuleProfile.Original,
-        ReactionRuleProfile.Original, DataFixProfile.Original, ExperienceRuleProfile.Original, SoundRuleProfile.Original);
+        ReactionRuleProfile.Original, DataFixProfile.Original, ExperienceRuleProfile.Original, SoundRuleProfile.Original,
+        MagicAnomalyProfile.Original);
 
     /// <summary>Both modes, default first.</summary>
     public static IReadOnlyList<GameRules> All { get; } = [Steamwoven, Original];
