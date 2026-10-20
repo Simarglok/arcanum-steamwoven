@@ -11,22 +11,25 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaMapTransfersOriginalTests
 {
     [TestMethod, TestCategory("RealData")]
-    public void A_staircase_leads_to_the_next_level_at_its_arrival_and_the_way_out_to_the_start_map_is_refused()
+    public void A_staircase_leads_to_the_next_level_at_its_arrival_and_the_way_out_leads_to_the_start_map()
     {
         var root = Root();
         var first = AreaLoadOperation.Execute(1, Arguments(root, "crematorium-lev 1"), default);
         Assert.IsNull(first.MapTransitionsFailure);
-        // Every listed map folder but the 2000 × 2000 start map (621 sector files) opens in map mode.
-        Assert.AreEqual(78, first.MapDestinations!.Count);
-        Assert.IsFalse(first.MapDestinations.ContainsKey(1));
+        // Every listed map folder opens in map mode; since ARC-RENDER-024 the 2000 × 2000 start map (621 sector files) too, as
+        // a window around the arrival.
+        Assert.AreEqual(79, first.MapDestinations!.Count);
+        Assert.IsTrue(first.MapDestinations.ContainsKey(1));
         var map = new AreaMapRuntime(first.Area!.Snapshot, first.AreaStepSnapshot!, first.Area.Plan.Chart);
         var transfers = new AreaMapTransfers(map, first.MapTransitions!, first.MapDestinations);
         Assert.AreEqual(0, transfers.Unmatched);
         var down = transfers.Triggers.Single(key => transfers.Site(key)!.DestinationCatalogue == 5034);
         var exit = transfers.Triggers.Single(key => transfers.Site(key)!.DestinationCatalogue == 5000);
         AreaStepCell At(Arcanum.Data.Area.AreaObjectKey key) => new(transfers.Object(key).WorldX!.Value, transfers.Object(key).WorldY!.Value);
-        var refused = transfers.RequestUse(exit, At(exit));
-        Assert.AreEqual((AreaUseOutcome.DestinationUnavailable, "DESTINATION_NOT_OPENED_IN_MAP_MODE 5000"), (refused.Outcome, refused.Reason));
+        var outside = transfers.RequestUse(exit, At(exit));
+        Assert.AreEqual(AreaUseOutcome.Accepted, outside.Outcome, outside.Reason);
+        Assert.AreEqual((5000, 1), (transfers.Pending!.To.Catalogue, transfers.Pending.To.Runtime));
+        transfers.Clear();
         var used = transfers.RequestUse(down, At(down));
         Assert.AreEqual(AreaUseOutcome.Accepted, used.Outcome, used.Reason);
         var pending = transfers.Pending!;
