@@ -282,6 +282,11 @@ values divided by four: −9…+9 → 13, 16, 19, 22, 26, 30, 34, 38, 42, 47, 52
 
 ### 5.3 Difficulty
 
+**Original check (ARC-SKILLS-003):** sections 5.2–5.4 were read in the retail 1.0.7.4 executable by two readers, rows
+[SC1–SC17](original-verification-ledger.md#skill-check-arc-skills-003). They agree with this reading except that a small own
+light keeps three quarters of the darkness penalty (SC9), and they complete it: heal without a healing item is impossible,
+and each worn armour's silent-move adjustment is halved on its own (SC11).
+
 Summed, in this order (difficulty (0x4C8430)):
 
 1. the invocation modifier;
@@ -300,7 +305,7 @@ Summed, in this order (difficulty (0x4C8430)):
    purpose is unclear and only the flag name says cover);
 6. **light** (not for an undead source) for bow, melee, throwing, firearms,
    spot trap, pick locks, disarm traps and seeing checks: up to +30 in full
-   darkness, divided by the source's own light (4, 3, 2 or ×2/3 by size),
+   darkness, divided by the source's own light (4, 3, 2 or ×3/4 by size; SC9),
    replaced by 30 − penalty when the source has dark sight (for a seeing
    check: unless the observer has dark sight); skipped by an expert in melee or pick locks; spot,
    disarm and seeing checks apply it only while untrained;
@@ -310,7 +315,7 @@ Summed, in this order (difficulty (0x4C8430)):
 8. **per skill**: pick pocket +30..1000 for worn slots (helmet 50, rings and
    medallion 30, weapon and shield 70, armour, gauntlets and boots 1000) and
    `5 × width × height` for size, halved for an expert; prowling (section 6);
-   heal minus the healing item's usage bonus; pick locks minus the lockpick
+   heal minus the healing item's usage bonus (impossible without one, SC11); pick locks minus the lockpick
    bonus plus the lock's difficulty (halved for a master), impossible on
    anything but a portal or container; disarm plus the trap's difficulty.
 

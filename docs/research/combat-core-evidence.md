@@ -264,8 +264,9 @@ Order of resolution in `sub_4B3170` (0x4B3170):
      hit impossible; each cell beyond `PE/2` adds 5 (not for masters); cover
      adds the line-of-fire rating;
    - light (not undead; melee experts exempt): `30 × (255 − light)/255`,
-     reduced by the attacker's own light (÷4, ÷3, ÷2, ×⅔) and inverted by dark
-     sight;
+     reduced by the attacker's own light (÷4, ÷3, ÷2, ×⅔; the executable keeps
+     ×¾ for a small light, [SC9](original-verification-ledger.md#skill-check-arc-skills-003))
+     and inverted by dark sight;
    - blinded +30; crippled arms +20 one, +50 both.
 7. **Critical.** A second d100 decides the critical (crit chance (0x4C81A0, 0x4C82E0)):
    on success critical when `roll ≤ effectiveness/20` + aimed bonus
