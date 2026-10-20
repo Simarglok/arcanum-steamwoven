@@ -24,6 +24,7 @@ internal sealed record ConversationSkillGate(DialogOperationSource Source, int S
 internal sealed record ConversationSkillTraining(DialogOperationSource Source, int Skill, int Training) : ConversationOperation(Source);
 internal sealed record ConversationExpertTeacher(DialogOperationSource Source, int Skill, int Node) : ConversationOperation(Source);
 internal sealed record ConversationMetBefore(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
+internal sealed record ConversationFatePoint(DialogOperationSource Source) : ConversationOperation(Source);
 
 internal enum ConversationField
 {
@@ -41,7 +42,9 @@ internal enum ConversationField
 /// and TR skill n (a training gate), ARC-SKILLS-004.</item>
 /// <item>Actions: LF, GF, QU, RU, RQ (quell a rumor, ARC-UI-008), RE and AL (unsigned target or lexically signed delta),
 /// negative IN (NPC gives an item), MM; a Player action may end with one JO 0 node or FL node, and with a party port with
-/// one UW 0 node; with a skill port TR skill tier (also in an NPC action), and a Player action may end with one ET skill node.</item>
+/// one UW 0 node; with a skill port TR skill tier (also in an NPC action), and a Player action may end with one ET skill node;
+/// with a fate port FP (one fate point for the PC, ARC-WORLD-054) in NPC and Player actions, without an operand, as every installed
+/// one is written (the source reads an operand it does not use; one is outside this subset).</item>
 /// </list>
 /// SK, TR and ET read their second operand as the source does (0x4167C0, ledger DS3): spaces before it are optional
 /// ("tr4-1") and a missing one is 0; a negative first operand is refused (the source would read it as the second too).
@@ -57,7 +60,7 @@ internal static class DialogConversationGrammar
     private const int HaggleSkill = 9, PersuasionSkill = 11;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false)
+        bool party, bool skills = false, bool fate = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -84,6 +87,7 @@ internal static class DialogConversationGrammar
             var admitted = role == ConversationField.PlayerCondition
                 ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR"
+                    || fate && opcode == "FP"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET");
             if (!admitted)
             {
@@ -94,6 +98,17 @@ internal static class DialogConversationGrammar
                 // The source keeps reading operations after JO/UW/FL, but JO/UW enter their node mid-field;
                 // operations after them are outside this conservative subset.
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
+            }
+            if (opcode == "FP")
+            {
+                // No operand: a number after it is outside the subset (the stray-number rule below, or this check).
+                if (index < bytes.Count && !IsSeparator(bytes[index]))
+                    throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, index - start + 1, operations.Count);
+                operations.Add(new ConversationFatePoint(Source(record, field, start, 2, operations.Count)));
+                if (operations.Count > options.MaxOperationsPerField)
+                    throw new DialogOperationParseException(DialogFailureKind.OperationLimitExceeded, operations[^1].Source);
+                SkipSeparators(bytes, ref index);
+                continue;
             }
             SkipOperandSpace(bytes, ref index, record, field, start, operations.Count, required: false);
             if (opcode is "RE" or "AL" && index < bytes.Count && bytes[index] is (byte)'>' or (byte)'<')

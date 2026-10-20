@@ -364,7 +364,9 @@ public sealed class AreaConversationHost
             new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
             new DialogConversationPorts(State, State, _session.Flags, State, party, InventoryPort(), State,
                 // ARC-SKILLS-004: the skill gates read the session hero; the diagnostic PC has no skills, so they stay unadmitted.
-                _session.QueryHero() is null ? null : new SessionDialogSkillPort(_session, AreaConversationState.PcParticipant), State));
+                _session.QueryHero() is null ? null : new SessionDialogSkillPort(_session, AreaConversationState.PcParticipant), State,
+                // ARC-WORLD-054: FP gives the session hero a fate point; without a hero it stays unadmitted.
+                _session.QueryHero() is null ? null : new SessionDialogFatePort(_session, AreaConversationState.PcParticipant)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script);
     }

@@ -118,13 +118,25 @@ public sealed class ReactionStateTests
     [TestMethod]
     public void TheFatePointForcesAHundredAndAnEndWithoutBeginStillRemembers()
     {
-        using var owner = Create();
-        Changed(owner.BeginReactionConversation(owner.Version, Virgil, Human60, forceGoodReaction: true), owner, 1);
+        // ARC-WORLD-054 (DR6): the hero's armed "force good reaction" fate raises a start below 100 and is used by it.
+        using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        owner.GrantHeroFatePoint(owner.Version);
+        owner.ArmHeroFate(owner.Version, FateKind.ForceGoodReaction);
+        var start = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.BeginReactionConversation(owner.Version, Virgil, Human60).Disposition);
+        Assert.AreEqual(start + 1, owner.Version.Revision, "the reaction and the used fate in one revision");
         Assert.AreEqual(100, View(owner).Stored);
-        Assert.AreEqual(GameSessionDisposition.NoChange,
-            owner.BeginReactionConversation(owner.Version, Virgil, Human60, forceGoodReaction: true).Disposition, "already 100");
+        Assert.AreEqual(new FateState(0, 0), owner.QueryHeroFate());
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.BeginReactionConversation(owner.Version, Virgil, Human60).Disposition, "already 100");
+        // At 100 or above an armed fate stays armed for a later talk.
+        owner.GrantHeroFatePoint(owner.Version);
+        owner.ArmHeroFate(owner.Version, FateKind.ForceGoodReaction);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.BeginReactionConversation(owner.Version, Virgil, Human60).Disposition);
+        Assert.IsTrue(owner.HeroFateArmed(FateKind.ForceGoodReaction));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.UndoHeroFate(owner.Version, FateKind.ForceGoodReaction).Disposition);
         // A second begin keeps the open conversation's value, not the remembered one or the base.
-        Changed(owner.AdjustReaction(owner.Version, Virgil, Human60, Pc, -30), owner, 2);
+        var before = owner.Version.Revision;
+        Changed(owner.AdjustReaction(owner.Version, Virgil, Human60, Pc, -30), owner, before + 1);
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.BeginReactionConversation(owner.Version, Virgil, Human60).Disposition);
         Assert.AreEqual(new SessionReaction(Virgil, null, 70), owner.QueryReactionRecord(Virgil));
         using var other = Create();

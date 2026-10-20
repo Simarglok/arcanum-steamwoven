@@ -160,6 +160,15 @@ stack resolves, 937 `TR`, 440 `SK`, 354 `HA` and 275 `PS` conditions, 53 player 
 actions (in 20 files); every one parses on its own. Of the 1,582 fields that hold one, 1,215 parse whole and 367 stop at an
 operation outside this subset (money `$$` 121, rumors 84, quests 47, …), never at a skill operation.
 
+## Fate point action (ARC-WORLD-054)
+
+With the optional `IDialogFatePort` (`DialogConversationPorts.Fate`) the NPC and Player actions admit `FP`: the PC gets one fate
+point (the source's dialog action `fp`, code 29 of its action table, [FT8](../research/original-verification-ledger.md#fate-points-arc-world-054)).
+The receipt is a `FatePointCommand`; Applied also covers a PC already at 100 points. Every installed `fp` is written without an
+operand, so `FP` takes none here; a number after it is an `UnsupportedOperation` frontier (the source reads it and ignores it).
+Without the port `FP` stays unadmitted. The session's port is `SessionDialogFatePort` over the hero
+([fate points](../world/fate-points-runtime.md)); the AREA viewer passes it when the session has a hero.
+
 ## Bounds and failure accounting
 
 Caller options may only lower the hard caps: 64 structural replies, 1024 turns (default 256),

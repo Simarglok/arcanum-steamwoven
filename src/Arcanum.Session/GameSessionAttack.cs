@@ -308,6 +308,8 @@ public sealed partial class GameSessionOwner
             DodgeTraining = skills[Skill.Dodge].Training,
             BackstabLevel = skills[Skill.Backstab].Level,
             BackstabTraining = skills[Skill.Backstab].Training,
+            CriticalHitFateArmed = FateRules.IsArmed(_hero.State.Fate, FateKind.CriticalHit),
+            CriticalMissFateArmed = FateRules.IsArmed(_hero.State.Fate, FateKind.CriticalMiss),
         };
         var weaponSkill = skills[SkillRules.Of(equipment.Skill)];
         var range = equipment.Weapon.Kind == WeaponKind.Unarmed ? 1 : Math.Max(1, equipment.Weapon.Range);
@@ -342,6 +344,7 @@ public sealed partial class GameSessionOwner
             return RejectAttack(GameSessionFailure.InvalidAttack);
         if (!hero.Supported) return RejectAttack(GameSessionFailure.AttackUnsupported);
         if (!IsCurrent(expected)) return RejectAttack(GameSessionFailure.StaleVersion);
+        if (_revision == long.MaxValue) return RejectAttack(GameSessionFailure.RevisionExhausted);
 
         var targetStatus = LifeRules.Evaluate(record.State, facts!);
         // A follower the session levelled defends with its saved sheet's skills and level (ARC-SKILLS-002).
@@ -367,8 +370,15 @@ public sealed partial class GameSessionOwner
         catch (TrialCombatRolls.ExhaustedException) { return RejectAttack(GameSessionFailure.RandomExhausted); }
         catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
         _random = rolls.Trial;
+        // The fate the resolver used (FT6) is cleared at once, in a revision of its own before the damage steps.
+        if (resolution.Fate != FateUse.None)
+        {
+            ClearUsedAttackFate(resolution.Fate);
+            _revision++;
+        }
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)
-            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version);
+            return new(resolution.Fate != FateUse.None ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None,
+                resolution, null, null, null, null, GameSessionFailure.None, Version);
 
         var recipient = resolution.Damage!.Recipient;
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage);
