@@ -17,6 +17,10 @@ public partial class TerrainViewerApp
         Require(_audio is not null, "no backend");
         var catalog = SoundCatalogFor(_arguments!.ModulePath);
         Require(catalog is not null, $"no catalogue ({_soundContent?.Detail})");
+        // ARC-UI-047: start from silence. An earlier stage's synthetic frames (the attack smoke runs hundreds in one engine frame)
+        // start many one-shot sounds within a fraction of a second; a voice is freed only after its sound ends, so every voice
+        // can still be taken here.
+        StopSceneSound();
         var handles = new List<ViewerAudioHandle>();
         foreach (var id in InterfaceSoundIds)
         {
