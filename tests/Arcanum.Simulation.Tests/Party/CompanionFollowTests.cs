@@ -164,6 +164,29 @@ public sealed class CompanionFollowTests
     }
 
     // One host frame per quarter unit: the leader's cell, an update at the frame boundary, then the drive to it.
+    [TestMethod]
+    public void An_ordered_walk_is_not_replaced_by_following_and_following_resumes_after_it()
+    {
+        // ARC-WORLD-046 (OL9): walk here to (12,1) while the leader stands at (2,1); then the leader 10 cells away is followed again.
+        var source = GridSource.Open(24, 3);
+        var host = new RouteHost(source, new(3, 1), Step);
+        var follow = new CompanionFollower(source);
+        Assert.IsFalse(follow.WalkTo(new(40, 1), host.State.Time), "outside the step source");
+        Assert.IsTrue(follow.WalkTo(new(12, 1), host.State.Time));
+        Assert.IsTrue(follow.Ordered);
+        var actions = Frames(host, follow, () => new(2, 1), 4 * 12);
+        Assert.AreEqual(FollowAction.Run, actions[0], "the ordered goal runs although the leader is within 4");
+        Assert.IsTrue(host.Committed().Contains(new CellCoord(12, 1)), "it reaches the tile");
+        Assert.IsTrue(host.Committed().Last().X <= 12, "and then turns back to its leader");
+        Assert.IsFalse(follow.Ordered);
+        Frames(host, follow, () => new(2, 1), 4 * 12);
+        Assert.AreEqual(new CellCoord(4, 1), host.State.CommittedCell, "then it follows the leader 10 cells away to range 2");
+        // Stopping to follow ends an ordered goal.
+        Assert.IsTrue(follow.WalkTo(new(20, 1), host.State.Time));
+        Frames(host, follow, () => new(2, 1), 1, following: false);
+        Assert.IsFalse(follow.Ordered);
+    }
+
     private static List<FollowAction> Frames(RouteHost host, CompanionFollower follow, Func<CellCoord> leader, int frames,
         bool spreadOut = false, bool following = true)
     {

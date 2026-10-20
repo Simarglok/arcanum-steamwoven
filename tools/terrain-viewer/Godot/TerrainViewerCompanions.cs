@@ -29,6 +29,7 @@ public partial class TerrainViewerApp
         // ARC-WORLD-051: the portals are bound with the same session and grid.
         BindAreaPortals();
         _areaCompanions = null; _unbodiedVisitors = [];
+        RefreshFollowerPortraits();
         if (_areaSession is not { } session || _conversationHost is not { PartyWired: true } || _worldActor.Session is not AreaGridSession grid) return;
         // ARC-WORLD-037: in map mode only the NPCs the party has touched move as companions (following, waiting, or recorded
         // elsewhere than their T0 cell); every other speaker stays its T0 body until it joins.
@@ -42,12 +43,17 @@ public partial class TerrainViewerApp
             world => grid.Chart.Contains(grid.Chart.ToChart(new(world.X, world.Y))));
         foreach (var entity in _unbodiedVisitors) GD.Print("ARC-WORLD-048 visitor not talkable entity=" + entity + " reason=no body kept this run");
         foreach (var skipped in _areaCompanions.Skipped) GD.Print("ARC-WORLD-016 companion skipped " + skipped);
+        RefreshFollowerPortraits();
         GD.Print("ARC-WORLD-016 companions bound " + System.Text.Json.JsonSerializer.Serialize(_areaCompanions.Companions.Select(c => new {
             c.Speaker.ScriptId, Standing = c.Standing.ToString(), Cell = grid.Chart.ToWorld(c.Grid.State.CommittedCell), Visiting = c.Template.Home.RuntimeMap != CurrentAreaMap }).ToArray())
             + " map=" + CurrentAreaMap + " absent=" + _areaCompanions.Absent.Count);
     }
 
-    private void UnbindAreaCompanions() { _areaCompanions = null; _companionNotice = null; _unbodiedVisitors = []; }
+    private void UnbindAreaCompanions()
+    {
+        _areaCompanions = null; _companionNotice = null; _unbodiedVisitors = []; _pendingWalkOrder = null;
+        RefreshFollowerPortraits();
+    }
 
     // ARC-WORLD-048: companions recorded on the shown map that this run kept no body for (AreaVisitors.Unbodied).
     private IReadOnlyList<string> _unbodiedVisitors = [];
@@ -150,6 +156,7 @@ public partial class TerrainViewerApp
         foreach (var companion in group.Companions.Where(c => c.LastUpdate.Action == FollowAction.Jump && c.Grid.State.Time == frontier))
             GD.Print($"ARC-WORLD-016 companion script={companion.Speaker.ScriptId} jumped onto the PC cell {pc.State.CommittedCell}");
         RunCompanionLoyalty(group, owner, pc, frontier);
+        RefreshFollowerPortraits();
     }
 
     // ARC-WORLD-045: each following companion's AI tick runs the loyalty step (the original's non-combat pass, so none while a
@@ -309,10 +316,41 @@ public partial class TerrainViewerApp
                 && AreaCompanionPlacement.Decode(value)?.World == new CellCoord((int)world.X, (int)world.Y), "the session holds his cell");
             Require(host.Nearest(map.Chart.ToWorld(pc).X, map.Chart.ToWorld(pc).Y, SpeakerCell) == speaker, "within talk reach where he stands");
 
+            // ARC-WORLD-046: F4 (spread out) through the keyboard path sets his spread flag and steps him away from the PC; F3 (stay
+            // close) clears it, and from beyond 4 cells he closes to 2 again. Then the portrait menu's wait makes him wait (his wait
+            // index 6 schedules no wait timer, ARC-WORLD-045).
+            void Press(Key key)
+            {
+                GetViewport().PushInput(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = true });
+                GetViewport().PushInput(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = false });
+            }
+            long Apart() => FollowDistanceRules.Distance(companion.Grid.State.CommittedCell, ((AreaGridSession)_worldActor.Session!).State.CommittedCell);
+            void SettleOrder() { for (var i = 0; i < 120 && (companion.Follow.Ordered || companion.Grid.State.Phase != MovementPhase.Settled); i++) AreaSmokeFrame(); }
+            GetViewport().GuiReleaseFocus();
+            Press(Key.F4);
+            Require(_areaSession.QueryCompanion(companion.Entity).SpreadOut, "F4 spread him out: " + _companionNotice);
+            SettleOrder();
+            var spread = Apart();
+            for (var i = 0; i < 8; i++) AreaSmokeFrame();
+            Require(Apart() == spread, $"spread out he holds at {spread} (start distance 7): {group()}");
+            Press(Key.F3);
+            Require(!_areaSession.QueryCompanion(companion.Entity).SpreadOut, "F3 called him close: " + _companionNotice);
+            for (var i = 0; i < 120 && spread > FollowDistanceRules.StartDistance
+                && (Apart() > FollowDistanceRules.Range || companion.Grid.State.Phase != MovementPhase.Settled); i++) AreaSmokeFrame();
+            var close = Apart();
+            Require(spread > FollowDistanceRules.StartDistance ? close <= FollowDistanceRules.Range : close == spread,
+                $"staying close he came back from {spread} to {close}: {group()}");
+            Require(_followerPortraits?.EntitiesForSelfTest.Contains(companion.Entity) == true, "his portrait is shown");
+            FollowerMenuChosen(companion.Entity, FollowerMenuItem.Wait);
+            Require(_areaSession.QueryCompanion(companion.Entity).Standing == CompanionStanding.Waiting && _areaSession.QueryWaitTimer(companion.Entity) is null,
+                "the portrait's wait made him wait, with no wait timer: " + _companionNotice);
+            Require(_followerPortraits?.EntitiesForSelfTest.Contains(companion.Entity) == false, "a waiting follower has no portrait (OL16)");
+            cell = companion.Grid.State.CommittedCell;
+            Require(RecordAreaCompanions("smoke orders"), "placement recorded after the orders");
+            GD.Print("ARC-WORLD-046 native-smoke orders PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Script = speaker.ScriptId, SpreadDistance = spread, CloseDistance = close, Waited = true, WaitTimer = "none (index 6)", Parity = "NOT_VERIFIED" }));
+
             // Waiting: the PC goes back to where Virgil started; he stays on his recorded cell.
-            // ARC-WORLD-045: his wait index 6 schedules no wait timer.
-            Require(_areaSession.WaitParty(_areaSession.Version, companion.Entity, AreaCompanionRoster.WaitFacts(companion.Facts)).Disposition
-                == GameSessionDisposition.Changed && _areaSession.QueryWaitTimer(companion.Entity) is null, "wait, with no wait timer");
             AreaSmokePlace(map, AreaSmokeStandable(map, origin, 2));
             companion = _areaCompanions!.Companions.Single();
             Require(companion.Grid.State.CommittedCell == cell && companion.Standing == CompanionStanding.Waiting, "rebound waiting on his recorded cell: " + group());
