@@ -152,7 +152,8 @@ public sealed partial class GameSessionOwner
         var e = firing.Event;
         var entity = e.Payload.Entities[0];
         var current = _party.Get(entity.Code);
-        // Every way out of waiting removes the timer and a restore admits one only for a waiting NPC, so this is a defect guard.
+        // Every way out of waiting removes the timer and a restore admits one only for a waiting NPC, so this is a defect guard; at
+        // revision exhaustion the queue has already taken the event, so the NPC then waits on without a timer.
         if (current.Standing != CompanionStanding.Waiting || _revision == long.MaxValue) return GameEventHandlerOutcome.Refused;
         var charisma = _hero is null ? (int)e.Payload.Values[2] : Leader(PersuasionTraining.None, 0).Charisma;
         var world = _passWorld as ISessionPartyEventWorld;

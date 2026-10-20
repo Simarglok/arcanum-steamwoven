@@ -1684,7 +1684,9 @@ public sealed partial class GameSessionOwner : IDisposable
                 if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || party.Get(pending.Entities[0].Code).Standing != CompanionStanding.Waiting ||
                     pending.Values[0] < 0 || pending.Values[0] > clockMs || !CompanionLoyaltyRules.WaitDurationsMs.Contains(pending.Values[1]) ||
                     pending.DeadlineMs != pending.Values[0] + Math.Max(pending.Values[1], 1) || pending.Values[2] is < int.MinValue or > int.MaxValue ||
-                    converted.Any(e => e.Kind == SessionEventKinds.PartyWait && SessionEventKinds.NamesNpc(e, pending.Entities[0].Code)))
+                    converted.Any(e => e.Kind == SessionEventKinds.PartyWait && SessionEventKinds.NamesNpc(e, pending.Entities[0].Code)) ||
+                    // One map per NPC's timers, as for the life timers.
+                    (!maps.TryAdd(pending.Entities[0].Code, pending.Entities[0].Map) && maps[pending.Entities[0].Code] != pending.Entities[0].Map))
                     return GameSessionFailure.InvalidEvents;
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;

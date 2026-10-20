@@ -135,8 +135,9 @@ when due the NPC stops waiting, jilted, after its reaction change, one revision,
 Only followers' events travel with the actor, so a waiting NPC's timer stays parked on its map and fires overdue after the PC
 returns. A host without an object check (`ISessionScriptWorld`) lets it run while the session records the NPC waiting; a host that
 implements `ISessionPartyEventWorld` gives the reaction facts. A restore refuses one whose NPC the saved party does not record
-waiting, one set after the saved clock or not exactly a table duration (0 as 1 ms) before its deadline, and a second one for the
-same NPC. See [party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045).
+waiting, one set after the saved clock or not exactly a table duration (0 as 1 ms) before its deadline, a second one for the
+same NPC, and one on another map than the NPC's life timers. A waiting NPC's timer counts for the one-map rule of its life timers:
+a life step on another map takes it along, and from the host's world port during a pass such a step is `InvalidEventPass`. See [party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045).
 
 A positive write is a step that changes the stored value to a positive one, or the timer's own handler writing what it
 found positive (the source writes those back even when the heal rate is 0). **Deliberate difference:** the source's

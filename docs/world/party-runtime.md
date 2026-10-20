@@ -74,7 +74,9 @@ session revision; refusals change nothing. `GameSessionLimits.MaxCompanions`
 existing record may still change. New failures: `InvalidCompanion`, `InvalidConsentFacts`,
 `ConsentRefused`, `LeaveRefused`, `NotInParty`, `NotWaiting`.
 
-Not stored yet: death (a dead NPC keeps its standing; the session removes its wait timer), NPC leaders other than the PC,
+Not stored yet: death and destruction (the original's kill notification and object destruction end the wait; here a dead or
+destroyed waiting NPC keeps its `Waiting` record, and its companion budget slot, with no timer: death removes the timer, a pass drops
+the timer of an NPC the host no longer reports), NPC leaders other than the PC,
 and the NPC flags an area record may carry at T0 (a new session starts with no records; Virgil's bits are clear, ARC-RES-026).
 
 ## Wait timer and loyalty (ARC-WORLD-045)
@@ -94,7 +96,7 @@ NPC is jilted at the next pass. With a hero its training and effective charisma 
 fires). No room for the timer (`SessionEventKinds.MaxWaitTimers` = 64, or the queue) is `EventBudgetExceeded` and changes nothing.
 
 **Expiry** (OL24). In one revision: the reaction change `2 × (charisma − 20)` (the hero's effective charisma, else the one saved
-in the event) through the ordinary reaction rules while the PC still leads the NPC, so a negative change arms its marks (OL22); then
+in the event: without a hero the leader is not re-read, a documented deviation from OL23) through the ordinary reaction rules while the PC still leads the NPC, so a negative change arms its marks (OL22); then
 the NPC is free and jilted, forced cleared, its marks kept. The reaction facts are the host's: a pass host that implements
 `ISessionPartyEventWorld` gives the NPC's (and without a hero the PC's) `Reaction…Facts`; without them, or when the stored
 value would leave its bounds or no reaction record is left, the NPC is jilted without the change and `SessionWaitFiring.ReactionFailure`
@@ -102,7 +104,7 @@ says why. No line, animation or script. A pass result lists the firings in `Sess
 
 **Cancel** (OL25). Every way out of waiting removes the NPC's timer wherever it is parked: `UnwaitParty`, `JoinParty`,
 `ForceJoinParty`, `LeaveParty` (forced or not) and an NPC's death (`Life` with `Died`). A refused unwait or leave keeps it.
-Destruction is the host's: a pass drops an event whose NPC the host no longer reports.
+Destruction is the host's: a pass drops an event whose NPC the host no longer reports (the record stays `Waiting`, above).
 
 **Maps** (OL26). The event stays with the waiting NPC's map (only followers' events travel with the actor), so it is parked while
 the PC is away and fires, overdue, at the first pass after the PC returns.

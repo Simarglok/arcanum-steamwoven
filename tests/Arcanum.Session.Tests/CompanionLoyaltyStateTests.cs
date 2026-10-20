@@ -445,10 +445,60 @@ public sealed class CompanionLoyaltyStateTests
         }
     }
 
+    [TestMethod]
+    public void Every_entry_stops_at_the_revision_limit_and_changes_nothing()
+    {
+        using var owner = Waiting(Wait(1), out _);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "oid:a").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AdjustReaction(owner.Version, "oid:a", Human50, Pc, -5).Disposition);
+        var saved = owner.Capture();
+        using var full = Restore(With(saved, saved.Party, revision: long.MaxValue));
+        var max = new GameSessionVersion(full.Identity, long.MaxValue);
+        Rejected(full.WaitParty(max, "oid:a", Wait(1)), full, GameSessionFailure.RevisionExhausted, long.MaxValue);
+        Assert.AreEqual(1, full.QueryEvents().Count, "no timer for the refused wait");
+        Assert.AreEqual(GameSessionFailure.RevisionExhausted, full.RunLoyaltyStep(max, "oid:a", Facts(), false).Failure);
+        Assert.AreEqual(ReactionMarks, full.QueryCompanion("oid:a").Loyalty);
+        Rejected(full.RecordPcAlignmentChange(max, 0, 5), full, GameSessionFailure.RevisionExhausted, long.MaxValue);
+        // The due timer is refused by its handler (a defect guard): the NPC still waits.
+        Advance(full, 15 * Minute);
+        var pass = full.ProcessEvents(new World());
+        Assert.AreEqual(0, pass.Waits.Count);
+        Assert.AreEqual(CompanionStanding.Waiting, full.QueryCompanion(Npc).Standing);
+    }
+
+    [TestMethod]
+    public void A_full_reaction_budget_jilts_without_the_reaction_change_or_its_marks()
+    {
+        using var owner = Create(new GameSessionLimits(maxReactionRecords: 1));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AdjustReaction(owner.Version, "oid:other", Human50, Pc, 3).Disposition);
+        Waiting(Wait(1), out _, owner);
+        Advance(owner, 15 * Minute);
+        var firing = owner.ProcessEvents(new World()).Waits.Single();
+        Assert.AreEqual((GameSessionFailure.BudgetExceeded, (ReactionAdjustment?)null), (firing.ReactionFailure, firing.Reaction));
+        Assert.AreEqual(new SessionCompanion(Npc, CompanionStanding.Free, false, false, true), owner.QueryCompanion(Npc));
+        Assert.IsNull(owner.QueryReactionRecord(Npc));
+    }
+
+    [TestMethod]
+    public void Restore_refuses_a_wait_timer_on_another_map_than_the_npcs_life_timers()
+    {
+        using var owner = Waiting(Wait(1), out _);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version,
+            SessionLifeTarget.Critter(Npc, new LifeFacts(), LifeState.Unharmed), new LifeDamage { Fatigue = 1 }).Disposition);
+        var saved = owner.Capture();
+        Assert.AreEqual(2, saved.Events.Pending.Count);
+        var moved = saved.Events.Pending.Select(e => e.Kind == SessionEventKinds.PartyWait
+            ? e with { Entities = [new(Cave.RuntimeMap, Npc)] } : e).ToArray();
+        var result = GameSessionOwner.Restore(With(saved, saved.Party, new(saved.Events.Registry, saved.Events.NextSequence, moved)), RestoreOptions());
+        result.Owner?.Dispose();
+        Assert.AreEqual(GameSessionFailure.InvalidEvents, result.Failure);
+    }
+
     private static GameSessionOwner HeroOwner(SessionHeroDefinition hero) => CreateWith(hero);
 
-    private static GameSessionSnapshot With(GameSessionSnapshot saved, SessionPartyState party, SessionEventState? events = null) => new(
-        saved.SchemaVersion, saved.Identity, saved.Revision, saved.Clock, saved.Flags, saved.Actor, saved.Maps.ToArray(), saved.Story, party,
+    private static GameSessionSnapshot With(GameSessionSnapshot saved, SessionPartyState party, SessionEventState? events = null,
+        long? revision = null) => new(
+        saved.SchemaVersion, saved.Identity, revision ?? saved.Revision, saved.Clock, saved.Flags, saved.Actor, saved.Maps.ToArray(), saved.Story, party,
         saved.Hero, saved.Inventory, saved.Equipment, saved.Durability, saved.Schematics, saved.Effects, saved.Experience, saved.Advancement,
         saved.Random, saved.Life, saved.Reactions, saved.Combat, saved.CombatMode, events ?? saved.Events, saved.Lighting, saved.Sound);
 }
