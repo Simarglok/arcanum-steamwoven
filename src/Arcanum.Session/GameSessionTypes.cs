@@ -198,6 +198,8 @@ public enum GameSessionFailure
     SpellBookUnavailable, InvalidSpellBook, SpellBookRefused,
     // Fate points (ARC-WORLD-054).
     FateUnavailable, InvalidFateKind, FateRefused,
+    // World-map areas (ARC-WORLD-056).
+    InvalidArea,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -259,19 +261,32 @@ public static class SessionStoryLimits
 
     public static bool IsQuest(int quest) => quest is >= FirstQuest and <= LastQuest;
     public static bool IsRumor(int rumor) => rumor is >= FirstRumor and <= LastRumor;
+
+    /// <summary>ARC-WORLD-056: world-map areas the PC can know, 1..<see cref="LastArea"/> (project policy; the installed module
+    /// has 81, area 0 is the unknown area).</summary>
+    public const int LastArea = 4095;
+    public static bool IsArea(int area) => area is >= 1 and <= LastArea;
 }
 
 /// <summary>Saved story state: PC quests, non-default shared quest states, known rumors and quelled rumors (ARC-UI-008),
-/// each ascending.</summary>
+/// each ascending, and the PC's known world-map areas and last discovered area (ARC-WORLD-056).</summary>
 public sealed class SessionStoryState
 {
-    internal SessionStoryState(SessionQuest[] quests, SessionGlobalQuest[] globalQuests, SessionRumor[] rumors, int[] quelledRumors)
+    internal SessionStoryState(SessionQuest[] quests, SessionGlobalQuest[] globalQuests, SessionRumor[] rumors, int[] quelledRumors,
+        int[] knownAreas, int lastArea)
     {
         Quests = Array.AsReadOnly(quests);
         GlobalQuests = Array.AsReadOnly(globalQuests);
         Rumors = Array.AsReadOnly(rumors);
         QuelledRumors = Array.AsReadOnly(quelledRumors);
+        KnownAreas = Array.AsReadOnly(knownAreas);
+        LastArea = lastArea;
     }
+
+    /// <summary>ARC-WORLD-056: the world-map areas the PC knows (ledger WT2), ascending.</summary>
+    public IReadOnlyList<int> KnownAreas { get; }
+    /// <summary>ARC-WORLD-056: the PC's last discovered area, 0 for none (ledger WT2).</summary>
+    public int LastArea { get; }
 
     public IReadOnlyList<SessionQuest> Quests { get; }
     public IReadOnlyList<SessionGlobalQuest> GlobalQuests { get; }
@@ -322,8 +337,9 @@ public sealed class GameSessionSnapshot
     /// schema 23 adds <see cref="Schematics"/> (ARC-TECHNOLOGY-003); schema 24 adds the made items to <see cref="Inventory"/>
     /// (ARC-TECHNOLOGY-004); schema 25 adds the mastered college of the hero and of the NPC advancement sheets (ARC-MAGIC-004);
     /// schema 26 adds the hero's fate points and armed fates (ARC-WORLD-054); schema 27 adds each party record's loyalty marks
-    /// (ARC-WORLD-045). Schemas 1..26 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 27;
+    /// (ARC-WORLD-045); schema 28 adds the PC's known world-map areas and last discovered area to the story (ARC-WORLD-056).
+    /// Schemas 1..27 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 28;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

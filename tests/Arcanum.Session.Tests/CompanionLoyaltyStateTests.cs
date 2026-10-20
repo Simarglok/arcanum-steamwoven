@@ -403,7 +403,7 @@ public sealed class CompanionLoyaltyStateTests
         StringAssert.Contains(text, "{\"entity\":\"oid:a\",\"forced\":true,\"spreadOut\":false,\"loyalty\":9}");
         StringAssert.Contains(text, "{\"entity\":\"oid:sogg\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":3}");
         StringAssert.Contains(text, "\"kind\":\"party.wait\"");
-        Assert.AreEqual(27, owner.Capture().SchemaVersion);
+        Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, owner.Capture().SchemaVersion);
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         Assert.AreEqual(T0 + 2 * Hour, restored.QueryWaitTimer(Npc));
@@ -427,7 +427,7 @@ public sealed class CompanionLoyaltyStateTests
             Assert.AreEqual("$.party.followers[0].loyalty", result.Path, bad);
         }
         Assert.AreEqual(SnapshotDecodeFailure.MissingField, GameSessionSnapshotCodec.TryDecode(text.Replace(",\"loyalty\":0", "")).Failure);
-        Assert.AreNotEqual(SnapshotDecodeFailure.None, GameSessionSnapshotCodec.TryDecode(text.Replace("\"schemaVersion\":27", "\"schemaVersion\":26")).Failure);
+        Assert.AreNotEqual(SnapshotDecodeFailure.None, GameSessionSnapshotCodec.TryDecode(text.Replace("\"schemaVersion\":28", "\"schemaVersion\":26")).Failure);
 
         // A free record with only marks is a state the transitions produce (OL22); undefined marks are not.
         var saved = owner.Capture();
