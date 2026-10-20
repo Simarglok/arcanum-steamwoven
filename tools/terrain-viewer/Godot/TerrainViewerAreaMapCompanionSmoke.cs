@@ -29,7 +29,9 @@ public partial class TerrainViewerApp
             throw new InvalidOperationException("AREA_MAP_FOLLOW_SMOKE_FAILED");
         }
         var map = new AreaMapRuntime(area.Snapshot, grid.Snapshot, grid.Chart);
-        var template = _companionTemplates.FirstOrDefault(t => t.Home.RuntimeMap == CurrentAreaMap && session.QueryCompanion(t.Entity).Standing == CompanionStanding.Free);
+        // ARC-WORLD-049: a living NPC (a dead one lies as a corpse and is looted, not joined).
+        var template = _companionTemplates.FirstOrDefault(t => t.Home.RuntimeMap == CurrentAreaMap && !SpeakerDead(t.Speaker)
+            && session.QueryCompanion(t.Entity).Standing == CompanionStanding.Free);
         if (template is null) { GD.Print($"ARC-WORLD-037 native-smoke follow NONE map={_readyMapName} templates={_companionTemplates.Count}"); return; }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
