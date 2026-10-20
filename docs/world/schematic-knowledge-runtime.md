@@ -1,10 +1,11 @@
 # Schematic knowledge runtime
 
-Status: **Implemented bounded component, not wired.** Work item ARC-TECHNOLOGY-003 (2026-10-21), slice TECH-3 of the
+Status: **Implemented bounded component, partly wired.** Work item ARC-TECHNOLOGY-003 (2026-10-21), slice TECH-3 of the
 [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted). The
 learned and found schematic lists of a crafter (Data, over the [schematic catalogue](../formats/schematics.md)), the
-found-schematic registration (Simulation) and the hero's found list in the session (snapshot schema 23). No viewer, reading
-window or schematic window calls them yet.
+found-schematic registration (Simulation) and the hero's found list in the session (snapshot schema 23). The viewer's
+[schematic window](schematic-window-runtime.md) (ARC-TECHNOLOGY-005) shows the hero's tabs; no reading window calls the
+registration yet.
 
 Requirements: [FR-ITEM-017](../requirements/items-economy.md#fr-item-017) (found and learned schematics);
 [FR-ITEM-010](../requirements/items-economy.md#fr-item-010) only for the written item's subtype and first text line.
@@ -75,6 +76,5 @@ project improvement; [rule modes](rule-modes.md#registry)). One installed docume
 
 ## Not ready
 
-- No caller: the reading window (FR-ITEM-010) and the schematic window (TECH-5) come later; the host shows messages 88 and 89.
-- No component gate or assembly (TECH-4).
+- No caller of the registration: the reading window (FR-ITEM-010) comes later; the host shows messages 88 and 89.
 - Five found records have no document (O3: placed on maps or given by scripts); no script path registers schematics.

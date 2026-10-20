@@ -48,7 +48,7 @@ public static class SchematicAssemblyRules
     public const int FirstWornLocation = 1000, LastWornLocation = 1008, FirstFallbackLocation = 2000, LastFallbackLocation = 2009;
     /// <summary>The page texts of <c>schematic_text.mes</c>: missing items, lacking expertise, the completion, and the button hover.</summary>
     public const int MissingMessage = 0, ExpertiseMessage = 1, CompletedMessage = 2, AssembleHoverMessage = 3;
-    /// <summary>The completion sound is this plus the current tab (0 learned, 1 found).</summary>
+    /// <summary>The completion sound is this plus the current discipline (0..7: 3018..3025; ARC-TECHNOLOGY-005, ledger SW6).</summary>
     public const int CompletedSoundBase = 3018;
 
     /// <summary>
