@@ -1,3 +1,6 @@
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Skills;
+
 namespace Arcanum.Simulation.Combat;
 
 /// <summary>
@@ -36,21 +39,17 @@ public static class AttackRules
     /// <summary>
     /// Attack effectiveness: melee, bow and firearms <c>5L + 25</c>, throwing <c>7L + 25</c>, firearms −20 against a
     /// target in Magnetic Inversion, +10 for extraordinary intelligence, then a PC's ×1.5 (easy) or ×0.75 (hard).
-    /// Combat skills are not capped at 95; the result is at least 0.
+    /// Combat skills are not capped at 95; the result is at least 0. The shared check's effectiveness
+    /// (<see cref="SkillCheckRules.Effectiveness"/>, ARC-SKILLS-003).
     /// </summary>
     public static int AttackEffectiveness(
         CombatSkill skill, int level, bool extraordinaryIntelligence, bool isPc, GameDifficulty difficulty,
         bool targetMagneticInversion)
     {
         CheckLevel(level, nameof(level));
-        var value = skill switch
-        {
-            CombatSkill.Melee or CombatSkill.Bow or CombatSkill.Firearms => 5 * level + 25,
-            CombatSkill.Throwing => 7 * level + 25,
-            _ => throw new ArgumentOutOfRangeException(nameof(skill)),
-        };
-        if (skill == CombatSkill.Firearms && targetMagneticInversion) value -= 20;
-        return FinishEffectiveness(value, extraordinaryIntelligence, isPc, difficulty, clampAt95: false);
+        if (skill is not (CombatSkill.Melee or CombatSkill.Bow or CombatSkill.Firearms or CombatSkill.Throwing))
+            throw new ArgumentOutOfRangeException(nameof(skill));
+        return SkillCheckRules.Effectiveness(SkillRules.Of(skill), level, Facts(extraordinaryIntelligence, isPc, difficulty, targetMagneticInversion));
     }
 
     /// <summary>
@@ -61,7 +60,7 @@ public static class AttackRules
     public static int DodgeEffectiveness(int level, bool extraordinaryIntelligence, bool isPc, GameDifficulty difficulty)
     {
         CheckLevel(level, nameof(level));
-        return FinishEffectiveness(2 * level, extraordinaryIntelligence, isPc, difficulty, clampAt95: true);
+        return SkillCheckRules.Effectiveness(Skill.Dodge, level, Facts(extraordinaryIntelligence, isPc, difficulty, false));
     }
 
     /// <summary>
@@ -69,12 +68,15 @@ public static class AttackRules
     /// the weapon's magic critical chance + the backstab term + the effect adjustment.
     /// </summary>
     public static int CriticalHitChance(
-        int effectiveness, HitLocation? aimedLocation, int magicCriticalHitChance, int backstabTerm, int effectAdjustment)
-    {
-        var chance = effectiveness / 20;
-        if (aimedLocation is { } aimed) chance += HitLocationPenalty(aimed) / -5;
-        return chance + magicCriticalHitChance + backstabTerm + effectAdjustment;
-    }
+        int effectiveness, HitLocation? aimedLocation, int magicCriticalHitChance, int backstabTerm, int effectAdjustment) =>
+        // Any combat skill: the shared check's divisor 20 (SkillCheckRules.CriticalSuccessChance).
+        SkillCheckRules.CriticalSuccessChance(Skill.Melee, effectiveness, new SkillCriticalFacts
+        {
+            AimedLocation = aimedLocation,
+            WeaponMagicCriticalHit = magicCriticalHitChance,
+            BackstabTerm = backstabTerm,
+            CriticalHitEffects = Adjustment(effectAdjustment),
+        });
 
     /// <summary>
     /// The critical chance a true backstab adds: <c>2 × backstab level − target level</c>, +20 for a backstab master.
@@ -93,10 +95,15 @@ public static class AttackRules
     public static int CriticalMissChance(int effectiveness, int itemHp, int itemMaxHp, int magicCriticalMissChance, int effectAdjustment)
     {
         CheckCondition(itemHp, itemMaxHp);
-        var chance = (100 - effectiveness) / 7;
-        if (itemHp < itemMaxHp) chance += 100 * (itemMaxHp - itemHp) / (itemMaxHp * 7);
-        chance += magicCriticalMissChance + effectAdjustment;
-        return Math.Max(2, chance);
+        // Any combat skill: the shared check's divisor 7 (SkillCheckRules.CriticalFailureChance).
+        return SkillCheckRules.CriticalFailureChance(Skill.Melee, effectiveness, new SkillCriticalFacts
+        {
+            Item = itemMaxHp > 0,
+            ItemHitPoints = itemHp,
+            ItemMaxHitPoints = itemMaxHp,
+            WeaponMagicCriticalMiss = magicCriticalMissChance,
+            CriticalMissEffects = Adjustment(effectAdjustment),
+        });
     }
 
     /// <summary>Chance that a critical dodge turns the hit into a critical miss: 0, 10, 50 or 100 % by dodge training.</summary>
@@ -137,29 +144,25 @@ public static class AttackRules
 
     /// <summary>
     /// The darkness penalty of an attack on a target in light <paramref name="targetLight"/>:
-    /// <c>30 × (255 − light) / 255</c>, reduced by the attacker's own light (÷4, ÷3, ÷2, ×⅔) and inverted
-    /// (<c>30 − penalty</c>) by dark sight. Undead attackers and melee experts and masters take none.
-    /// A negative result adds nothing.
+    /// <c>30 × (255 − light) / 255</c>, reduced by the attacker's own light (÷4, ÷3, ÷2, ×¾; the original's ×¾ for a small
+    /// light, ARC-SKILLS-003 ledger SC9, replaced an earlier ×⅔) and inverted (<c>30 − penalty</c>) by dark sight. Undead
+    /// attackers and melee experts and masters take none. A negative result adds nothing. The shared check's term
+    /// (<see cref="SkillCheckRules.LightPenalty"/>).
     /// </summary>
     public static int LightPenalty(
         int targetLight, LightEmission attackerLight, bool attackerDarkSight, bool attackerUndead, CombatSkill skill,
         SkillTraining training)
     {
         if (targetLight is < 0 or > MaxLightLevel) throw new ArgumentOutOfRangeException(nameof(targetLight));
-        if (attackerUndead) return 0;
-        if (skill == CombatSkill.Melee && training >= SkillTraining.Expert) return 0;
-        var penalty = 30 * (MaxLightLevel - targetLight) / MaxLightLevel;
-        penalty = attackerLight switch
+        if (!Enum.IsDefined(attackerLight)) throw new ArgumentOutOfRangeException(nameof(attackerLight));
+        CheckTraining(training, nameof(training));
+        return SkillCheckRules.LightPenalty(SkillRules.Of(skill), training, new SkillDifficultyFacts
         {
-            LightEmission.None => penalty,
-            LightEmission.Small => 2 * penalty / 3,
-            LightEmission.Medium => penalty / 2,
-            LightEmission.Large => penalty / 3,
-            LightEmission.ExtraLarge => penalty / 4,
-            _ => throw new ArgumentOutOfRangeException(nameof(attackerLight)),
-        };
-        if (attackerDarkSight) penalty = 30 - penalty;
-        return Math.Max(0, penalty);
+            Light = targetLight,
+            SourceLight = attackerLight,
+            SourceDarkSight = attackerDarkSight,
+            SourceUndead = attackerUndead,
+        });
     }
 
     /// <summary>
@@ -237,22 +240,14 @@ public static class AttackRules
         _ => throw new ArgumentOutOfRangeException(nameof(material)),
     };
 
-    private static int FinishEffectiveness(int value, bool extraordinaryIntelligence, bool isPc, GameDifficulty difficulty, bool clampAt95)
+    private static SkillEffectivenessFacts Facts(bool extraordinaryIntelligence, bool isPc, GameDifficulty difficulty, bool magneticInversion)
     {
-        if (extraordinaryIntelligence) value += 10;
-        if (isPc)
-        {
-            value = difficulty switch
-            {
-                GameDifficulty.Normal => value,
-                GameDifficulty.Easy => value + value / 2,
-                GameDifficulty.Hard => value - value / 4,
-                _ => throw new ArgumentOutOfRangeException(nameof(difficulty)),
-            };
-        }
-        if (clampAt95 && value > 95) value = 95;
-        return Math.Max(0, value);
+        if (!Enum.IsDefined(difficulty)) throw new ArgumentOutOfRangeException(nameof(difficulty));
+        return new() { ExtraordinaryIntelligence = extraordinaryIntelligence, LocalPc = isPc, Difficulty = difficulty, TargetMagneticInversion = magneticInversion };
     }
+
+    private static IReadOnlyList<EffectModifier> Adjustment(int value) =>
+        value == 0 ? [] : [new EffectModifier(StatModifierOperator.Add, value)];
 
     internal static void CheckLevel(int level, string name)
     {
