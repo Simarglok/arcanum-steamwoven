@@ -4,9 +4,12 @@ Status: **Implemented bounded component**, ARC-WORLD-026 (2026-10-17). Slices 1 
 [reaction research](../research/npc-reaction-reputation-evidence.md#proposed-implementation-slices-project-policy-not-accepted)
 (ARC-RES-028): the reaction rules as pure functions in `Arcanum.Simulation.Reaction`, and the NPCs' reaction memory
 toward the PC as a domain of the [game session](game-session-runtime.md) (snapshot schema 10). The AREA viewer's dialog
-reaction now lives there instead of the per-speaker `reaction.pc` map change. Requirement:
-[FR-SOCIAL-001](../requirements/story-social-ai.md#fr-social-001). Reputations (FR-SOCIAL-002), the `ME` dialog
-condition and the AI consumers are not part of it ([Not ready](#not-ready)).
+reaction now lives there instead of the per-speaker `reaction.pc` map change. Slice 3, ARC-WORLD-043 (2026-10-21), binds
+it to the dialog: the `ME` condition, the insult and the conversation slot opened and closed by every AREA talk
+([Dialog binding](#dialog-binding-arc-world-043)). Requirements:
+[FR-SOCIAL-001](../requirements/story-social-ai.md#fr-social-001), with
+[FR-DIALOG-001, FR-DIALOG-002 and FR-DIALOG-004](../requirements/story-social-ai.md#fr-dialog-001) for the binding.
+Reputations (FR-SOCIAL-002), fate points and the AI consumers are not part of it ([Not ready](#not-ready)).
 
 ## Evidence
 
@@ -97,6 +100,20 @@ The codec refuses unsorted or repeated entities and a record with both slots `nu
 **Migration decision: none.** Schema 9 and older are refused. The viewer's `reaction.pc` map changes of schema 9 saves
 are therefore never read; a quick save of schema 9 loads as "written by an incompatible version".
 
+## Dialog binding (ARC-WORLD-043)
+
+Read in the retail executable by two readers ([ledger DR1–DR7](../research/original-verification-ledger.md#dialog-reaction-binding-arc-world-043)):
+
+| Original | Steamwoven |
+| --- | --- |
+| The dialog start (0x412FD0) opens the NPC's reaction conversation before the first NPC line and action; every exit of the dialog (exit, return to a script line, a final line, an insult that ends it, a failed window, leaving dialog mode) ends it (0x413280 → 0x4C10A0), before the caller's script continues. | `AreaConversationHost` calls `BeginReactionConversation` (no fate point) right before `DialogConversation.Start` of every started talk, also one a resumed script opens, and `EndReaction()` closes it; the viewer calls it first on every close of the panel (the player's close, a reply that ends the talk, a frontier or failure, teardown, reset and map changes), before a resumed script runs. A slot a missed end left open is closed before the next talk begins. A refused begin is the start status `ReactionRejected`. |
+| `ME 0` / `ME 1` (0x4150D0) ask "met before" (0x4C0C40): the remembered slots only, so false during the first talk and true after it ends; any other operand passes untested. | The conversation's optional `IDialogMetBeforePort`; `AreaConversationState` answers it from the session record (`SessionReaction.MetBefore`). Operands other than 0 and 1 are refused (`InvalidOperation`). |
+| A Player reply of exactly `i:` (any case) is an insult: after the reply's action, the reaction changes by −10 through the PC's adjustment effects (0x4C0DE0), then at an effective reaction of 20 or below the NPC ends the talk with a generated line, without a script continuation (0x4191E0); above 20 the reply's own transition follows. An action that moves the dialog itself (FL, JO) skips the insult. | The conversation offers it as a generated `i:` option with its own transition; picking it runs the action, then a `ReactionCommand` of −10 through the world port (the viewer's `AdjustReaction`, into the open conversation slot), then reads the effective reaction; at most 20 it ends as `DialogEndKind.Insulted`. The phrase and the NPC's generated reply are not loaded. An insult whose action ends with JO, UW or FL is shown blocked (`UnsupportedInteraction`). |
+| "Force good reaction" is fate 1: spending a fate point arms it, undo refunds it while unused, and the next talk whose stored value is below 100 consumes it and starts at 100 (O4, DR6). | Not built: the session keeps no fate points, so the viewer passes no fate point. |
+
+The AI's checks of the dialog start and pick (the NPC refuses to speak, or turns hostile and ends the talk with a
+generated line) are not modelled.
+
 ## AREA viewer
 
 `AreaConversationState` reads and writes the speaker's reaction through the session domain: `RE t` gates read
@@ -104,8 +121,10 @@ are therefore never read; a quick save of schema 9 loads as "written by an incom
 quest raises the reaction to at least 41 with `SetReaction` and a completed one adds 10 with `AdjustReaction`; the
 follow consent of the session party reads the same effective value. The facts are diagnostic: each speaker is a human,
 not aloof NPC whose base is the profile's initial reaction (50; Virgil's measured base 60 of ARC-RES-026 is still not
-used), and the PC is the session hero when there is one, else a human with reaction modifier 0. The viewer does not
-open or close the conversation slot, so every change lands in the remembered slot.
+used), and the PC is the session hero when there is one, else a human with reaction modifier 0. Since ARC-WORLD-043 each
+talk opens the speaker's conversation slot and its end moves it to the remembered slot, so changes during a talk land in
+the conversation slot, `ME` reads the remembered slot and the insult goes through `AdjustReaction`
+([Dialog binding](#dialog-binding-arc-world-043)).
 
 ## Tests
 
@@ -120,12 +139,21 @@ open or close the conversation slot, so every change lands in the remembered slo
   (follow check kept), a hit on another NPC, the hero's facts, typed refusals in their order and stale versions, the record
   budget, canonical text and restore, decode and restore refusals. `RuleModeTests` checks the profile in `GameRules`.
 - `Arcanum.TerrainViewer.Tests/AreaConversationTests`: the dialog reaction is a session reaction record, not a map change.
+- `Arcanum.Scripting.Tests/Dialog/DialogReactionBindingTests` (ARC-WORLD-043): `ME` through its port in condition order, the
+  missing port, refused operands and a throwing port; the insult as a generated option with its transition, after the
+  action, ending at 20 and continuing at 21, reading the value the owner's effects left, unknown reaction, a refused change,
+  no reaction port, a transfer tail, a prefixed marker and the effect budget.
+- `Arcanum.TerrainViewer.Tests/AreaReactionConversationTests` (ARC-WORLD-043): through the host with synthetic SCR and DLG
+  content, `ME 0` holds in the first talk and `ME 1` in the second, the slot is open during a talk and remembered after
+  `EndReaction`; insults lower the slot 50 → 40 → 30 → 20 and the last ends the talk; a missed end is closed before the next
+  talk.
 
 ## Not ready
 
 - Reputations (slice 4): the PC's list, `rules\gamerep.mes`, the reaction sum, faction membership, greetings. The
   sum is an input, 0 from the hero.
-- The `ME` condition, the insult rule and conversation begin/end in the viewer (slice 3).
+- Fate points ("force good reaction", DR6), the AI's speak refusal and hostile end at the dialog start and pick, the
+  insult phrase and the NPC's generated replies (generated text), `ME` operands other than 0 and 1.
 - The PC's `reaction`, good and bad adjustment effects of real data (the hero keeps none), fate points, enemy lists,
   mind control, charm (A4, decision D2 open), barter prices, gifts, hover colour, AI consumers (KOS at parameter 10, the
   follower loyalty pass that reads the leader check and the follow check after a hit).

@@ -18,6 +18,7 @@ internal sealed record ConversationJoin(DialogOperationSource Source, int Node) 
 internal sealed record ConversationFinalLine(DialogOperationSource Source, int Node) : ConversationOperation(Source);
 internal sealed record ConversationWaiting(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
 internal sealed record ConversationUnwait(DialogOperationSource Source, int Node) : ConversationOperation(Source);
+internal sealed record ConversationMetBefore(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
 
 internal enum ConversationField
 {
@@ -29,8 +30,9 @@ internal enum ConversationField
 /// <summary>
 /// conversation-grammar-v1: the bounded DLG operation subset of ARC-SCRIPT-005.
 /// <list type="bullet">
-/// <item>Player condition: ordered conjunction of LF, GF, RE (signed reaction threshold) and RA (signed race selector);
-/// with a party port also WA 0/1 (the NPC is not / is waiting for the PC).</item>
+/// <item>Player condition: ordered conjunction of LF, GF, RE (signed reaction threshold), RA (signed race selector) and
+/// ME 0/1 (the NPC has not / has met the PC before, ARC-WORLD-043); with a party port also WA 0/1 (the NPC is not / is
+/// waiting for the PC).</item>
 /// <item>Actions: LF, GF, QU, RU, RQ (quell a rumor, ARC-UI-008), RE and AL (unsigned target or lexically signed delta),
 /// negative IN (NPC gives an item), MM; a Player action may end with one JO 0 node or FL node, and with a party port with
 /// one UW 0 node.</item>
@@ -67,7 +69,7 @@ internal static class DialogConversationGrammar
             var opcode = new string([(char)ToUpper(bytes[index]), (char)ToUpper(bytes[index + 1])]);
             index += 2;
             var admitted = role == ConversationField.PlayerCondition
-                ? opcode is "LF" or "GF" or "RE" or "RA" || party && opcode == "WA"
+                ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" || party && opcode == "WA"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW");
             if (!admitted)
@@ -128,6 +130,8 @@ internal static class DialogConversationGrammar
                 "UW" when first == 0 && second > 0 => new ConversationUnwait(source, second),
                 "UW" when second > 0 => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "WA" when first is 0 or 1 => new ConversationWaiting(source, first == 1),
+                // The original passes any other ME operand without a test (0x4150D0); this subset refuses it.
+                "ME" when first is 0 or 1 => new ConversationMetBefore(source, first == 1),
                 "FL" when first > 0 => new ConversationFinalLine(source, first),
                 _ => throw new DialogOperationParseException(DialogFailureKind.InvalidOperation, source),
             };

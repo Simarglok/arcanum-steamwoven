@@ -46,6 +46,9 @@ public enum AreaConversationStartStatus
     ScriptRemoved,
     /// <summary>ARC-SCRIPT-011: the game's script content could not be loaded for this area; nothing ran.</summary>
     ContentUnavailable,
+    /// <summary>ARC-WORLD-043: the session refused to open the NPC's reaction conversation (its record budget); the dialog
+    /// script's effects are applied, the conversation did not start.</summary>
+    ReactionRejected,
 }
 
 /// <param name="Party">ARC-WORLD-016: the session party port of a roster companion's conversation (its
@@ -70,6 +73,9 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
 /// The host owns neither the session nor the script content. Scripts and dialogs come from the game's universal content
 /// stack (ARC-SCRIPT-011, <see cref="ScriptContent"/>): the original's name for each script number and the winning copy,
 /// the same for every map. Synchronous, single-threaded; Begin and Resume read the files every time.
+/// ARC-WORLD-043: as the original's dialog start and end (0x412FD0, 0x413280), every started conversation opens the NPC's
+/// reaction conversation slot in the session (<see cref="GameSessionOwner.BeginReactionConversation"/>, no fate point) before
+/// its first effect, and the caller closes it with <see cref="EndReaction"/> on every exit path, before a resumed script runs.
 /// </summary>
 public sealed class AreaConversationHost
 {
@@ -81,6 +87,9 @@ public sealed class AreaConversationHost
     private readonly bool _party;
     private readonly AreaConversationProfile _baseProfile;
     private readonly Func<AreaSpeaker, AreaCompanionFacts?> _companions;
+    private readonly IReadOnlyList<AreaSpeaker>? _speakers;
+    // ARC-WORLD-043: the speaker whose reaction conversation slot this host opened and has not closed yet.
+    private int? _reactionOpen;
 
     /// <param name="inventory">ARC-UI-004: when it covers this map, negative IN moves the item in the session inventory
     /// (<see cref="SessionDialogInventoryPort"/>); otherwise IN is only recorded in <see cref="AreaConversationState.Items"/>.</param>
@@ -95,7 +104,20 @@ public sealed class AreaConversationHost
     public AreaConversationHost(AreaSnapshot snapshot, ScriptContent? content, GameSessionOwner session,
         AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, bool party = false, string contentDetail = "no script content",
         Func<AreaSpeaker, AreaCompanionFacts?>? companions = null)
+        : this(snapshot, content, session, profile, inventory, party, contentDetail, companions, null)
     {
+    }
+
+    /// <summary>Test seam: the given speakers instead of the snapshot's dialog NPCs.</summary>
+    internal AreaConversationHost(AreaSnapshot snapshot, IReadOnlyList<AreaSpeaker> speakers, ScriptContent? content, GameSessionOwner session)
+        : this(snapshot, content, session, null, null, false, "no script content", null, speakers ?? throw new ArgumentNullException(nameof(speakers)))
+    {
+    }
+
+    private AreaConversationHost(AreaSnapshot snapshot, ScriptContent? content, GameSessionOwner session, AreaConversationProfile? profile,
+        AreaInventoryHost? inventory, bool party, string contentDetail, Func<AreaSpeaker, AreaCompanionFacts?>? companions, IReadOnlyList<AreaSpeaker>? speakers)
+    {
+        _speakers = speakers;
         _companions = companions ?? AreaCompanionRoster.For;
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -106,7 +128,7 @@ public sealed class AreaConversationHost
         _baseProfile = profile ?? AreaConversationProfile.Diagnostic;
         Profile = session.QueryHeroDialogFacts() is { } hero ? _baseProfile with { Pc = hero } : _baseProfile;
         _inventory = inventory is not null && inventory.Covers(snapshot.RuntimeMap) ? inventory : null;
-        Speakers = FindSpeakers(snapshot);
+        Speakers = speakers ?? FindSpeakers(snapshot);
         _party = party;
         State = new AreaConversationState(session, new SessionMapId(snapshot.RuntimeMap),
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
@@ -122,7 +144,7 @@ public sealed class AreaConversationHost
     /// PC facts follow the new session's hero (ARC-WORLD-027).
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, _baseProfile, _inventory, _party, _contentDetail, _companions);
+    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, _baseProfile, _inventory, _party, _contentDetail, _companions, _speakers);
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;
@@ -223,6 +245,24 @@ public sealed class AreaConversationHost
         return true;
     }
 
+    /// <summary>
+    /// ARC-WORLD-043: closes the reaction conversation slot a started conversation opened (the original's dialog end, 0x413280,
+    /// on every exit: a reply that ends the talk, the player's close, a frontier or failure, teardown, a map change): the
+    /// session moves the value to the remembered slot, so the NPC has met the PC and the next talk's ME 1 holds. False when no
+    /// slot is open. A refusal by the session (not expected: the begin already made the record) throws, like any other lost
+    /// session write of the host; the host no longer counts the slot as open.
+    /// </summary>
+    public bool EndReaction()
+    {
+        if (_reactionOpen is not { } speaker) return false;
+        _reactionOpen = null;
+        if (State.EndReaction(speaker).Disposition == GameSessionDisposition.Rejected) throw new InvalidOperationException("AREA_SESSION_REACTION_END_REJECTED");
+        return true;
+    }
+
+    /// <summary>The speaker whose reaction conversation slot is open, or null (ARC-WORLD-043).</summary>
+    public int? ReactionOpen => _reactionOpen;
+
     /// <summary>The last deferred call run of <see cref="RunCall"/>.</summary>
     public ScrRunResult? LastCall { get; private set; }
 
@@ -272,9 +312,15 @@ public sealed class AreaConversationHost
 
         var participants = new DialogParticipants(new DialogId(dialog.Script), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
         var party = PartyPort(speaker);
+        // ARC-WORLD-043: the original starts the reaction conversation before the dialog's first NPC line and action
+        // (0x412FD0); a slot a missed end left open is closed first.
+        EndReaction();
+        if (State.BeginReaction(speaker.Index).Disposition == GameSessionDisposition.Rejected)
+            return new(AreaConversationStartStatus.ReactionRejected, null, speaker, $"script {dialog.Script}: the session refused the NPC's reaction conversation");
+        _reactionOpen = speaker.Index;
         var conversation = DialogConversation.Start(document!,
             new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
-            new DialogConversationPorts(State, State, _session.Flags, State, party, _inventory?.DialogPort(_session, SpeakerEntity), State));
+            new DialogConversationPorts(State, State, _session.Flags, State, party, _inventory?.DialogPort(_session, SpeakerEntity), State, State));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script);
     }
@@ -303,12 +349,13 @@ public sealed class AreaConversationHost
 /// follow consent as map-local entity changes on the speaker's map (absent = loaded baseline: attachment flags
 /// from the area, not following). Reaction facts are diagnostic: every speaker is a human, not aloof NPC with the
 /// profile's initial reaction as base; the PC is the session hero when there is one, else a human with reaction modifier
-/// 0 and no reputation or effects. The viewer does not open or close the reaction conversation slot yet, so every change
-/// lands in the remembered slot. Still PROJECT diagnostic, in memory only and
+/// 0 and no reputation or effects. Since ARC-WORLD-043 the host opens the speaker's reaction conversation slot for each
+/// conversation and closes it at its end, so changes during a talk land in that slot and ME reads the session's "met
+/// before". Still PROJECT diagnostic, in memory only and
 /// lost with this object: PC alignment, items given (IN) when the host has no session inventory (ARC-UI-004 wires it),
 /// and areas marked (MM); they wait for their own owners.
 /// </summary>
-public sealed class AreaConversationState : IDialogStateQueryPort, IDialogCommandPort, IDialogWorldPort, IDialogRumorPort
+public sealed class AreaConversationState : IDialogStateQueryPort, IDialogCommandPort, IDialogWorldPort, IDialogRumorPort, IDialogMetBeforePort
 {
     public const string LocalFlagsProperty = "dialog.lf";
     public const string FollowProperty = "follow.pc";
@@ -455,6 +502,23 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
 
     public DialogReactionReadResult ReadReaction(DialogReactionQuery query) => DialogReactionReadResult.Of(Reaction(Speaker(query.Npc)));
 
+    /// <summary>ARC-WORLD-043: ME reads whether the speaker remembers the PC (its remembered slot; the open conversation does
+    /// not count).</summary>
+    public bool MetBefore(DialogReactionQuery query) => MetBefore(Speaker(query.Npc));
+
+    /// <summary>Whether the speaker has met the PC before (the session's remembered reaction slot).</summary>
+    public bool MetBefore(int speaker) =>
+        _session.QueryReaction(_entities[speaker], NpcFacts(), PcFacts).View?.MetBefore ?? throw new InvalidOperationException("AREA_SESSION_REACTION_INVALID");
+
+    /// <summary>ARC-WORLD-043: opens the speaker's reaction conversation slot (no "force good reaction" fate point: fate points
+    /// are not session state).</summary>
+    internal SessionReactionResult BeginReaction(int speaker) =>
+        _session.BeginReactionConversation(_session.Version, _entities[speaker], NpcFacts());
+
+    /// <summary>ARC-WORLD-043: closes the speaker's reaction conversation slot; the value moves to the remembered slot.</summary>
+    internal SessionReactionResult EndReaction(int speaker) =>
+        _session.EndReactionConversation(_session.Version, _entities[speaker], NpcFacts());
+
     public DialogCommandResult Execute(ReactionCommand command)
     {
         var entity = _entities[Speaker(command.Npc)];
@@ -499,6 +563,7 @@ public static class AreaConversationText
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.ReturnToScript =>
             $"[dialog ended; the caller script would continue at SCR line {conversation.End.ScriptLine!.Value.Value} (not executed)]",
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.NpcFinalLine => "[dialog ended with the NPC's final line]",
+        DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.Insulted => "[the insult ended the dialog: the NPC's generated reply is not loaded]",
         DialogConversationPhase.Ended => "[dialog closed]",
         DialogConversationPhase.AtFrontier => $"[stopped at a frontier: {conversation.Frontier!.Kind} at node {conversation.Frontier.Node.Value}{Where(conversation.Frontier.Source)}]",
         DialogConversationPhase.Failed => $"[failed: {conversation.Failure!.Kind} at node {conversation.Failure.Node.Value}{Where(conversation.Failure.Source)}]",
@@ -514,7 +579,8 @@ public static class AreaConversationText
             QuestStateCommand quest => $"QU {quest.QuestId} -> {quest.State}",
             RumorLogCommand rumor => $"RU {rumor.RumorId} logged",
             QuellRumorCommand quell => $"RQ {quell.RumorId} quelled",
-            ReactionCommand reaction => reaction.Mode == DialogReactionMode.Target ? $"RE target {reaction.Value}" : $"RE adjust {reaction.Value:+0;-0;+0}",
+            ReactionCommand reaction => reaction.Mode == DialogReactionMode.Target ? $"RE target {reaction.Value}"
+                : $"RE adjust {reaction.Value:+0;-0;+0}{(receipt.Source.FieldKind == DlgFieldKind.Text ? " (insult)" : string.Empty)}",
             GiveItemCommand item => $"IN item name {item.ItemName} NPC -> PC",
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",
