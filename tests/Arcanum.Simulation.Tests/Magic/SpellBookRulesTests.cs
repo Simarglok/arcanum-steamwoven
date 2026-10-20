@@ -130,6 +130,7 @@ public sealed class SpellBookRulesTests
         Assert.AreEqual(PointChangeStatus.Invalid, lane.Raise(Sheet(), AdvancementModifiers.None, 16).Status);
         Assert.AreEqual(PointChangeStatus.Invalid, lane.Lower(Sheet() with { Stats = [] }, AdvancementModifiers.None, 0).Status);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => lane.Cost(Sheet(), -1));
+        Assert.ThrowsExactly<ArgumentException>(() => lane.Cost(Sheet() with { Colleges = [] }, 0));
     }
 
     [TestMethod]

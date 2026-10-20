@@ -23,8 +23,12 @@ public sealed class SpellRankLane : IPointLane
         _willpower = spellWillpower;
     }
 
-    public int Cost(AdvancementSheet sheet, int index) =>
-        index is >= 0 and < SpellBookRules.Colleges ? SpellCostRules.RankPointCost(Next(sheet, index)) : throw new ArgumentOutOfRangeException(nameof(index));
+    public int Cost(AdvancementSheet sheet, int index)
+    {
+        if (!AutoLevelRules.IsValid(sheet)) throw new ArgumentException("Invalid advancement sheet.", nameof(sheet));
+        if (index is < 0 or >= SpellBookRules.Colleges) throw new ArgumentOutOfRangeException(nameof(index));
+        return SpellCostRules.RankPointCost(Next(sheet, index));
+    }
 
     [OriginalFunction(0x57C540, OriginalFunctionScope.Partial)]
     public PointLaneStep Raise(AdvancementSheet sheet, AdvancementModifiers modifiers, int index)
