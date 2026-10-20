@@ -72,6 +72,9 @@ after each level written and returns the unspent points left.
 
 ## Snapshot (schema 20)
 
+Since ARC-TECHNOLOGY-002 the editor buys and refunds `techDegrees` through the point pool and the session reads the
+expertise they give ([tech degrees](tech-degrees-runtime.md)).
+
 The hero gains `"advancement":{"basicSkills","techSkills","colleges","techDegrees","hitPointPoints","fatiguePoints","scheme"}`
 after `"alignment"`; the root gains `"advancement":{"npcs":[...]}` after `"experience"`, each record with its entity, race,
 monstrous flag, stats, magick and tech points, level, unspent points, skills, colleges, degrees, pools, adjustments and

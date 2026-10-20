@@ -28,6 +28,8 @@ public enum PointChangeStatus
     DegreeNeedsStat,
     /// <summary>The track's lane (spell ranks: the magic lane; tech degrees: the technology lane) has not plugged in.</summary>
     LaneNotReady,
+    /// <summary>Raising a tech degree needs more effective intelligence than the critter has (ARC-TECHNOLOGY-002).</summary>
+    IntelligenceTooLow,
     /// <summary>An input outside the rules' domain (an invalid sheet or modifiers, an undefined track, an index out of range,
     /// a lane step that changes the unspent points or leaves an invalid sheet).</summary>
     Invalid,
