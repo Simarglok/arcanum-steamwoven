@@ -95,6 +95,9 @@ public sealed class AreaVisitorTalkTests
         CollectionAssert.AreEqual(new[] { template.Entity }, AreaVisitors.Unbodied(session, Visited, []).ToArray(), "no template: not talkable here");
         Assert.AreEqual(0, AreaVisitors.Unbodied(session, Visited, [template]).Count, "with its kept body it is talkable");
         Assert.AreEqual(0, AreaVisitors.Unbodied(session, Home, []).Count, "its home map records only where it went");
+        Assert.AreEqual(0, AreaVisitors.Unbodied(session, Visited, [], cell => cell.X > 100).Count,
+            "a cell the viewer has not loaded (the main map's other windows) is not here");
+        Assert.AreEqual(1, AreaVisitors.Unbodied(session, Visited, [], cell => cell == new Arcanum.Simulation.Movement.CellCoord(10, 20)).Count);
     }
 
     [TestMethod]
@@ -108,5 +111,10 @@ public sealed class AreaVisitorTalkTests
             "a typed refusal, not a crash or a silent record");
         Assert.AreEqual(DialogCommandResult.Rejected, AreaConversationHost.ForVisitor(template, null, session).InventoryPort()!
             .Execute(new GiveItemCommand(Npc, AreaConversationState.PcParticipant, 4001)), "no inventory host at all");
+        using var loaded = ConversationSessionFixture.SaveAndLoad(session);
+        var rebound = uncovered.Rebind(loaded);
+        Assert.AreEqual((Home, false), (rebound.Map, rebound.InventoryWired));
+        Assert.AreEqual(DialogCommandResult.Rejected, rebound.InventoryPort()!.Execute(new GiveItemCommand(Npc, AreaConversationState.PcParticipant, 4001)),
+            "a rebound visitor host keeps refusing");
     }
 }

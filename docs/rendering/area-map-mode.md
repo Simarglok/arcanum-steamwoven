@@ -484,16 +484,20 @@ back to lev 2 with the companion) and on a `tulla interior` jump point
   After the conversation the companions are recorded, then the group is
   rebuilt, so it stays where it stands. A negative `IN` moves the item through
   its home map's inventory seed when the viewer has it attached and is refused
-  (a rejected command) when it has not. After a quick load, a companion
-  recorded on the shown map whose home map was not loaded in this run has no
-  body: it is not drawn and the HUD names it as not talkable here
-  (`AreaVisitors.Unbodied`); nothing is guessed. The native smoke talks to the
+  (a rejected command) when it has not. Its dialog script runs on its home-map
+  slot, its quest awards and script sounds are taken from its host like the
+  shown map's, and a deferred call whose attachee it is runs through the same
+  host. A home-map dialog state the session cannot read (a damaged save) makes
+  it not talkable, with a notice, never a crash. The native smoke talks to the
   carried companion on the destination
-  (`ARC-WORLD-048 native-smoke visitor-talk PASS`, after the carry).
+  (`ARC-WORLD-048 native-smoke visitor-talk PASS`, after the carry; observed on
+  `bates mansion lev 1` and on the main map, script 1160 from lev 2, whose
+  dialog script line 0 is not admitted yet, `EntryNotAdmitted`, as at home).
 
 Not covered: after a quick load, a companion whose home map was not loaded in
 this run, or loaded without the party ever touching it, has no body and is
-skipped; a follower that is not a companion of
+skipped: when it is recorded on a loaded cell of the shown map, the HUD names it
+as not talkable here (`AreaVisitors.Unbodied`), nothing is guessed; a follower that is not a companion of
 the shown map (no body, or its cell not admitted) is not carried and stays
 recorded where it was. There are
 no followers of followers, unconscious followers, carried inventory, orders,

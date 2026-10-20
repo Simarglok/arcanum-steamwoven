@@ -38,7 +38,7 @@ public partial class TerrainViewerApp
     {
         EndConversation();
         // The old host may borrow content that is released below; it is never used again.
-        _conversationHost = null; _visitorHosts.Clear();
+        _conversationHost = null; _visitorHosts.Clear(); _visitorRefused.Clear();
         _conversationNotice = null; _talkAfterRoute = null;
         // ARC-SCRIPT-006: dialog consequences live in the area session, which outlives map changes.
         // ARC-WORLD-016: Virgil's JO/WA/UW go through the session party with his measured follow inputs.
@@ -88,7 +88,7 @@ public partial class TerrainViewerApp
     {
         EndConversation();
         UnbindAreaCompanions();
-        _conversationHost = null; _visitorHosts.Clear(); _conversationNotice = null; _talkAfterRoute = null; _voiceStart = null; _storyStatus = null;
+        _conversationHost = null; _visitorHosts.Clear(); _visitorRefused.Clear(); _conversationNotice = null; _talkAfterRoute = null; _voiceStart = null; _storyStatus = null;
     }
 
     private bool TalkMapActive => _conversationHost is not null && (!InCave || _areaCompanions is { Companions.Count: > 0 });
@@ -113,6 +113,10 @@ public partial class TerrainViewerApp
     private AreaSpeaker? VisitorSpeaker(AreaObjectKey identity) =>
         _areaCompanions?.Companions.FirstOrDefault(c => c.Key == identity) is { } companion && VisitorHost(companion.Template) is { } host ? host.Speakers[0] : null;
 
+    // ARC-WORLD-048: a visitor whose home-map dialog state the session cannot read (a damaged save), by entity and session: refused,
+    // reported once, never retried every frame.
+    private readonly Dictionary<string, Arcanum.Session.GameSessionOwner> _visitorRefused = new(StringComparer.Ordinal);
+
     private AreaConversationHost? VisitorHost(AreaCompanionTemplate template)
     {
         // A companion of the shown host talks through it; any other one (from another map, or on the main map from another
@@ -120,18 +124,41 @@ public partial class TerrainViewerApp
         if (_conversationHost is not { PartyWired: true } shown || _areaSession is not { } session
             || shown.Speakers.Any(s => s.Row.Key == template.Key)) return null;
         if (_visitorHosts.TryGetValue(template.Entity, out var known) && ReferenceEquals(known.Session, session)) return known.Host;
+        if (_visitorRefused.TryGetValue(template.Entity, out var refused) && ReferenceEquals(refused, session)) return null;
         var content = _conversationContent?.Load;
-        var host = AreaConversationHost.ForVisitor(template, content?.Content, session, inventory: _inventoryHost,
-            contentDetail: content is { } load ? $"{load.Status}: {load.Detail}" : "no script content", npcAdvancement: AreaNpcAdvancement);
+        AreaConversationHost host;
+        try
+        {
+            host = AreaConversationHost.ForVisitor(template, content?.Content, session, inventory: _inventoryHost,
+                contentDetail: content is { } load ? $"{load.Status}: {load.Detail}" : "no script content", npcAdvancement: AreaNpcAdvancement);
+        }
+        catch (ArgumentException exception)
+        {
+            _visitorRefused[template.Entity] = session;
+            _conversationNotice = $"visitor script {template.Speaker.ScriptId} not talkable: its home-map dialog state is unreadable ({exception.Message})";
+            GD.Print($"ARC-WORLD-048 visitor host refused script={template.Speaker.ScriptId} home={template.Home.RuntimeMap}: {exception.Message}");
+            return null;
+        }
         _visitorHosts[template.Entity] = (session, host);
         GD.Print($"ARC-WORLD-048 visitor host script={template.Speaker.ScriptId} home={template.Home.RuntimeMap} shown={shown.Map.RuntimeMap} inventory={host.InventoryWired}");
         return host;
     }
 
-    /// <summary>The host a speaker talks through: a visitor's own host, else the shown map's.</summary>
-    private AreaConversationHost HostOf(AreaSpeaker speaker) =>
+    /// <summary>The host a speaker talks through: the shown map's, or a visitor's own; null for a speaker of neither (never mixed:
+    /// a speaker's index means something only in its own host).</summary>
+    private AreaConversationHost? HostOf(AreaSpeaker speaker) =>
         _conversationHost!.Speakers.Contains(speaker) ? _conversationHost
-            : _visitorHosts.Values.Select(v => v.Host).FirstOrDefault(h => h.Speakers.Contains(speaker)) ?? _conversationHost;
+            : _visitorHosts.Values.Select(v => v.Host).FirstOrDefault(h => h.Speakers.Contains(speaker));
+
+    /// <summary>ARC-WORLD-048: the host of a deferred call whose attachee is a companion visiting the shown map, else null (the
+    /// shown map's host runs it).</summary>
+    private AreaConversationHost? VisitorCallHost(Arcanum.Session.SessionScriptCall call) =>
+        call.Attachee is { } attachee && _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == attachee.Entity) is { } companion
+            ? VisitorHost(companion.Template) : null;
+
+    /// <summary>Every host that runs dialog scripts now: the shown map's and the visitors'.</summary>
+    private IEnumerable<AreaConversationHost> TalkHosts() =>
+        _conversationHost is null ? [] : [_conversationHost, .. _visitorHosts.Values.Select(v => v.Host)];
 
     /// <summary>The nearest speaker in reach: the shown map's present speakers and the visitors standing here.</summary>
     private AreaSpeaker? NearestTalkable(long x, long y)
@@ -200,7 +227,7 @@ public partial class TerrainViewerApp
         QuarantineWorld();
         _conversationNotice = null;
         AreaConversationStart start;
-        var host = HostOf(speaker);
+        if (HostOf(speaker) is not { } host) { _conversationNotice = $"dialog NPC script {speaker.ScriptId} has no host here"; RefreshReadyStatus(); return; }
         _talkHost = host;
         try { start = host.Begin(speaker); }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DatException)
@@ -286,7 +313,7 @@ public partial class TerrainViewerApp
             return " | talk: no dialog NPC on this map";
         return ActorCell() is { } cell && NearestTalkable(cell.X, cell.Y) is { } speaker
             ? $" | dialog NPC script {speaker.ScriptId} in reach: left-click it to talk"
-            : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count(SpeakerPresent)} on this map; walks within {_conversationHost.Profile.Reach} tiles first)";
+            : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count(SpeakerPresent) + (_areaCompanions?.Companions.Count(c => VisitorHost(c.Template) is not null) ?? 0)} on this map; walks within {_conversationHost.Profile.Reach} tiles first)";
     }
 
     // ARC-SCRIPT-006: what the dialogs left in the session (survives the cave trip). The status line is rebuilt

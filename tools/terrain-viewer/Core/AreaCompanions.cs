@@ -108,17 +108,20 @@ public static class AreaCompanionPlacement
 /// quick load, a visitor whose home map was not loaded in this run has no template): the entities with a recorded cell
 /// (<see cref="AreaCompanionPlacement.Property"/>) on <paramref name="map"/> and no template among <paramref name="templates"/>.
 /// A cell is recorded on a map other than the home map only while the companion stands there (the transfer clears it on the map
-/// it leaves), and every NPC of the shown map has a template when the map has companion data, so these are visitors.
+/// it leaves); <paramref name="shown"/> keeps only cells the viewer has loaded (on the main map, a companion recorded in another
+/// window is not "here", whatever its home).
 /// </summary>
 public static class AreaVisitors
 {
-    public static IReadOnlyList<string> Unbodied(GameSessionOwner session, SessionMapId map, IEnumerable<AreaCompanionTemplate> templates)
+    public static IReadOnlyList<string> Unbodied(GameSessionOwner session, SessionMapId map, IEnumerable<AreaCompanionTemplate> templates,
+        Func<CellCoord, bool>? shown = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(templates);
         var known = templates.Select(t => t.Entity).ToHashSet(StringComparer.Ordinal);
         return session.QueryMapChanges(map)
-            .Where(c => c.Key.Scope == MapChangeScope.Entity && c.Key.Property == AreaCompanionPlacement.Property && c.Key.Entity is { } e && !known.Contains(e))
+            .Where(c => c.Key.Scope == MapChangeScope.Entity && c.Key.Property == AreaCompanionPlacement.Property && c.Key.Entity is { } e && !known.Contains(e)
+                && (shown is null || (AreaCompanionPlacement.Decode(c.Value) is { } placed && shown(placed.World))))
             .Select(c => c.Key.Entity!).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
     }
 }

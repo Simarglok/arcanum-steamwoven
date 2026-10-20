@@ -36,7 +36,8 @@ public partial class TerrainViewerApp
         _areaCompanions = AreaCompanionGroup.Create(templates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time, grid.Timing);
         if (_readyMapName is not null) AdoptTravellers(_areaCompanions);
         // ARC-WORLD-048: a companion recorded here without a body kept in this run (after a quick load) cannot be talked to here.
-        if (_readyMapName is not null) _unbodiedVisitors = AreaVisitors.Unbodied(session, new(CurrentAreaMap), _companionTemplates);
+        if (_readyMapName is not null) _unbodiedVisitors = AreaVisitors.Unbodied(session, new(CurrentAreaMap), _companionTemplates,
+            world => grid.Chart.Contains(grid.Chart.ToChart(new(world.X, world.Y))));
         foreach (var entity in _unbodiedVisitors) GD.Print("ARC-WORLD-048 visitor not talkable entity=" + entity + " reason=no body kept this run");
         foreach (var skipped in _areaCompanions.Skipped) GD.Print("ARC-WORLD-016 companion skipped " + skipped);
         GD.Print("ARC-WORLD-016 companions bound " + System.Text.Json.JsonSerializer.Serialize(_areaCompanions.Companions.Select(c => new {

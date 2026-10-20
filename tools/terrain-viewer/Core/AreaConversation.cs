@@ -85,6 +85,8 @@ public sealed class AreaConversationHost
     private readonly Func<string, SessionNpcAdvancement?>? _npcAdvancement;
     // ARC-WORLD-048: a visitor host refuses negative IN when its home map's inventory seed is not attached.
     private readonly bool _refuseUncoveredInventory;
+    // The inventory host as given (Rebind filters it again for the map).
+    private readonly AreaInventoryHost? _givenInventory;
 
     /// <param name="inventory">ARC-UI-004: when it covers this map, negative IN moves the item in the session inventory
     /// (<see cref="SessionDialogInventoryPort"/>); otherwise IN is only recorded in <see cref="AreaConversationState.Items"/>.</param>
@@ -149,8 +151,6 @@ public sealed class AreaConversationHost
             party ? Speakers.Where(speaker => _companions(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null);
         Scripts = new AreaScriptHost(session, map, Speakers, State, content, npcAdvancement);
     }
-
-    private readonly AreaInventoryHost? _givenInventory;
 
     /// <summary>The map whose dialog state this host reads and writes (ARC-WORLD-048: a visitor's home map).</summary>
     public SessionMapId Map => _map;

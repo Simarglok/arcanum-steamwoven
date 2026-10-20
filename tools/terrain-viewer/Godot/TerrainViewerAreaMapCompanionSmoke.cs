@@ -146,6 +146,9 @@ public partial class TerrainViewerApp
             $"the talk opened through its home-map host: open {ConversationOpen}, host map {_talkHost?.Map.RuntimeMap}, notice {_conversationNotice}");
         var started = _voiceStart?.Status;
         var detail = _voiceStart?.Detail;
+        // The dialog script ran on its home-map slot: content, file or I/O failures are not a talk.
+        Require(started is not (null or AreaConversationStartStatus.ContentUnavailable or AreaConversationStartStatus.SourceChanged
+            or AreaConversationStartStatus.EntryError), $"the dialog script ran: {started} {detail}");
         EndConversation();
         var after = _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == companion.Entity);
         Require(after is not null && after.Grid.State.CommittedCell == cell && after.Standing == CompanionStanding.Following,
