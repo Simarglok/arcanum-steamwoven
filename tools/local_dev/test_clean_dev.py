@@ -86,6 +86,38 @@ class CleanDevTests(unittest.TestCase):
         self.assertEqual((after[ids["b"]], after[ids["e"]]), ("pruned", "pruned"))
         self.assertEqual(clean.apply(self.root)["status"], "nothing-to-remove")
 
+    def test_a_current_build_that_does_not_verify_supersedes_nothing(self) -> None:
+        ids = self.fixture()
+        (self.root / "artifacts" / TASK / ("a" * 40) / "GamepadLab.app/Contents/MacOS/GamepadLab").write_bytes(b"changed")
+        found = {item["candidateId"]: item for item in clean.builds(config.load_config(), config.load_registry())}
+        self.assertEqual(found[ids["b"]]["class"], "keep"); self.assertIn("does not verify", found[ids["b"]]["reason"])
+        self.assertEqual(clean.apply(self.root)["retired"], [])
+        self.assertTrue((self.root / "artifacts" / TASK / ("b" * 40) / "GamepadLab.app").is_dir())
+
+    def test_a_running_viewer_refuses_apply_before_anything_changes(self) -> None:
+        self.fixture()
+        registry_before = config.registry_path().read_bytes()
+        lease = retention._try_exclusive(config.home() / "locks" / "gamepad.lock")
+        try:
+            with self.assertRaisesRegex(ValueError, "viewer is running"):
+                clean.apply(self.root)
+        finally:
+            retention._release(lease)
+        self.assertEqual(config.registry_path().read_bytes(), registry_before)
+        self.assertTrue((self.root / "artifacts" / TASK / ("e" * 40) / "GamepadLab.app").is_dir())
+
+    def test_pruned_builds_do_not_count_as_surviving_payloads(self) -> None:
+        ids = self.fixture()
+        clean.apply(self.root)
+        survivors = retention.surviving_payloads(config.load_config(), "gamepad")
+        self.assertNotIn(ids["b"], survivors); self.assertNotIn(ids["e"], survivors); self.assertIn(ids["a"], survivors)
+
+    def test_a_malformed_measurement_blocks_its_tool(self) -> None:
+        self.fixture()
+        registry = config.load_registry(); registry["measurements"] = {"gamepad": "not-a-record"}
+        self.assertIn(["test", "gamepad"], retention.protection_snapshot(config.load_config(), registry)["blockedDomains"])
+        self.assertTrue(all(item["class"] != "disposable" for item in clean.builds(config.load_config(), registry)))
+
     def test_dry_run_cli_changes_nothing_and_writes_the_marker(self) -> None:
         self.fixture()
         registry_before = config.registry_path().read_bytes()
@@ -105,6 +137,9 @@ class CleanDevTests(unittest.TestCase):
         self.assertFalse((self.root / "missing").exists())
         (self.root / "artifacts").mkdir()
         self.assertTrue(clean.write_marker(self.root / "artifacts")); self.assertTrue(clean.write_marker(self.root / "artifacts"))
+        marker = self.root / "artifacts" / clean.MARKER; marker.unlink()
+        other = self.root / "other"; other.write_text("mine"); os.link(other, marker)
+        self.assertFalse(clean.write_marker(self.root / "artifacts")); self.assertEqual(other.read_text(), "mine")
 
     def test_unmanaged_entries_are_kept_and_owned_homes_are_named(self) -> None:
         checkout = self.root / "checkout"; artifacts = checkout / "artifacts"
@@ -118,7 +153,7 @@ class CleanDevTests(unittest.TestCase):
         found = {Path(item["path"]).relative_to(checkout).as_posix(): item for item in clean.unmanaged(conf, checkout)}
         self.assertEqual(sorted(found), ["artifacts/builds", "artifacts/gamepad-builds", "artifacts/world-builds/ARC-NOT-A-TASK"])
         self.assertTrue(all(item["class"] == "keep" for item in found.values()))
-        self.assertIn("local/gpad005-pr-home", found["artifacts/gamepad-builds"]["reason"])
+        self.assertIn(str(home.resolve()), found["artifacts/gamepad-builds"]["reason"])
 
     def test_caches_are_build_outputs_next_to_a_project_only(self) -> None:
         checkout = self.root / "checkout"

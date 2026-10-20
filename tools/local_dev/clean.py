@@ -52,15 +52,25 @@ def disk_bytes(path: Path) -> int | None:
 
 
 def write_marker(artifacts: Path) -> bool:
-    """Write the local do-not-delete marker into an existing artifacts folder; never creates the folder."""
-    if not artifacts.is_dir() or artifacts.is_symlink():
-        return False
+    """Best effort: write the local do-not-delete marker into an existing artifacts folder; never creates the folder.
+    A link, a hard-linked or special node, or any read/write failure leaves it as it is."""
     path = artifacts / MARKER
-    if path.is_symlink() or (path.exists() and not path.is_file()):
+    try:
+        if not artifacts.is_dir() or artifacts.is_symlink():
+            return False
+        if path.exists() or path.is_symlink():
+            node = os.lstat(path)
+            if not stat.S_ISREG(node.st_mode) or node.st_nlink != 1:
+                return False
+            if path.read_bytes() == MARKER_TEXT.encode("utf-8"):
+                return True
+        temporary = artifacts / f".{MARKER}.tmp"
+        temporary.unlink(missing_ok=True)
+        temporary.write_bytes(MARKER_TEXT.encode("utf-8"))
+        os.replace(temporary, path)
+        return True
+    except (OSError, ValueError):
         return False
-    if not path.exists() or path.read_text(encoding="utf-8") != MARKER_TEXT:
-        path.write_text(MARKER_TEXT, encoding="utf-8")
-    return True
 
 
 def _currents(conf: dict[str, Any]) -> dict[tuple[str, str], set[str]]:
@@ -86,6 +96,15 @@ def _currents(conf: dict[str, Any]) -> dict[tuple[str, str], set[str]]:
                     if len(relative.parts) == 3 and relative.parts[0] == task:
                         found.setdefault((root_id, task), set()).add(f"{root_id}:{task}:{relative.parts[1]}")
     return found
+
+
+def _verifies(conf: dict[str, Any], registered: dict[str, Any], candidate_id: str) -> bool:
+    tool = registered[candidate_id].get("tool")
+    try:
+        retention._verified_output(conf, tool, candidate_id, registered[candidate_id].get("manifestSha256"))
+        return True
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
 
 
 def builds(conf: dict[str, Any], registry: dict[str, Any]) -> list[dict[str, Any]]:
@@ -122,12 +141,15 @@ def builds(conf: dict[str, Any], registry: dict[str, Any]) -> list[dict[str, Any
                 "payloadBytes": entry.get("payloadBytes"), "lifecycle": lifecycle, "path": entry.get("path")}
         # Superseded means a current build of the same task that was registered later; a build registered after the
         # current one (a publication that never moved the pointer) or without a registration time is kept.
+        # The superseding current must itself verify (manifest, evidence and every payload file), or the export would be
+        # left with no measurable build once the older one is pruned.
         mine = state.get("registeredAt") if isinstance(state, dict) else None
-        newer = sorted(value for value in currents.get((entry["rootId"], entry["task"]), set()) - {candidate_id}
-                       if isinstance(mine, str) and isinstance(registered.get(value), dict)
-                       and isinstance(registered[value].get("registeredAt"), str) and registered[value]["registeredAt"] > mine)
+        later = [value for value in currents.get((entry["rootId"], entry["task"]), set()) - {candidate_id}
+                 if isinstance(mine, str) and isinstance(registered.get(value), dict)
+                 and isinstance(registered[value].get("registeredAt"), str) and registered[value]["registeredAt"] > mine]
+        newer = sorted(value for value in later if _verifies(conf, registered, value))
         if candidate_id in protected:
-            item.update({"class": "protected", "reason": "; ".join(roles.get(candidate_id, ["current, selected, accepted or rollback"])),
+            item.update({"class": "protected", "reason": "; ".join(roles.get(candidate_id, ["current, selected, accepted, rollback or measurement"])),
                          "action": None})
         elif entry["eligible"]:
             item.update({"class": "disposable", "reason": "retired", "action": "prune"})
@@ -137,15 +159,18 @@ def builds(conf: dict[str, Any], registry: dict[str, Any]) -> list[dict[str, Any
             item.update({"class": "disposable", "reason": "superseded by current " + ", ".join(newer), "action": "retire-and-prune"})
         else:
             reason = entry["reason"].removeprefix("KEEP: ").removeprefix("KEEP/SKIP: ")
-            if lifecycle == "exported" and not newer:
-                reason = "lifecycle exported and no later current build of its task supersedes it"
+            if lifecycle == "exported" and later and not newer:
+                reason = "the later current build of its task does not verify; kept as the export's measurable build"
+            elif lifecycle == "exported" and not newer:
+                reason = "lifecycle exported and no later current build of its task in this root supersedes it"
             item.update({"class": "keep", "reason": reason, "action": None})
         results.append(item)
     return results
 
 
 def _owned_homes(checkout: Path) -> dict[Path, str]:
-    """Artifact roots configured by an owned ARCANUM_LOCAL_HOME kept under local/ (for example local/gpad005-pr-home)."""
+    """Artifact roots configured by an owned ARCANUM_LOCAL_HOME kept under local/ (for example local/gpad005-pr-home),
+    mapped to that home's absolute path (a relative root is taken relative to the home)."""
     roots: dict[Path, str] = {}
     local = checkout / "local"
     for path in sorted(local.glob("*/config-v1.json")) if local.is_dir() else ():
@@ -155,7 +180,7 @@ def _owned_homes(checkout: Path) -> dict[Path, str]:
             continue
         for text in values.values() if isinstance(values, dict) else ():
             if isinstance(text, str):
-                roots[Path(text).resolve()] = str(path.parent.relative_to(checkout))
+                roots[(path.parent / text).resolve()] = str(path.parent.resolve())
     return roots
 
 
@@ -190,7 +215,8 @@ def unmanaged(conf: dict[str, Any], checkout: Path) -> list[dict[str, Any]]:
 
 def _git(*arguments: str) -> str | None:
     try:
-        return subprocess.run(["git", *arguments], check=True, capture_output=True, text=True).stdout
+        # --no-optional-locks: a report must not refresh (and lock) the index of a worktree a session works in.
+        return subprocess.run(["git", "--no-optional-locks", *arguments], check=True, capture_output=True, text=True).stdout
     except (OSError, subprocess.CalledProcessError):
         return None
 
@@ -218,7 +244,9 @@ def worktrees(checkout: Path) -> list[dict[str, Any]]:
             changed = [line for line in lines if not line.startswith("!!")]
             ignored = [line[3:].rstrip("/") for line in lines if line.startswith("!!")]
             extra = [name for name in ignored if Path(name).name not in REGENERABLE and Path(name).name != "__pycache__"]
-            if not merged:
+            if "locked" in fields:
+                reason, kind = "locked worktree", "keep"
+            elif not merged:
                 reason, kind = f"branch {branch} is not in origin/main (as of the last fetch)", "keep"
             elif changed:
                 reason, kind = f"{len(changed)} uncommitted or untracked paths", "keep"
@@ -253,20 +281,34 @@ def report(conf: dict[str, Any], registry: dict[str, Any], checkout: Path) -> di
 
 
 def apply(checkout: Path) -> dict[str, Any]:
-    """Retire superseded registered builds, then prune every retired payload through one retention plan."""
+    """Retire superseded registered builds and prune every retired payload through one retention plan, all under one
+    registry lock. A running viewer of an affected tool refuses before anything changes; a failure part-way through
+    the plan is reported with what was already retired and removed (the next report shows them as retired or pruned)."""
     with config.registry_lock():
         conf, registry = config.load_config(), config.load_registry()
-        retired = [item["candidateId"] for item in builds(conf, registry) if item["action"] == "retire-and-prune"]
+        acting = [item for item in builds(conf, registry) if item["action"] is not None]
+        for tool in sorted({retention._tool_for_task(item["task"]) for item in acting} - {None}):
+            lease = retention._try_exclusive(config.home() / "locks" / f"{tool}.lock")
+            if lease is None:
+                raise ValueError(f"a {tool} viewer is running; close it and run clean --apply again")
+            retention._release(lease)
+        retired = [item["candidateId"] for item in acting if item["action"] == "retire-and-prune"]
         for candidate_id in retired:
             retention.retire(registry, candidate_id, conf=conf)
         if retired:
             config.save_registry(registry)
-    conf, registry = config.load_config(), config.load_registry()
-    plan = retention.create_plan(conf, registry, retention.inventory(conf, registry, show_paths=True))
-    if not plan["payloads"]:
-        return {"retired": retired, "planId": None, "status": "nothing-to-remove", "removed": []}
-    # apply_plan reloads the authorities under the registry lock and rechecks every binding and lease before removal.
-    result = retention.apply_plan(plan, conf, registry, accepted_id=plan["id"])
+        conf, registry = config.load_config(), config.load_registry()
+        plan = retention.create_plan(conf, registry, retention.inventory(conf, registry, show_paths=True))
+        if not plan["payloads"]:
+            return {"retired": retired, "planId": None, "status": "nothing-to-remove", "removed": []}
+        try:
+            # The locked apply rechecks every binding, pointer, payload identity and lease before each removal.
+            result = retention._apply_plan_locked(plan, conf, registry, accepted_id=plan["id"])
+        except ValueError as error:
+            pruned = [item["candidateId"] for item in plan["payloads"]
+                      if (Path(item["path"]) / "payload-pruned-v1.json").is_file()]
+            return {"retired": retired, "planId": plan["id"], "status": f"stopped: {error}", "removed": pruned,
+                    "freedBytes": sum(item["payloadIdentity"]["bytes"] for item in plan["payloads"] if item["candidateId"] in pruned)}
     freed = sum(item["payloadIdentity"]["bytes"] for item in plan["payloads"] if item["candidateId"] in result["removed"])
     return {"retired": retired, **result, "freedBytes": freed}
 
