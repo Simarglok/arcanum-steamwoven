@@ -19,12 +19,14 @@ Code: [`src/Arcanum.Data/Technology`](../../src/Arcanum.Data/Technology); tests:
 
 ## API
 
-- `TechTexts.Open(stack, options)` reads `mes\tech.mes`; `TechTexts.Read(file)` reads a parsed table.
+- `TechTexts.Open(stack, options)` reads `mes\tech.mes`; `TechTexts.Read(file)` reads a parsed table; `MessageCount`
+  is the number of messages the file holds.
   `DisciplineNames`, `DegreeNames`, `DisciplineDescriptions` (eight each), `DegreeDescription(discipline, degree)`,
   `AlreadyKnown` (88), `Learned` (89), `Missing` (the numbers of 0..89 the file lacks).
 - `SchematicCatalog.Open(stack, options)` reads `rules\schematic.mes`, then `mes\schematic_text.mes`;
   `SchematicCatalog.Create(rules, texts)` builds the same from parsed tables (synthetic data or another loader).
-- `SchematicCatalog`: `Records` (every record holding an entry), `Read(number)` (any number, as the original reads it),
+- `SchematicCatalog`: `Records` (every record holding one of its entries n..n+6), `Read(number)` (any number, as the
+  original reads it, except that the original first replaces −1 by the placeholder, which is `RecordToShow` here),
   `Text(number)` and `TextCount` (`schematic_text.mes`), `LearnedCount`, `LearnedStarts` (the full list), `Learned(d)`,
   `Discipline(number, prototypeDiscipline)`, `Select(list, shown, discipline, page, prototypeDiscipline)`,
   `SelectLearned(degrees, discipline, page)`, `RecordToShow(selected, discipline)`, `Unread`; static `KindOf(number)`,
@@ -88,7 +90,7 @@ all zeros with every line flagged, as the original reads it.
 | `6000 + 10 × d`, d 0..7 | `Placeholder`: the record shown for an empty tab of discipline d |
 | 4000 and up, other than a placeholder | `Found` |
 
-The catalogue parses every record whose number n (n mod 10 = 0) holds at least one entry when it is created, so a bad
+The catalogue parses every record n (n mod 10 = 0) that holds at least one of its entries n..n+6 when it is created, so a bad
 list line refuses the whole catalogue; entries at offsets 7..9 belong to no record and are listed in `Unread`.
 
 ## Learned list, discipline and selection
@@ -124,7 +126,7 @@ modes ([rule modes](../world/rule-modes.md#registry), Technology row) and need n
 ## Installed original
 
 `SchematicRealDataTests` (`DAT_ROOT`, category `RealData`) checks the [data census](../research/technology-evidence.md#data-census):
-`tech.mes` holds all 90 entries; `rules\schematic.mes` (from `Arcanum4.dat`) has 882 entries in 126 complete records,
+`tech.mes` holds 90 entries, all of 0..89; `rules\schematic.mes` (from `Arcanum4.dat`) has 882 entries in 126 complete records,
 none unread: 56 learned (7 per discipline, the k-th at `1990 + 200d + 10k`, `LearnedCount` 56), 62 found (4000..5440)
 and 8 placeholders; every list has 1 or 3 alternatives; every name and description exists in the 258-entry
 `schematic_text.mes`; every quantity is at least 1. No refusal is reached by the installed data.

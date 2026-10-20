@@ -48,7 +48,7 @@ public sealed class SchematicCatalog
     /// order; empty when <see cref="LearnedCount"/> is 0. Its length is the count (the catalogue refuses a file where it is not,
     /// TC11).</summary>
     public IReadOnlyList<int> LearnedStarts { get; }
-    /// <summary>Every record that holds at least one entry: the numbers n with n mod 10 = 0, ascending.</summary>
+    /// <summary>Every record that holds at least one of its entries n..n+6 (n mod 10 = 0), ascending.</summary>
     public IReadOnlyList<SchematicRecord> Records { get; }
     /// <summary>Entries no record reads (offsets 7..9 of a record's ten numbers), ascending; a diagnostic.</summary>
     public IReadOnlyList<int> Unread { get; }
@@ -60,7 +60,9 @@ public sealed class SchematicCatalog
     /// <summary>The number of messages of <c>mes\schematic_text.mes</c>.</summary>
     public int TextCount => _texts.Count;
 
-    /// <summary>The record at <paramref name="number"/> as the original reads it: any number, a missing entry reading as 0.</summary>
+    /// <summary>The record at <paramref name="number"/> as the original reads it: any number, a missing entry reading as 0. The
+    /// original replaces −1 (an empty selection) by the placeholder first; that substitution is <see cref="RecordToShow"/>, so
+    /// here −1 is read as entries −1..5.</summary>
     public SchematicRecordRead Read(int number) =>
         _records.TryGetValue(number, out var record) ? new(TechnologyDataStatus.Read, record) : ReadRecord(_rules, number);
 
@@ -87,7 +89,8 @@ public sealed class SchematicCatalog
         if (rules.Count == 0) return Refused(new(TechnologyDataStatus.FileEmpty, Path));
         if (texts.Count == 0) return Refused(new(TechnologyDataStatus.FileEmpty, TextPath));
         var records = new SortedDictionary<int, SchematicRecord>();
-        foreach (var start in rules.Messages.Select(m => m.Number - m.Number % RecordStride).Distinct())
+        foreach (var start in rules.Messages.Where(m => m.Number % RecordStride < SchematicRecord.Lines)
+                     .Select(m => m.Number - m.Number % RecordStride).Distinct())
         {
             var read = ReadRecord(rules, start);
             if (read.Refusal is { } refusal) return Refused(refusal);

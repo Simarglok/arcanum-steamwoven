@@ -23,8 +23,9 @@ public sealed class TechTexts
     private readonly string?[] _degreeDescriptions;
 
     private TechTexts(string?[] disciplines, string?[] degrees, string?[] disciplineDescriptions, string?[] degreeDescriptions,
-        string? alreadyKnown, string? learned, int[] missing)
+        string? alreadyKnown, string? learned, int[] missing, int count)
     {
+        MessageCount = count;
         DisciplineNames = Array.AsReadOnly(disciplines);
         DegreeNames = Array.AsReadOnly(degrees);
         DisciplineDescriptions = Array.AsReadOnly(disciplineDescriptions);
@@ -44,10 +45,14 @@ public sealed class TechTexts
     public string? AlreadyKnown { get; }
     /// <summary>Message 89: a new schematic was learned from a document (the document is destroyed).</summary>
     public string? Learned { get; }
+    /// <summary>The number of messages the file holds (any number, not only 0..89).</summary>
+    public int MessageCount { get; }
     /// <summary>The numbers of 0..89 the file does not hold, ascending (a diagnostic; the original shows its missing-line text).</summary>
     public IReadOnlyList<int> Missing { get; }
 
-    /// <summary>The message number of the description of <paramref name="degree"/> in <paramref name="discipline"/>.</summary>
+    /// <summary>The message number of the description of <paramref name="degree"/> in <paramref name="discipline"/>: entry
+    /// <c>discipline + 8 × degree</c> of the 64-entry table, message <c>24 + discipline + 8 × degree</c>.</summary>
+    [OriginalFunction(0x4AFE40, OriginalFunctionScope.Full)]
     public static int DegreeDescriptionMessage(int discipline, int degree)
     {
         Check(discipline, degree);
@@ -78,7 +83,7 @@ public sealed class TechTexts
         var missing = Enumerable.Range(0, Messages).Where(n => texts[n] is null).ToArray();
         return new(TechnologyDataStatus.Read, new(texts[..Disciplines], texts[FirstDegreeName..(FirstDegreeName + Degrees)],
             texts[FirstDisciplineDescription..(FirstDisciplineDescription + Disciplines)],
-            texts[FirstDegreeDescription..(FirstDegreeDescription + Disciplines * Degrees)], texts[AlreadyKnownMessage], texts[LearnedMessage], missing));
+            texts[FirstDegreeDescription..(FirstDegreeDescription + Disciplines * Degrees)], texts[AlreadyKnownMessage], texts[LearnedMessage], missing, file.Count));
     }
 
     private static void Check(int discipline, int degree)

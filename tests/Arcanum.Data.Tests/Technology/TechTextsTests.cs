@@ -45,7 +45,7 @@ public sealed class TechTextsTests
         Assert.AreEqual("t87", texts.DegreeDescription(7, 7));
         Assert.AreEqual(24 + 3 + 8 * 5, TechTexts.DegreeDescriptionMessage(3, 5));
         Assert.AreEqual(("t88", "t89"), (texts.AlreadyKnown, texts.Learned));
-        Assert.AreEqual(0, texts.Missing.Count);
+        Assert.AreEqual((0, 90), (texts.Missing.Count, texts.MessageCount));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => texts.DegreeDescription(8, 0));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => texts.DegreeDescription(0, -1));
     }

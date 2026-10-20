@@ -572,8 +572,9 @@ button state.
 - The session inventory (T0 `Inventory`) holds items; `MesFile` reads message
   files; the [rule modes](../world/rule-modes.md) registry takes switches.
 
-Missing: degrees as live session state with expertise, schematic data, the
-found list, the window, assembly, item durability, cell payment.
+Missing: degrees as live session state with expertise, the
+found list, the window, assembly, item durability, cell payment (schematic data:
+ARC-TECHNOLOGY-001, [schematics](../formats/schematics.md)).
 
 ## Proposed implementation slices (project policy, not accepted)
 
@@ -590,12 +591,13 @@ at F0 (for example the F0 addresses of FR-ITEM-011 and FR-MAGIC-012 and the
 tech parts of the magic and skills studies) and raises its level; the rows of
 this document start at F1 or F2.
 
-1. **TECH-1 Schematic data** (Data; FR-ITEM-017/018 data): read `tech.mes`
+1. **TECH-1 Schematic data** (done: ARC-TECHNOLOGY-001, [contract](../formats/schematics.md);
+   Data; FR-ITEM-017/018 data): read `tech.mes`
    texts, `rules\schematic.mes` and `schematic_text.mes` into immutable
    records (seven lines, alternatives, quantity, learned/found/placeholder
    ranges, the discipline rule of 0x56DB00), with a strict parse that refuses
-   TC6 and a typed refusal for a missing text; the written item's schematic
-   number (subtype 5). Synthetic fixtures; a `RealData` test on the Mac counts
+   TC6 (and TC11) and a typed refusal for a missing text. The written item's
+   schematic number (subtype 5) moved to TECH-3, which needs the written-item read path. Synthetic fixtures; a `RealData` test on the Mac counts
    56 learned, 62 found and 8 placeholders and checks the learned-number
    formula.
 2. **TECH-2 Degrees and expertise** (Simulation, Session; FR-CHAR-017/020,
@@ -607,8 +609,8 @@ this document start at F1 or F2.
    degrees stay in the advancement sheet.
 3. **TECH-3 Schematic knowledge** (Session; FR-ITEM-017): learned lists from
    stored degrees, the PC's found list (append once, no limit), registration
-   from reading a schematic document (destroy on first read, messages 88/89,
-   TC8 decided; needs a written-item read path, FR-ITEM-010); snapshot schema bump (the next free number, coordinated).
+   from reading a schematic document (its schematic number from the written item's
+   start text line field, destroy on first read, messages 88/89, TC8 decided; needs a written-item read path, FR-ITEM-010); snapshot schema bump (the next free number, coordinated).
 4. **TECH-4 Assembly** (Simulation pure + Session transaction; FR-ITEM-018):
    the component gate (own inventory, exact prototype, worn, broken and
    changed-description items skipped, fallback slots, expertise per component

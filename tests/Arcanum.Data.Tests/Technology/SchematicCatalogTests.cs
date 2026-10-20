@@ -110,7 +110,8 @@ public sealed class SchematicCatalogTests
         // Two learned records and a learned entry outside any record ((14 + 1) / 7 = 2); found records do not count.
         var catalog = Catalog(Record(2000) + Record(2010) + "{2408}{1}\n" + Record(4000) + Record(6000));
         Assert.AreEqual(2, catalog.LearnedCount);
-        CollectionAssert.AreEqual(new[] { 2000, 2010, 2400, 4000, 6000 }, catalog.Records.Select(r => r.Number).ToArray());
+        CollectionAssert.AreEqual(new[] { 2000, 2010, 4000, 6000 }, catalog.Records.Select(r => r.Number).ToArray(),
+            "a group holding only an entry past offset 6 is no record");
         CollectionAssert.AreEqual(new[] { 2408 }, catalog.Unread.ToArray());
         Assert.AreEqual(0, Catalog(Record(2000)).Unread.Count);
     }
@@ -209,6 +210,9 @@ public sealed class SchematicCatalogTests
         Write(data, SchematicCatalog.TextPath, "{0}{base}");
         Write(data, SchematicCatalog.Path, Record(2000, c1: "1 2 3 4"));
         Assert.AreEqual((TechnologyDataStatus.TooManyTokens, SchematicCatalog.Path), Refusal(Open(module, data)));
+        Write(data, SchematicCatalog.Path, Record(2000, c1: new string('1', SchematicCatalog.LineBufferBytes)));
+        Assert.AreEqual((TechnologyDataStatus.FileRefused, SchematicCatalog.Path), Refusal(Open(module, data)),
+            "a text of 2,000 bytes or more is refused by the MES grammar before the list parse (TC6)");
     }
 
     private static string Parse(string line)
@@ -217,8 +221,6 @@ public sealed class SchematicCatalogTests
         Assert.AreEqual(TechnologyDataStatus.Read, parsed.Status);
         return $"{string.Join(',', parsed.Alternatives!.Bases)}/{parsed.Alternatives.Tokens}";
     }
-
-    private static int? NoPrototype(int prototype) => null;
 
     private static (TechnologyDataStatus, string?) Refusal(SchematicCatalogLoad load)
     {

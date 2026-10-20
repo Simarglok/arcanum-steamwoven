@@ -19,7 +19,7 @@ public sealed class SchematicRealDataTests
 
         var tech = TechTexts.Open(stack);
         Assert.AreEqual(TechnologyDataStatus.Read, tech.Status, $"{tech.Refusal}");
-        Assert.AreEqual(0, tech.Texts!.Missing.Count, "tech.mes holds all 90 entries 0..89");
+        Assert.AreEqual((90, 0), (tech.Texts!.MessageCount, tech.Texts.Missing.Count), "tech.mes holds 90 entries, all of 0..89");
 
         var load = SchematicCatalog.Open(stack);
         Assert.AreEqual(TechnologyDataStatus.Read, load.Status, $"{load.Refusal}");
