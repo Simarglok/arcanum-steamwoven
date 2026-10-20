@@ -92,6 +92,8 @@ tools/arcanum-local launch gamepad
 
 ## Owner comparison checklist
 
+The owner deferred this check to the first playable game build (decision of 2026-10-20); until then it stays PENDING.
+
 Repeat the same route with each built-in, then optionally its user copy. Record controller/device, preset and any explicit axis/UI choices locally; no telemetry upload or personal data is needed.
 
 - Connect Xbox Series X|S Bluetooth; confirm selected-device HUD, all buttons/physical glyphs, drift and independent inversion toggles. Test focus loss, disconnect/reconnect, held sticks/shoulders/faces/triggers and safe modal resume; check no ghost cast/zoom/pan.
