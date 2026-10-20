@@ -3,7 +3,7 @@
 Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
 inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019; life state ARC-COMBAT-002;
 event queue ARC-WORLD-024; NPC reaction ARC-WORLD-026; turn-based round ARC-COMBAT-003; equipment ARC-WORLD-028;
-durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20).
+durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20); the hero's skills in play ARC-SKILLS-002 (schema 21).
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
@@ -157,7 +157,7 @@ state that left `Accepted` (`InvalidQuestState`). A shared state without a PC re
 as the source's shared state is not owned by one PC.
 
 
-## Snapshot schema 20
+## Snapshot schema 21
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -184,7 +184,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":20,
+{"format":"arcanum-steamwoven-session","schemaVersion":21,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -240,7 +240,9 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 20 is the only accepted version. ARC-WORLD-036 added the hero's `advancement` fields
+**Migration decision: none.** Schema 21 is the only accepted version. ARC-SKILLS-002 added the hero's `innateSkills` list
+(the race and gender effects' skill changes, [hero skills](hero-skills-runtime.md#snapshot-schema-21)); schema 20 is refused
+like the earlier ones, also a heroless one of the same structure. ARC-WORLD-036 had added the hero's `advancement` fields
 and the root `advancement` section; schema 19 is refused like the earlier ones (see
 [auto-level schemes](advancement-runtime.md#snapshot-schema-20)). ARC-UI-008 had added the quelled rumors (schema 19) and
 refused schema 18. ARC-WORLD-040 had added the required `sound` section
@@ -280,8 +282,8 @@ refuses schema 15. ARC-WORLD-035 added the hero's blessings and curses as schema
 added the sound state as schema 18 and refuses schema 17. ARC-UI-008 added the quelled rumors to the story domain as
 schema 19 and refuses schema 18 (a quick save of an older schema loads as incompatible). ARC-WORLD-036 added the hero's
 advancement fields and the levelled NPCs' sheets as schema 20 and refuses schema 19
-([auto-level schemes](advancement-runtime.md#snapshot-schema-20)). Adding another domain needs schema 21 with its own
-explicit migration decision.
+([auto-level schemes](advancement-runtime.md#snapshot-schema-20)). ARC-SKILLS-002 added the hero's innate skill changes as
+schema 21 and refuses schema 20. Adding another domain needs schema 22 with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
 

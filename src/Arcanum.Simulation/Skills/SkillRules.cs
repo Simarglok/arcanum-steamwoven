@@ -60,6 +60,16 @@ public static class SkillRules
     /// <summary>The tech skill with the source's tech-skill index 0..3.</summary>
     public static Skill Tech(int index) => index is >= 0 and < TechCount ? (Skill)(BasicCount + index) : throw new ArgumentOutOfRangeException(nameof(index));
 
+    /// <summary>The skill an attack with a weapon skill reads: melee, bow, throwing, or the tech skill firearms.</summary>
+    public static Skill Of(CombatSkill skill) => skill switch
+    {
+        CombatSkill.Melee => Skill.Melee,
+        CombatSkill.Bow => Skill.Bow,
+        CombatSkill.Throwing => Skill.Throwing,
+        CombatSkill.Firearms => Skill.Firearms,
+        _ => throw new ArgumentOutOfRangeException(nameof(skill)),
+    };
+
     /// <summary>The source's index of the skill in its family: 0..11 for a basic skill, 0..3 for a tech skill.</summary>
     public static int FamilyIndex(Skill skill) => IsTech(skill) ? (int)skill - BasicCount : (int)skill;
 
