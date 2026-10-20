@@ -56,6 +56,8 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionScriptCallFiring> ScriptCalls { get; init; } = Array.Empty<SessionScriptCallFiring>();
     /// <summary>The timed effects' ENDs that came due (ARC-WORLD-029), in firing order.</summary>
     public IReadOnlyList<SessionEffectFiring> Effects { get; init; } = Array.Empty<SessionEffectFiring>();
+    /// <summary>The Lock events that came due (ARC-WORLD-050), in firing order.</summary>
+    public IReadOnlyList<SessionLockFiring> Locks { get; init; } = Array.Empty<SessionLockFiring>();
 }
 
 /// <summary>One saved pending event: the queue record without its derived domain and scope map.</summary>
@@ -88,7 +90,8 @@ public sealed class SessionEventState
 public static class SessionEventKinds
 {
     /// <summary>
-    /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/> and ARC-WORLD-029 <see cref="HeroEffectEnd"/> without a new version:
+    /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/>, ARC-WORLD-029 <see cref="HeroEffectEnd"/> and ARC-WORLD-050
+    /// <see cref="LockReset"/> without a new version:
     /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
     /// </summary>
     public const int RegistryVersion = 1;
@@ -98,6 +101,13 @@ public static class SessionEventKinds
     /// its duration, the effect number, the count of entries it removes.
     /// </summary>
     public const string HeroEffectEnd = "effect.hero.end";
+
+    /// <summary>
+    /// The original's Lock event (kind 21; ARC-WORLD-050, ledger LK3–LK5): an hour after an unlock of a locked object or a
+    /// day after a jam it locks, unjams and closes the portal or container it names. Scoped to the object's map, any number
+    /// per object (each unlock or jam adds one). Entity: the object; value: the game time it was scheduled at.
+    /// </summary>
+    public const string LockReset = "lock.reset";
 
     /// <summary>
     /// A deferred SCR call (ARC-SCRIPT-010): global, any number per key. Entities: the triggerer and the attachee (the
@@ -133,8 +143,11 @@ public static class SessionEventKinds
     public const long RestingDelayMs = 3_600_000;
 
     /// <summary>Pending events a session holds: four timers for each NPC life record and three for the hero, so a life step
-    /// can always set its timers, the deferred calls and the timed effects' ENDs.</summary>
-    public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects;
+    /// can always set its timers, the deferred calls, the timed effects' ENDs and the Lock events.</summary>
+    public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
+        + MaxLockResets;
+    /// <summary>Pending Lock events a session holds (project policy; the original has no bound).</summary>
+    public const int MaxLockResets = 1024;
 
     internal static GameEventQueueLimits Limits { get; } = new(MaxPending: MaxPending);
 
@@ -156,6 +169,8 @@ public static class SessionEventKinds
                 new ScriptCallHandler(owner), Validate: ScriptCallPayload),
             new(HeroEffectEnd, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.Global, 0, 4, 0, 0,
                 new EffectEndHandler(owner), Validate: EffectEndPayload),
+            new(LockReset, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 1, 0, 0,
+                new LockResetHandler(owner), Validate: payload => payload.Values[0] >= 0),
         ]);
     }
 
@@ -234,4 +249,10 @@ internal sealed class LifeTimerHandler(SessionEventSink sink, LifeTimer timer) :
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireLifeTimer(timer, firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class LockResetHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireLockReset(firing) ?? GameEventHandlerOutcome.Refused;
 }
