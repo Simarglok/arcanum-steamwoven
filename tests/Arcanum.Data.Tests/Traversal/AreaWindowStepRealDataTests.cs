@@ -104,6 +104,9 @@ public sealed class AreaWindowStepRealDataTests
             Assert.AreEqual(1L, Math.Max(Math.Abs(route.Cells[i].X - route.Cells[i - 1].X), Math.Abs(route.Cells[i].Y - route.Cells[i - 1].Y)), $"step {i}");
         // Far longer than the straight line (2,750 cells): the way off the plateau goes south first.
         Assert.IsTrue(route.Cells.Count > 2751 && sectors > 40, $"cells {route.Cells.Count} sectors {sectors}");
+    }
+
+    [TestMethod, TestCategory("RealData")]
     public void Every_arrival_on_the_main_map_opens_a_complete_window()
     {
         // ARC-DATA-038: every transition of any listed map into the main map (runtime 1), guarded or not, arrives in a window
