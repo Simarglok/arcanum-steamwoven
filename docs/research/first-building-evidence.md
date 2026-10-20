@@ -207,7 +207,9 @@ open-door goals);
 using a portal toggles it
 (use node 6).
 An unlock relocks the portal after one game hour and closes it
-(lock timer (0x441DD0, 0x441E90)).
+(lock timer (0x441DD0, 0x441E90)). **Original (ARC-RES-065):** the lock, jam, key, frame
+and bust functions are read in the executable in
+[ledger LK1–LK13](original-verification-ledger.md#doors-containers-and-locks-arc-res-065).
 
 **Data + restated rule (D/S):** the probe evaluates the restated rule for the player
 character, without a key and with no unlock script attached:

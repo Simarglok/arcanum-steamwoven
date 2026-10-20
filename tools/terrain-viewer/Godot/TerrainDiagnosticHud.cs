@@ -11,6 +11,8 @@ public partial class TerrainDiagnosticHud : CanvasLayer
 {
     private PanelContainer? _panel;
     private Label? _sticky;
+    private string _stickyBase = string.Empty;
+    private string? _notice;
     private Label? _detail;
     private ScrollContainer? _scroll;
     private TerrainViewerMode _mode;
@@ -31,6 +33,9 @@ public partial class TerrainDiagnosticHud : CanvasLayer
     internal Rect2 Rect => _panel?.GetGlobalRect() ?? new Rect2();
     internal bool HasHorizontalClipping => _detail is null || _scroll is null || _detail.GetCombinedMinimumSize().X > _scroll.Size.X + 1;
     internal bool StickyVisible => _sticky?.IsVisibleInTree() == true && _sticky.GetGlobalRect().Size.X > 0;
+    internal string StickyText => _sticky?.Text ?? string.Empty;
+    internal Rect2 StickyRect => _sticky?.GetGlobalRect() ?? new Rect2();
+    internal bool StickyFullyShown => _sticky is not null && _sticky.GetVisibleLineCount() >= _sticky.GetLineCount();
 
     internal void MoveVerticalScroll()
     {
@@ -88,10 +93,15 @@ public partial class TerrainDiagnosticHud : CanvasLayer
         var limitation = _mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea
             ? "\nBounded adjacent grid — original Data admission, not gameplay\nOriginal placement/movement/visual parity: NOT VERIFIED"
             : _mode == TerrainViewerMode.ActorDiagnostic ? "\nOriginal placement parity: NOT VERIFIED" : string.Empty;
-        if (_sticky is not null)
-            _sticky.Text = $"{(automatedTestMode ? "AUTOMATED TEST MODE\n" : string.Empty)}Mode: {mode}\nDIAGNOSTIC — not gameplay/original parity{limitation}";
+        _stickyBase = $"{(automatedTestMode ? "AUTOMATED TEST MODE\n" : string.Empty)}Mode: {mode}\nDIAGNOSTIC — not gameplay/original parity{limitation}";
+        ComposeSticky();
         if (_detail is not null) _detail.Text = detail;
     }
+
+    // ARC-INPUT-003: a short notice (the last reserved key) shown in the sticky header, above the scrolled detail, so it
+    // is visible without scrolling; null removes it.
+    internal void SetNotice(string? notice) { _notice = notice; ComposeSticky(); }
+    private void ComposeSticky() { if (_sticky is not null) _sticky.Text = _notice is null ? _stickyBase : $"{_stickyBase}\n{_notice}"; }
 
     private void ResizeForViewport()
     {

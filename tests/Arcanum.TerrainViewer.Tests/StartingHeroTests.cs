@@ -10,6 +10,7 @@ using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Skills;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -35,10 +36,12 @@ public sealed class StartingHeroTests
         var snapshot = data.LoadStrict();
         var document = VirgilDialog(P("arcanum3.dat"));
 
-        // 16069, the half-elf man: race effect 67 raises DX, BE and magick points, lowers CN; its four tech-skill changes and
-        // age are outside the character owner. Set 20: 385 gold, a weapon and two armours.
+        // 16069, the half-elf man: race effect 67 raises DX, BE and magick points, lowers CN; its four tech-skill changes are the
+        // hero's innate skill changes since ARC-SKILLS-002, and only age is outside the session. Set 20: 385 gold, a weapon and
+        // two armours.
         using var halfElf = Start(sources, 16069, snapshot.RuntimeMap, out var dropped);
-        Assert.AreEqual(5, dropped, "four tech skills and age");
+        Assert.AreEqual(1, dropped, "age");
+        Assert.AreEqual(4, halfElf.QueryHero()!.InnateSkills.Count(c => c.Cause == EffectCause.Race && SkillRules.IsTech(c.Skill)), "four tech skills");
         var stats = halfElf.QueryHeroStats(new(0))!.Value.Snapshot!;
         Assert.AreEqual((9, 9, 7, 8, 1), (stats.GetEffective(CharacterStat.Dexterity), stats.GetEffective(CharacterStat.Beauty),
             stats.GetEffective(CharacterStat.Constitution), stats.GetEffective(CharacterStat.Intelligence), stats.GetEffective(CharacterStat.MagickPoints)));

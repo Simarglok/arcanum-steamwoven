@@ -258,7 +258,7 @@ public sealed partial class GameSessionOwner
         Func<int, int, int>? spend = null;
         if (_advancement.Rules is { } rules && rules.Scheme(hero.Advancement.AutoLevelScheme) is { } scheme)
         {
-            var modifiers = AdvancementDomain.HeroModifiers(_hero.Stats, _effects, life.PoisonLevel);
+            var modifiers = AdvancementDomain.HeroModifiers(_hero, _effects, life.PoisonLevel);
             spend = (level, unspent) =>
             {
                 var outcome = AutoLevelRules.Apply(sheet with { Level = level, UnspentPoints = unspent }, modifiers, scheme, null, npc: false,

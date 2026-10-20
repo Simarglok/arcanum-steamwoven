@@ -28,7 +28,8 @@ effective object fields. No NPC fights back. Requirements:
 - [Function registry](../verification/README.md) rows (F2, two readings): skill points, base level, level, key-stat cap and
   training (`CombatSkillRules`, a view of [`SkillRules`](skill-rules-runtime.md) since ARC-SKILLS-001; 0x4C5FA0, 0x4C5E50, 0x4C5EB0, 0x4C5F70, 0x4C60C0) and the critter resistance
   (`CombatantRules.Resistances`, 0x43D6D0); no function oracle covers them yet.
-- The installed data: the twelve pre-made PC prototypes store no skills (the pre-made hero reader refuses one that does), the
+- The installed data: the twelve pre-made PC prototypes store no skills (the pre-made hero reader refuses one that does); since
+  ARC-WORLD-036 their schemes buy skills at the start and since ARC-SKILLS-002 the attack reads them ([hero skills](hero-skills-runtime.md)). The
   Crash Site creatures are animals and monsters with stored hit-point adjustments of −3 to −6.
 
 ## Rules
@@ -51,7 +52,7 @@ effective object fields. No NPC fights back. Requirements:
 | Entry | Contract |
 | --- | --- |
 | `SessionCritterCombat.From(entity, fields, carried)` | One NPC's combat values from its ARC-DATA-021 fields and the fields of the items it carries (those in a wear slot count): life facts (pools, level, effective ST under each poison penalty, CN, WP, HealRate, PoisonRecovery, normal resistance, traits from the critter, object and spell flags), the loaded life state (hit-point and fatigue damage, poison, stun and injury flags), the experience worth and pool, and `Combatant(status, state, profile)` with its effective stats under its poison and crippled legs, armour class, resistances, dodge and backstab, light and conditions. Effective stats are the character owner's for the NPC's race and gender over its stored base stats, each clamped to the race's range first (monsters store values beyond it); its stored effects are not applied. Typed `SessionCritterCombatFailure`, never an exception for data. |
-| `QueryHeroAttack()` | The hero's `Combatant`, its weapon (bare hands without one), the weapon's skill with its level and training (all 0: the session keeps no skill state and a pre-made hero has none), weapon speed, Speed, range and whether the attack is supported (melee only). Null without a hero. |
+| `QueryHeroAttack()` | The hero's `Combatant`, its weapon (bare hands without one), the weapon's skill with its level and training (`QueryHeroSkills`, ARC-SKILLS-002; dodge and backstab too), weapon speed with that training, Speed, range and whether the attack is supported (melee only). Null without a hero. |
 | `AttackCritter(expected, attack)` | Refused before any roll: no hero (`AttackUnavailable`), an invalid target, an aim at the torso or an undefined location, a distance outside 0..1 (`InvalidAttack`), a weapon that is not melee (`AttackUnsupported`), the version. Then the resolver on a trial copy of the session generator (`RandomExhausted` when it runs out), adopted once it ran; a resolver refusal (the hero cannot act, the target is dead) is NoChange with the resolution. Then `ApplyDamage` on the target or, on a critical self-hit, the hero; then, with experience data, `RecordNpcDamage` for an NPC that is not stoned and `RecordNpcKill` on a death. Each step commits its own revision; a later refusal is `StepFailure` and leaves the earlier steps. |
 | `QueryNpcKilled(entity)` | Whether the session's record of the NPC holds the pinned death damage. |
 | Loot | `LootItem` and `QueryMapInventory` count an NPC the session killed as dead, besides those its map data shows dead. |
