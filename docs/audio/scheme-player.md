@@ -60,4 +60,5 @@ executable):
   schemes PASS`: the session holds the map default (15/39 at 15:00), its day loop song plays; a
   requested scheme with an ambient sound at this hour fires within the first ticks with draws
   pinned to their minimum (the map's pair is requested again afterwards); the combat stinger and loop
-  start together and stop at once. Hearing itself is not checked.
+  start together and stop at once. Hearing itself is not checked. An area without a session clock (a map drawn unlit) has no session and prints
+  `ARC-UI-041 native-smoke schemes NONE` instead (ARC-UI-045).
