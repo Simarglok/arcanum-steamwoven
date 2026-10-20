@@ -95,14 +95,14 @@ between the two objects' tiles; loudness is an index 0 = silent, 1 = normal,
    and does not have that critter as PC leader, and that sees it or hears it at
    silent loudness, counts as attacked by it (silent, no flags).
 8. **Anomalies.** No first-pass anomaly belongs to A2. Two double counts are
-   proposed as bugs of the original with Original switches, as the plan's
-   precedents A6, A7 and MR3: a corner step of the line counts the corner
-   tile's soundproofing and cover twice (AW13, with AW14, the last corner step
-   skipping objects on the side tiles), and an NPC inside both alert squares is
-   handled twice (AW16). Kept in both settings: living critters block lines
-   although the walk asks to ignore critters (AW15), lines longer than about
-   1000 screen pixels fail with cost 100 (AW17, flagged for the owner because
-   long ranged shots get +100 difficulty), the walk is shifted by the
+   bugs of the original with Original switches (owner decision 2026-10-20), as
+   the plan's precedents A6, A7 and MR3: a corner step of the line counts the
+   corner tile's soundproofing and cover twice (AW13, with AW14, the last corner
+   step skipping objects on the side tiles), and an NPC inside both alert
+   squares is handled twice (AW16). Kept in both settings: living critters block
+   lines although the walk asks to ignore critters (AW15), lines longer than
+   about 1000 screen pixels fail with cost 100 (AW17, flagged for the owner
+   because long ranged shots get +100 difficulty), the walk is shifted by the
    observer's pixel offset (AW18), and a sleeping witness wakes without any
    perception test (AW19) ([anomalies](#9-anomalies-and-decisions)).
 
@@ -411,15 +411,17 @@ dynamite. The table index therefore stays 0..2 (a 3 would read the global
 
 ## 9. Anomalies and decisions
 
-Verdicts and rows: [ledger](original-verification-ledger.md#npc-ai-awareness-arc-res-056).
-No first-pass anomaly (P1–P7) belongs to A2, and the F0 summaries of S6–S9 were
+Verdicts and rows:
+[ledger](original-verification-ledger.md#npc-ai-awareness-arc-res-056). No
+first-pass anomaly (P1–P7) belongs to A2, and the F0 summaries of S6–S9 were
 confirmed or refined, none contradicted. The rows below are behaviour of the
 original that looks unplanned; none crashes or reads out of bounds. Decisions
-follow D2 and D8 and the plan's precedents (A6 and A7: double counts are bugs
-of the original with Original switches; MR3 of ARC-RES-058): a double count
-gets a Steamwoven fix and a proposed Original switch that keeps the retail
-behaviour; behaviour that looks designed or is a limit is kept in both
-settings, no switch. The owner accepted every proposed Original switch of this table on 2026-10-20 (ARC-RES-063).
+follow D2 and D8 and the plan's precedents (A6 and A7: double counts are bugs of
+the original with Original switches; MR3 of ARC-RES-058): a double count gets a
+Steamwoven fix and a proposed Original switch that keeps the retail behaviour;
+behaviour that looks designed or is a limit is kept in both settings, no switch.
+The owner accepted every proposed Original switch of this table on 2026-10-20
+(ARC-RES-063).
 
 | ID | Original 1.0.7.4 | Verdict | Proposed decision |
 | --- | --- | --- | --- |
