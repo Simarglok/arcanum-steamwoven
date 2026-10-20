@@ -10,6 +10,9 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>ARC-RENDER-017: loads one interior of the game folder's module content stack in the
 /// AREA viewer under a whole-map plan (ARC-DATA-019) with whole-map step evidence (ARC-WORLD-018).
+/// ARC-RENDER-024: a map with more sector files than a whole-map plan admits (the main world map) loads as a window
+/// (ARC-DATA-032) around <see cref="TerrainViewerArguments.AreaMapSector"/>, the transfer arrival or the map-list start
+/// tile, with window step evidence (ARC-DATA-034); the viewer moves the window as the actor walks.
 /// The pinned exterior path (<see cref="AreaLoadOperation"/>) is untouched.</summary>
 internal static class AreaMapLoadOperation
 {
@@ -27,12 +30,15 @@ internal static class AreaMapLoadOperation
         // The viewer's own archive arguments must be the stack's sources the plan reads.
         RequireSame(stack.Plan.SearchOrder.Where(s => s.Role == ContentSourceRole.ModuleArchive).Select(s => s.Path), arguments.ModulePath);
         var catalog = WorldCatalog.Open(stack);
-        var created = AreaMapPlans.Create(stack, catalog, mapName);
+        var centre = WindowCentre(stack, catalog, mapName, arguments);
+        var created = centre is { } around ? AreaMapPlans.CreateWindow(stack, catalog, mapName, new(checked((int)around.X), checked((int)around.Y)))
+            : AreaMapPlans.Create(stack, catalog, mapName);
         if (created.Status != AreaMapPlanStatus.Ready) throw new InvalidOperationException("AREA_MAP_PLAN_" + created.Status.ToString().ToUpperInvariant());
         var mapPlan = created.Plan!;
         RequireSame(mapPlan.Files.Where(f => f.Key.Role == AreaSourceRole.Resource2).Select(f => f.Path), arguments.ResourcePath);
         RequireSame(mapPlan.Files.Where(f => f.Key.Role == AreaSourceRole.Resource1).Select(f => f.Path), arguments.ActorResourcePath!);
-        Console.WriteLine($"ARC-RENDER-017 load stage=plan map={mapPlan.Map.Name} catalogue={mapPlan.Plan.CatalogueMap} sectors={mapPlan.Map.SectorFiles.Count}");
+        Console.WriteLine($"ARC-RENDER-017 load stage=plan map={mapPlan.Map.Name} catalogue={mapPlan.Plan.CatalogueMap} sectors={mapPlan.Map.SectorFiles.Count}" +
+            (centre is { } shown ? $" window={shown.X},{shown.Y}" : string.Empty));
         token.ThrowIfCancellationRequested();
         // ARC-WORLD-031: the map's transitions and the maps this mode can open, from the same stack.
         var (transitions, destinations, transitionsFailure) = Transitions(stack, catalog, mapPlan.Map);
@@ -46,7 +52,10 @@ internal static class AreaMapLoadOperation
             // Step evidence from this same strict publication, and one chart over every sector of the map.
             steps = AreaStepInspector.InspectWholeMap(snapshot, stack, mapPlan.Map.AggregatePath, generation);
             var chart = Chart(snapshot);
-            return chart with { Spawn = chart.ToChart(Spawn(steps, mapPlan.StartTile, snapshot, arguments.AreaMapArrival)) };
+            // The sector the actor is asked to stand in: the explicit sector, else the window's centre (a window opened
+            // around the map-list start keeps the start tile), else none.
+            var near = arguments.AreaMapSector ?? (centre is { } middle && arguments.AreaMapArrival is null && !Inside(mapPlan.StartTile, middle) ? middle : null);
+            return chart with { Spawn = chart.ToChart(Spawn(steps, mapPlan.StartTile, snapshot, arguments.AreaMapArrival, near)) };
         }, mapPlan.Limits);
         var snapshot = area.Snapshot; var plan = area.Plan;
         var moduleIdentity = snapshot.Inputs.Single(i => i.Key.Role == AreaSourceRole.Module);
@@ -101,9 +110,25 @@ internal static class AreaMapLoadOperation
             terrainCommands.Count(command => command.Phase == 0), terrainCommands.Count(command => command.Phase == 1), 0, 0,
             mf, rf, mf, rf, area.CpuRgbaBytes + actor.CheckedRgbaBytes, elapsed, 1)
         { Area = area, ActorPlan = actor.Plan, ActorTextures = actor.Textures, AreaStepSnapshot = traversal,
-            MapTransitions = transitions, MapDestinations = destinations, MapTransitionsFailure = transitionsFailure,
+            MapTransitions = transitions, MapDestinations = destinations, MapTransitionsFailure = transitionsFailure, AreaMapWindowCentre = centre,
             ActorResourceFingerprint = new(actorIdentity.Length, actorIdentity.Sha256), ActorResourceFingerprintAfter = new(actorIdentity.Length, actorIdentity.Sha256) };
     }
+
+    /// <summary>ARC-RENDER-024: the centre of the window a map opens as, or null when it loads whole. A map with more sector
+    /// files than <see cref="AreaMapPlans.MaxSectorFiles"/> opens as a window around the asked sector, else the sector of the
+    /// transfer arrival, else the sector of its map-list start tile (the new-game start of the main map: the map list's
+    /// start tile, not <c>gameinit.mes</c>, whose start map and location are unused).</summary>
+    internal static AreaSectorCoordinate? WindowCentre(ContentStack stack, WorldCatalog catalog, string mapName, TerrainViewerArguments arguments)
+    {
+        if (catalog.Find(mapName) is not { } map || map.SectorFiles.Count <= AreaMapPlans.MaxSectorFiles) return null;
+        if (arguments.AreaMapSector is { } asked) return asked;
+        var tile = arguments.AreaMapArrival ?? MapList.Read(stack).Find(map.Name)?.Start ?? throw new InvalidOperationException("AREA_MAP_WINDOW_NO_START");
+        var sector = WorldSectorCoordinate.Containing(tile);
+        return new(sector.X, sector.Y);
+    }
+
+    private static bool Inside(WorldLocation? tile, AreaSectorCoordinate sector) =>
+        tile is { } t && t.X >> 6 == sector.X && t.Y >> 6 == sector.Y;
 
     /// <summary>The widest chart (in sectors) a whole map may span; the largest installed interior spans 14.</summary>
     internal const int MaxChartSectors = 32;
@@ -124,9 +149,9 @@ internal static class AreaMapLoadOperation
             { MinimumCell = 0, MaximumCell = checked((int)(span * 64 - 1)) };
     }
 
-    /// <summary>ARC-WORLD-031: the map's transitions (ARC-DATA-025) and every listed map with 1 to
-    /// <see cref="AreaMapPlans.MaxSectorFiles"/> sector files, which map mode can open, by runtime number. An unlisted map
-    /// has no transitions (the reason is returned instead).</summary>
+    /// <summary>ARC-WORLD-031: the map's transitions (ARC-DATA-025) and every listed map with a sector file, which map mode
+    /// can open (whole, or as a window since ARC-RENDER-024), by runtime number. An unlisted map has no transitions (the
+    /// reason is returned instead).</summary>
     internal static (MapTransitionSet? Transitions, IReadOnlyDictionary<int, AreaMapDestination>? Destinations, string? Failure) Transitions(
         ContentStack stack, WorldCatalog catalog, WorldMap map)
     {
@@ -137,20 +162,32 @@ internal static class AreaMapLoadOperation
         var transitions = MapTransitions.Read(catalog, list, map, scripts);
         var destinations = new Dictionary<int, AreaMapDestination>();
         foreach (var entry in list.Entries)
-            if (catalog.Find(entry.Name) is { SectorFiles.Count: > 0 and <= AreaMapPlans.MaxSectorFiles } folder)
+            if (catalog.Find(entry.Name) is { SectorFiles.Count: > 0 } folder)
                 destinations.TryAdd(entry.Runtime, new(entry.Runtime, entry.Catalogue, folder.Name));
         return (transitions, destinations, null);
     }
 
     /// <summary>A transfer's arrival tile (ARC-WORLD-031) when the step evidence admits it: the original places the player
-    /// there without a passability check (W9). Otherwise the map-list arrival tile when the walker can stand on it, else the
-    /// first core tile (by row, then column) where it can. A tile qualifies with open terrain and a cardinal neighbour it can
-    /// step to and back from (so no body blocks the tile itself).</summary>
-    internal static AreaStepCell Spawn(AreaStepSnapshot steps, WorldLocation? start, AreaSnapshot snapshot, WorldLocation? arrival = null)
+    /// there without a passability check (W9). ARC-RENDER-024: with a sector asked (<paramref name="near"/>), the core tile
+    /// nearest that sector's middle where the walker can stand. Otherwise the map-list arrival tile when the walker can stand
+    /// on it, else the first core tile (by row, then column) where it can. A tile qualifies with open terrain and a cardinal
+    /// neighbour it can step to and back from (so no body blocks the tile itself).</summary>
+    internal static AreaStepCell Spawn(AreaStepSnapshot steps, WorldLocation? start, AreaSnapshot snapshot, WorldLocation? arrival = null,
+        AreaSectorCoordinate? near = null)
     {
         if (arrival is { } authored && steps.IsAdmitted(new(authored.X, authored.Y))) return new(authored.X, authored.Y);
-        if (start is { } tile && CanStep(steps, new(tile.X, tile.Y))) return new(tile.X, tile.Y);
-        foreach (var terrain in snapshot.Terrain.Where(t => t.Scope == AreaScope.Core).OrderBy(t => t.WorldY).ThenBy(t => t.WorldX))
+        var core = snapshot.Terrain.Where(t => t.Scope == AreaScope.Core);
+        if (near is { } sector)
+        {
+            long midX = sector.OriginX + 32, midY = sector.OriginY + 32;
+            core = core.OrderBy(t => Math.Abs(t.WorldX - midX) + Math.Abs(t.WorldY - midY)).ThenBy(t => t.WorldY).ThenBy(t => t.WorldX);
+        }
+        else
+        {
+            if (start is { } tile && CanStep(steps, new(tile.X, tile.Y))) return new(tile.X, tile.Y);
+            core = core.OrderBy(t => t.WorldY).ThenBy(t => t.WorldX);
+        }
+        foreach (var terrain in core)
             if (CanStep(steps, new(terrain.WorldX, terrain.WorldY))) return new(terrain.WorldX, terrain.WorldY);
         throw new InvalidOperationException("AREA_MAP_NO_WALKABLE_TILE");
     }

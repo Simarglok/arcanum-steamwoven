@@ -29,8 +29,26 @@ public partial class TerrainViewerApp
             throw new InvalidOperationException("AREA_MAP_FOLLOW_SMOKE_FAILED");
         }
         var map = new AreaMapRuntime(area.Snapshot, grid.Snapshot, grid.Chart);
-        var template = _companionTemplates.FirstOrDefault(t => t.Home.RuntimeMap == CurrentAreaMap && session.QueryCompanion(t.Entity).Standing == CompanionStanding.Free);
-        if (template is null) { GD.Print($"ARC-WORLD-037 native-smoke follow NONE map={_readyMapName} templates={_companionTemplates.Count}"); return; }
+        // The first free NPC of the map with a cell 6 cells from its T0 cell that it can walk to (ARC-RENDER-024: a main-map
+        // window can hold NPCs standing where no open step leads away).
+        var routes = new AreaRouteSource(map.Steps, map.Chart);
+        CellCoord? Far(CellCoord origin)
+        {
+            var seen = new HashSet<CellCoord> { origin }; var queue = new Queue<CellCoord>([origin]);
+            while (queue.TryDequeue(out var from) && seen.Count < 20000)
+                foreach (var direction in Enum.GetValues<NeighborDirection>())
+                {
+                    var next = Arcanum.Simulation.Navigation.RoutePlanner.Neighbor(from, direction);
+                    if (seen.Contains(next) || !routes.Contains(next) || routes.Assess(from, direction) != Arcanum.Simulation.Navigation.RouteStepVerdict.Open) continue;
+                    seen.Add(next); queue.Enqueue(next);
+                    if (FollowDistanceRules.Distance(next, origin) >= 6) return next;
+                }
+            return null;
+        }
+        var candidates = _companionTemplates.Where(t => t.Home.RuntimeMap == CurrentAreaMap && session.QueryCompanion(t.Entity).Standing == CompanionStanding.Free).ToArray();
+        var (template, far) = candidates.Select(t => (Template: t, Far: Far(t.HomeOrigin))).FirstOrDefault(p => p.Far is not null);
+        if (template is null)
+        { GD.Print($"ARC-WORLD-037 native-smoke follow NONE map={_readyMapName} templates={_companionTemplates.Count} free={candidates.Length} (none can walk 6 cells)"); return; }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
         try
@@ -45,20 +63,7 @@ public partial class TerrainViewerApp
             Require(!ConversationOpen, "the conversation closed");
             Require(_areaCompanions?.Companions.SingleOrDefault(c => c.Entity == template.Entity) is { Standing: CompanionStanding.Following },
                 "the NPC is a following companion: " + _areaCompanions?.Status());
-            // The PC 6 to 10 cells away on a cell the NPC can walk to (a breadth-first search over open steps from its T0 cell).
-            var origin = template.HomeOrigin;
-            var routes = new AreaRouteSource(map.Steps, map.Chart);
-            var seen = new HashSet<CellCoord> { origin }; var queue = new Queue<CellCoord>([origin]);
-            CellCoord? far = null;
-            while (far is null && queue.TryDequeue(out var from) && seen.Count < 20000)
-                foreach (var direction in Enum.GetValues<NeighborDirection>())
-                {
-                    var next = Arcanum.Simulation.Navigation.RoutePlanner.Neighbor(from, direction);
-                    if (seen.Contains(next) || !routes.Contains(next) || routes.Assess(from, direction) != Arcanum.Simulation.Navigation.RouteStepVerdict.Open) continue;
-                    seen.Add(next); queue.Enqueue(next);
-                    if (FollowDistanceRules.Distance(next, origin) >= 6) { far = next; break; }
-                }
-            Require(far is not null, $"a cell 6 cells from the NPC that it can walk to (searched {seen.Count})");
+            // The PC 6 cells away on a cell the NPC can walk to (a breadth-first search over open steps from its T0 cell).
             AreaSmokePlace(map, far!.Value);
             var companion = _areaCompanions!.Companions.Single(c => c.Entity == template.Entity);
             var pc = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
@@ -88,7 +93,7 @@ public partial class TerrainViewerApp
             _smokeCompanion = template.Entity;
             GD.Print("ARC-WORLD-037 native-smoke follow PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, template.Speaker.ScriptId, Prototype = template.Speaker.Row.PrototypeNumber, template.Facts.Level, template.Facts.Thresholds,
-                From = map.Chart.ToWorld(origin), Pc = map.Chart.ToWorld(pc), At = world, UnderRoof = underRoof, Frames = frames, Templates = _companionTemplates.Count, Parity = "NOT_VERIFIED" }));
+                From = map.Chart.ToWorld(template.HomeOrigin), Pc = map.Chart.ToWorld(pc), At = world, UnderRoof = underRoof, Frames = frames, Templates = _companionTemplates.Count, Parity = "NOT_VERIFIED" }));
         }
         finally
         {

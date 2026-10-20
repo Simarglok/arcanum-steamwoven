@@ -56,6 +56,7 @@ class LauncherSyncTests(unittest.TestCase):
                 self.assertIn(launch.ROLE_FLAGS[role], argv, f"{task} must pass {role}")
         argv = launch.map_arguments(self.inputs(), "crash site cave")
         passed |= {token for token in argv if token.startswith("--")}
+        passed |= {token for token in launch.map_arguments(self.inputs(), "Arcanum1-024-fixed", sector="1452,1290") if token.startswith("--")}
         passed |= {token for token in launch.terrain_arguments(self.inputs(), "crash-site-area", hero="elf-male") if token.startswith("--")}
         self.assertTrue({launch.ROLE_FLAGS[role] for role in launch.MAP_ROLES} <= set(argv))
         self.assertEqual(viewer, passed | NON_LAUNCHER_FLAGS,
@@ -91,6 +92,24 @@ class LauncherSyncTests(unittest.TestCase):
                 launch.map_arguments(inputs, name)
         with self.assertRaises(ValueError):
             launch.map_arguments({role: path for role, path in inputs.items() if role != "gameRoot"}, "void")
+
+    def test_map_mode_passes_an_opening_sector_in_the_viewers_form(self):
+        # ARC-RENDER-024: `--area-map-sector X,Y` (the viewer's ParseSector: two numbers below 2^26).
+        inputs = self.inputs()
+        self.assertNotIn("--area-map-sector", launch.map_arguments(inputs, "Arcanum1-024-fixed"))
+        argv = launch.map_arguments(inputs, "Arcanum1-024-fixed", "elf-male", "1409,1314")
+        self.assertEqual(argv[-6:], ["--area-map", "Arcanum1-024-fixed", "--hero", "elf-male", "--area-map-sector", "1409,1314"])
+        self.assertEqual(launch.map_arguments(inputs, "x", sector="0,67108863")[-1], "0,67108863")
+        for bad in ("", "1", "1,2,3", "-1,2", "1, 2", "x,2", "67108864,0", "123456789,1", "1.5,2"):
+            with self.subTest(sector=bad), self.assertRaises(ValueError):
+                launch.map_arguments(inputs, "x", sector=bad)
+        source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()
+        self.assertIn('case "--area-map-sector"', source)
+        self.assertIn("x < 67108864 && y < 67108864", source)
+        self.assertEqual(launch.MAX_SECTOR, 67108863)
+        # `./arcanum map NAME --sector X,Y` and the low-level launcher pass it on.
+        self.assertIn('("--area-map-sector", args.sector)', (REPO / "arcanum").read_text())
+        self.assertIn('launcher.add_argument("--area-map-sector"', (REPO / "tools/arcanum-local").read_text())
 
     def test_hero_names_match_the_viewer_and_are_passed_only_to_the_area_mode(self):
         # ARC-WORLD-027: the launcher's hero names are the viewer's `AreaStartingHero.Premade`, in main-menu order.

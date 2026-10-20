@@ -60,7 +60,8 @@ def setup(args: argparse.Namespace) -> int:
 
 def run(args: argparse.Namespace) -> int:
     mode, tasks = MAP_MODE if args.mode == "map" else MODES[args.mode]
-    extra = (("--area-map", args.name) if args.mode == "map" else ()) + (("--hero", args.hero) if getattr(args, "hero", None) else ())
+    extra = (("--area-map", args.name) if args.mode == "map" else ()) + (("--hero", args.hero) if getattr(args, "hero", None) else ()) \
+        + (("--area-map-sector", args.sector) if getattr(args, "sector", None) else ())
     roots = config.load_config().get("artifactRoots", {})
     if not isinstance(roots, dict) or not isinstance(roots.get(ROOT_ID), str):
         print("Run ./arcanum setup first.", file=sys.stderr)
@@ -186,8 +187,10 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--hero", choices=launch.PREMADE_HEROES,
                                  help="start as this pre-made hero (default: the diagnostic PC profile)")
         command.set_defaults(func=run, mode=name)
-    command = commands.add_parser("map", help=f"launch one whole interior (a maps/ folder name) from the current {launch.UNIVERSAL_TASK} or ARC-RENDER-008 build")
-    command.add_argument("name", help='the map folder name, e.g. "crash site cave"')
+    command = commands.add_parser("map", help=f"launch one map (a maps/ folder name) from the current {launch.UNIVERSAL_TASK} or ARC-RENDER-008 build; "
+                                  "the main world map (Arcanum1-024-fixed) opens as a window that moves with the actor")
+    command.add_argument("name", help='the map folder name, e.g. "crash site cave" or Arcanum1-024-fixed')
+    command.add_argument("--sector", help="X,Y: open the map at this sector (default: the transfer arrival or the map-list start)")
     command.add_argument("--hero", choices=launch.PREMADE_HEROES, help="start as this pre-made hero (default: the diagnostic PC profile)")
     command.add_argument("--dry-run", action="store_true")
     command.set_defaults(func=run, mode="map")

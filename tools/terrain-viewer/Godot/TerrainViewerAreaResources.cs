@@ -38,6 +38,9 @@ public partial class TerrainViewerApp
         // sweep runs with terrain chunks (production default) and once more with
         // per-command terrain, so both GPU caches must exceed their limits and evict.
         var maxRetained = 0;
+        // The plan's own commands: a companion visiting from another map or window (ARC-WORLD-037, ARC-RENDER-024) is drawn
+        // from its kept body, a command of no plan here, and is not part of the coverage count.
+        HashSet<AreaDrawCommand>? planned = new(_readyArea!.Plan.Commands, ReferenceEqualityComparer.Instance);
         async Task<(int Steps, int Swept, int MaxVisible, int MaxLive, long MaxBytes, int MaxChunks, long MaxChunkBytes)> Sweep(bool chunked)
         {
             _canvas!.AreaTerrainChunksEnabled = chunked;
@@ -51,7 +54,7 @@ public partial class TerrainViewerApp
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 // ARC-RENDER-023: the view must still be the one set (the sweep holds the camera).
                 Require(_camera.State == view, "CAMERA_MOVED");
-                steps++; seen.UnionWith(_canvas.AreaVisibleCommands);
+                steps++; seen.UnionWith(_canvas.AreaVisibleCommands.Where(planned!.Contains));
                 Require(!_canvas.AreaVisibleCommands.Any(_canvas.AreaHiddenOf), "TAKEN_ITEM_DRAWN");
                 maxLive = Math.Max(maxLive, _cache.AreaCount); maxVisible = Math.Max(maxVisible, _canvas.AreaVisibleCount);
                 maxBytes = Math.Max(maxBytes, _cache.AreaRgbaBytes);
@@ -87,6 +90,7 @@ public partial class TerrainViewerApp
             && _canvas.AreaChunkCreatedCount - _canvas.AreaChunkDisposedCount == _canvas.AreaChunkResidentCount, "CHUNK_OWNERSHIP");
         var created = _cache.CreatedCount; var disposed = _cache.DisposedCount;
         var commandSweep = await WithAreaSmokeCameraHeld(() => Sweep(false));
+        planned = null; // the reload below must find the retired generation unreferenced
         _canvas.AreaTerrainChunksEnabled = true;
         Require(commandSweep.Swept + taken == old.Commands, "SWEEP_COVERAGE");
         Require(ReferenceEquals(old.Result.Target, _readyArea) && _readyArea!.Frames.Count == old.CpuFrames

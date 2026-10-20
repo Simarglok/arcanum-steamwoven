@@ -17,7 +17,8 @@ namespace Arcanum.TerrainViewer;
 // with the actor where it stood. A reset or reload drops a queued transfer.
 public partial class TerrainViewerApp
 {
-    private enum MapHandoffKind { Transfer, QuickLoad }
+    // ARC-RENDER-024: Stream moves the window of a map too large to load whole (the main map) around the walking actor.
+    private enum MapHandoffKind { Transfer, QuickLoad, Stream }
     private AreaMapTransfers? _mapTransfers;
     private MapTransferHandoff? _mapHandoff;
     // Tiles the actor stepped into since the last frame, in order (a frame can complete several steps; ledger TR3 fires on each).
@@ -44,7 +45,8 @@ public partial class TerrainViewerApp
         public GameSessionOwner? Released => Previous is null ? null : Fallback ? Session : Previous;
     }
 
-    private bool AreaTransferPending => _areaTransitions?.Pending is not null || _mapTransfers?.Pending is not null || _mapHandoff is not null;
+    // A window move (ARC-RENDER-024) loads in the background and leaves the shown map playable.
+    private bool AreaTransferPending => _areaTransitions?.Pending is not null || _mapTransfers?.Pending is not null || _mapHandoff is { Kind: not MapHandoffKind.Stream };
 
     private bool IsAreaTrigger(AreaObjectKey key) =>
         _mapTransfers?.Site(key) is not null || _areaTransitions?.Triggers().Any(t => t.Trigger.Key == key) == true;
@@ -90,7 +92,7 @@ public partial class TerrainViewerApp
         }
         _mapTransfers = new(new(area.Snapshot, steps, chart), transitions, destinations);
         var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
-        var arrived = handoff is null ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
+        var arrived = handoff is null || handoff.Kind == MapHandoffKind.Stream ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
             : handoff.Kind == MapHandoffKind.Transfer ? $"; arrived from map {handoff.FromMap}" : $"; quick load from map {handoff.FromMap}";
         _areaUseStatus = $"map {arguments.AreaMapName}: {_mapTransfers.Triggers.Count} exit objects, {_mapTransfers.TriggerCells.Count} exit tiles{arrived}";
         GD.Print("ARC-WORLD-031 transfers-ready " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -152,7 +154,8 @@ public partial class TerrainViewerApp
     /// actor's place changed.</summary>
     private bool ProcessAreaMapTransfer()
     {
-        if (_mapTransfers is null || _mapHandoff is not null) return false;
+        // A window move in flight (ARC-RENDER-024) keeps the shown map playable; a transfer it meets supersedes it.
+        if (_mapTransfers is null || _mapHandoff is { Kind: not MapHandoffKind.Stream }) return false;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending)
         {
             CancelAreaUseApproach("reset/reload"); CancelTalkApproach("reset/reload"); CancelInventoryApproach("reset/reload");
@@ -182,6 +185,7 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             if (entered.Outcome == AreaUseOutcome.Accepted) { StopWorldRoute("ROUTE_REPLACED_BY_TRANSFER"); _mapEntered.Clear(); }
         }
+        if (_mapTransfers.Pending is null) ProcessAreaMapStream(session);
         if (_mapTransfers.Pending is not { } transfer || WorldModal || session.State.Phase != MovementPhase.Settled) return false;
         _mapTransfers.Clear();
         // A map change leaves combat mode, as the source's teleport does (ARC-COMBAT-004).

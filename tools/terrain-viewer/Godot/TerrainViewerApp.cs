@@ -114,14 +114,24 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        if (_readyMapName is not null) { await RunAreaMapSmokeAsync(result); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLogbookSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); }
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip) narrows a
+                        // map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all run.
+                        var only = MapSmokeStages();
+                        bool Stage(string name) => only is null || only.Contains(name);
+                        if (_readyMapName is not null)
+                        {
+                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLogbookSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); }
+                            if (Stage("stream")) await RunAreaMapStreamSmokeAsync();
+                        }
                         else await RunAreaSmokeAsync(result);
                         // S5 must observe the retired generation become
                         // collectable; this frame may not keep it reachable.
                         result = null;
-                        await RunAreaResourcesAsync();
+                        if (_readyMapName is null || Stage("resources")) await RunAreaResourcesAsync();
                         // ARC-WORLD-031: last, because a transfer to another map publishes a new scene.
-                        if (_readyMapName is not null) { await RunAreaMapCompanionSmokeAsync(); await RunAreaMapTransferSmokeAsync(); }
+                        if (_readyMapName is not null && Stage("transfer")) { await RunAreaMapCompanionSmokeAsync(); await RunAreaMapTransferSmokeAsync(); }
+                        // ARC-RENDER-024: on a window map, into an interior and back by its exits.
+                        if (_readyMapName is not null && Stage("roundtrip")) await RunAreaMapRoundTripSmokeAsync();
                         GetTree().Quit(0);
                     }
                     else await RunNativeSmokeAsync(result);

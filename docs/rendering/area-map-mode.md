@@ -12,7 +12,11 @@ from the module's content stack and the
 profiles and every exterior smoke stay as they were.
 
     ./arcanum map "elven ruins"            # needs ./arcanum setup (any installation) and an ARC-DEV-015 or ARC-RENDER-008 build with map mode
-    viewer: --mode crash-site-area --module … --resource … --source-id … --actor-resource … --game-root GAME --area-map "elven ruins"
+    ./arcanum map Arcanum1-024-fixed [--sector X,Y]   # the main world map, streamed by window (ARC-RENDER-024); a build exported after it
+    viewer: --mode crash-site-area --module … --resource … --source-id … --actor-resource … --game-root GAME --area-map "elven ruins" [--area-map-sector X,Y]
+
+Since ARC-RENDER-024 the main world map opens here too, as a window that moves with the actor
+([the main world map](#the-main-world-map-arc-render-024)).
 
 ## What it does
 
@@ -202,10 +206,10 @@ quest flag, a held item, a dialog) is not a trigger here (SCRIPT slice S4).
   firing the start tile, as a load does.
 - **Destinations.** A transfer applies once the actor is settled. On the same
   map the actor moves to the authored arrival. Another map must be one map mode
-  can open: listed in the map list with 1 to 256 sector files (78 of the 79
-  installed map folders; the 2000 × 2000 start map is the one it cannot open, so
-  every exit to it is refused with `DESTINATION_NOT_OPENED_IN_MAP_MODE 5000` and
-  the HUD says so). The destination is loaded through the ordinary load path
+  can open: listed in the map list with a sector file (every installed map folder
+  of the list since ARC-RENDER-024: a map with more than 256 sector files, the
+  2000 × 2000 start map, opens as a window around the arrival; before it every exit
+  to the start map was refused with `DESTINATION_NOT_OPENED_IN_MAP_MODE 5000`). The destination is loaded through the ordinary load path
   with the authored arrival (`AreaMapArrival`, never a command-line option): the
   actor starts exactly there when the step evidence admits the tile (the
   original places the player without a passability check, W9), otherwise at the
@@ -294,7 +298,7 @@ queued transfer.
   as on the exterior: the shown map's inventory seeds and dialog state are
   checked against it, then it replaces the running session.
 - **Another map.** A save whose actor stands on another map that map mode can
-  open (listed, 1 to 256 sector files) passes the same checks of the slot, the
+  open (listed with a sector file; the main map as a window around the saved cell, ARC-RENDER-024) passes the same checks of the slot, the
   restore and the shown map, then loads that map through the ordinary load
   path with the actor on the saved cell, as a transfer does; the shown scene is
   cleared as the load starts, as for any load. The loaded session keeps its
@@ -410,6 +414,57 @@ recorded where it was. There are
 no followers of followers, unconscious followers, carried inventory, orders,
 loyalty or wait timer. The exterior keeps its measured roster (Virgil).
 
+## The main world map (ARC-RENDER-024)
+
+The 2000 × 2000-sector start map (`Arcanum1-024-fixed`, catalogue 5000, runtime 1; 621 sector files, the rest
+generated from terrain templates, ARC-DATA-031) is too large to load whole, so map mode loads it as a
+[window](../world/whole-map-plans.md#window-plans-arc-data-032): 3×3 core sectors around a centre and their context
+ring (25 sectors), with the [window step evidence](../world/area-step-assessment.md#windows-arc-data-034), window
+lighting and stationary lights (ARC-DATA-035), its transitions and its dialog NPCs, through the same load path as any
+map.
+
+- **Where it opens.** A map with more than `AreaMapPlans.MaxSectorFiles` (256) sector files opens as a window around
+  `--area-map-sector X,Y` (launcher `./arcanum map NAME --sector X,Y`), else around a transfer's or quick load's
+  arrival, else around the sector of its map-list start tile. That start tile is the new-game start: row 5000 of
+  `rules/maplist.mes` puts it at (92958, 82592), the Crash Site sector (1452, 1290); `gameinit.mes` names no start map
+  or location (both entries are empty and marked unused). The actor stands on the arrival when admitted; with a sector
+  asked, on the open core tile nearest that sector's middle (a sector without open ground of its own, such as the
+  generated mountains at (1450, 1290), gives a tile of a neighbour); otherwise on the start tile. With a sector asked on
+  a map that loads whole, the actor stands near that sector the same way.
+- **Streaming.** When the actor stands 16 cells (`StreamMargin`) beyond the window's centre sector, the window around
+  the sector it stands in loads in the background (about 5 s on the owner's Mac) while the shown window stays drawn and
+  playable. Once loaded, and when no dialog, inventory, sheet, logbook or palette is open, it replaces the shown window
+  in one publication: the game session is carried as on a transfer (`MapTransferHandoff`, kind `Stream`), the
+  companions' cells are written to the session first and they are bound again where they stand, the actor stands on
+  the cell it reached meanwhile, and a walk keeps its goal when the new window holds it. Music and ambient sound go on
+  (no map change). The margin keeps a walk along a border, or a path that bends back over it, from reloading the
+  window at every step; the actor always has at least 48 loaded cells ahead. The original keeps no fixed window: its
+  sector cache holds the 16 most recently used sectors and a teleport pre-caches the 3×3 around its target
+  ([main-map streaming](../research/main-map-streaming.md), SS1–SS4); the 3×3 core is that pre-cache kept around the
+  actor. A window that cannot load leaves the shown one in place and is tried again when the actor enters another
+  sector. No window moves in combat mode, while a transfer or quick load is pending, or (in a native smoke) outside
+  its own stage. A transfer, quick load or reload during a window load supersedes it.
+- **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
+  Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
+  (92913, 82598). Every listed map is a destination.
+- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,stream,resources,transfer,roundtrip`
+  narrows a run to those stages): the map battery at the new-game start (the Crash Site window: walk, logbook, sound,
+  dialog with Virgil, who then follows); `ARC-RENDER-024 native-smoke stream PASS`: walks by the production route
+  follower into sectors the actor has not stood in until the window has moved three times, each move with the session
+  carried, the actor inside the new core and the walk's goal reached, the first one met mid-walk; the resource reload
+  sweep; the map transfer smoke (exit to another map, jump point, F7/F8); and
+  `ARC-RENDER-024 native-smoke round-trip PASS`: into the cave and back onto the main map by the two exits. The same
+  stages run with `--area-map-sector` at a town (1409, 1314) and a generated wilderness sector (1384, 239).
+- **Memory.** One window holds 1,300 to 4,900 visuals and 10 to 26 MB of CPU frames; after a full collection the
+  managed heap of a run that moved the window seven times followed the window's contents (368 to 435 MB), with no
+  growth from move to move.
+
+**NOT READY:** the window is a fixed 3×3 core, not the original's 16-sector cache; a move costs a background load of
+the whole window (no sector is reused) and one publication, which rebuilds the scene (a frame hitch at the swap); saved
+sector differences (`.dif`) are not modelled; the world map's own travel (the original's world-map screen) is not
+implemented; a companion more than one sector from the actor when the window moves is bound only if the new window
+holds its cell. Original parity NOT_VERIFIED.
+
 ## Not yet
 
 - Roofs are drawn, hidden and faded since ARC-RENDER-022 ([roofs](roofs.md)).
@@ -418,7 +473,7 @@ loyalty or wait timer. The exterior keeps its measured roster (Virgil).
 - Door passability follows the step evidence: a locked door the player has no key
   for opens only for a step leaving a building, as the original executable decides
   it (ARC-RES-049); doors are not opened or animated.
-- The main world map (ARC-RES-034) and therefore every exit to it, conditional
-  transitions and door runtime on these maps; the dialog gaps
-  above (SCR admission, generated lines).
+- Conditional transitions and door runtime on these maps; the dialog gaps
+  above (SCR admission, generated lines). On the main world map: the limits listed in
+  [its section](#the-main-world-map-arc-render-024).
 - Original-executable parity is NOT_VERIFIED.

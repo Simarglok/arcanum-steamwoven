@@ -44,6 +44,8 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     public Arcanum.Data.Maps.MapTransitionSet? MapTransitions { get; init; }
     public IReadOnlyDictionary<int, AreaMapDestination>? MapDestinations { get; init; }
     public string? MapTransitionsFailure { get; init; }
+    /// <summary>ARC-RENDER-024 (map mode): the centre sector of a window load (a map too large to load whole), else null.</summary>
+    public Arcanum.Data.Area.AreaSectorCoordinate? AreaMapWindowCentre { get; init; }
 }
 
 /// <summary>The cave's strict snapshot, scene, frames and step evidence, bound to the same generation.</summary>
