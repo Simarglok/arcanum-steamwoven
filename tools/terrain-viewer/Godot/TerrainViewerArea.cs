@@ -110,33 +110,41 @@ public partial class TerrainViewerApp
         var groups = terrainSamples.Concat(bodySamples).ToArray();
         var samples = new List<object>();
         var sampleFrames = new HashSet<AreaFrameKey>();
-        foreach (var zoom in new[] { 1d, 2d, .5d })
-        foreach (var candidates in groups)
+        // ARC-RENDER-029: the samples hold the camera, as the blend samples do (ARC-RENDER-023).
+        await WithAreaSmokeCameraHeld(async () =>
         {
-            GD.Print($"ARC-RENDER-007 sample-begin kind={candidates[0].Visual.Kind} sector={candidates[0].Visual.Sector.Packed} sourceIndex={candidates[0].Visual.SourceIndex} zoom={zoom}");
-            var found = false;
-            var diagnostics = new List<object>();
-            foreach (var command in candidates.Take(64))
+            foreach (var zoom in new[] { 1d, 2d, .5d })
+            foreach (var candidates in groups)
             {
-                _camera!.ResetWorld(new Vec2(command.Destination.X + command.Destination.Width / 2d, command.Destination.Y + command.Destination.Height / 2d), WorldViewport, zoom);
-                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-                using var image = GetViewport().GetTexture().GetImage();
-                var admitted = TryAreaPixel(command, area, image, out var sample, out var diagnostic);
-                diagnostics.Add(new { command.Visual, Diagnostic = diagnostic });
-                if (!admitted) continue;
-                samples.Add(sample); sampleFrames.Add(command.Frame); found = true; break;
+                GD.Print($"ARC-RENDER-007 sample-begin kind={candidates[0].Visual.Kind} sector={candidates[0].Visual.Sector.Packed} sourceIndex={candidates[0].Visual.SourceIndex} zoom={zoom}");
+                var found = false;
+                var diagnostics = new List<object>();
+                foreach (var command in candidates.Take(64))
+                {
+                    _camera!.ResetWorld(new Vec2(command.Destination.X + command.Destination.Width / 2d, command.Destination.Y + command.Destination.Height / 2d), WorldViewport, zoom);
+                    var view = _camera.State;
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var image = GetViewport().GetTexture().GetImage();
+                    // The frame must show the view just set.
+                    if (_camera.State != view) throw new InvalidOperationException($"AREA_CLASS_CAMERA_MOVED {command.Visual.Kind} {view} {_camera.State}");
+                    var admitted = TryAreaPixel(command, area, image, out var sample, out var diagnostic);
+                    diagnostics.Add(new { command.Visual, Diagnostic = diagnostic });
+                    if (!admitted) continue;
+                    samples.Add(sample); sampleFrames.Add(command.Frame); found = true; break;
+                }
+                if (!found)
+                {
+                    var path = System.Environment.GetEnvironmentVariable("ARC_AREA_REPORT");
+                    if (!string.IsNullOrWhiteSpace(path)) System.IO.File.WriteAllText(path + ".admission-failure.json",
+                        System.Text.Json.JsonSerializer.Serialize(new { Schema = "arcanum-area-admission-failure-v1",
+                            Outcome = "FAIL", area.Generation, Zoom = zoom, GroupCommands = candidates.Length,
+                            CandidatesTried = diagnostics.Count, CapHit = candidates.Length > 64, Diagnostics = diagnostics }));
+                    throw new InvalidOperationException("AREA_CLASS_PIXEL_NOT_OBSERVED");
+                }
             }
-            if (!found)
-            {
-                var path = System.Environment.GetEnvironmentVariable("ARC_AREA_REPORT");
-                if (!string.IsNullOrWhiteSpace(path)) System.IO.File.WriteAllText(path + ".admission-failure.json",
-                    System.Text.Json.JsonSerializer.Serialize(new { Schema = "arcanum-area-admission-failure-v1",
-                        Outcome = "FAIL", area.Generation, Zoom = zoom, GroupCommands = candidates.Length,
-                        CandidatesTried = diagnostics.Count, CapHit = candidates.Length > 64, Diagnostics = diagnostics }));
-                throw new InvalidOperationException("AREA_CLASS_PIXEL_NOT_OBSERVED");
-            }
-        }
+            return samples.Count;
+        });
         RefreshAreaStatus();
         var report = new {
             Schema = "arcanum-area-render-coverage-v1", Task = "ARC-RENDER-007", area.Generation, area.Snapshot.Inputs,
