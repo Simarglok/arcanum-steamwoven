@@ -1,5 +1,6 @@
 using Arcanum.Data;
 using Arcanum.Data.Area;
+using Arcanum.Presentation.Audio;
 using Arcanum.Scripting.Dialog;
 using Arcanum.TerrainViewer.Core;
 using GamepadLab.Core;
@@ -48,6 +49,7 @@ public partial class TerrainViewerApp
         if (_conversationPanel is null)
         {
             _conversationPanel = new AreaConversationPanel(); AddChild(_conversationPanel);
+            _conversationPanel.Picked += () => { if (_audio is not null) ExecuteVoice(DialogVoicePlayer.Picked()); };
             // Only the player's close resumes the dialog script; teardown, reset and map changes just close.
             _conversationPanel.CloseRequested += () => EndConversation(resume: true);
         }
@@ -170,6 +172,7 @@ public partial class TerrainViewerApp
     {
         _conversationParty = start.Party;
         _conversationSpeaker = speaker;
+        _voiceStart = start;
         var title = $"Dialog NPC (script {speaker.ScriptId}, prototype {speaker.Row.PrototypeNumber})";
         _conversationPanel!.Open(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
     }

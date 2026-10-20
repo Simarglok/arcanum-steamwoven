@@ -80,12 +80,22 @@ public partial class TerrainViewerApp
                 // A start the content or the source refused is a regression of the wiring, not a gap of the dialog runtime.
                 Require(conversation is not null || !(status.Contains(nameof(AreaConversationStartStatus.ContentUnavailable)) || status.Contains(nameof(AreaConversationStartStatus.EntryError))
                     || status.Contains(nameof(AreaConversationStartStatus.SourceChanged))), $"script {speaker.ScriptId}: {status}");
+                // ARC-UI-043: the first NPC line's voice plays on the voice channel when the module has its file.
+                var played = _voicesPlayed;
+                TickDialogVoice();
+                var identity = _voiceStart?.VoiceIdentity(conversation?.NpcLine) ?? -1;
+                var gender = host.Profile.Pc.Gender == DialogPcGender.Female ? Arcanum.Data.Audio.SpeechGender.Female : Arcanum.Data.Audio.SpeechGender.Male;
+                var speech = identity == -1 || AreaSoundCatalog() is not { } voices ? null : voices.ResolveSpeech(identity, gender);
+                if (_audio is not null && speech?.Status == Arcanum.Data.Audio.SpeechStatus.Found)
+                    Require(_voicesPlayed == played + 1 && _voiceHandle is not null, $"script {speaker.ScriptId}: the voiced line played its voice ({_voiceNotice})");
+                var voice = speech is null ? "none" : $"{speech.Folder}/{speech.Line} {speech.Status}";
                 var turns = 0;
                 while (conversation is { Phase: DialogConversationPhase.AwaitingSelection } && conversation.Turn < 32)
                 {
                     var option = conversation.Options.FirstOrDefault(o => o.Block is null);
                     if (option is null) break;
                     _conversationPanel.Choose(option.Number); turns++;
+                    TickDialogVoice();
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                     if (!ReferenceEquals(_conversationPanel.Conversation, conversation)) break;
                 }
@@ -94,7 +104,7 @@ public partial class TerrainViewerApp
                 for (var close = 0; close < 4 && ConversationOpen; close++) _conversationPanel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 Require(!ConversationOpen && !WorldModal, "Close ends the modal panel");
                 var record = new { speaker.ScriptId, Prototype = speaker.Row.PrototypeNumber, Walked = walked, WalkStopped = walkStopped, Hover = hover.ToString(), Frames = frames,
-                    Status = status, Offered = offered, Phase = phase, Frontier = conversation?.Frontier is { } f ? $"{f.Kind} {f.Source}" : null, Turns = turns, Effects = effects, SessionChanges = session.Version.Revision - revision };
+                    Status = status, Offered = offered, Phase = phase, Frontier = conversation?.Frontier is { } f ? $"{f.Kind} {f.Source}" : null, Turns = turns, Effects = effects, SessionChanges = session.Version.Revision - revision, Voice = voice, VoicesPlayed = _voicesPlayed - played };
                 tried.Add(record); opens++;
                 if (offered) { passed = record; break; }
                 started ??= conversation is not null ? record : null;

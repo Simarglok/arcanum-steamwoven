@@ -19,7 +19,7 @@ it from one explicitly selected archive. This study:
 
 - re-states the audio requirements as testable items for the whole game (AU1–AU14);
 - checks every audio behaviour those items rest on in the original executable (rows SN1–SN33;
-  ARC-WORLD-041 and ARC-UI-042 added SN34 and SN35);
+  ARC-WORLD-041, ARC-UI-042 and ARC-UI-043 added SN34–SN36);
 - counts the installed sound data over all 81 maps of the module through the content stack;
 - corrects ARC-RES-022 where the executable or the whole-world rule disagrees;
 - splits full in-game audio into ordered, PR-sized tasks.
@@ -65,7 +65,7 @@ reading agrees, unintended; switch candidate), **Reconstruction change** (the ea
 marked a deliberate change; the row states the original).
 
 Evidence level ([F0–F4](original-executable-check.md#evidence-levels-for-a-function-f0f4)): **F2**
-(two independent readings) for every row but SN34 and SN35 (F1, read by ARC-WORLD-041 and ARC-UI-042); SN21 was read by this task and again by the two
+(two independent readings) for every row but SN34, SN35 and SN36 (F1, read by ARC-WORLD-041, ARC-UI-042 and ARC-UI-043); SN21 was read by this task and again by the two
 reviewers of ARC-RES-052 and ARC-DATA-040, and SN32 is a caller list the first reviewer checked. The readers checked operand widths, signed compares and rounding where the result
 depends on them (SN4 64-bit signed division and the rounded single-precision distance, SN8 and
 SN13 integer truncation, SN14 the absolute tick difference).
@@ -107,6 +107,7 @@ SN13 integer truncation, SN14 the absolute tick difference).
 | --- | --- | --- | --- |
 | SN21 | speech id (0x4189C0) | `(script number & 0x7FFF) << 16 | (number in the NPC line's condition field & 0xFFFF)`; −1 when either is missing. | Original |
 | SN22 | `dialog_ui_speech_start` (0x5688D0), `dialog_ui_speech_stop` (0x5689B0), `dialog_ui_process_option` (0x567E30) | −1 returns before stopping, so an unvoiced line leaves the previous voice playing. Otherwise the previous voice stops, then `sound\speech\%05d\v%d_%c.mp3` with the **PC's** gender (male `m`, female `f`); a missing female file falls back to male, never the reverse; missing → silence, text unchanged. One voice at a time, not positional. Stopped when the PC picks an option and at shutdown; closing the dialog does not stop it. | Original |
+| SN36 | `dialog_entry_copy` (0x417E20), `gsound_play_voice` (0x41C370) | A dialogue entry's condition field is stored as no field when it is empty or holds only C white space, so such a line has no voice identity (SN21). The voice plays at the voice channel's volume as set, not scaled. A byte above 0x7F is tested through the C type table with a negative index (undefined); Steamwoven reads it as not white space. | Original. Read once by ARC-UI-043 (F1) |
 | SN23 | `sfx_item_sound` (0x4F0BF0) | Base is the item's sound field (`OBJ_F_SOUND_EFFECT`). Use +0, miss +3 (no base: 4010), hit +4 or +5 at random, critical +6, out of ammo +7. Pickup/drop: 5950/5960 + material class (heavy metal counts as light at weight ≤ 2000; gold 5958/5968). Hit without a resolvable base: `7000 + 20 × weapon class + 3 × target class + random(0, 1)`, the target's armour standing in for the target, no weapon = flesh. | Original |
 | SN24 | `sfx_critter_sound` (0x4F0ED0) | Critter sound field + type: 0 critically hit, 1 dying, 2 gruesome dying, 3 fidget, 4 attacking, 5 alerted, 6 agitated (never requested). Footsteps: plate armour art 2900 on any surface; otherwise the tile's sound class (from the tile-name rules) gives dirt 2904, sand 2912, snow 2916, stone 2920, water 2928, wood 2932, chain armour +4 on dirt, stone and wood; then +random(0, 3). Nothing plays while the **local PC** is switched off (world-map travel). | Reconstruction slip (the earlier reading tested the off flag on the sounding critter) |
 | SN25 | `sfx_container_sound` (0x4F0FD0), `sfx_portal_sound` (0x4F1010), `sfx_misc_sound` (0x4F1050) | Containers and portals: sound field + 0 open, +1 close, +2 locked. Misc (walls, scenery, projectiles, traps, weapons): busting +0 (weapon +1), destroying +1 (weapon +2), both only when the file resolves; animating +2. | Original |
@@ -256,7 +257,7 @@ plus the root checks; viewer tasks follow the launcher rule (a new argument upda
 | 5 | ARC-UI-041 (done, [contract](../audio/scheme-player.md)) | Music and ambient play in the viewer | UI-040, WORLD-040 | Scheme player rules in `Arcanum.Presentation` and their host in AREA and map mode: 250 ms ticks on the session hour, loop windows, ambient chances with presentation random, one ambient per slot per tick, 25 ms fades, combat stinger and loop, cut on map change; SN14 switch. Smoke: map mode (`fal'kins maze`): the map's loop song, an ambient sound and combat music. |
 | 6 | ARC-WORLD-041 (done, [contract](../audio/sound-cues.md)) | Sound cues of world events | DATA-040 | Godot-free rules SN23–SN26 and SN27 (item, critter, footstep by tile sound class and armour, container, portal, misc, combat) and the session cue output; prototype and object sound fields through the stack; local-PC off rule. Headless tests. |
 | 7 | ARC-UI-042 (done, [contract](../audio/positional-sound.md)) | Positional effects in the viewer | UI-040, WORLD-041 | Positional rules in `Arcanum.Presentation` (SN4–SN7: listener at the view centre, attenuation and pan with per-size volume, recalculation on scroll) and their host; plays the hero's footsteps, a pickup from the ground, the hero's attacks and the target's death. Doors and chests wait for the viewer to open them, looping scenery for animated scenery (both under [Later](#later-not-in-this-plan)). |
-| 8 | ARC-UI-043 | Dialogue voice | UI-040, DATA-040 | Speech id per NPC line in the conversation (SN21), voice by PC gender with fallback, start/replace/stop as SN22, voice bus; missing voice changes nothing. Smoke: Virgil's lines. |
+| 8 | ARC-UI-043 (done, [contract](../audio/dialogue-voice.md)) | Dialogue voice | UI-040, DATA-040 | Speech id per NPC line in the conversation (SN21), voice by PC gender with fallback, start/replace/stop as SN22, voice bus; missing voice changes nothing. Smoke: an installed line voice in map mode. |
 | 9 | ARC-SCRIPT-040 | Script sounds | WORLD-040, WORLD-041 | Admit `play_sound`, `play_sound_on`, `play_sound_scheme` in the SCR interpreter, output through the session's cue and scheme ports; teleport and fade sound operand when the teleport action is admitted. |
 | 10 | ARC-UI-044 | Interface sounds and audio options | UI-040 | SN31 ids on the existing windows (inventory and containers, character sheet, conversation, level up, quest complete) and the three sliders in the viewer settings, applied live (SN8). |
 

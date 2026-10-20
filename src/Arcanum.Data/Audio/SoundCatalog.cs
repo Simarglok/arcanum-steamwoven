@@ -195,6 +195,16 @@ public sealed class SoundCatalog
         return ((scriptNumber & 0x7FFF) << 16) | (number & 0xFFFF);
     }
 
+    /// <summary>The condition field of an NPC line as the voice identity reads it (ARC-UI-043): null when it is empty or
+    /// holds only C white space (the original's dialogue entry copy stores no condition then), else its text.</summary>
+    [OriginalFunction(0x417E20, OriginalFunctionScope.Partial)]
+    public static string? SpeechConditionField(IReadOnlyList<byte> field)
+    {
+        ArgumentNullException.ThrowIfNull(field);
+        if (field.All(b => b is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\v' or (byte)'\f' or (byte)'\r')) return null;
+        return Encoding.Latin1.GetString([.. field]);
+    }
+
     /// <summary>The sound record of a sector read by <see cref="WorldCatalog.ReadSector"/>, or null for a sector version
     /// without one (before 0xAA0003). Words 3–5 (0-based) of the metadata-and-sound section are flags, music and ambient.</summary>
     public static SectorSoundRecord? SectorSound(WorldSector sector)
