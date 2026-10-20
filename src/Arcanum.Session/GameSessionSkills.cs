@@ -30,6 +30,11 @@ public sealed record SessionInnateSkillChange(EffectCause Cause, Skill Skill, St
 /// <summary>One skill as a critter reads it now: the stored value, its points, the effective level and the training.</summary>
 public readonly record struct SessionSkill(Skill Skill, int Stored, int Points, int Level, SkillTraining Training);
 
+/// <summary>A training change of the hero (ARC-SKILLS-004): <see cref="Change"/> is the rules' answer (null when refused before
+/// the rules ran); a tier the rules refuse is <see cref="GameSessionDisposition.NoChange"/>.</summary>
+public sealed record SessionSkillTrainingResult(GameSessionDisposition Disposition, GameSessionFailure Failure, SkillTrainingChange? Change,
+    GameSessionVersion Version);
+
 /// <summary>A critter's sixteen skills in <see cref="Skill"/> order (ARC-SKILLS-002).</summary>
 public sealed class SessionSkills
 {
@@ -87,6 +92,38 @@ public sealed partial class GameSessionOwner
         if (!AutoLevelRules.IsValid(modifiers)) throw new ArgumentException("Invalid advancement modifiers.", nameof(modifiers));
         return _advancement.Npcs.TryGetValue(entity, out var record) ? SessionSkills.Of(record.Sheet, modifiers) : null;
     }
+
+    /// <summary>
+    /// Sets the hero's training in a skill (ARC-SKILLS-004; the dialog action TR, the source's training setters 0x4C6170 and
+    /// 0x4C6850) through <see cref="SkillRules.SetTraining"/> with the skill's effective level now: one tier up at a time, any tier
+    /// down, the tier's minimum level. A refused tier, or the same tier, changes nothing (<see cref="GameSessionDisposition.NoChange"/>,
+    /// with the rules' answer). The source then runs the Educator update for an Educator PC; no background is modelled, so nothing
+    /// follows. Refused, in order: no hero (<see cref="GameSessionFailure.SkillsUnavailable"/>), an undefined skill or tier
+    /// (<see cref="GameSessionFailure.InvalidSkill"/>), the version, the revision.
+    /// </summary>
+    public SessionSkillTrainingResult SetHeroSkillTraining(GameSessionVersion expected, Skill skill, SkillTraining training)
+    {
+        ThrowIfDisposed();
+        if (_hero is not { } hero) return RejectSkill(GameSessionFailure.SkillsUnavailable);
+        if (!SkillRules.IsDefined(skill) || !SkillRules.IsDefined(training)) return RejectSkill(GameSessionFailure.InvalidSkill);
+        if (!IsCurrent(expected)) return RejectSkill(GameSessionFailure.StaleVersion);
+        var current = HeroSkills()[skill];
+        var change = SkillRules.SetTraining(skill, current.Stored, training, current.Level);
+        if (change.Status != SkillChangeStatus.Changed || change.Stored == current.Stored)
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, change, Version);
+        if (_revision == long.MaxValue) return RejectSkill(GameSessionFailure.RevisionExhausted);
+        var advancement = hero.State.Advancement;
+        var index = SkillRules.FamilyIndex(skill);
+        advancement = SkillRules.IsTech(skill)
+            ? advancement with { TechSkills = advancement.TechSkills.SetItem(index, change.Stored) }
+            : advancement with { BasicSkills = advancement.BasicSkills.SetItem(index, change.Stored) };
+        hero.Apply(hero.State.With([.. hero.State.Stats], hero.State.Level, hero.State.Experience, hero.State.UnspentPoints, advancement));
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, change, Version);
+    }
+
+    private SessionSkillTrainingResult RejectSkill(GameSessionFailure failure) =>
+        new(GameSessionDisposition.Rejected, failure, null, new(_identity, _revision));
 
     private SessionSkills HeroSkills()
     {

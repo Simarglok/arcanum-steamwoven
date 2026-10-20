@@ -51,4 +51,18 @@ public sealed class AreaMapChartTests
         Assert.AreEqual(first, AreaMapLoadOperation.Spawn(steps, new WorldLocation(1, 1), snapshot));
         Assert.AreEqual(new AreaStepCell(X0, Y0), first);
     }
+
+    [TestMethod]
+    public void A_sector_asked_stands_the_actor_on_the_open_core_tile_nearest_its_middle()
+    {
+        // ARC-RENDER-024: with a sector asked, the start tile is skipped; the arrival of a transfer still wins.
+        using var source = new AreaOwnerFixture(motionBodies: true);
+        var snapshot = source.Owner.LoadStrict();
+        var steps = AreaOwnerFixture.Steps(snapshot, source.Streams[new(AreaSourceRole.Module)].Bytes, 3);
+        var near = AreaMapLoadOperation.Spawn(steps, new WorldLocation(X0 + 6, Y0 + 1), snapshot, near: new AreaSectorCoordinate(1453, 1291));
+        Assert.AreEqual(new AreaStepCell(X0 + 64 + 32, Y0 + 64 + 32), near);
+        Assert.AreEqual(new AreaStepCell(X0 + 6, Y0 + 1), AreaMapLoadOperation.Spawn(steps, null, snapshot, new WorldLocation(X0 + 6, Y0 + 1), new AreaSectorCoordinate(1453, 1291)));
+        // A sector outside the core: the core tile nearest its middle.
+        Assert.AreEqual(new AreaStepCell(X0 + 127, Y0 + 127), AreaMapLoadOperation.Spawn(steps, null, snapshot, near: new AreaSectorCoordinate(1460, 1300)));
+    }
 }

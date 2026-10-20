@@ -113,6 +113,8 @@ the AREA viewer passes it for Virgil and he follows the PC (slices 2 and 3 below
 
 **Original check (ARC-RES-048):** O3 is answered: the original schedules the wait timeout when the leader's charisma is **not** extraordinary and passes the NPC to the event, so the earlier reading's condition and missing parameter are reconstruction slips (ledger row Wait timer (C12, O3, TE8)). The verdicts in the [verification ledger](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024) supersede the earlier readings below where they differ.
 
+**Original check (ARC-RES-064):** C11–C14 and C16, O4 and O7 were read in the retail executable by [companion orders and loyalty](companion-orders-loyalty-evidence.md) (ledger rows [OL1–OL33](original-verification-ledger.md#companion-orders-and-loyalty-arc-res-064)). The earlier readings hold; in addition, C13's line on leaving is the refusal line of the reason (OL20), C14's "back off" is "stop attacking" without movement (OL10) and the "follow" order changes no state (OL6). O4 and O7 are answered below; seven owner-decision candidates and the implementation slices ARC-WORLD-045..048, ARC-UI-046 and ARC-SCRIPT-016 are listed there.
+
 - **O1** *Answered by [ARC-RES-026](virgil-follow-consent.md):* AI row 5
   (dislike ≤ −1000, alignment gaps 2001, level gate 30), level 1, alignment 1,
   wait index 6, reaction base 60, no forced/aloof bit. A real PC can be refused
@@ -125,6 +127,7 @@ the AREA viewer passes it for Virgil and he follows the PC (slices 2 and 3 below
   before it becomes behaviour. Virgil's wait index 6 schedules no timer, so it
   does not affect him.
 - **O4** How often the C13 loyalty check runs while a follow goal is alive.
+  *Answered statically by [ARC-RES-064](companion-orders-loyalty-evidence.md#2-loyalty-while-following-q2-companion-c13-o4) (OL19):* not while the follow goal lives, which restarts itself every 100 ms in real time; only while the follower idles near its leader without one. How often that is in play needs an observation.
 - **O5** The move-near / run-near goals (so the exact stopping distance),
   speed recalculation and the follower in combat or turn-based mode were not
   read. The 100 ms step costs 2 action points, which only matters in
@@ -134,6 +137,7 @@ the AREA viewer passes it for Virgil and he follows the PC (slices 2 and 3 below
 - **O7** How the destination map rebinds the follower array and leader IDs on
   open, and how a waiting follower left on another map is shown, were not read
   beyond the ID conversion of C16.
+  *Answered by [ARC-RES-064](companion-orders-loyalty-evidence.md#7-followers-across-maps-q7-companion-o7) (OL31–OL33):* a map open turns the saved IDs back into handles among the loaded objects (missing → null); a waiting follower on another map is not in memory and keeps its leader as the PC's ID.
 
 ## Proposed implementation slices (project policy, not accepted)
 
@@ -161,7 +165,7 @@ of Godot.
    source map. This is the FR-WORLD-010 A→B→A acceptance with one entity per
    identity.
 5. Later: orders (C14), loyalty and timeout (C12–C13, after O3/O4), Persuasion
-   and charisma effects once character rules exist.
+   and charisma effects once character rules exist. Superseded by the [ARC-RES-064 slices](companion-orders-loyalty-evidence.md#implementation-slices).
 
 ## Method
 

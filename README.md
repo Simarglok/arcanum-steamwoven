@@ -29,6 +29,7 @@ With the game installed at `/Applications/Arcanum` and an exported build present
 ```sh
 ./arcanum setup    # find the installed game's inputs and configure the launcher
 ./arcanum map "crash site cave"   # one whole map, on any installation
+./arcanum map Arcanum1-024-fixed  # the main world map, streamed by window from the new-game start (--sector X,Y for another place)
 ./arcanum area     # walk the Crash Site exterior and cave (the pinned installation)
 ./arcanum world    # the WORLD diagnostic
 ./arcanum status   # which modes have every input configured
