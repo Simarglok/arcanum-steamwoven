@@ -23,6 +23,9 @@ summarizes the project and points to them.
   a cloud clone, which has no .NET or Godot, and runs **no checks**: no root
   checks, no task checks; the PR says "docs-only, no checks run". The
   independent review still applies (`docs/workflow/tasks.md`).
+- **Check every launch.** Within a minute of starting a Godot or launcher run,
+  confirm it started the intended mode, or stop it and fix the command
+  ([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
 - **The retired Hermes setup is off limits.** The Hermes task board and the
   Codex workflow were removed on 2026-10-16 (PR #137); do not touch `~/.hermes`
   on the owner's Mac (old board, profiles, logs with secrets) and do not run
@@ -82,15 +85,17 @@ under `docs/research`. Details: `docs/project/status.md`.
   (AREA) and `world-diagnostic` (WORLD), plus older diagnostic modes), `tools/terrain-inspect`, `tools/research/*` probes,
   `tools/arcanum-local` + `tools/local_dev` (local export/lease/retention
   authority — heavy, fail-closed). Labs: `experiments/{gamepad,display-ui,audio}-lab`.
-- Launcher: `./arcanum setup|area|world|status` wraps `tools/arcanum-local`. When a
+- Launcher: `./arcanum setup|area|world|map|status|clean` wraps `tools/arcanum-local`. Never delete `artifacts/`
+  or a build in it by hand, and never advise it: `./arcanum clean` and `docs/workflow/build-retention.md` say what may go. When a
   viewer mode gains or changes an argument or input, update `tools/local_dev/launch.py`
   (`GAME_ROLES`/`MODE_ROLES`/`ROLE_FLAGS`), `./arcanum` and the launcher docs in the
   same PR; `test_launcher_sync.py` catches drift.
 - HD: a pack (PNG + JSON, `docs/formats/hd-pack.md`) is local, built from the
   player's own installation or imported from another of the player's devices,
   and never distributed; the AREA/WORLD viewers draw characters and objects from it with
-  per-frame Legacy fallback. Build/import tooling is ARC-DEV-003, terrain HD
-  ARC-RENDER-016 (both not merged yet).
+  per-frame Legacy fallback, and the AREA also walls and level-0 terrain
+  chunks since ARC-RENDER-016 (PR #206). Build/import tooling is ARC-DEV-003, deferred by the
+  owner (not started).
 - Hard rules: no original/extracted game content, nothing derived from it (HD
   packs and frames, screenshots, model weights), toolkit archives, secrets or
   personal paths in git (`toolkit/`, `artifacts/`, `local/`, `research-private/`
@@ -110,7 +115,8 @@ under `docs/research`. Details: `docs/project/status.md`.
 3. For how the **original game** behaves, the retail executable is the only
    reference; no source reconstruction is used (owner decision 2026-10-18,
    [plan](docs/research/original-oracle-research.md)). Facts not yet read in the
-   executable carry their address at level F0.
+   executable carry their address at level F0 and are re-read when their domain
+   is implemented (owner decision 2026-10-20).
    Check behaviour in the original 1.0.7.4 `Arcanum.exe`
    ([original executable check](docs/research/original-executable-check.md)):
    read it with `llvm-objdump` or headless Ghidra, or run a single function in the
@@ -147,7 +153,9 @@ under `docs/research`. Details: `docs/project/status.md`.
   branch, PR and commit naming.
 - `docs/workflow/toolchain.md` — exact SDK/Godot versions, `godot_canonical`,
   lab and export commands.
-- `docs/project/status.md` — component catalogue; `docs/requirements/coverage.md`.
+- `docs/project/status.md` — component catalogue; `docs/requirements/coverage.md` — status of
+  every functional requirement, checked when creating a task and updated in the PR that
+  changes it (`docs/workflow/tasks.md#functional-requirements`).
 - `docs/architecture/decisions.md` — owner decisions (graphics, HD pack, controls,
   platforms); `docs/research/method.md` — research method and provenance;
   `docs/research/original-executable-check.md` — checking behaviour in the

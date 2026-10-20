@@ -114,14 +114,21 @@ still hold. Eviction itself is therefore shown only by the exterior sweep. The
 reload's managed-heap bound (half the CPU repository) has an 8 MiB floor in map
 mode, because a small map's repository (the cave's is 1.5 MB) is below the
 heap's ordinary noise, and since ARC-RENDER-018 a second floor of 4 % of the heap
-before the reload, because a large map's heap (about 450 MB for the 64-sector
+before the reload, because a large map's heap (about 540 MB live for the 64-sector
 `tarant sewers-02`) varied between runs from −63 to +26 MB in a single post-GC
 sample. The baseline and the retained size are each the least of three post-GC samples
 a frame apart (exterior and maps); the retired generation must still be collected.
-**Known flake:** on `tarant sewers-02` the heap after the reload stays 8–24 MB
-larger in a stable way (samples within one measurement differ by under 1 MB),
-so about one run in four still exceeds the 4 % floor; what grows (a one-time
-cache or a retention) is not yet known and is left to its own investigation.
+
+Since ARC-RENDER-025 the last collection of each sample compacts the large-object
+heap. On `tarant sewers-02` the earlier flake did not come from growth. In five
+runs the reload left the live heap (the generations' size less their free space)
+about 10 MB *smaller*: 543.4 MB before, 533.0 MB after. In those runs the
+large-object heap held 96 to 208 MB of free space, and the uncompacted samples
+differed from the live bytes by up to tens of megabytes, so before and after
+sometimes crossed the 4 % floor. This is an observation; the runtime's own
+estimate is meant to exclude free space, and the mechanism is not established.
+With compaction, in four runs, the samples equal the live bytes to within about
+10 KB (543.4 MB before, 533.0 MB after each time).
 
 ## Body blends and wading (ARC-RENDER-018)
 

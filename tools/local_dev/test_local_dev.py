@@ -877,6 +877,140 @@ class LocalDevTests(unittest.TestCase):
                 retention.export_preflight({}, "gamepad", output, temporary, conf=self.conf(),
                     destinations={"export": manifest.parent, "temporary": self.root}, estimate_manifest=manifest)
 
+    def test_first_export_needs_the_flag_an_owner_estimate_and_no_surviving_payload(self) -> None:
+        # ARC-DEV-026: with nothing to measure, the default stays fail-closed; the flag takes one stated estimate.
+        (self.root / "artifacts").mkdir()
+        destinations = {"export": self.root / "artifacts", "temporary": self.root}
+        with self.assertRaisesRegex(ValueError, "trusted"):
+            retention.export_preflight({}, "gamepad", 2 * 1024**3, None, conf=self.conf(), destinations=destinations)
+        for output in (None, 1024**3 - 1):
+            with self.subTest(output=output), self.assertRaisesRegex(ValueError, "at least 1 GiB"):
+                retention.export_preflight({}, "gamepad", output, None, conf=self.conf(), destinations=destinations, first_export=True)
+        budget = retention.export_preflight({}, "gamepad", 1024**3, None, conf=self.conf(), destinations=destinations, first_export=True)
+        self.assertEqual(budget["outputBasis"], retention.FIRST_EXPORT_BASIS)
+        self.assertEqual((budget["outputBytes"], budget["temporaryBytes"]), (1024**3, 2 * 1024**3))
+        manifest, _ = self.v2_manifest()
+        self.assertEqual(retention.surviving_payloads(self.conf(), "gamepad"), ["test:ARC-GPAD-003:" + "a" * 40])
+        self.assertEqual(retention.surviving_payloads(self.conf(), "display"), [])
+        with self.assertRaisesRegex(ValueError, "survives"):
+            retention.export_preflight({}, "gamepad", 1024**3, None, conf=self.conf(), destinations=destinations, first_export=True)
+        with self.assertRaisesRegex(ValueError, "refused"):
+            retention.export_preflight({}, "gamepad", 7, None, conf=self.conf(), destinations=destinations,
+                                       estimate_manifest=manifest, first_export=True)
+
+    def test_first_export_basis_is_an_admitted_manifest_value(self) -> None:
+        manifest, _ = self.v2_manifest()
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload["exportBudget"]["preflight"]["outputBasis"] = retention.FIRST_EXPORT_BASIS
+        manifest.write_text(json.dumps(payload), encoding="utf-8")
+        manifests._manifest(manifest, "gamepad")
+        payload["exportBudget"]["preflight"]["outputBasis"] = "guess"
+        manifest.write_text(json.dumps(payload), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "preflight"):
+            manifests._manifest(manifest, "gamepad")
+
+    def test_export_endpoint_passes_the_first_export_flag_to_preflight(self) -> None:
+        parsed = export_endpoint.parser().parse_args(["--tool", "terrain", "--root-id", "test", "--task", "ARC-DEV-015",
+            "--candidate", "d" * 40, "--manifest", "m", "--output-bytes", str(1024**3), "--first-export", "--", "/usr/bin/true"])
+        self.assertTrue(parsed.first_export)
+        self.assertFalse(export_endpoint.parser().parse_args(["--tool", "terrain", "--root-id", "test", "--task", "ARC-DEV-015",
+            "--candidate", "d" * 40, "--manifest", "m", "--", "/usr/bin/true"]).first_export)
+        root = self.root / "artifacts"; root.mkdir()
+        conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}; config.save_config(conf)
+        commit = "d" * 40
+        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": commit,
+                                  "manifest": str(root / "ARC-GPAD-003" / commit / "manifest.json"), "first_export": True,
+                                  "output_bytes": 1024**3, "temporary_bytes": None, "command": ["/usr/bin/true"]})()
+        with patch("tools.local_dev.export_endpoint.retention.export_preflight", side_effect=ValueError("stop")) as preflight, \
+                patch("tools.local_dev.export_endpoint.subprocess.run") as command:
+            with self.assertRaisesRegex(ValueError, "stop"):
+                export_endpoint.run_export(args)
+        self.assertIs(preflight.call_args.kwargs["first_export"], True)
+        command.assert_not_called()
+
+    def test_repair_registry_dry_run_then_apply_forgets_only_missing_payloads(self) -> None:
+        # ARC-DEV-026: records only; no file on disk is removed, a dangling current pointer is reported.
+        manifest, digest = self.v2_manifest()
+        present = "test:ARC-GPAD-003:" + "a" * 40
+        missing = "test:ARC-GPAD-003:" + "b" * 40
+        unconfigured = "elsewhere:ARC-GPAD-003:" + "c" * 40
+        registry = config.default_registry()
+        for identity in (present, missing, unconfigured):
+            registry["builds"][identity] = {"lifecycle": "exported", "tool": "gamepad"}
+        registry["accepted"] = {"gamepad": missing}; registry["rollback"] = {"gamepad": present}
+        registry["measurements"] = {"gamepad": {"candidateId": missing, "temporaryLowWaterBytes": 0}}
+        conf = self.conf(); conf["launchSelection"] = {"gamepad": missing, "display": "test:ARC-UI-001:" + "d" * 40}
+        pointer = manifest.parent.parent / "current.json"
+        pointer.write_text(json.dumps({"schema": "arcanum-build-current-v2", "manifestRelativePath": "b" * 40 + "/manifest.json",
+                                       "manifestSha256": digest}), encoding="utf-8")
+        before = (json.dumps(registry, sort_keys=True), json.dumps(conf, sort_keys=True))
+        report = retention.repair_registry(registry, conf)
+        self.assertEqual((json.dumps(registry, sort_keys=True), json.dumps(conf, sort_keys=True)), before)
+        self.assertFalse(report["applied"])
+        self.assertEqual(report["droppedBuilds"], [missing]); self.assertEqual(report["keptBuilds"], 2)
+        self.assertEqual(report["droppedAccepted"], {"gamepad": missing}); self.assertEqual(report["droppedRollback"], {})
+        self.assertEqual(report["droppedMeasurements"], {"gamepad": missing})
+        self.assertEqual(report["clearedLaunchSelection"], {"gamepad": missing, "display": "test:ARC-UI-001:" + "d" * 40})
+        self.assertEqual(report["danglingPointers"], ["test:ARC-GPAD-003:current.json"])
+        self.assertEqual(report["unjudged"], [unconfigured]); self.assertEqual(report["unreadablePointers"], [])
+        applied = retention.repair_registry(registry, conf, apply=True)
+        self.assertTrue(applied["applied"])
+        self.assertEqual(sorted(registry["builds"]), sorted([present, unconfigured]))
+        self.assertEqual((registry["accepted"], registry["rollback"], registry["measurements"]), ({}, {"gamepad": present}, {}))
+        self.assertEqual(conf["launchSelection"], {})
+        self.assertTrue(pointer.is_file() and manifest.is_file())
+        self.assertEqual(retention.repair_registry(registry, conf)["droppedBuilds"], [])
+
+    def test_repair_registry_keeps_what_it_cannot_judge(self) -> None:
+        (self.root / "artifacts").mkdir()
+        conf = self.conf(); conf["artifactRoots"]["offline"] = str(self.root / "unmounted")
+        registry = config.default_registry()
+        malformed = "test:ARC-GPAD-003:../../x"
+        offline = "offline:ARC-GPAD-003:" + "e" * 40
+        wrong_tool = "test:ARC-DEV-015:" + "e" * 40
+        for identity in (malformed, offline, wrong_tool):
+            registry["builds"][identity] = {"tool": "gamepad"}
+        report = retention.repair_registry(registry, conf, apply=True)
+        self.assertEqual(report["droppedBuilds"], [])
+        self.assertEqual(report["unjudged"], sorted([malformed, offline, wrong_tool]))
+        self.assertEqual(len(registry["builds"]), 3)
+
+    def test_repair_registry_separates_unreadable_and_legacy_pointers(self) -> None:
+        folder = self.root / "artifacts" / "ARC-UI-001"; folder.mkdir(parents=True)
+        (folder / "current.json").write_text(json.dumps({"schemaVersion": 1, "manifest": "/nowhere/manifest.json"}))
+        (folder / "current-v2.json").write_text("{")
+        report = retention.repair_registry(config.default_registry(), self.conf())
+        self.assertEqual(report["danglingPointers"], [])
+        self.assertEqual(report["unreadablePointers"], ["test:ARC-UI-001:current-v2.json"])
+
+    def test_first_export_is_refused_under_a_symlinked_task_folder_or_a_measurement(self) -> None:
+        artifacts = self.root / "artifacts"; artifacts.mkdir()
+        hidden = self.root / "hidden" / ("a" * 40); hidden.mkdir(parents=True); (hidden / "manifest.json").write_text("{}")
+        (artifacts / "ARC-GPAD-003").symlink_to(self.root / "hidden")
+        destinations = {"export": artifacts, "temporary": self.root}
+        with self.assertRaisesRegex(ValueError, "cannot be judged"):
+            retention.export_preflight({}, "gamepad", 1024**3, None, conf=self.conf(), destinations=destinations, first_export=True)
+        (artifacts / "ARC-GPAD-003").unlink()
+        registry = config.default_registry(); registry["accepted"] = {"gamepad": "test:ARC-GPAD-003:" + "a" * 40}
+        with patch("tools.local_dev.retention._verified_output", return_value=8):
+            with self.assertRaisesRegex(ValueError, "measured or explicit"):
+                retention.export_preflight(registry, "gamepad", 1024**3, None, conf=self.conf(), destinations=destinations, first_export=True)
+
+    def test_repair_registry_cli_writes_only_with_apply(self) -> None:
+        (self.root / "artifacts").mkdir()
+        conf = self.conf(); conf["launchSelection"] = {"terrain": "test:ARC-DEV-015:" + "e" * 40}; config.save_config(conf)
+        registry = config.default_registry(); registry["builds"]["test:ARC-DEV-015:" + "e" * 40] = {"tool": "terrain"}
+        config.save_registry(registry)
+        cli = Path(__file__).resolve().parents[1] / "arcanum-local"
+        before = (config.config_path().read_bytes(), config.registry_path().read_bytes())
+        dry = subprocess.run([sys.executable, "-B", str(cli), "builds", "repair-registry"], capture_output=True, text=True, timeout=10)
+        self.assertEqual(dry.returncode, 0, dry.stderr)
+        self.assertEqual(json.loads(dry.stdout)["droppedBuilds"], ["test:ARC-DEV-015:" + "e" * 40])
+        self.assertEqual((config.config_path().read_bytes(), config.registry_path().read_bytes()), before)
+        applied = subprocess.run([sys.executable, "-B", str(cli), "builds", "repair-registry", "--apply"], capture_output=True, text=True, timeout=10)
+        self.assertEqual(applied.returncode, 0, applied.stderr)
+        self.assertEqual((config.load_registry()["builds"], config.load_config()["launchSelection"]), ({}, {}))
+
     def test_pointer_added_during_inventory_recheck_prevents_intent_and_delete(self) -> None:
         manifest, _ = self.v2_manifest()
         registry, candidate_id = self.retired(manifest)

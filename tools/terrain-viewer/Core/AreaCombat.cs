@@ -20,7 +20,7 @@ public sealed record AreaCombatTarget(string Entity, AreaObjectRecord Row, bool 
 /// the pinned exterior, the cave and every whole map. It holds no session state: life and party come from the session it is
 /// given.
 /// </summary>
-public sealed class AreaCombatHost
+public sealed class AreaCombatHost : IAreaEventObjects
 {
     private readonly Dictionary<int, AreaInventoryMap> _maps;
     private readonly Dictionary<(int Map, string Entity), SessionCritterCombatBuild> _builds = [];
@@ -34,6 +34,12 @@ public sealed class AreaCombatHost
     }
 
     public bool Covers(int runtimeMap) => _maps.ContainsKey(runtimeMap);
+
+    /// <summary>ARC-WORLD-039: whether an object of the map's T0 data has this session entity id (a deferred call's role).</summary>
+    public bool HasObject(int runtimeMap, string entity) => _maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(entity, out _);
+
+    /// <summary>ARC-WORLD-039: the NPC's life facts from its combat fields on that map, or null.</summary>
+    public LifeFacts? Facts(int runtimeMap, string entity) => Build(runtimeMap, entity).Combat?.Facts;
 
     /// <summary>The NPC drawn as <paramref name="key"/> on <paramref name="runtimeMap"/>, or null for anything else.</summary>
     public AreaCombatTarget? Target(GameSessionOwner session, int runtimeMap, AreaObjectKey key)

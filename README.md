@@ -33,7 +33,11 @@ With the game installed at `/Applications/Arcanum` and an exported build present
 ./arcanum area     # walk the Crash Site exterior and cave (the pinned installation)
 ./arcanum world    # the WORLD diagnostic
 ./arcanum status   # which modes have every input configured
+./arcanum clean    # which builds are protected and which may go (dry run)
 ```
+
+Never delete `artifacts/` or a build in it by hand: the launcher and the export need the current builds. See
+[which builds may be deleted](docs/workflow/build-retention.md).
 
 The launcher runs the newest exported build of each mode; the features above need a build exported from current `main`. See [the project launcher](docs/workflow/local-development.md#project-launcher).
 

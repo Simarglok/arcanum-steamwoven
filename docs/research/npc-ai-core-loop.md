@@ -6,7 +6,7 @@ Status: **Research**, work item ARC-RES-054 (2026-10-18), stage A1 of the
 what each one feeds, when the AI runs in real time and in a turn-based round, the
 order of one AI pass, and the four danger states with every flag, script and side
 effect of their transitions. It changes no code. The rules it states are inputs
-for implementation slices I1 (parameters), I2 (danger state) and I6 (tick and
+for implementation slices I1 (parameters), I3 (danger state) and I6 (tick and
 turn-based hooks) of the plan.
 
 Earlier facts reused here: the [load map](combat-domain-load-map.md) (ARC-RES-040:
@@ -293,8 +293,8 @@ original and there is no switch.
 | LM4 | The module unload does nothing, so module rows 100..149 survive into the next module. | Original | Steamwoven rebuilds the module rows with each module's content layer, so rows of a previous module never leak; no switch, because a module change inside one session is not modelled (load-map policy 1). |
 | CL1 | A stunned NPC never passes the gate; the pass on which the stun animation has ended clears the flag and still ends. | The reconstruction lets a still-stunned NPC act: slip | Follow the original in both settings. No switch. |
 | CL2 | After the full re-wield both "check wield" and "check weapon" are cleared. | The reconstruction clears only "check wield", so the next pass re-wields the weapon again: slip | Follow the original in both settings. No switch. |
-| CL4 | On a surrender the setter leaves combat mode (0x4B3F20, which runs the toggle 0x4B3F80 when the NPC is in combat mode and the toggle acts), then writes back critter flags it read before, so the combat-mode bit is set again; the NPC still counts as in combat mode (gate step 6 keeps running its combat scripts) while the rest of leaving combat mode was done. The reconstruction has the same code. | Bug of the original | Steamwoven: a surrender leaves the combat-mode bit cleared. Original setting keeps it (`SurrenderKeepsCombatModeFlag`). Lands with slice I2. |
-| CL5 | The gate's blind, crippled and stun writes use a copy of the critter flags read before the combat scripts of step 6, so a flag a script changed in that pass is undone when one of the writes happens. The reconstruction has the same code. | Bug of the original (latent: needs a combat script that changes critter flags in the same pass as a recovery) | Steamwoven: each write changes only its own bits of the current flags. Original setting keeps the stale write (`GateRecoveryWritesStaleFlags`). Lands with slice I6. |
+| CL4 | On a surrender the setter leaves combat mode (0x4B3F20, which runs the toggle 0x4B3F80 when the NPC is in combat mode and the toggle acts), then writes back critter flags it read before, so the combat-mode bit is set again; the NPC still counts as in combat mode (gate step 6 keeps running its combat scripts) while the rest of leaving combat mode was done. The reconstruction has the same code. | Bug of the original | Steamwoven: a surrender leaves the combat-mode bit cleared. Original setting keeps it (`SurrenderKeepsCombatModeFlag`, owner decision 2026-10-20). Lands with slice I3. |
+| CL5 | The gate's blind, crippled and stun writes use a copy of the critter flags read before the combat scripts of step 6, so a flag a script changed in that pass is undone when one of the writes happens. The reconstruction has the same code. | Bug of the original (latent: needs a combat script that changes critter flags in the same pass as a recovery) | Steamwoven: each write changes only its own bits of the current flags. Original setting keeps the stale write (`GateRecoveryWritesStaleFlags`, owner decision 2026-10-20). Lands with slice I6. |
 | CL3 | On a network client (network active, not host) the AI event, the pass and the danger setter do nothing and the delayed scheduler adds no event; in any network game the follower catch-up ends the follower's conversation first. | The reconstruction leaves multiplayer out | Not applicable: Steamwoven is single player. Recorded so a network mode would start from it. |
 
 CL4 refines ledger row P6: a surrender does leave combat mode in the toggle's
@@ -305,7 +305,7 @@ other effects, but not in the combat-mode bit, which the original sets again.
 1. **Slice I1** is largely in place: the [AI parameter table](../world/ai-parameters.md)
    (ARC-DATA-033) reads both tables as the original fills them. What remains is a
    typed 17-field record with the dictionary's names for the AI runtime.
-2. **Slice I2** implements the state read and the setter as one pure function
+2. **Slice I3** implements the state read and the setter as one pure function
    over the NPC's flags and handles, returning the new flags, handles, the
    script to run (enter or exit combat, with its triggerer), the sound request
    and the reaction change, in the rule order above.

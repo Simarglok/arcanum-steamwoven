@@ -87,7 +87,8 @@ public static class ScrCatalogue
     /// <summary>Condition types the project reads by name.</summary>
     public static class Condition
     {
-        public const int True = 0, LocalFlag = 3, Equal = 4, LessOrEqual = 5, FollowingPc = 18, Jilted = 39, GlobalFlag = 43;
+        public const int True = 0, LocalFlag = 3, Equal = 4, LessOrEqual = 5, PcQuestState = 6, HasItemNamed = 17, FollowingPc = 18, IsNamed = 20,
+            IsWieldingItem = 21, HasReputation = 33, Jilted = 39, GlobalFlag = 43;
     }
 
     /// <summary>Action types the project reads by name.</summary>

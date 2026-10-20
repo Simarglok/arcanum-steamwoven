@@ -175,7 +175,7 @@ class LauncherSyncTests(unittest.TestCase):
         finally:
             sys.path.remove(str(REPO / "tools/original-oracle"))
         self.assertEqual(list(launch.ORACLE_FUNCTIONS), [f"0x{address:X}" for address in oracle_functions.FUNCTIONS])
-        tests = (REPO / launch.ORACLE_TEST_CLASS).read_text()
+        tests = "\n".join((REPO / path).read_text() for path in launch.ORACLE_TEST_CLASSES)
         self.assertIn('Category = "OriginalExe";', tests)
         for spec in oracle_functions.FUNCTIONS.values():
             name = launch.ORACLE_FUNCTIONS[f"0x{spec.address:X}"]

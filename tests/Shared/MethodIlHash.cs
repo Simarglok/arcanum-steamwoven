@@ -76,7 +76,13 @@ internal static partial class MethodIlHash
         foreach (var clause in body.ExceptionHandlingClauses)
             text.Append("clause ").Append(clause.Flags).Append(' ').Append(clause.TryOffset).Append(' ').Append(clause.TryLength).Append(' ')
                 .Append(clause.HandlerOffset).Append(' ').Append(clause.HandlerLength).Append(' ')
-                .Append(clause.Flags == ExceptionHandlingClauseOptions.Clause ? clause.CatchType?.FullName : clause.FilterOffset.ToString()).Append('\n');
+                .Append(clause.Flags switch
+                {
+                    // Only a catch clause has a type and only a filter clause a filter; a finally or fault clause has neither.
+                    ExceptionHandlingClauseOptions.Clause => clause.CatchType?.FullName,
+                    ExceptionHandlingClauseOptions.Filter => clause.FilterOffset.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    _ => "",
+                }).Append('\n');
         for (var at = 0; at < il.Length;)
         {
             var start = at;

@@ -1,6 +1,6 @@
 # Требования к бою, магии и технологиям
 
-**Покрытие реализации:** аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), через PR #54. Дата исходного исследования сохранена; актуальный объём — в таблице и Steamwoven-описаниях ниже. [Метод и срез доски](README.md#база-и-происхождение). Новых runtime/GUI/original-data запусков в этом аудите нет.
+**Текущий статус:** статус каждого требования этого документа, реализованный объём, остаток и документация — в [матрице покрытия](coverage.md#бой-магия-и-технологии) (пересверено 2026-10-20, ARC-DEV-027). Поля «Steamwoven» ниже и сводный раздел покрытия — подробности на дату их последней правки (исходный аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), PR #54); при расхождении верна матрица.
 
 Дата: 2026-10-02. Исходный Steamwoven research baseline: `b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae`. Поведение оригинала указано адресами функций retail `Arcanum.exe` 1.0.7.4 в скобках. Покрытие относится только к закреплённому Steamwoven baseline. Документ — draft полного каталога для проверки и аппрува владельцем, не утверждённая спецификация и не очередь задач.
 
@@ -196,7 +196,7 @@
 
 **Поведение и приёмка.** Magic and tech abilities share invocation/effect infrastructure only where their rules agree. Their differences in resource, target resistance, aptitude interaction and eligibility remain explicit. Приёмка casts paired magic and tech effects at targets with changing magick-tech aptitude, resistance and source aptitude; logs distinguish blocked, resisted, save and resource failure. Tech degree/eligibility calculation remains a shared input to the character domain.
 
-**Функции оригинала и данные.** Разбор magic-tech записей (0x44FE30) marks tech records, and effect resistance branches separately: шанс провала (0x453B20) applies magic resistance to spells, while эффективная степень технологии (0x4B00B0) derives effective degree from stored degree, intelligence and effects (tech discrimination (0x44FE30), resistance branch (0x453B20), tech effective level (0x4B00B0, 0x4B0110)). Основание — чтение функций оригинала по указанным адресам, уровень F0 (не проверено в exe), если строки нет в журнале сверки, кроме [MG14](../research/original-verification-ledger.md#magic-arc-res-043-load-map-arc-res-040). **Steamwoven:** no tech/spell invocation or aptitude opposition ([status][status]). Exact coupling remains subject to original-runtime evidence.
+**Функции оригинала и данные.** Разбор magic-tech записей (0x44FE30) marks tech records, and effect resistance branches separately: шанс провала (0x453B20) applies magic resistance to spells, while эффективная степень технологии (0x4B00B0) derives effective degree from stored degree, intelligence and effects (tech discrimination (0x44FE30), resistance branch (0x453B20), tech effective level (0x4B00B0, 0x4B0110)). Основание — чтение функций оригинала по указанным адресам, уровень F0 (не проверено в exe), если строки нет в журнале сверки, кроме [MG14](../research/original-verification-ledger.md#magic-arc-res-043-load-map-arc-res-040). Прочитано в exe (ARC-RES-062, [технологические предметы](../research/technology-evidence.md#technological-items-fr-magic-010-fr-magic-011)): эффективная экспертиза (0x4B00B0) читается только листом персонажа и гейтом схем, а не устройствами; технологические предметы магам вне боя не запрещены, их «magic adj» действуют как штраф по силе предмета; тех-записи 140..222 пропускают проверки и оплату BEGIN, но платят поддержание (0x453170); оплата ячейками у предмета-источника перевёрнута (TC1). **Steamwoven:** no tech/spell invocation or aptitude opposition ([status][status]). Exact coupling remains subject to original-runtime evidence.
 
 <a id="fr-magic-011"></a>
 
@@ -204,7 +204,7 @@
 
 **Поведение и приёмка.** Device/item effects trigger only on their declared event and target: use, wear/unwear, hit/stun/unconscious/death, attack opponent/location or target hit. Frequency/probability and resource checks happen once; effect is linked to source device and event actor. Приёмка independently covers on-use, on-hit, on-wear and failed charge/cost without firing unrelated triggers.
 
-**Функции оригинала и данные.** Исполнитель предметного события (0x4CB830) scans item spell slots, matches event flags, tests defined chance, builds a magic-tech invocation, sets actor/target/location and runs it; combat/critter callers notify these trigger events (item trigger executor (0x4CB830), combat notifications (0x4CBAD0), item event families (0x4CBC60, 0x4CBD40, 0x4CBDB0, 0x4CBE00, 0x4CBE70, 0x4CBF70)). Номер заклинания предмета переводится с маской `& 0xFF` ([LM7](../research/original-verification-ledger.md#magic-arc-res-043-load-map-arc-res-040)). Функции описаний предметных эффектов read description strings only; they are not the event/effect resolver (description API (0x4D3F60, 0x4D3FE0, 0x4D3FF0, 0x4D4050, 0x4D4080)). **Steamwoven:** no item event/effect runtime ([status][status]); inventory/equipment lifecycle belongs to item requirements.
+**Функции оригинала и данные.** Исполнитель предметного события (0x4CB830) scans item spell slots, matches event flags, tests defined chance, builds a magic-tech invocation, sets actor/target/location and runs it; combat/critter callers notify these trigger events (item trigger executor (0x4CB830), combat notifications (0x4CBAD0), item event families (0x4CBC60, 0x4CBD40, 0x4CBDB0, 0x4CBE00, 0x4CBE70, 0x4CBF70)). Номер заклинания предмета переводится с маской `& 0xFF` ([LM7](../research/original-verification-ledger.md#magic-arc-res-043-load-map-arc-res-040)). Функции описаний предметных эффектов read description strings only; they are not the event/effect resolver (description API (0x4D3F60, 0x4D3FE0, 0x4D3FF0, 0x4D4050, 0x4D4080)). Технологические носители (ARC-RES-062, [перепись](../research/technology-evidence.md#data-census)): 70 слотов тех-спеллов на 61 тех-предмете и 9 прочих; исполнитель не проверяет знак сложности, силу, степень и поломку. **Steamwoven:** no item event/effect runtime ([status][status]); inventory/equipment lifecycle belongs to item requirements.
 
 <a id="fr-magic-012"></a>
 
@@ -212,39 +212,13 @@
 
 **Поведение и приёмка.** Игрок видит доступность spell/tech action, выбор цели, ошибку отказа, maintained effect and cancel/interrupt; UI state matches authoritative simulation. Tech degree editing and associated point/stat accounting are specified in character development, not duplicated here. Приёмка casts and cancels an action through hotkey and mouse path, observes maintained slot, then confirms final effect/resource state in gameplay model.
 
-**Функции оригинала и данные.** Активация и применение в spell UI (0x57BC70, 0x57C110) check turn cost, target mode, affordability and LOS; maintenance UI adds/stops effects and renders slots. Интерфейс технологий (0x589A20–0x589B90) changes degree through character editor; инициализация панели интерфейса (0x57C6E0) wires callbacks, while обработчик событий игрового интерфейса (0x54DE50) routes player selection/casting (spell UI (0x57BC70, 0x57BFF0, 0x57C040, 0x57C080, 0x57C0B0, 0x57C0E0, 0x57C110, 0x57C290, 0x57C320, 0x57C370, 0x57C3F0, 0x57C470, 0x57C4B0), tech UI boundary (0x589A20, 0x589AF0, 0x589B90), callbacks (0x57C6E0), input caller (0x54DE50)). Основание — чтение функций оригинала по указанным адресам, уровень F0 (не проверено в exe), если строки нет в журнале сверки. **Steamwoven:** game UI and cast/tech state are absent ([status][status]); display lab is not game integration.
+**Функции оригинала и данные.** Активация и применение в spell UI (0x57BC70, 0x57C110) check turn cost, target mode, affordability and LOS; maintenance UI adds/stops effects and renders slots. Интерфейс технологий (0x589A20–0x589B90) changes degree through character editor; инициализация панели интерфейса (0x57C6E0) wires callbacks, while обработчик событий игрового интерфейса (0x54DE50) routes player selection/casting (spell UI (0x57BC70, 0x57BFF0, 0x57C040, 0x57C080, 0x57C0B0, 0x57C0E0, 0x57C110, 0x57C290, 0x57C320, 0x57C370, 0x57C3F0, 0x57C470, 0x57C4B0), tech UI boundary (0x589A20, 0x589AF0, 0x589B90), callbacks (0x57C6E0), input caller (0x54DE50)). Основание — чтение функций оригинала по указанным адресам, уровень F0 (не проверено в exe), если строки нет в журнале сверки. Окно схем и покупка степеней прочитаны в exe (ARC-RES-062, [окно и гейт](../research/technology-evidence.md#the-window-and-its-gate-fr-item-018-fr-magic-012)): клавиша `T`, кнопка интерфейса и диалоговое `su`; обёртки покупки и продажи степени 0x589A20/0x589AF0 принадлежат редактору персонажа, продажа не сверяется со снимком начала уровня (TC10). **Steamwoven:** game UI and cast/tech state are absent ([status][status]); display lab is not game integration.
 
-## Сводное покрытие на Steamwoven baseline
+## Покрытие Steamwoven до 2026-10-20
+
+Таблица покрытия этого раздела перенесена в [матрицу покрытия](coverage.md#бой-магия-и-технологии): там у каждого требования текущий статус, объём, остаток и документация (2026-10-20). Абзацы ниже описывали прежнюю таблицу этого документа (исходный аудит 2026-10-09 с поздними правками) и сохранены как история; слова «таблица», «строки» и «столбцы» в них относятся к ней.
 
 Статусы относятся только к текущему Steamwoven source snapshot: для этих доменов нет игрового data model или UI integration; правила одной атаки есть только как неподключённый [резолвер](../world/attack-resolver-runtime.md) (ARC-COMBAT-001), пошаговый раунд — как домен сессии без хоста ([раунд](../world/turn-based-round-runtime.md), ARC-COMBAT-003). `Нет` не оценивает наличие соответствующей ветви в оригинале; чтение функций по адресам — исследование, а не выполнение acceptance scenario. Ограниченный общий animation playback и диагностические/UI лаборатории не считаются combat/magic-tech покрытием.
-
-| ID | Данные | Правила | Интеграция | Проверка |
-| --- | --- | --- | --- | --- |
-| FR-COMBAT-001 | Нет | Частично | Частично | Частично |
-| FR-COMBAT-002 | Нет | Частично | Частично | Частично |
-| FR-COMBAT-003 | Нет | Частично | Частично | Частично |
-| FR-COMBAT-004 | Нет | Частично | Частично | Частично |
-| FR-COMBAT-005 | Нет | Частично | Нет | Частично |
-| FR-COMBAT-006 | Частично | Частично | Частично | Частично |
-| FR-COMBAT-007 | Нет | Нет | Нет | Нет |
-| FR-COMBAT-008 | Нет | Частично | Нет | Частично |
-| FR-COMBAT-009 | Нет | Нет | Нет | Нет |
-| FR-COMBAT-010 | Нет | Частично | Частично | Частично |
-| FR-COMBAT-011 | Нет | Частично | Частично | Частично |
-| FR-COMBAT-012 | Нет | Частично | Частично | Частично |
-| FR-COMBAT-013 | Нет | Нет | Нет | Нет |
-| FR-MAGIC-001 | Нет | Нет | Нет | Нет |
-| FR-MAGIC-002 | Нет | Нет | Нет | Нет |
-| FR-MAGIC-003 | Нет | Нет | Нет | Нет |
-| FR-MAGIC-004 | Нет | Нет | Нет | Нет |
-| FR-MAGIC-005 | Нет | Нет | Нет | Нет |
-| FR-MAGIC-006 | Нет | Нет | Нет | Нет |
-| FR-MAGIC-007 | Нет | Нет | Нет | Нет |
-| FR-MAGIC-008 | Нет | Нет | Нет | Нет |
-| FR-MAGIC-009 | Нет | Нет | Нет | Нет |
-| FR-MAGIC-010 | Нет | Нет | Нет | Нет |
-| FR-MAGIC-011 | Нет | Нет | Нет | Нет |
-| FR-MAGIC-012 | Нет | Нет | Нет | Нет |
 
 ## Важные пределы источника и открытые вопросы
 

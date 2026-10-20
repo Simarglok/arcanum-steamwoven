@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S7"/>.
+/// <see cref="ScrAdmissionSet.S4"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -20,6 +20,7 @@ internal sealed class ScrInterpreter
     private readonly List<ScrCallRequest> _calls = new();
     private readonly List<ScrPrintLine> _lines = new();
     private readonly List<ScrSound> _sounds = new();
+    private readonly List<ScrTeleport> _teleports = new();
     private readonly ScrRunOptions _options;
     private readonly int[] _locals = new int[ScrCatalogue.LocalSlots];
     private readonly SortedDictionary<int, bool> _flags = new();
@@ -85,7 +86,8 @@ internal sealed class ScrInterpreter
         int? story = _story is { } s2 && s2 != _storyBefore ? s2 : null;
         var result = new ScrRunResult(outcome, stop, _number, stopLine, null, Array.AsReadOnly(_trace.ToArray()), ScrEffects.None);
         return new(result, new ScrSlot(number, _localFlags, _counters), null, flags, story, _dialog, _calls.Count == 0 ? null : Array.AsReadOnly(_calls.ToArray()),
-            _lines.Count == 0 ? null : Array.AsReadOnly(_lines.ToArray()), _sounds.Count == 0 ? null : Array.AsReadOnly(_sounds.ToArray()));
+            _lines.Count == 0 ? null : Array.AsReadOnly(_lines.ToArray()), _sounds.Count == 0 ? null : Array.AsReadOnly(_sounds.ToArray()),
+            _teleports.Count == 0 ? null : Array.AsReadOnly(_teleports.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -97,6 +99,10 @@ internal sealed class ScrInterpreter
         // Following: the first object's leader is the second object (both single objects in the set).
         ScrCatalogue.Condition.FollowingPc => _host.Leader(Object(c, 0, line)) == Object(c, 1, line),
         ScrCatalogue.Condition.Jilted => _host.IsJilted(Object(c, 0, line)),
+        // SG1: the guard conditions, one object each; the quest state's second value is its third operand.
+        ScrCatalogue.Condition.PcQuestState => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), Get(c, 2), Queries),
+        ScrCatalogue.Condition.HasItemNamed or ScrCatalogue.Condition.IsNamed or ScrCatalogue.Condition.IsWieldingItem or ScrCatalogue.Condition.HasReputation
+            => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), 0, Queries),
         _ => throw new InvalidOperationException("Condition outside the interpreter's set."),
     };
 
@@ -147,6 +153,21 @@ internal sealed class ScrInterpreter
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.PlaySoundScheme: _sounds.Add(new(ScrSoundKind.Scheme, Get(a, 0), Get(a, 1))); return (Step.Next, 0);
+            case ScrCatalogue.Action.Teleport:
+            {
+                // TR1: the object, then the catalogue map, x and y as values; the run goes on. An absent object asks for
+                // nothing here (the original would queue a teleport of no object; NOT_VERIFIED what its processing does).
+                int[] values = [Get(a, 1), Get(a, 2), Get(a, 3)];
+                if (OptionalObject(a, 0) is { } who) _teleports.Add(ScrGuards.Teleport(a.Type, who, values));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.FadeAndTeleport:
+            {
+                // TR2: seconds, sound and movie, the object, then the map, x and y.
+                int[] values = [Get(a, 0), Get(a, 1), Get(a, 2), Get(a, 4), Get(a, 5), Get(a, 6)];
+                if (OptionalObject(a, 3) is { } who) _teleports.Add(ScrGuards.Teleport(a.Type, who, values));
+                return (Step.Next, 0);
+            }
             case ScrCatalogue.Action.RemoveThisScript: _changedNumber = 0; return (Step.Next, 0);
             case ScrCatalogue.Action.ChangeThisScript:
             {
@@ -252,6 +273,9 @@ internal sealed class ScrInterpreter
         ScrFocusKind.Player => _host.Player(),
         _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
     };
+
+    private IScrObjectQueries Queries => _host as IScrObjectQueries
+        ?? throw new InvalidOperationException("SCR_OBJECT_QUERIES_REQUIRED: the admission set holds a guard condition the host cannot answer.");
 
     private bool Flag(int index) => _flags.TryGetValue(index, out var value) ? value : _host.GlobalFlag(index);
 
