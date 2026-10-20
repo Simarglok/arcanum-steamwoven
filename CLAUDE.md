@@ -114,7 +114,8 @@ under `docs/research`. Details: `docs/project/status.md`.
 3. For how the **original game** behaves, the retail executable is the only
    reference; no source reconstruction is used (owner decision 2026-10-18,
    [plan](docs/research/original-oracle-research.md)). Facts not yet read in the
-   executable carry their address at level F0.
+   executable carry their address at level F0 and are re-read when their domain
+   is implemented (owner decision 2026-10-20).
    Check behaviour in the original 1.0.7.4 `Arcanum.exe`
    ([original executable check](docs/research/original-executable-check.md)):
    read it with `llvm-objdump` or headless Ghidra, or run a single function in the

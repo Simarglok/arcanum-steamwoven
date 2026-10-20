@@ -6,7 +6,8 @@ reference for original behaviour, a function may be executed in an emulator as
 an [oracle](#function-emulation-oracle). Since 2026-10-18 the project uses no
 source reconstruction at all (owner decision, [research](original-oracle-research.md)):
 facts not yet read in the executable keep their address at level F0 until their
-domain is re-read. First used by ARC-COMBAT-001
+domain is implemented; the task that implements a function reads it in the
+executable first (owner decision 2026-10-20). First used by ARC-COMBAT-001
 ([combat anomalies A1–A10](combat-core-evidence.md#original-executable-check-arc-combat-001)).
 
 Where a task must say how **the original game** behaves, or where an earlier
@@ -25,6 +26,8 @@ unchanged file in an emulator under the rules below.
   (owner decision D8 in the
   [NPC combat AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16));
   for a reconstruction slip both settings follow the original.
+- A task implements an original function whose recorded facts are F0: read
+  it before writing the code (owner decision 2026-10-20).
 - The owner asks "how is it in the original".
 - A rule matters for parity and its recorded reading is F0, has unclear intent
   or an open question.
