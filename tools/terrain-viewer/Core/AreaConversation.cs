@@ -87,6 +87,7 @@ public sealed class AreaConversationHost
     private readonly bool _party;
     private readonly AreaConversationProfile _baseProfile;
     private readonly Func<AreaSpeaker, AreaCompanionFacts?> _companions;
+    private readonly Func<string, SessionNpcAdvancement?>? _npcAdvancement;
     private readonly IReadOnlyList<AreaSpeaker>? _speakers;
     // ARC-WORLD-043: the speaker whose reaction conversation slot this host opened and has not closed yet.
     private int? _reactionOpen;
@@ -101,23 +102,27 @@ public sealed class AreaConversationHost
     /// <paramref name="contentDetail"/>.</param>
     /// <param name="companions">ARC-WORLD-037: the follow facts of a speaker that can join the party (null when it cannot); by
     /// default the measured roster (<see cref="AreaCompanionRoster.For"/>).</param>
+    /// <param name="npcAdvancement">ARC-SCRIPT-016: an NPC's stored advancement for a script's scheme change
+    /// (<see cref="AreaScriptHost"/>); null: only the PC's scheme changes.</param>
     public AreaConversationHost(AreaSnapshot snapshot, ScriptContent? content, GameSessionOwner session,
         AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, bool party = false, string contentDetail = "no script content",
-        Func<AreaSpeaker, AreaCompanionFacts?>? companions = null)
-        : this(snapshot, content, session, profile, inventory, party, contentDetail, companions, null)
+        Func<AreaSpeaker, AreaCompanionFacts?>? companions = null, Func<string, SessionNpcAdvancement?>? npcAdvancement = null)
+        : this(snapshot, content, session, profile, inventory, party, contentDetail, companions, npcAdvancement, null)
     {
     }
 
     /// <summary>Test seam: the given speakers instead of the snapshot's dialog NPCs.</summary>
     internal AreaConversationHost(AreaSnapshot snapshot, IReadOnlyList<AreaSpeaker> speakers, ScriptContent? content, GameSessionOwner session)
-        : this(snapshot, content, session, null, null, false, "no script content", null, speakers ?? throw new ArgumentNullException(nameof(speakers)))
+        : this(snapshot, content, session, null, null, false, "no script content", null, null, speakers ?? throw new ArgumentNullException(nameof(speakers)))
     {
     }
 
     private AreaConversationHost(AreaSnapshot snapshot, ScriptContent? content, GameSessionOwner session, AreaConversationProfile? profile,
-        AreaInventoryHost? inventory, bool party, string contentDetail, Func<AreaSpeaker, AreaCompanionFacts?>? companions, IReadOnlyList<AreaSpeaker>? speakers)
+        AreaInventoryHost? inventory, bool party, string contentDetail, Func<AreaSpeaker, AreaCompanionFacts?>? companions,
+        Func<string, SessionNpcAdvancement?>? npcAdvancement, IReadOnlyList<AreaSpeaker>? speakers)
     {
         _speakers = speakers;
+        _npcAdvancement = npcAdvancement;
         _companions = companions ?? AreaCompanionRoster.For;
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -133,7 +138,7 @@ public sealed class AreaConversationHost
         State = new AreaConversationState(session, new SessionMapId(snapshot.RuntimeMap),
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
             party ? Speakers.Where(speaker => _companions(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null);
-        Scripts = new AreaScriptHost(session, new SessionMapId(snapshot.RuntimeMap), Speakers, State, content);
+        Scripts = new AreaScriptHost(session, new SessionMapId(snapshot.RuntimeMap), Speakers, State, content, npcAdvancement);
     }
 
     /// <summary>True when roster speakers talk through the session party (ARC-WORLD-016).</summary>
@@ -145,7 +150,7 @@ public sealed class AreaConversationHost
     /// the viewer cannot quick-load during a talk, whose panel takes every key).
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, _baseProfile, _inventory, _party, _contentDetail, _companions, _speakers);
+    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, _baseProfile, _inventory, _party, _contentDetail, _companions, _npcAdvancement, _speakers);
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;

@@ -43,8 +43,11 @@ two readers and stand at F2 or F3: storage, levels, caps, key stats, training ge
 setters, cost and refund, the next point's key stat, the stat-lowering guard and its caller, the tech points side effect,
 the skill effect collections, the Educator update, the skill module (names, the "follower skills" setting, the saved
 gambling roll), the new-character kit and the aptitude formula ([ledger](original-verification-ledger.md#skill-rules-arc-skills-001)
-FA7–FA9, AL5, SR1–SR14; since ARC-SKILLS-004 also the dialog skill conditions and the `tr` and `et` actions, [DS1–DS5](original-verification-ledger.md#dialog-skill-gates-arc-skills-004)). They agree with the reading below. Still F0, apart from the − loop (SK2) and the training
-dispatch (SK3) already read by ARC-RES-048: the editor's + and − buttons, its floor and hint (0x57ACD0, 0x57AEB0, 0x55D3A0, 0x55D6F0, 0x5597C0, 0x55AE70, 0x55BD10; tasks S5, S6), the training sources (0x418CA0,
+FA7–FA9, AL5, SR1–SR14; since ARC-SKILLS-004 also the dialog skill conditions and the `tr` and `et` actions, [DS1–DS5](original-verification-ledger.md#dialog-skill-gates-arc-skills-004)). They agree with the reading below. The editor's + and − buttons, its floor, snapshot and
+hints (0x57ACD0, 0x57AEB0, 0x55D3A0, 0x55D6F0, 0x5597C0, 0x55AE70) stand at F2 since ARC-WORLD-052
+([ledger CP1–CP12](original-verification-ledger.md#character-point-pool-arc-world-052)), with one correction to section 2: the
+floor does not hold through a − click whose level an effect pins (CP6). Still F0, apart from the − loop (SK2) and the training
+dispatch (SK3) already read by ARC-RES-048: the sheet's skill page (0x55BD10; task S6), the training sources (0x418CA0,
 0x418DE0, 0x418F30, 0x411940; S16), and everything of sections 5 and 6
 (the check and the uses; S3 and later).
 
@@ -165,7 +168,9 @@ that would go below the value accepted when the editor opened
 "skill at maximum" when the level is already 20 and "stat too low" otherwise;
 the stat hint shows the key stat needed for the next point
 (hint (0x55AE70)). The basic − path loops until the visible level
-changes; see SK2.
+changes; see SK2. The floor is tested only before the loop, so when an effect
+holds the level the click passes it (ledger CP6, an original bug; Steamwoven
+stops at the floor in both modes, [character point pool](../world/character-point-pool.md)).
 
 **Auto-level** (auto level (0x4A76B0, 0x4A77A0)). A scheme step "skill N" buys points
 until the level reaches N; when a point is refused it raises the key stat by

@@ -45,7 +45,7 @@ public partial class TerrainViewerApp
             // ARC-WORLD-037: in map mode every speaker with follow facts from the map's data joins through the session party.
             _conversationHost = new AreaConversationHost(area.Snapshot, content.Content, session, inventory: _inventoryHost,
                 party: arguments.AreaMapName is null || _companionData?.Data is not null, contentDetail: $"{content.Status}: {content.Detail}",
-                companions: arguments.AreaMapName is null ? null : MapCompanionFacts);
+                companions: arguments.AreaMapName is null ? null : MapCompanionFacts, npcAdvancement: AreaNpcAdvancement);
         }
         else _conversationHost = null;
         if (_conversationPanel is null)

@@ -25,12 +25,13 @@ public sealed class AreaScriptHost : IScrHost
     /// The set the viewer runs: <see cref="ScrAdmissionSet.S3"/> without get and set story state, because the session
     /// has no story-state number yet (a script that would use one is refused, not run on a made-up value), plus the three
     /// sound actions of <see cref="ScrAdmissionSet.S7"/> (ARC-SCRIPT-040), plus call script in and remove script call of
-    /// <see cref="ScrAdmissionSet.S5"/> since the viewer pumps the session's event queue (ARC-WORLD-039).
+    /// <see cref="ScrAdmissionSet.S5"/> since the viewer pumps the session's event queue (ARC-WORLD-039), plus set auto-level
+    /// scheme of <see cref="ScrAdmissionSet.S8"/> (ARC-SCRIPT-016).
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls", ScrAdmissionSet.S3.Conditions,
+    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme", ScrAdmissionSet.S3.Conditions,
         ScrAdmissionSet.S3.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState)
             .Concat([ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
-                ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall]),
+                ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme]),
         ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
 
     private readonly List<ScrSound> _sounds = [];
@@ -53,12 +54,17 @@ public sealed class AreaScriptHost : IScrHost
     private readonly IReadOnlyList<AreaSpeaker> _speakers;
     private readonly AreaConversationState _state;
     private readonly ScriptContent? _content;
+    private readonly Func<string, SessionNpcAdvancement?>? _npcAdvancement;
 
     /// <param name="content">The game's scripts; null when they could not be loaded, and then every script is missing.
     /// The host borrows it.</param>
-    public AreaScriptHost(GameSessionOwner session, SessionMapId map, IReadOnlyList<AreaSpeaker> speakers, AreaConversationState state, ScriptContent? content)
+    /// <param name="npcAdvancement">ARC-SCRIPT-016: an NPC's advancement as its map data holds it (sheet and scheme), by entity id, or
+    /// null for an object that is not such an NPC; a scheme request for one is ignored, as the original ignores an object that is
+    /// neither a PC nor an NPC. Without it only the PC's scheme changes.</param>
+    public AreaScriptHost(GameSessionOwner session, SessionMapId map, IReadOnlyList<AreaSpeaker> speakers, AreaConversationState state, ScriptContent? content,
+        Func<string, SessionNpcAdvancement?>? npcAdvancement = null)
     {
-        _session = session; _map = map; _speakers = speakers; _state = state; _content = content;
+        _session = session; _map = map; _speakers = speakers; _state = state; _content = content; _npcAdvancement = npcAdvancement;
         Pc = new ScrObjectRef(map.RuntimeMap, PcCode);
     }
 
@@ -156,8 +162,8 @@ public sealed class AreaScriptHost : IScrHost
     public bool IsPc(ScrObjectRef critter) => critter == Pc;
 
     /// <summary>
-    /// Applies a run's effects: the global flags, then the speaker's slot as map changes (a value equal to the loaded
-    /// one clears its key). The session has no transaction across its flag owner and its map changes; a rejected step
+    /// Applies a run's effects: the global flags, the sound requests, the deferred calls, the scheme changes (ARC-SCRIPT-016), then
+    /// the speaker's slot as map changes (a value equal to the loaded one clears its key). The session has no transaction across its flag owner and its map changes; a rejected step
     /// stops the later ones and is reported. The dialog start is the caller's.
     /// </summary>
     public bool Apply(ScrEffects effects)
@@ -186,6 +192,16 @@ public sealed class AreaScriptHost : IScrHost
                 : _session.RemoveScriptCall(_session.Version, request.Script, Role(request.Attachee));
             if (queued.Disposition == GameSessionDisposition.Rejected) return false;
         }
+        // ARC-SCRIPT-016: each scheme request in action order: the PC's own scheme, or an NPC's record with its map data; any other
+        // object is ignored (0x4A6D90). A number the session refuses (outside 0..199, a documented deviation) or a PC without a hero
+        // changes nothing and stops nothing, as the original's run goes on; a session that cannot take the change (the record budget,
+        // the revision) stops the later steps, as a refused call request does.
+        foreach (var request in effects.Schemes)
+        {
+            var target = request.Object == Pc ? SessionSchemeTarget.Hero
+                : _npcAdvancement?.Invoke(request.Object.Code) is { } npc ? SessionSchemeTarget.ForNpc(npc) : null;
+            if (target is not null && SchemeRefusalStops(_session.SetAutoLevelScheme(_session.Version, target, request.Scheme).Failure)) return false;
+        }
         if (effects.Writeback is not { } writeback) return true;
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
             || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;
@@ -198,6 +214,11 @@ public sealed class AreaScriptHost : IScrHost
         ]);
         return result.Disposition != GameSessionDisposition.Rejected;
     }
+
+    /// <summary>ARC-SCRIPT-016: whether a refused scheme change stops the later steps of <see cref="Apply"/>: the session could not
+    /// take it (the record budget, the revision, a stale version); a number outside 0..199 or a missing hero does not.</summary>
+    public static bool SchemeRefusalStops(GameSessionFailure failure) =>
+        failure is not (GameSessionFailure.None or GameSessionFailure.InvalidAdvancement or GameSessionFailure.AdvancementUnavailable);
 
     /// <summary>A script object as a deferred call's session role (map and entity id), or null for an absent one.</summary>
     public static SessionScriptRole? Role(ScrObjectRef? obj) => obj is { } o ? new SessionScriptRole(new SessionMapId(o.Map), o.Code) : null;
