@@ -75,7 +75,8 @@ setting.
   device), loop kept by `Tick`, flatten, refusals, voice limit, stale handles after slot reuse,
   buses removed, the volume file at the test path.
 - Native smoke on the original installation (exterior AREA and map mode):
-  `ARC-UI-040 native-smoke audio PASS`: the module's catalogue opens; every fixed interface sound
+  `ARC-UI-040 native-smoke audio PASS`: it starts from silence (ARC-UI-047: earlier stages' synthetic frames start many
+  one-shot sounds at once, and a voice is freed only after its sound ends, so every voice can still be taken); the module's catalogue opens; every fixed interface sound
   resolves, is admitted, decodes and starts on the effects channel; the world-map travel music
   (an MP3 in the module folder) loops on the music channel; with an output device the music and at
   least one interface sound are still playing a few frames later; stop all leaves no voice. Hearing itself is not checked.
