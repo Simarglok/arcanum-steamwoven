@@ -1,6 +1,6 @@
 # Local diagnostic launch and build retention
 
-`tools/arcanum-local` is a Python-standard-library command for choosing only explicitly configured local diagnostic inputs and ignored artifact roots. It is not a game launcher, exporter, discovery scanner, cleaner, or acceptance authority.
+`tools/arcanum-local` is a Python-standard-library command for choosing only explicitly configured local diagnostic inputs and ignored artifact roots. It is not a game launcher, exporter, discovery scanner or acceptance authority; its only cleaner is `builds clean` (ARC-DEV-028), which removes nothing protected. **Never delete `artifacts/` or a build in it by hand**: see [which builds may be deleted](build-retention.md).
 
 ## Project launcher
 
@@ -13,6 +13,7 @@ every identity, artifact-authority and ordinary-launch check stays there.
     ./arcanum map NAME [--hero NAME] [--dry-run]          # one whole interior (a maps/ folder name) in map mode, from the ARC-DEV-015 build, else ARC-RENDER-008; any installation
     ./arcanum oracle [--function ADDR|--all] [--exe PATH] # function oracle on the installed Arcanum.exe, then the OriginalExe tests (ARC-DEV-007)
     ./arcanum status                                      # which modes have every input configured
+    ./arcanum clean [--apply] [--json]                    # which builds are protected and which disposable (dry run); --apply removes only disposable payloads (ARC-DEV-028)
 
 `area` and `world` select the build named by that task's `current.json` pointer
 (never timestamps or directory order) and launch it; `area` tries its tasks in the
@@ -120,6 +121,10 @@ ordinary logs and manifest/payload digest equality are recorded outside the
 sealed artifact, without automated input/capture or owner-interaction kills.
 See [integrated WORLD policy](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy).
 
+[Which builds may be deleted](build-retention.md) (ARC-DEV-028) states the classes for the owner; `builds clean --checkout
+PATH [--apply] [--json]` (behind `./arcanum clean`) reports them and, with `--apply`, retires superseded registered builds
+and prunes through `builds plan`/`apply` below.
+
 `builds inventory` is conservative and dry-run by default. It reports only configured roots and known candidate directories. A candidate is kept for unknown ownership, current/rollback/active/open-review/unmerged lifecycle, in-use state, symlink ambiguity, or any missing proof. A candidate is eligible only when containment, supported ownership, and explicit retired/disposable state are all proved.
 
     tools/arcanum-local builds inventory [--show-paths]
@@ -127,6 +132,7 @@ See [integrated WORLD policy](../rendering/terrain-viewer.md#integrated-world-di
     tools/arcanum-local builds apply --plan PLAN.json --accept-plan PLAN_ID
     tools/arcanum-local builds export-preflight --tool terrain --root-id ID --temporary-root TMP [--output-bytes BYTES --estimate-manifest MANIFEST.json | --output-bytes BYTES --first-export] [--temporary-bytes BYTES] [--write-root BUILD_OR_CACHE]
     tools/arcanum-local builds repair-registry [--apply]
+    tools/arcanum-local builds clean --checkout PATH [--apply] [--json]
     tools/arcanum-local builds register-export --tool terrain --candidate ID --manifest MANIFEST.json
     tools/arcanum-local builds accept --tool terrain --candidate ID --manifest MANIFEST.json --authority REF --review REF
     tools/arcanum-local builds retire --candidate ID
@@ -135,7 +141,7 @@ A plan binds config/registry generations and digests plus registered-root, candi
 
 `builds repair-registry` (ARC-DEV-026) forgets records whose payload is gone: registered builds whose candidate `manifest.json` no longer exists under its configured root, the accepted, rollback and temporary-measurement entries and launch selections naming such a candidate. It is a dry run that prints the report (`arcanum-registry-repair-v1`) unless `--apply`, which rewrites only the registry and configuration under the registry lock. An entry it cannot judge is kept and listed in `unjudged`: a malformed id or one whose task does not belong to its tool, a root that is not configured or does not exist (an unmounted volume; recreate a deleted root before repairing), or a symlinked path. A v2 current pointer that names a missing manifest is listed in `danglingPointers` and an unreadable one in `unreadablePointers`; both are left in place, since removing one would delete a file (legacy v1 pointers are not judged here). It never deletes or writes a file in an artifact root.
 
-Retention protects the union of every supported `current.json` and `current-v2.json` across configured roots/tasks, all explicit launch selections (even stale), and accepted/rollback references. Multiple valid currents protect all targets although launch rejects ambiguity. Malformed/unreadable/escaping/unsupported authority means KEEP/SKIP for the affected root/tool. Plans carry `protectionBindings` with hashes AND absence of every pointer and the selection digest. Apply rechecks under lock/leases before intent, deletion and crash recovery; old plans without this proof require replanning. Retire requires an existing registered immutable configured identity and cannot retire a protected selection. Repeated exact manual registration preserves lifecycle; digest conflicts reject.
+Retention protects the union of every supported `current.json` and `current-v2.json` across configured roots/tasks, all explicit launch selections (even stale), accepted/rollback references and (ARC-DEV-028) each tool's export measurement build (registry `measurements`). Multiple valid currents protect all targets although launch rejects ambiguity. Malformed/unreadable/escaping/unsupported authority means KEEP/SKIP for the affected root/tool. Plans carry `protectionBindings` with hashes AND absence of every pointer and the selection digest. Apply rechecks under lock/leases before intent, deletion and crash recovery; old plans without this proof require replanning. Retire requires an existing registered immutable configured identity and cannot retire a protected selection. Repeated exact manual registration preserves lifecycle; digest conflicts reject.
 
 Prune receipts/intents and export publication snapshots use the same pinned read-only regular-file proof as configuration and pointers. Only genuine absence is optional; dangling/loop/existing links, directories, special nodes, unreadable files and detected substitutions reject boundedly without being opened as streams or replaced as missing records. Apply also rechecks receipt/intent bytes or absence after lease acquisition and immediately before intent/deletion/recovery mutation. This is fail-closed detection, not a claim of an atomic filesystem-wide snapshot against arbitrary concurrent writers.
 

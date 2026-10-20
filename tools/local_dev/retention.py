@@ -279,6 +279,11 @@ def protection_snapshot(conf: dict[str, Any], registry: dict[str, Any]) -> dict[
                 except (OSError, ValueError):
                     blocked.update((root_id, name) for root_id in roots for name in SUPPORTED_TOOLS
                                    if tool not in SUPPORTED_TOOLS or name == tool)
+    # ARC-DEV-028: the measurement build carries the export's qualified temporary low water; it is kept like a current.
+    measurements = registry.get("measurements", {})
+    if isinstance(measurements, dict):
+        protected.update(value["candidateId"] for value in measurements.values()
+                         if isinstance(value, dict) and isinstance(value.get("candidateId"), str))
     selections = conf.get("launchSelection", {})
     if not isinstance(selections, dict):
         blocked.update((root_id, tool) for root_id in roots for tool in SUPPORTED_TOOLS)

@@ -15,7 +15,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from tools.local_dev import config, launch, manifests  # noqa: E402
+from tools.local_dev import clean, config, launch, manifests  # noqa: E402
 
 LOCAL = ROOT / "tools" / "arcanum-local"
 DEFAULT_GAME_ROOT = Path("/Applications/Arcanum")
@@ -50,6 +50,7 @@ def setup(args: argparse.Namespace) -> int:
     if code != 0:
         return code
     artifacts = main_checkout() / "artifacts" / "world-builds"
+    clean.write_marker(artifacts.parent)  # ARC-DEV-028: the local do-not-delete note (docs/workflow/build-retention.md)
     if config.load_config().get("artifactRoots", {}).get(ROOT_ID) != str(artifacts.resolve()):
         if not artifacts.is_dir():
             print(f"No exported viewer builds yet under {artifacts}; run an export endpoint first.", file=sys.stderr)
@@ -137,6 +138,12 @@ def oracle(args: argparse.Namespace) -> int:
                             "--logger", "console;verbosity=detailed"], env=environment)
 
 
+def cleanup(args: argparse.Namespace) -> int:
+    """ARC-DEV-028: which builds are protected and which are disposable; removes only with --apply."""
+    return local("builds", "clean", "--checkout", str(main_checkout()), *(["--apply"] if args.apply else []),
+                 *(["--json"] if args.json else []))
+
+
 def status(_: argparse.Namespace) -> int:
     conf = config.load_config()
     inputs = conf.get("inputs", {}) if isinstance(conf.get("inputs"), dict) else {}
@@ -199,6 +206,10 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--exe", type=Path, help="the installed Arcanum.exe (default: $ARCANUM_EXE or the game folder)")
     command.add_argument("--seed", type=int, default=20261017)
     command.set_defaults(func=oracle)
+    command = commands.add_parser("clean", help="show which builds are protected and which are disposable (dry run); --apply removes only the disposable payloads")
+    command.add_argument("--apply", action="store_true", help="retire superseded builds and remove the disposable .app payloads")
+    command.add_argument("--json", action="store_true")
+    command.set_defaults(func=cleanup)
     commands.add_parser("status", help="show which modes have every input configured").set_defaults(func=status)
     return result
 

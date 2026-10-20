@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tools.local_dev import config, launch, manifests, retention
+from tools.local_dev import clean, config, launch, manifests, retention
 
 
 def emit(value: object) -> None:
@@ -186,6 +186,9 @@ def command_builds(args: argparse.Namespace) -> None:
              conf=conf, destinations=destinations,
              estimate_manifest=config.regular_file(Path(args.estimate_manifest)) if args.estimate_manifest else None,
              first_export=args.first_export))
+    elif args.builds == "clean":
+        # ARC-DEV-028: a dry-run report unless --apply (docs/workflow/build-retention.md).
+        clean.run(config.canonical_existing(args.checkout, directory=True), do_apply=args.apply, as_json=args.json)
     elif args.builds == "repair-registry":
         # ARC-DEV-026: dry run by default; --apply rewrites only the registry and configuration records.
         with config.registry_lock():
@@ -234,6 +237,7 @@ def parser() -> argparse.ArgumentParser:
     preflight.add_argument("--root-id", required=True); preflight.add_argument("--temporary-root", required=True)
     preflight.add_argument("--estimate-manifest"); preflight.add_argument("--write-root", action="append", default=[])
     preflight.add_argument("--first-export", action="store_true")
+    cleaner = build_sub.add_parser("clean"); cleaner.add_argument("--checkout", required=True); cleaner.add_argument("--apply", action="store_true"); cleaner.add_argument("--json", action="store_true")
     repair = build_sub.add_parser("repair-registry"); repair.add_argument("--apply", action="store_true")
     register = build_sub.add_parser("register-export"); register.add_argument("--tool", required=True, choices=manifests.SUPPORTED_TOOLS); register.add_argument("--candidate", required=True); register.add_argument("--manifest", required=True)
     builds.set_defaults(func=command_builds)
