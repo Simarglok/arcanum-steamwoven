@@ -22,8 +22,8 @@ public interface ISpellRollSource
 
 /// <summary>
 /// The PC target's armed fate "save against magick" (0x4F5270 with kind 4): consumes it and answers whether it was armed. The
-/// skills plan's fate owner (S7) fills it; until then a caller passes <see cref="SpellFateSave.None"/>. It is asked only for a
-/// PC target that is not the caster, at most once per resolution.
+/// session fills it from its fate owner (ARC-WORLD-054); a target without fate points passes <see cref="SpellFateSave.None"/>.
+/// It is asked only for a PC target that is not the caster, at most once per resolution.
 /// </summary>
 public interface ISpellFateSave
 {

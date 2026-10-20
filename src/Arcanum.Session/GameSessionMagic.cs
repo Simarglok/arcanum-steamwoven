@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Magic;
 
 namespace Arcanum.Session;
@@ -10,4 +11,18 @@ public sealed partial class GameSessionOwner
     /// fail-chance prediction moves the saved random position as the original's random stream does. A refused roll throws.
     /// </summary>
     public ISpellRollSource SpellRolls { get { ThrowIfDisposed(); return new SessionSpellRolls(this); } }
+
+    /// <summary>
+    /// The hero's fate save against magick for <see cref="SpellResistanceRules.Resist"/> when the hero is the target (ARC-MAGIC-005,
+    /// MG13): asking it uses the armed <see cref="FateKind.SaveAgainstMagick"/> through <see cref="UseHeroFate"/> (0x4F5270, one
+    /// revision when it fires) and answers whether it was armed; without a hero, or with that fate not armed, it answers false.
+    /// </summary>
+    public ISpellFateSave HeroMagickSave { get { ThrowIfDisposed(); return new SessionHeroMagickSave(this); } }
+}
+
+/// <summary>The hero's armed "save against magick", used when the resistance asks it.</summary>
+internal sealed class SessionHeroMagickSave(GameSessionOwner owner) : ISpellFateSave
+{
+    public bool ConsumeSaveAgainstMagick() =>
+        owner.UseHeroFate(owner.Version, FateKind.SaveAgainstMagick).Disposition == GameSessionDisposition.Changed;
 }

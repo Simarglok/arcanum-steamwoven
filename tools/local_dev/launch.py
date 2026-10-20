@@ -65,6 +65,7 @@ ORACLE_TESTS = "tests/Arcanum.Simulation.Tests/Arcanum.Simulation.Tests.csproj"
 ORACLE_TEST_CLASSES = ("tests/Arcanum.Simulation.Tests/Character/ExperienceOriginalExeTests.cs",
                        "tests/Arcanum.Simulation.Tests/Skills/SkillOriginalExeTests.cs",
                        "tests/Arcanum.Simulation.Tests/Skills/SkillCheckOriginalExeTests.cs",
+                       "tests/Arcanum.Simulation.Tests/Character/FateOriginalExeTests.cs",
                        "tests/Arcanum.Simulation.Tests/Magic/SpellCostOriginalExeTests.cs",
                        "tests/Arcanum.Simulation.Tests/Magic/SpellBookOriginalExeTests.cs",
                        "tests/Arcanum.Simulation.Tests/Magic/SpellResistanceOriginalExeTests.cs")
@@ -79,6 +80,10 @@ ORACLE_FUNCTIONS: dict[str, str] = {
     "0x4C62E0": "BasicEffectivenessMatchesTheOriginal",
     "0x4C6410": "OpposedEffectivenessMatchesTheOriginal",
     "0x4C69F0": "TechEffectivenessMatchesTheOriginal",
+    "0x4F5090": "ArmedMatchesTheOriginal",
+    "0x4F50C0": "ArmMatchesTheOriginal",
+    "0x4F51B0": "UndoMatchesTheOriginal",
+    "0x4F5270": "UseMatchesTheOriginal",
     "0x4507D0": "RunCostMatchesTheOriginal",
     "0x4508A0": "CheckCostMatchesTheOriginal",
     "0x4B1660": "CastCostMatchesTheOriginal",
