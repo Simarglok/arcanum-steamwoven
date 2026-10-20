@@ -173,6 +173,7 @@ public enum GameSessionFailure
     InvalidSound,
     // Locks of portals and containers (ARC-WORLD-050).
     InvalidOpenable,
+    InvalidDurability,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -293,19 +294,20 @@ public sealed class GameSessionSnapshot
     /// to the retail executable (<see cref="Arcanum.Simulation.Clock.GameClockOwner.RetailExecutableSha256"/>, ARC-DEV-009); schema 17
     /// adds the hero's blessings and curses to <see cref="Effects"/> (ARC-WORLD-035); schema 18 adds <see cref="Sound"/> (ARC-WORLD-040); schema 19 adds the
     /// quelled rumors to the story (ARC-UI-008); schema 20 adds the hero's advancement fields and <see cref="Advancement"/> (ARC-WORLD-036);
-    /// schema 21 adds the hero's innate skill changes (ARC-SKILLS-002). Schemas 1..20 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 21;
+    /// schema 21 adds the hero's innate skill changes (ARC-SKILLS-002); schema 24 adds <see cref="Durability"/> (ARC-WORLD-053; 22 and 23 are
+    /// reserved by other slices). Schemas 1..23 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 24;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
-        SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionEquipmentState equipment,
+        SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionEquipmentState equipment, SessionDurabilityState durability,
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
         SessionEventState events, SessionLightingState? lighting, SessionSoundState sound)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Equipment = equipment; Effects = effects; Experience = experience; Advancement = advancement; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Events = events; Lighting = lighting; Sound = sound;
+        Hero = hero; Inventory = inventory; Equipment = equipment; Durability = durability; Effects = effects; Experience = experience; Advancement = advancement; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Events = events; Lighting = lighting; Sound = sound;
     }
 
     public int SchemaVersion { get; }
@@ -322,6 +324,8 @@ public sealed class GameSessionSnapshot
     public SessionInventoryState Inventory { get; }
     /// <summary>The hero's worn items (ARC-WORLD-028).</summary>
     public SessionEquipmentState Equipment { get; }
+    /// <summary>The conditions of the items the session damaged, broke or repaired, and the items it deleted (ARC-WORLD-053).</summary>
+    public SessionDurabilityState Durability { get; }
     /// <summary>The hero's durable effects (ARC-WORLD-029); their timed ENDs are in <see cref="Events"/>.</summary>
     public SessionEffectState Effects { get; }
     /// <summary>The experience worth and pool of the NPCs the session changed (ARC-WORLD-030); the hero's experience is in

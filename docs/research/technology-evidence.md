@@ -372,6 +372,10 @@ check, action-point or time cost and no experience.
 
 ### Item durability (FR-ITEM-011)
 
+Re-read for ARC-WORLD-053 by a second reader (F2, [ledger DU1–DU8](original-verification-ledger.md#item-durability-arc-world-053)): every row
+below agrees; the second reader added the price's final bounds (negative 0, exactly 1 is 2), that the unwield moves only items in wear
+slots and the item is dropped when it fails, and the repair table (training none 10, apprentice 5, expert 1, master 0; 5 for a broken item).
+
 - **Fields and formulas**: hp_pts (0x1B), hp_adj (0x1C) and hp_damage (0x1D)
   are ordinary saved object fields (an instance stores overrides). A
   non-critter's maximum is `pts + adj` (effects only for critters,
@@ -573,8 +577,9 @@ button state.
   files; the [rule modes](../world/rule-modes.md) registry takes switches.
 
 Missing: degrees as live session state with expertise, the
-found list, the window, assembly, item durability, cell payment (schematic data:
-ARC-TECHNOLOGY-001, [schematics](../formats/schematics.md)).
+found list, the window, assembly, cell payment (schematic data:
+ARC-TECHNOLOGY-001, [schematics](../formats/schematics.md); item durability: ARC-WORLD-053,
+[runtime](../world/item-durability-runtime.md)).
 
 ## Proposed implementation slices (project policy, not accepted)
 
@@ -635,7 +640,7 @@ this document start at F1 or F2.
    item-spell items is lifted with the shared item trigger slice, which the
    magic research owns).
 
-**Item durability** (FR-ITEM-011) is one more slice, owned by this research and
+**Item durability** (FR-ITEM-011; done: ARC-WORLD-053, [runtime](../world/item-durability-runtime.md), ledger DU1–DU8) is one more slice, owned by this research and
 needed by ARC-SKILLS-011 (Repair). Its type is `WORLD` (item state in the
 session runtime; the next free `WORLD` number at task creation): hp fields per item in the session (prototype values with
 instance overrides), maximum and current, the damage setter, the two-step
