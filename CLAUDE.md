@@ -82,7 +82,8 @@ under `docs/research`. Details: `docs/project/status.md`.
   (AREA) and `world-diagnostic` (WORLD), plus older diagnostic modes), `tools/terrain-inspect`, `tools/research/*` probes,
   `tools/arcanum-local` + `tools/local_dev` (local export/lease/retention
   authority — heavy, fail-closed). Labs: `experiments/{gamepad,display-ui,audio}-lab`.
-- Launcher: `./arcanum setup|area|world|status` wraps `tools/arcanum-local`. When a
+- Launcher: `./arcanum setup|area|world|map|status|clean` wraps `tools/arcanum-local`. Never delete `artifacts/`
+  or a build in it by hand, and never advise it: `./arcanum clean` and `docs/workflow/build-retention.md` say what may go. When a
   viewer mode gains or changes an argument or input, update `tools/local_dev/launch.py`
   (`GAME_ROLES`/`MODE_ROLES`/`ROLE_FLAGS`), `./arcanum` and the launcher docs in the
   same PR; `test_launcher_sync.py` catches drift.

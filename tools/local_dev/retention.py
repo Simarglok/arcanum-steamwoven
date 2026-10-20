@@ -279,6 +279,18 @@ def protection_snapshot(conf: dict[str, Any], registry: dict[str, Any]) -> dict[
                 except (OSError, ValueError):
                     blocked.update((root_id, name) for root_id in roots for name in SUPPORTED_TOOLS
                                    if tool not in SUPPORTED_TOOLS or name == tool)
+    # ARC-DEV-028: the measurement build is the export's measured history (its temporary low water); it is kept like a
+    # current. A malformed record blocks its tool, as malformed accepted/rollback records do.
+    measurements = registry.get("measurements", {})
+    if not isinstance(measurements, dict):
+        blocked.update((root_id, tool) for root_id in roots for tool in SUPPORTED_TOOLS)
+    else:
+        for tool, value in measurements.items():
+            if isinstance(value, dict) and isinstance(value.get("candidateId"), str):
+                protected.add(value["candidateId"])
+            else:
+                blocked.update((root_id, name) for root_id in roots for name in SUPPORTED_TOOLS
+                               if tool not in SUPPORTED_TOOLS or name == tool)
     selections = conf.get("launchSelection", {})
     if not isinstance(selections, dict):
         blocked.update((root_id, tool) for root_id in roots for tool in SUPPORTED_TOOLS)
@@ -300,7 +312,7 @@ def protection_snapshot(conf: dict[str, Any], registry: dict[str, Any]) -> dict[
 def _assert_unprotected(snapshot: dict[str, Any], tool: str, candidate_id: str) -> None:
     if (candidate_id in snapshot["protected"]
             or [candidate_id.split(":", 1)[0], tool] in snapshot["blockedDomains"]):
-        raise ValueError("candidate is current/selected/rollback or has ambiguous pointer authority")
+        raise ValueError("candidate is current/selected/rollback/measurement or has ambiguous pointer authority")
 
 
 def inventory(conf: dict[str, Any], registry: dict[str, Any], *, show_paths: bool = False) -> list[dict[str, Any]]:
@@ -778,8 +790,23 @@ def _payload_state(conf: dict[str, Any], tool: Any, candidate_id: Any) -> str:
     return "present" if manifest.exists() or manifest.is_symlink() else "gone"
 
 
+def _pruned(candidate: Path) -> bool:
+    """ARC-DEV-028: a pruned candidate (a regular receipt whose named payload is gone) keeps only its manifest and evidence."""
+    try:
+        encoded = config.optional_authority_bytes(candidate / "payload-pruned-v1.json")
+        receipt = json.loads(encoded) if encoded is not None else None
+    except (OSError, ValueError):
+        return False
+    relative = receipt.get("relativePayload") if isinstance(receipt, dict) else None
+    if not isinstance(relative, str) or not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
+        return False
+    payload = candidate / relative
+    return not payload.exists() and not payload.is_symlink()
+
+
 def surviving_payloads(conf: dict[str, Any], tool: str) -> list[str]:
-    """Candidate ids of this tool whose manifest is still on disk under a configured root, registered or not."""
+    """Candidate ids of this tool whose manifest is still on disk under a configured root, registered or not, except pruned
+    candidates (ARC-DEV-028), which keep only their manifest and evidence."""
     roots = conf.get("artifactRoots", {})
     if not isinstance(roots, dict):
         raise ValueError("invalid artifact roots")
@@ -793,7 +820,7 @@ def surviving_payloads(conf: dict[str, Any], tool: str) -> list[str]:
             if folder.is_symlink() or not folder.is_dir():
                 raise ValueError("surviving payloads cannot be judged: a task folder is a symlink or not a directory")
             found += [f"{root_id}:{task}:{child.name}" for child in sorted(folder.iterdir())
-                      if (child / "manifest.json").exists() or (child / "manifest.json").is_symlink()]
+                      if ((child / "manifest.json").exists() or (child / "manifest.json").is_symlink()) and not _pruned(child)]
     return found
 
 
