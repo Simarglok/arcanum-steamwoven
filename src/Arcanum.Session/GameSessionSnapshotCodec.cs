@@ -1223,7 +1223,7 @@ public static class GameSessionSnapshotCodec
         const string p = "$.durability";
         const int m = Arcanum.Simulation.Items.ItemDurabilityLimits.MaxMagnitude;
         var f = Fields(element, p, DurabilityFields);
-        var rows = Array(f["items"], p + ".items", DurabilityDomain.MaxRecords);
+        var rows = Array(f["items"], p + ".items", GameSessionLimits.PolicyMaxDurabilityRecords);
         var items = new SessionItemDurability[rows.Length];
         for (var i = 0; i < rows.Length; i++)
         {
@@ -1235,7 +1235,7 @@ public static class GameSessionSnapshotCodec
                 Int(item["damage"], path + ".damage", 0, Arcanum.Simulation.Items.ItemDurabilityLimits.MaxDamage),
                 Bool(item["broken"], path + ".broken"), Bool(item["inventoryArtBroken"], path + ".inventoryArtBroken")));
         }
-        var listed = Array(f["destroyed"], p + ".destroyed", DurabilityDomain.MaxRecords);
+        var listed = Array(f["destroyed"], p + ".destroyed", GameSessionLimits.PolicyMaxDurabilityRecords);
         var destroyed = new string[listed.Length];
         for (var i = 0; i < listed.Length; i++)
         {

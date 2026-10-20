@@ -234,7 +234,7 @@ public sealed class SnapshotRestoreTests
         Fails(With(LightingTail, ",\"lighting\":{\"hour\":15}}"), SnapshotDecodeFailure.MissingField, "$.lighting.schemeId");
 
         // A newer schema with different fields is reported as unsupported, not as damage.
-        Fails(With("\"schemaVersion\":24,\"world\"", "\"schemaVersion\":22,\"wardrobe\":[],\"world\"").Replace("\"revision\":2,", ""),
+        Fails(With("\"schemaVersion\":24,\"world\"", "\"schemaVersion\":25,\"wardrobe\":[],\"world\"").Replace("\"revision\":2,", ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         Fails(With("\"schemaVersion\":24,\"world\"", "\"schemaVersion\":4294967297,\"world\"").Replace(NoAdvancement, "").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, ""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
 

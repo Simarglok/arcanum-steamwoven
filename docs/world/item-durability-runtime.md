@@ -50,8 +50,8 @@ ARC-DATA-021).
 ## Price and repair quote
 
 - **Sale price** (0x461F80): only when the PC sells and the item lost hit points does the price the trade owner computed
-  (worth, the buyer's multiplier, the haggle share) become `current × price / maximum`, truncated; then a negative price
-  is 0 and a price of exactly 1 is 2. Buying from an NPC ignores damage.
+  (worth, the buyer's multiplier, the haggle share) become `current × price / maximum`, truncated; then, in that branch, a
+  negative price is 0 and a price of exactly 1 is 2. Buying from an NPC ignores damage (its own bounds are the trade owner's).
 - **Repair quote** (0x578760), from the undamaged PC sale price the trade owner passes: a broken item is quoted only by a
   master of Repair, with the damage taken as the maximum (so the quote is `P / 2`), else refused; damage 0 is "not
   needed"; otherwise `trunc(P / 2) × damage / maximum`, at least 2.
@@ -68,10 +68,11 @@ ARC-DATA-021).
 
 `ItemDurabilityRules.Repair(condition, amount, adjustmentPercent, repairer)` (0x4C8E60, the repair case of the skill run):
 
-- nothing for an item without damage that is not broken (`NothingToRepair`); a broken item only by a master
-  (`BrokenNeedsMaster` otherwise);
-- the damage falls by `amount` (to 0 at least); hp_adj falls by `trunc(maximum × percent / 100)` of the maximum before the
-  repair; a master's repair of a broken item clears the destroyed bit of the **current** art only.
+- nothing for an item without damage unless it is broken and the repairer a master (`NothingToRepair`);
+- otherwise the damage falls by `amount` (to 0 at least) and hp_adj by `trunc(maximum × percent / 100)` of the maximum
+  before the repair; a master's repair clears the destroyed bit of the **current** art only. A broken item that took damage
+  again is repaired by any repairer and stays broken unless the repairer is a master: only the quote turns a broken item away
+  from a repairer who is not a master.
 - `RepairAmount`: the whole maximum with the PC's fate full repair, else `maximum × effectiveness / 100`, at least 1 (the
   service forces success). `RepairAdjustmentPercent`: the repairer's training none 10, apprentice 5, expert 1, master 0,
   and 5 for a broken item. The payment, made whatever the skill gives, is the trade owner's.
@@ -86,7 +87,7 @@ The session tracks every item it knows: the hero's kit, the items the PC took, a
 - `DamageItem(expected, entity, baseline, amount)`, `BreakItem`, `DestroyItem` (the "destroy weapon" critical: deleted at
   once without a break), `RepairItem(expected, entity, baseline, amount, percent, repairer)`. Each is one revision;
   refusals are typed (`InvalidItem`, `StaleVersion`, `ItemNotAvailable` for an item the session does not track or deleted,
-  `BudgetExceeded` past 8,192 records). The result (`ItemDurabilityResult`) names the condition, the break step and, for
+  `BudgetExceeded` past `GameSessionLimits.MaxDurabilityRecords`, 8,192 by default). The result (`ItemDurabilityResult`) names the condition, the break step and, for
   an item the hero wore, the slot it left.
 - A worn item's values follow its record; a first break takes it off the hero's slot into the inventory, where it already
   counts. For an item an NPC wears, taking it off is the host's.
@@ -97,11 +98,12 @@ The session tracks every item it knows: the hero's kit, the items the PC took, a
 ### Snapshot (schema 24)
 
 `"durability":{"items":[{"entity","points","adjustment","damage","broken","inventoryArtBroken"}],"destroyed":[entity]}`,
-both in strictly ascending ordinal order. Schemas 22 and 23 are reserved by other slices; schemas 1..23 are refused, not
-migrated. Restore refuses (`InvalidDurability`) a deleted item that has a record or appears twice, a value outside the
-bounds (points and adjustment within ±100,000, damage 0..200,000), and a worn item whose record is broken or disagrees
-with its worn values; a kit or PC item that is deleted, or a kit numbering that only an unlisted deletion would explain,
-is `InvalidSnapshot`.
+both in strictly ascending ordinal order. Schemas 22 and 23 are left to the slices the coordinator reserved them for;
+schemas 1..23 are refused, not migrated. The decoder refuses a list out of order or with a repeated entity
+(`NotCanonical`), a value outside the bounds (points and adjustment within ±100,000, damage 0..200,000: `OutOfRange`) and a
+missing or unknown field. Restore refuses (`InvalidDurability`) a deleted item that has a record and a worn item whose record
+is broken or disagrees with its worn values, more records than the limit (`BudgetExceeded`), and a kit or PC item that is
+deleted or a kit numbering that only an unlisted deletion would explain (`InvalidSnapshot`).
 
 ## Callers
 

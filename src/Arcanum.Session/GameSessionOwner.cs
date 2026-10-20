@@ -154,7 +154,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportHero(snapshot.Hero, out var hero);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportDurability(snapshot.Durability, out var durability);
+        failure = ImportDurability(snapshot.Durability, limits, out var durability);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportInventory(snapshot.Inventory, hero is not null, limits, durability.Destroyed, out var inventory);
         if (failure != GameSessionFailure.None) return Rejected(failure);

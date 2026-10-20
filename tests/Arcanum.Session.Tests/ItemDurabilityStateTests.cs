@@ -132,7 +132,7 @@ public sealed class ItemDurabilityStateTests
 
         Ok(owner.BreakItem(owner.Version, "vest", Baseline), owner, 3);
         var refused = owner.RepairItem(owner.Version, "vest", Baseline, 5, 5, RepairTraining.Expert);
-        Assert.AreEqual((GameSessionDisposition.NoChange, (ItemRepairStatus?)ItemRepairStatus.BrokenNeedsMaster), (refused.Disposition, refused.Repair));
+        Assert.AreEqual((GameSessionDisposition.NoChange, (ItemRepairStatus?)ItemRepairStatus.NothingToRepair), (refused.Disposition, refused.Repair));
         var mended = Ok(owner.RepairItem(owner.Version, "vest", Baseline, 5, 5, RepairTraining.Master), owner, 4);
         Assert.AreEqual((false, true), (mended.Condition!.Value.Broken, mended.Condition.Value.InventoryArtBroken));
     }
@@ -209,5 +209,51 @@ public sealed class ItemDurabilityStateTests
         Assert.AreEqual(GameSessionFailure.InvalidDurability, GameSessionOwner.Restore(Decode(broken), RestoreOptions()).Failure);
         var other = text.Replace("\"damage\":5,\"broken\":false", "\"damage\":6,\"broken\":false", StringComparison.Ordinal);
         Assert.AreEqual(GameSessionFailure.InvalidDurability, GameSessionOwner.Restore(Decode(other), RestoreOptions()).Failure);
+    }
+
+    [TestMethod]
+    public void A_deleted_or_repaired_worn_item_and_the_best_item_choice_follow_the_record()
+    {
+        using var owner = Owner();
+        var blade = new SessionWearableItem(Kit[0].Kind, [], false, Blade);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, blade, (_, _) => true, Accept).Disposition);
+        var condition = new ItemCondition(15, 5, 0, false);
+        Ok(owner.DamageItem(owner.Version, "kit:1", condition, 10), owner, 2);
+        // A repair lowers hp_adj, so the maximum the worn values carry falls with it.
+        Ok(owner.RepairItem(owner.Version, "kit:1", condition, 4, 10, RepairTraining.None), owner, 3);
+        var worn = owner.QueryEquipment().Worn.Single().Item;
+        Assert.AreEqual((12, 18), (worn.HitPoints, worn.MaxHitPoints), "damage 6, hp_adj 5 − 2");
+        var gone = Ok(owner.DestroyItem(owner.Version, "kit:1", condition), owner, 4);
+        Assert.AreEqual((ItemBreakStep.Deleted, (EquipmentSlot?)EquipmentSlot.Weapon), (gone.Break, gone.Unworn));
+        Assert.AreEqual(0, owner.QueryEquipment().Worn.Count);
+
+        // The best-item choice reads the session's broken bit: a broken blade is not wielded.
+        using var chooser = Owner();
+        SessionWearableLookup lookup = entity => entity == "kit:1" ? blade : null;
+        Ok(chooser.BreakItem(chooser.Version, "kit:1", condition), chooser, 1);
+        chooser.EquipBest(chooser.Version, lookup, (_, _) => true, Accept);
+        Assert.AreEqual(0, chooser.QueryEquipment().Worn.Count);
+        using var whole = Owner();
+        whole.EquipBest(whole.Version, lookup, (_, _) => true, Accept);
+        Assert.AreEqual("kit:1", whole.QueryEquipment().Worn.Single().Entity);
+    }
+
+    [TestMethod]
+    public void The_record_budget_and_a_deleted_pc_item_are_refused()
+    {
+        using var owner = Create(new GameSessionLimits(maxDurabilityRecords: 1));
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, InventoryStateTests.Seed()).Failure);
+        Ok(owner.DamageItem(owner.Version, "sword", Baseline, 1), owner, 1);
+        Ok(owner.DamageItem(owner.Version, "sword", Baseline, 1), owner, 2);
+        Refused(owner.DamageItem(owner.Version, "vest", Baseline, 1), owner, GameSessionFailure.BudgetExceeded, 2);
+
+        using var picker = Owner();
+        Assert.AreEqual(GameSessionFailure.None, picker.PickUpItem(picker.Version, "apple", Accept).Failure);
+        var text = GameSessionSnapshotCodec.Encode(picker.Capture());
+        var listed = text.Replace("\"destroyed\":[]", "\"destroyed\":[\"apple\"]", StringComparison.Ordinal);
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(listed), RestoreOptions()).Failure);
+        var over = GameSessionSnapshotCodec.Encode(owner.Capture()).Replace("\"destroyed\":[]", "\"destroyed\":[\"x\"]", StringComparison.Ordinal);
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, GameSessionOwner.Restore(Decode(over), RestoreOptions(new GameSessionLimits(maxDurabilityRecords: 1))).Failure,
+            "two records over a limit of one");
     }
 }

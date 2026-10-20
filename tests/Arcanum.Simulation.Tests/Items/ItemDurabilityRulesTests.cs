@@ -71,8 +71,9 @@ public sealed class ItemDurabilityRulesTests
         Assert.AreEqual(100, ScalePrice(100, damaged, pcSells: false), "buying from an NPC ignores damage");
         Assert.AreEqual(100, ScalePrice(100, Sword, pcSells: true));
         Assert.AreEqual(33, ScalePrice(100, new(3, 0, 2, false), pcSells: true), "1 × 100 / 3, truncated");
-        Assert.AreEqual(2, ScalePrice(1, Sword, pcSells: false), "a price of exactly 1 is 2");
-        Assert.AreEqual(0, ScalePrice(0, Sword, pcSells: false));
+        Assert.AreEqual(2, ScalePrice(1, Sword, pcSells: true), "a PC sale price of exactly 1 is 2");
+        Assert.AreEqual(1, ScalePrice(1, Sword, pcSells: false), "the buy branch's bounds are the trade owner's");
+        Assert.AreEqual(0, ScalePrice(0, Sword, pcSells: true));
         Assert.AreEqual(0, ScalePrice(100, Sword with { Damage = 60 }, pcSells: true), "a negative product is 0");
     }
 
@@ -123,7 +124,12 @@ public sealed class ItemDurabilityRulesTests
         Assert.AreEqual(ItemRepairStatus.NothingToRepair, Repair(Sword, 10, 0, RepairTraining.Master).Status);
 
         var broken = Break(Sword).Condition;
-        Assert.AreEqual(ItemRepairStatus.BrokenNeedsMaster, Repair(broken, 10, 5, RepairTraining.Expert).Status);
+        Assert.AreEqual(ItemRepairStatus.NothingToRepair, Repair(broken, 10, 5, RepairTraining.Expert).Status, "no damage, not a master");
+        // A broken item that took damage again: any repairer lowers the damage; only a master clears the bit.
+        var hurt = broken with { Damage = 20 };
+        var expert = Repair(hurt, 10, 5, RepairTraining.Expert);
+        Assert.AreEqual((ItemRepairStatus.Repaired, 10, 8, true), (expert.Status, expert.Condition.Damage, expert.Condition.Adjustment, expert.Condition.Broken));
+        Assert.IsFalse(Repair(hurt, 10, 5, RepairTraining.Master).Condition.Broken);
         var mended = Repair(broken, 10, 5, RepairTraining.Master);
         Assert.AreEqual(ItemRepairStatus.Repaired, mended.Status);
         Assert.AreEqual((false, true, 0, 8), (mended.Condition.Broken, mended.Condition.InventoryArtBroken, mended.Condition.Damage, mended.Condition.Adjustment),

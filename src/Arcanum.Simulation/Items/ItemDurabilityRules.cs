@@ -65,10 +65,9 @@ public enum RepairTraining { None = 0, Apprentice = 1, Expert = 2, Master = 3 }
 public enum ItemRepairStatus
 {
     Repaired,
-    /// <summary>No damage and nothing a master would clear: the original's service changes nothing.</summary>
+    /// <summary>No damage and nothing a master would clear (a broken item and a repairer who is not a master): the original's
+    /// service changes nothing.</summary>
     NothingToRepair,
-    /// <summary>A broken item and a repairer who is not a master.</summary>
-    BrokenNeedsMaster,
 }
 
 public readonly record struct ItemRepairOutcome(ItemRepairStatus Status, ItemCondition Condition);
@@ -138,7 +137,8 @@ public static class ItemDurabilityRules
     /// <summary>
     /// The damage part of the item price: when the PC sells and the item has lost hit points (current below maximum), the
     /// price the caller computed (worth, the buyer's multiplier and the haggle share) becomes <c>current × price / maximum</c>;
-    /// then a negative price is 0 and a price of exactly 1 is 2. Buying from an NPC ignores damage.
+    /// then a negative price is 0 and a price of exactly 1 is 2 (the PC-seller branch's bounds). Buying from an NPC ignores
+    /// damage: the price comes back unchanged (that branch's own bounds are the trade owner's).
     /// </summary>
     [OriginalFunction(0x461F80, OriginalFunctionScope.Partial)]
     public static int ScalePrice(int price, ItemCondition item, bool pcSells)
@@ -147,7 +147,8 @@ public static class ItemDurabilityRules
         ArgumentOutOfRangeException.ThrowIfGreaterThan(price, ItemDurabilityLimits.MaxPrice);
         var maximum = MaximumHitPoints(item);
         var current = HitPoints(item);
-        if (pcSells && current < maximum && maximum != 0) price = (int)((long)current * price / maximum);
+        if (!pcSells) return price;
+        if (current < maximum && maximum != 0) price = (int)((long)current * price / maximum);
         return price < 0 ? 0 : price == 1 ? 2 : price;
     }
 
@@ -204,8 +205,10 @@ public static class ItemDurabilityRules
     }
 
     /// <summary>
-    /// The item side of a repair (the repair service's skill case): nothing for an item without damage that is not broken;
-    /// a broken item only by a master, who clears the destroyed bit of the current art only. Otherwise the damage falls by
+    /// The item side of a repair (the repair service's skill case): nothing for an item without damage unless it is broken and
+    /// the repairer a master, who clears the destroyed bit of the current art only. A broken item that took damage again is
+    /// repaired by any repairer and stays broken unless the repairer is a master (only the quote turns a broken item away from
+    /// others). Otherwise the damage falls by
     /// <paramref name="amount"/> (to 0 at least) and hp_adj by <c>trunc(maximum × percent / 100)</c> of the maximum before the
     /// repair, without a clamp. <paramref name="amount"/> is <see cref="RepairAmount"/> and <paramref name="adjustmentPercent"/>
     /// <see cref="RepairAdjustmentPercent"/> as the original passes them; the payment, made whatever the skill gives, is the
@@ -218,14 +221,14 @@ public static class ItemDurabilityRules
         ArgumentOutOfRangeException.ThrowIfLessThan(amount, 1);
         ArgumentOutOfRangeException.ThrowIfNegative(adjustmentPercent);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(adjustmentPercent, 100);
-        if (item.Broken && repairer != RepairTraining.Master) return new(ItemRepairStatus.BrokenNeedsMaster, item);
-        if (item.Damage <= 0 && !item.Broken) return new(ItemRepairStatus.NothingToRepair, item);
+        var master = repairer == RepairTraining.Master;
+        if (item.Damage <= 0 && !(item.Broken && master)) return new(ItemRepairStatus.NothingToRepair, item);
         var maximum = MaximumHitPoints(item);
         var repaired = item with
         {
             Damage = Math.Max(0, item.Damage - amount),
             Adjustment = (int)Math.Clamp(item.Adjustment - (long)maximum * adjustmentPercent / 100, -ItemDurabilityLimits.MaxMagnitude, ItemDurabilityLimits.MaxMagnitude),
-            Broken = false,
+            Broken = item.Broken && !master,
         };
         return new(ItemRepairStatus.Repaired, repaired);
     }

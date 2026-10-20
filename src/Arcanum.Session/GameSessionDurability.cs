@@ -28,7 +28,7 @@ public sealed class SessionDurabilityState
 
 /// <summary>
 /// Outcome of a durability call: the item's condition afterwards (null when it was deleted), the break step it reached, and
-/// the hero's wear slot it left (a first break of an item the hero wore). For an item an NPC wears, taking it off on a break is
+/// the hero's wear slot it left (a first break or a deletion of an item the hero wore). For an item an NPC wears, taking it off on a break is
 /// the host's (<see cref="ItemDamageOutcome.TakeOffAndRunBust"/>); the BUST script (point 30) and the sounds are the host's
 /// in both cases.
 /// </summary>
@@ -55,12 +55,10 @@ public static class SessionItemConditions
     }
 }
 
-/// <summary>The durability domain of one owner: changed conditions and deleted items, by entity.</summary>
+/// <summary>The durability domain of one owner: changed conditions and deleted items, by entity (together at most
+/// <see cref="GameSessionLimits.MaxDurabilityRecords"/>).</summary>
 internal sealed class DurabilityDomain
 {
-    /// <summary>Records the session keeps: changed conditions plus deleted items.</summary>
-    internal const int MaxRecords = 8192;
-
     internal SortedDictionary<string, ItemCondition> Records { get; } = new(StringComparer.Ordinal);
     internal SortedSet<string> Destroyed { get; } = new(StringComparer.Ordinal);
 
@@ -173,7 +171,7 @@ public sealed partial class GameSessionOwner
         if (outcome.Break == ItemBreakStep.None && outcome.Condition == current)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, current, ItemBreakStep.None, null, Version);
         if (!ItemDurabilityRules.IsValid(outcome.Condition)) return RejectDurability(GameSessionFailure.InvalidItem);
-        if (!_durability.Records.ContainsKey(entity) && _durability.Count >= DurabilityDomain.MaxRecords)
+        if (!_durability.Records.ContainsKey(entity) && _durability.Count >= _limits.MaxDurabilityRecords)
             return RejectDurability(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectDurability(GameSessionFailure.RevisionExhausted);
 
@@ -219,10 +217,10 @@ public sealed partial class GameSessionOwner
 
     // Records by entity, deleted items apart; ranges are the rules' bounds. The kit and the PC's lists are checked against the
     // deleted items by ImportInventory, worn items against the records by ImportWornConditions.
-    private static GameSessionFailure ImportDurability(SessionDurabilityState saved, out DurabilityDomain durability)
+    private static GameSessionFailure ImportDurability(SessionDurabilityState saved, GameSessionLimits limits, out DurabilityDomain durability)
     {
         durability = new();
-        if (saved.Items.Count + saved.Destroyed.Count > DurabilityDomain.MaxRecords) return GameSessionFailure.BudgetExceeded;
+        if (saved.Items.Count + saved.Destroyed.Count > limits.MaxDurabilityRecords) return GameSessionFailure.BudgetExceeded;
         foreach (var entity in saved.Destroyed)
             if (!SessionValidation.Entity(entity) || !durability.Destroyed.Add(entity)) return GameSessionFailure.InvalidDurability;
         foreach (var item in saved.Items)

@@ -71,11 +71,15 @@ public sealed class GameSessionLimits
     public const int PolicyMaxExperienceRecords = 8192;
     /// <summary>NPC advancement records (ARC-WORLD-036): followers whose level the session updated.</summary>
     public const int PolicyMaxAdvancementRecords = 256;
+    /// <summary>Item durability records (ARC-WORLD-053): items whose condition the session changed plus the items it deleted
+    /// (as life: far more than the items a playthrough damages, breaks or repairs).</summary>
+    public const int PolicyMaxDurabilityRecords = 8192;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
         int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
         int maxLifeRecords = PolicyMaxLifeRecords, int maxReactionRecords = PolicyMaxReactionRecords,
-        int maxExperienceRecords = PolicyMaxExperienceRecords, int maxAdvancementRecords = PolicyMaxAdvancementRecords)
+        int maxExperienceRecords = PolicyMaxExperienceRecords, int maxAdvancementRecords = PolicyMaxAdvancementRecords,
+        int maxDurabilityRecords = PolicyMaxDurabilityRecords)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
@@ -86,10 +90,11 @@ public sealed class GameSessionLimits
         if (maxReactionRecords is < 1 or > PolicyMaxReactionRecords) throw new ArgumentOutOfRangeException(nameof(maxReactionRecords));
         if (maxExperienceRecords is < 1 or > PolicyMaxExperienceRecords) throw new ArgumentOutOfRangeException(nameof(maxExperienceRecords));
         if (maxAdvancementRecords is < 1 or > PolicyMaxAdvancementRecords) throw new ArgumentOutOfRangeException(nameof(maxAdvancementRecords));
+        if (maxDurabilityRecords is < 1 or > PolicyMaxDurabilityRecords) throw new ArgumentOutOfRangeException(nameof(maxDurabilityRecords));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
         MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
         MaxReactionRecords = maxReactionRecords; MaxExperienceRecords = maxExperienceRecords;
-        MaxAdvancementRecords = maxAdvancementRecords;
+        MaxAdvancementRecords = maxAdvancementRecords; MaxDurabilityRecords = maxDurabilityRecords;
     }
 
     public int MaxMaps { get; }
@@ -101,6 +106,7 @@ public sealed class GameSessionLimits
     public int MaxReactionRecords { get; }
     public int MaxExperienceRecords { get; }
     public int MaxAdvancementRecords { get; }
+    public int MaxDurabilityRecords { get; }
 }
 
 /// <summary>
@@ -175,6 +181,7 @@ public enum GameSessionFailure
     InvalidOpenable,
     // Skills (ARC-SKILLS-004).
     SkillsUnavailable, InvalidSkill,
+    // Item durability (ARC-WORLD-053).
     InvalidDurability,
 }
 
