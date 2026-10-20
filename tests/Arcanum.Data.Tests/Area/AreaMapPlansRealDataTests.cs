@@ -63,8 +63,9 @@ public sealed class AreaMapPlansRealDataTests
             Assert.IsFalse(inspection.Issues.Any(i => i.SourceIndex >= 4096 && i.Stage is AreaStage.Appearance or AreaStage.Mapping or AreaStage.Frame), map.Name);
             // ARC-DATA-023: every installed name resolves; no complete interior draws bad art.
             if (inspection.IsComplete) Assert.IsFalse(inspection.Snapshot!.Visuals.Any(v => v.Policy == "original-badart-v1"), map.Name);
-            // ARC-DATA-024: K'na Tha's 43,219 objects share 260 art ids; each distinct frame is decoded once.
-            if (map.Name == "k'na tha") Assert.AreEqual(477, inspection.Usage.FrameRequests);
+            // ARC-DATA-024: K'na Tha's 43,219 objects share 260 art ids; each distinct frame is decoded once (488 since
+            // ARC-WORLD-051 decodes the other frames of its door ART: 11 more).
+            if (map.Name == "k'na tha") Assert.AreEqual(488, inspection.Usage.FrameRequests);
             if (map.Name == "crash site cave")
             {
                 // The generic plan reaches what the pinned cave profile pins, without its exceptions.

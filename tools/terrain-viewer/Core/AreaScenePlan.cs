@@ -48,13 +48,17 @@ public sealed record AreaRoofDraw(AreaRoofRecord Roof, AreaDrawCommand Command);
 public sealed class AreaScenePlan
 {
     private AreaScenePlan(TerrainRect bounds, IReadOnlyList<AreaDrawCommand> commands, IReadOnlyList<AreaCoverage> coverage, AreaChart chart,
-        IReadOnlyList<AreaRoofDraw> roofs)
-    { WorldBounds = bounds; Commands = commands; Coverage = coverage; Chart = chart; Roofs = roofs; }
+        IReadOnlyList<AreaRoofDraw> roofs, IReadOnlyDictionary<AreaObjectKey, IReadOnlyList<AreaVisualRecord>> portalFrames)
+    { WorldBounds = bounds; Commands = commands; Coverage = coverage; Chart = chart; Roofs = roofs; PortalFrames = portalFrames; }
+    /// <summary>ARC-WORLD-051: every frame of each drawn door or window whose ART has more than one, in frame order (its T0
+    /// body visual among them), for the open and close steps at runtime.</summary>
+    public IReadOnlyDictionary<AreaObjectKey, IReadOnlyList<AreaVisualRecord>> PortalFrames { get; }
     /// <summary>ARC-RENDER-022: the roof blocks of a whole map, outside <see cref="Commands"/> (they are neither terrain nor
     /// bodies); none for a pinned profile.</summary>
     public IReadOnlyList<AreaRoofDraw> Roofs { get; }
     /// <summary>The frames the plan draws: its commands' and its roofs'.</summary>
-    public IEnumerable<AreaFrameKey> Frames => Commands.Select(command => command.Frame).Concat(Roofs.Select(roof => roof.Command.Frame));
+    public IEnumerable<AreaFrameKey> Frames => Commands.Select(command => command.Frame).Concat(Roofs.Select(roof => roof.Command.Frame))
+        .Concat(PortalFrames.Values.SelectMany(frames => frames).Select(AreaFrameKey.From));
     /// <summary>The chart whose origin every projection and sort key of this plan is relative to.</summary>
     public AreaChart Chart { get; }
     public TerrainRect WorldBounds { get; }
@@ -154,8 +158,41 @@ public sealed class AreaScenePlan
                 new(checked((int)(x - hotX)), checked((int)(y - hotY)), visual.Width, visual.Height), visual.Mirrored, false, 5,
                 checked((int)nx), checked((int)ny), 0, 0, 255, false) { ArtClass = 10 }));
         }
+        // ARC-WORLD-051: the other frames of each drawn portal (the area owner decodes them for a portal ART of several frames).
+        var drawn = commands.Where(command => command.Identity is not null && command.ArtClass == 3).Select(command => command.Identity!.Value).ToHashSet();
+        var portalFrames = catalog.Values.Where(v => v.Key.Layer == AreaLayerKind.PortalFrame && v.Key.Object is { } owner && drawn.Contains(owner))
+            .GroupBy(v => v.Key.Object!.Value)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<AreaVisualRecord>)Array.AsReadOnly(g.Append(bodyVisuals[g.Key]!)
+                .OrderBy(v => (int)((v.RawArt >> 14) & 31)).ToArray()));
         return new(new(left, top, checked(right - left), checked(bottom - top)), Array.AsReadOnly(ordered), coverage.AsReadOnly(), chart,
-            roofDraws.AsReadOnly());
+            roofDraws.AsReadOnly(), portalFrames);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-051: <paramref name="command"/> (the T0 body of the portal <paramref name="body"/>, drawn from
+    /// <paramref name="visual"/>) with another frame of its ART, <paramref name="frame"/>: the same object, cell, order and
+    /// blend, its destination placed from the frame's size and drawn hotspot (<see cref="Hotspot"/>) by the rule
+    /// <see cref="Create"/> places a body with.
+    /// </summary>
+    public static AreaDrawCommand PortalFrame(AreaDrawCommand command, AreaObjectRecord body, AreaVisualRecord visual, AreaVisualRecord frame)
+    {
+        ArgumentNullException.ThrowIfNull(command); ArgumentNullException.ThrowIfNull(body); ArgumentNullException.ThrowIfNull(visual);
+        ArgumentNullException.ThrowIfNull(frame);
+        if (command.Identity != body.Key || command.Visual != visual.Key || visual.RawArt >> 28 != 3 || frame.Key.Object != body.Key)
+            throw new ArgumentException("AREA_PORTAL_FRAME_BODY");
+        var state = State(body);
+        int Scaled(int value) => checked(value * state.Scale / 100) / (state.Shrunk ? 2 : 1);
+        var (hotX, hotY) = Hotspot(visual); var (frameX, frameY) = Hotspot(frame);
+        var w = Scaled(frame.Width); var h = Scaled(frame.Height);
+        if (w <= 0 || h <= 0) throw new InvalidOperationException("AREA_BODY_SCALE");
+        var destination = new TerrainRect(checked(command.Destination.X + (hotX - frameX) * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
+            checked(command.Destination.Y + (hotY - frameY) * state.Scale / 100 / (state.Shrunk ? 2 : 1)), w, h);
+        return command with
+        {
+            // The visual key stays the body's (ambient channel, pick and wall check go by it); only the frame changes.
+            Frame = AreaFrameKey.From(frame), Source = new(0, 0, frame.Width, frame.Height), Destination = destination,
+            WadeRows = command.WadeRows == 0 ? 0 : command.Phase == 4 ? Math.Min(WadingRows, h) : h,
+        };
     }
 
     /// <summary>

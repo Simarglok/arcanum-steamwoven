@@ -450,6 +450,8 @@ public partial class TerrainViewerApp
             FollowAreaAmbient(); FollowAreaWalls(); FollowAreaRoofs();
             // ARC-COMBAT-005: fallen bodies move like companions, from the frame repository with their poses.
             SyncAreaCombatBodies();
+            // ARC-WORLD-051: portals off their T0 frame are drawn like moved bodies.
+            FollowAreaPortals();
             _canvas!.SetAreaMovingBodies(AreaMovingCommands()); _canvas.SetAreaAbsent(_areaCompanions?.Absent);
             _canvas.PublishArea(_readyArea.Plan, AreaFrames(), actor, input, _cache); return;
         }
@@ -551,6 +553,7 @@ public partial class TerrainViewerApp
         _worldAdvanceObserverForSelfTest?.Invoke(advance);
         ObserveCombatRunSteps(advance);
         NoteMapEntries(advance);
+        NoteMapPortals(advance);
         foreach (var evidence in advance.AreaEvidence)
         {
             _worldActorDenied |= evidence.Live?.ReasonCode is AreaOccupancyRules.DestinationActor or AreaOccupancyRules.ShoulderActor;
@@ -584,7 +587,7 @@ public partial class TerrainViewerApp
         if (session is not AreaGridSession area || _readyMode != TerrainViewerMode.CrashSiteArea) return null;
         if (!ReferenceEquals(_worldRouteSession, session))
         {
-            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy));
+            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy, () => area.Portals?.Invoke()));
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;
@@ -635,6 +638,8 @@ public partial class TerrainViewerApp
         if (TryAreaTalk(screen)) { SetObjectApproachGait(); return; }
         // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
         if (TryAreaUse(screen)) { SetObjectApproachGait(); return; }
+        // ARC-WORLD-051: a press on a door or window uses it (walking within use range first).
+        if (TryAreaPortalUse(screen)) { SetObjectApproachGait(); return; }
         // ARC-UI-004: a press on an item on the ground picks it up, on a dead NPC loots it (walking within reach first).
         if (TryAreaInventoryClick(screen)) { SetObjectApproachGait(); return; }
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;

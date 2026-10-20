@@ -26,6 +26,8 @@ public partial class TerrainViewerApp
     /// <summary>Rebuilds the companions of the shown map from the session (placement and standing), at the PC's time.</summary>
     private void BindAreaCompanions()
     {
+        // ARC-WORLD-051: the portals are bound with the same session and grid.
+        BindAreaPortals();
         _areaCompanions = null;
         if (_areaSession is not { } session || _conversationHost is not { PartyWired: true } || _worldActor.Session is not AreaGridSession grid) return;
         // ARC-WORLD-037: in map mode only the NPCs the party has touched move as companions (following, waiting, or recorded

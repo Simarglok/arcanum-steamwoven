@@ -53,7 +53,11 @@ public sealed class AreaStepSnapshot
     public AreaStepRequest Request(AreaStepCell from, AreaStepCell to, CardinalTraversalDirection direction) =>
         new(ProfileId, EvidenceSha256, EvidenceEpoch, from, to, direction, DeclaredContext);
 
-    public AreaStepAssessment Assess(AreaStepRequest request)
+    public AreaStepAssessment Assess(AreaStepRequest request) => Assess(request, null);
+
+    /// <summary>ARC-WORLD-051: the assessment with the runtime passage of the doors and windows the caller lists (by object
+    /// key) in place of their T0 edge rules; an <see cref="AreaPortalPassage.Unresolved"/> or unlisted portal keeps its T0 rule.</summary>
+    public AreaStepAssessment Assess(AreaStepRequest request, IReadOnlyDictionary<AreaObjectKey, AreaPortalPassage>? portals)
     {
         ArgumentNullException.ThrowIfNull(request);
         var denial = Validate(request);
@@ -86,13 +90,17 @@ public sealed class AreaStepSnapshot
         AreaObjectKey? wallBlocker = null, windowJump = null;
         // The source tile's walls and portals take part in leaving it: an Unknown one there is a gap.
         foreach (var evaluation in _objects.GetValueOrDefault(request.From, []))
-            if (evaluation.ObjectType is 0 or 1 && evaluation.Coverage != CardinalTraversalCoverage.Supported)
+            if (evaluation.ObjectType is 0 or 1 && evaluation.Coverage != CardinalTraversalCoverage.Supported && !Overridden(evaluation.Key))
                 gaps.Add(new(evaluation.Reason, request.From, evaluation.Key));
+        var crossed = new List<AreaObjectKey>();
         void Leg(AreaStepCell cell, int edge, bool diagonal)
         {
             var next = Neighbor(cell, edge);
-            foreach (var wall in _walls.GetValueOrDefault(cell, []).Where(w => w.Edge == edge).Concat(_walls.GetValueOrDefault(next, []).Where(w => w.Edge == (edge + 4) % 8)))
+            foreach (var t0 in _walls.GetValueOrDefault(cell, []).Where(w => w.Edge == edge).Concat(_walls.GetValueOrDefault(next, []).Where(w => w.Edge == (edge + 4) % 8)))
             {
+                var wall = Runtime(t0);
+                // A whole map's portal keeps its raw rotation (a wall never does).
+                if (wall.RawRotation >= 0) crossed.Add(wall.Key);
                 switch (wall.Rule)
                 {
                     case AreaStepEdgeRule.Legacy when wall.Opening: gaps.Add(new("WALL_OPENING_PIECE_UNSUPPORTED", wall.Cell, wall.Key)); break;
@@ -124,24 +132,32 @@ public sealed class AreaStepSnapshot
         }
 
         if (terrain.Disposition == CardinalTraversalDisposition.Blocked)
-            return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "DESTINATION_TERRAIN_BLOCKED", terrain, objects, gaps, windowJump: windowJump);
+            return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "DESTINATION_TERRAIN_BLOCKED", terrain, objects, gaps, windowJump: windowJump, portals: crossed);
         if (wallBlocker is not null)
-            return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED", terrain, objects, gaps, wallBlocker);
+            return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED", terrain, objects, gaps, wallBlocker, portals: crossed);
         if (objects.Any(o => o.Disposition == CardinalTraversalDisposition.Blocked))
             return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked,
                 objects.First(o => o.Disposition == CardinalTraversalDisposition.Blocked).Role == AreaStepObjectRole.Destination
-                    ? "DESTINATION_OBJECT_BLOCKER" : "SHOULDER_OBJECT_BLOCKER", terrain, objects, gaps, windowJump: windowJump);
+                    ? "DESTINATION_OBJECT_BLOCKER" : "SHOULDER_OBJECT_BLOCKER", terrain, objects, gaps, windowJump: windowJump, portals: crossed);
         // The window stays named on a step a host overlay may still open (ARC-WORLD-021).
-        if (gaps.Count != 0) return Result(request, CardinalTraversalCoverage.Unknown, null, "REQUIRED_EVIDENCE_UNAVAILABLE", terrain, objects, gaps, windowJump: windowJump);
+        if (gaps.Count != 0) return Result(request, CardinalTraversalCoverage.Unknown, null, "REQUIRED_EVIDENCE_UNAVAILABLE", terrain, objects, gaps, windowJump: windowJump, portals: crossed);
         return windowJump is not null
-            ? Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "WINDOW_JUMP", terrain, objects, gaps, windowJump: windowJump)
-            : Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE", terrain, objects, gaps);
+            ? Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "WINDOW_JUMP", terrain, objects, gaps, windowJump: windowJump, portals: crossed)
+            : Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE", terrain, objects, gaps, portals: crossed);
+        bool Overridden(AreaObjectKey key) => portals is not null && portals.TryGetValue(key, out var passage) && passage != AreaPortalPassage.Unresolved;
+        AreaStepWallEdge Runtime(AreaStepWallEdge wall) => portals is null || wall.RawRotation < 0 || !portals.TryGetValue(wall.Key, out var passage) ? wall : passage switch
+        {
+            AreaPortalPassage.Open => wall with { Rule = AreaStepEdgeRule.Pass, Reason = "PORTAL_RUNTIME_OPEN" },
+            AreaPortalPassage.LeavingOnly => wall with { Rule = AreaStepEdgeRule.Leaving, Reason = AreaStepInspector.LockedLeavingOnlyReason },
+            AreaPortalPassage.Blocked => wall with { Rule = AreaStepEdgeRule.Block, Reason = "PORTAL_RUNTIME_BLOCKED" },
+            _ => wall,
+        };
     }
 
     private AreaStepAssessment Result(AreaStepRequest request, CardinalTraversalCoverage coverage, CardinalTraversalDisposition? disposition,
         string reason, AreaStepTerrainEvidence? terrain, IEnumerable<AreaStepObjectEvidence> objects, IEnumerable<AreaStepGap> gaps, AreaObjectKey? wall = null,
-        AreaObjectKey? windowJump = null) =>
-        new(request, InputIdentity, EvidenceEpoch, coverage, disposition, reason, terrain, objects, gaps, wall, windowJump);
+        AreaObjectKey? windowJump = null, IEnumerable<AreaObjectKey>? portals = null) =>
+        new(request, InputIdentity, EvidenceEpoch, coverage, disposition, reason, terrain, objects, gaps, wall, windowJump, portals);
 
     private static AreaStepCell Neighbor(AreaStepCell cell, int direction) => new(cell.X + Deltas[direction].Dx, cell.Y + Deltas[direction].Dy);
 
