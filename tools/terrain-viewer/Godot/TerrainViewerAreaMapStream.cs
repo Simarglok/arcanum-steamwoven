@@ -177,14 +177,19 @@ public partial class TerrainViewerApp
             {
                 var session = (AreaGridSession)_worldActor.Session!; var chart = session.Chart; var centre = _mapWindowCentre!.Value;
                 var routes = new AreaRouteSource(session.Snapshot, chart);
-                // The nearest reachable cell deep in a core sector the actor has not stood in: deep enough that the walk
-                // goes on while the window loads, so a swap meets a moving actor.
+                // The nearest reachable cell deep in another core sector, preferably one the actor has not stood in (the
+                // ground around the Crash Site is enclosed), as deep as the window allows (40, else 24, else 8 cells past the
+                // margin), so the walk goes on while the window loads where it can.
                 var origin = session.State.CommittedCell;
-                var seen = new Dictionary<CellCoord, CellCoord> { [origin] = origin }; var queue = new Queue<CellCoord>([origin]); CellCoord? goal = null;
+                var seen = new Dictionary<CellCoord, CellCoord> { [origin] = origin }; var queue = new Queue<CellCoord>([origin]);
+                var best = new Dictionary<(bool Visited, int Depth), CellCoord>();
                 while (queue.TryDequeue(out var cell))
                 {
                     var world = chart.ToWorld(cell);
-                    if (!visited.Contains(new(world.X >> 6, world.Y >> 6)) && Beyond(centre, world) >= StreamMargin + 40) { goal = cell; break; }
+                    var sector = new AreaSectorCoordinate(world.X >> 6, world.Y >> 6);
+                    if (sector != centre)
+                        foreach (var depth in new[] { 40, 24, 8 })
+                            if (Beyond(centre, world) >= StreamMargin + depth) best.TryAdd((visited.Contains(sector), depth), cell);
                     foreach (var direction in Enum.GetValues<NeighborDirection>())
                     {
                         var next = RoutePlanner.Neighbor(cell, direction);
@@ -192,6 +197,8 @@ public partial class TerrainViewerApp
                         seen.Add(next, cell); queue.Enqueue(next);
                     }
                 }
+                CellCoord? goal = new[] { false, true }.SelectMany(v => new[] { 40, 24, 8 }.Select(d => (v, d)))
+                    .Where(best.ContainsKey).Select(k => (CellCoord?)best[k]).FirstOrDefault();
                 Require(goal is not null, $"NO_NEW_SECTOR from {chart.ToWorld(origin)} reached {seen.Count}");
                 var goalWorld = chart.ToWorld(goal!.Value);
                 // The path in world cells; the route follower reaches 32 cells per axis, so the walk goes in legs along it.
@@ -273,10 +280,9 @@ public partial class TerrainViewerApp
             _worldFocused = true; SelectSimulatedPadForSelfTest();
             var home = _readyMapName!; var homeRuntime = CurrentAreaMap; var session = _areaSession;
             var there = await UseMapExitAsync(site => site.DestinationRuntime != homeRuntime) ?? throw new InvalidOperationException("AREA_ROUND_TRIP_NO_EXIT");
-            Require(_mapWindowCentre is null && string.Equals(_readyMapName, there.To, StringComparison.OrdinalIgnoreCase), $"NOT_ARRIVED {_readyMapName}");
+            Require(_mapWindowCentre is null && SameMapName(_readyMapName, there.To), $"NOT_ARRIVED {_readyMapName}");
             var back = await UseMapExitAsync(site => site.DestinationRuntime == homeRuntime) ?? throw new InvalidOperationException("AREA_ROUND_TRIP_NO_EXIT_BACK");
-            // Map folder names compare without case (a destination spells its folder as the catalogue does).
-            Require(string.Equals(_readyMapName, home, StringComparison.OrdinalIgnoreCase) && _mapWindowCentre is { } centre && (back.Arrival.X >> 6, back.Arrival.Y >> 6) == (centre.X, centre.Y), $"NOT_BACK {_readyMapName} {_mapWindowCentre}");
+            Require(SameMapName(_readyMapName, home) && _mapWindowCentre is { } centre && (back.Arrival.X >> 6, back.Arrival.Y >> 6) == (centre.X, centre.Y), $"NOT_BACK {_readyMapName} {_mapWindowCentre}");
             Require(session is null || ReferenceEquals(_areaSession, session), "SESSION_NOT_CARRIED");
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
@@ -309,7 +315,7 @@ public partial class TerrainViewerApp
         await (_lastLoad ?? Task.CompletedTask);
         var arrived = (AreaGridSession)_worldActor.Session!;
         var at = arrived.Chart.ToWorld(arrived.State.CommittedCell);
-        if (_readyMapName != pending.To.Name || at != pending.Arrival) throw new InvalidOperationException($"AREA_ROUND_TRIP_ARRIVAL_{_readyMapName == pending.To.Name}");
+        if (!SameMapName(_readyMapName, pending.To.Name) || at != pending.Arrival) throw new InvalidOperationException($"AREA_ROUND_TRIP_ARRIVAL_{SameMapName(_readyMapName, pending.To.Name)}");
         return new(pending.To.Name, site.Script, pending.Arrival);
     }
 

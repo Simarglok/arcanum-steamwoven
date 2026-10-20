@@ -454,17 +454,22 @@ map.
 - **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
   Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
   (92913, 82598). Every listed map is a destination.
-- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,stream,resources,transfer,roundtrip`
-  narrows a run to those stages): the map battery at the new-game start (the Crash Site window: walk, logbook, sound,
-  dialog with Virgil, who then follows); `ARC-RENDER-024 native-smoke stream PASS`: walks by the production route
-  follower into sectors the actor has not stood in until the window has moved three times, each move with the session
-  carried, the actor inside the new core and the walk's goal reached, the first one met mid-walk; the resource reload
-  sweep; the map transfer smoke (exit to another map, jump point, F7/F8); and
-  `ARC-RENDER-024 native-smoke round-trip PASS`: into the cave and back onto the main map by the two exits. The same
-  stages run with `--area-map-sector` at a town (1409, 1314) and a generated wilderness sector (1384, 239).
+- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream`
+  narrows a run to those stages), in this order: the map battery at the new-game start (the Crash Site window: walk,
+  logbook, sound, dialog with Virgil, who then follows); the resource sweep and reload; the companion follow smoke and
+  the map transfer smoke (exit to another map, jump point, F7/F8); `ARC-RENDER-024 native-smoke round-trip PASS`: into
+  the cave and back onto the main map by the two exits; and last `ARC-RENDER-024 native-smoke stream PASS`: walks by the
+  production route follower into sectors the actor has not stood in until the window has moved three times, each move
+  with the session carried (and Virgil following), the actor inside the new core and the walk's goal reached, the first
+  one met mid-walk. The map battery and the stream run with `--area-map-sector` at a town (1409, 1314) and a generated
+  wilderness sector (1384, 239). The smoke counts only the plan's own commands in the resource sweep (a companion
+  visiting from another window is drawn from its kept body) and picks, for the follow smoke, a free NPC that can walk
+  6 cells.
 - **Memory.** One window holds 1,300 to 4,900 visuals and 10 to 26 MB of CPU frames; after a full collection the
   managed heap of a run that moved the window seven times followed the window's contents (368 to 435 MB), with no
-  growth from move to move.
+  growth from move to move. The first reload after the map battery allocates a one-time 25 to 30 MB that the next
+  reload does not (it changed the heap by −0.3 MB), so on a window map the resource stage measures a steady-state
+  reload after one warm-up reload; the retired generation must still be collected and every other bound holds.
 
 **NOT READY:** the window is a fixed 3×3 core, not the original's 16-sector cache; a move costs a background load of
 the whole window (no sector is reused) and one publication, which rebuilds the scene (a frame hitch at the swap); saved

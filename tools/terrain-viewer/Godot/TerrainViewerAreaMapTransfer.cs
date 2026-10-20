@@ -317,7 +317,7 @@ public partial class TerrainViewerApp
                 for (var i = 0; i < 3; i++) AreaSmokeFrame();
                 QuickKey(Key.F8);
                 if (_quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) != true || ReferenceEquals(running, _areaSession)
-                    || ((AreaGridSession)_worldActor.Session!).State.CommittedCell != near || _readyMapName != from)
+                    || ((AreaGridSession)_worldActor.Session!).State.CommittedCell != near || !SameMapName(_readyMapName, from))
                     throw new InvalidOperationException("AREA_MAP_QUICK_LOAD_SAME_MAP " + _quickSaveStatus);
                 sameMapLoad = new { Map = from, Cell = map.Chart.ToWorld(near), Away = map.Chart.ToWorld(away) };
                 for (var i = 0; i < 3; i++) AreaSmokeFrame();
@@ -329,10 +329,10 @@ public partial class TerrainViewerApp
             AreaSmokeFrame();
             if (!pending.SameMap)
             {
-                if (_mapHandoff is null && _readyMapName == from) throw new InvalidOperationException("AREA_MAP_TRANSFER_LOAD_NOT_STARTED " + _areaUseStatus);
+                if (_mapHandoff is null && SameMapName(_readyMapName, from)) throw new InvalidOperationException("AREA_MAP_TRANSFER_LOAD_NOT_STARTED " + _areaUseStatus);
                 await (_lastLoad ?? Task.CompletedTask);
             }
-            if (_readyMapName != pending.To.Name || _worldActor.Session is not AreaGridSession arrived) throw new InvalidOperationException("AREA_MAP_TRANSFER_NOT_PUBLISHED " + _areaUseStatus);
+            if (!SameMapName(_readyMapName, pending.To.Name) || _worldActor.Session is not AreaGridSession arrived) throw new InvalidOperationException("AREA_MAP_TRANSFER_NOT_PUBLISHED " + _areaUseStatus);
             var at = arrived.Chart.ToWorld(arrived.State.CommittedCell);
             if (at != pending.Arrival) throw new InvalidOperationException($"AREA_MAP_TRANSFER_ARRIVAL {at} {pending.Arrival}");
             if (session is not null && (!ReferenceEquals(_areaSession, session) || _areaSession.QueryActor().Map.RuntimeMap != pending.To.Runtime
@@ -363,7 +363,8 @@ public partial class TerrainViewerApp
                 QuickKey(Key.F8);
                 if (_mapHandoff is null) throw new InvalidOperationException("AREA_MAP_QUICK_LOAD_NOT_STARTED " + _quickSaveStatus);
                 await (_lastLoad ?? Task.CompletedTask);
-                if (_readyMapName != from || _worldActor.Session is not AreaGridSession back || back.State.CommittedCell != near
+                // The saved cell in world cells: a window map (ARC-RENDER-024) loads again around the saved cell, on its own chart.
+                if (!SameMapName(_readyMapName, from) || _worldActor.Session is not AreaGridSession back || back.Chart.ToWorld(back.State.CommittedCell) != map.Chart.ToWorld(near)
                     || _areaSession is null || ReferenceEquals(_areaSession, carried) || _areaSession.QueryActor().Map.RuntimeMap != map.RuntimeMap
                     || _areaSession.QueryActor().Cell.X != map.Chart.ToWorld(near).X || _areaSession.QueryActor().Cell.Y != map.Chart.ToWorld(near).Y)
                     throw new InvalidOperationException($"AREA_MAP_QUICK_LOAD_OTHER_MAP map={_readyMapName} status={_quickSaveStatus} use={_areaUseStatus}");
@@ -384,6 +385,10 @@ public partial class TerrainViewerApp
             if (quickDirectory is not null) try { System.IO.Directory.Delete(quickDirectory, recursive: true); } catch (System.IO.IOException) { }
         }
     }
+
+    // Map folder names compare without case: a destination spells its folder as the catalogue does, the command line as
+    // the user typed it (ARC-RENDER-024: the main map, Arcanum1-024-fixed, comes back as arcanum1-024-fixed).
+    private static bool SameMapName(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     // On the map shown, a jump point reachable from the actor: a ground click on its tile walks there, and entering it moves
     // the actor to the jump point's arrival.

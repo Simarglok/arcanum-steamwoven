@@ -121,7 +121,6 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null)
                         {
                             if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLogbookSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); }
-                            if (Stage("stream")) await RunAreaMapStreamSmokeAsync();
                         }
                         else await RunAreaSmokeAsync(result);
                         // S5 must observe the retired generation become
@@ -132,6 +131,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && Stage("transfer")) { await RunAreaMapCompanionSmokeAsync(); await RunAreaMapTransferSmokeAsync(); }
                         // ARC-RENDER-024: on a window map, into an interior and back by its exits.
                         if (_readyMapName is not null && Stage("roundtrip")) await RunAreaMapRoundTripSmokeAsync();
+                        // ARC-RENDER-024: last on a window map, as the window it ends on holds no exit to use afterwards.
+                        if (_readyMapName is not null && Stage("stream")) await RunAreaMapStreamSmokeAsync();
                         GetTree().Quit(0);
                     }
                     else await RunNativeSmokeAsync(result);
