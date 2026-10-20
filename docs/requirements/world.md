@@ -1,6 +1,6 @@
 # Функциональные требования: карты, сектора и переходы
 
-**Покрытие реализации:** аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), через PR #54. Источники исходного исследования и его дата сохранены; актуальный объём — в таблице и Steamwoven-описаниях ниже. [Метод и срез доски](README.md#база-и-происхождение). Новых runtime/GUI/original-data запусков в этом аудите нет.
+**Текущий статус:** статус каждого требования этого документа, реализованный объём, остаток и документация — в [матрице покрытия](coverage.md#мир-и-переходы) (пересверено 2026-10-20, ARC-DEV-027). Поля «Steamwoven» ниже и сводный раздел покрытия — подробности на дату их последней правки (исходный аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), PR #54); при расхождении верна матрица.
 
 ARC-RES-017: [whole-exterior traversal research](../world/crash-site-area-traversal-contract.md)
 для FR-WORLD-002/003/004: coordinates, neighbor binding и edge evidence;
@@ -22,7 +22,7 @@ survey 621 → 9 core sectors и явный context, immutable world/source keys
 core terrain, 426 static и 88 mobile bodies, reconcile 7,399 aggregate records.
 Это частичное data-layer покрытие FR-WORLD-001/002/003/005/007 (источники, адреса,
 snapshot и numeric endpoint), не streaming/eviction runtime, crossing movement,
-cave transition, DIF/PATCH или original-runtime parity. Таблица ниже учитывает этот merged объём; full-area renderer ещё не реализован.
+cave transition, DIF/PATCH или original-runtime parity. [Матрица покрытия](coverage.md#мир-и-переходы) учитывает этот merged объём.
 
 Позднее bounded research ARC-RES-015: [перепись Crash Site area](../research/crash-site-area-inventory.md) и [предлагаемый multi-sector/mobile контракт](../world/crash-site-area-contract.md) уточняют источники, границу и потенциальные cave endpoints. Это исследование, не реализация FR-WORLD-001..007 и не original-runtime parity; актуальный production coverage указан ниже отдельно от исследования.
 
@@ -229,28 +229,11 @@ cave transition, DIF/PATCH или original-runtime parity. Таблица ниж
 
 **Целевая политика:** проверить target/link/location до commit; если открытие всё же завершается ошибкой, восстановить исходный authoritative actor/map state либо оставить его в детерминированном recovery state. Не превращать порядок оригинала в norm. **Acceptance:** synthetic loader отказывает после validation и на каждом commit stage; ни один кейс не теряет и не дублирует actor, возвращает устойчивый failure receipt и сохраняет возможность продолжить из исходного или объявленного recovery state. **Steamwoven:** Частично: [Area owner](../world/crash-site-area-loader.md) не заменяет публикацию при неуспешной загрузке; [WORLD003](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy) отклоняет Blocked/Unknown/Unsupported атомарно. Полного transfer transaction/rollback нет.
 
-## Краткая таблица покрытия Steamwoven
+## Покрытие Steamwoven до 2026-10-20
+
+Таблица покрытия этого раздела перенесена в [матрицу покрытия](coverage.md#мир-и-переходы): там у каждого требования текущий статус, объём, остаток и документация (2026-10-20). Абзацы ниже описывали прежнюю таблицу этого документа (исходный аудит 2026-10-09 с поздними правками) и сохранены как история; слова «таблица», «строки» и «столбцы» в них относятся к ней.
 
 Статусы показывают только покрытие на закреплённом срезе. `Нет` означает отсутствие компонента в проверенной ветке, а не опровержение поведения оригинальной игры. `Частично` ограничено пояснением в ячейке. Существующие bounded-тесты засчитываются только для указанного локального контракта. Единственный выполненный переход карт — Crash Site ↔ пещера в area viewer (ARC-WORLD-009); прочие переходы и original-data association не запускались. Чтение функций оригинала само по себе не считается runtime-проверкой.
-
-| ID | Данные | Правила | Интеграция | Проверка |
-|---|---|---|---|---|
-| FR-WORLD-001 | Частично — фиксированный каталог map5000/runtime1 и townmap2 | Частично — строгий выбор наружного Data-профиля | Частично — Area API; общего game-map bootstrap нет | Частично — production synthetic и полный opt-in area load |
-| FR-WORLD-002 | Частично — multisector keys, checked pack/unpack и world/local координаты Area | Частично — границы Area и конечной movement-сетки | Частично — Area snapshot и viewer x4..8/y0..3; не общий map runtime | Частично — Area coordinate fixtures и bounded original bridge |
-| FR-WORLD-003 | Частично — 9 core и 11 present context секторов; 5 absent явны | Частично — конечный read-only owner/lease lifecycle; нет streaming/eviction | Частично — самостоятельный Area API, не live sector cache | Частично — полная Data-загрузка/disposal; gameplay eviction не проверен |
-| FR-WORLD-004 | Частично — непрерывные world keys/terrain нескольких секторов | Частично — loader сопоставляет границы; движение остаётся в одном секторе | Частично — Data continuity; crossing actor/renderer отсутствует | Частично — adjacent Data fixtures; crossing movement не проверен |
-| FR-WORLD-005 | Частично — FILE-effective .sec и aggregate/mobile/prototype поля Area | Частично — framing, defaults и immutable snapshot; DIF/PATCH не применяются | Частично — Area API; изменяемое состояние карты отсутствует | Частично — malformed/identity/original load; .sec/.dif lifecycle не проверен |
-| FR-WORLD-006 | Частично — pinned cave profile в Data (карта 5078, стены, endpoint назад) | Частично — cross-map переход Crash Site ↔ пещера (`AreaTransitionCoordinator` в viewer Core) | Частично — viewer рисует пещеру и переключает сцену | Частично — real-data тест и нативный прогон перехода; общей топологии нет |
-| FR-WORLD-007 | Частично — оба endpoint пещеры в Area (вход и явная обратная запись) | Частично — use-endpoint с направлением и проверкой destination | Частично — клик по объекту входа/выхода в viewer | Частично — real-data тест и нативный прогон; activation parity не проверена |
-| FR-WORLD-008 | Частично — trigger = use объекта (не клетка) | Частично — один dispatch на use, очередь, отказ при pending | Частично — клик по спрайту в viewer | Частично — Core и нативный прогон; разные render scales не проверялись |
-| FR-WORLD-009 | Частично — destination snapshot пещеры | Частично — смена активной карты один раз на settled-шаге | Частично — замена сцены, шагов и chart в viewer | Частично — A→B→A real-data и нативно; обе карты остаются загружены |
-| FR-WORLD-010 | Частично — один спутник как map-local состояние сессии (ARC-WORLD-017); inventory payload нет | Частично — следующие спутники идут на клетку прибытия, ожидающие остаются, один атомарный шаг сессии | Частично — viewer: Вергилий в пещере и обратно | Частично — синтетика, real-data и нативный прогон A→B→A |
-| FR-WORLD-011 | Частично — authored arrival и chart пещеры | Частично — актёр ровно на клетке прибытия, свежая сессия | Частично — камера на актёре после перехода | Частично — проверка клетки прибытия в Core и нативно |
-| FR-WORLD-012 | Частично — явная обратная запись 1532 | Частично — возврат только по ней; без записи выход недоступен | Частично — клик по выходу в viewer | Частично — real-data A→B→A сравнивает карту и клетку |
-| FR-WORLD-013 | Частично — map-local overlay в [состоянии сессии](../world/game-session-runtime.md) | Частично — переживает уход/возврат и snapshot/restore | Частично — переход в пещеру (ARC-WORLD-009); LF, реакция и следование NPC из диалога — map-local изменения, переживают пещеру (ARC-SCRIPT-006); к Area/рендеру не применяются | Частично — синтетические тесты и opt-in Virgil |
-| FR-WORLD-014 | Частично — один каталог карт/свойств | Нет — нет world-map/area/travel правил | Нет — нет overland runtime | Нет |
-| FR-WORLD-015 | Нет — нет флагов эффектов перехода | Нет — нет времени/эффектов перехода | Нет — нет переходного coordinator | Нет |
-| FR-WORLD-016 | Частично — Area failure и bounded movement refusal | Частично — failed load не заменяет snapshot, denied step не меняет cell | Частично — Data owner и diagnostic session; не transfer rollback | Частично — malformed/cancellation/admission tests; map-transfer rollback отсутствует |
 
 Проверки Data coordinates/neighbor selection и bounded movement относятся к разным слоям. Area fixtures/load подтверждают multisector metadata, а WORLD003 проверки — движение/отказ только внутри x4..8/y0..3. Cross-sector actor, connectors и map-transfer rollback не проверены. Новых runtime запусков в аудите нет; исторические candidate-specific receipts — в [каталоге](../project/status.md#verification-that-can-be-credited).
 

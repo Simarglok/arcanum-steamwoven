@@ -2,7 +2,7 @@
 
 Audit baseline: merged main [`a8a553b7c406ace77ea019bf2b13251f00ecddb6`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), through PR #54, 2026-10-09. The audit compared repository source/tests/contracts, all 54 merged PR records and the read-only Hermes board snapshot at **18:11:36 UTC**. Merge commits were checked against this baseline; root-card `done` alone is not product delivery. Later merges require another coverage update.
 
-This is a source/delivery audit, **not a new build, game, original-data, graphical, export or device run**. Test results below are historical evidence reported for the linked reviewed candidates. They do not certify every subsystem together on the audit baseline. The [183-group requirements register](../requirements/README.md) records Data, behavior, integration and verification separately; no whole-game readiness percentage is inferred.
+This is a source/delivery audit, **not a new build, game, original-data, graphical, export or device run**. Test results below are historical evidence reported for the linked reviewed candidates. They do not certify every subsystem together on the audit baseline. The [183-group requirements register](../requirements/README.md) gives each requirement one status with what is implemented, what is missing and documentation links in its [coverage matrix](../requirements/coverage.md) (re-checked 2026-10-20); no whole-game readiness percentage is inferred.
 
 ## Implemented components
 
@@ -166,4 +166,4 @@ The [roadmap](roadmap.md) describes dependency gates; the [vision](vision.md) de
 
 ## Maintaining this catalogue
 
-After a merged product change, update its affected FR domain/table and [combined matrix](../requirements/coverage.md), concrete bounded scope, implementation/test links and verification conditions. Keep research-only work and unmerged candidates separate. Re-snapshot main and open PRs when planning; do not reuse this dated observation as live authority or infer delivery from Done/decomposition.
+After a merged product change, update the row of each affected requirement in the [coverage matrix](../requirements/coverage.md) (status, what is implemented, what is missing, documentation links; [rule](../workflow/tasks.md#functional-requirements)) and this catalogue's concrete bounded scope, implementation/test links and verification conditions. Keep research-only work and unmerged candidates separate. Re-snapshot main and open PRs when planning; do not reuse this dated observation as live authority or infer delivery from Done/decomposition.

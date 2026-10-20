@@ -33,6 +33,7 @@ ready only when it follows these rules.
    Result: <one mergeable result, one PR>
    Components: <at most 3, comma-separated>
    Human-Gates: none | ARC-TYPE-NNN[, ...]
+   Requirements: FR-XXX-NNN[, ...] | none (<reason>)
 
    AC1. <criterion an agent can check itself>
    AC2. ...
@@ -52,6 +53,31 @@ ready only when it follows these rules.
    repeats twice, stop and ask the owner with options: accept the practical
    contract, narrow it, stop, or continue with a larger allowance. Do not loop
    on new diagnostics.
+
+## Functional requirements
+
+Owner decision 2026-10-20: the [functional requirements register](../requirements/README.md)
+is checked when a task is created and kept current when a change lands.
+
+- **When creating a task**, find the requirements it serves in the
+  [coverage matrix](../requirements/coverage.md) and name them in the contract's
+  `Requirements:` line (`none` with a reason for tooling, research method or
+  workflow work that serves no requirement). Read each named requirement in its
+  domain document (behaviour, original, acceptance) and its current row: the
+  status, what is implemented and what is missing. A task that duplicates delivered
+  work or contradicts a requirement is raised with the owner before it starts. Product
+  work that no requirement covers is raised with the owner too: either it belongs under
+  an existing requirement, or the register needs a new one.
+- **When the change lands**, the same PR updates the matrix row of every
+  requirement whose coverage it changes: status, what is implemented, what is
+  missing and the documentation links, using the matrix's status scale. A new
+  requirement, or a changed one, is edited in its domain document with the owner's
+  agreement, and the counts
+  in the register's README and the matrix summary follow. The PR body lists the
+  requirements it touched, or says that it touched none.
+- The matrix is the status of record. The per-requirement "Steamwoven" text in the
+  domain documents is background as of its last edit; when it disagrees with the
+  matrix, the matrix wins.
 
 ## Evidence levels
 
