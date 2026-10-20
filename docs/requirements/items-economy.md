@@ -114,7 +114,7 @@
 
 **Функции оригинала:** применение к объекту (0x462CC0) отправляет written item в UI чтения (0x4606F0); запуск чтения (0x56BB60) отличает schematic subtype и вызывает регистрацию найденной схемы (0x4B0120), остальные типы направляет в режим чтения. Регистрация схемы (0x4B0120) записывает новый ID и уничтожает предмет только при первом открытии схематики. Use written item caller (0x462CC0), written subtype branch (0x56BB60), written-type presentation (0x56BC00), learn-once behavior (0x4B0120).
 
-**Зависимости и сценарии:** localized written data, UI/media and schematic discovery (FR-ITEM-017). Проверить обычное чтение нескольких типов, закрытие и повторное открытие; новый найденный документ добавляет ровно одну schematic entry, дубликат сохраняется и не добавляется повторно. **Steamwoven:** book UI, written records, content and learned-schematic state не реализованы; см. [покрытие](#текущее-покрытие-steamwoven). Оригинальные тексты и bytes не исследовались.
+**Зависимости и сценарии:** localized written data, UI/media and schematic discovery (FR-ITEM-017). Проверить обычное чтение нескольких типов, закрытие и повторное открытие; новый найденный документ добавляет ровно одну schematic entry, дубликат сохраняется и не добавляется повторно. **Steamwoven:** book UI, written records и content не реализованы; поля записки для схем (подтип, первая строка) читаются, изученные и найденные схемы — [ARC-TECHNOLOGY-003](../world/schematic-knowledge-runtime.md); см. [покрытие](#текущее-покрытие-steamwoven). Оригинальные тексты и bytes не исследовались.
 
 <a id="fr-item-011"></a>
 

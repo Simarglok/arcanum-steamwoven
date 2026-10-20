@@ -40,7 +40,7 @@ public static class CombatFieldReader
     // Armour block (59..70).
     private const int ArmorFlagsSlot = 59, AcAdjustmentSlot = 61, MagicAcAdjustmentSlot = 62, ResistanceAdjustmentSlot = 63,
         MagicResistanceAdjustmentSlot = 64, SilentMoveSlot = 65, MagicSilentMoveSlot = 66, UnarmedBonusSlot = 67;
-    // Written block (59..64, ARC-TECHNOLOGY-003).
+    // Written block (59..66, ARC-TECHNOLOGY-003): flags, subtype, first and last text line, then pads.
     private const int WrittenFlagsSlot = 59, WrittenSubtypeSlot = 60, WrittenStartLineSlot = 61, WrittenEndLineSlot = 62;
     // Generic block (59..63).
     private const int GenericFlagsSlot = 59, UsageBonusSlot = 60, UsageCountSlot = 61;

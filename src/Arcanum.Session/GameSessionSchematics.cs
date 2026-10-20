@@ -55,7 +55,8 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.InvalidLifeTarget"/>), an invalid entity (<see cref="GameSessionFailure.InvalidItem"/>), the
     /// version, an item the hero does not hold or not a written item (<see cref="GameSessionFailure.ItemNotAvailable"/>,
     /// <see cref="GameSessionFailure.InventoryMismatch"/>), a full found list (<see cref="GameSessionFailure.BudgetExceeded"/>,
-    /// <see cref="GameSessionLimits.MaxFoundSchematics"/>), the revision.
+    /// <see cref="GameSessionLimits.MaxFoundSchematics"/>), a spent budget of durability records for the document's deletion (BudgetExceeded),
+    /// the revision.
     /// </summary>
     public SessionReadingResult ReadWrittenItem(GameSessionVersion expected, string entity, SessionWrittenFacts facts)
     {

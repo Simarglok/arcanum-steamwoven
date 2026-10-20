@@ -46,7 +46,7 @@ Reading a written item (`SchematicKnowledgeRules.Read`, the reading start 0x56BB
 | subtype other than 5 | `NotSchematic`: the host opens its reading window |
 | a number in the found list (linear search) | `AlreadyKnown`: `mes\tech.mes` 88 (message type 13), the document stays |
 | a new number | `Registered`: appended at the end, the document destroyed, then message 89 naming the schematic |
-| number 0, Steamwoven (TC8) | `RefusedZero`: nothing registers, the document stays |
+| number 0, Steamwoven (TC8) | `RefusedZero`: nothing registers, the document stays, the host shows no message |
 | number 0, Original (TC8) | registered as any number (a record of zeros that can never be built) |
 
 TC8 is the switch `TechnologyRuleProfile.RegistersSchematicZero` in `GameRules.Technology` (owner decision 2026-10-20, a
@@ -59,7 +59,7 @@ project improvement; [rule modes](rule-modes.md#registry)). One installed docume
   no hero or a dead one (`InvalidLifeTarget`, the reading start's dead-reader check), an invalid entity, the version, an item
   the hero does not hold (`ItemNotAvailable`) or that is not a written item (`InventoryMismatch`), a full list
   (`BudgetExceeded`, `GameSessionLimits.MaxFoundSchematics`, 128 by default: the original has no limit, the installed data 62
-  found records). A registration is one revision; the document is deleted as the [durability](item-durability-runtime.md)
+  found records) and a spent budget of durability records for the document's deletion (`BudgetExceeded`). A registration is one revision; the document is deleted as the [durability](item-durability-runtime.md)
   deletion does (it leaves the hero's lists and every seed). Every other outcome is NoChange with its `Reading`.
 - **Snapshot (schema 25)**: `"schematics":{"found":[number]}` in registration order. Restore refuses a repeated number or a list
   without a hero (`InvalidSchematics`) and a list over the limit (`BudgetExceeded`). Schemas 23 and 24 are the reaction and

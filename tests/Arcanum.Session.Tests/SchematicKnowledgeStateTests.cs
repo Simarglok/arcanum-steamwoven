@@ -77,6 +77,31 @@ public sealed class SchematicKnowledgeStateTests
         Ok(owner.ReadWrittenItem(owner.Version, "kit:1", Schematic(4000)), owner, 1);
         Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.ReadWrittenItem(owner.Version, "kit:2", Schematic(4010)).Failure);
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.ReadWrittenItem(owner.Version, "kit:1", Schematic(4020)).Failure, "destroyed");
+
+        // A dead reader reads nothing (the reading start's check).
+        using var dead = Owner();
+        dead.Kill(dead.Version, SessionLifeTarget.Hero);
+        var revision = dead.Version.Revision;
+        Assert.AreEqual(GameSessionFailure.InvalidLifeTarget, dead.ReadWrittenItem(dead.Version, "kit:1", Schematic(4000)).Failure);
+        Assert.AreEqual((revision, false, 0), (dead.Version.Revision, dead.IsItemDestroyed("kit:1"), dead.QueryHeroFoundSchematics()!.Value.Length));
+
+        // The document's deletion needs a durability record.
+        using var spent = Owner(new GameSessionLimits(maxDurabilityRecords: 1));
+        Assert.AreEqual(GameSessionDisposition.Changed, spent.BreakItem(spent.Version, "kit:3", new(10, 0, 0, false)).Disposition);
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, spent.ReadWrittenItem(spent.Version, "kit:1", Schematic(4000)).Failure);
+        Assert.AreEqual(0, spent.QueryHeroFoundSchematics()!.Value.Length);
+    }
+
+    [TestMethod]
+    public void A_document_the_hero_took_from_a_map_registers_too()
+    {
+        using var owner = Owner();
+        var seed = new SessionMapInventorySeed([], [new("page", new(Document.Kind with { Prototype = 14090 }, 1, 0, 0, null, []), new(5, 5))]);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "page", _ => SessionInsertVerdict.Accepted).Disposition);
+        Ok(owner.ReadWrittenItem(owner.Version, "page", Schematic(4300)), owner, 2);
+        Assert.IsFalse(owner.QueryPcInventory().Any(item => item.Entity == "page"));
+        Assert.IsNull(owner.QueryMapInventory(Exterior)!.Ground.FirstOrDefault(g => g.Item.Entity == "page"));
     }
 
     [TestMethod]
@@ -100,5 +125,7 @@ public sealed class SchematicKnowledgeStateTests
         var plain = GameSessionSnapshotCodec.Encode(heroless.Capture()).Replace(NoSchematics, ",\"schematics\":{\"found\":[4000]}", StringComparison.Ordinal);
         Assert.AreEqual(GameSessionFailure.InvalidSchematics, Restore(plain));
         Assert.AreEqual(SnapshotDecodeFailure.WrongType, GameSessionSnapshotCodec.TryDecode(text.Replace("[4150,4010]", "[\"4150\"]", StringComparison.Ordinal)).Failure);
+        var many = string.Join(',', Enumerable.Range(0, GameSessionLimits.PolicyMaxFoundSchematics + 1));
+        Assert.AreEqual(SnapshotDecodeFailure.BudgetExceeded, GameSessionSnapshotCodec.TryDecode(text.Replace("[4150,4010]", $"[{many}]", StringComparison.Ordinal)).Failure);
     }
 }
