@@ -23,6 +23,9 @@ summarizes the project and points to them.
   a cloud clone, which has no .NET or Godot, and runs **no checks**: no root
   checks, no task checks; the PR says "docs-only, no checks run". The
   independent review still applies (`docs/workflow/tasks.md`).
+- **Check every launch.** Within a minute of starting a Godot or launcher run,
+  confirm it started the intended mode, or stop it and fix the command
+  ([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
 - **The retired Hermes setup is off limits.** The Hermes task board and the
   Codex workflow were removed on 2026-10-16 (PR #137); do not touch `~/.hermes`
   on the owner's Mac (old board, profiles, logs with secrets) and do not run
