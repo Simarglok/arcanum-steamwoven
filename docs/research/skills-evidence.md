@@ -447,10 +447,14 @@ would not buy; a master can buy "won't sell" and worn items
 Dialog `ps` compares the PC's effective level with a threshold (positive: at
 least, negative: at most) (conditions (0x4150D0)). Expert +1 maximum
 followers (followers (0x4B0490)); Master: every follow and leader check
-succeeds (follow (0x4AD950), leader (0x4ADB50)); Apprentice with
-extraordinary charisma lengthens a follower's "wait here" by one step
-(wait (0x4AA7A0)). Steamwoven already models the follower rules with the
-training as a caller fact ([follow consent](../../src/Arcanum.Simulation/Party/FollowConsentRules.cs)).
+succeeds (follow (0x4AD950), leader (0x4ADB50)); any persuasion training of
+the leader lengthens a follower's "wait here" by one step, unless its charisma is
+extraordinary, when no wait ends (wait (0x4AA7A0); this summary first said
+"apprentice with extraordinary charisma", which the executable does not do,
+[ledger HK2](original-verification-ledger.md#hero-skills-arc-skills-002)).
+Steamwoven models the follow rules ([follow consent](../../src/Arcanum.Simulation/Party/FollowConsentRules.cs)),
+and since ARC-SKILLS-002 the session reads the hero's persuasion training itself
+([hero skills](../world/hero-skills-runtime.md)).
 
 ### Dialog and scripts
 

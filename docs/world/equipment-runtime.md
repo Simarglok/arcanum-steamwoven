@@ -50,7 +50,7 @@ and unarmed bonus not negative, the blocks of its kind).
 | Entry | Contract |
 | --- | --- |
 | `QueryEquipment()` | The worn items in slot order: slot, the PC item entity (`kit:n` or a taken item), its saved values. |
-| `QueryHeroEquipmentCombat(training)` | `EquipmentRules.Evaluate` for the hero's effective magick/tech aptitude; null without a hero. Training is the caller's (skills are not session state). |
+| `QueryHeroEquipmentCombat(training)` | `EquipmentRules.Evaluate` for the hero's effective magick/tech aptitude; null without a hero. Without a training argument the hero's training in the wielded weapon's skill (ARC-SKILLS-002, [hero skills](hero-skills-runtime.md)); an explicit one overrides. |
 | `Equip(expected, entity, slot, item, artCheck, insertCheck)` | The original's wield (0x464AE0). Refusals, in order: input, version, no hero (`EquipmentUnavailable`), an item the hero does not hold (`ItemNotAvailable`) or another kind than the saved one (`InventoryMismatch`); NoChange when already in that slot; a `SAP_INSERT_ITEM`, `SAP_REMOVE_ITEM`, `SAP_WIELD_ON` or `SAP_WIELD_OFF` script (`ItemScriptUnsupported`) or item spells (`ItemEffectUnsupported`); the wear check with the hero's race, gender, aptitude and crippled arms from the life domain, then `artCheck` (`WearRefused` with the `EquipmentRefusal`); the no-drop flag of the item, then of the slot's occupant (`WearRefused`, `NotDroppable`); the insert check of the occupant going back to the grid (`InsertRefused`). A ring in the other ring slot moves. One revision. |
 | `Unequip(expected, slot, insertCheck)` | The original's unwield to the grid: NoChange for an empty slot; the no-drop flag, then the insert check. One revision. |
 
@@ -104,8 +104,8 @@ stays as the worth to beat, except in the weapon slot; any other comes off (no-d
 then the choice over the hero's items in creation order (the kit, then the items taken from the world), wielded as by
 `Equip`. The host gives every held item's facts (`SessionWearableLookup`; `SessionEquipmentFacts.Wearable` builds them from
 the stored combat fields, which now also read the script points) and answers the art and insert checks. The hero's weapon
-skill levels come from its stored 0 points under the dexterity cap without the race and gender effects on skills, which the
-session drops (skills are not session state), its tech level is 0, and it carries no ammunition. `SessionEquipBestStep` lists what happened per slot. Refused before any effect: version, no hero, invalid or
+skill levels (melee, bow, throwing, firearms) are its session skills since ARC-SKILLS-002 ([hero skills](hero-skills-runtime.md)), and it carries no
+ammunition. `SessionEquipBestStep` lists what happened per slot. Refused before any effect: version, no hero, invalid or
 mismatched facts, a callback that moved the session. **Project policy:** a chosen item with a move script or item spells
 is not wielded (the session runs neither; the original wears it and runs them): its step names it, the slot keeps what it
 held when the call began (a weapon taken off for the choice goes back on) and the call goes on.
@@ -146,7 +146,7 @@ pack.
 ## Not ready
 
 - **No paperdoll.** The viewer's inventory window has no paperdoll and no host calls `Equip`; the pre-made start wields the
-  kit (ARC-WORLD-034). The best-items choice uses skill levels from 0 points (no skill state) and no ammunition; a custom
+  kit (ARC-WORLD-034). The best-items choice reads the hero's skill levels (ARC-SKILLS-002) and no ammunition; a custom
   character's start (weapon and armour only) and the AI's call with a target are not wired.
 - **NPC equipment.** NPC slots stay the host's (seed inventory locations); `EquipmentRules.Evaluate` serves them too, and
   looting a worn item is still `WornItemUnsupported`.
