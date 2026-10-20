@@ -8,7 +8,7 @@ namespace Arcanum.Session;
 public readonly record struct SessionItemDurability(string Entity, ItemCondition Condition);
 
 /// <summary>
-/// Saved durability (ARC-WORLD-053, schema 24): the condition of every item the session damaged, broke or repaired, by entity
+/// Saved durability (ARC-WORLD-053, schema 22): the condition of every item the session damaged, broke or repaired, by entity
 /// in ordinal order, and the items it deleted (a second break or a destroying critical), in ordinal order. An item without a
 /// record has its host's baseline.
 /// </summary>

@@ -3,7 +3,7 @@
 Status: **Implemented bounded component**, work item ARC-WORLD-053 (2026-10-20), the item durability slice of the
 [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted).
 Godot-free durability rules in `Arcanum.Simulation.Items` and the session's item condition state in `Arcanum.Session`
-(snapshot schema 24). No viewer, combat or trade caller uses them yet.
+(snapshot schema 22). No viewer, combat or trade caller uses them yet.
 
 Requirements: [FR-ITEM-011](../requirements/items-economy.md#fr-item-011) (durability, break and the item side of repair).
 The Repair skill rule itself is ARC-SKILLS-011 (skills plan), which calls the item side below.
@@ -95,11 +95,10 @@ The session tracks every item it knows: the hero's kit, the items the PC took, a
   from every seed view and from pickup and loot, and keeps no record.
 - `Equip` and `EquipBest` read the record's broken bit and hit points over the host's data.
 
-### Snapshot (schema 24)
+### Snapshot (schema 22)
 
 `"durability":{"items":[{"entity","points","adjustment","damage","broken","inventoryArtBroken"}],"destroyed":[entity]}`,
-both in strictly ascending ordinal order. Schemas 22 and 23 are left to the slices the coordinator reserved them for;
-schemas 1..23 are refused, not migrated. The decoder refuses a list out of order or with a repeated entity
+both in strictly ascending ordinal order. Schemas 1..21 are refused, not migrated. The decoder refuses a list out of order or with a repeated entity
 (`NotCanonical`), a value outside the bounds (points and adjustment within ±100,000, damage 0..200,000: `OutOfRange`) and a
 missing or unknown field. Restore refuses (`InvalidDurability`) a deleted item that has a record and a worn item whose record
 is broken or disagrees with its worn values, more records than the limit (`BudgetExceeded`), and a kit or PC item that is

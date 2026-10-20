@@ -305,9 +305,9 @@ public sealed class GameSessionSnapshot
     /// to the retail executable (<see cref="Arcanum.Simulation.Clock.GameClockOwner.RetailExecutableSha256"/>, ARC-DEV-009); schema 17
     /// adds the hero's blessings and curses to <see cref="Effects"/> (ARC-WORLD-035); schema 18 adds <see cref="Sound"/> (ARC-WORLD-040); schema 19 adds the
     /// quelled rumors to the story (ARC-UI-008); schema 20 adds the hero's advancement fields and <see cref="Advancement"/> (ARC-WORLD-036);
-    /// schema 21 adds the hero's innate skill changes (ARC-SKILLS-002); schema 24 adds <see cref="Durability"/> (ARC-WORLD-053; 22 and 23 are
-    /// reserved by other slices). Schemas 1..23 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 24;
+    /// schema 21 adds the hero's innate skill changes (ARC-SKILLS-002); schema 22 adds <see cref="Durability"/> (ARC-WORLD-053).
+    /// Schemas 1..21 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 22;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

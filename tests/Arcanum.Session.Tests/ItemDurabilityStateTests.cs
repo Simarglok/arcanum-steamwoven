@@ -149,7 +149,7 @@ public sealed class ItemDurabilityStateTests
             "{\"entity\":\"apple\",\"points\":15,\"adjustment\":5,\"damage\":0,\"broken\":true,\"inventoryArtBroken\":true}," +
             "{\"entity\":\"sword\",\"points\":15,\"adjustment\":5,\"damage\":3,\"broken\":false,\"inventoryArtBroken\":false}]," +
             "\"destroyed\":[\"kit:3\"]},\"effects\":");
-        StringAssert.Contains(text, "\"schemaVersion\":24,");
+        StringAssert.Contains(text, "\"schemaVersion\":22,");
         var restored = GameSessionOwner.Restore(Decode(text), RestoreOptions());
         Assert.AreEqual(GameSessionFailure.None, restored.Failure);
         using var back = restored.Owner!;
