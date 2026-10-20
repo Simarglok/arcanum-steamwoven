@@ -82,7 +82,7 @@ public partial class TerrainViewerApp
     {
         EndConversation();
         UnbindAreaCompanions();
-        _conversationHost = null; _conversationNotice = null; _talkAfterRoute = null;
+        _conversationHost = null; _conversationNotice = null; _talkAfterRoute = null; _voiceStart = null; _storyStatus = null;
     }
 
     private bool TalkMapActive => _conversationHost is not null && (!InCave || _areaCompanions is { Companions.Count: > 0 });
@@ -188,6 +188,9 @@ public partial class TerrainViewerApp
         var conversation = _conversationPanel.Conversation;
         GD.Print($"ARC-SCRIPT-005 conversation closed phase={conversation?.Phase} end={conversation?.End?.Kind} turns={conversation?.Turn} effects={conversation?.Effects.Count}");
         _conversationPanel.CloseView();
+        // ARC-UI-045 (ARC-UI-043 voice): the voice plays on after a close, but the conversation must not outlive it: its ports reach the area
+        // host and its snapshot, which a reload or map change would otherwise keep alive.
+        _voiceStart = null; _dialogVoice.Release();
         // ARC-WORLD-016: a refused follow names its reason (the generated refusal line text is not loaded).
         if (_conversationParty?.LastRefusal is { } refused) _conversationNotice = $"follow refused: {refused}";
         _conversationParty = null;

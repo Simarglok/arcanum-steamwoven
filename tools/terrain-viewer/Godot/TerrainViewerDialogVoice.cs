@@ -53,7 +53,7 @@ public partial class TerrainViewerApp
     /// plays on the voice channel at the voice volume; a line whose file is missing then stops it and plays nothing.</summary>
     private async Task RunAreaVoiceSmokeAsync()
     {
-        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-043 voice smoke: " + why); }
+        static void Require(bool value, string why) { if (value) return; GD.Print("ARC-UI-043 voice smoke: FAIL " + why); throw new InvalidOperationException("ARC-UI-043 voice smoke: " + why); }
         Require(_audio is not null && AreaSoundCatalog() is not null && _soundContent?.Stack is not null, "no backend or catalogue");
         var key = _soundContent!.Value.Stack!.Keys("sound/speech/").FirstOrDefault(k =>
             System.Text.RegularExpressions.Regex.IsMatch(k, @"^sound/speech/[0-9]{5}/v[0-9]+_m\.mp3$"));

@@ -13,7 +13,7 @@ public partial class TerrainViewerApp
     /// later. Nothing here depends on hearing it.</summary>
     private async Task RunAreaAudioSmokeAsync()
     {
-        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-040 audio smoke: " + why); }
+        static void Require(bool value, string why) { if (value) return; GD.Print("ARC-UI-040 audio smoke: FAIL " + why); throw new InvalidOperationException("ARC-UI-040 audio smoke: " + why); }
         Require(_audio is not null, "no backend");
         var catalog = SoundCatalogFor(_arguments!.ModulePath);
         Require(catalog is not null, $"no catalogue ({_soundContent?.Detail})");
@@ -54,8 +54,10 @@ public partial class TerrainViewerApp
     /// fires within the first ticks; the combat stinger and loop start together and stop at once.</summary>
     private async Task RunAreaSchemeSmokeAsync()
     {
-        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-041 scheme smoke: " + why); }
-        Require(_areaSession is not null && _schemePlayer is not null && AreaSoundCatalog() is not null, "no session, player or catalogue");
+        static void Require(bool value, string why) { if (value) return; GD.Print("ARC-UI-041 scheme smoke: FAIL " + why); throw new InvalidOperationException("ARC-UI-041 scheme smoke: " + why); }
+        // ARC-UI-045: an area loaded without a session clock (a map drawn unlit) has no session and so no schemes.
+        if (_areaSession is null) { GD.Print("ARC-UI-041 native-smoke schemes NONE (no session clock)"); return; }
+        Require(_schemePlayer is not null && AreaSoundCatalog() is not null, "no player or catalogue");
         var session = _areaSession!;
         var state = session.QuerySound().State;
         var hour = session.QueryClockSnapshot().Hour;
