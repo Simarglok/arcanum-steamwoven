@@ -768,15 +768,14 @@ def _verified_output(conf: dict[str, Any], tool: str, candidate_id: str, expecte
     return _bound_payload_inventory(payload, path.parent, path.parent / payload["app"]["relativePath"])
 
 
-def _payload_manifest_present(roots: dict[str, Any], root_id: str, task: str, commit: str) -> bool | None:
-    """True/False for a candidate manifest under a configured root; None when the path cannot be judged safely."""
-    text = roots.get(root_id)
-    if not isinstance(text, str):
-        return None
-    manifest = Path(text).expanduser().absolute() / task / commit / "manifest.json"
-    if config._has_symlink_component(manifest.parent):
-        return None
-    return manifest.exists() or manifest.is_symlink()
+def _payload_state(conf: dict[str, Any], tool: Any, candidate_id: Any) -> str:
+    """present/gone for a well-formed id under an existing configured root; unjudged for anything that cannot be proved."""
+    try:
+        candidate = config.candidate_path(conf, tool, candidate_id)
+    except (OSError, ValueError):
+        return "unjudged"
+    manifest = candidate / "manifest.json"
+    return "present" if manifest.exists() or manifest.is_symlink() else "gone"
 
 
 def surviving_payloads(conf: dict[str, Any], tool: str) -> list[str]:
@@ -789,8 +788,10 @@ def surviving_payloads(conf: dict[str, Any], tool: str) -> list[str]:
         root = config.canonical_existing(text, directory=True)
         for task in SUPPORTED_TOOLS[tool]:
             folder = root / task
-            if folder.is_symlink() or not folder.is_dir():
+            if not folder.exists() and not folder.is_symlink():
                 continue
+            if folder.is_symlink() or not folder.is_dir():
+                raise ValueError("surviving payloads cannot be judged: a task folder is a symlink or not a directory")
             found += [f"{root_id}:{task}:{child.name}" for child in sorted(folder.iterdir())
                       if (child / "manifest.json").exists() or (child / "manifest.json").is_symlink()]
     return found
@@ -798,33 +799,38 @@ def surviving_payloads(conf: dict[str, Any], tool: str) -> list[str]:
 
 def repair_registry(registry: dict[str, Any], conf: dict[str, Any], *, apply: bool = False) -> dict[str, Any]:
     """ARC-DEV-026: forget registered builds, accepted/rollback/measurement entries and launch selections whose payload
-    manifest is gone from its configured root. Dry run unless apply; it never deletes or writes a file on disk itself."""
+    manifest is gone from its configured root. Dry run unless apply; it never deletes or writes a file on disk itself.
+    A malformed id, an unconfigured or missing root or a symlinked path is kept and listed as unjudged."""
     roots = conf.get("artifactRoots", {})
     builds = registry.get("builds", {})
     if not isinstance(roots, dict) or not isinstance(builds, dict):
         raise ValueError("invalid artifact roots or registered builds")
+    unjudged: set[str] = set()
 
-    def gone(candidate_id: Any) -> bool:
-        parts = candidate_id.split(":") if isinstance(candidate_id, str) else []
-        return len(parts) == 3 and _payload_manifest_present(roots, *parts) is False
+    def gone(tool: Any, candidate_id: Any) -> bool:
+        state = _payload_state(conf, tool, candidate_id)
+        if state == "unjudged":
+            unjudged.add(str(candidate_id))
+        return state == "gone"
 
-    report: dict[str, Any] = {"schema": "arcanum-registry-repair-v1", "applied": apply,
-                              "droppedBuilds": sorted(key for key in builds if gone(key)), "keptBuilds": 0,
-                              "droppedAccepted": {}, "droppedRollback": {}, "droppedMeasurements": {},
-                              "clearedLaunchSelection": {}, "danglingPointers": []}
-    report["keptBuilds"] = len(builds) - len(report["droppedBuilds"])
+    dropped = sorted(key for key, value in builds.items() if gone(value.get("tool") if isinstance(value, dict) else None, key))
+    report: dict[str, Any] = {"schema": "arcanum-registry-repair-v1", "applied": apply, "droppedBuilds": dropped,
+                              "keptBuilds": len(builds) - len(dropped), "droppedAccepted": {}, "droppedRollback": {},
+                              "droppedMeasurements": {}, "clearedLaunchSelection": {}, "unjudged": [],
+                              "danglingPointers": [], "unreadablePointers": []}
     for field, key in (("accepted", "droppedAccepted"), ("rollback", "droppedRollback")):
         values = registry.get(field, {})
         if isinstance(values, dict):
-            report[key] = {tool: value for tool, value in sorted(values.items()) if gone(value)}
+            report[key] = {tool: value for tool, value in sorted(values.items()) if gone(tool, value)}
     measurements = registry.get("measurements", {})
     if isinstance(measurements, dict):
         report["droppedMeasurements"] = {tool: value["candidateId"] for tool, value in sorted(measurements.items())
-                                         if isinstance(value, dict) and gone(value.get("candidateId"))}
+                                         if isinstance(value, dict) and gone(tool, value.get("candidateId"))}
     selections = conf.get("launchSelection", {})
     if isinstance(selections, dict):
-        report["clearedLaunchSelection"] = {tool: value for tool, value in sorted(selections.items()) if gone(value)}
-    # A current pointer naming a missing manifest is reported only: removing it would delete a file.
+        report["clearedLaunchSelection"] = {tool: value for tool, value in sorted(selections.items()) if gone(tool, value)}
+    report["unjudged"] = sorted(unjudged)
+    # A current pointer that names a missing manifest is reported only: removing it would delete a file.
     for root_id, text in sorted(roots.items()):
         try:
             root = config.canonical_existing(text, directory=True)
@@ -836,10 +842,12 @@ def repair_registry(registry: dict[str, Any], conf: dict[str, Any], *, apply: bo
                     pointer = root / task / name
                     try:
                         encoded = config.optional_authority_bytes(pointer)
-                        relative = json.loads(encoded)["manifestRelativePath"] if encoded is not None else None
-                    except (OSError, ValueError, KeyError, TypeError):
-                        report["danglingPointers"].append(f"{root_id}:{task}:{name}")
+                        value = json.loads(encoded) if encoded is not None else None
+                    except (OSError, ValueError):
+                        report["unreadablePointers"].append(f"{root_id}:{task}:{name}")
                         continue
+                    # Only v2 pointers bind a root-relative manifest; legacy v1 pointers are left to resolve_pointer.
+                    relative = value.get("manifestRelativePath") if isinstance(value, dict) else None
                     if isinstance(relative, str) and not (root / task / relative).exists():
                         report["danglingPointers"].append(f"{root_id}:{task}:{name}")
     if apply:

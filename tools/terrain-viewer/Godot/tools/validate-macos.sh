@@ -29,6 +29,9 @@ if test "${ARCANUM_EXPORT_LEASE_HELD:-}" != 1; then
   : "${ARCANUM_LOCAL_ROOT_ID:?ARCANUM_LOCAL_ROOT_ID must identify the configured ignored artifact root}"
   : "${TMPDIR:?TMPDIR must identify the effective temporary destination}"
   set --
+  if test -n "${ARCANUM_OUTPUT_BYTES:-}" && test -n "${ARCANUM_FIRST_EXPORT_BYTES:-}"; then
+    printf '%s\n' 'Use either ARCANUM_OUTPUT_BYTES with ARCANUM_ESTIMATE_MANIFEST or ARCANUM_FIRST_EXPORT_BYTES, not both.' >&2; exit 2
+  fi
   if test -n "${ARCANUM_OUTPUT_BYTES:-}"; then
     : "${ARCANUM_ESTIMATE_MANIFEST:?a single complete measured payload manifest is required}"
     set -- --output-bytes "$ARCANUM_OUTPUT_BYTES" --estimate-manifest "$ARCANUM_ESTIMATE_MANIFEST"
