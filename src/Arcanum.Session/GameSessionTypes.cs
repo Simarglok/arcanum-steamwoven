@@ -181,6 +181,8 @@ public enum GameSessionFailure
     InvalidOpenable,
     // Skills (ARC-SKILLS-004).
     SkillsUnavailable, InvalidSkill,
+    // Character point pool (ARC-WORLD-052).
+    HeroEditorUnavailable, HeroEditorClosed, InvalidPointTarget, PointRefused,
     // Item durability (ARC-WORLD-053).
     InvalidDurability,
 }

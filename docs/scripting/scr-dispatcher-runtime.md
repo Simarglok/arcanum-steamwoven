@@ -219,7 +219,7 @@ the caller applies `ScrEffects.Calls` with `ScheduleScriptCall` and
 `RemoveScriptCall`, and an event pass hands each due call to an
 `ISessionScriptWorld` host, which runs `RunCall` and applies the effects. Since
 ARC-WORLD-039 the AREA viewer pumps the queue ([host pump](../world/game-event-queue-runtime.md#host-pump-arc-world-039)):
-its set admits call script in and remove script call ("S3-area-sound-calls"),
+its set admits call script in and remove script call ("S3-area-sound-calls", "S3-area-sound-calls-scheme" since ARC-SCRIPT-016),
 `AreaScriptHost.Apply` hands the requests to the session in action order, and a due
 call runs through `AreaConversationHost.RunCall` (a call that would start a
 conversation is not run).
@@ -253,7 +253,7 @@ conversation is not run).
     an absent object's null handle to the sound call (undefined); here nothing plays and the run goes on.
   - **Play sound scheme**: `Scheme` with the music and ambient ids, the session's scheme request unchanged
     (`PlaySoundScheme`, [session sound](../world/session-sound-runtime.md)).
-- **The AREA viewer** admits the three in its dialog set (`AreaScriptHost.Admission`, now "S3-area-sound-calls"): `Apply` hands a
+- **The AREA viewer** admits the three in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound-calls", since ARC-SCRIPT-016 "S3-area-sound-calls-scheme"): `Apply` hands a
   scheme pair to the session (one the session drops, while sound is locked, or refuses, a negative id, changes nothing and
   stops nothing) and keeps the effect sounds for the viewer, which plays them on the next frame
   (`TerrainViewerScriptSounds`: play sound through the effects channel at the plain volume, play sound on through the
@@ -263,6 +263,29 @@ conversation is not run).
 - The teleport and fade sound operands go to the host with the teleport request (set S4 below).
 - Set numbers no longer follow the slice plan of the [event dispatcher research](../research/scr-event-dispatcher.md):
   S6 is print line and S7 the sound actions, not heartbeat and combat.
+
+## Set auto-level scheme (ARC-SCRIPT-016, set S8)
+
+- **`ScrAdmissionSet.S8`** is S4 plus set auto-level scheme (139); `ScrRunOptions` accepts any subset of S8 (the interpreter's
+  widest set; the default stays S5). Its focus kinds stay the four single objects, so focus groups are not admitted.
+- **The action** (ledger [OL30](../research/original-verification-ledger.md#companion-orders-and-loyalty-arc-res-064)): its object
+  operand is a list in the original (one object or a group, 0x44B4E0), and each object gets the number (a value operand, no range
+  check) through the scheme setter (0x4A6D90), which writes a PC's or an NPC's scheme and ignores any other object. The run returns
+  one `ScrSchemeRequest(Object, Scheme)` per object in `ScrEffects.Schemes`, in action order, and goes on to the next line; an
+  absent object names none (the original's list then holds a null handle, which the setter ignores). The host decides what the
+  object is. Nothing is bought at once: the scheme runs at the object's next level step
+  ([advancement](../world/advancement-runtime.md), AL12).
+- **Session**: `SetAutoLevelScheme(expected, SessionSchemeTarget.Hero | ForNpc(loaded), scheme)` stores it (registry 0x4A6D90,
+  partial, F2). The session keeps schemes within 0..199 (its snapshot bound), so a number outside is refused where the original
+  stores it and later buys nothing with it: a documented deviation no installed script reaches.
+- **The AREA viewer** admits 139 in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound-calls-scheme"); `Apply` hands each
+  request to the session in action order: the PC's own scheme, or an NPC's record with its map data (the host's `npcAdvancement`,
+  which the viewer reads from the NPC's home-map fields with `--hero`); any other object is ignored, and a refused number or a PC
+  without a hero changes nothing and stops nothing, as the original's run goes on; a change the session cannot take (the record
+  budget, the revision) stops the later steps, as a refused call request does (`AreaScriptHost.SchemeRefusalStops`).
+- **Installed original** (opt-in `ScrSchemeTests`, `DAT_ROOT`): one set-scheme action in all scripts, line 5 of the winning script
+  2023 (on the triggerer, 101); S8 admits it from that line, and the next line (action 99) is the first refusal, so the script
+  itself does not run yet.
 
 ## Teleports and guards (ARC-SCRIPT-014, set S4)
 
@@ -331,6 +354,11 @@ the player's teleport becomes the transfer); tile and sector events are a later 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrSoundTests.cs` (ARC-SCRIPT-040): the sound actions refused below S7, returned in
   action order with value operands read, an absent object playing nothing, a run with only sounds not empty. Opt-in
   `ScrAdmissionRealDataTests`: S6 admits 336 installed scripts whole, S7 342; the six more each have a sound action.
+- `tests/Arcanum.Scripting.Tests/Scr/ScrSchemeTests.cs` (ARC-SCRIPT-016): set scheme refused below S8, one request per object in
+  action order with a value operand, an absent object naming none, a focus group refused, a deferred call's requests; opt-in
+  (`DAT_ROOT`): the one installed action and its admission. `tests/Arcanum.Session.Tests/AdvancementStateTests.cs`: the hero's and
+  an NPC's scheme set without a purchase, run at the next level step, a scheme without a rule buying nothing, the refusals and the
+  snapshot. `AreaScriptHostTests`: requests to an NPC record, a refused number and an unreadable object ignored.
 - `tests/Arcanum.TerrainViewer.Tests/AreaScriptHostTests.cs`: the viewer host's
   slot over the session keys, writeback and baseline clearing, refusals in
   `Apply`, invalid stored keys, scripts and dialogs found by number once, the
@@ -352,11 +380,11 @@ the player's teleport becomes the transfer); tile and sector events are a later 
   the story-state actions and no admitted set reads global variables.
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
-- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls": S3 without
-  story state, plus the sound actions and call script in / remove script call); since ARC-SCRIPT-015 map mode's use
+- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme": S3 without
+  story state, plus the sound actions, call script in / remove script call and set auto-level scheme); since ARC-SCRIPT-015 map mode's use
   clicks on guarded use sites run it under "S4-area-use"; tile and sector events, heartbeat and combat are later slices.
 - Not in any admitted set yet: focus groups and local objects, loops, immediate calls and
-  call-ex, and the world actions other than teleport and fade-and-teleport (set S4); float line, quests,
+  call-ex, and the world actions other than teleport and fade-and-teleport (set S4) and set auto-level scheme (set S8); float line, quests,
   reactions... are not admitted.
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
