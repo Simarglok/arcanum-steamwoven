@@ -60,7 +60,7 @@ Notes on the policy caps:
 - **NPC records.** Life, reaction and experience records are kept for NPCs the session changed;
   each cap holds a record for every NPC of every installed map. The session's event queue is
   derived from the life records (four timers each, [event queue](game-event-queue-runtime.md)),
-  with fixed shares for script calls, timed effects and Lock events: 34,883 events.
+  with fixed shares for script calls, timed effects, Lock events and wait timers: 34,947 events (ARC-WORLD-045 added the 64 wait timers).
 - **Snapshot size.** Raising the count caps needs a larger text cap: 262,144 sector changes
   alone take about 16.8 MB. The estimate of a whole playthrough is a change of every installed
   object under the viewer's 68-character object ids (`oid:` and a SHA-256), about 141 characters

@@ -64,7 +64,7 @@ public sealed class CombatFieldReaderTests
 
     private static Dictionary<int, object> NpcValues() => CritterValues(new()
     {
-        [69] = 0x1306, [71] = 23, [74] = 40, [75] = 7, [81] = 11, [84] = 50, [85] = 3, [92] = Map(2, 6, 0, 0, 0, 0, 1, 2, 0, 0),
+        [69] = 0x1306, [71] = 23, [74] = 40, [75] = 7, [81] = 11, [84] = 50, [85] = 3, [89] = 2, [92] = Map(2, 6, 0, 0, 0, 0, 1, 2, 0, 0),
     });
 
     private static Func<int, PrototypeFile> Files(params (int Number, int Type, Dictionary<int, object> Values)[] prototypes)
@@ -180,6 +180,7 @@ public sealed class CombatFieldReaderTests
         Assert.AreEqual((2, -1, 1), (c.SpellTech[3], c.SpellTech[16], c.SpellTech[21]));
         var n = npc.Npc!;
         Assert.AreEqual((0x1306u, 23, 40, 7, 11, 50, 3), (n.Flags, n.AiData, n.ExperienceWorth, n.ExperiencePool, n.Faction, n.ReactionBase, n.SocialClass));
+        Assert.AreEqual(2, n.Wait, "ARC-WORLD-045: the wait field (300)");
         CollectionAssert.AreEqual(new CombatDamageRange[] { new(2, 6), new(0, 0), new(0, 0), new(1, 2), new(0, 0) }, n.Damage.ToArray());
         Assert.IsNull(npc.Item);
 

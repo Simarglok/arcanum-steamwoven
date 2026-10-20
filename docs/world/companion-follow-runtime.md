@@ -12,8 +12,8 @@ through the cave entrance and exit with the PC ([map change](#map-change-arc-wor
 
 **NOT READY:** no walk cycle or turning for Virgil (his T0 body frame moves with him), running uses the human gait timing
 (ARC-WORLD-020, [gait runtime](gait-runtime.md); his own ART stride is not read), only the two cave endpoints carry him (no other map, no
-follower of a follower, no unconscious-follower rule, no carried inventory payload), no orders, loyalty, wait timer, combat or turn-based cost, no
-refusal line text, and the PC side of the follow check is still the AREA diagnostic profile (charisma 8, level 1), not
+follower of a follower, no unconscious-follower rule, no carried inventory payload), no orders, combat or turn-based cost, no
+refusal or warning line text (the loyalty step and the wait timer of ARC-WORLD-045 name their line ranges, [below](#loyalty-and-the-wait-timer-arc-world-045)), and the PC side of the follow check is still the AREA diagnostic profile (charisma 8, level 1), not
 the session hero. Distances and order are a reading of the original's functions, evidence level F0 (not checked
 in the executable) unless the [verification ledger](../research/original-verification-ledger.md) lists them;
 original executable parity is **NOT_VERIFIED**.
@@ -141,6 +141,34 @@ frame key), like the other load checks; it is not a runtime failure.
 - ARC-WORLD-017: the transfer carries the following companions (above). In the cave a visiting companion is the only
   dialog NPC; on the exterior an absent one is not a speaker.
 
+## Loyalty and the wait timer (ARC-WORLD-045)
+
+The session's loyalty step and wait timer ([party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045)) in the AREA
+viewer (exterior, cave and map mode):
+
+- **AI tick.** `AreaCompanionGroup.Loyalty` runs after each frame's companion drive: a following companion's tick is due
+  `250 + 4750 × d / 30` ms (integer division, `d` its cell distance to the PC, counted as 30 when above; ledger CL8) after the
+  last one, on the frames' simulation time (a clock that went back further than 5 s makes it due at once). A waiting or free
+  companion has no tick. No tick runs while a turn-based round is active (the original's step is in the non-combat pass).
+- **Facts.** `AreaCompanionLoyalty.Facts`: the companion's follow facts against the diagnostic PC (or the hero, which the session
+  substitutes), the shown area's conversation state's PC alignment and the companion's effective reaction under its facts, and its
+  level now.
+- **Follow-goal gate (decision D5, both settings as the original).** `AreaCompanion.FollowGoal` stands for the original's follow
+  goal: an approach (walk, run or jump) starts it, and it lives after the companion arrives, as the original's goal does not end
+  by itself (OL19); it ends when the companion stops following, when a conversation with it starts (`InterruptGoals`) and when
+  the group is rebuilt (a map change, a quick load, a reset). While it lives the step is `GoalRunning`: in practice the step runs
+  before the companion first moves after the PC, and after a talk with it.
+- **Alignment.** The conversation state's `AL` arms the followers through `RecordPcAlignmentChange` before it changes the
+  diagnostic alignment (a refusal leaves both).
+- **Wait timer.** `AreaEventWorld` gives a wait timeout the shown area's conversation state's facts. Nothing in play makes a
+  companion wait yet (no wait order or dialog `WA` action); the native smoke waits Virgil with his facts (`AreaCompanionRoster.WaitFacts`):
+  his wait index 6 sets no timer.
+- **Log and HUD.** A step that changed the session or was refused prints `ARC-WORLD-045 loyalty script=<id> disposition=… step=…
+  consent=… leaveRefused=… warning=… marks=…` with `shown="left, refusal lines 1800-1899 (Dislike)"` or `shown="warning lines
+  5400-5499 (LowReaction)"`; a timeout prints `ARC-WORLD-045 wait expired entity=… map=… charisma=… reaction=<skip>:<delta>
+  failure=…`. The HUD's companion line names the same ranges or `wait ended for <entity>: jilted (reaction −24)`. No line text is
+  loaded.
+
 ## Tests
 
 - `tests/Arcanum.Simulation.Tests/Party/CompanionFollowTests.cs`: the distance table, approach to range 2 through the
@@ -168,7 +196,13 @@ frame key), like the other load checks; it is not a runtime failure.
   Virgil follows into the cave, steps off the arrival cell, is drawn, picked and talked to there; waiting in the cave he
   stays while the PC leaves and the exterior has no T0 Virgil; following again he comes back out and steps off next to
   the PC. `ARC_AREA_CAVE_FOLLOW_CAPTURE=<png>` saves the cave frame.
-- Native smoke (`--native-smoke --mode crash-site-area` with the original roles): `ARC-WORLD-016 native-smoke follow
+- `tests/Arcanum.TerrainViewer.Tests/AreaCompanionLoyaltyTests.cs` (ARC-WORLD-045): the AI tick delay, the step on a following
+  companion's tick and its schedule, the follow-goal gate and a talk ending it, a refused check making it leave, the approach
+  starting the goal and waiting ending it, a wait timer jilting through the event pump with the area's reaction facts, and `AL`
+  arming the followers.
+- Native smoke (`--native-smoke --mode crash-site-area` with the original roles): `ARC-WORLD-045 native-smoke loyalty PASS`
+  inside the follow stage (a reaction drop arms Virgil, his AI tick clears the marks while he stands near the PC with no follow
+  goal, and after he followed the PC the step stays gated; his wait sets no timer), then `ARC-WORLD-016 native-smoke follow
   PASS` after the quick-save stage: Virgil joins through his dialog in the running viewer, follows the PC to within 2,
   is drawn on his new cell only, his cell is in the session, and a waiting Virgil stays while the PC is farther than 4.
   `ARC_AREA_FOLLOW_CAPTURE=<png>` saves the frame.
@@ -191,6 +225,6 @@ measured roster.
 
 ## Next
 
-Orders, loyalty and the wait timer (slice 5), a walk cycle for NPC bodies, the session hero as the PC side of the
+Orders (the rest of slice 5; the loyalty step and wait timer are ARC-WORLD-045), a walk cycle for NPC bodies, the session hero as the PC side of the
 check, and the rest of the general map-change carry (followers of followers, unconscious followers, carried
 inventory).
