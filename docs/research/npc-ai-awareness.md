@@ -477,4 +477,6 @@ loudness and fires on use, not on explosion.
 - **AU4** How often lines exceed the 100-sample limit in real fights is a
   runtime question.
 - **AU5** What sets the combat record's flag 0x800 (which suppresses the
-  noise of combat attacks) is the combat stage's question.
+  noise of combat attacks) is the combat stage's question. *Settled by ARC-RES-066:*
+  the missile's flight sets it for an object a missile meets instead of its target;
+  the resolution's own test is never true ([execution](npc-ai-execution.md#8-other-answers)).
