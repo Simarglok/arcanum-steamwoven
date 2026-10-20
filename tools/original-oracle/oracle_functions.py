@@ -4,8 +4,9 @@ Each function has its own code range (its first instruction up to the next funct
 functions it may call, the stubs that replace service functions, and the globals it may read. Inputs are drawn from a
 seed inside the domain of the C# side (ExperienceTable.Create, levels 0..51, experience 0..2,000,000,000; for the skill
 functions of ARC-SKILLS-001 one critter with its twelve stored basic skills, its eight primary stats, the monstrous flag
-and one additive effect change of the skill); the same model becomes the inputs of the OriginalExe tests. Importing this
-module does not need Unicorn.
+and one additive effect change of the skill; for the spell cost functions of ARC-MAGIC-003 one caster, one spell record's
+cost, the cheat flag and a recording payment stub); the same model becomes the inputs of the OriginalExe tests. Importing
+this module does not need Unicorn.
 """
 from __future__ import annotations
 
@@ -46,6 +47,19 @@ TRAINING_MINIMA = (0x5B6F44, 0x5B6F44 + 16)
 SKILL_CAPS = (0x5B6FA4, 0x5B6FA4 + 80)  # the cap per key stat 1..20
 SKILL_LEVEL_CODE = ((0x4C5EB0, 0x4C5F70), (0x4C5E50, 0x4C5EB0), (0x4C5F70, 0x4C5FA0), (0x4C5FA0, 0x4C6000))
 
+# Globals and service functions used by the spell cost functions (ARC-MAGIC-003).
+SPELL_TABLE_POINTER = 0x6876D8  # pointer to the 223 spell records of 0x158 bytes; +0x08 is Cost
+SPELL_RECORD = 0x158
+SPELL_RECORDS = 223
+SPELL_COST_FIELD = 0x08
+SPELLS_LOADED = 0x5E7618        # the magic-tech init's loaded flag, read by the cost getter 0x450340
+CHEAT = 0x5E75FC                # the cheat flag: every run-time and check cost is 1
+MASTERY = 0x4B1CB0              # mastered college of a critter: (handle low, handle high) -> 0..15 or -1
+PAY = 0x450420                  # payment: (handle low, handle high, cost, apply, spell) -> 1 paid / 0 refused; a recording stub
+STAT_RACE = 27
+DWARF = 1
+COST_GETTER_CODE = (0x450340, 0x450370)
+
 
 @dataclass(frozen=True)
 class FunctionSpec:
@@ -65,6 +79,9 @@ FUNCTIONS: dict[int, FunctionSpec] = {spec.address: spec for spec in (
     FunctionSpec(0x4A6980, "level-bonus-points", ((0x4A6980, 0x4A69C0),), "bonus"),
     FunctionSpec(0x4C5EB0, "basic-skill-level", SKILL_LEVEL_CODE, "skill-level"),
     FunctionSpec(0x4C6170, "basic-skill-training-set", ((0x4C6170, 0x4C62B0),) + SKILL_LEVEL_CODE, "training-set"),
+    FunctionSpec(0x4507D0, "spell-run-cost", ((0x4507D0, 0x4508A0),), "spell-cost"),
+    FunctionSpec(0x4508A0, "spell-check-cost", ((0x4508A0, 0x450940),), "spell-cost"),
+    FunctionSpec(0x4B1660, "spell-cast-cost", ((0x4B1660, 0x4B16C0), COST_GETTER_CODE), "spell-cost"),
 )}
 
 
@@ -222,6 +239,72 @@ def critter_stubs(critter: Critter, recorder: Recorder | None = None) -> dict:
     return stubs
 
 
+@dataclass
+class SpellCostCase:
+    """The spell cost functions' one caster and spell: the spell number, its record's cost, the caster's mastered college,
+    object type and race, the cheat flag and what the payment stub answers."""
+    spell: int
+    cost: int
+    mastery: int
+    kind: int
+    race: int
+    cheat: int
+    paid: int
+
+
+def draw_spell_cost_case(rng: random.Random) -> SpellCostCase:
+    """A spell 0..222 (college spells more often), a cost mostly 0..60 with odd values and sometimes negative or near the
+    32-bit edges, a mastered college often the spell's own, a PC or NPC mostly (items and other types too), a dwarf often,
+    the cheat flag rarely."""
+    spell = rng.randrange(80) if rng.random() < 0.6 else rng.randrange(SPELL_RECORDS)
+    roll = rng.random()
+    cost = (rng.randint(0, 60) if roll < 0.85 else rng.randint(-60, -1) if roll < 0.92
+            else rng.choice((0x3FFFFFFF, 0x40000000, 0x7FFFFFFF, -0x40000000, -0x40000001, -0x80000000)))
+    mastery = spell // 5 if spell < 80 and rng.random() < 0.5 else rng.randint(-1, 15)
+    kind = rng.choice((15, 16)) if rng.random() < 0.8 else rng.choice((0, 3, 5, 9, 14, 17))
+    race = DWARF if rng.random() < 0.4 else rng.randint(0, 10)
+    return SpellCostCase(spell, cost, mastery, kind, race, int(rng.random() < 0.1), int(rng.random() < 0.8))
+
+
+@dataclass
+class PayRecorder:
+    """The payment calls of one run: (cost, apply, spell) each."""
+    calls: list[tuple[int, int, int]]
+
+
+def spell_cost_stubs(case: SpellCostCase, recorder: PayRecorder) -> dict:
+    """Stubs answering from one caster: its type, race and mastered college; the payment records its arguments and
+    answers the case's result. Any other object, field or stat is rejected."""
+    from oracle_emu import StubRejected, to_signed
+
+    def same(argument) -> None:
+        if (argument(0), argument(1)) != HANDLE:
+            raise StubRejected(f"handle {argument(0):#x}:{argument(1):#x} is not the world model's object")
+
+    def field(argument) -> int:
+        same(argument)
+        if argument(2) != FIELD_TYPE:
+            raise StubRejected(f"field {argument(2):#x} is not in the world model")
+        return case.kind
+
+    def stat(argument) -> int:
+        same(argument)
+        if argument(2) != STAT_RACE:
+            raise StubRejected(f"stat {argument(2)} is not in the world model")
+        return case.race
+
+    def mastery(argument) -> int:
+        same(argument)
+        return case.mastery & 0xFFFFFFFF
+
+    def pay(argument) -> int:
+        same(argument)
+        recorder.calls.append((to_signed(argument(2)), argument(3), to_signed(argument(4))))
+        return case.paid
+
+    return {FIELD_GETTER: field, STAT_GETTER: stat, MASTERY: mastery, PAY: pay}
+
+
 # --- runs ------------------------------------------------------------------------------------------------------------
 
 def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str, unicorn_version: str,
@@ -292,6 +375,30 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
         stats = ["st", "dx", "cn", "be", "in", "pe", "wp", "ch"]
         tail = ["result"] if spec.model == "skill-level" else ["training", "result", "written", "educated"]
         document.update(fields=["skill", "stored", "monstrous", "effect", *stats, *tail])
+    elif spec.model == "spell-cost":
+        from oracle_emu import RunFailure
+        table = emulator.write_heap(b"\0" * (SPELL_RECORD * SPELL_RECORDS))
+        emulator.set_global(SPELL_TABLE_POINTER, table)
+        emulator.set_global(SPELLS_LOADED, 1)
+        cast = spec.address == 0x4B1660
+        for case_number in range(count):
+            case = draw_spell_cost_case(rng)
+            field = SPELL_RECORD * case.spell + SPELL_COST_FIELD
+            emulator.write_heap(struct.pack("<i", case.cost), field)
+            emulator.set_global(CHEAT, case.cheat)
+            recorder = PayRecorder([])
+            readable = (Range(SPELL_TABLE_POINTER, SPELL_TABLE_POINTER + 4), Range(CHEAT, CHEAT + 4), Range(SPELLS_LOADED, SPELLS_LOADED + 4),
+                        Range(table + field, table + field + 4))
+            arguments = (case.spell, *HANDLE) if cast else (*HANDLE, case.spell)
+            result = emulator.call(spec.address, arguments, code=code, stubs=spell_cost_stubs(case, recorder), readable=readable)
+            emulator.write_heap(b"\0\0\0\0", field)
+            if len(recorder.calls) > 1 or (cast and recorder.calls):
+                raise RunFailure("stub", f"unexpected payment calls {recorder.calls}")
+            paid = recorder.calls[0] if recorder.calls else (0, -1, -1)
+            cases.append([case.spell, case.cost, case.mastery, case.kind, case.race, case.cheat, case.paid, result, len(recorder.calls), *paid])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["spell", "cost", "mastery", "type", "race", "cheat", "payAnswer", "result", "payCalls", "paidCost", "paidApply", "paidSpell"])
     else:
         raise ValueError(f"unknown model {spec.model}")
     document["cases"] = cases

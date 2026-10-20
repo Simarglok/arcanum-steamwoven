@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4B1660",
+  "name": "spell-cast-cost",
+  "method": "Arcanum.Simulation.Magic.SpellCostRules.CastCost",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "ffd692c3c803d450fef985259f01645d8adedcff589a83c28bd3ac97c1d59ab7",
+  "configuration": "Debug"
+}

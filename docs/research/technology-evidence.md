@@ -151,10 +151,11 @@ zero.
 
 The module has 17 functions:
 
-- **Init** (0x4AFCD0) loads `mes\tech.mes`, 90 entries: 0..7 discipline names,
+- **Init** (0x4AFCD0, F2 by ARC-TECHNOLOGY-001, [ledger SD1](original-verification-ledger.md#schematic-data-arc-technology-001))
+  loads `mes\tech.mes`, 90 entries: 0..7 discipline names,
   8..15 degree names, 16..23 discipline descriptions, 24..87 the 64 degree
   descriptions at `24 + discipline + 8 × degree`, 88 and 89 the two
-  registration messages. A missing file fails the module. Exit unloads it
+  registration messages (read by the registration, not by the init). A missing file fails the module. Exit unloads it
   (0x4AFDD0). Text getters: discipline name (0x4AFE10), its description
   (0x4AFE20), degree name (0x4AFE30), degree description (0x4AFE40).
 - **Zero** (0x4AFDE0) clears the eight degrees; called at object creation and
@@ -201,25 +202,32 @@ The module has 17 functions:
 The Schematic-UI module runs from init 0x56CD60 (reset 0x56D0B0, exit
 0x56D040) to the next module at 0x56EA90.
 
-- **Init** (0x56CD60) loads `rules\schematic.mes` and `mes\schematic_text.mes`;
+- **Init** (0x56CD60, F2 by ARC-TECHNOLOGY-001, [ledger SD2](original-verification-ledger.md#schematic-data-arc-technology-001))
+  loads `rules\schematic.mes` and `mes\schematic_text.mes`;
   without the second it unloads the first and fails. The number of learned
-  schematics is the count of entries in 2000..3999 divided by 7; the starts
-  2000, 2010, … below 3999 form the "full list".
+  schematics is the count of entries in 2000..3999 divided by 7 (0 when entry
+  2000 is missing); for a count above 0 the starts 2000, 2010, … below 3999
+  whose entry exists form the "full list", whose length for the window is the
+  count (TC11).
 - **Record** (0x56DBD0, F2): seven consecutive entries n..n+6 of
   `rules\schematic.mes`: n the name's entry in `schematic_text.mes` (`atoi`),
   n+1 the description's entry, n+2 the art, n+3 and n+4 components 1 and 2,
   n+5 the product, n+6 the quantity. Components and products hold up to three
   alternative base numbers; the prototype is the number + 20.
-- **Parse** (0x56DD20): the line is copied into a 2000-byte buffer, split at
-  spaces, each token through `atoi`. One or two tokens: the last value repeats
+- **Parse** (0x56DD20, F2 by ARC-TECHNOLOGY-001, [ledger SD6](original-verification-ledger.md#schematic-data-arc-technology-001)):
+  the line is copied into a 2000-byte buffer, split at
+  single spaces with `strtok`, each token through `atoi`. One or two tokens: the last value repeats
   to fill three; no token: the field is left unwritten; more than three: the
   write runs past the field (TC6). A missing entry yields the message module's
-  error text, so `atoi` gives 0.
-- **Discipline of a schematic** (0x56DB00): number ≥ 4000 → the discipline
+  error text, so `atoi` gives 0; on a list line its six tokens write past the
+  field (ledger SD5).
+- **Discipline of a schematic** (0x56DB00, F2 by ARC-TECHNOLOGY-001): number ≥ 4000 → the discipline
   field of the first product's prototype; 2000..3999 → `(n − 2000) / 200`;
   otherwise 0.
-- **Selection** (0x56DB60): the k-th record (k the page) of the current tab
-  with the current discipline; an empty tab gives −1, and the loader then reads
+- **Selection** (0x56DB60, F2 by ARC-TECHNOLOGY-001, [ledger SD4](original-verification-ledger.md#schematic-data-arc-technology-001)):
+  the k-th record (k the page) of the current tab
+  with the current discipline; a tab count of 0 for the discipline (or no
+  match) gives −1, and the record read then reads
   the placeholder record `6000 + 10 × discipline`.
 
 ### Learned and found lists
@@ -454,21 +462,55 @@ Prototypes and message files through the content stack, counts only.
 Verdicts as in the [ledger](original-verification-ledger.md#verdicts-and-what-they-mean-for-the-two-settings).
 The owner rule that the Original mode never reproduces a crash, a hang or an
 out-of-bounds access ([rule modes](../world/rule-modes.md#what-is-a-mode-difference))
-puts TC2, TC4 and TC6 in "both fixed". The mode column is a proposal for the
-slice that meets the row.
+puts TC2, TC4 and TC6 in "both fixed". The mode column was a proposal; the owner
+decided every row on 2026-10-20 ([owner decisions](#owner-decisions-2026-10-20)), and the slice named implements it.
 
 | ID | Where | Original 1.0.7.4 | Verdict | Proposal (Steamwoven / Original) |
 | --- | --- | --- | --- | --- |
-| TC1 | cell payment (0x450420 with 0x461590), F2 | An item source pays `cost × (1 + p / c)` cells: a strong technologist pays double, a mage the minimum; the technological adjustment branch looks swapped | Original bug | switch: Steamwoven charges `cost` scaled the other way (a technologist pays less) or plain `cost`, the slice picks one under D2; Original keeps it. Reaches records 147 (one weapon) and 168 (three armours) |
-| TC2 | action 129 (0x44A7BD, 0x460B50, 0x45FD40, 0x57C6E0), F2 | Calls an unfilled slot of an uninitialised callback structure: undefined | Original bug (crash class) | both fixed: open the window with (PC, PC) or (NPC, its PC leader); unused in the data |
-| TC3 | assembly (0x56E720), F2 | A failed product creation returns after the components are spent and some products given | Original bug (latent) | switch: Steamwoven all or nothing (check room and creation before consuming); Original keeps the loss |
-| TC4 | assembly (0x56E720), second reader | Both components are found before consuming, so one item matching both lists would be consumed twice (the second time a deleted object) | Original bug (latent, use of a deleted object) | both fixed: a found item is reserved for one component; no installed record triggers it |
-| TC5 | assembly (0x56E720) | Expertise is gated only by the button state; assembly itself does not check (a multiplayer host does not re-check a client) | Original (no single-player effect) | both: assembly re-checks the gate, which changes nothing a single-player player can do |
-| TC6 | parse (0x56DD20) | More than three tokens write past the field and the record; a line over 2000 bytes overflows the buffer | Original bug (latent, out of bounds) | both fixed: strict parse refuses; the installed data never has more than three |
-| TC7 | repair quote (0x578760) | Damage counts twice (sale price already × current / maximum, then × damage / maximum): a badly damaged item is nearly free to repair, the dearest is half damaged | Original (intent unknown) | both follow the original unless the owner records a fix |
-| TC8 | data: one schematic written prototype | Its schematic number is 0: reading registers a schematic 0 whose record reads all zeros and can never be built | Original (data) | a project improvement only if the owner records it (then a switch): Steamwoven refuses the registration and keeps the document; Original registers it |
-| TC9 | use (0x462CC0), triggers (0x4CB830) | A broken item can still be used and its item spells fire | Original (intent unknown) | both follow the original until a game observation says otherwise |
-| TC10 | editor decrease (0x55F5F0, 0x55D940) → sell (0x589AF0), F2 | Selling a degree is not compared with the level-start snapshot (written to 0x64DF10, never read), unlike skills, tech skills and colleges, so degrees bought on earlier levels can be refunded | Original bug (if the button is reachable, O2) | switch: Steamwoven compares with the snapshot as for the other categories; Original allows it |
+| TC1 | cell payment (0x450420 with 0x461590), F2 | An item source pays `cost × (1 + p / c)` cells: a strong technologist pays double, a mage the minimum; the technological adjustment branch looks swapped | Original bug | **Decided** ([owner](#owner-decisions-2026-10-20)): switch. Steamwoven `2 × cost − trunc(cost × p / c)` (a technologist pays fewer cells); Original keeps it. Reaches records 147 (one weapon) and 168 (three armours); TECH-6 |
+| TC2 | action 129 (0x44A7BD, 0x460B50, 0x45FD40, 0x57C6E0), F2 | Calls an unfilled slot of an uninitialised callback structure: undefined | Original bug (crash class) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: open the window with (PC, PC) or (NPC, its PC leader); unused in the data; TECH-5 |
+| TC3 | assembly (0x56E720), F2 | A failed product creation returns after the components are spent and some products given | Original bug (latent) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes all or nothing (room and creation checked before consuming); no switch; TECH-4 |
+| TC4 | assembly (0x56E720), second reader | Both components are found before consuming, so one item matching both lists would be consumed twice (the second time a deleted object) | Original bug (latent, use of a deleted object) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: a found item is reserved for one component; no installed record triggers it; TECH-4 |
+| TC5 | assembly (0x56E720) | Expertise is gated only by the button state; assembly itself does not check (a multiplayer host does not re-check a client) | Original (no single-player effect) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes: assembly re-checks the gate, which changes nothing a single-player player can do; TECH-4 |
+| TC6 | parse (0x56DD20) | More than three tokens write past the field and the record; a line over 2000 bytes overflows the buffer | Original bug (latent, out of bounds) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: strict parse refuses; the installed data never has more than three. **Implemented** by ARC-TECHNOLOGY-001 ([schematics](../formats/schematics.md)) |
+| TC7 | repair quote (0x578760) | Damage counts twice (sale price already × current / maximum, then × damage / maximum): a badly damaged item is nearly free to repair, the dearest is half damaged | Original (intent unknown) | **Decided** ([owner](#owner-decisions-2026-10-20)): switch. Steamwoven quotes from the undamaged sale price; Original keeps the double count; item durability slice |
+| TC8 | data: one schematic written prototype | Its schematic number is 0: reading registers a schematic 0 whose record reads all zeros and can never be built | Original (data) | **Decided** ([owner](#owner-decisions-2026-10-20)): switch, a recorded project improvement: Steamwoven refuses the registration and keeps the document; Original registers it; TECH-3 |
+| TC9 | use (0x462CC0), triggers (0x4CB830) | A broken item can still be used and its item spells fire | Original (intent unknown) | **Decided** ([owner](#owner-decisions-2026-10-20)): both follow the original (broken items still usable) |
+| TC10 | editor decrease (0x55F5F0, 0x55D940) → sell (0x589AF0), F2 | Selling a degree is not compared with the level-start snapshot (written to 0x64DF10, never read), unlike skills, tech skills and colleges, so degrees bought on earlier levels can be refunded | Original bug (if the button is reachable, O2) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes sell a degree only down to its value when the character window was opened; no switch; TECH-2 |
+| TC11 | window init (0x56CD60), selection (0x56DB60), found by ARC-TECHNOLOGY-001 ([ledger](original-verification-ledger.md#schematic-data-arc-technology-001)) | The learned list has "count" (entries / 7) slots but is filled with every existing start without a bound and walked to the count; a start at 3600 or above counts past the eight-entry discipline table | Original bug (latent, out of bounds) | both fixed (owner rule of 2026-10-17): the schematic catalogue refuses such a file; the installed data has 56 starts for a count of 56 |
+
+## Owner decisions (2026-10-20)
+
+Recorded by ARC-TECHNOLOGY-001 from the owner's messages of 2026-10-20 in the project thread. They settle the proposals
+of the anomaly table above under D2; each is implemented by the slice named.
+
+- **TC3, no loss in either mode.** From the owner's play experience assembly never loses components: the product is
+  always created. Both modes check room and creation before consuming anything, so a failed creation spends nothing.
+  No switch (TECH-4).
+- **TC1, switch.** Steamwoven: an experienced technologist pays fewer cells; an item source needs `2 × cost −
+  trunc(cost × p / c)` cells (a strong technologist `cost`, a neutral holder about `1.5 × cost`, a mage `2 × cost`).
+  Original keeps the executable's `cost + trunc(cost × p / c)`. Implemented with the cell source in TECH-6.
+- **TC7, switch.** Steamwoven: the repair quote starts from the undamaged sale price, `trunc(P_full / 2) × damage /
+  maximum`, at least 2, so the cost grows with the damage and a nearly intact item is cheap. Original keeps the
+  executable's double count. Implemented in the item durability slice.
+- **TC10, no switch.** From the owner's play experience the original never lets a player take back a point invested
+  earlier: choices can be undone only until the character window is closed. Both modes allow selling a degree only down
+  to the value it had when the character window was opened (the snapshot the executable writes at 0x64DF10, as for
+  skills and colleges). The reading's missing comparison is classified as not reachable in play by the owner's
+  observation (an owner report, not a game trace; O2 is answered by it). Implemented in TECH-2.
+- **The other rows, as proposed** (the owner approved the remaining proposals the same day):
+  - **TC2, both fixed.** Script action 129 opens the window with (PC, PC), or (NPC, its PC leader) and does nothing
+    without a leader (TECH-5).
+  - **TC4, both fixed.** A found item is reserved for one component, so one item never serves both (TECH-4).
+  - **TC5, no switch.** Both modes re-check the expertise gate in assembly (TECH-4).
+  - **TC6, both fixed.** The schematic parse refuses a list line with more than three tokens or of 2,000 bytes or more
+    (this slice, [schematics](../formats/schematics.md)).
+  - **TC8, switch** (a recorded project improvement). Steamwoven refuses to register a schematic document numbered 0
+    and keeps the document; Original registers it (TECH-3).
+  - **TC9, no switch.** Both modes follow the original: a broken item can still be used and its item spells fire.
+
+Every TC row is decided: switches TC1, TC7, TC8; both fixed TC2, TC4, TC6 (and TC11, found later by ARC-TECHNOLOGY-001 and fixed under the owner's no-out-of-bounds rule); no switch TC3, TC5, TC9, TC10
+([rule modes](../world/rule-modes.md#registry)).
 
 ## Second reading
 
@@ -497,7 +539,8 @@ button state.
 - **O1** What action 129 actually calls (stack contents): observation only;
   unused in the data.
 - **O2** Whether the editor's "−" button is reachable for a degree bought on an
-  earlier level (TC10): observation in the game.
+  earlier level (TC10): answered by the owner's play experience (not reachable;
+  [owner decisions](#owner-decisions-2026-10-20)), not by a game trace.
 - **O3** The 5 found schematics without a written prototype: placed on maps or
   given by scripts (map instances and scripts were not counted).
 - **O4** Answered by a follow-up count: no record lists the same prototype in
@@ -529,8 +572,9 @@ button state.
 - The session inventory (T0 `Inventory`) holds items; `MesFile` reads message
   files; the [rule modes](../world/rule-modes.md) registry takes switches.
 
-Missing: degrees as live session state with expertise, schematic data, the
-found list, the window, assembly, item durability, cell payment.
+Missing: degrees as live session state with expertise, the
+found list, the window, assembly, item durability, cell payment (schematic data:
+ARC-TECHNOLOGY-001, [schematics](../formats/schematics.md)).
 
 ## Proposed implementation slices (project policy, not accepted)
 
@@ -547,12 +591,13 @@ at F0 (for example the F0 addresses of FR-ITEM-011 and FR-MAGIC-012 and the
 tech parts of the magic and skills studies) and raises its level; the rows of
 this document start at F1 or F2.
 
-1. **TECH-1 Schematic data** (Data; FR-ITEM-017/018 data): read `tech.mes`
+1. **TECH-1 Schematic data** (done: ARC-TECHNOLOGY-001, [contract](../formats/schematics.md);
+   Data; FR-ITEM-017/018 data): read `tech.mes`
    texts, `rules\schematic.mes` and `schematic_text.mes` into immutable
    records (seven lines, alternatives, quantity, learned/found/placeholder
    ranges, the discipline rule of 0x56DB00), with a strict parse that refuses
-   TC6 and a typed refusal for a missing text; the written item's schematic
-   number (subtype 5). Synthetic fixtures; a `RealData` test on the Mac counts
+   TC6 (and TC11) and a typed refusal for a missing text. The written item's
+   schematic number (subtype 5) moved to TECH-3, which needs the written-item read path. Synthetic fixtures; a `RealData` test on the Mac counts
    56 learned, 62 found and 8 placeholders and checks the learned-number
    formula.
 2. **TECH-2 Degrees and expertise** (Simulation, Session; FR-CHAR-017/020,
@@ -564,8 +609,8 @@ this document start at F1 or F2.
    degrees stay in the advancement sheet.
 3. **TECH-3 Schematic knowledge** (Session; FR-ITEM-017): learned lists from
    stored degrees, the PC's found list (append once, no limit), registration
-   from reading a schematic document (destroy on first read, messages 88/89,
-   TC8 decided; needs a written-item read path, FR-ITEM-010); snapshot schema bump (the next free number, coordinated).
+   from reading a schematic document (its schematic number from the written item's
+   start text line field, destroy on first read, messages 88/89, TC8 decided; needs a written-item read path, FR-ITEM-010); snapshot schema bump (the next free number, coordinated).
 4. **TECH-4 Assembly** (Simulation pure + Session transaction; FR-ITEM-018):
    the component gate (own inventory, exact prototype, worn, broken and
    changed-description items skipped, fallback slots, expertise per component

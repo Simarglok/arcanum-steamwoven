@@ -64,7 +64,7 @@ a tile. "Magic" means a spell record without the technology flag.
    refunds the point (add/remove (0x4B1530, 0x4B1570, 0x4B15A0, 0x4B1600, 0x4B1620, 0x4B1650, 0x4B1660, 0x4B16C0, 0x4B1740, 0x4B1750, 0x4B1760, 0x4B1770, 0x4B1790, 0x4B1950, 0x4B19B0, 0x4B1A40), UI (0x57C540, 0x57C670)).
 3. **Mastery is one college for life, given only by a script.** It needs all
    five ranks and no earlier mastery; then that college's spells cost half
-   (rounded up to even at run time) and last and maintain twice as long
+   (rounded up at run time: halved, plus 1 when the cost is odd; ledger PC1) and last and maintain twice as long
    (mastery (0x4B1C70, 0x4B1CB0, 0x4B1CF0), script (0x447220), time (0x455250)).
 4. **A cast is a pipeline.** Invocation check (turn, range, line of fire,
    forbidden flags, Bonds of Magick, aptitude, intelligence, anti-teleport)
@@ -146,7 +146,7 @@ line (0x457E70), components (0x458060)):
 | `Resist:(stat@value)` | none | saving throw stat and modifier (usually negative per a comment of the earlier reading) |
 | `Range:` | 99 | Chebyshev cells from the parent to the target |
 | `ChargesFromCells:` | no | cost is paid in charge-cell ammunition instead of fatigue |
-| `ChargeBeginCost: 0` | (charged) | skip the BEGIN payment |
+| `ChargeBeginCost: 0` | (charged) | skip the BEGIN payment (ledger PC12) |
 | `Info:` | neutral | friendly, aggressive or both; aggressive spells notify the AI of an attack on each target |
 | `Disabled:` | enabled | refuses only a PC's activation from the spell UI (UI (0x57BC70)); AI, script, item and dialog casts do not test it |
 | `No_Stack:`, `Cancels_SF:`, `Cancels_EnvSF:` | none | stacking and mutual cancellation |
@@ -180,7 +180,7 @@ drives the resistance rules below.
 - **Mastery.** Allowed once, with all five ranks of the college
   (mastery (0x4B1C70, 0x4B1CB0, 0x4B1CF0)); only the script action "give spell mastery in
   college" calls it (script (0x447220)). Effects: BEGIN cost halved
-  (rounded up to even, MG2), maintenance period and duration doubled
+  (rounded up at run time, MG2, ledger PC1), maintenance period and duration doubled
   (time (0x455250)); maintenance **cost** is not reduced.
 - **Services.** Paid spellcasting in trade and dialog (identify, healing,
   other casts) costs a flat 100 coins (money (0x4B1650, 0x4B1660, 0x4B16C0, 0x4B1740)).
@@ -238,10 +238,14 @@ in full and dropped (interrupt (0x456F70, 0x456FA0, 0x457000, 0x457030, 0x457060
 
 ```
 cost = Cost
-if spell < 80 and caster mastered its college: cost = cost / 2; if cost is odd: cost + 1
+if spell < 80 and caster mastered its college: cost = cost / 2, + 1 if Cost was odd
 if cheat mode: cost = 1
 if caster is a dwarf PC or NPC: cost × 2
 ```
+
+Read in the executable by ARC-MAGIC-003 (two readers, three functions in the function oracle):
+[ledger "Spell cost and payment"](original-verification-ledger.md#spell-cost-and-payment-arc-magic-003) and the
+[runtime contract](../world/spell-cost-runtime.md); the odd test reads the cost before halving.
 
 **From where** (pay (0x450420)):
 
@@ -269,9 +273,9 @@ seconds later that restores `2 × max(1, elapsed game seconds / 120)` points
 up to the amount drained and reschedules the rest; drains of the same item
 merge into one event (recharge (0x459590, 0x459640, 0x459680)).
 
-**Worked example.** `Cost: 6`, mastered college, dwarf caster: run time
-charges `6 / 2 = 3 → 4`, then `× 2 = 8` fatigue; the UI and AI formula
-`spell_cast_cost` gives `6 × 2 / 2 = 6` (MG2).
+**Worked example.** `Cost: 7`, mastered college, dwarf caster: run time
+charges `7 / 2 = 3 → 4` (7 is odd), then `× 2 = 8` fatigue; the UI and AI
+cast cost gives `7 × 2 / 2 = 7` (MG2). With `Cost: 6` both give 6 (ledger MG2, PC1).
 
 ### Resistance, saving throw and aptitude (FR-MAGIC-005, FR-MAGIC-010)
 
@@ -481,8 +485,8 @@ deliberate changes are listed after the table.
 
 | ID | Where | Source behaviour | Likely intent (inference) |
 | --- | --- | --- | --- |
-| MG1 | casting goal (anim (0x429B50, 0x429BB0, 0x429BC0, 0x429C40, 0x429C80, 0x429CD0), check (0x450940)) | the affordability check before the animation reads `Cost:` (or the maintenance cost) of the spell whose **number equals the run slot**, not of the spell being cast, and applies no mastery; the table has only 223 entries, so run slots 223..511 read past its end (undefined behaviour) | the cast spell's own cost |
-| MG2 | cost (cost (0x4507D0), UI/AI (0x4B1650, 0x4B1660, 0x4B16C0, 0x4B1740), UI check (0x4508A0)) | three formulas: run time halves for mastery and adds 1 when the half is odd, then doubles for dwarves; `spell_cast_cost` (UI, AI) doubles then halves with truncation; the UI affordability check ignores mastery | one formula; likely `ceil(cost / 2)` for mastery |
+| MG1 | casting goal (anim (0x429B50, 0x429BB0, 0x429BC0, 0x429C40, 0x429C80, 0x429CD0), check (0x450940)) | the affordability check before the animation reads `Cost:` (or the maintenance cost) of the spell whose **number equals the run slot**, not of the spell being cast, and applies no mastery; the table has only 223 entries, so run slots 223..511 read past its end (undefined behaviour) | the cast spell's own cost. Superseded by ledger PC3 and MG1: the original reads the cast spell's cost, no read past the table; no mastery. |
+| MG2 | cost (cost (0x4507D0), UI/AI (0x4B1650, 0x4B1660, 0x4B16C0, 0x4B1740), UI check (0x4508A0)) | three formulas: run time halves for mastery and adds 1 when the half is odd, then doubles for dwarves; `spell_cast_cost` (UI, AI) doubles then halves with truncation; the UI affordability check ignores mastery | one formula; likely `ceil(cost / 2)` for mastery. Superseded by ledger PC1, PC10 and MG2: the run time adds 1 when the cost (not the half) is odd. |
 | MG3 | maintenance tick (stage (0x452F20), pay (0x4532F0, 0x453370)) | with a resistance margin a tick charges the plain cost **and** the cost plus the margin share | charge only the surcharged cost |
 | MG4 | saving throw (resist (0x4537B0), fail (0x453B20, 0x453CC0)) | the resistance-derived term is **subtracted** from the save, against the manual's "+1 bonus on the save for each 10 % of resistance" | add it |
 | MG5 | aptitude gate (check (0x4564E0)) | a tech-aligned target "nullifies" when `d100 ≤ target aptitude`, which is negative, so it never happens | use the magnitude, reduced by a magick-aligned caster's aptitude |
