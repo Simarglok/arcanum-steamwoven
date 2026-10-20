@@ -18,12 +18,14 @@ Work-Item: ARC-TYPE-NNN
 Result: <one mergeable result, one PR>
 Components: <at most 3, comma-separated>
 Human-Gates: none
+Requirements: FR-XXX-NNN[, ...] | none (<reason>)
 
 AC1. <criterion an agent can check itself>
 AC2. ...
 ```
 
 - `Human-Gates:` is `none` or the codes of separate owner-validation work items (e.g. `ARC-INPUT-002`).
+- `Requirements:` names the functional requirements the task serves, found in the [coverage matrix](docs/requirements/coverage.md) when the task is created; read each one's domain description and current status first. The PR that changes a requirement's coverage updates its matrix row (status, what is implemented, what is missing, documentation links) in the same PR ([functional requirements rule](docs/workflow/tasks.md#functional-requirements)).
 - At most 8 criteria `AC1`..`AC8`. A human, physical-device or native-GUI observation is never an `AC`: it goes into the separate owner-validation work item named in `Human-Gates`, which does not block merge.
 - "Exhaustive", "certificate", "worst-case", "parity", "all possible" need an explicit bound (number, list of cases, limit) on the same line.
 - The contract is fixed when work starts; only an explicit owner amendment changes it.

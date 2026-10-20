@@ -70,9 +70,9 @@ script hooks of [FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002
   through the coordinator (the NPC AI and skills lanes bump it too).
 - **Records 140..222.** The spell reader reads all 223 records (one table), but technology records run only when the
   technology lane uses them.
-- **Requirements.** Each PR updates its FR rows in [coverage](../requirements/coverage.md) and the domain file
-  ([combat, magic and technology](../requirements/combat-magic-tech.md)), and its row in the
-  [component catalogue](../project/status.md).
+- **Requirements.** Each slice's contract names its requirements in a `Requirements:` line (the FR column below), and
+  its PR updates their rows in the [coverage matrix](../requirements/coverage.md) on the matrix's status scale
+  ([rule](../workflow/tasks.md#functional-requirements)) and its row in the [component catalogue](../project/status.md).
 - **Contract size.** Each slice is one result, at most three components and at most eight criteria
   ([Definition of Ready](../workflow/tasks.md#definition-of-ready)). A slice that outgrows that is split before work
   starts, with the owner's word.

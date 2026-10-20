@@ -1,6 +1,6 @@
 # Требования к статической сцене и входу в здания
 
-**Покрытие реализации:** аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), через PR #54. Источники исходного исследования и его дата сохранены; актуальный объём — в таблице и Steamwoven-описаниях ниже. [Метод и срез доски](README.md#база-и-происхождение). Новых runtime/GUI/original-data запусков в этом аудите нет.
+**Текущий статус:** статус каждого требования этого документа, реализованный объём, остаток и документация — в [матрице покрытия](coverage.md#объекты-здания-и-крыши) (пересверено 2026-10-20, ARC-DEV-027). Поля «Steamwoven» ниже и сводный раздел покрытия — подробности на дату их последней правки (исходный аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), PR #54); при расхождении верна матрица.
 
 ARC-RES-017: [whole-exterior traversal research](../world/crash-site-area-traversal-contract.md)
 для FR-SCENE-012/013/014/016 сохраняет physical/visual, state и edge frontiers;
@@ -202,35 +202,18 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Steamwoven сейчас.** ARC-WORLD-021: на whole-map evidence кардинальный шаг через оконную часть стены открыт как `WINDOW_JUMP`, если оконный портал и остальное не решают иначе; диагональ блокируется; маршрут платит +50; viewer даёт шагу время и анимацию прыжка (vault). Только для актёра-человека (ПК), способность прыгать других актёров не проверяется; виден в режиме карт (два интерьера с окнами). [Gait runtime](../world/gait-runtime.md#window-jump-arc-world-021).
 
-## Ключевые разрывы покрытия
+## Ключевые разрывы покрытия до 2026-10-20
 
 - Complete exterior Data owner разрешает terrain/static/mobile body chains, но viewer всё ещё рисует finite sector/пять statics. Full-area renderer — отдельная поставка; Data-ready не равно draw/visibility-ready.
 - WORLD003 уже подключает bounded original-data step assessment к runtime/actor. Его 20-cell rectangle и isolated context не закрывают whole-exterior registry, HP/state, cross-sector permission или route search.
 - Wall/portal/window/roof gameplay и normal original depth/occlusion не реализованы. Отсутствие таких active composite references в выбранном original Area profile не доказывает поддержку их форматов.
 - Недочитанные ветви функций и original-runtime parity сохраняются как ограничения исходного исследования; исторические viewer/readback проверки ниже не снимают их.
 
-## Сводное покрытие на Steamwoven baseline
+## Покрытие Steamwoven до 2026-10-20
+
+Таблица покрытия этого раздела перенесена в [матрицу покрытия](coverage.md#объекты-здания-и-крыши): там у каждого требования текущий статус, объём, остаток и документация (2026-10-20). Абзацы ниже описывали прежнюю таблицу этого документа (исходный аудит 2026-10-09 с поздними правками) и сохранены как история; слова «таблица», «строки» и «столбцы» в них относятся к ней.
 
 Статусы относятся только к закреплённому Steamwoven source snapshot. Проверка исходных данных, synthetic fixtures и просмотр кода не равны проверке оригинального runtime. Под «интеграцией» понимается подключение к сцене/симуляции, а не наличие отдельного диагностического API.
-
-| ID | Данные | Правила | Интеграция | Проверка |
-| --- | --- | --- | --- | --- |
-| FR-SCENE-001 | Частично — 36,864 core terrain, 426 statics и 88 mobiles; context отдельно | Частично — occurrence/disposition/visual chains различаются; не live registry | Частично — Area API; viewer сохраняет один сектор и 5 statics | Частично — полный original Data census; full-area rendering не проверен |
-| FR-SCENE-002 | Частично — 2,444 selected terrain/object visual chains Area | Частично — actual instance/prototype/resource/frame/default chain и leases | Частично — самостоятельный Area API; viewer по-прежнему 5 records | Частично — каждый selected chain сверяется с independent original manifest |
-| FR-SCENE-003 | Частично — vegetation/static body chains входят в core Area census | Частично — source selectors/defaults; нет общего live vegetation path | Частично — Data API; полная растительность в viewer ещё не показана | Частично — original area chain reconciliation, не full-scene visual parity |
-| FR-SCENE-004 | Частично — signed offsets/hotspots/scale/mirror для Area visuals | Частично — diagnostic projection; общий placement/visibility не ратифицирован | Частично — пять static placements и fixed Human в viewer | Частично — metadata/original frame checks и historical bounded raster |
-| FR-SCENE-005 | Частично — tile/facade данные всех выбранных Area sectors | Частично — bounded terrain/facade layer policy | Частично — diagnostic sector; full-area renderer не смержен | Частично — original Data и historical source/export viewer checks |
-| FR-SCENE-006 | Частично — Area occurrence/visual metadata, без общего depth model | Частично — finite diagnostic ordering; актёр в центре ромба; не original z-order/occlusion | Частично — terrain/facade/statics/actor и стены пещеры с затуханием, без roof | Частично — bounded ordering/readback; полная сцена не сравнивалась |
-| FR-SCENE-007 | Частично: wall objects и выбор wall ART (пещера) | Частично: стена блокирует край клетки в шаге; оригинальная проверка стен (затухание); соединения кусков нет | Частично: viewer рисует стены пещеры по hotspot и flip, затухание перед игроком | Частично: синтетические и real-data тесты wall ART и проверки стен, нативное наблюдение затухания |
-| FR-SCENE-008 | Нет: portal state/resources | Нет: physical door traversal | Нет: state-aware portal rendering | Нет |
-| FR-SCENE-009 | Нет: window/wall records | Нет: window traversal | Нет: wall/window integration | Нет |
-| FR-SCENE-010 | Частично: roof-section framing/discriminator only | Нет: piece topology rules | Нет: roof renderer | Нет: no roof scenario |
-| FR-SCENE-011 | Частично: roof section boundary only | Нет: coverage/fade/hit-state integration | Нет: actor-roof integration | Нет |
-| FR-SCENE-012 | Частично — terrain/static census плюс owned directed evidence | Частично — CardinalOnly и opt-in BoundedAdjacent; sprite extent не blocker | Частично — WORLD003 diagnostic admission в x4..8/y0..3 | Частично — original cardinal/shoulder rows и source/export grid cases |
-| FR-SCENE-013 | Частично — identity-bound terrain/static directed step evidence | Частично — final terrain и 4 object legs для map diagonal в узком контексте | Частично — Data → MovementRuntime → viewer; нет общего navigation adapter | Частично — historical original bridge и 18 source/export gates; не full-area permission |
-| FR-SCENE-014 | Нет: portal state absent | Нет: open/close-to-traversal path | Нет: no door gameplay | Нет |
-| FR-SCENE-015 | Нет: building/interior identity unresolved | Нет: no same-map building traversal policy | Нет: no integrated interior scene | Нет |
-| FR-SCENE-016 | Нет: window data absent | Нет: window-specific edge rule | Нет: no window interaction | Нет |
 
 Подробные границы и доказательства см. в соответствующих FR выше: [loader](../world/static-object-loader.md), [five-object scene contract](../rendering/static-scenery-contract.md), [static obstruction evidence](../research/static-obstruction-evidence.md), [four directed cardinal observations](../research/cardinal-traversal-evidence.md) и [movement catalogue](../project/status.md). Статус одного компонента не складывается с другим: данные сцены, ресурсная полнота, blocker и полный runtime verdict остаются разными измерениями.
 
