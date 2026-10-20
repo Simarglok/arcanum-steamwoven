@@ -74,12 +74,20 @@ public sealed class SpellResistanceOriginalExeTests
         return $"{result} {rolls.Count}";
     }
 
-    // MG4's inputs: the save is reached with a non-zero penalty (the Original run's penalty), so adding it can change the answer.
+    // MG4's inputs, from the row alone: the save is reached with a non-zero penalty (a tenth of the d100 margin), so adding it
+    // instead of subtracting it can change the answer.
     private static bool ReachesSaveWithPenalty(Row c)
     {
-        var result = SpellResistanceRules.Resist(Record(c), Target(c), new(c["action"] == 0, c["unresistable"] != 0, c["fateMaximized"] != 0),
-            new Rolls(c), new Fate(c["fate"] != 0), MagicAnomalyProfile.Original);
-        return result.Penalty != 0;
+        var record = Record(c);
+        var target = Target(c);
+        if (c["action"] != 0 || record.Technology || c["unresistable"] != 0 || target.IsCaster || !record.HasSave || target.Kind == SpellTargetKind.Other)
+            return false;
+        if (record.Spell == SpellResistanceRules.Disintegrate && target.NoDisintegrate) return false;
+        if (target.Kind == SpellTargetKind.Pc && c["fate"] != 0) return false;
+        if (record.ResistStat == SpellResistanceRules.Willpower && target.ResistStatExtraordinary) return false;
+        var resistance = target.StoredMagicResistance;
+        if (c["fateMaximized"] == 0 && target.Aptitude < 0) resistance = unchecked(100 - (100 - resistance) * (target.Aptitude + 100) / 100);
+        return resistance > 0 && !record.Damaging && record.MaintainPeriod <= 0 && c["d100"] < resistance && (resistance - c["d100"]) / 10 != 0;
     }
 
     private static bool PredictorReachesSaveWithPenalty(Row c)
@@ -159,7 +167,11 @@ public sealed class SpellResistanceOriginalExeTests
         return $"{(record.MaintainPeriod != 0 ? chance : 100)} {count}";
     }
 
-    private static int Code(string rolls) => rolls switch { "" => 0, "d" => 1, "s" => 2, _ => 3 };
+    private static int Code(string rolls) => rolls switch
+    {
+        "" => 0, "d" => 1, "s" => 2, "ds" => 3,
+        _ => throw new InvalidOperationException($"unexpected roll order {rolls}"),
+    };
 
     private sealed class Rolls(Row c) : ISpellRollSource
     {
@@ -171,6 +183,7 @@ public sealed class SpellResistanceOriginalExeTests
 
         public int Roll(SpellRollPurpose purpose, int min, int max)
         {
+            Assert.AreEqual(purpose == SpellRollPurpose.ResistanceD100 ? (1, 100) : (1, 20), (min, max), $"the range of {purpose}");
             _made += purpose == SpellRollPurpose.ResistanceD100 ? "d" : "s";
             return purpose == SpellRollPurpose.ResistanceD100 ? c["d100"] : c["d20"];
         }

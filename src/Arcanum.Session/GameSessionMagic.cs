@@ -15,7 +15,8 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// The hero's fate save against magick for <see cref="SpellResistanceRules.Resist"/> when the hero is the target (ARC-MAGIC-005,
     /// MG13): asking it uses the armed <see cref="FateKind.SaveAgainstMagick"/> through <see cref="UseHeroFate"/> (0x4F5270, one
-    /// revision when it fires) and answers whether it was armed; without a hero, or with that fate not armed, it answers false.
+    /// revision when it fires) and answers whether it was armed; without a hero, or with that fate not armed, it answers false. A
+    /// use the session refuses otherwise (its revision exhausted) throws <see cref="InvalidOperationException"/>, as a refused roll does.
     /// </summary>
     public ISpellFateSave HeroMagickSave { get { ThrowIfDisposed(); return new SessionHeroMagickSave(this); } }
 }
@@ -23,6 +24,15 @@ public sealed partial class GameSessionOwner
 /// <summary>The hero's armed "save against magick", used when the resistance asks it.</summary>
 internal sealed class SessionHeroMagickSave(GameSessionOwner owner) : ISpellFateSave
 {
-    public bool ConsumeSaveAgainstMagick() =>
-        owner.UseHeroFate(owner.Version, FateKind.SaveAgainstMagick).Disposition == GameSessionDisposition.Changed;
+    public bool ConsumeSaveAgainstMagick()
+    {
+        var result = owner.UseHeroFate(owner.Version, FateKind.SaveAgainstMagick);
+        return result.Disposition switch
+        {
+            GameSessionDisposition.Changed => true,
+            GameSessionDisposition.NoChange => false,
+            _ when result.Failure == GameSessionFailure.FateUnavailable => false,
+            _ => throw new InvalidOperationException($"The hero's fate save was refused: {result.Failure}."),
+        };
+    }
 }

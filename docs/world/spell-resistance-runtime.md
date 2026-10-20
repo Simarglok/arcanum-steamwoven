@@ -51,7 +51,8 @@ The rules take what the original reads as plain values, so they work for any tar
 4. The caster, a record without a save, or a target that is no PC or NPC: applies with the margin.
 5. A willpower save against an extraordinary willpower: skipped; the target's AI is told when the record is aggressive.
 6. The save `S = stat − penalty + modifier` (**Steamwoven: `+ penalty`**, MG4). `S ≤ 0` or a d20 above `S`: applies. Otherwise the
-   margin grows by `S − d20`; a damaging record applies with at least 50; a maintained one applies; any other is skipped.
+   run's margin grows by `S − d20` and the displayed margin is set to it (a fate's display 100 is replaced); a damaging record
+   applies with at least 50; a record whose maintenance period is other than 0 applies; any other is skipped.
 
 `SpellResistance` answers whether the spell applies, the run's margin and the displayed margin (null when step 1 returned),
 the penalty and the AI notice. Worked example: resistance 30 and aptitude −40 give `R = 100 − 70 × 60 / 100 = 58`; a d100 of
@@ -63,10 +64,10 @@ The predictor follows the resistance's shape but differs (MG14, both modes): a t
 instead of a rolled margin (a record without a save answers 100 above `R` 40, a save's penalty is `R / 10`); the caster, a
 record without a save or an object answers `R`; an extraordinary willpower against a willpower save answers 100; a failed or
 impossible save answers `R`; a made save answers at least 50 for a damaging record, `R` for a maintained one, 100 for any
-other. It rolls its **own d20** (`FailChanceD20`) whenever the save is reached, so asking it moves the random stream, as in the
+other ("maintained" there is a period other than 0, as in step 6). It rolls its **own d20** (`FailChanceD20`) whenever the save is reached, so asking it moves the random stream, as in the
 original. It reads the fate-maximised flag of the last processed action (the original's global), which the caller passes.
 `ItemFailChance` answers it for an item's first spell when the item is magical (spell charges or the magical flag) and 0
-otherwise. The AI refuses a cast at 38 or more (RS7, slice I8).
+otherwise. The AI refuses a cast at 38 or more (RS7, read by one reader, F1; slice I8).
 
 ## Session
 
@@ -94,4 +95,4 @@ follow the original in both modes, as decided.
 
 - No caller: the per-target stage (MT10) runs the resolver for each target and applies the margin to the components
   (MT12–MT18); the AI (slice I8) and the spell UI (MT19) ask the predictor.
-- The second resistance near 0x459CF0 (RS10) is not implemented.
+- The entangle effect's re-resistance (0x459C10, RS10) is not implemented (slice MT13).

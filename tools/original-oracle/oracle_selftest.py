@@ -377,6 +377,13 @@ class OracleSelfTest(unittest.TestCase):
         self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x4537B0, 0x453B20, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660,
                                                               0x4B1790, 0x4C5EB0, 0x4C6170, 0x4C62E0, 0x4C6410, 0x4C69F0, 0x4F5090,
                                                               0x4F50C0, 0x4F51B0, 0x4F5270])
+        for address, spec in oracle_functions.FUNCTIONS.items():
+            self.assertEqual(spec.code[0][0], address)
+            self.assertTrue(all(start < end for start, end in spec.code))
+            self.assertNotIn("_", spec.name)  # Steamwoven's own kebab-case names
+        self.assertEqual(oracle_functions.parse_address("0x4a6900"), 0x4A6900)
+        with self.assertRaises(ValueError):
+            oracle_functions.parse_address("0x401000")
 
     def test_the_resist_model_stays_in_the_csharp_domain_and_rejects_anything_else(self):
         rng = random.Random(5)
@@ -402,14 +409,6 @@ class OracleSelfTest(unittest.TestCase):
                                    (oracle_functions.EXTRAORDINARY, (*target, 4)), (oracle_functions.FIELD_GETTER, (*oracle_functions.HANDLE, 0x14F))):
             with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
                 call(address, *arguments)
-
-        for address, spec in oracle_functions.FUNCTIONS.items():
-            self.assertEqual(spec.code[0][0], address)
-            self.assertTrue(all(start < end for start, end in spec.code))
-            self.assertNotIn("_", spec.name)  # Steamwoven's own kebab-case names
-        self.assertEqual(oracle_functions.parse_address("0x4a6900"), 0x4A6900)
-        with self.assertRaises(ValueError):
-            oracle_functions.parse_address("0x401000")
 
     def test_generated_inputs_stay_out_of_the_work_tree(self):
         with self.assertRaises(ValueError):

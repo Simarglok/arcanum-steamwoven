@@ -72,7 +72,7 @@ public readonly record struct SpellResistRun(bool Begin, bool Unresistable, bool
 /// <summary>
 /// One target's resolution: whether the spell applies to it (false: the target is skipped and plays "resisted"); the run's
 /// margin and the displayed margin (null when the resolution returned before resetting them: not BEGIN, a technology record or
-/// an unresistable run; the run keeps its previous margin); the penalty the resistance put on the save; whether the AI of the
+/// an unresistable run; the run keeps its previous margin; after a made save the displayed margin equals the run's); the penalty the resistance put on the save; whether the AI of the
 /// target is told of an aggressive spell it shrugged off (extraordinary willpower).
 /// </summary>
 public sealed record SpellResistance(bool Applies, int? Margin, int? DisplayMargin, int Penalty, bool NotifiesAi);
@@ -98,13 +98,13 @@ public static class SpellResistanceRules
     /// <item>the margins reset to 0; Disintegrate against a PC or NPC with "no disintegrate": skipped;</item>
     /// <item>unless the target is the caster: a PC whose armed fate "save against magick" fires gets margin 10 (display 100,
     /// MG13); otherwise R is the stored magic resistance, scaled for a negative aptitude unless the action is fate-maximised
-    /// (<c>100 − (100 − R) × (A + 100) / 100</c>), a d100 below R makes the margin R − roll; a non-damaging, non-maintained
-    /// spell with R &gt; 0 then gets a save penalty of margin / 10, or, without a save, is skipped when the roll was below R;</item>
+    /// (<c>100 − (100 − R) × (A + 100) / 100</c>), a d100 below R makes the margin R − roll; a non-damaging
+    /// spell with a maintenance period not above 0 and R &gt; 0 then gets a save penalty of margin / 10, or, without a save, is skipped when the roll was below R;</item>
     /// <item>the caster, a record without a save or a target that is no PC or NPC: applies;</item>
     /// <item>a willpower save against an extraordinary willpower: skipped (the AI is told of an aggressive spell);</item>
     /// <item>the save <c>S = stat − penalty + modifier</c> (Steamwoven: <c>+ penalty</c>, MG4); S ≤ 0 or a d20 above S: applies;
-    /// a d20 ≤ S adds S − d20 to the margin; a damaging spell then applies with at least 50; a maintained one applies; any other
-    /// is skipped.</item>
+    /// a d20 ≤ S adds S − d20 to the run's margin and sets the displayed one to it; a damaging spell then applies with at least 50;
+    /// a maintenance period other than 0 applies; any other is skipped.</item>
     /// </list>
     /// </summary>
     [OriginalFunction(0x4537B0, OriginalFunctionScope.Partial)]
@@ -153,7 +153,7 @@ public static class SpellResistanceRules
     /// <summary>
     /// The fail-chance predictor the AI and the spell UI ask (0x453B20, MG14), which follows the resistance's shape but differs:
     /// a technology record is 0; R is the stored resistance (scaled for a negative aptitude unless <paramref name="fateMaximized"/>,
-    /// the flag the last processed action left); for a non-damaging, non-maintained spell with R &gt; 0 a record without a save
+    /// the flag the last processed action left); for a non-damaging spell with a maintenance period not above 0 and R &gt; 0 a record without a save
     /// is 100 above R 40, else the save's penalty is R / 10; the caster, a record without a save or a target that is no PC or NPC
     /// answers R (0 for the caster); a willpower save against an extraordinary willpower answers 100; the save
     /// <c>S = stat − penalty + modifier</c> (Steamwoven <c>+</c>, MG4) at 0 or below, or a d20 above it, answers R; otherwise a
@@ -191,7 +191,7 @@ public static class SpellResistanceRules
 
     /// <summary>
     /// The predictor for an item's spell (0x453CC0): an item that is magical (<paramref name="itemMagical"/>) and holds a spell
-    /// (<paramref name="itemSpell"/> ≥ 0) answers <see cref="FailChance"/> for that spell; any other item answers 0.
+    /// (<paramref name="itemSpell"/> not −1) answers <see cref="FailChance"/> for that spell; any other item answers 0.
     /// </summary>
     [OriginalFunction(0x453CC0, OriginalFunctionScope.Partial)]
     public static int ItemFailChance(bool itemMagical, int itemSpell, Func<int, int> failChance)

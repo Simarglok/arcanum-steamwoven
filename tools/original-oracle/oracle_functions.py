@@ -926,6 +926,8 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
             if len(recorder.rolls) > 2 or len(recorder.fates) > 1 or recorder.notified > 1 or any(k != FATE_SAVE_AGAINST_MAGICK for k in recorder.fates):
                 raise RunFailure("stub", f"unexpected calls {recorder}")
             rolls = "".join("d" if bounds == (1, 100) else "s" for bounds in recorder.rolls)
+            if rolls not in ("", "d", "s", "ds"):
+                raise RunFailure("stub", f"unexpected roll order {recorder.rolls}")
             cases.append([case.spell, case.action, case.unresistable, case.fate_maximized, case.technology, case.damaging, case.aggressive,
                           case.period, case.resist_stat, case.modifier, case.kind, case.caster, case.no_disintegrate, case.resistance,
                           case.aptitude, case.stat_value, case.extraordinary, case.fate, case.d100, case.d20, result,
