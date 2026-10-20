@@ -23,6 +23,10 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
     /// <summary>ARC-WORLD-031: the tile a map transfer arrives on (never a command-line option). The actor starts there when
     /// the map's step evidence admits it, otherwise where a map-list arrival would.</summary>
     public Arcanum.Data.Maps.WorldLocation? AreaMapArrival { get; init; }
+    /// <summary>ARC-RENDER-024: <c>--area-map-sector X,Y</c>, the sector the map opens at. A map too large to load whole (the
+    /// main world map) opens as a window around it, the actor near its centre; a whole map stands the actor near it. Absent,
+    /// a large map opens around the transfer arrival or the map-list start tile.</summary>
+    public Arcanum.Data.Area.AreaSectorCoordinate? AreaMapSector { get; init; }
     /// <summary>ARC-WORLD-027: start the AREA session as this original pre-made hero (<see cref="AreaStartingHero.Premade"/>);
     /// absent, the session has no hero and dialogs use the diagnostic PC profile.</summary>
     public AreaPremadeHero? Hero { get; init; }
@@ -33,7 +37,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
         ArgumentNullException.ThrowIfNull(args);
         string? module = null, resource = null, sourceId = null, prototypes = null, moduleHash = null, resourceHash = null,
             actorResource = null, actorResourceHash = null, areaMobile = null, areaEffects = null, areaPatch = null, areaCaveMobile = null,
-            gameRoot = null, areaMap = null, hero = null;
+            gameRoot = null, areaMap = null, hero = null, areaMapSector = null;
         long? actorMapX = null, actorMapY = null, actorOriginX = null, actorOriginY = null;
         int? actorOffsetX = null, actorOffsetY = null, actorScale = null, actorFacing = null, actorFrame = null;
         ActorDiagnosticRenderBranch? actorBranch = null;
@@ -65,6 +69,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
                 case "--area-cave-mobile": areaCaveMobile = Unique(areaCaveMobile, value); break;
                 case "--game-root": gameRoot = Unique(gameRoot, value); break;
                 case "--area-map": areaMap = Unique(areaMap, value); break;
+                case "--area-map-sector": areaMapSector = Unique(areaMapSector, value); break;
                 case "--hero": hero = Unique(hero, value); break;
                 case "--expect-actor-resource-sha256": actorResourceHash = Unique(actorResourceHash, ValidateHash(value)); break;
                 case "--actor-map-x": actorMapX = Unique(actorMapX, ParseInt64(value)); break;
@@ -96,7 +101,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             || (areaMap is not null && (mode != TerrainViewerMode.CrashSiteArea || string.IsNullOrWhiteSpace(areaMap) || areaMap.Length > MaxAreaMapName || areaMap.Any(char.IsControl) ||
                 areaMap.Contains('/') || areaMap.Contains('\\') || string.IsNullOrWhiteSpace(gameRoot) || prototypes is not null ||
                 string.IsNullOrWhiteSpace(actorResource) || areaMobile is not null || areaEffects is not null || areaPatch is not null || areaCaveMobile is not null || actorSpecified))
-            || (areaMap is null && gameRoot is not null)
+            || (areaMap is null && (gameRoot is not null || areaMapSector is not null))
             || (mode == TerrainViewerMode.CrashSiteArea && areaCaveMobile is not null && string.IsNullOrWhiteSpace(areaCaveMobile))
             || (hero is not null && (mode != TerrainViewerMode.CrashSiteArea || AreaStartingHero.Find(hero) is null))
             || (mode != TerrainViewerMode.CrashSiteArea && (areaMobile is not null || areaEffects is not null || areaPatch is not null || areaCaveMobile is not null)))
@@ -113,9 +118,18 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             actor = new(6,1,0,0,0,0,ActorDiagnosticRenderBranch.NormalUncached,100,false,
                 ActorDiagnosticAction.Idle,5,0,0,0,0,0,0,0);
         return new TerrainViewerArguments(mode, module, resource, sourceId, prototypes, moduleHash, resourceHash, actorResource, actorResourceHash, actor) { AreaMobilePath = areaMobile, AreaEffectsPath = areaEffects, AreaPatchPath = areaPatch, AreaCaveMobilePath = areaCaveMobile,
-            GameRoot = gameRoot, AreaMapName = areaMap, Hero = hero is null ? null : AreaStartingHero.Find(hero) };
+            GameRoot = gameRoot, AreaMapName = areaMap, Hero = hero is null ? null : AreaStartingHero.Find(hero),
+            AreaMapSector = areaMapSector is null ? null : ParseSector(areaMapSector) };
     }
 
+    /// <summary>A sector as <c>X,Y</c>: two decimal numbers below 2^26 (the packed sector id's field width).</summary>
+    private static Arcanum.Data.Area.AreaSectorCoordinate ParseSector(string value)
+    {
+        var parts = value.Split(',');
+        if (parts.Length != 2 || !parts.All(p => p.Length is > 0 and <= 8 && p.All(char.IsAsciiDigit))) throw new ArgumentException("Usage");
+        var (x, y) = (long.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture), long.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture));
+        return x < 67108864 && y < 67108864 ? new(x, y) : throw new ArgumentException("Usage");
+    }
     private static string ValidateHash(string value) => value.Length == 64 && value.All(Uri.IsHexDigit)
         ? value.ToLowerInvariant() : throw new ArgumentException("Usage");
     private static string Unique(string? existing, string value) => existing is null ? value : throw new ArgumentException("Usage");

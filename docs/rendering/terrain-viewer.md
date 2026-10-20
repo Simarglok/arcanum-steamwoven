@@ -371,7 +371,9 @@ artifact, independent review, publication or merge claim.
 
 `crash-site-area` with `--game-root GAME --area-map NAME` (no `--prototypes` or Crash
 Site inputs) shows one whole interior of the game folder's module content stack
-instead of the pinned exterior; see [map mode](area-map-mode.md).
+instead of the pinned exterior; see [map mode](area-map-mode.md). Since ARC-RENDER-024 the main world map opens there
+as a window that moves with the actor (`--area-map-sector X,Y` picks where it opens;
+[the main world map](area-map-mode.md#the-main-world-map-arc-render-024)).
 
 ### Crash Site cave and return (ARC-WORLD-009)
 

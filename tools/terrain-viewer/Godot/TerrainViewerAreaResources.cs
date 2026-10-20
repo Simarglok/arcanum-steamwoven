@@ -38,6 +38,11 @@ public partial class TerrainViewerApp
         // sweep runs with terrain chunks (production default) and once more with
         // per-command terrain, so both GPU caches must exceed their limits and evict.
         var maxRetained = 0;
+        // Every drawn command counts once; a companion drawn where it stands is a moved copy of its plan command (whose own
+        // T0 command is hidden). A companion visiting from another map or window (ARC-WORLD-037, ARC-RENDER-024) is drawn from
+        // its kept body, whose identity is in no command of this plan: it is not part of the coverage count.
+        HashSet<AreaObjectKey>? identities = _readyArea!.Plan.Commands.Where(c => c.Identity is not null).Select(c => c.Identity!.Value).ToHashSet();
+        var companions = _areaCompanions?.Companions.Select(c => c.Key).ToHashSet() ?? [];
         async Task<(int Steps, int Swept, int MaxVisible, int MaxLive, long MaxBytes, int MaxChunks, long MaxChunkBytes)> Sweep(bool chunked)
         {
             _canvas!.AreaTerrainChunksEnabled = chunked;
@@ -51,7 +56,9 @@ public partial class TerrainViewerApp
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 // ARC-RENDER-023: the view must still be the one set (the sweep holds the camera).
                 Require(_camera.State == view, "CAMERA_MOVED");
-                steps++; seen.UnionWith(_canvas.AreaVisibleCommands);
+                steps++; seen.UnionWith(_canvas.AreaVisibleCommands.Where(c => c.Identity is not { } key || identities!.Contains(key)));
+                // A body of no plan command is a visiting companion's, never anything else.
+                Require(_canvas.AreaVisibleCommands.All(c => c.Identity is not { } key || identities!.Contains(key) || companions.Contains(key)), "UNPLANNED_BODY");
                 Require(!_canvas.AreaVisibleCommands.Any(_canvas.AreaHiddenOf), "TAKEN_ITEM_DRAWN");
                 maxLive = Math.Max(maxLive, _cache.AreaCount); maxVisible = Math.Max(maxVisible, _canvas.AreaVisibleCount);
                 maxBytes = Math.Max(maxBytes, _cache.AreaRgbaBytes);
@@ -79,6 +86,8 @@ public partial class TerrainViewerApp
         // there eviction is not required, while every per-view budget and the ownership balance still are.
         var mustEvict = _readyMapName is null;
         var chunkedSweep = await WithAreaSmokeCameraHeld(() => Sweep(true));
+        if (chunkedSweep.Swept + taken != old.Commands)
+            GD.Print($"ARC-RENDER-007 resources detail swept={chunkedSweep.Swept} taken={taken} commands={old.Commands} steps={chunkedSweep.Steps}");
         Require(chunkedSweep.Swept + taken == old.Commands, "SWEEP_COVERAGE");
         // The envelope needs more chunks than the chunk cap, so the chunk LRU must have
         // evicted, and its own create/dispose accounting must balance.
@@ -87,7 +96,10 @@ public partial class TerrainViewerApp
             && _canvas.AreaChunkCreatedCount - _canvas.AreaChunkDisposedCount == _canvas.AreaChunkResidentCount, "CHUNK_OWNERSHIP");
         var created = _cache.CreatedCount; var disposed = _cache.DisposedCount;
         var commandSweep = await WithAreaSmokeCameraHeld(() => Sweep(false));
+        identities = null; // the reload below must find the retired generation unreferenced
         _canvas.AreaTerrainChunksEnabled = true;
+        if (commandSweep.Swept + taken != old.Commands)
+            GD.Print($"ARC-RENDER-007 resources detail command sweep swept={commandSweep.Swept} taken={taken} commands={old.Commands} steps={commandSweep.Steps} chunked={chunkedSweep.Swept}");
         Require(commandSweep.Swept + taken == old.Commands, "SWEEP_COVERAGE");
         Require(ReferenceEquals(old.Result.Target, _readyArea) && _readyArea!.Frames.Count == old.CpuFrames
             && _readyArea.CpuRgbaBytes == old.CpuBytes, "CPU_REPOSITORY");
