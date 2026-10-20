@@ -728,6 +728,9 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity)) ||
             admitted.Items.Keys.Any(entity => entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)))
             return Reject(GameSessionFailure.InventoryMismatch);
+        // ARC-WORLD-055: a holder that holds added items is an NPC, not a container.
+        if (admitted.Holders.Values.Any(holder => holder.Kind != SessionHolderKind.Npc && _inventory.Npcs.ContainsKey(holder.Entity)))
+            return Reject(GameSessionFailure.InventoryMismatch);
         // An object lies on one map: an item another attached map lists would be hidden there too once taken.
         foreach (var (other, attached) in _inventory.Seeds)
             if (other != map && admitted.Items.Keys.Any(attached.Items.ContainsKey)) return Reject(GameSessionFailure.InventoryMismatch);
@@ -791,6 +794,9 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!seed.Holders.TryGetValue(holder, out var row)) return RejectItem(GameSessionFailure.UnknownHolder);
         if (row.Kind != SessionHolderKind.Npc || !row.Dead && !KilledNpc(holder)) return RejectItem(GameSessionFailure.HolderNotLootable);
         if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
+        // ARC-WORLD-055: a made item the session added to this NPC is in its list too.
+        if (_inventory.AddedTo(holder).FirstOrDefault(added => added.Entity == item) is { Entity: not null } made)
+            return Take(seed, new(item, InventoryDomain.MadeFacts(made.Kind)), true, insertCheck, scripts);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != holder || _inventory.Taken.Contains(item))
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         return Take(seed, new(item, seed.Items[item].Facts), true, insertCheck, scripts);
@@ -1379,8 +1385,10 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var (revision, map, flagVersion) = (_revision, _actor.Map, _flags.Version);
+        // ARC-WORLD-055: a made item comes from the NPC that holds it (and is in Taken while it does), any other from a seed.
+        var npc = _inventory.NpcOf(item.Entity);
         bool Stale() => _revision != revision || _actor.Map != map || _flags.Version != flagVersion || !_inventory.Seeds.TryGetValue(map, out var current) ||
-            !ReferenceEquals(current, seed) || _inventory.Taken.Contains(item.Entity);
+            !ReferenceEquals(current, seed) || (npc is null ? _inventory.Taken.Contains(item.Entity) : _inventory.NpcOf(item.Entity) != npc);
         var verdict = insertCheck(item);
         ThrowIfDisposed();
         if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict);
@@ -1405,7 +1413,13 @@ public sealed partial class GameSessionOwner : IDisposable
             if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = run };
             if (failure != GameSessionFailure.None) return RejectItem(failure, verdict) with { InsertScript = run };
         }
-        _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
+        if (npc is not null)
+        {
+            // A made item keeps its entity and kind: it leaves the NPC's added items and joins the hero's made items.
+            _inventory.RemoveFromNpc(item.Entity);
+            _inventory.Add(new SessionMadeItem(item.Entity, facts.Kind));
+        }
+        else _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
         foreach (var write in run?.Effects.GlobalFlags ?? [])
         {
             var receipt = _flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), _flags.Version, new FlagId(write.Index), write.Value));
@@ -1484,16 +1498,33 @@ public sealed partial class GameSessionOwner : IDisposable
                 item.Entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)) return GameSessionFailure.InvalidSnapshot;
             inventory.Add(item);
         }
-        // Made items (ARC-TECHNOLOGY-004): made:n with strictly ascending n, a hero's, an admitted type, not deleted.
-        var lastMade = 0;
+        // Made items (ARC-TECHNOLOGY-004): made:n, an admitted type, not deleted, each once. Since ARC-WORLD-055 the PC can take a made
+        // item from an NPC (with or without a hero), so the list keeps entry order, not number order.
         foreach (var item in saved.Made)
         {
-            if (!hero) return GameSessionFailure.InvalidSnapshot;
             if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
-            if (SessionMadeItem.Number(item.Entity) is not { } number || number <= lastMade || destroyed.Contains(item.Entity))
+            if (SessionMadeItem.Number(item.Entity) is null || destroyed.Contains(item.Entity) || inventory.Taken.Contains(item.Entity))
                 return GameSessionFailure.InvalidSnapshot;
-            lastMade = number;
             inventory.Add(item);
+        }
+        // ARC-WORLD-055: the made items added to NPCs, by NPC entity in ordinal order, each list non-empty and within one list's bound;
+        // the same item rules as the hero's made items, and no item held twice.
+        if (saved.Npcs.Sum(npc => (long)(npc.Items?.Count ?? 0)) > limits.MaxNpcItems) return GameSessionFailure.BudgetExceeded;
+        string? previous = null;
+        foreach (var npc in saved.Npcs)
+        {
+            if (npc?.Items is null || !SessionValidation.Entity(npc.Npc) || npc.Npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) ||
+                npc.Items.Count is 0 or > SessionMapInventorySeed.MaxListLength || previous is not null && string.CompareOrdinal(previous, npc.Npc) >= 0)
+                return GameSessionFailure.InvalidSnapshot;
+            previous = npc.Npc;
+            foreach (var item in npc.Items)
+            {
+                if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
+                if (SessionMadeItem.Number(item.Entity) is null || destroyed.Contains(item.Entity) || inventory.Taken.Contains(item.Entity))
+                    return GameSessionFailure.InvalidSnapshot;
+                inventory.AddToNpc(npc.Npc, item);
+                inventory.Taken.Add(item.Entity);
+            }
         }
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.
         foreach (var entity in destroyed) inventory.Taken.Add(entity);

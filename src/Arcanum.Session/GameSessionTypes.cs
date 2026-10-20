@@ -77,12 +77,15 @@ public sealed class GameSessionLimits
     /// <summary>The hero's found schematics (ARC-TECHNOLOGY-003): the original's list has no limit; the installed data has 62 found
     /// records (57 with a document), so 128 is twice that.</summary>
     public const int PolicyMaxFoundSchematics = 128;
+    /// <summary>Made items the session added to NPCs (ARC-WORLD-055), all NPCs together; one NPC's list holds at most
+    /// <see cref="SessionMapInventorySeed.MaxListLength"/> items with its seed items. Far more than NPC crafting adds in a playthrough.</summary>
+    public const int PolicyMaxNpcItems = 4096;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
         int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
         int maxLifeRecords = PolicyMaxLifeRecords, int maxReactionRecords = PolicyMaxReactionRecords,
         int maxExperienceRecords = PolicyMaxExperienceRecords, int maxAdvancementRecords = PolicyMaxAdvancementRecords,
-        int maxDurabilityRecords = PolicyMaxDurabilityRecords, int maxFoundSchematics = PolicyMaxFoundSchematics)
+        int maxDurabilityRecords = PolicyMaxDurabilityRecords, int maxFoundSchematics = PolicyMaxFoundSchematics, int maxNpcItems = PolicyMaxNpcItems)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
@@ -95,10 +98,12 @@ public sealed class GameSessionLimits
         if (maxAdvancementRecords is < 1 or > PolicyMaxAdvancementRecords) throw new ArgumentOutOfRangeException(nameof(maxAdvancementRecords));
         if (maxDurabilityRecords is < 1 or > PolicyMaxDurabilityRecords) throw new ArgumentOutOfRangeException(nameof(maxDurabilityRecords));
         if (maxFoundSchematics is < 1 or > PolicyMaxFoundSchematics) throw new ArgumentOutOfRangeException(nameof(maxFoundSchematics));
+        if (maxNpcItems is < 1 or > PolicyMaxNpcItems) throw new ArgumentOutOfRangeException(nameof(maxNpcItems));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
         MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
         MaxReactionRecords = maxReactionRecords; MaxExperienceRecords = maxExperienceRecords;
         MaxAdvancementRecords = maxAdvancementRecords; MaxDurabilityRecords = maxDurabilityRecords; MaxFoundSchematics = maxFoundSchematics;
+        MaxNpcItems = maxNpcItems;
     }
 
     public int MaxMaps { get; }
@@ -112,6 +117,7 @@ public sealed class GameSessionLimits
     public int MaxAdvancementRecords { get; }
     public int MaxDurabilityRecords { get; }
     public int MaxFoundSchematics { get; }
+    public int MaxNpcItems { get; }
 }
 
 /// <summary>
@@ -322,8 +328,9 @@ public sealed class GameSessionSnapshot
     /// schema 23 adds <see cref="Schematics"/> (ARC-TECHNOLOGY-003); schema 24 adds the made items to <see cref="Inventory"/>
     /// (ARC-TECHNOLOGY-004); schema 25 adds the mastered college of the hero and of the NPC advancement sheets (ARC-MAGIC-004);
     /// schema 26 adds the hero's fate points and armed fates (ARC-WORLD-054); schema 27 adds each party record's loyalty marks
-    /// (ARC-WORLD-045). Schemas 1..26 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 27;
+    /// (ARC-WORLD-045); schema 28 adds the made items added to NPCs to <see cref="Inventory"/> (ARC-WORLD-055). Schemas 1..27 are
+    /// refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 28;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
