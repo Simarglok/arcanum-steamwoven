@@ -60,13 +60,13 @@ no morale function reads it.
    mode, never treats its source as kill-on-sight, may be spoken to (its dialog
    script runs only with the "surrender speech" script flag, and its greeting is
    its fleeing line), and a member of the source's party who tries to talk to it
-   makes it flee again. It ends when the source is missing, dead or
+   makes it flee again (or fight, once it has NO_FLEE). It ends when the source is missing, dead or
    unconscious, or with 1 chance in 500 per pass once its HP% is at least 80; a
    new attack by its source asks the flee question again
    ([section 3](#3-a-surrendered-npc)).
 6. **Back off (S15).** In combat, an NPC closer to its target than parameter 15
    (only when it is above 1) starts backing off with 1 chance in 20 per pass; a
-   PC's kill sets the back-off on every NPC within 3 tiles of the PC that shares
+   PC's kill sets the back-off on every NPC in the 7×7 tile square around the PC that shares
    the victim's faction, lacks NO_FLEE and is focused on that PC. A backing-off
    NPC runs before anything else until it is parameter 15 tiles from its target
    (5 when parameter 15 ≤ 1), along the first clear straight line of eight
@@ -77,8 +77,9 @@ no morale function reads it.
    original: a leaderless NPC leader counts alone (MR3), a stale "flee spell
    used" flag skips the flee spell of the next flight (MR7), the flee animation
    starts even when the setter refuses the surrender (MR9), and the end of mind
-   control leaves NO_FLEE set for good (MR13); the back-off's fallback path
-   changes nothing (MR15) ([section 5](#5-anomalies-and-decisions)).
+   control leaves NO_FLEE set for good (MR13, a candidate only: the flee goal
+   itself can set NO_FLEE for good); the back-off's fallback path changes
+   nothing (MR15) ([section 5](#5-anomalies-and-decisions)).
 
 ## 1. The flee decision
 
@@ -183,7 +184,8 @@ stateDiagram-v2
     FLEE --> COMBAT_FOCUS: attacked by another, beyond parameter 4, should-flee no
     FLEE --> NONE: stop fleeing (kill of this NPC, resurrection, fear ends, no-flee set)
     SURRENDER --> NONE: source missing, dead or unconscious; or HP% ≥ 80 and 1 in 500
-    SURRENDER --> FLEE: attacked by its source and should-flee yes; spoken to by the source's party
+    SURRENDER --> FLEE: attacked by its source and should-flee yes; spoken to by the source's party (without NO_FLEE)
+    SURRENDER --> COMBAT_FOCUS: spoken to by the source's party while it has NO_FLEE (setter rule 2)
     SURRENDER --> COMBAT_FOCUS: attacked by its source (or a chosen new attacker) and should-flee no
 ```
 
@@ -198,13 +200,22 @@ nothing, so its action points become 0 and its subturn ends
 | --- | --- | --- |
 | flee (0x4AF130) | for an NPC: setter FLEE from the given critter | the fear effect of the magic object-flag component (0x454A10, when the critter flag FLEEING is applied, from the handle the effect passes, **(inference)** the spell's source); the dialog-start callback (below) |
 | stop fleeing (0x4AF170) | for an NPC: FLEE → NONE (SURRENDER is kept); then every flee goal (type 25) of the NPC is interrupted, in either state | the fear effect's removal; the kill notification (on the victim); set no-flee; resurrection in the heal step (0x4B58C0) |
-| set no-flee (0x4AF1D0) | stop fleeing, then the critter flag NO_FLEE (for any object type) | two animation functions (0x426A80, 0x4293D0) and the start of mind control (0x454A10) |
+| set no-flee (0x4AF1D0) | stop fleeing, then the critter flag NO_FLEE (for any object type) | nodes 5 (0x426A80, on a condition of its own after the path away is built) and 7 (0x4293D0, unconditionally; reached when node 6's test 0x42C240 fails) of the animation goal "move away from object" (goal 52, table 0x5ABDD0), which the flee goal (25, table 0x5A87D0) runs as its node 3; and the start of mind control (0x454A10) |
 | witness flee (0x4A9F10) | setter FLEE directly, without should-flee (stage A2) | noise and witness notification |
 
 Mind control (spell flag 0x8000000) on an NPC: −50 reaction when a PC cast it
 on a non-summoned NPC, the spell flag, follow the caster, then set no-flee. Its
 removal clears the spell flag and disbands the NPC but leaves NO_FLEE set, so a
 formerly controlled NPC never flees again (MR13).
+
+**NO_FLEE is also set by the flight itself.** Because the flee goal runs the
+"move away from object" goal, and that goal's node 7 sets NO_FLEE without a
+condition, the original makes NO_FLEE permanent at run time by design: an NPC
+whose move away ends on that node never flees again. Should-flee then answers
+no, and a request for FLEE becomes COMBAT_FOCUS (setter rule 2), so such an NPC
+turns to fight; this includes a surrendered NPC spoken to by its source's
+party, which fights instead of running. When node 6's test fails and what node
+5's condition is belong to the animation stage (U1).
 
 ## 3. A surrendered NPC
 
@@ -228,9 +239,9 @@ everything else asks the state.
 | Reader (address) | Behaviour |
 | --- | --- |
 | surrendered (0x4AF210) | true when the state is SURRENDER; also returns the source |
-| dialog-start callback (0x57CC70, in the interface's callback table) | runs the NPC's dialog script (point 9); on "continue", if the NPC is surrendered and its source is in the talker's party (0x45E2E0), the NPC flees from the talker (0x4AF130) and no dialog opens; otherwise the dialog window opens (0x5681C0) |
-| script run (0x441980 → 0x444AC8) | for attachment point 9 (dialog) on an NPC: a surrendered NPC's script is skipped (returns "continue") unless the script has the "surrender speech" flag (0x10), as a dead NPC's is skipped without "death speech" (0x8) |
-| script condition (0x4460E8) | counts surrendered NPCs in an object set (stage A8) |
+| dialog-start callback (0x57CC70, in the interface's callback table) | runs the NPC's dialog script (point 9); on "continue", if the NPC is surrendered and its source is in the talker's party (0x45E2E0), the NPC flees from the talker (0x4AF130; with NO_FLEE the setter makes that a fight instead) and no dialog opens; otherwise the dialog window opens (0x5681C0) |
+| the script executor (0x441980), call site 0x444AC8 | for attachment point 9 (dialog) on an NPC: a surrendered NPC's script is skipped (returns "continue") unless the script has the "surrender speech" flag (0x10), as a dead NPC's is skipped without "death speech" (0x8) |
+| the condition evaluator, call site 0x4460E8 | counts surrendered NPCs in an object set (stage A8) |
 | greeting builder (0x419260) | a living surrendered NPC answers with its fleeing message |
 | can speak (0x4AD800) | COMBAT_FOCUS and FLEE refuse ("busy"); SURRENDER does not |
 | can leave combat mode (0x4B3D90) | only NPCs in COMBAT_FOCUS on the critter or one of its followers keep it in combat mode; fleeing and surrendered NPCs do not |
@@ -267,7 +278,9 @@ and the pass does nothing more. Otherwise a path request "away" (path flag
 tries the directions straight away, then 45° either side, 90°, 135° and last
 straight toward the target (offsets 4, 5, 3, 6, 2, 7, 1, 0), each to the tile
 `d − distance` tiles out along a straight line that stops at a blocking tile, a
-blocked traversal, a spotted trap or fire; the first clear line gives the
+blocked traversal or a spotted trap (fire is not checked: the request lacks
+path flag 0x400; a line longer than 32 tiles is refused, which installed values
+of at most 5 never reach); the first clear line gives the
 destination and the NPC runs to it (0x433C80). With no clear line the request
 fails and BACKING_OFF is cleared (MR15). Each later pass repeats the check until
 the distance is reached.
@@ -290,11 +303,11 @@ follow the original.
 | --- | --- | --- | --- |
 | P2 | The party level sum adds each member's own level (followers of followers included). | Reconstruction slip (confirms ARC-RES-048) | Both settings follow the original; no switch. |
 | P6 | A fleeing NPC's next pass without an action requests SURRENDER and starts the flee goal; interface, scripts, dialog and combat-mode exit treat SURRENDER as a lasting "out of the fight" state that only this step creates. | Original (confirms ARC-RES-048) | Kept in both settings; no switch. The combat-mode bit stays CL4's decision. |
-| MR3 | A leaderless NPC counts as a party of one, its own followers ignored, while each of its followers counts the whole group; so an NPC group leader flees as if alone, and an NPC fleeing from it sees a party of one. | Original bug (likely) | Steamwoven counts a leaderless NPC's own followers like a PC's; Original keeps the party of one (`NpcLeaderPartyCountsAlone`, proposed). Owner decision needed; lands with slice I5. |
+| MR3 | A leaderless NPC counts as a party of one, its own followers ignored, while each of its followers counts the whole group; so an NPC group leader flees as if alone, and an NPC fleeing from it sees a party of one. | Original bug | Uncertain: an NPC-led group may simply not have been a case the code meant to size; owner decision needed. Proposed: Steamwoven counts a leaderless NPC's own followers like a PC's; Original keeps the party of one (`NpcLeaderPartyCountsAlone`, proposed). Lands with slice I5. |
 | MR7 | SPELL_FLEE is cleared only by the flee-spell step in state FLEE; when the NPC leaves FLEE before that step (attacked and turning to fight), the flag survives and the next flight skips its flee spell or item once. | Original bug (latent) | Steamwoven clears SPELL_FLEE when the NPC leaves FLEE; Original keeps it (`StaleSpellFleeSkipsFleeSpell`, proposed). Lands with slices I5/I8. |
-| MR9 | Perform fleeing ignores the setter's answer and starts the flee goal even when the surrender was refused (invulnerable → NONE, extraordinarily charismatic leader → COMBAT_FOCUS). Reachable only when invulnerability or the leader's charisma changes during a flight. | Original bug (latent) | Steamwoven starts the flee goal only when SURRENDER was applied; Original always starts it (`FleeGoalAfterRefusedSurrender`, proposed). Lands with slice I5. |
-| MR13 | The start of mind control sets NO_FLEE; its end does not clear it, so a formerly controlled NPC never flees again (and the game cannot tell it from an NPC that had NO_FLEE in its data). | Original bug (likely) | Steamwoven restores NO_FLEE to its value before the control (one remembered bit, stored in both settings, D4); Original leaves it set (`MindControlLeavesNoFlee`, proposed). Belongs to the magic slice that implements mind control; owner decision needed. |
-| MR15 | When no straight line of the eight directions is clear, the "away" path keeps the direction with the most partial steps and retries the same straight line, which fails again (it can also compare a stale partial-step value); the back-off then ends. | Original bug (no effect) | Both settings follow the effect: the back-off ends when no straight line is clear. No switch. |
+| MR9 | Perform fleeing ignores the setter's answer and starts the flee goal even when the surrender was refused (invulnerable → NONE, extraordinarily charismatic leader → COMBAT_FOCUS). Reachable only through a change during a flight, for example the NPC becoming invulnerable, gaining a leader, or its leader's charisma rising; a script that writes FLEEING directly, past the setter, would be another way in (stage A8, unchecked). | Original bug (latent) | Steamwoven starts the flee goal only when SURRENDER was applied; Original always starts it (`FleeGoalAfterRefusedSurrender`, proposed). Lands with slice I5. |
+| MR13 | The start of mind control sets NO_FLEE; its end does not clear it, so a formerly controlled NPC never flees again (and the game cannot tell it from an NPC that had NO_FLEE in its data). | Original bug | Candidate only, for the owner. The original also sets NO_FLEE for good, by design, at run time: node 7 of the "move away from object" goal, which the flee goal runs, sets it unconditionally ([section 2](#2-flight-and-surrender)). So NO_FLEE may be meant as a one-way flag and the mind-control end may be intended; the bug reading rests only on the flag outliving the control. Proposed default: both settings keep the original until the owner decides. If the owner wants the fix, Steamwoven restores NO_FLEE to its value before the control (one remembered bit, stored in both settings, D4), and Original leaves it set (`MindControlLeavesNoFlee`, proposed). Belongs to the magic slice that implements mind control. |
+| MR15 | When no straight line of the eight directions is clear, the "away" path keeps the direction with the most partial steps and retries the same straight line, which fails again (it can also compare a stale partial-step value); the back-off then ends. | Original bug (latent, no effect) | Both settings follow the effect: the back-off ends when no straight line is clear. No switch. |
 
 The other rows (MR1, MR2, MR4–MR6, MR8, MR10–MR12, MR14, MR16) are the
 original's behaviour and are kept in both settings.
@@ -309,8 +322,9 @@ original's behaviour and are kept in both settings.
 2. **The two rolls** (surrender recovery 1..500, back-off start 1..20) are
    labelled draws of the session random source, as design rule 3 asks.
 3. **State.** SURRENDER, FLEE, the fleeing-from handle, BACKING_OFF and
-   SPELL_FLEE are already part of the danger state of slice I2; MR13's fix needs
-   one more remembered bit per NPC, stored in both settings.
+   SPELL_FLEE are already part of the danger state of slice I2; MR13's fix, if
+   the owner chooses it, needs one more remembered bit per NPC, stored in both
+   settings.
 4. **Execution** of the flee goal and the back-off run belongs to slice I7
    (stage A6): the flee goal's own stopping rule is not part of this note.
 5. **Dialog.** When the dialog port meets a surrendered NPC it applies the
@@ -319,8 +333,10 @@ original's behaviour and are kept in both settings.
 
 ## Unknowns
 
-- **U1** How far the flee goal (type 25) runs and how it chooses its path is
-  the animation stage's question (A6).
+- **U1** How far the flee goal (type 25) runs and how it chooses its path,
+  and when its "move away from object" goal (52) reaches the nodes that set
+  NO_FLEE (node 5's condition, node 6's test 0x42C240), are the animation
+  stage's questions (A6).
 - **U2** Whether a follower array can hold dead critters, and so whether dead
   followers count in the party sums, was not traced.
 - **U3** Whether a surrendered NPC stays in the turn-based round's list and
