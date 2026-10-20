@@ -416,8 +416,10 @@ travels with the player. Nothing is pinned to Virgil or to a location.
   session party port, so a `JO` runs the follow check. A speaker the party has
   touched (following, waiting, or recorded away from its T0 cell) becomes a
   moving companion of the map with its T0 body; every other speaker stays its
-  T0 body, and a dead NPC stays a corpse where it lies (ARC-WORLD-049). The group is rebuilt when a conversation ends (the follow smoke closes a
-  conversation after the join and checks the rebuilt companion).
+  T0 body, and an NPC dead at T0 stays its T0 corpse, never a moving
+  companion (ARC-WORLD-049). The group is rebuilt when a conversation ends
+  (the follow smoke closes a conversation after the join and checks the
+  rebuilt companion).
 - **Following.** These are the companion follow rules of the exterior
   ([companion follow runtime](../world/companion-follow-runtime.md)): start
   beyond 4 cells, stop within 2, and the 30-cell catch-up.
@@ -432,9 +434,9 @@ travels with the player. Nothing is pinned to Virgil or to a location.
   session.
 
 Native smoke (`ARC-WORLD-037 native-smoke follow PASS`, before the transfer
-smoke; `NONE` when the map has no living drawn speaker, as `crash site cave`,
-whose only speaker is dead at T0). A drawn, living speaker with facts joins through the session's forced join, as
-a script follow does; the dialog's `JO` uses the same session party, and
+smoke; `NONE` when the map has no living drawn speaker with follow facts, as
+`crash site cave`, whose only speaker is dead at T0). A drawn, living speaker
+with facts joins through the session's forced join, as a script follow does; the dialog's `JO` uses the same session party, and
 dialogs that offer a `JO` from their start are rare (see the dialog census). It
 follows the player placed 6 cells away (on a cell it can walk to) to within 2
 and is drawn there,
