@@ -508,9 +508,8 @@ map.
   6 cells.
 - **Memory.** One window holds 1,300 to 4,900 visuals and 10 to 26 MB of CPU frames; after a full collection the
   managed heap of a run that moved the window seven times followed the window's contents (368 to 435 MB), with no
-  growth from move to move. The first reload after the map battery allocates a one-time 25 to 30 MB that the next
-  reload does not (it changed the heap by −0.3 MB), so on a window map the resource stage measures a steady-state
-  reload after one warm-up reload; the retired generation must still be collected and every other bound holds.
+  growth from move to move; the resource stage's reload after the map battery leaves the heap 5.5 MB smaller (since
+  ARC-UI-045 released the closed conversation's voice start, which had kept 25 to 30 MB after a dialog).
 
 **NOT READY:** the window is a fixed 3×3 core, not the original's 16-sector cache; a move costs a background load of
 the whole window (no sector is reused) and one publication, which rebuilds the scene (a frame hitch at the swap); saved

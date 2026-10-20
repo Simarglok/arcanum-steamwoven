@@ -29,13 +29,6 @@ public partial class TerrainViewerApp
     private async Task RunAreaResourcesAsync()
     {
         static void Require(bool value, string code) { if (!value) throw new InvalidOperationException("AREA_RESOURCES_" + code); }
-        // ARC-RENDER-024: on a window map the first reload after the map battery allocates a one-time 25-30 MB (measured: the
-        // next reload changes the heap by -0.3 MB), so the stage measures a steady-state reload after one warm-up reload.
-        if (_mapWindowCentre is not null && _arguments is { } warm && System.Environment.GetEnvironmentVariable("ARC_EXPERIMENT_NO_WARM") is null)
-        {
-            await StartLoadAsync(warm, false);
-            GD.Print($"ARC-RENDER-024 resources warm-up reload generation={_generation} managed={GC.GetTotalMemory(true)}");
-        }
         var old = CaptureAreaResourceBaseline();
         // ARC-UI-004: items the earlier smoke phases picked up are no longer in the world and are never drawn.
         var taken = _readyArea!.Plan.Commands.Count(command => _canvas!.AreaHiddenOf(command));
