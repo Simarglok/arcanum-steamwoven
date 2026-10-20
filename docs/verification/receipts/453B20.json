@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "function": "0x453B20",
+  "name": "spell-fail-chance",
+  "method": "Arcanum.Simulation.Magic.SpellResistanceRules.FailChance",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": {
+    "mode": "steamwoven",
+    "ledger": "MG4",
+    "ledgerInputs": 1869,
+    "differ": 801,
+    "outsideLedger": 0
+  },
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "54698651bdf13c32af6372e9f742481f3367e53cdb77d2260fec0bcbb43e3ba2",
+  "configuration": "Debug"
+}

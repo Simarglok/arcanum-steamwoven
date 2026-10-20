@@ -167,6 +167,14 @@ class OracleSelfTest(unittest.TestCase):
         self.assertEqual(self.failure(READS_OTHER, code=own(READS_OTHER), readable=(Range(GLOBAL, GLOBAL + 4),)).kind, "read")
         self.assertEqual(self.failure(WRITES, code=own(WRITES), readable=(Range(GLOBAL, GLOBAL + 4),)).kind, "write")
 
+    def test_a_global_named_writable_is_an_output_the_oracle_reads_back(self):
+        emulator = self.emulator()
+        emulator.call(WRITES, (), code=own(WRITES), writable=(Range(GLOBAL, GLOBAL + 4),))
+        self.assertEqual(emulator.read_u32(GLOBAL), 0xCCCCCCCC)  # EAX as the call left it
+        self.assertEqual(self.failure(WRITES, code=own(WRITES), writable=(Range(GLOBAL + 4, GLOBAL + 8),)).kind, "write")
+        with self.assertRaises(ValueError):
+            emulator.read_u32(0x100)
+
     def test_heap_data_and_arguments_are_readable_only_where_the_call_defines_them(self):
         emulator = self.emulator()
         emulator.write_heap(struct.pack("<I", 1234))
@@ -340,9 +348,34 @@ class OracleSelfTest(unittest.TestCase):
         with self.assertRaises(StubRejected):
             oracle_functions.effectiveness_stubs(alone)[oracle_functions.STAT_GETTER](lambda index: (*target, 5)[index])
 
-    def test_the_registry_names_twelve_functions_with_their_own_code_first(self):
-        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660, 0x4B1790,
-                                                              0x4C5EB0, 0x4C6170, 0x4C62E0, 0x4C6410, 0x4C69F0])
+    def test_the_resist_model_stays_in_the_csharp_domain_and_rejects_anything_else(self):
+        rng = random.Random(5)
+        draws = [oracle_functions.draw_resist_case(rng) for _ in range(10_000)]
+        self.assertTrue(all(1 <= c.d100 <= 100 and 1 <= c.d20 <= 20 and c.action in (0, 1, 2) and -1 <= c.resist_stat <= 7 for c in draws))
+        self.assertTrue(any(c.spell == 34 and c.no_disintegrate for c in draws) and any(c.resistance > 100 for c in draws))
+        self.assertTrue({15, 16} <= {c.kind for c in draws} and any(c.kind not in (15, 16) for c in draws))
+        case = next(c for c in draws if c.resist_stat == 6)
+        recorder = oracle_functions.ResistRecorder([], [])
+        stubs = oracle_functions.resist_stubs(case, recorder)
+        target = oracle_functions.TARGET
+
+        def call(address, *arguments):
+            return stubs[address](lambda index: arguments[index])
+        self.assertEqual(call(oracle_functions.FIELD_GETTER, *target, 0x14F), case.kind)
+        self.assertEqual(call(oracle_functions.ARRAY_GETTER, *target, 0x1F, 4), case.resistance & 0xFFFFFFFF)
+        self.assertEqual(call(oracle_functions.STAT_GETTER, *target, 6), case.stat_value)
+        self.assertEqual((call(oracle_functions.RANDOM, 1, 100), call(oracle_functions.RANDOM, 1, 20)), (case.d100, case.d20))
+        self.assertEqual(call(oracle_functions.FATE_USE, *target, 4), case.fate)
+        self.assertEqual((recorder.rolls, recorder.fates), ([(1, 100), (1, 20)], [4]))
+        for address, arguments in ((oracle_functions.FIELD_GETTER, (*target, 0xDA)), (oracle_functions.STAT_GETTER, (*target, 5)),
+                                   (oracle_functions.ARRAY_GETTER, (*target, 0x1F, 3)), (oracle_functions.RANDOM, (1, 6)),
+                                   (oracle_functions.EXTRAORDINARY, (*target, 4)), (oracle_functions.FIELD_GETTER, (*oracle_functions.HANDLE, 0x14F))):
+            with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
+                call(address, *arguments)
+
+    def test_the_registry_names_fourteen_functions_with_their_own_code_first(self):
+        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x4537B0, 0x453B20, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660,
+                                                              0x4B1790, 0x4C5EB0, 0x4C6170, 0x4C62E0, 0x4C6410, 0x4C69F0])
         for address, spec in oracle_functions.FUNCTIONS.items():
             self.assertEqual(spec.code[0][0], address)
             self.assertTrue(all(start < end for start, end in spec.code))

@@ -5,6 +5,7 @@ using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Technology;
 using Arcanum.Simulation.Reaction;
 
@@ -33,7 +34,7 @@ public sealed class GameRules
 {
     private GameRules(RuleMode mode, CombatAnomalyProfile combat, GameEventQueueProfile events, ScrRuleProfile scripts,
         ReactionRuleProfile reaction, DataFixProfile data, ExperienceRuleProfile experience, SoundRuleProfile sound, ItemRuleProfile items,
-        TechnologyRuleProfile technology)
+        TechnologyRuleProfile technology, MagicAnomalyProfile magic)
     {
         Mode = mode;
         Combat = combat;
@@ -45,6 +46,7 @@ public sealed class GameRules
         Sound = sound;
         Items = items;
         Technology = technology;
+        Magic = magic;
     }
 
     public RuleMode Mode { get; }
@@ -80,13 +82,18 @@ public sealed class GameRules
     /// <summary>Technology (ARC-TECHNOLOGY-003): TC8, a schematic document numbered 0 registers.</summary>
     public TechnologyRuleProfile Technology { get; }
 
+    /// <summary>Magic (ARC-MAGIC-005): MG4, the resistance term is subtracted from the saving throw.</summary>
+    public MagicAnomalyProfile Magic { get; }
+
     /// <summary>The default mode: the original with every recorded fix.</summary>
     public static GameRules Steamwoven { get; } = new(RuleMode.Steamwoven, CombatAnomalyProfile.Steamwoven, GameEventQueueProfile.Steamwoven, ScrRuleProfile.Steamwoven,
-        ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven, ExperienceRuleProfile.Steamwoven, SoundRuleProfile.Steamwoven, ItemRuleProfile.Steamwoven, TechnologyRuleProfile.Steamwoven);
+        ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven, ExperienceRuleProfile.Steamwoven, SoundRuleProfile.Steamwoven, ItemRuleProfile.Steamwoven, TechnologyRuleProfile.Steamwoven,
+        MagicAnomalyProfile.Steamwoven);
 
     /// <summary>The retail 1.0.7.4 behaviour in every domain.</summary>
     public static GameRules Original { get; } = new(RuleMode.Original, CombatAnomalyProfile.Original, GameEventQueueProfile.Original, ScrRuleProfile.Original,
-        ReactionRuleProfile.Original, DataFixProfile.Original, ExperienceRuleProfile.Original, SoundRuleProfile.Original, ItemRuleProfile.Original, TechnologyRuleProfile.Original);
+        ReactionRuleProfile.Original, DataFixProfile.Original, ExperienceRuleProfile.Original, SoundRuleProfile.Original, ItemRuleProfile.Original, TechnologyRuleProfile.Original,
+        MagicAnomalyProfile.Original);
 
     /// <summary>Both modes, default first.</summary>
     public static IReadOnlyList<GameRules> All { get; } = [Steamwoven, Original];
