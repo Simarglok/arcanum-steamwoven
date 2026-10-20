@@ -15,6 +15,12 @@ public sealed class DialogConversation
     private const int MaxSkillLevel = 20, MaxSkillTraining = 3, ExpertMinimumLevel = 9;
     private const int MaxEligible = 5;
 
+    /// <summary>ARC-WORLD-043: the reaction change of an insult (a Player <c>i:</c> reply), 0x4191E0.</summary>
+    public const int InsultReaction = -10;
+
+    /// <summary>ARC-WORLD-043: an insult ends the talk when the NPC's effective reaction is then at most this value.</summary>
+    public const int InsultEndsAtOrBelow = 20;
+
     private readonly DlgDocument _document;
     private readonly DialogConversationRequest _request;
     private readonly DialogConversationPorts _ports;
@@ -136,7 +142,7 @@ public sealed class DialogConversation
                 BuildOffers(_step!);
                 return Phase == DialogConversationPhase.AwaitingSelection ? new(DialogConversationSelectStatus.StaleSelection) : Result();
             }
-            var pending = plan.Reply.Action!.Count;
+            var pending = plan.Reply.Action!.Count + (plan.Reply.Insult is null ? 0 : 1);
             if (!Admit(plan.Target, pending))
             {
                 return Result();
@@ -146,6 +152,11 @@ public sealed class DialogConversation
         // The token is consumed before the first effect; nothing below can offer it again.
         _offers = Array.Empty<DialogOption>();
         if (plan is not null && !Execute(plan.Reply.Action!))
+        {
+            return Result();
+        }
+        // The insult rule runs after the reply's own action and before its transition (0x413130, 0x414810).
+        if (plan?.Reply.Insult is { } insult && !Insult(insult))
         {
             return Result();
         }
@@ -301,6 +312,7 @@ public sealed class DialogConversation
                 ConversationGlobalFlag global => ReadGlobal(global),
                 ConversationReactionGate reaction => ReadReaction(reaction),
                 ConversationWaiting waiting => ReadWaiting(waiting),
+                ConversationMetBefore met => ReadMetBefore(met),
                 ConversationSkillGate skill => ReadSkill(skill),
                 // RA n>0: the PC race is n-1; RA n<=0: the PC race is not -n-1.
                 ConversationRaceGate race => race.Selector > 0
@@ -358,7 +370,12 @@ public sealed class DialogConversation
     }
 
     /// <summary>RE t>=0: reaction at least t; RE t&lt;0: reaction at most -t (both inclusive).</summary>
-    private bool? ReadReaction(ConversationReactionGate operation)
+    private bool? ReadReaction(ConversationReactionGate operation) =>
+        ReadReactionValue(operation.Source) is not { } value ? null
+            : operation.Threshold < 0 ? value <= -(long)operation.Threshold : value >= operation.Threshold;
+
+    /// <summary>The NPC's effective reaction to the PC; null when the session stopped (unknown is a frontier).</summary>
+    private int? ReadReactionValue(DialogOperationSource source)
     {
         DialogReactionReadResult result;
         try
@@ -367,15 +384,56 @@ public sealed class DialogConversation
         }
         catch (Exception)
         {
-            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, operation.Source));
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, source));
             return null;
         }
         if (!result.Known)
         {
-            Stop(new DialogConversationFrontier(DialogFrontierKind.ReactionUnknown, CurrentNode, operation.Source), null);
+            Stop(new DialogConversationFrontier(DialogFrontierKind.ReactionUnknown, CurrentNode, source), null);
             return null;
         }
-        return operation.Threshold < 0 ? result.Value <= -(long)operation.Threshold : result.Value >= operation.Threshold;
+        return result.Value;
+    }
+
+    /// <summary>
+    /// ME 1: the NPC has met the PC before; ME 0: it has not. The original's condition (0x4150D0) asks the met-before
+    /// function (0x4C0C40), which leaves out the conversation in progress.
+    /// </summary>
+    [OriginalFunction(0x4150D0, OriginalFunctionScope.Partial)]
+    private bool? ReadMetBefore(ConversationMetBefore operation)
+    {
+        bool met;
+        try
+        {
+            met = _ports.MetBefore!.MetBefore(new DialogReactionQuery(_request.Participants.Npc, _request.Participants.PlayerCharacter));
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, operation.Source));
+            return null;
+        }
+        return met == operation.Value;
+    }
+
+    /// <summary>
+    /// The insult of a picked Player <c>i:</c> reply (0x4191E0): the NPC's reaction changes by <see cref="InsultReaction"/>
+    /// through the reaction port (the PC's adjustment effects and skips are the owner's), then the effective reaction is read;
+    /// at most <see cref="InsultEndsAtOrBelow"/> the NPC ends the talk with a generated line (not loaded,
+    /// <see cref="DialogEndKind.Insulted"/>), otherwise the reply's own transition follows. False when the talk ended or stopped.
+    /// </summary>
+    [OriginalFunction(0x4191E0, OriginalFunctionScope.Partial)]
+    private bool Insult(DialogOperationSource source)
+    {
+        if (!Execute([new ConversationReaction(source, DialogReactionMode.Adjust, InsultReaction)]) || ReadReactionValue(source) is not { } value)
+        {
+            return false;
+        }
+        if (value <= InsultEndsAtOrBelow)
+        {
+            Finish(new DialogConversationEnd(DialogEndKind.Insulted, null));
+            return false;
+        }
+        return true;
     }
 
     /// <summary>WA 1: the NPC is waiting for the PC; WA 0: it is not.</summary>
@@ -695,6 +753,7 @@ public sealed class DialogConversation
         var kind = DialogOptionTextKind.Record;
         DialogGeneratedMarker? marker = null;
         DialogOptionBlock? block = null;
+        DialogOperationSource? insult = null;
         var found = DialogText.Marker(text, out var exact);
         if (found is { Letter: 'd' or 'q' or 'u' or 'x' })
         {
@@ -708,7 +767,17 @@ public sealed class DialogConversation
             marker = found;
             text = string.Empty;
         }
-        else if (found is { Letter: 'b' or 'h' or 'i' or 'l' or 'p' } && exact || found is { Letter: 'c' or 'r' or 't' or 'z' })
+        else if (found is { Letter: 'i' } && exact)
+        {
+            // ARC-WORLD-043: the original's insult reply (exactly "i:", either case, 0x416C10): a generated phrase that keeps the
+            // reply's action and transition and runs the insult rule in between. The marker itself is its source.
+            kind = DialogOptionTextKind.Generated;
+            marker = found;
+            text = string.Empty;
+            insult = new DialogOperationSource(new DialogNodeId(record.Id), record.SerializedIndex, DlgFieldKind.Text,
+                record.Text.PayloadOffset, 0, 2, 0);
+        }
+        else if (found is { Letter: 'b' or 'h' or 'l' or 'p' } && exact || found is { Letter: 'c' or 'r' or 't' or 'z' })
         {
             kind = DialogOptionTextKind.Generated;
             marker = found;
@@ -775,6 +844,19 @@ public sealed class DialogConversation
                     exception.OperationSource);
             }
         }
+        if (block is null && insult is not null)
+        {
+            if (_ports.World is null)
+            {
+                block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedOperation, insult);
+            }
+            else if (action is { Count: > 0 } && action[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher)
+            {
+                // An action that moves the dialog itself skips the insult in the original (0x413130; read for FL); the
+                // transfer tails are kept out of this subset rather than modelled.
+                block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, action[^1].Source);
+            }
+        }
         if (block is null && action is { Count: > 0 } && action[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher)
         {
             // JO/UW/FL/ET override the response: the source skips the response transition after them.
@@ -801,7 +883,8 @@ public sealed class DialogConversation
                 line = null;
             }
         }
-        return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block);
+        return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
+            block is null ? insult : null);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -840,6 +923,7 @@ public sealed class DialogConversation
         ConversationGiveItem => _ports.World is null && _ports.Inventory is null,
         ConversationJoin => _ports.World is null && _ports.Party is null,
         ConversationWaiting or ConversationUnwait => _ports.Party is null,
+        ConversationMetBefore => _ports.MetBefore is null,
         ConversationQuellRumor => _ports.Rumors is null,
         ConversationSkillGate or ConversationSkillTraining or ConversationExpertTeacher => _ports.Skills is null,
         _ => false,
@@ -887,7 +971,8 @@ public sealed class DialogConversation
         DlgRecord? Target,
         DialogScriptLine? ScriptLine,
         IReadOnlyList<ConversationOperation>? Action,
-        DialogOptionBlock? Block);
+        DialogOptionBlock? Block,
+        DialogOperationSource? Insult);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }
