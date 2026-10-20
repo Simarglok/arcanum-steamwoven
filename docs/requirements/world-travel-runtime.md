@@ -1,6 +1,6 @@
 # Требования к навигации, путешествиям и игровому runtime
 
-**Покрытие реализации:** аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), через PR #54. Источники исходного исследования и его дата сохранены; актуальный объём — в таблице и Steamwoven-описаниях ниже. [Метод и срез доски](README.md#база-и-происхождение). Новых runtime/GUI/original-data запусков в этом аудите нет.
+**Текущий статус:** статус каждого требования этого документа, реализованный объём, остаток и документация — в [матрице покрытия](coverage.md#навигация-путешествия-и-runtime) (пересверено 2026-10-20, ARC-DEV-027). Поля «Steamwoven» ниже и сводный раздел покрытия — подробности на дату их последней правки (исходный аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), PR #54); при расхождении верна матрица.
 
 ARC-RES-017: [whole-exterior traversal research](../world/crash-site-area-traversal-contract.md)
 связывает FR-NAV-002/003 с source/state/registration frontiers. Research/Proposed,
@@ -130,7 +130,7 @@ Rest/combat/travel/save restoration остаются зависимостями 
 
 **Поведение и приёмка.** Игровой цикл принимает события ввода/перерисовки/времени, выполняет только наступившую игровую работу, обновляет симуляцию до показа результата и возвращается к очереди без потери ввода. Цикл диагностического окна или фонового исследовательского задания сам по себе не является игровым runtime. Приёмка повторяет одну последовательность ввода/времени при разной частоте отрисовки и сравнивает авторитетные состояния актёров и мира.
 
-**Оригинал и Steamwoven.** Главный цикл оригинала (0x401560) вызывает обновление библиотеки TIG, обновление библиотеки игры, перерисовку iso, вывод кадра и затем передаёт очередь сообщений в обработку событий игрового интерфейса (0x54DE50) (цикл и caller (0x401560), перерисовка iso (0x557DF0, 0x557EA0, 0x557EC0, 0x557ED0, 0x557F30, 0x557FD0, 0x558110, 0x558130, 0x5581A0)). `ViewerApp` и `ViewerSession` в Steamwoven управляют окном-диагностикой, а не игровой симуляцией ([приложение](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Godot/ViewerApp.cs#L82-L103), [сессия просмотра](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Godot/ViewerSession.cs#L30-L54)). Порядок scheduler по чтению функций (три очереди, по одной на реальное, игровое и анимационное время; срок и порядок при равенстве; лимит 500 событий за ping; события, созданные в ping, ждут следующего) и предложенная очередь на часах сессии — [ARC-RES-046](../research/game-event-queue.md); порядок при равенстве сроков и устройство прохода сверены с exe (строки [TE3, TE4–TE7](../research/original-verification-ledger.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019)). Ядро очереди (ARC-WORLD-022, срез E1) реализовано: [проход выполняет только наступившие события](../world/game-event-queue-runtime.md) по трём часам с бюджетом; сессия владеет очередью и запускает проход на своих часах (ARC-WORLD-024, срез E2), но кадр его ещё не вызывает (срез E3). **Открыто:** восстановление сохранения и исходная частота кадров требуют проверки полного runtime.
+**Оригинал и Steamwoven.** Главный цикл оригинала (0x401560) вызывает обновление библиотеки TIG, обновление библиотеки игры, перерисовку iso, вывод кадра и затем передаёт очередь сообщений в обработку событий игрового интерфейса (0x54DE50) (цикл и caller (0x401560), перерисовка iso (0x557DF0, 0x557EA0, 0x557EC0, 0x557ED0, 0x557F30, 0x557FD0, 0x558110, 0x558130, 0x5581A0)). `ViewerApp` и `ViewerSession` в Steamwoven управляют окном-диагностикой, а не игровой симуляцией ([приложение](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Godot/ViewerApp.cs#L82-L103), [сессия просмотра](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Godot/ViewerSession.cs#L30-L54)). Порядок scheduler по чтению функций (три очереди, по одной на реальное, игровое и анимационное время; срок и порядок при равенстве; лимит 500 событий за ping; события, созданные в ping, ждут следующего) и предложенная очередь на часах сессии — [ARC-RES-046](../research/game-event-queue.md); порядок при равенстве сроков и устройство прохода сверены с exe (строки [TE3, TE4–TE7](../research/original-verification-ledger.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019)). Ядро очереди (ARC-WORLD-022, срез E1) реализовано: [проход выполняет только наступившие события](../world/game-event-queue-runtime.md) по трём часам с бюджетом; сессия владеет очередью и запускает проход на своих часах (ARC-WORLD-024, срез E2), а AREA viewer прокачивает её каждый кадр шагами до сроков, так что одно и то же игровое время при любом разбиении на кадры даёт одно состояние (ARC-WORLD-039, срез E3). **Открыто:** восстановление сохранения и исходная частота кадров требуют проверки полного runtime.
 
 <a id="fr-runtime-002"></a>
 
@@ -158,28 +158,11 @@ Rest/combat/travel/save restoration остаются зависимостями 
 
 **Текущий Steamwoven:** WORLD использует fixed HumanFixed Idle/Walk, event-derived facing и historical 264-selection metadata/raster checks; MonsterRegression сохранён отдельно. Полный PC/NPC appearance/equipment compositor и original scheduler отсутствуют. [Viewer policy](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy), [Data API](../world/cardinal-traversal-assessment.md).
 
-## Сводное покрытие Steamwoven baseline
+## Покрытие Steamwoven до 2026-10-20
+
+Таблица покрытия этого раздела перенесена в [матрицу покрытия](coverage.md#навигация-путешествия-и-runtime): там у каждого требования текущий статус, объём, остаток и документация (2026-10-20). Абзацы ниже описывали прежнюю таблицу этого документа (исходный аудит 2026-10-09 с поздними правками) и сохранены как история; слова «таблица», «строки» и «столбцы» в них относятся к ней.
 
 Таблица разделяет наличие данных, правил, игровой интеграции и ограниченной проверки. «В указанном объёме» означает только описанную синтетическую/диагностическую границу, а не полную приёмку требования. Наличие исходников и конечных проверок не доказывает паритет оригинального runtime. В закреплённом Steamwoven `src` есть Data, Presentation, Simulation/Movement, Input, Scripting и диагностическое Godot-приложение, но нет игрового runtime для world-map путешествий, случайных встреч, ловушек, AI, замков или сна ([дерево исходников commit baseline](https://github.com/Simarglok/arcanum-steamwoven/tree/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src)). Проверки в таблице основаны на зафиксированных baseline-отчётах; в этой отчётной сессии тесты/приложение не запускались.
-
-| ID | Данные | Правила | Интеграция | Проверка |
-| --- | --- | --- | --- | --- |
-| FR-NAV-001 | Частично: bounded original terrain/static assessment | Частично: exact grid step/return/finish; кликовый маршрут не реализован | Частично: left stick и diagnostic WASD в WORLD003; original input pending | Частично: synthetic и original source/export bridge; путь по клику отсутствует |
-| FR-NAV-002 | Частично: полный 317-record census в narrow directed profile | Частично: CardinalOnly/BoundedAdjacent в x4..8/y0..3; не route search | Частично: Data assessment подключён к MovementRuntime/viewer | Частично: original directed rows, shoulder denial и bounded grid readback |
-| FR-NAV-003 | Частично: выбранная scenery | Нет: нет actor traversal | Нет: нет действий portal/window | Нет: действие оригинала не проверялось |
-| FR-NAV-004 | Нет: нет click-route данных | Нет: повторный route search отсутствует | Нет: нет path consumer | Нет: дальняя цель не проверялась |
-| FR-NAV-005 | Нет: нет gameplay perception данных | Нет: AI/LOS отсутствуют | Нет | Нет |
-| FR-NAV-006 | Нет: нет trap state/data | Нет: spotting/disarm/trigger отсутствуют | Нет | Нет |
-| FR-NAV-007 | Нет: нет lock/key gameplay данных | Нет: lock skill/state отсутствуют | Нет | Нет |
-| FR-TRAVEL-001 | Нет: нет интеграции route graph | Нет: нет town/world route | Нет | Нет |
-| FR-TRAVEL-002 | Нет: нет game calendar/areas | Нет: время пути не продвигается | Нет | Нет |
-| FR-TRAVEL-003 | Нет: нет encounter tables | Нет: encounter gate отсутствует | Нет | Нет |
-| FR-TRAVEL-004 | Нет: нет sleep/heal данных | Нет: правила сна/ожидания отсутствуют | Нет | Нет |
-| FR-TRAVEL-005 | Нет: нет teleport rules | Нет: проверка областей отсутствует | Нет | Нет |
-| FR-RUNTIME-001 | Неприменимо: цикл событий не требует игровых данных | Частично: очередь событий ARC-WORLD-022 и её проход в сессии ARC-WORLD-024, pump нет | Частично: цикл окна viewer | В указанном объёме: только lifecycle viewer |
-| FR-RUNTIME-002 | Частично: ART metadata | Нет: нет actor goal scheduler | Нет: worker viewer — диагностика | Нет: нет actor goals |
-| FR-RUNTIME-003 | Частично: ART ActionFrame | Частично: правило атаки (ARC-COMBAT-004); хост — атака героя во вьюере (ARC-COMBAT-005) | Частично: выбранная animation playback | В указанном объёме: только playback |
-| FR-RUNTIME-004 | Частично: HumanFixed Idle/Walk и отдельный MonsterRegression | Частично: fixed action/facing/group/flip/raw FPS; нет equipment compositor | Частично: event-derived actor facing в WORLD003 diagnostic | Частично: historical 264 Human selections source/export; не общий actor runtime |
 
 ## Граница просмотра функций оригинала
 

@@ -18,12 +18,14 @@ Work-Item: ARC-TYPE-NNN
 Result: <one mergeable result, one PR>
 Components: <at most 3, comma-separated>
 Human-Gates: none
+Requirements: FR-XXX-NNN[, ...] | none (<reason>)
 
 AC1. <criterion an agent can check itself>
 AC2. ...
 ```
 
 - `Human-Gates:` is `none` or the codes of separate owner-validation work items (e.g. `ARC-INPUT-002`).
+- `Requirements:` names the functional requirements the task serves, found in the [coverage matrix](docs/requirements/coverage.md) when the task is created; read each one's domain description and current status first. The PR that changes a requirement's coverage updates its matrix row (status, what is implemented, what is missing, documentation links) in the same PR ([functional requirements rule](docs/workflow/tasks.md#functional-requirements)).
 - At most 8 criteria `AC1`..`AC8`. A human, physical-device or native-GUI observation is never an `AC`: it goes into the separate owner-validation work item named in `Human-Gates`, which does not block merge.
 - "Exhaustive", "certificate", "worst-case", "parity", "all possible" need an explicit bound (number, list of cases, limit) on the same line.
 - The contract is fixed when work starts; only an explicit owner amendment changes it.
@@ -38,7 +40,9 @@ AC2. ...
 - Original behaviour: when a task needs to know how the original game behaves, or a recorded F0 fact looks like a slip, check it in the original executable at the function's address ([original executable check](docs/research/original-executable-check.md)): a reading, or the function oracle (`./arcanum oracle`, ARC-DEV-007). A change to a function that has an oracle (`ORACLE_FUNCTIONS` in `tools/local_dev/launch.py`) runs `./arcanum oracle --function ADDR` on the owner's Mac and reports its result (seed, inputs, differences, mutants caught), committing the receipts it writes to `docs/verification/receipts/`. A method that implements an original function carries `[OriginalFunction(address, scope)]` and has its row in the [function registry](docs/verification/README.md); root tests keep the registry, attributes, receipts and rule-mode switches consistent and fail when a tracked file names the reconstruction. The install stays unchanged; record behaviour in prose and the verdict ("reconstruction slip" or "in the original"); never commit bytes, listings, decompiled code or the oracle's generated inputs and outputs. Facts not yet read in the executable keep their address at level F0 ([plan](docs/research/original-oracle-research.md)), and only free tools with free licences are used.
 - Do not commit original/extracted game content, third-party toolkit archives, secrets or personal paths. Nothing derived from original art enters git either: HD packs, upscaled frames, real manifests, model weights or adapters, screenshots and recordings stay local; an HD pack is built or imported on the player's device and never distributed ([HD pack format](docs/formats/hd-pack.md)). Use synthetic public fixtures and opt-in local real-data checks. Keep the original installation unchanged.
 - Validate offsets, sizes, decompression limits and untrusted archive paths. Do not infer gameplay/resource-precedence rules from a parser's convenience behavior.
+- Builds and artifacts: never delete `artifacts/`, a build in it or a local home by hand, and never advise it as "rebuildable"; the launcher and every export read the current, selected, accepted, rollback and measurement builds. Report and remove only with `./arcanum clean` (dry run; `--apply` prunes only disposable payloads) per [which builds may be deleted](docs/workflow/build-retention.md) (ARC-DEV-028).
 - Launcher sync: a change that adds or changes a viewer mode's arguments or original inputs updates `tools/local_dev/launch.py` (`GAME_ROLES`, `MODE_ROLES`, `ROLE_FLAGS`), the root `./arcanum` launcher when it adds a mode, and [the launcher docs](docs/workflow/local-development.md#project-launcher) in the same PR; `tools/local_dev/test_launcher_sync.py` must pass.
+- Launch check: after starting a Godot or launcher run, confirm within the first minute that it started the intended mode (its own stage lines or window, not the project manager or an argument failure on the window); otherwise stop it, fix the command and rerun. A run that did not start the intended mode is not evidence, and a command given to the owner must have been run or checked with the launcher's `--dry-run` or `--help` first ([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
 - Run checks appropriate to changed behavior and all checks required by the accepted task, plus the root checks (a docs-only change runs none of them; see [the docs-only rule](docs/workflow/tasks.md#review-publication-and-merge)):
 
   ```sh

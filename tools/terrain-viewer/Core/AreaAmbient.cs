@@ -77,13 +77,16 @@ public sealed class AreaAmbientDriver
     private readonly GameTimeFlow _flow = new();
     private bool _holdsPause;
 
-    private AreaAmbientDriver(AreaLightingSource source, GameSessionOwner session, AmbientLightingState state)
+    private AreaAmbientDriver(AreaLightingSource source, GameSessionOwner session, AmbientLightingState state, AreaEventPump? events)
     {
-        _source = source; _session = session; _state = state;
+        _source = source; _session = session; _state = state; Events = events;
         _holdsPause = session.QueryClockSnapshot().PauseDisposition == new PauseDisposition(true, PauseReason.Menu);
     }
 
     public ClockSnapshot Clock => _session.QueryClockSnapshot();
+    /// <summary>ARC-WORLD-039: the pump of the session's event queue that moves the clock, or null when time moves without
+    /// event passes (a host that runs no gameplay events).</summary>
+    public AreaEventPump? Events { get; }
     /// <summary>The lighting source currently bound (ARC-RENDER-012: the shown map's).</summary>
     public AreaLightingSource Source => _source;
     public AmbientSelection Selection => _state.Current ?? throw new InvalidOperationException("AREA_AMBIENT_NOT_APPLIED");
@@ -104,12 +107,13 @@ public sealed class AreaAmbientDriver
     }
 
     /// <summary>Binds to a session whose clock was started from this source's profile and applies the
-    /// current hour for the active sector.</summary>
-    public static AreaAmbientDriver Create(AreaLightingSource source, GameSessionOwner session, long activeSector)
+    /// current hour for the active sector. With <paramref name="events"/> every clock move goes through an
+    /// <see cref="AreaEventPump"/> over that world (ARC-WORLD-039).</summary>
+    public static AreaAmbientDriver Create(AreaLightingSource source, GameSessionOwner session, long activeSector, ISessionEventWorld? events = null)
     {
         ArgumentNullException.ThrowIfNull(source); ArgumentNullException.ThrowIfNull(session);
         if (session.QueryClockSnapshot().ProfileBinding != ClockProfile(source)) throw new InvalidOperationException("AREA_AMBIENT_CLOCK_PROFILE");
-        var driver = new AreaAmbientDriver(source, session, new AmbientLightingState(source));
+        var driver = new AreaAmbientDriver(source, session, new AmbientLightingState(source), events is null ? null : new AreaEventPump(session, events));
         driver.Apply(activeSector);
         return driver;
     }
@@ -129,7 +133,8 @@ public sealed class AreaAmbientDriver
         else if (!ModalPaused) _holdsPause = false;
         var admitted = _flow.Observe(hostMilliseconds);
         var hour = clock.Hour;
-        if (admitted > 0) clock = Mutate(_session.AdvanceGameTime(clock.Token, admitted, ClockAdvanceReason.OrdinaryAdvance));
+        if (Events is { } events) { events.Advance(admitted); clock = Clock; }
+        else if (admitted > 0) clock = Mutate(_session.AdvanceGameTime(clock.Token, admitted, ClockAdvanceReason.OrdinaryAdvance));
         return clock.Hour != hour && Apply(activeSector);
     }
 
@@ -140,7 +145,8 @@ public sealed class AreaAmbientDriver
         if (hours <= 0) throw new ArgumentOutOfRangeException(nameof(hours));
         var resolve = _source.TryResolveScheme(activeSector, out _, out _);
         if (resolve != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + resolve);
-        Mutate(_session.AdvanceGameTime(Clock.Token, checked(hours * HourMilliseconds), ClockAdvanceReason.ExplicitWait));
+        if (Events is { } events) events.Jump(checked(hours * HourMilliseconds));
+        else Mutate(_session.AdvanceGameTime(Clock.Token, checked(hours * HourMilliseconds), ClockAdvanceReason.ExplicitWait));
         return Apply(activeSector);
     }
 

@@ -13,7 +13,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 ## Development
 
 - [Toolchain and verification entry points](workflow/toolchain.md)
-- [Private local diagnostic launch and build retention](workflow/local-development.md)
+- [Private local diagnostic launch and build retention](workflow/local-development.md); [which builds may be deleted](workflow/build-retention.md)
 - [Task workflow](workflow/tasks.md) and [task naming](workflow/task-naming.md)
 - [Original executable check](research/original-executable-check.md): how original behaviour and bugs of the original game are classified, and the function oracle (emulating single functions of the executable)
 - [Original oracle and reconstruction removal (ARC-RES-051)](research/original-oracle-research.md): trial results, tools and plan for checking Steamwoven against the executable and removing the source reconstruction

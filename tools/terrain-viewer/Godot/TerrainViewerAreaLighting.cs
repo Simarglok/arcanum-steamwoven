@@ -17,12 +17,15 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     private AreaAmbientDriver? _areaAmbient;
+    // ARC-WORLD-039: the event world the clock's pump asks; it reads the viewer's current combat and conversation hosts.
+    private AreaEventWorld? _areaEventWorld;
+    private AreaEventWorld AreaEvents => _areaEventWorld ??= new AreaEventWorld(() => _combatHost, () => _conversationHost);
 
     private void StartAreaAmbient(AreaLoadResult area)
     {
         StopAreaAmbient();
         if (area.Lighting is not { } lighting || _areaSession is null) return;
-        _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector());
+        _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents);
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
     }
@@ -35,7 +38,7 @@ public partial class TerrainViewerApp
         if (_areaAmbient is not { } previous || (_exteriorArea ?? _readyArea)?.Lighting is not { } lighting) return;
         // The source of the map shown so far (the exterior's or, after ARC-RENDER-012, the cave's); the map of the
         // loaded actor is bound once it is placed (RebindAreaMapAmbient).
-        _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector);
+        _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents);
         _areaAmbient.Enabled = previous.Enabled;
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-WORLD-010 clock-rebound " + AreaAmbientReceipt());
@@ -71,6 +74,7 @@ public partial class TerrainViewerApp
         if (_areaAmbient is not { } driver) return;
         var paused = driver.ModalPaused;
         var hourChanged = driver.Tick(hostMilliseconds, WorldModal, AmbientSector());
+        LogAreaEvents(driver);
         if (hourChanged) PushAreaAmbient();
         if (hourChanged || paused != driver.ModalPaused)
         {
@@ -116,6 +120,7 @@ public partial class TerrainViewerApp
     {
         if (_areaAmbient is null) { _worldPanel?.SetActionStatus("Game time unavailable: no area lighting loaded"); return; }
         _areaAmbient.AdvanceHours(1, AmbientSector());
+        LogAreaEvents(_areaAmbient);
         AreaAmbientChanged($"Waited 1 hour: {_areaAmbient.Clock.Hour:00}:00");
     }
     private void PaletteLightingToggle()
@@ -144,7 +149,21 @@ public partial class TerrainViewerApp
         return $" | {clock.Hour:00}:{clock.Minute:00} day {clock.DayIndex + 1} {(clock.IsDay ? "DAY" : "NIGHT")} {flow} | ambient scheme {selection.SchemeId}"
             + $"{(selection.FromMapDefault ? " (map default)" : " (sector)")} hour {selection.Hour} {(driver.Enabled ? "ON" : "OFF (unlit source)")}"
             + $" | stationary lights {_readyArea?.Lighting?.Local?.LightCount ?? 0}"
-            + " | palette: Game time +1 hour (wait), Ambient lighting on/off | hourly discrete, 8x rate and original night/visual parity NOT_VERIFIED";
+            + " | palette: Game time +1 hour (wait), Ambient lighting on/off | hourly discrete, 8x rate and original night/visual parity NOT_VERIFIED"
+            + (driver.Events is { } events ? " | " + events.Last.Status(clock.GameTimestampMs) : "");
+    }
+
+    // ARC-WORLD-039: a line per pump call that took events (identifiers and counts only).
+    private int _loggedCallRefusals;
+
+    private void LogAreaEvents(AreaAmbientDriver driver)
+    {
+        if (driver.Events?.Last is not { } last || last.Fired + last.Dropped + last.ScriptCalls == 0) return;
+        var refused = (_areaEventWorld?.CallRefusals ?? 0) > _loggedCallRefusals;
+        _loggedCallRefusals = _areaEventWorld?.CallRefusals ?? 0;
+        GD.Print($"ARC-WORLD-039 events steps={last.Steps} passes={last.Passes} fired={last.Fired} dropped={last.Dropped} calls={last.ScriptCallsRun}/{last.ScriptCalls}"
+            + $" late={last.Coalesced} budgetLeft={last.BudgetLeft} pending={last.Pending}"
+            + (refused ? $" refusal={_areaEventWorld!.LastCallRefusal}" : ""));
     }
 
     // Numbers only: scheme id, hour, sector and digests; never colour values.

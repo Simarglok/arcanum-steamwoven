@@ -1,6 +1,6 @@
 # Функциональные требования: диалоги, сценарии, социальные системы и ИИ
 
-**Покрытие реализации:** аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), через PR #54. Источники исходного исследования и его дата сохранены; актуальный объём — в таблице и Steamwoven-описаниях ниже. [Метод и срез доски](README.md#база-и-происхождение). Новых runtime/GUI/original-data запусков в этом аудите нет.
+**Текущий статус:** статус каждого требования этого документа, реализованный объём, остаток и документация — в [матрице покрытия](coverage.md#диалоги-история-социальные-системы-и-ai) (пересверено 2026-10-20, ARC-DEV-027). Поля «Steamwoven» ниже и сводный раздел покрытия — подробности на дату их последней правки (исходный аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), PR #54); при расхождении верна матрица.
 
 **Срез исследования:** 2026-10-02. Источник — функции оригинального исполняемого файла 1.0.7.4 по указанным адресам; исходный research-checkout Steamwoven — `b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae`. Это требования данного домена, а не полный аудит Arcanum и не утверждённый список работ.
 
@@ -178,33 +178,11 @@ services, не запуск оригинальной игры и не доказ
 
 **Цель продукта (на проверку):** сценарный генератор создаёт существ только при включённом состоянии и в пределах ограничений на число активных и суммарное число созданий и интервала; смерть существа освобождает активное место. **Граница:** прототип, размещение и время зависят от данных, домена мира и игровых часов; боевой результат не входит. **Оригинал:** обработчик проверяет включение, день/ночь, экран, общий/активный предел; может создать группу. Размещение пробует случайное смещение до пяти клеток с тем же типом внутренней/наружной области, затем использует исходное место; гибель уменьшает активный счётчик, heartbeat назначает следующий интервал. **Неизвестно:** исходные профили генераторов и места не изучались. **Приёмка:** проверить пределы и условия, освобождение места и повторное создание без превышения общего числа. **Steamwoven:** отсутствует — нет генераторов или heartbeat. **Источники:** проверки генератора и новый интервал (0x4BA790) · размещение и создание (0x4BA910) · освобождение места после гибели (0x4BAB30) · вызов из heartbeat (0x4AD200).
 
-## Краткая таблица покрытия Steamwoven
+## Покрытие Steamwoven до 2026-10-20
+
+Таблица покрытия этого раздела перенесена в [матрицу покрытия](coverage.md#диалоги-история-социальные-системы-и-ai): там у каждого требования текущий статус, объём, остаток и документация (2026-10-20). Абзацы ниже описывали прежнюю таблицу этого документа (исходный аудит 2026-10-09 с поздними правками) и сохранены как история; слова «таблица», «строки» и «столбцы» в них относятся к ней.
 
 Статусы относятся к четырём осям. `Нет` обозначает отсутствие компонента в проверенном срезе, а не опровержение поведения оригинальной игры. `Частично` ограничено пояснением в ячейке. `В указанном объёме` потребовало бы теста/интеграции; в этом домене таких игровых проверок нет. Чтение функций оригинала не считается проверкой исполнения.
-
-| ID | Данные | Правила | Интеграция | Проверка |
-|---|---|---|---|---|
-| FR-DIALOG-001 | Частично — effective SAP_DIALOG, authenticated SCR/DLG и computed NPC node | Частично — computed entry запускает bounded conversation (ARC-SCRIPT-005); life/combat/exclusivity admission нет | Частично — AREA viewer: левый клик по NPC (в пределах 3 клеток, иначе сначала маршрут) → entry → conversation panel; диагностический профиль PC | Частично — NPC entry checks, conversation synthetic и opt-in original Virgil path |
-| FR-DIALOG-002 | Частично — gender selector, IQ, condition fields | Частично — gender → IQ (dumb) → LF/GF/RE/RA conjunction, numeric-ID group, первые 5 eligible | Частично — AREA conversation panel; PC facts диагностические; LF/GF/RE из состояния сессии, следующий разговор видит последствия (ARC-SCRIPT-006) | Частично — синтетическая матрица и opt-in original path |
-| FR-DIALOG-003 | Частично — Windows-1252 text, male/female NPC lines, @pcname@/@npcname@ | Частично — generated markers типизированы; generic `gd_*` фразы не загружаются | Частично — AREA conversation panel показывает реплику и варианты | Частично — синтетический текст/маркеры и native panel self-test |
-| FR-DIALOG-004 | Частично — ответы/действия conversation-grammar-v1 | Частично — Direct, Exit/negative → SCR line, JO, FL; LF/GF/QU/RU/RE/AL/IN/MM effects | Частично — диагностический world port; SCR continuation после DLG исполняется через диспетчер во вьювере (ARC-SCRIPT-009); barter и др. blocked | Частично — синтетические effects/frontiers и original Virgil exit |
-| FR-SCRIPT-001 | Частично — effective whole-array attachment и typed SAP_DIALOG context | Частично — Prepare/Resolve для одного event; общий диспетчер SAP с writeback слота (ARC-SCRIPT-008/009), во вьювере только SAP_DIALOG | Частично — headless Area snapshot bridge; нет automatic world events | Частично — synthetic attachment/admission и selected original graph |
-| FR-SCRIPT-002 | Частично — authenticated bounded SCR graph/operands и typed GF domain | Частично — TRUE/LF/FOLLOWING/JILTED, advance/GOTO/DIALOG; standalone GF read/write | Частично — NPC entry query API; GF подключён к DLG conversation; общий strict SCR reader и статический допуск S1 с типизированным отказом ([ARC-SCRIPT-007](../scripting/scr-program-admission.md)); ядро диспетчера S2 исполняет допущенные скрипты для объекта, клетки и сектора с типизированным исходом и эффектами ([ARC-SCRIPT-008](../scripting/scr-dispatcher-runtime.md)), разговор во вьювере и продолжение скрипта после DLG идут через диспетчер с проверкой достижимой части ([ARC-SCRIPT-009](../scripting/scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3)); скрипты и диалоги читаются по номеру через общий стек контента игры для любой карты ([ARC-SCRIPT-011](../scripting/script-content.md)); групп объектов, циклов и вызовов пока нет | Частично — NPC36, GF22 и conversation synthetic tests; original entry/conversation checks, не полная VM |
-| FR-SCRIPT-003 | Частично — explicit finite GF domain/bootstrap; новая игра оригинала: 3200 флагов, все 0 | Частично — versioned GF owner/read/write/snapshot; отложенные вызовы SCR как вид события `scr.call` в очереди сессии ([ARC-SCRIPT-010](../scripting/scr-dispatcher-runtime.md#deferred-calls-arc-script-010-slice-s5)); сюжетного runtime нет | Частично — GF DLG во флагах сессии AREA viewer (0..3199 false), переживают пещеру и snapshot (ARC-SCRIPT-006); файла сохранения нет | Частично — production GF22, conversation receipts, session story tests, opt-in Virgil save/load |
-| FR-SCRIPT-004 | Частично — правила состояния задания и слухов по чтению оригинала (F0); из данных заданий читается только уровень опыта | Частично — состояния заданий и слухи в сессии (ARC-SCRIPT-006), опыт за выполнение (ARC-WORLD-030) | Частично — QU/RU диалога пишут в сессию; alignment задания и журнала нет | Частично — синтетические тесты сессии и opt-in Virgil |
-| FR-SOCIAL-001 | Нет | Нет | Нет | Нет |
-| FR-SOCIAL-002 | Нет | Нет | Нет | Нет |
-| FR-SOCIAL-003 | Нет | Нет | Нет | Нет |
-| FR-SOCIAL-004 | Нет | Нет | Нет | Нет |
-| FR-SOCIAL-005 | Нет | Нет | Нет | Нет |
-| FR-SOCIAL-006 | Нет — нет сетевого членства | Нет | Нет | Нет |
-| FR-SOCIAL-007 | Нет — нет хранилища слухов/журнала | Частично — только команда RU | Нет | Частично — синтетическая команда RU |
-| FR-SOCIAL-008 | Нет — нет состояния журнала | Нет | Нет | Нет |
-| FR-SOCIAL-009 | Нет — нет очереди выпусков | Нет | Нет | Нет |
-| FR-AI-001 | Нет — нет распорядка NPC | Нет | Нет — нет игровых часов и исполнителя AI | Нет |
-| FR-AI-002 | Нет — нет акторов/восприятия | Нет | Нет — нет передачи управления бою | Нет |
-| FR-AI-003 | Нет — нет порталов карты | Нет | Нет — нет связи NPC с миром | Нет |
-| FR-AI-004 | Нет — нет данных генераторов | Нет | Нет — нет heartbeat/создания NPC | Нет |
 
 Это срез текущей ветки Steamwoven, не отчёт о готовности. Исторические PR #48/#54 содержат production-path synthetic и, для NPC entry, opt-in original checks. Они засчитываются только в указанном headless объёме; в текущем аудите не перезапускались. Research-only [reply/state](../scripting/dialog-state-contract.md) и [negative IN](../scripting/negative-inventory-transfer-contract.md) не являются исполнением разговора/передачи предмета.
 

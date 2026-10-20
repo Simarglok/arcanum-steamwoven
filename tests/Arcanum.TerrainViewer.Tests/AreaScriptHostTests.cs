@@ -42,6 +42,12 @@ public sealed class AreaScriptHostTests
         Assert.IsNull(f.Host.Slot(npc, ScrPoint.Use), "only the dialog point is modelled");
         Assert.IsNull(f.Host.Slot(new ScrObjectRef(f.Map.RuntimeMap, "oid:other"), ScrPoint.Dialog));
         Assert.IsNull(f.Host.Slot(new ScrObjectRef(f.Map.RuntimeMap + 1, npc.Code), ScrPoint.Dialog));
+        // ARC-WORLD-039: a deferred call's PC and speaker roles that moved with the PC are this host's objects again.
+        var away = new SessionMapId(f.Map.RuntimeMap + 78);
+        Assert.AreEqual(f.Host.Pc, f.Host.Local(new(away, AreaScriptHost.PcCode)));
+        Assert.AreEqual(npc, f.Host.Local(new(away, f.Entity)));
+        Assert.AreEqual(new ScrObjectRef(away.RuntimeMap, "oid:other"), f.Host.Local(new(away, "oid:other")));
+        Assert.IsNull(f.Host.Local(null));
         Assert.AreEqual(GameSessionDisposition.Changed, f.Session.SetMapChange(f.Session.Version, f.Map, MapChangeKey.ForEntity(f.Entity, AreaConversationState.LocalFlagsProperty), 6).Disposition);
         Assert.AreEqual(new ScrSlot(777, 6, 0x0201), f.Host.Slot(npc, ScrPoint.Dialog));
     }

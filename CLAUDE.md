@@ -23,6 +23,9 @@ summarizes the project and points to them.
   a cloud clone, which has no .NET or Godot, and runs **no checks**: no root
   checks, no task checks; the PR says "docs-only, no checks run". The
   independent review still applies (`docs/workflow/tasks.md`).
+- **Check every launch.** Within a minute of starting a Godot or launcher run,
+  confirm it started the intended mode, or stop it and fix the command
+  ([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
 - **The retired Hermes setup is off limits.** The Hermes task board and the
   Codex workflow were removed on 2026-10-16 (PR #137); do not touch `~/.hermes`
   on the owner's Mac (old board, profiles, logs with secrets) and do not run
@@ -82,7 +85,8 @@ under `docs/research`. Details: `docs/project/status.md`.
   (AREA) and `world-diagnostic` (WORLD), plus older diagnostic modes), `tools/terrain-inspect`, `tools/research/*` probes,
   `tools/arcanum-local` + `tools/local_dev` (local export/lease/retention
   authority — heavy, fail-closed). Labs: `experiments/{gamepad,display-ui,audio}-lab`.
-- Launcher: `./arcanum setup|area|world|status` wraps `tools/arcanum-local`. When a
+- Launcher: `./arcanum setup|area|world|map|status|clean` wraps `tools/arcanum-local`. Never delete `artifacts/`
+  or a build in it by hand, and never advise it: `./arcanum clean` and `docs/workflow/build-retention.md` say what may go. When a
   viewer mode gains or changes an argument or input, update `tools/local_dev/launch.py`
   (`GAME_ROLES`/`MODE_ROLES`/`ROLE_FLAGS`), `./arcanum` and the launcher docs in the
   same PR; `test_launcher_sync.py` catches drift.
@@ -147,7 +151,9 @@ under `docs/research`. Details: `docs/project/status.md`.
   branch, PR and commit naming.
 - `docs/workflow/toolchain.md` — exact SDK/Godot versions, `godot_canonical`,
   lab and export commands.
-- `docs/project/status.md` — component catalogue; `docs/requirements/coverage.md`.
+- `docs/project/status.md` — component catalogue; `docs/requirements/coverage.md` — status of
+  every functional requirement, checked when creating a task and updated in the PR that
+  changes it (`docs/workflow/tasks.md#functional-requirements`).
 - `docs/architecture/decisions.md` — owner decisions (graphics, HD pack, controls,
   platforms); `docs/research/method.md` — research method and provenance;
   `docs/research/original-executable-check.md` — checking behaviour in the

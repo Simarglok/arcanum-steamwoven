@@ -106,6 +106,35 @@ public sealed class AreaAmbientTests
         Assert.AreEqual(selection, driver.Selection);
     }
 
+    private sealed class CallLog : ISessionScriptWorld
+    {
+        public required GameSessionOwner Session { get; init; }
+        public List<long> At { get; } = [];
+        public Arcanum.Simulation.Combat.LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
+        public bool ObjectExists(SessionMapId map, string entity) => true;
+        public bool RunScriptCall(SessionScriptCall call) { At.Add(Session.QueryClockSnapshot().GameTimestampMs); return true; }
+    }
+
+    [TestMethod]
+    public void Driver_moves_time_through_the_event_pump_when_it_has_a_world()
+    {
+        using var session = Session(Source(15));
+        var world = new CallLog { Session = session };
+        var driver = AreaAmbientDriver.Create(Source(15), session, West, world);
+        Assert.IsNotNull(driver.Events);
+        var call = new SessionScriptCall(5, 0, new(new(1), SessionEventKinds.PlayerEntity), null);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ScheduleScriptCall(session.Version, call, 80_000).Disposition);
+        // Frames of 0.13 s host time (1.04 s of game time) never end on the deadline; the pump stops the clock there.
+        for (var host = 0L; host <= 13_000; host += 130) driver.Tick(host, false, West);
+        CollectionAssert.AreEqual(new[] { 54_080_000L }, world.At.ToArray());
+        Assert.AreEqual(54_000_000 + 13_000 * 8, driver.Clock.GameTimestampMs, "the first frame only sets the flow's reference");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ScheduleScriptCall(session.Version, call, 60_000).Disposition);
+        Assert.IsTrue(driver.AdvanceHours(1, West));
+        Assert.AreEqual(54_000_000 + 13_000 * 8 + 3_600_000, world.At[1], "a wait fires its event once, at the end of the jump");
+        Assert.AreEqual(1, driver.Events!.Last.ScriptCallsRun);
+        Assert.IsNull(AreaAmbientDriver.Create(Source(15), session, West).Events);
+    }
+
     [TestMethod]
     public void Driver_refuses_a_session_started_from_another_profile()
     {

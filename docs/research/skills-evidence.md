@@ -528,6 +528,8 @@ Codes are allocated on creation (D6). All code slices need a machine with the
 pinned .NET SDK and the original data. Session slices change the snapshot
 schema and therefore go one at a time with other schema changes. "Top-20
 #n" names an item of the owner's planning list outside the repository.
+The [skills plan](skills-plan.md) (ARC-RES-061, 2026-10-20) refines these
+slices against later main into tasks S1..S17.
 
 | Slice | Content | Requirements | Depends on | Lane |
 | --- | --- | --- | --- | --- |
