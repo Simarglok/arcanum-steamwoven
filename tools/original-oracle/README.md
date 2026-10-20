@@ -36,6 +36,9 @@ python3 -B tools/original-oracle/oracle.py list
 | 0x4A6980 | level bonus points | two integers, no stubs | `BonusPointsMatchTheOriginal` |
 | 0x4C5EB0 | basic skill level | one critter (ARC-SKILLS-001): stubs for its type, its twelve stored basic skills, its eight primary stats, the monstrous test and an additive effect change; the key-stat and cap tables; may call the base level, points and cap | `SkillLevelMatchesTheOriginal` (`SkillOriginalExeTests`) |
 | 0x4C6170 | basic skill training set | the same critter and a requested tier (also outside 0..3); the network test answers single player; the array write and the Educator update are recorded stubs; may call the level | `TrainingSetMatchesTheOriginal` (`SkillOriginalExeTests`) |
+| 0x4507D0 | spell run-time cost | one caster (ARC-MAGIC-003): stubs for its type, race and mastered college; one spell record's cost in a heap table behind 0x6876D8; the cheat flag 0x5E75FC; the payment 0x450420 is a recording stub (its arguments are the cost) | `RunCostMatchesTheOriginal` (`SpellCostOriginalExeTests`) |
+| 0x4508A0 | spell check cost | as above; the payment is asked without applying | `CheckCostMatchesTheOriginal` |
+| 0x4B1660 | spell cast cost (UI and AI) | as above, with the loaded flag 0x5E7618 and the cost getter 0x450340; no payment | `CastCostMatchesTheOriginal` |
 
 Adding a function: a `FunctionSpec` in `oracle_functions.py` with its model, a test with mutants that writes its receipt,
 a row in `ORACLE_FUNCTIONS` of `tools/local_dev/launch.py` and its test class in `ORACLE_TEST_CLASSES` (`test_launcher_sync.py` checks all three agree), and its F3
