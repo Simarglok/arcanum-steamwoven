@@ -194,6 +194,10 @@ public enum GameSessionFailure
     InvalidSchematics,
     // Schematic assembly (ARC-TECHNOLOGY-004).
     AssemblyRefused,
+    // Spell book (ARC-MAGIC-004).
+    SpellBookUnavailable, InvalidSpellBook, SpellBookRefused,
+    // Fate points (ARC-WORLD-054).
+    FateUnavailable, InvalidFateKind, FateRefused,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -316,9 +320,10 @@ public sealed class GameSessionSnapshot
     /// quelled rumors to the story (ARC-UI-008); schema 20 adds the hero's advancement fields and <see cref="Advancement"/> (ARC-WORLD-036);
     /// schema 21 adds the hero's innate skill changes (ARC-SKILLS-002); schema 22 adds <see cref="Durability"/> (ARC-WORLD-053);
     /// schema 23 adds <see cref="Schematics"/> (ARC-TECHNOLOGY-003); schema 24 adds the made items to <see cref="Inventory"/>
-    /// (ARC-TECHNOLOGY-004); schema 25 adds each party record's loyalty marks (ARC-WORLD-045). Schemas 1..24 are refused, not
-    /// migrated.</summary>
-    public const int CurrentSchemaVersion = 25;
+    /// (ARC-TECHNOLOGY-004); schema 25 adds the mastered college of the hero and of the NPC advancement sheets (ARC-MAGIC-004);
+    /// schema 26 adds the hero's fate points and armed fates (ARC-WORLD-054); schema 27 adds each party record's loyalty marks
+    /// (ARC-WORLD-045). Schemas 1..26 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 27;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

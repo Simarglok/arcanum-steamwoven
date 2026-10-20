@@ -5,6 +5,7 @@ using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Party;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -52,7 +53,8 @@ public static class AreaAdvancement
 
     /// <summary>
     /// A follower's loaded advancement and its modifiers from its stored fields: race, stats, level, points, magick and tech points
-    /// and poison from the 28 base stats, skills, colleges and degrees, hit and fatigue points and adjustments, the scheme and the
+    /// and poison from the 28 base stats, skills, colleges, the mastered college (ARC-MAGIC-004; a book outside its ranges gives no
+    /// admissible sheet) and degrees, hit and fatigue points and adjustments, the scheme and the
     /// monster flag; its effects' stat, skill and maxima changes through <paramref name="effect"/> (null for a number without a rule,
     /// which changes nothing). Null when the fields are not a critter's or give no admissible sheet.
     /// </summary>
@@ -66,7 +68,8 @@ public static class AreaAdvancement
         var sheet = new AdvancementSheet((CharacterRace)stats[RaceStat], (critter.Flags & MonsterFlag) != 0, [.. stats.Take(AutoLevelRules.PrimaryStats)],
             stats[MagickStat], stats[TechStat], stats[LevelStat], stats[UnspentStat], [.. critter.BasicSkills], [.. critter.TechSkills],
             [.. critter.SpellTech.Take(AutoLevelRules.Colleges)], [.. critter.SpellTech.Skip(MasteryIndex + 1).Take(AutoLevelRules.TechDisciplines)],
-            fields.Object.HitPoints, fields.Object.HitPointAdjustment, critter.FatiguePoints, critter.FatigueAdjustment);
+            fields.Object.HitPoints, fields.Object.HitPointAdjustment, critter.FatiguePoints, critter.FatigueAdjustment,
+            SpellBookRules.FromFields(critter.SpellTech)?.MasteredCollege ?? int.MinValue);
         var loaded = new SessionNpcAdvancement(entity, sheet, critter.AutoLevelScheme);
         var statChanges = ImmutableArray.CreateBuilder<StatModifier>();
         var basic = ImmutableArray.CreateBuilder<SkillModifier>();

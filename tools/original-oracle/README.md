@@ -39,9 +39,14 @@ python3 -B tools/original-oracle/oracle.py list
 | 0x4C62E0 | basic skill effectiveness | a source and an optional target (ARC-SKILLS-003): stubs for their basic levels (0x4C5EB0), the target's perception and intelligence (0x4B0490), the source's extraordinary intelligence (0x4B0EE0), the local PC (0x40DA50, a 64-bit answer), the difficulty setting (0x404590); the skill flag and opposed tables; may call the opposed effectiveness | `BasicEffectivenessMatchesTheOriginal` (`SkillCheckOriginalExeTests`) |
 | 0x4C6410 | opposed skill effectiveness | the same model, for any basic skill | `OpposedEffectivenessMatchesTheOriginal` |
 | 0x4C69F0 | tech skill effectiveness | the same model with the tech levels (0x4C65E0) and the target's spell flags (field 0x14, Magnetic Inversion) | `TechEffectivenessMatchesTheOriginal` |
+| 0x4F5090 | fate armed | one PC (ARC-WORLD-054): stubs for its fate flags (field 0xFE) and fate points (stat 20); the kinds' mask table; the window callback pointer 0x603D48 null | `ArmedMatchesTheOriginal` (`FateOriginalExeTests`) |
+| 0x4F50C0 | fate arm | the same PC; the authority test answers single player; the stat, field, hit-point and fatigue writes are recording stubs (the stat setter's clamp is applied by the test); may call the immediate effect 0x4F52D0 | `ArmMatchesTheOriginal` |
+| 0x4F51B0 | fate undo | as above | `UndoMatchesTheOriginal` |
+| 0x4F5270 | fate use | as above | `UseMatchesTheOriginal` |
 | 0x4507D0 | spell run-time cost | one caster (ARC-MAGIC-003): stubs for its type, race and mastered college; one spell record's cost in a heap table behind 0x6876D8; the cheat flag 0x5E75FC; the payment 0x450420 is a recording stub (its arguments are the cost) | `RunCostMatchesTheOriginal` (`SpellCostOriginalExeTests`) |
 | 0x4508A0 | spell check cost | as above; the payment is asked without applying | `CheckCostMatchesTheOriginal` |
 | 0x4B1660 | spell cast cost (UI and AI) | as above, with the loaded flag 0x5E7618 and the cost getter 0x450340; no payment | `CastCostMatchesTheOriginal` |
+| 0x4B1790 | spell learn | one critter (ARC-MAGIC-004): stubs for its type, its college's rank (0x407470), its effective level, intelligence and willpower, its stored magick points; the spell's willpower minimum in the table behind 0x6876D8 (or the defaults with the loaded flag 0); the rank write (0x4F0270) and the stat setter are recording stubs; single player, not the local player; may call the minima, the rank getter and setter | `LearnMatchesTheOriginal` (`SpellBookOriginalExeTests`) |
 
 Adding a function: a `FunctionSpec` in `oracle_functions.py` with its model, a test with mutants that writes its receipt,
 a row in `ORACLE_FUNCTIONS` of `tools/local_dev/launch.py` and its test class in `ORACLE_TEST_CLASSES` (`test_launcher_sync.py` checks all three agree), and its F3

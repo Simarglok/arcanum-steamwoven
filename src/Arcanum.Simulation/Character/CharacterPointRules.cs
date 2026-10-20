@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Skills;
 
 namespace Arcanum.Simulation.Character;
@@ -11,7 +12,7 @@ public enum PointChangeStatus
     /// <summary>The cost is above the unspent points.</summary>
     NotEnoughPoints,
     /// <summary>The value cannot rise: a stat whose effective value is at its maximum or whose base is at the race's maximum, a
-    /// skill whose level is 20, a hit-point or fatigue pool at its bound.</summary>
+    /// skill whose level is 20, a hit-point or fatigue pool at its bound, a college with all five ranks.</summary>
     AtMaximum,
     /// <summary>The skill's key stat does not allow the points (four levels each above its cap); <see cref="PointChange.Stat"/>
     /// names the key stat.</summary>
@@ -26,12 +27,18 @@ public enum PointChangeStatus
     SpellNeedsStat,
     /// <summary>Lowering intelligence would leave a tech degree below its minimum.</summary>
     DegreeNeedsStat,
-    /// <summary>The track's lane (spell ranks: the magic lane; tech degrees: the technology lane) has not plugged in.</summary>
+    /// <summary>The track's lane was not given (the session gives spell ranks and tech degrees theirs).</summary>
     LaneNotReady,
-    /// <summary>Raising a tech degree needs more effective intelligence than the critter has (ARC-TECHNOLOGY-002).</summary>
+    /// <summary>Raising a tech degree (ARC-TECHNOLOGY-002) or learning a spell rank (ARC-MAGIC-004) needs more effective
+    /// intelligence than the critter has.</summary>
     IntelligenceTooLow,
+    /// <summary>The character level is below the step's minimum (a spell rank's 1, 1, 5, 10, 15).</summary>
+    LevelTooLow,
+    /// <summary>Another stat is below the step's minimum (a spell rank's willpower; <see cref="PointChange.Stat"/> names it).</summary>
+    StatTooLow,
     /// <summary>An input outside the rules' domain (an invalid sheet or modifiers, an undefined track, an index out of range,
-    /// a lane step that changes the unspent points or leaves an invalid sheet).</summary>
+    /// a lane step that changes fields other than its own, moves its value by other than one step, charges other than its
+    /// stated cost or leaves an invalid sheet).</summary>
     Invalid,
 }
 
@@ -58,9 +65,9 @@ public sealed record PointChange(PointChangeStatus Status, AdvancementSheet Shee
     public bool Changed => Status == PointChangeStatus.Changed;
 }
 
-/// <summary>One step of a lane: the status, the sheet after the step without the unspent points (the pool moves them) and the
-/// character points the step costs or refunds.</summary>
-public readonly record struct PointLaneStep(PointChangeStatus Status, AdvancementSheet Sheet, int Points);
+/// <summary>One step of a lane: the status, the sheet after the step without the unspent points (the pool moves them), the
+/// character points the step costs or refunds, and for a refusal the stat it names.</summary>
+public readonly record struct PointLaneStep(PointChangeStatus Status, AdvancementSheet Sheet, int Points, CharacterStat? Stat = null);
 
 /// <summary>
 /// The rules a lane brings to the shared point path for its track: the magic lane's spell ranks (<see cref="AdvancementTrack.College"/>,
@@ -70,6 +77,11 @@ public readonly record struct PointLaneStep(PointChangeStatus Status, Advancemen
 /// </summary>
 public interface IPointLane
 {
+    /// <summary>The character points the next step up of <paramref name="index"/> costs: the pool tests them against the unspent
+    /// points before it asks for the step, as the original's editor does. The pool admits the sheet and the index first; a lane
+    /// may throw or answer anything for an invalid one.</summary>
+    int Cost(AdvancementSheet sheet, int index);
+
     /// <summary>One step up of <paramref name="index"/> (a college or a discipline) and its cost, or a refusal.</summary>
     PointLaneStep Raise(AdvancementSheet sheet, AdvancementModifiers modifiers, int index);
 
@@ -187,24 +199,13 @@ public static class CharacterPointRules
         if (!skills.Allowed) return Refused(PointChangeStatus.SkillNeedsStat, sheet, AdvancementTrack.Stat, (int)stat, stat, skills.Blocking);
         if (stat == CharacterStat.Intelligence)
         {
-            if (!SpellsHold(sheet, _ => AutoLevelRules.MinimumSpellIntelligence, effective))
+            if (!SpellBookRules.RanksHold(sheet.Colleges, _ => AutoLevelRules.MinimumSpellIntelligence, effective))
                 return Refused(PointChangeStatus.SpellNeedsStat, sheet, AdvancementTrack.Stat, (int)stat, stat);
             if (!DegreesHold(sheet, effective)) return Refused(PointChangeStatus.DegreeNeedsStat, sheet, AdvancementTrack.Stat, (int)stat, stat);
         }
-        if (stat == CharacterStat.Willpower && !SpellsHold(sheet, spell => work.SpellWillpower(spell), effective))
+        if (stat == CharacterStat.Willpower && !SpellBookRules.RanksHold(sheet.Colleges, work.SpellWillpower, effective))
             return Refused(PointChangeStatus.SpellNeedsStat, sheet, AdvancementTrack.Stat, (int)stat, stat);
         return null;
-    }
-
-    /// <summary>Every known rank (ranks 0 .. rank − 1 of each college) needs at most <paramref name="value"/> (0x4B1B90, 0x4B1C00).</summary>
-    [OriginalFunction(0x4B1B90, OriginalFunctionScope.Full)]
-    [OriginalFunction(0x4B1C00, OriginalFunctionScope.Full)]
-    internal static bool SpellsHold(AdvancementSheet sheet, Func<int, int> minimum, int value)
-    {
-        for (var college = 0; college < AutoLevelRules.Colleges; college++)
-            for (var rank = 0; rank < sheet.Colleges[college]; rank++)
-                if (minimum(college * AutoLevelRules.SpellsPerCollege + rank) > value) return false;
-        return true;
     }
 
     /// <summary>Every stored degree's intelligence minimum is at most <paramref name="intelligence"/> (0x4B02B0; a PC or NPC).</summary>
@@ -316,13 +317,16 @@ public static class CharacterPointRules
         bool raise)
     {
         if (lane is null) return Refused(PointChangeStatus.LaneNotReady, sheet, track, index);
+        var cost = raise ? lane.Cost(sheet, index) : 0;
+        if (cost < 0) return Refused(PointChangeStatus.Invalid, sheet, track, index);
+        if (cost > sheet.UnspentPoints) return Refused(PointChangeStatus.NotEnoughPoints, sheet, track, index);
         var step = raise ? lane.Raise(sheet, modifiers, index) : lane.Lower(sheet, modifiers, index);
         if (step.Status != PointChangeStatus.Changed)
             return Refused(Enum.IsDefined(step.Status) ? step.Status : PointChangeStatus.Invalid, sheet, track, index,
-                step.Status == PointChangeStatus.IntelligenceTooLow ? CharacterStat.Intelligence : null);
-        if (!AutoLevelRules.IsValid(step.Sheet) || step.Points < 0 || !OwnStep(sheet, step.Sheet, track, index, raise ? 1 : -1))
+                step.Stat ?? (step.Status == PointChangeStatus.IntelligenceTooLow ? CharacterStat.Intelligence : null));
+        if (!AutoLevelRules.IsValid(step.Sheet) || step.Points < 0 || (raise && step.Points != cost) ||
+            !OwnStep(sheet, step.Sheet, track, index, raise ? 1 : -1))
             return Refused(PointChangeStatus.Invalid, sheet, track, index);
-        if (raise && step.Points > sheet.UnspentPoints) return Refused(PointChangeStatus.NotEnoughPoints, sheet, track, index);
         var unspent = raise ? sheet.UnspentPoints - step.Points : Math.Min(sheet.UnspentPoints + step.Points, ExperienceRules.MaxUnspentPoints);
         var after = step.Sheet with { UnspentPoints = unspent };
         return new(PointChangeStatus.Changed, after, raise ? step.Points : unspent - sheet.UnspentPoints, Value(after, track, index));

@@ -162,15 +162,25 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// A conversation with the NPC starts (R5): the stored value moves into the conversation slot, raised to 100 when it is
-    /// below and the PC spends its "force good reaction" fate point (<paramref name="forceGoodReaction"/>; fate points are not
-    /// session state yet). Changes made until <see cref="EndReactionConversation"/> go to that slot; "met before" stays as it was.
+    /// below and the hero's "force good reaction" fate is armed; that fate is then used in the same revision (DR6, ARC-WORLD-054),
+    /// while at 100 or above it stays armed for a later talk. Changes made until <see cref="EndReactionConversation"/> go to that
+    /// slot; "met before" stays as it was.
     /// </summary>
-    public SessionReactionResult BeginReactionConversation(GameSessionVersion expected, string entity, ReactionNpcFacts npc,
-        bool forceGoodReaction = false)
+    public SessionReactionResult BeginReactionConversation(GameSessionVersion expected, string entity, ReactionNpcFacts npc)
     {
         ThrowIfDisposed();
-        return StepReaction(expected, entity, npc, record =>
-            record with { Conversation = ReactionRules.ConversationStart(record.Stored(npc.BaseReaction), forceGoodReaction) });
+        var force = _hero is { } hero && FateRules.IsArmed(hero.State.Fate, FateKind.ForceGoodReaction);
+        var used = false;
+        var result = StepReaction(expected, entity, npc, record =>
+        {
+            var stored = record.Stored(npc.BaseReaction);
+            used = force && stored < ReactionRules.ForcedGoodReaction;
+            return record with { Conversation = ReactionRules.ConversationStart(stored, force) };
+        });
+        // The raised start always changes the slot, so a used fate commits with it.
+        if (used && result.Disposition == GameSessionDisposition.Changed)
+            _hero!.Apply(_hero.State.WithFate(FateRules.Use(_hero.State.Fate, FateKind.ForceGoodReaction).After));
+        return result;
     }
 
     /// <summary>The conversation ends (R5): the stored value goes to the remembered slot and the conversation slot is cleared,

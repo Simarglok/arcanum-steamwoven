@@ -26,7 +26,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 21. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> at <see cref="GameSessionSnapshot.CurrentSchemaVersion"/>. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets, and the order and meaning of pending events, whose queue order
@@ -59,7 +59,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut", "loyalty"];
     private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted", "loyalty"];
     private static readonly string[] HeroFields = ["prototype", "race", "gender", "stats", "level", "experience", "unspentPoints",
-        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills"];
+        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills", "fatePoints", "armedFates"];
     private static readonly string[] EffectFields = ["effect", "modifiers"];
     private static readonly string[] InnateSkillFields = ["cause", "skill", "operator", "value"];
     // Skill names in Skill order (ARC-SKILLS-002), the innate skill change's causes.
@@ -89,12 +89,12 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] ChangeFields = ["kind", "attribute", "operator", "value"];
     private static readonly string[] ExperienceFields = ["npcs"];
     private static readonly string[] NpcExperienceFields = ["entity", "worth", "pool"];
-    private static readonly string[] HeroAdvancementFields = ["basicSkills", "techSkills", "colleges", "techDegrees", "hitPointPoints",
-        "fatiguePoints", "scheme"];
+    private static readonly string[] HeroAdvancementFields = ["basicSkills", "techSkills", "colleges", "mastery", "techDegrees",
+        "hitPointPoints", "fatiguePoints", "scheme"];
     private static readonly string[] AdvancementFields = ["npcs"];
     private static readonly string[] NpcAdvancementFields = ["entity", "race", "monstrous", "stats", "magickPoints", "techPoints", "level",
-        "unspentPoints", "basicSkills", "techSkills", "colleges", "techDegrees", "hitPointPoints", "hitPointAdjustment", "fatiguePoints",
-        "fatigueAdjustment", "scheme"];
+        "unspentPoints", "basicSkills", "techSkills", "colleges", "mastery", "techDegrees", "hitPointPoints", "hitPointAdjustment",
+        "fatiguePoints", "fatigueAdjustment", "scheme"];
     private static readonly string[] RandomFields = ["seed", "draws"];
     private static readonly string[] LifeFields = ["hero", "critters"];
     private static readonly string[] LifeRecordFields = ["hpDamage", "fatigueDamage", "poison", "conditions", "scars", "deathTimeMs"];
@@ -264,6 +264,7 @@ public static class GameSessionSnapshotCodec
                 WriteInts(w, "basicSkills", hero.Advancement.BasicSkills);
                 WriteInts(w, "techSkills", hero.Advancement.TechSkills);
                 WriteInts(w, "colleges", hero.Advancement.Colleges);
+                w.WriteNumber("mastery", hero.Advancement.MasteredCollege);
                 WriteInts(w, "techDegrees", hero.Advancement.TechDegrees);
                 w.WriteNumber("hitPointPoints", hero.Advancement.HitPointPoints);
                 w.WriteNumber("fatiguePoints", hero.Advancement.FatiguePoints);
@@ -282,6 +283,8 @@ public static class GameSessionSnapshotCodec
                     w.WriteEndObject();
                 }
                 w.WriteEndArray();
+                w.WriteNumber("fatePoints", hero.Fate.Points);
+                w.WriteNumber("armedFates", hero.Fate.Armed);
                 w.WriteEndObject();
             }
             else w.WriteNull("hero");
@@ -430,6 +433,7 @@ public static class GameSessionSnapshotCodec
                 WriteInts(w, "basicSkills", sheet.BasicSkills);
                 WriteInts(w, "techSkills", sheet.TechSkills);
                 WriteInts(w, "colleges", sheet.Colleges);
+                w.WriteNumber("mastery", sheet.MasteredCollege);
                 WriteInts(w, "techDegrees", sheet.TechDegrees);
                 w.WriteNumber("hitPointPoints", sheet.HitPointPoints);
                 w.WriteNumber("hitPointAdjustment", sheet.HitPointAdjustment);
@@ -1018,7 +1022,9 @@ public static class GameSessionSnapshotCodec
             Int(f["level"], p + ".level", int.MinValue, int.MaxValue), Int(f["unspentPoints"], p + ".unspentPoints", int.MinValue, int.MaxValue),
             Int(f["alignment"], p + ".alignment", int.MinValue, int.MaxValue), Effect(f["raceEffect"], p + ".raceEffect"),
             Effect(f["genderEffect"], p + ".genderEffect"), Int(f["experience"], p + ".experience", int.MinValue, int.MaxValue),
-            HeroAdvancement(f["advancement"], p + ".advancement"), InnateSkills(f["innateSkills"], p + ".innateSkills"));
+            HeroAdvancement(f["advancement"], p + ".advancement"), InnateSkills(f["innateSkills"], p + ".innateSkills"),
+            new FateState(Int(f["fatePoints"], p + ".fatePoints", int.MinValue, int.MaxValue),
+                Int(f["armedFates"], p + ".armedFates", int.MinValue, int.MaxValue)));
     }
 
     // Shapes only; the count, magnitudes and divisors are the hero's import (InvalidHero).
@@ -1043,7 +1049,8 @@ public static class GameSessionSnapshotCodec
         var f = Fields(element, p, HeroAdvancementFields);
         return new(Ints(f["basicSkills"], p + ".basicSkills"), Ints(f["techSkills"], p + ".techSkills"), Ints(f["colleges"], p + ".colleges"),
             Ints(f["techDegrees"], p + ".techDegrees"), Int(f["hitPointPoints"], p + ".hitPointPoints", int.MinValue, int.MaxValue),
-            Int(f["fatiguePoints"], p + ".fatiguePoints", int.MinValue, int.MaxValue), Int(f["scheme"], p + ".scheme", int.MinValue, int.MaxValue));
+            Int(f["fatiguePoints"], p + ".fatiguePoints", int.MinValue, int.MaxValue), Int(f["scheme"], p + ".scheme", int.MinValue, int.MaxValue),
+            Int(f["mastery"], p + ".mastery", int.MinValue, int.MaxValue));
     }
 
     // Shapes and ordinal order; lengths, ranges and the budget are Restore's.
@@ -1065,7 +1072,7 @@ public static class GameSessionSnapshotCodec
                 Bool(n["monstrous"], path + ".monstrous"), Ints(n["stats"], path + ".stats"), Value("magickPoints"), Value("techPoints"),
                 Value("level"), Value("unspentPoints"), Ints(n["basicSkills"], path + ".basicSkills"), Ints(n["techSkills"], path + ".techSkills"),
                 Ints(n["colleges"], path + ".colleges"), Ints(n["techDegrees"], path + ".techDegrees"), Value("hitPointPoints"),
-                Value("hitPointAdjustment"), Value("fatiguePoints"), Value("fatigueAdjustment"));
+                Value("hitPointAdjustment"), Value("fatiguePoints"), Value("fatigueAdjustment"), Value("mastery"));
             npcs[i] = new(entity, sheet, Value("scheme"));
         }
         return new(npcs);
