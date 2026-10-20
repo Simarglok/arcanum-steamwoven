@@ -802,8 +802,8 @@ Source: [NPC AI awareness](npc-ai-awareness.md) (plan stage A2, source units S6�
 critter sees or hears another, how the straight line between two tiles is priced for sound and missiles, how an attack
 alerts nearby NPCs and what each witness does, and what arming dynamite does. Read on 2026-10-20 by a first reader and,
 independently, a second reader that saw only the questions (method step 6). Both agree on every row. The second reader
-first read the concealment margin as raising the observer's Perception, having taken the multiplier 0xAE147AE1 as
-positive; asked to re-check the sign, it worked the numbers (P 8, margin 85 → P 2) and agrees that the margin lowers it.
+first read the concealment margin as raising the observer's Perception, having taken the signed reciprocal multiplier
+as positive; asked to re-check the sign, it worked the numbers (P 8, margin 85 → P 2) and agrees that the margin lowers it.
 The second reader added the view-option dependence of the line (AW17), the dropped cost when a step leaves the map
 (AW6), the unconscious test's cases (AW2) and the attack event's flag gate (AW9); the first reader re-read them and agrees.
 No first-pass anomaly (P1–P7) belongs to this stage; the F0 summaries of S6–S9 are confirmed or refined. Every direct
@@ -823,10 +823,10 @@ branch stays inside `.text`.
 | AW10 | witness (0x4A9F10), protect (0x4AE3A0) | Skip the victim, the attacker and an NPC whose leader (none while "wait here") is either; wake a sleeper; protects the victim and perceives the victim → attacked reaction toward the attacker (0x4AA620); else protects the attacker and perceives him → toward the victim; else, not a guard (social class 5), no "no flee", danger state NONE and perceives the victim → FLEE from the attacker. Perception: sight, else hearing at the attack's loudness. | Original (confirms the F0 summary) |
 | AW11 | dynamite (0x4AA0D0), trap use (0x4BC384, 0x4BC4D3) | On using an item whose spell field 2 is 176: NPCs in the 10-tile square around the user, not dead, not mind-controlled, not having the user as PC leader, that see the user or hear it at silent loudness, are attacked by the user (silent, no flags). | Original (refines F0: any user, on use, not on explosion) |
 | AW12 | every call of sight and hearing | Sight: script condition 28 (0x4462F2), witness (3), dynamite, find target (3), target validity (0x4ABBA1), guards (0x4AEF8A), attack set-up (0x4B2303), skill difficulty (0x4C86B3), examine (0x5541AE), inventory window (0x572408). Hearing: condition 29 (normal), witness (attack's), dynamite (silent), find target (silent if concealed, else normal), guards (caller's: loud or silent), attack set-up (silent), skill difficulty (normal), examine (silent). Indices stay 0..2. | Original |
-| AW13 | step cost (0x43FE00) for a corner step | Both L routes are summed: side tiles once, the corner tile twice (+16 soundproof, cover ×2); a blocker on either side tile blocks. | Original |
-| AW14 | step cost with 0x10 on a corner step | The last step also skips objects on the side tiles. | Original |
+| AW13 | step cost (0x43FE00) for a corner step | Both L routes are summed: side tiles once, the corner tile twice (+16 soundproof, cover ×2, so one see-through cover object there denies a clear shot); a blocker on either side tile blocks. | Original bug (the corner tile's double cost; the side-tile blocking is the original's design) |
+| AW14 | step cost with 0x10 on a corner step | The last step also skips objects on the side tiles. | Original bug (with AW13) |
 | AW15 | step cost with 0x0C | "Ignore critters" has no effect under "projectile": living critters block unless shoot-through. | Original |
-| AW16 | noise (0x4A9E10) | An NPC inside both squares is handled twice. | Original |
+| AW16 | noise (0x4A9E10) | An NPC inside both squares is handled twice, repeating the attacked reaction and its roll. | Original bug |
 | AW17 | line (0x4201C0), `location_xy` (0x4B8680) | More than 100 samples (about 1000 pixels on the major axis) fail → cost 100; the screen geometry follows the view option at 0x5FC2D0. | Original (limit) |
 | AW18 | sound cost and line of fire walks | The observer's pixel offset is added to a line built between tile centres. | Original |
 | AW19 | witness (0x4A9F10) | A sleeping witness is woken before any perception test. | Original |

@@ -484,9 +484,10 @@ repository; the table records only the observed behaviour.
   ([ledger RT8–RT11](original-verification-ledger.md#real-time-combat-arc-combat-004)).
 - **O4** The line-of-fire test `sub_4ADE00` (the 26 threshold and the cover
   rating) belongs to FR-COMBAT-007 and was not read. *Settled by ARC-RES-056:* the
-  test sums cover along a straight tile line (shoot-through objects that block
-  sight +50, see-through cover +20; other objects, closed doors, solid walls and
-  living critters block); 26 is the animation's "clear shot" limit (cost below
+  test sums cover along a straight tile line: closed doors, objects and living
+  critters block only without the shoot-through flag, and with it add 50 (not
+  see-through) or 20 (see-through, providing cover); solid walls block unless
+  the wall carries spell flag 0x100000; 26 is the animation's "clear shot" limit (cost below
   26, nothing but the target blocking), and the attack difficulty adds the cover
   and makes a blocked shot impossible ([awareness](npc-ai-awareness.md#5-line-of-fire-s8-combat-o4)).
 - **O5** How AI chooses attacks, flees or ends its subturn early

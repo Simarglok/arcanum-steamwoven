@@ -9,7 +9,10 @@ question O4, with its 26 threshold and cover rating), how an attack alerts the
 NPCs around it and what each witness does, and what arming dynamite does to the
 NPCs that notice. It changes no code. The rules are inputs for implementation
 slice I2 (awareness) of the plan and for the combat difficulty term
-FR-COMBAT-007.
+FR-COMBAT-007. The prowling margin (skill effectiveness, the opposed table and
+the prowling difficulty) is documented here as the executable computes it, but
+the shared skill check ARC-SKILLS-003 will own it: the AI code takes the margin
+as an input and does not compute it.
 
 Earlier facts reused here: the [core loop](npc-ai-core-loop.md) (ARC-RES-054:
 the danger states and their setter 0x4AABE0, parameter slots), the
@@ -25,7 +28,9 @@ cost function 0x43FDC0/0x43FE00, F0 until now) and the
 Behaviour comes from the retail executable (`Arcanum.exe` 1.0.7.4, SHA-256
 `9bd80511…78d52`), read statically with `llvm-objdump` by a first reader and,
 independently, by a second reader that saw only the questions
-([method step 6](original-executable-check.md)). Object fields were named from
+([method step 6](original-executable-check.md)); the second reader was asked
+once to re-check one point, the sign of the concealment margin, as the ledger
+intro records. Object fields were named from
 the executable's own field table (0x59BEA8); flag bits, skill, stat and
 social-class numbers are the project's records of the same constants. The rows
 and verdicts are in the [ledger](original-verification-ledger.md#npc-ai-awareness-arc-res-056).
@@ -65,10 +70,11 @@ between the two objects' tiles; loudness is an index 0 = silent, 1 = normal,
    door on the crossed edge and 8 for a soundproof tile entered; objects and
    critters cost nothing; same tile 0, a line too long to build 100.
 5. **Line of fire (S8, 0x4ADE00), closes combat O4.** The same line walk with
-   the missile flags: a wall piece, closed door or object that is not
-   "shoot-through" blocks (living critters included), a shoot-through object
-   that is not "see-through" adds **50**, a see-through one that provides cover
-   adds **20**; objects on the target's tile are skipped. The function returns
+   the missile flags: a solid wall piece blocks (unless the wall carries spell
+   flag 0x100000); a closed door, an object or a living critter blocks only
+   when it lacks the "shoot-through" flag, and with it adds **50** when not
+   "see-through" or **20** when see-through and providing cover; objects on the
+   target's tile are skipped. The function returns
    the summed cover and reports the first blocker. The **26 threshold** belongs
    to two animation-goal callbacks (0x425590, 0x429960): an attacker has a clear
    shot only when the cover is below 26 (at most one see-through cover object)
@@ -88,17 +94,17 @@ between the two objects' tiles; loudness is an index 0 = silent, 1 = normal,
    every living NPC within a 10-tile square around it that is not mind-controlled
    and does not have that critter as PC leader, and that sees it or hears it at
    silent loudness, counts as attacked by it (silent, no flags).
-8. **Anomalies.** No first-pass anomaly belongs to A2. The reading found
-   behaviour of the original that a reimplementation could easily "fix" by
-   accident; all are recorded and kept in both settings (no switch): a corner
-   step of the line counts the corner tile's cost twice and both side tiles once
-   (AW13), the last corner step also skips objects on the side tiles (AW14),
-   living critters block lines although the walk asks to ignore critters
-   (AW15), an NPC inside both alert squares is notified twice (AW16), lines
-   longer than about 1000 screen pixels fail with cost 100 (AW17), the walk is
-   shifted by the observer's pixel offset (AW18), and a sleeping witness wakes
-   without any perception test (AW19)
-   ([anomalies](#9-anomalies-and-decisions)).
+8. **Anomalies.** No first-pass anomaly belongs to A2. Two double counts are
+   proposed as bugs of the original with Original switches, as the plan's
+   precedents A6, A7 and MR3: a corner step of the line counts the corner
+   tile's soundproofing and cover twice (AW13, with AW14, the last corner step
+   skipping objects on the side tiles), and an NPC inside both alert squares is
+   handled twice (AW16). Kept in both settings: living critters block lines
+   although the walk asks to ignore critters (AW15), lines longer than about
+   1000 screen pixels fail with cost 100 (AW17, flagged for the owner because
+   long ranged shots get +100 difficulty), the walk is shifted by the
+   observer's pixel offset (AW18), and a sleeping witness wakes without any
+   perception test (AW19) ([anomalies](#9-anomalies-and-decisions)).
 
 ## 1. Perception distance (S6)
 
@@ -150,14 +156,16 @@ cover object on the line: `E = 260 / 4 = 65` (Δ = 12 − 8 = 4), `D = −20`
 
 ### 2.1 The prowling margin
 
-Both perception tests build a skill invocation with T (the prowler) as source,
+This is what the executable computes; in Steamwoven the margin `M` comes from
+the shared skill check ARC-SKILLS-003 and the awareness functions take it as
+an input. Both perception tests build a skill invocation with T (the prowler) as source,
 O (the observer) as target, skill 6 (prowling), no item, modifier 0, and the
 flag 0x4000 for sight or 0x2000 for hearing.
 
 **Effectiveness** (0x4C62E0 → opposed 0x4C6410): `Δ` = T's prowling level −
 O's effective Perception; `Δ ≥ 10` → 100, `Δ ≤ −10` → 0, else `V[Δ] / 4` with
 `V[−9..9]` = 55, 66, 78, 91, 105, 120, 136, 153, 171, 190, 209, 227, 244,
-260, 275, 289, 302, 314, 325 (so 13 … 47 at Δ = 0 … 81); +10 when T's
+260, 275, 289, 302, 314, 325 (so 13 … 81 for Δ = −9 … 9; 47 at Δ = 0); +10 when T's
 intelligence is extraordinary; for the local PC +E/2 on the easy and −E/4 on
 the hard game difficulty; at least 0. Prowling has no 95 cap.
 
@@ -265,7 +273,7 @@ negative and nobody hears.
 
 | Thing (source edge, destination tile) | Result |
 | --- | --- |
-| wall piece 10, 13, 14, 17, 18 or 19 on the crossed edge | passes on an edge step of the line, blocks inside a corner step (these are the pieces the walking code treats as windows) |
+| wall piece 10, 13, 14, 17, 18 or 19 on the crossed edge | passes on an edge step of the line, blocks inside a corner step (inference: the window pieces of the walking code; see AU1) |
 | wall piece 22, 25, 26, 29, 30, 31 or 32 | passes, no cost |
 | any other wall piece | blocks, unless the wall object has spell flag 0x100000; then the shoot-through rule below |
 | door: broken art or open | passes |
@@ -290,8 +298,8 @@ non-see-through object → 50; a closed door that is not shoot-through → block
 
 | Caller (call site) | From → to | Use |
 | --- | --- | --- |
-| animation goal callback 0x425590 (0x425649), from the goal tables | attacker → target's tile | after the reach check 0x4294F0 failed: when cost < **26** and no blocker but the target, every entry of the path gets the weapon range and the goal is marked (run-info 0xC00 bit 4) |
-| animation goal callback 0x429960 (0x429A8D; also via 0x4294A0) | attacker → target's tile | true only when distance ≤ max(weapon range, 1), cost < **26** and no blocker but the target |
+| animation goal callback 0x425590 (0x425649), from the goal tables | attacker → target's tile | when the target moved since the run started, the run-info flag value 0x4 (at 0xC00) is set and nothing else is done; otherwise, after the reach check 0x4294F0 failed: when cost < **26** and no blocker but the target, and only with a wielded weapon, every goal entry of the run (run-info count) gets the weapon range and the same flag 0x4 is set |
+| animation goal callback 0x429960 (0x429A8D; also via 0x4294A0) | attacker → target's tile | false when the target has object flag 0x1 or 0x2 (destroyed, off); otherwise true only when distance ≤ max(weapon range, 1), cost < **26** and no blocker but the target |
 | attack update 0x4294F0 (0x42963C), from the attack goal 0x432B46, 0x432BE2 | attacker → target's tile | cost ignored; a blocker other than the target needs a path (0x426500) |
 | skill difficulty 0x4C8430, bow, throwing, firearms (0x4C88D7) | source → target's tile | blocker: +1,000,000 (impossible, flag 0x20000); else cost > 0 is added (flag 0x200, cover) |
 | skill difficulty, prowling sight (0x4C8BC6) | observer → prowler's tile | section 2.1 term 5a |
@@ -318,6 +326,11 @@ flags)`, stage A3): the noise is raised (call at 0x4A98A8) only for a PC or NPC
 attacker and a PC or NPC victim that passed the event's early refusals (dead,
 nigh-invulnerable, off or invulnerable, the decoy, a wall, self), after V (or
 its PC leader) lost concealment, and only when flag bits 1, 2 and 4 are clear.
+The combat paths 0x4B2690 (calls at 0x4B279C, 0x4B27F7) and 0x4B3170 (call at
+0x4B337B) pass the weapon loudness and set event flag 1 when the attack's
+combat flag 0x800 is set, so those attacks raise no noise and no witnesses
+(the meaning of combat flag 0x800 is AU5); the portal and container guards
+0x4AEE50 (calls at 0x4AF060, 0x4AF105) pass their caller's loudness.
 
 **0x4A9E10** `Noise(V, A, s)`: `r = N[s]` (2, 8 or 15); `d` = distance(V, A).
 
@@ -382,10 +395,13 @@ Every caller treats 0 as perceived.
 | portal and container guards 0x4AEE50 (S22) | 0x4AEF8A | 0x4AEFA0, the caller's: loud from damage (0x4B4727, 0x4B474C) and magick (0x4550AE), silent from skill use (0x4C7EE4, 0x4C7F1D) | a guard that neither sees nor hears is skipped |
 | attack set-up 0x4B2210 (combat) | 0x4B2303 | 0x4B2319, silent | with a backstab possible against an NPC, the attack is also marked unnoticed (0x8000) when the NPC neither sees nor hears the attacker |
 | skill difficulty 0x4C8430 | 0x4C86B3 | 0x4C86C9, normal | −30 when the target, not in combat mode, neither sees nor hears the source (not for prowling) |
-| examine 0x554100 region (0x5541AE, 0x5541CA) | NPC → concealed PC | silent | the smaller value picks one of five lines (0, 1, 2, 3, more); a sleeping NPC never shows 0 |
+| examine critter 0x553F70 (0x5541AE, 0x5541CA) | NPC → concealed PC | silent | the smaller value picks one of five lines (0, 1, 2, 3, more); a sleeping NPC never shows 0 |
 | inventory window 0x572370 | 0x572408 | — | in two of its modes the PC is turned toward the other object and refused when it does not see it |
 
-Fixed loudness of the other attack events: normal for the dialog (0x416717),
+Attack events from combat (0x4B279C, 0x4B27F7, 0x4B337B) pass the weapon
+loudness, with event flag 1 (no noise) when the attack's combat flag 0x800 is
+set; the guards (0x4AF060, 0x4AF105) pass their caller's loudness. Fixed
+loudness of the other attack events: normal for the dialog (0x416717),
 fire damage (0x42A87C), magick (0x453F5B, 0x453F8B), the follower broadcast
 (0x4C3763) and skill use (0x4C7728, 0x4C793B); normal with flag 2 for the
 script action (0x447D95, so no noise); loud with flag 4 for the follower
@@ -399,20 +415,21 @@ Verdicts and rows: [ledger](original-verification-ledger.md#npc-ai-awareness-arc
 No first-pass anomaly (P1–P7) belongs to A2, and the F0 summaries of S6–S9 were
 confirmed or refined, none contradicted. The rows below are behaviour of the
 original that looks unplanned; none crashes or reads out of bounds. Decisions
-follow D2 and D8: only a confirmed bug of the original would get a fix and an
-Original switch; for these the intent is not clear and the effect is part of
-how lines and noises play, so each is **proposed to be kept in both settings,
-no switch**, and listed for the owner.
+follow D2 and D8 and the plan's precedents (A6 and A7: double counts are bugs
+of the original with Original switches; MR3 of ARC-RES-058): a double count
+gets a Steamwoven fix and a proposed Original switch that keeps the retail
+behaviour; behaviour that looks designed or is a limit is kept in both
+settings, no switch.
 
 | ID | Original 1.0.7.4 | Verdict | Proposed decision |
 | --- | --- | --- | --- |
-| AW13 | A corner step of the line is priced as both L-shaped routes around the corner: each side tile once, the corner tile twice (a soundproof tile +16, a cover object +40 or +100), and a blocker on either side tile blocks the corner. | Original (the step function serves walking, where only a blocker matters) | Kept in both settings, no switch: lines along the screen axes pass corners all the time, so a change would move many shots and sounds away from the original. Owner may choose a fix later. |
-| AW14 | On the last step, "skip objects" also skips objects on the two side tiles of a corner step. | Original | Kept, no switch. |
-| AW15 | The line passes "ignore critters", but under "projectile" a living critter still goes to the shoot-through test, so critters block lines of fire and sight (the flag has no effect there). | Original (likely intended: no shooting through bodies) | Kept, no switch. |
-| AW16 | An NPC inside both alert squares (around the attacker and around the victim) is handled twice; the second time can repeat the attacked reaction, including its target-choice roll (stage A3). | Original | Kept, no switch: deduplicating would change roll counts against the original. |
-| AW17 | A line of 100 samples (about 1000 screen pixels along its major axis: some 12 tiles along the screen-horizontal tile diagonal, 24–25 along a tile axis or the screen vertical) fails: the line of fire returns 100 without a blocker (attack difficulty +100, no magick line of sight, AI refusal 5) and the sound cost is 100. The geometry also depends on the view option (0x5FC2D0, isometric or the editor's top-down view). | Original (limit) | Kept for the isometric view, no switch; the top-down view is not modelled. |
-| AW18 | The walk adds the observer's pixel offset to a line built between tile centres, so a moving observer's line is shifted and may end beside the target tile (then the last-step skip never applies). | Original | Kept, no switch; a standing critter has offset 0. |
-| AW19 | A witness inside an alert square is woken before any perception test. | Original | Kept, no switch. |
+| AW13 | A corner step of the line is priced as both L-shaped routes around the corner: each side tile once, the corner tile twice (a soundproof tile +16, a see-through cover object +40, so one such object on a corner tile already denies a clear shot), and a blocker on either side tile blocks the corner. | Original bug for the corner tile's double cost (the step function serves walking, where only a blocker matters); the side-tile blocking is the original's design | Steamwoven: the corner tile's soundproofing and objects count once; side tiles and blockers as in the original. Original setting keeps both routes summed (`CornerStepCountsBothRoutes`, proposed). |
+| AW14 | On the last step, "skip objects" also skips objects on the two side tiles of a corner step. | Original bug (same reuse as AW13) | Follows AW13: Steamwoven skips only the target tile's objects; the same proposed switch keeps the original. |
+| AW15 | The line passes "ignore critters", but under "projectile" a living critter still goes to the shoot-through test, so critters block lines of fire and sight (the flag has no effect there). | Original (likely intended: no shooting through bodies) | Kept in both settings, no switch. |
+| AW16 | An NPC inside both alert squares (around the attacker and around the victim) is handled twice; the second time repeats the attacked reaction, including its target-choice roll (stage A3). | Original bug (the A7 pattern: one event processed twice) | Steamwoven: each NPC is handled once per attack (the attacker's square first). Original setting handles it twice (`WitnessHandledTwice`, proposed). |
+| AW17 | A line of 100 samples (about 1000 screen pixels along its major axis: some 12 tiles along the screen-horizontal tile diagonal, 24–25 along a tile axis or the screen vertical) fails: the line of fire returns 100 without a blocker (attack difficulty +100, no magick line of sight, AI refusal 5) and the sound cost is 100. The geometry also depends on the view option (0x5FC2D0, isometric or the editor's top-down view). | Original (limit) | Kept for the isometric view in both settings, no switch; the top-down view is not modelled. **For the owner:** beyond about 12 tiles along the screen-horizontal diagonal every ranged shot gets +100 difficulty and the animation never finds a clear shot. |
+| AW18 | The walk adds the observer's pixel offset to a line built between tile centres, so a moving observer's line is shifted and may end beside the target tile (then the last-step skip never applies). | Original | Kept in both settings, no switch (inference: a standing critter has offset 0, so only a moving observer is affected). |
+| AW19 | A witness inside an alert square is woken before any perception test. | Original | Kept in both settings, no switch. |
 
 Further observations, no decision needed: sight discards the cover cost and a
 blocked prowling line sets the difficulty to −100, dropping its other terms
@@ -423,31 +440,39 @@ loudness and fires on use, not on explosion.
 ## 10. Consequences for Steamwoven (project policy proposals)
 
 1. **Slice I2** implements `PerceptionDistance`, `CanSee`, `CanHear`,
-   `SoundCost`, `LineOfFire` and the prowling margin as pure functions over an
-   explicit record (observer and target flags, stats, prowling level and
-   training, light level and carried light, dark sight, worn armour
-   adjustments, facing, the tile line and the objects on its tiles) with the
+   `SoundCost` and `LineOfFire` as pure functions over an explicit record
+   (observer and target flags, stats, light level and carried light, dark
+   sight, facing, the tile line and the objects on its tiles) with the
    arithmetic above, returning the excess distance or the cost and the blocker
-   with a reason (`STATE`, `INVISIBLE`, `FACING`, `RANGE`, `BLOCKED`).
+   with a reason (`STATE`, `INVISIBLE`, `FACING`, `RANGE`, `BLOCKED`). The
+   prowling margin `M` is an input from the shared skill check ARC-SKILLS-003
+   (effectiveness, opposed table, prowling difficulty with its line-of-fire
+   term); the AI code does not compute it.
 2. **The line walk** reproduces the screen-space sampling (10-pixel steps, 100
    samples, the observer's pixel offset) and the step function's edge and
-   corner rules, so AW13–AW18 come out as in the original; it shares the
-   traversal records of the passability work.
+   corner rules, so the Original setting reproduces AW13–AW18 and Steamwoven
+   differs only by the AW13/AW14 fix; it shares the traversal records of the
+   passability work.
 3. **The combat difficulty** (FR-COMBAT-007) takes the cover value and the
    blocker from `LineOfFire`; the attack executor (stage A6) uses the 26
    threshold for "clear shot from here".
 4. **Noise and witnesses** become an event of the attack owner (stage A3 / slice
    I4) with the loudness rule, the two squares and the witness order above;
-   protect and the attacked reaction plug in from A3/A4.
+   protect and the attacked reaction plug in from A3/A4; Steamwoven handles each
+   witness once (AW16).
 
 ## Unknowns
 
 - **AU1** Which wall pieces 10–32 are in the art (windows, openings) is a data
   question; the rule is stated by piece number.
-- **AU2** Script conditions 28 and 29 may pass a non-critter observer or heard
-  object; the field getter's behaviour on a critter field of a non-critter was
-  not traced.
+- **AU2** Script conditions 28 and 29 may pass a non-critter observer: the
+  unconscious test (0x45D800) is true for any non-critter, so sight and hearing
+  return 1000 for it; only the critter-flag read made just before that test
+  (a critter field on a non-critter) was not traced. A non-critter heard
+  object is read for the moving-silently flag in the same way.
 - **AU3** The light level at an object (0x4DCE10) is the lighting stage's
   function; only its 0..255 result is used here.
 - **AU4** How often lines exceed the 100-sample limit in real fights is a
   runtime question.
+- **AU5** What sets the combat record's flag 0x800 (which suppresses the
+  noise of combat attacks) is the combat stage's question.
