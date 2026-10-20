@@ -7,8 +7,8 @@ original executable. It replaces the eight slices proposed at the end of that re
 ([proposed implementation slices](magic-core-evidence.md#proposed-implementation-slices-project-policy-not-accepted)).
 No slice starts before the owner accepts this plan; codes are allocated when each task is created (owner decision D6 of
 the [NPC combat AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)), so slices carry plan labels **MT1..MT21**
-(MT9 and MT20 in two parts each) here, not codes; the codes of other lanes named below were taken by those
-lanes' threads on 2026-10-20 and are in flight. Docs only: no code, reader, schema or test changes.
+(MT9 and MT20 in two parts each) here, not codes. Of the other lanes named below, the [skills plan](skills-plan.md) (ARC-RES-061) is merged
+and the technology research (ARC-RES-062) is in flight. Docs only: no code, reader, schema or test changes.
 
 Requirements: [FR-MAGIC-001](../requirements/combat-magic-tech.md#fr-magic-001) to
 [FR-MAGIC-007](../requirements/combat-magic-tech.md#fr-magic-007) in full; the core's part of
@@ -48,7 +48,7 @@ script hooks of [FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002
    is fixed in both modes by the owner's no-crash rule; MG1, MG2, MG8, MG13, MG14, MG16, MG17 and MG20 follow the
    original and need no decision.
 6. **Boundaries agreed with the parallel lanes (2026-10-20)**: skills builds the shared character-point transaction
-   (ARC-SKILLS-005) and the fate owner (ARC-SKILLS-007); technology (ARC-RES-062) owns tech degrees, schematics,
+   (slice S5 of the skills plan) and the fate owner (S7); technology (ARC-RES-062) owns tech degrees, schematics,
    charge cells and tech items; NPC AI slice I8 consumes MT1–MT13, and MT17 for summoning
    ([Boundaries](#boundaries-with-other-lanes)).
 
@@ -135,7 +135,7 @@ parallel. "Read" lists the function groups each slice reads twice in the executa
 | --- | --- | --- | --- | --- | --- | --- |
 | **MT1 Spell records** | MAGIC | `Arcanum.Data.Magic` reader of `spelllist.mes` lines +0..+4 into immutable records (every field of the [definitions table](magic-core-evidence.md#definitions-fr-magic-001): IQ, cost, maintain, duration, stat info, trigger count, resist, range, charges, info, flags, cancel and disallow sets, item triggers, ten `AI_*`), `spell.mes` names and college texts, `magictech.mes` component names; strict and like-original reader modes (load-map policy 2), typed refusals. Contract `docs/formats/spell-records.md`. | 001 | — | parse (0x44FE30, 0x44FFA0, 0x450090, 0x4501D0, 0x457580, 0x4578F0, 0x457D00, 0x457E70); LM rows already read stay | — |
 | **MT2 Components and target areas as data** | MAGIC | Component lines (+5 to the first gap) for the five actions: `AoE:` over the 65 target names, spell-flag filters, `Radius:`, `Count:`, and the 25 component types with their keys, typed per type. `RealData` census of what [census U3](combat-data-census.md#unknowns) left open: component types per action, `Dmg_Flags:`, summon lists and `Clear_Faction:`, `No_Stack:` and cancel sets, `No_Resist:` with `Maintain:`/`Duration:` (sizes MG19), records 80..139. | 001, 003, 007 (data) | MT1 | components (0x458060), target table (0x596140) | MG18 |
-| **MT3 Spell book** | MAGIC | One spell-book rule (learn rank r, unlearn the highest, mastery once with all five, re-validation after a stat decrease) that auto-level and the UI share; magick points +1/−1 per rank; mastery saved for the hero and NPC sheets (schema bump); NPC books from the critter fields of any map. Spends through the shared point transaction of ARC-SKILLS-005. | 002; FR-CHAR-015 | MT1, ARC-SKILLS-005 | learn/unlearn (0x4B1530–0x4B1A40), checks (0x4B1B90, 0x4B1C00), mastery (0x4B1C70, 0x4B1CB0, 0x4B1CF0); oracle candidate for learn (0x4B1790) if the stubs stay small | — |
+| **MT3 Spell book** | MAGIC | One spell-book rule (learn rank r, unlearn the highest, mastery once with all five, re-validation after a stat decrease) that auto-level and the UI share; magick points +1/−1 per rank; mastery saved for the hero and NPC sheets (schema bump); NPC books from the critter fields of any map. Spends through the shared point transaction of the skills plan's S5. | 002; FR-CHAR-015 | MT1, the skills plan's S5 | learn/unlearn (0x4B1530–0x4B1A40), checks (0x4B1B90, 0x4B1C00), mastery (0x4B1C70, 0x4B1CB0, 0x4B1CF0); oracle candidate for learn (0x4B1790) if the stubs stay small | — |
 | **MT4 Aptitude inputs** | MAGIC | The sector aptitude adjustment of every sector (the input `CharacterStatContext.SectorAptitudeAdjustment` has no source yet) and the day, night, sky and nature mage backgrounds' ±4 magick points at read time. | FR-CHAR-020; 005 | — | sector (0x45A060), backgrounds branch of the stat getter (0x4B0490) | — |
 
 ### Phase B: cast rules (pure functions in `Arcanum.Simulation`)
@@ -143,7 +143,7 @@ parallel. "Read" lists the function groups each slice reads twice in the executa
 | Slice | Type | Result | FR | Needs | Read / oracle | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
 | **MT5 Cost and payment** | MAGIC | The three cost formulas as the original has them (run time `ceil(cost / 2)` for mastery then dwarf ×2; UI and AI with truncation; UI check without mastery, MG2); the pre-animation affordability check on the cast spell (MG1); a payment plan: free runs, `ChargeBeginCost: 0`, fatigue-limited half, worn mana stores first (MG20), fatigue refusal at −15, fail-after-pay for maintained or untimed spells, item spell charges; the charge-cell source through a port the technology lane fills; the worn-store recharge amount. | 004 | MT1 | cost (0x4507D0, oracle), pay (0x450420), checks (0x4508A0 oracle, 0x450940), spell cost (0x4B1650, 0x4B1660 oracle, 0x4B16C0), recharge (0x459590, 0x459640, 0x459680) | MG20 (2nd reading only) |
-| **MT6 Resistance and save** | MAGIC | Per-target resolver returning the margin or a skip: stored magic resistance (O9), the tech-aligned raise, d100 margin, `Resist:` save d20, extraordinary willpower immunity, damaging floor 50, the fate save as an input (MG13); the fail-chance predictor exactly as the original, with its own labelled d20 (MG14); technology records skip it. | 005, 010 | MT1, fate input (ARC-SKILLS-007 later) | resist (0x4537B0, oracle), fail chance (0x453B20 oracle, 0x453CC0) | MG4, O9 |
+| **MT6 Resistance and save** | MAGIC | Per-target resolver returning the margin or a skip: stored magic resistance (O9), the tech-aligned raise, d100 margin, `Resist:` save d20, extraordinary willpower immunity, damaging floor 50, the fate save as an input (MG13); the fail-chance predictor exactly as the original, with its own labelled d20 (MG14); technology records skip it. | 005, 010 | MT1, fate input (the skills plan's S7 later) | resist (0x4537B0, oracle), fail chance (0x453B20 oracle, 0x453CC0) | MG4, O9 |
 | **MT7 Invocation check** | MAGIC | The check before any slot or payment, with a typed refusal per step: turn, spell number, range (Chebyshev, inventory always in range), line of fire through a port (filled by AI awareness I2 or a later LOS slice), forbidden flags, Bonds of Magick, NPC fallback radius 2, item aptitude gate and holder-can-use (0x456A10), intelligence 5, anti-teleport. | 003, 009 (gate), 010 | MT1, MT2 | check (0x4564E0), range (0x454700), LOS (0x456BC0), flags (0x456430), gate (0x456A10) | MG5 |
 | **MT8 Target areas** | MAGIC | Target lists for an action's area over a world query port (objects and tiles of the active map, party, parent, attacker, the run's object list) and the per-component filter and re-aim; reads the cone, count and radius branches the research left open (O3). | 003 | MT2 | targets (0x4F40B0) and the target functions it calls (0x4F24F0–0x4F4E40), apply area (0x453D40, 0x453EE0, 0x453F20) | MG18 (if not settled in MT2) |
 
@@ -231,11 +231,11 @@ in both modes); none of them is a slice of this plan.
 
 Agreed through the coordinator on 2026-10-20:
 
-- **Skills (ARC-RES-061, ARC-SKILLS-\*)**: one character-point pool, the session's unspent points; learning or
-  unlearning a rank spends or refunds through the editor-budget transaction that ARC-SKILLS-005 builds (whichever lane
+- **Skills ([ARC-RES-061](skills-plan.md))**: one character-point pool, the session's unspent points; learning or
+  unlearning a rank spends or refunds through the editor-budget transaction that slice S5 of the [skills plan](skills-plan.md) builds (a WORLD code) (whichever lane
   gets there first builds it, the other reuses it). The aptitude formula stays in `CharacterStatRules`; skills owns the
   tech points from tech skills, magic owns magick points from spells, the sector adjustment and the mage backgrounds.
-  The shared fate owner (point count, armed fate per kind, consumed on use, saved) is ARC-SKILLS-007; until it exists,
+  The shared fate owner (point count, armed fate per kind, consumed on use, saved) is slice S7 of the skills plan (a WORLD code); until it exists,
   magic takes "spell at maximum" and "save against magick" as armed-fate inputs and returns which fate it consumed, as
   the attack resolver does.
 - **Technology (ARC-RES-062)**: tech degrees and disciplines, schematics, tech items (records 140..222 as their
@@ -257,7 +257,7 @@ Agreed through the coordinator on 2026-10-20:
 - **Spell visuals**: `SpellEyeCandy.mes`, casting and missile art and their animation; MT20a emits presentation events
   only, and the visual catalogue is a presentation task.
 - **Line of fire**: the AI awareness lane (combat open question O4).
-- **Fate state**: ARC-SKILLS-007.
+- **Fate state**: slice S7 of the [skills plan](skills-plan.md).
 
 ## Open questions
 
