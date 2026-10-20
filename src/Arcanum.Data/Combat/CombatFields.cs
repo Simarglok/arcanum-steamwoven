@@ -122,7 +122,22 @@ public sealed record CombatNpcFields(uint Flags, int AiData, int ExperienceWorth
 /// with the NPC block for NPCs. Raw values only: no stat, effect, aptitude, difficulty or wielder is applied.
 /// </summary>
 public sealed record CombatFields(CombatFieldOrigin Origin, CombatObjectFields Object, CombatItemFields? Item, CombatWeaponFields? Weapon,
-    CombatAmmoFields? Ammo, CombatArmorFields? Armor, CombatGenericFields? Generic, CombatCritterFields? Critter, CombatNpcFields? Npc);
+    CombatAmmoFields? Ammo, CombatArmorFields? Armor, CombatGenericFields? Generic, CombatCritterFields? Critter, CombatNpcFields? Npc)
+{
+    /// <summary>The written block of a written item (type 13, ARC-TECHNOLOGY-003); null for any other object.</summary>
+    public CombatWrittenFields? Written { get; init; }
+}
+
+/// <summary>
+/// Written item fields as stored (ARC-TECHNOLOGY-003): the written flags, the subtype (<see cref="SchematicSubtype"/> marks a
+/// schematic document) and the first and last text line; for a schematic document the start line is its schematic number.
+/// </summary>
+public sealed record CombatWrittenFields(uint Flags, int Subtype, int TextStartLine, int TextEndLine)
+{
+    public const int SchematicSubtype = 5;
+
+    public bool IsSchematic => Subtype == SchematicSubtype;
+}
 
 public enum CombatFieldFailure
 {

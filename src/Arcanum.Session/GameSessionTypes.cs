@@ -74,12 +74,15 @@ public sealed class GameSessionLimits
     /// <summary>Item durability records (ARC-WORLD-053): items whose condition the session changed plus the items it deleted
     /// (as life: far more than the items a playthrough damages, breaks or repairs).</summary>
     public const int PolicyMaxDurabilityRecords = 8192;
+    /// <summary>The hero's found schematics (ARC-TECHNOLOGY-003): the original's list has no limit; the installed data has 62 found
+    /// records (57 with a document), so 128 is twice that.</summary>
+    public const int PolicyMaxFoundSchematics = 128;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
         int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
         int maxLifeRecords = PolicyMaxLifeRecords, int maxReactionRecords = PolicyMaxReactionRecords,
         int maxExperienceRecords = PolicyMaxExperienceRecords, int maxAdvancementRecords = PolicyMaxAdvancementRecords,
-        int maxDurabilityRecords = PolicyMaxDurabilityRecords)
+        int maxDurabilityRecords = PolicyMaxDurabilityRecords, int maxFoundSchematics = PolicyMaxFoundSchematics)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
@@ -91,10 +94,11 @@ public sealed class GameSessionLimits
         if (maxExperienceRecords is < 1 or > PolicyMaxExperienceRecords) throw new ArgumentOutOfRangeException(nameof(maxExperienceRecords));
         if (maxAdvancementRecords is < 1 or > PolicyMaxAdvancementRecords) throw new ArgumentOutOfRangeException(nameof(maxAdvancementRecords));
         if (maxDurabilityRecords is < 1 or > PolicyMaxDurabilityRecords) throw new ArgumentOutOfRangeException(nameof(maxDurabilityRecords));
+        if (maxFoundSchematics is < 1 or > PolicyMaxFoundSchematics) throw new ArgumentOutOfRangeException(nameof(maxFoundSchematics));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
         MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
         MaxReactionRecords = maxReactionRecords; MaxExperienceRecords = maxExperienceRecords;
-        MaxAdvancementRecords = maxAdvancementRecords; MaxDurabilityRecords = maxDurabilityRecords;
+        MaxAdvancementRecords = maxAdvancementRecords; MaxDurabilityRecords = maxDurabilityRecords; MaxFoundSchematics = maxFoundSchematics;
     }
 
     public int MaxMaps { get; }
@@ -107,6 +111,7 @@ public sealed class GameSessionLimits
     public int MaxExperienceRecords { get; }
     public int MaxAdvancementRecords { get; }
     public int MaxDurabilityRecords { get; }
+    public int MaxFoundSchematics { get; }
 }
 
 /// <summary>
@@ -185,6 +190,8 @@ public enum GameSessionFailure
     HeroEditorUnavailable, HeroEditorClosed, InvalidPointTarget, PointRefused,
     // Item durability (ARC-WORLD-053).
     InvalidDurability,
+    // Schematic knowledge (ARC-TECHNOLOGY-003).
+    InvalidSchematics,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -305,20 +312,21 @@ public sealed class GameSessionSnapshot
     /// to the retail executable (<see cref="Arcanum.Simulation.Clock.GameClockOwner.RetailExecutableSha256"/>, ARC-DEV-009); schema 17
     /// adds the hero's blessings and curses to <see cref="Effects"/> (ARC-WORLD-035); schema 18 adds <see cref="Sound"/> (ARC-WORLD-040); schema 19 adds the
     /// quelled rumors to the story (ARC-UI-008); schema 20 adds the hero's advancement fields and <see cref="Advancement"/> (ARC-WORLD-036);
-    /// schema 21 adds the hero's innate skill changes (ARC-SKILLS-002); schema 22 adds <see cref="Durability"/> (ARC-WORLD-053).
-    /// Schemas 1..21 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 22;
+    /// schema 21 adds the hero's innate skill changes (ARC-SKILLS-002); schema 22 adds <see cref="Durability"/> (ARC-WORLD-053);
+    /// schema 25 adds <see cref="Schematics"/> (ARC-TECHNOLOGY-003; 23 and 24 are the reaction and companion slices'). Schemas
+    /// 1..24 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 25;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
-        SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionEquipmentState equipment, SessionDurabilityState durability,
+        SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionEquipmentState equipment, SessionDurabilityState durability, SessionSchematicState schematics,
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
         SessionEventState events, SessionLightingState? lighting, SessionSoundState sound)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Equipment = equipment; Durability = durability; Effects = effects; Experience = experience; Advancement = advancement; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Events = events; Lighting = lighting; Sound = sound;
+        Hero = hero; Inventory = inventory; Equipment = equipment; Durability = durability; Schematics = schematics; Effects = effects; Experience = experience; Advancement = advancement; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Events = events; Lighting = lighting; Sound = sound;
     }
 
     public int SchemaVersion { get; }
@@ -337,6 +345,8 @@ public sealed class GameSessionSnapshot
     public SessionEquipmentState Equipment { get; }
     /// <summary>The conditions of the items the session damaged, broke or repaired, and the items it deleted (ARC-WORLD-053).</summary>
     public SessionDurabilityState Durability { get; }
+    /// <summary>The hero's found schematics (ARC-TECHNOLOGY-003).</summary>
+    public SessionSchematicState Schematics { get; }
     /// <summary>The hero's durable effects (ARC-WORLD-029); their timed ENDs are in <see cref="Events"/>.</summary>
     public SessionEffectState Effects { get; }
     /// <summary>The experience worth and pool of the NPCs the session changed (ARC-WORLD-030); the hero's experience is in

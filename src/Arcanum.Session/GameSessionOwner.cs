@@ -162,6 +162,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportWornConditions(equipment, durability);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportSchematics(snapshot.Schematics, hero is not null, limits, out var found);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportLife(snapshot.Life, hero is not null, snapshot.Clock.GameTimestampMs, limits, out var life);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportEffects(snapshot.Effects, hero, life, snapshot.Clock.GameTimestampMs, out var effects);
@@ -205,7 +207,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party,
             hero, inventory, equipment, effects, experience, advancement, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat,
             snapshot.Lighting, sink, events!)
-        { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _durability = durability };
+        { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _durability = durability, _foundSchematics = found };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -1188,7 +1190,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), _equipment.Capture(), _durability.Capture(), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureEvents(), _lighting, _sound.Capture());
+            _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureEvents(), _lighting, _sound.Capture());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
