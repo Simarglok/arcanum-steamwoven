@@ -467,7 +467,7 @@ public sealed class AreaCompanionGroup
         ArgumentNullException.ThrowIfNull(command);
         if (_companions.FirstOrDefault(c => c.Key == command.Identity)?.Template is not { } template
             || !template.Visuals.TryGetValue(command.Visual, out var visual)) return null;
-        // ARC-RENDER-018: a multiply or constant-alpha body stays unlit where it stands.
+        // ARC-RENDER-018, ARC-RENDER-026: an additive, multiply or constant-alpha body stays unlit where it stands.
         var channel = command.Unlit ? AreaAmbientChannel.Unlit : AreaAmbientPolicy.Channel(visual.RawArt);
         if (local is not null) return local.Body(command, visual, channel, pair);
         var color = AreaLocalLighting.Ambient(channel, pair);

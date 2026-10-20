@@ -23,7 +23,7 @@ public partial class TerrainViewerApp
         var kinds = new (string Name, Func<AreaDrawCommand, bool> Of)[]
         {
             ("multiply", command => command.Multiply),
-            ("constant-alpha", command => command.Unlit && !command.Multiply && command.WadeRows == 0),
+            ("constant-alpha", command => command.Unlit && !command.Multiply && !command.Additive && command.WadeRows == 0),
             ("wading", command => command.WadeRows > 0 && !command.Unlit && !command.Additive && !command.Multiply),
         };
         var observed = new List<object>();

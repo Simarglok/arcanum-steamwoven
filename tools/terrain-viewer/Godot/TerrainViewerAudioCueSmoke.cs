@@ -13,7 +13,7 @@ public partial class TerrainViewerApp
     /// to the full volume scaled by the channel / 127. Prints the event sounds the earlier stages played.</summary>
     private async Task RunAreaCueSmokeAsync()
     {
-        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-042 cue smoke: " + why); }
+        static void Require(bool value, string why) { if (value) return; GD.Print("ARC-UI-042 cue smoke: FAIL " + why); throw new InvalidOperationException("ARC-UI-042 cue smoke: " + why); }
         Require(_audio is not null && AreaSoundCatalog() is not null && _worldActor.Session is AreaGridSession, "no backend, catalogue or actor");
         var grid = (AreaGridSession)_worldActor.Session!;
         var (prototypes, tiles) = CueContent();

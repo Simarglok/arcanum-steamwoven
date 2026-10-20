@@ -69,7 +69,7 @@ public partial class TerrainViewerApp
     /// recalculating a positional sound; the setting is then restored.</summary>
     private async Task RunAreaInterfaceSoundSmokeAsync()
     {
-        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-044 interface sound smoke: " + why); }
+        static void Require(bool value, string why) { if (value) return; GD.Print("ARC-UI-044 interface sound smoke: FAIL " + why); throw new InvalidOperationException("ARC-UI-044 interface sound smoke: " + why); }
         Require(_audio is not null && AreaSoundCatalog() is not null && ActorCell() is { } && _worldActor.Session is AreaGridSession, "no backend, catalogue or actor");
         var played = _interfaceSoundsPlayed;
         var logbook = "none";

@@ -146,7 +146,8 @@ They are general rules of every body, not of these maps.
 - **Constant alpha.** The body is drawn at its blit alpha (`Alpha`, the source's
   weight; the shader divides by 255 where the original divides by 256, at most
   1/255 apart).
-- **Unlit.** Multiply and constant-alpha bodies are drawn with the base palette,
+- **Unlit.** Additive (since ARC-RENDER-026, ledger BL2), multiply and
+  constant-alpha bodies are drawn with the base palette,
   without ambient or stationary light (`Unlit`, the `Unlit` ambient channel), and
   a wall among them never fades.
 - **Wading.** A body with `OF_WADING` and without `OF_WATER_WALKING`, as
@@ -159,7 +160,8 @@ They are general rules of every body, not of these maps.
   multiply before constant alpha. That dispatch is a source reading, not checked in
   the executable (F0), and no installed body has the combination.
 
-On the installed original (opt-in test): 20 wading bodies in `caladons sewers`
+On the installed original (opt-in test): additive bodies, drawn unlit, on most
+interiors (115 in `bmc`, 86 in K'na Tha, 76 in `ashbury haunted castle`); 20 wading bodies in `caladons sewers`
 and 102 in `tarant sewers-02` (rats, lake scenery, a container), 12 and 42
 multiply scenery bodies in `void - arronax's interior` and
 `void-kerghans castle`, and one constant-alpha critter (alpha 95) in
@@ -181,9 +183,7 @@ Not covered: wading is the T0 flag only (the original recomputes it from the til
 an object moves, a source reading not checked in the executable, F0; the walking
 actor never wades); shadows (the original also darkens a wading body's shadow,
 source reading, F0); frozen, stoned, `OF_DONTLIGHT` and
-animated-dead tints. Additive bodies keep the earlier lit rule, although the
-original draws them unlit too (BL2); changing it touches the pinned Crash Site
-lighting and is left to its own task.
+animated-dead tints.
 
 ## Map transitions (ARC-WORLD-031)
 
@@ -416,8 +416,10 @@ travels with the player. Nothing is pinned to Virgil or to a location.
   session party port, so a `JO` runs the follow check. A speaker the party has
   touched (following, waiting, or recorded away from its T0 cell) becomes a
   moving companion of the map with its T0 body; every other speaker stays its
-  T0 body. The group is rebuilt when a conversation ends (the follow smoke closes a
-  conversation after the join and checks the rebuilt companion).
+  T0 body, and an NPC dead at T0 stays its T0 corpse, never a moving
+  companion (ARC-WORLD-049). The group is rebuilt when a conversation ends
+  (the follow smoke closes a conversation after the join and checks the
+  rebuilt companion).
 - **Following.** These are the companion follow rules of the exterior
   ([companion follow runtime](../world/companion-follow-runtime.md)): start
   beyond 4 cells, stop within 2, and the 30-cell catch-up.
@@ -432,8 +434,9 @@ travels with the player. Nothing is pinned to Virgil or to a location.
   session.
 
 Native smoke (`ARC-WORLD-037 native-smoke follow PASS`, before the transfer
-smoke). A drawn speaker with facts joins through the session's forced join, as
-a script follow does; the dialog's `JO` uses the same session party, and
+smoke; `NONE` when the map has no living drawn speaker with follow facts, as
+`crash site cave`, whose only speaker is dead at T0). A drawn, living speaker
+with facts joins through the session's forced join, as a script follow does; the dialog's `JO` uses the same session party, and
 dialogs that offer a `JO` from their start are rare (see the dialog census). It
 follows the player placed 6 cells away (on a cell it can walk to) to within 2
 and is drawn there,

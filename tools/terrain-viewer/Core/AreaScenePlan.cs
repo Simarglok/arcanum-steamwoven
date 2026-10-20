@@ -272,7 +272,8 @@ public sealed class AreaScenePlan
         var wading = (flags & 0x20000) != 0 && (flags & 0x40000) == 0 && !additive && !multiply;
         return new(suppressed, reason, (flags & 0x4) != 0, body.Type == 3 && (Field(36) & 0x200) != 0,
             (int)scale, (flags & 0x80) != 0, constant ? (int)blitAlpha : 255, additive, (blit & 1) != 0, (blit & 2) != 0,
-            multiply, multiply || constant, wading);
+            // ARC-RENDER-026: an additive, multiply or constant-alpha body is drawn with the base palette, unlit (ledger BL1, BL2).
+            multiply, additive || multiply || constant, wading);
     }
 }
 
