@@ -326,7 +326,9 @@ public sealed class AreaConversationHost
         _reactionOpen = speaker.Index;
         var conversation = DialogConversation.Start(document!,
             new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
-            new DialogConversationPorts(State, State, _session.Flags, State, party, _inventory?.DialogPort(_session, SpeakerEntity), State, State));
+            new DialogConversationPorts(State, State, _session.Flags, State, party, _inventory?.DialogPort(_session, SpeakerEntity), State,
+                // ARC-SKILLS-004: the skill gates read the session hero; the diagnostic PC has no skills, so they stay unadmitted.
+                _session.QueryHero() is null ? null : new SessionDialogSkillPort(_session, AreaConversationState.PcParticipant), State));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script);
     }
@@ -590,6 +592,7 @@ public static class AreaConversationText
             GiveItemCommand item => $"IN item name {item.ItemName} NPC -> PC",
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",
+            SkillTrainingCommand training => $"TR skill {training.Skill} -> tier {training.Training}",
             JoinCommand => "JO follow request",
             _ => receipt.Command.GetType().Name,
         };
