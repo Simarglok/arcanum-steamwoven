@@ -11,6 +11,7 @@ using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reaction;
+using Arcanum.Simulation.Skills;
 
 namespace Arcanum.Session;
 
@@ -57,8 +58,13 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut"];
     private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted"];
     private static readonly string[] HeroFields = ["prototype", "race", "gender", "stats", "level", "experience", "unspentPoints",
-        "alignment", "advancement", "raceEffect", "genderEffect"];
+        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills"];
     private static readonly string[] EffectFields = ["effect", "modifiers"];
+    private static readonly string[] InnateSkillFields = ["cause", "skill", "operator", "value"];
+    // Skill names in Skill order (ARC-SKILLS-002), the innate skill change's causes.
+    private static readonly string[] SkillNames = ["Bow", "Dodge", "Melee", "Throwing", "Backstab", "PickPocket", "Prowling", "SpotTrap",
+        "Gambling", "Haggle", "Heal", "Persuasion", "Repair", "Firearms", "PickLocks", "DisarmTraps"];
+    private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
     private static readonly string[] InventoryFields = ["gold", "kit", "pc"];
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
@@ -259,6 +265,17 @@ public static class GameSessionSnapshotCodec
                 w.WriteEndObject();
                 WriteEffect(w, "raceEffect", hero.RaceEffect);
                 WriteEffect(w, "genderEffect", hero.GenderEffect);
+                w.WriteStartArray("innateSkills");
+                foreach (var change in hero.InnateSkills)
+                {
+                    w.WriteStartObject();
+                    w.WriteString("cause", change.Cause == EffectCause.Race ? "Race" : "Gender");
+                    w.WriteString("skill", SkillNames[(int)change.Skill]);
+                    w.WriteString("operator", OperatorNames[(int)change.Operator]);
+                    w.WriteNumber("value", change.Value);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
                 w.WriteEndObject();
             }
             else w.WriteNull("hero");
@@ -955,7 +972,23 @@ public static class GameSessionSnapshotCodec
             Int(f["level"], p + ".level", int.MinValue, int.MaxValue), Int(f["unspentPoints"], p + ".unspentPoints", int.MinValue, int.MaxValue),
             Int(f["alignment"], p + ".alignment", int.MinValue, int.MaxValue), Effect(f["raceEffect"], p + ".raceEffect"),
             Effect(f["genderEffect"], p + ".genderEffect"), Int(f["experience"], p + ".experience", int.MinValue, int.MaxValue),
-            HeroAdvancement(f["advancement"], p + ".advancement"));
+            HeroAdvancement(f["advancement"], p + ".advancement"), InnateSkills(f["innateSkills"], p + ".innateSkills"));
+    }
+
+    // Shapes only; the count, magnitudes and divisors are the hero's import (InvalidHero).
+    private static ImmutableArray<SessionInnateSkillChange> InnateSkills(JsonElement element, string p)
+    {
+        var items = Array(element, p, SessionInnateSkillChange.MaxChanges);
+        var changes = ImmutableArray.CreateBuilder<SessionInnateSkillChange>(items.Length);
+        for (var i = 0; i < items.Length; i++)
+        {
+            var at = $"{p}[{i}]";
+            var item = Fields(items[i], at, InnateSkillFields);
+            changes.Add(new(Name(item["cause"], at + ".cause", InnateCauseNames) == 0 ? EffectCause.Race : EffectCause.Gender,
+                (Skill)Name(item["skill"], at + ".skill", SkillNames), (StatModifierOperator)Name(item["operator"], at + ".operator", OperatorNames),
+                Int(item["value"], at + ".value", int.MinValue, int.MaxValue)));
+        }
+        return changes.MoveToImmutable();
     }
 
     // Shapes only; lengths and ranges are the hero's import (InvalidHero).

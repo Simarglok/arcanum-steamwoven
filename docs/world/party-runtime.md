@@ -34,7 +34,9 @@ inputs. The first matching step wins (the executable's 0x4AD950, ledger AP3):
 `FollowThresholds` carries AI fields 5..8. Differences and the level sum are computed in 32 bits
 and wrap, as in the executable. `FollowConsentRules.MaxFollowers(charisma, persuasion)` is
 the effective charisma / 4, +1 at Expert or above, clamped to 1..7 (ledger AP4);
-a caller with stat effects passes its own effective value. With a clamped value `NotAllowed`
+a caller with stat effects passes its own effective value. With a hero the session supplies the PC's persuasion training, effective charisma, level and
+max followers itself (ARC-SKILLS-002, [hero skills](hero-skills-runtime.md)); the caller's `PartyConsentFacts` values stand
+only without a hero. With a clamped value `NotAllowed`
 is unreachable, as ARC-RES-026 found; the evaluator keeps it for an explicit 0 (a negative
 value, as in the executable, falls through to `LimitReached`).
 `MayLeaveUnforced(leaderCharisma, mindControlled)` is the C6 leave guard (refused at charisma
