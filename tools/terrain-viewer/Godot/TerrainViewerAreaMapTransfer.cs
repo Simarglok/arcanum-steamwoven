@@ -47,7 +47,7 @@ public partial class TerrainViewerApp
     private bool AreaTransferPending => _areaTransitions?.Pending is not null || _mapTransfers?.Pending is not null || _mapHandoff is not null;
 
     private bool IsAreaTrigger(AreaObjectKey key) =>
-        _mapTransfers?.Site(key) is not null || _areaTransitions?.Triggers().Any(t => t.Trigger.Key == key) == true;
+        _mapTransfers?.Site(key) is not null || _mapTransfers?.ScriptedSite(key) is not null || _areaTransitions?.Triggers().Any(t => t.Trigger.Key == key) == true;
 
     /// <summary>The session the arriving map adopts: the carried one of a transfer to this map, else null.</summary>
     private GameSessionOwner? AdoptHandoffSession(TerrainViewerArguments arguments)
@@ -89,23 +89,28 @@ public partial class TerrainViewerApp
             return;
         }
         _mapTransfers = new(new(area.Snapshot, steps, chart), transitions, destinations);
+        // ARC-SCRIPT-015: a guarded use site runs its use script on the session; the hosts are read at the click.
+        _mapTransfers.ScriptRunner = (_, row, refusal) => _areaSession is { } owner
+            ? new AreaUseScriptHost(owner, area.Snapshot.RuntimeMap, area.Snapshot.Objects, _inventoryHost?.Maps ?? [], _conversationContent?.Load.Content).Run(row, owner.Rules.Scripts, refusal)
+            : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
         var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
         var arrived = handoff is null ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
             : handoff.Kind == MapHandoffKind.Transfer ? $"; arrived from map {handoff.FromMap}" : $"; quick load from map {handoff.FromMap}";
         _areaUseStatus = $"map {arguments.AreaMapName}: {_mapTransfers.Triggers.Count} exit objects, {_mapTransfers.TriggerCells.Count} exit tiles{arrived}";
         GD.Print("ARC-WORLD-031 transfers-ready " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = arguments.AreaMapName, area.Snapshot.RuntimeMap, _mapTransfers.Exits, Objects = _mapTransfers.Triggers.Count,
-            Tiles = _mapTransfers.TriggerCells.Count, _mapTransfers.Unmatched, Destinations = destinations.Count, Issues = transitions.Issues.Count }));
+            Tiles = _mapTransfers.TriggerCells.Count, Scripted = _mapTransfers.ScriptedTriggers.Count, _mapTransfers.Unmatched, Destinations = destinations.Count, Issues = transitions.Issues.Count }));
     }
 
     /// <summary>A guarded left press on a map-mode trigger object: one use request, or a walk within use range first.</summary>
     private bool TryAreaMapUse(Vector2 screen)
     {
-        if (_mapTransfers is null || _worldActor.Session is not AreaGridSession session || AreaObjectAtScreen(screen) is not { } hit || _mapTransfers.Site(hit) is null) return false;
+        if (_mapTransfers is null || _worldActor.Session is not AreaGridSession session || AreaObjectAtScreen(screen) is not { } hit
+            || (_mapTransfers.Site(hit) is null && _mapTransfers.ScriptedSite(hit) is null)) return false;
         var actor = session.Chart.ToWorld(session.State.CommittedCell);
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it");
-        // An exit map mode cannot take is refused at once, without walking there.
-        if (_mapTransfers.Refusal(_mapTransfers.Site(hit)!) is { } refusal)
+        // An exit map mode cannot take is refused at once, without walking there (a scripted use's script names its exit).
+        if (_mapTransfers.Site(hit) is { } site && _mapTransfers.Refusal(site) is { } refusal)
         {
             _areaUseAfterRoute = null;
             _areaUseStatus = $"use refused: {AreaUseOutcome.DestinationUnavailable} {refusal}"; RefreshAreaStatus();
@@ -142,10 +147,14 @@ public partial class TerrainViewerApp
     private string DescribeMapUse(AreaMapUseResult result) => result.Outcome switch
     {
         AreaUseOutcome.Accepted => _mapTransfers!.Pending is { } pending
-            ? $"use accepted: to '{pending.To.Name}' ({pending.To.Catalogue}) at ({pending.Arrival.X},{pending.Arrival.Y})" : "use accepted",
+            ? $"use accepted: to '{pending.To.Name}' ({pending.To.Catalogue}) at ({pending.Arrival.X},{pending.Arrival.Y})" + ScriptedLines() : "use accepted",
         AreaUseOutcome.TooFar => $"too far: {result.Distance} cells (use range {AreaUseRule.UseRange})",
-        _ => $"use refused: {result.Outcome} {result.Reason}",
+        AreaUseOutcome.ScriptEnded => "use script: " + result.Reason + ScriptedLines(),
+        _ => $"use refused: {result.Outcome} {result.Reason}" + ScriptedLines(),
     };
+
+    // ARC-SCRIPT-015: the floating lines the last scripted use printed (shown on the status line).
+    private string ScriptedLines() => _mapTransfers?.LastScripted is { Lines.Count: > 0 } ran ? " — \"" + string.Join(" / ", ran.Lines) + "\"" : "";
 
     /// <summary>Per frame in map mode: drops a transfer on reset or reload, asks a walk-to-use on arrival, fires a jump point
     /// or tile script the actor entered, and applies a pending transfer once the actor is settled. True when the map or the
