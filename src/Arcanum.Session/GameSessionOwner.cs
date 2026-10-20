@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Scripting.Scr;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
@@ -730,11 +731,13 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>
     /// Ground pickup (the pickup goal, then the item transfer 0x4617F0): an item lying on the actor's map goes to the end of
     /// the PC's list. Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
-    /// effect: an item with an item <c>SAP_GET</c> or <c>SAP_INSERT_ITEM</c> script (not run here), a stack or key type
-    /// (stack merge and key rings are not modelled), and a refusal of <paramref name="insertCheck"/>, which runs last.
+    /// effect: an item with an item <c>SAP_GET</c> script (not run here), a stack or key type (stack merge and key rings
+    /// are not modelled), and a refusal of <paramref name="insertCheck"/>, which runs after every other check. An item
+    /// <c>SAP_INSERT_ITEM</c> script runs through <paramref name="scripts"/> (ARC-SCRIPT-013, see <see cref="ISessionItemScriptHost"/>);
+    /// without a host such an item is refused.
     /// </summary>
     [OriginalFunction(0x4617F0, OriginalFunctionScope.Partial)]
-    public InventoryMutationResult PickUpItem(GameSessionVersion expected, string item, SessionInsertCheck insertCheck)
+    public InventoryMutationResult PickUpItem(GameSessionVersion expected, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -743,7 +746,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         if (!seed.Items.TryGetValue(item, out var row) || row.Cell is null || _inventory.Taken.Contains(item))
             return RejectItem(GameSessionFailure.ItemNotAvailable);
-        return Take(seed, new(item, row.Facts), false, insertCheck);
+        return Take(seed, new(item, row.Facts), false, insertCheck, scripts);
     }
 
     /// <summary>
@@ -754,7 +757,8 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <c>SAP_REMOVE_ITEM</c> script. The PC's own <c>SAP_TRANSFER</c> attachment is not modelled (the session has no PC
     /// object).
     /// </summary>
-    public InventoryMutationResult LootItem(GameSessionVersion expected, string holder, string item, SessionInsertCheck insertCheck)
+    public InventoryMutationResult LootItem(GameSessionVersion expected, string holder, string item, SessionInsertCheck insertCheck,
+        ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -766,7 +770,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != holder || _inventory.Taken.Contains(item))
             return RejectItem(GameSessionFailure.ItemNotAvailable);
-        return Take(seed, new(item, seed.Items[item].Facts), true, insertCheck);
+        return Take(seed, new(item, seed.Items[item].Facts), true, insertCheck, scripts);
     }
 
     /// <summary>
@@ -777,7 +781,8 @@ public sealed partial class GameSessionOwner : IDisposable
     /// the PC cannot take at the PC's location (into a junk pile when items lie there); that fallback is not modelled, so a
     /// refusal of <paramref name="insertCheck"/> is <see cref="GameSessionFailure.InsertRefused"/> with no effect.
     /// </summary>
-    public InventoryMutationResult GiveItemToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck)
+    public InventoryMutationResult GiveItemToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck,
+        ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -788,7 +793,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_inventory.Current(seed, row).FirstOrDefault(entry => entry.Facts.Kind.Name == name) is not { } found)
             return row.HasSubstituteInventory ? RejectItem(GameSessionFailure.SubstituteInventoryUnsupported)
                 : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision));
-        return Take(seed, found, true, insertCheck);
+        return Take(seed, found, true, insertCheck, scripts);
     }
 
     /// <summary>The generator's seed and position (draws made so far).</summary>
@@ -1305,28 +1310,85 @@ public sealed partial class GameSessionOwner : IDisposable
         return GameSessionFailure.None;
     }
 
-    // Pickup, loot and IN share the item rules and the commit: every refusal precedes the insert check, which runs last.
-    // The check is the owner's only host callback, so a call back into the owner from it (a transfer, a placement, a new
-    // seed) makes this transfer stale instead of committing over the changed state.
-    private InventoryMutationResult Take(InventoryDomain.Seed seed, SessionInventoryItem item, bool parented, SessionInsertCheck insertCheck)
+    // Pickup, loot and IN share the item rules and the commit: every refusal precedes the insert check, which runs after
+    // the other checks, and the item's insert-item script, which runs last. Both are host callbacks, so a call back into the
+    // owner from either (a transfer, a placement, a new seed) makes this transfer stale instead of committing over the
+    // changed state.
+    private InventoryMutationResult Take(InventoryDomain.Seed seed, SessionInventoryItem item, bool parented, SessionInsertCheck insertCheck,
+        ISessionItemScriptHost? scripts)
     {
         var facts = item.Facts;
         if (!InventoryDomain.Admitted(facts.Kind.Type)) return RejectItem(GameSessionFailure.ItemTypeUnsupported);
         if (parented && facts.Worn) return RejectItem(GameSessionFailure.WornItemUnsupported);
-        if (facts.HasScript(SessionScriptPoint.InsertItem) ||
+        var insertScript = facts.HasScript(SessionScriptPoint.InsertItem);
+        if ((insertScript && scripts is null) ||
             facts.HasScript(parented ? SessionScriptPoint.RemoveItem : SessionScriptPoint.Get)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         if (_inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
-        var (revision, map) = (_revision, _actor.Map);
+        var (revision, map, flagVersion) = (_revision, _actor.Map, _flags.Version);
+        bool Stale() => _revision != revision || _actor.Map != map || _flags.Version != flagVersion || !_inventory.Seeds.TryGetValue(map, out var current) ||
+            !ReferenceEquals(current, seed) || _inventory.Taken.Contains(item.Entity);
         var verdict = insertCheck(item);
         ThrowIfDisposed();
-        if (_revision != revision || _actor.Map != map || !_inventory.Seeds.TryGetValue(map, out var current) || !ReferenceEquals(current, seed) ||
-            _inventory.Taken.Contains(item.Entity)) return RejectItem(GameSessionFailure.StaleVersion, verdict);
+        if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict);
         // Any answer but Accepted refuses, an undefined one included.
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
+
+        ScrRunResult? run = null;
+        var messages = new List<SessionScriptMessage>();
+        if (insertScript)
+        {
+            // The original inserts first and then runs the script, whose result it ignores (ledger IF10). The admitted
+            // commands read nothing the insertion changes, so the run is made before the commit and its effects are
+            // applied with it, or the whole transfer is refused.
+            // The run reads global flags from the session itself, whatever the host would answer (a flag the session does
+            // not know refuses the transfer).
+            var reads = new SessionFlagReads(this, scripts!);
+            run = ScrDispatcher.RunObject(new(SessionScriptPoint.InsertItem, new ScrObjectRef(map.RuntimeMap, item.Entity),
+                new ScrObjectRef(map.RuntimeMap, SessionEventKinds.PlayerEntity), null), reads, new() { Rules = _rules.Scripts, Admission = SessionItemScripts.Admission });
+            ThrowIfDisposed();
+            var failure = reads.UnknownFlag ? GameSessionFailure.ItemScriptUnsupported : InsertScriptEffects(run, scripts!, messages);
+            ThrowIfDisposed();
+            if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = run };
+            if (failure != GameSessionFailure.None) return RejectItem(failure, verdict) with { InsertScript = run };
+        }
         _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
+        foreach (var write in run?.Effects.GlobalFlags ?? [])
+        {
+            var receipt = _flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), _flags.Version, new FlagId(write.Index), write.Value));
+            // Checked before the commit; a refusal here would be a broken invariant of the flag owner.
+            if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange))
+                throw new InvalidOperationException("INSERT_SCRIPT_FLAG_WRITE_" + receipt.Disposition);
+        }
         _revision++;
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, new(_identity, _revision));
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, new(_identity, _revision))
+            { InsertScript = run, Messages = messages.AsReadOnly() };
+    }
+
+    // What the session applies from an insert-item run: global flags and printed lines. A script outside the admitted set,
+    // a changed attachment (its flags, counters or number would need a home on the moved item) and anything else refuse the
+    // transfer; a flag outside the session's domain and a line the host cannot show do too. Host reads only.
+    private GameSessionFailure InsertScriptEffects(ScrRunResult run, ISessionItemScriptHost scripts, List<SessionScriptMessage> messages)
+    {
+        // A script file that exists but cannot be read is not the original's missing file: refused, not skipped.
+        if (run.Outcome == ScrOutcome.Refused || run.Stop == ScrStop.UnreadableScript) return GameSessionFailure.ItemScriptUnsupported;
+        var effects = run.Effects;
+        if (effects.GlobalFlags.Count > 0 && _flags.Version.Revision > GlobalFlagLimits.MaxRevision - effects.GlobalFlags.Count)
+            return GameSessionFailure.RevisionExhausted;
+        if (effects.Writeback is not null || effects.DestroyTrapObject is not null || effects.Dialog is not null || effects.StoryState is not null || effects.Calls.Count > 0)
+            return GameSessionFailure.ItemScriptUnsupported;
+        foreach (var write in effects.GlobalFlags)
+        {
+            var read = _flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), _flags.Version, new FlagId(write.Index)));
+            if (read.Status != GlobalFlagReadStatus.Known) return GameSessionFailure.ItemScriptUnsupported;
+        }
+        foreach (var line in effects.Lines)
+        {
+            var printed = scripts.PrintedLine(line.Script, line.Line) ?? throw new InvalidOperationException("INSERT_SCRIPT_LINE_NULL");
+            if (printed.Status == SessionPrintedLineStatus.Unsupported) return GameSessionFailure.ItemScriptUnsupported;
+            if (printed.Status == SessionPrintedLineStatus.Shown) messages.Add(new(line.Script, line.Line, line.Kind, printed.Text ?? string.Empty));
+        }
+        return GameSessionFailure.None;
     }
 
     private InventoryMutationResult RejectItem(GameSessionFailure failure, SessionInsertVerdict? verdict = null) =>
@@ -1598,6 +1660,35 @@ public sealed partial class GameSessionOwner : IDisposable
     private static GameSessionCreationResult Rejected(GameSessionFailure failure,
         ClockFailure clockFailure = ClockFailure.None, GlobalFlagReason flagReason = GlobalFlagReason.None) =>
         new(null, failure, clockFailure, flagReason);
+}
+
+/// <summary>ARC-SCRIPT-013: the item script host with global flags read from the session; an unknown flag answers false and
+/// is recorded, and the session then refuses the transfer.</summary>
+internal sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host) : IScrHost
+{
+    internal bool UnknownFlag { get; private set; }
+
+    public bool GlobalFlag(int index)
+    {
+        var flags = session.Flags;
+        var read = flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(index)));
+        if (read.Status == GlobalFlagReadStatus.Known && read.Value is { } value) return value;
+        UnknownFlag = true;
+        return false;
+    }
+
+    public ScrSlot? Slot(ScrObjectRef attachee, int point) => host.Slot(attachee, point);
+    public ScrScriptLookup Script(int number) => host.Script(number);
+    public int StoryState() => host.StoryState();
+    public bool IsMonsterGenerator(ScrObjectRef attachee) => host.IsMonsterGenerator(attachee);
+    public ScrDialogState DialogState(ScrObjectRef attachee) => host.DialogState(attachee);
+    public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) =>
+        host.CheckTrapBeforeUse(triggerer, attachee);
+    public bool IsTrapObject(ScrObjectRef attachee) => host.IsTrapObject(attachee);
+    public ScrObjectRef? Player() => host.Player();
+    public ScrObjectRef? Leader(ScrObjectRef critter) => host.Leader(critter);
+    public bool IsJilted(ScrObjectRef critter) => host.IsJilted(critter);
+    public bool IsPc(ScrObjectRef critter) => host.IsPc(critter);
 }
 
 /// <summary>Forwarding view, so callers cannot reach the owner's Dispose or MarkFailed.</summary>

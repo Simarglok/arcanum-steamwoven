@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Inventory;
 using Arcanum.Data.Messages;
+using Arcanum.Data.Scripts;
 using Arcanum.Data.Traversal;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
@@ -149,15 +150,22 @@ public sealed class AreaInventoryHost
     public static SessionInsertCheck DiagnosticInsertCheck { get; } = _ => SessionInsertVerdict.Accepted;
 
     private readonly Dictionary<int, AreaInventoryMap> _maps;
+    private readonly ScriptContent? _scripts;
 
-    public AreaInventoryHost(IEnumerable<AreaInventoryMap> maps, SessionInsertCheck? insertCheck = null)
+    /// <param name="scripts">ARC-SCRIPT-013: the game's script content for an item's insert-item script (borrowed); without
+    /// it such an item is refused, as before.</param>
+    public AreaInventoryHost(IEnumerable<AreaInventoryMap> maps, SessionInsertCheck? insertCheck = null, ScriptContent? scripts = null)
     {
         ArgumentNullException.ThrowIfNull(maps);
         _maps = [];
         foreach (var map in maps)
             if (map is null || !_maps.TryAdd(map.RuntimeMap, map)) throw new ArgumentException("AREA_INVENTORY_MAP_DUPLICATE", nameof(maps));
         InsertCheck = insertCheck ?? DiagnosticInsertCheck;
+        _scripts = scripts;
     }
+
+    /// <summary>The item script host over <paramref name="session"/>, or null without script content.</summary>
+    public AreaItemScriptHost? ItemScripts(GameSessionOwner session) => _scripts is null ? null : new(session, _maps.Values, _scripts);
 
     public IReadOnlyCollection<AreaInventoryMap> Maps => _maps.Values;
     public SessionInsertCheck InsertCheck { get; }
@@ -201,18 +209,18 @@ public sealed class AreaInventoryHost
     public InventoryMutationResult PickUp(GameSessionOwner session, string item)
     {
         ArgumentNullException.ThrowIfNull(session);
-        return session.PickUpItem(session.Version, item, InsertCheck);
+        return session.PickUpItem(session.Version, item, InsertCheck, ItemScripts(session));
     }
 
     public InventoryMutationResult Loot(GameSessionOwner session, string holder, string item)
     {
         ArgumentNullException.ThrowIfNull(session);
-        return session.LootItem(session.Version, holder, item, InsertCheck);
+        return session.LootItem(session.Version, holder, item, InsertCheck, ItemScripts(session));
     }
 
     /// <summary>The dialog's negative IN through the session (<see cref="SessionDialogInventoryPort"/>) with this insert check.</summary>
     public SessionDialogInventoryPort DialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>
-        new(session, AreaConversationState.PcParticipant, entityOf, InsertCheck);
+        new(session, AreaConversationState.PcParticipant, entityOf, InsertCheck, ItemScripts(session));
 
     /// <summary>The shown name of an item or holder of any loaded map (the hover tooltip's rule); a taken item keeps its
     /// row. Unknown entities and nameless objects get a bracketed type label, never original text.</summary>
@@ -265,10 +273,15 @@ public sealed class AreaInventoryHost
     private static string Line(string name, SessionItemType type, int? weight) =>
         $"{name} ({AreaHoverIndex.TypeName((int)type)}{(weight is { } w ? $", weight {w}" : string.Empty)})";
 
+    /// <summary>ARC-SCRIPT-013: the lines the item's insert-item script printed, as a suffix for the status line and the
+    /// window's message (empty when none).</summary>
+    public static string Printed(InventoryMutationResult result) =>
+        result.Messages.Count == 0 ? string.Empty : " — " + string.Join(" ", result.Messages.Select(message => message.Text.Trim()));
+
     /// <summary>Plain text for a transfer refusal shown in the window and the status line.</summary>
     public static string Refusal(GameSessionFailure failure) => failure switch
     {
-        GameSessionFailure.ItemScriptUnsupported => "the item runs a script on this transfer (not supported here)",
+        GameSessionFailure.ItemScriptUnsupported => "the item runs a script on this transfer that is not supported here",
         GameSessionFailure.HolderScriptUnsupported => "the body runs a use script (not supported here)",
         GameSessionFailure.ItemTypeUnsupported => "gold, ammunition and keys are not modelled",
         GameSessionFailure.WornItemUnsupported => "worn items are not modelled",

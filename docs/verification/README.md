@@ -22,7 +22,8 @@ tests in `tests/Arcanum.Session.Tests/Verification` keep all four consistent.
 
 The registry covers the experience functions of ARC-WORLD-030 (three full at F3 by the oracle; progress since its XP3
 switch, ARC-WORLD-033: a known difference keeps a row from `full` until it is implemented), the audio rows (ARC-DATA-040,
-F2, [audio study](../research/audio-evidence.md), marking methods of `Arcanum.Data`, which declares its own attribute),
+F2, [audio study](../research/audio-evidence.md), marking methods of `Arcanum.Data`, which declares its own attribute; `Arcanum.Scripting`
+does the same since ARC-SCRIPT-013),
 the rows other tasks added, and since ARC-DEV-009 and ARC-DEV-010 the original functions the Simulation, Session and Data code implements and names (F2 where
 the [ledger](../research/original-verification-ledger.md) has two readings, F0 where the function was not read in the
 executable). Since ARC-DEV-025 no implemented row is at F0: the twelve that were F0 have been read by two readers

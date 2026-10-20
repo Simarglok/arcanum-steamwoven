@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S5"/>.
+/// <see cref="ScrAdmissionSet.S6"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -18,6 +18,7 @@ internal sealed class ScrInterpreter
     private readonly ScrDispatcher.ScrRoles _roles;
     private ScrDialogStart? _dialog;
     private readonly List<ScrCallRequest> _calls = new();
+    private readonly List<ScrPrintLine> _lines = new();
     private readonly ScrRunOptions _options;
     private readonly int[] _locals = new int[ScrCatalogue.LocalSlots];
     private readonly SortedDictionary<int, bool> _flags = new();
@@ -82,7 +83,8 @@ internal sealed class ScrInterpreter
         var flags = _flags.Where(p => p.Value != _host.GlobalFlag(p.Key)).Select(p => new ScrFlagWrite(p.Key, p.Value)).ToArray();
         int? story = _story is { } s2 && s2 != _storyBefore ? s2 : null;
         var result = new ScrRunResult(outcome, stop, _number, stopLine, null, Array.AsReadOnly(_trace.ToArray()), ScrEffects.None);
-        return new(result, new ScrSlot(number, _localFlags, _counters), null, flags, story, _dialog, _calls.Count == 0 ? null : Array.AsReadOnly(_calls.ToArray()));
+        return new(result, new ScrSlot(number, _localFlags, _counters), null, flags, story, _dialog, _calls.Count == 0 ? null : Array.AsReadOnly(_calls.ToArray()),
+            _lines.Count == 0 ? null : Array.AsReadOnly(_lines.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -123,6 +125,15 @@ internal sealed class ScrInterpreter
                 var node = Get(a, 0);
                 if (_roles.Triggerer is { } pc && _host.IsPc(pc)) _dialog = new(pc, _roles.Attachee, _number, line, node);
                 return (Step.Dialog, 0);
+            }
+            case ScrCatalogue.Action.PrintLine:
+            {
+                // Ledger IS2: the DLG of the running attachment's script (the number this run executes, as for the dialog
+                // action: 2188 during a mind-controlled run, E6), operand 0 the line, operand 1 a number shown with it;
+                // without an attachee nothing is printed.
+                var at = Get(a, 0); var kind = Get(a, 1);
+                if (_roles.Attachee is not null) _lines.Add(new(_number, at, kind));
+                return (Step.Next, 0);
             }
             case ScrCatalogue.Action.RemoveThisScript: _changedNumber = 0; return (Step.Next, 0);
             case ScrCatalogue.Action.ChangeThisScript:

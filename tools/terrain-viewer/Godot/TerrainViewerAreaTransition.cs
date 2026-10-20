@@ -66,7 +66,7 @@ public partial class TerrainViewerApp
                 result.Hero);
             _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
         }
-        BindAreaInventory(result);
+        BindAreaInventory(arguments, result);
         // ARC-UI-041: the map opens: its default music and ambient pair plays. ARC-WORLD-038: a session a quick load (or its
         // fallback) brings keeps the sound state it holds, as a same-map quick load does.
         if (_mapHandoff is { Kind: MapHandoffKind.QuickLoad } && ReferenceEquals(carried, _areaSession)) RebindAreaSound();

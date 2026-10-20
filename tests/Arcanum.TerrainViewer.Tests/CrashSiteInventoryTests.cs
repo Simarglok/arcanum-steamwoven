@@ -5,6 +5,8 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Inventory;
 using Arcanum.Data.Traversal;
 using Arcanum.Scripting.Dialog;
+using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -83,7 +85,8 @@ public sealed class CrashSiteInventoryTests
         CollectionAssert.AreEqual(new[] { Entity(2421), Entity(2908) }, Current(session, map, virgil));
         Assert.IsTrue(talk.Close());
 
-        // Loot: five of the six dead-NPC items; 2527 has its own insert-item script (ARC-RES-023 U frontier).
+        // Loot without script content: five of the six dead-NPC items; 2527 has its own insert-item script, which needs the
+        // script host (ARC-SCRIPT-013, below).
         foreach (var (holder, item) in new[] { (5699, 3312), (5699, 7282), (4457, 4698), (4457, 6177), (4200, 4201) })
             Assert.AreEqual(GameSessionDisposition.Changed, viewer.Loot(session, Entity(holder), Entity(item)).Disposition, item.ToString());
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, viewer.Loot(session, Entity(1201), Entity(2527)).Failure);
@@ -105,7 +108,29 @@ public sealed class CrashSiteInventoryTests
         Assert.AreEqual(GameSessionFailure.None, viewer.Attach(loaded));
         CollectionAssert.AreEqual(new[] { Entity(2527) }, Current(loaded, map, Entity(1201)));
         Assert.AreEqual(GameSessionDisposition.NoChange, loaded.GiveItemToPc(loaded.Version, virgil, 2804, Accept).Disposition, "the ring is gone");
+
+        // ARC-SCRIPT-013 (docs/research/item-insert-script.md): with the game's scripts the amulet loots; its insert-item
+        // script 1341 prints line 1 of its DLG while global flag 1085 is clear and writes nothing else.
+        var scripted = new AreaInventoryHost([inventoryMap], scripts: scripts);
+        using var flagSet = ConversationSessionFixture.SaveAndLoad(loaded);
+        Assert.AreEqual(GameSessionFailure.None, scripted.Attach(flagSet));
+        var amulet = scripted.Loot(loaded, Entity(1201), Entity(2527));
+        Assert.AreEqual((GameSessionDisposition.Changed, 1341, ScrStop.ReturnSkipDefault), (amulet.Disposition, amulet.InsertScript!.Script, amulet.InsertScript.Stop));
+        Assert.AreEqual((1341, 1, 6), (amulet.Messages.Single().Script, amulet.Messages.Single().Line, amulet.Messages.Single().Kind));
+        Assert.IsTrue(amulet.Messages.Single().Text.Trim().Length > 0, "a line of text (not asserted)");
+        Assert.AreEqual(0, amulet.InsertScript.Effects.GlobalFlags.Count);
+        Assert.IsFalse(Flag(loaded, 1085));
+        Assert.AreEqual(0, Current(loaded, map, Entity(1201)).Length);
+        Assert.AreEqual(1 + 6 + 37, loaded.QueryPcInventory().Count);
+        // Once a conversation set flag 1085, the script returns at once and prints nothing.
+        var write = flagSet.Flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), flagSet.FlagVersion, new FlagId(1085), true));
+        Assert.AreEqual(GlobalFlagWriteDisposition.Applied, write.Disposition);
+        var silent = scripted.Loot(flagSet, Entity(1201), Entity(2527));
+        Assert.AreEqual((GameSessionDisposition.Changed, ScrStop.ReturnRunDefault, 0), (silent.Disposition, silent.InsertScript!.Stop, silent.Messages.Count));
     }
+
+    private static bool Flag(GameSessionOwner session, int flag) =>
+        session.Flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), session.FlagVersion, new FlagId(flag))).Value == true;
 
     private static string[] Current(GameSessionOwner session, SessionMapId map, string holder) =>
         session.QueryMapInventory(map)!.Holders.Single(h => h.Entity == holder).Items.Select(i => i.Entity).ToArray();

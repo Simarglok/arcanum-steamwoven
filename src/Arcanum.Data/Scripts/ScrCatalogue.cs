@@ -94,7 +94,7 @@ public static class ScrCatalogue
     public static class Action
     {
         public const int DoNothing = 0, ReturnSkipDefault = 1, ReturnRunDefault = 2, Goto = 3, Dialog = 4, RemoveThisScript = 5, ChangeThisScript = 6, CallScript = 7,
-            SetLocalFlag = 8, ClearLocalFlag = 9, Assign = 10, Add = 11, Subtract = 12, Multiply = 13, Divide = 14,
+            SetLocalFlag = 8, ClearLocalFlag = 9, Assign = 10, Add = 11, Subtract = 12, Multiply = 13, Divide = 14, PrintLine = 24,
             LoopFor = 18, LoopEnd = 19, LoopBreak = 20, GetStoryState = 42, SetStoryState = 43, Teleport = 44,
             CallScriptIn = 54, CallScriptAt = 55, CallScriptEx = 81, SetGlobalFlag = 100, ClearGlobalFlag = 101, FadeAndTeleport = 102,
             RemoveScriptCall = 125;

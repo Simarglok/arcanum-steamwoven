@@ -100,6 +100,11 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S5 { get; } = new("S5", S3.Conditions,
         S3.Actions.Append(ScrCatalogue.Action.CallScriptIn).Append(ScrCatalogue.Action.RemoveScriptCall), S3.ValueKinds, S3.FocusKinds);
 
+    /// <summary>The print-line set (ARC-SCRIPT-013): <see cref="S5"/> plus print line (24), which hands a line of the running
+    /// script's DLG and a number to the host as a <see cref="ScrPrintLine"/> effect (ledger IS1–IS3,
+    /// docs/research/item-insert-script.md).</summary>
+    public static ScrAdmissionSet S6 { get; } = new("S6", S5.Conditions, S5.Actions.Append(ScrCatalogue.Action.PrintLine), S5.ValueKinds, S5.FocusKinds);
+
     /// <summary>Whether every type and kind of this set is also in <paramref name="other"/>.</summary>
     public bool IsSubsetOf(ScrAdmissionSet other)
     {
