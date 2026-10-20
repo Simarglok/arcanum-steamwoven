@@ -520,6 +520,7 @@ public static class AreaConversationText
             GiveItemCommand item => $"IN item name {item.ItemName} NPC -> PC",
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",
+            SkillTrainingCommand training => $"TR skill {training.Skill} -> tier {training.Training}",
             JoinCommand => "JO follow request",
             _ => receipt.Command.GetType().Name,
         };

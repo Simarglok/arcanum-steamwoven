@@ -65,13 +65,14 @@ public sealed class DialogSkillTests
     [TestMethod]
     public void Sk_and_tr_gates_read_a_skill_level_or_training_with_the_sources_second_operand()
     {
-        var skills = new Skills { Levels = { [2] = 8, [13] = 12 }, Trainings = { [4] = 1, [14] = 2 } };
+        var skills = new Skills { Levels = { [2] = 8, [13] = 12, [9] = 5 }, Trainings = { [4] = 1, [14] = 2 } };
         foreach (var (condition, open) in new[]
         {
             ("SK 2 8", true), ("sk2 9", false), ("SK 2 -8", true), ("SK 2 -7", false), ("SK 13 12", true), ("sk 13 13", false),
             ("TR 4 1", true), ("tr4 2", false), ("tr4-1", true), ("tr4 -0", true), ("tr 14 2", true), ("TR 14 -1", false),
             // A missing second operand reads 0, and a skill the source does not have reads level 0, training none.
-            ("tr41, tr4 -1", true), ("tr 4,", true), ("sk 30 1", false), ("sk 30 0", true), ("tr 99 -0", true),
+            ("tr41, tr4 -1", true), ("tr 4,", true), ("tr 4 sk 2 8", true), ("tr 4 sk 2 9", false), ("sk 2 ha 4", true), ("sk 30 1", false), ("sk 30 0", true),
+            ("tr 99 -0", true),
         })
             Assert.AreEqual(open, Offered(condition, skills).Contains("Yes."), condition);
         CollectionAssert.Contains(skills.Queries, new DialogSkillQuery(Pc, 41), "an out-of-range number is asked as it is");
@@ -141,13 +142,31 @@ public sealed class DialogSkillTests
         var npcTeacher = Start(Read(Record("10", "?", action: "ET 2 10") + Record("11", "x", iq: "1", response: "0")), new Ports(), Owner(), skills: new Skills());
         Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, npcTeacher.Frontier!.Kind, "ET only ends a player action");
         // A stray number where an operation should start is outside the subset, as the source's scanner skips it.
-        var stray = Read(Record("10", "?") + Record("11", "x", iq: "1", condition: "ha4, -4", response: "0"));
+        var stray = Read(Record("10", "?") + Record("11", "x", iq: "1", condition: "ha4, -4, lf1 1", response: "0"));
         Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, Start(stray, new Ports(), Owner(), skills: new Skills()).Frontier!.Kind);
         foreach (var condition in new[] { "PS +3", "SK -1 3", "SK 2 x" })
         {
             var document = Read(Record("10", "?") + Record("11", "x", iq: "1", condition: condition, response: "0"));
             Assert.AreEqual(DialogConversationFailureKind.InvalidOperation, Start(document, new Ports(), Owner(), skills: new Skills()).Failure!.Kind, condition);
         }
+    }
+
+    private sealed class Throwing : IDialogSkillPort
+    {
+        public int Level(DialogSkillQuery query) => throw new InvalidOperationException("no hero");
+        public int Training(DialogSkillQuery query) => throw new InvalidOperationException("no hero");
+        public DialogCommandResult Execute(SkillTrainingCommand command) => throw new InvalidOperationException("no hero");
+    }
+
+    [TestMethod]
+    public void A_skill_port_that_throws_is_a_query_failure_or_an_indeterminate_command()
+    {
+        var gate = Read(Record("10", "?") + Record("11", "x", iq: "1", condition: "SK 2 1", response: "0"));
+        Assert.AreEqual(DialogConversationFailureKind.QueryException, Start(gate, new Ports(), Owner(), skills: new Throwing()).Failure!.Kind);
+        var action = Read(Record("10", "?", action: "TR 2 1") + Record("11", "x", iq: "1", response: "0"));
+        var conversation = Start(action, new Ports(), Owner(), skills: new Throwing());
+        Assert.AreEqual(DialogConversationFailureKind.CommandIndeterminate, conversation.Failure!.Kind);
+        Assert.AreEqual(DialogCommandAttemptOutcome.Indeterminate, conversation.Effects.Single().Outcome);
     }
 
     [TestMethod]

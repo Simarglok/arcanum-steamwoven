@@ -70,8 +70,8 @@ internal static class DialogConversationGrammar
             var start = index;
             if (index + 2 > bytes.Count || !IsAsciiLetter(bytes[index]) || !IsAsciiLetter(bytes[index + 1]))
             {
-                // A stray number where an operation should start ("ha4, -4, $$250") is one the source's scanner skips: outside
-                // this subset, not damage (ARC-SKILLS-004, one installed reply).
+                // A number where an operation should start (an extra operand, or "ha4, -4, lf1 1") is one the source's scanner
+                // skips: outside this subset, not damage (ARC-SKILLS-004).
                 var kind = bytes[index] is (byte)'$' or (byte)'&' or (byte)'|' or (byte)'!' or (byte)'~' or (byte)'-' or (byte)'+' or (>= (byte)'0' and <= (byte)'9')
                     ? DialogFailureKind.UnsupportedOperation
                     : DialogFailureKind.InvalidOperation;
@@ -106,8 +106,14 @@ internal static class DialogConversationGrammar
                 if (sign == '-') throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
                 // The source's second operand (0x4167C0): atoi after the first operand's digits, so the spaces are optional and
                 // a missing operand reads 0.
+                var afterFirst = index;
                 while (index < bytes.Count && bytes[index] is (byte)' ' or (byte)'\t') index++;
-                if (index < bytes.Count && bytes[index] is (byte)'-' or (>= (byte)'0' and <= (byte)'9'))
+                if (!(index < bytes.Count && bytes[index] is (byte)'-' or (byte)'+' or (>= (byte)'0' and <= (byte)'9')))
+                {
+                    // No second operand: the spaces belong to the separator before the next operation.
+                    index = afterFirst;
+                }
+                else
                 {
                     (second, var secondSign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
                     if (secondSign == '+') throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);

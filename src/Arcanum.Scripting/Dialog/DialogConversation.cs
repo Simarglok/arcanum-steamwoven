@@ -777,7 +777,7 @@ public sealed class DialogConversation
         }
         if (block is null && action is { Count: > 0 } && action[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher)
         {
-            // JO/UW/FL override the response: the source skips the response transition after them.
+            // JO/UW/FL/ET override the response: the source skips the response transition after them.
             var continuation = action[^1] switch
             {
                 ConversationJoin join => join.Node,
