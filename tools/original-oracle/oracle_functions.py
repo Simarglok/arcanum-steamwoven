@@ -9,8 +9,9 @@ cost, the cheat flag and a recording payment stub; for the effectiveness functio
 optional target critter with their skill levels, the target's perception, intelligence and Magnetic Inversion flag, the
 source's extraordinary intelligence, the local PC and the game difficulty; for the spell learn of ARC-MAGIC-004 one critter's
 college rank, level, intelligence, willpower and magick points, the spell's willpower minimum and recording rank and stat
-setters; for the fate functions of ARC-WORLD-054 one PC with its fate points and armed fates and recording
-stubs of the stat, field, hit-point and fatigue writes); the same model becomes the inputs of the OriginalExe tests. Importing this module does not need Unicorn.
+setters; for the fate functions of ARC-WORLD-054 one PC with its fate points and armed fates and recording stubs of the stat,
+field, hit-point and fatigue writes); the same model becomes the inputs of the OriginalExe tests. Importing this module does not
+need Unicorn.
 """
 from __future__ import annotations
 
@@ -113,7 +114,7 @@ class FunctionSpec:
     address: int
     name: str                          # Steamwoven's own name
     code: tuple[tuple[int, int], ...]  # allowed code ranges, [start, end), the function's own first
-    model: str                         # "experience", "bonus", "skill-level", "training-set", "spell-cost", "effectiveness" or "fate"
+    model: str                         # "experience", "bonus", "skill-level", "training-set", "spell-cost", "effectiveness", "spell-learn" or "fate"
 
     @property
     def key(self) -> str:
@@ -475,41 +476,6 @@ def spell_learn_stubs(case: SpellLearnCase, recorder: LearnRecorder) -> dict:
     field, index or stat is rejected."""
     from oracle_emu import StubRejected
 
-
-class FateCase:
-    """The fate functions' one PC: the kind asked (0..11), its fate points (stat 20) and its armed fate flags (field 0xFE)."""
-    kind: int
-    points: int
-    armed: int
-
-
-def draw_fate_case(rng: random.Random) -> FateCase:
-    """A kind 0..11 (the full heal more often), points mostly 0..3 with the edges 0, 1, 99 and 100, armed flags with the asked
-    kind's bit half of the time among any other of the eleven bits."""
-    kind = 0 if rng.random() < 0.15 else rng.randrange(FATE_KINDS)
-    points = rng.choice((0, 1, 99, 100)) if rng.random() < 0.4 else rng.randint(0, 100) if rng.random() < 0.3 else rng.randint(0, 3)
-    armed = rng.getrandbits(11)
-    if kind > 0:
-        bit = 1 << (kind - 1)
-        armed = armed | bit if rng.random() < 0.5 else armed & ~bit
-    return FateCase(kind, points, armed)
-
-
-@dataclass
-class FateRecorder:
-    """What a fate run wrote: the field writes (field, value), the stat writes (stat, value), the hit-point and fatigue
-    damage writes."""
-    fields: list[tuple[int, int]]
-    stats: list[tuple[int, int]]
-    hit_points: list[int]
-    fatigue: list[int]
-
-
-def fate_stubs(case: FateCase, recorder: FateRecorder) -> dict:
-    """Stubs answering from one PC: its fate flags, fate points and single-player authority; every write is recorded. Any other
-    object, field or stat is rejected."""
-    from oracle_emu import StubRejected, to_signed
-
     def same(argument) -> None:
         if (argument(0), argument(1)) != HANDLE:
             raise StubRejected(f"handle {argument(0):#x}:{argument(1):#x} is not the world model's object")
@@ -562,6 +528,47 @@ def fate_stubs(case: FateCase, recorder: FateRecorder) -> dict:
             STAT_GETTER: stat, STAT_BASE_GETTER: base, STAT_SETTER: set_stat, SPELL_ARRAY_SETTER: set_rank, IS_PLAYER: player}
 
 
+@dataclass
+class FateCase:
+    """The fate functions' one PC: the kind asked (0..11), its fate points (stat 20) and its armed fate flags (field 0xFE)."""
+    kind: int
+    points: int
+    armed: int
+
+
+def draw_fate_case(rng: random.Random) -> FateCase:
+    """A kind 0..11 (the full heal more often), points mostly 0..3 with the edges 0, 1, 99 and 100, armed flags with the asked
+    kind's bit half of the time among any other of the eleven bits."""
+    kind = 0 if rng.random() < 0.15 else rng.randrange(FATE_KINDS)
+    points = rng.choice((0, 1, 99, 100)) if rng.random() < 0.4 else rng.randint(0, 100) if rng.random() < 0.3 else rng.randint(0, 3)
+    armed = rng.getrandbits(11)
+    if kind > 0:
+        bit = 1 << (kind - 1)
+        armed = armed | bit if rng.random() < 0.5 else armed & ~bit
+    return FateCase(kind, points, armed)
+
+
+@dataclass
+class FateRecorder:
+    """What a fate run wrote: the field writes (field, value), the stat writes (stat, value), the hit-point and fatigue
+    damage writes."""
+    fields: list[tuple[int, int]]
+    stats: list[tuple[int, int]]
+    hit_points: list[int]
+    fatigue: list[int]
+
+
+def fate_stubs(case: FateCase, recorder: FateRecorder) -> dict:
+    """Stubs answering from one PC: its fate flags, fate points and single-player authority; every write is recorded. Any other
+    object, field or stat is rejected."""
+    from oracle_emu import StubRejected, to_signed
+
+    def same(argument) -> None:
+        if (argument(0), argument(1)) != HANDLE:
+            raise StubRejected(f"handle {argument(0):#x}:{argument(1):#x} is not the world model's object")
+
+    def field(argument) -> int:
+        same(argument)
         if argument(2) != FIELD_FATE_FLAGS:
             raise StubRejected(f"field {argument(2):#x} is not in the world model")
         return case.armed
@@ -731,8 +738,6 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
                 progress(case_number)
         document.update(fields=["spell", "force", "type", "known", "level", "in", "wp", "magick", "loaded", "minimum", "result",
                                 "writes", "rankWritten", "magickWritten"])
-
-
     elif spec.model == "fate":
         from oracle_emu import RunFailure
         emulator.set_global(FATE_CALLBACK, 0)
