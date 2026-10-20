@@ -1089,7 +1089,6 @@ oracle (F3, receipts `4C5EB0.json` and `4C6170.json`).
 | SR13 | new-character kit (0x460FF0, called from the creation screen 0x545E80) | After the clothing part: any pick-locks point (points, not level) creates prototype 15178 at the critter's location and puts it in its inventory, then any heal point does the same with prototype 15179; a failed creation skips its item. | Original (the earlier reading agrees; the items' names not read) |
 | SR14 | aptitude (0x4B0740, stat 16) | `(50 × magick points − 55 × tech points) / 10` of the effective point stats, truncated toward zero, plus the adjustment of the sector the critter stands in (0x45A060); this function does not clamp. `CharacterStatRules` computes the same. | Original |
 
-<<<<<<< HEAD
 ## Hero skills (ARC-SKILLS-002)
 
 Source: [hero skills runtime](../world/hero-skills-runtime.md) and [skills](skills-evidence.md#persuasion), task S2 of the
@@ -1102,7 +1101,7 @@ questions (method step 6); they agree on both rows. Every direct branch stays in
 | --- | --- | --- | --- |
 | HK1 | leader check (0x4ADB50) | Arguments: the NPC, then the prospective leader. It first clears three bits of the NPC's flags field 0xDB (0x01000000, 0x02000000, 0x04000000) and tests the values it read before. Under mind control the controller (or, with none found, any PC leader) passes. Then a leader with persuasion training master passes at once; then NPC flag 0x400 of field 0x118 passes; then the saved bits gate a reaction refusal (3) and the two alignment refusals (1, 2) against the NPC's AI parameter row. | Original (the earlier reading agrees for master); not implemented (no leader-check caller in Steamwoven) |
 | HK2 | wait (0x4AA7A0) | For an NPC not already waiting: unless the leader's charisma is extraordinary or the NPC is mind-controlled, its wait index (field 0x12C) rises by one when the leader has **any** persuasion training (apprentice, expert or master alike), and an index of 6 or more schedules no timer; 0..5 schedule 0, 15 minutes, 2 hours, 1 day, 7 days or 30 days. Then the NPC leaves the follower list, keeps its leader and is marked waiting. | Reconstruction slip of the skills study's summary ("apprentice with extraordinary charisma"); the companion study's C12 already read it so; the timer itself is row Wait timer above. Not implemented (no wait timer runtime) |
-=======
+
 ## Doors, containers and locks (ARC-RES-065)
 
 Source: [first building](first-building-evidence.md#portals-doors-and-windows-fr-scene-008) (portal frames and door
@@ -1130,7 +1129,6 @@ executable's: object flags 19, portal flags 46, lock difficulty 47, key 48; cont
 | LK11 | open and close door animation (0x42D080, 0x42D160; 0x42D1C0, 0x42D2A0) | The begin node makes the first step (LK10), sets the animation delay to 1000 / the ART's frame rate in ms (unsigned division; 100 ms when the ART cannot be read) and plays the portal sound (open +0, close +1; [SN25](audio-evidence.md#dialogue-voice-event-sounds-scripts-and-interface)); each later node makes one step, without sound, until it refuses. | Original |
 | LK12 | bust (0x4F06E0, busted ART 0x4EC830) | A door has no busted ART: the door object is destroyed (0x43CCA0). A window gets its busted ART (the ART bit 9, 0x200, set and frame 0; kept when already set), the busted bit, and the bust script (SAP 30) of the object runs with the attacker. No sound plays (the misc sound of a portal is none) and the object flags are not touched. | Original |
 | LK13 | container open and close (0x43F7F0, 0x43F8F0; frame next 0x502BC0, previous 0x502C00) | Skipped for a destroyed object. Open sets the next ART frame (wrapping to 0 past the last), close the previous one (0 stays 0); each redraws the object when its ART changed. | Original |
->>>>>>> origin/main
 
 ## Decisions to revisit
 
