@@ -118,7 +118,8 @@ public sealed class AreaMapTransfersTests
         Assert.IsNull(transfers.LastScripted);
         var answer = new AreaScriptedUse(AreaScriptedUseOutcome.NoTeleport, null, ["It is locked."], null, "no teleport");
         var runs = 0;
-        transfers.ScriptRunner = (site, obj) => { runs++; Assert.AreEqual((guarded, row), (site, obj)); return answer; };
+        string? refusal = null;
+        transfers.ScriptRunner = (site, obj, refuse) => { runs++; Assert.AreEqual((guarded, row), (site, obj)); refusal = answer.Teleport is { } t ? refuse(t) : null; return answer; };
         Assert.AreEqual(AreaUseOutcome.TooFar, transfers.RequestUse(row.Key, new(at.X + 5, at.Y)).Outcome);
         Assert.AreEqual(0, runs, "the use rule comes first");
         var ended = transfers.RequestUse(row.Key, at);
@@ -139,11 +140,16 @@ public sealed class AreaMapTransfersTests
         Assert.IsNull(transfers.LastScripted, "a request that runs no script clears the last run");
         transfers.Clear();
 
-        // A teleport to a map the mode cannot open is refused after the run; map 4,998 keeps the current map.
-        answer = answer with { Teleport = new(pc, 5001, 5, 6) };
-        Assert.AreEqual((AreaUseOutcome.DestinationUnavailable, "DESTINATION_NOT_OPENED_IN_MAP_MODE 5001"), (transfers.RequestUse(row.Key, at).Outcome, transfers.RequestUse(row.Key, at).Reason));
+        // The runner is told why a teleport to a map the mode cannot open would be refused, and its refusal is the answer.
+        answer = answer with { Outcome = AreaScriptedUseOutcome.TeleportRefused, Teleport = new(pc, 5001, 5, 6), Detail = "DESTINATION_NOT_OPENED_IN_MAP_MODE 5001" };
+        var refused = transfers.RequestUse(row.Key, at);
+        Assert.AreEqual((AreaUseOutcome.DestinationUnavailable, "DESTINATION_NOT_OPENED_IN_MAP_MODE 5001", "DESTINATION_NOT_OPENED_IN_MAP_MODE 5001"),
+            (refused.Outcome, refused.Reason, refusal));
+        Assert.AreEqual(5001, refused.Site!.DestinationCatalogue);
+        Assert.IsNull(transfers.Pending);
+        // Map 4,998 keeps the current map and names its catalogue number.
         var here = transfers.Teleported(guarded, new(pc, 4998, 7, 8));
-        Assert.AreEqual((guarded.DestinationCatalogue, map.RuntimeMap, new WorldLocation(7, 8)), (here.DestinationCatalogue, here.DestinationRuntime, here.Arrival));
+        Assert.AreEqual((map.Snapshot.CatalogueMap, map.RuntimeMap, new WorldLocation(7, 8)), (here.DestinationCatalogue, here.DestinationRuntime, here.Arrival));
     }
 
     [TestMethod]
@@ -153,7 +159,8 @@ public sealed class AreaMapTransfersTests
         var plain = Use(row, 77, new(5, 6));
         MapTransitionSite Guarded(MapTransitionGuard guards) => plain with { Guards = MapTransitionGuard.ConditionalPath | guards };
         foreach (var guard in new[] { MapTransitionGuard.TrapScript, MapTransitionGuard.MovesOtherObject, MapTransitionGuard.ContainerOpenCheck,
-            MapTransitionGuard.UseRunsOtherAction, MapTransitionGuard.ObjectNotClickable, MapTransitionGuard.ObjectOffOrDestroyed })
+            MapTransitionGuard.UseRunsOtherAction, MapTransitionGuard.ObjectNotClickable, MapTransitionGuard.ObjectOffOrDestroyed,
+            MapTransitionGuard.UnlistedDestination, MapTransitionGuard.CallChangesTriggerer })
             Assert.AreEqual(0, new AreaMapTransfers(map, Set(map, Guarded(guard)), Destinations(map)).ScriptedTriggers.Count, guard.ToString());
         var both = new AreaMapTransfers(map, Set(map, Guarded(MapTransitionGuard.None), plain), Destinations(map));
         Assert.AreEqual((1, 0), (both.Triggers.Count, both.ScriptedTriggers.Count));

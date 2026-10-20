@@ -23,7 +23,7 @@ public sealed class AreaUseScriptsOriginalTests
         Assert.AreEqual(7, transfers.ScriptedTriggers.Count);
         var door = transfers.ScriptedTriggers.Single(key => transfers.ScriptedSite(key)!.Script == 2353);
         using var session = ConversationSessionFixture.Create(map.RuntimeMap);
-        transfers.ScriptRunner = (_, row) => new AreaUseScriptHost(session, map.RuntimeMap, map.Snapshot.Objects, [], content).Run(row, session.Rules.Scripts);
+        transfers.ScriptRunner = (_, row, refusal) => new AreaUseScriptHost(session, map.RuntimeMap, map.Snapshot.Objects, [], content).Run(row, session.Rules.Scripts, refusal);
         var at = new AreaStepCell(transfers.Object(door).WorldX!.Value, transfers.Object(door).WorldY!.Value);
 
         var shut = transfers.RequestUse(door, at);

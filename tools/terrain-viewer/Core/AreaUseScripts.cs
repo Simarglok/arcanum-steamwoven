@@ -7,8 +7,9 @@ using Arcanum.Session;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>What a scripted use did: ran with a teleport of the player (<see cref="Teleport"/>), ran without one, was refused
-/// by the dispatcher or by the session, or found no script content.</summary>
-public enum AreaScriptedUseOutcome { Teleport, NoTeleport, Refused, EffectsRejected, ContentUnavailable }
+/// by the dispatcher or by the session, found no script content, or asked for a teleport the caller cannot take (then
+/// nothing of the run is applied).</summary>
+public enum AreaScriptedUseOutcome { Teleport, NoTeleport, Refused, EffectsRejected, ContentUnavailable, TeleportRefused }
 
 /// <summary>A scripted use: the outcome, the first teleport of the player the run asked for, the printed lines the viewer
 /// shows, the dispatcher's result and a detail (identifiers and statuses only).</summary>
@@ -16,9 +17,9 @@ public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport
 
 /// <summary>
 /// ARC-SCRIPT-015 (plan slice S4, viewer part): the AREA viewer's SCR host for a use click on an object whose use script can
-/// reach a teleport. The attachee is a T0 object of the shown map (any row of its snapshot, by
-/// <see cref="AreaConversationState.EntityId"/>; an item or holder of another loaded map through its
-/// <see cref="AreaInventoryMap"/> rows); its use slot is the row's effective attachment, overridden by the session's map changes <c>use.lf</c>, <c>use.counters</c> and
+/// reach a teleport. The attachee is a T0 object of the shown map (any row of its snapshot, by <see cref="EntityId"/>; an
+/// item or holder of another loaded map through its <see cref="AreaInventoryMap"/> rows); its use slot is the row's
+/// effective attachment, overridden by the session's map changes <c>use.lf</c>, <c>use.counters</c> and
 /// <c>use.script</c>. It answers the S4 guards (<see cref="IScrObjectQueries"/>) from the session: the PC's quest log and the
 /// quests' global states, the hero's kit, carried and worn items, the holders' current lists, and from the rows the T0 name and
 /// spell flags.
@@ -40,6 +41,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState and not ScrCatalogue.Action.Dialog),
         ScrAdmissionSet.S4.ValueKinds, ScrAdmissionSet.S4.FocusKinds);
 
+    /// <summary>
+    /// The session entity of a row: a mobile's own id (<see cref="AreaConversationState.EntityId"/>, as the inventory and
+    /// dialog hosts name it); a sector object's sector and window ordinal, because sector objects carry a null id and so
+    /// share one id digest (the transition reader and the area owner key them the same way).
+    /// </summary>
+    public static string EntityId(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return row.Key.Kind == AreaSourceKind.Static && row.Key.Sector is { } sector ? $"sector:{sector}:{row.Key.SourceIndex}" : AreaConversationState.EntityId(row);
+    }
+
     private readonly GameSessionOwner _session;
     private readonly IReadOnlyCollection<AreaInventoryMap> _maps;
     private readonly ScriptContent? _content;
@@ -58,8 +70,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         _maps = maps ?? throw new ArgumentNullException(nameof(maps));
         _content = content;
         _shownMap = shownMap;
-        // An id repeated by several rows keeps the first; the clicked row answers for its own (Run).
-        foreach (var row in shown) _shown.TryAdd(AreaConversationState.EntityId(row), row);
+        // A mobile id repeated by several rows keeps the first; the clicked row answers for its own (Run).
+        foreach (var row in shown) _shown.TryAdd(EntityId(row), row);
     }
 
     public ScrObjectRef Pc => new(_session.QueryActor().Map.RuntimeMap, AreaScriptHost.PcCode);
@@ -157,14 +169,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     /// <summary>
     /// Runs the object's use script with the PC as the triggerer and applies its effects: the global flags, the deferred
     /// calls, then the object's use slot as map changes (a value equal to the loaded one clears its key). The first teleport of
-    /// the player is returned for the caller's transfer; another object's teleport is not modelled and leaves the run
-    /// unapplied. Printed lines are read for the caller to show; effect sounds are not played here.
+    /// the player is returned for the caller's transfer; <paramref name="teleportRefusal"/> names why the caller cannot take
+    /// it (or null), and then the run is not applied. Another object's teleport is not modelled and leaves the run unapplied.
+    /// Effects apply as the run goes: a step the session refuses leaves the earlier ones applied, as for a dialog script.
+    /// Printed lines are read for the caller to show; effect sounds are not played here.
     /// </summary>
-    public AreaScriptedUse Run(AreaObjectRecord row, ScrRuleProfile rules)
+    public AreaScriptedUse Run(AreaObjectRecord row, ScrRuleProfile rules, Func<ScrTeleport, string?>? teleportRefusal = null)
     {
         ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(rules);
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
-        var entity = AreaConversationState.EntityId(row);
+        if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        var entity = EntityId(row);
         if (row.Key.RuntimeMap != _shownMap) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the object is not on the shown map");
         // The clicked row answers for its entity, whichever copy of a repeated id the index kept.
         _shown[entity] = row;
@@ -172,9 +187,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
         if (run.Outcome == ScrOutcome.Refused)
             return new(AreaScriptedUseOutcome.Refused, null, [], run, $"script {run.Script} SCR line {run.Refusal!.Line}: {run.Refusal.Code} type {run.Refusal.Type}");
+        if (_content.Changed) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], run, $"script {run.Script}: a script file changed since it was first read");
         var effects = run.Effects;
         if (effects.Teleports.FirstOrDefault(t => !IsPc(t.Object)) is { } other)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a teleport of {other.Object.Code} is not modelled");
+        // A teleport the caller cannot take (a map the mode cannot open, an arrival not admitted) leaves the use undone.
+        if (effects.Teleports.FirstOrDefault() is { } asked && teleportRefusal?.Invoke(asked) is { } refusal)
+            return new(AreaScriptedUseOutcome.TeleportRefused, asked, [], run, refusal);
         var lines = new List<string>();
         foreach (var line in effects.Lines)
         {

@@ -90,8 +90,8 @@ public partial class TerrainViewerApp
         }
         _mapTransfers = new(new(area.Snapshot, steps, chart), transitions, destinations);
         // ARC-SCRIPT-015: a guarded use site runs its use script on the session; the hosts are read at the click.
-        _mapTransfers.ScriptRunner = (_, row) => _areaSession is { } owner
-            ? new AreaUseScriptHost(owner, area.Snapshot.RuntimeMap, area.Snapshot.Objects, _inventoryHost?.Maps ?? [], _conversationContent?.Load.Content).Run(row, owner.Rules.Scripts)
+        _mapTransfers.ScriptRunner = (_, row, refusal) => _areaSession is { } owner
+            ? new AreaUseScriptHost(owner, area.Snapshot.RuntimeMap, area.Snapshot.Objects, _inventoryHost?.Maps ?? [], _conversationContent?.Load.Content).Run(row, owner.Rules.Scripts, refusal)
             : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
         var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
         var arrived = handoff is null ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"

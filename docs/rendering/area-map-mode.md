@@ -256,25 +256,29 @@ with an unconditional exit stays that exit.
   `AreaUseScriptHost` runs the object's use script once, with the PC as the triggerer, under the set "S4-area-use": S4
   without the story-state actions (the session has no story-state number) and without the dialog action. The use slot is
   the row's script attachment, overridden by the session's map changes `use.lf`, `use.counters` and `use.script` of the
-  object, and a changed slot is written back there (a value equal to the loaded one clears its key), so a door that
+  object (a mobile by its own id; a sector object, whose id is null, by its sector and window ordinal,
+  `AreaUseScriptHost.EntityId`), and a changed slot is written back there (a value equal to the loaded one clears its key), so a door that
   removes its script or keeps a flag stays so, also across F7/F8 and map changes.
 - **Guards** (ledger SG1–SG6) are answered from the session: the PC's quest log (botched reads 6) and, for any other
   object, the quest's global state; the hero's kit and carried items and their worn slots; a holder's current list and
   its items' inventory locations; any object's name number and spell flags from its row (the PC has no row: name 0, no
   spell flags); no reputations (only a PC has them and the session holds none yet).
 - **Effects**, applied as the run goes, as for a dialog script: global flags, sound-scheme requests, deferred calls to the
-  session's queue, the use slot. Printed lines show on the status line; effect sounds are not played. The first teleport
-  of the player is the transfer: its map (−1 keeps this map, ledger TR4) and tile replace the site's, and it queues
-  through the ordinary transfer path, so an exit to the start map or an arrival the step evidence does not admit is
-  refused after the run. A teleport of another object is not modelled: the run's effects are dropped and the use is
-  refused. A run outside the set or without script content is refused and changes nothing.
+  session's queue, the use slot; a step the session refuses leaves the earlier ones applied and the use is reported
+  refused. Printed lines show on the status line; effect sounds are not played. The first teleport of the player is the
+  transfer: its map (−1 keeps this map, ledger TR4) and tile replace the site's, and it queues through the ordinary
+  transfer path. A teleport map mode cannot take (an exit to the start map, an arrival the step evidence does not admit)
+  is checked before anything is applied: the use is refused and the door stays as it was. A teleport of another object
+  is not modelled: the run's effects are dropped and the use is refused. A run outside the set, without script content or
+  after a script file changed is refused and changes nothing.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`): 21 guarded use sites on 6 of the 78 maps map
   mode opens. With a new game's state (no flag, quest or item) 9 run and their guards hold the teleport back, 12 are
   refused because they need conditions or actions outside the set (immediate script calls, loops, other conditions). In
   `tulla interior` the door with script 2353 prints its line while global flag 2376 is clear and, once it is set,
   teleports the player to (168,218) on the same map.
 - **Not covered.** Guarded tile and sector scripts (the reader finds no guarded sector teleport); immediate script calls,
-  loops and focus groups; the PC's name number; a fade-and-teleport's fade, sound and movie.
+  loops and focus groups; a teleport behind a deferred call (the call later runs under the dialog host's set, which has
+  no teleport, and is refused); the PC's name number; a fade-and-teleport's fade, sound and movie.
 
 ## Dialogs (ARC-WORLD-032)
 

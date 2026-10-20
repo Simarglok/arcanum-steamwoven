@@ -355,10 +355,13 @@ the player's teleport becomes the transfer); tile and sector events are a later 
 - The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls": S3 without
   story state, plus the sound actions and call script in / remove script call); since ARC-SCRIPT-015 map mode's use
   clicks on guarded use sites run it under "S4-area-use"; tile and sector events, heartbeat and combat are later slices.
-- Not in the admitted set yet: focus groups and local objects, loops, calls and
-  call-ex, and every world action (float line, teleport, quests, reactions...).
-- The viewer's script host models only the dialog slot of the map's speakers;
+- Not in any admitted set yet: focus groups and local objects, loops, immediate calls and
+  call-ex, and the world actions other than teleport and fade-and-teleport (set S4: float line, quests,
+  reactions...).
+- The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
-  "no", and the generic greeting is a status line.
+  "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any
+  row of the shown map, mind control from the row's spell flags and the jilted flag from the session; generators and
+  traps answer "no" there too.
 - X2 (an uninitialised attachee type without attachee) is reachable only through
   call-script and is left to the slice that admits calls.

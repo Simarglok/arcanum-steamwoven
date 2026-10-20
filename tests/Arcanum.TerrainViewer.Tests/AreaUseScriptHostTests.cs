@@ -23,7 +23,9 @@ public sealed class AreaUseScriptHostTests
     private static string Entity(int index) => "oid:" + Key(index).ObjectIdSha256;
 
     // A row with a use slot (point 1: local flags, counters, script) and a name number; spell flags when given.
-    private static AreaObjectRecord Row(int index, int type, int script, int name, uint spellFlags = 0, int map = 1)
+    private static AreaObjectRecord Row(int index, int type, int script, int name, uint spellFlags = 0, int map = 1) => Row(Key(index, map), type, script, name, spellFlags);
+
+    private static AreaObjectRecord Row(AreaObjectKey key, int type, int script, int name, uint spellFlags = 0)
     {
         var fields = new List<AreaFieldValue>
         {
@@ -31,7 +33,7 @@ public sealed class AreaUseScriptHostTests
             new(21, AreaPresence.Value, AreaValueOrigin.Instance, name, [], null),
             new(19, AreaPresence.Value, AreaValueOrigin.Instance, spellFlags, [], null),
         };
-        return new(Key(index, map), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally,
+        return new(key, 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + key.SourceIndex, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally,
             [], fields, true, true, true);
     }
 
@@ -216,6 +218,55 @@ public sealed class AreaUseScriptHostTests
             var again = host.Run(gate, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, again.Outcome);
             Assert.AreEqual(ScrStop.NoScript, again.Run!.Stop);
+        });
+    }
+
+    [TestMethod]
+    public void Sector_objects_with_the_one_null_id_digest_keep_their_own_use_slots()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            // Two scenery objects of one sector: the same id digest (a null id), told apart by their window ordinals.
+            AreaObjectKey Sector(int index) => new(new string('a', 64), 1, AreaSourceKind.Static, 42, index, index * 100L, new string('0', 64), 100);
+            var first = Row(Sector(0), 3, 705, 3000);
+            var second = Row(Sector(1), 3, 705, 3001);
+            Assert.AreEqual("sector:42:0", AreaUseScriptHost.EntityId(first));
+            Assert.AreNotEqual(AreaUseScriptHost.EntityId(first), AreaUseScriptHost.EntityId(second));
+            Assert.AreEqual(Entity(9), AreaUseScriptHost.EntityId(Row(9, 16, 0, 9000)), "a mobile keeps its own id");
+            var host = Host(session, content, first, second);
+            Assert.AreEqual(3001, host.NameOf(new(1, AreaUseScriptHost.EntityId(second))));
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(first, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(0, host.Slot(new(1, AreaUseScriptHost.EntityId(first)), ScrPoint.Use)!.Value.Script, "the first removed its script");
+            Assert.AreEqual(705, host.Slot(new(1, AreaUseScriptHost.EntityId(second)), ScrPoint.Use)!.Value.Script, "the second keeps its own");
+        });
+    }
+
+    [TestMethod]
+    public void A_teleport_the_caller_cannot_take_leaves_the_use_undone()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var gate = Gate(700);
+            var host = Host(session, content, gate);
+            var before = session.Version;
+            var asked = new List<ScrTeleport>();
+            // Without the item: no teleport, so the refusal is never asked and the run applies.
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(gate, session.Rules.Scripts, t => { asked.Add(t); return "NO"; }).Outcome);
+            Assert.AreEqual(0, asked.Count);
+            Assert.AreNotEqual(before, session.Version);
+
+            var inventory = new AreaInventoryHost([Inventory()]);
+            Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+            Assert.AreEqual(GameSessionDisposition.Changed, inventory.PickUp(session, Entity(4)).Disposition);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null,
+                [new MapChangeEdit(new SessionMapId(1), MapChangeKey.ForEntity(Entity(0), AreaUseScriptHost.LocalFlagsProperty), null)]).Disposition);
+            var held = session.Version;
+            var refused = host.Run(gate, session.Rules.Scripts, t => { asked.Add(t); return "DESTINATION_NOT_OPENED_IN_MAP_MODE 5076"; });
+            Assert.AreEqual((AreaScriptedUseOutcome.TeleportRefused, "DESTINATION_NOT_OPENED_IN_MAP_MODE 5076"), (refused.Outcome, refused.Detail));
+            Assert.AreEqual(new ScrTeleport(host.Pc, 5076, 5, 6), asked.Single());
+            Assert.AreEqual(held, session.Version, "the local flag 3 is not written back");
         });
     }
 }

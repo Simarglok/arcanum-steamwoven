@@ -78,8 +78,9 @@ public sealed class AreaMapTransfers
     public const MapTransitionGuard ScriptDecides = MapTransitionGuard.ConditionalPath | MapTransitionGuard.ComputedDestination;
 
     /// <summary>ARC-SCRIPT-015: runs a scripted use's script for its object and returns what it asked for; set by the host.
-    /// Without a runner a scripted use is refused.</summary>
-    public Func<MapTransitionSite, AreaObjectRecord, AreaScriptedUse>? ScriptRunner { get; set; }
+    /// The third argument names why a teleport cannot be taken (<see cref="Refusal"/> of the resolved site), so the runner
+    /// applies nothing then. Without a runner a scripted use is refused.</summary>
+    public Func<MapTransitionSite, AreaObjectRecord, Func<ScrTeleport, string?>, AreaScriptedUse>? ScriptRunner { get; set; }
 
     /// <summary>ARC-SCRIPT-015: the objects whose use runs their script to decide the transfer.</summary>
     public IReadOnlyCollection<AreaObjectKey> ScriptedTriggers => _scripted.Keys;
@@ -112,10 +113,12 @@ public sealed class AreaMapTransfers
         if (!scripted) return Queue(use.Site, trigger, check.Distance);
         // ARC-SCRIPT-015: the script decides; its teleport of the player gives the destination.
         if (ScriptRunner is not { } runner) return new(AreaUseOutcome.ScriptRefused, use.Site, check.Distance, "NO_SCRIPT_RUNNER");
-        var ran = LastScripted = runner(use.Site, use.Object);
+        var site = use.Site;
+        var ran = LastScripted = runner(site, use.Object, teleport => Refusal(Teleported(site, teleport)));
         return ran.Outcome switch
         {
-            AreaScriptedUseOutcome.Teleport => Queue(Teleported(use.Site, ran.Teleport!), trigger, check.Distance),
+            AreaScriptedUseOutcome.Teleport => Queue(Teleported(site, ran.Teleport!), trigger, check.Distance),
+            AreaScriptedUseOutcome.TeleportRefused => new(AreaUseOutcome.DestinationUnavailable, Teleported(site, ran.Teleport!), check.Distance, ran.Detail),
             AreaScriptedUseOutcome.NoTeleport => new(AreaUseOutcome.ScriptEnded, use.Site, check.Distance, ran.Detail),
             _ => new(AreaUseOutcome.ScriptRefused, use.Site, check.Distance, ran.Detail),
         };
@@ -136,8 +139,9 @@ public sealed class AreaMapTransfers
     public MapTransitionSite Teleported(MapTransitionSite site, ScrTeleport teleport)
     {
         ArgumentNullException.ThrowIfNull(site); ArgumentNullException.ThrowIfNull(teleport);
-        var runtime = teleport.RuntimeMap == -1 ? Map.RuntimeMap : teleport.RuntimeMap;
-        var catalogue = teleport.RuntimeMap == -1 ? site.DestinationCatalogue : teleport.CatalogueMap;
+        var here = teleport.RuntimeMap == -1;
+        var runtime = here ? Map.RuntimeMap : teleport.RuntimeMap;
+        var catalogue = here ? Map.Snapshot.CatalogueMap : teleport.CatalogueMap;
         return site with { DestinationCatalogue = catalogue, DestinationRuntime = runtime, Arrival = new(teleport.X, teleport.Y) };
     }
 
