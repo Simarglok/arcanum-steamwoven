@@ -14,9 +14,10 @@ public sealed partial class GameSessionOwner
 {
     /// <summary>
     /// The hero's eight disciplines now (ARC-TECHNOLOGY-002), or null without a hero: the stored degrees of its advancement fields,
-    /// each lowered while its effective intelligence (effects and poison included) is below the degree's minimum, and the
+    /// each lowered while its effective intelligence (effects included) is below the degree's minimum, and the
     /// expertise <see cref="TechDegreeRules.EffectiveExpertise"/> gives with the "expertise in discipline" changes of its durable
-    /// effects (every cause). The schematic gate and the character sheet read this.
+    /// effects (every cause; the race and gender effects' discipline changes are not carried: no installed one has any). The
+    /// schematic gate (TECH-4) and the character sheet will read this.
     /// </summary>
     public ImmutableArray<SessionTechDiscipline>? QueryHeroTechnology()
     {

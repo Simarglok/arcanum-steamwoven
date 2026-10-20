@@ -45,10 +45,12 @@ point, `RefundHeroPoint` lowers one and credits the point. The pool checks the u
 ## Session
 
 `QueryHeroTechnology()` gives the hero's eight disciplines now: the stored degree, the degree its effective intelligence
-(effects and poison included) lets count, and the effective expertise with the tech-discipline changes of its durable
-effects (every cause; no installed race or female effect has one, 9 installed rules do, all adds). These changes were inert
-until now ([durable effects](durable-effects-runtime.md)); the schematic component gate (TECH-4) and the character sheet read
-the expertise. NPC degrees stay in their advancement records; no NPC query is added yet.
+(effects included) lets count, and the effective expertise with the tech-discipline changes of its durable
+effects (every cause; counted on the installed data with the repository's effect reader on 2026-10-21: 9 of 310 rules have such a
+change, all adds, none a race or the female effect, whose discipline changes the session therefore does not carry). These
+changes were inert until now ([durable effects](durable-effects-runtime.md)); the schematic component gate (TECH-4) and the
+character sheet will read the expertise. A bought degree moves the tech points and so the aptitude
+([character stats](character-stats-runtime.md)). NPC degrees stay in their advancement records; no NPC query is added yet.
 
 ## Differences from the original
 
@@ -65,3 +67,5 @@ the expertise. NPC degrees stay in their advancement records; no NPC query is ad
 - No caller: the character sheet's + and − buttons (skills plan S6) and the schematic window (TECH-5) come later.
 - The schematic knowledge (TECH-3) and the component gate (TECH-4) do not read the expertise yet.
 - Spell ranks in the intelligence guard are read from the sheet; the spell lane is the magic slice MT3.
+- The race and gender effects' tech-discipline changes are not carried into the expertise (no installed one has any); a
+  module with one would need them carried as the innate skill changes are.

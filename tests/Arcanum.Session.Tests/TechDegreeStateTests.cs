@@ -11,8 +11,6 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class TechDegreeStateTests
 {
-    private const int Discipline = (int)AdvancementTrack.TechDiscipline;
-
     private static GameSessionOwner Editing(int intelligence = 8)
     {
         var stats = Defaults();
@@ -45,6 +43,8 @@ public sealed class TechDegreeStateTests
         Ok(owner.SpendHeroPoint(owner.Version, AdvancementTrack.TechDiscipline, 3), owner, 2);
         var hero = owner.QueryHero()!;
         Assert.AreEqual((2, 3, 2), (hero.Advancement.TechDegrees[3], hero.UnspentPoints, hero.Stats[9]), "degree 2, 5 − 2 points, tech points 0 + 2");
+        // The tech points move the aptitude toward technology.
+        Assert.IsTrue(owner.QueryHeroStats(new(0))!.Value.Snapshot!.GetEffective(CharacterStat.MagickTechAptitude) < 0);
         Assert.AreEqual(new SessionTechDiscipline(3, 2, 2, 20), owner.QueryHeroTechnology()!.Value[3]);
     }
 
@@ -54,6 +54,7 @@ public sealed class TechDegreeStateTests
         using var owner = Editing(intelligence: 7);
         Ok(owner.SpendHeroPoint(owner.Version, AdvancementTrack.TechDiscipline, 0), owner, 1);
         Refused(owner.SpendHeroPoint(owner.Version, AdvancementTrack.TechDiscipline, 0), owner, PointChangeStatus.IntelligenceTooLow, 1);
+        Assert.AreEqual(CharacterStat.Intelligence, owner.SpendHeroPoint(owner.Version, AdvancementTrack.TechDiscipline, 0).Change!.Stat);
         // An intelligence effect lifts the effective value: degree 2 needs 8.
         var clever = new SessionEffectDefinition(120, [new(EffectAttributeKind.Stat, (int)CharacterStat.Intelligence, EffectChangeOperator.Add, 1)]);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AddHeroEffect(owner.Version, clever, EffectCause.Item).Disposition);

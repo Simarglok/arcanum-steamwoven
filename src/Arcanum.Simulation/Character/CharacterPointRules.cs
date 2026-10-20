@@ -318,7 +318,8 @@ public static class CharacterPointRules
         if (lane is null) return Refused(PointChangeStatus.LaneNotReady, sheet, track, index);
         var step = raise ? lane.Raise(sheet, modifiers, index) : lane.Lower(sheet, modifiers, index);
         if (step.Status != PointChangeStatus.Changed)
-            return Refused(Enum.IsDefined(step.Status) ? step.Status : PointChangeStatus.Invalid, sheet, track, index);
+            return Refused(Enum.IsDefined(step.Status) ? step.Status : PointChangeStatus.Invalid, sheet, track, index,
+                step.Status == PointChangeStatus.IntelligenceTooLow ? CharacterStat.Intelligence : null);
         if (!AutoLevelRules.IsValid(step.Sheet) || step.Points < 0 || !OwnStep(sheet, step.Sheet, track, index, raise ? 1 : -1))
             return Refused(PointChangeStatus.Invalid, sheet, track, index);
         if (raise && step.Points > sheet.UnspentPoints) return Refused(PointChangeStatus.NotEnoughPoints, sheet, track, index);
