@@ -1,3 +1,5 @@
+using Arcanum.Data.Scripts;
+using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.Session;
@@ -128,7 +130,55 @@ public delegate SessionInsertVerdict SessionInsertCheck(SessionInventoryItem ite
 /// is the insert check's answer when it ran (also on an <see cref="GameSessionFailure.InsertRefused"/> refusal).
 /// </summary>
 public readonly record struct InventoryMutationResult(GameSessionDisposition Disposition, GameSessionFailure Failure,
-    string? Item, SessionInsertVerdict? Verdict, GameSessionVersion Version);
+    string? Item, SessionInsertVerdict? Verdict, GameSessionVersion Version)
+{
+    /// <summary>ARC-SCRIPT-013: the item's insert-item script run, when one ran (also on a refusal of its effects).</summary>
+    public ScrRunResult? InsertScript { get; init; }
+    /// <summary>The lines that script printed, in order, for the host to show; empty when none.</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = Array.Empty<SessionScriptMessage>();
+}
+
+/// <summary>A line a script printed (ARC-SCRIPT-013): the DLG line of <paramref name="Script"/>, the print action's second
+/// number and the text the host built.</summary>
+public sealed record SessionScriptMessage(int Script, int Line, int Kind, string Text);
+
+public enum SessionPrintedLineStatus
+{
+    /// <summary>Show <see cref="SessionPrintedLine.Text"/>.</summary>
+    Shown,
+    /// <summary>The script's DLG is missing or cannot be read: the original prints nothing (ledger IS2).</summary>
+    NoDialog,
+    /// <summary>The line would do more than show text (an action field, generated text) or cannot be decoded; the transfer
+    /// is refused before any effect.</summary>
+    Unsupported,
+}
+
+public sealed record SessionPrintedLine(SessionPrintedLineStatus Status, string Text, string Detail);
+
+/// <summary>
+/// ARC-SCRIPT-013: what the session needs from the host to run an item's insert-item script on a transfer. The dispatcher
+/// reads the game through the <see cref="IScrHost"/> part (the item's slot, the script files, the session's global flags,
+/// the player); <see cref="PrintedLine"/> reads the DLG line a print-line action shows (see
+/// <see cref="Arcanum.Scripting.Scr.ScrPrintedLine"/>). Every call only reads; the session applies the run.
+/// </summary>
+public interface ISessionItemScriptHost : IScrHost
+{
+    SessionPrintedLine PrintedLine(int script, int line);
+}
+
+/// <summary>ARC-SCRIPT-013: how a transfer runs an item's insert-item script.</summary>
+public static class SessionItemScripts
+{
+    /// <summary>
+    /// The commands an insert-item script may use: <see cref="ScrAdmissionSet.S6"/> without the dialog action (no
+    /// conversation starts from a transfer), the story-state actions (the session has no story-state number) and the
+    /// deferred calls (not applied from a transfer yet). A script outside it refuses the transfer.
+    /// </summary>
+    public static ScrAdmissionSet Admission { get; } = new("S6-item", ScrAdmissionSet.S6.Conditions,
+        ScrAdmissionSet.S6.Actions.Where(action => action is not (ScrCatalogue.Action.Dialog or ScrCatalogue.Action.GetStoryState
+            or ScrCatalogue.Action.SetStoryState or ScrCatalogue.Action.CallScriptIn or ScrCatalogue.Action.RemoveScriptCall)),
+        ScrAdmissionSet.S6.ValueKinds, ScrAdmissionSet.S6.FocusKinds);
+}
 
 /// <summary>Mutable inventory domain of one owner: attached map seeds, the PC's gold and the PC's list.</summary>
 internal sealed class InventoryDomain

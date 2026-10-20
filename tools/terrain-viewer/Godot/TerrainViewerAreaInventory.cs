@@ -29,8 +29,9 @@ public partial class TerrainViewerApp
     private bool InventoryActive => _inventoryHost is not null && _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
 
     /// <summary>Builds the seeds of the exterior and (when loaded) the cave and attaches them to the new area session.
-    /// A refused build leaves the inventory unavailable; the rest of the area runs as before.</summary>
-    private void BindAreaInventory(TerrainLoadResult result)
+    /// A refused build leaves the inventory unavailable; the rest of the area runs as before. ARC-SCRIPT-013: the game's
+    /// script content (shared with the conversations) runs an item's insert-item script on a transfer.</summary>
+    private void BindAreaInventory(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
         UnbindAreaInventory();
         if (_areaSession is not { } session || result.Area is not { } area || result.AreaStepSnapshot is not { } steps) return;
@@ -44,7 +45,8 @@ public partial class TerrainViewerApp
             if (build.Map is null) { _inventoryStatus = $"inventory: unavailable ({name} {build.Status})"; return; }
             maps.Add(build.Map);
         }
-        AdoptAreaInventory(new AreaInventoryHost(maps));
+        var content = ConversationContent(arguments.ModulePath, area.Snapshot.Inputs.SingleOrDefault(input => input.Key.Role == AreaSourceRole.Module)?.Sha256);
+        AdoptAreaInventory(new AreaInventoryHost(maps, scripts: content.Content));
     }
 
     // The session has no detach: when a later map's seed is refused, an earlier one stays attached but unused (seeds are
@@ -127,10 +129,14 @@ public partial class TerrainViewerApp
         var result = _inventoryHost!.PickUp(_areaSession!, target.Entity);
         var name = _inventoryHost.Name(target.Entity, _hoverNames?.Catalog);
         _inventoryStatus = result.Disposition == GameSessionDisposition.Changed
-            ? $"picked up {name}" : $"pickup refused: {AreaInventoryHost.Refusal(result.Failure)}";
-        GD.Print($"ARC-UI-004 pickup disposition={result.Disposition} failure={result.Failure} pc={_areaSession!.QueryPcInventory().Count}");
+            ? $"picked up {name}{AreaInventoryHost.Printed(result)}" : $"pickup refused: {AreaInventoryHost.Refusal(result.Failure)}";
+        GD.Print($"ARC-UI-004 pickup disposition={result.Disposition} failure={result.Failure} pc={_areaSession!.QueryPcInventory().Count}{InsertScriptLog(result)}");
         SyncAreaInventory(); RefreshAreaStatus();
     }
+
+    // ARC-SCRIPT-013: how an item's insert-item script ended and how many lines it printed (the text stays on screen only).
+    private static string InsertScriptLog(InventoryMutationResult result) =>
+        result.InsertScript is { } run ? $" insert-script={run.Script} stop={run.Stop} lines={result.Messages.Count}" : string.Empty;
 
     private void CancelInventoryApproach(string? why)
     {
@@ -189,8 +195,8 @@ public partial class TerrainViewerApp
         if (!InventoryOpen || !InventoryActive || _inventoryPanel!.Holder is not { } holder) return;
         var result = _inventoryHost!.Loot(_areaSession!, holder, item);
         var message = result.Disposition == GameSessionDisposition.Changed
-            ? $"took {_inventoryHost.Name(item, _hoverNames?.Catalog)}" : $"not taken: {AreaInventoryHost.Refusal(result.Failure)}";
-        GD.Print($"ARC-UI-004 loot disposition={result.Disposition} failure={result.Failure} pc={_areaSession!.QueryPcInventory().Count}");
+            ? $"took {_inventoryHost.Name(item, _hoverNames?.Catalog)}{AreaInventoryHost.Printed(result)}" : $"not taken: {AreaInventoryHost.Refusal(result.Failure)}";
+        GD.Print($"ARC-UI-004 loot disposition={result.Disposition} failure={result.Failure} pc={_areaSession!.QueryPcInventory().Count}{InsertScriptLog(result)}");
         _inventoryStatus = message;
         _inventoryPanel.Render(InventoryView(holder), message);
         SyncAreaInventory(); RefreshReadyStatus();
@@ -200,14 +206,15 @@ public partial class TerrainViewerApp
     private void TakeAllFromBody()
     {
         if (!InventoryOpen || !InventoryActive || _inventoryPanel!.Holder is not { } holder) return;
-        var taken = 0; var refused = new List<string>();
+        var taken = 0; var refused = new List<string>(); var printed = new System.Text.StringBuilder();
         foreach (var line in InventoryView(holder).Loot)
         {
             var result = _inventoryHost!.Loot(_areaSession!, holder, line.Entity);
-            if (result.Disposition == GameSessionDisposition.Changed) taken++;
+            GD.Print($"ARC-UI-004 loot-all-item disposition={result.Disposition} failure={result.Failure}{InsertScriptLog(result)}");
+            if (result.Disposition == GameSessionDisposition.Changed) { taken++; printed.Append(AreaInventoryHost.Printed(result)); }
             else refused.Add($"{_inventoryHost.Name(line.Entity, _hoverNames?.Catalog)}: {AreaInventoryHost.Refusal(result.Failure)}");
         }
-        var message = $"took {taken} item(s)" + (refused.Count == 0 ? string.Empty : "; not taken: " + string.Join("; ", refused));
+        var message = $"took {taken} item(s){printed}" + (refused.Count == 0 ? string.Empty : "; not taken: " + string.Join("; ", refused));
         GD.Print($"ARC-UI-004 loot-all taken={taken} refused={refused.Count} pc={_areaSession!.QueryPcInventory().Count}");
         _inventoryStatus = message;
         _inventoryPanel.Render(InventoryView(holder), message);

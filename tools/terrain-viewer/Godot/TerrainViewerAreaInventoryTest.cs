@@ -177,7 +177,8 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-UI-004 on the original exterior (native smoke): a ground item picked up next to it, another reached by walk to
-    /// pick up, the dead NPCs looted with "take all" (the scripted item stays), and the Inventory key showing every taken
+    /// pick up, the dead NPCs looted with "take all" (ARC-SCRIPT-013: the amulet's insert-item script runs and prints its
+    /// line, shown only on screen), and the Inventory key showing every taken
     /// item by its resolved name. Prints counts and outcomes only.
     /// </summary>
     private async Task RunAreaInventorySmokeAsync()
@@ -223,9 +224,11 @@ public partial class TerrainViewerApp
             // 3. Every dead NPC with items: the press opens the body, "take all" takes what the rules admit.
             var bodies = _areaSession.QueryMapInventory(new(map.RuntimeMap))!.Holders.Where(h => h.Dead && h.Items.Count > 0)
                 .Select(h => _inventoryHost!.Target(_areaSession, map.RuntimeMap, KeyOf(h.Entity))!).ToArray();
-            var looted = 0; var left = 0;
+            var looted = 0; var left = 0; var printed = 0;
             foreach (var body in bodies)
             {
+                var scripted = _areaSession.QueryMapInventory(new(map.RuntimeMap))!.Holders.Single(h => h.Entity == body.Entity).Items
+                    .Any(item => item.Facts.HasScript(SessionScriptPoint.InsertItem));
                 AreaSmokePlace(map, ApproachCell((AreaGridSession)_worldActor.Session!, body.Row.WorldX!.Value, body.Row.WorldY!.Value, AreaInventoryHost.Reach)!.Value);
                 point = await HoverPointAsync(this, commands[body.Row.Key]) ?? throw new InvalidOperationException("AREA_INVENTORY_SMOKE body not visible");
                 var before = _areaSession.QueryPcInventory().Count;
@@ -234,10 +237,12 @@ public partial class TerrainViewerApp
                 _inventoryPanel!.TakeAllForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 looted += _areaSession.QueryPcInventory().Count - before; left += _inventoryPanel.ViewForSelfTest!.Loot.Count;
+                // The printed line follows " — " in the message; its text is not logged.
+                if (scripted) { Require(_inventoryStatus.Contains(" — ", StringComparison.Ordinal), "the amulet's script printed its line"); printed++; }
                 EndInventory();
             }
-            // docs/world/inventory-runtime.md: four dead NPCs carry six items; one has its own insert-item script.
-            Require((bodies.Length, looted, left) == (4, 5, 1), $"loot bodies {bodies.Length} taken {looted} left {left}");
+            // docs/world/inventory-runtime.md: four dead NPCs carry six items; the amulet's insert-item script runs (ARC-SCRIPT-013).
+            Require((bodies.Length, looted, left, printed) == (4, 6, 0, 1), $"loot bodies {bodies.Length} taken {looted} left {left} printed {printed}");
 
             // 4. The Inventory key lists every taken item by its resolved name.
             AreaSmokePlace(map, map.Chart.Spawn);
@@ -257,6 +262,7 @@ public partial class TerrainViewerApp
             AreaSmokePlace(map, map.Chart.Spawn); PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
             GD.Print("ARC-UI-004 native-smoke inventory PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 GroundDrawn = groundKeys.Length, PickedNextTo = 1, WalkToPickUpFrames = walkFrames, DeadBodies = bodies.Length, Looted = looted, LeftOnBodies = left,
+                PrintedLines = printed,
                 Pc = _areaSession.QueryPcInventory().Count, Named = view.Pc.Count, Parity = "NOT_VERIFIED (diagnostic window, no grid or weight)" }));
         }
         finally

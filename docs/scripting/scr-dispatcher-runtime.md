@@ -45,7 +45,8 @@ action, next line or null) and `Effects`.
 
 `ScrEffects`: the slot `Writeback` (source, attachee or null, point, new slot)
 or `DestroyTrapObject`, the changed `GlobalFlags` (final values, ascending, only
-those that differ from the host's), and the new `StoryState`. A run reads its
+those that differ from the host's), the new `StoryState`, the conversation to start (`Dialog`), the deferred `Calls`
+and the printed `Lines` (S6). A run reads its
 own writes back from an overlay. Effects made before a stop are kept, as the
 original applies them as it goes; a refused script has none.
 
@@ -220,6 +221,22 @@ the caller applies `ScrEffects.Calls` with `ScheduleScriptCall` and
 viewer does not run event passes yet (slice E3 of the queue plan) and keeps its
 dialogue set at S3, so its talks never schedule a call.
 
+## Print line (ARC-SCRIPT-013, slice S6)
+
+- **`ScrAdmissionSet.S6`** is S5 plus print line (action 24); `ScrRunOptions` accepts any subset of S6 and keeps S5 as
+  its default, so existing hosts are unchanged.
+- **Print line** returns `ScrEffects.Lines`, one `ScrPrintLine(Script, Line, Kind)` per action in order: the DLG line
+  (operand 0) of the running attachment's own script (`_slot.Script`; a mind-controlled run names the NPC's script, a
+  deferred call the called one) and the second number (operand 1), both read as values. A run without an attachee
+  (tile, sector, a call without one) prints nothing, as the original (ledger IS2).
+- **`ScrPrintedLine.Read(document, line, alternate, names)`** builds the shown text from a loaded DLG as the original's
+  NPC-line step does: a missing record shows one space; the text or (`alternate`, a critter triggerer that is not male)
+  the alternate text, Windows-1252 with `@pcname@`/`@npcname@` substituted. A record with an action field, generated
+  text (a `g:`, `m:` or `r:` prefix, or exactly `i:`), another token or an undecodable text is `Unsupported`: the
+  original would run the action or generate the text, which is not modelled, so a caller refuses the run's effects. It
+  carries the registry mark of 0x44B390 (partial). The session uses both for an item's insert-item script
+  ([inventory runtime](../world/inventory-runtime.md#insert-item-script-arc-script-013)).
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the
@@ -244,6 +261,9 @@ dialogue set at S3, so its talks never schedule a call.
   refusals, entry outside the script), Virgil-like entries and resumption, the
   dialog action for a PC and a non-PC, mind control, object roles and
   `MissingObject`, the S3 set.
+- `tests/Arcanum.Scripting.Tests/Scr/ScrPrintLineTests.cs` (ARC-SCRIPT-013): print line refused below S6, its lines
+  in order from an object event and a call, none without an attachee, options wider than S6 refused, and the printed
+  text rules (missing line, alternate text, tokens, action field, generated text).
 - `tests/Arcanum.TerrainViewer.Tests/AreaScriptHostTests.cs`: the viewer host's
   slot over the session keys, writeback and baseline clearing, refusals in
   `Apply`, invalid stored keys, scripts and dialogs found by number once, the

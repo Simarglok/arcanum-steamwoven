@@ -82,7 +82,8 @@ Already in the ledger and used here: the insert-item script runs after the item 
 
 ## Proposal (P)
 
-1. **Admit 2527 through the script, not by exception.** A follow-up implementation task runs the item's insert-item
+1. **Admit 2527 through the script, not by exception.** Delivered by ARC-SCRIPT-013
+   ([inventory runtime](../world/inventory-runtime.md#insert-item-script-arc-script-013)). A follow-up implementation task runs the item's insert-item
    script through the [SCR dispatcher](../scripting/scr-dispatcher-runtime.md) when the session moves an item (holder
    as triggerer, item as attachee, result ignored), with `print_line` added to an admission set as a host-facing
    message effect (DLG line and the second number), admitted only for a line whose action field is empty (or itself

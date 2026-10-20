@@ -170,6 +170,15 @@ public sealed record ScrCallRequest(ScrCallKind Kind, int Script, int Line, ScrO
 /// conversation (E1, ARC-RES-042 section 3; see <see cref="ScrDispatcher.RunCall"/>).</summary>
 public sealed record ScrCallEvent(int Script, int Line, ScrObjectRef? Triggerer, ScrObjectRef? Attachee);
 
+/// <summary>
+/// A print-line action (ARC-SCRIPT-013, type 24): line <paramref name="Line"/> of the DLG of <paramref name="Script"/>, the
+/// running attachment's own script (a mind-controlled NPC's run names the NPC's script, not 2188), with the action's second
+/// number <paramref name="Kind"/> (its meaning on screen is not read, ARC-RES-055 U1). The original builds the line through
+/// the dialog's NPC-line step, which also runs the line's action field, and hands the text to the interface (ledger IS2);
+/// the host reads the DLG and decides whether it can show it. A run without an attachee prints nothing, as the original.
+/// </summary>
+public readonly record struct ScrPrintLine(int Script, int Line, int Kind);
+
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
@@ -180,10 +189,11 @@ public readonly record struct ScrFlagWrite(int Index, bool Value);
 public sealed class ScrEffects
 {
     internal ScrEffects(ScrWriteback? writeback, ScrObjectRef? destroyTrapObject, IReadOnlyList<ScrFlagWrite> globalFlags, int? storyState, ScrDialogStart? dialog = null,
-        IReadOnlyList<ScrCallRequest>? calls = null)
+        IReadOnlyList<ScrCallRequest>? calls = null, IReadOnlyList<ScrPrintLine>? lines = null)
     {
         Writeback = writeback; DestroyTrapObject = destroyTrapObject; GlobalFlags = globalFlags; StoryState = storyState; Dialog = dialog;
         Calls = calls ?? Array.Empty<ScrCallRequest>();
+        Lines = lines ?? Array.Empty<ScrPrintLine>();
     }
 
     public static ScrEffects None { get; } = new(null, null, Array.Empty<ScrFlagWrite>(), null);
@@ -195,7 +205,10 @@ public sealed class ScrEffects
     public ScrDialogStart? Dialog { get; }
     /// <summary>The deferred calls to schedule or remove, in action order (ARC-SCRIPT-010).</summary>
     public IReadOnlyList<ScrCallRequest> Calls { get; }
-    public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0;
+    /// <summary>The lines to print, in action order (ARC-SCRIPT-013).</summary>
+    public IReadOnlyList<ScrPrintLine> Lines { get; }
+    public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
+        && Lines.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -222,7 +235,8 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// admitted for the lines reachable from the event's line) and the executed-line budget.</summary>
+/// at most <see cref="ScrAdmissionSet.S6"/>, admitted for the lines reachable from the event's line) and the executed-line
+/// budget.</summary>
 public sealed record ScrRunOptions
 {
     /// <summary>The original stops a run after 1,000 executed lines.</summary>
@@ -238,6 +252,6 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Rules);
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S5)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S5.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S6)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S6.", nameof(Admission));
     }
 }

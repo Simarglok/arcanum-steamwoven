@@ -71,10 +71,13 @@ public sealed class AreaScriptHost : IScrHost
 
     /// <summary>The script the original names for the number (<see cref="ScriptNameIndex"/>), read from the stack's
     /// winning copy. A copy that cannot be framed, or that changed since this content first read it, is unreadable.</summary>
-    public ScrScriptLookup Script(int number)
+    public ScrScriptLookup Script(int number) => Lookup(_content, number);
+
+    /// <summary>The lookup of <see cref="Script"/> over any content (shared with the item script host, ARC-SCRIPT-013).</summary>
+    public static ScrScriptLookup Lookup(ScriptContent? content, int number)
     {
-        if (_content is null || number <= 0 || number > ScrCatalogue.MaxScriptNumber) return ScrScriptLookup.Missing;
-        var read = _content.Script(number);
+        if (content is null || number <= 0 || number > ScrCatalogue.MaxScriptNumber) return ScrScriptLookup.Missing;
+        var read = content.Script(number);
         return read.Status switch
         {
             ScriptContentStatus.Read => ScrScriptLookup.Of(read.Program!),

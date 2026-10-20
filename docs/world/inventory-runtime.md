@@ -61,9 +61,10 @@ Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and se
   NPC has a substitute inventory;
 - then the shared item rules: `ItemTypeUnsupported` (gold and ammunition merge into stacks, a key may go onto the PC's
   key ring), `WornItemUnsupported` (a parented item in slots 1000..1008),
-`ItemScriptUnsupported` (an item `SAP_INSERT_ITEM`, or `SAP_GET` for pickup, or `SAP_REMOVE_ITEM` for loot and IN;
-other attachments such as examine and use do not run on a transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`,
-at most 512), `RevisionExhausted`, and last `InsertRefused`.
+`ItemScriptUnsupported` (an item `SAP_GET` for pickup or `SAP_REMOVE_ITEM` for loot and IN, or an item
+`SAP_INSERT_ITEM` when the caller passes no script host; other attachments such as examine and use do not run on a
+transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`, at most 512), `RevisionExhausted`, then `InsertRefused`, and
+last the item's insert-item script (below).
 
 **Insert check.** The original's insert check (0x466510) depends on the created character (carry weight against its strength, the
 Technophobia background against technology items, free grid room around its own items), none of which the session owns.
@@ -77,6 +78,37 @@ items lie there), which is not modelled, so IN is refused instead.
 Not modelled, on purpose: the PC's `SAP_TRANSFER` attachment (no PC object), reach and the walk to an item, the
 combat action-point cost of a pickup, item decay timers, the item insert's slot choice and hotkeys, encumbrance effects,
 dropping, barter, theft, positive `IN`, NPC respawn and chest generation.
+
+## Insert-item script (ARC-SCRIPT-013)
+
+The original inserts the item and then runs the item's insert-item point (21) with the new holder as triggerer and the
+item as attachee; the point cannot cancel and its result is ignored (ledger IF10). The Crash Site amulet (2527) is the
+one Crash Site item with such a script; [ARC-RES-055](../research/item-insert-script.md) found it only prints a line.
+
+`PickUpItem`, `LootItem` and `GiveItemToPc` take an optional `ISessionItemScriptHost` (an `IScrHost` plus
+`PrintedLine(script, line)`). With it, a scripted item's transfer runs `ScrDispatcher.RunObject` for point 21 with the
+item (`ScrObjectRef(actor map, item)`) and the player (`SessionEventKinds.PlayerEntity`) under the session's script rules
+and `SessionItemScripts.Admission` (S6 without the dialog action, the story-state actions and the deferred calls). The
+run is made after the insert check and before the commit; the admitted commands read nothing the insertion changes, so
+the order is equivalent. The transfer then commits together with what the session applies from the run, or is refused
+with `ItemScriptUnsupported` and no effect when:
+
+- the script is outside the set (`Refused`);
+- the run changed the attachment (local flags, counters, its number), started a conversation, set story state, asked for
+  a deferred call or a trap destruction: the moved item has no home for a changed slot yet;
+- it writes a global flag the session does not hold as known;
+- a printed line is `Unsupported` for the host (an action field, generated text, a name the host cannot fill).
+
+Global flag writes are applied with the transfer, in its one revision. A printed line the host shows comes back in
+`InventoryMutationResult.Messages` (`SessionScriptMessage`: script, line, kind, text); a missing DLG prints nothing
+(`NoDialog`), as does a missing script file (`MissingScript`, the transfer proceeds). `InventoryMutationResult.InsertScript`
+carries the run (also on a refusal). A call back into the owner from the host during the run makes the transfer
+`StaleVersion`. Without a host the item is refused, as before.
+
+The AREA viewer passes `AreaItemScriptHost` when the game's script content loaded: an item's slot from its area row,
+scripts and DLGs from the content stack (the session's data-fix rules), the session's flags, the player and the party;
+the printed line uses the hero's gender (male without a hero) and the diagnostic PC name; a line naming
+`@npcname@` is `Unsupported` (whose name it would be on an item run is not read), so such an item is refused. The status line and the loot window show the printed text after the item's name.
 
 ## Dialog seam
 
@@ -124,9 +156,9 @@ in schema 4 to lose (its `IN` record was in memory only).
   [CrashSiteInventoryTests](../../tests/Arcanum.TerrainViewer.Tests/CrashSiteInventoryTests.cs). The step rules mark
   exactly the four research NPCs with items dead (5699, 4457, 4200, 1201). Virgil's original first conversation, opened
   by the viewer's conversation host, runs node 1's `IN -2804` through the session port and the ring (1714) enters the
-  PC's list, leaving his weapon and worn armor. Five of the six dead-NPC items loot; 2527 is refused for its `SAP_INSERT_ITEM` script (the research's open
-  question, answered by [ARC-RES-055](../research/item-insert-script.md): the script only prints a message line, so
-  admitting it needs that line delivered through the SCR dispatcher). All 37 core ground items pick up. Virgil and a chest are not lootable. A save and load keep the 43 items,
+  PC's list, leaving his weapon and worn armor. Without script content five of the six dead-NPC items loot and 2527 is
+  refused for its `SAP_INSERT_ITEM` script; with the content (ARC-SCRIPT-013) it loots too, script 1341 prints line 1 of
+  its DLG and writes no flag, and once global flag 1085 is set it returns at once and prints nothing. All 37 core ground items pick up. Virgil and a chest are not lootable. A save and load keep the 43 items,
   the re-attached seed agrees, and a second `IN -2804` changes nothing.
 
 ## Next steps

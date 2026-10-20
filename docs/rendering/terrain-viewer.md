@@ -673,8 +673,12 @@ the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
   with its display name (the hover rule: the examine function's (0x441B60) order from the description
   tables, type fallback without them), type and weight. When looting, right: the dead NPC's
   current list with a *Take* button per item and *Take all*; a refusal stays on the body and
-  is named in the message line (on the installed exterior the item with its own
-  `SAP_INSERT_ITEM` script: "the item runs a script on this transfer"). Project
+  is named in the message line. ARC-SCRIPT-013: an item with its own `SAP_INSERT_ITEM`
+  script runs it through the SCR dispatcher with the game's script content (on the installed
+  exterior the amulet: script 1341 prints line 1 of its DLG, shown after the item's name in the
+  message and status line, until global flag 1085 is set); without the content, or for a script
+  that does more than the item set admits, it stays: "the item runs a script on this transfer
+  that is not supported here". Project
   diagnostic window: no inventory grid, equipment, drop, stacks or weight; the insert check
   accepts every item (carry weight, Technophobia and grid room need the created character,
   NOT READY).
@@ -686,8 +690,8 @@ the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
 Checks: `AreaInventoryHostTests` (targets, taken items, transfers, window lines, re-attach
 after a load and a mismatched save, the dialog port), the opt-in `CrashSiteInventoryTests`
 (`ARC_AREA_CONVERSATION_GAME_ROOT`: seeds built by `AreaInventoryMap.Build`, every NPC on an
-admitted cell with life evidence, every core ground item and dead NPC a target, Virgil's ring through the viewer's conversation host, 5 of 6 loot,
-37 pickups, save and load), the self-test `ARC-UI-004 self-test PASS` (synthetic seed over the
+admitted cell with life evidence, every core ground item and dead NPC a target, Virgil's ring through the viewer's conversation host, 5 of 6 loot
+without script content and the amulet's script with it (ARC-SCRIPT-013), 37 pickups, save and load), the self-test `ARC-UI-004 self-test PASS` (synthetic seed over the
 production click path: walk-to-pickup hover and press from 2..6 cells, its cancel by a ground
 click, pickup next to the item, I/Escape, loot by the take button) and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PASS`
 (one pickup next to an item, one walk to pick up, the four dead NPCs looted with *Take all*:
