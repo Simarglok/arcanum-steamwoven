@@ -523,7 +523,11 @@ remove an identical effect that an item or background added
 - **O4** How spell timers behave in turn-based mode (the game clock advances
   one second per round per ARC-RES-030) was not traced.
 - **O5** Technology records: charge-cell use, tech degrees and the
-  `ChargeNBranch` pattern belong to a TECHNOLOGY research item.
+  `ChargeNBranch` pattern belong to a TECHNOLOGY research item. Answered by
+  ARC-RES-062 ([technology](technology-evidence.md#technological-items-fr-magic-010-fr-magic-011)),
+  read in the executable: the cell branch pays before every other branch, and
+  MAINTAIN does not test the tech flag, so maintained tech records do pay
+  maintenance.
 - **O6** Item triggers (the item spell functions 0x4CB720–0x4CC160, FR-MAGIC-011) and the spell visual
   catalogue (`SpellEyeCandy.mes`, the missile and casting art) were not read.
 - **O7** The effect list semantics (the effect functions 0x4E99F0–0x4EABF0) belong to the durable-effects
