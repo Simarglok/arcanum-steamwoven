@@ -39,8 +39,12 @@ public partial class TerrainViewerApp
     private enum QuickBusy { None, NoActor, Lifecycle, TransferPending, MapLoading }
 
     private GameSessionSaveSlot QuickSaveSlot => _quickSaveSlotForSelfTest ?? (_readyMapName is not null
-        ? _mapQuickSaveSlot ??= GameSessionSaveSlot.QuickSave(ProjectSettings.GlobalizePath(MapQuickSaveDirectory))
-        : _quickSaveSlot ??= GameSessionSaveSlot.QuickSave(ProjectSettings.GlobalizePath(QuickSaveDirectory)));
+        ? _mapQuickSaveSlot ??= GameSessionSaveSlot.QuickSave(SaveDirectory(MapQuickSaveDirectory))
+        : _quickSaveSlot ??= GameSessionSaveSlot.QuickSave(SaveDirectory(QuickSaveDirectory)));
+
+    // ARC-DEV-032: an automated run keeps its quick saves in its isolated folder, never in the player's saves.
+    private static string SaveDirectory(string user) => ViewerAutomatedStorage.Automated
+        ? System.IO.Path.Combine(ViewerAutomatedStorage.Folder(), user["user://".Length..]) : ProjectSettings.GlobalizePath(user);
 
     // Map mode (ARC-RENDER-017) never touches the player's Crash Site quick save slot: it has its own (ARC-WORLD-038).
     private bool QuickKeysActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;

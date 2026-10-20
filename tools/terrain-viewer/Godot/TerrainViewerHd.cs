@@ -72,10 +72,11 @@ public partial class TerrainViewerApp
             if (HdActivePack.Choose(listed) is { } chosen) { pack = chosen.Result.Pack; open = chosen.Result.Status.ToString(); }
             _visualPack = listed.Count == 0 ? "no pack in the pack folders" : pack is null ? $"{listed.Count} found, none opened" : $"1 of {listed.Count} found";
         }
+        // ARC-DEV-032: an automated run reads no player budget (the contract ceilings unless ARC_HD_BUDGET_PATH names one).
         var budgetPath = System.Environment.GetEnvironmentVariable("ARC_HD_BUDGET_PATH") is { Length: > 0 } custom ? custom
-            : ProjectSettings.GlobalizePath("user://hd_budget_v1.json");
+            : AutomatedVisualRun ? null : ProjectSettings.GlobalizePath("user://hd_budget_v1.json");
         string? budgetText = null;
-        try { if (System.IO.File.Exists(budgetPath)) budgetText = System.IO.File.ReadAllText(budgetPath); }
+        try { if (budgetPath is not null && System.IO.File.Exists(budgetPath)) budgetText = System.IO.File.ReadAllText(budgetPath); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
         var scale = pack?.Scale ?? 4;
         var budget = HdDeviceBudgetCodec.DeserializeOrCeiling(budgetText, scale);
