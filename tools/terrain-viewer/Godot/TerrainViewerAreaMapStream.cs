@@ -18,8 +18,10 @@ namespace Arcanum.TerrainViewer;
 // the 3×3 around its target (docs/research/main-map-streaming.md, SS1-SS4); the 3×3 core is that pre-cache, kept around
 // the actor as it walks. The window moves once the actor stands StreamMargin cells beyond the centre sector, so a walk
 // along a sector border (or a path that bends back over it) does not reload it at every step; the actor then still has
-// at least 48 loaded cells ahead. A window that cannot load leaves the shown one in place; the next sector the actor
-// enters tries again. No window moves in combat mode or while a transfer is pending.
+// at least 48 loaded cells ahead. A window that cannot load leaves the shown one in place and is tried again once the
+// actor has stood in the centre sector again; another sector is tried at once. No window moves while the scene holds an
+// intent a new scene would drop, in combat mode or under a panel (StreamHeld); a move whose window no longer holds the
+// actor when it can publish is given up.
 public partial class TerrainViewerApp
 {
     private AreaSectorCoordinate? _mapWindowCentre;
@@ -114,16 +116,24 @@ public partial class TerrainViewerApp
         // stream; a walk to use, talk or pick up runs to its end), in combat mode, and while a panel is open.
         while (!_exiting && ReferenceEquals(_mapHandoff, handoff) && (StreamHeld || _worldLifecycleSession is not null || _worldResetPending || _worldReloadPending))
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        if (_exiting) return;
-        if (!ReferenceEquals(_mapHandoff, handoff)) { EndMapStream(handoff); return; }
-        // The actor stands where it walked meanwhile when the new window admits that cell; otherwise it stands on the new
-        // window's own spawn (the cell the stream began at when admitted, ARC-WORLD-031's arrival rule).
+        if (_exiting || !ReferenceEquals(_mapHandoff, handoff)) { EndMapStream(handoff); return; }
+        // The actor stands where it walked meanwhile. When the new window does not admit that cell (a hold let the actor walk
+        // off its core, or a same-map jump moved it), the move is given up, not applied: the next frame starts the window
+        // around where the actor stands, and the actor is never put back on the cell the move began at.
         var area = result.Area!; var chart = area.Plan.Chart;
         AreaStepCell at = chart.ToWorld(chart.Spawn); var facing = handoff.Facing; AreaStepCell? goal = null;
         if (_worldActor.Session is AreaGridSession walking)
         {
             var now = walking.Chart.ToWorld(walking.State.CommittedCell);
-            if (chart.Contains(chart.ToChart(now)) && result.AreaStepSnapshot!.IsAdmitted(now)) { at = now; facing = walking.State.Facing; }
+            if (!chart.Contains(chart.ToChart(now)) || !result.AreaStepSnapshot!.IsAdmitted(now))
+            {
+                EndMapStream(handoff);
+                _mapStreamStatus = $"window around ({sector.X},{sector.Y}) given up: the actor walked off it meanwhile";
+                GD.Print("ARC-RENDER-024 stream abandoned " + System.Text.Json.JsonSerializer.Serialize(new { To = new { sector.X, sector.Y }, Actor = now }));
+                RefreshAreaStatus();
+                return;
+            }
+            at = now; facing = walking.State.Facing;
             if (ReferenceEquals(_worldRouteSession, walking) && _worldRoute is { Status: RouteFollowStatus.Following } route && route.Target is { } target)
                 goal = walking.Chart.ToWorld(target);
         }
@@ -137,7 +147,7 @@ public partial class TerrainViewerApp
         var published = _coordinator.TryPublish(generation, () =>
         {
             try { RecordAreaCompanions("window move"); ClearPublishedScene(); _arguments = arrived; PublishReadyResult(arrived, result); }
-            catch (Exception exception) when (exception is not OperationCanceledException) { refused = exception; }
+            catch (Exception exception) { refused = exception; }
         });
         if (refused is not null)
         {

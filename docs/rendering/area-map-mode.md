@@ -478,7 +478,8 @@ map.
   `rules/maplist.mes` puts it at (92958, 82592), the Crash Site sector (1452, 1290); `gameinit.mes` names no start map
   or location (both entries are empty and marked unused). The actor stands on the arrival when admitted; with a sector
   asked, on the open core tile nearest that sector's middle (a sector without open ground of its own, such as the
-  generated mountains at (1450, 1290), gives a tile of a neighbour); otherwise on the start tile. With a sector asked on
+  generated mountains at (1450, 1290), gives a tile of a neighbour); otherwise on the start tile when it can stand
+  there, else on the first open core tile. With a sector asked on
   a map that loads whole, the actor stands near that sector the same way.
 - **Streaming.** When the actor stands 16 cells (`StreamMargin`) beyond the window's centre sector, the window around
   the sector it stands in loads in the background (about 5 s on the owner's Mac) while the shown window stays drawn and
@@ -492,10 +493,13 @@ map.
   window at every step; the actor always has at least 48 loaded cells ahead. The original keeps no fixed window: its
   sector cache holds the 16 most recently used sectors and a teleport pre-caches the 3×3 around its target
   ([main-map streaming](../research/main-map-streaming.md), SS1–SS4); the 3×3 core is that pre-cache kept around the
-  actor. A window that cannot load leaves the shown one in place and is tried again when the actor enters another
-  sector. In a native smoke the window moves only in its own stage. A transfer or reload during a window load supersedes
-  it (the move gives up its session to the scene, which carries or ends it); F7/F8 wait while a window loads ("another map
-  is loading"). A publication that fails publishes the failure as any load does.
+  actor. A window that cannot load leaves the shown one in place; it is tried again once the actor has stood in the
+  centre sector again (another sector is tried at once). A move whose new window no longer holds the actor when it can
+  publish (a hold let it walk off that core, or a same-map jump moved it) is given up, and the next frame starts the
+  window around where the actor stands. In a native smoke the window moves only in its own stage. A transfer or reload during a window load supersedes
+  it (the move gives up its session to the scene, which carries or ends it); F7/F8 wait while a move is pending, loading
+  or held ("another map is loading"). A publication that fails publishes the failure as any load does, and the game
+  session ends with the scene (no fallback to the shown window).
 - **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
   Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
   (92913, 82598). Every listed map is a destination.
