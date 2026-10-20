@@ -1461,6 +1461,17 @@ named in the study; no game text is copied.
 | OL31 | 0x4064B0, 0x410C50, 0x406520, 0x40BDB0, 0x40BE70, 0x40BFC0, 0x4E50E0 | Handles saved as IDs; a map open converts every marked object's handle fields and array elements back among loaded objects; not found → null (in place). | Original (answers O7) |
 | OL32–OL33 | as OL31, 0x4D3460 | A waiting follower on another map keeps its leader as an ID and rebinds when its map opens; a follower carried to another map is that map's object from then on. | Original (O7; OL33 partly inference) |
 
+## Objects without ART (ARC-DATA-038)
+
+Source: a main-map window around Caladon (sector (1602, 1825)) holds a scenery object (prototype 4031, at (102582, 116816))
+whose ART id is 0xFFFFFFFF and which its serialized state does not hide; the area owner refused the whole window for its
+ART class, so the transfer out of the Panarii temple (arrival (102647, 116816)) did not load. Read on 2026-10-21 by this
+task and, independently, by its reviewer (method step 6). Every direct branch read stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| NA1 | ART name of an ART id (0x41DAE0: stored at field +0x1C of the init block by 0x40124E; the ART init 0x500590, called through the module table of 0x51F130, copies it to 0x604710 at 0x500659, and the ART file name 0x51AE50 calls it for every ART type but 8), ART cache lookup (0x51AA90), frame data of ART (0x5031C0), object rectangle (0x43DFD0), object draw body pass (0x43B390) | The callback first normalises the id (0x41D510, which returns an id of type 15 unchanged), then tests the type (bits 28-31) against 0-7 and 9-14; type 15 matches none and the callback returns error 0x10 with no file name. The cache lookup returns -1 when the name fails, and frame data returns error 13 on a -1 cache slot. The object rectangle reads the object's current ART and, when its frame data fails, returns an empty rectangle; the draw's body pass intersects that rectangle with each dirty rectangle (0x52D1A0, which reports an empty width) and blits nothing. So an object whose ART id is 0xFFFFFFFF draws no body. The shadow and overlay passes before the body pass are not read. | Original |
+
 ## Decisions to revisit
 
 These owner decisions or accepted proposals rest on a fact of the earlier reading that the original does not share.
