@@ -39,6 +39,7 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-040 native-smoke audio PASS driver={_audio.Driver} interface={effects} music=mp3 loop catalogue=\"{_soundContent?.Detail}\"");
         await RunAreaSchemeSmokeAsync();
         await RunAreaCueSmokeAsync();
+        await RunAreaVoiceSmokeAsync();
     }
 
     private sealed class FirstDraw : IAudioRandom

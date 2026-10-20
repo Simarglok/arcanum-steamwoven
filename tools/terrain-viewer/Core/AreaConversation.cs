@@ -1,5 +1,6 @@
 using Arcanum.Data;
 using Arcanum.Data.Area;
+using Arcanum.Data.Audio;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
@@ -49,8 +50,18 @@ public enum AreaConversationStartStatus
 
 /// <param name="Party">ARC-WORLD-016: the session party port of a roster companion's conversation (its
 /// <see cref="SessionDialogPartyPort.LastRefusal"/> names a refused JO/UW), else null.</param>
+/// <param name="Document">ARC-UI-043: the DLG the conversation runs on (its NPC lines' condition fields name their voices).</param>
+/// <param name="DialogScript">ARC-UI-043: the script number of that DLG (0 without a conversation).</param>
 public sealed record AreaConversationStart(AreaConversationStartStatus Status, DialogConversation? Conversation, AreaSpeaker? Speaker, string Detail,
-    SessionDialogPartyPort? Party = null);
+    SessionDialogPartyPort? Party = null, DlgDocument? Document = null, int DialogScript = 0)
+{
+    /// <summary>ARC-UI-043: the voice identity of the NPC line <paramref name="line"/> of this conversation (audio study SN21):
+    /// the DLG script number and the number in the line's condition field; −1 without a document, line or record, or with an
+    /// empty condition field.</summary>
+    public int VoiceIdentity(DialogNpcLine? line) =>
+        Document is null || line is null || !Document.TryGetRecord(line.Node.Value, out var record) || record is null ? -1
+            : SoundCatalog.SpeechIdentity(DialogScript, SoundCatalog.SpeechConditionField(record.Condition.Bytes));
+}
 
 /// <summary>
 /// Opens a bounded conversation with an area NPC: effective SAP_DIALOG → SCR dispatcher (ARC-SCRIPT-009) →
@@ -235,7 +246,8 @@ public sealed class AreaConversationHost
         var conversation = DialogConversation.Start(document!,
             new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
             new DialogConversationPorts(State, State, _session.Flags, State, party, _inventory?.DialogPort(_session, SpeakerEntity), State));
-        return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party);
+        return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
+            document, dialog.Script);
     }
 
     /// <summary>The session party port for a roster speaker when the party is wired; facts are read at each call.</summary>

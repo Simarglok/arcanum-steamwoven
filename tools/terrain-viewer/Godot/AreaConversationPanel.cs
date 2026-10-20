@@ -23,6 +23,8 @@ public partial class AreaConversationPanel : CanvasLayer
     private DialogConversation? _conversation;
     private string _title = string.Empty;
     public event Action? CloseRequested;
+    /// <summary>ARC-UI-043: a reply the PC picked was processed (whatever it did to the dialog).</summary>
+    public event Action? Picked;
     public bool IsOpen => Visible;
     public DialogConversation? Conversation => _conversation;
     internal IReadOnlyList<Button> ButtonsForSelfTest => _buttons;
@@ -81,6 +83,8 @@ public partial class AreaConversationPanel : CanvasLayer
         if (_conversation is not { Phase: DialogConversationPhase.AwaitingSelection } conversation) return;
         var result = conversation.Select(token);
         if (result.Status == DialogConversationSelectStatus.NotOffered) return;
+        if (result.Status is not (DialogConversationSelectStatus.UnsupportedTransition or DialogConversationSelectStatus.StaleSelection
+            or DialogConversationSelectStatus.WrongPhase)) Picked?.Invoke();
         Render(result.Status is DialogConversationSelectStatus.UnsupportedTransition or DialogConversationSelectStatus.StaleSelection
             ? $"[{result.Status}: the reply was not executed]" : null);
     }

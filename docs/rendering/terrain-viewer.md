@@ -1080,6 +1080,12 @@ target's death) play on their tiles with the original's attenuation and pan arou
 ([contract](../audio/positional-sound.md)); the status line counts them. Native smoke marker
 `ARC-UI-042 native-smoke cues PASS` (exterior AREA and `--area-map`).
 
+### Dialogue voice (ARC-UI-043)
+
+An NPC line in a conversation plays its recorded voice once on the voice channel, by the PC's gender with the female → male
+fallback; a picked reply stops it ([contract](../audio/dialogue-voice.md)). The status line names the last voice. The talk
+smoke (`--area-map`) checks that a voiced first line starts its voice.
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)

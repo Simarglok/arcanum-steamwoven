@@ -104,12 +104,12 @@ public partial class TerrainViewerApp
         : $"{(_audio.Audible ? "device " + _audio.Driver : "no output device (" + _audio.Driver + ")")}; effects {_audioVolumes.Effects}, voice {_audioVolumes.Voice}, music {_audioVolumes.Music} ({_audioOrigin})"
           + (_soundContent is { } content ? $"; catalogue {content.Detail}" : "") + (_audioNotice is null ? "" : "; " + _audioNotice);
 
-    private string AudioStatus() => (_audioNotice is null ? "" : $" | sound: {_audioNotice}") + CueStatus();
+    private string AudioStatus() => (_audioNotice is null ? "" : $" | sound: {_audioNotice}") + CueStatus() + VoiceStatus();
 
     private void TickAudio()
     {
         _audio?.Tick();
-        if (_readyMode == TerrainViewerMode.CrashSiteArea) { TickSceneSound(); TickPositionalSound(); }
+        if (_readyMode == TerrainViewerMode.CrashSiteArea) { TickSceneSound(); TickPositionalSound(); TickDialogVoice(); }
     }
 
     private void DisposeAudio()

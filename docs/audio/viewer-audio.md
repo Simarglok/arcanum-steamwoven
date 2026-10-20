@@ -5,7 +5,7 @@ Status: **Implemented bounded component**, task 3 of the
 mode) can play the original's sounds: the module's [sound catalogue](sound-catalog.md) resolves
 an id or a file, the payload is admitted, and the engine decodes and plays it on one of the
 original's three channels at the original's volumes. Music and ambient play through it since ARC-UI-041 ([scheme player](scheme-player.md)), positional event sounds
-since ARC-UI-042 ([positional sound](positional-sound.md)); voice (ARC-UI-043) and interface sounds (ARC-UI-044) will use it too.
+since ARC-UI-042 ([positional sound](positional-sound.md)), the dialogue voice since ARC-UI-043 ([dialogue voice](dialogue-voice.md)); interface sounds (ARC-UI-044) will use it too.
 
 ## Volume rules (Godot-free)
 
