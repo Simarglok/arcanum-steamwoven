@@ -79,6 +79,13 @@ public sealed class AreaScriptHost : IScrHost
     private AreaSpeaker? Speaker(ScrObjectRef critter) =>
         critter.Map == _map.RuntimeMap ? _speakers.FirstOrDefault(s => AreaConversationState.EntityId(s.Row) == critter.Code) : null;
 
+    /// <summary>ARC-WORLD-039: a deferred call's role as this host's object. The session moves a call's player and follower
+    /// roles with the PC to another map, so the PC and this host's speakers are taken on this host's map by their ids; any
+    /// other object keeps its map.</summary>
+    public ScrObjectRef? Local(SessionScriptRole? role) => role is not { } r ? null
+        : r.Entity == PcCode || _speakers.Any(s => AreaConversationState.EntityId(s.Row) == r.Entity) ? new ScrObjectRef(_map.RuntimeMap, r.Entity)
+        : new ScrObjectRef(r.Map.RuntimeMap, r.Entity);
+
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
         if (point != ScrPoint.Dialog || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return null;
@@ -194,7 +201,4 @@ public sealed class AreaScriptHost : IScrHost
 
     /// <summary>A script object as a deferred call's session role (map and entity id), or null for an absent one.</summary>
     public static SessionScriptRole? Role(ScrObjectRef? obj) => obj is { } o ? new SessionScriptRole(new SessionMapId(o.Map), o.Code) : null;
-
-    /// <summary>A deferred call's session role as a script object, or null for an absent one.</summary>
-    public static ScrObjectRef? ObjectOf(SessionScriptRole? role) => role is { } r ? new ScrObjectRef(r.Map.RuntimeMap, r.Entity) : null;
 }

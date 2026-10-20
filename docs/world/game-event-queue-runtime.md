@@ -10,7 +10,7 @@ from its clock ([host pump](#host-pump-arc-world-039)). The other gameplay kinds
 slices (E4).
 
 Requirements served in part: [FR-SCRIPT-003](../requirements/story-social-ai.md#fr-script-003) (deferred calls that
-survive a save: the queue is saved with the session; no script-call kind yet) and
+survive a save: the queue is saved with the session, kind `scr.call` since ARC-SCRIPT-010) and
 [FR-RUNTIME-001](../requirements/world-travel-runtime.md#fr-runtime-001) (only due work runs, independent of frame
 rate: the AREA viewer's pump steps time to each deadline, so a replay of the same game time split into other frames gives
 the same state, ARC-WORLD-039).
@@ -220,9 +220,14 @@ Slice E3 of the plan: the AREA viewer moves the session clock only through `Area
   an NPC's life facts from its combat fields (`AreaCombatHost.Build`, as the hero's attack uses them), so its timers run
   as the session schedules them; an object a deferred call names exists when it is the PC or a row of its map's T0 data;
   a call runs through the shown area's conversation host (`AreaConversationHost.RunCall`: the SCR dispatcher with the
-  session's current rules and the viewer's set, then the effects). A call that would start a conversation, is refused,
-  finds its file changed or has an effect the session refuses is consumed and not run; the status line and the log keep
-  the reason.
+  session's current rules and the viewer's set, then the effects). A call that would start a conversation, is refused
+  or finds its file changed applies nothing and is consumed as not run. A call whose effect the session refuses (a call
+  request over the 1,024 cap, a flag the domain refuses) keeps the effects applied before it, as the original applies
+  actions as it goes, and is reported as not run. The status line and the log keep the reason.
+- **Followers and the PC on another map.** The session moves a follower's timers and a call's player and follower roles
+  with the PC; the world answers such a follower from the map whose T0 data holds it (`IAreaEventObjects.HomeMap`), so its
+  timers keep running, and the call host takes the PC and its own speakers on its map by their ids
+  (`AreaScriptHost.Local`).
 - **Trace.** The area status line shows the pending events, the next deadline and the last pass's outcomes; the log
   prints a line per frame that took events (`ARC-WORLD-039 events ...`).
 

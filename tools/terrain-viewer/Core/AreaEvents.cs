@@ -150,38 +150,61 @@ public sealed class AreaEventPump
     }
 }
 
+/// <summary>ARC-WORLD-039: the area objects an event world asks about (<see cref="AreaCombatHost"/> in the viewer): an NPC's
+/// life facts and an object's presence on a map's T0 data, and the map whose data holds an entity.</summary>
+public interface IAreaEventObjects
+{
+    LifeFacts? Facts(int runtimeMap, string entity);
+    bool HasObject(int runtimeMap, string entity);
+    int? HomeMap(string entity);
+}
+
 /// <summary>
 /// ARC-WORLD-039: the AREA viewer's world for event passes. An NPC's life facts come from the area's combat fields
 /// (<see cref="AreaCombatHost"/>, the same reader the hero's attack uses); an object a deferred call names exists when it is
-/// the PC or a row of its map; a call runs through the shown area's conversation host and its SCR dispatcher
+/// the PC or a row of its map. A follower the session moved to another map (its timers and call roles travel with it) is
+/// answered from the map whose data holds it, so its events are not dropped as missing. A call runs through the shown area's conversation host and its SCR dispatcher
 /// (<see cref="AreaConversationHost.RunCall"/>). The providers are read at each question, so the world follows the
 /// viewer's current hosts.
 /// </summary>
 public sealed class AreaEventWorld : ISessionScriptWorld
 {
-    private readonly Func<AreaCombatHost?> _combat;
+    private readonly Func<IAreaEventObjects?> _combat;
     private readonly Func<AreaConversationHost?> _talk;
 
-    public AreaEventWorld(Func<AreaCombatHost?> combat, Func<AreaConversationHost?> talk)
+    public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk)
     {
         _combat = combat ?? throw new ArgumentNullException(nameof(combat));
         _talk = talk ?? throw new ArgumentNullException(nameof(talk));
     }
 
-    /// <summary>The reason the last call did not run, or null.</summary>
+    /// <summary>The reason the last refused call did not run, or null; <see cref="CallRefusals"/> counts the refusals.</summary>
     public string? LastCallRefusal { get; private set; }
+    public int CallRefusals { get; private set; }
 
-    public LifeFacts? CritterFacts(SessionMapId map, string entity) => _combat()?.Build(map.RuntimeMap, entity).Combat?.Facts;
+    public LifeFacts? CritterFacts(SessionMapId map, string entity)
+    {
+        if (_combat() is not { } objects) return null;
+        if (objects.HasObject(map.RuntimeMap, entity)) return objects.Facts(map.RuntimeMap, entity);
+        return objects.HomeMap(entity) is { } home ? objects.Facts(home, entity) : null;
+    }
 
     public bool ObjectExists(SessionMapId map, string entity) =>
-        entity == SessionEventKinds.PlayerEntity || (_combat()?.HasObject(map.RuntimeMap, entity) ?? false);
+        entity == SessionEventKinds.PlayerEntity
+        || (_combat() is { } objects && (objects.HasObject(map.RuntimeMap, entity) || objects.HomeMap(entity) is not null));
 
     public bool RunScriptCall(SessionScriptCall call)
     {
         ArgumentNullException.ThrowIfNull(call);
-        if (_talk() is not { } host) { LastCallRefusal = "no script host on this map"; return false; }
+        if (_talk() is not { } host) { Refuse("no script host on this map"); return false; }
         var ran = host.RunCall(call, out var detail);
-        LastCallRefusal = ran ? null : detail;
+        if (!ran) Refuse(detail);
         return ran;
+    }
+
+    private void Refuse(string detail)
+    {
+        LastCallRefusal = detail;
+        CallRefusals++;
     }
 }

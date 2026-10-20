@@ -36,6 +36,30 @@ public sealed class AreaEventsTests
         }
     }
 
+    private sealed class Objects : IAreaEventObjects
+    {
+        // The wolf's T0 row is on map 1; the session may say it stands on another map (a follower moved with the PC).
+        public LifeFacts? Facts(int runtimeMap, string entity) => runtimeMap == 1 && entity == Wolf ? WolfFacts : null;
+        public bool HasObject(int runtimeMap, string entity) => runtimeMap == 1 && entity is Wolf or "oid:chest";
+        public int? HomeMap(string entity) => entity is Wolf or "oid:chest" ? 1 : null;
+    }
+
+    [TestMethod]
+    public void A_follower_moved_to_another_map_keeps_its_facts_and_its_calls_roles()
+    {
+        var world = new AreaEventWorld(() => new Objects(), () => null);
+        Assert.AreSame(WolfFacts, world.CritterFacts(new(1), Wolf));
+        Assert.AreSame(WolfFacts, world.CritterFacts(new(79), Wolf), "answered from its home map's data");
+        Assert.IsNull(world.CritterFacts(new(1), "oid:chest"), "an object without combat fields");
+        Assert.IsNull(world.CritterFacts(new(79), "oid:ghost"));
+        Assert.IsTrue(world.ObjectExists(new(79), Wolf));
+        Assert.IsTrue(world.ObjectExists(new(79), SessionEventKinds.PlayerEntity));
+        Assert.IsFalse(world.ObjectExists(new(1), "oid:ghost"));
+        Assert.IsNull(new AreaEventWorld(() => null, () => null).CritterFacts(new(1), Wolf), "no combat host yet");
+        Assert.IsFalse(world.RunScriptCall(new(5, 0, null, null)));
+        Assert.AreEqual((1, "no script host on this map"), (world.CallRefusals, world.LastCallRefusal));
+    }
+
     private static GameSessionOwner Wounded()
     {
         var session = ConversationSessionFixture.Create();
@@ -141,6 +165,9 @@ public sealed class AreaEventsTests
             // 790: call script 791 at line 0 in 10 s (80 s of game time) with the triggerer and the attachee; 791: set global flag 9.
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00790caller.scr"), Program((54, [(3, 791), (3, 0), (0, 0), (1, 0), (3, 10)]), (1, [])));
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00791called.scr"), Program((100, [(3, 9)]), (1, [])));
+            // 793: remove the pending call of script 791 for the attachee; 794: start a dialog (the viewer does not run it).
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00793remove.scr"), Program((125, [(3, 791), (1, 0)]), (1, [])));
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00794talk.scr"), Program((4, [(3, 1), (0, 0)]), (1, [])));
             // 792: a float line, which the viewer's set does not admit.
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00792float.scr"), Program((23, [(3, 1), (1, 0)]), (1, [])));
             using var content = AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Syn.dat")).Content!;
@@ -162,6 +189,14 @@ public sealed class AreaEventsTests
             // game time).
             var dropped = new AreaEventPump(session, world).Advance(80_000);
             Assert.AreEqual((0, 1), (dropped.ScriptCalls, dropped.Dropped), dropped.ToString());
+
+            // A remove script call of the same script and attachee takes the pending call off the queue.
+            Assert.IsTrue(host.RunCall(new(790, 0, pc, npc), out detail), detail);
+            Assert.IsTrue(host.RunCall(new(793, 0, pc, npc), out detail), detail);
+            Assert.AreEqual(0, session.QueryScriptCalls().Count);
+            // A call that would start a conversation applies nothing.
+            Assert.IsFalse(host.RunCall(new(794, 0, pc, npc), out detail));
+            StringAssert.Contains(detail, "starts a conversation");
 
             Assert.IsTrue(host.RunCall(new(790, 0, pc, null), out detail), detail);
             var ran = new AreaEventPump(session, world).Advance(80_000);

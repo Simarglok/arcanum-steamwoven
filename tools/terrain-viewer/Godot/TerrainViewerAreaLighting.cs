@@ -154,12 +154,16 @@ public partial class TerrainViewerApp
     }
 
     // ARC-WORLD-039: a line per pump call that took events (identifiers and counts only).
+    private int _loggedCallRefusals;
+
     private void LogAreaEvents(AreaAmbientDriver driver)
     {
         if (driver.Events?.Last is not { } last || last.Fired + last.Dropped + last.ScriptCalls == 0) return;
+        var refused = (_areaEventWorld?.CallRefusals ?? 0) > _loggedCallRefusals;
+        _loggedCallRefusals = _areaEventWorld?.CallRefusals ?? 0;
         GD.Print($"ARC-WORLD-039 events steps={last.Steps} passes={last.Passes} fired={last.Fired} dropped={last.Dropped} calls={last.ScriptCallsRun}/{last.ScriptCalls}"
             + $" late={last.Coalesced} budgetLeft={last.BudgetLeft} pending={last.Pending}"
-            + (_areaEventWorld?.LastCallRefusal is { } refusal && last.ScriptCallsRun < last.ScriptCalls ? $" refusal={refusal}" : ""));
+            + (refused ? $" refusal={_areaEventWorld!.LastCallRefusal}" : ""));
     }
 
     // Numbers only: scheme id, hour, sector and digests; never colour values.
