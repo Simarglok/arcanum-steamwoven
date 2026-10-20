@@ -117,7 +117,7 @@ public sealed class ReputationTableTests
         Assert.AreEqual(76, table.Records.Count);
         Assert.AreEqual(93, table.Records.Sum(record => record.Effects.Count));
         Assert.AreEqual(5, table.Records.Count(record => record.Factions.Any(faction => faction != 0)), "L1: 5 reputations list a membership faction");
-        Assert.AreEqual(76, Enumerable.Range(1000, 76).Count(number => table.Name(number) is not null), "L2: every reputation has a name");
+        Assert.AreEqual(76, table.Records.Count(record => table.Name(record.Number) is not null), "L2: every reputation has a name");
         Assert.AreEqual(4, table.Greetings.Count(file => file is not null));
     }
 

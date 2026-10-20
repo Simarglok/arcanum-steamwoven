@@ -65,7 +65,7 @@ public static class ReputationRules
     /// or the NPC's origin and whose faction is 0 or the NPC's faction, its adjustment; all of them add up. A number the catalogue
     /// does not hold contributes nothing (the original's record of it is empty). Not skipped for aloof or monstrous NPCs.
     /// </summary>
-    [OriginalFunction(0x4C1AC0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4C1AC0, OriginalFunctionScope.Partial)]
     public static long ReactionSum(IReadOnlyList<int> held, ReputationCatalog catalog, int npcOrigin, int npcFaction)
     {
         ArgumentNullException.ThrowIfNull(held);
@@ -104,6 +104,8 @@ public static class ReputationRules
     {
         ArgumentNullException.ThrowIfNull(a);
         ArgumentNullException.ThrowIfNull(b);
+        ArgumentNullException.ThrowIfNull(a.Id, nameof(a));
+        ArgumentNullException.ThrowIfNull(b.Id, nameof(b));
         if (a.IsPc && b.IsPc) return false;
         if (a.IsPc || b.IsPc)
         {

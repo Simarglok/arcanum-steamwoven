@@ -416,7 +416,8 @@ public sealed class AreaConversationHost
 /// follow consent as map-local entity changes on the speaker's map (absent = loaded baseline: attachment flags
 /// from the area, not following). Reaction facts are diagnostic: every speaker is a human, not aloof NPC with the
 /// profile's initial reaction as base; the PC is the session hero when there is one, else a human with reaction modifier
-/// 0 and no reputation or effects. Since ARC-WORLD-043 the host opens the speaker's reaction conversation slot for each
+/// 0 and no effects; both carry the session PC's reputation sum for the speaker's origin and faction (ARC-WORLD-044,
+/// <see cref="PcFactsFor"/>). Since ARC-WORLD-043 the host opens the speaker's reaction conversation slot for each
 /// conversation and closes it at its end, so changes during a talk land in that slot and ME reads the session's "met
 /// before". Still PROJECT diagnostic, in memory only and
 /// lost with this object: PC alignment, items given (IN) when the host has no session inventory (ARC-UI-004 wires it),
@@ -667,6 +668,7 @@ public static class AreaConversationText
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",
             SkillTrainingCommand training => $"TR skill {training.Skill} -> tier {training.Training}",
             JoinCommand => "JO follow request",
+            ReputationCommand reputation => $"RP {(reputation.Add ? "add" : "remove")} {reputation.Reputation}",
             _ => receipt.Command.GetType().Name,
         };
         return $"#{receipt.Ordinal} turn {receipt.Turn}: {command} [{receipt.Outcome}]";

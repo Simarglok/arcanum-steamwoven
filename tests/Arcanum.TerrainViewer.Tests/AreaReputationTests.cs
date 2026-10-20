@@ -38,5 +38,17 @@ public sealed class AreaReputationTests
         Assert.AreEqual((0, 0), AreaConversationHost.Scope(row with { Type = 16 }));
     }
 
+    [TestMethod]
+    public void The_catalogue_keeps_a_stopped_entrys_factions_and_refuses_an_effect_beyond_the_bounds()
+    {
+        static Arcanum.Data.Messages.MesFile Mes(string text) => Arcanum.Data.Messages.MesFile.Parse(System.Text.Encoding.ASCII.GetBytes(text)).File!;
+        var stopped = Arcanum.Data.Reputations.ReputationTable.Create(Mes("{1000}{1 2 3, 5 0 0}\n{1001}{4 5}")).Table!;
+        var catalog = AreaReputations.Catalog(stopped)!;
+        CollectionAssert.AreEqual(new[] { 4, 5, 0 }, catalog.Find(1001)!.Factions.ToArray(), "the original keeps the stopped entry's numbers");
+        Assert.AreEqual(1, catalog.Find(1000)!.Effects.Count);
+        Assert.IsTrue(ReputationRules.GrantsFaction([1001], catalog, 4));
+        Assert.IsNull(AreaReputations.Catalog(Arcanum.Data.Reputations.ReputationTable.Create(Mes("{1000}{1 2 3, 2000000 0 0}")).Table!));
+    }
+
     private static AreaFieldValue Number(int slot, long value) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, value, [], null);
 }

@@ -68,6 +68,7 @@ public sealed class ReputationRulesTests
         Assert.IsFalse(Same(Npc("a"), Npc("b")), "no leader, faction 0 on both: never");
         Assert.IsFalse(Same(Npc("a", faction: 4), Npc("b", faction: 5)));
         Assert.IsFalse(Same(Npc("a", faction: 12), Npc("b", faction: 30)), "the PC's grants play no part between NPCs");
+        Assert.ThrowsExactly<ArgumentNullException>(() => Same(Npc(null!), Npc("b")), "an id is required: a null one would match a null leader");
     }
 
     [TestMethod]
