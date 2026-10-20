@@ -77,8 +77,8 @@ no morale function reads it.
    original: a leaderless NPC leader counts alone (MR3), a stale "flee spell
    used" flag skips the flee spell of the next flight (MR7), the flee animation
    starts even when the setter refuses the surrender (MR9), and the end of mind
-   control leaves NO_FLEE set for good (MR13, a candidate only: the flee goal
-   itself can set NO_FLEE for good); the back-off's fallback path changes
+   control leaves NO_FLEE set for good (MR13, fixed in Steamwoven by the
+   owner's decision of 2026-10-20 although the flee goal itself can set NO_FLEE for good); the back-off's fallback path changes
    nothing (MR15) ([section 5](#5-anomalies-and-decisions)).
 
 ## 1. The flee decision
@@ -297,16 +297,16 @@ subturn.
 Verdicts and rows: [ledger](original-verification-ledger.md#npc-ai-morale-arc-res-058).
 Decisions follow D2 and D8: a bug of the original gets a Steamwoven fix and a
 proposed Original switch; where only the reconstruction differs, both settings
-follow the original.
+follow the original. The owner accepted every proposed Original switch of this table on 2026-10-20 (ARC-RES-063).
 
 | ID | Original 1.0.7.4 | Verdict | Proposed decision |
 | --- | --- | --- | --- |
 | P2 | The party level sum adds each member's own level (followers of followers included). | Reconstruction slip (confirms ARC-RES-048) | Both settings follow the original; no switch. |
 | P6 | A fleeing NPC's next pass without an action requests SURRENDER and starts the flee goal; interface, scripts, dialog and combat-mode exit treat SURRENDER as a lasting "out of the fight" state that only this step creates. | Original (confirms ARC-RES-048) | Kept in both settings; no switch. The combat-mode bit stays CL4's decision. |
-| MR3 | A leaderless NPC counts as a party of one, its own followers ignored, while each of its followers counts the whole group; so an NPC group leader flees as if alone, and an NPC fleeing from it sees a party of one. | Original bug | Uncertain: an NPC-led group may simply not have been a case the code meant to size; owner decision needed. Proposed: Steamwoven counts a leaderless NPC's own followers like a PC's; Original keeps the party of one (`NpcLeaderPartyCountsAlone`, proposed). Lands with slice I5. |
-| MR7 | SPELL_FLEE is cleared only by the flee-spell step in state FLEE; when the NPC leaves FLEE before that step (attacked and turning to fight), the flag survives and the next flight skips its flee spell or item once. | Original bug (latent) | Steamwoven clears SPELL_FLEE when the NPC leaves FLEE; Original keeps it (`StaleSpellFleeSkipsFleeSpell`, proposed). Lands with slices I5/I8. |
-| MR9 | Perform fleeing ignores the setter's answer and starts the flee goal even when the surrender was refused (invulnerable → NONE, extraordinarily charismatic leader → COMBAT_FOCUS). Reachable only through a change during a flight, for example the NPC becoming invulnerable, gaining a leader, or its leader's charisma rising; a script that writes FLEEING directly, past the setter, would be another way in (stage A8, unchecked). | Original bug (latent) | Steamwoven starts the flee goal only when SURRENDER was applied; Original always starts it (`FleeGoalAfterRefusedSurrender`, proposed). Lands with slice I5. |
-| MR13 | The start of mind control sets NO_FLEE; its end does not clear it, so a formerly controlled NPC never flees again (and the game cannot tell it from an NPC that had NO_FLEE in its data). | Original bug | Candidate only, for the owner. The original also sets NO_FLEE for good, by design, at run time: node 7 of the "move away from object" goal, which the flee goal runs, sets it unconditionally ([section 2](#2-flight-and-surrender)). So NO_FLEE may be meant as a one-way flag and the mind-control end may be intended; the bug reading rests only on the flag outliving the control. Proposed default: both settings keep the original until the owner decides. If the owner wants the fix, Steamwoven restores NO_FLEE to its value before the control (one remembered bit, stored in both settings, D4), and Original leaves it set (`MindControlLeavesNoFlee`, proposed). Belongs to the magic slice that implements mind control. |
+| MR3 | A leaderless NPC counts as a party of one, its own followers ignored, while each of its followers counts the whole group; so an NPC group leader flees as if alone, and an NPC fleeing from it sees a party of one. | Original bug | Uncertain: an NPC-led group may simply not have been a case the code meant to size. Owner decision 2026-10-20: Steamwoven counts a leaderless NPC's own followers like a PC's; Original keeps the party of one (`NpcLeaderPartyCountsAlone`, owner decision 2026-10-20). Lands with slice I5. |
+| MR7 | SPELL_FLEE is cleared only by the flee-spell step in state FLEE; when the NPC leaves FLEE before that step (attacked and turning to fight), the flag survives and the next flight skips its flee spell or item once. | Original bug (latent) | Steamwoven clears SPELL_FLEE when the NPC leaves FLEE; Original keeps it (`StaleSpellFleeSkipsFleeSpell`, owner decision 2026-10-20). Lands with slices I5/I8. |
+| MR9 | Perform fleeing ignores the setter's answer and starts the flee goal even when the surrender was refused (invulnerable → NONE, extraordinarily charismatic leader → COMBAT_FOCUS). Reachable only through a change during a flight, for example the NPC becoming invulnerable, gaining a leader, or its leader's charisma rising; a script that writes FLEEING directly, past the setter, would be another way in (stage A8, unchecked). | Original bug (latent) | Steamwoven starts the flee goal only when SURRENDER was applied; Original always starts it (`FleeGoalAfterRefusedSurrender`, owner decision 2026-10-20). Lands with slice I5. |
+| MR13 | The start of mind control sets NO_FLEE; its end does not clear it, so a formerly controlled NPC never flees again (and the game cannot tell it from an NPC that had NO_FLEE in its data). | Original bug | Owner decision 2026-10-20: fixed in Steamwoven, kept by the Original setting. The original also sets NO_FLEE for good, by design, at run time: node 7 of the "move away from object" goal, which the flee goal runs, sets it unconditionally ([section 2](#2-flight-and-surrender)). So NO_FLEE may be meant as a one-way flag and the mind-control end may be intended; the bug reading rests only on the flag outliving the control. Steamwoven restores NO_FLEE to its value before the control (one remembered bit, stored in both settings, D4), and Original leaves it set (`MindControlLeavesNoFlee`, owner decision 2026-10-20). Belongs to the magic slice that implements mind control. |
 | MR15 | When no straight line of the eight directions is clear, the "away" path keeps the direction with the most partial steps and retries the same straight line, which fails again (it can also compare a stale partial-step value); the back-off then ends. | Original bug (latent, no effect) | Both settings follow the effect: the back-off ends when no straight line is clear. No switch. |
 
 The other rows (MR1, MR2, MR4–MR6, MR8, MR10–MR12, MR14, MR16) are the
@@ -322,8 +322,8 @@ original's behaviour and are kept in both settings.
 2. **The two rolls** (surrender recovery 1..500, back-off start 1..20) are
    labelled draws of the session random source, as design rule 3 asks.
 3. **State.** SURRENDER, FLEE, the fleeing-from handle, BACKING_OFF and
-   SPELL_FLEE are already part of the danger state of slice I3; MR13's fix, if
-   the owner chooses it, needs one more remembered bit per NPC, stored in both
+   SPELL_FLEE are already part of the danger state of slice I3; MR13's fix (owner
+   decision 2026-10-20) needs one more remembered bit per NPC, stored in both
    settings.
 4. **Execution** of the flee goal and the back-off run belongs to slice I7
    (stage A6): the flee goal's own stopping rule is not part of this note.
