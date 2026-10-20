@@ -49,6 +49,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     public static string EntityId(AreaObjectRecord row)
     {
         ArgumentNullException.ThrowIfNull(row);
+        // A static row without a sector is not a use site here (the transfers match statics by sector and ordinal).
         return row.Key.Kind == AreaSourceKind.Static && row.Key.Sector is { } sector ? $"sector:{sector}:{row.Key.SourceIndex}" : AreaConversationState.EntityId(row);
     }
 

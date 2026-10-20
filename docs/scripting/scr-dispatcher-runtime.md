@@ -356,8 +356,8 @@ the player's teleport becomes the transfer); tile and sector events are a later 
   story state, plus the sound actions and call script in / remove script call); since ARC-SCRIPT-015 map mode's use
   clicks on guarded use sites run it under "S4-area-use"; tile and sector events, heartbeat and combat are later slices.
 - Not in any admitted set yet: focus groups and local objects, loops, immediate calls and
-  call-ex, and the world actions other than teleport and fade-and-teleport (set S4: float line, quests,
-  reactions...).
+  call-ex, and the world actions other than teleport and fade-and-teleport (set S4); float line, quests,
+  reactions... are not admitted.
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any
