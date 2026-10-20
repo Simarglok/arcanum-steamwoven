@@ -492,7 +492,12 @@ repository; the table records only the observed behaviour.
   and makes a blocked shot impossible ([awareness](npc-ai-awareness.md#5-line-of-fire-s8-combat-o4)).
 - **O5** How AI chooses attacks, flees or ends its subturn early
   (`ai_process`), and what an NPC does in real time between attacks, belong to
-  the AI section.
+  the AI section. *Settled by ARC-RES-066:* with stages A1–A5, the
+  [execution study](npc-ai-execution.md#7-combat-o5-how-the-ai-chooses-attacks-flees-or-ends-its-subturn)
+  answers it: a pass that starts no animation ends the subturn (A1); targets, flight
+  and support choices come from A3–A5; an NPC's attack goal ends after one attack,
+  so its next attack is the next AI pass (the AI event in real time, the subturn hook
+  in a round), and every action's goal and action-point cost are listed there.
 - **O6** Weapon, armour and critter prototype fields (damage ranges, speed
   factor, range, to-hit, minimum strength, crit charts, AC, resistances) were
   not read from data; the Crash Site combatants are unknown. *Update:* the

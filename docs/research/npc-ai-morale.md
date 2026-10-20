@@ -339,7 +339,10 @@ original's behaviour and are kept in both settings.
 - **U1** How far the flee goal (type 25) runs and how it chooses its path,
   and when its "move away from object" goal (52) reaches the nodes that set
   NO_FLEE (node 5's condition, node 6's test 0x42C240), are the animation
-  stage's questions (A6).
+  stage's questions (A6). *Settled by ARC-RES-066:* the flight runs straight away
+  to a tile 10 from the source and stops beyond 9 tiles or on a blocked step back;
+  node 5's NO_FLEE is unreachable in single player; node 7 follows a failed escape
+  line ([execution](npc-ai-execution.md#4-flight-and-moving-away)).
 - **U2** Whether a follower array can hold dead critters, and so whether dead
   followers count in the party sums, was not traced.
 - **U3** Whether a surrendered NPC stays in the turn-based round's list and

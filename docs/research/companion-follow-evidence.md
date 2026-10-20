@@ -128,7 +128,11 @@ the AREA viewer passes it for Virgil and he follows the PC (slices 2 and 3 below
 - **O5** The move-near / run-near goals (so the exact stopping distance),
   speed recalculation and the follower in combat or turn-based mode were not
   read. The 100 ms step costs 2 action points, which only matters in
-  turn-based mode.
+  turn-based mode. *Settled by ARC-RES-066:* the follower stops within 2 tiles (5
+  spread out) with a clear step, walks within 4 (7) and runs beyond; joining only
+  marks a running animation to recompute its frame time; a follower follows only in
+  danger state NONE; in a round the in-range check charges 2 action points every
+  100 ms ([execution](npc-ai-execution.md#5-following)).
 - **O6** Virgil's other five occupied script slots (for example heartbeat or
   new-sector reactions while following) were not decoded.
 - **O7** How the destination map rebinds the follower array and leader IDs on

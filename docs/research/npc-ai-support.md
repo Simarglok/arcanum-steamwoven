@@ -465,10 +465,13 @@ writes both values.
 ## Unknowns
 
 - **U1** The order of spells with equal values inside a global list is decided
-  by the runtime's sort routine on the record order; it was not traced.
+  by the runtime's sort routine on the record order; it was not traced. *Settled by
+  ARC-RES-066* for the algorithm: the runtime quicksort, not stable
+  ([execution](npc-ai-execution.md#8-other-answers)).
 - **U2** What the immediate item use (0x462CC0) of an AI-action entry does in a
   round (action points, animation) and how perform runs a cast, an item or a skill
-  (0x4AC250, 0x4AC320, 0x4AC350) are stage A6's questions.
+  (0x4AC250, 0x4AC320, 0x4AC350) are stage A6's questions. *Settled by
+  ARC-RES-066* ([execution](npc-ai-execution.md#1-perform-and-its-actions)).
 - **U3** Who sets LOOK_FOR_ARMOR besides an armour drop (prototype data or
   scripts) was not searched beyond direct writes in the executable.
 - **U4** How often each path decides in play (heal skill versus lists, grenades)
