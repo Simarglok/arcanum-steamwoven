@@ -220,7 +220,7 @@ Depends on: S1.
 **S6 Skills page on the character sheet** (UI part of K7).
 Result: the AREA viewer's sheet shows the 16 skills with level, training and
 the key-stat hint, and + and − buy and refund points through S5.
-Components: viewer core, Godot viewer, viewer tests and smoke.
+Components: viewer core, Godot viewer (its smoke run is an acceptance criterion).
 Requirements: FR-CHAR-012, FR-CHAR-016, FR-UI-004.
 Original check: read 0x55BD10 (display) and the skill texts of `mes\skill.mes`.
 Human-Gates: an owner look at the page (separate L3 item, does not block merge).
