@@ -105,11 +105,13 @@ current map) and effects; the conversation reads a levelled follower's level fro
 - The scheme choice (the character screen's auto-level selection) and point purchases by the player; the Educator
   background; the level-up message.
 - Waiting followers "nearby" are the ones on the current map; a waiting follower on another map does not follow the level
-  step (the source's distance test is not modelled). An NPC whose home map the viewer has not loaded (map mode covers one
+  step (the source's distance test is not modelled; it is a screen-sized rectangle around the PC,
+  [ARC-RES-064](../research/companion-orders-loyalty-evidence.md#5-waiting-followers-and-the-level-step-q5-xp5-xp7) OL29). An NPC whose home map the viewer has not loaded (map mode covers one
   map) is skipped, even when the session already holds its record.
 - The hero's purchases read the skill and maxima changes of its durable effects; the race and gender effects' skill changes
   are dropped when the hero is built (`DroppedChanges`, [starting hero](starting-hero-runtime.md)), so they do not reach the
   skill levels a scheme compares.
 - Viewer: an award reached while the viewer has no combat host or effect rules (no `--hero`) levels no follower.
-- Script changes of a scheme (Virgil's script 2023 sets scheme 101) have no runtime.
+- Script changes of a scheme (Virgil's script 2023 sets scheme 101) have no runtime; action 139 is read in
+  [ARC-RES-064](../research/companion-orders-loyalty-evidence.md#6-scr-action-139-set-auto-level-scheme-q6) (OL30).
 - Multiplayer and network branches (AL13) are out of scope.
