@@ -340,14 +340,16 @@ public partial class TerrainViewerApp
         ? (overlay.Frames.AddedCount, overlay.Frames.AddedBytes) : (0, 0);
 
     /// <summary>The bodies drawn away from their T0 command: companions where they stand, then the fallen bodies (a companion's
-    /// own command wins).</summary>
+    /// own command wins), then the portals on another frame.</summary>
     private IReadOnlyList<AreaDrawCommand>? AreaMovingCommands()
     {
         var companions = AreaCompanionCommands();
-        if (_fallenBodies.Count == 0 || _readyArea is null || _areaOverlay?.Area != _readyArea) return companions;
+        if ((_fallenBodies.Count == 0 && _portalBodies.Count == 0) || _readyArea is null || _areaOverlay?.Area != _readyArea) return companions;
         var moving = companions?.ToList() ?? [];
         var taken = moving.Select(c => c.Identity).ToHashSet();
         moving.AddRange(_fallenBodies.Values.Where(c => !taken.Contains(c.Identity)));
+        // ARC-WORLD-051: doors and windows off their T0 frame.
+        moving.AddRange(_portalBodies.Values);
         return moving;
     }
 

@@ -171,7 +171,7 @@ public sealed class AdvancementStateTests
         owner.LevelFollower(owner.Version, Follower("cutthroat"), AdvancementModifiers.None, new(1, 2));
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, "\"advancement\":{\"basicSkills\":[0,0,1,0,0,0,0,0,0,0,0,0],\"techSkills\":[0,0,0,0]," +
-            "\"colleges\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"techDegrees\":[0,0,0,0,0,0,0,0],\"hitPointPoints\":2,\"fatiguePoints\":0,\"scheme\":60}");
+            "\"colleges\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"mastery\":-1,\"techDegrees\":[0,0,0,0,0,0,0,0],\"hitPointPoints\":2,\"fatiguePoints\":0,\"scheme\":60}");
         StringAssert.Contains(text, ",\"advancement\":{\"npcs\":[{\"entity\":\"cutthroat\",");
         StringAssert.Contains(text, "{\"entity\":\"virgil\",\"race\":\"Human\",\"monstrous\":false," +
             "\"stats\":[8,9,8,8,8,8,8,8],\"magickPoints\":0,\"techPoints\":0,\"level\":2,\"unspentPoints\":0,");

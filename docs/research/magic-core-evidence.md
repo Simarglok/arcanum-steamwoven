@@ -161,6 +161,14 @@ drives the resistance rules below.
 
 ### Learning, colleges and mastery (FR-MAGIC-002)
 
+**Original check (ARC-MAGIC-004, 2026-10-21).** The facts of this section, Answer items 2 and 3 and the state model's "Known
+spells" and "Magick points" rows were read in the executable by two readers ([ledger SB1–SB11](original-verification-ledger.md#spell-book-arc-magic-004); the learn by the
+function oracle, F3) and stand at F2. Three corrections to the text below: the forced learn adds the magick points of the
+missing ranks only and never lowers a rank (SB3); unlearning keeps the mastered college (SB6); and the re-validation on a stat
+decrease runs for a base decrease of intelligence or willpower through the stat setter, not for an effect (SB11). The
+character editor reports a failed learn by testing the level and then intelligence, naming willpower for anything else
+(SB8). The runtime is the [spell book](../world/spell-book-runtime.md).
+
 - **Order.** Learning rank r of a college requires knowing exactly r − 1
   ranks, character level ≥ {1, 1, 5, 10, 15}[r − 1], intelligence ≥ 5 and
   willpower ≥ the record's `IQ:` (add (0x4B1530, 0x4B1570, 0x4B15A0, 0x4B1600, 0x4B1620, 0x4B1650, 0x4B1660, 0x4B16C0, 0x4B1740, 0x4B1750, 0x4B1760, 0x4B1770, 0x4B1790, 0x4B1950, 0x4B19B0, 0x4B1A40)).

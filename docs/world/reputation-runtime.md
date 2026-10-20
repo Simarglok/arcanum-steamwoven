@@ -3,7 +3,7 @@
 Status: **Implemented bounded component**, ARC-WORLD-044 (2026-10-21). Slice 4 of the
 [reaction research](../research/npc-reaction-reputation-evidence.md#proposed-implementation-slices-project-policy-not-accepted)
 (ARC-RES-028): the module's reputation table (Data), the reputation rules (Simulation), the PC's reputation list in the
-[game session](game-session-runtime.md) (snapshot schema 25), the dialog `RP` condition and action, the script condition
+[game session](game-session-runtime.md) (snapshot schema 26), the dialog `RP` condition and action, the script condition
 "has reputation" and the reputation term of the [NPC reaction](npc-reaction-runtime.md). Requirements:
 [FR-SOCIAL-002](../requirements/story-social-ai.md#fr-social-002) and
 [FR-SOCIAL-001](../requirements/story-social-ai.md#fr-social-001). Greetings, the logbook's reputation tab and the AI
@@ -73,12 +73,12 @@ the revision capacity. One revision per change. No record budget beyond the rang
 | RM1 | removal copies entry 2·i into i (original bug) | a correct shift in both settings | owner decision pending (recommended: no switch) |
 | A9 | the greeting pick returns the reputation's own number | not built | reconstruction slip of the earlier reading |
 
-## Snapshot schema 25
+## Snapshot schema 26
 
 `story.reputations`: `[{"reputation":1001,"timestampMs":54000000}, …]` in the order gained. The codec refuses a number
 outside 1000..1999 (`OutOfRange`), a repeated number or a time below the previous entry's (`NotCanonical`), more than 1000
-entries; restore refuses a time after the saved clock (`InvalidSnapshot`). **Migration decision: none.** Schemas 1..24 are
-refused, so a quick save of schema 24 loads as written by an incompatible version.
+entries; restore refuses a time after the saved clock (`InvalidSnapshot`). **Migration decision: none.** Schemas 1..25 are
+refused, so a quick save of schema 25 loads as written by an incompatible version.
 
 ## Dialog and scripts
 

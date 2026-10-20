@@ -3,7 +3,7 @@
 Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
 inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019; life state ARC-COMBAT-002;
 event queue ARC-WORLD-024; NPC reaction ARC-WORLD-026; turn-based round ARC-COMBAT-003; equipment ARC-WORLD-028;
-durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20); the hero's skills in play ARC-SKILLS-002 (schema 21); item durability ARC-WORLD-053 (schema 22); schematic knowledge ARC-TECHNOLOGY-003 (schema 23); made items ARC-TECHNOLOGY-004 (schema 24); the PC's reputations ARC-WORLD-044 (schema 25, [reputation runtime](reputation-runtime.md)). The character editor's point pool ARC-WORLD-052 ([character point pool](character-point-pool.md)) adds no saved state: its floor lives only while the editor is open.
+durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20); the hero's skills in play ARC-SKILLS-002 (schema 21); item durability ARC-WORLD-053 (schema 22); schematic knowledge ARC-TECHNOLOGY-003 (schema 23); made items ARC-TECHNOLOGY-004 (schema 24); the spell book's mastered college ARC-MAGIC-004 (schema 25); the PC's reputations ARC-WORLD-044 (schema 26, [reputation runtime](reputation-runtime.md)). The character editor's point pool ARC-WORLD-052 ([character point pool](character-point-pool.md)) adds no saved state: its floor lives only while the editor is open.
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
@@ -157,14 +157,14 @@ state that left `Accepted` (`InvalidQuestState`). A shared state without a PC re
 as the source's shared state is not owned by one PC.
 
 
-## Snapshot schema 25
+## Snapshot schema 26
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
 pause, revision; no owner identity), `Flags` (revision and every admitted flag in
 ascending order, `null` = Unknown), `Actor`, `Maps` (ascending map, each with
 changes in canonical order: scope, sector, entity, property, ordinal), `Story`
-(PC quests, shared quests that left `Accepted`, known rumors, quelled rumor numbers, each ascending; and the PC's reputations in the order gained, [reputation runtime](reputation-runtime.md#snapshot-schema-25)), `Party`
+(PC quests, shared quests that left `Accepted`, known rumors, quelled rumor numbers, each ascending; and the PC's reputations in the order gained, [reputation runtime](reputation-runtime.md#snapshot-schema-26)), `Party`
 (the follower array in order, then waiting and flagged free NPCs; [party runtime](party-runtime.md#snapshot-schema-4)),
 `Hero` (the player character or `null`; [starting hero runtime](starting-hero-runtime.md#snapshot-schema-6)),
 `Inventory` (the PC's gold, the starting kit and the taken items in list order; [inventory runtime](inventory-runtime.md#snapshot-schema-5)),
@@ -186,7 +186,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":21,
+{"format":"arcanum-steamwoven-session","schemaVersion":25,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -242,7 +242,9 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 24 is the only accepted version. ARC-TECHNOLOGY-004 added the required
+**Migration decision: none.** Schema 25 is the only accepted version. ARC-MAGIC-004 added the mastered college (`mastery`, −1
+none) to the hero's `advancement` and to each NPC advancement record ([spell book](spell-book-runtime.md#snapshot-schema-25));
+schema 24 is refused like the earlier ones, also a heroless one without NPC records of the same structure. ARC-TECHNOLOGY-004 had added the required
 `made` list to `inventory` ([schematic assembly](schematic-assembly-runtime.md#made-items-snapshot-schema-24)); schema 23 is refused
 like the earlier ones. ARC-TECHNOLOGY-003 had added the required `schematics`
 section ([schematic knowledge](schematic-knowledge-runtime.md#session)); schema 22 is refused like the earlier ones. ARC-WORLD-053 had added the required `durability`
@@ -291,8 +293,9 @@ schema 19 and refuses schema 18 (a quick save of an older schema loads as incomp
 advancement fields and the levelled NPCs' sheets as schema 20 and refuses schema 19
 ([auto-level schemes](advancement-runtime.md#snapshot-schema-20)). ARC-SKILLS-002 added the hero's innate skill changes as
 schema 21 and refuses schema 20. ARC-WORLD-053 added item durability as schema 22 and refuses schemas 1..21. ARC-TECHNOLOGY-003 added the found schematics as
-schema 23 and refuses schemas 1..22. ARC-TECHNOLOGY-004 added the made items as schema 24 and refuses schemas 1..23. ARC-WORLD-044 added the PC's reputations to the story domain
-as schema 25 and refuses schemas 1..24 (no migration).
+schema 23 and refuses schemas 1..22. ARC-TECHNOLOGY-004 added the made items as schema 24 and refuses schemas 1..23. ARC-MAGIC-004 added the mastered college of
+the hero and the NPC advancement records as schema 25 and refuses schemas 1..24. ARC-WORLD-044 added the PC's reputations to the story domain
+as schema 26 and refuses schemas 1..25 (no migration).
 Adding another domain needs the next free schema number with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)

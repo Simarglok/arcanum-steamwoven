@@ -88,6 +88,11 @@ public static class TechDegreeRules
 
     private sealed class DegreeLane : IPointLane
     {
+        // The next degree's cost, which the pool tests against the unspent points before it asks for the raise (0x589A20's order);
+        // 0 at degree 7, as the original reads it past its table, so the raise answers "at maximum" whatever the points.
+        public int Cost(AdvancementSheet sheet, int index) =>
+            Admit(sheet, AdvancementModifiers.None, index) && sheet.TechDegrees[index] < MaxDegree ? AutoLevelRules.DegreeCost(sheet.TechDegrees[index] + 1) : 0;
+
         // The editor's buy wrapper 0x589A20: the cost of the next degree against the unspent points first, then the raise; the pool
         // spends the point. At degree 7 the original reads the cost past its table (the next table's 0), passes and the raise
         // refuses, so a degree at the cap is "at maximum" whatever the points.

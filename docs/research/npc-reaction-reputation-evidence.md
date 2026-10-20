@@ -199,7 +199,7 @@ continuation), and every AREA talk opens and closes the NPC's conversation slot.
 fate point, consumed only by a talk start below 100); fate points are not built. **Since ARC-WORLD-044** slice 4 is implemented
 ([reputation runtime](../world/reputation-runtime.md), ledger [RP1–RP8, RM1, A9](original-verification-ledger.md#reputations-arc-world-044)):
 the module's table with the original's parse rules (every effect in its written scope, D1), the PC's list in the session
-(schema 25), the reaction sum, faction membership and faction-same, the dialog `RP` and the script condition 33. A9 is a slip
+(schema 26), the reaction sum, faction membership and faction-same, the dialog `RP` and the script condition 33. A9 is a slip
 of the earlier reading (the original's greeting pick returns the reputation's own number); the remove shifts wrongly in the
 original (RM1, an original bug); A5 and RM1 wait for the owner. The notes below describe the state before ARC-WORLD-026.
 
