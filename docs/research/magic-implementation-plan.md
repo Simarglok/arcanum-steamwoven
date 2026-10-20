@@ -132,14 +132,14 @@ Data questions (record contents, component use, which items carry mana) go throu
 
 Phase and order follow the dependencies; slices in one row of "Needs" that do not depend on each other can run in
 parallel. "Read" lists the function groups each slice reads twice in the executable (addresses as in the research);
-"Decides" lists the anomaly rows the slice implements under the accepted decisions, settles (MG7, MG18) or re-reads.
+"Decides" lists the anomaly rows the slice implements under the accepted decisions, settles (MG7), measures (MG18) or re-reads.
 
 ### Phase A: data and character
 
 | Slice | Type | Result | FR | Needs | Read / oracle | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
 | **MT1 Spell records** (done: ARC-MAGIC-001, [contract](../formats/spell-records.md)) | MAGIC | `Arcanum.Data.Magic` reader of `spelllist.mes` lines +0..+4 into immutable records (every field of the [definitions table](magic-core-evidence.md#definitions-fr-magic-001): IQ, cost, maintain, duration, stat info, trigger count, resist, range, charges, info, flags, cancel and disallow sets, item triggers, ten `AI_*`), `spell.mes` names and college texts, `magictech.mes` component names; strict and like-original reader modes (load-map policy 2), typed refusals. Contract `docs/formats/spell-records.md`. | 001 | — | parse (0x44FE30, 0x44FFA0, 0x450090, 0x4501D0, 0x457580, 0x4578F0, 0x457D00, 0x457E70); LM rows already read stay | — |
-| **MT2 Components and target areas as data** (done: ARC-MAGIC-002, [contract](../formats/spell-records.md#components-lines-5-onward)) | MAGIC | Component lines (+5 to the first gap) for the five actions: `AoE:` over the 65 target names, spell-flag filters, `Radius:`, `Count:`, and the 25 component types with their keys, typed per type. `RealData` census of what [census U3](combat-data-census.md#unknowns) left open: component types per action, `Dmg_Flags:`, summon lists and `Clear_Faction:`, `No_Stack:` and cancel sets, `No_Resist:` with `Maintain:`/`Duration:` (sizes MG19), records 80..139. | 001, 003, 007 (data) | MT1 | components (0x458060), target table (0x596140) | MG18 |
+| **MT2 Components and target areas as data** (done: ARC-MAGIC-002, [contract](../formats/spell-records.md#components-lines-5-onward)) | MAGIC | Component lines (+5 to the first gap) for the five actions: `AoE:` over the 65 target names, spell-flag filters, `Radius:`, `Count:`, and the 25 component types with their keys, typed per type. `RealData` census of what [census U3](combat-data-census.md#unknowns) left open: component types per action, `Dmg_Flags:`, summon lists and `Clear_Faction:`, `No_Stack:` and cancel sets, `No_Resist:` with `Maintain:`/`Duration:` (sizes MG19), records 80..139. | 001, 003, 007 (data) | MT1 | components (0x458060), target table (0x596140) | MG7 (record only); MG18 measured, classified in MT8 |
 | **MT3 Spell book** | MAGIC | One spell-book rule (learn rank r, unlearn the highest, mastery once with all five, re-validation after a stat decrease) that auto-level and the UI share; magick points +1/−1 per rank; mastery saved for the hero and NPC sheets (schema bump); NPC books from the critter fields of any map. Spends through the shared point transaction of the skills plan's S5. | 002; FR-CHAR-015 | MT1, the skills plan's S5 | learn/unlearn (0x4B1530–0x4B1A40), checks (0x4B1B90, 0x4B1C00), mastery (0x4B1C70, 0x4B1CB0, 0x4B1CF0); oracle candidate for learn (0x4B1790) if the stubs stay small | — |
 | **MT4 Aptitude inputs** | MAGIC | The sector aptitude adjustment of every sector (the input `CharacterStatContext.SectorAptitudeAdjustment` has no source yet) and the day, night, sky and nature mage backgrounds' ±4 magick points at read time. | FR-CHAR-020; 005 | — | sector (0x45A060), backgrounds branch of the stat getter (0x4B0490) | — |
 
@@ -204,8 +204,8 @@ every fix of a bug of the original be documented. The decided rows are recorded 
 [anomaly decisions](npc-combat-ai-plan.md#anomaly-decisions) (original behaviour, chosen behaviour, reason, switch).
 Each slice that implements a row names its switch there, adds it to the
 [rule-mode registry](../world/rule-modes.md#registry) and describes the difference in its runtime contract. MG7 and
-MG18 were settled by the MT2 census (ARC-MAGIC-002): MG7 is record only (no installed record has an Interrupt
-component); MG18 stays record only and is classified in MT8 with MG21–MG23, because whether it is a bug depends on how
+MG18 were taken up by the MT2 census (ARC-MAGIC-002): it settled MG7 (record only: no installed record has an Interrupt
+component) and measured MG18, which stays record only and moves to MT8, to be classified with MG21–MG23, because whether it is a bug depends on how
 the target functions test the kind bits (its row below).
 
 The registry's reserved Magic row still lists the earlier proposals. The first magic slice that adds a switch brings it
@@ -234,7 +234,7 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG12 | original bug, out of bounds | fixed in both modes (owner rule 2026-10-17), "both fixed" in the registry | MT20b |
 | MG13, MG14, MG16, MG17, MG20 | the original | follow it in both modes; second reading in the slice | MT5, MT6, MT10 |
 | MG15 | original bug | fix (the reflected spell's own cost), switch | MT10 |
-| MG18 | original bug (target table) | record only for now; classified in MT8 with MG21–MG23 once the target functions are read, fixed with a switch only if it proves a bug. Census (ARC-MAGIC-002): 105 installed records name it (100 line +0 areas, 15 components), but almost all of their masks already carry the critter bit through another target name, so adding it would change only two records: record 33 (Bolt of Lightning, all five line +0 areas, "any object except self and dead critters") and record 168 (two Maintain components, Heal and EyeCandy). With the bit the target functions gather critters only, so Bolt of Lightning would narrow to critters — bug or intent? | MT8 |
+| MG18 | original bug (target table) | record only for now; classified in MT8 with MG21–MG23 once the target functions are read, fixed with a switch only if it proves a bug. Census (ARC-MAGIC-002): 105 installed records name it (100 line +0 areas, 15 components), but almost all of their masks already carry the critter bit through another target name, so adding it would change only two records: record 33 (Bolt of Lightning, all five line +0 areas, a mask of any object other than the caster and dead critters) and record 168 (two Maintain components, Heal and EyeCandy). With the bit the target functions gather critters only, so Bolt of Lightning would narrow to critters — bug or intent? | MT8 |
 | MG19 | original bug | fix (separate the two flags), switch; it reaches two technology records (`No_Resist:`) and the script action `cast_unresistable_spell` (7 live lines in 6 scripts); actions 121 and 122 are unused | MT9a |
 | MG21, MG22, MG23 | not decided (target values without a kind bit; ARC-MAGIC-002, ledger SC10) | open: decided with the target functions, when MT8 reads how the bits are tested; until then both modes keep the original's values | MT8 |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |

@@ -27,7 +27,8 @@ public enum SpellDataStatus
     FileRefused,
     /// <summary>A component type name 10..34 of <c>rules\magictech.mes</c> is missing: the original's init fails.</summary>
     MissingComponentName,
-    /// <summary>A text, record line, key or byte the original ends the process on, in both modes.</summary>
+    /// <summary>A byte above 0x7F on any parsed line (ledger SR14). This and the next five statuses, through
+    /// <see cref="MissingValue"/>, are refused in both modes: the original ends its process on them.</summary>
     NonAsciiByte,
     MissingParenthesis,
     UnknownName,
