@@ -98,7 +98,7 @@ Per the [original executable check](original-executable-check.md), every slice:
    owner's Mac (`./arcanum oracle --function ADDR`). Proposed: cast cost (0x4507D0), the UI and AI cost (0x4B1660), the
    UI affordability check (0x4508A0), resistance and save (0x4537B0), the fail-chance predictor (0x453B20), the duration
    and period scaling (0x455250) and the summon list pick (0x452900). They read only a few stats, fields and random
-   draws, which stubs can serve. The spell learn check (0x4B1790) is a conditional eighth, if its stubs stay small.
+   draws, which stubs can serve. The spell learn check (0x4B1790) is a conditional eighth, if its stubs stay small; ARC-MAGIC-004 ran it (eight one-line stubs, F3).
 4. **Classifies** each difference: a reconstruction slip or the original's intended behaviour is followed in both
    modes with no switch; a bug of the original gets a decision ([below](#anomaly-decisions-accepted-2026-10-20)) and, if
    fixed, a switch; a crash or out-of-bounds access is fixed in both modes.

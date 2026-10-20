@@ -12,7 +12,7 @@ public enum PointChangeStatus
     /// <summary>The cost is above the unspent points.</summary>
     NotEnoughPoints,
     /// <summary>The value cannot rise: a stat whose effective value is at its maximum or whose base is at the race's maximum, a
-    /// skill whose level is 20, a hit-point or fatigue pool at its bound.</summary>
+    /// skill whose level is 20, a hit-point or fatigue pool at its bound, a college with all five ranks.</summary>
     AtMaximum,
     /// <summary>The skill's key stat does not allow the points (four levels each above its cap); <see cref="PointChange.Stat"/>
     /// names the key stat.</summary>
@@ -34,7 +34,8 @@ public enum PointChangeStatus
     /// <summary>A stat is below the step's minimum (a spell rank's intelligence or willpower; <see cref="PointChange.Stat"/> names it).</summary>
     StatTooLow,
     /// <summary>An input outside the rules' domain (an invalid sheet or modifiers, an undefined track, an index out of range,
-    /// a lane step that changes the unspent points or leaves an invalid sheet).</summary>
+    /// a lane step that changes fields other than its own, moves its value by other than one step, charges other than its
+    /// stated cost or leaves an invalid sheet).</summary>
     Invalid,
 }
 

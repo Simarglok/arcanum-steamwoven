@@ -6,7 +6,7 @@ using static Arcanum.Simulation.Tests.Character.AutoLevelRulesTests;
 
 namespace Arcanum.Simulation.Tests.Magic;
 
-// ARC-MAGIC-004: the spell book (ledger SB1–SB10). Books and sheets are invented.
+// ARC-MAGIC-004: the spell book (ledger SB1–SB11). Books and sheets are invented.
 [TestClass]
 public sealed class SpellBookRulesTests
 {
@@ -127,6 +127,9 @@ public sealed class SpellBookRulesTests
         Assert.AreEqual((PointChangeStatus.Changed, 4, 5), (kept.Status, kept.Sheet.Colleges[5], kept.Sheet.MasteredCollege), "mastery is for life");
         Assert.AreEqual(PointChangeStatus.AtMinimum, lane.Lower(Sheet(), AdvancementModifiers.None, 5).Status);
         Assert.ThrowsExactly<ArgumentException>(() => new SpellRankLane([1, 2]));
+        Assert.AreEqual(PointChangeStatus.Invalid, lane.Raise(Sheet(), AdvancementModifiers.None, 16).Status);
+        Assert.AreEqual(PointChangeStatus.Invalid, lane.Lower(Sheet() with { Stats = [] }, AdvancementModifiers.None, 0).Status);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => lane.Cost(Sheet(), -1));
     }
 
     [TestMethod]

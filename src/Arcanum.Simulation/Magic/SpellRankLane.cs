@@ -23,11 +23,13 @@ public sealed class SpellRankLane : IPointLane
         _willpower = spellWillpower;
     }
 
-    public int Cost(AdvancementSheet sheet, int index) => SpellCostRules.RankPointCost(Next(sheet, index));
+    public int Cost(AdvancementSheet sheet, int index) =>
+        index is >= 0 and < SpellBookRules.Colleges ? SpellCostRules.RankPointCost(Next(sheet, index)) : throw new ArgumentOutOfRangeException(nameof(index));
 
     [OriginalFunction(0x57C540, OriginalFunctionScope.Partial)]
     public PointLaneStep Raise(AdvancementSheet sheet, AdvancementModifiers modifiers, int index)
     {
+        if (!Admit(sheet, modifiers, index)) return new(PointChangeStatus.Invalid, sheet, 0);
         if (sheet.Colleges[index] >= SpellBookRules.Ranks) return new(PointChangeStatus.AtMaximum, sheet, 0);
         var spell = Next(sheet, index);
         var work = new AutoLevelRules.Work(sheet, modifiers, _willpower);
@@ -46,6 +48,7 @@ public sealed class SpellRankLane : IPointLane
     [OriginalFunction(0x57C670, OriginalFunctionScope.Partial)]
     public PointLaneStep Lower(AdvancementSheet sheet, AdvancementModifiers modifiers, int index)
     {
+        if (!Admit(sheet, modifiers, index)) return new(PointChangeStatus.Invalid, sheet, 0);
         var rank = sheet.Colleges[index];
         if (rank == 0) return new(PointChangeStatus.AtMinimum, sheet, 0);
         var spell = index * SpellBookRules.Ranks + rank - 1;
@@ -59,6 +62,9 @@ public sealed class SpellRankLane : IPointLane
         ArgumentNullException.ThrowIfNull(sheet);
         return new(sheet.Colleges, sheet.MasteredCollege);
     }
+
+    private static bool Admit(AdvancementSheet sheet, AdvancementModifiers modifiers, int index) =>
+        AutoLevelRules.IsValid(sheet) && AutoLevelRules.IsValid(modifiers) && index is >= 0 and < SpellBookRules.Colleges;
 
     // The next rank's spell number; a college with all five ranks names its last (the step refuses it).
     private static int Next(AdvancementSheet sheet, int index) =>

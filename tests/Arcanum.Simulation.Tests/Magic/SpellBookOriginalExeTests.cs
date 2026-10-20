@@ -36,7 +36,8 @@ public sealed class SpellBookOriginalExeTests
             c => $"{c.Result} {c.Writes} {c.RankWritten} {c.MagickWritten}",
             new Mutant("a forced learn adds one magick point", c => Variant(c, forcedPoints: false, strictWillpower: false, forcedOrder: false)),
             new("willpower must exceed the minimum", c => Variant(c, forcedPoints: true, strictWillpower: true, forcedOrder: false)),
-            new("a forced learn keeps the rank order", c => Variant(c, forcedPoints: true, strictWillpower: false, forcedOrder: true)));
+            new("a forced learn keeps the rank order", c => Variant(c, forcedPoints: true, strictWillpower: false, forcedOrder: true)),
+            new("rank 3 needs level 4", c => Variant(c, forcedPoints: true, strictWillpower: false, forcedOrder: false, rankThreeLevel: 4)));
     }
 
     private static SpellBook Book(LearnCase c) => SpellBook.Empty with { Ranks = SpellBook.Empty.Ranks.SetItem(c.Spell / 5, c.Known) };
@@ -48,12 +49,12 @@ public sealed class SpellBookOriginalExeTests
         : $"{(change.Succeeded ? 1 : 0)} 0 -1 -1";
 
     // A planted variant of the learn, written apart from SpellBookRules.
-    private static string Variant(LearnCase c, bool forcedPoints, bool strictWillpower, bool forcedOrder)
+    private static string Variant(LearnCase c, bool forcedPoints, bool strictWillpower, bool forcedOrder, int rankThreeLevel = 5)
     {
         var rank = c.Spell % 5 + 1;
         if (c.Force && !forcedOrder)
             return rank <= c.Known ? "1 0 -1 -1" : $"1 1 {rank} {c.Magick + (forcedPoints ? rank - c.Known : 1)}";
-        int[] levels = [1, 1, 5, 10, 15];
+        int[] levels = [1, 1, rankThreeLevel, 10, 15];
         var refused = rank != c.Known + 1 || levels[c.Spell % 5] > c.Level || c.Intelligence < 5 ||
             (strictWillpower ? Minimum(c) >= c.Willpower : Minimum(c) > c.Willpower);
         return refused ? "0 0 -1 -1" : $"1 1 {rank} {c.Magick + 1}";

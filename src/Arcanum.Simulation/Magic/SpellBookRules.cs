@@ -55,7 +55,7 @@ public sealed record SpellBookChange(SpellBookStatus Status, SpellBook Book, int
 /// <summary>
 /// ARC-MAGIC-004 (magic plan MT3): the one spell-book rule that auto-level, the character editor and the scripts share, as the
 /// original's spell functions apply it (0x4B1530–0x4B1CF0; contract docs/world/spell-book-runtime.md, ledger "Spell book",
-/// SB1–SB10). A college's ranks are learned strictly in order and unlearned from the highest; each rank adds one magick point
+/// SB1–SB11). A college's ranks are learned strictly in order and unlearned from the highest; each rank adds one magick point
 /// (<see cref="SpellCostRules.RankPointCost"/>) and costs one character point (the caller's). Mastery is set once, for a
 /// college with all five ranks, and kept for life. Pure functions over explicit values; spell numbers outside 0..79 and
 /// colleges outside 0..15 are refused (the original would write past the sixteen ranks, SB9).
@@ -84,12 +84,12 @@ public static class SpellBookRules
     }
 
     /// <summary>The character level a rank needs (0x4B1770): 1, 1, 5, 10, 15 by rank.</summary>
-    [OriginalFunction(0x4B1770, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4B1770, OriginalFunctionScope.Partial)]
     public static int MinimumLevel(int spell) => spell is >= 0 and < Spells ? MinimumLevels[spell % Ranks]
         : throw new ArgumentOutOfRangeException(nameof(spell));
 
     /// <summary>Whether a spell is known (0x4B1950): 0..79 and its rank at most its college's.</summary>
-    [OriginalFunction(0x4B1950, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4B1950, OriginalFunctionScope.Partial)]
     public static bool IsKnown(SpellBook book, int spell) => IsValid(book) && spell is >= 0 and < Spells &&
         spell % Ranks + 1 <= book.Ranks[spell / Ranks];
 
@@ -132,7 +132,7 @@ public static class SpellBookRules
     }
 
     /// <summary>Whether <paramref name="college"/> can be mastered (0x4B1C70): no college mastered yet and all five ranks known.</summary>
-    [OriginalFunction(0x4B1C70, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4B1C70, OriginalFunctionScope.Partial)]
     public static SpellBookStatus CanMaster(SpellBook book, int college)
     {
         if (!IsValid(book) || college is < 0 or >= Colleges) return SpellBookStatus.Invalid;
@@ -141,7 +141,7 @@ public static class SpellBookRules
     }
 
     /// <summary>Masters <paramref name="college"/> (0x4B1CF0, the script action's): set only when <see cref="CanMaster"/> allows it.</summary>
-    [OriginalFunction(0x4B1CF0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4B1CF0, OriginalFunctionScope.Partial)]
     public static SpellBookChange Master(SpellBook book, int college)
     {
         var status = CanMaster(book, college);

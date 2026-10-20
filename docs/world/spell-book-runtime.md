@@ -12,7 +12,8 @@ Requirements: [FR-MAGIC-002](../requirements/combat-magic-tech.md#fr-magic-002) 
 Every rule below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
 ([ledger "Spell book"](../research/original-verification-ledger.md#spell-book-arc-magic-004), rows SB1–SB11), and the learn
 (0x4B1790) was compared with the original in the function oracle on 10,000 seeded inputs (F3, receipt
-[`4B1790.json`](../verification/receipts/4B1790.json)). Code: [`SpellBookRules`](../../src/Arcanum.Simulation/Magic/SpellBookRules.cs),
+[`4B1790.json`](../verification/receipts/4B1790.json); re-run with `./arcanum oracle --function 0x4B1790`, which the
+`SpellBookOriginalExeTests` compare with four planted mutants). Code: [`SpellBookRules`](../../src/Arcanum.Simulation/Magic/SpellBookRules.cs),
 [`SpellRankLane`](../../src/Arcanum.Simulation/Magic/SpellRankLane.cs),
 [`GameSessionSpellBook`](../../src/Arcanum.Session/GameSessionSpellBook.cs); tests:
 [`SpellBookRulesTests`](../../tests/Arcanum.Simulation.Tests/Magic/SpellBookRulesTests.cs),
@@ -79,6 +80,9 @@ Owner decision 2026-10-20: every difference is documented. This slice adds no ru
 | Original 1.0.7.4 | Steamwoven | Mode |
 | --- | --- | --- |
 | Learn and unlearn take any spell number: one outside 0..79 addresses the college index 16 and above of the spell-and-tech field, which is the mastery and the tech degrees (SB9; no caller passes one). | Refused (`Invalid`), by the no-out-of-bounds rule. | both |
+| The level minimum (0x4B1770) has no range test: a negative or large spell reads before or past its table (SB4). | `MinimumLevel` throws outside 0..79; no caller passes such a number. | both |
+| The mastery test and set take any college index (SB7). | A college outside 0..15 is refused (`Invalid`). | both |
+| Each function reads only the one college it needs; a rank above 5 or a mastery outside −1..15 elsewhere in the field is not noticed. | The rules take a whole book and refuse one outside its ranges (`Invalid`); the session and the critter-field reader never hold such a book. | both |
 | The editor reports a failed learn by testing the level, then intelligence, then names willpower for anything else, so a rank-order failure is reported as a level, intelligence or willpower failure (SB8). | The typed status names the failing check in the learn's order; the messages are the sheet's (MT19). | — |
 | The level check reads the effective level (stat 17 through the effect system). | The sheet's stored level; no effect changes the level in the modelled effects. | both |
 | A network client sends learns, unlearns and rank writes to the host. | Single player only. | — |

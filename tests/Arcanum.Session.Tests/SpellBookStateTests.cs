@@ -74,6 +74,8 @@ public sealed class SpellBookStateTests
 
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, "\"mastery\":4");
+        Assert.AreEqual(GameSessionFailure.InvalidHero,
+            GameSessionOwner.Restore(Decode(text.Replace("\"mastery\":4", "\"mastery\":16")), RestoreOptions()).Failure);
         using var restored = Restore(Decode(text));
         Assert.AreEqual(4, restored.QueryHeroSpellBook()!.MasteredCollege);
 
@@ -96,8 +98,11 @@ public sealed class SpellBookStateTests
         var mastered = owner.MasterNpcCollege(owner.Version, Mage(), 4);
         Assert.AreEqual((GameSessionDisposition.Changed, 4), (mastered.Disposition, owner.QueryNpcSpellBook("mage")!.MasteredCollege));
         Assert.AreEqual(SpellBookStatus.AlreadyMastered, owner.MasterNpcCollege(owner.Version, Mage(), 4).Status, "the saved record is read");
-        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text));
         Assert.AreEqual(new SpellBook(SpellBook.Empty.Ranks.SetItem(4, 5), 4), restored.QueryNpcSpellBook("mage"));
+        Assert.AreEqual(GameSessionFailure.InvalidAdvancement,
+            GameSessionOwner.Restore(Decode(text.Replace("\"mastery\":4", "\"mastery\":-2")), RestoreOptions()).Failure);
         Assert.ThrowsExactly<ArgumentException>(() => owner.QueryNpcSpellBook("bad id"));
     }
 }
