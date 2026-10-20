@@ -1,11 +1,12 @@
 # Magic implementation plan
 
-Status: **Plan (proposal)**, work item ARC-RES-060 (2026-10-20), top-20 item 12. It cuts the
+Status: **Plan**, work item ARC-RES-060 (2026-10-20), top-20 item 12; the owner approved starting the slices on 2026-10-20,
+and MT1 is done as ARC-MAGIC-001. It cuts the
 [magic core research](magic-core-evidence.md) (ARC-RES-043) into ordered code slices, one PR each, and says for every
 slice what it builds, which requirements it covers, what it depends on, what it reuses and how it is checked against the
 original executable. It replaces the eight slices proposed at the end of that research
 ([proposed implementation slices](magic-core-evidence.md#proposed-implementation-slices-project-policy-not-accepted)).
-No slice starts before the owner accepts this plan; codes are allocated when each task is created (owner decision D6 of
+Codes are allocated when each task is created (owner decision D6 of
 the [NPC combat AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)), so slices carry plan labels **MT1..MT21**
 (MT9 and MT20 in two parts each) here, not codes. Of the other lanes named below, the [skills plan](skills-plan.md) (ARC-RES-061) is merged
 and the technology research (ARC-RES-062) is in flight. Docs only: no code, reader, schema or test changes.
@@ -133,7 +134,7 @@ parallel. "Read" lists the function groups each slice reads twice in the executa
 
 | Slice | Type | Result | FR | Needs | Read / oracle | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
-| **MT1 Spell records** | MAGIC | `Arcanum.Data.Magic` reader of `spelllist.mes` lines +0..+4 into immutable records (every field of the [definitions table](magic-core-evidence.md#definitions-fr-magic-001): IQ, cost, maintain, duration, stat info, trigger count, resist, range, charges, info, flags, cancel and disallow sets, item triggers, ten `AI_*`), `spell.mes` names and college texts, `magictech.mes` component names; strict and like-original reader modes (load-map policy 2), typed refusals. Contract `docs/formats/spell-records.md`. | 001 | — | parse (0x44FE30, 0x44FFA0, 0x450090, 0x4501D0, 0x457580, 0x4578F0, 0x457D00, 0x457E70); LM rows already read stay | — |
+| **MT1 Spell records** (done: ARC-MAGIC-001, [contract](../formats/spell-records.md)) | MAGIC | `Arcanum.Data.Magic` reader of `spelllist.mes` lines +0..+4 into immutable records (every field of the [definitions table](magic-core-evidence.md#definitions-fr-magic-001): IQ, cost, maintain, duration, stat info, trigger count, resist, range, charges, info, flags, cancel and disallow sets, item triggers, ten `AI_*`), `spell.mes` names and college texts, `magictech.mes` component names; strict and like-original reader modes (load-map policy 2), typed refusals. Contract `docs/formats/spell-records.md`. | 001 | — | parse (0x44FE30, 0x44FFA0, 0x450090, 0x4501D0, 0x457580, 0x4578F0, 0x457D00, 0x457E70); LM rows already read stay | — |
 | **MT2 Components and target areas as data** | MAGIC | Component lines (+5 to the first gap) for the five actions: `AoE:` over the 65 target names, spell-flag filters, `Radius:`, `Count:`, and the 25 component types with their keys, typed per type. `RealData` census of what [census U3](combat-data-census.md#unknowns) left open: component types per action, `Dmg_Flags:`, summon lists and `Clear_Faction:`, `No_Stack:` and cancel sets, `No_Resist:` with `Maintain:`/`Duration:` (sizes MG19), records 80..139. | 001, 003, 007 (data) | MT1 | components (0x458060), target table (0x596140) | MG18 |
 | **MT3 Spell book** | MAGIC | One spell-book rule (learn rank r, unlearn the highest, mastery once with all five, re-validation after a stat decrease) that auto-level and the UI share; magick points +1/−1 per rank; mastery saved for the hero and NPC sheets (schema bump); NPC books from the critter fields of any map. Spends through the shared point transaction of the skills plan's S5. | 002; FR-CHAR-015 | MT1, the skills plan's S5 | learn/unlearn (0x4B1530–0x4B1A40), checks (0x4B1B90, 0x4B1C00), mastery (0x4B1C70, 0x4B1CB0, 0x4B1CF0); oracle candidate for learn (0x4B1790) if the stubs stay small | — |
 | **MT4 Aptitude inputs** | MAGIC | The sector aptitude adjustment of every sector (the input `CharacterStatContext.SectorAptitudeAdjustment` has no source yet) and the day, night, sky and nature mage backgrounds' ±4 magick points at read time. | FR-CHAR-020; 005 | — | sector (0x45A060), backgrounds branch of the stat getter (0x4B0490) | — |
