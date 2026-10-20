@@ -44,7 +44,7 @@ script hooks of [FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002
    ARC-DEV-025 no implemented function stays at F0; seven pure functions are proposed for the function oracle (F3)
    ([Checking against the original](#checking-against-the-original)).
 5. **Fifteen rows need an owner decision** (eleven bugs of the original, four reconstruction changes), asked in one
-   card per slice when it starts, each with a recommendation ([Anomaly decisions](#anomaly-decisions-proposed)). MG12
+   card per slice when it starts, each with a recommendation ([Anomaly decisions](#anomaly-decisions-accepted-2026-10-20)). MG12
    is fixed in both modes by the owner's no-crash rule; MG1, MG2, MG8, MG13, MG14, MG16, MG17 and MG20 follow the
    original and need no decision.
 6. **Boundaries agreed with the parallel lanes (2026-10-20)**: skills builds the shared character-point transaction
@@ -95,7 +95,7 @@ Per the [original executable check](original-executable-check.md), every slice:
    and period scaling (0x455250) and the summon list pick (0x452900). They read only a few stats, fields and random
    draws, which stubs can serve. The spell learn check (0x4B1790) is a conditional eighth, if its stubs stay small.
 4. **Classifies** each difference: a reconstruction slip or the original's intended behaviour is followed in both
-   modes with no switch; a bug of the original gets a decision ([below](#anomaly-decisions-proposed)) and, if
+   modes with no switch; a bug of the original gets a decision ([below](#anomaly-decisions-accepted-2026-10-20)) and, if
    fixed, a switch; a crash or out-of-bounds access is fixed in both modes.
 
 Data questions (record contents, component use, which items carry mana) go through the data probes and opt-in
@@ -142,7 +142,7 @@ parallel. "Read" lists the function groups each slice reads twice in the executa
 
 | Slice | Type | Result | FR | Needs | Read / oracle | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
-| **MT5 Cost and payment** | MAGIC | The three cost formulas as the original has them (run time `ceil(cost / 2)` for mastery then dwarf ×2; UI and AI with truncation; UI check without mastery, MG2); the pre-animation affordability check on the cast spell (MG1); a payment plan: free runs, `ChargeBeginCost: 0`, fatigue-limited half, worn mana stores first (MG20), fatigue refusal at −15, fail-after-pay for maintained or untimed spells, item spell charges; the charge-cell source through a port the technology lane fills; the worn-store recharge amount. | 004 | MT1 | cost (0x4507D0, oracle), pay (0x450420), checks (0x4508A0 oracle, 0x450940), spell cost (0x4B1650, 0x4B1660 oracle, 0x4B16C0), recharge (0x459590, 0x459640, 0x459680) | MG20 (2nd reading only) |
+| **MT5 Cost and payment** | MAGIC | The three cost formulas as the original has them (run time `ceil(cost / 2)` for mastery then dwarf ×2; UI and AI with truncation; UI check without mastery, MG2); the pre-animation affordability check on the cast spell (MG1); a payment plan: free runs, `ChargeBeginCost: 0`, fatigue-limited half, worn mana stores first (MG20), fatigue refusal at −15, fail-after-pay for maintained or untimed spells, item spell charges; the charge-cell source through a port the technology lane fills, called first and always charged, as the original's payment does (its item-source surcharge is the technology lane's anomaly TC1); the worn-store recharge amount. | 004 | MT1 | cost (0x4507D0, oracle), pay (0x450420), checks (0x4508A0 oracle, 0x450940), spell cost (0x4B1650, 0x4B1660 oracle, 0x4B16C0), recharge (0x459590, 0x459640, 0x459680) | MG20 (2nd reading only) |
 | **MT6 Resistance and save** | MAGIC | Per-target resolver returning the margin or a skip: stored magic resistance (O9), the tech-aligned raise, d100 margin, `Resist:` save d20, extraordinary willpower immunity, damaging floor 50, the fate save as an input (MG13); the fail-chance predictor exactly as the original, with its own labelled d20 (MG14); technology records skip it. | 005, 010 | MT1, fate input (the skills plan's S7 later) | resist (0x4537B0, oracle), fail chance (0x453B20 oracle, 0x453CC0) | MG4, O9 |
 | **MT7 Invocation check** | MAGIC | The check before any slot or payment, with a typed refusal per step: turn, spell number, range (Chebyshev, inventory always in range), line of fire through a port (filled by AI awareness I2 or a later LOS slice), forbidden flags, Bonds of Magick, NPC fallback radius 2, item aptitude gate and holder-can-use (0x456A10), intelligence 5, anti-teleport. | 003, 009 (gate), 010 | MT1, MT2 | check (0x4564E0), range (0x454700), LOS (0x456BC0), flags (0x456430), gate (0x456A10) | MG5 |
 | **MT8 Target areas** | MAGIC | Target lists for an action's area over a world query port (objects and tiles of the active map, party, parent, attacker, the run's object list) and the per-component filter and re-aim; reads the cone, count and radius branches the research left open (O3). | 003 | MT2 | targets (0x4F40B0) and the target functions it calls (0x4F24F0–0x4F4E40), apply area (0x453D40, 0x453EE0, 0x453F20) | MG18 (if not settled in MT2) |
@@ -151,7 +151,7 @@ parallel. "Read" lists the function groups each slice reads twice in the executa
 
 | Slice | Type | Result | FR | Needs | Read / oracle | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
-| **MT9a Run lifecycle** | MAGIC | In-memory runs: slots (512), actions BEGIN, MAINTAIN, END, CALLBACK, END_CALLBACK through a component executor port; the invocation check (MT7) before a slot; payment at BEGIN and at each MAINTAIN (MT5); duration with `DurationStatInfo:` and trigger counts, mastery ×2, maintenance period, the `INT / 4` cap, sourceless ticks (8), the scheduler's order (unresistable first, nothing applied, maintained, timed, neither); explicit interrupt (maintain bar, script stop); the magic-tech event kind on the session's queue. | 006 | MT5, MT6, MT7 | process shell (0x4510F0), stage (0x452F20), schedule (0x453FA0), cap (0x4545E0), timers (0x454790, 0x4547F0, 0x4548D0), time (0x455250, oracle), run (0x455A20, 0x455AC0, 0x455C30), interrupt (0x456F70–0x457530) | MG3, MG6, MG11, MG19 |
+| **MT9a Run lifecycle** | MAGIC | In-memory runs: slots (512), actions BEGIN, MAINTAIN, END, CALLBACK, END_CALLBACK through a component executor port; the invocation check (MT7) before a slot; payment at BEGIN and at each MAINTAIN (MT5); only BEGIN skips the checks and payment for technology records, MAINTAIN (0x453170) does not test the technology flag, so maintained technology records check intelligence and willpower and pay; duration with `DurationStatInfo:` and trigger counts, mastery ×2, maintenance period, the `INT / 4` cap, sourceless ticks (8), the scheduler's order (unresistable first, nothing applied, maintained, timed, neither); explicit interrupt (maintain bar, script stop); the magic-tech event kind on the session's queue. | 006 | MT5, MT6, MT7 | process shell (0x4510F0), stage (0x452F20), schedule (0x453FA0), cap (0x4545E0), timers (0x454790, 0x4547F0, 0x4548D0), time (0x455250, oracle), run (0x455A20, 0x455AC0, 0x455C30), interrupt (0x456F70–0x457530) | MG3, MG6, MG11, MG19 |
 | **MT9b Saved runs** | MAGIC | Runs and their events saved in the snapshot (schema bump), including runs of maps that are not active (the original's per-map `MT.dat`), and restored as the original's post-load does. | 006 | MT9a | save and load (0x44F250, 0x44F3C0, 0x44F540, LM19), map close (0x44F7A0, 0x44FA70, 0x44FC30) | — |
 | **MT10 Per-target stage** | MAGIC | Between the area and the components: resistance per target (MT6), anti-magic shell on source and target (target spell flags from the static object fields until P1 brings them into the session), full reflection with the source/target swap and its cost (MG15), the original's order (O10), no-stack after payment (MG16), cancels by `Cancels_SF:` and `Cancels_EnvSF:`, fate maximisation per action (MG17). | 005, 006, 010 | MT6, MT8, MT9a | stack and cancel (0x453410, 0x4534E0), shell (0x453710), reflect (0x455550), env (0x458A80) | MG15, MG16, MG17, O10 |
 | **MT11 Endings and recharge** | MAGIC | Every ending trigger of the caster and target: the caster fainting from payment or damage (0x45D5A0 → demaintain 0x457450), rest, world-map travel, a follower leaving combat (0x4A8570), death or destruction of parent, source item or target (0x459740, 0x4598D0, 0x459A20), unwearing a source item; the worn-store recharge event (merged per item, saved). The summon's death ending is MT17's, the entangle re-resist MT13's. | 006; FR-COMBAT-010 | MT9b, MT10 | the listed addresses | — |
@@ -192,15 +192,20 @@ parallel. "Read" lists the function groups each slice reads twice in the executa
 | Magic core | + MT4, MT9b, MT11, MT20b, P1, MT13, MT14, MT15, MT21 | Maintained spells with the bar, buffs and curses on NPCs, charm and mind control, dispel, scripted casts; FR-MAGIC-001..007 covered. |
 | World magic | + MT16, P2, MT17, MT18 | Teleport, summons, polymorph. |
 
-## Anomaly decisions (proposed)
+## Anomaly decisions (accepted 2026-10-20)
 
-Each slice asks the owner for its rows in one decision card when it starts (D2) and logs the answer in the AI plan's
-[anomaly decisions](npc-combat-ai-plan.md#anomaly-decisions). The verdicts come from the
+The owner accepted every recommendation below on 2026-10-20 and asked that every difference from the original and
+every fix of a bug of the original be documented. So each slice, when it implements a row, adds the row to the AI
+plan's [anomaly decisions](npc-combat-ai-plan.md#anomaly-decisions) (original behaviour, chosen behaviour, reason,
+switch), adds its switch to the [rule-mode registry](../world/rule-modes.md#registry) and describes the difference in
+its runtime contract. MG7 and MG18 stay conditional on the MT2 census, as their rows say. The Magic row of the registry's reserved differences is updated by
+the first slice that adds a magic switch (the registry file is read by a root test, so it changes with code, not in a
+docs-only PR). The verdicts come from the
 [ledger](original-verification-ledger.md#magic-arc-res-043-load-map-arc-res-040). Under the
 [rule modes](../world/rule-modes.md), a reconstruction slip and the original's intended behaviour get no switch; a bug
 of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bounds access is fixed in both modes.
 
-| Row | Verdict | Recommendation | Slice |
+| Row | Verdict | Decision | Slice |
 | --- | --- | --- | --- |
 | MG1 | slip (spell index); no mastery is the original | follow the original in both modes, no switch | MT5 |
 | MG2 | slip (run-time rounding); three formulas are the original | follow the original in both modes, no switch | MT5 |
