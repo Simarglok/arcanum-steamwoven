@@ -32,6 +32,9 @@ if test "${ARCANUM_EXPORT_LEASE_HELD:-}" != 1; then
   if test -n "${ARCANUM_OUTPUT_BYTES:-}"; then
     : "${ARCANUM_ESTIMATE_MANIFEST:?a single complete measured payload manifest is required}"
     set -- --output-bytes "$ARCANUM_OUTPUT_BYTES" --estimate-manifest "$ARCANUM_ESTIMATE_MANIFEST"
+  elif test -n "${ARCANUM_FIRST_EXPORT_BYTES:-}"; then
+    # ARC-DEV-026: no terrain payload survives to measure; the owner states the output estimate.
+    set -- --output-bytes "$ARCANUM_FIRST_EXPORT_BYTES" --first-export
   fi
   cd "$candidate_root"
   exec /usr/bin/env ARCANUM_EXPORT_LEASE_HELD=1 /usr/bin/python3 -B -m tools.local_dev.export_endpoint \
