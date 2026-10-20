@@ -34,9 +34,11 @@ python3 -B tools/original-oracle/oracle.py list
 | 0x4A68B0 | experience to next level | stat getter stub (level 17, experience 18), threshold-table pointer 0x5F5C94 | `ToNextLevelMatchesTheOriginal` |
 | 0x4A6900 | experience progress | as above, may call 0x4A68B0 | `ProgressMatchesTheOriginal` (Original mode; Steamwoven differs only on XP3 inputs) |
 | 0x4A6980 | level bonus points | two integers, no stubs | `BonusPointsMatchTheOriginal` |
+| 0x4C5EB0 | basic skill level | one critter (ARC-SKILLS-001): stubs for its type, its twelve stored basic skills, its eight primary stats, the monstrous test and an additive effect change; the key-stat and cap tables; may call the base level, points and cap | `SkillLevelMatchesTheOriginal` (`SkillOriginalExeTests`) |
+| 0x4C6170 | basic skill training set | the same critter and a requested tier (also outside 0..3); the network test answers single player; the array write and the Educator update are recorded stubs; may call the level | `TrainingSetMatchesTheOriginal` (`SkillOriginalExeTests`) |
 
 Adding a function: a `FunctionSpec` in `oracle_functions.py` with its model, a test with mutants that writes its receipt,
-a row in `ORACLE_FUNCTIONS` of `tools/local_dev/launch.py` (`test_launcher_sync.py` checks all three agree), and its F3
+a row in `ORACLE_FUNCTIONS` of `tools/local_dev/launch.py` and its test class in `ORACLE_TEST_CLASSES` (`test_launcher_sync.py` checks all three agree), and its F3
 row in the [function registry](../../docs/verification/README.md) with the committed receipt.
 
 ## Unicorn and its licence
