@@ -24,11 +24,13 @@ public sealed class AreaScriptHost : IScrHost
     /// <summary>
     /// The set the viewer runs: <see cref="ScrAdmissionSet.S3"/> without get and set story state, because the session
     /// has no story-state number yet (a script that would use one is refused, not run on a made-up value), plus the three
-    /// sound actions of <see cref="ScrAdmissionSet.S7"/> (ARC-SCRIPT-040).
+    /// sound actions of <see cref="ScrAdmissionSet.S7"/> (ARC-SCRIPT-040), plus call script in and remove script call of
+    /// <see cref="ScrAdmissionSet.S5"/> since the viewer pumps the session's event queue (ARC-WORLD-039).
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound", ScrAdmissionSet.S3.Conditions,
+    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls", ScrAdmissionSet.S3.Conditions,
         ScrAdmissionSet.S3.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState)
-            .Concat([ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme]),
+            .Concat([ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
+                ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall]),
         ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
 
     private readonly List<ScrSound> _sounds = [];
@@ -154,8 +156,8 @@ public sealed class AreaScriptHost : IScrHost
     public bool Apply(ScrEffects effects)
     {
         ArgumentNullException.ThrowIfNull(effects);
-        // The viewer's set admits neither story state nor deferred calls; a trap object is not modelled.
-        if (effects.StoryState is not null || effects.DestroyTrapObject is not null || effects.Calls.Count > 0) return false;
+        // The viewer's set admits no story state; a trap object is not modelled.
+        if (effects.StoryState is not null || effects.DestroyTrapObject is not null) return false;
         foreach (var write in effects.GlobalFlags)
         {
             var flags = _session.Flags;
@@ -168,6 +170,15 @@ public sealed class AreaScriptHost : IScrHost
         foreach (var sound in effects.Sounds)
             if (sound.Kind == ScrSoundKind.Scheme) _session.PlaySoundScheme(_session.Version, sound.Id, sound.Ambient);
             else _sounds.Add(sound);
+        // ARC-WORLD-039: deferred calls go to the session's queue in action order (the viewer pumps it); a refused request
+        // stops the later steps, as a refused flag write does.
+        foreach (var request in effects.Calls)
+        {
+            var queued = request.Kind == ScrCallKind.Schedule
+                ? _session.ScheduleScriptCall(_session.Version, new(request.Script, request.Line, Role(request.Triggerer), Role(request.Attachee)), request.DelayMs)
+                : _session.RemoveScriptCall(_session.Version, request.Script, Role(request.Attachee));
+            if (queued.Disposition == GameSessionDisposition.Rejected) return false;
+        }
         if (effects.Writeback is not { } writeback) return true;
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
             || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;
@@ -180,4 +191,10 @@ public sealed class AreaScriptHost : IScrHost
         ]);
         return result.Disposition != GameSessionDisposition.Rejected;
     }
+
+    /// <summary>A script object as a deferred call's session role (map and entity id), or null for an absent one.</summary>
+    public static SessionScriptRole? Role(ScrObjectRef? obj) => obj is { } o ? new SessionScriptRole(new SessionMapId(o.Map), o.Code) : null;
+
+    /// <summary>A deferred call's session role as a script object, or null for an absent one.</summary>
+    public static ScrObjectRef? ObjectOf(SessionScriptRole? role) => role is { } r ? new ScrObjectRef(r.Map.RuntimeMap, r.Entity) : null;
 }

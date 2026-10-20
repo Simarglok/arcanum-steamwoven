@@ -35,6 +35,9 @@ public sealed class AreaCombatHost
 
     public bool Covers(int runtimeMap) => _maps.ContainsKey(runtimeMap);
 
+    /// <summary>ARC-WORLD-039: whether an object of the map's T0 data has this session entity id (a deferred call's role).</summary>
+    public bool HasObject(int runtimeMap, string entity) => _maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(entity, out _);
+
     /// <summary>The NPC drawn as <paramref name="key"/> on <paramref name="runtimeMap"/>, or null for anything else.</summary>
     public AreaCombatTarget? Target(GameSessionOwner session, int runtimeMap, AreaObjectKey key)
     {

@@ -217,9 +217,12 @@ The session keeps the calls on its event queue as the kind `scr.call`
 ([event queue](../world/game-event-queue-runtime.md#session-wiring-arc-world-024)):
 the caller applies `ScrEffects.Calls` with `ScheduleScriptCall` and
 `RemoveScriptCall`, and an event pass hands each due call to an
-`ISessionScriptWorld` host, which runs `RunCall` and applies the effects. The AREA
-viewer does not run event passes yet (slice E3 of the queue plan) and keeps its
-dialogue set at S3, so its talks never schedule a call.
+`ISessionScriptWorld` host, which runs `RunCall` and applies the effects. Since
+ARC-WORLD-039 the AREA viewer pumps the queue ([host pump](../world/game-event-queue-runtime.md#host-pump-arc-world-039)):
+its set admits call script in and remove script call ("S3-area-sound-calls"),
+`AreaScriptHost.Apply` hands the requests to the session in action order, and a due
+call runs through `AreaConversationHost.RunCall` (a call that would start a
+conversation is not run).
 
 ## Print line (ARC-SCRIPT-013, slice S6)
 
@@ -250,7 +253,7 @@ dialogue set at S3, so its talks never schedule a call.
     an absent object's null handle to the sound call (undefined); here nothing plays and the run goes on.
   - **Play sound scheme**: `Scheme` with the music and ambient ids, the session's scheme request unchanged
     (`PlaySoundScheme`, [session sound](../world/session-sound-runtime.md)).
-- **The AREA viewer** admits the three in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound"): `Apply` hands a
+- **The AREA viewer** admits the three in its dialog set (`AreaScriptHost.Admission`, now "S3-area-sound-calls"): `Apply` hands a
   scheme pair to the session (one the session drops, while sound is locked, or refuses, a negative id, changes nothing and
   stops nothing) and keeps the effect sounds for the viewer, which plays them on the next frame
   (`TerrainViewerScriptSounds`: play sound through the effects channel at the plain volume, play sound on through the
@@ -307,9 +310,9 @@ dialogue set at S3, so its talks never schedule a call.
   the story-state actions and no admitted set reads global variables.
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
-- Only the AREA viewer's talk and resumption call the dispatcher (its set "S3-area-sound": S3 without story state, plus the sound actions), and no
-  host runs deferred calls yet (S5 is headless until the viewer pumps the event
-  queue); use, tile and sector events, heartbeat, combat and items are later slices.
+- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls": S3 without
+  story state, plus the sound actions and call script in / remove script call); use, tile and sector events, heartbeat
+  and combat are later slices.
 - Not in the admitted set yet: focus groups and local objects, loops, calls and
   call-ex, and every world action (float line, teleport, quests, reactions...).
 - The viewer's script host models only the dialog slot of the map's speakers;
