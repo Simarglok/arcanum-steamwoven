@@ -6,7 +6,8 @@ namespace Arcanum.Session;
 /// <summary>
 /// Dialog party seam over a <see cref="GameSessionOwner"/> (ARC-WORLD-013): WA reads the NPC's waiting standing, JO and
 /// UW run the session's checked join and unwait (first operand 0: charisma limit applies, not forced). The host maps
-/// each NPC participant to its session entity id and supplies the follow-check facts; a participant it cannot map, a
+/// each NPC participant to its session entity id and supplies the follow-check facts (with a session hero the session
+/// supplies the PC's persuasion, charisma, level and max followers itself, ARC-SKILLS-002); a participant it cannot map, a
 /// PC other than <paramref name="playerCharacter"/> or missing facts is Rejected with no effect. A refusal is Refused and
 /// its reason is kept in <see cref="LastRefusal"/> for the host's refusal line. The session is read at each call, so the
 /// port never caches its owner's state; it must be rebuilt when the host replaces the owner.

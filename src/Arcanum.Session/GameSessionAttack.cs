@@ -3,6 +3,7 @@ using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Randomness;
+using Arcanum.Simulation.Skills;
 
 namespace Arcanum.Session;
 
@@ -57,6 +58,7 @@ public sealed class SessionCritterCombat
     private readonly CharacterStatsOwner _stats;
     private readonly IReadOnlyDictionary<EquipmentSlot, EquipmentItem> _worn;
     private readonly IReadOnlyList<int> _basicSkills;
+    private readonly SessionSkills? _sheetSkills;
     private readonly int _baseArmorClass;
     private readonly DamageResistances _storedResistances;
     private readonly LightEmission _ownLight;
@@ -64,9 +66,9 @@ public sealed class SessionCritterCombat
 
     private SessionCritterCombat(string entity, CharacterStatsOwner stats, IReadOnlyDictionary<EquipmentSlot, EquipmentItem> worn,
         IReadOnlyList<int> basicSkills, int baseArmorClass, DamageResistances storedResistances, LightEmission ownLight, CombatantFlags flags,
-        LifeFacts facts, LifeState loaded, SessionNpcExperience experience, bool monstrous, int level)
+        LifeFacts facts, LifeState loaded, SessionNpcExperience experience, bool monstrous, int level, SessionSkills? sheetSkills = null)
     {
-        Entity = entity; _stats = stats; _worn = worn; _basicSkills = basicSkills; _baseArmorClass = baseArmorClass;
+        Entity = entity; _stats = stats; _worn = worn; _basicSkills = basicSkills; _sheetSkills = sheetSkills; _baseArmorClass = baseArmorClass;
         _storedResistances = storedResistances; _ownLight = ownLight; _flags = flags; Facts = facts; Loaded = loaded;
         Experience = experience; Monstrous = monstrous; Level = level;
         Target = SessionLifeTarget.Critter(entity, facts, loaded);
@@ -83,6 +85,12 @@ public sealed class SessionCritterCombat
     /// <summary>Mechanical, monster, animal or undead (the source's 0x45F730).</summary>
     public bool Monstrous { get; }
     public int Level { get; }
+
+    /// <summary>The same NPC defending with the dodge and backstab of the sheet the session levelled it to (ARC-SKILLS-002, a
+    /// follower's saved advancement record, read under the sheet's own stats as <see cref="GameSessionOwner.QueryNpcSkills"/>
+    /// reads it) and that sheet's level; its other values stay the map data's.</summary>
+    internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, _baseArmorClass,
+        _storedResistances, _ownLight, _flags, Facts, Loaded, Experience, Monstrous, sheet.Level, SessionSkills.Of(sheet, AdvancementModifiers.None));
 
     /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
@@ -210,10 +218,12 @@ public sealed class SessionCritterCombat
             Resistances = CombatantRules.Resistances(_storedResistances, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), Monstrous),
             Conditions = CombatantRules.Conditions(status, state, Facts.Traits, _flags),
             LightEmission = _ownLight,
-            DodgeLevel = SkillLevel(BasicCombatSkill.Dodge),
-            DodgeTraining = CombatSkillRules.Training(BasicCombatSkill.Dodge, _basicSkills[(int)BasicCombatSkill.Dodge], Monstrous, 0, Level),
-            BackstabLevel = SkillLevel(BasicCombatSkill.Backstab),
-            BackstabTraining = CombatSkillRules.Training(BasicCombatSkill.Backstab, _basicSkills[(int)BasicCombatSkill.Backstab], Monstrous, 0, Level),
+            DodgeLevel = _sheetSkills?[Skill.Dodge].Level ?? SkillLevel(BasicCombatSkill.Dodge),
+            DodgeTraining = _sheetSkills?[Skill.Dodge].Training
+                ?? CombatSkillRules.Training(BasicCombatSkill.Dodge, _basicSkills[(int)BasicCombatSkill.Dodge], Monstrous, 0, Level),
+            BackstabLevel = _sheetSkills?[Skill.Backstab].Level ?? SkillLevel(BasicCombatSkill.Backstab),
+            BackstabTraining = _sheetSkills?[Skill.Backstab].Training
+                ?? CombatSkillRules.Training(BasicCombatSkill.Backstab, _basicSkills[(int)BasicCombatSkill.Backstab], Monstrous, 0, Level),
         };
     }
 
@@ -266,8 +276,8 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// What the hero attacks with now (null without a hero): its <see cref="Combatant"/> from the character owner (stats under its
     /// poison and crippled legs), its level, the worn items (armour class, resistances, light, weapon), the difficulty-free values
-    /// and its life conditions. The hero has no skill state: a pre-made hero starts with none (the pre-made hero reader refuses a
-    /// prototype with skills), so every combat skill is level 0 with no training.
+    /// and its life conditions. Its skills are <see cref="QueryHeroSkills"/> (ARC-SKILLS-002): the level and training of the
+    /// weapon's skill (firearms a tech skill), dodge and backstab, and the weapon speed with the weapon skill's training.
     /// </summary>
     public SessionHeroAttack? QueryHeroAttack()
     {
@@ -278,8 +288,8 @@ public sealed partial class GameSessionOwner
         var status = LifeRules.Evaluate(state, facts);
         var snapshot = _hero.Stats.Query(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!;
         var aptitude = HeroAptitude();
-        var equipment = EquipmentRules.Evaluate(_equipment.Items(), aptitude, SkillTraining.None);
-        var dexterity = snapshot.GetEffective(CharacterStat.Dexterity);
+        var skills = HeroSkills();
+        var equipment = EquipmentRules.Evaluate(_equipment.Items(), aptitude, HeroWeaponTraining(skills));
         var combatant = new Combatant
         {
             IsPc = true,
@@ -294,18 +304,14 @@ public sealed partial class GameSessionOwner
             Resistances = CombatantRules.Resistances(DamageResistances.None, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), false),
             Conditions = CombatantRules.Conditions(status, state, facts.Traits, CombatantFlags.None),
             LightEmission = equipment.Light,
-            DodgeLevel = CombatSkillRules.Level(BasicCombatSkill.Dodge, 0, dexterity, false),
-            BackstabLevel = CombatSkillRules.Level(BasicCombatSkill.Backstab, 0, dexterity, false),
+            DodgeLevel = skills[Skill.Dodge].Level,
+            DodgeTraining = skills[Skill.Dodge].Training,
+            BackstabLevel = skills[Skill.Backstab].Level,
+            BackstabTraining = skills[Skill.Backstab].Training,
         };
-        var skillLevel = equipment.Skill switch
-        {
-            CombatSkill.Melee => CombatSkillRules.Level(BasicCombatSkill.Melee, 0, dexterity, false),
-            CombatSkill.Bow => CombatSkillRules.Level(BasicCombatSkill.Bow, 0, dexterity, false),
-            CombatSkill.Throwing => CombatSkillRules.Level(BasicCombatSkill.Throwing, 0, dexterity, false),
-            _ => 0,
-        };
+        var weaponSkill = skills[SkillRules.Of(equipment.Skill)];
         var range = equipment.Weapon.Kind == WeaponKind.Unarmed ? 1 : Math.Max(1, equipment.Weapon.Range);
-        return new(combatant, equipment.Weapon, equipment.Skill, skillLevel, SkillTraining.None, equipment.WeaponSpeed,
+        return new(combatant, equipment.Weapon, equipment.Skill, weaponSkill.Level, weaponSkill.Training, equipment.WeaponSpeed,
             snapshot.GetEffective(CharacterStat.Speed), range, equipment.Skill == CombatSkill.Melee);
     }
 
@@ -338,8 +344,10 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectAttack(GameSessionFailure.StaleVersion);
 
         var targetStatus = LifeRules.Evaluate(record.State, facts!);
+        // A follower the session levelled defends with its saved sheet's skills and level (ARC-SKILLS-002).
+        var defending = _advancement.Npcs.TryGetValue(target.Entity, out var levelled) ? target.WithSheet(levelled.Sheet) : target;
         Combatant defender;
-        try { defender = target.Combatant(targetStatus, record.State, _rules.Combat); }
+        try { defender = defending.Combatant(targetStatus, record.State, _rules.Combat); }
         catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
         var request = new AttackRequest
         {

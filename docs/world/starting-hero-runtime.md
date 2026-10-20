@@ -71,9 +71,10 @@ a pair of digit runs, at most 300 items. A buy line for the set with anything bu
 (eight primary, magick points, tech points), level, unspent points, alignment, the race and gender effects as
 `StatEffectDefinition` (only stats the character owner models; `null` when none), gold and the kit as item kinds. The
 host maps the reader's result (the mapping lives in the real-data test until the viewer is wired): effect changes on
-the 17 primary/derived stats and magick/tech points are kept; changes on skills, resistances, tech disciplines,
-special values, level, alignment, age, gender and race are not modelled and dropped (for the pre-made heroes: tech
-skills, prowling, dodge, melee, haggle, resistances, critical-hit chance, the bad-reaction adjustment and age, SH-09).
+the 17 primary/derived stats and magick/tech points are kept; since ARC-SKILLS-002 the changes on basic and tech skills are
+kept too, as the hero's innate skill changes (`InnateSkills`, [hero skills](hero-skills-runtime.md)); changes on resistances, tech disciplines,
+special values, level, alignment, age, gender and race are not modelled and dropped (for the pre-made heroes: resistances,
+critical-hit chance, the bad-reaction adjustment and age, SH-09).
 
 `Create` refuses (`InvalidHero`, before any component is built) a prototype below 1, an undefined race or gender, a
 stats list that is not ten values, a stored value outside the race's range (strict, as `SetBase`), level outside
