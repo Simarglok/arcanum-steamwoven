@@ -55,6 +55,10 @@ earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-sche
 
 - No skill page, point buying or training in play (tasks S5, S6, S16); dialog skill gates are S4; the shared skill check S3.
 - The leader check (HK1) and the wait timer (HK2) have no runtime, so the persuasion training reaches only the follow check.
+- A levelled follower defends with its sheet read without effects (its current stat effects and poison do not change its
+  dodge); the map path reads poison.
+- The character sheet's max followers is the character-stats value (charisma / 4 with effects), without the expert
+  persuasion bonus the follow check adds (AP4); the sheet does not read the session's value yet.
 - Backstab and ranged attacks of the hero are not modelled (the hero attacks in melee only), so their skills are read but
   unused; NPCs read map skills except a levelled follower's.
 
@@ -62,7 +66,8 @@ earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-sche
 
 - `tests/Arcanum.Session.Tests/HeroSkillsTests.cs`: levels, training and innate changes; attack, dodge and weapon speed; the
   best-items levels; the follow check with persuasion master and the expert follower bonus; the snapshot round trip and its
-  refusals; the creation scheme with an innate change; a levelled follower's skills.
+  refusals and the innate order; the creation scheme with an innate change; a durable effect's skill change; the hero's
+  effects on max followers; a levelled follower's skills and the dodge it defends with in the session's attack.
 - Opt-in `tests/Arcanum.TerrainViewer.Tests/AreaAdvancementOriginalTests.cs` (`DAT_ROOT`): every pre-made hero's skills (only
   levels and counts printed), and `StartingHeroTests` (`ARC_AREA_CONVERSATION_GAME_ROOT`): the half-elf's four tech skill
   changes are kept, only age is dropped.

@@ -217,10 +217,11 @@ public sealed class HeroSkillsTests
         var rules = SessionAutoLevelRules.Create(new Dictionary<int, AutoLevelScheme>
         {
             [67] = AutoLevelRules.Parse(Encoding.ASCII.GetBytes("dodge 8,")).Scheme!,
+            // The standard NPC rule, which runs after a completed NPC rule.
             [70] = AutoLevelRules.Parse(Encoding.ASCII.GetBytes("cn 9,")).Scheme!,
         }, AutoLevelRules.DefaultSpellWillpower);
         using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf(), Experience = ExperienceStateTests.Rules(), AutoLevel = rules }).Owner!;
-        var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(dexterity: 4), critterFlags: 0);
+        var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(dexterity: 4), critterFlags: 0, hpAdjustment: 5000);
         var map = SessionCritterCombat.From("follower", fields).Combat!;
         var follower = new SessionNpcAdvancement("follower", new(CharacterRace.Human, false, [8, 9, 8, 8, 8, 8, 8, 8], 0, 0, 1, 0,
             [.. new int[12]], [.. new int[4]], [.. new int[16]], [.. new int[8]], 0, 0, 0, 0), 67);
@@ -231,7 +232,15 @@ public sealed class HeroSkillsTests
         Assert.AreEqual(0, map.Combatant(LifeRules.Evaluate(state, map.Facts), state, owner.Rules.Combat).DodgeLevel, "the map data: no dodge");
         Assert.AreEqual((8, sheet.Level), (defending.Combatant(LifeRules.Evaluate(state, defending.Facts), state, owner.Rules.Combat).DodgeLevel, defending.Level),
             "the sheet's points under the sheet's dexterity 9, not the map's 4");
-        Assert.AreEqual(GameSessionFailure.None, owner.AttackCritter(owner.Version, new(map)).Failure, "the attack reads the record");
+        // The session's attack reads the record: the defender's dodge check has effectiveness 2 × 8, where the map data gives 0.
+        SkillCheck? dodge = null;
+        for (var attempt = 0; attempt < 400 && dodge is null; attempt++)
+        {
+            var result = owner.AttackCritter(owner.Version, new(map));
+            Assert.AreEqual(GameSessionFailure.None, result.Failure);
+            dodge = result.Resolution?.DodgeCheck;
+        }
+        Assert.AreEqual(16, dodge!.Effectiveness, "a hit within the bounded run meets the sheet's dodge");
     }
 
     [TestMethod]
