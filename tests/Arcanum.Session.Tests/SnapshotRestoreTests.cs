@@ -127,8 +127,11 @@ public sealed class SnapshotRestoreTests
         Fails("[]", SnapshotDecodeFailure.WrongType, "$");
         Fails(With("arcanum-steamwoven-session", "other-save"), SnapshotDecodeFailure.WrongFormat, "$.format");
         Fails(With("\"schemaVersion\":28,\"world\"", "\"schemaVersion\":29,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        // ARC-WORLD-045: schema 26 has no loyalty marks in its party records and is refused, not migrated.
-        Fails(With("\"schemaVersion\":28,\"world\"", "\"schemaVersion\":27,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        // ARC-SKILLS-005: schema 28 has no uses list in the durability section and is refused, not migrated.
+        Fails(With("\"schemaVersion\":29,\"world\"", "\"schemaVersion\":28,\"world\"").Replace(",\"uses\":[]", ""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With(",\"uses\":[]", ""), SnapshotDecodeFailure.MissingField, "$.durability.uses");
+        // ARC-WORLD-056: schema 27 has no known world-map areas in its story and is refused, not migrated.
+        Fails(With("\"schemaVersion\":29,\"world\"", "\"schemaVersion\":27,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         // ARC-WORLD-054: schema 25 has no fate fields of the hero (a heroless snapshot has the same structure) and is refused, not migrated.
         Fails(With("\"schemaVersion\":28,\"world\"", "\"schemaVersion\":25,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         // ARC-MAGIC-004: schema 24 has the same structure (a heroless snapshot without NPC records has no mastery) and is refused, not migrated.

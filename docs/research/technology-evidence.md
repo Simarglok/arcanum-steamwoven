@@ -40,8 +40,8 @@ Agreed through the coordinator on 2026-10-20:
   tech items, owned by the magic research; this document only says which tech items reach it.
 - The **skills** research owns the four technical skills, the Repair skill
   rule ([SK7](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)),
-  fate points (ARC-SKILLS-007) and the shared character-point spend and refund
-  path (ARC-SKILLS-005). Item durability (item hit points and the broken
+  fate points (built as ARC-WORLD-054) and the shared character-point spend and refund
+  path (built as ARC-WORLD-052). Item durability (item hit points and the broken
   state) is owned here and is the input of the Repair slice ARC-SKILLS-011.
 
 ## Vocabulary and evidence
@@ -617,7 +617,7 @@ this document start at F1 or F2.
    formula.
 2. **TECH-2 Degrees and expertise** (done: ARC-TECHNOLOGY-002, [runtime](../world/tech-degrees-runtime.md); Simulation, Session; FR-CHAR-017/020,
    FR-MAGIC-012 rules): degree get, raise and lower with the shared
-   spend/refund path of ARC-SKILLS-005, effective expertise through the
+   spend/refund path of ARC-WORLD-052, effective expertise through the
    durable-effects owner (expertise effects become live), the intelligence
    guard on a base decrease, and the level-start snapshot for selling (TC10
    decided). Reuses the auto-level degree rules; no schema change if the
@@ -664,7 +664,7 @@ area damage to items join when those owners exist.
 
 Order and dependencies: TECH-1 → TECH-2 → TECH-3 → durability → TECH-4 →
 TECH-5; TECH-6 after the magic engine's payment step and the shared item
-trigger slice. TECH-2 needs ARC-SKILLS-005 (spend/refund); TECH-4 needs the
+trigger slice. TECH-2 needs ARC-WORLD-052 (spend/refund); TECH-4 needs the
 inventory owner and durability (the broken skip); TECH-3 needs a written-item read path
 (FR-ITEM-010); TECH-5 needs the dialog port for `su`, and the NPC crafter path
 needs NPC degrees and inventories from map instances (O5).

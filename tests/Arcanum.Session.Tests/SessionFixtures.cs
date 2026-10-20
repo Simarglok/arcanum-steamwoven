@@ -101,7 +101,7 @@ internal static class SessionFixtures
     internal const string NoSound = ",\"sound\":{\"slots\":[0,0],\"restorePending\":false,\"restore\":[0,0],\"combatMusic\":false,\"preCombat\":[0,0]}";
     internal const string NoEquipment = ",\"equipment\":[]";
     internal const string NoSchematics = ",\"schematics\":{\"found\":[]}";
-    internal const string NoDurability = ",\"durability\":{\"items\":[],\"destroyed\":[]}";
+    internal const string NoDurability = ",\"durability\":{\"items\":[],\"destroyed\":[],\"uses\":[]}";
     internal const string NoEffects = ",\"effects\":{\"hero\":[],\"definitions\":[],\"blessings\":[],\"curses\":[]}";
     internal const string NoExperience = ",\"experience\":{\"npcs\":[]}";
     internal const string NoAdvancement = ",\"advancement\":{\"npcs\":[]}";

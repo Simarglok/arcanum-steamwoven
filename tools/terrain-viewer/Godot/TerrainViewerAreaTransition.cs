@@ -56,6 +56,7 @@ public partial class TerrainViewerApp
             return;
         }
         _areaEffectRules = result.Hero?.Effects;
+        _areaKitHealing = result.Hero?.KitHealing;
         if (carried is not null) _areaSession = carried;
         else
         {

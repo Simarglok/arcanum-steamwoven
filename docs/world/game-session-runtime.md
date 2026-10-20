@@ -3,7 +3,7 @@
 Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
 inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019; life state ARC-COMBAT-002;
 event queue ARC-WORLD-024; NPC reaction ARC-WORLD-026; turn-based round ARC-COMBAT-003; equipment ARC-WORLD-028;
-durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20); the hero's skills in play ARC-SKILLS-002 (schema 21); item durability ARC-WORLD-053 (schema 22); schematic knowledge ARC-TECHNOLOGY-003 (schema 23); made items ARC-TECHNOLOGY-004 (schema 24); the spell book's mastered college ARC-MAGIC-004 (schema 25); the hero's fate points ARC-WORLD-054 (schema 26, [fate points](fate-points-runtime.md)); the wait timer and follower loyalty ARC-WORLD-045 (schema 27, [party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045)); the PC's known world-map areas ARC-WORLD-056 (schema 28, [world-map travel](world-map-travel-runtime.md#session-gamesessionowner-gamesessionareascs)). The character editor's point pool ARC-WORLD-052 ([character point pool](character-point-pool.md)) adds no saved state: its floor lives only while the editor is open.
+durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20); the hero's skills in play ARC-SKILLS-002 (schema 21); item durability ARC-WORLD-053 (schema 22); schematic knowledge ARC-TECHNOLOGY-003 (schema 23); made items ARC-TECHNOLOGY-004 (schema 24); the spell book's mastered college ARC-MAGIC-004 (schema 25); the hero's fate points ARC-WORLD-054 (schema 26, [fate points](fate-points-runtime.md)); the wait timer and follower loyalty ARC-WORLD-045 (schema 27, [party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045)); the PC's known world-map areas ARC-WORLD-056 (schema 28, [world-map travel](world-map-travel-runtime.md#session-gamesessionowner-gamesessionareascs)); healing with a healing item ARC-SKILLS-005 (schema 29, the items' remaining uses, [heal runtime](heal-runtime.md)). The character editor's point pool ARC-WORLD-052 ([character point pool](character-point-pool.md)) adds no saved state: its floor lives only while the editor is open.
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
@@ -169,7 +169,7 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 `Hero` (the player character or `null`; [starting hero runtime](starting-hero-runtime.md#snapshot-schema-6); its fate points and armed fates, [fate points](fate-points-runtime.md#snapshot-schema-26)),
 `Inventory` (the PC's gold, the starting kit and the taken items in list order; [inventory runtime](inventory-runtime.md#snapshot-schema-5)),
 `Equipment` (the hero's worn items in slot order; [equipment](equipment-runtime.md#snapshot-schema-12)),
-`Durability` (the changed items' conditions and the deleted items, each in ordinal order; [item durability](item-durability-runtime.md#snapshot-schema-22)),
+`Durability` (the changed items' conditions, the deleted items and the spent items' remaining uses, each in ordinal order; [item durability](item-durability-runtime.md#snapshot-schema-22)),
 `Schematics` (the hero's found schematics in registration order; [schematic knowledge](schematic-knowledge-runtime.md#session)),
 `Effects` (the hero's durable entries in list order and the rule of each number; [durable effects](durable-effects-runtime.md#snapshot-schema-13)),
 `Experience` (the changed NPCs' experience worth and pool in ordinal order; the hero's experience is in `Hero`; [experience](experience-runtime.md#snapshot-schema-14)),
@@ -242,7 +242,8 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 28 is the only accepted version. ARC-WORLD-056 added the story's required
+**Migration decision: none.** Schema 29 is the only accepted version. ARC-SKILLS-005 added the required `uses` list to
+`durability` ([heal runtime](heal-runtime.md#snapshot-schema-29)); schema 28 is refused like the earlier ones. ARC-WORLD-056 added the story's required
 `knownAreas` and `lastArea` ([world-map travel](world-map-travel-runtime.md#session-gamesessionowner-gamesessionareascs)); schema 27 is refused like the
 earlier ones. ARC-WORLD-045 had added the required `loyalty` field to
 every party record ([party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045)); schema 26 is refused like the
@@ -302,7 +303,7 @@ schema 21 and refuses schema 20. ARC-WORLD-053 added item durability as schema 2
 schema 23 and refuses schemas 1..22. ARC-TECHNOLOGY-004 added the made items as schema 24 and refuses schemas 1..23. ARC-MAGIC-004 added the mastered college of
 the hero and the NPC advancement records as schema 25 and refuses schemas 1..24. ARC-WORLD-054 added the hero's fate points as
 schema 26 and refuses schemas 1..25. ARC-WORLD-045 added the party records' loyalty marks as schema 27 and refuses schemas 1..26. ARC-WORLD-056 added the PC's
-known world-map areas and last discovered area as schema 28 and refuses schemas 1..27.
+known world-map areas and last discovered area as schema 28 and refuses schemas 1..27. ARC-SKILLS-005 added the items' remaining uses as schema 29 and refuses schemas 1..28.
 Adding another domain needs the next free schema number with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)

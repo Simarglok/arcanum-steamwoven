@@ -200,6 +200,8 @@ public enum GameSessionFailure
     FateUnavailable, InvalidFateKind, FateRefused,
     // World-map areas (ARC-WORLD-056).
     InvalidArea,
+    // Heal with a healing item (ARC-SKILLS-005).
+    HealUnavailable, InvalidHealingItem,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -337,8 +339,9 @@ public sealed class GameSessionSnapshot
     /// schema 23 adds <see cref="Schematics"/> (ARC-TECHNOLOGY-003); schema 24 adds the made items to <see cref="Inventory"/>
     /// (ARC-TECHNOLOGY-004); schema 25 adds the mastered college of the hero and of the NPC advancement sheets (ARC-MAGIC-004);
     /// schema 26 adds the hero's fate points and armed fates (ARC-WORLD-054); schema 27 adds each party record's loyalty marks
-    /// (ARC-WORLD-045); schema 28 adds the PC's known world-map areas and last discovered area to the story (ARC-WORLD-056).
-    /// Schemas 1..27 are refused, not migrated.</summary>
+    /// (ARC-WORLD-045); schema 28 adds the PC's known world-map areas and last discovered area to the story (ARC-WORLD-056);
+    /// schema 29 adds the items' remaining uses to <see cref="Durability"/> (ARC-SKILLS-005). Schemas 1..28 are refused, not
+    /// migrated.</summary>
     public const int CurrentSchemaVersion = 28;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
