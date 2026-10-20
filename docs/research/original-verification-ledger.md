@@ -1188,7 +1188,7 @@ executable's: object flags 19, portal flags 46, lock difficulty 47, key 48; cont
 Source: [companion orders and loyalty](companion-orders-loyalty-evidence.md) (questions Q1–Q7), re-reading the F0 rows C11–C14
 and C16, O4 and O7 of the [companion study](companion-follow-evidence.md#open-questions), XP5's message and waiting followers
 and SCR action 139. Read on 2026-10-21 by a first reader and, independently, a second reader that saw only the questions
-(method step 6). Both agree on every behaviour and verdict. The second reader added that the PC's own text is floated over the PC first, that the curse line is a race insult of the generated race-line files and that the multiplayer phase scans players within a screen-sized rectangle; it first read keyword 116 ("stop") as having no rule entry, which the installed `Rules\BroadCastRules.mes` does have (back off), a data-reading difference, not a code one. Every direct branch stays inside `.text`. Message numbers are of the installed files
+(method step 6). After resolving one data-reading difference (below), both agree on every behaviour and verdict. The second reader added that the PC's own text is floated over the PC first, that the curse line is a race insult of the generated race-line files and that the multiplayer phase scans players within a screen-sized rectangle; it first read keyword 116 ("stop") as having no rule entry, which the installed `Rules\BroadCastRules.mes` does have (back off), a data-reading difference, not a code one. Every direct branch stays inside `.text`. Message numbers are of the installed files
 named in the study; no game text is copied.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
@@ -1212,7 +1212,7 @@ named in the study; no game text is copied.
 | OL20 | 0x4AC380, 0x45DFC0, 0x413A90 | Refused check (limit ignored) → unforced leave; if it left: jilted, then the reason's refusal line (1600–2999 by reason); a refused leave falls through to check leader. | Original (C13) |
 | OL21 | 0x4ADB50, 0x414290 | Check leader clears the three bits; no warning when mind controlled by the leader, Persuasion Master, or forced; reaction ≤ field 5 + 20 → 3; alignment gap > field 6 − 100 (too good) → 1 or > field 7 − 100 (too bad) → 2; warning lines 5200–5499; never leaves. | Original (C13) |
 | OL22 | 0x4AA990, 0x4C0DE0 | Bits armed just before the leader is cleared stay until the NPC follows again (one stale test). | Original (latent) |
-| OL23 | 0x4AA7A0, table 0x5B5088 | Game-time kind 17 naming the NPC; 0, 15 min, 2 h, 1 d, 7 d, 30 d by wait index, +1 with any leader Persuasion training, ≥ 6 none; index 0 fires at the next ping. | Original (with row Wait timer) |
+| OL23 | 0x4AA7A0, table 0x5B5088 | Game-time kind 17 naming the NPC; 0, 15 min, 2 h, 1 d, 7 d, 30 d by wait index, +1 with any leader Persuasion training before the cut (index 5 then has none), ≥ 6 none; index 0 fires at the next ping. | Original (with row Wait timer) |
 | OL24 | 0x4AA990, 0x4B0FD0 | Expiry: no leader → nothing; wait off and jilted; reaction `2 × (leader charisma − 20)` (R2 rules); leader cleared; no line. | Original (C12) |
 | OL25 | 0x4AA8C0, 0x4AAA30, 0x45BFF0 | Any successful unwait cancels the event: dialog `UW`, leave, join, kill notification (forced), forced disband on object destruction (0x45E180). | Original (C11) |
 | OL26 | 0x45BCE0, 0x45C2F0, 0x45C580 | The event stays with the waiting NPC's map, parked while the PC is away, fires at the first ping after the return when overdue. | Original (with OQ3) |
@@ -1222,7 +1222,6 @@ named in the study; no game text is copied.
 | OL30 | 0x44ABC8, 0x44B4E0, 0x44BA70, 0x4A6D90 | Action 139: object operand (a list) and a number; each PC or NPC gets field 245 written, no range check, no purchase until its next level step. | Original |
 | OL31 | 0x4064B0, 0x410C50, 0x406520, 0x40BDB0, 0x40BE70, 0x40BFC0, 0x4E50E0 | Handles saved as IDs; a map open converts every marked object's handle fields and array elements back among loaded objects; not found → null (in place). | Original (answers O7) |
 | OL32–OL33 | as OL31, 0x4D3460 | A waiting follower on another map keeps its leader as an ID and rebinds when its map opens; a follower carried to another map is that map's object from then on. | Original (O7; OL33 partly inference) |
-
 
 ## Decisions to revisit
 

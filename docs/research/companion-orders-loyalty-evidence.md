@@ -54,8 +54,8 @@ Original setting). The rows are also in the
 
 ## Answer
 
-- **Q1 Orders.** All orders are text handled by one broadcast function. F1–F6
-  send six preset texts to every direct follower within 10 tiles; the portrait
+- **Q1 Orders.** All orders are text handled by one broadcast function. F1–F5
+  send preset texts to every direct follower within 10 tiles; the portrait
   menu sends "name + order" to one follower; the player can also type an order
   after Enter. Leave, wait, follow, move, stay close, spread out and walk here
   are the out-of-combat orders: leave is a forced leave, wait is the ordinary
@@ -63,7 +63,7 @@ Original setting). The rows are also in the
   switch the follow distances, walk here runs to the chosen tile. **Follow
   changes nothing** (OL6), **F6 reaches nobody** (OL14) and **back off is "stop
   attacking"**, not a movement (OL10). Every answer is a random line of the
-  generated NPC line files by gender. A waiting follower is outside the
+  generated NPC line files by gender, unless the follower's own dialog supplies one. A waiting follower is outside the
   follower array and has no portrait, so no order reaches it.
 - **Q2 Loyalty.** Negative reaction changes and the PC's alignment changes arm
   three tests on each direct follower. The loyalty step runs in the follower's
@@ -75,8 +75,8 @@ Original setting). The rows are also in the
   armed check-leader test only floats a warning line.
 - **Q3 Wait timeout.** The expiry handler drops waiting, sets jilted, changes the
   NPC's reaction to its leader by `2 × (leader's charisma − 20)` and clears the
-  leader; no line, nothing else. Unwait, leave, join, death and a script follow
-  cancel it. The event stays with the waiting NPC's map: away from it, it is
+  leader; no line, nothing else. An unwait (dialog `UW`, leave, join, death,
+  destruction of the NPC) cancels it. The event stays with the waiting NPC's map: away from it, it is
   parked and fires at the first ping after the PC returns.
 - **Q4 Level-up message.** For each level the PC reaches, an entry in the
   in-game message window: a "Level Up" title, the new level, and the unspent
@@ -117,7 +117,7 @@ the follower's spell flag 0x8000000.
 | OL8 | stay close, spread out | Acknowledgement; clear or set the follower's spread flag (NPC flag 0x10), which selects the follow distances 4/2 or 7/5 (C7, C8). Setting it (when it was clear) also starts an "attempt spread out" goal (69) relative to the leader. | 0x4C3673, 0x4C36BB, 0x45F5C0, 0x45F600, 0x436960 | Original |
 | OL9 | walk here | Needs a tile (F1: the tile under the pointer; portrait walk: the picked tile). Acknowledgement, then a run-to-tile goal (4) to that tile; a run-to-tile goal already running gets the new tile. The follower keeps its leader; at its next non-combat pass the follow request does not replace the running goal, so it reaches the tile and then follows again once the leader is beyond 4 (7) tiles **(inference from OL19)**. | 0x4C37E2, 0x433C80 | Original |
 | OL10 | back off, stop | Acknowledgement, then "stop attacking" (ledger HS18): peace with its focus, combat mode left and, for a follower with a PC leader, the no-attack flag. **No movement.** The menu label and F5 are this order. | 0x4C3849, 0x4AA4A0 | Original (combat side: A7) |
-| OL11 | curse, attack | Boundary only (stage A7). Curse: mind controlled → nothing; otherwise an unforced leave and, when it left, a race insult from the generated race-line files (0x413D40) and the attacked-by-the-PC reaction (0x4A9650). Attack: the target is the object of the UI's target cursor; out of combat mode a target in the PC's own party is refused; the no-attack flag is cleared (0x4AA580) and an attack is requested (0x4A9650). | 0x4C3703, 0x4C377D, target 0x43C570 | Not settled here (A7) |
+| OL11 | curse, attack | Boundary only (stage A7). Curse: mind controlled → nothing; otherwise an unforced leave and, when it left, a race insult from the generated race-line files (0x413D40) and the attacked-by-the-PC reaction (0x4A9650). Attack: the target is the object of the UI's target cursor; out of combat mode a target in the PC's own party is refused; the no-attack flag is cleared (0x4AA580) and an attack is requested (0x4A9650). | 0x4C3703, 0x4C377D, target 0x43C570 | Not checked here (A7) |
 
 ### Lines, presets and addressing
 
@@ -149,7 +149,7 @@ and stays with stage A7.
 
 | ID | Fact | Address | Verdict |
 | --- | --- | --- | --- |
-| OL23 | Scheduling (re-read with the ledger's row Wait timer): a game-time event of kind 17 naming the NPC, only when the leader's charisma is below 20 and the NPC is not mind controlled. Duration by the NPC's wait field: 0, 15 min, 2 h, 1 day, 7 days, 30 days for 0..5; any Persuasion training of the leader adds one step; 6 or more: no event. Index 0 is a zero delay, which the queue stores as 1 ms (event queue Q2): such a follower jilts at the next ping. The leader is re-read when the event fires. | wait 0x4AA7A0, table 0x5B5088, add 0x45B800 | Original |
+| OL23 | Scheduling (re-read with the ledger's row Wait timer): a game-time event of kind 17 naming the NPC, only when the leader's charisma is below 20 and the NPC is not mind controlled. Duration by the NPC's wait field: 0, 15 min, 2 h, 1 day, 7 days, 30 days for 0..5; any Persuasion training of the leader adds one step before the cut, so index 0 becomes 15 min and index 5 no timer; 6 or more: no event. Index 0 is a zero delay, which the queue stores as 1 ms (event queue Q2): such a follower jilts at the next ping. The leader is re-read when the event fires. | wait 0x4AA7A0, table 0x5B5088, add 0x45B800 | Original |
 | OL24 | Expiry: a network client does nothing; without a leader nothing; otherwise one write clears waiting and sets jilted, then the reaction change `2 × (leader's effective charisma − its maximum 20)` (no race has another charisma maximum, 0x4B0FD0) through the reaction change rules (R2: zero does nothing; for a leader that is not a PC nothing), then the leader is cleared. No line, no animation, no script; the NPC is in no follower array. | 0x4AA990, 0x4B0FD0, 0x4C0DE0 | Original |
 | OL25 | Cancel: every unwait that succeeds removes the NPC's pending events of this kind (predicate 0x4AAA30). Unwait runs on dialog `UW`, leave (with the leave's force), join (which leaves first), the kill notification (forced, 0x4AA1B0) and the forced disband when the object is destroyed (0x45E180, called from object destruction 0x43CCA0); the follow order's unwait never reaches a waiting NPC (OL6). An unforced unwait that the follow check refuses keeps waiting and keeps the event. | 0x4AA8C0, 0x45BFF0, 0x45DFC0, 0x45DE90 | Original |
 | OL26 | Maps: the event names only the NPC, which stays on its map. When the PC leaves, the event is parked in that map's file with it; when the map opens again it is loaded and, if overdue, fires at the first ping (ledger OQ3, event queue P4, P5). A timeout that elapsed while the PC was away therefore jilts the NPC as the PC returns. | 0x4AA990; map close 0x45BCE0, park 0x45C2F0, open 0x45C580 | Original |
@@ -158,8 +158,8 @@ and stays with stage A7.
 
 | ID | Fact | Address | Verdict |
 | --- | --- | --- | --- |
-| OL27 | For each level written in the normal branch of the recalculation, and only when the PC is the local player's: one entry (type 0) in the in-game message window, a history of ten. It is drawn as message 21 of `mes\intgame.mes` (the "Level Up" title), message 11 with the new level, then either message 12 with the unspent points or, for a PC with an auto-level scheme, the scheme's text: message 2 of `mes\level.mes` followed by what was bought or message 3 when nothing, message 4 for a scheme without a rule, and a space plus message 1 when the rule completed. Drawing it plays sound 3005 (audio SN31). Three more interface callbacks follow (button state and two refreshes, not traced). The last-level branch (level 51 not reached) shows nothing; a follower's level step (0x4A6CB0) runs its scheme with no text. | 0x4A69C0, 0x460630 → 0x550750 → 0x552770, draw 0x5529C0, sound 0x41B780, scheme text 0x4A7030 | Original (XP5) |
-| OL28 | The points shown are the stored unspent points plus this level's points, computed before the setter clamps unspent points to 56 (XP2): with more than 54 unspent points the line names points the PC does not have. | 0x4A6A90–0x4A6AC4 | Original bug (cosmetic) |
+| OL27 | For each level written in the normal branch of the recalculation, and only when the PC is the local player's: one entry (type 0) in the in-game message window, a history of ten. It is drawn as message 21 of `mes\intgame.mes` (the "Level Up" title), message 11 with the new level, then either message 12 with the unspent points or, for a PC with an auto-level scheme, the scheme's text: message 2 of `mes\level.mes` followed by what was bought or message 3 when nothing, message 4 for a scheme without a rule, and a space plus message 1 when the rule completed. Drawing it plays sound 3005 (audio SN31). Three more interface callbacks follow (button state and two refreshes, not traced). The last-level branch (the step that would reach level 51, which writes level 50's threshold instead, XP5) shows nothing; a follower's level step (0x4A6CB0) runs its scheme with no text. | 0x4A69C0, 0x460630 → 0x550750 → 0x552770, draw 0x5529C0, sound 0x41B780, scheme text 0x4A7030 | Original (XP5) |
+| OL28 | The points shown are the stored unspent points plus this level's points, computed before the setter clamps unspent points to 56 (XP2): when the sum passes 56 (more than 55 unspent points before a 1-point level, more than 54 before a 2-point one) the line names points the PC does not have. | 0x4A6A90–0x4A6AC4 | Original bug (cosmetic) |
 
 ## 5. Waiting followers and the level step (Q5, XP5, XP7)
 
