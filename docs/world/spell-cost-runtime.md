@@ -51,16 +51,15 @@ two functions differ there; the rules take a payer, the null case is the caller'
 to write and the "last cost" the original keeps for reflection (MG15, slice MT10). The steps in the original's order:
 
 1. A spell number outside 0..222 that is not 10000 (no record) is refused (`SpellOutOfRange`).
-2. **Charge cells first and alone**: a record with `ChargesFromCells:` asks the cell source port (`ISpellCellSource`,
-   filled by the technology lane: a critter pays `cost` cells, an item source its surcharge, TC1) and pays nothing else;
-   the source refusing is `CellsRefused`. The original spends cells **whether or not the payment is applied** (the
-   affordability checks spend them too); the request carries the apply flag for the source. A cost of 0 or less, or no
-   payer, asks nothing (step 3 comes first).
-3. A cost of 0 or less pays nothing (no last cost); no payer pays nothing (the last cost is kept).
+2. A cost of 0 or less pays nothing (no last cost); no payer pays nothing (the last cost is kept).
+3. **Charge cells first and alone**: a record with `ChargesFromCells:` asks the cell source port (`ISpellCellSource`,
+   filled by the technology lane: a critter pays `cost` cells, an item source its surcharge, TC1) before any other
+   payment step and pays nothing else; the source refusing is `CellsRefused`. The original spends cells **whether or not
+   the payment is applied** (the affordability checks spend them too); the request carries the apply flag for the source.
 4. **An item source** (object types 5..14) spends one spell charge when applied: 0 charges refuse (`NoCharges`), a negative
    store never runs out; a positive store marks the item magical even when not applied.
 5. **A critter**: a fatigue-limiting critter pays half (toward zero, at least 1). The items worn in the nine slots pay
-   from their mana stores first, slot by slot (a store covering the rest keeps the difference; a smaller one is emptied);
+   from their mana stores first, slot by slot (a store covering the rest keeps the difference; a smaller one is emptied; a negative one is emptied and adds to the rest);
    when applied, each slot with a store gets a drain in the plan, also one of 0 after the cost is covered, as the original
    writes it and schedules its recharge; an emptied store is reported (the original notifies the AI). The rest is
    fatigue: refused when `current fatigue − rest ≤ −15` (`FatigueRefused`) — **the stores are drained all the same**

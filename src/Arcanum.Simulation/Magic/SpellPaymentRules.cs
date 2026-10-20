@@ -20,8 +20,8 @@ public enum SpellPaymentStatus
     CellsRefused,
     /// <summary>Fatigue would fall to −15 or lower; nothing but the worn mana stores was paid (MG20).</summary>
     FatigueRefused,
-    /// <summary>The new fatigue damage is 0 or less (it cannot be: a positive amount is added to the stored damage), which the
-    /// original's fatigue setter reports as a failure; a project guard for inconsistent inputs.</summary>
+    /// <summary>The new fatigue damage is 0 or less (reachable only from a negative stored damage): the original's setter writes
+    /// it clamped to 0 and reports a failure; the plan brings the damage to 0.</summary>
     FatigueNotSet,
     /// <summary>Paid, but the record is maintained or has no duration and fatigue is now below 0: the cast fails after paying.</summary>
     FailedAfterPay,
@@ -81,8 +81,8 @@ public sealed record SpellPayment(SpellPaymentStatus Status, int? LastCost, IRea
 /// cost and payment"). A pure plan: it says what to take and write; the host applies it (fatigue through the life state,
 /// stores and charges as item fields, the recharge event of each drain). The steps, in the original's order:
 /// <list type="number">
-/// <item>a record with <c>ChargesFromCells:</c> pays charge cells and nothing else (the cell source, first);</item>
 /// <item>a cost of 0 or less, or no payer, pays nothing;</item>
+/// <item>a record with <c>ChargesFromCells:</c> pays charge cells and nothing else (the cell source, before every other step);</item>
 /// <item>a critter: a fatigue-limiting one pays half (at least 1); the worn mana stores pay first, slot by slot; the rest is
 /// fatigue, refused when fatigue would fall to −15 or lower (the stores are drained all the same when applying, MG20); when
 /// applying, the fatigue damage is added, and a maintained or untimed record fails after paying when fatigue is now below 0;</item>
