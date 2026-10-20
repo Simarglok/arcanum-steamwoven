@@ -36,6 +36,7 @@ public sealed record DialogConversationRequest(
 /// <paramref name="Rumors"/> (ARC-UI-008) takes RQ; without it RQ is a static frontier.
 /// <paramref name="Skills"/> (ARC-SKILLS-004) admits the skill gates PS, HA, SK and TR and the actions TR and ET; without it
 /// they stay unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>).
+/// <paramref name="MetBefore"/> (ARC-WORLD-043) answers the ME condition; without it ME is a static frontier.
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
@@ -45,7 +46,8 @@ public sealed record DialogConversationPorts(
     IDialogPartyPort? Party = null,
     IDialogInventoryPort? Inventory = null,
     IDialogRumorPort? Rumors = null,
-    IDialogSkillPort? Skills = null);
+    IDialogSkillPort? Skills = null,
+    IDialogMetBeforePort? MetBefore = null);
 
 public enum DialogReactionMode
 {
@@ -162,6 +164,16 @@ public interface IDialogRumorPort
     DialogCommandResult Execute(QuellRumorCommand command);
 }
 
+/// <summary>
+/// "Met before" seam (ARC-WORLD-043): the ME condition. True when the NPC remembers the PC from an earlier conversation or
+/// reaction change; the original excludes the conversation in progress, so it is still false during the first talk
+/// (0x4C0C40). Calls are synchronous and serialized by the host; a thrown exception fails the conversation.
+/// </summary>
+public interface IDialogMetBeforePort
+{
+    bool MetBefore(DialogReactionQuery query);
+}
+
 public sealed class DialogConversationOptions
 {
     public const int HardMaxStructuralReplies = 64;
@@ -262,6 +274,9 @@ public enum DialogEndKind
     NpcFinalLine,
     /// <summary>The host closed an awaiting dialog without choosing a reply. No SCR continuation is implied.</summary>
     ClosedByHost,
+    /// <summary>ARC-WORLD-043: an insult (a Player <c>i:</c> reply) left the NPC's reaction at 20 or below, so the NPC
+    /// answered with a generated line (not loaded) and ended the talk, as after FL: no SCR continuation follows.</summary>
+    Insulted,
 }
 
 public sealed record DialogConversationEnd(DialogEndKind Kind, DialogScriptLine? ScriptLine);

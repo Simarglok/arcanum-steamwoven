@@ -228,8 +228,14 @@ public static class AutoLevelRules
     public static int SpellMinimumLevel(int spell) => spell is >= 0 and < Spells ? SpellMinimumLevels[spell % 5]
         : throw new ArgumentOutOfRangeException(nameof(spell));
 
-    /// <summary>The intelligence a tech degree needs: 0, 5, 8, 11, 13, 15, 17, 19.</summary>
+    /// <summary>The intelligence a tech degree needs (0x4B0110): 0, 5, 8, 11, 13, 15, 17, 19.</summary>
+    [OriginalFunction(0x4B0110, OriginalFunctionScope.Full)]
     public static int DegreeMinimumIntelligence(int degree) => degree is >= 0 and <= MaxDegree ? DegreeIntelligence[degree]
+        : throw new ArgumentOutOfRangeException(nameof(degree));
+
+    /// <summary>The tech points a degree costs (0x4B00A0): 0 for degree 0, 1 for each of 1..7.</summary>
+    [OriginalFunction(0x4B00A0, OriginalFunctionScope.Full)]
+    public static int DegreeCost(int degree) => degree is >= 0 and <= MaxDegree ? DegreeCosts[degree]
         : throw new ArgumentOutOfRangeException(nameof(degree));
 
     // One rule (0x4A7340): each step buys until its target; running out of points ends the rule, not completed;
@@ -603,6 +609,17 @@ public static class AutoLevelRules
             TechPoints = Math.Clamp(TechPoints + DegreeCosts[degree + 1], 0, MaxPointStat);
             Degrees[discipline] = degree + 1;
             return degree + 1;
+        }
+
+        // 0x4AFFF0: a degree above 0 falls by one and the tech points by its cost; no intelligence check.
+        [OriginalFunction(0x4AFFF0, OriginalFunctionScope.Full)]
+        internal int LowerDegree(int discipline)
+        {
+            var degree = Degrees[discipline];
+            if (degree == 0) return degree;
+            TechPoints = Math.Clamp(TechPoints - DegreeCosts[degree], 0, MaxPointStat);
+            Degrees[discipline] = degree - 1;
+            return degree - 1;
         }
 
         internal int MaxHitPoints() => LifeRules.MaxHitPoints(Facts(), _modifiers.PoisonLevel);

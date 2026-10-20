@@ -125,6 +125,8 @@ public static partial class TerrainViewerSelfTest
             }
             await ScreenshotAsync(host, "original-end");
             GD.Print($"ARC-SCRIPT-005 original phase={conversation.Phase} end={conversation.End?.Kind} line={conversation.End?.ScriptLine?.Value} turns={conversation.Turn} effects={conversation.Effects.Count} gameplay parity NOT_VERIFIED");
+            // ARC-WORLD-043: the talk's end closes the NPC's reaction conversation before the script resumes.
+            Require(conversations.EndReaction(), "the started conversation opened the reaction slot");
             // ARC-SCRIPT-009: the DLG's return resumes the dialog script through the dispatcher.
             if (conversation.End?.ScriptLine is { } line)
             {

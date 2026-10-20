@@ -78,7 +78,7 @@ public partial class TerrainViewerApp
                 var offered = conversation is { Phase: DialogConversationPhase.AwaitingSelection };
                 var status = conversation is null ? _conversationPanel.OutcomeForSelfTest : "Started";
                 // A start the content or the source refused is a regression of the wiring, not a gap of the dialog runtime.
-                Require(conversation is not null || !(status.Contains(nameof(AreaConversationStartStatus.ContentUnavailable)) || status.Contains(nameof(AreaConversationStartStatus.EntryError))
+                Require(conversation is not null || !(status.Contains(nameof(AreaConversationStartStatus.ContentUnavailable)) || status.Contains(nameof(AreaConversationStartStatus.EntryError)) || status.Contains(nameof(AreaConversationStartStatus.ReactionRejected))
                     || status.Contains(nameof(AreaConversationStartStatus.SourceChanged))), $"script {speaker.ScriptId}: {status}");
                 // ARC-UI-043: the first NPC line's voice plays on the voice channel when the module has its file.
                 var played = _voicesPlayed;
@@ -103,8 +103,12 @@ public partial class TerrainViewerApp
                 // Close; a dialog script that opens the next conversation is closed again.
                 for (var close = 0; close < 4 && ConversationOpen; close++) _conversationPanel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 Require(!ConversationOpen && !WorldModal, "Close ends the modal panel");
+                // ARC-WORLD-043: every close ends the NPC's reaction conversation, so a started talk leaves it remembering the PC.
+                Require(host.ReactionOpen is null, $"script {speaker.ScriptId}: Close ends the NPC's reaction conversation");
+                var metBefore = session.QueryReactionRecord(AreaConversationState.EntityId(speaker.Row)) is { MetBefore: true, InConversation: false };
+                Require(conversation is null || metBefore, $"script {speaker.ScriptId}: the ended talk is remembered");
                 var record = new { speaker.ScriptId, Prototype = speaker.Row.PrototypeNumber, Walked = walked, WalkStopped = walkStopped, Hover = hover.ToString(), Frames = frames,
-                    Status = status, Offered = offered, Phase = phase, Frontier = conversation?.Frontier is { } f ? $"{f.Kind} {f.Source}" : null, Turns = turns, Effects = effects, SessionChanges = session.Version.Revision - revision, Voice = voice, VoicesPlayed = _voicesPlayed - played };
+                    Status = status, Offered = offered, Phase = phase, Frontier = conversation?.Frontier is { } f ? $"{f.Kind} {f.Source}" : null, Turns = turns, Effects = effects, SessionChanges = session.Version.Revision - revision, MetBefore = metBefore, Voice = voice, VoicesPlayed = _voicesPlayed - played };
                 tried.Add(record); opens++;
                 if (offered) { passed = record; break; }
                 started ??= conversation is not null ? record : null;

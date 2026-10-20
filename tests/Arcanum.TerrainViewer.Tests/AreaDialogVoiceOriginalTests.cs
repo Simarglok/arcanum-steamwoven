@@ -54,15 +54,18 @@ public sealed class AreaDialogVoiceOriginalTests
                             if (sounds.ResolveSpeech(identity, SpeechGender.Female).Status == SpeechStatus.Found) female++;
                         }
                     }
-                    if (conversation.Phase != DialogConversationPhase.AwaitingSelection || conversation.Options.FirstOrDefault(o => o.Block is null) is not { } option) break;
+                    // An insult (ARC-WORLD-043) is a deliberate choice the walk does not make.
+                    if (conversation.Phase != DialogConversationPhase.AwaitingSelection
+                        || conversation.Options.FirstOrDefault(o => o.Block is null && o.Marker is not { Letter: 'i' }) is not { } option) break;
                     conversation.Select(option.Token);
                 }
             }
         }
         TestContext.WriteLine($"lines {lines} voiced {voiced} found {found} femaleFound {female} maps {string.Join(", ", maps.Select(m => $"{m.Key}={m.Value}"))}");
-        // Moves only when the SCR admission set or the dialog runtime grows (with AreaMapConversationOriginalTests): 57 lines shown,
-        // 27 with a voice identity, every one of them installed (the Caladon underground and the Derian Ka temple).
-        Assert.AreEqual((57, 27, 27), (lines, voiced, found));
+        // Moves only when the SCR admission set or the dialog runtime grows (with AreaMapConversationOriginalTests): 124 lines shown
+        // (57 before ARC-WORLD-043 admitted ME: the two conversations that stopped at it walk on), 27 with a voice identity, every
+        // one of them installed (the Caladon underground and the Derian Ka temple).
+        Assert.AreEqual((124, 27, 27), (lines, voiced, found));
         Assert.AreEqual(found, female, "a female PC hears every voice a male PC hears (female falls back to male)");
     }
 }
