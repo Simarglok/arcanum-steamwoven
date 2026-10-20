@@ -50,7 +50,7 @@ and credits nothing.
 | Hit points, fatigue | Cost 1; no maximum in the original, the session stops at 100 bought points | Refunds 1 | 0x55A5C0 rows 0 and 1; CP3, CP4 |
 | Basic skill | Cost 1; the points setter refuses four levels per point above the key stat's cap: "at maximum" when the skill's level is 20, else the key stat's refusal | One point per pass, refunding 1 each, repeated until the skill's level changes (the original's click) or, with `SkillRefundClick.OnePoint`, once; stops at the floor; a first pass the key stat refuses (its cap fell below the points left, for example under an effect) is refused | 0x57ACD0, 0x57AEB0; CP5, CP6 |
 | Tech skill | As a basic skill; a tech point moves with each point | One point | 0x57ACD0, 0x57AEB0; CP5, CP7 |
-| College, tech discipline | Through the lane (`IPointLane`), `LaneNotReady` until MT3 and TECH-2 plug in | Through the lane, down to the floor | college handler, degree sell 0x589AF0; CP2, TC10 |
+| College, tech discipline | Through the lane (`IPointLane`): spell ranks through the spell book's `SpellRankLane` (ARC-MAGIC-004, [spell book](spell-book-runtime.md)), the points tested first; tech degrees `LaneNotReady` until TECH-2 plugs in | Through the lane, down to the floor | college handler, 0x57C540, 0x57C670, degree sell 0x589AF0; CP2, TC10, SB8, SB10 |
 
 The editor's stat hint (`NextStatCost`, 0x55AE70) shows `StatCost(base + 1)` while the **base** is below the race's maximum,
 and 0 at it: when an effect holds the effective value at the maximum, the hint shows a cost the + button then refuses
@@ -60,11 +60,12 @@ and 0 at it: when an effect holds the effective value at the maximum, the hint s
 level changes. `RefundHeroPoint` takes the click as an explicit option for task S6: `UntilLevelChanges` (the default, the
 original's click) or `OnePoint`. Either way the loop ends at the level change, the floor or a refusal.
 
-**Lanes.** A lane implements `IPointLane.Raise` and `Lower` for its track: one step of its own fields (a rank and the
-magick points, a degree and the tech points) and the points that step costs or refunds. The pool checks the points and the
-floor, and refuses as `Invalid` a step that leaves an invalid sheet, changes any field but the track's own (the index's
-rank or degree and its magick or tech points; the unspent points included) or moves the value by anything but one step in
-the asked direction; then it moves the unspent points. The session
+**Lanes.** A lane implements `IPointLane.Cost`, `Raise` and `Lower` for its track: the cost of the next step, one step of
+its own fields (a rank and the magick points, a degree and the tech points) and the points that step costs or refunds. The
+pool tests the cost against the unspent points before it asks for the step (as the editor does, SB8), checks the floor, and refuses as `Invalid` a step that leaves an invalid sheet, changes any field but the track's own (the index's
+rank or degree and its magick or tech points; the unspent points and the mastery included), charges other than its stated
+cost, or moves the value by anything but one step in the asked direction; then it moves the unspent points. A lane's refusal
+passes through with the stat it names (`LevelTooLow`, `StatTooLow`). The session
 names each track's lane in one place (`PointLane`).
 
 ## Differences from the original
@@ -87,6 +88,6 @@ strict in both modes.
 ## Not ready
 
 - No caller: task S6 puts the + and − buttons on the AREA viewer's character sheet; the viewer has no editor yet.
-- Spell ranks and tech degrees answer `LaneNotReady` until the magic lane's MT3 (spell book) and the technology lane's
-  TECH-2 (degrees) add their lanes.
+- Tech degrees answer `LaneNotReady` until the technology lane's TECH-2 adds its lane (spell ranks plugged in with
+  ARC-MAGIC-004).
 - The character editor's other modes (creation, the level-up of followers, multiplayer) are not modelled.

@@ -276,8 +276,32 @@ class OracleSelfTest(unittest.TestCase):
             with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
                 call(address, *arguments)
 
-    def test_the_registry_names_eight_functions_with_their_own_code_first(self):
-        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660, 0x4C5EB0, 0x4C6170])
+    def test_the_spell_learn_model_stays_in_the_csharp_domain_and_rejects_anything_else(self):
+        rng = random.Random(4)
+        draws = [oracle_functions.draw_spell_learn_case(rng) for _ in range(10_000)]
+        self.assertTrue(all(0 <= c.spell < 80 and c.force in (0, 1) and c.kind in (15, 16) and 0 <= c.known <= 5 and 0 <= c.magick <= 210
+                            and c.loaded in (0, 1) for c in draws))
+        self.assertTrue(any(c.known == c.spell % 5 and not c.force for c in draws) and any(c.known > c.spell % 5 and c.force for c in draws))
+        recorder = oracle_functions.LearnRecorder([], [])
+        case = draws[0]
+        stubs = oracle_functions.spell_learn_stubs(case, recorder)
+        handle = oracle_functions.HANDLE
+
+        def call(address, *arguments):
+            return stubs[address](lambda index: arguments[index])
+        self.assertEqual(call(oracle_functions.SPELL_ARRAY_GETTER, *handle, 0xDF, case.spell // 5), case.known)
+        self.assertEqual(call(oracle_functions.STAT_GETTER, *handle, 6), case.willpower)
+        self.assertEqual(call(oracle_functions.STAT_BASE_GETTER, *handle, 22), case.magick)
+        call(oracle_functions.SPELL_ARRAY_SETTER, *handle, 0xDF, case.spell // 5, 3)
+        call(oracle_functions.STAT_SETTER, *handle, 22, 9)
+        self.assertEqual((recorder.ranks, recorder.stats), ([(case.spell // 5, 3)], [(22, 9)]))
+        for address, arguments in ((oracle_functions.SPELL_ARRAY_GETTER, (*handle, 0xDF, 16)), (oracle_functions.STAT_GETTER, (*handle, 21)),
+                                   (oracle_functions.STAT_SETTER, (*handle, 21, 1)), (oracle_functions.IS_PLAYER, (handle[0], 0))):
+            with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
+                call(address, *arguments)
+
+    def test_the_registry_names_nine_functions_with_their_own_code_first(self):
+        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660, 0x4B1790, 0x4C5EB0, 0x4C6170])
         for address, spec in oracle_functions.FUNCTIONS.items():
             self.assertEqual(spec.code[0][0], address)
             self.assertTrue(all(start < end for start, end in spec.code))
