@@ -223,8 +223,40 @@ class OracleSelfTest(unittest.TestCase):
         self.assertTrue(any(remaining(*case) == 0 for case in inner))
         self.assertTrue(any(remaining(*case) < 0 for case in inner))
 
-    def test_the_registry_names_three_functions_with_their_own_code_first(self):
-        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4A68B0, 0x4A6900, 0x4A6980])
+    def test_the_skill_model_stays_in_the_csharp_domain_and_rejects_anything_else(self):
+        rng = random.Random(2)
+        draws = [oracle_functions.draw_critter(rng) for _ in range(10_000)]
+        self.assertTrue(all(0 <= skill < 12 and len(c.skills) == 12 and len(c.stats) == 8 for skill, c in draws))
+        self.assertTrue(all(0 <= v <= 1023 and abs(s) <= 1_000_000 for _, c in draws for v in c.skills for s in c.stats))
+        self.assertTrue(any(skill == 2 and c.monstrous for skill, c in draws))
+        self.assertTrue({-25, 0, 25} <= {c.effect for _, c in draws})
+        stats = {s for _, c in draws for s in c.stats}
+        self.assertTrue({0, 1, 20, 21} <= stats and min(stats) < 0)
+        self.assertTrue(any(v > 255 for _, c in draws for v in c.skills))
+        stubs = oracle_functions.critter_stubs(draws[0][1])
+        handle = oracle_functions.HANDLE
+
+        def call(address, *arguments):
+            return stubs[address](lambda index: arguments[index])
+        self.assertIn(call(oracle_functions.FIELD_GETTER, *handle, oracle_functions.FIELD_TYPE), oracle_functions.CRITTER_TYPES)
+        for address, arguments in ((oracle_functions.FIELD_GETTER, (*handle, 0x1B)), (oracle_functions.ARRAY_GETTER, (*handle, 0xDE, 0)),
+                                   (oracle_functions.ARRAY_GETTER, (*handle, 0xDD, 12)), (oracle_functions.STAT_GETTER, (*handle, 17)),
+                                   (oracle_functions.MONSTROUS, (handle[0] + 1, handle[1]))):
+            with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
+                call(address, *arguments)
+        recorder = oracle_functions.Recorder([])
+        stubs = oracle_functions.critter_stubs(draws[0][1], recorder)
+        self.assertEqual(call(oracle_functions.NETWORK_GATE), 1)
+        call(oracle_functions.ARRAY_SETTER, *handle, 0xDD, 3, 0x41)
+        call(oracle_functions.EDUCATOR, *handle)
+        self.assertEqual((recorder.writes, recorder.educated), ([(3, 0x41)], 1))
+        for address, arguments in ((oracle_functions.ARRAY_SETTER, (*handle, 0xDE, 0, 1)), (oracle_functions.ARRAY_SETTER, (*handle, 0xDD, 12, 1)),
+                                   (oracle_functions.EDUCATOR, (handle[0], handle[1] + 1))):
+            with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
+                call(address, *arguments)
+
+    def test_the_registry_names_five_functions_with_their_own_code_first(self):
+        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4A68B0, 0x4A6900, 0x4A6980, 0x4C5EB0, 0x4C6170])
         for address, spec in oracle_functions.FUNCTIONS.items():
             self.assertEqual(spec.code[0][0], address)
             self.assertTrue(all(start < end for start, end in spec.code))

@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4C5EB0",
+  "name": "basic-skill-level",
+  "method": "Arcanum.Simulation.Skills.SkillRules.Level",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 4,
+  "mutantsCaught": 4,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "c38e5fb4dadb697841b7af2e9718a4ea9344b70404d4ea101b2cf91f225aac18",
+  "configuration": "Debug"
+}

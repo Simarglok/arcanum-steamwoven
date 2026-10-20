@@ -103,8 +103,10 @@ the project's policy, not a rule of the original.
 
 - Dialog, dying, destroy, heartbeat and bust triggers and dialog resumption
   (ARC-RES-035 counts them; they need the SCR dispatcher, SCRIPT slice S4).
-- What a guard reads at T0 is not evaluated; a conditional site stays closed
-  for M3. Call-ex, objects created at run time and scripts of unplaced
+- What a guard reads at T0 is not evaluated here; map mode runs the use script of a guarded use site
+  (`ConditionalPath`/`ComputedDestination` only) since ARC-SCRIPT-015
+  ([guarded use transitions](../rendering/area-map-mode.md#guarded-use-transitions-arc-script-015)); guarded tile and
+  sector sites stay closed. Call-ex, objects created at run time and scripts of unplaced
   prototypes are not followed, as in the census.
 - A tile entry fires for any critter, not only the player; the consumer decides
   who triggers it.

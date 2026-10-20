@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Traversal;
+using Arcanum.Scripting.Scr;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -29,6 +30,8 @@ public sealed class AreaMapTransfers
 {
     private readonly Dictionary<AreaObjectKey, (MapTransitionSite Site, AreaObjectRecord Object)> _uses = new();
     private readonly Dictionary<AreaStepCell, MapTransitionSite> _cells = new();
+    // ARC-SCRIPT-015: use sites whose teleport stands behind guards or a computed destination; their script decides.
+    private readonly Dictionary<AreaObjectKey, (MapTransitionSite Site, AreaObjectRecord Object)> _scripted = new();
     private readonly IReadOnlyDictionary<int, AreaMapDestination> _destinations;
     /// <summary>Every map map mode can open, by runtime number (ARC-WORLD-038: a quick load to another map).</summary>
     public IReadOnlyDictionary<int, AreaMapDestination> Destinations { get; }
@@ -59,7 +62,32 @@ public sealed class AreaMapTransfers
             _uses.TryAdd(row.Key, (site, row));
         }
         Exits = transitions.Unconditional.Count();
+        foreach (var site in transitions.Sites.Where(s => !s.Unconditional && s.Trigger == MapTransitionTrigger.Use && (s.Guards & ~ScriptDecides) == 0)
+            .OrderBy(s => s.Chain.Count).ThenBy(s => s.Line))
+        {
+            if (site.Object is not { } owner) continue;
+            var row = owner.Sector is { } sector ? statics.GetValueOrDefault((sector.Id, owner.Index)) : mobiles.GetValueOrDefault(owner.OwnIdSha256);
+            if (row is null || row.Key.ObjectIdSha256 != owner.OwnIdSha256 || row.WorldX is null || row.WorldY is null || _uses.ContainsKey(row.Key)) continue;
+            _scripted.TryAdd(row.Key, (site, row));
+        }
     }
+
+    /// <summary>ARC-SCRIPT-015: the guards a scripted use runs its script for (a conditional path, a computed destination);
+    /// any other guard (another object moved, a trap, a container's loot screen, an object a click cannot pick) keeps the
+    /// site out.</summary>
+    public const MapTransitionGuard ScriptDecides = MapTransitionGuard.ConditionalPath | MapTransitionGuard.ComputedDestination;
+
+    /// <summary>ARC-SCRIPT-015: runs a scripted use's script for its object and returns what it asked for; set by the host.
+    /// The third argument names why a teleport cannot be taken (<see cref="Refusal"/> of the resolved site), so the runner
+    /// applies nothing then. Without a runner a scripted use is refused.</summary>
+    public Func<MapTransitionSite, AreaObjectRecord, Func<ScrTeleport, string?>, AreaScriptedUse>? ScriptRunner { get; set; }
+
+    /// <summary>ARC-SCRIPT-015: the objects whose use runs their script to decide the transfer.</summary>
+    public IReadOnlyCollection<AreaObjectKey> ScriptedTriggers => _scripted.Keys;
+    public MapTransitionSite? ScriptedSite(AreaObjectKey key) => _scripted.TryGetValue(key, out var use) ? use.Site : null;
+
+    /// <summary>The script run of the last <see cref="RequestUse"/> (its printed lines and detail), or null when it ran none.</summary>
+    public AreaScriptedUse? LastScripted { get; private set; }
 
     public AreaMapRuntime Map { get; }
     public AreaMapTransfer? Pending { get; private set; }
@@ -71,16 +99,29 @@ public sealed class AreaMapTransfers
     public IReadOnlyCollection<AreaStepCell> TriggerCells => _cells.Keys;
     public MapTransitionSite? Site(AreaObjectKey key) => _uses.TryGetValue(key, out var use) ? use.Site : null;
     public MapTransitionSite? CellSite(AreaStepCell cell) => _cells.GetValueOrDefault(cell);
-    public AreaObjectRecord Object(AreaObjectKey key) => _uses[key].Object;
+    public AreaObjectRecord Object(AreaObjectKey key) => _uses.TryGetValue(key, out var use) ? use.Object : _scripted[key].Object;
 
     public AreaMapUseResult RequestUse(AreaObjectKey trigger, AreaStepCell actor)
     {
+        LastScripted = null;
         if (Pending is not null) return new(AreaUseOutcome.TransitionPending, Pending.Site, -1, "TRANSITION_PENDING");
-        if (!_uses.TryGetValue(trigger, out var use)) return new(AreaUseOutcome.NotATrigger, null, -1, "NO_TRANSITION_FOR_OBJECT");
+        var scripted = !_uses.TryGetValue(trigger, out var use) && _scripted.TryGetValue(trigger, out use);
+        if (use.Site is null) return new(AreaUseOutcome.NotATrigger, null, -1, "NO_TRANSITION_FOR_OBJECT");
         var objectCell = new AreaStepCell(use.Object.WorldX!.Value, use.Object.WorldY!.Value);
         var check = AreaUseRule.Check(Map, trigger, objectCell, actor);
         if (check.Outcome != AreaUseOutcome.Accepted) return new(check.Outcome, use.Site, check.Distance, check.Reason);
-        return Queue(use.Site, trigger, check.Distance);
+        if (!scripted) return Queue(use.Site, trigger, check.Distance);
+        // ARC-SCRIPT-015: the script decides; its teleport of the player gives the destination.
+        if (ScriptRunner is not { } runner) return new(AreaUseOutcome.ScriptRefused, use.Site, check.Distance, "NO_SCRIPT_RUNNER");
+        var site = use.Site;
+        var ran = LastScripted = runner(site, use.Object, teleport => Refusal(Teleported(site, teleport)));
+        return ran.Outcome switch
+        {
+            AreaScriptedUseOutcome.Teleport => Queue(Teleported(site, ran.Teleport!), trigger, check.Distance),
+            AreaScriptedUseOutcome.TeleportRefused => new(AreaUseOutcome.DestinationUnavailable, Teleported(site, ran.Teleport!), check.Distance, ran.Detail),
+            AreaScriptedUseOutcome.NoTeleport => new(AreaUseOutcome.ScriptEnded, use.Site, check.Distance, ran.Detail),
+            _ => new(AreaUseOutcome.ScriptRefused, use.Site, check.Distance, ran.Detail),
+        };
     }
 
     /// <summary>The player entered <paramref name="cell"/>: a jump point or an unconditional tile script there queues its
@@ -88,8 +129,20 @@ public sealed class AreaMapTransfers
     public AreaMapUseResult? Enter(AreaStepCell cell)
     {
         if (!_cells.TryGetValue(cell, out var site)) return null;
+        LastScripted = null;
         if (Pending is not null) return new(AreaUseOutcome.TransitionPending, site, 0, "TRANSITION_PENDING");
         return Queue(site, null, 0);
+    }
+
+    /// <summary>The site as the script's teleport resolved it: its destination and arrival (a runtime −1 keeps this map, as a
+    /// pending map of −1 does, ledger TR4).</summary>
+    public MapTransitionSite Teleported(MapTransitionSite site, ScrTeleport teleport)
+    {
+        ArgumentNullException.ThrowIfNull(site); ArgumentNullException.ThrowIfNull(teleport);
+        var here = teleport.RuntimeMap == -1;
+        var runtime = here ? Map.RuntimeMap : teleport.RuntimeMap;
+        var catalogue = here ? Map.Snapshot.CatalogueMap : teleport.CatalogueMap;
+        return site with { DestinationCatalogue = catalogue, DestinationRuntime = runtime, Arrival = new(teleport.X, teleport.Y) };
     }
 
     /// <summary>Why a site's transfer cannot be queued (its destination is not opened in map mode, or a same-map arrival is
