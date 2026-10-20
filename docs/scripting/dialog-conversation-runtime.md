@@ -54,7 +54,9 @@ instead of the world port; `IN` then needs only one of the two. The optional `ID
 [logbook](../rendering/terrain-viewer.md#logbook-arc-ui-008)) takes `RQ`; without it an `RQ` is a static
 `CapabilityUnavailable` frontier. The optional `IDialogSkillPort` (ARC-SKILLS-004, [skill gates](#skill-gates-arc-skills-004))
 answers the PC's skill levels and training and takes `TR`; when present it admits `PS`, `HA`, `SK`, `TR` and `ET`, and
-without it they stay `UnsupportedOperation`.
+without it they stay `UnsupportedOperation`. The optional `IDialogMetBeforePort` (ARC-WORLD-043,
+[dialog binding](../world/npc-reaction-runtime.md#dialog-binding-arc-world-043)) answers `ME`; without it an `ME` condition is
+a static `CapabilityUnavailable` frontier.
 
 ## Flow and source semantics
 
@@ -80,7 +82,7 @@ Source references are the function addresses listed under [Provenance](#provenan
    selecting it returns `UnsupportedTransition` with no effect.
 5. **Selection** consumes the token before the first effect, runs the reply action, then:
    positive response → next NPC node (new turn); `0` → `Ended(ReturnToScript, caller+1)`;
-   negative `-n` → `Ended(ReturnToScript, n)`; a trailing `JO 0 node` (or, with a party port,
+   negative `-n` → `Ended(ReturnToScript, n)`; an insult (below) first runs its rule; a trailing `JO 0 node` (or, with a party port,
    `UW 0 node`) → join (or stop waiting), continue at node; a trailing `FL node` → run that node's action, show its line, `Ended(NpcFinalLine)`.
    SCR continuation is reported, never executed.
 
@@ -94,7 +96,12 @@ undefined 1252 bytes and texts over 4096 bytes fail closed.
 Generated markers (one ASCII letter and `:`; NPC markers are read from the record text
 whatever the PC gender, as in the source): Player `a e f k n s w y` (exact) are offered as
 `Generated` with their normal transition (phrase text lives in generic resources not loaded
-here); `b h i l p` (exact) and `c r t z` (prefix) are offered blocked as
+here); exact `i:` (ARC-WORLD-043) is the original's **insult**: offered as `Generated` with its normal transition, and
+picking it runs the reply's action, then a `ReactionCommand` of −10 (`DialogConversation.InsultReaction`) through the world
+port, then reads the effective reaction; at most 20 (`InsultEndsAtOrBelow`) the talk ends as `Ended(Insulted)` with no SCR
+continuation (the NPC's generated reply is not loaded), above 20 its transition follows (0x4191E0). Without a world port, or
+with an action ending in `JO`/`UW`/`FL`/`ET` (the original then skips the insult, read for FL), it is offered blocked. `b h l p` (exact) and
+`c r t z` (prefix) are offered blocked as
 `UnsupportedInteraction`; `d q u x` have state-dependent visibility and make the step a
 frontier. NPC `g:`/`m:`/`r:` (prefix) and exact `i:` are frontiers. Other text is literal.
 
@@ -110,7 +117,7 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 
 | Field | Admitted operations (domains) |
 | --- | --- |
-| Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not); with a skill port `PS n`, `HA n`, `SK s n`, `TR s t` ([skill gates](#skill-gates-arc-skills-004)). |
+| Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1), `ME v` (ARC-WORLD-043; v 1: the NPC has met the PC before, 0: it has not; the original passes any other operand untested; here it is an `UnsupportedOperation` frontier); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not); with a skill port `PS n`, `HA n`, `SK s n`, `TR s t` ([skill gates](#skill-gates-arc-skills-004)). |
 | NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0); with a skill port `TR s t` (set the PC's training). |
 | Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically). |
 
@@ -197,6 +204,11 @@ human PC, intelligence 8, not dumb, alignment 0, initial NPC→PC reaction 50, n
 `[PC]`/`[NPC]`, follow requests accepted. No item, party, map or AI simulation runs. The
 panel shows typed identifiers in its effect ledger, never raw operations.
 
+Since ARC-WORLD-043 the host opens the speaker's reaction conversation slot right before each conversation starts and
+`EndReaction()` closes it; the viewer calls it on every close of the panel, before a resumed script runs (the original's
+dialog start and end, [dialog binding](../world/npc-reaction-runtime.md#dialog-binding-arc-world-043)). `ME` reads the
+session's "met before" through the state's `IDialogMetBeforePort`, and the panel names an insult's change and its end.
+
 ### Consequences in the game session (ARC-SCRIPT-006)
 
 The host borrows the area's [game session](../world/game-session-runtime.md), created for
@@ -210,7 +222,7 @@ capture/encode/decode/restore of the session, and they change the next conversat
 | QU | Session quest rules ([story domain](../world/game-session-runtime.md#story-domain)); a QU that leaves a quest Accepted lifts the NPC's effective reaction to at least 41 (a delta through the reaction domain), Completed adds 10 (source rule, checked in the original executable); such a QU takes two session revisions (quest, then reaction). A quest outside 1000..1999 is refused and fails the dialog. |
 | RU | Session rumors with their game time; outside 1000..2999 is refused. |
 | RQ | ARC-UI-008: the session's game-wide quelled rumors (no participant, as the original's dialog action); quelling a quelled rumor is no change; outside 1000..2999 is refused and fails the dialog. |
-| RE | The session reaction domain ([NPC reaction runtime](../world/npc-reaction-runtime.md), ARC-WORLD-026): `RE t` reads the speaker's effective reaction, unsigned `RE v` sets it as a delta to the effective value, `RE ±d` adjusts it through the PC's adjustment effects. Facts are diagnostic (human NPC with the initial reaction as base; the session hero or a human PC). |
+| RE, ME, insult | The session reaction domain ([NPC reaction runtime](../world/npc-reaction-runtime.md), ARC-WORLD-026): `RE t` reads the speaker's effective reaction, unsigned `RE v` sets it as a delta to the effective value, `RE ±d` and an insult's −10 adjust it through the PC's adjustment effects; while a talk is open they land in its conversation slot (ARC-WORLD-043). `ME` reads the remembered slot. Facts are diagnostic (human NPC with the initial reaction as base; the session hero or a human PC). |
 | LF, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `follow.pc`. A value equal to the loaded baseline (attachment flags, not following) clears the key. A session holding values these ports cannot read (LF outside 32 bits, follow other than 1) is refused when the state is built. |
 | AL, IN, MM | Still in memory on the state object and lost with it; PC alignment, items and known areas wait for their own owners. |
 
@@ -236,11 +248,12 @@ original gameplay verification.
 ## Verification
 
 ```sh
-"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogConversation"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogConversation|FullyQualifiedName~DialogReactionBinding"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogSkillTests"   # ARC-SKILLS-004
 DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogSkillRealData"
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogSkillPort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"
+"$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaReactionConversation"
 ARC_AREA_CONVERSATION_GAME_ROOT=<installation> "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation&TestCategory=RealData"
 godot_canonical --path tools/terrain-viewer/Godot -- --self-test      # synthetic panel; AREA routing: off-NPC click, keys and polled levels, palette guard
 ARC_AREA_CONVERSATION_PROBE=1 [ARC_AREA_CONVERSATION_GAME_ROOT=…] [ARC_AREA_CONVERSATION_SCREENSHOTS=<ignored dir>] \
@@ -259,7 +272,8 @@ ARC-RENDER-007 export, which predates this change until a new export is register
 Source-backed observations are a reading of the original's functions at the cited addresses,
 evidence level F0 (not checked in the executable) unless the
 [verification ledger](../research/original-verification-ledger.md) lists them: record fields (0x417860), reply enumeration and
-gates (0x414E60, 0x414F50), conditions (0x4150D0), actions (0x415BA0), NPC line, markers and
+gates (0x414E60, 0x414F50), conditions (0x4150D0; its `ME` branch checked in the executable, ledger DR1), actions (0x415BA0), the
+insult (0x416C10, 0x419190, 0x4191E0; ledger DR4, DR5), NPC line, markers and
 names (0x416840, 0x416AB0, 0x416B00), generated Player options (0x416C10, 0x417590), response and UI outcomes (0x567E30, 0x5680A0, 0x5681C0, 0x568430, 0x568480).
 Strict grammar, group-order guard, look-ahead blocking, budgets, typed ports and the
 diagnostic profile are project policy. Unknown: original parser edge cases, generated

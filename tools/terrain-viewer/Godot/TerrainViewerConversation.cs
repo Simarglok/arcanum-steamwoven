@@ -18,6 +18,8 @@ namespace Arcanum.TerrainViewer;
 // ARC-WORLD-032: in map mode (--area-map) the speakers are the dialog NPCs of the map's own snapshot, talking through
 // the same host with the game's script content and the session the map carries, so their consequences go with it to
 // the next map; since ARC-WORLD-037 the party commands of a speaker with follow facts go through the session party.
+// ARC-WORLD-043: each conversation opens the speaker's reaction conversation slot and every close ends it, so ME reads
+// "met before" and an insult's change lands in the talk.
 // ARC-WORLD-048: a companion visiting the shown map from another map talks through its own host over its home map's dialog
 // state (AreaConversationHost.ForVisitor), so the talk is the same wherever it stands.
 public partial class TerrainViewerApp
@@ -259,6 +261,11 @@ public partial class TerrainViewerApp
         var conversation = _conversationPanel.Conversation;
         GD.Print($"ARC-SCRIPT-005 conversation closed phase={conversation?.Phase} end={conversation?.End?.Kind} turns={conversation?.Turn} effects={conversation?.Effects.Count}");
         _conversationPanel.CloseView();
+        // ARC-WORLD-043: every exit closes the NPC's reaction conversation (the original's dialog end), before a resumed
+        // script may start the next one; the NPC now remembers the PC.
+        // ARC-WORLD-048: the host that opened it (a visitor's own) closes it.
+        if ((_talkHost ?? _conversationHost) is { } talk && !talk.EndReaction() && talk.ReactionFailure != Arcanum.Session.GameSessionFailure.None)
+            _conversationNotice = $"the session refused to end the NPC's reaction conversation ({talk.ReactionFailure})";
         // ARC-UI-045 (ARC-UI-043 voice): the voice plays on after a close, but the conversation must not outlive it: its ports reach the area
         // host and its snapshot, which a reload or map change would otherwise keep alive.
         _voiceStart = null; _dialogVoice.Release();

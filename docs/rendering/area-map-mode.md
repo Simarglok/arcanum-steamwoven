@@ -350,8 +350,9 @@ interiors have 182 dialog NPCs. Each one gets a typed start: 50 start a
 conversation, 1 ends with skip default, and 131 stop at an SCR action,
 condition, goto or value kind the dispatcher does not admit yet (most often
 action types 23 and 22, and condition type 21). Of the 50 conversations, 35 stop at a generated NPC
-line, which is not loaded yet, 8 at an unsupported DLG operation, and 7 offer
-replies at once; 6 end when the first choosable reply is always taken. Native smoke (`ARC-WORLD-032 native-smoke talk PASS`, after
+line, which is not loaded yet, 6 at an unsupported DLG operation, and 9 offer
+replies at once; 7 end when the first choosable reply is always taken (since ARC-WORLD-043 the `ME` condition is
+admitted: before, 8 stopped at an unsupported operation, 7 offered replies and 6 ended). Native smoke (`ARC-WORLD-032 native-smoke talk PASS`, after
 the roof smoke): from 4–6 cells away the NPC hovers as a walk to talk, a click
 through the production seam walks within reach and opens the panel (a walk
 that stops short is tried again from within reach, where the click must open
@@ -360,8 +361,10 @@ ends the modal panel; a start refused for missing script content, an entry
 error or a changed source fails the smoke. `FRONTIER` means every NPC tried (up
 to eight) stopped before offering a reply, `NOT-STARTED` that none started,
 `NO-REACHABLE-SPEAKER` that none could be clicked, and `NONE` that no NPC is
-drawn. Observed: `caladon-panarrii temple`, script 2969, 3 turns, the dialog
-ended, 1 effect in the session; `tulla interior` reports `FRONTIER` (generated
+drawn. Since ARC-WORLD-043 Close must also end the NPC's reaction conversation (the host holds no open slot and a
+started talk leaves the NPC remembering the PC, `MetBefore` in the record). Observed: `caladon-panarrii temple`, script
+2969, 3 turns, the dialog ended, 1 effect (3 session revisions with the reaction slot's open and close; 2026-10-21), the NPC
+remembers the PC; `tulla interior` reports `FRONTIER` (generated
 greetings); in `caladon-mafia underground` both NPCs are undrawn. That the
 consequences travel with the session to another map and back is the host's
 synthetic test (`AreaConversationTests`); the native smoke does not observe it.

@@ -190,7 +190,13 @@ for several PCs (R3).
 
 **Since ARC-WORLD-026** slices 1 and 2 below are implemented ([NPC reaction runtime](../world/npc-reaction-runtime.md)):
 the rules in `Arcanum.Simulation.Reaction`, the reaction memory in the session (snapshot schema 10), and the viewer's
-`RE` and quest rules over it; `reaction.pc` is gone. The notes below describe the state before it.
+`RE` and quest rules over it; `reaction.pc` is gone. **Since ARC-WORLD-043** slice 3 is implemented too
+([dialog binding](../world/npc-reaction-runtime.md#dialog-binding-arc-world-043), ledger
+[DR1–DR7](original-verification-ledger.md#dialog-reaction-binding-arc-world-043)): `ME` reads "met before" through a port,
+an exact `i:` reply is the insult (−10 after the reply's action; at 20 or below the NPC ends the talk without a script
+continuation), and every AREA talk opens and closes the NPC's conversation slot. O4 is answered (fate 1, armed by spending a
+fate point, consumed only by a talk start below 100); fate points are not built. The notes below describe the state before
+ARC-WORLD-026.
 
 - The conversation runtime's `reaction.pc` is a single stored value seeded with
   the diagnostic 50. Per R1 it is the **stored** value only. The
@@ -221,8 +227,10 @@ the rules in `Arcanum.Simulation.Reaction`, the reaction memory in the session (
 - **O3** A6 (script operand), A7 (gift test), A8 (RE comparison operand) and A9
   (greeting number), same kind of observation. A2 was answered by ARC-RES-048
   and decided on 2026-10-17.
-- **O4** Fate-point flow (when "force good reaction" is armed and consumed)
-  and the higher-priority greeting kinds before R12 were not read.
+- **O4** Fate-point flow: answered by ARC-WORLD-043 (ledger DR6): spending a fate point
+  arms "force good reaction" (refunded on undo), and the next conversation start whose
+  stored value is below 100 consumes it. The higher-priority greeting kinds before R12
+  were not read.
 - **O5** The race matrix and beauty table are source tables, not data files;
   only their shape and order are recorded here. An implementation reads them
   from the source with citation, like the character stats owner did for the
@@ -247,8 +255,8 @@ Godot.
    set-to (as a delta), forget; a new snapshot schema replaces the
    `reaction.pc` map change. Single PC first; the 9-slot eviction (R3) stays
    documented, not built.
-3. **Dialog binding**: `ME`, `RE` actions as deltas, the insult rule, and the
-   quest rule through the owner.
+3. **Dialog binding** (done, ARC-WORLD-043): `ME`, `RE` actions as deltas, the insult rule, and the
+   quest rule through the owner, with the conversation slot opened and closed by every AREA talk.
 4. **Reputation data and owner**: a Data reader for the four file kinds with
    every effect in its written scope (D1), a PC reputation list with game time, add/remove/has,
    `RP` condition and action with the A5 domain, faction membership and the
