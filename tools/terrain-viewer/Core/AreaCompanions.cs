@@ -19,7 +19,8 @@ public sealed record AreaCompanionFacts(int Prototype, int ScriptId, FollowThres
 /// <summary>
 /// The NPCs whose follow consent and follow movement run through the session party (ARC-WORLD-013, ARC-WORLD-016).
 /// Only measured NPCs are listed; every other speaker keeps the diagnostic follow key of ARC-SCRIPT-005. The PC side
-/// is the AREA diagnostic profile (charisma 8, level 1, no Persuasion), not a character sheet.
+/// is the AREA diagnostic profile (charisma 8, level 1, no Persuasion), not a character sheet; with a session hero
+/// (`--hero`) the session replaces it with the hero's persuasion, charisma, level and max followers (ARC-SKILLS-002).
 /// </summary>
 public static class AreaCompanionRoster
 {

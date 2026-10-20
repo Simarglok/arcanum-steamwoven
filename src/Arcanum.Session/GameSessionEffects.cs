@@ -467,7 +467,7 @@ public sealed partial class GameSessionOwner
         var hero = _hero!;
         var trial = HeroDomain.Build(hero.State.Prototype, hero.State.Race, hero.State.Gender, hero.State.Stats, hero.State.Level,
             hero.State.UnspentPoints, hero.State.Alignment, hero.State.RaceEffect, hero.State.GenderEffect, hero.State.Experience,
-            hero.State.Advancement)!;
+            hero.State.Advancement, hero.State.InnateSkills)!;
         var definitions = new Dictionary<int, SessionEffectDefinition>(_effects.Definitions);
         if (added is not null) definitions[added.Number] = added;
         var entries = new List<SessionEffect>(_effects.Entries);
