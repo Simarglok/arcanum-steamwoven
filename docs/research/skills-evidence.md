@@ -95,7 +95,8 @@ use of skill conditions) are listed for the census in
    success or failure, then fate for the PC, then the skill's own handler
    (run (0x4C7160)). Effectiveness is a per-skill formula of the level, an
    opposed table for four skills, +10 for extraordinary intelligence, the game
-   difficulty for the PC and a 95 % cap for non-combat skills
+   difficulty for the PC and a 95 % cap for every skill but bow, melee,
+   throwing, firearms and prowling ([SC1](original-verification-ledger.md#skill-check-arc-skills-003))
    (effectiveness (0x4C62E0), opposed (0x4C6410), tech (0x4C69F0)).
 7. **Persuasion and haggle in dialog are thresholds, not rolls.** Dialog
    conditions `ps`, `ha`, `sk` and `tr` compare the PC's effective level or

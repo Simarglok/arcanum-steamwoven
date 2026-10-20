@@ -36,7 +36,8 @@ public sealed class SkillCheckOriginalExeTests
             new Mutant("extraordinary intelligence ignored", c => Basic(c with { Extraordinary = false })),
             new("the difficulty for every critter", c => Basic(c with { Local = 0 })),
             new("easy and hard swapped", c => Basic(c with { Difficulty = Swapped(c.Difficulty) })),
-            new("the opposed table one entry off", c => Basic(c, levelShift: 1)));
+            new("the opposed table one entry off", c => Basic(c, levelShift: 1)),
+            new("prowling capped at 95", c => c.Skill == 6 ? Math.Min(int.Parse(Basic(c)), 95).ToString() : Basic(c)));
     }
 
     [TestMethod, TestCategory(Category)]
