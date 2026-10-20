@@ -196,7 +196,7 @@ public sealed class PartyStateTests
         StringAssert.Contains(text, ",\"party\":{\"followers\":[{\"entity\":\"golem\",\"forced\":true,\"spreadOut\":true}," +
             "{\"entity\":\"ari\",\"forced\":false,\"spreadOut\":false}]," +
             "\"others\":[{\"entity\":\"sogg\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false}," +
-            "{\"entity\":\"virgil\",\"standing\":\"Free\",\"spreadOut\":false,\"jilted\":true}]}" + NoHero + EmptyInventory + NoEquipment + NoDurability + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoSound + NoEvents + ",\"lighting\":null}");
+            "{\"entity\":\"virgil\",\"standing\":\"Free\",\"spreadOut\":false,\"jilted\":true}]}" + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoSound + NoEvents + ",\"lighting\":null}");
 
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryParty().Followers.ToArray(), restored.QueryParty().Followers.ToArray());
@@ -320,7 +320,7 @@ public sealed class PartyStateTests
         GameSessionFailure Restored(SessionCompanion[] followers, SessionCompanion[] others)
         {
             var snapshot = new GameSessionSnapshot(saved.SchemaVersion, saved.Identity, saved.Revision, saved.Clock, saved.Flags,
-                saved.Actor, saved.Maps.ToArray(), saved.Story, new SessionPartyState(followers, others), saved.Hero, saved.Inventory, saved.Equipment, saved.Durability, saved.Effects, saved.Experience, saved.Advancement, saved.Random, saved.Life, saved.Reactions, saved.Combat, saved.CombatMode, saved.Events, saved.Lighting, saved.Sound);
+                saved.Actor, saved.Maps.ToArray(), saved.Story, new SessionPartyState(followers, others), saved.Hero, saved.Inventory, saved.Equipment, saved.Durability, saved.Schematics, saved.Effects, saved.Experience, saved.Advancement, saved.Random, saved.Life, saved.Reactions, saved.Combat, saved.CombatMode, saved.Events, saved.Lighting, saved.Sound);
             var result = GameSessionOwner.Restore(snapshot, RestoreOptions());
             result.Owner?.Dispose();
             return result.Failure;

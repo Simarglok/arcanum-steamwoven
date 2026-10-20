@@ -172,11 +172,16 @@ public sealed class AreaEventWorld : ISessionScriptWorld
     private readonly Func<IAreaEventObjects?> _combat;
     private readonly Func<AreaConversationHost?> _talk;
 
-    public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk)
+    /// <param name="callHost">ARC-WORLD-048: the host of a call's attachee when it is not the map's own (a companion visiting the
+    /// shown map talks and runs its calls through its own host); null or a null answer: <paramref name="talk"/>.</param>
+    public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk, Func<SessionScriptCall, AreaConversationHost?>? callHost = null)
     {
         _combat = combat ?? throw new ArgumentNullException(nameof(combat));
         _talk = talk ?? throw new ArgumentNullException(nameof(talk));
+        _callHost = callHost;
     }
+
+    private readonly Func<SessionScriptCall, AreaConversationHost?>? _callHost;
 
     /// <summary>The reason the last refused call did not run, or null; <see cref="CallRefusals"/> counts the refusals.</summary>
     public string? LastCallRefusal { get; private set; }
@@ -196,7 +201,7 @@ public sealed class AreaEventWorld : ISessionScriptWorld
     public bool RunScriptCall(SessionScriptCall call)
     {
         ArgumentNullException.ThrowIfNull(call);
-        if (_talk() is not { } host) { Refuse("no script host on this map"); return false; }
+        if ((_callHost?.Invoke(call) ?? _talk()) is not { } host) { Refuse("no script host on this map"); return false; }
         var ran = host.RunCall(call, out var detail);
         if (!ran) Refuse(detail);
         return ran;

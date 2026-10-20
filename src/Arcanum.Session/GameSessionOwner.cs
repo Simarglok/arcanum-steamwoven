@@ -163,6 +163,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportWornConditions(equipment, durability);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportSchematics(snapshot.Schematics, hero is not null, limits, out var found);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportLife(snapshot.Life, hero is not null, snapshot.Clock.GameTimestampMs, limits, out var life);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportEffects(snapshot.Effects, hero, life, snapshot.Clock.GameTimestampMs, out var effects);
@@ -206,7 +208,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party,
             hero, inventory, equipment, effects, experience, advancement, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat,
             snapshot.Lighting, sink, events!)
-        { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _durability = durability,
+        { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _durability = durability, _foundSchematics = found,
           _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
@@ -713,8 +715,10 @@ public sealed partial class GameSessionOwner : IDisposable
             var listed = admitted.Items.TryGetValue(item.Entity, out var row);
             if (item.Origin == map ? !listed || row!.Facts.Kind != item.Kind : listed) return Reject(GameSessionFailure.InventoryMismatch);
         }
-        // Kit items came from no map, so no seed may list them.
-        if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity))) return Reject(GameSessionFailure.InventoryMismatch);
+        // Kit and made items came from no map, so no seed may list them; the made: prefix is the session's own.
+        if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity)) ||
+            admitted.Items.Keys.Any(entity => entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)))
+            return Reject(GameSessionFailure.InventoryMismatch);
         // An object lies on one map: an item another attached map lists would be hidden there too once taken.
         foreach (var (other, attached) in _inventory.Seeds)
             if (other != map && admitted.Items.Keys.Any(attached.Items.ContainsKey)) return Reject(GameSessionFailure.InventoryMismatch);
@@ -734,6 +738,9 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
     /// starting kit, which precedes them, is <see cref="QueryHeroKit"/>.</summary>
     public IReadOnlyList<SessionPcItem> QueryPcInventory() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Pc.ToArray()); }
+
+    /// <summary>Detached copy of the items the hero made from schematics (ARC-TECHNOLOGY-004), in the order they were made.</summary>
+    public IReadOnlyList<SessionMadeItem> QueryMadeItems() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Made.ToArray()); }
 
     /// <summary>
     /// Ground pickup (the pickup goal, then the item transfer 0x4617F0): an item lying on the actor's map goes to the end of
@@ -1190,7 +1197,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), _equipment.Capture(), _durability.Capture(), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureEvents(), _lighting, _sound.Capture());
+            _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureEvents(), _lighting, _sound.Capture());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -1445,7 +1452,7 @@ public sealed partial class GameSessionOwner : IDisposable
         inventory = new();
         if (saved.Gold < 0 || (saved.Gold > 0 && !hero) || (saved.Kit.Count > 0 && !hero)) return GameSessionFailure.InvalidSnapshot;
         inventory.Gold = saved.Gold;
-        if (saved.Kit.Count + saved.Pc.Count > limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
+        if (saved.Kit.Count + saved.Pc.Count + saved.Made.Count > limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
         // Kit items are kit:1, kit:2, … in order; a deleted one (ARC-WORLD-053) leaves its number out.
         var next = 0;
         foreach (var item in saved.Kit)
@@ -1459,7 +1466,19 @@ public sealed partial class GameSessionOwner : IDisposable
         {
             if (!SessionValidation.Entity(item.Entity) || !SessionValidation.Map(item.Origin) || !Enum.IsDefined(item.Kind.Type) ||
                 !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
-            if (inventory.Taken.Contains(item.Entity) || destroyed.Contains(item.Entity)) return GameSessionFailure.InvalidSnapshot;
+            if (inventory.Taken.Contains(item.Entity) || destroyed.Contains(item.Entity) ||
+                item.Entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)) return GameSessionFailure.InvalidSnapshot;
+            inventory.Add(item);
+        }
+        // Made items (ARC-TECHNOLOGY-004): made:n with strictly ascending n, a hero's, an admitted type, not deleted.
+        var lastMade = 0;
+        foreach (var item in saved.Made)
+        {
+            if (!hero) return GameSessionFailure.InvalidSnapshot;
+            if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
+            if (SessionMadeItem.Number(item.Entity) is not { } number || number <= lastMade || destroyed.Contains(item.Entity))
+                return GameSessionFailure.InvalidSnapshot;
+            lastMade = number;
             inventory.Add(item);
         }
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.

@@ -201,6 +201,7 @@ public sealed partial class GameSessionOwner
         if (_equipment.SlotOf(entity) is { } slot) _equipment.Worn.Remove(slot);
         _inventory.Kit.RemoveAll(item => item.Entity == entity);
         _inventory.Pc.RemoveAll(item => item.Entity == entity);
+        _inventory.Made.RemoveAll(item => item.Entity == entity);
         // Taken hides an item from every seed view and from pickup and loot.
         _inventory.Taken.Add(entity);
         _durability.Records.Remove(entity);
@@ -210,6 +211,7 @@ public sealed partial class GameSessionOwner
     /// <summary>An item of the hero's kit, one the PC took, or one an attached seed lists, and not deleted.</summary>
     private bool TracksItem(string entity) =>
         !_durability.Destroyed.Contains(entity) && (_inventory.Kit.Any(item => item.Entity == entity) || _inventory.Pc.Any(item => item.Entity == entity) ||
+            _inventory.Made.Any(item => item.Entity == entity) ||
             _inventory.Seeds.Values.Any(seed => seed.Items.ContainsKey(entity)));
 
     private ItemDurabilityResult RejectDurability(GameSessionFailure failure) =>

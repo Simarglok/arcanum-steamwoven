@@ -259,7 +259,7 @@ The Schematic-UI module runs from init 0x56CD60 (reset 0x56D0B0, exit
   [LB1](original-verification-ledger.md#logbook-arc-ui-008)); the dialog action
   `su` sets outcome 7, which calls 0x567E30 → 0x56D130(**NPC**, player) (F2);
   script action 129 (TC2).
-- **Component gate** (0x56E190), drawn per component slot: only the
+- **Component gate** (0x56E190, F2 by ARC-TECHNOLOGY-004, [ledger SA1](original-verification-ledger.md#schematic-assembly-arc-technology-004)), drawn per component slot: only the
   crafter's own inventory is searched (0x462540, flags 7), without the party
   or nested containers; a match is the exact prototype; worn items (slots
   1000..1008), broken items and items with a changed description are skipped,
@@ -271,9 +271,10 @@ The Schematic-UI module runs from init 0x56CD60 (reset 0x56D0B0, exit
 - **Button** (page draw 0x56DDC0): three states, "can assemble", "an item is
   missing" and "expertise is lacking for at least one component"; the button
   assembles in the first, otherwise shows `schematic_text.mes` 0 or 1; hover
-  texts 3, 4, 5. Which code (1 or 2) means which refusal is the one
-  [disagreement](#second-reading) between the readers. Sounds: page 3010, tab
-  3011, open 3008.
+  texts 3, 4, 5. Code 2 is "expertise lacking" (checked first, message 1) and
+  code 1 "an item is missing" (message 0): settled by a third reading and the
+  installed texts (ARC-TECHNOLOGY-004, [ledger SA2](original-verification-ledger.md#schematic-assembly-arc-technology-004);
+  O7 closed). Sounds: page 3010, tab 3011, open 3008.
 
 ### Assembly (0x56E720, FR-ITEM-018, F2)
 
@@ -482,6 +483,7 @@ decided every row on 2026-10-20 ([owner decisions](#owner-decisions-2026-10-20))
 | TC9 | use (0x462CC0), triggers (0x4CB830) | A broken item can still be used and its item spells fire | Original (intent unknown) | **Decided** ([owner](#owner-decisions-2026-10-20)): both follow the original (broken items still usable) |
 | TC10 | editor decrease (0x55F5F0, 0x55D940) → sell (0x589AF0), F2 | Selling a degree is not compared with the editor-open snapshot, unlike skills, tech skills and colleges, so degrees bought on earlier levels could be refunded; the snapshot (0x64DEEC) is read only by the tech page's draw, which in the in-game editor hides the − button at it (ledger [CP2](original-verification-ledger.md#character-point-pool-arc-world-052); the 0x64DF10 named first is a per-player copy, never read) | Original bug (if the button is reachable, O2) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes sell a degree only down to its value when the character window was opened; no switch; TECH-2 |
 | TC11 | window init (0x56CD60), selection (0x56DB60), found by ARC-TECHNOLOGY-001 ([ledger](original-verification-ledger.md#schematic-data-arc-technology-001)) | The learned list has "count" (entries / 7) slots but is filled with every existing start without a bound and walked to the count; a start at 3600 or above counts past the eight-entry discipline table | Original bug (latent, out of bounds) | both fixed (owner rule of 2026-10-17): the schematic catalogue refuses such a file; the installed data has 56 starts for a count of 56 |
+| TC12 | window open (0x56D130), found by ARC-TECHNOLOGY-003 ([ledger](original-verification-ledger.md#schematic-knowledge-arc-technology-003)) | A found number whose discipline is outside 0..7 is counted past the window's eight-entry table | Original bug (latent, out of bounds) | both fixed (owner rule of 2026-10-17): left out of the found tab; the installed found records all have disciplines 0..7 |
 
 ## Owner decisions (2026-10-20)
 
@@ -515,7 +517,7 @@ of the anomaly table above under D2; each is implemented by the slice named.
     and keeps the document; Original registers it (TECH-3).
   - **TC9, no switch.** Both modes follow the original: a broken item can still be used and its item spells fire.
 
-Every TC row is decided: switches TC1, TC7, TC8; both fixed TC2, TC4, TC6 (and TC11, found later by ARC-TECHNOLOGY-001 and fixed under the owner's no-out-of-bounds rule); no switch TC3, TC5, TC9, TC10
+Every TC row is decided: switches TC1, TC7, TC8; both fixed TC2, TC4, TC6 (and TC11 and TC12, found later by ARC-TECHNOLOGY-001 and -003 and fixed under the owner's no-out-of-bounds rule); no switch TC3, TC5, TC9, TC10
 ([rule modes](../world/rule-modes.md#registry)).
 
 ## Second reading
@@ -536,8 +538,10 @@ button state.
 - **Disagreement**: the button state codes in 0x56DDC0. The first reader reads
   2 as "expertise lacking" and 1 as "item missing"; the second reader the
   other way round. The first reader re-checked the stack layout and keeps its
-  reading. The row stays F1 until an observation or an oracle run settles it;
-  the slice that builds the window must settle it.
+  reading. **Settled by ARC-TECHNOLOGY-004:** a third independent reading of
+  0x56DDC0 and its click handler and the installed texts (message 0 names missing
+  items, message 1 lacking expertise) confirm the first reader
+  ([ledger SA2](original-verification-ledger.md#schematic-assembly-arc-technology-004)).
 - TC4 was found by the second reader.
 
 ## Open questions
@@ -556,7 +560,7 @@ button state.
   map instances and their auto-level schemes; needs a pass over map instances.
 - **O6** Buy prices (0x462230, 0x4C1150) were not re-read (ledger R9 and O6
   stay with their tasks).
-- **O7** The button state codes ([Second reading](#second-reading)).
+- **O7** The button state codes: answered by ARC-TECHNOLOGY-004 (code 2 expertise lacking, code 1 an item missing; [ledger SA2](original-verification-ledger.md#schematic-assembly-arc-technology-004)).
 
 ## Steamwoven inputs that already exist
 
@@ -615,11 +619,11 @@ this document start at F1 or F2.
    guard on a base decrease, and the level-start snapshot for selling (TC10
    decided). Reuses the auto-level degree rules; no schema change if the
    degrees stay in the advancement sheet.
-3. **TECH-3 Schematic knowledge** (Session; FR-ITEM-017): learned lists from
+3. **TECH-3 Schematic knowledge** (done: ARC-TECHNOLOGY-003, [runtime](../world/schematic-knowledge-runtime.md); Session; FR-ITEM-017): learned lists from
    stored degrees, the PC's found list (append once, no limit), registration
    from reading a schematic document (its schematic number from the written item's
    start text line field, destroy on first read, messages 88/89, TC8 decided; needs a written-item read path, FR-ITEM-010); snapshot schema bump (the next free number, coordinated).
-4. **TECH-4 Assembly** (Simulation pure + Session transaction; FR-ITEM-018):
+4. **TECH-4 Assembly** (done: ARC-TECHNOLOGY-004, [runtime](../world/schematic-assembly-runtime.md); Simulation pure + Session transaction; FR-ITEM-018):
    the component gate (own inventory, exact prototype, worn, broken and
    changed-description items skipped, fallback slots, expertise per component
    discipline against `−complexity`), the three button states (O7 settled),

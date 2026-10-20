@@ -64,6 +64,7 @@ ORIGINAL_EXE_SHA256 = "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c2
 ORACLE_TESTS = "tests/Arcanum.Simulation.Tests/Arcanum.Simulation.Tests.csproj"
 ORACLE_TEST_CLASSES = ("tests/Arcanum.Simulation.Tests/Character/ExperienceOriginalExeTests.cs",
                        "tests/Arcanum.Simulation.Tests/Skills/SkillOriginalExeTests.cs",
+                       "tests/Arcanum.Simulation.Tests/Skills/SkillCheckOriginalExeTests.cs",
                        "tests/Arcanum.Simulation.Tests/Magic/SpellCostOriginalExeTests.cs")
 # ARC-DEV-008: where `./arcanum oracle` has the tests write their receipts (checked against docs/verification/functions.csv).
 ORACLE_RECEIPTS = "docs/verification/receipts"
@@ -73,6 +74,9 @@ ORACLE_FUNCTIONS: dict[str, str] = {
     "0x4A6980": "BonusPointsMatchTheOriginal",
     "0x4C5EB0": "SkillLevelMatchesTheOriginal",
     "0x4C6170": "TrainingSetMatchesTheOriginal",
+    "0x4C62E0": "BasicEffectivenessMatchesTheOriginal",
+    "0x4C6410": "OpposedEffectivenessMatchesTheOriginal",
+    "0x4C69F0": "TechEffectivenessMatchesTheOriginal",
     "0x4507D0": "RunCostMatchesTheOriginal",
     "0x4508A0": "CheckCostMatchesTheOriginal",
     "0x4B1660": "CastCostMatchesTheOriginal",
