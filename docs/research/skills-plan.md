@@ -4,7 +4,7 @@ Status: **Research plan**, work item ARC-RES-061 (2026-10-20), item 13 of the
 owner's top-20 task list (project planning, outside the repository). This
 document turns the `SKILLS` slices K1–K7 of the
 [skills research](skills-evidence.md#10-proposed-skills-slices) (ARC-RES-044)
-into ordered tasks against `origin/main` of 2026-10-20 (through the merge of PR #268, `e9a1356`). Each task names its
+into ordered tasks against `origin/main` of 2026-10-20 (through the merge of PR #271, `e52f447`). Each task names its
 result, the requirement groups it covers, what it reuses, how it is checked
 against the original executable, and what it waits for. It changes no code,
 contract, session schema or dialog port. Every task, code and contract below
@@ -48,11 +48,7 @@ main of 2026-10-20 the slices start from more than they assumed:
 | Read-only character sheet (top-20 item 11) | [viewer](../rendering/terrain-viewer.md#character-sheet-arc-ui-007) | K7 adds a skills page to it. |
 | Dialog grammar admits `LF GF RE RA` as player conditions (and `WA` with a party port); any other opcode is `UnsupportedOperation` | [dialog conversation runtime](../scripting/dialog-conversation-runtime.md) | K3's dialog gates are new opcodes. |
 | `Rules\map.patch` `training` key read but not modelled | [map patch](../world/map-patch.md) | Training sources (K7). |
-
-Not on main yet: the prowling margin in the observer's sight and hearing, read
-in the executable by two readers in the NPC AI awareness research ARC-RES-056
-([PR #269](https://github.com/Simarglok/arcanum-steamwoven/pull/269), open on
-2026-10-20); K5 reuses it and AI slice I2 consumes the skill check.
+| Prowling margin in the observer's sight and hearing, read in the executable by two readers; it names the shared skill check ARC-SKILLS-003 as its source | [NPC AI awareness](npc-ai-awareness.md#21-the-prowling-margin) (ARC-RES-056) | K5 reuses it; AI slice I2 takes the margin from S3. |
 
 Missing owners that some uses wait for: lock state of portals and containers,
 trap state on objects, item durability, a barter window, the shared fate
@@ -108,7 +104,8 @@ and the session runtime stay `WORLD`. So S5 (the shared point pool, stats
 included) and S7 (fate points) take the next free `ARC-WORLD-NNN` codes, and
 the other fifteen take `ARC-SKILLS-NNN` codes in the order they are created
 (none is used on 2026-10-20: no branch, PR or commit has the type), S1 being
-`ARC-SKILLS-001`. Each task is one PR on the Mac (.NET and the original data)
+`ARC-SKILLS-001`; created in order, S3 is `ARC-SKILLS-003`, the code ARC-RES-056 already names
+for the prowling margin. Each task is one PR on the Mac (.NET and the original data)
 unless marked; the components listed exclude tests and docs, which every task
 has; the contract is written in the
 [Definition of Ready](../workflow/tasks.md#definition-of-ready) form when the
@@ -303,7 +300,7 @@ first.
 
 ## Method
 
-Read against `origin/main` at 2026-10-20 (merge of PR #268, `e9a1356`): the skills research, its
+Read against `origin/main` at 2026-10-20 (merge of PR #271, `e52f447`): the skills research, its
 ledger rows, the function registry, the code of the character, advancement,
 combat, equipment, session and dialog owners, the requirements registry and
 the component catalogue. No original file, probe or game data was read for

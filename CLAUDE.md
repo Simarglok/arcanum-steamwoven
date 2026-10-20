@@ -147,7 +147,9 @@ under `docs/research`. Details: `docs/project/status.md`.
   branch, PR and commit naming.
 - `docs/workflow/toolchain.md` — exact SDK/Godot versions, `godot_canonical`,
   lab and export commands.
-- `docs/project/status.md` — component catalogue; `docs/requirements/coverage.md`.
+- `docs/project/status.md` — component catalogue; `docs/requirements/coverage.md` — status of
+  every functional requirement, checked when creating a task and updated in the PR that
+  changes it (`docs/workflow/tasks.md#functional-requirements`).
 - `docs/architecture/decisions.md` — owner decisions (graphics, HD pack, controls,
   platforms); `docs/research/method.md` — research method and provenance;
   `docs/research/original-executable-check.md` — checking behaviour in the
