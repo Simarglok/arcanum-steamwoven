@@ -1325,9 +1325,9 @@ public sealed partial class GameSessionOwner : IDisposable
             facts.HasScript(parented ? SessionScriptPoint.RemoveItem : SessionScriptPoint.Get)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         if (_inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
-        var (revision, map) = (_revision, _actor.Map);
-        bool Stale() => _revision != revision || _actor.Map != map || !_inventory.Seeds.TryGetValue(map, out var current) || !ReferenceEquals(current, seed) ||
-            _inventory.Taken.Contains(item.Entity);
+        var (revision, map, flagVersion) = (_revision, _actor.Map, _flags.Version);
+        bool Stale() => _revision != revision || _actor.Map != map || _flags.Version != flagVersion || !_inventory.Seeds.TryGetValue(map, out var current) ||
+            !ReferenceEquals(current, seed) || _inventory.Taken.Contains(item.Entity);
         var verdict = insertCheck(item);
         ThrowIfDisposed();
         if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict);
@@ -1341,9 +1341,13 @@ public sealed partial class GameSessionOwner : IDisposable
             // The original inserts first and then runs the script, whose result it ignores (ledger IF10). The admitted
             // commands read nothing the insertion changes, so the run is made before the commit and its effects are
             // applied with it, or the whole transfer is refused.
+            // The run reads global flags from the session itself, whatever the host would answer (a flag the session does
+            // not know refuses the transfer).
+            var reads = new SessionFlagReads(this, scripts!);
             run = ScrDispatcher.RunObject(new(SessionScriptPoint.InsertItem, new ScrObjectRef(map.RuntimeMap, item.Entity),
-                new ScrObjectRef(map.RuntimeMap, SessionEventKinds.PlayerEntity), null), scripts!, new() { Rules = _rules.Scripts, Admission = SessionItemScripts.Admission });
-            var failure = InsertScriptEffects(run, scripts!, messages);
+                new ScrObjectRef(map.RuntimeMap, SessionEventKinds.PlayerEntity), null), reads, new() { Rules = _rules.Scripts, Admission = SessionItemScripts.Admission });
+            ThrowIfDisposed();
+            var failure = reads.UnknownFlag ? GameSessionFailure.ItemScriptUnsupported : InsertScriptEffects(run, scripts!, messages);
             ThrowIfDisposed();
             if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = run };
             if (failure != GameSessionFailure.None) return RejectItem(failure, verdict) with { InsertScript = run };
@@ -1366,8 +1370,11 @@ public sealed partial class GameSessionOwner : IDisposable
     // transfer; a flag outside the session's domain and a line the host cannot show do too. Host reads only.
     private GameSessionFailure InsertScriptEffects(ScrRunResult run, ISessionItemScriptHost scripts, List<SessionScriptMessage> messages)
     {
-        if (run.Outcome == ScrOutcome.Refused) return GameSessionFailure.ItemScriptUnsupported;
+        // A script file that exists but cannot be read is not the original's missing file: refused, not skipped.
+        if (run.Outcome == ScrOutcome.Refused || run.Stop == ScrStop.UnreadableScript) return GameSessionFailure.ItemScriptUnsupported;
         var effects = run.Effects;
+        if (effects.GlobalFlags.Count > 0 && _flags.Version.Revision > GlobalFlagLimits.MaxRevision - effects.GlobalFlags.Count)
+            return GameSessionFailure.RevisionExhausted;
         if (effects.Writeback is not null || effects.DestroyTrapObject is not null || effects.Dialog is not null || effects.StoryState is not null || effects.Calls.Count > 0)
             return GameSessionFailure.ItemScriptUnsupported;
         foreach (var write in effects.GlobalFlags)
@@ -1653,6 +1660,35 @@ public sealed partial class GameSessionOwner : IDisposable
     private static GameSessionCreationResult Rejected(GameSessionFailure failure,
         ClockFailure clockFailure = ClockFailure.None, GlobalFlagReason flagReason = GlobalFlagReason.None) =>
         new(null, failure, clockFailure, flagReason);
+}
+
+/// <summary>ARC-SCRIPT-013: the item script host with global flags read from the session; an unknown flag answers false and
+/// is recorded, and the session then refuses the transfer.</summary>
+internal sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host) : IScrHost
+{
+    internal bool UnknownFlag { get; private set; }
+
+    public bool GlobalFlag(int index)
+    {
+        var flags = session.Flags;
+        var read = flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(index)));
+        if (read.Status == GlobalFlagReadStatus.Known && read.Value is { } value) return value;
+        UnknownFlag = true;
+        return false;
+    }
+
+    public ScrSlot? Slot(ScrObjectRef attachee, int point) => host.Slot(attachee, point);
+    public ScrScriptLookup Script(int number) => host.Script(number);
+    public int StoryState() => host.StoryState();
+    public bool IsMonsterGenerator(ScrObjectRef attachee) => host.IsMonsterGenerator(attachee);
+    public ScrDialogState DialogState(ScrObjectRef attachee) => host.DialogState(attachee);
+    public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) =>
+        host.CheckTrapBeforeUse(triggerer, attachee);
+    public bool IsTrapObject(ScrObjectRef attachee) => host.IsTrapObject(attachee);
+    public ScrObjectRef? Player() => host.Player();
+    public ScrObjectRef? Leader(ScrObjectRef critter) => host.Leader(critter);
+    public bool IsJilted(ScrObjectRef critter) => host.IsJilted(critter);
+    public bool IsPc(ScrObjectRef critter) => host.IsPc(critter);
 }
 
 /// <summary>Forwarding view, so callers cannot reach the owner's Dispose or MarkFailed.</summary>

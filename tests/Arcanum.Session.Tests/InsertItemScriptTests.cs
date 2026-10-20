@@ -49,6 +49,7 @@ public sealed class InsertItemScriptTests
         public Dictionary<(int, int), SessionPrintedLine> Lines { get; } = new() { [(Amulet, 1)] = new(SessionPrintedLineStatus.Shown, "It hums.", "line 1") };
         public List<string> Asked { get; } = [];
         public Action? DuringLine { get; set; }
+        public bool Unreadable { get; init; }
 
         public ScrSlot? Slot(ScrObjectRef attachee, int point)
         {
@@ -56,7 +57,8 @@ public sealed class InsertItemScriptTests
             return point == SessionScriptPoint.InsertItem && attachee.Code is "glove" or "boots" or "glove-held" ? new ScrSlot(Amulet, 0, 0) : null;
         }
 
-        public ScrScriptLookup Script(int number) => Programs.TryGetValue(number, out var program) ? ScrScriptLookup.Of(program) : ScrScriptLookup.Missing;
+        public ScrScriptLookup Script(int number) => Unreadable ? ScrScriptLookup.Unreadable
+            : Programs.TryGetValue(number, out var program) ? ScrScriptLookup.Of(program) : ScrScriptLookup.Missing;
 
         public bool GlobalFlag(int index)
         {
@@ -163,6 +165,44 @@ public sealed class InsertItemScriptTests
     }
 
     [TestMethod]
+    public void An_unreadable_script_or_an_unknown_flag_refuses_the_transfer()
+    {
+        using var owner = Attached();
+        var host = new Host(owner) { Unreadable = true };
+        var unreadable = owner.PickUpItem(owner.Version, "glove", Accept, host);
+        Refused(unreadable, owner, GameSessionFailure.ItemScriptUnsupported, 0);
+        Assert.AreEqual(ScrStop.UnreadableScript, unreadable.InsertScript!.Stop);
+
+        // The run reads flags from the session: flag 9 is unknown there, whatever the host would answer.
+        host = new Host(owner);
+        host.Programs[Amulet] = Program(C(ScrCatalogue.Action.Assign, (Local, 0), (Flag, 9)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        Refused(owner.PickUpItem(owner.Version, "glove", Accept, host), owner, GameSessionFailure.ItemScriptUnsupported, 0);
+        Assert.AreEqual(0, Pc(owner).Length);
+    }
+
+    [TestMethod]
+    public void Spilled_flag_writes_of_the_original_mode_apply_together_or_refuse()
+    {
+        var created = GameSessionOwner.Create(Descriptor() with { Rules = RuleMode.Original });
+        using var owner = created.Owner!;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, InventoryStateTests.Seed()).Disposition);
+        Assert.AreEqual(GlobalFlagWriteDisposition.Applied, WriteFlag(owner, 7, false).Disposition);
+        var host = new Host(owner);
+        // X10: a value of 17 written to flag 3 sets flag 3 and, four bits up, flag 7.
+        host.Programs[Amulet] = Program(C(ScrCatalogue.Action.Assign, (Flag, 3), (Number, 17)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        var taken = owner.PickUpItem(owner.Version, "glove", Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, 1L), (taken.Disposition, owner.Version.Revision));
+        CollectionAssert.AreEqual(new[] { new ScrFlagWrite(3, true), new ScrFlagWrite(7, true) }, taken.InsertScript!.Effects.GlobalFlags.ToArray());
+        Assert.AreEqual((true, true), (ReadFlag(owner, 3), ReadFlag(owner, 7)));
+
+        // 1 + 64 also spills into flag 9, which the session does not know: refused, nothing written.
+        host.Programs[Amulet] = Program(C(ScrCatalogue.Action.Assign, (Flag, 3), (Number, 65)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        Assert.AreEqual(GlobalFlagWriteDisposition.Applied, WriteFlag(owner, 3, false).Disposition);
+        Refused(owner.LootItem(owner.Version, "corpse", "boots", Accept, host), owner, GameSessionFailure.ItemScriptUnsupported, 1);
+        Assert.AreEqual((false, (bool?)null), (ReadFlag(owner, 3), ReadFlag(owner, 9)));
+    }
+
+    [TestMethod]
     public void The_script_runs_after_the_insert_check_and_a_call_back_makes_the_transfer_stale()
     {
         using var owner = Attached();
@@ -174,6 +214,9 @@ public sealed class InsertItemScriptTests
         var stale = owner.PickUpItem(owner.Version, "glove", Accept, host);
         Refused(stale, owner, GameSessionFailure.StaleVersion, 1);
         Assert.IsNotNull(stale.InsertScript);
+        // A global flag written from the host is a change too, though it moves no session revision.
+        host.DuringLine = () => WriteFlag(owner, 3, true);
+        Refused(owner.PickUpItem(owner.Version, "glove", Accept, host), owner, GameSessionFailure.StaleVersion, 1);
         Assert.AreEqual(0, Pc(owner).Length);
     }
 

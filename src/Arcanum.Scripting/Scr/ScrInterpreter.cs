@@ -128,10 +128,11 @@ internal sealed class ScrInterpreter
             }
             case ScrCatalogue.Action.PrintLine:
             {
-                // Ledger IS2: the DLG of the attachment's own script, operand 0 the line, operand 1 a number shown with it;
+                // Ledger IS2: the DLG of the running attachment's script (the number this run executes, as for the dialog
+                // action: 2188 during a mind-controlled run, E6), operand 0 the line, operand 1 a number shown with it;
                 // without an attachee nothing is printed.
                 var at = Get(a, 0); var kind = Get(a, 1);
-                if (_roles.Attachee is not null) _lines.Add(new(_slot.Script, at, kind));
+                if (_roles.Attachee is not null) _lines.Add(new(_number, at, kind));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.RemoveThisScript: _changedNumber = 0; return (Step.Next, 0);

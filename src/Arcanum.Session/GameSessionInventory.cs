@@ -134,8 +134,10 @@ public readonly record struct InventoryMutationResult(GameSessionDisposition Dis
 {
     /// <summary>ARC-SCRIPT-013: the item's insert-item script run, when one ran (also on a refusal of its effects).</summary>
     public ScrRunResult? InsertScript { get; init; }
+    private readonly IReadOnlyList<SessionScriptMessage>? _messages;
+
     /// <summary>The lines that script printed, in order, for the host to show; empty when none.</summary>
-    public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = Array.Empty<SessionScriptMessage>();
+    public IReadOnlyList<SessionScriptMessage> Messages { get => _messages ?? Array.Empty<SessionScriptMessage>(); init => _messages = value; }
 }
 
 /// <summary>A line a script printed (ARC-SCRIPT-013): the DLG line of <paramref name="Script"/>, the print action's second
@@ -146,10 +148,10 @@ public enum SessionPrintedLineStatus
 {
     /// <summary>Show <see cref="SessionPrintedLine.Text"/>.</summary>
     Shown,
-    /// <summary>The script's DLG is missing or cannot be read: the original prints nothing (ledger IS2).</summary>
+    /// <summary>The script's DLG is missing or keeps no record: the original's load fails and nothing is printed (ledger IS2).</summary>
     NoDialog,
-    /// <summary>The line would do more than show text (an action field, generated text) or cannot be decoded; the transfer
-    /// is refused before any effect.</summary>
+    /// <summary>The line would do more than show text (an action field, generated text), cannot be decoded, or its DLG
+    /// cannot be read here (a file the original might still load); the transfer is refused before any effect.</summary>
     Unsupported,
 }
 

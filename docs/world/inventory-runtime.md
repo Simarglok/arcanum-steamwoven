@@ -93,7 +93,8 @@ run is made after the insert check and before the commit; the admitted commands 
 the order is equivalent. The transfer then commits together with what the session applies from the run, or is refused
 with `ItemScriptUnsupported` and no effect when:
 
-- the script is outside the set (`Refused`);
+- the script is outside the set (`Refused`) or its file exists but cannot be read (`UnreadableScript`);
+- it reads a global flag the session does not hold as known (the run reads flags from the session, not from the host);
 - the run changed the attachment (local flags, counters, its number), started a conversation, set story state, asked for
   a deferred call or a trap destruction: the moved item has no home for a changed slot yet;
 - it writes a global flag the session does not hold as known;
@@ -101,14 +102,17 @@ with `ItemScriptUnsupported` and no effect when:
 
 Global flag writes are applied with the transfer, in its one revision. A printed line the host shows comes back in
 `InventoryMutationResult.Messages` (`SessionScriptMessage`: script, line, kind, text); a missing DLG prints nothing
-(`NoDialog`), as does a missing script file (`MissingScript`, the transfer proceeds). `InventoryMutationResult.InsertScript`
-carries the run (also on a refusal). A call back into the owner from the host during the run makes the transfer
-`StaleVersion`. Without a host the item is refused, as before.
+(`NoDialog`: no DLG or one without records), as does a missing script file (`MissingScript`, the transfer proceeds); a
+DLG the host cannot read is `Unsupported`. `InventoryMutationResult.InsertScript` carries the run (also on a refusal). A
+call back into the owner from the host during the run (any revision, actor, seed or global-flag change) makes the
+transfer `StaleVersion`. Without a host the item is refused, as before.
 
 The AREA viewer passes `AreaItemScriptHost` when the game's script content loaded: an item's slot from its area row,
 scripts and DLGs from the content stack (the session's data-fix rules), the session's flags, the player and the party;
 the printed line uses the hero's gender (male without a hero) and the diagnostic PC name; a line naming
-`@npcname@` is `Unsupported` (whose name it would be on an item run is not read), so such an item is refused. The status line and the loot window show the printed text after the item's name.
+`@npcname@` is `Unsupported` (whose name it would be on an item run is not read), so such an item is refused. Lines a
+script prints during Virgil's `IN` reach `SessionDialogInventoryPort.LastResult`, but the conversation panel does not show
+them yet (no Crash Site `IN` gives a scripted item). The status line and the loot window show the printed text after the item's name.
 
 ## Dialog seam
 

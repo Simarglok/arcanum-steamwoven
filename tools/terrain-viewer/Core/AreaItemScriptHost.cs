@@ -72,7 +72,10 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost
             // One content never mixes two versions of a file (ARC-SCRIPT-011).
             case ScriptContentStatus.Changed: return new(SessionPrintedLineStatus.Unsupported, string.Empty, $"dialog {script} changed since it was first read");
             // The original's dialog load fails and nothing is printed (ledger IS2); a DLG without records opens nothing either.
-            default: return new(SessionPrintedLineStatus.NoDialog, string.Empty, $"dialog {script}: {read.Status}");
+            case ScriptContentStatus.NoName or ScriptContentStatus.NotFound or ScriptContentStatus.Empty:
+                return new(SessionPrintedLineStatus.NoDialog, string.Empty, $"dialog {script}: {read.Status}");
+            // A file this reader refuses may still load in the original: not shown and not skipped.
+            default: return new(SessionPrintedLineStatus.Unsupported, string.Empty, $"dialog {script}: {read.Status}");
         }
         var alternate = (_session.QueryHeroDialogFacts() ?? AreaConversationProfile.Diagnostic.Pc).Gender != DialogPcGender.Male;
         var printed = ScrPrintedLine.Read(read.Document!, line, alternate, AreaConversationProfile.Diagnostic.Names);

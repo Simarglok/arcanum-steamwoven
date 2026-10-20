@@ -226,13 +226,15 @@ dialogue set at S3, so its talks never schedule a call.
 - **`ScrAdmissionSet.S6`** is S5 plus print line (action 24); `ScrRunOptions` accepts any subset of S6 and keeps S5 as
   its default, so existing hosts are unchanged.
 - **Print line** returns `ScrEffects.Lines`, one `ScrPrintLine(Script, Line, Kind)` per action in order: the DLG line
-  (operand 0) of the running attachment's own script (`_slot.Script`; a mind-controlled run names the NPC's script, a
-  deferred call the called one) and the second number (operand 1), both read as values. A run without an attachee
+  (operand 0) of the running attachment's script (the number the run executes, as the dialog action names it: 2188 while
+  a mind-controlled NPC's attachment runs it, E6; the called script for a deferred call) and the second number
+  (operand 1), both read as values. A run without an attachee
   (tile, sector, a call without one) prints nothing, as the original (ledger IS2).
 - **`ScrPrintedLine.Read(document, line, alternate, names)`** builds the shown text from a loaded DLG as the original's
   NPC-line step does: a missing record shows one space; the text or (`alternate`, a critter triggerer that is not male)
   the alternate text, Windows-1252 with `@pcname@`/`@npcname@` substituted. A record with an action field, generated
-  text (a `g:`, `m:` or `r:` prefix, or exactly `i:`), another token or an undecodable text is `Unsupported`: the
+  text (a `g:`, `m:` or `r:` prefix, or exactly `i:`, tested on the record text whichever field is shown), another token
+  or an undecodable text is `Unsupported`: the
   original would run the action or generate the text, which is not modelled, so a caller refuses the run's effects. It
   carries the registry mark of 0x44B390 (partial). The session uses both for an item's insert-item script
   ([inventory runtime](../world/inventory-runtime.md#insert-item-script-arc-script-013)).

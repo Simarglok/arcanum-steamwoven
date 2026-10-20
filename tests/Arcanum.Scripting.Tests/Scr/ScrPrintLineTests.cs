@@ -80,6 +80,10 @@ public sealed class ScrPrintLineTests
         Assert.AreEqual((ScrPrintedLineStatus.Shown, " "), (Show(40).Status, Show(40).Text));
         Assert.AreEqual((ScrPrintedLineStatus.Shown, "Kept"), (Show(9).Status, Show(9).Text));
         Assert.AreEqual((ScrPrintedLineStatus.Shown, "i: is fine"), (Show(7).Status, Show(7).Text));
+        // The generated-text marker is the record text's, whichever field is shown.
+        var marked = Read(Record("1", "g: greeting", "plain") + Record("2", "plain", "g:x"));
+        Assert.AreEqual(ScrPrintedLineStatus.Unsupported, ScrPrintedLine.Read(marked, 1, true, names).Status);
+        Assert.AreEqual((ScrPrintedLineStatus.Shown, "g:x"), (ScrPrintedLine.Read(marked, 2, true, names).Status, ScrPrintedLine.Read(marked, 2, true, names).Text));
         foreach (var line in new[] { 2, 3, 4, 5, 6, 8 })
             Assert.AreEqual(ScrPrintedLineStatus.Unsupported, Show(line).Status, line.ToString());
     }
