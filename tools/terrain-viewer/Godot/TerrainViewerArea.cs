@@ -33,6 +33,7 @@ public partial class TerrainViewerApp
         _hud!.SetMode(arguments.Mode); InitializeWorld(); _actorTimeline = null; RetireWorldLifecycle();
         // The plan's chart: the exterior chart for the Crash Site, the whole-map chart for --area-map (ARC-RENDER-017).
         _worldActor.Configure(result.AreaStepSnapshot, WorldTime, chart: area.Plan.Chart);
+        NoteMapWindow(result);
         StartAreaTransitions(arguments, result);
         BindAreaConversations(arguments, area);
         BindAreaCompanions();
@@ -67,7 +68,7 @@ public partial class TerrainViewerApp
         var r = area.Snapshot.Reconciliation;
         var b = area.Plan.WorldBounds;
         var limited = b.Width * _camera.State.Zoom > WorldViewport.X - 64 || b.Height * _camera.State.Zoom > WorldViewport.Y - 64;
-        ShowStatus($"{(_readyMapName is { } map ? $"Map '{map}' ({area.Snapshot.CatalogueMap}/{area.Snapshot.RuntimeMap})" : "Crash Site area")} | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {_readyAreaNotApplicable} | visible commands {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | terrain {(_canvas.AreaTerrainChunked ? $"chunks {_canvas.AreaChunkCount}{(_canvas.AreaChunkLevel > 0 ? $" at 1/{1 << _canvas.AreaChunkLevel}" : string.Empty)}, resident {_canvas.AreaChunkResidentCount}/{_canvas.AreaChunkResidentBytes} bytes" : "per command")} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | {(_readyMapName is not null ? AreaMapMovementStatus() : InCave ? $"movement: cave sector at new-game T0, walls block tile edges | {AreaWallStatus()}; roofs/portals/active composites absent | cave lit by its own scheme and stationary lights" : "movement: whole core (9 sectors) at new-game T0, core edge refused | roofs/walls/portals/active composites absent, not general support")}{(_readyMapName is null ? " | cave transfer by use, no gameplay" : "")} | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{AreaTransitionStatus()}{HeroStatusText()}{CombatModeStatus()}{AttackStatus()}{QuickSaveStatus()}{AreaAmbientStatus()}{ConversationStatus()}{CompanionStatus()}{AreaInventoryStatus()}{AreaSheetStatus()}{AreaLogbookStatus()}{AudioStatus()}{SchemeStatus()}{AreaHoverStatus()}{WorldStatus()}");
+        ShowStatus($"{(_readyMapName is { } map ? $"Map '{map}' ({area.Snapshot.CatalogueMap}/{area.Snapshot.RuntimeMap})" : "Crash Site area")} | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {_readyAreaNotApplicable} | visible commands {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | terrain {(_canvas.AreaTerrainChunked ? $"chunks {_canvas.AreaChunkCount}{(_canvas.AreaChunkLevel > 0 ? $" at 1/{1 << _canvas.AreaChunkLevel}" : string.Empty)}, resident {_canvas.AreaChunkResidentCount}/{_canvas.AreaChunkResidentBytes} bytes" : "per command")} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | {(_readyMapName is not null ? AreaMapMovementStatus() : InCave ? $"movement: cave sector at new-game T0, walls block tile edges | {AreaWallStatus()}; roofs/portals/active composites absent | cave lit by its own scheme and stationary lights" : "movement: whole core (9 sectors) at new-game T0, core edge refused | roofs/walls/portals/active composites absent, not general support")}{(_readyMapName is null ? " | cave transfer by use, no gameplay" : "")} | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{AreaTransitionStatus()}{MapStreamStatus()}{HeroStatusText()}{CombatModeStatus()}{AttackStatus()}{QuickSaveStatus()}{AreaAmbientStatus()}{ConversationStatus()}{CompanionStatus()}{AreaInventoryStatus()}{AreaSheetStatus()}{AreaLogbookStatus()}{AudioStatus()}{SchemeStatus()}{AreaHoverStatus()}{WorldStatus()}");
     }
     private string AreaMapMovementStatus() => "movement: whole map at new-game T0 from the map-list arrival, walls/doors/windows by whole-map step rules | "
         + AreaWallStatus().Replace("cave walls", "walls") + "; active composites absent" + AreaRoofStatus() + " | transitions by use, jump point and tile (unconditional only); companions from the map's data";
@@ -97,6 +98,9 @@ public partial class TerrainViewerApp
             viewports.Add(size);
         }
         GetWindow().Size = new(1280,800);
+        // ARC-RENDER-029: let the resize settle before the held samples, so it cannot move a sampled view.
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         // Per-sector terrain and per-body-class native pixels, plus the largest
         // admitted scenery. Expectations come from decoded source pixels; the
         // external original occurrence oracle separately ratifies descriptors.
@@ -110,33 +114,41 @@ public partial class TerrainViewerApp
         var groups = terrainSamples.Concat(bodySamples).ToArray();
         var samples = new List<object>();
         var sampleFrames = new HashSet<AreaFrameKey>();
-        foreach (var zoom in new[] { 1d, 2d, .5d })
-        foreach (var candidates in groups)
+        // ARC-RENDER-029: the samples hold the camera, as the blend samples do (ARC-RENDER-023).
+        await WithAreaSmokeCameraHeld(async () =>
         {
-            GD.Print($"ARC-RENDER-007 sample-begin kind={candidates[0].Visual.Kind} sector={candidates[0].Visual.Sector.Packed} sourceIndex={candidates[0].Visual.SourceIndex} zoom={zoom}");
-            var found = false;
-            var diagnostics = new List<object>();
-            foreach (var command in candidates.Take(64))
+            foreach (var zoom in new[] { 1d, 2d, .5d })
+            foreach (var candidates in groups)
             {
-                _camera!.ResetWorld(new Vec2(command.Destination.X + command.Destination.Width / 2d, command.Destination.Y + command.Destination.Height / 2d), WorldViewport, zoom);
-                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-                using var image = GetViewport().GetTexture().GetImage();
-                var admitted = TryAreaPixel(command, area, image, out var sample, out var diagnostic);
-                diagnostics.Add(new { command.Visual, Diagnostic = diagnostic });
-                if (!admitted) continue;
-                samples.Add(sample); sampleFrames.Add(command.Frame); found = true; break;
+                GD.Print($"ARC-RENDER-007 sample-begin kind={candidates[0].Visual.Kind} sector={candidates[0].Visual.Sector.Packed} sourceIndex={candidates[0].Visual.SourceIndex} zoom={zoom}");
+                var found = false;
+                var diagnostics = new List<object>();
+                foreach (var command in candidates.Take(64))
+                {
+                    _camera!.ResetWorld(new Vec2(command.Destination.X + command.Destination.Width / 2d, command.Destination.Y + command.Destination.Height / 2d), WorldViewport, zoom);
+                    var view = _camera.State;
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var image = GetViewport().GetTexture().GetImage();
+                    // The frame must show the view just set.
+                    if (_camera.State != view) throw new InvalidOperationException($"AREA_CLASS_CAMERA_MOVED {command.Visual.Kind} {view} {_camera.State}");
+                    var admitted = TryAreaPixel(command, area, image, out var sample, out var diagnostic);
+                    diagnostics.Add(new { command.Visual, Diagnostic = diagnostic });
+                    if (!admitted) continue;
+                    samples.Add(sample); sampleFrames.Add(command.Frame); found = true; break;
+                }
+                if (!found)
+                {
+                    var path = System.Environment.GetEnvironmentVariable("ARC_AREA_REPORT");
+                    if (!string.IsNullOrWhiteSpace(path)) System.IO.File.WriteAllText(path + ".admission-failure.json",
+                        System.Text.Json.JsonSerializer.Serialize(new { Schema = "arcanum-area-admission-failure-v1",
+                            Outcome = "FAIL", area.Generation, Zoom = zoom, GroupCommands = candidates.Length,
+                            CandidatesTried = diagnostics.Count, CapHit = candidates.Length > 64, Diagnostics = diagnostics }));
+                    throw new InvalidOperationException("AREA_CLASS_PIXEL_NOT_OBSERVED");
+                }
             }
-            if (!found)
-            {
-                var path = System.Environment.GetEnvironmentVariable("ARC_AREA_REPORT");
-                if (!string.IsNullOrWhiteSpace(path)) System.IO.File.WriteAllText(path + ".admission-failure.json",
-                    System.Text.Json.JsonSerializer.Serialize(new { Schema = "arcanum-area-admission-failure-v1",
-                        Outcome = "FAIL", area.Generation, Zoom = zoom, GroupCommands = candidates.Length,
-                        CandidatesTried = diagnostics.Count, CapHit = candidates.Length > 64, Diagnostics = diagnostics }));
-                throw new InvalidOperationException("AREA_CLASS_PIXEL_NOT_OBSERVED");
-            }
-        }
+            return samples.Count;
+        });
         RefreshAreaStatus();
         var report = new {
             Schema = "arcanum-area-render-coverage-v1", Task = "ARC-RENDER-007", area.Generation, area.Snapshot.Inputs,
@@ -168,7 +180,7 @@ public partial class TerrainViewerApp
         }
         await RunAreaHdSmokeAsync(area, result);
         await RunAreaLightingSmokeAsync(area);
-        if (_areaTransitions is not null) { await RunAreaHoverSmokeAsync(); await RunAreaInventorySmokeAsync(); await RunAreaHeroSmokeAsync(result); await RunAreaLogbookSmokeAsync(); await RunAreaTransitionSmokeAsync(); await RunAreaQuickSaveSmokeAsync(); await RunAreaGaitSmokeAsync(); await RunAreaCombatModeSmokeAsync(); await RunAreaAudioSmokeAsync(); await RunAreaAttackSmokeAsync(); await RunAreaFollowSmokeAsync(); await RunAreaCompanionCaveSmokeAsync(); await RunAreaVisualToggleSmokeAsync(result); }
+        if (_areaTransitions is not null) { await RunAreaHoverSmokeAsync(); await RunAreaInventorySmokeAsync(); await RunAreaHeroSmokeAsync(result); await RunAreaLogbookSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaTransitionSmokeAsync(); await RunAreaQuickSaveSmokeAsync(); await RunAreaGaitSmokeAsync(); await RunAreaCombatModeSmokeAsync(); await RunAreaAudioSmokeAsync(); await RunAreaAttackSmokeAsync(); await RunAreaFollowSmokeAsync(); await RunAreaCompanionCaveSmokeAsync(); await RunAreaVisualToggleSmokeAsync(result); }
         RunAreaClockSmoke();
         // The caller releases its load result, then runs S5 and quits.
     }

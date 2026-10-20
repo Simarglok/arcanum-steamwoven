@@ -188,7 +188,8 @@ public sealed class SessionEventTests
         for (var i = 0; i < GameSessionLimits.PolicyMaxLifeRecords; i++)
             Damage(owner, Npc($"oid:n{i}"), new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
         Damage(owner, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
-        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxScriptCalls - SessionEffectLimits.MaxTimedEffects, owner.QueryEvents().Count);
+        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxScriptCalls - SessionEffectLimits.MaxTimedEffects - SessionEventKinds.MaxLockResets,
+            owner.QueryEvents().Count);
         // ARC-SCRIPT-010: the deferred SCR calls have their own share of the queue on top.
         for (var i = 0; i < SessionEventKinds.MaxScriptCalls; i++)
             Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleScriptCall(owner.Version, new(i + 1, 0, null, null), 1000).Disposition);
@@ -202,6 +203,12 @@ public sealed class SessionEventTests
         }
         Assert.AreEqual(GameSessionFailure.EventBudgetExceeded,
             owner.AddHeroTimedEffect(owner.Version, effect, Arcanum.Simulation.Character.EffectCause.Spell, 1, 1000).Failure);
+        // ARC-WORLD-050: and so do the Lock events (each unlock of a locked door adds one).
+        var door = new SessionOpenableBaseline(Arcanum.Simulation.Locks.OpenableKind.Portal, Arcanum.Simulation.Locks.LockRules.LockedBit, 0, 0);
+        for (var i = 0; i < SessionEventKinds.MaxLockResets; i++)
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.SetOpenableLocked(owner.Version, new(Exterior, $"door:{i}"), door, false).Disposition);
+        Assert.AreEqual(GameSessionFailure.EventBudgetExceeded, owner.SetOpenableLocked(owner.Version, new(Exterior, "door:x"), door, false).Failure);
+        Assert.IsNull(owner.QueryMapChange(Exterior, MapChangeKey.ForEntity("door:x", GameSessionOwner.FlagsProperty)));
         Assert.AreEqual(SessionEventKinds.MaxPending, owner.QueryEvents().Count);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, Npc("oid:n0"), new LifeDamage { HitPoints = 1 }).Disposition);
         // A save of a full queue restores.

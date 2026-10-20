@@ -48,6 +48,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private List<SessionLifeFiring>? _passFirings;
     private List<SessionScriptCallFiring>? _passCalls;
     private List<SessionEffectFiring>? _passEffects;
+    private List<SessionLockFiring>? _passLocks;
     // Replaced, not mutated, when a life step that drew on a trial copy commits.
     private SeededRandom _random;
     private readonly SessionCombatRolls _combatRolls;
@@ -174,7 +175,7 @@ public sealed partial class GameSessionOwner : IDisposable
         failure = ImportSound(snapshot.Sound, GameRules.For(options.Rules).Sound, options.SoundMapDefault, out var sound);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         var sink = new SessionEventSink();
-        failure = ImportEvents(snapshot.Events, hero?.State, life, snapshot.Clock.GameTimestampMs, sink,
+        failure = ImportEvents(snapshot.Events, hero?.State, life, maps, snapshot.Clock.GameTimestampMs, sink,
             GameRules.For(options.Rules).Events, out var events);
         if (failure != GameSessionFailure.None) return Rejected(failure);
 
@@ -969,10 +970,12 @@ public sealed partial class GameSessionOwner : IDisposable
         var firings = new List<SessionLifeFiring>();
         var calls = new List<SessionScriptCallFiring>();
         var effects = new List<SessionEffectFiring>();
+        var locks = new List<SessionLockFiring>();
         _passWorld = world;
         _passFirings = firings;
         _passCalls = calls;
         _passEffects = effects;
+        _passLocks = locks;
         GameEventPassResult pass;
         try
         {
@@ -982,7 +985,9 @@ public sealed partial class GameSessionOwner : IDisposable
                 entity.Code == SessionEventKinds.AbsentRole
                 || (_life.Critters.ContainsKey(entity.Code)
                     ? world.CritterFacts(new(entity.Map), entity.Code) is not null
-                    : world is ISessionScriptWorld scripts && scripts.ObjectExists(new(entity.Map), entity.Code))));
+                    // A host that knows objects answers for every kind; otherwise a Lock event's object exists while the
+                    // session records its lock state (ARC-WORLD-050).
+                    : world is ISessionScriptWorld scripts ? scripts.ObjectExists(new(entity.Map), entity.Code) : LockObjectExists(entity))));
         }
         finally
         {
@@ -990,9 +995,11 @@ public sealed partial class GameSessionOwner : IDisposable
             _passFirings = null;
             _passCalls = null;
             _passEffects = null;
+            _passLocks = null;
         }
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
-            firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly() };
+            firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
+            Locks = locks.AsReadOnly() };
     }
 
     /// <summary>
@@ -1575,7 +1582,8 @@ public sealed partial class GameSessionOwner : IDisposable
     // Saved timers: the queue's strict restore (registry version, kinds, sequences, order, payloads, keys), plus what only
     // the session knows: a hero timer needs the hero, an NPC timer a life record of its NPC, and every timer was set at a
     // game time no later than the saved clock, exactly its kind's delay before its deadline.
-    private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life, long clockMs,
+    private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life,
+        IReadOnlyDictionary<SessionMapId, Dictionary<MapChangeKey, long>> mapChanges, long clockMs,
         SessionEventSink sink, GameEventQueueProfile profile, out GameEventQueue? events)
     {
         events = null;
@@ -1607,6 +1615,18 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.LockReset)
+            {
+                // A Lock event (ARC-WORLD-050): one object whose lock state the saved map changes record, set no later than
+                // the saved clock, an hour (unlock) or a day (jam) before its deadline.
+                if (pending.Entities.Length != 1 || pending.Entities[0].Code == SessionEventKinds.AbsentRole ||
+                    RecordedIn(mapChanges, new(new(pending.Entities[0].Map), pending.Entities[0].Code)) is null ||
+                    pending.Values[0] < 0 || pending.Values[0] > clockMs ||
+                    (pending.DeadlineMs - pending.Values[0]) is not (Arcanum.Simulation.Locks.LockRules.UnlockResetDelayMs or Arcanum.Simulation.Locks.LockRules.JamResetDelayMs))
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
             var scheduledAt = pending.Values[0];
             if (scheduledAt < 0 || scheduledAt > clockMs || scheduledAt > long.MaxValue - SessionEventKinds.Delay(TimerOf(kind.Name)) ||
                 pending.DeadlineMs != scheduledAt + SessionEventKinds.Delay(TimerOf(kind.Name))) return GameSessionFailure.InvalidEvents;
@@ -1620,7 +1640,8 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         // No session kind is SavedUnlessRebuilt yet, so Rebuild is always empty; the AI tick (slice I6) reschedules it here.
         if (converted.Count(e => e.Kind == SessionEventKinds.ScriptCall) > SessionEventKinds.MaxScriptCalls ||
-            converted.Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) > SessionEffectLimits.MaxTimedEffects) return GameSessionFailure.EventBudgetExceeded;
+            converted.Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) > SessionEffectLimits.MaxTimedEffects ||
+            converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets) return GameSessionFailure.EventBudgetExceeded;
         var result = GameEventQueue.Restore(registry, new(saved.Registry, saved.NextSequence, converted.ToImmutable()), profile,
             SessionEventKinds.Limits);
         if (result.Queue is null)

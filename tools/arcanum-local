@@ -137,13 +137,16 @@ def command_launch(args: argparse.Namespace) -> None:
     if args.hero is not None and (tool != "terrain" or args.mode != "crash-site-area"
                                or not v2 or manifest.get("task") not in ("ARC-RENDER-008", launch.UNIVERSAL_TASK)):
         raise ValueError(f"--hero requires terrain --mode crash-site-area from an ARC-RENDER-008 or {launch.UNIVERSAL_TASK} build exported with the hero start")
+    # ARC-RENDER-024: a map's opening sector; map mode only.
+    if args.area_map_sector is not None and args.area_map is None:
+        raise ValueError("--area-map-sector requires --area-map")
     executable, argv = launch.argv_from_manifest(manifest)
     if tool == "terrain":
         separator = argv.index("--")
         inputs = conf.get("inputs", {})
         # ARC-DEV-015: a pinned mode needs its pinned roles verified by setup's installation record (absent for older or
         # explicit configurations, whose inputs keep their earlier meaning).
-        argv = [*argv[:separator + 1], *(launch.map_arguments(inputs, args.area_map, args.hero) if args.area_map is not None
+        argv = [*argv[:separator + 1], *(launch.map_arguments(inputs, args.area_map, args.hero, args.area_map_sector) if args.area_map is not None
                 else launch.terrain_arguments(inputs, args.mode or "terrain-only", preview, task=manifest.get("task"), hero=args.hero,
                                               verified=launch.verified_roles(conf)))]
     emit(launch.start(executable, argv, allow_duplicate=args.allow_duplicate, lock_root=config.home(), tool=tool,
@@ -224,6 +227,7 @@ def parser() -> argparse.ArgumentParser:
     configure.set_defaults(func=command_configure)
     launcher = top.add_parser("launch"); launcher.add_argument("launch", choices=manifests.SUPPORTED_TOOLS); launcher.add_argument("--mode", choices=("terrain-only", "combined", "actor-diagnostic", "world-diagnostic", "crash-site-area")); launcher.add_argument("--allow-duplicate", action="store_true"); launcher.add_argument("--dry-run", action="store_true"); launcher.add_argument("--show-paths", action="store_true")
     launcher.add_argument("--area-map")
+    launcher.add_argument("--area-map-sector", help="X,Y: the sector the map opens at (map mode; the main world map opens as a window there)")
     launcher.add_argument("--hero", choices=launch.PREMADE_HEROES)
     for option in launch.ACTOR_DEFAULTS:
         launcher.add_argument("--" + option.replace("_", "-"))
