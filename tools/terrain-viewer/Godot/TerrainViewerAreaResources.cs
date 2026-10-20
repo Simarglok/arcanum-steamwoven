@@ -102,7 +102,16 @@ public partial class TerrainViewerApp
         var maxChunks = chunkedSweep.MaxChunks; var maxChunkBytes = chunkedSweep.MaxChunkBytes;
         GD.Print($"ARC-RENDER-007 resources sweep steps={steps} commands={sweptCommands} taken={taken} maxVisible={maxVisible} maxGpu={maxLive}/{maxBytes} reuploads={reuploads} evictions={evictions} maxRetained={maxRetained} cpu={old.CpuFrames}/{old.CpuBytes} chunks={chunkComposed}/{chunkEvictions} maxChunks={maxChunks}/{maxChunkBytes}");
 
-        static long Managed() { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); return GC.GetTotalMemory(true); }
+        // ARC-RENDER-025: the last collection of each sample compacts the large-object heap. Before, on a 64-sector map whose
+        // large-object heap held 96 to 208 MB of free space, samples differed from the live bytes by up to tens of megabytes
+        // from run to run; compacted, they equal the live bytes to within about 10 KB (observed, not a runtime guarantee).
+        static long Managed()
+        {
+            GC.Collect(); GC.WaitForPendingFinalizers();
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect();
+            return GC.GetTotalMemory(false);
+        }
         static long Resident() { using var process = System.Diagnostics.Process.GetCurrentProcess(); process.Refresh(); return process.WorkingSet64; }
         static int Handles() => System.IO.Directory.GetFileSystemEntries("/dev/fd").Length;
         var arguments = _arguments ?? throw new InvalidOperationException("AREA_RESOURCES_ARGUMENTS_REQUIRED");
@@ -146,7 +155,7 @@ public partial class TerrainViewerApp
         Require(!retiredAlive, "RETIRED_GENERATION_ALIVE");
         Require(after.Handles <= baseline.Handles, "HANDLE_GROWTH");
         // A small whole map's repository (the cave's is 1.5 MB) is below the heap's ordinary noise, so map mode bounds the
-        // growth by at least 8 MiB, and on a large map (tarant sewers-02: 64 sectors, ~450 MB heap, up to +26 MB in one sample)
+        // growth by at least 8 MiB, and on a large map (tarant sewers-02: 64 sectors, about 540 MB live heap, up to +26 MB in one uncompacted sample)
         // by at least 4 % of the heap before the reload (ARC-RENDER-018); the retired generation itself is proven
         // collected above.
         Require(after.Managed - baseline.Managed < (mustEvict ? old.CpuBytes / 2
