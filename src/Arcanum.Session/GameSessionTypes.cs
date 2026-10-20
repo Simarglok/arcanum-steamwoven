@@ -173,6 +173,8 @@ public enum GameSessionFailure
     InvalidSound,
     // Locks of portals and containers (ARC-WORLD-050).
     InvalidOpenable,
+    // Character point pool (ARC-WORLD-052).
+    HeroEditorUnavailable, HeroEditorClosed, InvalidPointTarget, PointRefused,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
