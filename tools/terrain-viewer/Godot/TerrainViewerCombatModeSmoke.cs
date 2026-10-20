@@ -3,6 +3,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
+using GamepadLab.Core;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -45,7 +46,10 @@ public partial class TerrainViewerApp
             var map = mapMode is { Area: { } area, AreaStepSnapshot: { } mapSteps }
                 ? new AreaMapRuntime(area.Snapshot, mapSteps, area.Plan.Chart) : _areaTransitions!.Current;
             var start = AreaSmokeStandable(map, map.Chart.Spawn, 2);
-            var far = AreaSmokeStandable(map, start with { X = start.X + 12 }, 3);
+            // ARC-COMBAT-006: the goal is a cell the PC can walk to about 12 cells away (a breadth-first search over open steps),
+            // not a fixed offset, which may fall in a wall on another map.
+            var far = RunGoal(map, start);
+            Require(far is not null, "a cell the PC can walk to at least 8 cells from its start");
             AreaSmokePlace(map, start);
             _worldAdvanceObserverForSelfTest = advance => events.AddRange(advance.Movement.Events);
             _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
@@ -59,7 +63,7 @@ public partial class TerrainViewerApp
             RouteFollower Route() => _worldRoute ?? throw new InvalidOperationException("ARC-COMBAT-004 smoke: no route");
             var before = session.QueryHeroLife()!.Record.State.FatigueDamage;
             _areaSmokeTime *= 10; _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);
-            _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, CtrlPressed = true, Position = Screen(far), GlobalPosition = Screen(far) });
+            _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, CtrlPressed = true, Position = Screen(far!.Value), GlobalPosition = Screen(far.Value) });
             Require(Route().Target == far && _worldGait == MovementGait.Run, $"the Ctrl click set a running route: {DescribeWorldRoute(Route())}");
             for (var frames = 0; frames < 600 && !(Route().Status == RouteFollowStatus.Arrived && _worldActor.Session!.State.Phase == MovementPhase.Settled); frames++)
             {
@@ -74,24 +78,32 @@ public partial class TerrainViewerApp
             Require(session.QueryEvents().Any(e => e.Kind == SessionEventKinds.HeroFatigue), "the fatigue recovery is scheduled");
 
             // A held stick with Num Lock run is one move: its run steps count across frames (the press starts the counter).
-            _numLockRun = true; events.Clear();
-            var beforeStick = session.QueryHeroLife()!.Record.State.FatigueDamage;
-            for (var frames = 0; frames < 40; frames++)
+            // ARC-COMBAT-006: the first stick direction that runs at least one charge of steps on this map (a wall may stop one).
+            _numLockRun = true;
+            var stickSteps = 0; var stickCharged = 0;
+            foreach (var stick in new Vec2[] { new(1, -1), new(-1, 1), new(1, 1), new(-1, -1), new(1, 0), new(-1, 0), new(0, 1), new(0, -1) })
             {
-                _areaSmokeTime++;
-                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(new(1, -1)) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
-            }
-            for (var frames = 0; frames < 20 && _worldActor.Session!.State.Phase != MovementPhase.Settled; frames++)
-            {
-                _areaSmokeTime++;
-                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
+                events.Clear();
+                var beforeStick = session.QueryHeroLife()!.Record.State.FatigueDamage;
+                for (var frames = 0; frames < 40; frames++)
+                {
+                    _areaSmokeTime++;
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(stick) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
+                }
+                // At least one neutral frame: the next direction is a new press, which starts its own run-step count.
+                for (var frames = 0; frames < 20 && (frames == 0 || _worldActor.Session!.State.Phase != MovementPhase.Settled); frames++)
+                {
+                    _areaSmokeTime++;
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
+                }
+                stickSteps = events.Count(e => e.Kind == MovementEventKind.StepStarted && e.Assessment!.Provenance.Contains(GaitTiming.RunProvenance));
+                stickCharged = session.QueryHeroLife()!.Record.State.FatigueDamage - beforeStick;
+                charged += stickCharged;
+                if (stickSteps >= RealTimeCombatRules.RunChargeSteps) break;
             }
             _numLockRun = false;
-            var stickSteps = events.Count(e => e.Kind == MovementEventKind.StepStarted && e.Assessment!.Provenance.Contains(GaitTiming.RunProvenance));
-            var stickCharged = session.QueryHeroLife()!.Record.State.FatigueDamage - beforeStick;
             Require(stickSteps >= RealTimeCombatRules.RunChargeSteps && stickCharged == stickSteps / RealTimeCombatRules.RunChargeSteps,
                 $"{stickSteps} stick run steps charged {stickCharged} fatigue");
-            charged += stickCharged;
 
             Require(LeaveCombatModeForDialog() && !HeroInCombatMode, "a dialog start left combat mode");
             PressR();
@@ -103,7 +115,7 @@ public partial class TerrainViewerApp
             var healed = session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = charged });
             Require(healed.Disposition != GameSessionDisposition.Rejected && session.QueryHeroLife()!.Record.State.FatigueDamage == before, "fatigue healed back");
             GD.Print("ARC-COMBAT-004 native-smoke combat-mode PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Start = map.Chart.ToWorld(start), Goal = map.Chart.ToWorld(far), RunSteps = runSteps, StickRunSteps = stickSteps, Charged = charged,
+                Start = map.Chart.ToWorld(start), Goal = map.Chart.ToWorld(far.Value), RunSteps = runSteps, StickRunSteps = stickSteps, Charged = charged,
                 Parity = "NOT_VERIFIED (rules checked in the original executable; no original-runtime run)" }));
         }
         finally
@@ -114,5 +126,25 @@ public partial class TerrainViewerApp
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
+    }
+
+    /// <summary>The first cell at least 12 cells (Chebyshev) from <paramref name="start"/> on open steps, else the farthest such cell
+    /// at least 8 away; null when none.</summary>
+    private static CellCoord? RunGoal(AreaMapRuntime map, CellCoord start)
+    {
+        var routes = new AreaRouteSource(map.Steps, map.Chart);
+        var seen = new HashSet<CellCoord> { start }; var queue = new Queue<CellCoord>([start]);
+        CellCoord? best = null; var bestDistance = 7;
+        while (queue.TryDequeue(out var from) && seen.Count < 20000)
+            foreach (var direction in Enum.GetValues<NeighborDirection>())
+            {
+                var next = RoutePlanner.Neighbor(from, direction);
+                if (seen.Contains(next) || !routes.Contains(next) || routes.Assess(from, direction) != RouteStepVerdict.Open) continue;
+                seen.Add(next); queue.Enqueue(next);
+                var distance = Math.Max(Math.Abs(next.X - start.X), Math.Abs(next.Y - start.Y));
+                if (distance >= 12) return next;
+                if (distance > bestDistance) { best = next; bestDistance = distance; }
+            }
+        return best;
     }
 }
