@@ -392,19 +392,21 @@ the exterior AREA smoke, so its two sweeps are held there too.
 ARC-RENDER-029 found the same cause behind the exterior Crash Site smoke's stop at its
 first class sample (`AREA_CLASS_PIXEL_NOT_OBSERVED`, failure stage `Upload`): on
 `origin/main` the smoke passed twice with the window visible but not focused, and
-stopped there whenever the window held the focus (simulated in a scratch build that
-keeps the window's focus state on, since a background process cannot take the real
-focus on macOS). Every sample read a view on the actor instead of the one just set,
+stopped there in the one run with the focus simulated (a scratch build that keeps the
+window's focus state on, since a background process cannot take the real focus on
+macOS). Every sample read a view on the actor instead of the one just set,
 so all 64 terrain candidates of the first group were off screen. The class samples,
-the exterior lighting samples, the cave lighting samples and the HD identity views
-(exterior and WORLD; with the focus, its widest-body view was quietly the actor's
-view) now hold the camera the same way, each refusing a view that moved after its
+the exterior lighting samples, the cave lighting samples (already on test time, so
+the hold only guards them) and the HD identity views (shared by the exterior and
+WORLD smokes; WORLD runs with processing off, so there the hold only guards) now hold
+the camera the same way, each refusing a view that moved after its
 reset: `AREA_CLASS_CAMERA_MOVED`, `AREA_LIGHTING_CAMERA_MOVED`,
 `CAVE_LIGHTING_CAMERA_MOVED`, `HD_SMOKE_CAMERA_MOVED`. Observed after the change: four
 exterior runs with the focus state held on complete (class samples, HD, lighting,
-transition with cave lighting, sweep and reload PASS; the widest-body HD view shows
-the widest body again), two runs without it complete, and the `crash site cave` map
-smoke passes. A window that really holds the focus was not observed: neither
+transition with cave lighting, sweep and reload PASS); in the first, before the HD
+views held the camera, the widest-body view counted 46 HD draws (the actor view's)
+instead of 15, and the three after it count 15. Three runs without it complete, the
+`crash site cave` map smoke passes and the WORLD smoke passes. A window that really holds the focus was not observed: neither
 `osascript` nor Godot's own move to the foreground could take it from a background
 run.
 

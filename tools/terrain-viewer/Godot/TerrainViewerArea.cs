@@ -97,6 +97,9 @@ public partial class TerrainViewerApp
             viewports.Add(size);
         }
         GetWindow().Size = new(1280,800);
+        // ARC-RENDER-029: let the resize settle before the held samples, so it cannot move a sampled view.
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         // Per-sector terrain and per-body-class native pixels, plus the largest
         // admitted scenery. Expectations come from decoded source pixels; the
         // external original occurrence oracle separately ratifies descriptors.

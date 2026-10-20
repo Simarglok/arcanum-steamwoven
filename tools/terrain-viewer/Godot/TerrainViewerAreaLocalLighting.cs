@@ -81,11 +81,11 @@ public partial class TerrainViewerApp
         {
             _camera!.ResetWorld(new GamepadLab.Core.Vec2(command.Destination.X + command.Destination.Width / 2d,
                 command.Destination.Y + command.Destination.Height / 2d), WorldViewport, 1);
-            var view = _camera.State;
+            var cameraView = _camera.State;
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             using var image = GetViewport().GetTexture().GetImage();
-            if (_camera.State != view) throw new InvalidOperationException($"CAVE_LIGHTING_CAMERA_MOVED {view} {_camera.State}");
+            if (_camera.State != cameraView) throw new InvalidOperationException($"CAVE_LIGHTING_CAMERA_MOVED {cameraView} {_camera.State}");
             return TryAreaPixel(command, area.Frames, _canvas!.AreaVisibleCommands, image, GetViewport(), _hud!.Rect,
                 _readyActor is { } actor ? new Rect2(actor.Destination.X - 5, actor.Destination.Y - 5, actor.Destination.Width + 10, actor.Destination.Height + 10) : null,
                 1, out _, out _, plain, tintAt);
