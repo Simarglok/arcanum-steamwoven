@@ -193,10 +193,10 @@ public sealed class PartyStateTests
         Joined(owner.JoinParty(owner.Version, "ari", Facts(), false), owner, 9);
 
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"party\":{\"followers\":[{\"entity\":\"golem\",\"forced\":true,\"spreadOut\":true}," +
-            "{\"entity\":\"ari\",\"forced\":false,\"spreadOut\":false}]," +
-            "\"others\":[{\"entity\":\"sogg\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false}," +
-            "{\"entity\":\"virgil\",\"standing\":\"Free\",\"spreadOut\":false,\"jilted\":true}]}" + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoSound + NoEvents + ",\"lighting\":null}");
+        StringAssert.Contains(text, ",\"party\":{\"followers\":[{\"entity\":\"golem\",\"forced\":true,\"spreadOut\":true,\"loyalty\":0}," +
+            "{\"entity\":\"ari\",\"forced\":false,\"spreadOut\":false,\"loyalty\":0}]," +
+            "\"others\":[{\"entity\":\"sogg\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":0}," +
+            "{\"entity\":\"virgil\",\"standing\":\"Free\",\"spreadOut\":false,\"jilted\":true,\"loyalty\":0}]}" + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoSound + NoEvents + ",\"lighting\":null}");
 
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryParty().Followers.ToArray(), restored.QueryParty().Followers.ToArray());
@@ -229,31 +229,35 @@ public sealed class PartyStateTests
             Assert.AreEqual(path, result.Path, party);
         }
 
-        const string F = "{\"entity\":\"a\",\"forced\":false,\"spreadOut\":false}";
+        const string F = "{\"entity\":\"a\",\"forced\":false,\"spreadOut\":false,\"loyalty\":0}";
         Fails(",\"party\":{\"followers\":[" + F + "," + F + "],\"others\":[]}", SnapshotDecodeFailure.NotCanonical, "$.party.followers[1].entity");
-        Fails(",\"party\":{\"followers\":[" + F + "],\"others\":[{\"entity\":\"a\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false}]}",
+        Fails(",\"party\":{\"followers\":[" + F + "],\"others\":[{\"entity\":\"a\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":0}]}",
             SnapshotDecodeFailure.NotCanonical, "$.party.others[0].entity");
-        Fails(",\"party\":{\"followers\":[],\"others\":[{\"entity\":\"b\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false}," +
-            "{\"entity\":\"a\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false}]}", SnapshotDecodeFailure.NotCanonical, "$.party.others[1].entity");
-        Fails(",\"party\":{\"followers\":[],\"others\":[{\"entity\":\"a\",\"standing\":\"Following\",\"spreadOut\":false,\"jilted\":false}]}",
+        Fails(",\"party\":{\"followers\":[],\"others\":[{\"entity\":\"b\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":0}," +
+            "{\"entity\":\"a\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":0}]}", SnapshotDecodeFailure.NotCanonical, "$.party.others[1].entity");
+        Fails(",\"party\":{\"followers\":[],\"others\":[{\"entity\":\"a\",\"standing\":\"Following\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":0}]}",
             SnapshotDecodeFailure.OutOfRange, "$.party.others[0].standing");
-        Fails(",\"party\":{\"followers\":[],\"others\":[{\"entity\":\"a\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":true}]}",
+        Fails(",\"party\":{\"followers\":[],\"others\":[{\"entity\":\"a\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":true,\"loyalty\":0}]}",
             SnapshotDecodeFailure.OutOfRange, "$.party.others[0].jilted");
-        Fails(",\"party\":{\"followers\":[],\"others\":[{\"entity\":\"a\",\"standing\":\"Free\",\"spreadOut\":false,\"jilted\":false}]}",
+        Fails(",\"party\":{\"followers\":[],\"others\":[{\"entity\":\"a\",\"standing\":\"Free\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":0}]}",
             SnapshotDecodeFailure.OutOfRange, "$.party.others[0].jilted");
-        Fails(",\"party\":{\"followers\":[{\"entity\":\"a b\",\"forced\":false,\"spreadOut\":false}],\"others\":[]}",
+        Fails(",\"party\":{\"followers\":[{\"entity\":\"a b\",\"forced\":false,\"spreadOut\":false,\"loyalty\":0}],\"others\":[]}",
             SnapshotDecodeFailure.OutOfRange, "$.party.followers[0].entity");
-        Fails(",\"party\":{\"followers\":[{\"entity\":\"a\",\"forced\":false,\"spreadOut\":false,\"jilted\":false}],\"others\":[]}",
+        Fails(",\"party\":{\"followers\":[{\"entity\":\"a\",\"forced\":false,\"spreadOut\":false,\"jilted\":false,\"loyalty\":0}],\"others\":[]}",
             SnapshotDecodeFailure.UnknownField, "$.party.followers[0].jilted");
-        Fails(",\"party\":{\"followers\":[{\"entity\":\"a\",\"forced\":0,\"spreadOut\":false}],\"others\":[]}",
+        Fails(",\"party\":{\"followers\":[{\"entity\":\"a\",\"forced\":0,\"spreadOut\":false,\"loyalty\":0}],\"others\":[]}",
             SnapshotDecodeFailure.WrongType, "$.party.followers[0].forced");
+        Fails(",\"party\":{\"followers\":[{\"entity\":\"a\",\"forced\":false,\"spreadOut\":false,\"loyalty\":16}],\"others\":[]}",
+            SnapshotDecodeFailure.OutOfRange, "$.party.followers[0].loyalty");
+        Fails(",\"party\":{\"followers\":[],\"others\":[{\"entity\":\"a\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false}]}",
+            SnapshotDecodeFailure.MissingField, "$.party.others[0].loyalty");
         Fails(",\"party\":{\"followers\":[]}", SnapshotDecodeFailure.MissingField, "$.party.others");
         Fails(",\"party\":null", SnapshotDecodeFailure.WrongType, "$.party");
         var many = string.Join(",", Enumerable.Range(0, GameSessionLimits.PolicyMaxCompanions + 1)
-            .Select(i => $"{{\"entity\":\"n{i:D3}\",\"forced\":false,\"spreadOut\":false}}"));
+            .Select(i => $"{{\"entity\":\"n{i:D3}\",\"forced\":false,\"spreadOut\":false,\"loyalty\":0}}"));
         Fails(",\"party\":{\"followers\":[" + many + "],\"others\":[]}", SnapshotDecodeFailure.BudgetExceeded, "$.party.followers");
-        var half = string.Join(",", Enumerable.Range(0, 40).Select(i => $"{{\"entity\":\"f{i:D3}\",\"forced\":false,\"spreadOut\":false}}"));
-        var rest = string.Join(",", Enumerable.Range(0, 40).Select(i => $"{{\"entity\":\"o{i:D3}\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false}}"));
+        var half = string.Join(",", Enumerable.Range(0, 40).Select(i => $"{{\"entity\":\"f{i:D3}\",\"forced\":false,\"spreadOut\":false,\"loyalty\":0}}"));
+        var rest = string.Join(",", Enumerable.Range(0, 40).Select(i => $"{{\"entity\":\"o{i:D3}\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":0}}"));
         Fails(",\"party\":{\"followers\":[" + half + "],\"others\":[" + rest + "]}", SnapshotDecodeFailure.BudgetExceeded, "$.party.others");
     }
 
