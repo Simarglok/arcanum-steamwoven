@@ -1,6 +1,6 @@
 # High-level dependency roadmap
 
-This is a product dependency map, not a task queue or authorization to implement a milestone. Active work items, accepted scope and dependencies come from the owner's explicit requests ([task workflow](../workflow/tasks.md)). The [status catalogue](status.md) and [requirements register](../requirements/README.md) share the 2026-10-09 audit baseline through PR #54. The [vision](vision.md) records accepted product direction. Later stages below are proposed dependencies, not dates or approval of the full catalogue.
+This is a product dependency map, not a task queue or authorization to implement a milestone. Active work items, accepted scope and dependencies come from the owner's explicit requests ([task workflow](../workflow/tasks.md)). The [status catalogue](status.md) dates from the 2026-10-09 audit baseline through PR #54 with later per-task updates; the [requirements register](../requirements/README.md) holds the status of each requirement in its [coverage matrix](../requirements/coverage.md), re-checked on 2026-10-20. The [vision](vision.md) records accepted product direction. Later stages below are proposed dependencies, not dates or approval of the full catalogue.
 
 | Stage | Current delivered scope | Next dependency / observable gate |
 | --- | --- | --- |

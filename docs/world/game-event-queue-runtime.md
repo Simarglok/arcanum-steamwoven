@@ -5,13 +5,15 @@ Status: **Implemented bounded component.** ARC-WORLD-022 is slice E1 of the
 session-free queue in `Arcanum.Simulation.Events` (kinds, ordering, scheduling, cancellation, relocation, the due pass
 and a detached snapshot with strict restore). ARC-WORLD-024 is slice E2 with the life-state timers of ARC-COMBAT-002:
 the [game session](game-session-runtime.md) owns one queue, saves it in snapshot schema 9 and runs a pass on its
-clock ([session wiring](#session-wiring-arc-world-024)). **Not wired yet**: no host calls the pass (E3), and the other
-gameplay kinds (AI tick, script calls, effects) belong to their slices (E4).
+clock ([session wiring](#session-wiring-arc-world-024)). ARC-WORLD-039 is slice E3: the AREA viewer pumps the queue
+from its clock ([host pump](#host-pump-arc-world-039)). The other gameplay kinds (AI tick, body decay) belong to their
+slices (E4).
 
 Requirements served in part: [FR-SCRIPT-003](../requirements/story-social-ai.md#fr-script-003) (deferred calls that
-survive a save: the queue is saved with the session; no script-call kind yet) and
+survive a save: the queue is saved with the session, kind `scr.call` since ARC-SCRIPT-010) and
 [FR-RUNTIME-001](../requirements/world-travel-runtime.md#fr-runtime-001) (only due work runs, independent of frame
-rate: the pass, not yet pumped by a frame).
+rate: the AREA viewer's pump steps time to each deadline, so a replay of the same game time split into other frames gives
+the same state, ARC-WORLD-039).
 
 ## What it follows
 
@@ -153,8 +155,8 @@ Rules of the wiring:
   on their map. The source makes unconscious followers wait before the PC leaves; the session moves the timers of every
   follower in the party list, so a host that leaves an unconscious follower behind makes it wait first.
 - **Long waits.** A wait that advances many hours and then runs one pass fires each timer once, late: fatigue and resting
-  count the elapsed time, a poison tick applies one step. Stepping a long wait (the source sleeps one hour per step) is
-  the host pump's job (E3).
+  count the elapsed time, a poison tick applies one step. The AREA viewer's wait is one hour per call and one jump
+  ([host pump](#host-pump-arc-world-039)), as the source's sleep steps one hour at a time.
 - **Rule mode.** A restore uses the event profile of the options' rule mode (`GameRules.For(options.Rules).Events`,
   ARC-WORLD-023); no session kind is `SavedUnlessRebuilt` yet (the AI tick arrives with I6), so both modes restore the
   same timers. The poison recovery timer reads the session's current rules when it fires (`PoisonRecoveryTwice`, TE10).
@@ -194,6 +196,45 @@ queue's own restore refuses (sequences, order, payloads, keys); more events than
 **Migration decision: none.** Schemas 1..8 are `UnsupportedSchema`. A schema-8 quick save loads as "written by an
 incompatible version" with the running session kept, and the next F7 overwrites it. No host kept timers before, so
 nothing is lost.
+
+## Host pump (ARC-WORLD-039)
+
+Slice E3 of the plan: the AREA viewer moves the session clock only through `AreaEventPump`
+(`tools/terrain-viewer/Core/AreaEvents.cs`), which `AreaAmbientDriver` owns when it is created with an event world.
+
+- **Ordinary flow is stepped at deadlines.** Each frame's admitted game time (`GameTimeFlow`, 8× host time) advances in
+  steps that end at every pending game-time deadline of a global event or one of the actor's map, with a pass after every
+  step and one before the first. Every event fires at its own deadline and reschedules from it, so the state after the same
+  game time does not depend on the frame split (FR-RUNTIME-001; the tests replay two hours in one, in 133 ms and in
+  irregular frames and compare the critter's life, every pending event and the clock). The source pings once per frame
+  and fires an event up to a frame late; that lateness is a timing artefact, not a rule, so both rule modes step (like
+  the FIFO tie order of OQ1). Events of another map do not end a step; they wait for their map.
+- **Bounds.** At most 64 steps per frame (`AreaEventPumpLimits.MaxStepsPerAdvance`); beyond them the rest of the frame is
+  one step and its events fire late (`AreaEventReport.Coalesced`, shown on the status line). A pass that leaves due events
+  behind its 500-event budget gets more passes, at most 8 per step; the rest wait for the next step or frame
+  (`BudgetLeft`).
+- **A wait is a jump.** The palette's +1 hour is one `ExplicitWait` jump and then the passes: each timer due inside it
+  fires once, late, and counts the elapsed time, as the source's sleep and other jumps do (K4).
+- **A paused clock** (a dialog, the palette or the inventory open) moves nothing; only the first pass runs.
+- **The world** (`AreaEventWorld`, an `ISessionScriptWorld`) answers from the viewer's current hosts at each question:
+  an NPC's life facts from its combat fields (`AreaCombatHost.Build`, as the hero's attack uses them), so its timers run
+  as the session schedules them; an object a deferred call names exists when it is the PC or a row of its map's T0 data;
+  a call runs through the shown area's conversation host (`AreaConversationHost.RunCall`: the SCR dispatcher with the
+  session's current rules and the viewer's set, then the effects). A call that would start a conversation, is refused
+  or finds its file changed applies nothing and is consumed as not run. A call whose effect the session refuses (a call
+  request over the 1,024 cap, a flag the domain refuses) keeps the effects applied before it, as the original applies
+  actions as it goes, and is reported as not run. The status line and the log keep the reason.
+- **Followers and the PC on another map.** The session moves a follower's timers and a call's player and follower roles
+  with the PC; the world answers such a follower from the map whose T0 data holds it (`IAreaEventObjects.HomeMap`), so its
+  timers keep running, and the call host takes the PC and its own speakers on its map by their ids
+  (`AreaScriptHost.Local`). An object counts as present when any covered map's T0 data holds it, because the viewer
+  does not model removing objects yet.
+- **Trace.** The area status line shows the pending events, the next deadline and the last pass's outcomes; the log
+  prints a line per frame that took events (`ARC-WORLD-039 events ...`).
+
+Map mode (`--area-map`) uses the same pump with its own hosts. Not done: NPC timers on a map whose combat host is missing
+are dropped as missing entities (the session asks the world for their facts); the AI tick and body decay kinds (E4) and an
+animation clock (E5).
 
 ## Tests
 

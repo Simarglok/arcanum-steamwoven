@@ -76,8 +76,11 @@ verifier and persuaded the reviewer, so the oracle must be protected). Sources o
 4. **Domain migrations**: per domain, raise the implemented functions to their target level and replace reconstruction
    references with executable addresses in the same PR. The owner chose full removal on 2026-10-18 (references go
    from history and research too; facts not yet read in the executable keep their address at F0). Done for code, tests
-   and tools (ARC-DEV-009..012), contracts and requirements (ARC-DEV-013) and research documents (ARC-DEV-020);
-   re-reading the F0 facts in the executable continues by domain.
+   and the viewer (ARC-DEV-009, ARC-DEV-010), probes (ARC-DEV-011), contracts (ARC-DEV-012), requirements (ARC-DEV-013) and
+   research documents (ARC-DEV-020); the twelve implemented functions still at F0 were read and raised to F2
+   (ARC-DEV-025, ledger IF1–IF12).
+   The remaining F0 facts are re-read domain by domain when the domain is implemented (owner decision 2026-10-20,
+   ARC-DEV-030): the task that implements or changes a function reads it in the executable first.
 5. **Closure**: the reconstruction removed from `AGENTS.md`, `CLAUDE.md` and the method; the counter becomes a ban.
    Done as ARC-DEV-023.
 

@@ -7,7 +7,7 @@ flee, how a flight turns into a surrender and how a surrender ends, what a
 surrendered NPC does and how the rest of the game treats it, and when and how an
 NPC backs off, including the back-off a PC's kill starts. It settles the plan's
 anomalies P2 and P6. It changes no code; the rules are inputs for slice I5
-(morale) of the plan, on top of the danger state and setter of slice I2.
+(morale) of the plan, on top of the danger state and setter of slice I3.
 
 Earlier facts reused here: the [core loop](npc-ai-core-loop.md) (ARC-RES-054:
 the pass order, the parameter dictionary, the danger states and the setter's rule
@@ -322,7 +322,7 @@ original's behaviour and are kept in both settings.
 2. **The two rolls** (surrender recovery 1..500, back-off start 1..20) are
    labelled draws of the session random source, as design rule 3 asks.
 3. **State.** SURRENDER, FLEE, the fleeing-from handle, BACKING_OFF and
-   SPELL_FLEE are already part of the danger state of slice I2; MR13's fix, if
+   SPELL_FLEE are already part of the danger state of slice I3; MR13's fix, if
    the owner chooses it, needs one more remembered bit per NPC, stored in both
    settings.
 4. **Execution** of the flee goal and the back-off run belongs to slice I7

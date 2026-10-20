@@ -1,6 +1,6 @@
 # Данные, совместимость и отдельные цели Steamwoven
 
-**Покрытие реализации:** аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), через PR #54. Источники исходного исследования и его дата сохранены; актуальный объём — в таблице и Steamwoven-описаниях ниже. [Метод и срез доски](README.md#база-и-происхождение). Новых runtime/GUI/original-data запусков в этом аудите нет.
+**Текущий статус:** статус каждого требования этого документа, реализованный объём, остаток и документация — в [матрице покрытия](coverage.md#данные-совместимость-и-современные-цели) (пересверено 2026-10-20, ARC-DEV-027). Поля «Steamwoven» ниже и сводный раздел покрытия — подробности на дату их последней правки (исходный аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), PR #54); при расхождении верна матрица.
 
 Draft, 2026-10-02. Исходный Steamwoven research pin `b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae`. **Источник (F0)** ниже — чтение функций оригинала по указанным адресам, уровень F0 (не проверено в exe), если строки нет в [журнале сверки](../research/original-verification-ledger.md); новых original-data или runtime проверок не проводилось. Подтверждение чтением функции не равно наблюдению оригинального поведения. Сценарии ниже — предложенная приёмка, не выполненные тесты. См. [правила реестра](README.md).
 
@@ -100,27 +100,11 @@ macOS, Windows, Linux и handheld PC должны запускать один о
 
 Normal/depth/occlusion/emissive maps, soft shadows, fog, weather, particles, improved water и более плавные визуальные переходы day/night — варианты Remastered presentation. Они не должны менять authoritative geometry, gameplay luminance, RNG или clocks. **Происхождение:** исходное product vision владельца; это кандидаты развития, не восстановленные функции оригинала и не обязательный объём раннего Legacy milestone. **Приёмка:** для каждой отдельно принятой возможности показать одинаковые gameplay state outcomes при разных visual settings; asset review и performance проверяются отдельно. **Покрытие:** отсутствует. Если оригинал уже имеет сходный эффект, его legacy-поведение исследуется отдельно; сходное название не доказывает одинаковую семантику.
 
-## Сводное покрытие
+## Покрытие Steamwoven до 2026-10-20
+
+Таблица покрытия этого раздела перенесена в [матрицу покрытия](coverage.md#данные-совместимость-и-современные-цели): там у каждого требования текущий статус, объём, остаток и документация (2026-10-20). Абзацы ниже описывали прежнюю таблицу этого документа (исходный аудит 2026-10-09 с поздними правками) и сохранены как история; слова «таблица», «строки» и «столбцы» в них относятся к ней.
 
 Ни одна строка не закрывает требование полностью. «Частично» обозначает ровно объём в последнем столбце, а «Проверка» — ограниченные исторические проверки связанных компонентов, не новый запуск и не оригинальный паритет.
-
-| ID | Данные | Правила | Интеграция | Проверка | Ограниченный объём |
-| --- | --- | --- | --- | --- | --- |
-| FR-CONTENT-001 | Частично | Частично | Частично | Частично | Authenticated Area owner/frame leases и explicit NPC SCR/DLG sources; read-only discovery установки и resolver `Arcanum.Data.Content` (ARC-DATA-011), но потребители к нему ещё не подключены. |
-| FR-CONTENT-002 | Частично | Частично | Нет | Частично | Порядок источников по чтению функций оригинала (F0) и snapshot resolver (первый источник в порядке поиска выигрывает), отчёт о 109 перекрытиях установки (ARC-DATA-011); потребители не переподключены, runtime-записи и `.ignore` не моделируются. |
-| FR-CONTENT-003 | Нет | Нет | Частично | Частично | Стартовый персонаж — явный вход новой сессии (ARC-WORLD-015, [герой сессии](../world/starting-hero-runtime.md)) рядом с идентичностью и часами; выбор модуля и campaign bootstrap отсутствуют. |
-| FR-CONTENT-004 | Частично | Частично | Частично | Частично | Multisector v119 static/mobile/prototype identity/default/presence и typed NPC bindings; не mutable world registry/save. |
-| FR-CONTENT-005 | Частично | Неприменимо | Частично | Частично | Bounded DAT/ART/MES/SEC/PRO/mobile/DLG/SCR consumers; не все format variants/overlays. |
-| FR-CONTENT-006 | Частично | Частично | Нет | Частично | Raw DLG/MES projections; [ARC-DATA-013](../formats/mes-reader.md): byte-preserving MES reader с typed отказами и явными профилями ASCII/Windows-1252/Windows-1251 (synthetic латиница/кириллица, отсутствующий номер); файл Windows-1251 с `я` (0xFF) отклоняется — NOT READY; не UI/локализация. |
-| FR-CONTENT-007 | Частично | Частично | Нет | Частично | Генератор сессии ARC-WORLD-019: seed и позиция в снимке, равномерные броски с меткой, synthetic replay через сохранение; ни один хост ещё не бросает. |
-| FR-CONTENT-008 | Нет | Нет | Нет | Нет | Общего mod compatibility profile нет. |
-| FR-PRODUCT-001 | Неприменимо | Частично | Частично | Частично | Display lab; не production game UI/readability. |
-| FR-PRODUCT-002 | Неприменимо | Частично | Частично | Частично | Synthetic/diagnostic input, не все gameplay actions. |
-| FR-PRODUCT-003 | Неприменимо | Частично | Частично | Частично | WORLD LT-out/RT-in, 1/2/3x+numeric zoom, saved default2x, Follow/Manual и grid integration; не production camera или physical1:1. |
-| FR-PRODUCT-004 | Частично | Нет | Частично | Частично | Selected Legacy frames/viewer; [HD contract](../rendering/hd-presentation-contract.md) ARC-RENDER-013 с синтетическими тестами; [исследование методов апскейла](../rendering/hd-upscale-research.md) ARC-RES-033; [генеративная перерисовка 4×](../rendering/hd-generative-redetail.md) ARC-RES-038; [формат HD-пакета и рецепта](../formats/hd-pack.md) ARC-DATA-014 (синтетические тесты); [HD-путь отрисовки](../rendering/terrain-viewer.md#hd-render-path-arc-render-014) ARC-RENDER-014 для персонажей и объектов в AREA/WORLD, ARC-RENDER-016 для стен и кусков земли в AREA (тождество с Legacy на nearest-паке 4×, откат по кадру); [переключатель Legacy/HD](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006) ARC-UI-006 с инвариантностью снапшотов Session; нет настоящего HD-пакета. |
-| FR-PRODUCT-005 | Неприменимо | Неприменимо | Частично | Частично | macOS diagnostics; не playable cross-platform validation. |
-| FR-PRODUCT-006 | Неприменимо | Нет | Нет | Нет | Только direction/source study; нет утверждённого gameplay fix profile. |
-| FR-PRODUCT-007 | Нет | Нет | Нет | Нет | Только future visual candidates. |
 
 ## Source inventory и вопросы
 
