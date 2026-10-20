@@ -104,7 +104,8 @@ frontier. NPC `g:`/`m:`/`r:` (prefix) and exact `i:` are frontiers. Other text i
 separator = SP | HTAB | ',' | ';' | ':' | '(' | ')'      field = separator* (op (separator+ op)*)? separator*
 space     = SP | HTAB
 op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? DIGIT+
-          | ('SK' | 'TR' | 'ET') space* int (space* int)?   (ARC-SKILLS-004: the source's second operand, also "tr4-1")
+          | ('SK' | 'TR' | 'ET') space* int (space* int)?   (ARC-SKILLS-004: digits are read greedily, so a second int
+                                                            without a space before it starts with '-': "tr4-1")
 ```
 
 | Field | Admitted operations (domains) |
@@ -116,11 +117,11 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 Unknown opcodes, `$`, combinators, `RE`/`AL` with `>`/`<`, non-negative `IN`, `JO`/`UW` with a non-zero
 first operand, `JO`/`UW`/`FL` in NPC actions or not last, `WA`/`UW` without a party port, and a non-space separator inside one
 operation (`GF 5,1`, `qu(5,6)`: the source's whitespace-skipping `atoi` would read 0 there)
-→ `UnsupportedOperation`; such forms are never reinterpreted. Wrong arity,
-missing separators, out-of-domain values, non-ASCII, `+` outside `RE`/`AL` actions,
+→ `UnsupportedOperation`; such forms are never reinterpreted. A missing operand (except the optional second operand of
+`SK`/`TR`/`ET`, which reads 0), missing separators, out-of-domain values, non-ASCII, `+` outside `RE`/`AL` actions,
 overflow → `InvalidOperation`. Since ARC-SKILLS-004 a number where an operation should start, an extra operand (`LF 1 1 1`,
 `JO 0 30 5`) or a stray one (`ha4, -4, lf1 1`), which the source's scanner skips (DS1), is `UnsupportedOperation` (a frontier,
-not a failure); a missing operand stays `InvalidOperation`. A field of separators only is empty. GF reads/writes use the
+not a failure). A field of separators only is empty. GF reads/writes use the
 owner's current version; `Unknown`/`Unavailable` is a frontier, `Failed`/`Stale` a failure,
 `NoChange` a successful receipt.
 

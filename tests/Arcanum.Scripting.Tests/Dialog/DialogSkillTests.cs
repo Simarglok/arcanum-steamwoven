@@ -144,7 +144,7 @@ public sealed class DialogSkillTests
         // A stray number where an operation should start is outside the subset, as the source's scanner skips it.
         var stray = Read(Record("10", "?") + Record("11", "x", iq: "1", condition: "ha4, -4, lf1 1", response: "0"));
         Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, Start(stray, new Ports(), Owner(), skills: new Skills()).Frontier!.Kind);
-        foreach (var condition in new[] { "PS +3", "SK -1 3", "SK 2 x" })
+        foreach (var condition in new[] { "PS +3", "SK -1 3", "SK 2 x", "SK 2 -", "tr4-" })
         {
             var document = Read(Record("10", "?") + Record("11", "x", iq: "1", condition: condition, response: "0"));
             Assert.AreEqual(DialogConversationFailureKind.InvalidOperation, Start(document, new Ports(), Owner(), skills: new Skills()).Failure!.Kind, condition);
