@@ -71,6 +71,22 @@ public sealed class AreaMapWindowOriginalTests
         Assert.IsTrue(cave.MapTransitions!.Unconditional.Any(s => s.DestinationRuntime == 1 && s.Arrival == new WorldLocation(92913, 82598)));
     }
 
+    [TestMethod, TestCategory("RealData")]
+    public void A_transfer_from_a_caladon_interior_opens_the_main_map_window_around_its_arrival()
+    {
+        // ARC-DATA-038: the Panarii temple's exit arrives at (102647, 116816), by Caladon; that window holds scenery whose ART id
+        // is 0xFFFFFFFF, which has no body (ledger NA1) instead of refusing the window.
+        var temple = AreaLoadOperation.Execute(8, Arguments(Root(), null, "caladon-panarrii temple"), default);
+        Assert.IsTrue(temple.MapTransitions!.Unconditional.Any(s => s.DestinationRuntime == 1 && s.Arrival == new WorldLocation(102647, 116816)));
+        var result = AreaLoadOperation.Execute(9, Arguments(Root(), null) with { AreaMapArrival = new WorldLocation(102647, 116816) }, default);
+        Assert.AreEqual(new AreaSectorCoordinate(1603, 1825), result.AreaMapWindowCentre);
+        var chart = result.Area!.Plan.Chart;
+        Assert.AreEqual(new Arcanum.Data.Traversal.AreaStepCell(102647, 116816), chart.ToWorld(chart.Spawn));
+        Assert.AreEqual(9 * 4096, result.AreaStepSnapshot!.AdmittedCells);
+        Assert.IsTrue(result.Area.Snapshot.Objects.Any(o => o.WorldX == 102582 && o.WorldY == 116816 && o.PrototypeNumber == 4031));
+        Assert.IsTrue(result.Area.Plan.DrawableBodies > 0);
+    }
+
     private static string Root()
     {
         if (Environment.GetEnvironmentVariable("DAT_ROOT") is { Length: > 0 } root) return root;

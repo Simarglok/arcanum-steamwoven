@@ -110,6 +110,13 @@ Every plan:
   so such an object needs no ART; the viewer draws no such body anyway. The
   original still draws a don't-draw object's overlays, so their admission check
   still applies to it; a destroyed or off object is not checked;
+- resolves no body for an object whose ART id is 0xFFFFFFFF (ARC-DATA-038): the
+  original names no ART for ART type 15, so there is nothing to draw
+  ([ledger NA1](../research/original-verification-ledger.md#objects-without-art-arc-data-038));
+  the object stays, with its step evidence, and the viewer counts it as suppressed
+  (`NoArt`). Any other type-15 ID is still refused. A main-map window around
+  Caladon holds such scenery; every window a transition into the main map arrives
+  in now loads complete (62 windows, `AreaWindowStepRealDataTests`);
 - names art as the original does (ARC-DATA-023, rules N1–N7 of the
   [art gaps study](../research/whole-map-art-gaps.md)):
   - critter, monster and unique NPC art (classes 2, 12, 13) in any of the 25

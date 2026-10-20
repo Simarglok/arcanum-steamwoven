@@ -59,6 +59,21 @@ public sealed class AreaResourceBoundaryTests
     }
 
     [TestMethod]
+    public void An_object_whose_art_id_names_no_art_has_no_body()
+    {
+        // ARC-DATA-038: ART id 0xFFFFFFFF (type 15) names no ART in the original (ledger NA1). The object stays an object with
+        // its disposition; it has no visual, and the load is complete (a window around Caladon held such scenery).
+        using var f = Make(uint.MaxValue);
+        var snapshot = f.Owner.LoadStrict();
+        var placed = snapshot.Objects.Single(o => o.Key.Kind == AreaSourceKind.Static);
+        Assert.AreEqual(AreaDisposition.BodyEligibleConditionally, placed.Disposition);
+        Assert.IsFalse(snapshot.Visuals.Any(v => v.Key.Kind == AreaSourceKind.Static));
+        // Any other ART type 15 id is still refused.
+        using var other = Make(0xF0000000);
+        Assert.IsTrue(other.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.UnsupportedArtClassOrState));
+    }
+
+    [TestMethod]
     public void Selected_palette_geometry_and_independent_pixel_copy_are_identity_bound()
     {
         var art = Art();
