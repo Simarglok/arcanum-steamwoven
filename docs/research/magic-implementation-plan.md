@@ -254,9 +254,9 @@ Agreed through the coordinator on 2026-10-20:
   unlearning a rank spends or refunds through the editor-budget transaction that slice S5 of the [skills plan](skills-plan.md) builds (a WORLD code; whichever lane
   gets there first builds it, the other reuses it). The aptitude formula stays in `CharacterStatRules`; skills owns the
   tech points from tech skills, magic owns magick points from spells, the sector adjustment and the mage backgrounds.
-  The shared fate owner (point count, armed fate per kind, consumed on use, saved) is slice S7 of the skills plan (a WORLD code); until it exists,
-  magic takes "spell at maximum" and "save against magick" as armed-fate inputs and returns which fate it consumed, as
-  the attack resolver does.
+  The shared fate owner (point count, armed fate per kind, consumed on use, saved) is slice S7 of the skills plan, built as
+  ARC-WORLD-054 ([fate points](../world/fate-points-runtime.md)): magic reads "spell at maximum" and "save against magick" with
+  `HeroFateArmed` and uses them with `UseHeroFate`, its pure rules taking them as armed-fate inputs as the attack resolver does.
 - **Technology (ARC-RES-062)**: tech degrees and disciplines, schematics, tech items (records 140..222 as their
   effects), the charge-cell source for `ChargesFromCells:` and `ChargeNBranch`, device failure from magick against
   technology, and the tech UI. The engine (run pipeline, the 25 components, payment step, resistance) is this plan's.

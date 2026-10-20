@@ -114,6 +114,24 @@ public sealed class AttackStateTests
     }
 
     [TestMethod]
+    public void AnArmedCriticalHitFateMakesTheNextAttackACriticalHitAndIsUsed()
+    {
+        // ARC-WORLD-054 (FT6): the hero's armed critical-hit fate is read by the resolver and used by the attack.
+        using var owner = Owner();
+        owner.GrantHeroFatePoint(owner.Version);
+        owner.ArmHeroFate(owner.Version, Arcanum.Simulation.Character.FateKind.CriticalHit);
+        Assert.IsTrue(owner.QueryHeroAttack()!.Combatant.CriticalHitFateArmed);
+        var tough = Combat(Npc(hpAdjustment: 5000));
+        var before = owner.Version.Revision;
+        var fated = owner.AttackCritter(owner.Version, new(tough));
+        Assert.AreEqual((FateUse.AttackerCriticalHit, AttackOutcome.CriticalHit), (fated.Resolution!.Fate, fated.Resolution.Outcome));
+        Assert.IsFalse(owner.HeroFateArmed(Arcanum.Simulation.Character.FateKind.CriticalHit));
+        Assert.AreEqual(new Arcanum.Simulation.Character.FateState(0, 0), owner.QueryHeroFate());
+        Assert.IsTrue(owner.Version.Revision >= before + 2, "the used fate, then the damage");
+        Assert.AreEqual(FateUse.None, owner.AttackCritter(owner.Version, new(tough)).Resolution!.Fate);
+    }
+
+    [TestMethod]
     public void ACriticalSelfHitHurtsTheHeroAndPaysNothing()
     {
         using var owner = Owner();

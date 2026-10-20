@@ -87,8 +87,9 @@ public sealed partial class DialogSkillRealDataTests
             "NpcAction/TR 62", "PlayerAction/ET 118", "PlayerAction/TR 53", "PlayerCondition/HA 354", "PlayerCondition/PS 275",
             "PlayerCondition/SK 440", "PlayerCondition/TR 937",
         }, counts.Select(p => $"{p.Key} {p.Value}").ToArray());
-        // 1,215 fields with a skill operation parse whole; 367 stop at an operation outside the subset (money 121, rumors 84, …).
-        Assert.AreEqual((1215, 367, 121), (fieldsWhole, fieldsStopped, stoppedAt.GetValueOrDefault("$$")));
+        // 1,218 fields with a skill operation parse whole; 364 stop at an operation outside the subset (money 121, rumors 84, …).
+        // ARC-WORLD-043 admitted ME after the first observation (1,215 and 367), which completes three more fields.
+        Assert.AreEqual((1218, 364, 121), (fieldsWhole, fieldsStopped, stoppedAt.GetValueOrDefault("$$")));
     }
 
     private static bool ParsesAlone(string operation, ConversationField role)
