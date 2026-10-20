@@ -80,14 +80,16 @@ public sealed class AreaMapTransfersTests
         var transfers = new AreaMapTransfers(map, Set(map, Cell(MapTransitionTrigger.TileEntry, new(1, 1)), guarded, Cell(MapTransitionTrigger.JumpPoint, new(arrival.X, arrival.Y))),
             Destinations(map));
         Assert.AreEqual(1, transfers.TriggerCells.Count);
-        Assert.IsNull(transfers.Enter(new(cell.X + 1, cell.Y)));
-        var entered = transfers.Enter(cell)!;
+        Assert.AreEqual(0, transfers.Enter(new(cell.X + 1, cell.Y)).Count);
+        var both = transfers.Enter(cell);
+        Assert.AreEqual(1, both.Count, "without a script runner the tile's own teleport is not a second trigger");
+        var entered = both[0];
         Assert.AreEqual(AreaUseOutcome.Accepted, entered.Outcome, entered.Reason);
         Assert.AreEqual(MapTransitionTrigger.JumpPoint, transfers.Pending!.Site.Trigger);
         Assert.IsTrue(transfers.Pending.SameMap);
         Assert.AreEqual(arrival, transfers.Pending.Arrival);
         Assert.IsNull(transfers.Pending.Trigger);
-        Assert.AreEqual(AreaUseOutcome.TransitionPending, transfers.Enter(cell)!.Outcome);
+        Assert.AreEqual(AreaUseOutcome.TransitionPending, transfers.Enter(cell)[0].Outcome);
     }
 
     [TestMethod]
@@ -165,5 +167,50 @@ public sealed class AreaMapTransfersTests
         var both = new AreaMapTransfers(map, Set(map, Guarded(MapTransitionGuard.None), plain), Destinations(map));
         Assert.AreEqual((1, 0), (both.Triggers.Count, both.ScriptedTriggers.Count));
         Assert.IsNull(both.ScriptedSite(row.Key));
+    }
+    // ARC-SCRIPT-017: tile and sector scripts run through the host's runner when the player enters them.
+    [TestMethod]
+    public void Entered_tile_and_sector_scripts_run_and_their_teleport_of_the_player_is_the_transfer()
+    {
+        var (map, row) = Load();
+        var cell = new AreaStepCell(row.WorldX!.Value, row.WorldY!.Value);
+        var sector = WorldSectorCoordinate.Containing(new(cell.X, cell.Y));
+        var arrival = map.Snapshot.Terrain.Select(t => new AreaStepCell(t.WorldX, t.WorldY)).First(c => map.Steps.IsAdmitted(c) && c != cell);
+        var tile = new MapPlacedScript(MapTransitionTrigger.TileEntry, sector, 5, new(cell.X, cell.Y), 0, 0, 600);
+        var own = new MapPlacedScript(MapTransitionTrigger.SectorEntry, sector, -1, new(sector.X * 64L, sector.Y * 64L), 0, 0, 601);
+        var set = new MapTransitionSet(new WorldMap("test", new(2, 0, 64, 64), null, null, null, [], [], [], null, []), new(map.RuntimeMap + 4999, "test", null), [], [], [tile, own]);
+        var transfers = new AreaMapTransfers(map, set, Destinations(map));
+        Assert.AreEqual((1, 1), (transfers.ScriptTiles.Count, transfers.ScriptSectors.Count));
+        Assert.AreEqual(0, transfers.Enter(cell).Count, "without a runner a script tile is no trigger");
+        Assert.IsNull(transfers.EnterSector(new(cell.X - 64, cell.Y), cell));
+
+        var pc = new Arcanum.Scripting.Scr.ScrObjectRef(map.RuntimeMap, "pc");
+        var answers = new Dictionary<int, AreaScriptedUse>
+        {
+            [600] = new(AreaScriptedUseOutcome.Teleport, new(pc, 4998, checked((int)arrival.X), checked((int)arrival.Y)), [], null, "teleport"),
+            [601] = new(AreaScriptedUseOutcome.NoTeleport, null, ["line"], null, "no teleport"),
+        };
+        var ran = new List<int>();
+        transfers.PlacedRunner = (placed, refuse) =>
+        {
+            ran.Add(placed.Script);
+            var answer = answers[placed.Script];
+            return answer.Teleport is { } t && refuse(t) is { } refusal ? answer with { Outcome = AreaScriptedUseOutcome.TeleportRefused, Detail = refusal } : answer;
+        };
+        Assert.IsNull(transfers.EnterSector(new(cell.X + 1, cell.Y), cell), "a step inside the sector enters nothing");
+        var entered = transfers.EnterSector(new(sector.X * 64L - 1, cell.Y), cell)!;
+        Assert.AreEqual((AreaUseOutcome.ScriptEnded, MapTransitionTrigger.SectorEntry, "line"), (entered.Outcome, entered.Site!.Trigger, transfers.LastScripted!.Lines.Single()));
+        var stepped = transfers.Enter(cell).Single();
+        Assert.AreEqual(AreaUseOutcome.Accepted, stepped.Outcome, stepped.Reason);
+        Assert.AreEqual((true, arrival, MapTransitionTrigger.TileEntry), (transfers.Pending!.SameMap, transfers.Pending.Arrival, transfers.Pending.Site.Trigger));
+        // With a transfer pending the run still happens; only its teleport is dropped (TR4).
+        Assert.AreEqual(AreaUseOutcome.TransitionPending, transfers.Enter(cell).Single().Outcome);
+        CollectionAssert.AreEqual(new[] { 601, 600, 600 }, ran);
+        transfers.Clear();
+
+        answers[600] = answers[600] with { Teleport = new(pc, 5001, 1, 1) };
+        var refused = transfers.Enter(cell).Single();
+        Assert.AreEqual((AreaUseOutcome.DestinationUnavailable, "DESTINATION_NOT_OPENED_IN_MAP_MODE 5001"), (refused.Outcome, refused.Reason));
+        Assert.IsNull(transfers.Pending);
     }
 }

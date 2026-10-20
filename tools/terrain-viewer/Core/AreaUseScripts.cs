@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Maps;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.Scr;
@@ -17,7 +18,7 @@ public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport
 
 /// <summary>
 /// ARC-SCRIPT-015 (plan slice S4, viewer part): the AREA viewer's SCR host for a use click on an object whose use script can
-/// reach a teleport. The attachee is a T0 object of the shown map (any row of its snapshot, by <see cref="EntityId"/>; an
+/// reach a teleport, and since ARC-SCRIPT-017 for the tile and sector scripts the player enters (<see cref="RunPlaced"/>). The attachee is a T0 object of the shown map (any row of its snapshot, by <see cref="EntityId"/>; an
 /// item or holder of another loaded map through its <see cref="AreaInventoryMap"/> rows); its use slot is the row's
 /// effective attachment, overridden by the session's map changes <c>use.lf</c>, <c>use.counters</c> and
 /// <c>use.script</c>. It answers the S4 guards (<see cref="IScrObjectQueries"/>) from the session: the PC's quest log and the
@@ -186,9 +187,56 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         _shown[entity] = row;
         var attachee = new ScrObjectRef(_shownMap, entity);
         var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
+        return Finish(run, teleportRefusal, writeback => WriteObjectSlot(writeback, attachee));
+    }
+
+    /// <summary>Map-change keys of a tile or sector script's slot, on its sector: <c>tile.N.script</c>, <c>tile.N.lf</c>,
+    /// <c>tile.N.counters</c> for the tile index N, <c>sector.script</c>, <c>sector.lf</c>, <c>sector.counters</c>.</summary>
+    public static string PlacedProperty(MapPlacedScript placed, string part)
+    {
+        ArgumentNullException.ThrowIfNull(placed);
+        return placed.Trigger == MapTransitionTrigger.TileEntry ? $"tile.{placed.Tile}.{part}" : $"sector.{part}";
+    }
+
+    public const string PlacedScriptPart = "script", PlacedLocalFlagsPart = "lf", PlacedCountersPart = "counters";
+
+    /// <summary>A tile or sector script's slot now: the sector file's attachment, overridden by the session's map changes on
+    /// its sector (<see cref="PlacedProperty"/>) of the shown map.</summary>
+    public ScrSlot PlacedSlot(MapPlacedScript placed)
+    {
+        ArgumentNullException.ThrowIfNull(placed);
+        long? Read(string part) => _session.QueryMapChange(new SessionMapId(_shownMap), MapChangeKey.ForSector(placed.Sector.Id, PlacedProperty(placed, part)));
+        return new(Read(PlacedScriptPart) is { } script ? checked((int)script) : placed.Script,
+            Read(PlacedLocalFlagsPart) is { } flags ? checked((uint)flags) : placed.LocalFlags,
+            Read(PlacedCountersPart) is { } counters ? checked((uint)counters) : placed.Counters);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-017: runs a tile script (the PC entered its tile) or a sector script (the PC entered its sector) of the
+    /// shown map, from line 0 as a use with the PC as the triggerer and no attachee, and applies its effects as
+    /// <see cref="Run"/> does. A changed slot is written back as map changes on its sector; the dispatcher discards a tile
+    /// script's changes under the original's rule (ledger X3).
+    /// </summary>
+    public AreaScriptedUse RunPlaced(MapPlacedScript placed, ScrRuleProfile rules, Func<ScrTeleport, string?>? teleportRefusal = null)
+    {
+        ArgumentNullException.ThrowIfNull(placed); ArgumentNullException.ThrowIfNull(rules);
+        if (placed.Trigger is not (MapTransitionTrigger.TileEntry or MapTransitionTrigger.SectorEntry)) throw new ArgumentException("Not a tile or sector script.", nameof(placed));
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        var slot = PlacedSlot(placed);
+        var options = new ScrRunOptions { Rules = rules, Admission = Admission };
+        var run = placed.Trigger == MapTransitionTrigger.TileEntry
+            ? ScrDispatcher.RunTile(new(slot, Pc), this, options)
+            : ScrDispatcher.RunSector(new(slot, Pc), this, options);
+        var source = placed.Trigger == MapTransitionTrigger.TileEntry ? ScrSource.Tile : ScrSource.Sector;
+        return Finish(run, teleportRefusal, writeback => WritePlacedSlot(writeback, placed, source));
+    }
+
+    private AreaScriptedUse Finish(ScrRunResult run, Func<ScrTeleport, string?>? teleportRefusal, Func<ScrWriteback, bool> write)
+    {
         if (run.Outcome == ScrOutcome.Refused)
             return new(AreaScriptedUseOutcome.Refused, null, [], run, $"script {run.Script} SCR line {run.Refusal!.Line}: {run.Refusal.Code} type {run.Refusal.Type}");
-        if (_content.Changed) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], run, $"script {run.Script}: a script file changed since it was first read");
+        if (_content!.Changed) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], run, $"script {run.Script}: a script file changed since it was first read");
         var effects = run.Effects;
         if (effects.Teleports.FirstOrDefault(t => !IsPc(t.Object)) is { } other)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a teleport of {other.Object.Code} is not modelled");
@@ -202,14 +250,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
             var printed = ScrPrintedLine.Read(document, line.Line, false, AreaConversationProfile.Diagnostic.Names);
             if (printed.Status == ScrPrintedLineStatus.Shown) lines.Add(printed.Text);
         }
-        if (!Apply(effects, attachee)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
+        if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
         var teleport = effects.Teleports.FirstOrDefault();
         return teleport is null
             ? new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: no teleport")
             : new(AreaScriptedUseOutcome.Teleport, teleport, lines, run, $"script {run.Script}: teleport to {teleport.CatalogueMap} ({teleport.X},{teleport.Y})");
     }
 
-    private bool Apply(ScrEffects effects, ScrObjectRef attachee)
+    private bool Apply(ScrEffects effects, Func<ScrWriteback, bool> writeSlot)
     {
         if (effects.StoryState is not null || effects.DestroyTrapObject is not null) return false;
         foreach (var write in effects.GlobalFlags)
@@ -229,7 +277,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
                 : _session.RemoveScriptCall(_session.Version, request.Script, AreaScriptHost.Role(request.Attachee));
             if (queued.Disposition == GameSessionDisposition.Rejected) return false;
         }
-        if (effects.Writeback is not { } writeback) return true;
+        return effects.Writeback is not { } writeback || writeSlot(writeback);
+    }
+
+    private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee)
+    {
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Use || writeback.Attachee != attachee
             || Row(attachee) is not { } row || LoadedSlot(row, ScrPoint.Use) is not { } loaded) return false;
         var map = new SessionMapId(attachee.Map);
@@ -239,6 +291,21 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
             Edit(ScriptProperty, writeback.Slot.Script, loaded.Script),
             Edit(LocalFlagsProperty, writeback.Slot.LocalFlags, loaded.LocalFlags),
             Edit(CountersProperty, writeback.Slot.Counters, loaded.Counters),
+        ]);
+        return result.Disposition != GameSessionDisposition.Rejected;
+    }
+
+    private bool WritePlacedSlot(ScrWriteback writeback, MapPlacedScript placed, ScrSource source)
+    {
+        if (writeback.Source != source || writeback.Attachee is not null || writeback.Point != ScrPoint.Use) return false;
+        var map = new SessionMapId(_shownMap);
+        MapChangeEdit Edit(string part, long value, long baseline) =>
+            new(map, MapChangeKey.ForSector(placed.Sector.Id, PlacedProperty(placed, part)), value == baseline ? null : value);
+        var result = _session.ApplyChanges(_session.Version, null,
+        [
+            Edit(PlacedScriptPart, writeback.Slot.Script, placed.Script),
+            Edit(PlacedLocalFlagsPart, writeback.Slot.LocalFlags, placed.LocalFlags),
+            Edit(PlacedCountersPart, writeback.Slot.Counters, placed.Counters),
         ]);
         return result.Disposition != GameSessionDisposition.Rejected;
     }

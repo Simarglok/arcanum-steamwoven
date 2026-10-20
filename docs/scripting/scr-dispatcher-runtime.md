@@ -270,7 +270,8 @@ The dispatcher part of plan slice S4: what a use, tile or sector script asks for
 conditions that guard the conditional map transitions of the [transition research](../research/world-transitions.md#conditions).
 The viewer's use wiring is ARC-SCRIPT-015 ([guarded use transitions](../rendering/area-map-mode.md#guarded-use-transitions-arc-script-015):
 map mode runs the use script of a guarded use site under "S4-area-use", S4 without story state and the dialog action, and
-the player's teleport becomes the transfer); tile and sector events are a later slice.
+the player's teleport becomes the transfer); tile and sector events since ARC-SCRIPT-017
+([tile and sector scripts](../rendering/area-map-mode.md#tile-and-sector-scripts-arc-script-017)).
 
 - **`ScrAdmissionSet.S4`** is S7 plus teleport (44) and fade-and-teleport (102), and the guard conditions PC quest state (6),
   holds an item named (17), is named (20), wields an item named (21) and has a reputation (33). `ScrRunOptions` accepts any
@@ -344,6 +345,9 @@ the player's teleport becomes the transfer); tile and sector events are a later 
   mind-controlled object, the use slot written back and a self-removing script, refusals that change nothing.
   `AreaMapTransfersTests`: which guarded use sites are scripted, the script's outcomes and teleport as the transfer.
   Opt-in `AreaUseScriptsOriginalTests`: the guarded door of `tulla interior` and the census of 21 guarded use sites.
+  ARC-SCRIPT-017: tile and sector scripts run for the PC with their slot on the sector, per rule mode; the transfers run
+  them on entry (tile, then sector) and drop a teleport while one is pending; opt-in: the exit tiles of `iron clan hq` and
+  the census of 3,012 tile and 20 sector scripts.
 
 ## Not ready
 
@@ -354,7 +358,8 @@ the player's teleport becomes the transfer); tile and sector events are a later 
   tile or sector it dispatched.
 - The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls": S3 without
   story state, plus the sound actions and call script in / remove script call); since ARC-SCRIPT-015 map mode's use
-  clicks on guarded use sites run it under "S4-area-use"; tile and sector events, heartbeat and combat are later slices.
+  clicks on guarded use sites run it under "S4-area-use", and since ARC-SCRIPT-017 the tile and sector scripts the player
+  enters; heartbeat and combat are later slices.
 - Not in any admitted set yet: focus groups and local objects, loops, immediate calls and
   call-ex, and the world actions other than teleport and fade-and-teleport (set S4); float line, quests,
   reactions... are not admitted.

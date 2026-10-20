@@ -40,12 +40,29 @@ public sealed class AreaUseScriptsOriginalTests
     }
 
     [TestMethod, TestCategory("RealData")]
-    public void Every_guarded_use_site_of_the_mode_runs_or_is_refused_by_its_set()
+    public void An_exit_tile_script_of_iron_clan_hq_takes_the_player_to_the_start_map()
+    {
+        var root = Root();
+        using var content = ConversationSessionFixture.Scripts(root);
+        var result = AreaLoadOperation.Execute(1, Arguments(root, "iron clan hq"), default);
+        var map = new AreaMapRuntime(result.Area!.Snapshot, result.AreaStepSnapshot!, result.Area.Plan.Chart);
+        var transfers = new AreaMapTransfers(map, result.MapTransitions!, result.MapDestinations!);
+        using var session = ConversationSessionFixture.Create(map.RuntimeMap);
+        transfers.PlacedRunner = (placed, refusal) => new AreaUseScriptHost(session, map.RuntimeMap, map.Snapshot.Objects, [], content).RunPlaced(placed, session.Rules.Scripts, refusal);
+        Assert.AreEqual(18, transfers.ScriptTiles.Count);
+        var entered = transfers.Enter(new(166, 114)).Single();
+        Assert.AreEqual(AreaUseOutcome.Accepted, entered.Outcome, entered.Reason);
+        Assert.AreEqual((5000, new AreaStepCell(96948, 75722), 2203), (transfers.Pending!.To.Catalogue, transfers.Pending.Arrival, transfers.Pending.Site.Script));
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void Every_guarded_use_site_and_every_tile_and_sector_script_runs_or_is_refused_by_its_set()
     {
         var root = Root();
         using var content = ConversationSessionFixture.Scripts(root);
         var first = AreaLoadOperation.Execute(1, Arguments(root, "crematorium-lev 1"), default);
         var outcomes = new Dictionary<AreaScriptedUseOutcome, int>();
+        var placedOutcomes = new Dictionary<(Arcanum.Data.Maps.MapTransitionTrigger, AreaScriptedUseOutcome), int>();
         foreach (var destination in first.MapDestinations!.Values)
         {
             var result = AreaLoadOperation.Execute(1, Arguments(root, destination.Name), default);
@@ -58,11 +75,26 @@ public sealed class AreaUseScriptsOriginalTests
                 var ran = new AreaUseScriptHost(session, map.RuntimeMap, map.Snapshot.Objects, [], content).Run(transfers.Object(key), session.Rules.Scripts);
                 outcomes[ran.Outcome] = outcomes.GetValueOrDefault(ran.Outcome) + 1;
             }
+            // ARC-SCRIPT-017: every tile and sector script of the map, each in a new game's state.
+            foreach (var placed in result.MapTransitions!.Placed)
+            {
+                using var session = ConversationSessionFixture.Create(map.RuntimeMap);
+                var ran = new AreaUseScriptHost(session, map.RuntimeMap, map.Snapshot.Objects, [], content).RunPlaced(placed, session.Rules.Scripts);
+                placedOutcomes[(placed.Trigger, ran.Outcome)] = placedOutcomes.GetValueOrDefault((placed.Trigger, ran.Outcome)) + 1;
+            }
         }
         // 21 guarded use sites on 6 maps: 9 run and their guards hold the teleport back; 12 need conditions or actions
         // outside the set (immediate calls, loops, other conditions) and are refused.
         CollectionAssert.AreEquivalent(new[] { (AreaScriptedUseOutcome.NoTeleport, 9), (AreaScriptedUseOutcome.Refused, 12) },
             outcomes.Select(p => (p.Key, p.Value)).ToArray());
+        // 3,012 tile and 20 sector scripts on the 79 maps map mode opens (the start map holds 2,439 tile scripts): most need
+        // actions outside the set; the five that teleport are the exit tiles of `iron clan hq` to the start map.
+        var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
+        CollectionAssert.AreEquivalent(new[]
+        {
+            ((tile, AreaScriptedUseOutcome.Teleport), 5), ((tile, AreaScriptedUseOutcome.NoTeleport), 249), ((tile, AreaScriptedUseOutcome.Refused), 2758),
+            ((sector, AreaScriptedUseOutcome.NoTeleport), 1), ((sector, AreaScriptedUseOutcome.Refused), 19),
+        }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray());
     }
 
     private static string Root()

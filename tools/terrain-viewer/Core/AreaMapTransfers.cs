@@ -24,7 +24,9 @@ public sealed record AreaMapUseResult(AreaUseOutcome Outcome, MapTransitionSite?
 /// (<see cref="AreaUseRule"/>); a jump point or an unconditional tile script fires when the player enters its tile
 /// (ledger TR3: the jump point first). One transfer is pending at a time (TR4). A destination on the same map needs an
 /// admitted arrival; another map must be one the viewer can open (listed, with 1 to 256 sector files), otherwise the
-/// transfer is refused with the reason. Caller-serialized; no I/O.
+/// transfer is refused with the reason. Since ARC-SCRIPT-015 a guarded use site runs its use script, and since
+/// ARC-SCRIPT-017 every tile and sector script the player enters runs (ledger TS2), through the host's runners; a script's
+/// teleport of the player is the transfer. Caller-serialized; no I/O.
 /// </summary>
 public sealed class AreaMapTransfers
 {
@@ -32,6 +34,9 @@ public sealed class AreaMapTransfers
     private readonly Dictionary<AreaStepCell, MapTransitionSite> _cells = new();
     // ARC-SCRIPT-015: use sites whose teleport stands behind guards or a computed destination; their script decides.
     private readonly Dictionary<AreaObjectKey, (MapTransitionSite Site, AreaObjectRecord Object)> _scripted = new();
+    // ARC-SCRIPT-017: every tile script by its tile and every sector script by its sector, teleport or not.
+    private readonly Dictionary<AreaStepCell, MapPlacedScript> _tiles = new();
+    private readonly Dictionary<WorldSectorCoordinate, MapPlacedScript> _sectors = new();
     private readonly IReadOnlyDictionary<int, AreaMapDestination> _destinations;
     /// <summary>Every map map mode can open, by runtime number (ARC-WORLD-038: a quick load to another map).</summary>
     public IReadOnlyDictionary<int, AreaMapDestination> Destinations { get; }
@@ -70,7 +75,19 @@ public sealed class AreaMapTransfers
             if (row is null || row.Key.ObjectIdSha256 != owner.OwnIdSha256 || row.WorldX is null || row.WorldY is null || _uses.ContainsKey(row.Key)) continue;
             _scripted.TryAdd(row.Key, (site, row));
         }
+        foreach (var placed in transitions.Placed)
+            if (placed.Trigger == MapTransitionTrigger.TileEntry) _tiles.TryAdd(new(placed.Location.X, placed.Location.Y), placed);
+            else if (placed.Trigger == MapTransitionTrigger.SectorEntry) _sectors.TryAdd(placed.Sector, placed);
     }
+
+    /// <summary>ARC-SCRIPT-017: runs a tile or sector script of this map for the player and returns what it asked for; set
+    /// by the host. The second argument names why a teleport cannot be taken, as for <see cref="ScriptRunner"/>. Without it a
+    /// tile fires only its jump point or unconditional tile teleport (ARC-WORLD-031) and a sector nothing.</summary>
+    public Func<MapPlacedScript, Func<ScrTeleport, string?>, AreaScriptedUse>? PlacedRunner { get; set; }
+
+    /// <summary>ARC-SCRIPT-017: the tiles and sectors with a script.</summary>
+    public IReadOnlyCollection<AreaStepCell> ScriptTiles => _tiles.Keys;
+    public IReadOnlyCollection<WorldSectorCoordinate> ScriptSectors => _sectors.Keys;
 
     /// <summary>ARC-SCRIPT-015: the guards a scripted use runs its script for (a conditional path, a computed destination);
     /// any other guard (another object moved, a trap, a container's loot screen, an object a click cannot pick) keeps the
@@ -124,14 +141,49 @@ public sealed class AreaMapTransfers
         };
     }
 
-    /// <summary>The player entered <paramref name="cell"/>: a jump point or an unconditional tile script there queues its
-    /// transfer. Null when the tile has none; a refused one returns its reason.</summary>
-    public AreaMapUseResult? Enter(AreaStepCell cell)
+    /// <summary>
+    /// The player entered <paramref name="cell"/>: its jump point queues its transfer (ledger TR3, first); then, with a
+    /// <see cref="PlacedRunner"/>, the tile's script runs and its teleport of the player is the transfer, else an
+    /// unconditional tile teleport there queues its transfer. Empty when the tile has none; a refused one returns its
+    /// reason. A teleport asked while another transfer is pending is dropped and the run's other effects stay (TR4).
+    /// </summary>
+    public IReadOnlyList<AreaMapUseResult> Enter(AreaStepCell cell)
     {
-        if (!_cells.TryGetValue(cell, out var site)) return null;
         LastScripted = null;
-        if (Pending is not null) return new(AreaUseOutcome.TransitionPending, site, 0, "TRANSITION_PENDING");
-        return Queue(site, null, 0);
+        var results = new List<AreaMapUseResult>(2);
+        var site = _cells.GetValueOrDefault(cell);
+        if (site is { Trigger: MapTransitionTrigger.JumpPoint }) results.Add(Pending is not null ? new(AreaUseOutcome.TransitionPending, site, 0, "TRANSITION_PENDING") : Queue(site, null, 0));
+        if (PlacedRunner is not null && _tiles.TryGetValue(cell, out var placed)) results.Add(RunPlaced(placed));
+        else if (site is { Trigger: MapTransitionTrigger.TileEntry })
+            results.Add(Pending is not null ? new(AreaUseOutcome.TransitionPending, site, 0, "TRANSITION_PENDING") : Queue(site, null, 0));
+        return results;
+    }
+
+    /// <summary>ARC-SCRIPT-017: the player stepped from <paramref name="from"/> into <paramref name="to"/>; when that enters
+    /// another sector whose script exists, the script runs (with a <see cref="PlacedRunner"/>), as the original runs a
+    /// sector script when the player enters its sector. Null otherwise.</summary>
+    public AreaMapUseResult? EnterSector(AreaStepCell from, AreaStepCell to)
+    {
+        var sector = WorldSectorCoordinate.Containing(new(to.X, to.Y));
+        if (PlacedRunner is null || sector == WorldSectorCoordinate.Containing(new(from.X, from.Y)) || !_sectors.TryGetValue(sector, out var placed)) return null;
+        LastScripted = null;
+        return RunPlaced(placed);
+    }
+
+    private AreaMapUseResult RunPlaced(MapPlacedScript placed)
+    {
+        var site = new MapTransitionSite(placed.Trigger, placed.Location, null, placed.Script, [placed.Script], 0, false, false, Map.Snapshot.CatalogueMap,
+            Map.RuntimeMap, placed.Location, MapTransitionGuard.None);
+        // A pending transfer refuses the teleport only: the run applies and its teleport is dropped (TR4).
+        var ran = LastScripted = PlacedRunner!(placed, teleport => Pending is not null ? null : Refusal(Teleported(site, teleport)));
+        return ran.Outcome switch
+        {
+            AreaScriptedUseOutcome.Teleport when Pending is not null => new(AreaUseOutcome.TransitionPending, Teleported(site, ran.Teleport!), 0, "TRANSITION_PENDING"),
+            AreaScriptedUseOutcome.Teleport => Queue(Teleported(site, ran.Teleport!), null, 0),
+            AreaScriptedUseOutcome.TeleportRefused => new(AreaUseOutcome.DestinationUnavailable, Teleported(site, ran.Teleport!), 0, ran.Detail),
+            AreaScriptedUseOutcome.NoTeleport => new(AreaUseOutcome.ScriptEnded, site, 0, ran.Detail),
+            _ => new(AreaUseOutcome.ScriptRefused, site, 0, ran.Detail),
+        };
     }
 
     /// <summary>The site as the script's teleport resolved it: its destination and arrival (a runtime −1 keeps this map, as a

@@ -47,6 +47,11 @@ public sealed class MapTransitionsRealDataTests
         Assert.AreEqual(421, tiles.Length);
         Assert.AreEqual(9, tiles.Count(p => p.Site.Unconditional));
         Assert.AreEqual(0, sites.Count(p => p.Site.Trigger == MapTransitionTrigger.SectorEntry));
+        // ARC-SCRIPT-017: every placed tile and sector script, teleport or not (2,439 tile scripts on the start map).
+        var placed = sets.SelectMany(s => s.Placed).ToArray();
+        Assert.AreEqual((3012, 20), (placed.Count(p => p.Trigger == MapTransitionTrigger.TileEntry), placed.Count(p => p.Trigger == MapTransitionTrigger.SectorEntry)));
+        Assert.AreEqual(2439, sets.Single(s => s.Entry!.Runtime == 1).Placed.Count(p => p.Trigger == MapTransitionTrigger.TileEntry));
+        Assert.IsTrue(sets.All(s => s.Placed.Where(p => p.Trigger == MapTransitionTrigger.TileEntry).GroupBy(p => p.Location).All(g => g.Count() == 1)), "one script per tile");
 
         var crossing = sites.Where(p => p.Site.Trigger != MapTransitionTrigger.JumpPoint && p.Site.Unconditional && p.Site.DestinationRuntime != p.From.Runtime).ToArray();
         Assert.AreEqual(151, crossing.Length);

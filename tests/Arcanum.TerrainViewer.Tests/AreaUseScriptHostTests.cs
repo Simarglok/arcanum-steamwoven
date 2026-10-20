@@ -98,6 +98,9 @@ public sealed class AreaUseScriptHostTests
             // 705: removes itself after the first use; then has no reputation and a teleport behind it.
             Write("scr/00705once.scr", Program(If(new(ScrCatalogue.Condition.HasReputation, (Triggerer, 0), N(4)), TeleportPc(5076), new(0)),
                 Do(new(ScrCatalogue.Action.RemoveThisScript)), Do(Skip)));
+            // 706: a tile script that keeps a local flag and teleports the player; 707: a sector script that sets a flag.
+            Write("scr/00706tile.scr", Program(Do(new(ScrCatalogue.Action.SetLocalFlag, N(2))), Do(TeleportPc(5076)), Do(Skip)));
+            Write("scr/00707sector.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(9))), Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(Skip)));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -267,6 +270,36 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual((AreaScriptedUseOutcome.TeleportRefused, "DESTINATION_NOT_OPENED_IN_MAP_MODE 5076"), (refused.Outcome, refused.Detail));
             Assert.AreEqual(new ScrTeleport(host.Pc, 5076, 5, 6), asked.Single());
             Assert.AreEqual(held, session.Version, "the local flag 3 is not written back");
+        });
+    }
+    // ARC-SCRIPT-017: tile and sector scripts run for the PC with no attachee; their slot lives on their sector.
+    [TestMethod]
+    public void Tile_and_sector_scripts_run_for_the_pc_and_keep_their_slot_on_the_sector_by_rule()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var sector = new Arcanum.Data.Maps.WorldSectorCoordinate(3, 4);
+            var tile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, sector, 70, new(198, 257), 0, 0, 706);
+            var own = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry, sector, -1, new(192, 256), 0x10, 0, 707);
+            Assert.AreEqual(("tile.70.lf", "sector.script"), (AreaUseScriptHost.PlacedProperty(tile, AreaUseScriptHost.PlacedLocalFlagsPart), AreaUseScriptHost.PlacedProperty(own, AreaUseScriptHost.PlacedScriptPart)));
+            var host = Host(session, content);
+
+            var stepped = host.RunPlaced(tile, session.Rules.Scripts);
+            Assert.AreEqual((AreaScriptedUseOutcome.Teleport, new ScrTeleport(host.Pc, 5076, 5, 6)), (stepped.Outcome, stepped.Teleport));
+            Assert.AreEqual(new ScrSlot(706, 1u << 2, 0), host.PlacedSlot(tile), "Steamwoven keeps a tile script's own change");
+            Assert.AreEqual(1L << 2, session.QueryMapChange(new SessionMapId(1), MapChangeKey.ForSector(sector.Id, "tile.70.lf")));
+
+            using var original = ConversationSessionFixture.Create();
+            var plain = Host(original, content);
+            Assert.AreEqual(AreaScriptedUseOutcome.Teleport, plain.RunPlaced(tile, GameRules.Original.Scripts).Outcome);
+            Assert.AreEqual(new ScrSlot(706, 0, 0), plain.PlacedSlot(tile), "the original stores the unchanged record back (ledger X3)");
+
+            var entered = host.RunPlaced(own, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, entered.Outcome, entered.Detail);
+            Assert.IsTrue(host.GlobalFlag(9));
+            Assert.AreEqual(new ScrSlot(707, 0x10 | 1u << 1, 0), host.PlacedSlot(own));
+            Assert.ThrowsExactly<ArgumentException>(() => host.RunPlaced(tile with { Trigger = Arcanum.Data.Maps.MapTransitionTrigger.Use }, session.Rules.Scripts));
         });
     }
 }
