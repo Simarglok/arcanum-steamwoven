@@ -50,7 +50,7 @@ and credits nothing.
 | Hit points, fatigue | Cost 1; no maximum in the original, the session stops at 100 bought points | Refunds 1 | 0x55A5C0 rows 0 and 1; CP3, CP4 |
 | Basic skill | Cost 1; the points setter refuses four levels per point above the key stat's cap: "at maximum" when the skill's level is 20, else the key stat's refusal | One point per pass, refunding 1 each, repeated until the skill's level changes (the original's click) or, with `SkillRefundClick.OnePoint`, once; stops at the floor; a first pass the key stat refuses (its cap fell below the points left, for example under an effect) is refused | 0x57ACD0, 0x57AEB0; CP5, CP6 |
 | Tech skill | As a basic skill; a tech point moves with each point | One point | 0x57ACD0, 0x57AEB0; CP5, CP7 |
-| College, tech discipline | Through the lane (`IPointLane`), `LaneNotReady` until MT3 and TECH-2 plug in | Through the lane, down to the floor | college handler, degree sell 0x589AF0; CP2, TC10 |
+| College, tech discipline | Through the lane (`IPointLane`): spell ranks `LaneNotReady` until MT3 plugs in; tech degrees through `TechDegreeRules.Lane` since ARC-TECHNOLOGY-002 ([tech degrees](tech-degrees-runtime.md)) | Through the lane, down to the floor | college handler, degree buy 0x589A20 and sell 0x589AF0; CP2, TC10 |
 
 The editor's stat hint (`NextStatCost`, 0x55AE70) shows `StatCost(base + 1)` while the **base** is below the race's maximum,
 and 0 at it: when an effect holds the effective value at the maximum, the hint shows a cost the + button then refuses
@@ -87,6 +87,6 @@ strict in both modes.
 ## Not ready
 
 - No caller: task S6 puts the + and − buttons on the AREA viewer's character sheet; the viewer has no editor yet.
-- Spell ranks and tech degrees answer `LaneNotReady` until the magic lane's MT3 (spell book) and the technology lane's
-  TECH-2 (degrees) add their lanes.
+- Spell ranks answer `LaneNotReady` until the magic lane's MT3 (spell book) adds its lane; tech degrees go through the
+  technology lane since ARC-TECHNOLOGY-002.
 - The character editor's other modes (creation, the level-up of followers, multiplayer) are not modelled.

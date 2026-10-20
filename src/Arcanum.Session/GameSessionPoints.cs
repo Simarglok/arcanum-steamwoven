@@ -54,8 +54,9 @@ public sealed partial class GameSessionOwner
     /// or a dead one (<see cref="GameSessionFailure.HeroEditorUnavailable"/>; death does not close the editor); a closed editor (<see cref="GameSessionFailure.HeroEditorClosed"/>);
     /// an undefined track or click, or an index out of range (<see cref="GameSessionFailure.InvalidPointTarget"/>); the version; the rules'
     /// refusal (<see cref="GameSessionFailure.PointRefused"/>, the answer in <see cref="SessionPointResult.Change"/>; a pool stops at
-    /// <see cref="SessionAdvancementLimits.MaxHeroPoolPoints"/>); the revision. Spell ranks and tech degrees answer
-    /// <see cref="PointChangeStatus.LaneNotReady"/> until their lanes plug in.
+    /// <see cref="SessionAdvancementLimits.MaxHeroPoolPoints"/>); the revision. Spell ranks answer
+    /// <see cref="PointChangeStatus.LaneNotReady"/> until their lane plugs in; tech degrees go through <see cref="TechDegreeRules.Lane"/>
+    /// (ARC-TECHNOLOGY-002).
     /// </summary>
     public SessionPointResult SpendHeroPoint(GameSessionVersion expected, AdvancementTrack track, int index)
     {
@@ -83,10 +84,11 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// The lane of a track the pool does not buy itself: spell ranks (<see cref="AdvancementTrack.College"/>) are the magic lane's
-    /// (MT3, the spell book), tech degrees (<see cref="AdvancementTrack.TechDiscipline"/>) the technology lane's (TECH-2). Each
-    /// adds its <see cref="IPointLane"/> here; until then the pool answers <see cref="PointChangeStatus.LaneNotReady"/>.
+    /// (MT3, the spell book), tech degrees (<see cref="AdvancementTrack.TechDiscipline"/>) the technology lane's
+    /// (<see cref="TechDegreeRules.Lane"/>, ARC-TECHNOLOGY-002). The magic lane adds its <see cref="IPointLane"/> here; until then the
+    /// pool answers <see cref="PointChangeStatus.LaneNotReady"/> for spell ranks.
     /// </summary>
-    private static IPointLane? PointLane(AdvancementTrack track) => null;
+    private static IPointLane? PointLane(AdvancementTrack track) => track == AdvancementTrack.TechDiscipline ? TechDegreeRules.Lane : null;
 
     private SessionPointResult? PointPrecheck(GameSessionVersion expected, AdvancementTrack track, int index,
         SkillRefundClick click = SkillRefundClick.UntilLevelChanges)
