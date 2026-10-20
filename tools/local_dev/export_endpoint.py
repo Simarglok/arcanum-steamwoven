@@ -197,7 +197,8 @@ def run_export(args: argparse.Namespace) -> int:
     with config.registry_lock():
         preflight = retention.export_preflight(registry, args.tool, getattr(args, "output_bytes", None),
                     getattr(args, "temporary_bytes", None), conf=conf, destinations=paths,
-                    estimate_manifest=Path(args.estimate_manifest) if getattr(args, "estimate_manifest", None) else None)
+                    estimate_manifest=Path(args.estimate_manifest) if getattr(args, "estimate_manifest", None) else None,
+                    first_export=getattr(args, "first_export", False))
     # The shared no-follow opener creates/pins missing parents; mkdir on the
     # original pathname would follow a concurrently introduced parent symlink.
     lease = retention._try_exclusive(candidate / ".export-lease.lock")
@@ -212,7 +213,8 @@ def run_export(args: argparse.Namespace) -> int:
             retention.verify_destinations(paths, proofs)
             preflight = retention.export_preflight(registry, args.tool, getattr(args, "output_bytes", None),
                         getattr(args, "temporary_bytes", None), conf=conf, destinations=paths,
-                        estimate_manifest=Path(args.estimate_manifest) if getattr(args, "estimate_manifest", None) else None)
+                        estimate_manifest=Path(args.estimate_manifest) if getattr(args, "estimate_manifest", None) else None,
+                        first_export=getattr(args, "first_export", False))
         preflight = {"schema": "arcanum-export-preflight-v1", **preflight,
                      "candidateId": candidate_id, "candidateCommit": args.candidate}
         evidence = candidate / "evidence" / "export-preflight.json"
@@ -278,6 +280,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--temporary-bytes", type=int,
                         help="optional explicit measured temporary low-water estimate")
     result.add_argument("--estimate-manifest")
+    result.add_argument("--first-export", action="store_true",
+                        help="ARC-DEV-026: no payload survives; --output-bytes is the owner's estimate")
     result.add_argument("--temporary-root")
     result.add_argument("--write-root", action="append", default=[])
     result.add_argument("command", nargs=argparse.REMAINDER)

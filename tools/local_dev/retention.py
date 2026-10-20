@@ -44,6 +44,11 @@ AREA_TASKS = ("ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009
 # ARC-DEV-015: universal builds (map mode on any installation) carry the terrain gates, the focused viewer tests and the
 # exported host check, and no pinned Crash Site regression gate; their launch is map mode only (tools/arcanum-local).
 REQUIRED_TASK_SUCCESS_GATES['ARC-DEV-015'] = {"focused-tests", "dual-hostfxr"}
+# ARC-DEV-026: when no payload of a tool survives in any configured root (nothing to measure), the owner may state the
+# output estimate for one first export. It is never a silent fallback: an explicit flag, at least this many bytes, and
+# the manifest/registry record it as this basis.
+FIRST_EXPORT_BASIS = "first-export-owner-estimate"
+FIRST_EXPORT_MIN_BYTES = 1024**3
 
 
 def _tool_for_task(task: str) -> str | None:
@@ -716,6 +721,8 @@ def register_export(registry: dict[str, Any], *, conf: dict[str, Any], tool: str
         registry.setdefault("builds", {})[candidate_id] = {"lifecycle": "exported", "tool": tool, "rootId": root_id,
             "task": task, "commit": payload["candidate"]["commit"], "manifestSha256": digest,
             "payloadBytes": measured_inventory, "registeredAt": datetime.now(timezone.utc).isoformat()}
+        if budget["preflight"].get("outputBasis") == FIRST_EXPORT_BASIS:
+            registry["builds"][candidate_id]["outputBasis"] = FIRST_EXPORT_BASIS
         observation = budget["observation"]
         if observation["temporaryMeasurementStatus"] == "qualified":
             registry.setdefault("measurements", {})[tool] = {
@@ -761,8 +768,103 @@ def _verified_output(conf: dict[str, Any], tool: str, candidate_id: str, expecte
     return _bound_payload_inventory(payload, path.parent, path.parent / payload["app"]["relativePath"])
 
 
+def _payload_state(conf: dict[str, Any], tool: Any, candidate_id: Any) -> str:
+    """present/gone for a well-formed id under an existing configured root; unjudged for anything that cannot be proved."""
+    try:
+        candidate = config.candidate_path(conf, tool, candidate_id)
+    except (OSError, ValueError):
+        return "unjudged"
+    manifest = candidate / "manifest.json"
+    return "present" if manifest.exists() or manifest.is_symlink() else "gone"
+
+
+def surviving_payloads(conf: dict[str, Any], tool: str) -> list[str]:
+    """Candidate ids of this tool whose manifest is still on disk under a configured root, registered or not."""
+    roots = conf.get("artifactRoots", {})
+    if not isinstance(roots, dict):
+        raise ValueError("invalid artifact roots")
+    found = []
+    for root_id, text in sorted(roots.items()):
+        root = config.canonical_existing(text, directory=True)
+        for task in SUPPORTED_TOOLS[tool]:
+            folder = root / task
+            if not folder.exists() and not folder.is_symlink():
+                continue
+            if folder.is_symlink() or not folder.is_dir():
+                raise ValueError("surviving payloads cannot be judged: a task folder is a symlink or not a directory")
+            found += [f"{root_id}:{task}:{child.name}" for child in sorted(folder.iterdir())
+                      if (child / "manifest.json").exists() or (child / "manifest.json").is_symlink()]
+    return found
+
+
+def repair_registry(registry: dict[str, Any], conf: dict[str, Any], *, apply: bool = False) -> dict[str, Any]:
+    """ARC-DEV-026: forget registered builds, accepted/rollback/measurement entries and launch selections whose payload
+    manifest is gone from its configured root. Dry run unless apply; it never deletes or writes a file on disk itself.
+    A malformed id, an unconfigured or missing root or a symlinked path is kept and listed as unjudged."""
+    roots = conf.get("artifactRoots", {})
+    builds = registry.get("builds", {})
+    if not isinstance(roots, dict) or not isinstance(builds, dict):
+        raise ValueError("invalid artifact roots or registered builds")
+    unjudged: set[str] = set()
+
+    def gone(tool: Any, candidate_id: Any) -> bool:
+        state = _payload_state(conf, tool, candidate_id)
+        if state == "unjudged":
+            unjudged.add(str(candidate_id))
+        return state == "gone"
+
+    dropped = sorted(key for key, value in builds.items() if gone(value.get("tool") if isinstance(value, dict) else None, key))
+    report: dict[str, Any] = {"schema": "arcanum-registry-repair-v1", "applied": apply, "droppedBuilds": dropped,
+                              "keptBuilds": len(builds) - len(dropped), "droppedAccepted": {}, "droppedRollback": {},
+                              "droppedMeasurements": {}, "clearedLaunchSelection": {}, "unjudged": [],
+                              "danglingPointers": [], "unreadablePointers": []}
+    for field, key in (("accepted", "droppedAccepted"), ("rollback", "droppedRollback")):
+        values = registry.get(field, {})
+        if isinstance(values, dict):
+            report[key] = {tool: value for tool, value in sorted(values.items()) if gone(tool, value)}
+    measurements = registry.get("measurements", {})
+    if isinstance(measurements, dict):
+        report["droppedMeasurements"] = {tool: value["candidateId"] for tool, value in sorted(measurements.items())
+                                         if isinstance(value, dict) and gone(tool, value.get("candidateId"))}
+    selections = conf.get("launchSelection", {})
+    if isinstance(selections, dict):
+        report["clearedLaunchSelection"] = {tool: value for tool, value in sorted(selections.items()) if gone(tool, value)}
+    report["unjudged"] = sorted(unjudged)
+    # A current pointer that names a missing manifest is reported only: removing it would delete a file.
+    for root_id, text in sorted(roots.items()):
+        try:
+            root = config.canonical_existing(text, directory=True)
+        except (OSError, ValueError):
+            continue
+        for tasks in SUPPORTED_TOOLS.values():
+            for task in tasks:
+                for name in ("current.json", "current-v2.json"):
+                    pointer = root / task / name
+                    try:
+                        encoded = config.optional_authority_bytes(pointer)
+                        value = json.loads(encoded) if encoded is not None else None
+                    except (OSError, ValueError):
+                        report["unreadablePointers"].append(f"{root_id}:{task}:{name}")
+                        continue
+                    # Only v2 pointers bind a root-relative manifest; legacy v1 pointers are left to resolve_pointer.
+                    relative = value.get("manifestRelativePath") if isinstance(value, dict) else None
+                    if isinstance(relative, str) and not (root / task / relative).exists():
+                        report["danglingPointers"].append(f"{root_id}:{task}:{name}")
+    if apply:
+        for key in report["droppedBuilds"]:
+            del builds[key]
+        for field, key in (("accepted", "droppedAccepted"), ("rollback", "droppedRollback"),
+                           ("measurements", "droppedMeasurements")):
+            for tool in report[key]:
+                del registry[field][tool]
+        for tool in report["clearedLaunchSelection"]:
+            del conf["launchSelection"][tool]
+    return report
+
+
 def export_preflight(registry: dict[str, Any], tool: str, output_bytes: int | None, temporary_bytes: int | None,
-                     *, conf: dict[str, Any], destinations: dict[str, Path], estimate_manifest: Path | None = None) -> dict[str, Any]:
+                     *, conf: dict[str, Any], destinations: dict[str, Path], estimate_manifest: Path | None = None,
+                     first_export: bool = False) -> dict[str, Any]:
     if tool not in SUPPORTED_TOOLS:
         raise ValueError("unknown tool")
     if output_bytes is not None and (type(output_bytes) is not int or output_bytes <= 0):
@@ -793,7 +895,17 @@ def export_preflight(registry: dict[str, Any], tool: str, output_bytes: int | No
         except (OSError, ValueError):
             continue
     measured = max(measured_outputs, default=0)
-    if measured:
+    if first_export:
+        # ARC-DEV-026: only when there is nothing to measure. Any payload manifest still on disk under a configured
+        # root (registered or not) can serve as --estimate-manifest instead.
+        if measured or estimate_manifest is not None:
+            raise ValueError("first export is refused: a measured or explicit payload estimate exists")
+        if output_bytes is None or output_bytes < FIRST_EXPORT_MIN_BYTES:
+            raise ValueError("first export needs an explicit --output-bytes of at least 1 GiB")
+        if surviving_payloads(conf, tool):
+            raise ValueError("first export is refused: a payload of this tool survives; name it with --estimate-manifest")
+        output = output_bytes
+    elif measured:
         output = (measured * 110 + 99) // 100
     elif output_bytes is not None and output_bytes > 0 and estimate_manifest is not None:
         # Explicit estimate is of ONE complete immutable payload, not history/source du.
@@ -842,5 +954,5 @@ def export_preflight(registry: dict[str, Any], tool: str, output_bytes: int | No
         observations.append({"role": role, **proof, "observedFreeBytes": free, "requiredBytes": required})
     return {"tool": tool, "outputBytes": output, "temporaryBytes": temporary, "reserveBytes": reserve,
             "requiredBytes": required, "observedFreeBytes": min(capacities.values()), "destinations": observations,
-            "outputBasis": "accepted-measurement-plus-10-percent" if measured else "explicit-estimate",
+            "outputBasis": FIRST_EXPORT_BASIS if first_export else "accepted-measurement-plus-10-percent" if measured else "explicit-estimate",
             "temporaryBasis": temporary_basis}
