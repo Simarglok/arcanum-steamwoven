@@ -50,8 +50,10 @@ chain to a PC (0x45DDA0). Distances are in tiles (0x441AE0).
    by the scan is fought without a flee check ([section 1](#1-the-danger-update)).
 2. **Validity is a 20-tile leash plus party rules (S11).** The target must be
    within 20 tiles of the NPC and of its leader, not its own leader, follower or
-   fellow follower, not stoned, invisible only when the NPC can see invisibility
-   or the target is a PC visibly attacking or casting, not a decoy for a smart
+   fellow follower, not stoned; a target under the invisibility spell stays valid
+   when the NPC detects invisibility, or when it lacks the object-invisible flag
+   and is either not a PC or a PC attempting an attack or a spell or in combat
+   mode; not a decoy for a smart
    NPC, and not a master prowler the NPC cannot see; an unconscious target stays
    valid only while no other target exists ([section 2](#2-target-validity)).
 3. **The scan looks at a square, nearest first (S11).** The square has half-size
@@ -86,11 +88,14 @@ chain to a PC (0x45DDA0). Distances are in tiles (0x441AE0).
    raises a PC's reaction to 50 ([section 7](#7-attack-event-fan-out)).
 8. **Anomalies.** P3 is confirmed with two readings: the redirect tests the
    spell target's intelligence, not the candidates'; the earlier reading was
-   wrong about what it reads, and the original's own test looks unintended. A
-   new bug of the original: upset-attacking treats any leaderless target as the
-   NPC's party when the NPC itself has no leader, which silences the scan's
-   ally-help and guard rules for leaderless NPCs against the PC (HS9). Three
-   quirks are recorded and kept ([section 8](#8-anomalies-and-decisions)).
+   wrong about what it reads, and the original's own test is recorded as a bug
+   of the original **(inference)**: one fixed critter is tested inside a
+   per-candidate loop. A new bug of the original: upset-attacking treats any
+   leaderless target as the NPC's party when the NPC itself has no leader, so for
+   a leaderless NPC the scan's ally help never targets a PC or a leaderless NPC,
+   GUARD never targets a leaderless NPC aggressor, and the guard-versus-monster
+   clauses are dead (HS9). Three quirks are recorded and kept
+   ([section 8](#8-anomalies-and-decisions)).
 
 ## 1. The danger update
 
@@ -311,19 +316,26 @@ does. Membership makes the owner's reaction toward a PC read 0 (reaction R1).
 | Peace (0x4AA300, [7.5](#75-peace-stop-and-allow-attacking)) | the other side's head and each of its followers removed from the peaceful NPC's list; the peaceful NPC removed from each follower's list |
 | The pick | null entries purged |
 
-**Target lock.** Lock (0x4AFBD0, arguments: NPC, target; non-null NPC of type NPC
-only): unlock, ask the setter for COMBAT_FOCUS on the target, and only when the
-state read then reports COMBAT_FOCUS on that target set critter flag 2 bit
-0x200000. While it is set, the setter ignores every further fight request
+**Target lock.** Lock (0x4AFBD0, arguments: NPC, target; nothing for a null NPC,
+a null target or an NPC owner that is not of type NPC): unlock, ask the setter for
+COMBAT_FOCUS on the target, and only when the state read then reports
+COMBAT_FOCUS on that target set critter flag 2 bit 0x200000. While it is set, the
+setter ignores every further COMBAT_FOCUS request
 ([core loop rule 6](npc-ai-core-loop.md#5-danger-state-machine)), so the danger
 update keeps the focus. Unlock (0x4AFC70) clears the bit. Lock is called only by
 the follower fan-out for an ordered attack ([7.2](#72-followers-join-or-complain));
 unlock by the danger update when the focus is no longer valid (0x4ABBC0), stop
-attacking (0x4AA4A0), the lock itself and leaving combat mode (0x4B411C). This
-settles the core loop's inference: the lock is entered only after the setter has
-set FIGHTING, so a locked NPC always reads COMBAT_FOCUS.
+attacking (0x4AA4A0), the lock itself and leaving combat mode (0x4B411C). The lock
+is entered while the NPC is fighting, but the setter's lock test blocks only
+COMBAT_FOCUS: a FLEE, SURRENDER or NONE request passes, clears FIGHTING and does
+not unlock (a surrender unlocks only through its combat-mode exit, when the
+toggle acts). So a locked follower that is hit and flees
+([morale](npc-ai-morale.md#2-flight-and-surrender), stage A4) can stop fleeing
+into NONE while still locked, and then ignores every fight request until it
+leaves combat mode or is told to stop: the core loop's inferred state "locked but
+not FIGHTING" is reachable.
 
-**Dialog distance (0x4AFBB0).** 5 tiles for a PC, 10 for anyone else (called by
+**Dialog distance (0x4AFBB0).** 5 tiles for the player's PC (0x40DA20), 10 for anyone else (called by
 the animation code, 0x42AE9F; stage A6).
 
 ## 7. Attack event fan-out
@@ -383,8 +395,8 @@ attacker).
 | --- | --- |
 | L is T | nothing |
 | T a PC or NPC, F is T or dead | nothing |
-| T a PC or NPC, u := upset(F, T, L) not NONE, and victim side, T already in combat mode or accidental | nothing |
-| T a PC or NPC, u not NONE, otherwise (attacker side) | F floats the "upset attacking" line for reason u toward L (when F is active) and its reaction to L drops by 5 |
+| T a PC or NPC, u := upset(F, T, L) not NONE, attacker side, T not in combat mode, not accidental | F floats the "upset attacking" line for reason u toward L (when F is active) and its reaction to L drops by 5 |
+| T a PC or NPC, u not NONE, otherwise | nothing |
 | T a PC or NPC, u NONE, accidental | nothing |
 | T a PC or NPC, u NONE, ordered | target lock on T |
 | T a PC or NPC, u NONE, otherwise | F's reaction to an attack by T ([7.4](#74-reaction-to-an-attack)) |
@@ -394,9 +406,10 @@ attacker).
 
 So an attacker's follower joins its leader against T unless T is its leader's
 party, too good for it (GOOD), or shares its origin or faction, in which case it
-complains instead (only when T is not yet fighting); a victim's follower turns on
-the attacker unless the attacker is in its leader's party or shares its origin or
-faction.
+complains instead (only when T is not yet fighting and the hit is deliberate); a
+victim's follower turns on the attacker unless upset returns anything (the
+attacker is in its leader's party, is too good for it, or shares its origin or
+faction), in which case it does nothing.
 
 ### 7.3 Redirect
 
@@ -462,8 +475,8 @@ Decisions follow D2 and D8.
 
 | ID | Original 1.0.7.4 | Verdict | Proposed decision |
 | --- | --- | --- | --- |
-| P3 | The redirect's intelligence test reads the spell target (the record's second handle, equal to the first), so with a threshold above 0 a target of higher intelligence redirects nobody and one at or below it redirects everyone the mask lets through; no candidate's intelligence is read. | The earlier reading (the threshold number's intelligence) was wrong: reconstruction slip, confirmed (ARC-RES-048 row unchanged). The original's own test looks unintended: a per-candidate loop that tests one fixed critter and a field named for intelligence suggest the candidates were meant (bug of the original, likely). | Steamwoven tests each candidate's intelligence against the threshold (a candidate above it is not redirected); Original setting keeps the target's (`RedirectTestsTargetIntelligence`, proposed). Owner to confirm; which installed spells set `MinIQ:` is a data question for the magic census. Lands with slice I8. |
-| HS9 | Upset attacking returns PARTY when the target's leader equals the leader argument also when both are null. Find target and kill-on-sight pass the NPC's own leader, so for a leaderless NPC every leaderless target (every PC, every loner NPC) is "party": the scan's ally help and the GUARD reason never fire against them, and the guard-against-monster clause (which demands a leaderless monster) can never fire for a leaderless guard. Validity, protect and faction-same all test for a non-null leader before comparing. | Bug of the original (also in the reconstruction) | Steamwoven: PARTY needs a non-null leader argument, so leaderless NPCs help allies and guard against the PC and loners by the scan. Original setting keeps the null match (`UpsetPartyMatchesMissingLeader`, proposed). Owner to confirm: this makes townspeople and guards join a fight by their own scan, not only through the witness rule, a visible change of play. Lands with slice I4. |
+| P3 | The redirect's intelligence test reads the spell target (the record's second handle, equal to the first), so with a threshold above 0 a target of higher intelligence redirects nobody and one at or below it redirects everyone the mask lets through; no candidate's intelligence is read. | Original bug. (The earlier reading, the threshold number's intelligence, was a reconstruction slip: confirmed, the ARC-RES-048 verdict unchanged.) **(inference)** A per-candidate loop that tests one fixed critter looks unintended; the field name fits neither reading, since the test skips when the intelligence is above the threshold. | Steamwoven tests each candidate's intelligence against the threshold (a candidate above it is not redirected); Original setting keeps the target's (`RedirectTestsTargetIntelligence`, proposed). The bug verdict rests on the inference, so the owner confirms it; which installed spells set `MinIQ:` is a data question for the magic census. Lands with slice I8. |
+| HS9 | Upset attacking returns PARTY when the target's leader equals the leader argument also when both are null. Find target and kill-on-sight pass the NPC's own leader, so for a leaderless NPC every leaderless target (every PC, every loner NPC) is "party": the scan's ally help never targets a PC or a leaderless NPC, GUARD (which only targets an NPC) never targets a leaderless NPC aggressor, and the guard-versus-monster clauses (which demand a leaderless monster) are dead for leaderless guards. Validity, protect and faction-same all test for a non-null leader before comparing, and upset's own GOOD row tests the leader argument for null. | Bug of the original (also in the reconstruction) | Steamwoven: PARTY needs a non-null leader argument, so leaderless NPCs help allies against the PC and loners and guard against leaderless NPC aggressors by the scan. Original setting keeps the null match (`UpsetPartyMatchesMissingLeader`, proposed). Owner to confirm: this makes townspeople and guards join a fight by their own scan, not only through the witness rule, a visible change of play. Lands with slice I4. |
 | HS19 | Every attack on an NPC, accidental ones too, adds the attacker's team to the victim's enemy list, which makes the victim's reaction to the PC read 0 until peace, while the explicit accidental penalty is only −10. | Original (intent unclear) | Kept in both settings: a design question, not a confirmed slip; recorded so a later patch (plan phase 2) can revisit it. No switch. |
 | HS20 | The scan keeps only the first 50 critters of the rectangle query before sorting by distance, so in a crowd a nearer critter may be dropped. | Original (limit) | Kept in both settings (50 entries in query order); more than 50 critters in a 21×21 box is not expected. No switch. |
 | HS21 | Validity's unconscious rule calls find target, which does nothing inside a running scan, so during a scan an unconscious candidate is valid and outside one it is valid only while no other target exists. | Original | Kept in both settings: the scan orders unconscious critters last, so the rule rarely decides. No switch. |
