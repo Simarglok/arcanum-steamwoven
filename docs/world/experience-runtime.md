@@ -111,7 +111,8 @@ refused, not migrated.
 - Viewer host, partial (ARC-UI-007): with `--hero` the AREA session gets the three tables (`AreaStartingHero.Experience`,
   kept over F8), so a dialog's quest completion gives quest experience and the
   [character sheet](../rendering/terrain-viewer.md#character-sheet-arc-ui-007) shows the experience to the next level. Not
-  wired: the dialog `XP` action and a level-up message; hits and kills give experience since ARC-COMBAT-005 and the
+  wired: the dialog `XP` action and a level-up message (the original's message is read in
+  [ARC-RES-064](../research/companion-orders-loyalty-evidence.md#4-level-up-message-q4-xp5), OL27); hits and kills give experience since ARC-COMBAT-005 and the
   points are spent by the hero's scheme since ARC-WORLD-036.
 - Auto-level schemes are [ARC-WORLD-036](advancement-runtime.md): the hero's scheme spends its points at creation and at
   each level, and the followers' level step is applied to their saved sheets with their schemes. Point purchases by the
