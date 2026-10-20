@@ -107,7 +107,8 @@ public sealed class PointPoolStateTests
         owner.OpenHeroEditor();
         Failed(owner.SpendHeroPoint(owner.Version, AdvancementTrack.Stat, 8), owner, GameSessionFailure.InvalidPointTarget, 0);
         Failed(owner.SpendHeroPoint(owner.Version, (AdvancementTrack)9, 0), owner, GameSessionFailure.InvalidPointTarget, 0);
-        Failed(owner.RefundHeroPoint(owner.Version, AdvancementTrack.Stat, 0, (SkillRefundClick)5), owner, GameSessionFailure.InvalidPointTarget, 0);
+        Failed(owner.RefundHeroPoint(new GameSessionVersion(owner.Identity, 7), AdvancementTrack.Stat, 0, (SkillRefundClick)5), owner,
+            GameSessionFailure.InvalidPointTarget, 0);
         Failed(owner.SpendHeroPoint(new GameSessionVersion(owner.Identity, 7), AdvancementTrack.Stat, 0), owner, GameSessionFailure.StaleVersion, 0);
         Refused(owner.SpendHeroPoint(owner.Version, AdvancementTrack.College, 3), owner, PointChangeStatus.LaneNotReady, 0);
         Refused(owner.SpendHeroPoint(owner.Version, AdvancementTrack.TechDiscipline, 3), owner, PointChangeStatus.LaneNotReady, 0);
@@ -126,7 +127,11 @@ public sealed class PointPoolStateTests
         Refused(owner.SpendHeroPoint(owner.Version, AdvancementTrack.HitPoints, 0), owner, PointChangeStatus.AtMaximum, 0);
 
         using var dead = CreateWith(HalfElf());
+        dead.OpenHeroEditor();
         dead.Kill(dead.Version, SessionLifeTarget.Hero);
+        var revision = dead.Version.Revision;
+        Failed(dead.SpendHeroPoint(dead.Version, AdvancementTrack.Stat, 0), dead, GameSessionFailure.HeroEditorUnavailable, revision);
+        dead.CloseHeroEditor();
         var refused = dead.OpenHeroEditor();
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.HeroEditorUnavailable), (refused.Disposition, refused.Failure));
     }

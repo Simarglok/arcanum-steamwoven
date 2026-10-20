@@ -51,8 +51,8 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// Spends the hero's unspent points on one step of <paramref name="track"/> at <paramref name="index"/> while the editor is open
     /// (<see cref="CharacterPointRules.Spend"/> over the hero's sheet, its effects' changes and poison). Refused, in order: no hero
-    /// (<see cref="GameSessionFailure.HeroEditorUnavailable"/>); a closed editor (<see cref="GameSessionFailure.HeroEditorClosed"/>);
-    /// an undefined track or an index out of range (<see cref="GameSessionFailure.InvalidPointTarget"/>); the version; the rules'
+    /// or a dead one (<see cref="GameSessionFailure.HeroEditorUnavailable"/>; death does not close the editor); a closed editor (<see cref="GameSessionFailure.HeroEditorClosed"/>);
+    /// an undefined track or click, or an index out of range (<see cref="GameSessionFailure.InvalidPointTarget"/>); the version; the rules'
     /// refusal (<see cref="GameSessionFailure.PointRefused"/>, the answer in <see cref="SessionPointResult.Change"/>; a pool stops at
     /// <see cref="SessionAdvancementLimits.MaxHeroPoolPoints"/>); the revision. Spell ranks and tech degrees answer
     /// <see cref="PointChangeStatus.LaneNotReady"/> until their lanes plug in.
@@ -75,8 +75,7 @@ public sealed partial class GameSessionOwner
         SkillRefundClick click = SkillRefundClick.UntilLevelChanges)
     {
         ThrowIfDisposed();
-        if (PointPrecheck(expected, track, index) is { } refused) return refused;
-        if (!Enum.IsDefined(click)) return RejectPoint(GameSessionFailure.InvalidPointTarget);
+        if (PointPrecheck(expected, track, index, click) is { } refused) return refused;
         var hero = _hero!;
         return CommitPoint(CharacterPointRules.Refund(AdvancementDomain.HeroSheet(hero.State), _editorFloor!, PointModifiers(), track, index, click,
             SpellWillpower(), PointLane(track)));
@@ -89,11 +88,13 @@ public sealed partial class GameSessionOwner
     /// </summary>
     private static IPointLane? PointLane(AdvancementTrack track) => null;
 
-    private SessionPointResult? PointPrecheck(GameSessionVersion expected, AdvancementTrack track, int index)
+    private SessionPointResult? PointPrecheck(GameSessionVersion expected, AdvancementTrack track, int index,
+        SkillRefundClick click = SkillRefundClick.UntilLevelChanges)
     {
-        if (_hero is null) return RejectPoint(GameSessionFailure.HeroEditorUnavailable);
+        if (_hero is null || HeroDead()) return RejectPoint(GameSessionFailure.HeroEditorUnavailable);
         if (_editorFloor is null) return RejectPoint(GameSessionFailure.HeroEditorClosed);
-        if (!Enum.IsDefined(track) || index < 0 || index >= CharacterPointRules.Indices(track)) return RejectPoint(GameSessionFailure.InvalidPointTarget);
+        if (!Enum.IsDefined(track) || index < 0 || index >= CharacterPointRules.Indices(track) || !Enum.IsDefined(click))
+            return RejectPoint(GameSessionFailure.InvalidPointTarget);
         if (!IsCurrent(expected)) return RejectPoint(GameSessionFailure.StaleVersion);
         return null;
     }

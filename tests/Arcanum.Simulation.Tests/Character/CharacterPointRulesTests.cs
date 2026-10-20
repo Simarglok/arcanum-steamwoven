@@ -144,7 +144,7 @@ public sealed class CharacterPointRulesTests
         Assert.AreEqual((PointChangeStatus.Changed, 1, 2, 1), (plain.Status, plain.Points, plain.Value, plain.Sheet.UnspentPoints),
             "12 → 8: the level changes after one point");
 
-        // An effect pins the level: +20 keeps it at 20 for every point count, so the original's click would take all three (CP5).
+        // An effect pins the level: +20 keeps it at 20 for every point count, so the original's click would take all three (CP6).
         var pinned = SkillChange(Skill.Bow, 20);
         var floorOne = WithBasic(dx20, Skill.Bow, 1);
         var loop = Refund(three, floorOne, AdvancementTrack.BasicSkill, 0, modifiers: pinned);
@@ -179,22 +179,30 @@ public sealed class CharacterPointRulesTests
     {
         var floor = Sheet(unspent: ExperienceRules.MaxUnspentPoints);
         var back = Refund(WithStat(floor, CharacterStat.Strength, 9), floor, AdvancementTrack.Stat, 0);
-        Assert.AreEqual((PointChangeStatus.Changed, ExperienceRules.MaxUnspentPoints), (back.Status, back.Sheet.UnspentPoints));
+        Assert.AreEqual((PointChangeStatus.Changed, ExperienceRules.MaxUnspentPoints, 0, 8), (back.Status, back.Sheet.UnspentPoints, back.Points,
+            back.Value), "the stat falls, the point is lost to the clamp (CP10) and the change credits none");
+        var hp = Refund(floor with { HitPointPoints = 1, UnspentPoints = 55 }, floor, AdvancementTrack.HitPoints, 0);
+        Assert.AreEqual((1, 56), (hp.Points, hp.Sheet.UnspentPoints));
     }
 
-    private sealed class Ranks(int cost = 1, bool touchUnspent = false, PointChangeStatus refuse = PointChangeStatus.Changed) : IPointLane
+    // A spell-rank lane (degrees with tech): one rank and one magick point a step; the flags break its contract on purpose.
+    private sealed class Ranks(int cost = 1, bool tech = false, bool touchUnspent = false, bool touchOther = false, int step = 1,
+        PointChangeStatus refuse = PointChangeStatus.Changed) : IPointLane
     {
-        public PointLaneStep Raise(AdvancementSheet sheet, AdvancementModifiers modifiers, int index) => Step(sheet, index, +1);
+        public PointLaneStep Raise(AdvancementSheet sheet, AdvancementModifiers modifiers, int index) => Step(sheet, index, step);
 
-        public PointLaneStep Lower(AdvancementSheet sheet, AdvancementModifiers modifiers, int index) => Step(sheet, index, -1);
+        public PointLaneStep Lower(AdvancementSheet sheet, AdvancementModifiers modifiers, int index) => Step(sheet, index, -step);
 
-        private PointLaneStep Step(AdvancementSheet sheet, int index, int by) => refuse != PointChangeStatus.Changed ? new(refuse, sheet, 0)
-            : new(PointChangeStatus.Changed, sheet with
-            {
-                Colleges = sheet.Colleges.SetItem(index, sheet.Colleges[index] + by), MagickPoints = sheet.MagickPoints + by,
-                TechDegrees = sheet.TechDegrees.SetItem(index % 8, sheet.TechDegrees[index % 8] + by),
-                UnspentPoints = touchUnspent ? 0 : sheet.UnspentPoints,
-            }, cost);
+        private PointLaneStep Step(AdvancementSheet sheet, int index, int by)
+        {
+            if (refuse != PointChangeStatus.Changed) return new(refuse, sheet, 0);
+            var after = tech
+                ? sheet with { TechDegrees = sheet.TechDegrees.SetItem(index, sheet.TechDegrees[index] + by), TechPoints = sheet.TechPoints + by }
+                : sheet with { Colleges = sheet.Colleges.SetItem(index, sheet.Colleges[index] + by), MagickPoints = sheet.MagickPoints + by };
+            if (touchUnspent) after = after with { UnspentPoints = 0 };
+            if (touchOther) after = after with { Colleges = after.Colleges.SetItem((index + 1) % 16, 1) };
+            return new(PointChangeStatus.Changed, after, cost);
+        }
     }
 
     [TestMethod]
@@ -212,11 +220,18 @@ public sealed class CharacterPointRulesTests
         Assert.AreEqual(PointChangeStatus.AtFloor, Refund(unlearned.Sheet, floor, AdvancementTrack.College, 2, lane: new Ranks()).Status);
 
         // TC10: the original sells a degree below the value the editor opened with; the pool keeps the floor in both modes.
-        Assert.AreEqual(PointChangeStatus.AtFloor, Refund(floor, floor, AdvancementTrack.TechDiscipline, 2, lane: new Ranks()).Status);
+        Assert.AreEqual(PointChangeStatus.AtFloor, Refund(floor, floor, AdvancementTrack.TechDiscipline, 2, lane: new Ranks(tech: true)).Status);
+        var degree = Spend(floor, AdvancementTrack.TechDiscipline, 2, lane: new Ranks(tech: true));
+        Assert.AreEqual((PointChangeStatus.Changed, 2, 1, 1), (degree.Status, degree.Value, degree.Sheet.TechPoints, degree.Sheet.UnspentPoints));
+        Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.TechDiscipline, 2, lane: new Ranks()).Status,
+            "a lane that changes another track's fields");
 
         Assert.AreEqual(PointChangeStatus.NotEnoughPoints, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(cost: 3)).Status);
         Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(touchUnspent: true)).Status);
         Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(cost: -1)).Status);
+        Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(touchOther: true)).Status);
+        Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(step: 2)).Status);
+        Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(step: -1)).Status, "the wrong way");
         Assert.AreEqual(PointChangeStatus.SpellNeedsStat, Spend(floor, AdvancementTrack.College, 2,
             lane: new Ranks(refuse: PointChangeStatus.SpellNeedsStat)).Status);
         Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(refuse: (PointChangeStatus)99)).Status);

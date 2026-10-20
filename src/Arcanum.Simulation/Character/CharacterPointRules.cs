@@ -46,7 +46,7 @@ public enum SkillRefundClick
 
 /// <summary>
 /// The answer of one spend or refund: the status, the sheet after it (the input sheet unless <see cref="PointChangeStatus.Changed"/>),
-/// the character points spent or refunded (0 unless changed), the target's value after it (a stat's base, a skill's points, a
+/// the character points spent or credited by a refund (the unspent points stop at 56; 0 unless changed), the target's value after it (a stat's base, a skill's points, a
 /// pool's bought points, a college's rank or a degree), and for a refusal the stat it names (the key stat, intelligence or
 /// willpower) and the skill that blocks a stat decrease.
 /// </summary>
@@ -80,7 +80,7 @@ public interface IPointLane
 /// character editor buys and refunds (0x55A5C0 stats and pools, 0x57ACD0 and 0x57AEB0 skills; ledger "Character point pool",
 /// CP1–CP12; contract docs/world/character-point-pool.md). Refunds go only down to the editor's floor, the sheet taken when the
 /// editor opened (0x5597C0): owner rule 2026-10-20, strict in both rule modes, for every track (the original has no floor for
-/// tech degrees, TC10, and its skill refund loop can pass the floor, CP5). Pure functions over explicit values; the session holds
+/// tech degrees, TC10, and its skill refund loop can pass the floor, CP6). Pure functions over explicit values; the session holds
 /// the floor and applies the sheet.
 /// </summary>
 public static class CharacterPointRules
@@ -155,7 +155,7 @@ public static class CharacterPointRules
     /// bought points, a skill its points, a college its rank, a discipline its degree.
     /// </summary>
     [OriginalFunction(0x55D3A0, OriginalFunctionScope.Partial)]
-    public static bool AtFloor(AdvancementSheet sheet, AdvancementSheet floor, AdvancementTrack track, int index)
+    internal static bool AtFloor(AdvancementSheet sheet, AdvancementSheet floor, AdvancementTrack track, int index)
     {
         ArgumentNullException.ThrowIfNull(sheet);
         ArgumentNullException.ThrowIfNull(floor);
@@ -233,10 +233,11 @@ public static class CharacterPointRules
         var value = work.Stats[index];
         var refund = AutoLevelRules.StatCost(value);
         work.SetStat(index, value - 1);
+        // Behind the floor (a valid floor's stats are at least 1) the race's minimum is not reached; kept for the setter's shape.
         if (work.Stats[index] >= value) return Refused(PointChangeStatus.AtMinimum, sheet, AdvancementTrack.Stat, index);
         if (Guard(sheet, work, stat, work.Effective(stat)) is { } refused) return refused;
-        work.Unspent = Math.Min(work.Unspent + refund, ExperienceRules.MaxUnspentPoints);
-        return new(PointChangeStatus.Changed, work.Sheet(), refund, work.Stats[index]);
+        var credited = Credit(work, refund);
+        return new(PointChangeStatus.Changed, work.Sheet(), credited, work.Stats[index]);
     }
 
     private static PointChange SpendPool(AdvancementSheet sheet, AutoLevelRules.Work work, AdvancementTrack track, int maximum)
@@ -252,10 +253,11 @@ public static class CharacterPointRules
     private static PointChange RefundPool(AdvancementSheet sheet, AutoLevelRules.Work work, AdvancementTrack track)
     {
         var points = track == AdvancementTrack.HitPoints ? work.HitPointPoints : work.FatiguePoints;
+        // Behind the floor only for a negative floor, which no hero sheet has.
         if (points <= 0) return Refused(PointChangeStatus.AtMinimum, sheet, track, 0);
         SetPool(work, track, points - 1);
-        work.Unspent = Math.Min(work.Unspent + PoolPointCost, ExperienceRules.MaxUnspentPoints);
-        return new(PointChangeStatus.Changed, work.Sheet(), PoolPointCost, points - 1);
+        var credited = Credit(work, PoolPointCost);
+        return new(PointChangeStatus.Changed, work.Sheet(), credited, points - 1);
     }
 
     // 0x57ACD0: the cost against the points, then the setter; its refusal is "at the maximum" when the level is 20, else the key
@@ -267,7 +269,7 @@ public static class CharacterPointRules
         var skill = tech ? SkillRules.Tech(index) : SkillRules.Basic(index);
         var cost = SkillRules.PointCost(skill);
         if (cost > work.Unspent) return Refused(PointChangeStatus.NotEnoughPoints, sheet, track, index);
-        var points = SkillRules.Points(tech ? work.Tech[index] : work.Basic[index]) + cost;
+        var points = SkillRules.Points(tech ? work.Tech[index] : work.Basic[index]) + 1;
         if (SetSkill(work, tech, index, points) != points)
         {
             var level = tech ? work.TechLevel(index) : work.BasicLevel(index);
@@ -288,25 +290,26 @@ public static class CharacterPointRules
         var skill = tech ? SkillRules.Tech(index) : SkillRules.Basic(index);
         var floorPoints = SkillRules.Points(tech ? floor.TechSkills[index] : floor.BasicSkills[index]);
         var level = tech ? work.TechLevel(index) : work.BasicLevel(index);
-        var refunded = 0;
+        int removed = 0, refunded = 0;
         while (true)
         {
             var points = SkillRules.Points(tech ? work.Tech[index] : work.Basic[index]);
             if (points <= floorPoints) break;
+            // points > floor ≥ 0, so only the key stat refuses points − 1 (its cap fell below them).
             if (SetSkill(work, tech, index, points - 1) != points - 1)
             {
-                if (refunded > 0) break;
-                return points == 0 ? Refused(PointChangeStatus.AtMinimum, sheet, track, index)
-                    : Refused(PointChangeStatus.KeyStatTooLow, sheet, track, index, SkillRules.KeyStat(skill));
+                if (removed > 0) break;
+                return Refused(PointChangeStatus.KeyStatTooLow, sheet, track, index, SkillRules.KeyStat(skill));
             }
-            var refund = SkillRules.PointRefund(skill);
-            work.Unspent = Math.Min(work.Unspent + refund, ExperienceRules.MaxUnspentPoints);
-            refunded += refund;
+            removed++;
+            refunded += Credit(work, SkillRules.PointRefund(skill));
             if (tech || click == SkillRefundClick.OnePoint || work.BasicLevel(index) != level) break;
         }
         return new(PointChangeStatus.Changed, work.Sheet(), refunded, SkillRules.Points(tech ? work.Tech[index] : work.Basic[index]));
     }
 
+    // The lane may change only its own fields (a college's rank and the magick points, a discipline's degree and the tech
+    // points), by exactly one step in the asked direction; a refund's step starts above the floor, so it ends at or above it.
     private static PointChange Lane(AdvancementSheet sheet, AdvancementModifiers modifiers, AdvancementTrack track, int index, IPointLane? lane,
         bool raise)
     {
@@ -314,12 +317,34 @@ public static class CharacterPointRules
         var step = raise ? lane.Raise(sheet, modifiers, index) : lane.Lower(sheet, modifiers, index);
         if (step.Status != PointChangeStatus.Changed)
             return Refused(Enum.IsDefined(step.Status) ? step.Status : PointChangeStatus.Invalid, sheet, track, index);
-        if (!AutoLevelRules.IsValid(step.Sheet) || step.Sheet.UnspentPoints != sheet.UnspentPoints || step.Points < 0)
+        if (!AutoLevelRules.IsValid(step.Sheet) || step.Points < 0 || !OwnStep(sheet, step.Sheet, track, index, raise ? 1 : -1))
             return Refused(PointChangeStatus.Invalid, sheet, track, index);
         if (raise && step.Points > sheet.UnspentPoints) return Refused(PointChangeStatus.NotEnoughPoints, sheet, track, index);
         var unspent = raise ? sheet.UnspentPoints - step.Points : Math.Min(sheet.UnspentPoints + step.Points, ExperienceRules.MaxUnspentPoints);
         var after = step.Sheet with { UnspentPoints = unspent };
-        return new(PointChangeStatus.Changed, after, step.Points, Value(after, track, index));
+        return new(PointChangeStatus.Changed, after, raise ? step.Points : unspent - sheet.UnspentPoints, Value(after, track, index));
+    }
+
+    private static bool OwnStep(AdvancementSheet before, AdvancementSheet after, AdvancementTrack track, int index, int by)
+    {
+        var college = track == AdvancementTrack.College;
+        var own = college ? after.Colleges : after.TechDegrees;
+        var old = college ? before.Colleges : before.TechDegrees;
+        if (own[index] != old[index] + by) return false;
+        for (var other = 0; other < own.Length; other++)
+            if (other != index && own[other] != old[other]) return false;
+        var rest = college
+            ? after with { Colleges = old, MagickPoints = before.MagickPoints }
+            : after with { TechDegrees = old, TechPoints = before.TechPoints };
+        return rest.Equals(before);
+    }
+
+    // The unspent points rise by the refund, clamped to 0..56 as the stat setter writes them (CP10); the points credited.
+    private static int Credit(AutoLevelRules.Work work, int refund)
+    {
+        var before = work.Unspent;
+        work.Unspent = Math.Min(before + refund, ExperienceRules.MaxUnspentPoints);
+        return work.Unspent - before;
     }
 
     private static int SetSkill(AutoLevelRules.Work work, bool tech, int index, int points) =>

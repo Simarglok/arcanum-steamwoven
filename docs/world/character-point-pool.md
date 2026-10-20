@@ -13,7 +13,7 @@ Requirements: [FR-CHAR-015](../requirements/characters-skills.md#fr-char-015) (s
 
 Every rule below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
 ([ledger "Character point pool"](../research/original-verification-ledger.md#character-point-pool-arc-world-052), rows
-CP1–CP12). Code: [`CharacterPointRules`](../../src/Arcanum.Simulation/Character/CharacterPointRules.cs),
+CP1–CP12; CP11's page draw only by the first, F1). Code: [`CharacterPointRules`](../../src/Arcanum.Simulation/Character/CharacterPointRules.cs),
 [`GameSessionPoints`](../../src/Arcanum.Session/GameSessionPoints.cs); tests:
 [`CharacterPointRulesTests`](../../tests/Arcanum.Simulation.Tests/Character/CharacterPointRulesTests.cs),
 [`PointPoolStateTests`](../../tests/Arcanum.Session.Tests/PointPoolStateTests.cs).
@@ -29,7 +29,10 @@ ranks and the sixteen skills' points.
 `OpenHeroEditor()` takes the hero's advancement sheet as the floor (`QueryHeroEditorFloor()`); `CloseHeroEditor()` drops
 it. Opening is refused without a hero or for a dead one (CS2); an open editor keeps its floor. The floor is not saved: a
 restored session starts with the editor closed, so nothing bought before a save is refundable after loading it. Opening
-and closing do not move the revision.
+and closing do not move the revision. Other session paths still change the hero while the editor is open: an experience
+award raises the level and the unspent points and runs the hero's auto-level scheme, whose purchases sit above the floor
+and are refundable until the editor closes, as in the original. A hero who dies with the editor open can neither spend nor
+refund (`HeroEditorUnavailable`); the editor stays open until closed.
 
 ## Spending and refunding
 
@@ -37,6 +40,9 @@ and closing do not move the revision.
 (stat 0..7, basic skill 0..11, tech skill 0..3, college 0..15, tech discipline 0..7, hit points 0, fatigue 0). They need
 an open editor and the current version; a change adds one revision and the hero's character owner follows the stats.
 A refusal of the rules is `PointRefused` with the rules' `PointChange` (status, value, and the stat or skill it names).
+A change's `Points` are the points spent, or for a refund the points actually credited: the unspent points are clamped
+to 56 as the original's stat setter writes them (CP10), so a refund with the unspent points already at 56 lowers the value
+and credits nothing.
 
 | Track | Spend (+) | Refund (−) | Original |
 | --- | --- | --- | --- |
@@ -55,8 +61,10 @@ level changes. `RefundHeroPoint` takes the click as an explicit option for task 
 original's click) or `OnePoint`. Either way the loop ends at the level change, the floor or a refusal.
 
 **Lanes.** A lane implements `IPointLane.Raise` and `Lower` for its track: one step of its own fields (a rank and the
-magick points, a degree and the tech points) and the points that step costs or refunds. The pool checks the points, the
-floor and that the lane leaves a valid sheet with the unspent points untouched, then moves the unspent points. The session
+magick points, a degree and the tech points) and the points that step costs or refunds. The pool checks the points and the
+floor, and refuses as `Invalid` a step that leaves an invalid sheet, changes any field but the track's own (the index's
+rank or degree and its magick or tech points; the unspent points included) or moves the value by anything but one step in
+the asked direction; then it moves the unspent points. The session
 names each track's lane in one place (`PointLane`).
 
 ## Differences from the original
@@ -70,7 +78,8 @@ strict in both modes.
 | A basic skill's − click checks the floor only before its first pass; when an effect holds the skill's level (for example key stat 18, 4 points at open, +4: after a + to 5 one − goes 5 → 4 → 3), the click goes on below the floor, down to no points, refunding each (CP6, an original bug; pending owner decision, recommended: fix in both modes). | The click stops at the floor. | both |
 | Selling a tech degree is not compared with the snapshot taken when the editor opened (TC10); the in-game editor only hides the − button at it (CP2), editor modes 0 and 3 draw it whenever the degree is above 0. | Down to the floor, as every other track (owner decision 2026-10-20, no switch). | both |
 | Hit and fatigue points have no maximum. | At most 100 bought points each (the session's bound). | both |
-| Refunds write the unspent points through the stat setter, which clamps them to 0..56. | The same clamp; the strict floor makes it unreachable. | both |
+| Refunds write the unspent points through the stat setter, which clamps them to 0..56. | The same clamp: reachable when the unspent points rose while the editor was open (an experience award); the point is lost and the change credits only what was added. | both |
+| Spends and refunds read the **effective** unspent points (stat 21 through the effect system). | The stored value; no effect changes stat 21 in the modelled effects. | both |
 | The snapshot lives in the editor window's globals while it is open. | The floor is session state that is not saved; a restored session starts with the editor closed. | — |
 | A network client sends each click to the host. | Single player only. | — |
 | The editor shows a message for each refusal and refreshes its window. | The typed status; the messages are task S6's. | — |
