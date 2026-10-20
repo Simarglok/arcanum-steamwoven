@@ -173,7 +173,9 @@ public partial class TerrainViewerApp
         _worldFocusSimulationForSelfTest = true; _worldFocused = true; SelectSimulatedPadForSelfTest();
         try
         {
-            AreaSmokePlace(map, open); PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
+            // An earlier stage may have walked the PC under a roof (ARC-COMBAT-006: the hero's combat-mode run, for one); a placement
+            // is a fresh start, so the roofs start again from the map's stored state.
+            AreaSmokePlace(map, open); ResetAreaRoofs(); PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
             await RoofFrames();
             var drawnOutside = _canvas!.AreaVisibleRoofCount;
             using var before = GetViewport().GetTexture().GetImage();

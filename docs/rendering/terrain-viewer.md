@@ -946,7 +946,11 @@ combat mode first (the exit gate never closes here: no NPC has a combat focus ye
 original's teleport does. Running in combat mode costs one fatigue every fifth run step of a move; a hero out of fatigue
 walks, and the viewer does not run the session's event queue, so that fatigue only returns with a quick load. In combat
 mode a left click on a living NPC attacks it (below). Native smoke with `--hero` (after the run stage):
-`ARC-COMBAT-004 native-smoke combat-mode PASS`.
+`ARC-COMBAT-004 native-smoke combat-mode PASS`. Since ARC-COMBAT-006 its run goal is a cell the PC can walk to 12 cells
+from its start (a search over open steps; else the farthest such cell at least 8 away) and its held-stick run takes the first direction that runs at least one
+charge of steps, so the smoke works on any map; before, a fixed offset and direction fell in a wall on `tulla interior`
+and stopped the map smoke there. The roof smoke after it starts the roofs again from the map's stored state, since the
+run may end under a roof.
 
 ### Hero attack (ARC-COMBAT-005)
 
