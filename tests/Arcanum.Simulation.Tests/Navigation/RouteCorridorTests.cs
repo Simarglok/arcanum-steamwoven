@@ -65,7 +65,7 @@ public sealed class RouteCorridorTests
     {
         var source = Maze();
         var host = new RouteHost(source, new(0, 4), Step);
-        var follower = new RouteFollower(source);
+        var follower = new RouteFollower(source, corridorLimits: new());
         Assert.IsTrue(follower.SetTarget(new(110, 4), host.State.Time));
         host.Frames(follower, 4 * 200);
         Assert.AreEqual((RouteFollowStatus.Arrived, "ROUTE_ARRIVED"), (follower.Status, follower.StopReason));
@@ -89,7 +89,7 @@ public sealed class RouteCorridorTests
         var rows = Enumerable.Range(0, 3).Select(_ => new string('.', 50) + "#" + new string('.', 9)).ToArray();
         var source = new GridSource(rows);
         var host = new RouteHost(source, new(0, 1), Step);
-        var follower = new RouteFollower(source);
+        var follower = new RouteFollower(source, corridorLimits: new());
         follower.SetTarget(new(55, 1), host.State.Time);
         host.Frames(follower, 4 * 60);
         Assert.AreEqual((RouteFollowStatus.Stopped, "ROUTE_PARTIAL"), (follower.Status, follower.StopReason));
@@ -98,9 +98,40 @@ public sealed class RouteCorridorTests
         // A goal outside the source is refused without motion, as before.
         var open = GridSource.Open(60, 3);
         var still = new RouteHost(open, new(0, 1), Step);
-        var refused = new RouteFollower(open);
+        var refused = new RouteFollower(open, corridorLimits: new());
         refused.SetTarget(new(200, 1), still.State.Time);
         still.Frames(refused, 4);
         Assert.AreEqual((RouteFollowStatus.Stopped, "ROUTE_TARGET_OUTSIDE_AREA", 0), (refused.Status, refused.StopReason, still.Events.Count));
+    }
+
+    [TestMethod]
+    public void An_occupant_on_a_waypoint_rebuilds_the_corridor_once_and_the_walk_goes_on()
+    {
+        var source = GridSource.Open(100, 9);
+        var host = new RouteHost(source, new(0, 4), Step);
+        var follower = new RouteFollower(source, corridorLimits: new());
+        follower.SetTarget(new(90, 4), host.State.Time);
+        host.Frames(follower, 4);
+        var first = follower.Corridor!;
+        Assert.AreEqual(RouteCorridorOutcome.Found, first.Outcome);
+        // An occupant arrives on the second waypoint: no step enters it any more.
+        var occupied = first.Waypoints[1];
+        source.Override = (from, direction) => RoutePlanner.Neighbor(from, direction) == occupied ? RouteStepVerdict.Blocked : null;
+        host.Frames(follower, 4 * 120);
+        Assert.AreEqual((RouteFollowStatus.Arrived, new CellCoord(90, 4)), (follower.Status, host.State.CommittedCell));
+        Assert.AreNotSame(first, follower.Corridor);
+        Assert.IsFalse(host.Committed().Contains(occupied));
+    }
+
+    [TestMethod]
+    public void Without_corridor_limits_a_goal_beyond_reach_is_refused_as_before()
+    {
+        // A companion follow builds its follower without corridor limits.
+        var source = GridSource.Open(100, 3);
+        var host = new RouteHost(source, new(0, 1), Step);
+        var follower = new RouteFollower(source);
+        follower.SetTarget(new(90, 1), host.State.Time);
+        host.Frames(follower, 4);
+        Assert.AreEqual((RouteFollowStatus.Stopped, "ROUTE_TARGET_OUT_OF_RANGE", (RouteCorridor?)null), (follower.Status, follower.StopReason, follower.Corridor));
     }
 }

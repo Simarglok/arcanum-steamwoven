@@ -12,8 +12,8 @@ public sealed class RouteCorridorLimits
 
     public RouteCorridorLimits(int expansions = 65536, int waypointSteps = WaypointStepMaximum)
     {
-        if (expansions is < 1 or > ExpansionMaximum || waypointSteps is < 1 or > WaypointStepMaximum)
-            throw new ArgumentOutOfRangeException(nameof(expansions));
+        if (expansions is < 1 or > ExpansionMaximum) throw new ArgumentOutOfRangeException(nameof(expansions));
+        if (waypointSteps is < 1 or > WaypointStepMaximum) throw new ArgumentOutOfRangeException(nameof(waypointSteps));
         Expansions = expansions; WaypointSteps = waypointSteps;
     }
     public int Expansions { get; }

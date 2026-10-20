@@ -11,7 +11,7 @@ public sealed class AreaWindowRouteLimits
 {
     public const int MaxWindowLoadsPolicy = 1024, MaxExpansionsPolicy = 8_000_000, MaxResidentWindowsPolicy = 64;
 
-    public AreaWindowRouteLimits(int maxWindowLoads = 256, int maxExpansions = 4_000_000, int maxResidentWindows = 24)
+    public AreaWindowRouteLimits(int maxWindowLoads = 256, int maxExpansions = 1_000_000, int maxResidentWindows = 24)
     {
         if (maxWindowLoads is < 1 or > MaxWindowLoadsPolicy) throw new ArgumentOutOfRangeException(nameof(maxWindowLoads));
         if (maxExpansions is < 1 or > MaxExpansionsPolicy) throw new ArgumentOutOfRangeException(nameof(maxExpansions));
@@ -62,6 +62,11 @@ public static class AreaWindowRoute
         {
             if (windows.For(from, from) is not { } first || !first.IsAdmitted(from))
                 return new(AreaWindowRouteStatus.Refused, "ROUTE_START_NOT_ADMITTED", [], windows.Loads, 0);
+            // A goal no window admits, or no step enters, is refused before the search floods the map toward it.
+            if (windows.For(to, to) is not { } last || !last.IsAdmitted(to))
+                return new(AreaWindowRouteStatus.Refused, "ROUTE_GOAL_NOT_ADMITTED", [], windows.Loads, 0);
+            if (!Directions.Any(direction => Entered(windows, Step(to, direction), to)))
+                return new(AreaWindowRouteStatus.Refused, "ROUTE_GOAL_UNENTERABLE", [], windows.Loads, 0);
             long Estimate(AreaStepCell c) => Math.Max(Math.Abs(c.X - to.X), Math.Abs(c.Y - to.Y));
             var cost = new Dictionary<AreaStepCell, long> { [from] = 0 };
             var parent = new Dictionary<AreaStepCell, AreaStepCell>();
@@ -99,6 +104,14 @@ public static class AreaWindowRoute
         catch (AreaStepInvocationException error) { return new(AreaWindowRouteStatus.Refused, $"ROUTE_WINDOW_EVIDENCE_{error.Code}", [], windows.Loads, expansions); }
     }
 
+    /// <summary>Whether the step from <paramref name="from"/> onto its neighbour <paramref name="to"/> is Open.</summary>
+    private static bool Entered(Windows windows, AreaStepCell from, AreaStepCell to)
+    {
+        var direction = Directions.First(d => Step(from, d) == to);
+        return windows.For(from, to) is { } window && window.IsAdmitted(from) && window.IsAdmitted(to)
+            && window.Assess(window.Request(from, to, direction)).Disposition == CardinalTraversalDisposition.Open;
+    }
+
     internal static AreaStepCell Step(AreaStepCell cell, CardinalTraversalDirection direction) => direction switch
     {
         CardinalTraversalDirection.XMinusYMinus => new(cell.X - 1, cell.Y - 1),
@@ -113,20 +126,21 @@ public static class AreaWindowRoute
 
     private sealed class WindowLimitException : Exception;
 
-    /// <summary>Window step evidence by centre sector, loaded on demand; a sector with no window (outside the map, or a plan
-    /// that is not ready) has none and blocks the route there.</summary>
+    /// <summary>Window step evidence by centre sector, loaded on demand; a sector with no window (outside the map, a plan that
+    /// is not ready, or an incomplete load) has none and blocks the route in that sector only.</summary>
     private sealed class Windows(ContentStack stack, WorldCatalog catalog, string mapName, AreaWindowRouteLimits limits)
     {
         private readonly Dictionary<(long X, long Y), (AreaStepSnapshot? Steps, long Used)> _cache = new();
         private long _clock;
         public int Loads { get; private set; }
 
-        /// <summary>A window whose core holds both cells' sectors: a resident one, else the one around the first cell's sector.</summary>
+        /// <summary>A window whose core holds both cells' sectors: a resident one (one without evidence only for its own
+        /// sector), else the one around the first cell's sector.</summary>
         public AreaStepSnapshot? For(AreaStepCell a, AreaStepCell b)
         {
             long ax = a.X >> 6, ay = a.Y >> 6, bx = b.X >> 6, by = b.Y >> 6;
             foreach (var (centre, entry) in _cache)
-                if (Math.Abs(ax - centre.X) <= 1 && Math.Abs(ay - centre.Y) <= 1 && Math.Abs(bx - centre.X) <= 1 && Math.Abs(by - centre.Y) <= 1)
+                if ((entry.Steps is not null || centre == (ax, ay)) && Math.Abs(ax - centre.X) <= 1 && Math.Abs(ay - centre.Y) <= 1 && Math.Abs(bx - centre.X) <= 1 && Math.Abs(by - centre.Y) <= 1)
                 {
                     _cache[centre] = (entry.Steps, ++_clock);
                     return entry.Steps;

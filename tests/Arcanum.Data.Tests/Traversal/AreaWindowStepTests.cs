@@ -136,9 +136,9 @@ public sealed class AreaWindowStepTests
         var catalog = WorldCatalog.Open(stack);
         Assert.AreEqual("ROUTE_START_NOT_ADMITTED", AreaWindowRoute.Plan(stack, catalog, Map, new(-5, 10), new(20, 20)).Detail);
         Assert.AreEqual((AreaWindowRouteStatus.Found, 1), (AreaWindowRoute.Plan(stack, catalog, Map, new(5, 5), new(5, 5)) is var at ? (at.Status, at.Cells.Count) : default));
-        // Sector (3, 0) is off the 3×3-sector map: every admitted cell is searched and none is the goal.
+        // Sector (3, 0) is off the 3×3-sector map: the goal is refused before any search.
         var off = AreaWindowRoute.Plan(stack, catalog, Map, new(150, 10), new(200, 10));
-        Assert.AreEqual((AreaWindowRouteStatus.NoRoute, "ROUTE_NOT_FOUND", 9 * 4096), (off.Status, off.Detail, off.Expansions));
+        Assert.AreEqual((AreaWindowRouteStatus.Refused, "ROUTE_GOAL_NOT_ADMITTED", 0), (off.Status, off.Detail, off.Expansions));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new AreaWindowRouteLimits(maxResidentWindows: 0));
     }
 

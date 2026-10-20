@@ -33,6 +33,8 @@ public partial class TerrainViewerApp
     private int _mapWindowMoves;
     // A route goal beyond the shown window and the cell of it the walk heads for (ARC-WORLD-042).
     private (AreaStepCell Goal, AreaStepCell Toward)? _mapFarGoal;
+    // Window moves given up (the actor walked off the new core) or superseded before they published; the walk smoke needs 0.
+    private int _mapStreamGivenUp;
     /// <summary>Cells beyond the centre sector's edge (either axis) the actor stands before the window moves.</summary>
     internal const int StreamMargin = 16;
     // In a native smoke the window moves only in its own stage, so the other stages observe one fixed window.
@@ -133,17 +135,19 @@ public partial class TerrainViewerApp
             if (!chart.Contains(chart.ToChart(now)) || !result.AreaStepSnapshot!.IsAdmitted(now))
             {
                 EndMapStream(handoff);
-                _mapStreamStatus = $"window around ({sector.X},{sector.Y}) given up: the actor walked off it meanwhile";
+                _mapStreamStatus = $"window around ({sector.X},{sector.Y}) given up: the actor walked off it meanwhile"; _mapStreamGivenUp++;
                 GD.Print("ARC-RENDER-024 stream abandoned " + System.Text.Json.JsonSerializer.Serialize(new { To = new { sector.X, sector.Y }, Actor = now }));
                 RefreshAreaStatus();
                 return;
             }
             at = now; facing = walking.State.Facing;
-            if (ReferenceEquals(_worldRouteSession, walking) && _worldRoute is { Status: RouteFollowStatus.Following } route && route.Target is { } target)
+            if (ReferenceEquals(_worldRouteSession, walking) && _worldRoute is { Status: RouteFollowStatus.Following or RouteFollowStatus.Arrived } route
+                && route.Target is { } target)
             {
-                goal = walking.Chart.ToWorld(target);
-                // Still heading for the cell nearest a far goal: the far goal is handed on.
-                if (_mapFarGoal is { } far && far.Toward == goal) goal = far.Goal;
+                var heading = walking.Chart.ToWorld(target);
+                // Heading for (or already on) the cell nearest a far goal: the far goal is handed on. Another arrived walk ends.
+                if (_mapFarGoal is { } far && far.Toward == heading) goal = far.Goal;
+                else if (route.Status == RouteFollowStatus.Following) goal = heading;
             }
         }
         var moved = handoff with { Facing = facing, OriginCell = at };
@@ -167,7 +171,7 @@ public partial class TerrainViewerApp
             if (_nativeSmoke) { GD.Print("ARC-RENDER-007 frontier=AREA_STREAM_PUBLICATION"); GetTree().Quit(1); }
             return;
         }
-        if (!published) { EndMapStream(moved); return; }
+        if (!published) { EndMapStream(moved); _mapStreamGivenUp++; return; }
         _mapWindowMoves++; _mapStreamFailedAt = null;
         // The walk goes on to its goal when the new window holds it, else toward it through the cell of the window nearest it.
         var resumed = false; _mapFarGoal = null;

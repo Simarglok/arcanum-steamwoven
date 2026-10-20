@@ -584,7 +584,8 @@ public partial class TerrainViewerApp
         if (session is not AreaGridSession area || _readyMode != TerrainViewerMode.CrashSiteArea) return null;
         if (!ReferenceEquals(_worldRouteSession, session))
         {
-            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy));
+            // ARC-WORLD-042: the player's click route follows a corridor to a goal beyond the local planner's reach.
+            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy), corridorLimits: new RouteCorridorLimits());
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;
@@ -640,6 +641,7 @@ public partial class TerrainViewerApp
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
         CancelAreaUseApproach("a ground click replaced it"); CancelTalkApproach("a ground click replaced it"); CancelInventoryApproach("a ground click replaced it");
+        _mapFarGoal = null; // a click replaces a far goal handed on across window moves (ARC-WORLD-042)
         var accepted = route.SetTarget(cell, WorldTime);
         SetGroundClickGait(ctrl);
         _worldRouteDiagnostic = DescribeWorldRoute(route);
