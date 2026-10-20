@@ -287,6 +287,14 @@ cast cost gives `7 × 2 / 2 = 7` (MG2). With `Cost: 6` both give 6 (ledger MG2, 
 
 ### Resistance, saving throw and aptitude (FR-MAGIC-005, FR-MAGIC-010)
 
+**Original check (ARC-MAGIC-005, 2026-10-21).** The resistance pseudo-code below, the predictor paragraph and the fate save
+against magick were read in the executable by two readers ([ledger RS1–RS10](original-verification-ledger.md#spell-resistance-arc-magic-005))
+and run in the function oracle (the resistance and the predictor, F3); they stand at F2/F3. Two precisions: an action other
+than BEGIN, a technology record or an unresistable run returns before the margins are reset, so the run keeps its previous
+margin; and the predictor answers the resistance R itself (its save penalty is R / 10) unless it answers 100, at least 50 or 0.
+MG4 is fixed in Steamwoven (the penalty is added) behind the Original switch; the runtime is the
+[spell resistance](../world/spell-resistance-runtime.md).
+
 Applied at BEGIN to each target, for magic records only, and skipped for
 self-targets, `No_Resist:` records and unresistable runs (script "cast
 unresistable spell") (resist (0x4537B0)):
