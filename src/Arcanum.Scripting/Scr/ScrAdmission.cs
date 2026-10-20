@@ -110,6 +110,21 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S7 { get; } = new("S7", S6.Conditions,
         S6.Actions.Append(ScrCatalogue.Action.PlaySound).Append(ScrCatalogue.Action.PlaySoundOn).Append(ScrCatalogue.Action.PlaySoundScheme), S6.ValueKinds, S6.FocusKinds);
 
+    /// <summary>
+    /// The teleport set (ARC-SCRIPT-014, the dispatcher part of plan slice S4): <see cref="S7"/> plus teleport (44) and
+    /// fade-and-teleport (102), which hand <see cref="ScrTeleport"/> effects to the host, and the guard conditions of the
+    /// conditional map transitions (ARC-RES-035): PC quest state (6), holds an item named (17), is named (20), wields an
+    /// item named (21) and has a reputation (33), which the host answers through <see cref="IScrObjectQueries"/> (ledger
+    /// SG1; the teleports TR1, TR2). Focus stays one object, so the conditions over focus groups are not admitted yet.
+    /// </summary>
+    public static ScrAdmissionSet S4 { get; } = new("S4", S7.Conditions.Concat([ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed,
+            ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation]),
+        S7.Actions.Append(ScrCatalogue.Action.Teleport).Append(ScrCatalogue.Action.FadeAndTeleport), S7.ValueKinds, S7.FocusKinds);
+
+    /// <summary>The conditions of <see cref="S4"/> a host answers through <see cref="IScrObjectQueries"/>.</summary>
+    public static IReadOnlySet<int> ObjectQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed,
+        ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation };
+
     /// <summary>Whether every type and kind of this set is also in <paramref name="other"/>.</summary>
     public bool IsSubsetOf(ScrAdmissionSet other)
     {

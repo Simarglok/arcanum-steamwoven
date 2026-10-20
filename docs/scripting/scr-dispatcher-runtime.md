@@ -260,9 +260,41 @@ conversation is not run).
   positional rules on the PC's tile or where the speaker stands now, a companion's live cell,
   [positional sound](../audio/positional-sound.md)). Like the flags, the scheme request and the queued sounds stay
   applied when a later step of `Apply` is refused (the original applies as it goes).
-- The teleport and fade sound operands wait for those actions to be admitted.
+- The teleport and fade sound operands go to the host with the teleport request (set S4 below).
 - Set numbers no longer follow the slice plan of the [event dispatcher research](../research/scr-event-dispatcher.md):
   S6 is print line and S7 the sound actions, not heartbeat and combat.
+
+## Teleports and guards (ARC-SCRIPT-014, set S4)
+
+The dispatcher part of plan slice S4: what a use, tile or sector script asks for when it moves an object to a map, and the
+conditions that guard the conditional map transitions of the [transition research](../research/world-transitions.md#conditions).
+The viewer's use and tile wiring is the next slice (S4b).
+
+- **`ScrAdmissionSet.S4`** is S7 plus teleport (44) and fade-and-teleport (102), and the guard conditions PC quest state (6),
+  holds an item named (17), is named (20), wields an item named (21) and has a reputation (33). `ScrRunOptions` accepts any
+  subset of S4 (the default set stays S5). Focus stays one object (triggerer, attachee, extra object, player), so the
+  guards over focus groups are not admitted yet.
+- **Teleports.** `ScrEffects.Teleports` holds one `ScrTeleport(Object, CatalogueMap, X, Y, Fade)` per action, in order, and
+  the run goes on to the next line (ledger [TR1, TR2](../research/original-verification-ledger.md#map-transitions-arc-data-025)):
+  the object from operand 0 (fade-and-teleport: 3), then the map as the script gives it, x and y as values;
+  `RuntimeMap` is the map less 4,999 in 32 bits, as the original computes it. A fade-and-teleport also carries its seconds,
+  sound and movie (`ScrTeleportFade`); the original skips it only in a network game. An absent object asks for nothing
+  (the original would queue a teleport of no object; what its processing does with one is NOT_VERIFIED). The host owns the
+  pending-teleport rule: the original keeps one pending teleport, a new request replaces it unless the pending one is the
+  local PC's, which refuses the rest (TR4).
+- **Guards** (ledger [SG1–SG6](../research/original-verification-ledger.md#guard-conditions-arc-script-014)). A host whose set
+  holds them implements `IScrObjectQueries`: the quest state of the object, whether it holds an item with that name number,
+  its name number, whether it is mind-controlled, the name number of the item it wields in each location 1000..1008, and
+  whether it has the reputation. The interpreter asks only for the object the condition names: quest state equals the
+  value (6); holds the item (17); is named, unless mind-controlled (20); wields the item in any of the nine locations (21);
+  has the reputation (33). A set with a guard and a host without the queries is a caller error (an exception), not a
+  script refusal. As for the other single-object conditions, an absent object stops the run (`MissingObject`) where the
+  original takes the false branch over zero objects.
+- **Registry**: `ScrGuards.Holds` marks 0x4451B0 and `ScrGuards.Teleport` 0x447220, both partial (only these conditions
+  and actions; the earlier slices' conditions and actions are not migrated to the registry yet).
+- **Installed original** (opt-in `ScrTeleportTests`, `DAT_ROOT`): from line 0 set S7 admits 469 scripts and S4 774. Of the
+  357 scripts with a teleport action, S7 admits 22 (none of their teleports is reached from line 0) and S4 294; with a host
+  that answers every guard "no" and holds no flag, those runs ask for 257 teleports.
 
 ## Checks
 

@@ -95,6 +95,43 @@ public interface IScrHost
     bool IsPc(ScrObjectRef critter);
 }
 
+/// <summary>
+/// ARC-SCRIPT-014: the object questions of the guard conditions of set <see cref="ScrAdmissionSet.S4"/> (ledger SG1). A host
+/// whose admission set holds them implements this interface; the dispatcher asks only for the objects the conditions name.
+/// </summary>
+public interface IScrObjectQueries
+{
+    /// <summary>The state of the quest the condition compares (SG1): a PC's own state of it (6 when its entry is marked
+    /// botched); for any other object the quest's global state, whatever the object.</summary>
+    int QuestState(ScrObjectRef pc, int quest);
+    /// <summary>Whether a direct inventory item of the object has this name number (SG2: a container's or a critter's
+    /// inventory, no nested search); false for an object without an inventory.</summary>
+    bool HoldsItemNamed(ScrObjectRef obj, int name);
+    /// <summary>The object's name number (its name field).</summary>
+    int NameOf(ScrObjectRef obj);
+    /// <summary>Whether the object is mind-controlled (its spell flags); such an object is never "named".</summary>
+    bool IsMindControlled(ScrObjectRef obj);
+    /// <summary>The name number of the item the object wields in inventory location 1000..1008, or null for an empty one.</summary>
+    int? WieldedItemName(ScrObjectRef obj, int location);
+    /// <summary>Whether the object has the reputation (SG5: only a PC has reputations).</summary>
+    bool HasReputation(ScrObjectRef obj, int reputation);
+}
+
+/// <summary>A fade-and-teleport's extras (action 102): the game seconds the move takes, the sound and the movie numbers, as
+/// the action reads them; the fade itself and the time advance are the host's.</summary>
+public sealed record ScrTeleportFade(int Seconds, int Sound, int Movie);
+
+/// <summary>
+/// ARC-SCRIPT-014: a teleport the run asks for (actions 44 and 102, ledger TR1, TR2): the object, the catalogue map number as the
+/// script gives it, and the tile. <see cref="RuntimeMap"/> is that number less 4,999, as the original computes it (32-bit).
+/// The original keeps one pending teleport: a request replaces the pending one unless that one is a PC's teleport the game
+/// has already committed, which refuses the rest (ledger TR4); the host owns that rule.
+/// </summary>
+public sealed record ScrTeleport(ScrObjectRef Object, int CatalogueMap, int X, int Y, ScrTeleportFade? Fade = null)
+{
+    public int RuntimeMap => unchecked(CatalogueMap - 4999);
+}
+
 /// <summary>What the caller does after the event: its normal behaviour, not, or nothing ran because the script is
 /// outside the admitted set (the caller states its own reaction to a refusal).</summary>
 public enum ScrOutcome { RunDefault, SkipDefault, Refused }
@@ -208,12 +245,14 @@ public readonly record struct ScrFlagWrite(int Index, bool Value);
 public sealed class ScrEffects
 {
     internal ScrEffects(ScrWriteback? writeback, ScrObjectRef? destroyTrapObject, IReadOnlyList<ScrFlagWrite> globalFlags, int? storyState, ScrDialogStart? dialog = null,
-        IReadOnlyList<ScrCallRequest>? calls = null, IReadOnlyList<ScrPrintLine>? lines = null, IReadOnlyList<ScrSound>? sounds = null)
+        IReadOnlyList<ScrCallRequest>? calls = null, IReadOnlyList<ScrPrintLine>? lines = null, IReadOnlyList<ScrSound>? sounds = null,
+        IReadOnlyList<ScrTeleport>? teleports = null)
     {
         Writeback = writeback; DestroyTrapObject = destroyTrapObject; GlobalFlags = globalFlags; StoryState = storyState; Dialog = dialog;
         Calls = calls ?? Array.Empty<ScrCallRequest>();
         Lines = lines ?? Array.Empty<ScrPrintLine>();
         Sounds = sounds ?? Array.Empty<ScrSound>();
+        Teleports = teleports ?? Array.Empty<ScrTeleport>();
     }
 
     public static ScrEffects None { get; } = new(null, null, Array.Empty<ScrFlagWrite>(), null);
@@ -229,8 +268,10 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrPrintLine> Lines { get; }
     /// <summary>The sounds to play and scheme pairs to request, in action order (ARC-SCRIPT-040).</summary>
     public IReadOnlyList<ScrSound> Sounds { get; }
+    /// <summary>The teleports to request, in action order (ARC-SCRIPT-014).</summary>
+    public IReadOnlyList<ScrTeleport> Teleports { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
-        && Lines.Count == 0 && Sounds.Count == 0;
+        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -274,6 +315,6 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Rules);
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S7)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S7.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S4)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S4.", nameof(Admission));
     }
 }

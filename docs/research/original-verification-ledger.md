@@ -779,6 +779,24 @@ while the code reads the poison level as stat 24 (the setter and the strength an
 | IF11 | weapon skill of an item (0x465D80) | No item: melee. Not a weapon: throwing. A weapon: the boomerang flag gives throwing; complexity below 0 with range 3 or more and ammunition type 1–3 gives firearms; ammunition type 0 gives bow; anything else melee. | Original; Steamwoven implements the weapon branch only and reads complexity −2^31 as firearms (the original: melee; no data has it) |
 | IF12 | stat getter (0x4B0490) | Before effects and the clamp: poison lowers strength and dexterity by min(3, poison / 100), the poison being the effective level of stat 24; both crippled legs lower speed by 5. The getter also adds ±10 speed under the Tempus Fugit flag, one follower for a training of 2 or more in skill 11 and the PC background's ±2 (stats 0, 1, 4, 6) and ±4 (stat 22). | Original; Steamwoven implements poison (from the stored level; no Steamwoven effect targets poison) and crippled legs only |
 
+## Guard conditions (ARC-SCRIPT-014)
+
+Source: the [dispatcher's teleports and guards](../scripting/scr-dispatcher-runtime.md#teleports-and-guards-arc-script-014-set-s4)
+and the guard kinds of [map transitions](world-transitions.md#conditions). Question: what the condition function does for
+the five guards that stand most often between a placed object or tile and a teleport. Read on 2026-10-20 by a first reader
+and, independently, a second reader that saw only the questions and the addresses (method step 6); they agree on every row.
+The second reader added the object-type branches inside the helpers (SG1, SG2, SG5). The teleport actions themselves are
+rows TR1, TR2 and TR4. Every call target stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SG1 | script condition (0x4451B0, jump table 0x44714C, entry 6), quest state (0x4C4CB0) | Operand 0 is a focus list, operands 1 and 2 values: an object counts when the quest state of operand 1 for it equals operand 2. The state is the PC's own entry for a PC (6 when the entry's 0x100 bit marks it botched) and the quest's global state (0x4C51A0) for any other object. | Original |
+| SG2 | the same, entry 17, item search by name (0x462480) | An object counts when it holds an item whose name field equals the value: the direct inventory of a container or a critter, the first match; any other object holds nothing. | Original |
+| SG3 | the same, entry 20 | An object counts when its spell flags (field 20) lack the mind-controlled bit (0x08000000) and its name field (22) equals the value. A mind-controlled object is not counted but stays in the list. | Original |
+| SG4 | the same, entry 21, wielded item (0x4649C0) | An object counts when an item it wields in inventory location 1000..1008 has a name field equal to the value; the first such location ends the walk. | Original |
+| SG5 | the same, entry 33, reputation (0x4C1CB0) | An object counts when it is a PC with the reputation in its reputation array; any other object has none. | Original |
+| SG6 | the same, after each of the five | The focus list is released, then the true branch runs when at least one object counted and either all did or the focus kind is one of 3, 5, 7, 9, 14, 16, 18, 20 or 23 (one is enough); otherwise, and always for an empty list, the false branch. | Original. The dispatcher admits single-object focus only, where "all" is the one object; an absent object stops the run there (project rule of the single-object conditions) instead of taking the false branch. |
+
 ## Item insert script (ARC-RES-055)
 
 Source: [item insert script](item-insert-script.md). Question: what the `print_line` action (type 24) of a script does,
