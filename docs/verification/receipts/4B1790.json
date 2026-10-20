@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4B1790",
+  "name": "spell-learn",
+  "method": "Arcanum.Simulation.Magic.SpellBookRules.Learn",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 4,
+  "mutantsCaught": 4,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "c14debccdeb1683b15779c2ec3e7505113e527bbca58568024a4f53d39fa341c",
+  "configuration": "Debug"
+}

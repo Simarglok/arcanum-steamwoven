@@ -228,6 +228,9 @@ Human-Gates: an owner look at the page (separate L3 item, does not block merge).
 Depends on: S2, S5.
 
 **S7 Fate points** (shared owner; a `WORLD` code).
+**Built by ARC-WORLD-054** (2026-10-21, [contract](../world/fate-points-runtime.md), ledger
+[FT1–FT8](original-verification-ledger.md#fate-points-arc-world-054)): the session's fate owner with the attack, conversation-start
+and dialog `fp` readers; the skill uses and magic call its API. Snapshot schema 26.
 Result: the hero's fate points in the session: count, armed fate per kind
 (skill critical success, attack critical hit and miss, spell at maximum, save
 against magick), consumed on use, saved; the skill check and the attack

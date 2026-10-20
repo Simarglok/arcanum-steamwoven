@@ -162,6 +162,21 @@ public static class LifeRules
     }
 
     /// <summary>
+    /// The PC's "full heal" fate (ARC-WORLD-054, 0x4F52D0 kind 0, ledger FT5): hit-point damage, poison level and fatigue damage
+    /// are set to 0, nothing else (scars, blindness and crippled limbs stay). The project refuses it for a dead critter
+    /// (<see cref="LifeEvents.AlreadyDead"/>, nothing changed); the original writes the values whatever the state, but a dead PC
+    /// cannot reach the fate window.
+    /// </summary>
+    [OriginalFunction(0x4F52D0, OriginalFunctionScope.Partial)]
+    public static LifeOutcome FateFullHeal(LifeState state, LifeFacts facts)
+    {
+        Check(state, facts);
+        if (IsDead(state, facts)) return new(state, state, LifeEvents.AlreadyDead, 0, DeathAnimation.None);
+        var after = state with { HitPointDamage = 0, PoisonLevel = 0, FatigueDamage = 0 };
+        return new(state, after, Consciousness(state, after, facts), 0, DeathAnimation.None);
+    }
+
+    /// <summary>
     /// Recovery steps of a fatigue recovery event: <c>max(1, (now s − scheduled s) / 80)</c> in whole game seconds
     /// (checked in the original 1.0.7.4 executable at 0x45E610).
     /// </summary>
