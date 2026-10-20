@@ -210,8 +210,9 @@ and sector script the player enters runs since ARC-SCRIPT-017
   steps: a jump point or an unconditional tile script there fires, the jump
   point first (ledger TR3), and stops the click route (the actor may stand a
   step further when the frame had already started it); since ARC-SCRIPT-017 the
-  tile's script runs instead of its unconditional teleport, and a sector script
-  runs when a step enters its sector. One transfer
+  tile's script runs instead of its unconditional teleport (which still fires when
+  the run is refused before it starts), and a sector script runs when a step
+  enters its sector. One transfer
   is pending at a time; the stick, clicks and hover actions wait while it is,
   and a reset or reload drops it; a reset puts the actor on its start without
   firing the start tile, as a load does.
@@ -311,8 +312,13 @@ the start map), one per tile.
   record), a sector script's is kept in both modes.
 - **Effects and teleports** as for a guarded use: flags, schemes, deferred calls and the slot apply as the run goes; the
   first teleport of the player is the transfer, checked before anything applies. A teleport asked while another transfer
-  is pending (the tile's jump point fired) is dropped and the run's other effects stay (TR4). A tile or sector script
-  that ran and printed nothing leaves the status line alone; every run is logged as `ARC-WORLD-031 enter`.
+  is pending (the tile's jump point fired) is dropped and the run's other effects stay (TR4). A tile run refused before it
+  starts (an action or condition outside the set, no script content, no session) leaves the tile's unconditional
+  teleport of ARC-WORLD-031 to fire as before: the four same-map tile teleports of `void` keep working that way. An
+  entry run checks only the script files it reads for changes, not every file seen so far as a click does.
+- **Status and log.** The status line shows a transfer, an exit map mode cannot take and a run that printed lines;
+  refused and silent runs are only logged (`ARC-WORLD-031 enter`), and nothing after a step's accepted transfer
+  replaces it. One host serves every run of the shown map and session.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`, a new game's state for each script):
   5 tile scripts teleport (the exit tiles of `iron clan hq`, script 2203, to the start map at (96948,75722)), 249 tile
   scripts and 1 sector script run without one, 2,758 tile and 19 sector scripts are refused because they need actions or

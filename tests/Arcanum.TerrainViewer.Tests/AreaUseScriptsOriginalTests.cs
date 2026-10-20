@@ -56,6 +56,27 @@ public sealed class AreaUseScriptsOriginalTests
     }
 
     [TestMethod, TestCategory("RealData")]
+    public void The_unconditional_tile_teleports_of_void_still_fire_when_their_script_is_refused()
+    {
+        var root = Root();
+        using var content = ConversationSessionFixture.Scripts(root);
+        var result = AreaLoadOperation.Execute(1, Arguments(root, "void"), default);
+        var map = new AreaMapRuntime(result.Area!.Snapshot, result.AreaStepSnapshot!, result.Area.Plan.Chart);
+        var transfers = new AreaMapTransfers(map, result.MapTransitions!, result.MapDestinations!);
+        using var session = ConversationSessionFixture.Create(map.RuntimeMap);
+        transfers.PlacedRunner = (placed, refusal) => new AreaUseScriptHost(session, map.RuntimeMap, map.Snapshot.Objects, [], content).RunPlaced(placed, session.Rules.Scripts, refusal);
+        var cells = transfers.TriggerCells.Where(c => transfers.CellSite(c)!.Trigger == Arcanum.Data.Maps.MapTransitionTrigger.TileEntry).ToArray();
+        Assert.AreEqual(4, cells.Length);
+        foreach (var cell in cells)
+        {
+            var entered = transfers.Enter(cell).Single();
+            // Their scripts need actions outside the set, so the ARC-WORLD-031 teleport is taken.
+            Assert.AreEqual((AreaScriptedUseOutcome.Refused, AreaUseOutcome.Accepted), (transfers.LastScripted!.Outcome, entered.Outcome), entered.Reason);
+            Assert.IsTrue(transfers.Clear()!.SameMap);
+        }
+    }
+
+    [TestMethod, TestCategory("RealData")]
     public void Every_guarded_use_site_and_every_tile_and_sector_script_runs_or_is_refused_by_its_set()
     {
         var root = Root();

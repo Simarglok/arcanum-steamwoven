@@ -213,4 +213,40 @@ public sealed class AreaMapTransfersTests
         Assert.AreEqual((AreaUseOutcome.DestinationUnavailable, "DESTINATION_NOT_OPENED_IN_MAP_MODE 5001"), (refused.Outcome, refused.Reason));
         Assert.IsNull(transfers.Pending);
     }
+    [TestMethod]
+    public void A_jump_point_fires_before_the_tile_script_and_a_refused_run_leaves_the_unconditional_teleport()
+    {
+        var (map, row) = Load();
+        var cell = new AreaStepCell(row.WorldX!.Value, row.WorldY!.Value);
+        var sector = WorldSectorCoordinate.Containing(new(cell.X, cell.Y));
+        var arrival = map.Snapshot.Terrain.Select(t => new AreaStepCell(t.WorldX, t.WorldY)).First(c => map.Steps.IsAdmitted(c) && c != cell);
+        MapTransitionSite Cell(MapTransitionTrigger trigger, AreaStepCell at) => new(trigger, new(at.X, at.Y), null, 600, [600], 0, false, false,
+            map.RuntimeMap + 4999, map.RuntimeMap, new(arrival.X, arrival.Y), MapTransitionGuard.None);
+        var other = new AreaStepCell(cell.X + 1, cell.Y);
+        var placed = new[] { cell, other }.Select((c, i) => new MapPlacedScript(MapTransitionTrigger.TileEntry, sector, i, new(c.X, c.Y), 0, 0, 600)).ToArray();
+        var set = new MapTransitionSet(new WorldMap("test", new(2, 0, 64, 64), null, null, null, [], [], [], null, []), new(map.RuntimeMap + 4999, "test", null),
+            [Cell(MapTransitionTrigger.JumpPoint, cell), Cell(MapTransitionTrigger.TileEntry, other)], [], placed);
+        var transfers = new AreaMapTransfers(map, set, Destinations(map));
+        var pc = new Arcanum.Scripting.Scr.ScrObjectRef(map.RuntimeMap, "pc");
+        var answer = new AreaScriptedUse(AreaScriptedUseOutcome.Teleport, new(pc, 4998, 1, 1), [], null, "teleport");
+        var runs = 0;
+        transfers.PlacedRunner = (_, refuse) => { runs++; return answer.Teleport is { } t && refuse(t) is { } why ? answer with { Outcome = AreaScriptedUseOutcome.TeleportRefused, Detail = why } : answer; };
+
+        // The jump point queues first; the tile script still runs and only its teleport is dropped (TR3, TR4).
+        var both = transfers.Enter(cell);
+        Assert.AreEqual((AreaUseOutcome.Accepted, MapTransitionTrigger.JumpPoint), (both[0].Outcome, both[0].Site!.Trigger));
+        Assert.AreEqual((AreaUseOutcome.TransitionPending, MapTransitionTrigger.TileEntry, 1), (both[1].Outcome, both[1].Site!.Trigger, runs));
+        Assert.AreEqual(arrival, transfers.Pending!.Arrival);
+        transfers.Clear();
+
+        // A run refused before it started leaves the tile's unconditional teleport (ARC-WORLD-031).
+        answer = new(AreaScriptedUseOutcome.Refused, null, [], null, "outside the set");
+        var fallback = transfers.Enter(other).Single();
+        Assert.AreEqual((AreaUseOutcome.Accepted, 2), (fallback.Outcome, runs), fallback.Reason);
+        Assert.AreEqual(arrival, transfers.Pending!.Arrival);
+        transfers.Clear();
+        answer = new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "guards held");
+        Assert.AreEqual(AreaUseOutcome.ScriptEnded, transfers.Enter(other).Single().Outcome, "a run that happened decides, teleport or not");
+        Assert.IsNull(transfers.Pending);
+    }
 }

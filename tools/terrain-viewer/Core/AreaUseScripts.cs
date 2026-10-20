@@ -222,7 +222,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         ArgumentNullException.ThrowIfNull(placed); ArgumentNullException.ThrowIfNull(rules);
         if (placed.Trigger is not (MapTransitionTrigger.TileEntry or MapTransitionTrigger.SectorEntry)) throw new ArgumentException("Not a tile or sector script.", nameof(placed));
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
-        if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        // A step runs often: unlike a click it checks only the files this run reads (the check after the run), not every
+        // file seen so far.
         var slot = PlacedSlot(placed);
         var options = new ScrRunOptions { Rules = rules, Admission = Admission };
         var run = placed.Trigger == MapTransitionTrigger.TileEntry

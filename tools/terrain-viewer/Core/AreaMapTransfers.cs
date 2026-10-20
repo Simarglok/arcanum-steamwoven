@@ -103,7 +103,8 @@ public sealed class AreaMapTransfers
     public IReadOnlyCollection<AreaObjectKey> ScriptedTriggers => _scripted.Keys;
     public MapTransitionSite? ScriptedSite(AreaObjectKey key) => _scripted.TryGetValue(key, out var use) ? use.Site : null;
 
-    /// <summary>The script run of the last <see cref="RequestUse"/> (its printed lines and detail), or null when it ran none.</summary>
+    /// <summary>The script run of the last <see cref="RequestUse"/>, <see cref="Enter"/> or <see cref="EnterSector"/> (its
+    /// printed lines and detail), or null when it ran none; for a tile with a jump point and a script, the tile's run.</summary>
     public AreaScriptedUse? LastScripted { get; private set; }
 
     public AreaMapRuntime Map { get; }
@@ -143,8 +144,9 @@ public sealed class AreaMapTransfers
 
     /// <summary>
     /// The player entered <paramref name="cell"/>: its jump point queues its transfer (ledger TR3, first); then, with a
-    /// <see cref="PlacedRunner"/>, the tile's script runs and its teleport of the player is the transfer, else an
-    /// unconditional tile teleport there queues its transfer. Empty when the tile has none; a refused one returns its
+    /// <see cref="PlacedRunner"/>, the tile's script runs and its teleport of the player is the transfer; without a runner,
+    /// or when the run was refused before it started (outside the set, no content), an unconditional tile teleport there
+    /// queues its transfer. Empty when the tile has none; a refused one returns its
     /// reason. A teleport asked while another transfer is pending is dropped and the run's other effects stay (TR4).
     /// </summary>
     public IReadOnlyList<AreaMapUseResult> Enter(AreaStepCell cell)
@@ -153,9 +155,13 @@ public sealed class AreaMapTransfers
         var results = new List<AreaMapUseResult>(2);
         var site = _cells.GetValueOrDefault(cell);
         if (site is { Trigger: MapTransitionTrigger.JumpPoint }) results.Add(Pending is not null ? new(AreaUseOutcome.TransitionPending, site, 0, "TRANSITION_PENDING") : Queue(site, null, 0));
-        if (PlacedRunner is not null && _tiles.TryGetValue(cell, out var placed)) results.Add(RunPlaced(placed));
+        var ran = PlacedRunner is not null && _tiles.TryGetValue(cell, out var placed) ? RunPlaced(placed) : null;
+        // A run that did not happen (outside the set, no content, no session) leaves the tile's unconditional teleport
+        // (ARC-WORLD-031) to fire as before.
+        if (ran is not null && LastScripted?.Outcome is not (AreaScriptedUseOutcome.Refused or AreaScriptedUseOutcome.ContentUnavailable)) results.Add(ran);
         else if (site is { Trigger: MapTransitionTrigger.TileEntry })
             results.Add(Pending is not null ? new(AreaUseOutcome.TransitionPending, site, 0, "TRANSITION_PENDING") : Queue(site, null, 0));
+        else if (ran is not null) results.Add(ran);
         return results;
     }
 

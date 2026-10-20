@@ -300,6 +300,14 @@ public sealed class AreaUseScriptHostTests
             Assert.IsTrue(host.GlobalFlag(9));
             Assert.AreEqual(new ScrSlot(707, 0x10 | 1u << 1, 0), host.PlacedSlot(own));
             Assert.ThrowsExactly<ArgumentException>(() => host.RunPlaced(tile with { Trigger = Arcanum.Data.Maps.MapTransitionTrigger.Use }, session.Rules.Scripts));
+            // The original keeps a sector script's change too (ledger X3 sector).
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, plain.RunPlaced(own, GameRules.Original.Scripts).Outcome);
+            Assert.AreEqual(new ScrSlot(707, 0x10 | 1u << 1, 0), plain.PlacedSlot(own));
+            // A tile script that removes itself runs once (Steamwoven); the next entry runs default and is silent.
+            var once = tile with { Tile = 71, Script = 705 };
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunPlaced(once, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(0, host.PlacedSlot(once).Script);
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrStop.NoScript), (host.RunPlaced(once, session.Rules.Scripts).Outcome, host.RunPlaced(once, session.Rules.Scripts).Run!.Stop));
         });
     }
 }

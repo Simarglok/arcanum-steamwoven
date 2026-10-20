@@ -60,7 +60,7 @@ public partial class TerrainViewerApp
 
     private void StartMapTransfers(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
-        _mapTransfers = null; _mapEntered.Clear();
+        _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
         var area = result.Area!; var steps = result.AreaStepSnapshot!; var chart = area.Plan.Chart;
         var handoff = _mapHandoff; _mapHandoff = null;
         // A carried session that this map did not adopt (another load published meanwhile) is released.
@@ -94,13 +94,11 @@ public partial class TerrainViewerApp
         }
         _mapTransfers = new(new(area.Snapshot, steps, chart), transitions, destinations);
         // ARC-SCRIPT-015: a guarded use site runs its use script on the session; the hosts are read at the click.
-        _mapTransfers.ScriptRunner = (_, row, refusal) => _areaSession is { } owner
-            ? new AreaUseScriptHost(owner, area.Snapshot.RuntimeMap, area.Snapshot.Objects, _inventoryHost?.Maps ?? [], _conversationContent?.Load.Content).Run(row, owner.Rules.Scripts, refusal)
-            : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
+        _mapTransfers.ScriptRunner = (_, row, refusal) => UseScriptHost(area.Snapshot) is { } host
+            ? host.Run(row, _areaSession!.Rules.Scripts, refusal) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
         // ARC-SCRIPT-017: every tile and sector script the player enters runs on the session the same way.
-        _mapTransfers.PlacedRunner = (placed, refusal) => _areaSession is { } owner
-            ? new AreaUseScriptHost(owner, area.Snapshot.RuntimeMap, area.Snapshot.Objects, _inventoryHost?.Maps ?? [], _conversationContent?.Load.Content).RunPlaced(placed, owner.Rules.Scripts, refusal)
-            : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
+        _mapTransfers.PlacedRunner = (placed, refusal) => UseScriptHost(area.Snapshot) is { } host
+            ? host.RunPlaced(placed, _areaSession!.Rules.Scripts, refusal) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
         var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
         var arrived = handoff is null || handoff.Kind == MapHandoffKind.Stream ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
             : handoff.Kind == MapHandoffKind.Transfer ? $"; arrived from map {handoff.FromMap}" : $"; quick load from map {handoff.FromMap}";
@@ -161,6 +159,20 @@ public partial class TerrainViewerApp
         _ => $"use refused: {result.Outcome} {result.Reason}" + ScriptedLines(),
     };
 
+    // ARC-SCRIPT-017: one use-script host per shown map, session and script content (entry runs come every step).
+    private (AreaSnapshot Snapshot, GameSessionOwner Session, Arcanum.Data.Scripts.ScriptContent? Content, AreaInventoryHost? Inventory, AreaUseScriptHost Host)? _useScriptHost;
+
+    private AreaUseScriptHost? UseScriptHost(AreaSnapshot snapshot)
+    {
+        if (_areaSession is not { } owner) return null;
+        var content = _conversationContent?.Load.Content;
+        if (_useScriptHost is { } cached && ReferenceEquals(cached.Snapshot, snapshot) && ReferenceEquals(cached.Session, owner)
+            && ReferenceEquals(cached.Content, content) && ReferenceEquals(cached.Inventory, _inventoryHost)) return cached.Host;
+        var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content);
+        _useScriptHost = (snapshot, owner, content, _inventoryHost, host);
+        return host;
+    }
+
     // ARC-SCRIPT-015: the floating lines the last scripted use printed (shown on the status line).
     private string ScriptedLines() => _mapTransfers?.LastScripted is { Lines.Count: > 0 } ran ? " — \"" + string.Join(" / ", ran.Lines) + "\"" : "";
 
@@ -195,19 +207,21 @@ public partial class TerrainViewerApp
         while (_mapEntered.TryDequeue(out var step))
         {
             var queued = false;
-            // Each result is described as it comes, so its printed lines are the run's own.
+            // Each result is described as it comes. The status line shows a transfer, a refused exit and a run that printed;
+            // refusals and silent runs are logged only, and nothing after an accepted transfer of the step replaces it.
             void Note(AreaMapUseResult entered)
             {
                 var trigger = entered.Site!.Trigger;
-                // A tile or sector script that ran and printed nothing leaves the status line alone (most tiles do).
-                if (entered.Outcome != AreaUseOutcome.ScriptEnded || _mapTransfers!.LastScripted is { Lines.Count: > 0 })
+                var shown = entered.Outcome is AreaUseOutcome.Accepted or AreaUseOutcome.DestinationUnavailable
+                    || (entered.Outcome == AreaUseOutcome.ScriptEnded && _mapTransfers!.LastScripted is { Lines.Count: > 0 });
+                if (shown && !queued)
                 {
                     _areaUseStatus = (trigger switch
                     {
                         Arcanum.Data.Maps.MapTransitionTrigger.JumpPoint => "jump point: ",
                         Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry => "sector script: ",
                         _ => "tile script: ",
-                    }) + DescribeMapUse(entered);
+                    }) + (entered.Outcome == AreaUseOutcome.ScriptEnded ? "ran" + ScriptedLines() : DescribeMapUse(entered));
                     RefreshAreaStatus();
                 }
                 GD.Print("ARC-WORLD-031 enter " + System.Text.Json.JsonSerializer.Serialize(new { Trigger = trigger.ToString(), Cell = step.To,
