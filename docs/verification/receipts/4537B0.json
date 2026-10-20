@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "function": "0x4537B0",
+  "name": "spell-resist",
+  "method": "Arcanum.Simulation.Magic.SpellResistanceRules.Resist",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 4,
+  "mutantsCaught": 4,
+  "differences": 0,
+  "otherMode": {
+    "mode": "steamwoven",
+    "ledger": "MG4",
+    "ledgerInputs": 697,
+    "differ": 590,
+    "outsideLedger": 0
+  },
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "23c8dacb327b5b9407e5e9e2575c74341277bc5a528f8761b1d3e91a9b779ed7",
+  "configuration": "Debug"
+}

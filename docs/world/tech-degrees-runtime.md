@@ -65,7 +65,8 @@ character sheet will read the expertise. A bought degree moves the tech points a
 
 ## Not ready
 
-- No caller: the character sheet's + and − buttons (skills plan S6) and the schematic window (TECH-5) come later.
+- No caller of the buy and refund: the character sheet's + and − buttons (skills plan S6) come later; the viewer's
+  [schematic window](schematic-window-runtime.md) (ARC-TECHNOLOGY-005) reads the degrees and expertise.
 - The schematic knowledge (TECH-3) and the component gate (TECH-4) do not read the expertise yet.
 - Spell ranks in the intelligence guard are read from the sheet; the spell lane is the magic slice MT3.
 - The race and gender effects' tech-discipline changes are not carried into the expertise (no installed one has any); a

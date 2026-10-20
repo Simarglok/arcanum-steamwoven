@@ -1,0 +1,214 @@
+namespace Arcanum.Simulation.Magic;
+
+/// <summary>What a magic roll decides; every roll carries one, so a trace shows which roll decided what.</summary>
+public enum SpellRollPurpose
+{
+    /// <summary>The d100 against the target's magic resistance (0x4537B0).</summary>
+    ResistanceD100,
+    /// <summary>The target's saving throw d20 (0x4537B0).</summary>
+    SaveD20,
+    /// <summary>The fail-chance predictor's own d20 (0x453B20, MG14): asking the question moves the random stream.</summary>
+    FailChanceD20,
+}
+
+/// <summary>
+/// The injected randomness of magic: an inclusive uniform integer in <c>min..max</c>, the original's random range function
+/// (0x4CEF00). The session's seeded source labels each roll <c>magic.</c> and the purpose; tests script each roll.
+/// </summary>
+public interface ISpellRollSource
+{
+    int Roll(SpellRollPurpose purpose, int min, int max);
+}
+
+/// <summary>
+/// The PC target's armed fate "save against magick" (0x4F5270 with kind 4): consumes it and answers whether it was armed. The
+/// session fills it from its fate owner (ARC-WORLD-054); a target without fate points passes <see cref="SpellFateSave.None"/>.
+/// It is asked only for a PC target that is not the caster, at most once per resolution.
+/// </summary>
+public interface ISpellFateSave
+{
+    bool ConsumeSaveAgainstMagick();
+}
+
+/// <summary>The fate save of a target without an armed fate.</summary>
+public sealed class SpellFateSave : ISpellFateSave
+{
+    private SpellFateSave() { }
+
+    public static ISpellFateSave None { get; } = new SpellFateSave();
+
+    public bool ConsumeSaveAgainstMagick() => false;
+}
+
+/// <summary>The kind of target the resolution reads: a PC, an NPC, or any other object (no saving throw).</summary>
+public enum SpellTargetKind { Pc, Npc, Other }
+
+/// <summary>
+/// The record facts the resistance reads: its number (Disintegrate, 34, has a special case), the technology flag, the damaging
+/// flag (a Damage component), the aggressive <c>Info:</c>, the maintenance period, and the <c>Resist:</c> stat (−1 for none, then
+/// any other stat number) and modifier.
+/// </summary>
+public readonly record struct SpellResistRecord(int Spell, bool Technology, bool Damaging, bool Aggressive, int MaintainPeriod,
+    int ResistStat, int ResistModifier)
+{
+    public bool HasSave => ResistStat != SpellResistanceRules.NoSave;
+}
+
+/// <summary>
+/// The target facts the resistance reads: whether it is the run's parent (the caster), its kind, the "no disintegrate" critter
+/// flag, its <em>stored</em> magic resistance (the object's resistance 4, no armour, effects or clamp: O9), its effective
+/// magick/tech aptitude, the effective value of the record's <c>Resist:</c> stat, and whether that stat is extraordinary.
+/// </summary>
+public readonly record struct SpellResistTarget(bool IsCaster, SpellTargetKind Kind, bool NoDisintegrate, int StoredMagicResistance,
+    int Aptitude, int ResistStatValue, bool ResistStatExtraordinary);
+
+/// <summary>
+/// The run facts the resistance reads: whether the action is BEGIN (resistance runs only then), whether the run is unresistable
+/// (the script's "cast unresistable spell" and <c>No_Resist:</c> records, MG19), and whether this action is fate-maximised
+/// ("spell at maximum": no aptitude scaling of the resistance).
+/// </summary>
+public readonly record struct SpellResistRun(bool Begin, bool Unresistable, bool FateMaximized);
+
+/// <summary>
+/// One target's resolution: whether the spell applies to it (false: the target is skipped and plays "resisted"); the run's
+/// margin and the displayed margin (null when the resolution returned before resetting them: not BEGIN, a technology record or
+/// an unresistable run; the run keeps its previous margin; after a made save the displayed margin equals the run's); the penalty the resistance put on the save; whether the AI of the
+/// target is told of an aggressive spell it shrugged off (extraordinary willpower).
+/// </summary>
+public sealed record SpellResistance(bool Applies, int? Margin, int? DisplayMargin, int Penalty, bool NotifiesAi);
+
+/// <summary>
+/// ARC-MAGIC-005 (magic plan MT6): the original's per-target resistance and saving throw (0x4537B0) and its fail-chance
+/// predictor (0x453B20, 0x453CC0), as the 1.0.7.4 executable has them (contract docs/world/spell-resistance-runtime.md, ledger
+/// "Spell resistance", RS1–RS10). The rolls come from the caller's <see cref="ISpellRollSource"/>; the PC's fate save from an
+/// <see cref="ISpellFateSave"/>. One switch (<see cref="MagicAnomalyProfile.SaveSubtractsResistance"/>, MG4); MG13 (the fate
+/// save's margin 10, display 100, and the save still rolls) and MG14 (the predictor's own d20) follow the original in both modes.
+/// Arithmetic is the original's 32-bit integer arithmetic.
+/// </summary>
+public static class SpellResistanceRules
+{
+    public const int NoSave = -1, Willpower = 6, Disintegrate = 34, DamagingFloor = 50, FateMargin = 10, FateDisplayMargin = 100;
+    /// <summary>The predictor's "certain" answer, and the resistance above which a spell without a save is certain to fail.</summary>
+    public const int Certain = 100, CertainWithoutSave = 40;
+
+    /// <summary>
+    /// The resistance of one target to a magic action (0x4537B0), in the original's order:
+    /// <list type="number">
+    /// <item>not BEGIN, a technology record or an unresistable run: applies, margins untouched;</item>
+    /// <item>the margins reset to 0; Disintegrate against a PC or NPC with "no disintegrate": skipped;</item>
+    /// <item>unless the target is the caster: a PC whose armed fate "save against magick" fires gets margin 10 (display 100,
+    /// MG13); otherwise R is the stored magic resistance, scaled for a negative aptitude unless the action is fate-maximised
+    /// (<c>100 − (100 − R) × (A + 100) / 100</c>), a d100 below R makes the margin R − roll; a non-damaging
+    /// spell with a maintenance period not above 0 and R &gt; 0 then gets a save penalty of margin / 10, or, without a save, is skipped when the roll was below R;</item>
+    /// <item>the caster, a record without a save or a target that is no PC or NPC: applies;</item>
+    /// <item>a willpower save against an extraordinary willpower: skipped (the AI is told of an aggressive spell);</item>
+    /// <item>the save <c>S = stat − penalty + modifier</c> (Steamwoven: <c>+ penalty</c>, MG4); S ≤ 0 or a d20 above S: applies;
+    /// a d20 ≤ S adds S − d20 to the run's margin and sets the displayed one to it; a damaging spell then applies with at least 50;
+    /// a maintenance period other than 0 applies; any other is skipped.</item>
+    /// </list>
+    /// </summary>
+    [OriginalFunction(0x4537B0, OriginalFunctionScope.Partial)]
+    public static SpellResistance Resist(SpellResistRecord record, SpellResistTarget target, SpellResistRun run, ISpellRollSource rolls,
+        ISpellFateSave fate, MagicAnomalyProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(rolls);
+        ArgumentNullException.ThrowIfNull(fate);
+        ArgumentNullException.ThrowIfNull(profile);
+        if (!Enum.IsDefined(target.Kind)) throw new ArgumentOutOfRangeException(nameof(target));
+        if (!run.Begin || record.Technology || run.Unresistable) return new(true, null, null, 0, false);
+        int margin = 0, display = 0, penalty = 0;
+        var critter = target.Kind is SpellTargetKind.Pc or SpellTargetKind.Npc;
+        if (record.Spell == Disintegrate && critter && target.NoDisintegrate) return new(false, 0, 0, 0, false);
+        if (!target.IsCaster)
+        {
+            if (target.Kind == SpellTargetKind.Pc && fate.ConsumeSaveAgainstMagick())
+                (display, margin) = (FateDisplayMargin, FateMargin);
+            else
+            {
+                var resistance = Resistance(target, run.FateMaximized);
+                var roll = rolls.Roll(SpellRollPurpose.ResistanceD100, 1, 100);
+                if (roll < resistance) display = margin = unchecked(resistance - roll);
+                if (resistance > 0 && !record.Damaging && record.MaintainPeriod <= 0)
+                {
+                    if (record.HasSave) penalty = margin / 10;
+                    else if (roll < resistance) return new(false, margin, display, 0, false);
+                }
+            }
+        }
+        if (target.IsCaster || !record.HasSave || !critter) return new(true, margin, display, penalty, false);
+        if (record.ResistStat == Willpower && target.ResistStatExtraordinary) return new(false, margin, display, penalty, record.Aggressive);
+        var save = Save(record, target, penalty, profile);
+        if (save <= 0) return new(true, margin, display, penalty, false);
+        var d20 = rolls.Roll(SpellRollPurpose.SaveD20, 1, 20);
+        if (d20 > save) return new(true, margin, display, penalty, false);
+        display = margin = unchecked(margin + (save - d20));
+        if (record.Damaging)
+        {
+            if (margin < DamagingFloor) display = margin = DamagingFloor;
+            return new(true, margin, display, penalty, false);
+        }
+        return new(record.MaintainPeriod != 0, margin, display, penalty, false);
+    }
+
+    /// <summary>
+    /// The fail-chance predictor the AI and the spell UI ask (0x453B20, MG14), which follows the resistance's shape but differs:
+    /// a technology record is 0; R is the stored resistance (scaled for a negative aptitude unless <paramref name="fateMaximized"/>,
+    /// the flag the last processed action left); for a non-damaging spell with a maintenance period not above 0 and R &gt; 0 a record without a save
+    /// is 100 above R 40, else the save's penalty is R / 10; the caster, a record without a save or a target that is no PC or NPC
+    /// answers R (0 for the caster); a willpower save against an extraordinary willpower answers 100; the save
+    /// <c>S = stat − penalty + modifier</c> (Steamwoven <c>+</c>, MG4) at 0 or below, or a d20 above it, answers R; otherwise a
+    /// damaging spell answers at least 50, a maintained one R, any other 100. The d20 is rolled whenever the save is reached.
+    /// </summary>
+    [OriginalFunction(0x453B20, OriginalFunctionScope.Partial)]
+    public static int FailChance(SpellResistRecord record, SpellResistTarget target, bool fateMaximized, ISpellRollSource rolls,
+        MagicAnomalyProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(rolls);
+        ArgumentNullException.ThrowIfNull(profile);
+        if (!Enum.IsDefined(target.Kind)) throw new ArgumentOutOfRangeException(nameof(target));
+        if (record.Technology) return 0;
+        int chance = 0, penalty = 0;
+        if (!target.IsCaster)
+        {
+            chance = Resistance(target, fateMaximized);
+            if (chance > 0 && !record.Damaging && record.MaintainPeriod <= 0)
+            {
+                if (!record.HasSave)
+                {
+                    if (chance > CertainWithoutSave) return Certain;
+                }
+                else penalty = chance / 10;
+            }
+        }
+        if (target.IsCaster || !record.HasSave || target.Kind == SpellTargetKind.Other) return chance;
+        if (record.ResistStat == Willpower && target.ResistStatExtraordinary) return Certain;
+        var save = Save(record, target, penalty, profile);
+        if (save <= 0) return chance;
+        if (rolls.Roll(SpellRollPurpose.FailChanceD20, 1, 20) > save) return chance;
+        if (record.Damaging) return Math.Max(chance, DamagingFloor);
+        return record.MaintainPeriod != 0 ? chance : Certain;
+    }
+
+    /// <summary>
+    /// The predictor for an item's spell (0x453CC0): an item that is magical (<paramref name="itemMagical"/>) and holds a spell
+    /// (<paramref name="itemSpell"/> not −1) answers <see cref="FailChance"/> for that spell; any other item answers 0.
+    /// </summary>
+    [OriginalFunction(0x453CC0, OriginalFunctionScope.Partial)]
+    public static int ItemFailChance(bool itemMagical, int itemSpell, Func<int, int> failChance)
+    {
+        ArgumentNullException.ThrowIfNull(failChance);
+        return itemMagical && itemSpell != -1 ? failChance(itemSpell) : 0;
+    }
+
+    // The stored resistance, scaled for a negative aptitude unless fate-maximised (toward zero, 32-bit).
+    private static int Resistance(SpellResistTarget target, bool fateMaximized)
+    {
+        var resistance = target.StoredMagicResistance;
+        if (!fateMaximized && target.Aptitude < 0)
+            resistance = unchecked(100 - (100 - resistance) * (target.Aptitude + 100) / 100);
+        return resistance;
+    }
+
+    private static int Save(SpellResistRecord record, SpellResistTarget target, int penalty, MagicAnomalyProfile profile) =>
+        unchecked(target.ResistStatValue + (profile.SaveSubtractsResistance ? -penalty : penalty) + record.ResistModifier);
+}

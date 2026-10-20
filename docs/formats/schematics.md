@@ -136,5 +136,6 @@ and 8 placeholders; every list has 1 or 3 alternatives; every name and descripti
 - No item discipline reader: the caller supplies the prototype → discipline lookup (field 0x61) for found records.
 - No degrees or expertise (TECH-2), no found list, no registration from a schematic document and no reading of the
   document's schematic number (TECH-3, which also implements TC8), no component gate or assembly (TECH-4, TC3–TC5), no
-  window, tabs, pages, button texts or sounds (TECH-5, which settles the button codes O7).
+  window, tabs, pages, button texts or sounds (TECH-5) — all since implemented: TECH-2..TECH-5 (ARC-TECHNOLOGY-002..005, the
+  last [schematic window](../world/schematic-window-runtime.md)); O7 was settled by ARC-TECHNOLOGY-004.
 - The window's per-discipline found counts (0x56D130) are the caller's `shown`; the open function is not implemented.

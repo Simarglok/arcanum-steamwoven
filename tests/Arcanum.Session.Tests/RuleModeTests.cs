@@ -47,11 +47,19 @@ public sealed class RuleModeTests
             Assert.AreSame(rules.Items, Arcanum.Simulation.Items.ItemRuleProfile.FromName(rules.Name));
             Assert.AreEqual(rules.Name, rules.Technology.Name);
             Assert.AreSame(rules.Technology, Arcanum.Simulation.Technology.TechnologyRuleProfile.FromName(rules.Name));
+            Assert.AreEqual(rules.Name, rules.Magic.Name);
+            Assert.AreSame(rules.Magic, Arcanum.Simulation.Magic.MagicAnomalyProfile.FromName(rules.Name));
+            Assert.AreEqual(rules.Name, rules.Travel.Name);
+            Assert.AreSame(rules.Travel, Arcanum.Simulation.Travel.TravelRuleProfile.FromName(rules.Name));
         }
         Assert.AreSame(Arcanum.Simulation.Items.ItemRuleProfile.Steamwoven, GameRules.Steamwoven.Items);
         Assert.AreSame(Arcanum.Simulation.Items.ItemRuleProfile.Original, GameRules.Original.Items);
         Assert.AreSame(Arcanum.Simulation.Technology.TechnologyRuleProfile.Steamwoven, GameRules.Steamwoven.Technology);
         Assert.AreSame(Arcanum.Simulation.Technology.TechnologyRuleProfile.Original, GameRules.Original.Technology);
+        Assert.AreSame(Arcanum.Simulation.Magic.MagicAnomalyProfile.Steamwoven, GameRules.Steamwoven.Magic);
+        Assert.AreSame(Arcanum.Simulation.Magic.MagicAnomalyProfile.Original, GameRules.Original.Magic);
+        Assert.AreSame(Arcanum.Simulation.Travel.TravelRuleProfile.Steamwoven, GameRules.Steamwoven.Travel);
+        Assert.AreSame(Arcanum.Simulation.Travel.TravelRuleProfile.Original, GameRules.Original.Travel);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
 

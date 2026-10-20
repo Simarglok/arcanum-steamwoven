@@ -243,6 +243,13 @@ public readonly record struct ScrSound(ScrSoundKind Kind, int Id, int Ambient = 
 /// </summary>
 public readonly record struct ScrSchemeRequest(ScrObjectRef Object, int Scheme);
 
+/// <summary>
+/// ARC-TECHNOLOGY-005: a start-schematic-UI action (129) for the object of its object operand (ledger SW8). The original calls an
+/// interface callback slot that is never filled (TC2, both fixed): a PC opens the window as crafter and viewer, an NPC with its PC
+/// leader as viewer, an NPC without a leader nothing. The host decides what the object is.
+/// </summary>
+public readonly record struct ScrSchematicRequest(ScrObjectRef Object);
+
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
@@ -254,7 +261,7 @@ public sealed class ScrEffects
 {
     internal ScrEffects(ScrWriteback? writeback, ScrObjectRef? destroyTrapObject, IReadOnlyList<ScrFlagWrite> globalFlags, int? storyState, ScrDialogStart? dialog = null,
         IReadOnlyList<ScrCallRequest>? calls = null, IReadOnlyList<ScrPrintLine>? lines = null, IReadOnlyList<ScrSound>? sounds = null,
-        IReadOnlyList<ScrTeleport>? teleports = null, IReadOnlyList<ScrSchemeRequest>? schemes = null)
+        IReadOnlyList<ScrTeleport>? teleports = null, IReadOnlyList<ScrSchemeRequest>? schemes = null, IReadOnlyList<ScrSchematicRequest>? schematics = null)
     {
         Writeback = writeback; DestroyTrapObject = destroyTrapObject; GlobalFlags = globalFlags; StoryState = storyState; Dialog = dialog;
         Calls = calls ?? Array.Empty<ScrCallRequest>();
@@ -262,6 +269,7 @@ public sealed class ScrEffects
         Sounds = sounds ?? Array.Empty<ScrSound>();
         Teleports = teleports ?? Array.Empty<ScrTeleport>();
         Schemes = schemes ?? Array.Empty<ScrSchemeRequest>();
+        Schematics = schematics ?? Array.Empty<ScrSchematicRequest>();
     }
 
     public static ScrEffects None { get; } = new(null, null, Array.Empty<ScrFlagWrite>(), null);
@@ -281,8 +289,10 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrTeleport> Teleports { get; }
     /// <summary>The auto-level schemes to set, in action order, one per object (ARC-SCRIPT-016).</summary>
     public IReadOnlyList<ScrSchemeRequest> Schemes { get; }
+    /// <summary>The schematic windows to open, in action order (ARC-TECHNOLOGY-005).</summary>
+    public IReadOnlyList<ScrSchematicRequest> Schematics { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
-        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0;
+        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -309,7 +319,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S8"/>, admitted for the lines reachable from the event's line) and the executed-line
+/// at most <see cref="ScrAdmissionSet.S9"/>, admitted for the lines reachable from the event's line) and the executed-line
 /// budget.</summary>
 public sealed record ScrRunOptions
 {
@@ -326,7 +336,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Rules);
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S8)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S8.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S9)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S9.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

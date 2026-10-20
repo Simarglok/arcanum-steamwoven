@@ -26,15 +26,18 @@ public sealed class AreaScriptHost : IScrHost
     /// has no story-state number yet (a script that would use one is refused, not run on a made-up value), plus the three
     /// sound actions of <see cref="ScrAdmissionSet.S7"/> (ARC-SCRIPT-040), plus call script in and remove script call of
     /// <see cref="ScrAdmissionSet.S5"/> since the viewer pumps the session's event queue (ARC-WORLD-039), plus set auto-level
-    /// scheme of <see cref="ScrAdmissionSet.S8"/> (ARC-SCRIPT-016).
+    /// scheme of <see cref="ScrAdmissionSet.S8"/> (ARC-SCRIPT-016), plus start schematic UI of <see cref="ScrAdmissionSet.S9"/>
+    /// (ARC-TECHNOLOGY-005).
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme", ScrAdmissionSet.S3.Conditions,
+    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic", ScrAdmissionSet.S3.Conditions,
         ScrAdmissionSet.S3.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState)
             .Concat([ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
-                ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme]),
+                ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
+                ScrCatalogue.Action.StartSchematicUi]),
         ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
 
     private readonly List<ScrSound> _sounds = [];
+    private readonly List<AreaSchematicScriptOpen> _schematics = [];
 
     /// <summary>ARC-SCRIPT-040: the effect sounds of the runs applied since the last call, in order, for the viewer to play
     /// (scheme requests go to the session in <see cref="Apply"/>).</summary>
@@ -43,6 +46,15 @@ public sealed class AreaScriptHost : IScrHost
         var sounds = _sounds.ToArray();
         _sounds.Clear();
         return sounds;
+    }
+
+    /// <summary>ARC-TECHNOLOGY-005: the schematic window requests of the runs applied since the last call, in order, each already
+    /// resolved (<see cref="ResolveSchematic"/>), for the viewer to open the hero's window or report the refusal.</summary>
+    public IReadOnlyList<AreaSchematicScriptOpen> TakeSchematics()
+    {
+        var schematics = _schematics.ToArray();
+        _schematics.Clear();
+        return schematics;
     }
 
     /// <summary>ARC-SCRIPT-040: the speaker the scripts name, or null for the PC and anything else (the viewer knows where it
@@ -162,7 +174,7 @@ public sealed class AreaScriptHost : IScrHost
     public bool IsPc(ScrObjectRef critter) => critter == Pc;
 
     /// <summary>
-    /// Applies a run's effects: the global flags, the sound requests, the deferred calls, the scheme changes (ARC-SCRIPT-016), then
+    /// Applies a run's effects: the global flags, the sound requests, the deferred calls, the scheme changes (ARC-SCRIPT-016), the schematic window requests (ARC-TECHNOLOGY-005), then
     /// the speaker's slot as map changes (a value equal to the loaded one clears its key). The session has no transaction across its flag owner and its map changes; a rejected step
     /// stops the later ones and is reported. The dialog start is the caller's.
     /// </summary>
@@ -202,6 +214,10 @@ public sealed class AreaScriptHost : IScrHost
                 : _npcAdvancement?.Invoke(request.Object.Code) is { } npc ? SessionSchemeTarget.ForNpc(npc) : null;
             if (target is not null && SchemeRefusalStops(_session.SetAutoLevelScheme(_session.Version, target, request.Scheme).Failure)) return false;
         }
+        // ARC-TECHNOLOGY-005 (SW8, TC2 both fixed): each start schematic UI request in action order, resolved now (the PC, or an NPC
+        // and its PC leader); it changes no session state, so it neither stops nor is stopped by a later step.
+        foreach (var request in effects.Schematics)
+            if (ResolveSchematic(request.Object, IsPc(request.Object), Leader(request.Object)) is { } open) _schematics.Add(open);
         if (effects.Writeback is not { } writeback) return true;
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
             || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;
@@ -220,6 +236,29 @@ public sealed class AreaScriptHost : IScrHost
     public static bool SchemeRefusalStops(GameSessionFailure failure) =>
         failure is not (GameSessionFailure.None or GameSessionFailure.InvalidAdvancement or GameSessionFailure.AdvancementUnavailable);
 
+    /// <summary>
+    /// ARC-TECHNOLOGY-005: what start schematic UI (129) does for its object (ledger SW8; TC2, both fixed, both modes): the PC opens
+    /// its own window (crafter and viewer the PC); an NPC with a PC leader would open the window with the NPC as crafter and the
+    /// leader as viewer, which the viewer does not support yet (no NPC inventory state), so it is refused by name
+    /// (<see cref="AreaSchematicScriptStatus.NpcCrafterNotReady"/>), never called through a garbage callback; any other object
+    /// (an NPC without a leader, an absent or non-critter object) opens nothing (null).
+    /// </summary>
+    public static AreaSchematicScriptOpen? ResolveSchematic(ScrObjectRef obj, bool isPc, ScrObjectRef? leader) =>
+        isPc ? new(obj, obj, AreaSchematicScriptStatus.Open)
+        : leader is { } viewer ? new(obj, viewer, AreaSchematicScriptStatus.NpcCrafterNotReady) : null;
+
     /// <summary>A script object as a deferred call's session role (map and entity id), or null for an absent one.</summary>
     public static SessionScriptRole? Role(ScrObjectRef? obj) => obj is { } o ? new SessionScriptRole(new SessionMapId(o.Map), o.Code) : null;
 }
+
+/// <summary>ARC-TECHNOLOGY-005: how a start schematic UI request resolved.</summary>
+public enum AreaSchematicScriptStatus
+{
+    /// <summary>The PC's own window opens.</summary>
+    Open = 0,
+    /// <summary>An NPC crafter with its PC leader as viewer: a later slice (NPC inventory state); refused by name.</summary>
+    NpcCrafterNotReady = 1,
+}
+
+/// <summary>ARC-TECHNOLOGY-005: one resolved start schematic UI request: the crafter, the viewer and the outcome.</summary>
+public readonly record struct AreaSchematicScriptOpen(ScrObjectRef Crafter, ScrObjectRef Viewer, AreaSchematicScriptStatus Status);

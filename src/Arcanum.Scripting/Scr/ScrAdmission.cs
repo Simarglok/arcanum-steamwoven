@@ -128,6 +128,12 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S8 { get; } = new("S8", S4.Conditions, S4.Actions.Append(ScrCatalogue.Action.SetAutoLevelScheme), S4.ValueKinds, S4.FocusKinds);
 
+    /// <summary>
+    /// The schematic set (ARC-TECHNOLOGY-005): <see cref="S8"/> plus start schematic UI (129), which hands one
+    /// <see cref="ScrSchematicRequest"/> for its object operand to the host (ledger SW8; TC2, both fixed).
+    /// </summary>
+    public static ScrAdmissionSet S9 { get; } = new("S9", S8.Conditions, S8.Actions.Append(ScrCatalogue.Action.StartSchematicUi), S8.ValueKinds, S8.FocusKinds);
+
     /// <summary>The conditions of <see cref="S4"/> a host answers through <see cref="IScrObjectQueries"/>.</summary>
     public static IReadOnlySet<int> ObjectQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed,
         ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation };

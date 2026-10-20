@@ -1,4 +1,5 @@
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Magic;
 
 namespace Arcanum.Session;
 
@@ -33,4 +34,21 @@ internal sealed class SessionCombatRolls(GameSessionOwner owner) : ICombatRollSo
     }
 
     internal static string Label(CombatRollPurpose purpose) => "combat." + purpose;
+}
+
+/// <summary>
+/// The session generator behind the magic rules' <see cref="ISpellRollSource"/> (ARC-MAGIC-005): each roll is labelled
+/// <c>magic.</c> and the <see cref="SpellRollPurpose"/> name; refusals throw as in <see cref="SessionCombatRolls"/>.
+/// </summary>
+internal sealed class SessionSpellRolls(GameSessionOwner owner) : ISpellRollSource
+{
+    public int Roll(SpellRollPurpose purpose, int min, int max)
+    {
+        if (!Enum.IsDefined(purpose)) throw new ArgumentOutOfRangeException(nameof(purpose));
+        if (min > max) throw new ArgumentOutOfRangeException(nameof(min), "min must not exceed max");
+        var result = owner.Roll(Label(purpose), min, max);
+        return result.Roll?.Value ?? throw new InvalidOperationException($"Session roll {purpose} refused: {result.Failure}.");
+    }
+
+    internal static string Label(SpellRollPurpose purpose) => "magic." + purpose;
 }

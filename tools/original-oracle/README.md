@@ -47,6 +47,11 @@ python3 -B tools/original-oracle/oracle.py list
 | 0x4508A0 | spell check cost | as above; the payment is asked without applying | `CheckCostMatchesTheOriginal` |
 | 0x4B1660 | spell cast cost (UI and AI) | as above, with the loaded flag 0x5E7618 and the cost getter 0x450340; no payment | `CastCostMatchesTheOriginal` |
 | 0x4B1790 | spell learn | one critter (ARC-MAGIC-004): stubs for its type, its college's rank (0x407470), its effective level, intelligence and willpower, its stored magick points; the spell's willpower minimum in the table behind 0x6876D8 (or the defaults with the loaded flag 0); the rank write (0x4F0270) and the stat setter are recording stubs; single player, not the local player; may call the minima, the rank getter and setter | `LearnMatchesTheOriginal` (`SpellBookOriginalExeTests`) |
+| 0x4537B0 | spell resistance | one magic run, record and target (ARC-MAGIC-005): the run, the record and its `Resist:` pair on the heap behind their globals, the target handle, type and fate-maximised globals; stubs for the target's type, critter flags 2, stored magic resistance, aptitude and `Resist:` stat, the extraordinary test, the fate use, the random range (the pre-drawn d100 and d20, recorded) and the AI notice; the run's margin and the displayed-margin global are the call's **writable** outputs, read back after it | `ResistMatchesTheOriginal` (`SpellResistanceOriginalExeTests`; Steamwoven differs only on MG4's inputs) |
+| 0x453B20 | spell fail chance | the same target and record (the record in the spell table behind 0x6876D8); no writes | `FailChanceMatchesTheOriginal` |
+
+A call may name `writable` ranges (world-model outputs such as a global the function sets); any other write still fails the
+run, and the oracle reads them back with `read_u32`.
 
 Adding a function: a `FunctionSpec` in `oracle_functions.py` with its model, a test with mutants that writes its receipt,
 a row in `ORACLE_FUNCTIONS` of `tools/local_dev/launch.py` and its test class in `ORACLE_TEST_CLASSES` (`test_launcher_sync.py` checks all three agree), and its F3
