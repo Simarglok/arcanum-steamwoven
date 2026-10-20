@@ -31,7 +31,7 @@ public partial class TerrainViewerApp
         static void Require(bool value, string code) { if (!value) throw new InvalidOperationException("AREA_RESOURCES_" + code); }
         // ARC-RENDER-024: on a window map the first reload after the map battery allocates a one-time 25-30 MB (measured: the
         // next reload changes the heap by -0.3 MB), so the stage measures a steady-state reload after one warm-up reload.
-        if (_mapWindowCentre is not null && _arguments is { } warm)
+        if (_mapWindowCentre is not null && _arguments is { } warm && System.Environment.GetEnvironmentVariable("ARC_EXPERIMENT_NO_WARM") is null)
         {
             await StartLoadAsync(warm, false);
             GD.Print($"ARC-RENDER-024 resources warm-up reload generation={_generation} managed={GC.GetTotalMemory(true)}");

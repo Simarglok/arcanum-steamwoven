@@ -268,7 +268,9 @@ conversation is not run).
 
 The dispatcher part of plan slice S4: what a use, tile or sector script asks for when it moves an object to a map, and the
 conditions that guard the conditional map transitions of the [transition research](../research/world-transitions.md#conditions).
-The viewer's use and tile wiring is the next slice (S4b).
+The viewer's use wiring is ARC-SCRIPT-015 ([guarded use transitions](../rendering/area-map-mode.md#guarded-use-transitions-arc-script-015):
+map mode runs the use script of a guarded use site under "S4-area-use", S4 without story state and the dialog action, and
+the player's teleport becomes the transfer); tile and sector events are a later slice.
 
 - **`ScrAdmissionSet.S4`** is S7 plus teleport (44) and fade-and-teleport (102), and the guard conditions PC quest state (6),
   holds an item named (17), is named (20), wields an item named (21) and has a reputation (33). `ScrRunOptions` accepts any
@@ -337,6 +339,11 @@ The viewer's use and tile wiring is the next slice (S4b).
   refused, following picks line 6 → node 385. ARC-SCRIPT-040: a scheme request reaches the session, effect sounds are
   taken once, a speaker is found by its object; the opt-in map conversation census finds no first talk (line 0, no
   follower, no resumption) that reaches a sound action yet.
+- `tests/Arcanum.TerrainViewer.Tests/AreaUseScriptHostTests.cs` (ARC-SCRIPT-015): the use-script host over invented
+  content: a held item and a quest guarding a teleport, names, holds and wielded items from rows and holders, a
+  mind-controlled object, the use slot written back and a self-removing script, refusals that change nothing.
+  `AreaMapTransfersTests`: which guarded use sites are scripted, the script's outcomes and teleport as the transfer.
+  Opt-in `AreaUseScriptsOriginalTests`: the guarded door of `tulla interior` and the census of 21 guarded use sites.
 
 ## Not ready
 
@@ -346,12 +353,15 @@ The viewer's use and tile wiring is the next slice (S4b).
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
 - The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls": S3 without
-  story state, plus the sound actions and call script in / remove script call); use, tile and sector events, heartbeat
-  and combat are later slices.
-- Not in the admitted set yet: focus groups and local objects, loops, calls and
-  call-ex, and every world action (float line, teleport, quests, reactions...).
-- The viewer's script host models only the dialog slot of the map's speakers;
+  story state, plus the sound actions and call script in / remove script call); since ARC-SCRIPT-015 map mode's use
+  clicks on guarded use sites run it under "S4-area-use"; tile and sector events, heartbeat and combat are later slices.
+- Not in any admitted set yet: focus groups and local objects, loops, immediate calls and
+  call-ex, and the world actions other than teleport and fade-and-teleport (set S4); float line, quests,
+  reactions... are not admitted.
+- The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
-  "no", and the generic greeting is a status line.
+  "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any
+  row of the shown map, mind control from the row's spell flags and the jilted flag from the session; generators and
+  traps answer "no" there too.
 - X2 (an uninitialised attachee type without attachee) is reachable only through
   call-script and is left to the slice that admits calls.

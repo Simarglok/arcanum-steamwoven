@@ -42,7 +42,7 @@ public static class AreaAmbientPolicy
         foreach (var command in plan.Commands)
         {
             if (!raw.TryGetValue(command.Visual, out var art)) throw new InvalidOperationException("AREA_AMBIENT_VISUAL_REQUIRED");
-            // ARC-RENDER-018: a multiply or constant-alpha body is drawn with its base palette.
+            // ARC-RENDER-018, ARC-RENDER-026: an additive, multiply or constant-alpha body is drawn with its base palette.
             result[command.Visual] = command.Unlit ? AreaAmbientChannel.Unlit : Channel(art);
         }
         return new ReadOnlyDictionary<AreaVisualKey, AreaAmbientChannel>(result);
