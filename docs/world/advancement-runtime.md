@@ -100,6 +100,10 @@ current map) and effects; the conversation reads a levelled follower's level fro
   their starting points and level to 50 with their schemes; Virgil's sheet levels from 1 to 50 with scheme 91. Only counts
   and levels are printed.
 
+The hero's purchases read the skill and maxima changes of its durable effects and, since ARC-SKILLS-002, the race and
+gender effects' skill changes ([hero skills](hero-skills-runtime.md)), so a race bonus lowers the points a scheme buys for a
+skill target.
+
 ## Not ready
 
 - The scheme choice (the character screen's auto-level selection) and point purchases by the player; the Educator
@@ -107,8 +111,6 @@ current map) and effects; the conversation reads a levelled follower's level fro
 - Waiting followers "nearby" are the ones on the current map; a waiting follower on another map does not follow the level
   step (the source's distance test is not modelled). An NPC whose home map the viewer has not loaded (map mode covers one
   map) is skipped, even when the session already holds its record.
-- The hero's purchases read the skill and maxima changes of its durable effects and, since ARC-SKILLS-002, the race and
-  gender effects' skill changes ([hero skills](hero-skills-runtime.md)), so a race bonus lowers the points a scheme buys for a skill target.
 - Viewer: an award reached while the viewer has no combat host or effect rules (no `--hero`) levels no follower.
 - Script changes of a scheme (Virgil's script 2023 sets scheme 101) have no runtime.
 - Multiplayer and network branches (AL13) are out of scope.

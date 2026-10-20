@@ -58,6 +58,7 @@ public sealed class SessionCritterCombat
     private readonly CharacterStatsOwner _stats;
     private readonly IReadOnlyDictionary<EquipmentSlot, EquipmentItem> _worn;
     private readonly IReadOnlyList<int> _basicSkills;
+    private readonly SessionSkills? _sheetSkills;
     private readonly int _baseArmorClass;
     private readonly DamageResistances _storedResistances;
     private readonly LightEmission _ownLight;
@@ -65,9 +66,9 @@ public sealed class SessionCritterCombat
 
     private SessionCritterCombat(string entity, CharacterStatsOwner stats, IReadOnlyDictionary<EquipmentSlot, EquipmentItem> worn,
         IReadOnlyList<int> basicSkills, int baseArmorClass, DamageResistances storedResistances, LightEmission ownLight, CombatantFlags flags,
-        LifeFacts facts, LifeState loaded, SessionNpcExperience experience, bool monstrous, int level)
+        LifeFacts facts, LifeState loaded, SessionNpcExperience experience, bool monstrous, int level, SessionSkills? sheetSkills = null)
     {
-        Entity = entity; _stats = stats; _worn = worn; _basicSkills = basicSkills; _baseArmorClass = baseArmorClass;
+        Entity = entity; _stats = stats; _worn = worn; _basicSkills = basicSkills; _sheetSkills = sheetSkills; _baseArmorClass = baseArmorClass;
         _storedResistances = storedResistances; _ownLight = ownLight; _flags = flags; Facts = facts; Loaded = loaded;
         Experience = experience; Monstrous = monstrous; Level = level;
         Target = SessionLifeTarget.Critter(entity, facts, loaded);
@@ -85,10 +86,11 @@ public sealed class SessionCritterCombat
     public bool Monstrous { get; }
     public int Level { get; }
 
-    /// <summary>The same NPC with the basic skills and level of the sheet the session levelled it to (ARC-SKILLS-002, a follower's
-    /// saved advancement record; its other values stay the map data's).</summary>
+    /// <summary>The same NPC defending with the dodge and backstab of the sheet the session levelled it to (ARC-SKILLS-002, a
+    /// follower's saved advancement record, read under the sheet's own stats as <see cref="GameSessionOwner.QueryNpcSkills"/>
+    /// reads it) and that sheet's level; its other values stay the map data's.</summary>
     internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, _baseArmorClass,
-        _storedResistances, _ownLight, _flags, Facts, Loaded, Experience, Monstrous, sheet.Level);
+        _storedResistances, _ownLight, _flags, Facts, Loaded, Experience, Monstrous, sheet.Level, SessionSkills.Of(sheet, AdvancementModifiers.None));
 
     /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
@@ -216,10 +218,12 @@ public sealed class SessionCritterCombat
             Resistances = CombatantRules.Resistances(_storedResistances, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), Monstrous),
             Conditions = CombatantRules.Conditions(status, state, Facts.Traits, _flags),
             LightEmission = _ownLight,
-            DodgeLevel = SkillLevel(BasicCombatSkill.Dodge),
-            DodgeTraining = CombatSkillRules.Training(BasicCombatSkill.Dodge, _basicSkills[(int)BasicCombatSkill.Dodge], Monstrous, 0, Level),
-            BackstabLevel = SkillLevel(BasicCombatSkill.Backstab),
-            BackstabTraining = CombatSkillRules.Training(BasicCombatSkill.Backstab, _basicSkills[(int)BasicCombatSkill.Backstab], Monstrous, 0, Level),
+            DodgeLevel = _sheetSkills?[Skill.Dodge].Level ?? SkillLevel(BasicCombatSkill.Dodge),
+            DodgeTraining = _sheetSkills?[Skill.Dodge].Training
+                ?? CombatSkillRules.Training(BasicCombatSkill.Dodge, _basicSkills[(int)BasicCombatSkill.Dodge], Monstrous, 0, Level),
+            BackstabLevel = _sheetSkills?[Skill.Backstab].Level ?? SkillLevel(BasicCombatSkill.Backstab),
+            BackstabTraining = _sheetSkills?[Skill.Backstab].Training
+                ?? CombatSkillRules.Training(BasicCombatSkill.Backstab, _basicSkills[(int)BasicCombatSkill.Backstab], Monstrous, 0, Level),
         };
     }
 

@@ -1259,16 +1259,21 @@ public sealed partial class GameSessionOwner : IDisposable
     }
 
     // With a hero the session owns the PC's side of the check (ARC-SKILLS-002): its persuasion training, effective charisma and
-    // level, and the max followers they give; the caller's values stand in only without a hero.
+    // level, and the max followers they give with the hero's effects on that stat (ledger AP4: charisma / 4, +1 from expert
+    // persuasion, then the effects, clamped to 1..7); the caller's values stand in only without a hero. The alignment stays the
+    // caller's: the conversation host tracks the alignment its dialog actions change.
     private FollowConsent Consent(PartyConsentFacts facts, bool forcedFollower, bool ignoreLimit)
     {
         var (persuasion, charisma, level, maxFollowers) = (facts.PcPersuasion, facts.PcCharisma, facts.PcLevel, facts.MaxFollowers);
         if (_hero is { } hero)
         {
             persuasion = HeroPersuasion();
-            charisma = hero.Stats.Query(new(0)).Snapshot!.GetEffective(CharacterStat.Charisma);
+            var snapshot = hero.Stats.Query(new(0)).Snapshot!;
+            charisma = snapshot.GetEffective(CharacterStat.Charisma);
             level = hero.State.Level;
-            maxFollowers = FollowConsentRules.MaxFollowers(charisma, persuasion);
+            var unclamped = charisma / 4 + (persuasion >= PersuasionTraining.Expert ? 1 : 0);
+            maxFollowers = Math.Clamp(CharacterStatRules.ApplyModifiers(CharacterStat.MaxFollowers, unclamped, snapshot.AppliedEffects),
+                FollowConsentRules.MinMaxFollowers, FollowConsentRules.MaxMaxFollowers);
         }
         return FollowConsentRules.Evaluate(new(facts.MindControlledByPc, persuasion, charisma, facts.PcAlignment, level,
             facts.OtherLeaderCharisma, forcedFollower, facts.Reaction, facts.Thresholds, facts.NpcAlignment, facts.NpcLevel, maxFollowers,

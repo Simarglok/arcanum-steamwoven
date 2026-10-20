@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Text;
+using Arcanum.Data.Characters;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
@@ -95,6 +96,19 @@ public sealed class HeroSkillsTests
     }
 
     [TestMethod]
+    public void ADurableEffectsSkillChangeReachesTheLevels()
+    {
+        using var owner = Owner();
+        // Effect 200: melee +2 (basic skill 2), repair +4 (tech skill 0), in level units.
+        var effect = new SessionEffectDefinition(200, [new(EffectAttributeKind.BasicSkill, 2, EffectChangeOperator.Add, 2),
+            new(EffectAttributeKind.TechSkill, 0, EffectChangeOperator.Add, 4)]);
+        Assert.AreEqual(GameSessionFailure.None, owner.AddHeroEffect(owner.Version, effect, EffectCause.Spell).Failure);
+        var skills = owner.QueryHeroSkills()!;
+        Assert.AreEqual((10, 4), (skills[Skill.Melee].Level, skills[Skill.Repair].Level), "melee 8 + 2; repair 0 + 4 within intelligence 8's cap 7");
+        Assert.AreEqual(10, owner.QueryHeroAttack()!.SkillLevel);
+    }
+
+    [TestMethod]
     public void TheBestItemsChoiceScoresTheHerosWeaponSkillLevels()
     {
         using var owner = Owner();
@@ -121,6 +135,18 @@ public sealed class HeroSkillsTests
         Assert.AreEqual(FollowConsent.Accepted, master.JoinParty(master.Version, "sogg", limited, false).Consent);
         Assert.AreEqual(FollowConsent.Accepted, master.JoinParty(master.Version, "gar", limited, false).Consent);
         Assert.AreEqual(FollowConsent.LimitReached, master.JoinParty(master.Version, "dog", limited, false).Consent);
+    }
+
+    [TestMethod]
+    public void TheMaxFollowersStatEffectsCountForTheHero()
+    {
+        // Max followers −2 (stat 15): charisma 8 / 4 + 1 (master persuasion) − 2 = 1 follower.
+        using var owner = Owner();
+        var effect = new SessionEffectDefinition(201, [new(EffectAttributeKind.Stat, 15, EffectChangeOperator.Add, -2)]);
+        Assert.AreEqual(GameSessionFailure.None, owner.AddHeroEffect(owner.Version, effect, EffectCause.Curse).Failure);
+        var facts = PartyStateTests.Facts(maxFollowers: 7);
+        Assert.AreEqual(FollowConsent.Accepted, owner.JoinParty(owner.Version, "virgil", facts, false).Consent);
+        Assert.AreEqual(FollowConsent.LimitReached, owner.JoinParty(owner.Version, "sogg", facts, false).Consent, "the caller's 7 does not count");
     }
 
     [TestMethod]
@@ -152,11 +178,19 @@ public sealed class HeroSkillsTests
             [new(EffectCause.Race, Skill.Melee, (StatModifierOperator)9, 1)],
             [new(EffectCause.Race, Skill.Melee, StatModifierOperator.Divide, 0)],
             [new(EffectCause.Race, Skill.Melee, StatModifierOperator.Add, SessionInnateSkillChange.MaxMagnitude + 1)],
-            [.. Enumerable.Repeat(new SessionInnateSkillChange(EffectCause.Race, Skill.Melee, StatModifierOperator.Add, 1), SessionInnateSkillChange.MaxChanges + 1)],
+            [.. Enumerable.Repeat(new SessionInnateSkillChange(EffectCause.Race, Skill.Melee, StatModifierOperator.Add, 1), SessionInnateSkillChange.MaxPerEffect + 1)],
+            [new(EffectCause.Gender, Skill.Melee, StatModifierOperator.Add, 1), new(EffectCause.Race, Skill.Melee, StatModifierOperator.Add, 1)],
             [null!],
         ];
         foreach (var changes in refused)
             Assert.AreEqual(GameSessionFailure.InvalidHero, GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() with { InnateSkills = changes } }).Failure);
+        SessionInnateSkillChange[] full =
+        [
+            .. Enumerable.Repeat(new SessionInnateSkillChange(EffectCause.Race, Skill.Melee, StatModifierOperator.Add, 1), SessionInnateSkillChange.MaxPerEffect),
+            .. Enumerable.Repeat(new SessionInnateSkillChange(EffectCause.Gender, Skill.Bow, StatModifierOperator.Add, 1), SessionInnateSkillChange.MaxPerEffect),
+        ];
+        Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() with { InnateSkills = full } }).Failure,
+            "seven per effect, race first");
     }
 
     [TestMethod]
@@ -174,6 +208,30 @@ public sealed class HeroSkillsTests
         Assert.AreEqual((2, 3), (plain.QueryHero()!.Advancement.BasicSkills[(int)Skill.Melee], plain.QueryHero()!.UnspentPoints));
         Assert.AreEqual((1, 4), (helped.QueryHero()!.Advancement.BasicSkills[(int)Skill.Melee], helped.QueryHero()!.UnspentPoints));
         Assert.AreEqual(8, helped.QueryHeroSkills()![Skill.Melee].Level);
+    }
+
+    [TestMethod]
+    public void ALevelledFollowerDefendsWithItsSheetsDodge()
+    {
+        // The map data stores dodge 0; the session levelled the follower to dodge 2 points (8) under its sheet's dexterity 9.
+        var rules = SessionAutoLevelRules.Create(new Dictionary<int, AutoLevelScheme>
+        {
+            [67] = AutoLevelRules.Parse(Encoding.ASCII.GetBytes("dodge 8,")).Scheme!,
+            [70] = AutoLevelRules.Parse(Encoding.ASCII.GetBytes("cn 9,")).Scheme!,
+        }, AutoLevelRules.DefaultSpellWillpower);
+        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf(), Experience = ExperienceStateTests.Rules(), AutoLevel = rules }).Owner!;
+        var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(dexterity: 4), critterFlags: 0);
+        var map = SessionCritterCombat.From("follower", fields).Combat!;
+        var follower = new SessionNpcAdvancement("follower", new(CharacterRace.Human, false, [8, 9, 8, 8, 8, 8, 8, 8], 0, 0, 1, 0,
+            [.. new int[12]], [.. new int[4]], [.. new int[16]], [.. new int[8]], 0, 0, 0, 0), 67);
+        Assert.AreEqual(GameSessionFailure.None, owner.LevelFollower(owner.Version, follower, AdvancementModifiers.None, new(1, 4)).Failure);
+        var sheet = owner.QueryNpcAdvancement("follower")!.Sheet;
+        var defending = map.WithSheet(sheet);
+        var state = new LifeState(0, 0, 0, LifeConditions.None, 0);
+        Assert.AreEqual(0, map.Combatant(LifeRules.Evaluate(state, map.Facts), state, owner.Rules.Combat).DodgeLevel, "the map data: no dodge");
+        Assert.AreEqual((8, sheet.Level), (defending.Combatant(LifeRules.Evaluate(state, defending.Facts), state, owner.Rules.Combat).DodgeLevel, defending.Level),
+            "the sheet's points under the sheet's dexterity 9, not the map's 4");
+        Assert.AreEqual(GameSessionFailure.None, owner.AttackCritter(owner.Version, new(map)).Failure, "the attack reads the record");
     }
 
     [TestMethod]

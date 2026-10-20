@@ -35,8 +35,8 @@ inputs. The first matching step wins (the executable's 0x4AD950, ledger AP3):
 and wrap, as in the executable. `FollowConsentRules.MaxFollowers(charisma, persuasion)` is
 the effective charisma / 4, +1 at Expert or above, clamped to 1..7 (ledger AP4);
 a caller with stat effects passes its own effective value. With a hero the session supplies the PC's persuasion training, effective charisma, level and
-max followers itself (ARC-SKILLS-002, [hero skills](hero-skills-runtime.md)); the caller's `PartyConsentFacts` values stand
-only without a hero. With a clamped value `NotAllowed`
+max followers itself, the hero's effects on that stat applied before the clamp (ARC-SKILLS-002, [hero skills](hero-skills-runtime.md));
+the caller's `PartyConsentFacts` values stand only without a hero (the alignment always stays the caller's). With a clamped value `NotAllowed`
 is unreachable, as ARC-RES-026 found; the evaluator keeps it for an explicit 0 (a negative
 value, as in the executable, falls through to `LimitReached`).
 `MayLeaveUnforced(leaderCharisma, mindControlled)` is the C6 leave guard (refused at charisma
@@ -113,7 +113,8 @@ owner (quick load) builds a new port.
 
 For Virgil the inputs are in [ARC-RES-026](../research/virgil-follow-consent.md#2-virgil-at-t0-d):
 AI row 5 (−1000, 2001, 2001, 30), level 1, alignment 1, reaction base 60. With the diagnostic PC
-(charisma 8, level 1, max followers 2) and no other leader, only the follower limit can refuse him.
+(charisma 8, level 1, max followers 2) and no other leader, only the follower limit can refuse him; with `--hero` the session
+uses the hero's persuasion, charisma, level and max followers instead (ARC-SKILLS-002).
 
 ## Tests
 

@@ -26,15 +26,15 @@ applied whenever a level is read, never written into the stored points. Snapshot
 
 | Entry | Contract |
 | --- | --- |
-| `SessionHeroDefinition.InnateSkills` | The race and gender effects' skill changes (`SessionInnateSkillChange`: cause `Race` or `Gender`, skill, operator, value in level units); null: none. At most 14 (seven per effect), a magnitude within 1000, no divide by 0; anything else is `InvalidHero`. |
+| `SessionHeroDefinition.InnateSkills` | The race and gender effects' skill changes (`SessionInnateSkillChange`: cause `Race` or `Gender`, skill, operator, value in level units); null: none. At most seven per effect, the race's before the gender's (the effects' order, which the aggregation of bounds reads), a magnitude within 1000, no divide by 0; anything else is `InvalidHero`. |
 | `SessionHeroState.InnateSkills` | The same list, saved. |
 | `QueryHeroSkills()` | `SessionSkills` (sixteen `SessionSkill`: stored value, points, effective level, training) or null without a hero. The level reads the hero's stored points, its effective key stat (stat effects and poison included), the innate skill changes and the skill changes of its durable effects; training is the stored tier (a PC is never monstrous). |
 | `QueryNpcSkills(entity, modifiers)` | The same from an NPC's saved advancement sheet (a levelled follower, [auto-level schemes](advancement-runtime.md)) under the caller's modifiers (its effects now, as `LevelFollower` takes them), with the monstrous melee tiers; null while the session holds no record. |
 | `QueryHeroAttack()` | The weapon skill's level and training (melee bare-handed, firearms a tech skill), dodge and backstab level and training in the `Combatant`, and the weapon speed with that training (an apprentice +5, 0x465CF0). |
 | `QueryHeroEquipmentCombat(training?)` | Null training reads the hero's training in the wielded weapon's skill; an explicit value still overrides. |
 | Best items | The chooser scores melee, bow, throwing and firearms with the hero's levels. |
-| Follow check | With a hero the session supplies the PC's persuasion training, effective charisma, level and max followers (charisma / 4, +1 from expert persuasion) in place of the caller's `PartyConsentFacts`; without a hero the caller's values stand. |
-| Attack on a levelled follower | `AttackCritter` reads the defender's basic skills and level from the session's advancement record when it has one, its map data otherwise. |
+| Follow check | With a hero the session supplies the PC's persuasion training, effective charisma, level and max followers (charisma / 4, +1 from expert persuasion, then the hero's effects on the stat, clamped to 1..7, ledger AP4) in place of the caller's `PartyConsentFacts`; without a hero the caller's values stand. The alignment stays the caller's (the conversation host tracks what its dialog actions change). |
+| Attack on a levelled follower | `AttackCritter` reads the defender's dodge and backstab (level and training, under the sheet's own stats, as `QueryNpcSkills` reads them without effects) and its level from the session's advancement record when it has one, its map data otherwise. |
 
 The hero's auto-level purchases (creation and level-up) read the innate skill changes too, so a race bonus makes a scheme buy
 fewer points for the same target, as in the original, where the race effect is in the critter's effect list.

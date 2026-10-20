@@ -14,8 +14,10 @@ namespace Arcanum.Session;
 /// </summary>
 public sealed record SessionInnateSkillChange(EffectCause Cause, Skill Skill, StatModifierOperator Operator, int Value)
 {
-    /// <summary>At most this many changes: seven per effect (the character owner's modifier limit), race and gender.</summary>
-    public const int MaxChanges = 14;
+    /// <summary>At most this many changes of one effect (the character owner's modifier limit).</summary>
+    public const int MaxPerEffect = 7;
+    /// <summary>At most this many changes: <see cref="MaxPerEffect"/> each of the race and the gender effect, race first.</summary>
+    public const int MaxChanges = 2 * MaxPerEffect;
     /// <summary>Bound of a change's magnitude (the character owner's default modifier limit).</summary>
     public const int MaxMagnitude = 1000;
 
@@ -65,7 +67,7 @@ public sealed partial class GameSessionOwner
     /// The hero's sixteen skills now (ARC-SKILLS-002), or null without a hero: the stored points and training of its advancement
     /// fields, levels read under its effective stats (poison included), its race and gender skill changes and the skill changes of
     /// its durable effects. Every reader of a hero's skill (its attack, dodge and backstab, weapon speed, the best-items choice, the
-    /// follow check, the dialog gates) reads this.
+    /// follow check) reads this.
     /// </summary>
     public SessionSkills? QueryHeroSkills()
     {

@@ -126,7 +126,8 @@ internal sealed class HeroDomain
     /// <summary>
     /// Builds the hero from saved or new fields; null when any field is outside its range or an effect is not one the
     /// character owner admits (no modifiers, an unknown stat or operator, a magnitude above its limit), or an innate skill change
-    /// is not one <see cref="SessionInnateSkillChange.IsValid"/> admits (more than <see cref="SessionInnateSkillChange.MaxChanges"/>).
+    /// is not one <see cref="SessionInnateSkillChange.IsValid"/> admits, more than <see cref="SessionInnateSkillChange.MaxPerEffect"/> of
+    /// one cause, or a race change after a gender change (the effects' order, which the aggregation of bounds reads).
     /// The character owner holds only this hero's race and gender effects; the session never calls its race or gender setters.
     /// </summary>
     internal static HeroDomain? Build(int prototype, CharacterRace race, CharacterGender gender, IReadOnlyList<int>? stats,
@@ -137,6 +138,9 @@ internal sealed class HeroDomain
         if (!advancement.IsValid()) return null;
         ImmutableArray<SessionInnateSkillChange> skills = [.. innateSkills ?? []];
         if (skills.Length > SessionInnateSkillChange.MaxChanges || !skills.All(SessionInnateSkillChange.IsValid)) return null;
+        var raceSkills = skills.Count(change => change.Cause == EffectCause.Race);
+        if (raceSkills > SessionInnateSkillChange.MaxPerEffect || skills.Length - raceSkills > SessionInnateSkillChange.MaxPerEffect ||
+            skills.Skip(raceSkills).Any(change => change.Cause == EffectCause.Race)) return null;
         // Checked on the copy, so a list whose count and contents disagree cannot pass.
         var values = stats?.ToArray();
         if (prototype < 1 || values is null || values.Length != SessionHeroLimits.StoredStats.Length) return null;
