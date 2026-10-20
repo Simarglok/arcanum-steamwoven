@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4F51B0",
+  "name": "fate-undo",
+  "method": "Arcanum.Simulation.Character.FateRules.Undo",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 2,
+  "mutantsCaught": 2,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "5efbe0f550a23f4fa525ad465344b09ec042816827304382df06b757a2417454",
+  "configuration": "Debug"
+}

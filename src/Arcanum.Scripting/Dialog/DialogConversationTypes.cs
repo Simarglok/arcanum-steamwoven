@@ -47,7 +47,8 @@ public sealed record DialogConversationPorts(
     IDialogInventoryPort? Inventory = null,
     IDialogRumorPort? Rumors = null,
     IDialogSkillPort? Skills = null,
-    IDialogMetBeforePort? MetBefore = null);
+    IDialogMetBeforePort? MetBefore = null,
+    IDialogFatePort? Fate = null);
 
 public enum DialogReactionMode
 {
@@ -96,6 +97,17 @@ public readonly record struct DialogSkillQuery(DialogParticipantId PlayerCharact
 /// rules refuse (a skipped tier, a level below the tier's minimum, a skill or tier out of range) changes nothing and the
 /// dialog goes on.</summary>
 public sealed record SkillTrainingCommand(DialogParticipantId PlayerCharacter, int Skill, int Training) : DialogCommand;
+
+/// <summary>FP (action, ARC-WORLD-054): the PC gets one fate point (the source's dialog action <c>fp</c>, 0x415BA0, ledger FT8); the
+/// operand the source reads is not used.</summary>
+public sealed record FatePointCommand(DialogParticipantId PlayerCharacter) : DialogCommand;
+
+/// <summary>Fate seam (ARC-WORLD-054): the FP action. Applied covers a PC already at the maximum (the source's stat setter clamps);
+/// Rejected means the owner could not run the command; a thrown exception is recorded as indeterminate.</summary>
+public interface IDialogFatePort
+{
+    DialogCommandResult Execute(FatePointCommand command);
+}
 
 /// <summary>
 /// Skill seam (ARC-SKILLS-004): the PC's effective skill level (0..20) and training (0 none .. 3 master) for the skill gates
