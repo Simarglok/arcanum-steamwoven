@@ -132,7 +132,8 @@ public sealed partial class GameSessionOwner
 
         internal void Collect()
         {
-            var kinds = owner._inventory.Kit.Select(kit => (kit.Entity, kit.Kind)).Concat(owner._inventory.Pc.Select(pc => (pc.Entity, pc.Kind)));
+            var kinds = owner._inventory.Kit.Select(kit => (kit.Entity, kit.Kind)).Concat(owner._inventory.Pc.Select(pc => (pc.Entity, pc.Kind)))
+                .Concat(owner._inventory.Made.Select(made => (made.Entity, made.Kind)));
             foreach (var (entity, kind) in kinds)
             {
                 var facts = lookup(entity);

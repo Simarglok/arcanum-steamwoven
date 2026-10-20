@@ -266,7 +266,7 @@ public sealed class InventoryStateTests
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, NoHero + ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[" +
             "{\"entity\":\"ring\",\"map\":79,\"type\":\"Armor\",\"prototype\":3804,\"name\":2804,\"description\":32804}," +
-            "{\"entity\":\"apple\",\"map\":79,\"type\":\"Food\",\"prototype\":4600,\"name\":3600,\"description\":33600}]}" +
+            "{\"entity\":\"apple\",\"map\":79,\"type\":\"Food\",\"prototype\":4600,\"name\":3600,\"description\":33600}],\"made\":[]}" +
             NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoSound + NoEvents + ",\"lighting\":null}");
 
         using var restored = Restore(Decode(text));
@@ -296,7 +296,7 @@ public sealed class InventoryStateTests
     public void DecodeAndRestoreRefusePcItemsTheTransfersCannotProduce()
     {
         const string Item = "{\"entity\":\"ring\",\"map\":79,\"type\":\"Armor\",\"prototype\":1,\"name\":2804,\"description\":2}";
-        string With(string pc) => GoldenJson.Replace(EmptyInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[" + pc + "]}");
+        string With(string pc) => GoldenJson.Replace(EmptyInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[" + pc + "],\"made\":[]}");
         void Fails(string pc, SnapshotDecodeFailure failure, string path)
         {
             var result = GameSessionSnapshotCodec.TryDecode(With(pc));
@@ -309,7 +309,7 @@ public sealed class InventoryStateTests
         Fails(Item.Replace("\"ring\"", "\"r i\""), SnapshotDecodeFailure.OutOfRange, "$.inventory.pc[0].entity");
         Fails(Item.Replace("}", ",\"slot\":0}"), SnapshotDecodeFailure.UnknownField, "$.inventory.pc[0].slot");
         Fails(Item.Replace(",\"description\":2", ""), SnapshotDecodeFailure.MissingField, "$.inventory.pc[0].description");
-        var notList = GameSessionSnapshotCodec.TryDecode(GoldenJson.Replace(EmptyInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":{}}"));
+        var notList = GameSessionSnapshotCodec.TryDecode(GoldenJson.Replace(EmptyInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":{},\"made\":[]}"));
         Assert.AreEqual((SnapshotDecodeFailure.WrongType, "$.inventory.pc"), (notList.Failure, notList.Path));
 
         // Stacks and keys never enter the list, so a save holding one is refused on restore.
