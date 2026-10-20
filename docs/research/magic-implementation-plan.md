@@ -86,6 +86,10 @@ Per the [original executable check](original-executable-check.md), every slice:
    [verification ledger](original-verification-ledger.md) named after the slice's code. MG rows already read twice
    are not re-read; MG13, MG14, MG16, MG17 and MG20 were read once and get their second reading in the slice that
    uses them (the ledger lists MG15 both as read twice and as read once; MT10 re-reads it to be safe).
+   Owner decision 2026-10-20: besides its own functions, each slice re-reads every fact of its area that is still at
+   F0 (every claim of the [magic core research](magic-core-evidence.md) and the matching rows of the
+   [requirements](../requirements/combat-magic-tech.md) that cite an address without a ledger row), so the domain
+   leaves F0 as it is implemented; the facts it re-reads get ledger rows and their documents cite them.
 2. **Marks** each implementing method with `[OriginalFunction(address, scope)]` and adds its row to the
    [function registry](../verification/functions.csv) at F2 or better.
 3. **Runs the oracle** for the functions marked "oracle" below: a world model, an `OriginalExe` test with at least two
