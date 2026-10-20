@@ -7,8 +7,9 @@ functions of ARC-SKILLS-001 one critter with its twelve stored basic skills, its
 and one additive effect change of the skill; for the spell cost functions of ARC-MAGIC-003 one caster, one spell record's
 cost, the cheat flag and a recording payment stub; for the effectiveness functions of ARC-SKILLS-003 a source and an
 optional target critter with their skill levels, the target's perception, intelligence and Magnetic Inversion flag, the
-source's extraordinary intelligence, the local PC and the game difficulty); the same model becomes the inputs of the OriginalExe tests. Importing
-this module does not need Unicorn.
+source's extraordinary intelligence, the local PC and the game difficulty; for the spell learn of ARC-MAGIC-004 one critter's
+college rank, level, intelligence, willpower and magick points, the spell's willpower minimum and recording rank and stat
+setters); the same model becomes the inputs of the OriginalExe tests. Importing this module does not need Unicorn.
 """
 from __future__ import annotations
 
@@ -78,6 +79,22 @@ SKILL_FLAGS = (0x5B6F64, 0x5B6F64 + 4 * (BASIC_SKILLS + TECH_SKILLS))
 OPPOSED_TABLE = (0x5B7044, 0x5B7044 + 4 * 19)
 BASIC_EFFECTIVENESS_CODE = ((0x4C62E0, 0x4C6410), (0x4C6410, 0x4C64B0))
 
+# Service functions and globals used by the spell learn (ARC-MAGIC-004).
+SPELL_ARRAY_GETTER = 0x407470   # spell-and-tech array element: (handle low, handle high, field, index) -> value
+SPELL_ARRAY_SETTER = 0x4F0270   # spell-and-tech array element write: (handle low, handle high, field, index, value)
+STAT_BASE_GETTER = 0x4B0740     # stored stat: (handle low, handle high, stat) -> value
+STAT_SETTER = 0x4B0980          # stored stat write: (handle low, handle high, stat, value)
+IS_PLAYER = 0x40D9F0            # the object is the local player: (handle low, handle high) -> 0 or 1
+FIELD_SPELL_TECH = 0xDF
+STAT_INTELLIGENCE = 4
+STAT_WILLPOWER = 6
+STAT_MAGICK_POINTS = 22
+SPELL_WILLPOWER_FIELD = 0x04
+DEFAULT_WILLPOWER = (0x5B0DE0, 0x5B0DE0 + 20)   # 6, 9, 12, 15, 18 before the spell table is loaded
+LEVEL_MINIMA = (0x5B5770, 0x5B5770 + 20)        # 1, 1, 5, 10, 15
+COLLEGE_SPELLS = 80
+SPELL_LEARN_CODE = ((0x4B1790, 0x4B1950), (0x4B1750, 0x4B1790), (0x4B1650, 0x4B1660), (0x4B1AB0, 0x4B1B90), (0x4502E0, 0x450340))
+
 
 @dataclass(frozen=True)
 class FunctionSpec:
@@ -103,6 +120,7 @@ FUNCTIONS: dict[int, FunctionSpec] = {spec.address: spec for spec in (
     FunctionSpec(0x4507D0, "spell-run-cost", ((0x4507D0, 0x4508A0),), "spell-cost"),
     FunctionSpec(0x4508A0, "spell-check-cost", ((0x4508A0, 0x450940),), "spell-cost"),
     FunctionSpec(0x4B1660, "spell-cast-cost", ((0x4B1660, 0x4B16C0), COST_GETTER_CODE), "spell-cost"),
+    FunctionSpec(0x4B1790, "spell-learn", SPELL_LEARN_CODE, "spell-learn"),
 )}
 
 
@@ -401,6 +419,98 @@ def effectiveness_stubs(case: EffectivenessCase) -> dict:
             FIELD_GETTER: field, LOCAL_PC: lambda argument: local, DIFFICULTY: lambda argument: case.difficulty & 0xFFFFFFFF}
 
 
+@dataclass
+class SpellLearnCase:
+    """The spell learn's one critter and spell: the spell 0..79, the forced flag, the object type (PC or NPC), the known rank
+    of the spell's college, the effective level, intelligence and willpower, the stored magick points, whether the spell
+    table is loaded and the spell's willpower minimum there."""
+    spell: int
+    force: int
+    kind: int
+    known: int
+    level: int
+    intelligence: int
+    willpower: int
+    magick: int
+    loaded: int
+    minimum: int
+
+
+def draw_spell_learn_case(rng: random.Random) -> SpellLearnCase:
+    """A spell 0..79 whose rank is often the next one, unforced mostly, levels, intelligence and willpower around the minima
+    (1, 1, 5, 10, 15; 5; 6..18), magick points 0..210, the table mostly loaded with minima 0..25."""
+    spell = rng.randrange(COLLEGE_SPELLS)
+    rank = spell % 5 + 1
+    known = rank - 1 if rng.random() < 0.6 else rng.randint(0, 5)
+    return SpellLearnCase(spell, int(rng.random() < 0.2), rng.choice((15, 16)), known, rng.randint(0, 20), rng.randint(1, 10),
+                          rng.randint(1, 22), rng.randint(0, 210), int(rng.random() < 0.8), rng.randint(0, 25))
+
+
+@dataclass
+class LearnRecorder:
+    """The writes of one learn: the rank writes (college, rank) and the magick point writes (stat, value)."""
+    ranks: list[tuple[int, int]]
+    stats: list[tuple[int, int]]
+
+
+def spell_learn_stubs(case: SpellLearnCase, recorder: LearnRecorder) -> dict:
+    """Stubs answering from one critter: its type, its college rank, its effective level, intelligence and willpower, its
+    stored magick points; the rank and stat writes are recorded; single player, not the local player. Any other object,
+    field, index or stat is rejected."""
+    from oracle_emu import StubRejected
+
+    def same(argument) -> None:
+        if (argument(0), argument(1)) != HANDLE:
+            raise StubRejected(f"handle {argument(0):#x}:{argument(1):#x} is not the world model's object")
+
+    def field(argument) -> int:
+        same(argument)
+        if argument(2) != FIELD_TYPE:
+            raise StubRejected(f"field {argument(2):#x} is not in the world model")
+        return case.kind
+
+    def college(argument) -> int:
+        same(argument)
+        if argument(2) != FIELD_SPELL_TECH or argument(3) != case.spell // 5:
+            raise StubRejected(f"array {argument(2):#x}[{argument(3)}] is not in the world model")
+        return argument(3)
+
+    def stat(argument) -> int:
+        same(argument)
+        values = {STAT_LEVEL: case.level, STAT_INTELLIGENCE: case.intelligence, STAT_WILLPOWER: case.willpower}
+        if argument(2) not in values:
+            raise StubRejected(f"stat {argument(2)} is not in the world model")
+        return values[argument(2)]
+
+    def base(argument) -> int:
+        same(argument)
+        if argument(2) != STAT_MAGICK_POINTS:
+            raise StubRejected(f"stored stat {argument(2)} is not in the world model")
+        return case.magick
+
+    def set_stat(argument) -> int:
+        same(argument)
+        if argument(2) != STAT_MAGICK_POINTS:
+            raise StubRejected(f"stat write {argument(2)} is not in the world model")
+        recorder.stats.append((argument(2), argument(3)))
+        return argument(3)
+
+    def set_rank(argument) -> int:
+        recorder.ranks.append((college(argument), argument(4)))
+        return argument(4)
+
+    def rank(argument) -> int:
+        college(argument)
+        return case.known
+
+    def player(argument) -> int:
+        same(argument)
+        return 0
+
+    return {NETWORK_GATE: lambda argument: 1, FIELD_GETTER: field, SPELL_ARRAY_GETTER: rank,
+            STAT_GETTER: stat, STAT_BASE_GETTER: base, STAT_SETTER: set_stat, SPELL_ARRAY_SETTER: set_rank, IS_PLAYER: player}
+
+
 # --- runs ------------------------------------------------------------------------------------------------------------
 
 def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str, unicorn_version: str,
@@ -510,6 +620,31 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
                 progress(case_number)
         document.update(fields=["skill", "level", "target", "targetLevel", "targetPe", "targetIn", "magneticInversion", "otherFlags",
                                 "extraordinary", "local", "difficulty", "result"])
+    elif spec.model == "spell-learn":
+        from oracle_emu import RunFailure, to_signed
+        table = emulator.write_heap(b"\0" * (SPELL_RECORD * SPELL_RECORDS))
+        emulator.set_global(SPELL_TABLE_POINTER, table)
+        for case_number in range(count):
+            case = draw_spell_learn_case(rng)
+            field = SPELL_RECORD * case.spell + SPELL_WILLPOWER_FIELD
+            emulator.write_heap(struct.pack("<i", case.minimum), field)
+            emulator.set_global(SPELLS_LOADED, case.loaded)
+            recorder = LearnRecorder([], [])
+            readable = (Range(SPELL_TABLE_POINTER, SPELL_TABLE_POINTER + 4), Range(SPELLS_LOADED, SPELLS_LOADED + 4),
+                        Range(table + field, table + field + 4), Range(*DEFAULT_WILLPOWER), Range(*LEVEL_MINIMA))
+            result = emulator.call(spec.address, (*HANDLE, case.spell, case.force), code=code, stubs=spell_learn_stubs(case, recorder),
+                                   readable=readable)
+            emulator.write_heap(b"\0\0\0\0", field)
+            if len(recorder.ranks) > 1 or len(recorder.stats) > 1 or len(recorder.ranks) != len(recorder.stats):
+                raise RunFailure("stub", f"unexpected writes {recorder.ranks} {recorder.stats}")
+            rank = recorder.ranks[0][1] if recorder.ranks else -1
+            magick = to_signed(recorder.stats[0][1]) if recorder.stats else -1
+            cases.append([case.spell, case.force, case.kind, case.known, case.level, case.intelligence, case.willpower, case.magick,
+                          case.loaded, case.minimum, result, len(recorder.ranks), rank, magick])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["spell", "force", "type", "known", "level", "in", "wp", "magick", "loaded", "minimum", "result",
+                                "writes", "rankWritten", "magickWritten"])
     else:
         raise ValueError(f"unknown model {spec.model}")
     document["cases"] = cases

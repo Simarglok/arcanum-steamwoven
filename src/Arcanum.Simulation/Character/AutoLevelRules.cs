@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Skills;
 
 namespace Arcanum.Simulation.Character;
@@ -37,17 +38,20 @@ public readonly record struct AutoLevelParse(AutoLevelParseStatus Status, AutoLe
 /// The stored values a scheme buys with (a PC's or an NPC's, ARC-WORLD-036): race (for the stat maxima), the monstrous flag
 /// (melee level 20), the eight primary stats and the stored magick and tech points, level and unspent points, the stored
 /// basic and tech skill fields (points in bits 0..5, training in bits 6..7), the sixteen college levels (0..5), the eight
-/// tech degrees (0..7), and the hit and fatigue points and adjustments. Equality compares the arrays' values.
+/// tech degrees (0..7), the hit and fatigue points and adjustments, and the mastered college (−1 none; ARC-MAGIC-004).
+/// Equality compares the arrays' values.
 /// </summary>
 public sealed record AdvancementSheet(CharacterRace Race, bool Monstrous, ImmutableArray<int> Stats, int MagickPoints, int TechPoints,
     int Level, int UnspentPoints, ImmutableArray<int> BasicSkills, ImmutableArray<int> TechSkills, ImmutableArray<int> Colleges,
-    ImmutableArray<int> TechDegrees, int HitPointPoints, int HitPointAdjustment, int FatiguePoints, int FatigueAdjustment)
+    ImmutableArray<int> TechDegrees, int HitPointPoints, int HitPointAdjustment, int FatiguePoints, int FatigueAdjustment,
+    int MasteredCollege = SpellBookRules.NoMastery)
 {
     public bool Equals(AdvancementSheet? other) => other is not null && Race == other.Race && Monstrous == other.Monstrous &&
         Same(Stats, other.Stats) && MagickPoints == other.MagickPoints && TechPoints == other.TechPoints && Level == other.Level &&
         UnspentPoints == other.UnspentPoints && Same(BasicSkills, other.BasicSkills) && Same(TechSkills, other.TechSkills) &&
         Same(Colleges, other.Colleges) && Same(TechDegrees, other.TechDegrees) && HitPointPoints == other.HitPointPoints &&
-        HitPointAdjustment == other.HitPointAdjustment && FatiguePoints == other.FatiguePoints && FatigueAdjustment == other.FatigueAdjustment;
+        HitPointAdjustment == other.HitPointAdjustment && FatiguePoints == other.FatiguePoints && FatigueAdjustment == other.FatigueAdjustment &&
+        MasteredCollege == other.MasteredCollege;
 
     public override int GetHashCode() => HashCode.Combine(Race, Level, UnspentPoints, HitPointPoints, FatiguePoints, Hash(Stats), Hash(BasicSkills), Hash(Colleges));
 
@@ -99,8 +103,8 @@ public static class AutoLevelRules
     /// <summary>The bound of hit and fatigue points and adjustments a sheet admits (project policy; the installed critters stay far below).</summary>
     public const int MaxPoolValue = 10_000;
     private const int MaxPointStat = 210;
-    /// <summary>The intelligence every spell rank needs (0x4502E0, before the spell table is loaded).</summary>
-    internal const int MinimumSpellIntelligence = 5;
+    /// <summary>The intelligence every spell rank needs (<see cref="SpellBookRules.MinimumIntelligence"/>).</summary>
+    internal const int MinimumSpellIntelligence = SpellBookRules.MinimumIntelligence;
 
     private static readonly string[][] Tokens =
     [
@@ -113,7 +117,6 @@ public static class AutoLevelRules
         ["maxhps", "maxfatigue"],
     ];
 
-    private static readonly int[] SpellMinimumLevels = [1, 1, 5, 10, 15];
     private static readonly int[] DefaultWillpower = [6, 9, 12, 15, 18];
     private static readonly int[] DegreeCosts = [0, 1, 1, 1, 1, 1, 1, 1];
     private static readonly int[] DegreeIntelligence = [0, 5, 8, 11, 13, 15, 17, 19];
@@ -163,6 +166,7 @@ public static class AutoLevelRules
             sheet.Level is >= 0 and <= ExperienceRules.MaxLevel && sheet.UnspentPoints is >= 0 and <= ExperienceRules.MaxUnspentPoints &&
             sheet.BasicSkills.All(v => v is >= 0 and <= 255) && sheet.TechSkills.All(v => v is >= 0 and <= 255) &&
             sheet.Colleges.All(v => v is >= 0 and <= SpellsPerCollege) && sheet.TechDegrees.All(v => v is >= 0 and <= MaxDegree) &&
+            sheet.MasteredCollege is >= SpellBookRules.NoMastery and < Colleges &&
             new[] { sheet.HitPointPoints, sheet.HitPointAdjustment, sheet.FatiguePoints, sheet.FatigueAdjustment }.All(v => Math.Abs(v) <= MaxPoolValue);
     }
 
@@ -223,10 +227,8 @@ public static class AutoLevelRules
     [OriginalFunction(0x4502F0, OriginalFunctionScope.Partial)]
     public static int DefaultSpellMinimumWillpower(int spell) => spell is >= 0 and < Spells ? DefaultWillpower[spell % 5] : DefaultWillpower[1];
 
-    /// <summary>The character level a spell rank needs (0x4B1770): 1, 1, 5, 10, 15.</summary>
-    [OriginalFunction(0x4B1770, OriginalFunctionScope.Full)]
-    public static int SpellMinimumLevel(int spell) => spell is >= 0 and < Spells ? SpellMinimumLevels[spell % 5]
-        : throw new ArgumentOutOfRangeException(nameof(spell));
+    /// <summary>The character level a spell rank needs (<see cref="SpellBookRules.MinimumLevel"/>, 0x4B1770): 1, 1, 5, 10, 15.</summary>
+    public static int SpellMinimumLevel(int spell) => SpellBookRules.MinimumLevel(spell);
 
     /// <summary>The intelligence a tech degree needs (0x4B0110): 0, 5, 8, 11, 13, 15, 17, 19.</summary>
     [OriginalFunction(0x4B0110, OriginalFunctionScope.Full)]
@@ -584,18 +586,15 @@ public static class AutoLevelRules
             return change.Points;
         }
 
-        // 0x4B1790 without force (0x4B1790): the college's next rank only, with its character level, intelligence 5 and its
-        // willpower; the magick points rise by the spell's cost, 1.
-        [OriginalFunction(0x4B1790, OriginalFunctionScope.Partial)]
+        // The spell book's unforced learn (SpellBookRules.Learn, 0x4B1790): the college's next rank only, with its character
+        // level, intelligence 5 and its willpower; the magick points rise by the spell's cost, 1, clamped as the stat setter does.
         internal bool AddSpell(int spell)
         {
-            var college = spell / SpellsPerCollege;
-            if (spell % SpellsPerCollege + 1 != College[college] + 1) return false;
-            if (SpellMinimumLevel(spell) > Level) return false;
-            if (MinimumSpellIntelligence > Effective(CharacterStat.Intelligence)) return false;
-            if (_willpower[spell] > Effective(CharacterStat.Willpower)) return false;
-            MagickPoints = Math.Clamp(MagickPoints + 1, 0, MaxPointStat);
-            College[college] = spell % SpellsPerCollege + 1;
+            var change = SpellBookRules.Learn(new([.. College], _sheet.MasteredCollege), spell, force: false, Level,
+                Effective(CharacterStat.Intelligence), Effective(CharacterStat.Willpower), _willpower[spell]);
+            if (!change.Succeeded) return false;
+            MagickPoints = Math.Clamp(MagickPoints + change.MagickPoints, 0, MaxPointStat);
+            College[spell / SpellsPerCollege] = change.Book.Ranks[spell / SpellsPerCollege];
             return true;
         }
 

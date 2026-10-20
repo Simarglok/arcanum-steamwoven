@@ -42,6 +42,7 @@ python3 -B tools/original-oracle/oracle.py list
 | 0x4507D0 | spell run-time cost | one caster (ARC-MAGIC-003): stubs for its type, race and mastered college; one spell record's cost in a heap table behind 0x6876D8; the cheat flag 0x5E75FC; the payment 0x450420 is a recording stub (its arguments are the cost) | `RunCostMatchesTheOriginal` (`SpellCostOriginalExeTests`) |
 | 0x4508A0 | spell check cost | as above; the payment is asked without applying | `CheckCostMatchesTheOriginal` |
 | 0x4B1660 | spell cast cost (UI and AI) | as above, with the loaded flag 0x5E7618 and the cost getter 0x450340; no payment | `CastCostMatchesTheOriginal` |
+| 0x4B1790 | spell learn | one critter (ARC-MAGIC-004): stubs for its type, its college's rank (0x407470), its effective level, intelligence and willpower, its stored magick points; the spell's willpower minimum in the table behind 0x6876D8 (or the defaults with the loaded flag 0); the rank write (0x4F0270) and the stat setter are recording stubs; single player, not the local player; may call the minima, the rank getter and setter | `LearnMatchesTheOriginal` (`SpellBookOriginalExeTests`) |
 
 Adding a function: a `FunctionSpec` in `oracle_functions.py` with its model, a test with mutants that writes its receipt,
 a row in `ORACLE_FUNCTIONS` of `tools/local_dev/launch.py` and its test class in `ORACLE_TEST_CLASSES` (`test_launcher_sync.py` checks all three agree), and its F3
