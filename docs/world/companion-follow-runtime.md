@@ -177,8 +177,15 @@ ARC_AREA_ORIGINAL=1 ARC_CAVE_MOBILE=… ARC_AREA_MODULE=… (same roles) \
   "$DOTNET" test tests/Arcanum.TerrainViewer.Tests --no-build --filter "FullyQualifiedName~VirgilCave"
 ```
 
+## Any map (ARC-WORLD-037)
+
+In the viewer's map mode every dialog NPC with follow facts from its own data is a possible companion, and followers
+travel with the PC between maps by `AreaCompanionGroup.Arrive`
+([companions in map mode](../rendering/area-map-mode.md#companions-arc-world-037)). The exterior and cave keep the
+measured roster.
+
 ## Next
 
 Orders, loyalty and the wait timer (slice 5), a walk cycle for NPC bodies, the session hero as the PC side of the
-check, and a general map-change carry once more maps load (followers of followers, unconscious followers, carried
+check, and the rest of the general map-change carry (followers of followers, unconscious followers, carried
 inventory).

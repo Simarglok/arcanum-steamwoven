@@ -41,7 +41,7 @@ public partial class TerrainViewerApp
         // ARC-RENDER-017: a whole interior (--area-map) has its own chart and none of the Crash Site roster.
         var mapMode = arguments.AreaMapName is not null;
         // ARC-WORLD-017: the roster companions are exterior NPCs; their T0 bodies can stand on any loaded map.
-        _companionTemplates = mapMode ? [] : AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(area.Snapshot), area.Plan, area.Snapshot.Visuals,
+        _companionTemplates = mapMode ? MapCompanionTemplates(arguments, area) : AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(area.Snapshot), area.Plan, area.Snapshot.Visuals,
             AreaChart.Exterior, new(area.Snapshot.RuntimeMap));
         var moduleSha = area.Lighting?.Source.ModuleSha256 ?? area.Snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256;
         ProfileBinding? clock = area.Lighting is { } lighting

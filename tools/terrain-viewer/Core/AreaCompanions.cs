@@ -118,9 +118,11 @@ public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFac
 
     /// <summary>The roster speakers of <paramref name="speakers"/> on home map <paramref name="home"/>, with their body
     /// commands from <paramref name="plan"/> and the visuals those commands draw.</summary>
+    /// <param name="facts">ARC-WORLD-037: the follow facts of a speaker that can join (null skips it); by default the roster.</param>
     public static IReadOnlyList<AreaCompanionTemplate> From(IEnumerable<AreaSpeaker> speakers, AreaScenePlan plan,
-        IEnumerable<AreaVisualRecord> visuals, AreaChart chart, SessionMapId home)
+        IEnumerable<AreaVisualRecord> visuals, AreaChart chart, SessionMapId home, Func<AreaSpeaker, AreaCompanionFacts?>? facts = null)
     {
+        facts ??= AreaCompanionRoster.For;
         ArgumentNullException.ThrowIfNull(speakers); ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(visuals); ArgumentNullException.ThrowIfNull(chart);
         var catalog = new Dictionary<AreaVisualKey, AreaVisualRecord>();
@@ -128,12 +130,14 @@ public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFac
         var templates = new List<AreaCompanionTemplate>();
         foreach (var speaker in speakers)
         {
-            if (AreaCompanionRoster.For(speaker) is not { } facts) continue;
+            if (facts(speaker) is not { } known) continue;
             var commands = plan.Commands.Where(command => command.Identity == speaker.Row.Key).ToArray();
+            // A speaker the plan does not draw has no body to follow with.
+            if (commands.Length == 0) continue;
             var drawn = new Dictionary<AreaVisualKey, AreaVisualRecord>();
             foreach (var command in commands)
                 drawn[command.Visual] = catalog.TryGetValue(command.Visual, out var visual) ? visual : throw new InvalidOperationException("AREA_COMPANION_VISUAL_REQUIRED");
-            templates.Add(new(speaker, facts, home, chart.ToChart(new AreaStepCell(speaker.WorldX, speaker.WorldY)),
+            templates.Add(new(speaker, known, home, chart.ToChart(new AreaStepCell(speaker.WorldX, speaker.WorldY)),
                 new(checked((int)speaker.WorldX), checked((int)speaker.WorldY)), Array.AsReadOnly(commands), new ReadOnlyDictionary<AreaVisualKey, AreaVisualRecord>(drawn)));
         }
         return templates.AsReadOnly();
@@ -385,13 +389,37 @@ public sealed class AreaCompanionGroup
         foreach (var companion in _companions)
         {
             if (session.QueryCompanion(companion.Entity).Standing != CompanionStanding.Following) { changes.Add(Stay(companion)); continue; }
-            var template = companion.Template;
-            changes.Add(new(_map, AreaCompanionPlacement.Key(companion.Entity), null));
-            changes.Add(AreaCompanionPlacement.Edit(template, destination, arrival, companion.Grid.State.Facing));
-            changes.Add(new(template.Home, AreaCompanionPlacement.MapKey(companion.Entity), destination == template.Home ? null : destination.RuntimeMap));
+            changes.AddRange(Arrive(companion.Template, _map, destination, arrival, companion.Grid.State.Facing));
             carried.Add(companion);
         }
         return (changes.AsReadOnly(), carried.AsReadOnly());
+    }
+
+    /// <summary>
+    /// ARC-WORLD-037: the session changes that stand a companion that follows the PC from map <paramref name="from"/> on
+    /// <paramref name="destination"/> at the world cell <paramref name="arrival"/> (as <see cref="Carry"/> does for the
+    /// group): its placement on the map it leaves is cleared, its cell on the destination written, and its home map names
+    /// the destination (or forgets the away map when the destination is home). On the same map only the cell is written.
+    /// </summary>
+    public static IReadOnlyList<MapChangeEdit> Arrive(AreaCompanionTemplate template, SessionMapId from, SessionMapId destination, CellCoord arrival,
+        NeighborDirection facing)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        if (from == destination) return [AreaCompanionPlacement.Edit(template, destination, arrival, facing)];
+        return
+        [
+            new(from, AreaCompanionPlacement.Key(template.Entity), null),
+            AreaCompanionPlacement.Edit(template, destination, arrival, facing),
+            new(template.Home, AreaCompanionPlacement.MapKey(template.Entity), destination == template.Home ? null : destination.RuntimeMap),
+        ];
+    }
+
+    /// <summary>The companions the session party says follow the PC, with the facing each stands with now.</summary>
+    public IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)> Following(GameSessionOwner session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return _companions.Where(c => session.QueryCompanion(c.Entity).Standing == CompanionStanding.Following)
+            .Select(c => (c.Template, c.Grid.State.Facing)).ToArray();
     }
 
     /// <summary>The companion of a speaker, if it stands on this map.</summary>

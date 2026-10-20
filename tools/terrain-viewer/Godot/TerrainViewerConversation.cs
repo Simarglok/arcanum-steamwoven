@@ -16,7 +16,7 @@ namespace Arcanum.TerrainViewer;
 // stands there (ARC-WORLD-017) can be talked to, and on the exterior a companion away in the cave cannot.
 // ARC-WORLD-032: in map mode (--area-map) the speakers are the dialog NPCs of the map's own snapshot, talking through
 // the same host with the game's script content and the session the map carries, so their consequences go with it to
-// the next map; the party commands keep the diagnostic follow key until companions follow in map mode.
+// the next map; since ARC-WORLD-037 the party commands of a speaker with follow facts go through the session party.
 public partial class TerrainViewerApp
 {
     private AreaConversationHost? _conversationHost;
@@ -39,8 +39,10 @@ public partial class TerrainViewerApp
         if (_areaSession is { } session)
         {
             var content = ConversationContent(arguments.ModulePath, area.Snapshot.Inputs.SingleOrDefault(input => input.Key.Role == AreaSourceRole.Module)?.Sha256);
-            _conversationHost = new AreaConversationHost(area.Snapshot, content.Content, session, inventory: _inventoryHost, party: arguments.AreaMapName is null,
-                contentDetail: $"{content.Status}: {content.Detail}");
+            // ARC-WORLD-037: in map mode every speaker with follow facts from the map's data joins through the session party.
+            _conversationHost = new AreaConversationHost(area.Snapshot, content.Content, session, inventory: _inventoryHost,
+                party: arguments.AreaMapName is null || _companionData?.Data is not null, contentDetail: $"{content.Status}: {content.Detail}",
+                companions: arguments.AreaMapName is null ? null : MapCompanionFacts);
         }
         else _conversationHost = null;
         if (_conversationPanel is null)
@@ -187,6 +189,8 @@ public partial class TerrainViewerApp
         if (_conversationParty?.LastRefusal is { } refused) _conversationNotice = $"follow refused: {refused}";
         _conversationParty = null;
         if (_areaSession is { } party) _areaCompanions?.Refresh(party);
+        // ARC-WORLD-037: in map mode a speaker that joined (or left) becomes (or stops being) a moving companion.
+        if (_readyMapName is not null && _areaSession is not null && _conversationHost is { PartyWired: true }) { RecordAreaCompanions("dialog"); BindAreaCompanions(); }
         // ARC-SCRIPT-009: a "return to script" end resumes the speaker's dialog script through the dispatcher; a new
         // dialog action opens the next conversation, anything else is a notice.
         var speaker = _conversationSpeaker; _conversationSpeaker = null;

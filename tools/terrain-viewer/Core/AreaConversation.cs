@@ -69,6 +69,7 @@ public sealed class AreaConversationHost
     private readonly AreaInventoryHost? _inventory;
     private readonly bool _party;
     private readonly AreaConversationProfile _baseProfile;
+    private readonly Func<AreaSpeaker, AreaCompanionFacts?> _companions;
 
     /// <param name="inventory">ARC-UI-004: when it covers this map, negative IN moves the item in the session inventory
     /// (<see cref="SessionDialogInventoryPort"/>); otherwise IN is only recorded in <see cref="AreaConversationState.Items"/>.</param>
@@ -78,9 +79,13 @@ public sealed class AreaConversationHost
     /// <param name="content">The game's script content (<see cref="AreaContentRoot.OpenScripts"/>), borrowed; null when it
     /// could not be loaded, and then every talk is <see cref="AreaConversationStartStatus.ContentUnavailable"/> with
     /// <paramref name="contentDetail"/>.</param>
+    /// <param name="companions">ARC-WORLD-037: the follow facts of a speaker that can join the party (null when it cannot); by
+    /// default the measured roster (<see cref="AreaCompanionRoster.For"/>).</param>
     public AreaConversationHost(AreaSnapshot snapshot, ScriptContent? content, GameSessionOwner session,
-        AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, bool party = false, string contentDetail = "no script content")
+        AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, bool party = false, string contentDetail = "no script content",
+        Func<AreaSpeaker, AreaCompanionFacts?>? companions = null)
     {
+        _companions = companions ?? AreaCompanionRoster.For;
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _content = content;
@@ -94,7 +99,7 @@ public sealed class AreaConversationHost
         _party = party;
         State = new AreaConversationState(session, new SessionMapId(snapshot.RuntimeMap),
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
-            party ? Speakers.Where(speaker => AreaCompanionRoster.For(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null);
+            party ? Speakers.Where(speaker => _companions(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null);
         Scripts = new AreaScriptHost(session, new SessionMapId(snapshot.RuntimeMap), Speakers, State, content);
     }
 
@@ -106,7 +111,7 @@ public sealed class AreaConversationHost
     /// PC facts follow the new session's hero (ARC-WORLD-027).
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, _baseProfile, _inventory, _party, _contentDetail);
+    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, _baseProfile, _inventory, _party, _contentDetail, _companions);
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;
@@ -236,7 +241,7 @@ public sealed class AreaConversationHost
     /// <summary>The session party port for a roster speaker when the party is wired; facts are read at each call.</summary>
     private SessionDialogPartyPort? PartyPort(AreaSpeaker speaker)
     {
-        if (!_party || AreaCompanionRoster.For(speaker) is not { } facts) return null;
+        if (!_party || _companions(speaker) is not { } facts) return null;
         var npc = AreaConversationState.Npc(speaker.Index);
         var entity = AreaConversationState.EntityId(speaker.Row);
         return new SessionDialogPartyPort(_session, AreaConversationState.PcParticipant,
