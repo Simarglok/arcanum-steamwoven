@@ -56,7 +56,8 @@ public sealed class AreaStepSnapshot
     public AreaStepAssessment Assess(AreaStepRequest request) => Assess(request, null);
 
     /// <summary>ARC-WORLD-051: the assessment with the runtime passage of the doors and windows the caller lists (by object
-    /// key) in place of their T0 edge rules; an <see cref="AreaPortalPassage.Unresolved"/> or unlisted portal keeps its T0 rule.</summary>
+    /// key) in place of their T0 edge rules; an <see cref="AreaPortalPassage.Unresolved"/> or unlisted portal keeps its T0 rule. A
+    /// portal whose T0 evaluation is Unknown has no edge and stays a gap whatever its passage.</summary>
     public AreaStepAssessment Assess(AreaStepRequest request, IReadOnlyDictionary<AreaObjectKey, AreaPortalPassage>? portals)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -90,7 +91,7 @@ public sealed class AreaStepSnapshot
         AreaObjectKey? wallBlocker = null, windowJump = null;
         // The source tile's walls and portals take part in leaving it: an Unknown one there is a gap.
         foreach (var evaluation in _objects.GetValueOrDefault(request.From, []))
-            if (evaluation.ObjectType is 0 or 1 && evaluation.Coverage != CardinalTraversalCoverage.Supported && !Overridden(evaluation.Key))
+            if (evaluation.ObjectType is 0 or 1 && evaluation.Coverage != CardinalTraversalCoverage.Supported)
                 gaps.Add(new(evaluation.Reason, request.From, evaluation.Key));
         var crossed = new List<AreaObjectKey>();
         void Leg(AreaStepCell cell, int edge, bool diagonal)
@@ -144,7 +145,6 @@ public sealed class AreaStepSnapshot
         return windowJump is not null
             ? Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "WINDOW_JUMP", terrain, objects, gaps, windowJump: windowJump, portals: crossed)
             : Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE", terrain, objects, gaps, portals: crossed);
-        bool Overridden(AreaObjectKey key) => portals is not null && portals.TryGetValue(key, out var passage) && passage != AreaPortalPassage.Unresolved;
         AreaStepWallEdge Runtime(AreaStepWallEdge wall) => portals is null || wall.RawRotation < 0 || !portals.TryGetValue(wall.Key, out var passage) ? wall : passage switch
         {
             AreaPortalPassage.Open => wall with { Rule = AreaStepEdgeRule.Pass, Reason = "PORTAL_RUNTIME_OPEN" },

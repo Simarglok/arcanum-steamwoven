@@ -64,7 +64,7 @@ public sealed class AreaMapPlansRealDataTests
             // ARC-DATA-023: every installed name resolves; no complete interior draws bad art.
             if (inspection.IsComplete) Assert.IsFalse(inspection.Snapshot!.Visuals.Any(v => v.Policy == "original-badart-v1"), map.Name);
             // ARC-DATA-024: K'na Tha's 43,219 objects share 260 art ids; each distinct frame is decoded once (488 since
-            // ARC-WORLD-051 decodes the other frames of its door ART: 11 more).
+            // ARC-WORLD-051 also decodes the other frames of its multi-frame door and window ARTs: 11 more).
             if (map.Name == "k'na tha") Assert.AreEqual(488, inspection.Usage.FrameRequests);
             if (map.Name == "crash site cave")
             {

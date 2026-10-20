@@ -23,6 +23,8 @@ public partial class TerrainViewerApp
     private readonly Dictionary<AreaObjectKey, (int[] Frames, ulong StartMs, long StepMs)> _portalAnimations = new();
     private Dictionary<AreaObjectKey, AreaDrawCommand> _portalBodies = [];
     private AreaObjectKey? _portalUseAfterRoute;
+    // A use pressed while the actor is mid-step: it runs once the step has settled (never closing a door under the actor's step).
+    private AreaObjectKey? _portalUseWhenSettled;
     private string _portalNotice = "";
 
     /// <summary>Binds the shown map's portals to the session and the actor's steps (map mode with a session).</summary>
@@ -30,14 +32,14 @@ public partial class TerrainViewerApp
     {
         if (_readyMapName is null || _readyArea is not { } area || _areaSession is not { } session || _worldActor.Session is not AreaGridSession grid)
         {
-            _areaPortals = null; _areaPortalsStamp = null; _portalAnimations.Clear(); _portalBodies = []; _portalUseAfterRoute = null;
+            _areaPortals = null; _areaPortalsStamp = null; _portalAnimations.Clear(); _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
             return;
         }
         var stamp = (area, session);
         if (!Equals(stamp, _areaPortalsStamp))
         {
             _areaPortals = AreaPortals.From(area.Snapshot, area.Plan);
-            _areaPortalsStamp = stamp; _portalAnimations.Clear(); _portalBodies = []; _portalUseAfterRoute = null;
+            _areaPortalsStamp = stamp; _portalAnimations.Clear(); _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
             GD.Print($"ARC-WORLD-051 portals bound map={_readyMapName} portals={_areaPortals.All.Count} multi-frame={_areaPortals.All.Count(p => p.Frames.Count > 1)}");
         }
         var portals = _areaPortals!;
@@ -68,7 +70,13 @@ public partial class TerrainViewerApp
             || AreaObjectAtScreen(screen) is not { } hit || !portals.TryGet(hit, out var portal)) return false;
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it"); CancelAreaUseApproach("a use click replaced it");
         var row = _readyArea!.Snapshot.Objects.Single(o => o.Key == hit);
-        if (PortalInReach(session, row)) { StopWorldRoute("ROUTE_REPLACED_BY_USE"); UsePortal(portal); return true; }
+        if (PortalInReach(session, row))
+        {
+            StopWorldRoute("ROUTE_REPLACED_BY_USE");
+            if (session.State.Phase == MovementPhase.Settled) UsePortal(portal);
+            else { _portalUseWhenSettled = hit; _portalNotice = $"{PortalName(portal)}: after this step"; RefreshAreaStatus(); }
+            return true;
+        }
         if (WorldRoute(session) is { } route && ApproachCell(session, row.WorldX!.Value, row.WorldY!.Value, AreaUseRule.UseRange) is { } goal)
         {
             StopWorldRoute("ROUTE_REPLACED_BY_USE");
@@ -79,6 +87,21 @@ public partial class TerrainViewerApp
         else _portalNotice = $"{PortalName(portal)}: no cell in reach";
         RefreshAreaStatus();
         return true;
+    }
+
+    /// <summary>Drops a walk to a door and a use waiting for the step to settle (another click, a reset or a reload replaced it).</summary>
+    private void CancelPortalApproach(string why)
+    {
+        if (_portalUseAfterRoute is null && _portalUseWhenSettled is null) return;
+        _portalUseAfterRoute = null; _portalUseWhenSettled = null; _portalNotice = "walk to the door cancelled: " + why;
+    }
+
+    // The walk-to-use guards (as walk to talk): no lifecycle, reset or reload, and input not quarantined or modal.
+    private bool PortalUseAdmitted(out string why)
+    {
+        why = _worldLifecycleSession is not null || _worldResetPending || _worldReloadPending ? "reset/reload"
+            : !_worldFocused || WorldModal || WorldUiFocus ? "input quarantined/modal" : "";
+        return why.Length == 0;
     }
 
     private static bool PortalInReach(AreaGridSession session, AreaObjectRecord row)
@@ -108,13 +131,23 @@ public partial class TerrainViewerApp
     private void FollowAreaPortals()
     {
         if (_areaPortals is not { } portals || _areaSession is not { } session || _readyArea is not { } area) { if (_portalBodies.Count > 0) _portalBodies = []; return; }
-        if (_portalUseAfterRoute is { } key && _worldActor.Session is AreaGridSession grid && grid.State.Phase == MovementPhase.Settled
-            && ReferenceEquals(_worldRouteSession, grid) && _worldRoute is { } route && route.Status != RouteFollowStatus.Following)
+        if (_worldActor.Session is AreaGridSession settled && settled.State.Phase == MovementPhase.Settled)
         {
-            _portalUseAfterRoute = null;
-            if (route.Status == RouteFollowStatus.Arrived && portals.TryGet(key, out var target)
-                && PortalInReach(grid, area.Snapshot.Objects.Single(o => o.Key == key))) UsePortal(target);
-            else { _portalNotice = "walk to the door stopped: " + (route.StopReason ?? route.Status.ToString()); RefreshAreaStatus(); }
+            if (_portalUseWhenSettled is { } waiting)
+            {
+                _portalUseWhenSettled = null;
+                if (!PortalUseAdmitted(out var why)) { _portalNotice = "door use dropped: " + why; RefreshAreaStatus(); }
+                else if (portals.TryGet(waiting, out var door) && PortalInReach(settled, area.Snapshot.Objects.Single(o => o.Key == waiting))) UsePortal(door);
+            }
+            if (_portalUseAfterRoute is { } key && ReferenceEquals(_worldRouteSession, settled) && _worldRoute is { } route && route.Status != RouteFollowStatus.Following)
+            {
+                _portalUseAfterRoute = null;
+                if (!PortalUseAdmitted(out var why)) _portalNotice = "walk to the door dropped: " + why;
+                else if (route.Status != RouteFollowStatus.Arrived) _portalNotice = "walk to the door stopped: " + (route.StopReason ?? route.Status.ToString());
+                else if (portals.TryGet(key, out var target) && PortalInReach(settled, area.Snapshot.Objects.Single(o => o.Key == key))) UsePortal(target);
+                else _portalNotice = "walk to the door ended out of reach";
+                RefreshAreaStatus();
+            }
         }
         AreaFrames();
         var overlay = _areaOverlay ?? throw new InvalidOperationException("AREA_OVERLAY_REQUIRED");

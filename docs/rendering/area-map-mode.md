@@ -570,9 +570,11 @@ the executable as read in
   pass, the session records the portal open (the last frame of its range) at
   once. The frames then play at 1000 / fps ms each, with the portal's open
   sound. The actor does not wait for the animation (the original's door goal
-  sequencing is not modelled).
+  sequencing is not modelled). A diagonal step opens every passable closed portal
+  on its four legs, the legs the step's evidence checks (parity NOT_VERIFIED).
 - **Use.** A left press on a door or window uses it, walking within the use
-  range (2 cells) first. An open portal closes. A closed one opens when the
+  range (2 cells) first; a press while the actor is mid-step uses it once the step
+  has settled, and any other click replaces a pending door use. An open portal closes. A closed one opens when the
   player's open attempt succeeds. A locked, jammed or magically held one plays
   the locked sound and stays closed. One with an unlock script is not opened (its
   script is not run).
@@ -594,6 +596,7 @@ The smoke prints `NONE` on a map without a door that opens. An opt-in test
 (`AreaPortalsOriginalTests`) checks every installed interior: the frames of
 every multi-frame door and window are in the map's repository, and a step from
 the tile of every closed, unlocked door opens it.
+
 ## The main world map (ARC-RENDER-024)
 
 The 2000 × 2000-sector start map (`Arcanum1-024-fixed`, catalogue 5000, runtime 1; 621 sector files, the rest
@@ -667,7 +670,7 @@ window around it); routes reach 32 cells per axis (ARC-WORLD-042). Original pari
 - Doors and windows open, close and animate since ARC-WORLD-051 (above). Keys are
   not held, NPCs do not open doors, an unlock script is not run, and a door the
   original destroys when busted has no destroyed state.
-- Guarded tile and sector transitions and use scripts outside the set, and door runtime on these maps; the dialog
+- Guarded tile and sector transitions and use scripts outside the set; the dialog
   gaps above (SCR admission, generated lines). On the main world map: the limits listed in
   [its section](#the-main-world-map-arc-render-024).
 - Original-executable parity is NOT_VERIFIED.

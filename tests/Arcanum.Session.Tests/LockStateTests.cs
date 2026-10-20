@@ -165,10 +165,10 @@ public sealed class LockStateTests
     }
 
     [TestMethod]
-    public void A_busted_portal_opens_for_the_player_and_keeps_its_frame()
+    public void A_busted_portal_opens_for_the_player_on_frame_0()
     {
         using var owner = Create();
-        var jammed = LockedDoor with { Flags = LockRules.LockedBit | LockRules.JammedBit };
+        var jammed = LockedDoor with { Flags = LockRules.LockedBit | LockRules.JammedBit, Frame = 1 };
         Assert.AreEqual(OpenAttempt.Jammed, owner.AttemptOpen(Door, jammed, false));
         Changed(owner.SetOpenableBusted(owner.Version, Door, jammed), owner, 1);
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.SetOpenableBusted(owner.Version, Door, jammed).Disposition);

@@ -69,8 +69,8 @@ whether it is a junk pile.
 
 - **Keys.** The session inventory holds no keys yet: ARC-WORLD-014 refuses keys and key rings.
   A lock that needs a key therefore stays locked, and `AttemptOpen` passes no keys.
-- **Bust and magic.** `SetOpenableBusted` (ARC-WORLD-051) sets the busted bit and keeps the
-  frame, for a window the original gives its busted ART. A door the original destroys instead
+- **Bust and magic.** `SetOpenableBusted` (ARC-WORLD-051) sets the busted bit on frame 0, as the
+  original busts a window; its busted ART (bit 0x200) is not stored. A door the original destroys instead
   has no destroyed state here, and magically held writes have no caller yet.
 - **Not modelled.** NPC open attempts (an NPC walker), the multiplayer key branch and the
   bust script (SAP 30).

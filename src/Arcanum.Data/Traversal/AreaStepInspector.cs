@@ -420,8 +420,8 @@ public static class AreaStepInspector
     }
 
     /// <summary>A script attached at the unlock slot (SAP 3) with a non-zero script number; an
-    /// attachment too short to read counts as one (fail closed).</summary>
-    private static bool HasUnlockScript(AreaObjectRecord o) =>
+    /// attachment too short to read counts as one (fail closed). ARC-WORLD-051: the viewer's portals use the same test.</summary>
+    public static bool HasUnlockScript(AreaObjectRecord o) =>
         o.EffectiveFields.FirstOrDefault(f => f.Slot == ScriptsSlot) is { Presence: AreaPresence.Array } scripts &&
         scripts.Elements.Any(e => e.Key == UnlockScriptSap && (e.Words.Count < 3 || e.Words[2] != 0));
 

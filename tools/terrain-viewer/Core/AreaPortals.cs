@@ -17,7 +17,7 @@ public sealed record AreaPortal(AreaObjectKey Key, string Entity, AreaStepCell C
     public int OpenFrame => PortalFrameRules.Toggled(Art, 0);
 
     /// <summary>One animation step: 1000 / the ART's frame rate in ms, 100 ms when the rate is not positive (ledger LK11).</summary>
-    public long StepMs => FramesPerSecond > 0 ? 1000 / FramesPerSecond : 100;
+    public long StepMs => FramesPerSecond > 0 ? Math.Max(1, 1000 / FramesPerSecond) : 100;
 }
 
 /// <summary>What a use of a door or window did (ARC-WORLD-051).</summary>
@@ -31,7 +31,7 @@ public enum AreaPortalUse { Opened, Closed, Locked, Jammed, MagicallyHeld, Scrip
 /// </summary>
 public sealed class AreaPortals
 {
-    private const int FlagsSlot = 36, KeySlot = 38, ScriptsSlot = 31, UnlockScriptPoint = 3;
+    private const int FlagsSlot = 36, KeySlot = 38;
     private readonly Dictionary<AreaObjectKey, AreaPortal> _portals;
 
     private AreaPortals(SessionMapId map, Dictionary<AreaObjectKey, AreaPortal> portals) { Map = map; _portals = portals; }
@@ -61,7 +61,7 @@ public sealed class AreaPortals
             // A busted ART (bit 9) stands for the busted bit the original sets with it (ledger LK12).
             var flags = unchecked((int)Field(FlagsSlot)) | ((raw & 0x200) != 0 ? LockRules.BustedBit : 0);
             var baseline = new SessionOpenableBaseline(OpenableKind.Portal, flags, unchecked((int)Field(KeySlot)), (int)((raw >> 14) & 31));
-            var script = row.EffectiveFields.SingleOrDefault(f => f.Slot == ScriptsSlot)?.Elements.Any(e => e.Key == UnlockScriptPoint && e.Words.Count == 3 && e.Words[2] != 0) == true;
+            var script = AreaStepInspector.HasUnlockScript(row);
             portals.Add(row.Key, new(row.Key, AreaUseScriptHost.EntityId(row), new(x, y), baseline, art, body.FramesPerSecond, script, frames));
         }
         return new(new(snapshot.RuntimeMap), portals);
@@ -103,7 +103,8 @@ public sealed class AreaPortals
         if (frame != 0)
             return session.SetOpenableFrame(session.Version, openable, portal.Baseline, PortalFrameRules.Closed).Disposition == GameSessionDisposition.Rejected
                 ? AreaPortalUse.CannotOpen : AreaPortalUse.Closed;
-        if (portal.UnlockScript) return AreaPortalUse.ScriptGuarded;
+        // The open attempt's order (ledger LK7): a busted portal opens before the unlock script is asked.
+        if (portal.UnlockScript && (session.QueryOpenable(openable, portal.Baseline).Flags & LockRules.BustedBit) == 0) return AreaPortalUse.ScriptGuarded;
         switch (session.AttemptOpen(openable, portal.Baseline, scriptRefused: false))
         {
             case OpenAttempt.Locked: return AreaPortalUse.Locked;

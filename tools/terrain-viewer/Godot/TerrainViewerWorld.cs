@@ -631,6 +631,8 @@ public partial class TerrainViewerApp
             _worldRouteClick = "ignored (map transfer pending)";
             RefreshReadyStatus(); return;
         }
+        // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
+        CancelPortalApproach("another click replaced it");
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
         if (TryAreaAttack(screen, alt)) return;
         CancelAreaAttack("another click replaced it");
