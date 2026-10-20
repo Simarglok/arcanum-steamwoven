@@ -579,7 +579,7 @@ exist yet.
 ## Proposed implementation slices (project policy, not accepted)
 
 **Superseded (2026-10-20):** the [magic implementation plan](magic-implementation-plan.md) (ARC-RES-060) cuts
-these eight slices into 21 smaller ones with their order, executable checks and reuse. The list below is kept as
+these eight slices into 23 smaller ones with their order, executable checks and reuse. The list below is kept as
 the research's first proposal.
 
 Type `MAGIC` per the [naming policy](../workflow/task-naming.md); codes are

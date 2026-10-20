@@ -7,7 +7,8 @@ original executable. It replaces the eight slices proposed at the end of that re
 ([proposed implementation slices](magic-core-evidence.md#proposed-implementation-slices-project-policy-not-accepted)).
 No slice starts before the owner accepts this plan; codes are allocated when each task is created (owner decision D6 of
 the [NPC combat AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)), so slices carry plan labels **MT1..MT21**
-here, not codes. Docs only: no code, reader, schema or test changes.
+(MT9 and MT20 in two parts each) here, not codes; the codes of other lanes named below were taken by those
+lanes' threads on 2026-10-20 and are in flight. Docs only: no code, reader, schema or test changes.
 
 Requirements: [FR-MAGIC-001](../requirements/combat-magic-tech.md#fr-magic-001) to
 [FR-MAGIC-007](../requirements/combat-magic-tech.md#fr-magic-007) in full; the core's part of
@@ -25,12 +26,14 @@ script hooks of [FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002
 
 ## Answer
 
-1. **21 slices in six phases**: data (MT1–MT4), cast rules (MT5–MT8, pure functions), runs (MT9–MT11, session),
+1. **23 slices in six phases** (MT1–MT21, with MT9 and MT20 split in two): data (MT1–MT4), cast rules (MT5–MT8,
+   pure functions), runs (MT9a–MT11, session),
    components (MT12–MT15), world components (MT16–MT18) and host (MT19–MT21). Two prerequisites belong to the WORLD
    type: per-critter magic state for every NPC (P1) and creating objects at run time (P2).
 2. **First visible result** ("first cast"): the hero learns a spell in the character sheet and casts a damaging or
-   healing spell at a critter in the AREA viewer, on any map: MT1, MT2, MT3, MT5–MT10, MT12, MT19 and MT20, twelve
-   PRs (plus the skills lane's point transaction). MT4 and MT11 can run beside them.
+   healing spell at a critter in the AREA viewer, on any map: MT1, MT2, MT3, MT5–MT8, MT9a, MT10, MT12, MT19 and
+   MT20a, twelve PRs (plus the skills lane's point transaction). Damage and heal spells end right after BEGIN, so the
+   first cast needs no saved runs (MT9b) and no maintain bar (MT20b). MT4 and MT11 can run beside them.
 3. **Most foundations exist**: the session clock, saved event queue, labelled seeded randomness, life state (hit points,
    fatigue, knockout, death, heal, resurrect), the attack resolver's typed damage and resistances, the hero's effect
    list, equipment, reaction memory, character stats with magick points and aptitude, auto-level spell purchases with
@@ -46,7 +49,8 @@ script hooks of [FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002
    original and need no decision.
 6. **Boundaries agreed with the parallel lanes (2026-10-20)**: skills builds the shared character-point transaction
    (ARC-SKILLS-005) and the fate owner (ARC-SKILLS-007); technology (ARC-RES-062) owns tech degrees, schematics,
-   charge cells and tech items; NPC AI slice I8 consumes MT1–MT13 ([Boundaries](#boundaries-with-other-lanes)).
+   charge cells and tech items; NPC AI slice I8 consumes MT1–MT13, and MT17 for summoning
+   ([Boundaries](#boundaries-with-other-lanes)).
 
 ## Rules for every slice
 
@@ -80,7 +84,8 @@ Per the [original executable check](original-executable-check.md), every slice:
 1. **Reads its functions** (the "Read" column below) in the retail 1.0.7.4 `Arcanum.exe` with `llvm-objdump` or
    headless Ghidra, with two independent readers, and records one row per question in a new section of the
    [verification ledger](original-verification-ledger.md) named after the slice's code. MG rows already read twice
-   are not re-read; MG13–MG17 and MG20 were read once and get their second reading in the slice that uses them.
+   are not re-read; MG13, MG14, MG16, MG17 and MG20 were read once and get their second reading in the slice that
+   uses them (the ledger lists MG15 both as read twice and as read once; MT10 re-reads it to be safe).
 2. **Marks** each implementing method with `[OriginalFunction(address, scope)]` and adds its row to the
    [function registry](../verification/functions.csv) at F2 or better.
 3. **Runs the oracle** for the functions marked "oracle" below: a world model, an `OriginalExe` test with at least two
@@ -88,9 +93,10 @@ Per the [original executable check](original-executable-check.md), every slice:
    owner's Mac (`./arcanum oracle --function ADDR`). Proposed: cast cost (0x4507D0), the UI and AI cost (0x4B1660), the
    UI affordability check (0x4508A0), resistance and save (0x4537B0), the fail-chance predictor (0x453B20), the duration
    and period scaling (0x455250) and the summon list pick (0x452900). They read only a few stats, fields and random
-   draws, which stubs can serve.
-4. **Classifies** each difference: a reconstruction slip is fixed in both modes; a bug of the original gets a decision
-   ([below](#anomaly-decisions-proposed)) and, if fixed, a switch.
+   draws, which stubs can serve. The spell learn check (0x4B1790) is a conditional eighth, if its stubs stay small.
+4. **Classifies** each difference: a reconstruction slip or the original's intended behaviour is followed in both
+   modes with no switch; a bug of the original gets a decision ([below](#anomaly-decisions-proposed)) and, if
+   fixed, a switch; a crash or out-of-bounds access is fixed in both modes.
 
 Data questions (record contents, component use, which items carry mana) go through the data probes and opt-in
 `RealData` tests on the Mac, not through the executable.
@@ -107,13 +113,13 @@ Data questions (record contents, component use, which items carry mana) go throu
 | [`CharacterStatRules`](../world/character-stats-runtime.md): magick points 0..210, aptitude with a sector input | MT3, MT4, MT6 | aptitude stays there; MT4 supplies the sector adjustment |
 | [Life state](../world/life-state-runtime.md) (`LifeRules`, session life domain) | MT5, MT11, MT12 | fatigue payment and fainting, damage, heal, resurrect, death hooks |
 | [Attack resolver](../world/attack-resolver-runtime.md) damage packet, resistances, immunities | MT12 | spell damage enters the same damage step |
-| [Durable effects](../world/durable-effects-runtime.md) (EF1–EF10) | MT13, MT9 | Effect component; the timed-effect END hands over to runs (its "Not ready" says so) |
-| [Event queue](../world/game-event-queue-runtime.md), [clock](../world/game-clock-runtime.md) | MT9, MT11 | a saved magic-tech event kind and the item recharge kind on game time (`seconds × 8000` ms, ledger TE1) |
+| [Durable effects](../world/durable-effects-runtime.md) (EF1–EF10) | MT13, MT9a | Effect component; the timed-effect END hands over to runs (its "Not ready" says so) |
+| [Event queue](../world/game-event-queue-runtime.md), [clock](../world/game-clock-runtime.md) | MT9a, MT9b, MT11 | a saved magic-tech event kind and the item recharge kind on game time (`seconds × 8000` ms, ledger TE1) |
 | [Equipment](../world/equipment-runtime.md) | MT5, MT11 | worn slots for mana stores; unwear ends item runs |
 | [Reaction](../world/npc-reaction-runtime.md) | MT14 | charm ±30 and mind control −50 through the reaction owner |
 | [Party and follow](../world/party-runtime.md) | MT11, MT14 | follower leaving combat demaintains; mind control follows and disbands |
-| [Turn-based round](../world/turn-based-round-runtime.md) (`CastSpellCost = 4`), [real-time combat](../world/real-time-combat-runtime.md) | MT20 | casting costs 4 AP; the BEGIN fires on the release frame |
-| Map transfers (ARC-WORLD-031, `AreaMapTransfers`) and the map catalogue | MT16 | teleport as a map change, anti-teleport areas |
+| [Turn-based round](../world/turn-based-round-runtime.md) (`CastSpellCost = 4`), [real-time combat](../world/real-time-combat-runtime.md) | MT20a | casting costs 4 AP; the BEGIN fires on the release frame |
+| The session's map change and the map catalogue; `AreaMapTransfers` (ARC-WORLD-031) as the viewer host's part | MT16 | teleport as a map change, anti-teleport areas |
 | [SCR dispatcher](../scripting/scr-dispatcher-runtime.md) admission sets | MT15, MT21 | Use component, spell conditions and actions |
 | [Rule modes](../world/rule-modes.md), [function registry](../verification/README.md), oracle (ARC-DEV-007) | all | switches, marks, receipts |
 
@@ -145,27 +151,28 @@ parallel. "Read" lists the function groups each slice reads twice in the executa
 
 | Slice | Type | Result | FR | Needs | Read / oracle | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
-| **MT9 Run lifecycle** | MAGIC | Run slots (512), actions BEGIN, MAINTAIN, END, CALLBACK, END_CALLBACK through a component executor port; payment at BEGIN and at each MAINTAIN (MT5); duration with `DurationStatInfo:` and trigger counts, mastery ×2, maintenance period, the `INT / 4` cap, sourceless ticks (8), the scheduler's order (unresistable first, nothing applied, maintained, timed, neither); explicit interrupt (maintain bar, script stop); a saved magic-tech event kind; runs saved in the snapshot (schema bump), including runs of maps that are not active (the original's per-map `MT.dat`). | 006 | MT5, MT6 | process shell (0x4510F0), stage (0x452F20), schedule (0x453FA0), cap (0x4545E0), timers (0x454790, 0x4547F0, 0x4548D0), time (0x455250, oracle), run (0x455A20, 0x455AC0, 0x455C30), interrupt (0x456F70–0x457530), post-load (0x44F540, LM19) | MG3, MG6, MG11, MG19 |
-| **MT10 Per-target stage** | MAGIC | Between the area and the components: resistance per target (MT6), anti-magic shell on source and target, full reflection with the source/target swap and its cost (MG15), the original's order (O10), no-stack after payment (MG16), cancels by `Cancels_SF:` and `Cancels_EnvSF:`, fate maximisation per action (MG17). | 005, 006, 010 | MT6, MT8, MT9 | stack and cancel (0x453410, 0x4534E0), shell (0x453710), reflect (0x455550), env (0x458A80) | MG15, MG16, MG17, O10 |
-| **MT11 Endings and recharge** | MAGIC | Every ending trigger: the caster fainting from payment or damage (0x45D5A0 → demaintain 0x457450), rest, world-map travel, a follower leaving combat (0x4A8570), death or destruction of parent, source item, target or summon (0x459740, 0x4598D0, 0x459A20), unwearing a source item; entangle re-resisted on each hit (0x459A30, 0x459C10); the worn-store recharge event (merged per item, saved). | 006; FR-COMBAT-010 | MT9, MT10 | the listed addresses | — |
+| **MT9a Run lifecycle** | MAGIC | In-memory runs: slots (512), actions BEGIN, MAINTAIN, END, CALLBACK, END_CALLBACK through a component executor port; the invocation check (MT7) before a slot; payment at BEGIN and at each MAINTAIN (MT5); duration with `DurationStatInfo:` and trigger counts, mastery ×2, maintenance period, the `INT / 4` cap, sourceless ticks (8), the scheduler's order (unresistable first, nothing applied, maintained, timed, neither); explicit interrupt (maintain bar, script stop); the magic-tech event kind on the session's queue. | 006 | MT5, MT6, MT7 | process shell (0x4510F0), stage (0x452F20), schedule (0x453FA0), cap (0x4545E0), timers (0x454790, 0x4547F0, 0x4548D0), time (0x455250, oracle), run (0x455A20, 0x455AC0, 0x455C30), interrupt (0x456F70–0x457530) | MG3, MG6, MG11, MG19 |
+| **MT9b Saved runs** | MAGIC | Runs and their events saved in the snapshot (schema bump), including runs of maps that are not active (the original's per-map `MT.dat`), and restored as the original's post-load does. | 006 | MT9a | save and load (0x44F250, 0x44F3C0, 0x44F540, LM19), map close (0x44F7A0, 0x44FA70, 0x44FC30) | — |
+| **MT10 Per-target stage** | MAGIC | Between the area and the components: resistance per target (MT6), anti-magic shell on source and target (target spell flags from the static object fields until P1 brings them into the session), full reflection with the source/target swap and its cost (MG15), the original's order (O10), no-stack after payment (MG16), cancels by `Cancels_SF:` and `Cancels_EnvSF:`, fate maximisation per action (MG17). | 005, 006, 010 | MT6, MT8, MT9a | stack and cancel (0x453410, 0x4534E0), shell (0x453710), reflect (0x455550), env (0x458A80) | MG15, MG16, MG17, O10 |
+| **MT11 Endings and recharge** | MAGIC | Every ending trigger of the caster and target: the caster fainting from payment or damage (0x45D5A0 → demaintain 0x457450), rest, world-map travel, a follower leaving combat (0x4A8570), death or destruction of parent, source item or target (0x459740, 0x4598D0, 0x459A20), unwearing a source item; the worn-store recharge event (merged per item, saved). The summon's death ending is MT17's, the entangle re-resist MT13's. | 006; FR-COMBAT-010 | MT9b, MT10 | the listed addresses | — |
 
 ### Phase D: components
 
 | Slice | Type | Result | FR | Needs | Read / oracle | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
 | **P1 Critter magic state** | WORLD | Every critter of any map gets an effect list and object spell flags in the session (loaded from its map and prototype fields, saved as map-local state, snapshot bump), so components can reach NPCs; the hero's existing list stays as is. | FR-CHAR-022; 007 | — | effect functions already read (EF1–EF10); spell-flag field read and write | — |
-| **MT12 Damage and Heal** | MAGIC | Damage (typed, `Dmg:` range, `Scaled` by the aptitude captured at cast, `Full` fatigue, `Dmg_Flags:` passed to the combat damage step, margin reduction, death flag cancelled by a margin) and Heal (hit points, poison, fatigue, `Full`, resurrect and reanimate with the resurrect-script veto as a port, scars) for any critter. | 007; FR-COMBAT-008, FR-COMBAT-010 | MT9, MT10 | damage (0x4518D0), heal (0x4521A0), combat heal (0x4B58C0) | — |
-| **MT13 Effect and object flags** | MAGIC | Effect add and remove with `Count:` and `Scaled:` (remove-first by number, ledger "Effect remove risk"); ObjFlag with reference counting over active runs; render and movement side effects: invisible, shrunk, water walking (death on a blocking tile), stoned, entangled, paralysed, "don't draw". | 007; FR-CHAR-022 | MT9, P1 | effect (0x451F20), flag (0x454A10, 0x455100) | — |
+| **MT12 Damage and Heal** | MAGIC | Damage (typed, `Dmg:` range, `Scaled` by the aptitude captured at cast, `Full` fatigue, `Dmg_Flags:` passed to the combat damage step, margin reduction, death flag cancelled by a margin) and Heal (hit points, poison, fatigue, `Full`, resurrect and reanimate with the resurrect-script veto as a port, scars) for any critter. | 007; FR-COMBAT-008, FR-COMBAT-010 | MT9a, MT10 | damage (0x4518D0), heal (0x4521A0), combat heal (0x4B58C0) | — |
+| **MT13 Effect and object flags** | MAGIC | Effect add and remove with `Count:` and `Scaled:` (remove-first by number, ledger "Effect remove risk"); ObjFlag with reference counting over active runs; render and movement side effects: invisible, shrunk, water walking (death on a blocking tile), stoned, entangled (re-resisted on each hit), paralysed, "don't draw". | 007; FR-CHAR-022 | MT9a, P1 | effect (0x451F20), flag (0x454A10, 0x455100), entangle (0x459A30, 0x459C10) | — |
 | **MT14 Social and AI flags** | MAGIC | The object flags that reach other domains: charm (+30 on, −30 off, both through the PC's reaction effects, as the original), mind control (follow without flee, −50 for a PC on a non-summoned NPC, disband at the end), undead, fleeing and blinded as AI and combat notifications, unlocking against the lock with the guard alert. | 007 | MT13 | flag (0x454A10) branches, lock (0x4551C0), reaction adjustment (0x4C0DE0) | charm asymmetry |
-| **MT15 Control components** | MAGIC | Dispel, Interrupt (MG7), Terminate, TestNBranch, ChargeNBranch (charge source from the technology port), Noop, EnvFlag (logs only), Identify, Recharge, TraitIdx, Trait64, Use (the target's use script through the SCR dispatcher), AGoalTerminate. | 007 | MT9, MT13 | dispel (0x451AF0, 0x451B90, 0x451BB0, 0x451C40), interrupt (0x452300), branch (0x4529D0, 0x4529F0), recharge (0x454920), stub (0x452F10) | MG7 |
+| **MT15 Control components** | MAGIC | Dispel, Interrupt (MG7), Terminate, TestNBranch, ChargeNBranch (charge source from the technology port), Noop, EnvFlag (logs only), Identify, Recharge, TraitIdx, Trait64, Use (the target's use script through the SCR dispatcher), AGoalTerminate. Split candidate: if the contract exceeds eight criteria, the branch and control components go first and Identify, Recharge, TraitIdx, Trait64 and Use second. | 007 | MT9a, MT13 | dispel (0x451AF0, 0x451B90, 0x451BB0, 0x451C40), interrupt (0x452300), branch (0x4529D0, 0x4529F0), recharge (0x454920), stub (0x452F10) | MG7 |
 
 ### Phase E: world components
 
 | Slice | Type | Result | FR | Needs | Read / oracle | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
-| **MT16 Movement, goals, nested casts** | MAGIC | Movement: to the target tile, a random tile in a radius, a world-map teleport or the nearest known area, through the universal map transfer, refused in anti-teleport areas; what a teleport does to followers afterwards (ledger "Not checked", W9). AGoal: knockback 4 cells, knockdown, follow, other goals through an animation-goal port. Cast: the parent casts another spell through the full check. Destroy. | 007, 009 | MT7, MT9, MT10 | movement (0x4524C0, 0x452650), goal (0x4514E0, 0x4516D0, 0x451700), cast (0x451740, 0x451850), destroy (0x451AF0) | — |
+| **MT16 Movement, goals, nested casts** | MAGIC | Movement: to the target tile, a random tile in a radius, a world-map teleport or the nearest known area, through the universal map transfer, refused in anti-teleport areas; what a teleport does to followers afterwards (ledger "Not checked", W9). AGoal: knockback 4 cells, knockdown, follow, other goals through an animation-goal port. Cast: the parent casts another spell through the full check. Destroy. Split candidate: teleport with followers apart from AGoal, Cast and Destroy. | 007, 009 | MT7, MT9a, MT10 | movement (0x4524C0, 0x452650), goal (0x4514E0, 0x4516D0, 0x451700), cast (0x451740, 0x451850), destroy (0x451AF0) | — |
 | **P2 Objects created at run time** | WORLD | The session creates a critter from a prototype on a tile of the active map, saves it as map-local state and removes it again; also what monster generators (FR-AI-004) will need. | FR-AI-004 (part); 008 | — | object create and destroy paths the summon calls | — |
-| **MT17 Summon** | MAGIC | Summon a prototype or a list pick (lists 0..2 weighted, 3..5 by aptitude), the summoned flags, palette, faction from `Clear_Faction:` (MG8, a reconstruction slip), alignment of the parent, tracking in the run so its END or a dispel removes the summon. | 008 | MT9, P2 | summon (0x450C40), list (0x452830, 0x452900 oracle) | MG9, summon palette |
+| **MT17 Summon** | MAGIC | Summon a prototype or a list pick (lists 0..2 weighted, 3..5 by aptitude), the summoned flags, palette, faction from `Clear_Faction:` (MG8, a reconstruction slip), alignment of the parent, tracking in the run so its END or a dispel removes the summon, and the run's end when the summon dies or is destroyed (0x459740). | 008 | MT9a, P2 | summon (0x450C40), list (0x452830, 0x452900 oracle) | MG9, summon palette |
 | **MT18 Polymorph** | MAGIC | Trait: drop what the new art cannot wield, monster art and palette, elemental flags (MG10), restore with `-1`. | 007 | MT13 | trait (0x452AD0, 0x452B00, 0x452CD0, 0x452D80, 0x452E40, 0x452ED0) | MG10 |
 
 ### Phase F: host and UI
@@ -173,15 +180,16 @@ parallel. "Read" lists the function groups each slice reads twice in the executa
 | Slice | Type | Result | FR | Needs | Read / oracle | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
 | **MT19 Spell book in the character sheet** | UI | Colleges, ranks and mastery in the character sheet (ARC-UI-007); learn and unlearn through MT3 with the refusal text of the failing check. L2 native smoke. | 012; FR-UI-004 | MT3 | UI learning (0x57C540, 0x57C670) | — |
-| **MT20 Casting in the AREA viewer** | UI | Spell choice, targeting cursor, cast goal (4 AP in turn-based mode, BEGIN on the release frame), maintain bar with stop (MG12 fixed in both modes: it is an out-of-bounds write), feedback texts of `spell.mes`, eye candy as presentation events. L2 native smoke; owner look-and-feel check as a separate owner-validation item. | 012, 003, 006; FR-COMBAT-003, FR-COMBAT-006 | MT9, MT10, MT12, MT19 | spell UI (0x57BC70, 0x57BFF0–0x57C110), maintain bar (0x57C290–0x57C4B0), casting goal (0x429B50–0x429CD0) | MG12 |
-| **MT21 Scripts and dialog** | SCRIPT | SCR conditions `knows_spell`, `mastered_spell_college`, `obj_is_influenced_by_spell`, `obj_has_body_spell`; actions cast spell on (81 shipped uses, [census](scr-census.md)), free and unresistable casts, give mastery, stop spell; a dialog NPC's free cast; paid spellcasting services (100 coins). | FR-SCRIPT-002; 002, 006 | MT9, MT3 | script (0x447220) spell branches, dialog (0x419D50), money (0x4B1650–0x4B1740) | — |
+| **MT20a Casting in the AREA viewer** | UI | Spell choice, targeting cursor, cast goal (4 AP in turn-based mode, BEGIN on the release frame), feedback texts of `spell.mes`, eye candy as presentation events. L2 native smoke; owner look-and-feel check as a separate owner-validation item. | 012, 003; FR-COMBAT-003, FR-COMBAT-006 | MT7, MT9a, MT10, MT12, MT19 | spell UI (0x57BC70, 0x57BFF0–0x57C110), casting goal (0x429B50–0x429CD0) | — |
+| **MT20b Maintain bar** | UI | The `INT / 4` slots of the PC's maintained runs with stop (MG12 fixed in both modes: it is an out-of-bounds write). L2 native smoke. | 012, 006 | MT20a, MT9b | maintain bar (0x57C290–0x57C4B0) | MG12 |
+| **MT21 Scripts and dialog** | SCRIPT | SCR conditions `knows_spell`, `mastered_spell_college`, `obj_is_influenced_by_spell`, `obj_has_body_spell`; actions cast spell on (81 lines, 40 live, [census](scr-census.md)), free and unresistable casts, give mastery, stop spell; a dialog NPC's free cast; paid spellcasting services (100 coins). | FR-SCRIPT-002; 002, 006 | MT9a, MT3 | script (0x447220) spell branches, dialog (0x419D50), money (0x4B1650–0x4B1740) | — |
 
 ### Milestones
 
 | Milestone | Slices | What the owner can see |
 | --- | --- | --- |
-| First cast | MT1, MT2, MT3, MT5, MT6, MT7, MT8, MT9, MT10, MT12, MT19, MT20 | The hero learns a spell and casts a damaging or healing spell at a critter on any map; fatigue drops; the target resists or takes damage. |
-| Magic core | + MT4, MT11, P1, MT13, MT14, MT15, MT21 | Maintained spells with the bar, buffs and curses on NPCs, charm and mind control, dispel, scripted casts; FR-MAGIC-001..007 covered. |
+| First cast | MT1, MT2, MT3, MT5, MT6, MT7, MT8, MT9a, MT10, MT12, MT19, MT20a | The hero learns a spell and casts a damaging or healing spell at a critter on any map; fatigue drops; the target resists or takes damage. |
+| Magic core | + MT4, MT9b, MT11, MT20b, P1, MT13, MT14, MT15, MT21 | Maintained spells with the bar, buffs and curses on NPCs, charm and mind control, dispel, scripted casts; FR-MAGIC-001..007 covered. |
 | World magic | + MT16, P2, MT17, MT18 | Teleport, summons, polymorph. |
 
 ## Anomaly decisions (proposed)
@@ -196,24 +204,28 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | --- | --- | --- | --- |
 | MG1 | slip (spell index); no mastery is the original | follow the original in both modes, no switch | MT5 |
 | MG2 | slip (run-time rounding); three formulas are the original | follow the original in both modes, no switch | MT5 |
-| MG3 | original bug | fix (charge only the surcharged cost), switch | MT9 |
+| MG3 | original bug | fix (charge only the surcharged cost), switch | MT9a |
 | MG4 | original bug | fix (add the resistance term, as the manual says), switch | MT6 |
 | MG5 | original bug | keep the original in both modes: the intended formula is unknown | MT7 |
-| MG6 | original bug | keep the original in both modes: the intended signed scaling is unknown | MT9 |
+| MG6 | original bug | keep the original in both modes: the intended signed scaling is unknown | MT9a |
 | MG7 | original bug | decide after the MT2 census shows which records use Interrupt; fix only if a record does | MT15 |
 | MG8 | slip | follow the original (`Clear_Faction:`), no switch | MT17 |
 | MG9 | original bug | fix (roll 0..99), switch | MT17 |
 | MG10 | original bug | fix (add the flags instead of replacing them), switch | MT18 |
-| MG11 | original bug | fix (count the caster's maintained runs), switch; the AI's I8 relies on it | MT9 |
-| MG12 | original bug, out of bounds | fixed in both modes (owner rule 2026-10-17), "both fixed" in the registry | MT20 |
+| MG11 | original bug | fix (count the caster's maintained runs), switch; the AI's I8 relies on it | MT9a |
+| MG12 | original bug, out of bounds | fixed in both modes (owner rule 2026-10-17), "both fixed" in the registry | MT20b |
 | MG13, MG14, MG16, MG17, MG20 | the original | follow it in both modes; second reading in the slice | MT5, MT6, MT10 |
 | MG15 | original bug | fix (the reflected spell's own cost), switch | MT10 |
 | MG18 | original bug (target table) | fix if the MT2 census finds a record using that target, switch; otherwise record only | MT2 or MT8 |
-| MG19 | original bug | fix (separate the two flags), switch; only two technology records and two unused script actions reach it | MT9 |
+| MG19 | original bug | fix (separate the two flags), switch; it reaches two technology records (`No_Resist:`) and the script action `cast_unresistable_spell` (7 live lines in 6 scripts); actions 121 and 122 are unused | MT9a |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |
 | O10 shell and reflection order | reconstruction change | the original in both modes | MT10 |
 | Charm asymmetry | reconstruction change confirmed | the original (+30 and −30 both through the reaction effects) | MT14 |
 | Summon palette | reconstruction change | the original (palette on the current art only) | MT17 |
+
+The [rule-mode registry](../world/rule-modes.md#registry)'s Magic row also names LM10 (item effect module maximum, the
+items owner), effect `min`/`max` (decided in `EffectRules`, durable effects) and LM20 (blessing and curse names, fixed
+in both modes); none of them is a slice of this plan.
 
 ## Boundaries with other lanes
 
@@ -230,8 +242,8 @@ Agreed through the coordinator on 2026-10-20:
   effects), the charge-cell source for `ChargesFromCells:` and `ChargeNBranch`, device failure from magick against
   technology, and the tech UI. The engine (run pipeline, the 25 components, payment step, resistance) is this plan's.
 - **NPC AI (ARC-RES-039)**: slice I8 needs MT1 (the ten `AI_*` lists), MT3 (`spell_is_known`, highest rank), MT5
-  (`spell_cast_cost`), MT6 (the predictor), MT7 (eligibility and line of fire), MT9 (the maintained-run predicate,
-  MG11) and MT12–MT13 (heal ladder, buffs), as the research lists
+  (`spell_cast_cost`), MT6 (the predictor), MT7 (eligibility and line of fire), MT9a (the maintained-run predicate,
+  MG11), MT8 and MT10 (to perform a cast), MT12–MT13 (heal ladder, buffs) and, for summoning, MT17, as the research lists
   ([what I8 needs](magic-core-evidence.md#what-ai-slice-i8-needs-from-this-domain)). Line of fire comes from the AI
   awareness stage (A2, then I2); MT7 takes it through a port until then.
 
@@ -239,10 +251,10 @@ Agreed through the coordinator on 2026-10-20:
 
 - **Item spells** (FR-MAGIC-011): the item trigger executor (0x4CB830) and its callers (0x4CB720–0x4CC160), on use,
   wear, unwear, hit and death, with item spell charges and LM7, serve magic and technology items alike. They need a
-  short research item first (open question O6), then one shared slice after MT9; equipment now refuses items with
+  short research item first (open question O6), then one shared slice after MT9a; equipment now refuses items with
   spells, and that refusal lifts there.
 - **Technology runtime**: the technology lane above.
-- **Spell visuals**: `SpellEyeCandy.mes`, casting and missile art and their animation; MT20 emits presentation events
+- **Spell visuals**: `SpellEyeCandy.mes`, casting and missile art and their animation; MT20a emits presentation events
   only, and the visual catalogue is a presentation task.
 - **Line of fire**: the AI awareness lane (combat open question O4).
 - **Fate state**: ARC-SKILLS-007.
@@ -252,5 +264,5 @@ Agreed through the coordinator on 2026-10-20:
 - **Q1** Whether the owner wants the first-cast milestone before the magic core is complete (this plan's order), or the
   whole core first without the viewer.
 - **Q2** The fifteen anomaly recommendations above; each is asked in its slice's card, not now.
-- **Q3** O4 of the research (how spell timers behave in turn-based mode) is read in MT9; if the original freezes them
+- **Q3** O4 of the research (how spell timers behave in turn-based mode) is read in MT9a; if the original freezes them
   with game time, nothing extra is needed, since the event queue already holds game events while game time stands.
