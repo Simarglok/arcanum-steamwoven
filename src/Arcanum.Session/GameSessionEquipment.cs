@@ -189,14 +189,14 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// The worn items' part of the hero's combat values for the attack resolver and the round (<see cref="EquipmentRules.Evaluate"/>):
     /// armour-class and resistance adjustments, light, the attack it strikes with and its weapon speed and attack cost, for the
-    /// hero's effective magick/tech aptitude. <paramref name="weaponTraining"/> is the hero's training in the wielded weapon's skill
-    /// (skills are not session state yet). Null without a hero.
+    /// hero's effective magick/tech aptitude. <paramref name="weaponTraining"/> overrides the hero's training in the wielded weapon's
+    /// skill; null reads it from <see cref="QueryHeroSkills"/> (ARC-SKILLS-002). Null without a hero.
     /// </summary>
-    public EquipmentCombat? QueryHeroEquipmentCombat(SkillTraining weaponTraining = SkillTraining.None)
+    public EquipmentCombat? QueryHeroEquipmentCombat(SkillTraining? weaponTraining = null)
     {
         ThrowIfDisposed();
-        if (!Enum.IsDefined(weaponTraining)) throw new ArgumentOutOfRangeException(nameof(weaponTraining));
-        return _hero is null ? null : EquipmentRules.Evaluate(_equipment.Items(), HeroAptitude(), weaponTraining);
+        if (weaponTraining is { } training && !Enum.IsDefined(training)) throw new ArgumentOutOfRangeException(nameof(weaponTraining));
+        return _hero is null ? null : EquipmentRules.Evaluate(_equipment.Items(), HeroAptitude(), weaponTraining ?? HeroWeaponTraining(HeroSkills()));
     }
 
     /// <summary>
