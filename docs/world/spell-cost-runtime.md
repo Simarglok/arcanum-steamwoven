@@ -54,8 +54,8 @@ to write and the "last cost" the original keeps for reflection (MG15, slice MT10
 2. **Charge cells first and alone**: a record with `ChargesFromCells:` asks the cell source port (`ISpellCellSource`,
    filled by the technology lane: a critter pays `cost` cells, an item source its surcharge, TC1) and pays nothing else;
    the source refusing is `CellsRefused`. The original spends cells **whether or not the payment is applied** (the
-   affordability checks spend them too); the request carries the apply flag for the source. This step comes after step 3
-   only in that a cost of 0 or less asks nothing.
+   affordability checks spend them too); the request carries the apply flag for the source. A cost of 0 or less, or no
+   payer, asks nothing (step 3 comes first).
 3. A cost of 0 or less pays nothing (no last cost); no payer pays nothing (the last cost is kept).
 4. **An item source** (object types 5..14) spends one spell charge when applied: 0 charges refuse (`NoCharges`), a negative
    store never runs out; a positive store marks the item magical even when not applied.
@@ -65,8 +65,8 @@ to write and the "last cost" the original keeps for reflection (MG15, slice MT10
    writes it and schedules its recharge; an emptied store is reported (the original notifies the AI). The rest is
    fatigue: refused when `current fatigue − rest ≤ −15` (`FatigueRefused`) — **the stores are drained all the same**
    (MG20, the original's behaviour). Without applying, the plan writes nothing and succeeds. When applied, the fatigue
-   damage grows by the rest (the original's setter reports a new damage of 0 or less as a failure, `FatigueNotSet`, which a
-   positive rest cannot reach); then a maintained record (a maintenance period) or one without a duration **fails after
+   damage grows by the rest (the original's setter clamps a new damage of 0 or less to 0, writes it and reports a failure,
+   `FatigueNotSet`, whose plan sets the damage to 0; a positive rest reaches it only from a negative stored damage); then a maintained record (a maintenance period) or one without a duration **fails after
    paying** when fatigue is now below 0 (`FailedAfterPay`), while a timed, non-maintained one lands. With no record
    (spell 10000) the cast lands.
 6. Any other object pays nothing.
@@ -95,8 +95,8 @@ rule modes; this slice adds no rule-mode switch.
 
 | Original 1.0.7.4 | Steamwoven | Mode |
 | --- | --- | --- |
-| The run-time cost reads the spell table before testing the spell number, and the payment reads the record of a number outside the table on its critter path (out of bounds). | The rules take the record's values; a spell number outside 0..222 and not 10000 is refused at once (`SpellOutOfRange`). | both |
-| The fatigue setter's failure (a new damage of 0 or less) ends the payment. | The same (`FatigueNotSet`); reachable only with a negative stored damage. | both |
+| The run-time cost reads the spell table before testing the spell number, and the payment reads the record of a number outside the table on its critter path (out of bounds). | The rules take the record's values; a spell number outside 0..222 and not 10000 is refused at once (`SpellOutOfRange`), also where the original would succeed without reading it (a cost of 0 or less, no payer, an item or another object), and then no last cost is kept. No caller passes such a number. | both |
+| The fatigue setter's failure (a new damage of 0 or less, written as 0) ends the payment. | The same (`FatigueNotSet`, the plan brings the damage to 0); reachable only with a negative stored damage. | both |
 | A network client sends the payment to the host. | Single player only. | — |
 | The plan is carried out inside the payment (fields written, recharge scheduled, AI notified, UI refreshed). | The plan says what to write; the host and the run apply it. | — |
 

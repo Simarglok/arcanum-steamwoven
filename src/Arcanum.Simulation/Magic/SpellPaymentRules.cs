@@ -66,7 +66,9 @@ public readonly record struct SpellPaymentRecord(bool ChargesFromCells, int Main
 /// <summary>
 /// The result of a payment: the status; the "last cost" the original keeps for reflection (MG15) when the cost is positive;
 /// the worn stores drained and the fatigue damage added (only when applied); the charge spent; whether an item source is
-/// marked magical (the original marks it before testing whether to apply); the cell payment when cells were asked.
+/// marked magical (the original marks it before testing whether to apply); the cell payment when cells were asked. The host
+/// applies the plan whatever the status: a refused cast still has its stores drained (<see cref="SpellPaymentStatus.FatigueRefused"/>,
+/// MG20), and one that fails after paying still has its fatigue damage (<see cref="SpellPaymentStatus.FailedAfterPay"/>).
 /// </summary>
 public sealed record SpellPayment(SpellPaymentStatus Status, int? LastCost, IReadOnlyList<ManaStoreDrain> Drains, int FatigueDamageAdded,
     bool ChargeSpent, bool MarksItemMagical, SpellCellPayment? Cells)
@@ -87,7 +89,8 @@ public sealed record SpellPayment(SpellPaymentStatus Status, int? LastCost, IRea
 /// <item>an item source spends one spell charge (0 refuses, negative is unlimited) and is marked magical;</item>
 /// <item>any other object pays nothing.</item>
 /// </list>
-/// Without <paramref name="apply"/> (the affordability checks) nothing is written, but the cell source is still asked.
+/// Without <paramref name="apply"/> (the affordability checks) no store, damage or charge is written, but the cell source is
+/// still asked and an item source with charges is still marked magical.
 /// </summary>
 public static class SpellPaymentRules
 {
@@ -136,7 +139,7 @@ public static class SpellPaymentRules
         if (rest == 0) return Result(SpellPaymentStatus.Paid, cost, drains);
         if (payer.CurrentFatigue - rest <= FatigueFloor) return Result(SpellPaymentStatus.FatigueRefused, cost, drains);
         if (!apply) return Result(SpellPaymentStatus.Paid, cost, drains);
-        if (unchecked(payer.FatigueDamage + rest) <= 0) return Result(SpellPaymentStatus.FatigueNotSet, cost, drains);
+        if (unchecked(payer.FatigueDamage + rest) <= 0) return Result(SpellPaymentStatus.FatigueNotSet, cost, drains, unchecked(-payer.FatigueDamage));
         var maintainedOrUntimed = spell != NoSpell && (record.MaintainPeriod != 0 || record.DurationSeconds == 0);
         var failed = maintainedOrUntimed && payer.CurrentFatigue - rest < 0;
         return Result(failed ? SpellPaymentStatus.FailedAfterPay : SpellPaymentStatus.Paid, cost, drains, rest);

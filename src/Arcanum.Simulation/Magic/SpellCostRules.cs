@@ -62,7 +62,7 @@ public static class SpellCostRules
 
     /// <summary>The cost the spell UI shows and the AI weighs: <paramref name="cost"/> doubled for a dwarf (any object with
     /// that race), then halved toward zero when the spell's college (spell / 5, for any spell number) is the mastered one.</summary>
-    [OriginalFunction(0x4B1660, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4B1660, OriginalFunctionScope.Partial)]
     public static int CastCost(int cost, int spell, SpellCaster caster)
     {
         if (caster.Race == DwarfRace) cost = unchecked(cost * 2);

@@ -35,8 +35,10 @@ public sealed class SpellPaymentRulesTests
         Assert.AreEqual((14, 14), (SpellCostRules.CheckCost(7, master, false), SpellCostRules.PreAnimationCost(true, 7, 3, master, false)));
         Assert.AreEqual((6, 1, 2), (SpellCostRules.PreAnimationCost(false, 7, 3, master, false), SpellCostRules.CheckCost(9, Human, true),
             SpellCostRules.RunCost(9, 7, master, true)));
-        // Mastery only for spells 0..79 at run time; a non-critter dwarf pays single at run time but double in the UI.
-        Assert.AreEqual((9, 9), (SpellCostRules.RunCost(9, 80, Human with { MasteredCollege = 16 }, false), SpellCostRules.RunCost(9, 7, Human, false)));
+        // Mastery only for spells 0..79 at run time (a negative number's college 0 matches only in the UI cost); a non-critter
+        // dwarf pays single at run time but double in the UI.
+        Assert.AreEqual((9, 4), (SpellCostRules.RunCost(9, -3, Human with { MasteredCollege = 0 }, false), SpellCostRules.CastCost(9, -3, Human with { MasteredCollege = 0 })));
+        Assert.AreEqual(9, SpellCostRules.RunCost(9, 7, Human, false));
         Assert.AreEqual((9, 18), (SpellCostRules.RunCost(9, 7, new(false, SpellCostRules.DwarfRace, -1), false), SpellCostRules.CastCost(9, 7, new(false, SpellCostRules.DwarfRace, -1))));
         Assert.AreEqual(unchecked(int.MaxValue * 2), SpellCostRules.RunCost(int.MaxValue, 100, Dwarf, false), "32-bit wrap");
         Assert.AreEqual((0, -1), (SpellCostRules.RunCost(-3, 7, Human with { MasteredCollege = 1 }, false), SpellCostRules.CastCost(-3, 7, Human with { MasteredCollege = 1 })));
@@ -101,6 +103,13 @@ public sealed class SpellPaymentRulesTests
         var check = SpellPaymentRules.Pay(Critter(0, 0, false, 3), 17, false, 3, Timed, cells);
         Assert.AreEqual((SpellPaymentStatus.Paid, 0), (check.Status, check.Drains.Count));
         Assert.ThrowsExactly<ArgumentException>(() => SpellPaymentRules.Pay(Critter(5, 0, false, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1), 1, true, 3, Timed, cells));
+        // A negative store adds to the rest and is emptied, also after the cost was covered.
+        var negative = SpellPaymentRules.Pay(Critter(20, 0, false, 5, -3), 4, true, 3, Timed, cells);
+        CollectionAssert.AreEqual(new[] { new ManaStoreDrain(0, 4, 1), new ManaStoreDrain(1, -3, 0) }, negative.Drains.ToArray());
+        Assert.AreEqual((SpellPaymentStatus.Paid, 3, true), (negative.Status, negative.FatigueDamageAdded, negative.Drains[1].Emptied));
+        // A check is refused at −15 too, writing nothing.
+        var refusedCheck = SpellPaymentRules.Pay(Critter(0, 0, false, 3), 20, false, 3, Timed, cells);
+        Assert.AreEqual((SpellPaymentStatus.FatigueRefused, 0), (refusedCheck.Status, refusedCheck.Drains.Count));
     }
 
     [TestMethod]
@@ -112,9 +121,10 @@ public sealed class SpellPaymentRulesTests
         Assert.AreEqual((SpellPaymentStatus.Paid, 0, 0, 7), (paid.Status, paid.Drains.Count, paid.FatigueDamageAdded, paid.Cells!.Cells));
         Assert.AreEqual(new SpellCellRequest(SpellPayerKind.Critter, 10, false), paying.Requests.Single());
         Assert.AreEqual(SpellPaymentStatus.CellsRefused, SpellPaymentRules.Pay(new(SpellPayerKind.Item, ItemCharges: 5), 10, true, 168, record, new Cells(false)).Status);
-        // Nothing to pay asks no cells.
+        // Nothing to pay, or no payer, asks no cells.
         var idle = new Cells(true);
         SpellPaymentRules.Pay(Critter(10), 0, true, 168, record, idle);
+        Assert.AreEqual(SpellPaymentStatus.Paid, SpellPaymentRules.Pay(new(SpellPayerKind.None), 10, true, 168, record, idle).Status);
         Assert.AreEqual(0, idle.Requests.Count);
     }
 
@@ -134,7 +144,8 @@ public sealed class SpellPaymentRulesTests
         Assert.IsNull(SpellPaymentRules.Pay(Critter(10), -2, true, 3, Timed, cells).LastCost);
         Assert.AreEqual(SpellPaymentStatus.SpellOutOfRange, SpellPaymentRules.Pay(Critter(10), 5, true, 223, Timed, cells).Status);
         Assert.AreEqual(SpellPaymentStatus.SpellOutOfRange, SpellPaymentRules.Pay(Critter(10), 5, true, -1, Timed, cells).Status);
-        Assert.AreEqual(SpellPaymentStatus.FatigueNotSet, SpellPaymentRules.Pay(Critter(10, -9), 5, true, 3, Timed, cells).Status);
+        var notSet = SpellPaymentRules.Pay(Critter(10, -9), 5, true, 3, Timed, cells);
+        Assert.AreEqual((SpellPaymentStatus.FatigueNotSet, 9), (notSet.Status, notSet.FatigueDamageAdded), "the damage is written as 0");
         Assert.ThrowsExactly<ArgumentNullException>(() => SpellPaymentRules.Pay(null!, 5, true, 3, Timed, cells));
         Assert.ThrowsExactly<ArgumentNullException>(() => SpellPaymentRules.Pay(Critter(1), 5, true, 3, Timed, null!));
     }
