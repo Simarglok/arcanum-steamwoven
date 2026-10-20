@@ -66,8 +66,9 @@ public sealed class AreaMapConversationOriginalTests
         // 35 of the 50 started conversations stop at a generated NPC line, which is not loaded yet.
         Assert.AreEqual((34, 182), (maps, speakers));
         Assert.AreEqual("EntryNotAdmitted=131, ScriptEnded=1, Started=50", string.Join(", ", statuses.Select(s => $"{s.Key}={s.Value}")));
-        Assert.AreEqual((35, 8), (stops.GetValueOrDefault("frontier UnsupportedGeneratedText"), stops.GetValueOrDefault("frontier UnsupportedOperation")));
-        Assert.AreEqual((7, 6), (offered, ended));
+        // ARC-WORLD-043: the ME condition is admitted, so two conversations that stopped at it offer replies (one of them ends).
+        Assert.AreEqual((35, 6), (stops.GetValueOrDefault("frontier UnsupportedGeneratedText"), stops.GetValueOrDefault("frontier UnsupportedOperation")));
+        Assert.AreEqual((9, 7), (offered, ended));
         CollectionAssert.AreEqual(new[] { "scienticians underground lev 2" }, unlisted);
     }
 }
