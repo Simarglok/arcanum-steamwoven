@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4C6170",
+  "name": "basic-skill-training-set",
+  "method": "Arcanum.Simulation.Skills.SkillRules.SetTraining",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 4,
+  "mutantsCaught": 4,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "8d3869696c1c54a917b87f460520e33cbd987677b7d2628f28f2508fedfa756b",
+  "configuration": "Debug"
+}

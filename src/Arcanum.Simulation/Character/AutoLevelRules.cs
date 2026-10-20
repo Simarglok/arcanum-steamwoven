@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Skills;
 
 namespace Arcanum.Simulation.Character;
 
@@ -94,10 +95,10 @@ public static class AutoLevelRules
     public const int PrimaryStats = 8, BasicSkills = 12, TechSkills = 4, Colleges = 16, TechDisciplines = 8;
     public const int SpellsPerCollege = 5, Spells = Colleges * SpellsPerCollege, MaxDegree = 7;
     /// <summary>The skill field's point bits.</summary>
-    public const int SkillPointMask = 63;
+    public const int SkillPointMask = SkillRules.PointMask;
     /// <summary>The bound of hit and fatigue points and adjustments a sheet admits (project policy; the installed critters stay far below).</summary>
     public const int MaxPoolValue = 10_000;
-    private const int MaxSkillLevel = 20, MaxPointStat = 210, MinimumSpellIntelligence = 5;
+    private const int MaxPointStat = 210, MinimumSpellIntelligence = 5;
 
     private static readonly string[][] Tokens =
     [
@@ -110,9 +111,6 @@ public static class AutoLevelRules
         ["maxhps", "maxfatigue"],
     ];
 
-    // Key stats of the basic and tech skills, as source stat indices.
-    private static readonly int[] BasicKeyStats = [1, 1, 1, 1, 1, 1, 5, 5, 4, 6, 4, 7];
-    private static readonly int[] TechKeyStats = [4, 5, 1, 5];
     private static readonly int[] SpellMinimumLevels = [1, 1, 5, 10, 15];
     private static readonly int[] DefaultWillpower = [6, 9, 12, 15, 18];
     private static readonly int[] DegreeCosts = [0, 1, 1, 1, 1, 1, 1, 1];
@@ -215,8 +213,8 @@ public static class AutoLevelRules
     [OriginalFunction(0x4B0F50, OriginalFunctionScope.Full)]
     public static int StatCost(int value) => Math.Clamp(value, 1, 20) <= 1 ? 0 : 1;
 
-    /// <summary>The highest skill level a key stat allows (<see cref="CombatSkillRules.KeyStatCap"/>, 0x4C5F70).</summary>
-    public static int SkillCap(int keyStat) => CombatSkillRules.KeyStatCap(keyStat);
+    /// <summary>The highest skill level a key stat allows (<see cref="SkillRules.KeyStatCap"/>, 0x4C5F70).</summary>
+    public static int SkillCap(int keyStat) => SkillRules.KeyStatCap(keyStat);
 
     /// <summary>The willpower a spell needs when its record names none (0x4502F0, the value before the spell table is loaded;
     /// 0x4502E0 reads the intelligence minimum, 5): 6, 9, 12, 15, 18 by rank; the rank-2 value outside 0..79.</summary>
@@ -296,7 +294,7 @@ public static class AutoLevelRules
             }
             else
             {
-                var key = BasicKeyStats[skill];
+                var key = (int)SkillRules.KeyStat(SkillRules.Basic(skill));
                 var raised = BuyStat(work, key, work.Stats[key] + 1);
                 if (raised != Purchase.Done) return raised;
             }
@@ -322,7 +320,7 @@ public static class AutoLevelRules
             }
             else
             {
-                var key = TechKeyStats[skill];
+                var key = (int)SkillRules.KeyStat(SkillRules.Tech(skill));
                 var raised = BuyStat(work, key, work.Stats[key] + 1);
                 if (raised != Purchase.Done) return raised;
             }
@@ -539,44 +537,40 @@ public static class AutoLevelRules
             return Math.Clamp(value, range.Minimum, range.Maximum);
         }
 
-        // A basic skill's level (0x4C5EB0, the reading CombatSkillRules.Level gives the combat skills): 4 × points (20 for a
-        // monstrous critter's melee), then the effects, clamped 0..20, then capped by the key stat.
+        // A basic skill's level (SkillRules.Level, 0x4C5EB0): 4 × points (20 for a monstrous critter's melee), then the
+        // effects, clamped 0..20, then capped by the effective key stat.
         internal int BasicLevel(int skill)
         {
-            var level = skill == 2 && _sheet.Monstrous ? MaxSkillLevel : 4 * (Basic[skill] & SkillPointMask);
-            level = Math.Clamp(EffectModifiers.Apply(level, Skill(_modifiers.BasicSkills, skill)), 0, MaxSkillLevel);
-            return Math.Min(level, SkillCap(Effective((CharacterStat)BasicKeyStats[skill])));
+            var id = SkillRules.Basic(skill);
+            return SkillRules.Level(id, Basic[skill], Effective(SkillRules.KeyStat(id)), _sheet.Monstrous, Skill(_modifiers.BasicSkills, skill));
         }
 
-        // 0x4C65E0: as the basic level, without the monstrous case.
-        [OriginalFunction(0x4C65E0, OriginalFunctionScope.Partial)]
+        // A tech skill's level (SkillRules.Level, 0x4C65E0): as the basic level, without the monstrous case.
         internal int TechLevel(int skill)
         {
-            var level = Math.Clamp(EffectModifiers.Apply(4 * (Tech[skill] & SkillPointMask), Skill(_modifiers.TechSkills, skill)), 0, MaxSkillLevel);
-            return Math.Min(level, SkillCap(Effective((CharacterStat)TechKeyStats[skill])));
+            var id = SkillRules.Tech(skill);
+            return SkillRules.Level(id, Tech[skill], Effective(SkillRules.KeyStat(id)), false, Skill(_modifiers.TechSkills, skill));
         }
 
-        // 0x4C6000: refused (the stored points returned) when 4 × points is above the key stat's cap;
-        // the training bits stay.
-        [OriginalFunction(0x4C6000, OriginalFunctionScope.Full)]
+        // The basic points setter (SkillRules.SetPoints, 0x4C6000): refused (the stored points returned) when 4 × points is
+        // above the key stat's cap; the training bits stay.
         internal int SetBasicPoints(int skill, int points)
         {
-            if (points < 0) return 0;
-            if (4 * points > SkillCap(Effective((CharacterStat)BasicKeyStats[skill]))) return Basic[skill] & SkillPointMask;
-            Basic[skill] = points | (Basic[skill] & ~SkillPointMask);
-            return points;
+            var id = SkillRules.Basic(skill);
+            var change = SkillRules.SetPoints(id, Basic[skill], points, Effective(SkillRules.KeyStat(id)));
+            Basic[skill] = change.Stored;
+            return change.Points;
         }
 
-        // 0x4C66E0: as the basic setter, and the stored tech points move by the change.
-        [OriginalFunction(0x4C66E0, OriginalFunctionScope.Full)]
+        // The tech points setter (SkillRules.SetPoints, 0x4C66E0): as the basic setter, and the stored tech points move by the
+        // change.
         internal int SetTechPoints(int skill, int points)
         {
-            if (points < 0) return 0;
-            var stored = Tech[skill];
-            if (4 * points > SkillCap(Effective((CharacterStat)TechKeyStats[skill]))) return stored & SkillPointMask;
-            Tech[skill] = points | (stored & ~SkillPointMask);
-            TechPoints = Math.Clamp(TechPoints + points - (stored & SkillPointMask), 0, MaxPointStat);
-            return points;
+            var id = SkillRules.Tech(skill);
+            var change = SkillRules.SetPoints(id, Tech[skill], points, Effective(SkillRules.KeyStat(id)));
+            Tech[skill] = change.Stored;
+            TechPoints = Math.Clamp(TechPoints + change.TechPointsChange, 0, MaxPointStat);
+            return change.Points;
         }
 
         // 0x4B1790 without force (0x4B1790): the college's next rank only, with its character level, intelligence 5 and its
