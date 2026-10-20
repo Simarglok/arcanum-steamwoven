@@ -704,7 +704,7 @@ public partial class TerrainViewerApp
             if (!RouteQuickKey(decision) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
             {
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
-                _hud?.SetNotice("Reserved key: " + _worldLastReserved);
+                _hud?.SetNotice($"Reserved: {routedKey} = {decision.OriginalAction} (NOT IMPLEMENTED)");
             }
         }
         var raw = _worldAdapter.Map(input, _worldFocused);

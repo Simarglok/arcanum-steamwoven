@@ -1062,7 +1062,7 @@ on the live session; on a detached copy every quest and rumor that has a text is
 ### Reserved-key hint (ARC-INPUT-003)
 
 An original key that is reserved, not implemented ([keyboard routing](../input/diagnostic-palette.md#keyboard-routing)),
-is named in the HUD's sticky header ("Reserved key: F1 = Followers: go to point (original; NOT IMPLEMENTED)") until the
+is named in the HUD's sticky header ("Reserved: F1 = Followers: go to point (NOT IMPLEMENTED)") until the
 next key press, so it is visible without scrolling; the detail text keeps its "last reserved key" entry. Native smoke
 after the logbook stage (exterior and map mode): `ARC-INPUT-003 native-smoke reserved-key hint PASS` (F1 pushed through
 the viewport's input path; the notice is in the sticky header, every header line shown inside the panel and the window;

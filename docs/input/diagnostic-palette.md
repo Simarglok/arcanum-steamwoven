@@ -98,8 +98,9 @@ WORLD host (`TerrainViewerWorld.cs`).
    A reserved key has no debug action and is not redirected; the HUD names the last
    one ("F1 = Followers: go to point (original; NOT IMPLEMENTED)") at the end of its
    detail text and, since ARC-INPUT-003, in the sticky header above the scrolled detail
-   ("Reserved key: F1 = …"), visible without scrolling until the next key press.
-   Exception: while
+   ("Reserved: F1 = Followers: go to point (NOT IMPLEMENTED)"), visible without scrolling
+   until the next key press (at window heights below about 550 px the header may then
+   take the whole HUD panel). Exception: while
    `crash-site-area` has a game session, F7/F8 are the original quick save/load on key
    release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011)),
    and while its session inventory exists I toggles the inventory window on key down
@@ -112,9 +113,10 @@ WORLD host (`TerrainViewerWorld.cs`).
    the palette holds the same action. In `crash-site-area` Num Lock flips the original always-run lock and
    Ctrl+LMB on the ground runs once ([ARC-WORLD-020](../world/gait-runtime.md)); while it has a game session R
    toggles the combat mode ([ARC-COMBAT-004](../rendering/terrain-viewer.md#combat-mode-arc-combat-004)). So in `crash-site-area` with a
-   session the keys still reserved are Escape, F1–F6, F10, F12, Enter, Space, Home, 1–0, A, E, F, K, M, O, S,
-   T, V, W and held `,` `.` `/`; without a session (`world-diagnostic`, a map without one) F7, F8, I, C, L and R
-   are reserved too, and Num Lock in `world-diagnostic`. Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
+   session and its inventory the keys still reserved are Escape, F1–F6, F10, F12, Enter, Space, Home, 1–0, A, E,
+   F, K, M, O, S, T, V, W and held `,` `.` `/` (I too when the inventory seed was refused); without a session
+   (`world-diagnostic`, or a map or exterior drawn without a session clock) F7, F8, I, C, L and R are reserved
+   too, and Num Lock in `world-diagnostic`. Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
 3. **Palette route (palette open).** Up/Down navigate, Enter/Space activate,
    Escape/Backspace cancel (close); the numeric editor keeps its native digits,
    Backspace, Enter and Tab. W/S/Q/E/F1 are not palette keys.
