@@ -161,8 +161,9 @@ internal static class DialogConversationGrammar
                 "UW" when first == 0 && second > 0 => new ConversationUnwait(source, second),
                 "UW" when second > 0 => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "WA" when first is 0 or 1 => new ConversationWaiting(source, first == 1),
-                // The original passes any other ME operand without a test (0x4150D0); this subset refuses it.
+                // The original passes any other ME operand without a test (0x4150D0): valid data outside this subset.
                 "ME" when first is 0 or 1 => new ConversationMetBefore(source, first == 1),
+                "ME" => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "FL" when first > 0 => new ConversationFinalLine(source, first),
                 "PS" when first != int.MinValue => new ConversationSkillGate(source, PersuasionSkill, first, false),
                 "HA" when first != int.MinValue => new ConversationSkillGate(source, HaggleSkill, first, false),

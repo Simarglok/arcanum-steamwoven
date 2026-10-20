@@ -260,7 +260,7 @@ public sealed class AreaConversationHost
     /// </summary>
     public bool EndReaction()
     {
-        if (_reactionOpen is not { } speaker) return false;
+        if (_reactionOpen is not { } speaker) { ReactionFailure = GameSessionFailure.None; return false; }
         _reactionOpen = null;
         var ended = State.EndReaction(speaker);
         ReactionFailure = ended.Disposition == GameSessionDisposition.Rejected ? ended.Failure : GameSessionFailure.None;

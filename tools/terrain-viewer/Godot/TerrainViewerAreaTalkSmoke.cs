@@ -78,7 +78,7 @@ public partial class TerrainViewerApp
                 var offered = conversation is { Phase: DialogConversationPhase.AwaitingSelection };
                 var status = conversation is null ? _conversationPanel.OutcomeForSelfTest : "Started";
                 // A start the content or the source refused is a regression of the wiring, not a gap of the dialog runtime.
-                Require(conversation is not null || !(status.Contains(nameof(AreaConversationStartStatus.ContentUnavailable)) || status.Contains(nameof(AreaConversationStartStatus.EntryError))
+                Require(conversation is not null || !(status.Contains(nameof(AreaConversationStartStatus.ContentUnavailable)) || status.Contains(nameof(AreaConversationStartStatus.EntryError)) || status.Contains(nameof(AreaConversationStartStatus.ReactionRejected))
                     || status.Contains(nameof(AreaConversationStartStatus.SourceChanged))), $"script {speaker.ScriptId}: {status}");
                 // ARC-UI-043: the first NPC line's voice plays on the voice channel when the module has its file.
                 var played = _voicesPlayed;

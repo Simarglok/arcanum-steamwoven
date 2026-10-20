@@ -100,7 +100,7 @@ here); exact `i:` (ARC-WORLD-043) is the original's **insult**: offered as `Gene
 picking it runs the reply's action, then a `ReactionCommand` of −10 (`DialogConversation.InsultReaction`) through the world
 port, then reads the effective reaction; at most 20 (`InsultEndsAtOrBelow`) the talk ends as `Ended(Insulted)` with no SCR
 continuation (the NPC's generated reply is not loaded), above 20 its transition follows (0x4191E0). Without a world port, or
-with an action ending in `JO`/`UW`/`FL` (the original then skips the insult), it is offered blocked. `b h l p` (exact) and
+with an action ending in `JO`/`UW`/`FL`/`ET` (the original then skips the insult, read for FL), it is offered blocked. `b h l p` (exact) and
 `c r t z` (prefix) are offered blocked as
 `UnsupportedInteraction`; `d q u x` have state-dependent visibility and make the step a
 frontier. NPC `g:`/`m:`/`r:` (prefix) and exact `i:` are frontiers. Other text is literal.
@@ -117,7 +117,7 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 
 | Field | Admitted operations (domains) |
 | --- | --- |
-| Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1), `ME v` (ARC-WORLD-043; v 1: the NPC has met the PC before, 0: it has not; the original passes any other operand untested, which is refused here); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not); with a skill port `PS n`, `HA n`, `SK s n`, `TR s t` ([skill gates](#skill-gates-arc-skills-004)). |
+| Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1), `ME v` (ARC-WORLD-043; v 1: the NPC has met the PC before, 0: it has not; the original passes any other operand untested; here it is an `UnsupportedOperation` frontier); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not); with a skill port `PS n`, `HA n`, `SK s n`, `TR s t` ([skill gates](#skill-gates-arc-skills-004)). |
 | NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0); with a skill port `TR s t` (set the PC's training). |
 | Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically). |
 

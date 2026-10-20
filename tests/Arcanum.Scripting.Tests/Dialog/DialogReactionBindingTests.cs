@@ -41,7 +41,13 @@ public sealed class DialogReactionBindingTests
         Assert.AreEqual(new DialogResponseId(11), unavailable.Frontier.Response);
         Assert.AreEqual(0, ports.Commands.Count, "a static frontier precedes every effect");
 
-        foreach (var condition in new[] { "ME 2", "ME -1", "ME +1", "ME" })
+        foreach (var condition in new[] { "ME 2", "ME -1" })
+        {
+            // The original passes these without a test: valid data this subset does not run.
+            var other = StartWith(Read(Record("10", "?") + Record("11", "x", iq: "1", condition: condition, response: "0")), new Ports(), new World(), new Memory());
+            Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, other.Frontier!.Kind, condition);
+        }
+        foreach (var condition in new[] { "ME +1", "ME" })
         {
             var invalid = StartWith(Read(Record("10", "?") + Record("11", "x", iq: "1", condition: condition, response: "0")), new Ports(), new World(), new Memory());
             Assert.AreEqual(DialogConversationFailureKind.InvalidOperation, invalid.Failure!.Kind, condition);
@@ -136,6 +142,9 @@ public sealed class DialogReactionBindingTests
             var transfer = StartWith(Read(Record("10", "?") + Record("11", "i:", iq: "1", response: "0", action: action) + Record("30", "!")), new Ports(), new World(), null);
             Assert.AreEqual(DialogOptionBlockKind.UnsupportedInteraction, transfer.Options[0].Block!.Kind, action);
         }
+        var expert = DialogConversation.Start(Read(Record("10", "?") + Record("11", "i:", iq: "1", response: "0", action: "ET 2 30") + Record("30", "!")),
+            Request(), new DialogConversationPorts(new Ports(), new Ports(), Owner(), new World(), Skills: new DialogSkillTests.Skills()));
+        Assert.AreEqual(DialogOptionBlockKind.UnsupportedInteraction, expert.Options[0].Block!.Kind, "ET");
         var prefixed = StartWith(Read(Record("10", "?") + Record("11", "i: more", iq: "1", response: "0")), new Ports(), new World(), null);
         Assert.AreEqual(DialogOptionTextKind.Record, prefixed.Options[0].TextKind, "only an exact marker is an insult");
     }
