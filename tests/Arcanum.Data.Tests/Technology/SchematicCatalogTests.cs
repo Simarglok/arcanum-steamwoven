@@ -174,6 +174,24 @@ public sealed class SchematicCatalogTests
     }
 
     [TestMethod]
+    public void The_tabs_give_the_first_degree_learned_records_and_a_pcs_found_numbers_by_discipline()
+    {
+        var catalog = Catalog(Record(2000) + Record(2010) + Record(2020) + Record(2200) + Record(4000, product: "100") +
+            Record(4010, product: "200") + Record(4020, product: "300") + Record(4030, product: "400"));
+        // 320 has discipline 9 (outside 0..7: left out); 420 is unknown.
+        int? Lookup(int prototype) => prototype switch { 120 => 2, 220 => 2, 320 => 9, _ => null };
+        var tabs = catalog.Tabs([2, 3, 0, 0, 0, 0, 0, 0], [4010, 4000, 4020, 4030], crafterIsPc: true, Lookup);
+        CollectionAssert.AreEqual(new[] { 2000, 2010 }, tabs.Learned[0].ToArray(), "the first two of discipline 0");
+        CollectionAssert.AreEqual(new[] { 2200 }, tabs.Learned[1].ToArray(), "degree 3 but one record: the list ends");
+        Assert.AreEqual(0, tabs.Learned[2].Count);
+        CollectionAssert.AreEqual(new[] { 4010, 4000 }, tabs.Found[2].ToArray(), "in the found list's order");
+        Assert.AreEqual(2, tabs.Found.Sum(t => t.Count));
+        var npc = catalog.Tabs([2, 3, 0, 0, 0, 0, 0, 0], [4010], crafterIsPc: false, Lookup);
+        Assert.IsTrue(npc.Found.All(t => t.Count == 0), "an NPC crafter has only the learned tab");
+        Assert.ThrowsExactly<ArgumentException>(() => catalog.Tabs([1], [], true, Lookup));
+    }
+
+    [TestMethod]
     public void A_learned_range_the_full_list_cannot_hold_is_refused_TC11()
     {
         // Entry 2000 missing: the count is 0 and no list is built (no refusal).

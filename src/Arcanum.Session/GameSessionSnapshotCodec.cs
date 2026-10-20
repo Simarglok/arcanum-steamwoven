@@ -40,7 +40,7 @@ public static class GameSessionSnapshotCodec
     /// it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
     public const int MaxEncodedCharacters = 96 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "durability", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "sound", "events", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "sound", "events", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -71,6 +71,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
     private static readonly string[] WornFields = ["slot", "entity", "item"];
     private static readonly string[] DurabilityFields = ["items", "destroyed"];
+    private static readonly string[] SchematicsFields = ["found"];
     private static readonly string[] ItemConditionFields = ["entity", "points", "adjustment", "damage", "broken", "inventoryArtBroken"];
     private static readonly string[] EquipmentItemFields = ["kind", "complexity", "noDrop", "broken", "uber", "light", "usesShieldLocation",
         "hp", "maxHp", "weapon", "armor"];
@@ -331,6 +332,12 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteStartArray("destroyed");
             foreach (var entity in snapshot.Durability.Destroyed) w.WriteStringValue(entity);
+            w.WriteEndArray();
+            w.WriteEndObject();
+
+            w.WriteStartObject("schematics");
+            w.WriteStartArray("found");
+            foreach (var number in snapshot.Schematics.Found) w.WriteNumberValue(number);
             w.WriteEndArray();
             w.WriteEndObject();
 
@@ -604,7 +611,7 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
@@ -1214,6 +1221,17 @@ public static class GameSessionSnapshotCodec
             worn[i] = new(slot, entity, EquipmentItemValue(f["item"], path + ".item"));
         }
         return new(worn);
+    }
+
+    // The found numbers in registration order (not sorted); repeats, the hero's presence and the limit are Restore's.
+    private static SessionSchematicState Schematics(JsonElement element)
+    {
+        const string p = "$.schematics";
+        var f = Fields(element, p, SchematicsFields);
+        var rows = Array(f["found"], p + ".found", GameSessionLimits.PolicyMaxFoundSchematics);
+        var found = new int[rows.Length];
+        for (var i = 0; i < rows.Length; i++) found[i] = Int(rows[i], $"{p}.found[{i}]", int.MinValue, int.MaxValue);
+        return new([.. found]);
     }
 
     // Shapes, ranges and strictly ascending ordinal entities in each list; the record budget, a deleted item with a record and the

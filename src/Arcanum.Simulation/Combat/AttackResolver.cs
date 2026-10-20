@@ -1,3 +1,6 @@
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Skills;
+
 namespace Arcanum.Simulation.Combat;
 
 /// <summary>
@@ -92,18 +95,17 @@ public static class AttackResolver
             }
             else if (proceed)
             {
-                var effectiveness = AttackRules.AttackEffectiveness(
-                    request.Skill, request.SkillLevel, attacker.ExtraordinaryIntelligence, attacker.IsPc, request.Difficulty,
-                    target.Conditions.HasFlag(CombatantConditions.MagneticInversion));
-                difficulty = AttackDifficultyOf(request, effectiveness, magicCancelled, profile);
-                attackCheck = AttackCheck(request, effectiveness, difficulty.Total, magicCancelled, rolls);
+                var check = SkillCheckRules.Run(AttackCheckRequest(request, magicCancelled),
+                    new CheckRolls(rolls, CombatRollPurpose.AttackCheck, CombatRollPurpose.AttackCritical), profile.InvocationModifierCountedTwice);
+                difficulty = AttackDifficultyOf(check.Difficulty, profile);
+                attackCheck = check.Check;
                 hit = attackCheck.Success;
                 critical = attackCheck.Critical;
                 if (!hit) missCause = AttackMissCause.SkillCheck;
 
                 if (hit)
                 {
-                    dodgeCheck = DodgeCheck(target, request.Difficulty, rolls);
+                    dodgeCheck = DodgeCheck(target, request.Difficulty, rolls, profile);
                     if (dodgeCheck.Success)
                     {
                         hit = false;
@@ -179,126 +181,121 @@ public static class AttackResolver
         new(refusal, AttackOutcome.Refused, AttackMissCause.None, HitLocation.Torso, false, false, null, null, null,
             FateUse.None, false, null, rolls.Rolls.ToArray());
 
-    private static AttackDifficulty AttackDifficultyOf(
-        AttackRequest request, int effectiveness, bool magicCancelled, CombatAnomalyProfile profile)
+    // The shared skill check of the attack (ARC-SKILLS-003): the attacker's combat skill against the critter target.
+    private static SkillCheckRequest AttackCheckRequest(AttackRequest request, bool magicCancelled)
     {
         var attacker = request.Attacker;
         var target = request.Target;
         var weapon = request.Weapon;
-
-        var invocation = request.TargetWasInBed ? -30 : 0;
-        // A2: the source starts the difficulty from the invocation modifier and then adds it again.
-        if (profile.InvocationModifierCountedTwice) invocation *= 2;
-
-        var weaponPart = 0;
-        if (weapon.Kind == WeaponKind.Weapon)
+        var armed = weapon.Kind == WeaponKind.Weapon;
+        var magic = armed && !magicCancelled;
+        var item = weapon.Kind != WeaponKind.Unarmed;
+        var trueBackstab = request.Backstab == BackstabKind.TrueBackstab;
+        return new SkillCheckRequest
         {
-            weaponPart -= weapon.ToHitBonus + (magicCancelled ? 0 : weapon.MagicToHitAdjustment);
-            var shortfall = weapon.MinimumStrength - attacker.Strength;
-            if (shortfall > 0) weaponPart += 5 * shortfall;
-        }
-
-        var conditions = target.Conditions;
-        var awareness = 0;
-        if (conditions.HasFlag(CombatantConditions.Paralyzed)) awareness = -50;
-        else if (conditions.HasFlag(CombatantConditions.Unconscious)) awareness = -50;
-        else if ((conditions & (CombatantConditions.FallingDown | CombatantConditions.Stunned)) != 0) awareness = -30;
-        else if (conditions.HasFlag(CombatantConditions.Sleeping)) awareness = -50;
-        else if (request.TargetUnaware) awareness = -30;
-
-        var aim = 0;
-        if (request.AimedLocation is { } aimed)
-        {
-            var penalty = AttackRules.HitLocationPenalty(aimed);
-            if (request.Skill == CombatSkill.Firearms && request.Training >= SkillTraining.Expert) penalty = 2 * penalty / 3;
-            aim = -penalty;
-        }
-
-        var armor = 0;
-        if (!(request.Backstab == BackstabKind.TrueBackstab && attacker.BackstabTraining != SkillTraining.None))
-        {
-            armor = effectiveness * (target.ArmorClass / 2) / 100;
-        }
-
-        var range = 0;
-        var cover = 0;
-        if (request.Skill != CombatSkill.Melee)
-        {
-            if (request.Distance > weapon.Range) range += AttackRules.Impossible;
-            if (request.Training < SkillTraining.Master)
+            Skill = SkillRules.Of(request.Skill),
+            Level = request.SkillLevel,
+            Training = request.Training,
+            Effectiveness = new()
             {
-                var extra = request.Distance - attacker.Perception / 2;
-                if (extra > 0) range += 5 * extra;
-            }
-            if (request.LineOfFireBlocked) range += AttackRules.Impossible;
-            else if (request.CoverRating > 0) cover = request.CoverRating;
-        }
-
-        var light = AttackRules.LightPenalty(target.LightLevel, attacker.LightEmission,
-            attacker.Conditions.HasFlag(CombatantConditions.DarkSight), attacker.Conditions.HasFlag(CombatantConditions.Undead),
-            request.Skill, request.Training);
-
-        var injury = 0;
-        if (attacker.Conditions.HasFlag(CombatantConditions.Blinded)) injury += 30;
-        if (attacker.Conditions.HasFlag(CombatantConditions.CrippledArmsBoth)) injury += 50;
-        else if (attacker.Conditions.HasFlag(CombatantConditions.CrippledArmOne)) injury += 20;
-
-        return new AttackDifficulty(invocation, weaponPart, awareness, aim, armor, range, cover, light, injury);
+                TargetMagneticInversion = target.Conditions.HasFlag(CombatantConditions.MagneticInversion),
+                ExtraordinaryIntelligence = attacker.ExtraordinaryIntelligence,
+                LocalPc = attacker.IsPc,
+                Difficulty = request.Difficulty,
+            },
+            Difficulty = new()
+            {
+                Modifier = request.TargetWasInBed ? -30 : 0,
+                Weapon = armed,
+                WeaponToHit = weapon.ToHitBonus + (magic ? weapon.MagicToHitAdjustment : 0),
+                WeaponMinimumStrength = weapon.MinimumStrength,
+                SourceStrength = attacker.Strength,
+                Target = true,
+                TargetCritter = true,
+                TargetConditions = TargetConditionsOf(target.Conditions),
+                TargetUnaware = request.TargetUnaware,
+                TargetArmorClass = target.ArmorClass,
+                TrueBackstabByTrained = trueBackstab && attacker.BackstabTraining != SkillTraining.None,
+                AimedLocation = request.AimedLocation,
+                Distance = request.Distance,
+                Range = weapon.Range,
+                SourcePerception = attacker.Perception,
+                LineOfFireBlocked = request.LineOfFireBlocked,
+                Cover = request.CoverRating,
+                Light = target.LightLevel,
+                SourceLight = attacker.LightEmission,
+                SourceDarkSight = attacker.Conditions.HasFlag(CombatantConditions.DarkSight),
+                SourceUndead = attacker.Conditions.HasFlag(CombatantConditions.Undead),
+                SourceInjuries = InjuriesOf(attacker.Conditions),
+            },
+            Critical = new()
+            {
+                AimedLocation = request.AimedLocation,
+                WeaponMagicCriticalHit = magic ? weapon.MagicCriticalHitChance : 0,
+                WeaponMagicCriticalMiss = magic ? weapon.MagicCriticalMissChance : 0,
+                Item = item,
+                ItemHitPoints = item ? weapon.Hp : 0,
+                ItemMaxHitPoints = item ? weapon.MaxHp : 0,
+                BackstabTerm = trueBackstab
+                    ? AttackRules.TrueBackstabCriticalBonus(attacker.BackstabLevel, attacker.BackstabTraining, target.Level)
+                    : 0,
+                CriticalHitEffects = Adjustment(attacker.CriticalHitChanceAdjustment),
+                CriticalMissEffects = Adjustment(attacker.CriticalMissChanceAdjustment),
+            },
+        };
     }
 
-    private static SkillCheck AttackCheck(
-        AttackRequest request, int effectiveness, int difficulty, bool magicCancelled, CombatRollLog rolls)
-    {
-        var attacker = request.Attacker;
-        var weapon = request.Weapon;
-        var roll = rolls.D100(CombatRollPurpose.AttackCheck);
-        var success = difficulty + roll <= effectiveness;
-        var criticalRoll = rolls.D100(CombatRollPurpose.AttackCritical);
-        int chance;
-        if (success)
-        {
-            var backstab = request.Backstab == BackstabKind.TrueBackstab
-                ? AttackRules.TrueBackstabCriticalBonus(attacker.BackstabLevel, attacker.BackstabTraining, request.Target.Level)
-                : 0;
-            chance = AttackRules.CriticalHitChance(effectiveness, request.AimedLocation,
-                weapon.Kind == WeaponKind.Weapon && !magicCancelled ? weapon.MagicCriticalHitChance : 0, backstab,
-                attacker.CriticalHitChanceAdjustment);
-        }
-        else if (request.Skill == CombatSkill.Melee && request.Training == SkillTraining.Master)
-        {
-            // A melee master never fails critically.
-            return new SkillCheck(effectiveness, difficulty, roll, false, 0, criticalRoll, false);
-        }
-        else
-        {
-            var hasItem = weapon.Kind != WeaponKind.Unarmed;
-            chance = AttackRules.CriticalMissChance(effectiveness, hasItem ? weapon.Hp : 0, hasItem ? weapon.MaxHp : 0,
-                weapon.Kind == WeaponKind.Weapon && !magicCancelled ? weapon.MagicCriticalMissChance : 0,
-                attacker.CriticalMissChanceAdjustment);
-        }
-        return new SkillCheck(effectiveness, difficulty, roll, success, chance, criticalRoll, criticalRoll <= chance);
-    }
+    // The attack's difficulty terms; A2 shows in the invocation term (the source starts from the modifier and adds it again).
+    private static AttackDifficulty AttackDifficultyOf(SkillDifficulty d, CombatAnomalyProfile profile) =>
+        new(profile.InvocationModifierCountedTwice ? 2 * d.Modifier : d.Modifier, d.Weapon, d.Awareness, d.Aim, d.ArmorClass,
+            d.Range, d.Cover, d.Light, d.Injury);
 
-    private static SkillCheck DodgeCheck(Combatant target, GameDifficulty gameDifficulty, CombatRollLog rolls)
+    // The dodge is the target's shared dodge check: only its blindness and crippled legs make it harder.
+    private static SkillCheck DodgeCheck(Combatant target, GameDifficulty gameDifficulty, CombatRollLog rolls, CombatAnomalyProfile profile)
     {
-        var effectiveness = AttackRules.DodgeEffectiveness(target.DodgeLevel, target.ExtraordinaryIntelligence, target.IsPc, gameDifficulty);
-        var difficulty = 0;
-        if (target.Conditions.HasFlag(CombatantConditions.Blinded)) difficulty += 30;
-        if (target.Conditions.HasFlag(CombatantConditions.CrippledLegsBoth)) difficulty += 30;
-        var roll = rolls.D100(CombatRollPurpose.DodgeCheck);
-        var success = difficulty + roll <= effectiveness;
-        var criticalRoll = rolls.D100(CombatRollPurpose.DodgeCritical);
-        var chance = success
-            ? AttackRules.CriticalHitChance(effectiveness, null, 0, 0, target.CriticalHitChanceAdjustment)
-            : AttackRules.CriticalMissChance(effectiveness, 0, 0, 0, target.CriticalMissChanceAdjustment);
-        var critical = criticalRoll <= chance;
+        var request = new SkillCheckRequest
+        {
+            Skill = Skill.Dodge,
+            Level = target.DodgeLevel,
+            Training = target.DodgeTraining,
+            Effectiveness = new()
+            {
+                ExtraordinaryIntelligence = target.ExtraordinaryIntelligence,
+                LocalPc = target.IsPc,
+                Difficulty = gameDifficulty,
+            },
+            Difficulty = new() { SourceInjuries = InjuriesOf(target.Conditions) },
+            Critical = new()
+            {
+                CriticalHitEffects = Adjustment(target.CriticalHitChanceAdjustment),
+                CriticalMissEffects = Adjustment(target.CriticalMissChanceAdjustment),
+            },
+        };
+        var check = SkillCheckRules.Run(request, new CheckRolls(rolls, CombatRollPurpose.DodgeCheck, CombatRollPurpose.DodgeCritical),
+            profile.InvocationModifierCountedTwice).Check;
         // The source rolls first and then fails the dodge of a critter that cannot move.
-        if ((target.Conditions & DodgeDisabled) != 0)
-        {
-            success = false;
-            critical = false;
-        }
-        return new SkillCheck(effectiveness, difficulty, roll, success, chance, criticalRoll, critical);
+        return (target.Conditions & DodgeDisabled) != 0 ? check with { Success = false, Critical = false } : check;
+    }
+
+    private static SkillTargetConditions TargetConditionsOf(CombatantConditions c) =>
+        (c.HasFlag(CombatantConditions.Paralyzed) ? SkillTargetConditions.Paralyzed : 0)
+        | (c.HasFlag(CombatantConditions.Unconscious) ? SkillTargetConditions.Unconscious : 0)
+        | (c.HasFlag(CombatantConditions.FallingDown) ? SkillTargetConditions.FallingDown : 0)
+        | (c.HasFlag(CombatantConditions.Stunned) ? SkillTargetConditions.Stunned : 0)
+        | (c.HasFlag(CombatantConditions.Sleeping) ? SkillTargetConditions.Sleeping : 0);
+
+    private static SkillSourceInjuries InjuriesOf(CombatantConditions c) =>
+        (c.HasFlag(CombatantConditions.Blinded) ? SkillSourceInjuries.Blinded : 0)
+        | (c.HasFlag(CombatantConditions.CrippledArmOne) ? SkillSourceInjuries.CrippledArmOne : 0)
+        | (c.HasFlag(CombatantConditions.CrippledArmsBoth) ? SkillSourceInjuries.CrippledArmsBoth : 0)
+        | (c.HasFlag(CombatantConditions.CrippledLegsBoth) ? SkillSourceInjuries.CrippledLegsBoth : 0);
+
+    private static IReadOnlyList<EffectModifier> Adjustment(int value) =>
+        value == 0 ? [] : [new EffectModifier(StatModifierOperator.Add, value)];
+
+    private sealed class CheckRolls(CombatRollLog log, CombatRollPurpose check, CombatRollPurpose critical) : ISkillCheckRolls
+    {
+        public int D100(SkillCheckRoll roll) => log.D100(roll == SkillCheckRoll.Check ? check : critical);
     }
 
     private static AttackDamage Damage(

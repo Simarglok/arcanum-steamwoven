@@ -11,6 +11,10 @@ public sealed record SchematicRecordRead(TechnologyDataStatus Status, SchematicR
 
 public sealed record SchematicAlternativesParse(TechnologyDataStatus Status, SchematicAlternatives? Alternatives);
 
+/// <summary>The window's tabs of one crafter (ARC-TECHNOLOGY-003): per discipline 0..7 the learned and the found record numbers
+/// in the window's order.</summary>
+public sealed record SchematicTabs(IReadOnlyList<IReadOnlyList<int>> Learned, IReadOnlyList<IReadOnlyList<int>> Found);
+
 /// <summary>
 /// ARC-TECHNOLOGY-001: the schematic data the original's schematic window loads at its init (contract docs/formats/schematics.md,
 /// ledger "Schematic data"): the records of <c>rules\schematic.mes</c> and the texts of <c>mes\schematic_text.mes</c>, both from
@@ -203,6 +207,41 @@ public sealed class SchematicCatalog
             throw new ArgumentException("Eight stored degrees 0..7 are required.", nameof(degrees));
         CheckDiscipline(discipline);
         return Select(LearnedStarts, degrees[discipline], discipline, page, static _ => null);
+    }
+
+    /// <summary>
+    /// The window's two tabs for a crafter (0x56D130, its list part; ARC-TECHNOLOGY-003): the learned tab of each discipline is
+    /// the first "stored degree" records of the full list (intelligence does not hide any: it only lowers the expertise); the
+    /// found tab, for a PC crafter only, the crafter's found numbers in list order, each in the discipline
+    /// <see cref="Discipline"/> gives. A found number whose discipline is unknown or outside 0..7 is left out (the original
+    /// counts it at that index of an eight-entry table, past its end). An NPC crafter has no found tab.
+    /// </summary>
+    [OriginalFunction(0x56D130, OriginalFunctionScope.Partial)]
+    public SchematicTabs Tabs(IReadOnlyList<int> degrees, IReadOnlyList<int> found, bool crafterIsPc, Func<int, int?> prototypeDiscipline)
+    {
+        ArgumentNullException.ThrowIfNull(degrees);
+        ArgumentNullException.ThrowIfNull(found);
+        ArgumentNullException.ThrowIfNull(prototypeDiscipline);
+        if (degrees.Count != TechTexts.Disciplines || degrees.Any(d => d is < 0 or >= TechTexts.Degrees))
+            throw new ArgumentException("Eight stored degrees 0..7 are required.", nameof(degrees));
+        var learned = new List<int>[TechTexts.Disciplines];
+        var foundTabs = new List<int>[TechTexts.Disciplines];
+        for (var d = 0; d < TechTexts.Disciplines; d++) { learned[d] = []; foundTabs[d] = []; }
+        for (var d = 0; d < TechTexts.Disciplines; d++)
+            for (var page = 0; page < degrees[d] && SelectLearned(degrees, d, page) is var number and >= 0; page++) learned[d].Add(number);
+        if (crafterIsPc)
+            foreach (var number in found)
+                if (Discipline(number, prototypeDiscipline) is { } discipline and >= 0 and < TechTexts.Disciplines) foundTabs[discipline].Add(number);
+        return new(Array.AsReadOnly(learned.Select(l => (IReadOnlyList<int>)l.AsReadOnly()).ToArray()),
+            Array.AsReadOnly(foundTabs.Select(l => (IReadOnlyList<int>)l.AsReadOnly()).ToArray()));
+    }
+
+    /// <summary>The prototype-discipline lookup of <see cref="Discipline"/> over the item discipline field (0x61) of prototypes
+    /// (<see cref="Combat.CombatFieldReader.ReadPrototype"/>); null for a prototype that is missing or not an item.</summary>
+    public static Func<int, int?> PrototypeDisciplines(Func<int, Characters.PrototypeFile> lookup)
+    {
+        ArgumentNullException.ThrowIfNull(lookup);
+        return prototype => Combat.CombatFieldReader.ReadPrototype(lookup, prototype).Fields?.Item?.Discipline;
     }
 
     /// <summary>The record the window shows for a selection: the selected record, or for −1 (an empty tab) the placeholder

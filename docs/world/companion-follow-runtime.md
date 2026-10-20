@@ -120,7 +120,9 @@ frame key), like the other load checks; it is not a runtime failure.
   (`AreaCompanionGroup.Light`: the original's object colour (F0) at its current cell over the map's tile classes and stationary
   lights); moved companion bodies on the exterior are lit at their current cell the same way. The hover index names and
   picks it where it is drawn, and a click talks to it through the exterior conversation host (its dialog state stays
-  on the exterior map).
+  on the exterior map). In map mode a companion that the shown map's host does not hold talks through its own host over
+  its home map's state (ARC-WORLD-048, [map mode](../rendering/area-map-mode.md#companions-arc-world-037)); the rule is
+  the same: one identity, one dialog state, wherever it stands.
 
 ## Viewer binding
 
@@ -147,6 +149,9 @@ frame key), like the other load checks; it is not a runtime failure.
 - `tests/Arcanum.TerrainViewer.Tests/AreaCompanionTests.cs`: the overlay rule (moved record, destination and shoulder
   actors, precedence, core edge), placement packing, a companion following the PC through the session party and drawn
   on its cell, waiting, the jump, and the placement surviving a save and load.
+- `tests/Arcanum.TerrainViewer.Tests/AreaVisitorTalkTests.cs` (ARC-WORLD-048): a visitor's host reads and writes its home map's
+  dialog keys and slot, follows through the session party, keeps its state over a save and load, a companion without a kept
+  body is reported, and a give-item without the home seed is refused.
 - `tests/Arcanum.TerrainViewer.Tests/VirgilFollowOriginalTests.cs` (opt-in `RealData`, `ARC_AREA_ORIGINAL=1` and the
   `ARC_AREA_*` roles): on the authenticated exterior the viewer host joins Virgil through his first talk, node 385
   then opens, and from his T0 chart cell (31,34) he follows a PC at (42,33) to (40,34) in two plans; the cell survives
