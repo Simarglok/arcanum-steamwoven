@@ -52,7 +52,7 @@ Spell ranks are the `AdvancementTrack.College` lane of the shared [character poi
 **before** the learn's checks (0x57C540: "not enough points" first), learns it unforced with the sheet's level and its
 effective intelligence and willpower (stat effects and poison), and unlearns the highest rank for the same refund (0x57C670).
 The pool keeps the editor's floor: only ranks learned since the editor opened can be unlearned, and once it closes never
-(owner rule 2026-10-20). Refusals: `NotEnoughPoints`, `LevelTooLow`, `StatTooLow` (intelligence or willpower named),
+(owner rule 2026-10-20). Refusals: `NotEnoughPoints`, `LevelTooLow`, `IntelligenceTooLow` (as a tech degree's), `StatTooLow` (willpower named),
 `AtMaximum` (five ranks), `AtMinimum` (no rank), `AtFloor`. Lowering intelligence or willpower in the editor is refused while a
 known rank needs it (`SpellNeedsStat`).
 

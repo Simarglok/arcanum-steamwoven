@@ -29,11 +29,12 @@ public enum PointChangeStatus
     DegreeNeedsStat,
     /// <summary>The track's lane was not given (the session gives spell ranks and tech degrees theirs).</summary>
     LaneNotReady,
-    /// <summary>Raising a tech degree needs more effective intelligence than the critter has (ARC-TECHNOLOGY-002).</summary>
+    /// <summary>Raising a tech degree (ARC-TECHNOLOGY-002) or learning a spell rank (ARC-MAGIC-004) needs more effective
+    /// intelligence than the critter has.</summary>
     IntelligenceTooLow,
     /// <summary>The character level is below the step's minimum (a spell rank's 1, 1, 5, 10, 15).</summary>
     LevelTooLow,
-    /// <summary>A stat is below the step's minimum (a spell rank's intelligence or willpower; <see cref="PointChange.Stat"/> names it).</summary>
+    /// <summary>Another stat is below the step's minimum (a spell rank's willpower; <see cref="PointChange.Stat"/> names it).</summary>
     StatTooLow,
     /// <summary>An input outside the rules' domain (an invalid sheet or modifiers, an undefined track, an index out of range,
     /// a lane step that changes fields other than its own, moves its value by other than one step, charges other than its
@@ -77,7 +78,8 @@ public readonly record struct PointLaneStep(PointChangeStatus Status, Advancemen
 public interface IPointLane
 {
     /// <summary>The character points the next step up of <paramref name="index"/> costs: the pool tests them against the unspent
-    /// points before it asks for the step, as the original's editor does.</summary>
+    /// points before it asks for the step, as the original's editor does. The pool admits the sheet and the index first; a lane
+    /// may throw or answer anything for an invalid one.</summary>
     int Cost(AdvancementSheet sheet, int index);
 
     /// <summary>One step up of <paramref name="index"/> (a college or a discipline) and its cost, or a refusal.</summary>

@@ -43,7 +43,7 @@ public sealed class SpellRankLane : IPointLane
         {
             SpellBookStatus.Done => Step(sheet, change, SpellCostRules.RankPointCost(spell)),
             SpellBookStatus.LevelTooLow => new(PointChangeStatus.LevelTooLow, sheet, 0),
-            SpellBookStatus.IntelligenceTooLow => new(PointChangeStatus.StatTooLow, sheet, 0, CharacterStat.Intelligence),
+            SpellBookStatus.IntelligenceTooLow => new(PointChangeStatus.IntelligenceTooLow, sheet, 0, CharacterStat.Intelligence),
             SpellBookStatus.WillpowerTooLow => new(PointChangeStatus.StatTooLow, sheet, 0, CharacterStat.Willpower),
             _ => new(PointChangeStatus.Invalid, sheet, 0),
         };

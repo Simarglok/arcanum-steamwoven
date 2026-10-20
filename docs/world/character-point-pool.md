@@ -65,7 +65,7 @@ its own fields (a rank and the magick points, a degree and the tech points) and 
 pool tests the cost against the unspent points before it asks for the step (as the editor does, SB8), checks the floor, and refuses as `Invalid` a step that leaves an invalid sheet, changes any field but the track's own (the index's
 rank or degree and its magick or tech points; the unspent points and the mastery included), charges other than its stated
 cost, or moves the value by anything but one step in the asked direction; then it moves the unspent points. A lane's refusal
-passes through with the stat it names (`LevelTooLow`, `StatTooLow`). The session
+passes through with the stat it names (`LevelTooLow`, `IntelligenceTooLow`, `StatTooLow`). The session
 names each track's lane in one place (`PointLane`).
 
 ## Differences from the original

@@ -116,7 +116,7 @@ public sealed class SpellBookRulesTests
         Assert.AreEqual(PointChangeStatus.NotEnoughPoints, Learn(Sheet(unspent: 0) with { Level = 0 }).Status, "the points before the learn's checks");
         Assert.AreEqual(PointChangeStatus.LevelTooLow, Learn(Sheet(level: 0)).Status);
         var dull = Learn(Sheet(), AdvancementModifiers.None with { Stats = [new(CharacterStat.Intelligence, StatModifierOperator.Add, -4)] });
-        Assert.AreEqual((PointChangeStatus.StatTooLow, (CharacterStat?)CharacterStat.Intelligence), (dull.Status, dull.Stat), "the effective value");
+        Assert.AreEqual((PointChangeStatus.IntelligenceTooLow, (CharacterStat?)CharacterStat.Intelligence), (dull.Status, dull.Stat), "the effective value");
         var weak = Learn(Sheet() with { Stats = Sheet().Stats.SetItem(6, 5) });
         Assert.AreEqual((PointChangeStatus.StatTooLow, (CharacterStat?)CharacterStat.Willpower), (weak.Status, weak.Stat));
         Assert.AreEqual(PointChangeStatus.AtMaximum, Learn(Sheet() with { Colleges = Sheet().Colleges.SetItem(5, 5) }).Status);
