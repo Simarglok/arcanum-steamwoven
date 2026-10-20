@@ -244,6 +244,16 @@ class OracleSelfTest(unittest.TestCase):
                                    (oracle_functions.MONSTROUS, (handle[0] + 1, handle[1]))):
             with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
                 call(address, *arguments)
+        recorder = oracle_functions.Recorder([])
+        stubs = oracle_functions.critter_stubs(draws[0][1], recorder)
+        self.assertEqual(call(oracle_functions.NETWORK_GATE), 1)
+        call(oracle_functions.ARRAY_SETTER, *handle, 0xDD, 3, 0x41)
+        call(oracle_functions.EDUCATOR, *handle)
+        self.assertEqual((recorder.writes, recorder.educated), ([(3, 0x41)], 1))
+        for address, arguments in ((oracle_functions.ARRAY_SETTER, (*handle, 0xDE, 0, 1)), (oracle_functions.ARRAY_SETTER, (*handle, 0xDD, 12, 1)),
+                                   (oracle_functions.EDUCATOR, (handle[0], handle[1] + 1))):
+            with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
+                call(address, *arguments)
 
     def test_the_registry_names_five_functions_with_their_own_code_first(self):
         self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4A68B0, 0x4A6900, 0x4A6980, 0x4C5EB0, 0x4C6170])

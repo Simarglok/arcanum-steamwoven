@@ -21,7 +21,8 @@ tests in `tests/Arcanum.Session.Tests/Verification` keep all four consistent.
 | `method` | the implementing method (`Namespace.Type.Method`) of a `full` or `partial` row; empty otherwise |
 
 The registry covers the experience functions of ARC-WORLD-030 (three full at F3 by the oracle; progress since its XP3
-switch, ARC-WORLD-033: a known difference keeps a row from `full` until it is implemented), the audio rows (ARC-DATA-040,
+switch, ARC-WORLD-033: a known difference keeps a row from `full` until it is implemented), the skill rules of
+ARC-SKILLS-001 (the basic level and the basic training setter partial at F3 by the oracle, the others F2), the audio rows (ARC-DATA-040,
 F2, [audio study](../research/audio-evidence.md), marking methods of `Arcanum.Data`, which declares its own attribute; `Arcanum.Scripting`
 does the same since ARC-SCRIPT-013),
 the rows other tasks added, and since ARC-DEV-009 and ARC-DEV-010 the original functions the Simulation, Session and Data code implements and names (F2 where

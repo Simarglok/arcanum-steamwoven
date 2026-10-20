@@ -163,8 +163,16 @@ def draw_critter(rng: random.Random) -> tuple[int, Critter]:
                           int(rng.random() < 0.35), effect)
 
 
-def critter_stubs(critter: Critter, writes: list[tuple[int, int]] | None = None, educated: list[int] | None = None) -> dict:
-    """Stubs answering from one critter; any other object, field, index, stat or skill is rejected."""
+@dataclass
+class Recorder:
+    """What a training-set run did: the array writes (index, value) and the Educator updates."""
+    writes: list[tuple[int, int]]
+    educated: int = 0
+
+
+def critter_stubs(critter: Critter, recorder: Recorder | None = None) -> dict:
+    """Stubs answering from one critter; any other object, field, index, stat or skill is rejected. With a recorder the
+    array write, the Educator update and the network test (single player) are stubbed too."""
     from oracle_emu import StubRejected
 
     def same(argument) -> None:
@@ -201,14 +209,14 @@ def critter_stubs(critter: Critter, writes: list[tuple[int, int]] | None = None,
 
     stubs = {FIELD_GETTER: field, ARRAY_GETTER: lambda argument: critter.skills[index(argument)], STAT_GETTER: stat,
              MONSTROUS: monstrous, SKILL_EFFECTS: effects}
-    if writes is not None:
+    if recorder is not None:
         def write(argument) -> int:
-            writes.append((index(argument), argument(4)))
+            recorder.writes.append((index(argument), argument(4)))
             return 0
 
         def educator(argument) -> int:
             same(argument)
-            educated.append(1)
+            recorder.educated += 1
             return 0
         stubs.update({ARRAY_SETTER: write, EDUCATOR: educator, NETWORK_GATE: lambda argument: 1})
     return stubs
@@ -262,7 +270,8 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
         document.update(fields=["from", "to", "result"])
     elif spec.model in ("skill-level", "training-set"):
         from oracle_emu import to_signed
-        readable = tuple(Range(start, end) for start, end in (KEY_STAT_TABLE, TRAINING_MINIMA, SKILL_CAPS))
+        tables = (KEY_STAT_TABLE, SKILL_CAPS) if spec.model == "skill-level" else (KEY_STAT_TABLE, TRAINING_MINIMA, SKILL_CAPS)
+        readable = tuple(Range(start, end) for start, end in tables)
         for case in range(count):
             skill, critter = draw_critter(rng)
             row = [skill, critter.skills[skill], critter.monstrous, critter.effect, *critter.stats]
@@ -270,13 +279,13 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
                 row.append(emulator.call(spec.address, (*HANDLE, skill), code=code, stubs=critter_stubs(critter), readable=readable))
             else:
                 training = rng.randint(0, 3) if rng.random() < 0.95 else rng.choice((-1, 4, 5))
-                writes: list[tuple[int, int]] = []
-                educated: list[int] = []
+                recorder = Recorder([])
                 result = emulator.call(spec.address, (*HANDLE, skill, training), code=code,
-                                       stubs=critter_stubs(critter, writes, educated), readable=readable)
-                if len(writes) > 1 or (writes and writes[0][0] != skill) or len(educated) > 1:
-                    raise RunFailure("stub", f"unexpected writes {writes} or Educator calls {len(educated)}")
-                row.extend((training, result, to_signed(writes[0][1]) if writes else -1, len(educated)))
+                                       stubs=critter_stubs(critter, recorder), readable=readable)
+                writes = recorder.writes
+                if len(writes) > 1 or (writes and writes[0][0] != skill) or recorder.educated > 1:
+                    raise RunFailure("stub", f"unexpected writes {writes} or Educator calls {recorder.educated}")
+                row.extend((training, result, to_signed(writes[0][1]) if writes else -1, recorder.educated))
             cases.append(row)
             if progress and case % 1000 == 0:
                 progress(case)

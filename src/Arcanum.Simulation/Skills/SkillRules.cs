@@ -160,7 +160,7 @@ public static class SkillRules
     /// are replaced and the training and higher bits kept. For a tech skill the change also reports the tech points to add
     /// (new − old points). The level read for the cap ignores the skill's effects and the monstrous melee.
     /// </summary>
-    [OriginalFunction(0x4C6000, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4C6000, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x4C66E0, OriginalFunctionScope.Partial)]
     public static SkillPointsChange SetPoints(Skill skill, int stored, int points, int keyStat)
     {
@@ -214,7 +214,8 @@ public static class SkillRules
     /// What the source's stat setter (0x4B0980) asks of the guard when a stored stat changes from <paramref name="currentBase"/>
     /// to <paramref name="newBase"/> (already clamped to the race's range): nothing unless the stat is lowered; then
     /// <see cref="CheckKeyStat"/> with <paramref name="effectiveAfter"/>, the effective value the new base gives. A refused
-    /// change keeps the stored stat.
+    /// change keeps the stored stat. Inputs outside the domain answer <see cref="SkillKeyStatStatus.Invalid"/> whichever way the
+    /// stat moves.
     /// </summary>
     public static SkillKeyStatCheck CheckBaseChange(CharacterStat stat, int currentBase, int newBase, int effectiveAfter,
         IReadOnlyList<int>? basic, IReadOnlyList<int>? tech)

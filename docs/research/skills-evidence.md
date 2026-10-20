@@ -38,6 +38,16 @@ Requirements: [FR-CHAR-016](../requirements/characters-skills.md#fr-char-016)
   **points** are the stored ranks; **training** is the tier None, Apprentice,
   Expert or Master.
 
+**Original check (ARC-SKILLS-001, 2026-10-20).** The state facts of sections 1 to 4 are now read in the executable by
+two readers and stand at F2 or F3: storage, levels, caps, key stats, training get and set with its minima, points
+setters, cost and refund, the next point's key stat, the stat-lowering guard and its caller, the tech points side effect,
+the skill effect collections, the Educator update, the skill module (names, the "follower skills" setting, the saved
+gambling roll), the new-character kit and the aptitude formula ([ledger](original-verification-ledger.md#skill-rules-arc-skills-001)
+FA7–FA9, AL5, SR1–SR14). They agree with the reading below. Still F0: the editor's + and − buttons, its floor and hint
+(0x57ACD0, 0x57AEB0, 0x55D3A0, 0x55D6F0, 0x5597C0, 0x55AE70, 0x55BD10; tasks S5, S6), the training sources (0x418CA0,
+0x418DE0, 0x418F30, 0x411940; S16), the dialog skill cases (0x4150D0, 0x415BA0; S4) and everything of sections 5 and 6
+(the check and the uses; S3 and later).
+
 No original file, probe or game data was read for this work item. Original
 executable parity remains **NOT_VERIFIED**. Values that depend on the shipped
 data (NPC skill points, effects on skills, lock and trap difficulties, dialog
