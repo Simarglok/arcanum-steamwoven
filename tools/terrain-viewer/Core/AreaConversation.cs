@@ -197,6 +197,35 @@ public sealed class AreaConversationHost
         return Run(speaker, line.Value, token);
     }
 
+    /// <summary>
+    /// ARC-WORLD-039: runs a deferred SCR call the session's event pass hands over (<see cref="ISessionScriptWorld.RunScriptCall"/>)
+    /// through the SCR dispatcher with this area's script host and the session's current rules, and applies its effects.
+    /// False, with the reason, when the content is missing or changed, the run is refused, the session refuses an effect,
+    /// or the run would start a conversation (the viewer opens talks only on the player's request; nothing is applied).
+    /// </summary>
+    public bool RunCall(SessionScriptCall call, out string detail)
+    {
+        ArgumentNullException.ThrowIfNull(call);
+        if (_content is null) { detail = _contentDetail; return false; }
+        if (!_content.VerifySeen()) { detail = "a script or dialog file changed since it was first read"; return false; }
+        var result = ScrDispatcher.RunCall(new(call.Script, call.Line, Scripts.Local(call.Triggerer), Scripts.Local(call.Attachee)), Scripts,
+            new() { Rules = _session.Rules.Scripts, Admission = AreaScriptHost.Admission });
+        LastCall = result;
+        if (_content.Changed) { detail = $"script {call.Script}: a script file changed since it was first read"; return false; }
+        if (result.Outcome == ScrOutcome.Refused)
+        {
+            detail = $"script {call.Script} SCR line {result.Refusal!.Line}: {result.Refusal.Code} type {result.Refusal.Type}";
+            return false;
+        }
+        if (result.Effects.Dialog is not null) { detail = $"script {call.Script}: a call that starts a conversation is not run by the viewer"; return false; }
+        if (!Scripts.Apply(result.Effects)) { detail = $"script {call.Script} {result.Stop}: the session refused its effects"; return false; }
+        detail = $"script {call.Script} {result.Stop} at SCR line {result.StopLine}";
+        return true;
+    }
+
+    /// <summary>The last deferred call run of <see cref="RunCall"/>.</summary>
+    public ScrRunResult? LastCall { get; private set; }
+
     /// <summary>The last dialog script run of <see cref="Begin"/> or <see cref="Resume"/> (outcome, stop, trace).</summary>
     public ScrRunResult? LastRun { get; private set; }
 
