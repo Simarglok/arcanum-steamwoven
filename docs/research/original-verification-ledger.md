@@ -798,6 +798,20 @@ rows TR1, TR2 and TR4. Every call target stays inside `.text`.
 | SG5 | the same, entry 33, reputation (0x4C1CB0) | An object counts when it is a PC with the reputation in its reputation array; any other object has none. | Original |
 | SG6 | the same, after each of the five | The focus list is released, then the true branch runs when at least one object counted and either all did or the focus kind is one of 3, 5, 7, 9, 14, 16, 18, 20 or 23 (one is enough); otherwise, and always for an empty list, the false branch. | Original. The dispatcher admits single-object focus only, where "all" is the one object; an absent object stops the run there (project rule of the single-object conditions) instead of taking the false branch. |
 
+## Tile and sector scripts (ARC-SCRIPT-017)
+
+Source: the [tile and sector scripts of map mode](../rendering/area-map-mode.md#tile-and-sector-scripts-arc-script-017) and
+rows TR3 and TR5. Question: which node a tile's script is, when a tile script and a sector script run on a move, and in
+which order. Read on 2026-10-21 by a first reader and, independently, a second reader that saw only the questions and the
+addresses (method step 6); they agree on every row. The second reader added the callers' modes (TS2) and the sector
+lookup (TS3).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| TS1 | tile script (0x4C0980), tile lookup (0x4C07B0), list search (0x4F6570), list insert (0x4F6470) | A tile's script is the node of the sector's tile-script list whose key is the tile index in the sector: the list is kept sorted with unique keys (an insert with an equal key overwrites), so the first match is the only one, and no node flag is tested. The node's header flags, counters and script number are run from line 0 as a use, with the moving object as the triggerer and no attachee. | Original |
+| TS2 | object location change (0x444270), move (0x43E770) | After a move: for a PC (type 15) the jump point of the new tile (0x4101D0); then for a PC or NPC (type 15 or 16) the tile script; then, only when the move enters another sector (the move passes mode 2 for a new sector, 1 for the same one) and only for the local player, the sector notification (0x4F2330). Placing an object on the map (0x4416E5, 0x4423A5) passes mode 2 as well; which placement a teleport arrival uses is not read here. | Original |
+| TS3 | sector notification (0x4F2330), sector script copy (0x4C0440), store (0x4C0490) | The sector's music scheme is switched first; then the sector script runs when its number is not 0, from line 0 as a use with the player as the triggerer and no attachee, and a changed copy is stored back (X3 sector). | Original |
+
 ## Item insert script (ARC-RES-055)
 
 Source: [item insert script](item-insert-script.md). Question: what the `print_line` action (type 24) of a script does,
