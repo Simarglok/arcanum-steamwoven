@@ -17,13 +17,13 @@ public sealed class AreaAdvancementTests
 
     // A follower like Virgil, invented: human, every primary stat 8, level 1, nothing to spend, one hit point bought, scheme 62,
     // effects 300 (strength +1, intelligence −1) and 301 (no rule).
-    private static CombatFields Follower(int scheme = 62, int race = 0)
+    private static CombatFields Follower(int scheme = 62, int race = 0, int mastery = -1, int fireRank = 1)
     {
         var stats = new int[28];
         for (var i = 0; i < 8; i++) stats[i] = 8;
         stats[17] = 1; stats[27] = race; stats[25] = 20;
         var spellTech = new int[25];
-        spellTech[12] = 1; spellTech[16] = -1;
+        spellTech[12] = fireRank; spellTech[16] = mastery;
         return new(CombatFieldOrigin.AreaObject, new CombatObjectFields(16, 17102, 0, 0, 0, 0, 0, 1, 2, 0, 4, [0, 0, 0, 0, 0], 0),
             null, null, null, null, null,
             new CombatCritterFields(0, 0, stats, new int[12], new int[4], spellTech, 0, 0, 0, 1, 0, scheme, [new(300, 1), new(301, 1)]), null);
@@ -61,6 +61,11 @@ public sealed class AreaAdvancementTests
             loaded.Sheet.HitPointPoints, loaded.Sheet.HitPointAdjustment));
         Assert.AreEqual(1, loaded.Sheet.Colleges[12]);
         Assert.AreEqual(0, loaded.Sheet.TechDegrees[0], "the mastery slot is not a degree");
+        Assert.AreEqual(-1, loaded.Sheet.MasteredCollege);
+        Assert.AreEqual(12, AreaAdvancement.Npc("x", Follower(mastery: 12, fireRank: 5), Effect)!.Value.Loaded.Sheet.MasteredCollege,
+            "ARC-MAGIC-004: the mastered college comes from the field's index 16");
+        Assert.IsNull(AreaAdvancement.Npc("x", Follower(mastery: 16), Effect), "a mastery outside −1..15 gives no sheet");
+        Assert.IsNull(AreaAdvancement.Npc("x", Follower(fireRank: 6), Effect), "a rank above 5 gives no sheet");
         CollectionAssert.AreEqual(new StatModifier[] { new(CharacterStat.Strength, StatModifierOperator.Add, 1), new(CharacterStat.Intelligence, StatModifierOperator.Add, -1) },
             modifiers.Stats.ToArray());
         Assert.AreEqual((1, 1), (modifiers.BasicSkills.Length, modifiers.MaxHitPoints.Length));

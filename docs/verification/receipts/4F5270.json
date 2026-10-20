@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4F5270",
+  "name": "fate-use",
+  "method": "Arcanum.Simulation.Character.FateRules.Use",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 2,
+  "mutantsCaught": 2,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "a450d88db7a1439987facac3108761ffe395b8df175889cfc4b80f28b58bdb57",
+  "configuration": "Debug"
+}

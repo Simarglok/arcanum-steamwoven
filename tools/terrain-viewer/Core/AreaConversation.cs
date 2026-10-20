@@ -74,7 +74,7 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
 /// stack (ARC-SCRIPT-011, <see cref="ScriptContent"/>): the original's name for each script number and the winning copy,
 /// the same for every map. Synchronous, single-threaded; Begin and Resume read the files every time.
 /// ARC-WORLD-043: as the original's dialog start and end (0x412FD0, 0x413280), every started conversation opens the NPC's
-/// reaction conversation slot in the session (<see cref="GameSessionOwner.BeginReactionConversation"/>, no fate point) before
+/// reaction conversation slot in the session (<see cref="GameSessionOwner.BeginReactionConversation"/>, which uses the hero's armed "force good reaction" fate, ARC-WORLD-054) before
 /// its first effect, and the caller closes it with <see cref="EndReaction"/> on every exit path, before a resumed script runs.
 /// </summary>
 public sealed class AreaConversationHost
@@ -364,7 +364,9 @@ public sealed class AreaConversationHost
             new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
             new DialogConversationPorts(State, State, _session.Flags, State, party, InventoryPort(), State,
                 // ARC-SKILLS-004: the skill gates read the session hero; the diagnostic PC has no skills, so they stay unadmitted.
-                _session.QueryHero() is null ? null : new SessionDialogSkillPort(_session, AreaConversationState.PcParticipant), State));
+                _session.QueryHero() is null ? null : new SessionDialogSkillPort(_session, AreaConversationState.PcParticipant), State,
+                // ARC-WORLD-054: FP gives the session hero a fate point; without a hero it stays unadmitted.
+                _session.QueryHero() is null ? null : new SessionDialogFatePort(_session, AreaConversationState.PcParticipant)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script);
     }
@@ -639,6 +641,7 @@ public static class AreaConversationText
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",
             SkillTrainingCommand training => $"TR skill {training.Skill} -> tier {training.Training}",
+            FatePointCommand => "FP fate point +1",
             JoinCommand => "JO follow request",
             _ => receipt.Command.GetType().Name,
         };

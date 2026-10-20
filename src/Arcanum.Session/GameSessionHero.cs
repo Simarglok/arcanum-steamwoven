@@ -54,18 +54,20 @@ public sealed record SessionHeroDefinition(int Prototype, CharacterRace Race, Ch
 /// <summary>
 /// Saved hero state: prototype, race, gender, stored stats in <see cref="SessionHeroLimits.StoredStats"/> order, level,
 /// experience (ARC-WORLD-030), unspent points, alignment, the advancement fields (ARC-WORLD-036) and the applied innate effects with their modifiers (race first, then gender; an innate
-/// effect without a modelled change is not listed), and the innate effects' skill changes (ARC-SKILLS-002). Gold and the kit items live in <see cref="SessionInventoryState"/>.
+/// effect without a modelled change is not listed), the innate effects' skill changes (ARC-SKILLS-002) and the fate points with
+/// the armed fates (ARC-WORLD-054). Gold and the kit items live in <see cref="SessionInventoryState"/>.
 /// </summary>
 public sealed class SessionHeroState
 {
     internal SessionHeroState(int prototype, CharacterRace race, CharacterGender gender, int[] stats, int level, int unspentPoints,
         int alignment, StatEffectDefinition? raceEffect, StatEffectDefinition? genderEffect, int experience = 0,
-        SessionHeroAdvancement? advancement = null, ImmutableArray<SessionInnateSkillChange> innateSkills = default)
+        SessionHeroAdvancement? advancement = null, ImmutableArray<SessionInnateSkillChange> innateSkills = default, FateState fate = default)
     {
         Prototype = prototype; Race = race; Gender = gender; Stats = Array.AsReadOnly(stats); Level = level;
         UnspentPoints = unspentPoints; Alignment = alignment; RaceEffect = raceEffect; GenderEffect = genderEffect;
         Experience = experience; Advancement = advancement ?? SessionHeroAdvancement.None;
         InnateSkills = innateSkills.IsDefault ? [] : innateSkills;
+        Fate = fate;
     }
 
     public int Prototype { get; }
@@ -83,14 +85,20 @@ public sealed class SessionHeroState
     public SessionHeroAdvancement Advancement { get; }
     /// <summary>The race and gender effects' skill changes (ARC-SKILLS-002), race first, in the effects' order.</summary>
     public ImmutableArray<SessionInnateSkillChange> InnateSkills { get; }
+    /// <summary>The fate points (0..100) and the armed fates (ARC-WORLD-054).</summary>
+    public FateState Fate { get; }
 
     /// <summary>The same hero with a new level, experience and unspent points (an experience award).</summary>
     internal SessionHeroState WithExperience(int level, int experience, int unspentPoints) =>
-        new(Prototype, Race, Gender, [.. Stats], level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, Advancement, InnateSkills);
+        new(Prototype, Race, Gender, [.. Stats], level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, Advancement, InnateSkills, Fate);
 
     /// <summary>The same hero with new stored stats, level, experience, unspent points and advancement (a scheme's purchases).</summary>
     internal SessionHeroState With(int[] stats, int level, int experience, int unspentPoints, SessionHeroAdvancement advancement) =>
-        new(Prototype, Race, Gender, stats, level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, advancement, InnateSkills);
+        new(Prototype, Race, Gender, stats, level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, advancement, InnateSkills, Fate);
+
+    /// <summary>The same hero with new fate points and armed fates (ARC-WORLD-054).</summary>
+    internal SessionHeroState WithFate(FateState fate) =>
+        new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, Alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, fate);
 }
 
 /// <summary>The hero domain of one owner: its saved fields and the character owner built from them.</summary>
@@ -127,14 +135,16 @@ internal sealed class HeroDomain
     /// Builds the hero from saved or new fields; null when any field is outside its range or an effect is not one the
     /// character owner admits (no modifiers, an unknown stat or operator, a magnitude above its limit), or an innate skill change
     /// is not one <see cref="SessionInnateSkillChange.IsValid"/> admits, more than <see cref="SessionInnateSkillChange.MaxPerEffect"/> of
-    /// one cause, or a race change after a gender change (the effects' order, which the aggregation of bounds reads).
+    /// one cause, or a race change after a gender change (the effects' order, which the aggregation of bounds reads), or a fate state
+    /// outside 0..100 points and the eleven armed bits.
     /// The character owner holds only this hero's race and gender effects; the session never calls its race or gender setters.
     /// </summary>
     internal static HeroDomain? Build(int prototype, CharacterRace race, CharacterGender gender, IReadOnlyList<int>? stats,
         int level, int unspentPoints, int alignment, StatEffectDefinition? raceEffect, StatEffectDefinition? genderEffect, int experience,
-        SessionHeroAdvancement? advancement, IReadOnlyList<SessionInnateSkillChange>? innateSkills)
+        SessionHeroAdvancement? advancement, IReadOnlyList<SessionInnateSkillChange>? innateSkills, FateState fate = default)
     {
         advancement ??= SessionHeroAdvancement.None;
+        if (!fate.IsValid) return null;
         if (!advancement.IsValid()) return null;
         ImmutableArray<SessionInnateSkillChange> skills = [.. innateSkills ?? []];
         if (skills.Length > SessionInnateSkillChange.MaxChanges || !skills.All(SessionInnateSkillChange.IsValid)) return null;
@@ -156,7 +166,7 @@ internal sealed class HeroDomain
         if (created.Owner is not { } owner) return null;
         for (var index = 0; index < values.Length; index++)
             if (owner.SetBase(SessionHeroLimits.StoredStats[index], values[index]).Disposition == CharacterStatsDisposition.Rejected) return null;
-        return new(new(prototype, race, gender, values, level, unspentPoints, alignment, raceEffect, genderEffect, experience, advancement, skills), owner);
+        return new(new(prototype, race, gender, values, level, unspentPoints, alignment, raceEffect, genderEffect, experience, advancement, skills, fate), owner);
     }
 
     /// <summary>The DLG reply-eligibility facts of this hero (see <see cref="GameSessionOwner.QueryHeroDialogFacts"/>).</summary>

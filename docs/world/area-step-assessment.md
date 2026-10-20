@@ -246,6 +246,16 @@ effects the rules do not model and from the lock cases above. ARC-RES-049 left
 these counts (54 complete, at least 48 walkable, 22 window-jump steps in 2
 interiors) unchanged.
 
+**Runtime portals (ARC-WORLD-051).** `Assess(request, portals)` takes, for any
+door or window key, an `AreaPortalPassage` that replaces its T0 edge rule:
+`Open` passes, `LeavingOnly` passes only a step leaving a building (the
+ARC-RES-049 test), `Blocked` blocks, and `Unresolved` keeps the T0 rule. A
+portal whose T0 evaluation is Unknown has no edge and stays a gap. Every whole-map
+portal keeps its raw rotation for that test; the evidence digest still writes it
+only for a Leaving rule, so digests are unchanged. `AreaStepAssessment.Portals`
+lists the portals on the step's legs in leg order, which the viewer opens when
+the step passes ([doors and windows](../rendering/area-map-mode.md#doors-and-windows-arc-world-051)).
+
 ## Windows (ARC-DATA-034)
 
 `InspectWholeMap` also takes a window snapshot ([window plans](whole-map-plans.md#window-plans-arc-data-032),

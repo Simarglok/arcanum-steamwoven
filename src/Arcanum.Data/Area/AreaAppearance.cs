@@ -212,7 +212,8 @@ public sealed partial class AreaDataOwner
         _budget.EndFrame();
         var visual = new AreaVisualRecord(key, raw, lookup, entry, sha, view, nominal, group, physical, frame, palette, decoded.EffectivePaletteSlot, mirrored,
             decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY, decoded.Frame.OffsetX, decoded.Frame.OffsetY, ox, oy, scale,
-            descriptor.Metadata.EncodedPayloadLength, decoded.Rgba.Count, rgbaSha, policy);
+            descriptor.Metadata.EncodedPayloadLength, decoded.Rgba.Count, rgbaSha, policy)
+        { FrameCount = descriptor.GroupFrames, FramesPerSecond = descriptor.FramesPerSecond };
         if (_sharedFrames is not null) { _budget.Reserve(512); _sharedFrames.Add(shared, visual); }
         return visual;
     }
@@ -264,7 +265,7 @@ public sealed partial class AreaDataOwner
         catch (ArgumentOutOfRangeException) { throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame); }
     }
     /// <summary>The selected frame's metadata, the ART's frame count and the bytes after its last frame payload.</summary>
-    private (ArtFrameMetadata Metadata, int Frames, int Trailing) InspectFrame(ReadOnlySpan<byte> bytes, int group, int frame, int palette)
+    private (ArtFrameMetadata Metadata, int Frames, int Trailing, int GroupFrames, int FramesPerSecond) InspectFrame(ReadOnlySpan<byte> bytes, int group, int frame, int palette)
     {
         _budget.Context = _budget.Context with { Callsite = AreaBudgetCallsite.ArtTable };
         if (bytes.Length < 132) throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame);
@@ -276,7 +277,7 @@ public sealed partial class AreaDataOwner
         {
             var metadata = ArtDecoder.Inspect(bytes, ArtOptions);
             if (palette is < 0 or > 3) throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame);
-            return (metadata.GetFrame(group, frame), frames * groups, metadata.TrailingBytes);
+            return (metadata.GetFrame(group, frame), frames * groups, metadata.TrailingBytes, frames, metadata.Header.FramesPerSecond);
         }
         catch (Exception error) when (error is ArtException or ArgumentOutOfRangeException)
         { throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame); }

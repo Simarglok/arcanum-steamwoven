@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using Arcanum.Data.Characters;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Skills;
 
 namespace Arcanum.Session;
@@ -21,15 +22,17 @@ public static class SessionAdvancementLimits
 /// <summary>
 /// The hero's purchasable fields besides its stats (ARC-WORLD-036): the stored basic and tech skill fields (points in bits
 /// 0..5, training in bits 6..7), the sixteen college levels, the eight tech degrees, the bought hit and fatigue points, and
-/// the auto-level scheme (0: none). A pre-made hero starts with none of them bought and its prototype's scheme.
+/// the auto-level scheme (0: none), and the mastered college (−1 none, ARC-MAGIC-004, snapshot schema 25). A pre-made hero starts
+/// with none of them bought, no mastery and its prototype's scheme.
 /// </summary>
 public sealed record SessionHeroAdvancement(ImmutableArray<int> BasicSkills, ImmutableArray<int> TechSkills, ImmutableArray<int> Colleges,
-    ImmutableArray<int> TechDegrees, int HitPointPoints, int FatiguePoints, int AutoLevelScheme)
+    ImmutableArray<int> TechDegrees, int HitPointPoints, int FatiguePoints, int AutoLevelScheme, int MasteredCollege = SpellBookRules.NoMastery)
 {
     /// <summary>Equality compares the arrays' values.</summary>
     public bool Equals(SessionHeroAdvancement? other) => other is not null && Same(BasicSkills, other.BasicSkills) &&
         Same(TechSkills, other.TechSkills) && Same(Colleges, other.Colleges) && Same(TechDegrees, other.TechDegrees) &&
-        HitPointPoints == other.HitPointPoints && FatiguePoints == other.FatiguePoints && AutoLevelScheme == other.AutoLevelScheme;
+        HitPointPoints == other.HitPointPoints && FatiguePoints == other.FatiguePoints && AutoLevelScheme == other.AutoLevelScheme &&
+        MasteredCollege == other.MasteredCollege;
 
     public override int GetHashCode() => HashCode.Combine(HitPointPoints, FatiguePoints, AutoLevelScheme, Hash(BasicSkills), Hash(Colleges));
 
@@ -53,7 +56,8 @@ public sealed record SessionHeroAdvancement(ImmutableArray<int> BasicSkills, Imm
         Length(Colleges, AutoLevelRules.Colleges, AutoLevelRules.SpellsPerCollege) &&
         Length(TechDegrees, AutoLevelRules.TechDisciplines, AutoLevelRules.MaxDegree) &&
         HitPointPoints is >= 0 and <= SessionAdvancementLimits.MaxHeroPoolPoints &&
-        FatiguePoints is >= 0 and <= SessionAdvancementLimits.MaxHeroPoolPoints && AutoLevelScheme is >= 0 and <= SessionAdvancementLimits.MaxScheme;
+        FatiguePoints is >= 0 and <= SessionAdvancementLimits.MaxHeroPoolPoints && AutoLevelScheme is >= 0 and <= SessionAdvancementLimits.MaxScheme &&
+        MasteredCollege is >= SpellBookRules.NoMastery and < SpellBookRules.Colleges;
 
     private static bool Length(ImmutableArray<int> values, int length, int max) =>
         !values.IsDefault && values.Length == length && values.All(v => v >= 0 && v <= max);
@@ -155,7 +159,8 @@ internal sealed class AdvancementDomain(SessionAutoLevelRules? rules)
     /// (a PC has no hit-point or fatigue adjustment and is never monstrous).</summary>
     internal static AdvancementSheet HeroSheet(SessionHeroState hero) => new(hero.Race, false, [.. hero.Stats.Take(AutoLevelRules.PrimaryStats)],
         hero.Stats[8], hero.Stats[9], hero.Level, hero.UnspentPoints, hero.Advancement.BasicSkills, hero.Advancement.TechSkills,
-        hero.Advancement.Colleges, hero.Advancement.TechDegrees, hero.Advancement.HitPointPoints, 0, hero.Advancement.FatiguePoints, 0);
+        hero.Advancement.Colleges, hero.Advancement.TechDegrees, hero.Advancement.HitPointPoints, 0, hero.Advancement.FatiguePoints, 0,
+        hero.Advancement.MasteredCollege);
 
     /// <summary>The hero after a sheet: its stats, points, level and advancement fields from the sheet, everything else kept.</summary>
     internal static SessionHeroState WithSheet(SessionHeroState hero, AdvancementSheet sheet, int experience) => hero.With(
@@ -163,7 +168,7 @@ internal sealed class AdvancementDomain(SessionAutoLevelRules? rules)
         hero.Advancement with
         {
             BasicSkills = sheet.BasicSkills, TechSkills = sheet.TechSkills, Colleges = sheet.Colleges, TechDegrees = sheet.TechDegrees,
-            HitPointPoints = sheet.HitPointPoints, FatiguePoints = sheet.FatiguePoints,
+            HitPointPoints = sheet.HitPointPoints, FatiguePoints = sheet.FatiguePoints, MasteredCollege = sheet.MasteredCollege,
         });
 
     /// <summary>

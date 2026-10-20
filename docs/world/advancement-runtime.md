@@ -79,7 +79,8 @@ The hero gains `"advancement":{"basicSkills","techSkills","colleges","techDegree
 after `"alignment"`; the root gains `"advancement":{"npcs":[...]}` after `"experience"`, each record with its entity, race,
 monstrous flag, stats, magick and tech points, level, unspent points, skills, colleges, degrees, pools, adjustments and
 scheme, in ordinal entity order. Restore checks every range, the order and the budget. Schemas 1..19 are refused, not
-migrated.
+migrated. Since schema 25 (ARC-MAGIC-004) both the hero's advancement and each NPC record also carry `mastery` (the mastered
+college, −1 none) after `colleges`, and the spell purchases learn through the [spell book](spell-book-runtime.md)'s one rule.
 
 ## Viewer host
 

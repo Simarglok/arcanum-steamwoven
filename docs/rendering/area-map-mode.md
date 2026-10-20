@@ -543,6 +543,60 @@ recorded where it was. There are
 no followers of followers, unconscious followers, carried inventory, orders,
 loyalty or wait timer. The exterior keeps its measured roster (Virgil).
 
+## Doors and windows (ARC-WORLD-051)
+
+Doors and windows keep their state in the session's lock owner
+([lock state](../world/lock-state-runtime.md), ARC-WORLD-050). Their rules follow
+the executable as read in
+[ledger LK1–LK13](../research/original-verification-ledger.md#doors-containers-and-locks-arc-res-065).
+
+- **Frames.** The area owner decodes every frame of a portal ART with more than
+  one frame as `PortalFrame` visuals, and the plan copies them into the map's
+  repository (`AreaScenePlan.PortalFrames`). A door whose even rotation is 0 or
+  6 opens through frames 4..6; one of 2 or 4 opens through frames 1..3. A window
+  uses frames 0 and 1. A portal off its T0 frame is drawn like a moved body,
+  from its current frame placed by the frame's own hot spot
+  (`AreaScenePlan.PortalFrame`).
+- **Steps.** The actor's steps and the click route use the portal's current
+  state instead of its T0 edge rule (`AreaStepSnapshot.Assess` with
+  `AreaPortalPassage`):
+  - an open or busted portal passes;
+  - otherwise the player's open attempt decides at the session hour: an
+    unlocked one passes, a locked one passes only a step leaving a building
+    (ledger LV5), and jammed, magically held and always-locked ones block (the
+    session holds no keys yet);
+  - an unlock script keeps the T0 rule.
+- **Opening by a step.** When a started step crosses a closed portal it may
+  pass, the session records the portal open (the last frame of its range) at
+  once. The frames then play at 1000 / fps ms each, with the portal's open
+  sound. The actor does not wait for the animation (the original's door goal
+  sequencing is not modelled). A diagonal step opens every passable closed portal
+  on its four legs, the legs the step's evidence checks (parity NOT_VERIFIED).
+- **Use.** A left press on a door or window uses it, walking within the use
+  range (2 cells) first; a press while the actor is mid-step uses it once the step
+  has settled, and any other click replaces a pending door use. An open portal closes. A closed one opens when the
+  player's open attempt succeeds. A locked, jammed or magically held one plays
+  the locked sound and stays closed. One with an unlock script is not opened (its
+  script is not run).
+- **Saves.** F7/F8 and map changes carry the state, because it is part of the
+  session's map changes. A Lock event that comes due locks, unjams and closes
+  the portal while its map is shown, and waits while another map is.
+- **Not covered.** Maps without a runtime number (not in the map list) keep their
+  portals at T0.
+
+Native smoke (`ARC-WORLD-051 native-smoke portal PASS`, after the talk smoke):
+1. The PC stands on a closed, unlocked door's tile and steps across its edge.
+   The session then records the door open, and after the animation it is drawn
+   on its open frame.
+2. A press on the door closes it, and it is drawn on its T0 frame again.
+3. When the map has a door the player cannot open, a press next to it is
+   refused and that door stays closed.
+
+The smoke prints `NONE` on a map without a door that opens. An opt-in test
+(`AreaPortalsOriginalTests`) checks every installed interior: the frames of
+every multi-frame door and window are in the map's repository, and a step from
+the tile of every closed, unlocked door opens it.
+
 ## The main world map (ARC-RENDER-024)
 
 The 2000 × 2000-sector start map (`Arcanum1-024-fixed`, catalogue 5000, runtime 1; 621 sector files, the rest
@@ -613,10 +667,10 @@ window around it); routes reach 32 cells per axis (ARC-WORLD-042). Original pari
 - Roofs are drawn, hidden and faded since ARC-RENDER-022 ([roofs](roofs.md)).
   Wall fade uses the ARC-RENDER-011 wall check; inside buildings an actor north
   of a wall can still be hidden by it (parity with the original not verified).
-- Door passability follows the step evidence: a locked door the player has no key
-  for opens only for a step leaving a building, as the original executable decides
-  it (ARC-RES-049); doors are not opened or animated.
-- Guarded tile and sector transitions and use scripts outside the set, and door runtime on these maps; the dialog
+- Doors and windows open, close and animate since ARC-WORLD-051 (above). Keys are
+  not held, NPCs do not open doors, an unlock script is not run, and a door the
+  original destroys when busted has no destroyed state.
+- Guarded tile and sector transitions and use scripts outside the set; the dialog
   gaps above (SCR admission, generated lines). On the main world map: the limits listed in
   [its section](#the-main-world-map-arc-render-024).
 - Original-executable parity is NOT_VERIFIED.
