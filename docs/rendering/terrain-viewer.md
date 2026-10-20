@@ -1090,6 +1090,12 @@ An NPC line in a conversation plays its recorded voice once on the voice channel
 fallback; a picked reply stops it ([contract](../audio/dialogue-voice.md)). The status line names the last voice. The talk
 smoke (`--area-map`) checks that a voiced first line starts its voice.
 
+### Interface sounds and volumes (ARC-UI-044)
+
+The logbook plays the original's book sounds (open, tab press, the player's close), a level gained and a quest completed play theirs, and an
+item taken from a body plays its pickup sound; the palette has the three volume settings 0–10, applied and saved at once
+([contract](../audio/interface-sounds.md)). Native smoke marker `ARC-UI-044 native-smoke interface PASS`.
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)

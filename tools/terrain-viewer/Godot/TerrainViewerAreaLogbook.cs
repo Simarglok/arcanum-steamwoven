@@ -63,12 +63,14 @@ public partial class TerrainViewerApp
         if (_logbookPanel is null)
         {
             _logbookPanel = new AreaLogbookPanel(); AddChild(_logbookPanel);
-            _logbookPanel.CloseRequested += EndLogbook;
+            _logbookPanel.CloseRequested += CloseLogbookByPlayer;
             _logbookPanel.TabRequested += SelectLogbookTab;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         _logbookPanel.Open(view); _logbookStamp = Stamp(); _logbookStatus = null;
+        // SN37: opening selects the tab (3011, then the tab's 3010) and then plays the book's 3008.
+        PlayInterfaceSound(BookSwitchSound, "logbook open"); PlayInterfaceSound(BookPageSound, "logbook open"); PlayInterfaceSound(BookOpenSound, "logbook open");
         GD.Print($"ARC-UI-008 logbook open tab={view.Tab} entries={view.Entries.Count} low={view.LowIntelligence} note={view.Note ?? "none"}");
         RefreshReadyStatus();
     }
@@ -79,14 +81,22 @@ public partial class TerrainViewerApp
     private void SelectLogbookTab(AreaLogbookTab tab)
     {
         if (!LogbookOpen) return;
+        // SN37: a tab press plays the page sound (the original's tab handler has no same-tab test).
+        PlayInterfaceSound(BookPageSound, "logbook tab");
         _logbookTab = tab;
         SyncAreaLogbook();
     }
 
-    private void EndLogbook()
+    // The player closed it (L, Escape, Cancel, the button): the book's close sound plays; a teardown closes it silently.
+    private void CloseLogbookByPlayer() => EndLogbook(byPlayer: true);
+
+    private void EndLogbook() => EndLogbook(byPlayer: false);
+
+    private void EndLogbook(bool byPlayer)
     {
         if (_logbookPanel is null || !_logbookPanel.IsOpen) return;
         GD.Print("ARC-UI-008 logbook closed");
+        if (byPlayer) PlayInterfaceSound(BookCloseSound, "logbook close");
         _logbookPanel.CloseView(); _logbookStamp = null;
         QuarantineWorld(); RefreshReadyStatus();
     }
@@ -121,13 +131,13 @@ public partial class TerrainViewerApp
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         if (!key.Pressed || key.Echo) return;
-        if (routed is Key.L or Key.Escape) EndLogbook();
+        if (routed is Key.L or Key.Escape) CloseLogbookByPlayer();
         else if (routed == Key.Tab) _logbookPanel!.Confirm();
     }
 
     private void HandleLogbookPulse(IntentFrame intent)
     {
-        if (intent.Cancel) EndLogbook();
+        if (intent.Cancel) CloseLogbookByPlayer();
         else if (intent.Confirm) _logbookPanel!.Confirm();
     }
 

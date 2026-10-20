@@ -20,6 +20,9 @@ public partial class TerrainViewerApp
 
     private readonly List<PositionalVoice> _positionalVoices = [];
     private SoundPoint? _soundListener;
+    // The view-centre tile the listener last followed: an effects volume change moves the listener to the PC (SN7) until the
+    // view's tile changes again.
+    private SoundPoint? _viewListenerTile;
     private (string Module, ContentPrototypes? Prototypes, TileSoundTable? Tiles, string Detail)? _cueContent;
     private (AreaSnapshot Snapshot, Dictionary<(long X, long Y), uint> Art)? _tileArt;
     private readonly Dictionary<int, ObjectSoundFields?> _prototypeSounds = [];
@@ -47,7 +50,7 @@ public partial class TerrainViewerApp
         _cueContent = null; _tileArt = null; _prototypeSounds.Clear(); _cuePayloads.Clear();
     }
 
-    private void StopPositionalSound() { _positionalVoices.Clear(); _soundListener = null; _stepFrame = null; }
+    private void StopPositionalSound() { _positionalVoices.Clear(); _soundListener = null; _viewListenerTile = null; _stepFrame = null; }
 
     private static PositionalProfile Positional(SoundPositionalProfile profile)
     {
@@ -108,7 +111,8 @@ public partial class TerrainViewerApp
         if (_audio is null || AreaSoundCatalog() is not { } catalog) return;
         _positionalVoices.RemoveAll(v => _audio.Volume(v.Handle) is null);
         TickFootsteps();
-        if (ViewListener() is not { } listener || listener == _soundListener) return;
+        if (ViewListener() is not { } listener || listener == _viewListenerTile) return;
+        _viewListenerTile = listener;
         MoveSoundListener(listener, catalog);
     }
 

@@ -31,6 +31,9 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public event Action? VisualToggleRequested;
     public event Action? AlwaysRunToggleRequested;
     public event Action? SoundTestRequested;
+    /// <summary>ARC-UI-044: a volume setting (0–10) the player changed: the channel and its new value.</summary>
+    public event Action<Arcanum.Presentation.Audio.AudioChannel, int>? VolumeChanged;
+    private readonly Dictionary<Arcanum.Presentation.Audio.AudioChannel, SpinBox> _volumes = [];
     private Label _sound = null!;
     private Label _gait = null!;
     private Label _visual = null!;
@@ -100,6 +103,15 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         // ARC-UI-040: sound output and the original's fixed interface sounds, played by id from the module's catalogue.
         AddAction("Sound test: next interface sound", () => SoundTestRequested?.Invoke());
         _sound = new Label { Name = "PaletteSound", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_sound);
+        // ARC-UI-044: the original's three volume settings, 0–10, applied at once and saved outside game saves.
+        foreach (var (channel, title) in new[] { (Arcanum.Presentation.Audio.AudioChannel.Effects, "Effects volume"),
+            (Arcanum.Presentation.Audio.AudioChannel.Voice, "Voice volume"), (Arcanum.Presentation.Audio.AudioChannel.Music, "Music volume") })
+        {
+            _rows.AddChild(new Label { Text = title + " (0–10)" });
+            var spin = new SpinBox { Name = title.Replace(" ", ""), MinValue = 0, MaxValue = 10, Step = 1, Rounded = true, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            spin.ValueChanged += v => { if (!_binding) VolumeChanged?.Invoke(channel, (int)v); };
+            _rows.AddChild(spin); _controls.Add(spin); _volumes[channel] = spin;
+        }
         // ARC-RENDER-008 overlay checkbox: the host binds availability/state (BindOverlay);
         // without a movement authority it is visibly unavailable, not navigable, not toggleable.
         _overlay = new CheckButton { Name = "PassabilityOverlay", Text = "Show passability (unavailable)", Disabled = true, FocusMode = Control.FocusModeEnum.None };
@@ -165,6 +177,13 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public void SetVisualStatus(string text) => _visual.Text = text;
     public void SetGaitStatus(string text) => _gait.Text = text;
     public void SetSoundStatus(string text) => _sound.Text = text;
+    /// <summary>ARC-UI-044: shows the three volume settings without reporting a change.</summary>
+    public void BindVolumes(Arcanum.Presentation.Audio.AudioVolumes volumes)
+    {
+        _binding = true;
+        foreach (var (channel, spin) in _volumes) spin.Value = volumes[channel];
+        _binding = false;
+    }
     /// <summary>The overlay state/action seam for ARC-RENDER-008: the host binds
     /// availability and state; a user toggle is reported once through OverlayToggled.
     /// Unavailable (the ARC-INPUT-001 default), the row is disabled and not navigable.</summary>

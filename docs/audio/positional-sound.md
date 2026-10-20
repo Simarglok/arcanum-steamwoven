@@ -67,6 +67,6 @@ volume × channel / 127; the attack smoke requires its attacks to play their sou
   NPC and companion footsteps (they are not animated), barks of AI states (fidget, alerted).
 - The hero's armour from what it wears (the viewer draws the prototype's art); a holder's magic
   weight adjustment in the pickup weight.
-- Moving the listener to the PC when the effects volume changes (SN7, with the volume sliders of
-  ARC-UI-044); following a moving source (the original fixes a sound's position at its start).
+- Following a moving source (the original fixes a sound's position at its start). The effects
+  volume change moving the listener to the PC (SN7) came with ARC-UI-044.
 - Nothing was compared by ear with the running original.

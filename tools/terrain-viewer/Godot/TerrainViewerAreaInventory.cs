@@ -195,6 +195,7 @@ public partial class TerrainViewerApp
     {
         if (!InventoryOpen || !InventoryActive || _inventoryPanel!.Holder is not { } holder) return;
         var result = _inventoryHost!.Loot(_areaSession!, holder, item);
+        if (result.Disposition == GameSessionDisposition.Changed) PlayTakenItemSound(item);
         var message = result.Disposition == GameSessionDisposition.Changed
             ? $"took {_inventoryHost.Name(item, _hoverNames?.Catalog)}{AreaInventoryHost.Printed(result)}" : $"not taken: {AreaInventoryHost.Refusal(result.Failure)}";
         GD.Print($"ARC-UI-004 loot disposition={result.Disposition} failure={result.Failure} pc={_areaSession!.QueryPcInventory().Count}{InsertScriptLog(result)}");
@@ -212,7 +213,8 @@ public partial class TerrainViewerApp
         {
             var result = _inventoryHost!.Loot(_areaSession!, holder, line.Entity);
             GD.Print($"ARC-UI-004 loot-all-item disposition={result.Disposition} failure={result.Failure}{InsertScriptLog(result)}");
-            if (result.Disposition == GameSessionDisposition.Changed) { taken++; printed.Append(AreaInventoryHost.Printed(result)); }
+            // One pickup sound for the whole take (the first item's), not one voice per item in the same frame.
+            if (result.Disposition == GameSessionDisposition.Changed) { if (taken++ == 0) PlayTakenItemSound(line.Entity); printed.Append(AreaInventoryHost.Printed(result)); }
             else refused.Add($"{_inventoryHost.Name(line.Entity, _hoverNames?.Catalog)}: {AreaInventoryHost.Refusal(result.Failure)}");
         }
         var message = $"took {taken} item(s){printed}" + (refused.Count == 0 ? string.Empty : "; not taken: " + string.Join("; ", refused));
