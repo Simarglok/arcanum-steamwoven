@@ -315,10 +315,11 @@ the start map), one per tile.
   is pending (the tile's jump point fired) is dropped and the run's other effects stay (TR4). A tile run refused before it
   starts (an action or condition outside the set, no script content, no session) leaves the tile's unconditional
   teleport of ARC-WORLD-031 to fire as before: the four same-map tile teleports of `void` keep working that way. An
-  entry run checks only the script files it reads for changes, not every file seen so far as a click does.
+  entry run checks only the files it reads for changes (a changed script refuses it; a changed dialog file skips that
+  printed line, and later runs are refused), not every file seen so far as a click does.
 - **Status and log.** The status line shows a transfer, an exit map mode cannot take and a run that printed lines;
-  refused and silent runs are only logged (`ARC-WORLD-031 enter`), and nothing after a step's accepted transfer
-  replaces it. One host serves every run of the shown map and session.
+  refused and silent runs are only logged (`ARC-WORLD-031 enter`), and nothing replaces an accepted transfer while it
+  is pending. One host serves every run of the shown map and session.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`, a new game's state for each script):
   5 tile scripts teleport (the exit tiles of `iron clan hq`, script 2203, to the start map at (96948,75722)), 249 tile
   scripts and 1 sector script run without one, 2,758 tile and 19 sector scripts are refused because they need actions or

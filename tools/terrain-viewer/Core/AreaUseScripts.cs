@@ -59,6 +59,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     private readonly ScriptContent? _content;
     private readonly int _shownMap;
     private readonly Dictionary<string, AreaObjectRecord> _shown = new(StringComparer.Ordinal);
+    private (string Entity, AreaObjectRecord Row)? _clicked;
 
     /// <param name="shownMap">The shown map's runtime number.</param>
     /// <param name="shown">The shown map's object rows (its snapshot's): any of them can be the attachee or a guard's object.</param>
@@ -80,6 +81,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
 
     private AreaObjectRecord? Row(ScrObjectRef obj)
     {
+        if (obj.Map == _shownMap && _clicked is { } clicked && clicked.Entity == obj.Code) return clicked.Row;
         if (obj.Map == _shownMap && _shown.TryGetValue(obj.Code, out var shown)) return shown;
         return _maps.FirstOrDefault(map => map.RuntimeMap == obj.Map) is { } map && map.TryGetRow(obj.Code, out var row) ? row : null;
     }
@@ -183,11 +185,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
         var entity = EntityId(row);
         if (row.Key.RuntimeMap != _shownMap) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the object is not on the shown map");
-        // The clicked row answers for its entity, whichever copy of a repeated id the index kept.
-        _shown[entity] = row;
-        var attachee = new ScrObjectRef(_shownMap, entity);
-        var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
-        return Finish(run, teleportRefusal, writeback => WriteObjectSlot(writeback, attachee));
+        // The clicked row answers for its entity during this run, whichever copy of a repeated id the index kept.
+        _clicked = (entity, row);
+        try
+        {
+            var attachee = new ScrObjectRef(_shownMap, entity);
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
+            return Finish(run, teleportRefusal, writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _clicked = null; }
     }
 
     /// <summary>Map-change keys of a tile or sector script's slot, on its sector: <c>tile.N.script</c>, <c>tile.N.lf</c>,

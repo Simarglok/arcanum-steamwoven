@@ -207,14 +207,15 @@ public partial class TerrainViewerApp
         while (_mapEntered.TryDequeue(out var step))
         {
             var queued = false;
-            // Each result is described as it comes. The status line shows a transfer, a refused exit and a run that printed;
-            // refusals and silent runs are logged only, and nothing after an accepted transfer of the step replaces it.
+            // The status line shows a transfer, a refused exit and a run that printed; refusals and silent runs are logged
+            // only, and nothing replaces an accepted transfer while it is pending. A jump point's line carries the printed
+            // lines of the tile script run with it.
             void Note(AreaMapUseResult entered)
             {
                 var trigger = entered.Site!.Trigger;
                 var shown = entered.Outcome is AreaUseOutcome.Accepted or AreaUseOutcome.DestinationUnavailable
                     || (entered.Outcome == AreaUseOutcome.ScriptEnded && _mapTransfers!.LastScripted is { Lines.Count: > 0 });
-                if (shown && !queued)
+                if (shown && !queued && (_mapTransfers!.Pending is null || entered.Outcome == AreaUseOutcome.Accepted))
                 {
                     _areaUseStatus = (trigger switch
                     {
