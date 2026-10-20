@@ -233,6 +233,7 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG15 | original bug | fix (the reflected spell's own cost), switch | MT10 |
 | MG18 | original bug (target table) | fixed with switch `NotDeadCritterTargetLacksCritterBit`: the MT2 census finds 105 records naming the target | MT2 (done) |
 | MG19 | original bug | fix (separate the two flags), switch; it reaches two technology records (`No_Resist:`) and the script action `cast_unresistable_spell` (7 live lines in 6 scripts); actions 121 and 122 are unused | MT9a |
+| MG21, MG22, MG23 | not decided (target values without a kind bit; ARC-MAGIC-002, ledger SC10) | open: decided with the target functions, when MT8 reads how the bits are tested; until then both modes keep the original's values | MT8 |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |
 | O10 shell and reflection order | reconstruction change | the original in both modes | MT10 |
 | Charm asymmetry | reconstruction change confirmed | the original (+30 and −30 both through the reaction effects) | MT14 |

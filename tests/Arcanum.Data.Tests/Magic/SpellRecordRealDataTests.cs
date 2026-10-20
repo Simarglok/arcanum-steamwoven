@@ -84,13 +84,14 @@ public sealed class SpellRecordRealDataTests
         Assert.AreEqual("42 lists -1:38,0:1,3:1,4:1,5:1 faction 0 palette 0 none 4", $"{summons.Count} lists " +
             string.Join(",", summons.GroupBy(s => s.List).OrderBy(g => g.Key).Select(g => $"{g.Key}:{g.Count()}")) +
             $" faction {summons.Count(s => s.ClearFaction != 0)} palette {summons.Count(s => s.Palette != 0)} none {summons.Count(s => s.Prototype <= 0)}");
+        Assert.IsTrue(summons.Where(s => s.Prototype <= 0).All(s => s.List >= 0), "the summons without a prototype are the ones with a list");
         var prototypes = ContentPrototypes.Open(stack);
         var numbers = summons.Where(s => s.Prototype > 0).Select(s => s.Prototype).Distinct().ToList();
         Assert.AreEqual((20, 20, 13), (numbers.Count, numbers.Count(n => prototypes.Read(n + 20).Status == PrototypeFileStatus.Found),
             numbers.Count(n => prototypes.Read(n).Status == PrototypeFileStatus.Found)));
 
         // Stacking and cancel sets; No_Resist with maintenance or duration (sizes MG19).
-        Assert.AreEqual((109, 34, 12, 0, 3, 15, 6), (records.Count(r => r.NoStack != 0), records.Count(r => r.NoStack == 0 && r.KeysRead.Contains("No_Stack:")),
+        Assert.AreEqual((109, 34, 12, 0, 3, 15, 6), (records.Count(r => r.NoStack == 1), records.Count(r => r.NoStack == 0 && r.KeysRead.Contains("No_Stack:")),
             records.Count(r => r.CancelsSpellFlags != 0), records.Count(r => r.CancelsEnvironmentSpellFlags != 0), records.Count(r => r.DisallowedCasterSpellFlags != 0),
             records.Count(r => r.DisallowedTargetSpellFlags != 0), records.Count(r => r.DisallowedTargetCritterFlags != 0)));
         Assert.AreEqual(0, records.Count(r => r.NoResist && (r.MaintainPeriod != 0 || r.DurationSeconds != 0 || r.DurationTriggerCount != 0)));

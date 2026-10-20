@@ -44,8 +44,9 @@ public enum SpellDataStatus
     SkippedKey,
     InvalidNumber,
     MalformedPair,
-    /// <summary>A key whose absence the original logs as an error and reads on with a default (<c>AoE:</c> of line +0, a
-    /// component's <c>Type:</c>, a Cast's <c>Spell:</c>, an Interrupt's <c>MagicTech:</c>, a Summon's <c>Proto:</c>).</summary>
+    /// <summary>A key the original reads on without, with a default: logged as an error for <c>AoE:</c> of line +0, a Cast's
+    /// <c>Spell:</c>, an Interrupt's <c>MagicTech:</c> and a Summon's <c>Proto:</c>; silent for a component's <c>Type:</c>
+    /// (NoOp).</summary>
     MissingKey,
     /// <summary>A flag list the original reads only in part (a space-separated name before a later <c>|</c>).</summary>
     AmbiguousFlagList,

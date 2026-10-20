@@ -37,7 +37,7 @@ Code: [`src/Arcanum.Data/Magic`](../../src/Arcanum.Data/Magic); tests:
   (`OCF_*`), 26 item triggers with their values, 23 stat keys, four `Info:` names, the ten `AI_*` keys.
 - Results are typed: `SpellDataLoad`, `SpellRecordRead`, `SpellTextsRead` with a `SpellDataStatus` and a
   `SpellDataRefusal` naming the file, the message number and the token. No exception at the boundary except for null
-  arguments and an undefined mode.
+  arguments, an undefined mode, and component type names that are not 25 non-null names.
 
 ## Files
 
@@ -130,7 +130,7 @@ typed data (`SpellComponentData`, null for the types without data). The line sta
 | `Count:` | number | −1 |
 | `Apply_AoE:` | target-name list | 0 |
 | `ItemTriggers:` | item-trigger list | 0 |
-| `Type:` | one of the 25 `rules\magictech.mes` names, ASCII case-insensitive | NoOp (the original reads on; strict mode: `MissingKey`) |
+| `Type:` | one of the 25 `rules\magictech.mes` names, ASCII case-insensitive | NoOp (the original reads on silently; strict mode: `MissingKey`) |
 
 Then the type's data. "Positional" values have no key and are read at the cursor in the order shown:
 
@@ -206,7 +206,7 @@ The original's named-key parser, with the comma as value delimiter:
 
 Load-map policy 2. Both modes refuse what ends the original's process: `MissingParenthesis`, `UnknownName` (also an
 unknown action name, component type, positional name, or a name reaching a hole of a field's table), `UnknownFlag`,
-`TrailingSeparator`, `MissingValue` (a positional value after the line has ended), and `NonAsciiByte` for a byte above 0x7F on lines +1..+4 (the original's white-space test reads
+`TrailingSeparator`, `MissingValue` (a positional value after the line has ended), and `NonAsciiByte` for a byte above 0x7F on any line it parses (line +0, +1..+4, component lines; the original's white-space test reads
 memory before its character table for one, so its result depends on run-time data; the refusal covers the whole line,
 deliberately broader than the places the original's skip meets the byte). A missing component type name is
 `MissingComponentName`.
@@ -219,9 +219,9 @@ deliberately broader than the places the original's skip meets the byte). A miss
 | Status | When |
 | --- | --- |
 | `MissingRequiredLine` | line +0 or +1 of a record is missing |
-| `MissingKey` | a key whose absence the original logs and reads on with a default: `AoE:` of line +0, a component's `Type:`, a Cast's `Spell:`, an Interrupt's `MagicTech:`, a Summon's `Proto:` |
+| `MissingKey` | a key the original reads on without, with a default: logged for `AoE:` of line +0, a Cast's `Spell:`, an Interrupt's `MagicTech:` and a Summon's `Proto:`; silent for a component's `Type:` (NoOp) |
 | `MissingText` | a text of `mes\spell.mes` is missing |
-| `UnknownKey` | text is left after the cursor's last key and its first non-empty segment's key is not one of the line's |
+| `UnknownKey` | text is left after the cursor's last key and its first non-empty segment's key is not one of the line's (for component lines: not one of the keys any component type has) |
 | `SkippedKey` | the left text starts with one of the line's keys (out of order, repeated, or a `DurationStatInfo:` after a stat of −1) |
 | `InvalidNumber` | a number, alone, in a pair, in a range or positional, that is not an optional sign and digits within 32 bits (a range: one or two unsigned numbers) |
 | `MalformedPair` | a pair without `@`, with text after `)`, or a stat name followed by more than spaces |
@@ -266,7 +266,7 @@ Component census (ARC-MAGIC-002; the questions census U3 left open, counts only)
   Death 4, Stunned 3, Scars 2, Crippling 2, Weapon dropped 1. Damage types: Damage normal 32, poison 10, electrical 9,
   fire 6, magic 10, acid 1; Heal normal 32, poison 8, magic 5.
 - Summons: 42 components, 38 without `List:`, lists 0, 3, 4 and 5 once each; **no `Clear_Faction:`** and no `Palette:`
-  (MG8 and the summon palette change nothing in the installed data); 4 without `Proto:` (all with a list); 20 distinct
+  (MG8 and the summon palette change nothing in the installed data); 4 without `Proto:`, which are the 4 with a list; 20 distinct
   prototypes, each with a file at the number + 20.
 - `No_Stack:` 1 on 109 records, 0 on 34; `Cancels_SF:` 12, `Cancels_EnvSF:` 0, `Disallowed_SF:` 3, `Disallowed_TSF:` 15,
   `Disallowed_TCF:` 6 records.
@@ -288,14 +288,14 @@ the reader modes cover them, and no installed record reaches any of them.
 | A pair without `(`, an unknown `Info:` name or an unknown or empty flag name logs and exits the process (SR11–SR13). | The spell data is refused with a typed reason naming file, message and token. | both |
 | A `Resist:` stat name that matches no key crashes on the key table's null entries (SR12). | Refused (`UnknownName`). | both |
 | A flag-list separator as the last character of the value crashes (SR13). | Refused (`TrailingSeparator`). | both |
-| A byte above 0x7F met by the white-space skip is classed by memory before the character table (SR14). | Refused (`NonAsciiByte`) on lines +1..+4. | both |
+| A byte above 0x7F met by the white-space skip is classed by memory before the character table (SR14). | Refused (`NonAsciiByte`) on every parsed line. | both |
 | A missing file, component type name, or a file the original's loader rejects fails the magic-tech init (SR1). | Refused (`FileMissing`, `MissingComponentName`, `FileEmpty`, `FileUnreadable`); a file the [MES grammar](mes-reader.md) refuses is `FileRefused` (project policy). | both |
 | A missing text of `mes\spell.mes` is the shared "Error! Missing line N" text (SR15). | `null`; the host formats the missing text. Strict mode refuses it (`MissingText`). | both / strict |
 | A missing line +0 or +1, a key out of order or repeated, an unknown key, a non-numeric or overflowing number, a pair without `@`, a dropped value and a flag list read in part are read silently. | Read the same way in like-original mode; refused in strict mode (statuses under [Reader modes](#reader-modes)). | strict |
 | The flag-list parse overwrites separators in the loaded message text and can leave a cut in it. | The text is never changed; each line is parsed once in both programs, so no reading differs. | both |
 | A positional component value read after its line has ended crashes (null cursor); a name of an ObjFlag field or a TraitIdx stat that matches nothing reaches a hole of its table and crashes (SC5). | Refused (`MissingValue`, `UnknownName`). | both |
 | An unknown action name or component type exits (SC5). | Refused (`UnknownName`). | both |
-| A missing `AoE:`, `Type:`, `Spell:`, `MagicTech:` or `Proto:` is logged and read on with a default (SC1, SC5, SC7, SC8). | The same default; strict mode refuses it (`MissingKey`). | strict |
+| A missing `AoE:`, `Spell:`, `MagicTech:` or `Proto:` is logged, a missing `Type:` is not, and each is read on with a default (SC1, SC5, SC7, SC8). | The same default; strict mode refuses it (`MissingKey`). | strict |
 | `Tgt_Obj_No_ST_Critter_Dead` lacks the critter bit (MG18). | The data keeps the original's mask; the Steamwoven setting adds the bit where the area is used, the Original setting keeps it (switch `NotDeadCritterTargetLacksCritterBit`). | rule mode |
 | `Proto:` is resolved to a prototype at load. | The basic prototype number is kept (resolution is the summon slice's). | both |
 | `Rules\SpellEyeCandy.mes` is parsed by the same init. | Not read. | both |

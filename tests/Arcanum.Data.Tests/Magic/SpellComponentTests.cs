@@ -151,6 +151,8 @@ public sealed class SpellComponentTests
             Refused(List((L(20, 5), "[Begin], Type: ObjFlag, obj_f_generic_flags, OGF_NOTHING, FLAG_ON")), mode, SpellDataStatus.UnknownName, L(20, 5), "OGF_NOTHING");
             Refused(List((L(20, 5), "[Begin], Type: Damage, Dmg_Flags: Full |")), mode, SpellDataStatus.TrailingSeparator, L(20, 5));
             Refused(List((L(20, 5), "[Begin], Type: Effect, 4, Add, Cause: Fate")), mode, SpellDataStatus.UnknownName, L(20, 5), "Fate");
+            Refused(List((L(20, 0), "AoE: Tgt_Self\u00e9")), mode, SpellDataStatus.NonAsciiByte, L(20, 0), "\u00e9");
+            Refused(List((L(20, 5), "[Begin], Type: NoOp\u00e9")), mode, SpellDataStatus.NonAsciiByte, L(20, 5), "\u00e9");
         }
     }
 
