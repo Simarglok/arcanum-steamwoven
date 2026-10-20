@@ -183,7 +183,7 @@ names the slice that would own the kind (P, [section
 | WorldMap, Sleeping, MainMenu, UI, MP Ctrl UI, Multiplayer, Debug, Bkg Anim, Fidget Anim | R | WorldMap only | WorldMap cleared | travel step 62 ms (travel (0x564C20)), sleep step 200 ms (sleep (0x57B710, 0x57B7F0)), UI messages, menu, background and fidget animations | host (Godot) timers, not session state (P) |
 | NPC Wait Here | G | yes | — | companion wait timeout by wait index: 0, 15 min, 2 h, 1 day, 7 days, 30 days (wait (0x4AA7A0, 0x4AA8C0, 0x4AA990, 0x4AAA30)); anomaly O3 of [ARC-RES-024](companion-follow-evidence.md#open-questions) | party slice after O3 |
 | Light | A | no | — | animated light frame, `1000 / fps` (light (0x4D8590, 0x4D8620, 0x4D8660)) | renderer (P) |
-| Lock | G | yes | — | relock 1 h after an unlock, unjam 1 day after a jam (lock (0x441DD0, 0x441E90, 0x441F10)) | door/container slice |
+| Lock | G | yes | — | 1 h after an unlock of a locked object, 1 day after a jam of a free one; either event locks, unjams and closes the object (lock (0x441DD0, 0x441E90, 0x441F10); [ledger LK3–LK5](original-verification-ledger.md#doors-containers-and-locks-arc-res-065)) | lock state owner ARC-WORLD-050 |
 | NPC Respawn | G | yes | — | store restock 12..24 h random, replace pattern (respawn (0x4640C0)) | barter slice |
 | Recharge Magic-Item | G | yes | — | 60 s × 8 (read as 60 real seconds, inference), merged per item (recharge (0x459590)) | MAGIC slices |
 | Decay Dead Bodie | G | yes | — | 1 day for a critter, 2 days for another object (decay (0x45EBE0)) | life state (death) |
