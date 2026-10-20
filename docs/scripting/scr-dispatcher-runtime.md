@@ -46,7 +46,7 @@ action, next line or null) and `Effects`.
 `ScrEffects`: the slot `Writeback` (source, attachee or null, point, new slot)
 or `DestroyTrapObject`, the changed `GlobalFlags` (final values, ascending, only
 those that differ from the host's), the new `StoryState`, the conversation to start (`Dialog`), the deferred `Calls`
-the printed `Lines` (S6) and the `Sounds` (S7). A run reads its
+the printed `Lines` (S6), the `Sounds` (S7) and the `Teleports` (S4). A run reads its
 own writes back from an overlay. Effects made before a stop are kept, as the
 original applies them as it goes; a refused script has none.
 
@@ -287,14 +287,14 @@ The viewer's use and tile wiring is the next slice (S4b).
   its name number, whether it is mind-controlled, the name number of the item it wields in each location 1000..1008, and
   whether it has the reputation. The interpreter asks only for the object the condition names: quest state equals the
   value (6); holds the item (17); is named, unless mind-controlled (20); wields the item in any of the nine locations (21);
-  has the reputation (33). A set with a guard and a host without the queries is a caller error (an exception), not a
-  script refusal. As for the other single-object conditions, an absent object stops the run (`MissingObject`) where the
+  has the reputation (33). A set with a guard and a host without the queries is a caller error: the dispatcher throws before
+  any event runs, never a script refusal. As for the other single-object conditions, an absent object stops the run (`MissingObject`) where the
   original takes the false branch over zero objects.
 - **Registry**: `ScrGuards.Holds` marks 0x4451B0 and `ScrGuards.Teleport` 0x447220, both partial (only these conditions
   and actions; the earlier slices' conditions and actions are not migrated to the registry yet).
 - **Installed original** (opt-in `ScrTeleportTests`, `DAT_ROOT`): from line 0 set S7 admits 469 scripts and S4 774. Of the
   357 scripts with a teleport action, S7 admits 22 (none of their teleports is reached from line 0) and S4 294; with a host
-  that answers every guard "no" and holds no flag, those runs ask for 257 teleports.
+  with no quests, items, names, wielded items, reputations or flags, those runs ask for 257 teleports.
 
 ## Checks
 
@@ -305,6 +305,9 @@ The viewer's use and tile wiring is the next slice (S4b).
   stops, tile and sector writeback per mode, refusal, invalid events and
   options, the trace, the profile.
 - `tests/Arcanum.Session.Tests/RuleModeTests.cs`: `GameRules.Scripts` per mode.
+- `tests/Arcanum.Scripting.Tests/Scr/ScrTeleportTests.cs` (ARC-SCRIPT-014): both teleport actions and their operand order,
+  absent objects, request order, each guard true and false, the wield locations, the absent object of a guard, the set
+  and host checks; opt-in, `DAT_ROOT`: the S7 and S4 counts and the teleport requests of the installed scripts.
 - Opt-in, `DAT_ROOT` = the game folder, `ScrDispatcherRealDataTests`: every
   installed script dispatched on a synthetic NPC slot from line 0 in both
   modes, with the file's own number. S2 admits 148 of 2,399 (the 144 of S1 and

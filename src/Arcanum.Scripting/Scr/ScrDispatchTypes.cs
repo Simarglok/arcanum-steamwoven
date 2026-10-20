@@ -103,7 +103,7 @@ public interface IScrObjectQueries
 {
     /// <summary>The state of the quest the condition compares (SG1): a PC's own state of it (6 when its entry is marked
     /// botched); for any other object the quest's global state, whatever the object.</summary>
-    int QuestState(ScrObjectRef pc, int quest);
+    int QuestState(ScrObjectRef obj, int quest);
     /// <summary>Whether a direct inventory item of the object has this name number (SG2: a container's or a critter's
     /// inventory, no nested search); false for an object without an inventory.</summary>
     bool HoldsItemNamed(ScrObjectRef obj, int name);
@@ -117,15 +117,16 @@ public interface IScrObjectQueries
     bool HasReputation(ScrObjectRef obj, int reputation);
 }
 
-/// <summary>A fade-and-teleport's extras (action 102): the game seconds the move takes, the sound and the movie numbers, as
-/// the action reads them; the fade itself and the time advance are the host's.</summary>
+/// <summary>A fade-and-teleport's extras (action 102, ledger TR2): the game seconds the move takes, the sound and the movie
+/// numbers, as the action reads them. The original uses the seconds and the sound only when positive and the movie when it
+/// is not zero (an unsigned test); the fade itself, the time advance, the sound and the movie are the host's.</summary>
 public sealed record ScrTeleportFade(int Seconds, int Sound, int Movie);
 
 /// <summary>
 /// ARC-SCRIPT-014: a teleport the run asks for (actions 44 and 102, ledger TR1, TR2): the object, the catalogue map number as the
 /// script gives it, and the tile. <see cref="RuntimeMap"/> is that number less 4,999, as the original computes it (32-bit).
-/// The original keeps one pending teleport: a request replaces the pending one unless that one is a PC's teleport the game
-/// has already committed, which refuses the rest (ledger TR4); the host owns that rule.
+/// The original keeps one pending teleport: a request while a teleport of the local PC is pending is refused, any other
+/// pending request is replaced (ledger TR4); the host owns that rule.
 /// </summary>
 public sealed record ScrTeleport(ScrObjectRef Object, int CatalogueMap, int X, int Y, ScrTeleportFade? Fade = null)
 {
@@ -298,7 +299,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S7"/>, admitted for the lines reachable from the event's line) and the executed-line
+/// at most <see cref="ScrAdmissionSet.S4"/>, admitted for the lines reachable from the event's line) and the executed-line
 /// budget.</summary>
 public sealed record ScrRunOptions
 {
@@ -316,5 +317,13 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (!Admission.IsSubsetOf(ScrAdmissionSet.S4)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S4.", nameof(Admission));
+    }
+
+    // A set with a guard condition needs a host that answers it, checked before any event runs.
+    internal void Validate(IScrHost host)
+    {
+        Validate();
+        if (host is not IScrObjectQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectQueryConditions.Contains))
+            throw new ArgumentException("A set with a guard condition needs a host that implements IScrObjectQueries.", nameof(Admission));
     }
 }

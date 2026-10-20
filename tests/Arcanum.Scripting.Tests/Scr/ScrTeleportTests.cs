@@ -117,6 +117,31 @@ public sealed class ScrTeleportTests
     }
 
     [TestMethod]
+    public void A_guard_over_an_absent_object_stops_and_values_may_be_variables()
+    {
+        // The player is absent: the guard on line 1 stops the run there (the original would take the false branch).
+        var absent = With(Program(Do(C(100, N(1))), L(C(17, (21, 0), N(6001)), C(100, N(2)), C(100, N(3))), Do(C(1))));
+        absent.Inner.PlayerRef = null;
+        var stopped = Use(absent);
+        Assert.AreEqual((ScrStop.MissingObject, 1), (stopped.Stop, stopped.StopLine));
+        CollectionAssert.AreEqual(new[] { 1 }, stopped.Effects.GlobalFlags.Select(f => f.Index).ToArray(), "effects before the stop are kept");
+        var fade = With(Program(Do(C(102, N(1), N(2), N(3), (21, 0), N(5000), N(1), N(1))), Do(C(1))));
+        fade.Inner.PlayerRef = null;
+        Assert.AreEqual(0, Use(fade).Effects.Teleports.Count);
+
+        // A local variable as the name, set on line 0; the false branch has its own effect; location 999 is not walked.
+        var program = Program(Do(C(10, (2, 0), N(6002))), L(C(21, (Triggerer, 0), (2, 0)), C(100, N(4)), C(100, N(5))), Do(C(1)));
+        var below = With(program);
+        below.Wielded[(Pc, 999)] = 6002;
+        CollectionAssert.AreEqual(new[] { 5 }, Use(below).Effects.GlobalFlags.Select(f => f.Index).ToArray());
+        CollectionAssert.AreEqual(Enumerable.Range(1000, 9).ToArray(), below.WieldAsks.ToArray());
+        var held = With(program);
+        held.Wielded[(Pc, 1000)] = 6002;
+        CollectionAssert.AreEqual(new[] { 4 }, Use(held).Effects.GlobalFlags.Select(f => f.Index).ToArray());
+        Assert.AreEqual(1, held.WieldAsks.Count, "the first matching location ends the walk");
+    }
+
+    [TestMethod]
     public void The_guards_and_teleports_need_set_S4_and_a_host_that_answers()
     {
         var guard = Program(L(C(17, (Triggerer, 0), N(6001)), C(1), C(1)));
@@ -125,12 +150,12 @@ public sealed class ScrTeleportTests
         var teleport = Program(Do(C(44, (Triggerer, 0), N(5078), N(1), N(1))), Do(C(1)));
         Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, Use(With(teleport), new ScrRunOptions()).Refusal!.Code, "the default set is S5");
 
-        // A host that cannot answer the guard questions is a caller error, not a script refusal.
+        // A set with a guard and a host that cannot answer is a caller error before any event runs, whatever the script.
         var plain = new FakeHost();
-        plain.Attach(Chest, ScrPoint.Use, 2793, guard);
-        Assert.ThrowsExactly<InvalidOperationException>(() => Use(plain));
         plain.Attach(Chest, ScrPoint.Use, 2793, teleport);
-        Assert.AreEqual(1, Use(plain).Effects.Teleports.Count, "a teleport needs no questions");
+        Assert.ThrowsExactly<ArgumentException>(() => Use(plain));
+        var teleportsOnly = new ScrAdmissionSet("teleports", ScrAdmissionSet.S7.Conditions, ScrAdmissionSet.S4.Actions, ScrAdmissionSet.S7.ValueKinds, ScrAdmissionSet.S7.FocusKinds);
+        Assert.AreEqual(1, Use(plain, new ScrRunOptions { Admission = teleportsOnly }).Effects.Teleports.Count, "a teleport needs no questions");
 
         Assert.IsTrue(ScrAdmissionSet.S7.IsSubsetOf(ScrAdmissionSet.S4));
         CollectionAssert.AreEquivalent(ScrAdmissionSet.S7.Actions.Append(44).Append(102).ToArray(), ScrAdmissionSet.S4.Actions.ToArray());
@@ -170,7 +195,7 @@ public sealed class ScrTeleportTests
         }
         // Measured on the 1.0.7.4 GOG installation: from line 0 set S7 admits 469 scripts, S4 774. Of the 357 scripts with a
         // teleport action, S7 admits 22 (their teleports are not reached from line 0) and S4 294; with a host that answers
-        // every guard "no" and holds no flag, those runs ask for 257 teleports.
+        // no quests, items, names, wielded items, reputations or flags, those runs ask for 257 teleports.
         Assert.AreEqual((2399, 469, 774), (total, s7, s4));
         Assert.AreEqual((357, 22, 294, 257), (teleportScripts, teleportS7, teleportS4, requested));
     }

@@ -28,7 +28,7 @@ public static class ScrDispatcher
         ArgumentNullException.ThrowIfNull(e);
         ArgumentNullException.ThrowIfNull(host);
         options ??= new();
-        options.Validate();
+        options.Validate(host);
         if (e.Point is < 0 or >= ScrPoint.Count || e.Point == ScrPoint.DialogOverride || e.Line < 0 || e.Attachee.Code is null || e.Triggerer is { Code: null } || e.Extra is { Code: null })
             return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         var slot = host.Slot(e.Attachee, e.Point);
@@ -82,7 +82,7 @@ public static class ScrDispatcher
     {
         ArgumentNullException.ThrowIfNull(e);
         options ??= new();
-        options.Validate();
+        options.Validate(host);
         if (e.Triggerer.Code is null) return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         return RunPlaced(ScrSource.Tile, e.Slot, new(e.Triggerer, null, null), host, options, discard: options.Rules.TileScriptChangesDiscarded);
     }
@@ -93,7 +93,7 @@ public static class ScrDispatcher
     {
         ArgumentNullException.ThrowIfNull(e);
         options ??= new();
-        options.Validate();
+        options.Validate(host);
         if (e.Player.Code is null) return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         return RunPlaced(ScrSource.Sector, e.Slot, new(e.Player, null, null), host, options, discard: false);
     }
@@ -108,7 +108,7 @@ public static class ScrDispatcher
         ArgumentNullException.ThrowIfNull(e);
         ArgumentNullException.ThrowIfNull(host);
         options ??= new();
-        options.Validate();
+        options.Validate(host);
         if (e.Line < 0 || e.Triggerer is { Code: null } || e.Attachee is { Code: null }) return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         if (e.Script == 0) return Ended(ScrOutcome.RunDefault, ScrStop.NoScript);
         var lookup = host.Script(e.Script);
