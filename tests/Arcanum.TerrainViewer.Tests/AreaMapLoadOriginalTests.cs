@@ -80,6 +80,16 @@ public sealed class AreaMapLoadOriginalTests
         Assert.IsTrue(bodies.Where(command => command.WadeRows > 0).All(command => command.WadeRows == Math.Min(AreaScenePlan.WadingRows, command.Destination.Height)));
     }
 
+    [TestMethod, TestCategory("RealData")]
+    [DataRow("bmc", 115), DataRow("ashbury haunted castle", 76), DataRow("k'na tha", 86)]
+    public void Additive_bodies_are_drawn_unlit(string map, int additive)
+    {
+        // ARC-RENDER-026: the original draws an additive body with the base palette, unlit (ledger BL2).
+        var bodies = AreaLoadOperation.Execute(1, Arguments(Root(), map), default).Area!.Plan.Commands.Where(command => command.Identity is not null).ToArray();
+        Assert.AreEqual(additive, bodies.Count(command => command.Additive && command.Unlit));
+        Assert.AreEqual(0, bodies.Count(command => command.Additive && !command.Unlit));
+    }
+
     private static string Root()
     {
         if (Environment.GetEnvironmentVariable("DAT_ROOT") is { Length: > 0 } root)

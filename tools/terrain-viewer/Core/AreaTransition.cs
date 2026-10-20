@@ -16,6 +16,10 @@ public sealed record AreaMapRuntime(AreaSnapshot Snapshot, AreaStepSnapshot Step
 public enum AreaUseOutcome
 {
     Accepted, NotATrigger, TooFar, TriggerTileBlocked, StepBlocked, StepUnknown, TransitionPending, DestinationUnavailable,
+    /// <summary>ARC-SCRIPT-015: a scripted use ran and asked for no teleport (its guards held it back).</summary>
+    ScriptEnded,
+    /// <summary>ARC-SCRIPT-015: a scripted use did not run (outside the viewer's set, no content) or the session refused its effects.</summary>
+    ScriptRefused,
 }
 
 /// <summary>The answer to one use of an object. <see cref="Distance"/> is the Chebyshev distance to it.</summary>

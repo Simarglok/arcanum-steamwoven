@@ -2,8 +2,8 @@ namespace Arcanum.Data.Magic;
 
 /// <summary>
 /// ARC-MAGIC-001: one of the 223 spell records of <c>rules\spelllist.mes</c> as the original's load leaves it (checked in the
-/// 1.0.7.4 executable, ledger "Spell records"; contract docs/formats/spell-records.md). Lines +0..+4 of the record are read here;
-/// line +0 (the record's target area) and the component lines (+5 onward) are kept as text for the component reader.
+/// 1.0.7.4 executable, ledger "Spell records" and "Spell components"; contract docs/formats/spell-records.md): lines +0..+4 of
+/// the record (ARC-MAGIC-001, line +0 since ARC-MAGIC-002) and its effect components (ARC-MAGIC-002).
 /// Records 0..79 are the college spells (16 colleges × 5 ranks); records 80..139 are magic outside any college; records
 /// 140..222 are technology. Seconds are the data's unit; the run turns them into game time.
 /// </summary>
@@ -81,15 +81,25 @@ public sealed record SpellRecord
     public required IReadOnlyList<bool> LinesPresent { get; init; }
     /// <summary>The keys of lines +1..+4 the original's cursor read, in reading order (a census and diagnostic aid).</summary>
     public required IReadOnlyList<string> KeysRead { get; init; }
-    /// <summary>Line +0, the record's target area, as text (null when missing); typed by the component reader.</summary>
+    /// <summary>Line +0: the target area of each <see cref="SpellAction"/>.</summary>
+    public required IReadOnlyList<SpellArea> Areas { get; init; }
+    /// <summary>The effect components of lines +5 onward, in file order (each names its action).</summary>
+    public required IReadOnlyList<SpellComponent> Components { get; init; }
+    /// <summary>Whether a component is a Damage component (the original's "has damage" flag, which drives resistance).</summary>
+    public required bool HasDamage { get; init; }
+    /// <summary>The spell-flag bits ObjFlag components turn on (<c>obj_f_spell_flags</c>), as the original collects them.</summary>
+    public required uint SpellFlagsSet { get; init; }
+    /// <summary>Line +0 as text (null when missing).</summary>
     public required string? AreaLine { get; init; }
-    /// <summary>Lines +5 onward up to the first missing one (at most 44), as text; typed by the component reader.</summary>
+    /// <summary>Lines +5 onward up to the first missing one (at most 44), as text.</summary>
     public required IReadOnlyList<string> ComponentLines { get; init; }
 
     public bool Equals(SpellRecord? other) =>
         other is not null && Scalars() == other.Scalars() && AreaLine == other.AreaLine && CasterEyeCandy.SequenceEqual(other.CasterEyeCandy)
         && TargetEyeCandy.SequenceEqual(other.TargetEyeCandy) && AiPriorities.SequenceEqual(other.AiPriorities)
-        && LinesPresent.SequenceEqual(other.LinesPresent) && KeysRead.SequenceEqual(other.KeysRead) && ComponentLines.SequenceEqual(other.ComponentLines);
+        && LinesPresent.SequenceEqual(other.LinesPresent)
+        && Areas.SequenceEqual(other.Areas) && Components.SequenceEqual(other.Components) && HasDamage == other.HasDamage
+        && SpellFlagsSet == other.SpellFlagsSet && KeysRead.SequenceEqual(other.KeysRead) && ComponentLines.SequenceEqual(other.ComponentLines);
 
     public override int GetHashCode() => HashCode.Combine(Scalars(), AreaLine, ComponentLines.Count, KeysRead.Count);
 

@@ -110,14 +110,21 @@ still hold. Eviction itself is therefore shown only by the exterior sweep. The
 reload's managed-heap bound (half the CPU repository) has an 8 MiB floor in map
 mode, because a small map's repository (the cave's is 1.5 MB) is below the
 heap's ordinary noise, and since ARC-RENDER-018 a second floor of 4 % of the heap
-before the reload, because a large map's heap (about 450 MB for the 64-sector
+before the reload, because a large map's heap (about 540 MB live for the 64-sector
 `tarant sewers-02`) varied between runs from −63 to +26 MB in a single post-GC
 sample. The baseline and the retained size are each the least of three post-GC samples
 a frame apart (exterior and maps); the retired generation must still be collected.
-**Known flake:** on `tarant sewers-02` the heap after the reload stays 8–24 MB
-larger in a stable way (samples within one measurement differ by under 1 MB),
-so about one run in four still exceeds the 4 % floor; what grows (a one-time
-cache or a retention) is not yet known and is left to its own investigation.
+
+Since ARC-RENDER-025 the last collection of each sample compacts the large-object
+heap. On `tarant sewers-02` the earlier flake did not come from growth. In five
+runs the reload left the live heap (the generations' size less their free space)
+about 10 MB *smaller*: 543.4 MB before, 533.0 MB after. In those runs the
+large-object heap held 96 to 208 MB of free space, and the uncompacted samples
+differed from the live bytes by up to tens of megabytes, so before and after
+sometimes crossed the 4 % floor. This is an observation; the runtime's own
+estimate is meant to exclude free space, and the mechanism is not established.
+With compaction, in four runs, the samples equal the live bytes to within about
+10 KB (543.4 MB before, 533.0 MB after each time).
 
 ## Body blends and wading (ARC-RENDER-018)
 
@@ -139,7 +146,8 @@ They are general rules of every body, not of these maps.
 - **Constant alpha.** The body is drawn at its blit alpha (`Alpha`, the source's
   weight; the shader divides by 255 where the original divides by 256, at most
   1/255 apart).
-- **Unlit.** Multiply and constant-alpha bodies are drawn with the base palette,
+- **Unlit.** Additive (since ARC-RENDER-026, ledger BL2), multiply and
+  constant-alpha bodies are drawn with the base palette,
   without ambient or stationary light (`Unlit`, the `Unlit` ambient channel), and
   a wall among them never fades.
 - **Wading.** A body with `OF_WADING` and without `OF_WATER_WALKING`, as
@@ -152,7 +160,8 @@ They are general rules of every body, not of these maps.
   multiply before constant alpha. That dispatch is a source reading, not checked in
   the executable (F0), and no installed body has the combination.
 
-On the installed original (opt-in test): 20 wading bodies in `caladons sewers`
+On the installed original (opt-in test): additive bodies, drawn unlit, on most
+interiors (115 in `bmc`, 86 in K'na Tha, 76 in `ashbury haunted castle`); 20 wading bodies in `caladons sewers`
 and 102 in `tarant sewers-02` (rats, lake scenery, a container), 12 and 42
 multiply scenery bodies in `void - arronax's interior` and
 `void-kerghans castle`, and one constant-alpha critter (alpha 95) in
@@ -174,17 +183,17 @@ Not covered: wading is the T0 flag only (the original recomputes it from the til
 an object moves, a source reading not checked in the executable, F0; the walking
 actor never wades); shadows (the original also darkens a wading body's shadow,
 source reading, F0); frozen, stoned, `OF_DONTLIGHT` and
-animated-dead tints. Additive bodies keep the earlier lit rule, although the
-original draws them unlit too (BL2); changing it touches the pinned Crash Site
-lighting and is left to its own task.
+animated-dead tints.
 
 ## Map transitions (ARC-WORLD-031)
 
 Map mode moves the player between maps by the map's own data: the
 [map transitions](../world/map-transitions.md) (ARC-DATA-025) read from the
 content stack when the map loads, so every map works the same way and nothing
-is bound to a location. Only unconditional transitions run; a guarded one (a
-quest flag, a held item, a dialog) is not a trigger here (SCRIPT slice S4).
+is bound to a location. Unconditional transitions run as below; a use site whose
+teleport stands behind guards runs its use script since ARC-SCRIPT-015
+([guarded use transitions](#guarded-use-transitions-arc-script-015)); guarded tile
+and sector scripts are not triggers here yet.
 
 - **Triggers.** A left click on an object with an unconditional use teleport
   (scenery or a portal) is a use: accepted within Chebyshev distance 2 by the
@@ -241,6 +250,42 @@ session; observed `crematorium-lev 1` → `crematorium-lev 2`, script 2369,
 arrival 116,112) and `ARC-WORLD-031 native-smoke jump PASS` (a ground click
 walks onto a jump point; observed in `tulla interior`, 437,214 → 304,219), or
 `NO-EXIT`/`NONE` when the map has no such trigger reachable from its start.
+
+## Guarded use transitions (ARC-SCRIPT-015)
+
+A use site whose teleport the [transition reader](../world/map-transitions.md) finds only behind a condition or with a
+computed destination (guards `ConditionalPath` and `ComputedDestination` only, on scenery or a portal) is a use trigger
+in map mode too, and its use script decides (plan slice S4, viewer part). Any other guard (a trap script, a container, an
+object of another kind, an object off or not clickable at T0, a teleport of another object) keeps the site out; an object
+with an unconditional exit stays that exit.
+
+- **Run.** The click goes through the same use rule and walk-to-use as an unconditional exit. Within range,
+  `AreaUseScriptHost` runs the object's use script once, with the PC as the triggerer, under the set "S4-area-use": S4
+  without the story-state actions (the session has no story-state number) and without the dialog action. The use slot is
+  the row's script attachment, overridden by the session's map changes `use.lf`, `use.counters` and `use.script` of the
+  object (a mobile by its own id; a sector object, whose id is null, by its sector and window ordinal,
+  `AreaUseScriptHost.EntityId`), and a changed slot is written back there (a value equal to the loaded one clears its key), so a door that
+  removes its script or keeps a flag stays so, also across F7/F8 and map changes.
+- **Guards** (ledger SG1–SG6) are answered from the session: the PC's quest log (botched reads 6) and, for any other
+  object, the quest's global state; the hero's kit and carried items and their worn slots; a holder's current list and
+  its items' inventory locations; any object's name number and spell flags from its row (the PC has no row: name 0, no
+  spell flags); no reputations (only a PC has them and the session holds none yet).
+- **Effects**, applied as the run goes, as for a dialog script: global flags, sound-scheme requests, deferred calls to the
+  session's queue, the use slot; a step the session refuses leaves the earlier ones applied and the use is reported
+  refused. Printed lines show on the status line; effect sounds are not played. The first teleport of the player is the
+  transfer: its map (−1 keeps this map, ledger TR4) and tile replace the site's, and it queues through the ordinary
+  transfer path. A teleport map mode cannot take (an exit to the start map, an arrival the step evidence does not admit)
+  is checked before anything is applied: the use is refused, the door stays as it was and its printed lines are not shown. A teleport of another object
+  is not modelled: the run's effects are dropped and the use is refused. A run outside the set, without script content or
+  after a script file changed is refused and changes nothing.
+- **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`): 21 guarded use sites on 6 of the 78 maps map
+  mode opens. With a new game's state (no flag, quest or item) 9 run and their guards hold the teleport back, 12 are
+  refused because they need conditions or actions outside the set (immediate script calls, loops, other conditions). In
+  `tulla interior` the door with script 2353 prints its line while global flag 2376 is clear and, once it is set,
+  teleports the player to (168,218) on the same map.
+- **Not covered.** Guarded tile and sector scripts (the reader finds no guarded sector teleport); immediate script calls,
+  loops and focus groups; a teleport behind a deferred call (the call later runs under the dialog host's set, which has
+  no teleport, and is refused); the PC's name number; a fade-and-teleport's fade, sound and movie.
 
 ## Dialogs (ARC-WORLD-032)
 
@@ -371,8 +416,10 @@ travels with the player. Nothing is pinned to Virgil or to a location.
   session party port, so a `JO` runs the follow check. A speaker the party has
   touched (following, waiting, or recorded away from its T0 cell) becomes a
   moving companion of the map with its T0 body; every other speaker stays its
-  T0 body. The group is rebuilt when a conversation ends (the follow smoke closes a
-  conversation after the join and checks the rebuilt companion).
+  T0 body, and an NPC dead at T0 stays its T0 corpse, never a moving
+  companion (ARC-WORLD-049). The group is rebuilt when a conversation ends
+  (the follow smoke closes a conversation after the join and checks the
+  rebuilt companion).
 - **Following.** These are the companion follow rules of the exterior
   ([companion follow runtime](../world/companion-follow-runtime.md)): start
   beyond 4 cells, stop within 2, and the 30-cell catch-up.
@@ -387,8 +434,9 @@ travels with the player. Nothing is pinned to Virgil or to a location.
   session.
 
 Native smoke (`ARC-WORLD-037 native-smoke follow PASS`, before the transfer
-smoke). A drawn speaker with facts joins through the session's forced join, as
-a script follow does; the dialog's `JO` uses the same session party, and
+smoke; `NONE` when the map has no living drawn speaker with follow facts, as
+`crash site cave`, whose only speaker is dead at T0). A drawn, living speaker
+with facts joins through the session's forced join, as a script follow does; the dialog's `JO` uses the same session party, and
 dialogs that offer a `JO` from their start are rare (see the dialog census). It
 follows the player placed 6 cells away (on a cell it can walk to) to within 2
 and is drawn there,
@@ -418,7 +466,7 @@ loyalty or wait timer. The exterior keeps its measured roster (Virgil).
 - Door passability follows the step evidence: a locked door the player has no key
   for opens only for a step leaving a building, as the original executable decides
   it (ARC-RES-049); doors are not opened or animated.
-- The main world map (ARC-RES-034) and therefore every exit to it, conditional
-  transitions and door runtime on these maps; the dialog gaps
+- The main world map (ARC-RES-034) and therefore every exit to it, guarded tile
+  and sector transitions and use scripts outside the set, and door runtime on these maps; the dialog gaps
   above (SCR admission, generated lines).
 - Original-executable parity is NOT_VERIFIED.

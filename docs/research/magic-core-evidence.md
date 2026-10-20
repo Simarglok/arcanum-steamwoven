@@ -408,6 +408,11 @@ is hit (entangle (0x459A30, 0x459C10)).
 
 ### Effect components (FR-MAGIC-007)
 
+The data side of this table (each type's keys, positional values, name tables and defaults) was read in the executable
+by ARC-MAGIC-002 (two readers, [ledger "Spell components"](original-verification-ledger.md#spell-components-arc-magic-002),
+[contract](../formats/spell-records.md#components-lines-5-onward)); what each type does at run time stays at the level
+given here until its slice reads it.
+
 Components run in order inside an action, on each target the area filter
 accepts, unless the record and component item triggers exclude the current
 trigger (process (0x4510F0)). Branch components can jump forward or end
@@ -496,6 +501,9 @@ deliberate changes are listed after the table.
 | MG18 | target names (target table 0x596140) | `Tgt_Obj_No_ST_Critter_Dead` lacks the critter type bit that its siblings carry (flagged in the earlier reading) | add the bit |
 | MG19 | unresistable runs (flags (0x455C30), schedule (0x453FA0)) | one run flag means both "unresistable" (`No_Resist:`, script unresistable casts) and "final END scheduled"; the scheduler tests it before maintenance and duration, so an unresistable spell ends right after BEGIN whatever its `Duration:` or `Maintain:` | separate flags; an unresistable spell keeps its duration (the census sizes which records combine them) |
 | MG20 | mana stores (pay (0x450420)) | worn mana stores are drained and their recharge scheduled before the fatigue refusal (≤ −15), so a refused cast still costs the stored mana | test fatigue before draining; low confidence that it is a slip |
+| MG21 | target names (target table 0x596140; ARC-MAGIC-002, ledger SC10) | `Tgt_Non_Party_Critters` lacks the critter bit its party siblings carry (20 installed records) | add the bit, or intended; the target slice (MT8) decides |
+| MG22 | target names (same) | `Tgt_Obj_Radius` lacks the object bit every other `Tgt_Obj_*` carries (24 installed records) | add the bit, or intended (a radius modifier); MT8 decides |
+| MG23 | target names (same) | `Tgt_Tile_Self` lacks the tile bit every other `Tgt_Tile_*` carries (no installed record) | add the bit, or intended; MT8 decides |
 
 **Reconstruction changes in these paths** (marked as deliberate in the
 earlier reading; the original may differ here, see O10): the shell and reflection check moves

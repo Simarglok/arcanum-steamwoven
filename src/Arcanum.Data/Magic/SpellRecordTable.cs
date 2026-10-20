@@ -27,12 +27,15 @@ public enum SpellDataStatus
     FileRefused,
     /// <summary>A component type name 10..34 of <c>rules\magictech.mes</c> is missing: the original's init fails.</summary>
     MissingComponentName,
-    /// <summary>A text, record line, key or byte the original ends the process on, in both modes.</summary>
+    /// <summary>A byte above 0x7F on any parsed line (ledger SR14). This and the next five statuses, through
+    /// <see cref="MissingValue"/>, are refused in both modes: the original ends its process on them.</summary>
     NonAsciiByte,
     MissingParenthesis,
     UnknownName,
     UnknownFlag,
     TrailingSeparator,
+    /// <summary>A positional value of a component read after its line has ended: the original reads through a null cursor.</summary>
+    MissingValue,
     /// <summary>Strict mode only.</summary>
     MissingText,
     MissingRequiredLine,
@@ -42,6 +45,10 @@ public enum SpellDataStatus
     SkippedKey,
     InvalidNumber,
     MalformedPair,
+    /// <summary>A key the original reads on without, with a default: logged as an error for <c>AoE:</c> of line +0, a Cast's
+    /// <c>Spell:</c>, an Interrupt's <c>MagicTech:</c> and a Summon's <c>Proto:</c>; silent for a component's <c>Type:</c>
+    /// (NoOp).</summary>
+    MissingKey,
     /// <summary>A flag list the original reads only in part (a space-separated name before a later <c>|</c>).</summary>
     AmbiguousFlagList,
     /// <summary>A value the original reads and drops: a negative <c>DurationTriggerCount:</c>, a non-zero
@@ -77,9 +84,17 @@ public sealed partial class SpellRecordTable
     private static readonly string[] Line4Keys = [.. SpellNameTables.AiKeys, "No_Resist:", "No_Reflect:"];
 
     private readonly SpellRecord[] _records;
-    private SpellRecordTable(SpellRecord[] records) => _records = records;
+    private SpellRecordTable(SpellRecord[] records, SpellDataRefusal[] unread)
+    {
+        _records = records;
+        Unread = Array.AsReadOnly(unread);
+    }
 
     public IReadOnlyList<SpellRecord> Records => Array.AsReadOnly(_records);
+    /// <summary>Like-original mode: text the original's cursor leaves unread after a line's last key, which strict mode refuses
+    /// (<see cref="SpellDataStatus.UnknownKey"/> or <see cref="SpellDataStatus.SkippedKey"/> with the first unread key or word);
+    /// empty in strict mode.</summary>
+    public IReadOnlyList<SpellDataRefusal> Unread { get; }
     public SpellRecord this[int spell] => _records[spell];
 
     /// <summary>The first message of record <paramref name="spell"/> (0..222).</summary>
@@ -90,16 +105,19 @@ public sealed partial class SpellRecordTable
         return (spell < SpellRecord.FirstTechnology ? FirstBase : TechnologyBase) + Stride * spell;
     }
 
-    /// <summary>Reads all 223 records of a parsed <c>rules\spelllist.mes</c>.</summary>
-    public static SpellRecordRead Read(MesFile list, SpellRecordMode mode)
+    /// <summary>Reads all 223 records of a parsed <c>rules\spelllist.mes</c>; <paramref name="componentTypes"/> are the 25
+    /// <c>Type:</c> names of <c>rules\magictech.mes</c> (<see cref="SpellData.ComponentTypeNames"/>).</summary>
+    public static SpellRecordRead Read(MesFile list, IReadOnlyList<string> componentTypes, SpellRecordMode mode)
     {
         ArgumentNullException.ThrowIfNull(list);
+        ArgumentNullException.ThrowIfNull(componentTypes);
+        if (componentTypes.Count != SpellData.ComponentTypes || componentTypes.Any(t => t is null))
+            throw new ArgumentException("The 25 component type names are required.", nameof(componentTypes));
         if (mode is not (SpellRecordMode.Strict or SpellRecordMode.LikeOriginal)) throw new ArgumentOutOfRangeException(nameof(mode));
         var drafts = new Draft[SpellRecord.Count];
-        var refusal = ReadRecords(list, mode, drafts);
+        var refusal = ReadRecords(list, mode, drafts) ?? ReadComponentPass(list, componentTypes, mode, drafts);
         if (refusal is not null) return new(refusal.Status, null, refusal);
-        ReadComponentPass(list, drafts);
-        return new(SpellDataStatus.Read, new(drafts.Select(d => d.ToRecord()).ToArray()));
+        return new(SpellDataStatus.Read, new(drafts.Select(d => d.ToRecord()).ToArray(), drafts.SelectMany(d => d.Unread).ToArray()));
     }
 
     /// <summary>The first pass of the original's load: lines +0..+4 of each record in number order, then the forced values
@@ -116,15 +134,16 @@ public sealed partial class SpellRecordTable
         return null;
     }
 
-    /// <summary>The second pass: the forced values again and the component lines.</summary>
-    [OriginalFunction(0x44FFA0, OriginalFunctionScope.Partial)]
-    private static void ReadComponentPass(MesFile list, Draft[] drafts)
+    /// <summary>The second pass: the component lines of each record in number order, then the forced values again.</summary>
+    [OriginalFunction(0x44FFA0, OriginalFunctionScope.Full)]
+    private static SpellDataRefusal? ReadComponentPass(MesFile list, IReadOnlyList<string> types, SpellRecordMode mode, Draft[] drafts)
     {
         foreach (var draft in drafts)
         {
-            draft.ComponentLines = ComponentLines(list, draft.Number);
+            if (ComponentLines(list, draft, types, mode) is { } refusal) return refusal;
             Force(draft);
         }
+        return null;
     }
 
     private static void Force(Draft draft)
@@ -133,7 +152,7 @@ public sealed partial class SpellRecordTable
         if (draft.Number >= SpellRecord.FirstTechnology) draft.IsTechnology = true;
     }
 
-    /// <summary>One record: line +0 kept as text, line +1, line +2 and +3 when present, the AI values reset to −1 and 0, line
+    /// <summary>One record: line +0 (the target areas), line +1, line +2 and +3 when present, the AI values reset to −1 and 0, line
     /// +4 when present. The record's name (message n of <c>mes\spell.mes</c>) is <see cref="SpellTexts.Names"/>.</summary>
     [OriginalFunction(0x450090, OriginalFunctionScope.Partial)]
     private static SpellDataRefusal? ReadRecord(MesFile list, SpellRecordMode mode, Draft draft)
@@ -144,11 +163,12 @@ public sealed partial class SpellRecordTable
             for (var offset = 0; offset <= 1; offset++)
                 if (!draft.LinesPresent[offset]) return new(SpellDataStatus.MissingRequiredLine, Path, first + offset);
         draft.AreaLine = Text(list, first);
-        return Line(list, mode, first + 1, Line1Keys, cursor => ParseLine1(cursor, draft, mode), always: true)
-            ?? Line(list, mode, first + 2, Line2Keys, cursor => ParseLine2(cursor, draft, mode), always: false)
-            ?? Line(list, mode, first + 3, Line3Keys, cursor => ParseLine3(cursor, draft, mode), always: false)
+        return Line(list, mode, draft, first, Line0Keys, cursor => ParseLine0(cursor, draft, mode), always: true)
+            ?? Line(list, mode, draft, first + 1, Line1Keys, cursor => ParseLine1(cursor, draft, mode), always: true)
+            ?? Line(list, mode, draft, first + 2, Line2Keys, cursor => ParseLine2(cursor, draft, mode), always: false)
+            ?? Line(list, mode, draft, first + 3, Line3Keys, cursor => ParseLine3(cursor, draft, mode), always: false)
             ?? ResetAi(draft)
-            ?? Line(list, mode, first + 4, Line4Keys, cursor => ParseLine4(cursor, draft, mode), always: false);
+            ?? Line(list, mode, draft, first + 4, Line4Keys, cursor => ParseLine4(cursor, draft, mode), always: false);
     }
 
     private static SpellDataRefusal? ResetAi(Draft draft)
@@ -158,19 +178,24 @@ public sealed partial class SpellRecordTable
         return null;
     }
 
-    /// <summary>The component lines: from +5 while the next message exists, at most 44.</summary>
-    [OriginalFunction(0x4501D0, OriginalFunctionScope.Partial)]
-    private static string[] ComponentLines(MesFile list, int spell)
+    /// <summary>The component lines: from +5 while the next message exists, at most 44, each parsed in order.</summary>
+    [OriginalFunction(0x4501D0, OriginalFunctionScope.Full)]
+    private static SpellDataRefusal? ComponentLines(MesFile list, Draft draft, IReadOnlyList<string> types, SpellRecordMode mode)
     {
         var lines = new List<string>();
-        var number = FirstMessage(spell) + FirstComponentLine;
-        while (lines.Count < MaxComponentLines && Text(list, number++) is { } text) lines.Add(text);
-        return lines.ToArray();
+        var number = FirstMessage(draft.Number) + FirstComponentLine;
+        for (; lines.Count < MaxComponentLines && Text(list, number) is { } text; number++)
+        {
+            lines.Add(text);
+            if (Line(list, mode, draft, number, ComponentKeys, cursor => ParseComponent(cursor, draft, types, mode), always: true) is { } refusal) return refusal;
+        }
+        draft.ComponentLines = lines.ToArray();
+        return null;
     }
 
     /// <summary>Every field's starting value: willpower by rank, range 99, no resistance or duration stat, duration modifier 1,
-    /// eye candy and AI −1, everything else 0 or off, enabled off until line +1 sets it.</summary>
-    [OriginalFunction(0x457580, OriginalFunctionScope.Partial)]
+    /// eye candy and AI −1, action areas empty with count −1, everything else 0 or off, enabled off until line +1 sets it.</summary>
+    [OriginalFunction(0x457580, OriginalFunctionScope.Full)]
     private static Draft Defaults(int spell) => new(spell) { MinimumWillpower = RankWillpower[spell % SpellRecord.Ranks] };
 
     /// <summary>Line +1, in this order: IQ, Cost, Maintain, Duration (then DurationStatInfo only when its stat is not −1),
@@ -277,7 +302,7 @@ public sealed partial class SpellRecordTable
     /// earlier key on the same line. A missing line +1 (or +0) is the original's missing-line text, which holds no key; a
     /// missing optional line is not parsed. A line with a byte above 0x7F is refused in both modes; strict mode refuses what is
     /// left after the cursor's last key.</summary>
-    private static SpellDataRefusal? Line(MesFile list, SpellRecordMode mode, int number, string[] keys,
+    private static SpellDataRefusal? Line(MesFile list, SpellRecordMode mode, Draft draft, int number, string[] keys,
         Func<NamedKeyCursor, SpellDataRefusal?> parse, bool always)
     {
         var text = Text(list, number);
@@ -295,16 +320,20 @@ public sealed partial class SpellRecordTable
                 NamedKeyFault.MissingParenthesis => SpellDataStatus.MissingParenthesis,
                 NamedKeyFault.UnknownName => SpellDataStatus.UnknownName,
                 NamedKeyFault.UnknownFlag => SpellDataStatus.UnknownFlag,
+                NamedKeyFault.MissingValue => SpellDataStatus.MissingValue,
                 _ => SpellDataStatus.TrailingSeparator,
             }, Path, number, cursor.FaultToken);
         if (refusal is not null) return refusal with { Entry = number };
-        if (mode == SpellRecordMode.LikeOriginal) return null;
         var rest = cursor.Rest();
         if (rest.Length == 0) return null;
         var segment = rest.Split(',').FirstOrDefault(part => part.Trim().Length > 0)?.Trim() ?? rest;
         var colon = segment.IndexOf(':');
         var key = colon < 0 ? segment.Trim() : segment[..(colon + 1)];
-        return new(keys.Contains(key, StringComparer.Ordinal) ? SpellDataStatus.SkippedKey : SpellDataStatus.UnknownKey, Path, number, key);
+        var unread = new SpellDataRefusal(keys.Contains(key, StringComparer.Ordinal) ? SpellDataStatus.SkippedKey : SpellDataStatus.UnknownKey,
+            Path, number, key);
+        if (mode == SpellRecordMode.Strict) return unread;
+        draft.Unread.Add(unread);
+        return null;
     }
 
     private static string? Text(MesFile list, int number) =>
@@ -347,26 +376,62 @@ public sealed partial class SpellRecordTable
             return value;
         }
 
-        public uint? Triggers(NamedKeyCursor cursor, string key)
-        {
-            var value = cursor.NamedFlags(key, SpellNameTables.ItemTriggers, SpellNameTables.ItemTriggerValues, out var tokens, out var text);
-            if (value is not null) CheckList(key, tokens, text);
-            return value;
-        }
+        public uint? Triggers(NamedKeyCursor cursor, string key) =>
+            Triggers(cursor, key, SpellNameTables.ItemTriggers, SpellNameTables.ItemTriggerValues);
 
         public void Ignored(string key)
         {
             if (Strict) Refuse(SpellDataStatus.IgnoredValue, key);
         }
 
-        private bool Strict => mode == SpellRecordMode.Strict;
+        public void Missing(string key)
+        {
+            if (Strict) Refuse(SpellDataStatus.MissingKey, key);
+        }
 
-        public int? Name(NamedKeyCursor cursor, string key, IReadOnlyList<string> names)
+        public ulong? Targets(NamedKeyCursor cursor, string key)
+        {
+            var value = cursor.NamedFlags64(key, SpellComponentTables.Targets, SpellComponentTables.TargetValues, out var tokens, out var text);
+            if (value is not null) CheckList(key, tokens, text);
+            return value;
+        }
+
+        public uint? Triggers(NamedKeyCursor cursor, string key, IReadOnlyList<string> names, IReadOnlyList<uint> values)
+        {
+            var value = cursor.NamedFlags(key, names, values, out var tokens, out var text);
+            if (value is not null) CheckList(key, tokens, text);
+            return value;
+        }
+
+        public int? Name(NamedKeyCursor cursor, string key, IReadOnlyList<string?> names)
         {
             var value = cursor.NamedName(key, names, out _);
             if (value is not null) keys.Add(key);
             return value;
         }
+
+        /// <summary>A <c>Dmg:</c> range <c>a-b</c>, or one number for both.</summary>
+        public (int First, int Second)? Range(NamedKeyCursor cursor, string key)
+        {
+            var value = cursor.NamedRange(key, out var token);
+            if (value is null) return null;
+            keys.Add(key);
+            if (Strict && !(RangeText().Match(token) is { Success: true } m && Fits(m.Groups["a"].Value)
+                && (!m.Groups["b"].Success || Fits(m.Groups["b"].Value))))
+                Refuse(SpellDataStatus.InvalidNumber, $"{key}{token}");
+            return value;
+        }
+
+        /// <summary>A positional number (no key) of a component.</summary>
+        public int? Positional(NamedKeyCursor cursor)
+        {
+            var value = cursor.IntValue(out var token);
+            if (value is not null && Strict && !(IntText().IsMatch(token) && int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)))
+                Refuse(SpellDataStatus.InvalidNumber, token);
+            return value;
+        }
+
+        private bool Strict => mode == SpellRecordMode.Strict;
 
         private void CheckList(string key, IReadOnlyList<string> tokens, string text)
         {
@@ -384,6 +449,9 @@ public sealed partial class SpellRecordTable
         private static bool Fits(string number) => int.TryParse(number, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _);
 
         private void Refuse(SpellDataStatus status, string token) => Refusal ??= new(status, Path, null, token);
+
+        [GeneratedRegex(@"^\s*(?<a>[0-9]+)\s*(-\s*(?<b>[0-9]+)\s*)?$")]
+        private static partial Regex RangeText();
 
         [GeneratedRegex(@"^\s*[+-]?[0-9]+\s*$")]
         private static partial Regex IntText();
@@ -411,6 +479,11 @@ public sealed partial class SpellRecordTable
         public string? AreaLine;
         public string[] ComponentLines = [];
         public List<string> KeysRead = [];
+        public SpellArea[] Areas = Enumerable.Repeat(new SpellArea(0, 0, 0, 0, -1), SpellRecord.Actions).ToArray();
+        public List<SpellComponent> Components = [];
+        public List<SpellDataRefusal> Unread = [];
+        public bool HasDamage;
+        public uint SpellFlagsSet;
 
         public SpellRecord ToRecord() => new()
         {
@@ -424,7 +497,8 @@ public sealed partial class SpellRecordTable
             CancelsEnvironmentSpellFlags = CancelsEnvironmentSpellFlags, DisallowedCasterSpellFlags = DisallowedCasterSpellFlags,
             DisallowedTargetSpellFlags = DisallowedTargetSpellFlags, DisallowedTargetCritterFlags = DisallowedTargetCritterFlags,
             ItemTriggers = ItemTriggers, AiPriorities = Array.AsReadOnly(AiPriorities), AiDefensiveSecond = AiDefensiveSecond,
-            LinesPresent = Array.AsReadOnly(LinesPresent), KeysRead = KeysRead.AsReadOnly(), AreaLine = AreaLine, ComponentLines = Array.AsReadOnly(ComponentLines),
+            LinesPresent = Array.AsReadOnly(LinesPresent), KeysRead = KeysRead.AsReadOnly(), Areas = Array.AsReadOnly(Areas),
+            Components = Components.AsReadOnly(), HasDamage = HasDamage, SpellFlagsSet = SpellFlagsSet, AreaLine = AreaLine, ComponentLines = Array.AsReadOnly(ComponentLines),
         };
     }
 }

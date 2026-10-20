@@ -273,6 +273,10 @@ technology.
 | +4 | A | no | `AI_Flee:`, `AI_Summon:`, `AI_Defensive:(value@second)`, `AI_Offensive:`, `AI_HealingLight:`, `AI_HealingMedium:`, `AI_HealingHeavy:`, `AI_CurePoison:`, `AI_FatigueRecover:`, `AI_Resurrect:`; absent values are −1; `No_Resist:` and `No_Reflect:` act by presence |
 | +5..+48 | B | stops at first gap | one effect component per line: action, area keys, `Type:` (one of 25) and a type payload: animation goal, AI redirect (critter flag, `MinIQ:`), cast, charge-and-branch, damage or heal (`DmgType:`, `Dmg:a-b`, `Dmg_Flags:`), effect add or remove (`Cause:`, `Scaled:`), environment or object flag, eye candy, interrupt, movement, recharge, summon (`Proto:` resolved immediately, `Clear_Faction:`, `Palette:`, `List:`), test-and-branch, trait setters |
 
+Lines +0..+4 and the component lines were read in the executable by ARC-MAGIC-001 and ARC-MAGIC-002 (two readers each,
+[ledger](original-verification-ledger.md#spell-components-arc-magic-002); format in the
+[spell record contract](../formats/spell-records.md)); the rows below stand, with the ledger's detail.
+
 Pass B runs after Map because `Proto:` needs the prototype pool
 (parse (0x457650, 0x4578F0, 0x457B20, 0x457D00, 0x457E70, 0x458060)); everything the AI and item triggers read is complete
 after pass A. Summon lists 0..2 are weighted random, 3..5 chosen by aptitude

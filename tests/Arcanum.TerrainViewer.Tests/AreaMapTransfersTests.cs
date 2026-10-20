@@ -100,4 +100,70 @@ public sealed class AreaMapTransfersTests
         var transfers = new AreaMapTransfers(map, Set(map, missing), Destinations(map));
         Assert.AreEqual((0, 1), (transfers.Triggers.Count, transfers.Unmatched));
     }
+    // ARC-SCRIPT-015: a use site whose teleport stands behind guards runs its script; the runner stands in for the host.
+    [TestMethod]
+    public void A_guarded_use_site_runs_its_script_and_its_teleport_gives_the_destination()
+    {
+        var (map, row) = Load();
+        var at = new AreaStepCell(row.WorldX!.Value, row.WorldY!.Value);
+        var guarded = Use(row, 1, new(1, 1)) with { Guards = MapTransitionGuard.ConditionalPath | MapTransitionGuard.ComputedDestination, DestinationRuntime = 0 };
+        var transfers = new AreaMapTransfers(map, Set(map, guarded), Destinations(map));
+        Assert.AreEqual(0, transfers.Triggers.Count);
+        CollectionAssert.AreEqual(new[] { row.Key }, transfers.ScriptedTriggers.ToArray());
+        Assert.AreEqual(guarded, transfers.ScriptedSite(row.Key));
+        Assert.AreEqual(row, transfers.Object(row.Key));
+
+        var noRunner = transfers.RequestUse(row.Key, at);
+        Assert.AreEqual((AreaUseOutcome.ScriptRefused, "NO_SCRIPT_RUNNER"), (noRunner.Outcome, noRunner.Reason));
+        Assert.IsNull(transfers.LastScripted);
+        var answer = new AreaScriptedUse(AreaScriptedUseOutcome.NoTeleport, null, ["It is locked."], null, "no teleport");
+        var runs = 0;
+        string? refusal = null;
+        transfers.ScriptRunner = (site, obj, refuse) => { runs++; Assert.AreEqual((guarded, row), (site, obj)); refusal = answer.Teleport is { } t ? refuse(t) : null; return answer; };
+        Assert.AreEqual(AreaUseOutcome.TooFar, transfers.RequestUse(row.Key, new(at.X + 5, at.Y)).Outcome);
+        Assert.AreEqual(0, runs, "the use rule comes first");
+        var ended = transfers.RequestUse(row.Key, at);
+        Assert.AreEqual((AreaUseOutcome.ScriptEnded, "no teleport", 1), (ended.Outcome, ended.Reason, runs));
+        Assert.AreEqual(answer, transfers.LastScripted);
+        Assert.IsNull(transfers.Pending);
+
+        answer = answer with { Outcome = AreaScriptedUseOutcome.Refused, Detail = "outside the set" };
+        Assert.AreEqual((AreaUseOutcome.ScriptRefused, "outside the set"), (transfers.RequestUse(row.Key, at).Outcome, transfers.LastScripted!.Detail));
+
+        var pc = new Arcanum.Scripting.Scr.ScrObjectRef(map.RuntimeMap, "pc");
+        answer = answer with { Outcome = AreaScriptedUseOutcome.Teleport, Teleport = new(pc, 5076, 5, 6) };
+        var accepted = transfers.RequestUse(row.Key, at);
+        Assert.AreEqual(AreaUseOutcome.Accepted, accepted.Outcome, accepted.Reason);
+        Assert.AreEqual((5076, 77, new WorldLocation(5, 6)), (transfers.Pending!.Site.DestinationCatalogue, transfers.Pending.Site.DestinationRuntime, transfers.Pending.Site.Arrival));
+        Assert.AreEqual((new AreaMapDestination(77, 5076, "elsewhere"), row.Key), (transfers.Pending.To, transfers.Pending.Trigger));
+        Assert.AreEqual(AreaUseOutcome.TransitionPending, transfers.RequestUse(row.Key, at).Outcome);
+        Assert.IsNull(transfers.LastScripted, "a request that runs no script clears the last run");
+        transfers.Clear();
+
+        // The runner is told why a teleport to a map the mode cannot open would be refused, and its refusal is the answer.
+        answer = answer with { Outcome = AreaScriptedUseOutcome.TeleportRefused, Teleport = new(pc, 5001, 5, 6), Detail = "DESTINATION_NOT_OPENED_IN_MAP_MODE 5001" };
+        var refused = transfers.RequestUse(row.Key, at);
+        Assert.AreEqual((AreaUseOutcome.DestinationUnavailable, "DESTINATION_NOT_OPENED_IN_MAP_MODE 5001", "DESTINATION_NOT_OPENED_IN_MAP_MODE 5001"),
+            (refused.Outcome, refused.Reason, refusal));
+        Assert.AreEqual(5001, refused.Site!.DestinationCatalogue);
+        Assert.IsNull(transfers.Pending);
+        // Map 4,998 keeps the current map and names its catalogue number.
+        var here = transfers.Teleported(guarded, new(pc, 4998, 7, 8));
+        Assert.AreEqual((map.Snapshot.CatalogueMap, map.RuntimeMap, new WorldLocation(7, 8)), (here.DestinationCatalogue, here.DestinationRuntime, here.Arrival));
+    }
+
+    [TestMethod]
+    public void Only_conditional_or_computed_use_sites_are_scripted_and_a_plain_exit_of_the_same_object_wins()
+    {
+        var (map, row) = Load();
+        var plain = Use(row, 77, new(5, 6));
+        MapTransitionSite Guarded(MapTransitionGuard guards) => plain with { Guards = MapTransitionGuard.ConditionalPath | guards };
+        foreach (var guard in new[] { MapTransitionGuard.TrapScript, MapTransitionGuard.MovesOtherObject, MapTransitionGuard.ContainerOpenCheck,
+            MapTransitionGuard.UseRunsOtherAction, MapTransitionGuard.ObjectNotClickable, MapTransitionGuard.ObjectOffOrDestroyed,
+            MapTransitionGuard.UnlistedDestination, MapTransitionGuard.CallChangesTriggerer })
+            Assert.AreEqual(0, new AreaMapTransfers(map, Set(map, Guarded(guard)), Destinations(map)).ScriptedTriggers.Count, guard.ToString());
+        var both = new AreaMapTransfers(map, Set(map, Guarded(MapTransitionGuard.None), plain), Destinations(map));
+        Assert.AreEqual((1, 0), (both.Triggers.Count, both.ScriptedTriggers.Count));
+        Assert.IsNull(both.ScriptedSite(row.Key));
+    }
 }

@@ -119,7 +119,7 @@ public sealed class SpellData
     {
         ArgumentNullException.ThrowIfNull(spellTexts);
         ArgumentNullException.ThrowIfNull(spellList);
-        var records = SpellRecordTable.Read(spellList, mode);
+        var records = SpellRecordTable.Read(spellList, names, mode);
         if (records.Refusal is { } recordRefusal) return Refused(recordRefusal);
         var texts = SpellTexts.Read(spellTexts, mode);
         if (texts.Refusal is { } textRefusal) return Refused(textRefusal);
