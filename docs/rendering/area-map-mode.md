@@ -320,8 +320,10 @@ ends the modal panel; a start refused for missing script content, an entry
 error or a changed source fails the smoke. `FRONTIER` means every NPC tried (up
 to eight) stopped before offering a reply, `NOT-STARTED` that none started,
 `NO-REACHABLE-SPEAKER` that none could be clicked, and `NONE` that no NPC is
-drawn. Observed: `caladon-panarrii temple`, script 2969, 3 turns, the dialog
-ended, 1 effect in the session; `tulla interior` reports `FRONTIER` (generated
+drawn. Since ARC-WORLD-043 Close must also end the NPC's reaction conversation (the host holds no open slot and a
+started talk leaves the NPC remembering the PC, `MetBefore` in the record). Observed: `caladon-panarrii temple`, script
+2969, 3 turns, the dialog ended, 1 effect (3 session revisions with the reaction slot's open and close; 2026-10-21), the NPC
+remembers the PC; `tulla interior` reports `FRONTIER` (generated
 greetings); in `caladon-mafia underground` both NPCs are undrawn. That the
 consequences travel with the session to another map and back is the host's
 synthetic test (`AreaConversationTests`); the native smoke does not observe it.

@@ -141,7 +141,8 @@ public sealed class AreaConversationHost
 
     /// <summary>
     /// A host over another session (a quick load replaced the area session): same area, content and given profile; the
-    /// PC facts follow the new session's hero (ARC-WORLD-027).
+    /// PC facts follow the new session's hero (ARC-WORLD-027). It starts with no reaction conversation open (ARC-WORLD-043:
+    /// the viewer cannot quick-load during a talk, whose panel takes every key).
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
     public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, _baseProfile, _inventory, _party, _contentDetail, _companions, _speakers);
@@ -249,16 +250,20 @@ public sealed class AreaConversationHost
     /// ARC-WORLD-043: closes the reaction conversation slot a started conversation opened (the original's dialog end, 0x413280,
     /// on every exit: a reply that ends the talk, the player's close, a frontier or failure, teardown, a map change): the
     /// session moves the value to the remembered slot, so the NPC has met the PC and the next talk's ME 1 holds. False when no
-    /// slot is open. A refusal by the session (not expected: the begin already made the record) throws, like any other lost
-    /// session write of the host; the host no longer counts the slot as open.
+    /// slot is open, or when the session refused the end (not expected: the begin already made the record); the refusal is
+    /// <see cref="ReactionFailure"/> and the host no longer counts the slot as open (the next begin of that NPC overwrites it).
     /// </summary>
     public bool EndReaction()
     {
         if (_reactionOpen is not { } speaker) return false;
         _reactionOpen = null;
-        if (State.EndReaction(speaker).Disposition == GameSessionDisposition.Rejected) throw new InvalidOperationException("AREA_SESSION_REACTION_END_REJECTED");
-        return true;
+        var ended = State.EndReaction(speaker);
+        ReactionFailure = ended.Disposition == GameSessionDisposition.Rejected ? ended.Failure : GameSessionFailure.None;
+        return ReactionFailure == GameSessionFailure.None;
     }
+
+    /// <summary>The session's refusal of the last <see cref="EndReaction"/>, else <see cref="GameSessionFailure.None"/>.</summary>
+    public GameSessionFailure ReactionFailure { get; private set; }
 
     /// <summary>The speaker whose reaction conversation slot is open, or null (ARC-WORLD-043).</summary>
     public int? ReactionOpen => _reactionOpen;
@@ -277,6 +282,9 @@ public sealed class AreaConversationHost
     private AreaConversationStart Run(AreaSpeaker speaker, int line, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+        // ARC-WORLD-043: a talk whose end the caller missed is ended before any script runs, as the original ends a dialog
+        // before the caller's script continues.
+        EndReaction();
         if (_content is null) return new(AreaConversationStartStatus.ContentUnavailable, null, speaker, _contentDetail);
         // ARC-SCRIPT-011: one content never mixes two versions of a file; every file read before is checked again, and once
         // one changed nothing more runs from it.
@@ -312,9 +320,7 @@ public sealed class AreaConversationHost
 
         var participants = new DialogParticipants(new DialogId(dialog.Script), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
         var party = PartyPort(speaker);
-        // ARC-WORLD-043: the original starts the reaction conversation before the dialog's first NPC line and action
-        // (0x412FD0); a slot a missed end left open is closed first.
-        EndReaction();
+        // ARC-WORLD-043: the original starts the reaction conversation before the dialog's first NPC line and action (0x412FD0).
         if (State.BeginReaction(speaker.Index).Disposition == GameSessionDisposition.Rejected)
             return new(AreaConversationStartStatus.ReactionRejected, null, speaker, $"script {dialog.Script}: the session refused the NPC's reaction conversation");
         _reactionOpen = speaker.Index;

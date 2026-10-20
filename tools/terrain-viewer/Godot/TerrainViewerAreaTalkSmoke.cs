@@ -103,8 +103,12 @@ public partial class TerrainViewerApp
                 // Close; a dialog script that opens the next conversation is closed again.
                 for (var close = 0; close < 4 && ConversationOpen; close++) _conversationPanel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 Require(!ConversationOpen && !WorldModal, "Close ends the modal panel");
+                // ARC-WORLD-043: every close ends the NPC's reaction conversation, so a started talk leaves it remembering the PC.
+                Require(host.ReactionOpen is null, $"script {speaker.ScriptId}: Close ends the NPC's reaction conversation");
+                var metBefore = session.QueryReactionRecord(AreaConversationState.EntityId(speaker.Row)) is { MetBefore: true, InConversation: false };
+                Require(conversation is null || metBefore, $"script {speaker.ScriptId}: the ended talk is remembered");
                 var record = new { speaker.ScriptId, Prototype = speaker.Row.PrototypeNumber, Walked = walked, WalkStopped = walkStopped, Hover = hover.ToString(), Frames = frames,
-                    Status = status, Offered = offered, Phase = phase, Frontier = conversation?.Frontier is { } f ? $"{f.Kind} {f.Source}" : null, Turns = turns, Effects = effects, SessionChanges = session.Version.Revision - revision, Voice = voice, VoicesPlayed = _voicesPlayed - played };
+                    Status = status, Offered = offered, Phase = phase, Frontier = conversation?.Frontier is { } f ? $"{f.Kind} {f.Source}" : null, Turns = turns, Effects = effects, SessionChanges = session.Version.Revision - revision, MetBefore = metBefore, Voice = voice, VoicesPlayed = _voicesPlayed - played };
                 tried.Add(record); opens++;
                 if (offered) { passed = record; break; }
                 started ??= conversation is not null ? record : null;

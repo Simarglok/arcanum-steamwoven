@@ -723,7 +723,7 @@ public sealed class DialogConversation
             insult = new DialogOperationSource(new DialogNodeId(record.Id), record.SerializedIndex, DlgFieldKind.Text,
                 record.Text.PayloadOffset, 0, 2, 0);
         }
-        else if (found is { Letter: 'b' or 'h' or 'i' or 'l' or 'p' } && exact || found is { Letter: 'c' or 'r' or 't' or 'z' })
+        else if (found is { Letter: 'b' or 'h' or 'l' or 'p' } && exact || found is { Letter: 'c' or 'r' or 't' or 'z' })
         {
             kind = DialogOptionTextKind.Generated;
             marker = found;
@@ -798,7 +798,8 @@ public sealed class DialogConversation
             }
             else if (action is { Count: > 0 } && action[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine)
             {
-                // A transfer that ends the action skips the insult in the original (0x413130); not modelled here.
+                // An action that moves the dialog itself skips the insult in the original (0x413130; read for FL); the
+                // transfer tails are kept out of this subset rather than modelled.
                 block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, action[^1].Source);
             }
         }

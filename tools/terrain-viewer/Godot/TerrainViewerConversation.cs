@@ -192,7 +192,8 @@ public partial class TerrainViewerApp
         _conversationPanel.CloseView();
         // ARC-WORLD-043: every exit closes the NPC's reaction conversation (the original's dialog end), before a resumed
         // script may start the next one; the NPC now remembers the PC.
-        _conversationHost?.EndReaction();
+        if (_conversationHost is { } talk && !talk.EndReaction() && talk.ReactionFailure != Arcanum.Session.GameSessionFailure.None)
+            _conversationNotice = $"the session refused to end the NPC's reaction conversation ({talk.ReactionFailure})";
         // ARC-UI-045 (ARC-UI-043 voice): the voice plays on after a close, but the conversation must not outlive it: its ports reach the area
         // host and its snapshot, which a reload or map change would otherwise keep alive.
         _voiceStart = null; _dialogVoice.Release();
