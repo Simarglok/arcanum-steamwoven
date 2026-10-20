@@ -58,7 +58,7 @@ the source answers too high for the key stat, and from 2^29 its 32-bit product w
 ## Boundaries
 
 - The callers own the state: the session's hero and follower fields (ARC-WORLD-036, schema 20) are not touched here. The hero's
-  skills in play are [hero skills](hero-skills-runtime.md) (S2), the shared skill check S3, the dialog gates S4, buying points with the accepted floor S5.
+  skills in play are [hero skills](hero-skills-runtime.md) (S2), the shared skill check S3, the dialog gates S4, buying points with the accepted floor S5 ([character point pool](character-point-pool.md), ARC-WORLD-052).
 - Not modelled: the Educator background update (S16), the network message of the training setters, and the spell and
   degree checks the stat setter runs after the skill guard when it lowers intelligence or willpower (magic and technology).
 - The stat setter's own clamp and write stay with `CharacterStatsOwner.SetBase`, which does not call the guard yet (the
