@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4C6410",
+  "name": "opposed-skill-effectiveness",
+  "method": "Arcanum.Simulation.Skills.SkillCheckRules.Opposed",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "8df1d345c262ee1058d6bb3414482415a004b73877462a8c77df7a050c5c2094",
+  "configuration": "Debug"
+}
