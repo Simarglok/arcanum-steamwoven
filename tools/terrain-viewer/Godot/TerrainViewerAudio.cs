@@ -65,6 +65,7 @@ public partial class TerrainViewerApp
         _soundContent?.Stack?.Dispose();
         _soundContent = null;
         _soundWorld = null; _schemeCache.Clear(); _sectorSoundCache.Clear(); _ambientPayloads.Clear();
+        ReleaseCueContent();
     }
 
     /// <summary>The original's non-positional effect (SN6: the plain play call uses volume 127 and the centre pan), scaled by
@@ -103,12 +104,12 @@ public partial class TerrainViewerApp
         : $"{(_audio.Audible ? "device " + _audio.Driver : "no output device (" + _audio.Driver + ")")}; effects {_audioVolumes.Effects}, voice {_audioVolumes.Voice}, music {_audioVolumes.Music} ({_audioOrigin})"
           + (_soundContent is { } content ? $"; catalogue {content.Detail}" : "") + (_audioNotice is null ? "" : "; " + _audioNotice);
 
-    private string AudioStatus() => _audioNotice is null ? "" : $" | sound: {_audioNotice}";
+    private string AudioStatus() => (_audioNotice is null ? "" : $" | sound: {_audioNotice}") + CueStatus();
 
     private void TickAudio()
     {
         _audio?.Tick();
-        if (_readyMode == TerrainViewerMode.CrashSiteArea) TickSceneSound();
+        if (_readyMode == TerrainViewerMode.CrashSiteArea) { TickSceneSound(); TickPositionalSound(); }
     }
 
     private void DisposeAudio()

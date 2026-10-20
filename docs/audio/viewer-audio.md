@@ -4,8 +4,8 @@ Status: **Implemented bounded component**, task 3 of the
 [audio plan](../research/audio-evidence.md#task-plan). The AREA viewer (exterior, cave and map
 mode) can play the original's sounds: the module's [sound catalogue](sound-catalog.md) resolves
 an id or a file, the payload is admitted, and the engine decodes and plays it on one of the
-original's three channels at the original's volumes. Music and ambient play through it since ARC-UI-041 ([scheme player](scheme-player.md)); positional effects
-(ARC-UI-042), voice (ARC-UI-043) and interface sounds (ARC-UI-044) will use it too.
+original's three channels at the original's volumes. Music and ambient play through it since ARC-UI-041 ([scheme player](scheme-player.md)), positional event sounds
+since ARC-UI-042 ([positional sound](positional-sound.md)); voice (ARC-UI-043) and interface sounds (ARC-UI-044) will use it too.
 
 ## Volume rules (Godot-free)
 
@@ -37,6 +37,8 @@ The original has no master or separate ambient bar; none is added here.
   `+4`, an `AudioEffectPanner` at each quarter, sending to the channel bus; a Steamwoven choice, the original pans
   continuously). Pan buses are created on first use and removed with the others.
 - `FadeOut(handle, ms)`: fades a voice to silence and releases it (25 ms for scheme songs); a stale handle is a no-op.
+- `Reposition(handle, volume, pan)`: sets a live voice's volume and moves it to the pan bus of the new pan when the
+  listener moves (ARC-UI-042); a stale handle is a no-op.
 - Handles carry a slot and a generation: a stale handle never stops a later sound in its slot.
   `Stop`, `StopAll`, `IsPlaying`, `Volume`.
 - `FlattenChannel(channel, channelVolume)`: when a setting changes, the original sets every live

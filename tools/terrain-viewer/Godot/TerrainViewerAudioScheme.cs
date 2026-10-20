@@ -88,6 +88,7 @@ public partial class TerrainViewerApp
     {
         _audio?.StopAll();
         _schemeVoices.Clear(); _combatStinger = _combatLoop = null;
+        StopPositionalSound();
         _schemePlayer = new SchemePlayer(WrapReversedWindows, _areaSession?.QuerySound().CombatStarts ?? 0);
     }
 
