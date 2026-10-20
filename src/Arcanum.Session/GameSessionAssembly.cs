@@ -45,13 +45,15 @@ public sealed partial class GameSessionOwner
     /// The hero assembles a schematic (0x56E720 with the owner's decisions TC3, TC4 and TC5, both modes): the gate is checked again;
     /// component 1 is reserved before component 2 is searched; every product unit must be an item kind the session admits
     /// (<paramref name="productKind"/>, the product prototype's type, name and description) and pass the insert check before
-    /// anything is consumed. The original creates each product on the crafter's tile and leaves it there when the inventory
+    /// anything is consumed. The host answers each unit's insert check as if both components were already gone and the earlier
+    /// units already inserted (the session asks before it changes anything). The original creates each product on the crafter's tile and leaves it there when the inventory
     /// cannot take it; the session keeps no new ground items, so a refused insert check refuses the assembly instead (nothing is
     /// lost). Then component 1 and component 2 are deleted (the durability deletion), and <c>quantity</c> made items enter the
     /// hero's inventory. One revision. No roll, skill, action points, time or experience.
     /// Refused before any effect: no hero or a dead one (<see cref="GameSessionFailure.InvalidLifeTarget"/>), the version, the gate
     /// (<see cref="GameSessionFailure.AssemblyRefused"/> with the plan), a product the session cannot hold
-    /// (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), the insert check (<see cref="GameSessionFailure.InsertRefused"/>),
+    /// (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), a record without a product at the found index or with a quantity
+    /// below 1 (<see cref="GameSessionFailure.InvalidSchematics"/>), the insert check (<see cref="GameSessionFailure.InsertRefused"/>),
     /// the item and durability budgets (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision.
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x4ED8B0, Arcanum.Simulation.OriginalFunctionScope.Partial)]
@@ -68,20 +70,24 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectAssembly(GameSessionFailure.StaleVersion);
         var revision = _revision;
         var plan = Plan(schematic, CraftInventory(items), facts);
+        ThrowIfDisposed();
         if (_revision != revision) return RejectAssembly(GameSessionFailure.StaleVersion);
-        if (!plan.CanAssemble) return RejectAssembly(GameSessionFailure.AssemblyRefused, plan);
+        if (plan.Button != AssemblyButton.CanAssemble) return RejectAssembly(GameSessionFailure.AssemblyRefused, plan);
+        // A record whose product list has no alternative at the found index, or a quantity below 1, cannot be assembled.
         var quantity = schematic.Quantity;
-        if (quantity < 1) return RejectAssembly(GameSessionFailure.AssemblyRefused, plan);
-        var prototype = plan.ProductBase!.Value + SchematicAssemblyRules.PrototypeOffset;
-        if (productKind(prototype) is not { } kind || kind.Prototype != prototype || !Enum.IsDefined(kind.Type) || !InventoryDomain.Admitted(kind.Type))
-            return RejectAssembly(GameSessionFailure.ItemTypeUnsupported, plan);
+        if (plan.ProductBase is not { } productBase || quantity < 1) return RejectAssembly(GameSessionFailure.InvalidSchematics, plan);
+        var prototype = productBase + SchematicAssemblyRules.PrototypeOffset;
+        var product = productKind(prototype);
+        ThrowIfDisposed();
         if (_revision != revision) return RejectAssembly(GameSessionFailure.StaleVersion);
+        if (product is not { } kind || kind.Prototype != prototype || !Enum.IsDefined(kind.Type) || !InventoryDomain.Admitted(kind.Type))
+            return RejectAssembly(GameSessionFailure.ItemTypeUnsupported, plan);
         if (_inventory.Held - 2 + (long)quantity > _limits.MaxPcItems) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         var newRecords = new[] { plan.First.Item!, plan.Second.Item! }.Count(entity => !_durability.Records.ContainsKey(entity));
         if (_durability.Count + newRecords > _limits.MaxDurabilityRecords) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         var next = NextMadeNumber();
-        if (next > int.MaxValue - quantity) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
-        var made = Enumerable.Range(next, quantity).Select(SessionMadeItem.EntityOf).ToArray();
+        if (next > int.MaxValue - (long)quantity + 1) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
+        var made = Enumerable.Range((int)next, quantity).Select(SessionMadeItem.EntityOf).ToArray();
         foreach (var entity in made)
         {
             var verdict = insertCheck(new SessionInventoryItem(entity, new SessionItemFacts(kind, 0, 0, -1, null, [])));
@@ -122,11 +128,12 @@ public sealed partial class GameSessionOwner
         return result.AsReadOnly();
     }
 
-    /// <summary>The next made number: one past every made item the hero holds or the session deleted.</summary>
-    private int NextMadeNumber()
+    /// <summary>The next made number: one past every made entity the hero holds, the session deleted or keeps a durability record
+    /// of (no seed or taken item can carry the prefix); past int.MaxValue there is none (long.MaxValue).</summary>
+    private long NextMadeNumber()
     {
-        var numbers = _inventory.Made.Select(item => SessionMadeItem.Number(item.Entity) ?? 0)
-            .Concat(_durability.Destroyed.Select(entity => SessionMadeItem.Number(entity) ?? 0));
+        var numbers = _inventory.Made.Select(item => item.Entity).Concat(_durability.Destroyed).Concat(_durability.Records.Keys)
+            .Select(entity => (long)(SessionMadeItem.Number(entity) ?? 0));
         return numbers.DefaultIfEmpty(0).Max() + 1;
     }
 

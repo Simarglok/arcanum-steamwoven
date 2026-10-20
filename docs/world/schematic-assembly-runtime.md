@@ -53,16 +53,20 @@ modes, no switch):
 revision, with nothing consumed before every check passed (**TC3**: the original consumes first and loses the components when
 a creation fails):
 
-- the plan above over the hero's own items: kit, taken and made items (`items`: the host's location and description facts;
-  a worn item's location is its slot, a broken item's state the session's durability record);
+- the plan above over the hero's own items: kit, taken and made items (`items`: the host's location and description facts,
+  also for `made:n`, which is a component only when the host answers for it; a worn item's location is its slot, a broken
+  item's state the session's durability record);
+- a record without a product at the found index or with a quantity below 1 is `InvalidSchematics`;
 - the product kind (`productKind`, the product prototype's type, name and description) must be a type the hero's lists admit
   (gold, ammunition, keys and key rings are not: `ItemTypeUnsupported`);
-- each of the "quantity" products must pass the insert check. The original creates each product on the crafter's tile
+- each of the "quantity" products must pass the insert check; the host answers each unit as if both components were already
+  gone and the earlier units already inserted (the session asks before it changes anything); The original creates each product on the crafter's tile
   (0x4ED8B0) and moves it into the inventory (0x4617F0), which leaves it on the tile when the inventory refuses it; the
   session keeps no new ground items, so a refusal refuses the assembly (`InsertRefused`) instead;
 - the item limit (the two components leave, the products enter) and the durability records for the two deletions;
 - then component 1 and component 2 are deleted ([durability](item-durability-runtime.md) deletion), and the products enter
-  as made items `made:n` (n one past every made or deleted one). No roll, skill, action points, time or experience.
+  as made items `made:n` (n one past every made entity held, deleted or with a durability record; the `made:` prefix is the
+  session's own: a seed or a taken item may not carry it). No roll, skill, action points, time or experience.
 
 The result names the plan, the made and the consumed items. The host shows `schematic_text.mes` 2 and plays sound 3018 + the
 current tab (the window's, TECH-5) on success, or the refusal message of the plan's button.
@@ -84,6 +88,8 @@ an entity that is not `made:n` with strictly ascending n or that was deleted (`I
 | One item that matches both component lists serves both and is consumed twice (TC4). | Component 1's item is reserved. |
 | The components are consumed before the products are made; a failed creation loses them (TC3). | Every product is checked before anything is consumed. |
 | A product the inventory refuses stays on the crafter's tile. | The assembly is refused (the session keeps no new ground items). |
+| Each product enters the inventory after the components left and the earlier products entered. | The insert check is asked first for every unit; the host answers each as if that had happened. |
+| — | The reservation is greedy: component 1 takes its first alternative present even when another would leave component 2 an item (latent: no installed record lists one prototype in both lists). |
 | An ammunition component loses one unit. | The rule does (`UseUnits`); the hero's lists hold no ammunition, so the session never meets one. |
 
 ## Not ready

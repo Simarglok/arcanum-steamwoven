@@ -30,7 +30,8 @@ public enum AssemblyButton
     ExpertiseLacking = 2,
 }
 
-/// <summary>What an assembly plan found: the two items, the product prototype and the quantity, or why it cannot assemble.</summary>
+/// <summary>What an assembly plan found: the two items, the product prototype and the quantity, or why it cannot assemble. A plan
+/// whose button assembles but whose product list has no alternative at the found index has no product.</summary>
 public sealed record AssemblyPlan(AssemblyButton Button, ComponentGate First, ComponentGate Second, int? ProductBase, int Quantity)
 {
     public bool CanAssemble => Button == AssemblyButton.CanAssemble && ProductBase is not null;
@@ -130,7 +131,8 @@ public static class SchematicAssemblyRules
         if (button != AssemblyButton.CanAssemble) return new(button, first, second, null, quantity);
         var index = first.Alternative != 0 ? first.Alternative : second.Alternative;
         int? productBase = index >= 0 && index < product.Count ? product[index] : null;
-        return new(productBase is null ? AssemblyButton.ItemMissing : AssemblyButton.CanAssemble, first, second, productBase, quantity);
+        // A product list without an alternative at that index leaves the plan without a product (a data defect, not a missing item).
+        return new(AssemblyButton.CanAssemble, first, second, productBase, quantity);
     }
 
     /// <summary>

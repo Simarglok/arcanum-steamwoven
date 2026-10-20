@@ -147,4 +147,54 @@ public sealed class SchematicAssemblyStateTests
         Assert.AreEqual(GameSessionFailure.InvalidItem, Restore(saved.Replace("\"type\":\"Generic\",\"prototype\":2320", "\"type\":\"Ammo\",\"prototype\":2320", StringComparison.Ordinal)));
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restore(saved.Replace("\"destroyed\":[\"kit:1\",\"kit:2\"]", "\"destroyed\":[\"kit:1\",\"kit:2\",\"made:1\"]", StringComparison.Ordinal)));
     }
+
+    [TestMethod]
+    public void Made_numbers_go_past_deleted_ones_across_a_restore_and_made_items_can_be_worn()
+    {
+        var stats = Defaults();
+        stats[4] = 15;
+        var hero = HalfElf(stats) with { Kit = [new(Part), new(Part), new(Part), new(Part)] };
+        using var owner = CreateWith(hero);
+        var parts = Schematic([2100], [2100]);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AssembleSchematic(owner.Version, parts, InBag, Facts, Kinds, Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyItem(owner.Version, "made:1", new(10, 0, 0, false)).Disposition);
+        var restored = GameSessionOwner.Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions());
+        Assert.AreEqual(GameSessionFailure.None, restored.Failure);
+        using var back = restored.Owner!;
+        var second = back.AssembleSchematic(back.Version, parts, InBag, Facts, Kinds, Accept);
+        CollectionAssert.AreEqual(new[] { "made:2" }, second.Made.ToArray(), "made:1 was deleted: its number is not reused");
+
+        // A made item is held like any other: a seed may not list the session's prefix.
+        var seed = new SessionMapInventorySeed([], [new("made:9", new(Product, 1, 0, 0, null, []), new(1, 1))]);
+        Assert.AreEqual(GameSessionFailure.InventoryMismatch, back.AttachMapInventory(Exterior, seed).Failure);
+    }
+
+    [TestMethod]
+    public void One_part_cannot_serve_both_lists_and_the_other_alternative_names_the_product_TC4()
+    {
+        var stats = Defaults();
+        stats[4] = 15;
+        using var single = CreateWith(HalfElf(stats) with { Kit = [new(Part)] });
+        Assert.AreEqual(AssemblyButton.ItemMissing, single.QueryHeroAssembly(Schematic([2100], [2100]), InBag, Facts)!.Button);
+        // Component 1 found at alternative 1 (2100): the product is alternative 1.
+        using var owner = Owner([0, 0, 0, 1, 0, 0, 0, 0]);
+        SessionItemKind? Both(int prototype) => prototype is 2320 or 2420 ? Product with { Prototype = prototype } : null;
+        var result = owner.AssembleSchematic(owner.Version, Schematic([2900, 2100], [2200], product: [2300, 2400]), InBag, Facts, Both, Accept);
+        Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition);
+        Assert.AreEqual(2420, owner.QueryMadeItems().Single().Kind.Prototype);
+    }
+
+    [TestMethod]
+    public void A_host_callback_that_changes_the_session_and_a_spent_durability_budget_refuse()
+    {
+        using var owner = Owner(limits: new GameSessionLimits(maxDurabilityRecords: 2));
+        var parts = Schematic([2100], [2100]);
+        SessionInsertCheck meddling = _ => { owner.BreakItem(owner.Version, "kit:3", new(10, 0, 0, false)); return SessionInsertVerdict.Accepted; };
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.AssembleSchematic(owner.Version, parts, InBag, Facts, Kinds, meddling).Failure);
+        Assert.AreEqual(2, owner.QueryHeroKit().Count(item => item.Kind == Part), "nothing consumed");
+        // kit:3's break used one of two records; the two deletions need two more.
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.AssembleSchematic(owner.Version, parts, InBag, Facts, Kinds, Accept).Failure);
+        var empty = Schematic([2100], [2100], product: []);
+        Assert.AreEqual(GameSessionFailure.InvalidSchematics, owner.AssembleSchematic(owner.Version, empty, InBag, Facts, Kinds, Accept).Failure);
+    }
 }
