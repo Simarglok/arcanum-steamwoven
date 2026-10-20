@@ -96,7 +96,11 @@ WORLD host (`TerrainViewerWorld.cs`).
    implemented**: Escape, F1–F5, F7, F8, F12, NumLock, Enter, Space, Home, 1–0, A, C, F,
    I, L, O, R, S, T, V, W, and F6, F10, E, K, M (not checked in the executable, F0), plus held `,` `.` `/`.
    A reserved key has no debug action and is not redirected; the HUD names the last
-   one ("F1 = Followers: go to point (original; NOT IMPLEMENTED)"). Exception: while
+   one ("F1 = Followers: go to point (original; NOT IMPLEMENTED)") at the end of its
+   detail text and, since ARC-INPUT-003, in the sticky header above the scrolled detail
+   ("Reserved: F1 = Followers: go to point (NOT IMPLEMENTED)"), visible without scrolling
+   until the next key press (at window heights below about 550 px the header may then
+   take the whole HUD panel). Exception: while
    `crash-site-area` has a game session, F7/F8 are the original quick save/load on key
    release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011)),
    and while its session inventory exists I toggles the inventory window on key down
@@ -107,7 +111,12 @@ WORLD host (`TerrainViewerWorld.cs`).
    `H` without modifiers (not an original key) switches the visual profile Legacy/HD on a fresh press
    while the world owns input ([ARC-UI-006](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006));
    the palette holds the same action. In `crash-site-area` Num Lock flips the original always-run lock and
-   Ctrl+LMB on the ground runs once ([ARC-WORLD-020](../world/gait-runtime.md)). Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
+   Ctrl+LMB on the ground runs once ([ARC-WORLD-020](../world/gait-runtime.md)); while it has a game session R
+   toggles the combat mode ([ARC-COMBAT-004](../rendering/terrain-viewer.md#combat-mode-arc-combat-004)). So in `crash-site-area` with a
+   session and its inventory the keys still reserved are Escape, F1–F6, F10, F12, Enter, Space, Home, 1–0, A, E,
+   F, K, M, O, S, T, V, W and held `,` `.` `/` (I too when the inventory seed was refused); without a session
+   (`world-diagnostic`, or a map or exterior drawn without a session clock) F7, F8, I, C, L and R are reserved
+   too, and Num Lock in `world-diagnostic`. Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
 3. **Palette route (palette open).** Up/Down navigate, Enter/Space activate,
    Escape/Backspace cancel (close); the numeric editor keeps its native digits,
    Backspace, Enter and Tab. W/S/Q/E/F1 are not palette keys.
@@ -147,8 +156,8 @@ Software only (synthetic Godot InputEvents and simulated controller levels):
 
 **Owner-verified (L3, ARC-INPUT-002, 2026-10-17):** native macOS delivery of
 Ctrl+Shift+F9, a physical Mac keyboard and a physical controller (see the result below).
-**NOT VERIFIED:** other keyboard layouts and models; visibility of the HUD reserved-key hint
-(finding below); synthetic injection is not a physical press. No original gameplay key is implemented:
+**NOT VERIFIED:** other keyboard layouts and models; a physical F1–F12 press on the owner's
+keyboard with and without Fn (finding below); synthetic injection is not a physical press. No original gameplay key is implemented:
 click-to-move, Followers, quick slots, game screens and called shots remain future work.
 
 ## Owner checklist (ARC-INPUT-002)
@@ -178,7 +187,7 @@ the owner's word, and nothing beyond it was reported.
 | --- | --- |
 | Launch: `git pull`, `./arcanum status`, `./arcanum area` (owner 1) | works |
 | 1 Chord (owner 2) | works |
-| 2 Release (owner 3) | no other problem reported (no second or late action and no world reaction noticed). **Finding:** the HUD hint "last reserved key: … (original; NOT IMPLEMENTED)" was not seen. Probable cause, not confirmed: in `crash-site-area` the hint sits near the end of the long HUD detail text, in a scroll area inside a panel capped at min(35% of the viewport height, 360 px) (`TerrainDiagnosticHud.ResizeForViewport`), so it is below the fold unless the HUD is scrolled. Also possible: plain F1–F5 and F9 on a Mac top row sent as media keys without Fn (no key event, so no hint), or a focused GUI control suppressing the hint. No automated check covers the hint text |
+| 2 Release (owner 3) | no other problem reported (no second or late action and no world reaction noticed). **Finding:** the HUD hint "last reserved key: … (original; NOT IMPLEMENTED)" was not seen. **Cause confirmed and fixed (ARC-INPUT-003):** in a 1280x800 `crash-site-area` source run, an F1 pushed through the viewport's input path set the hint, but it stood about 390 px down the HUD detail text, whose scroll area showed 140 px at scroll 0: below the fold. The hint is now also a line in the sticky header, shown without scrolling until the next key press, and the native smoke checks it (`ARC-INPUT-003 native-smoke reserved-key hint PASS`, exterior and map mode). A second cause remains possible: on the owner's Mac "Use F1, F2, etc. keys as standard function keys" is off (`com.apple.keyboard.fnState` 0), so on an Apple keyboard plain F1–F12 send their media actions and only Fn+F1 reaches the viewer as F1; which keys were pressed is not recorded. A focused GUI control is unlikely: closing the palette releases GUI focus |
 | 3 Text field (owner 4) | works; the typed zoom value is applied on Enter, as the numeric editor (Godot `SpinBox`) commits it on Enter or focus loss, which is the editor's purpose and not a key leak |
 | 4 Fit/zoom (owner 5) | works |
 | Mouse and arrows: wheel and +/- do not zoom, arrows pan, LMB on the ground sets the click-to-move goal (owner 6) | works; the first physical-mouse check of the LMB goal (hover cursor and route preview do not exist yet) |
