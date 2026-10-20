@@ -42,7 +42,9 @@ object's T0 facts as a `SessionOpenableBaseline`: its kind, flags, lock key and 
 whether it is a junk pile.
 
 - **State.** `QueryOpenable` returns the recorded state, or the baseline when nothing is
-  recorded, together with the lock at the session hour.
+  recorded, together with the lock at the session hour (never locked for a junk pile). A
+  recorded value out of range (a kind other than portal or container, a frame outside 0..31)
+  counts as not recorded.
 - **Lock, jam and frame writes.** `SetOpenableLocked`, `SetOpenableJammed` and
   `SetOpenableFrame` each add one revision. The first write records three map changes of the
   entity: `lock.kind`, `lock.flags` and `lock.frame`. The snapshot already carries map changes,
@@ -54,8 +56,10 @@ whether it is a junk pile.
   version stays 1, as when the script call and effect END kinds were added.
 - **When the event fires.** It locks the object, clears its jam and closes it. A portal goes to
   frame 0. A container goes to frame 0 only when its frame is exactly 1. The pass lists each
-  firing in `SessionEventPassResult.Locks`. An event whose object has no recorded state is
-  dropped.
+  firing in `SessionEventPassResult.Locks`. A host that checks objects (`ISessionScriptWorld`)
+  decides whether the object still exists; otherwise it exists while its state is recorded,
+  and an event whose object has no recorded state is dropped. A restore refuses a Lock event
+  whose object has no recorded state or whose delay is neither an hour nor a day.
 - **Open attempt.** `AttemptOpen` runs the player's open attempt with the current flags and
   hour. The host supplies the unlock script's result and the leaving test.
 

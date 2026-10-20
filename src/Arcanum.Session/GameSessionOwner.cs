@@ -175,7 +175,7 @@ public sealed partial class GameSessionOwner : IDisposable
         failure = ImportSound(snapshot.Sound, GameRules.For(options.Rules).Sound, options.SoundMapDefault, out var sound);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         var sink = new SessionEventSink();
-        failure = ImportEvents(snapshot.Events, hero?.State, life, snapshot.Clock.GameTimestampMs, sink,
+        failure = ImportEvents(snapshot.Events, hero?.State, life, maps, snapshot.Clock.GameTimestampMs, sink,
             GameRules.For(options.Rules).Events, out var events);
         if (failure != GameSessionFailure.None) return Rejected(failure);
 
@@ -982,10 +982,12 @@ public sealed partial class GameSessionOwner : IDisposable
             // A life timer's NPC must be present with its life record; an object a deferred call names must exist (an
             // absent role always does).
             pass = _events.ProcessDue(new(new(0, now, 0), _actor.Map.RuntimeMap, budget, entity =>
-                entity.Code == SessionEventKinds.AbsentRole || LockObjectExists(entity)
+                entity.Code == SessionEventKinds.AbsentRole
                 || (_life.Critters.ContainsKey(entity.Code)
                     ? world.CritterFacts(new(entity.Map), entity.Code) is not null
-                    : world is ISessionScriptWorld scripts && scripts.ObjectExists(new(entity.Map), entity.Code))));
+                    // A host that knows objects answers for every kind; otherwise a Lock event's object exists while the
+                    // session records its lock state (ARC-WORLD-050).
+                    : world is ISessionScriptWorld scripts ? scripts.ObjectExists(new(entity.Map), entity.Code) : LockObjectExists(entity))));
         }
         finally
         {
@@ -1563,7 +1565,8 @@ public sealed partial class GameSessionOwner : IDisposable
     // Saved timers: the queue's strict restore (registry version, kinds, sequences, order, payloads, keys), plus what only
     // the session knows: a hero timer needs the hero, an NPC timer a life record of its NPC, and every timer was set at a
     // game time no later than the saved clock, exactly its kind's delay before its deadline.
-    private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life, long clockMs,
+    private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life,
+        IReadOnlyDictionary<SessionMapId, Dictionary<MapChangeKey, long>> mapChanges, long clockMs,
         SessionEventSink sink, GameEventQueueProfile profile, out GameEventQueue? events)
     {
         events = null;
@@ -1597,9 +1600,10 @@ public sealed partial class GameSessionOwner : IDisposable
             }
             if (pending.Kind == SessionEventKinds.LockReset)
             {
-                // A Lock event (ARC-WORLD-050): one object, set no later than the saved clock, an hour (unlock) or a day (jam)
-                // before its deadline. Its object's state is checked when it fires.
-                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || !SessionValidation.Entity(pending.Entities[0].Code) ||
+                // A Lock event (ARC-WORLD-050): one object whose lock state the saved map changes record, set no later than
+                // the saved clock, an hour (unlock) or a day (jam) before its deadline.
+                if (pending.Entities.Length != 1 || pending.Entities[0].Code == SessionEventKinds.AbsentRole ||
+                    RecordedIn(mapChanges, new(new(pending.Entities[0].Map), pending.Entities[0].Code)) is null ||
                     pending.Values[0] < 0 || pending.Values[0] > clockMs ||
                     (pending.DeadlineMs - pending.Values[0]) is not (Arcanum.Simulation.Locks.LockRules.UnlockResetDelayMs or Arcanum.Simulation.Locks.LockRules.JamResetDelayMs))
                     return GameSessionFailure.InvalidEvents;

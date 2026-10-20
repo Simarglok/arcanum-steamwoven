@@ -41,7 +41,8 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (!ValidOpenable(openable, baseline)) throw new ArgumentException("Invalid openable object or baseline.", nameof(openable));
         var (flags, frame) = Current(openable, baseline);
-        return new(flags, frame, LockRules.IsLocked(flags, _clock.QueryClockSnapshot().Hour));
+        // A junk pile is not lockable, so the original's locked query answers 0 for it (ledger LK1, LK2).
+        return new(flags, frame, !baseline.JunkPile && LockRules.IsLocked(flags, _clock.QueryClockSnapshot().Hour));
     }
 
     /// <summary>Locks or unlocks the object (ledger LK3), as a script, a key or the pick-locks skill does; unlocking a locked
@@ -98,14 +99,17 @@ public sealed partial class GameSessionOwner
         if (result.Flags == flags) return NoChange();
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         if (result.SchedulesReset && (_events.QueryPending().Count(e => e.Kind == SessionEventKinds.LockReset) >= SessionEventKinds.MaxLockResets ||
-            _events.Count >= _events.Limits.MaxPending || now > long.MaxValue - delayMs))
+            _events.Count >= _events.Limits.MaxPending || _events.NextSequence == long.MaxValue || now > long.MaxValue - delayMs))
             return Reject(GameSessionFailure.EventBudgetExceeded);
         var applied = ApplyChanges(expected, null, Edits(openable, baseline.Kind, result.Flags, frame));
         if (applied.Disposition == GameSessionDisposition.Rejected || !result.SchedulesReset) return applied;
-        // The Lock event of the original's lock and jam setters; the changes above made the revision move already.
+        // The Lock event of the original's lock and jam setters; the changes above made the revision move already. Every
+        // refusal was checked before the changes (the kind keeps any number of events), so a failure here is a defect.
         var scheduled = _events.ScheduleAfter(SessionEventKinds.LockReset,
             GameEventPayload.Of([new(openable.Map.RuntimeMap, openable.Entity)], now), delayMs, new(0, now, 0));
-        return scheduled.Disposition == GameEventScheduleDisposition.Added ? applied : Reject(GameSessionFailure.EventConflict);
+        if (scheduled.Disposition != GameEventScheduleDisposition.Added)
+            throw new InvalidOperationException("An admitted Lock event could not be scheduled.");
+        return applied;
     }
 
     // A Lock event: lock, unjam and close the object it names (ledger LK5); dropped when the object has no recorded state.
@@ -122,14 +126,20 @@ public sealed partial class GameSessionOwner
         return GameEventHandlerOutcome.Completed;
     }
 
-    // The queue's existence check for a Lock event's object: the session's own record of it.
+    // The queue's existence check for a Lock event's object when the host cannot answer it: the session's own record.
     private bool LockObjectExists(GameEventEntity entity) => Recorded(new(new(entity.Map), entity.Code)) is not null;
 
-    private (OpenableKind Kind, int Flags, int Frame)? Recorded(SessionOpenable openable)
+    private (OpenableKind Kind, int Flags, int Frame)? Recorded(SessionOpenable openable) => RecordedIn(_maps, openable);
+
+    // An object's recorded state, or null when any of its three values is missing or out of range (a crafted save).
+    private static (OpenableKind Kind, int Flags, int Frame)? RecordedIn(IReadOnlyDictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps,
+        SessionOpenable openable)
     {
-        if (!SessionValidation.Map(openable.Map) || !SessionValidation.Entity(openable.Entity)) return null;
-        long? Read(string property) => QueryMapChange(openable.Map, MapChangeKey.ForEntity(openable.Entity, property));
-        return Read(KindProperty) is { } kind && Read(FlagsProperty) is { } flags && Read(FrameProperty) is { } frame
+        if (!SessionValidation.Map(openable.Map) || !SessionValidation.Entity(openable.Entity) || !maps.TryGetValue(openable.Map, out var changes))
+            return null;
+        long? Read(string property) => changes.TryGetValue(MapChangeKey.ForEntity(openable.Entity, property), out var value) ? value : null;
+        return Read(KindProperty) is { } kind and ((long)OpenableKind.Portal or (long)OpenableKind.Container) &&
+            Read(FlagsProperty) is { } flags and >= int.MinValue and <= int.MaxValue && Read(FrameProperty) is { } frame and >= 0 and <= MaxFrame
             ? ((OpenableKind)kind, (int)flags, (int)frame) : null;
     }
 

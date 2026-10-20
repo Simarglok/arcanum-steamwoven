@@ -117,6 +117,15 @@ the count of entries it removes. When due it removes the first entries of that n
 call (set no later than the saved clock, exactly its duration before its deadline) and refuses one without a hero or of an
 innate number. See [durable effects](durable-effects-runtime.md).
 
+**Lock events (ARC-WORLD-050).** The kind `lock.reset` (also added to registry version 1 without a new version) is the
+original's Lock event: game time, saved, scoped to its object's map (it waits while another map is active), any number, at
+most `SessionEventKinds.MaxLockResets` (1,024) on top of the others. One entity, the portal or container; one value, the
+game time it was set at. Unlocking a locked object sets it an hour ahead, jamming a free one a day ahead; when due it
+locks, unjams and closes the object, one revision, and `SessionEventPassResult.Locks` reports it. A host without an
+object check (`ISessionScriptWorld`) lets it run while the session records the object's lock state. A restore checks it
+as a call (set no later than the saved clock, exactly an hour or a day before its deadline) and refuses one whose object
+has no recorded lock state. See [lock state](lock-state-runtime.md).
+
 A positive write is a step that changes the stored value to a positive one, or the timer's own handler writing what it
 found positive (the source writes those back even when the heal rate is 0). **Deliberate difference:** the source's
 damage step writes hit-point damage and the poison level on every hit, even with an unchanged value, so a hit that
@@ -132,8 +141,9 @@ poison schedule (0x4B1350), hit-point write (0x43D530), poison write (0x4B0980).
 Rules of the wiring:
 
 - **Scheduling with the step.** Every life call (`ApplyDamage`, `Kill`, `Heal`, the ticks) sets its timers in the same
-  step. The session's queue holds 33,859 events (`SessionEventKinds.MaxPending`: four per NPC life record, 8,192 records
-  since ARC-DATA-029, and three for the hero, plus the 1,024 deferred script calls and 64 timed-effect ENDs), so the
+  step. The session's queue holds 34,883 events (`SessionEventKinds.MaxPending`: four per NPC life record, 8,192 records
+  since ARC-DATA-029, and three for the hero, plus the 1,024 deferred script calls, 64 timed-effect ENDs and 1,024 Lock
+  events), so the
   timers of a step always fit; a step whose timers would not fit, or whose deadline would pass the clock's range, is
   refused whole (`EventBudgetExceeded`) with nothing drawn or changed.
 - **Map of an NPC timer.** The map the NPC is on: the actor's map when a life call sets it (the host acts on NPCs of the
@@ -187,7 +197,7 @@ D2: the Steamwoven mode applies one tick per period, the Original mode keeps two
 ```
 
 Pending events are in queue order. Decoding checks shapes and ranges: registry and next sequence at least 1, at most
-33,859 events, 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
+34,883 events, 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
 (`OutOfRange`, `BudgetExceeded`, missing, unknown and wrongly typed fields). Restore refuses (`InvalidEvents`) another
 registry version, an unknown kind, a value count other than the kind's (2 for poison recovery, else 1), a recovery
 value other than 1 or 2, an NPC with timers on two maps, a timer whose deadline is not its kind's delay after its scheduling time or that was

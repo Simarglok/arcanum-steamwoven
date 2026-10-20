@@ -87,6 +87,7 @@ public sealed class LockStateTests
         var pile = new SessionOpenable(Exterior, "oid:pile");
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.SetOpenableLocked(owner.Version, pile, junk, false).Disposition);
         Assert.AreEqual(OpenAttempt.Opens, owner.AttemptOpen(pile, junk, false));
+        Assert.IsFalse(owner.QueryOpenable(pile, junk).Locked);
     }
 
     [TestMethod]
@@ -116,6 +117,51 @@ public sealed class LockStateTests
         Advance(restored, Hour);
         Assert.AreEqual(1, restored.ProcessEvents(new World()).Locks.Count);
         Assert.AreEqual(new SessionOpenableState(LockRules.LockedBit, 0, true), restored.QueryOpenable(Door, LockedDoor));
+    }
+
+    [TestMethod]
+    public void Each_unlock_and_jam_adds_its_own_event_and_both_survive_a_save()
+    {
+        using var owner = Create();
+        Changed(owner.SetOpenableLocked(owner.Version, Door, LockedDoor, false), owner, 1);
+        Changed(owner.SetOpenableLocked(owner.Version, Door, LockedDoor, true), owner, 2);
+        Changed(owner.SetOpenableLocked(owner.Version, Door, LockedDoor, false), owner, 3);
+        Changed(owner.SetOpenableJammed(owner.Version, Door, LockedDoor, true), owner, 4);
+        CollectionAssert.AreEqual(new[] { T0 + Hour, T0 + Hour, T0 + 24 * Hour }, owner.QueryEvents().Select(e => e.DeadlineMs).ToArray());
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(3, restored.QueryEvents().Count);
+        Advance(restored, Hour);
+        Assert.AreEqual(2, restored.ProcessEvents(new World()).Locks.Count);
+        Assert.AreEqual(new SessionOpenableState(LockRules.LockedBit, 0, true), restored.QueryOpenable(Door, LockedDoor));
+    }
+
+    [TestMethod]
+    public void A_save_with_a_malformed_lock_event_is_refused()
+    {
+        using var owner = Create();
+        Changed(owner.SetOpenableLocked(owner.Version, Door, LockedDoor, false), owner, 1);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        void Refused(string changed)
+        {
+            Assert.AreNotEqual(text, changed);
+            var decoded = GameSessionSnapshotCodec.TryDecode(changed);
+            if (decoded.Snapshot is null) return;
+            Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(decoded.Snapshot, RestoreOptions()).Failure);
+        }
+        // A delay that is neither an hour nor a day, a time after the saved clock, and an object without recorded state.
+        Refused(text.Replace($"\"deadlineMs\":{T0 + Hour}", $"\"deadlineMs\":{T0 + Hour + 1}"));
+        Refused(text.Replace($"\"values\":[{T0}]", $"\"values\":[{T0 + 1}]"));
+        var events = text.IndexOf("\"pending\"", StringComparison.Ordinal);
+        Refused(text[..events] + text[events..].Replace("\"entity\":\"sector:1:7\"", "\"entity\":\"sector:1:8\""));
+    }
+
+    [TestMethod]
+    public void A_refused_write_records_nothing()
+    {
+        using var owner = Create(new GameSessionLimits(maxTotalChanges: 2));
+        Rejected(owner.SetOpenableLocked(owner.Version, Door, LockedDoor, false), owner, GameSessionFailure.BudgetExceeded, 0);
+        Assert.AreEqual(0, owner.QueryMapChanges(Exterior).Count);
+        Assert.AreEqual(0, owner.QueryEvents().Count);
     }
 
     [TestMethod]

@@ -208,6 +208,7 @@ public sealed class SessionEventTests
         for (var i = 0; i < SessionEventKinds.MaxLockResets; i++)
             Assert.AreEqual(GameSessionDisposition.Changed, owner.SetOpenableLocked(owner.Version, new(Exterior, $"door:{i}"), door, false).Disposition);
         Assert.AreEqual(GameSessionFailure.EventBudgetExceeded, owner.SetOpenableLocked(owner.Version, new(Exterior, "door:x"), door, false).Failure);
+        Assert.IsNull(owner.QueryMapChange(Exterior, MapChangeKey.ForEntity("door:x", GameSessionOwner.FlagsProperty)));
         Assert.AreEqual(SessionEventKinds.MaxPending, owner.QueryEvents().Count);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, Npc("oid:n0"), new LifeDamage { HitPoints = 1 }).Disposition);
         // A save of a full queue restores.
