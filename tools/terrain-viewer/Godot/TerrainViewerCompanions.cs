@@ -242,11 +242,14 @@ public partial class TerrainViewerApp
             EndConversation();
             Require(_areaSession!.QueryCompanion(companion.Entity).Standing == CompanionStanding.Following, "the dialog joined him through the session: " + conversation.Phase);
 
-            // ARC-WORLD-045: a negative reaction change by his leader arms his loyalty marks; standing near the PC without a follow
-            // goal, his next AI tick runs the loyalty step, which clears them (his AI row warns at no reaction above −980).
+            // ARC-WORLD-045: a negative reaction change by his leader arms his loyalty marks (his join dialog's AL may have armed the
+            // alignment marks too); standing near the PC without a follow goal, his next AI tick runs the loyalty step, which clears
+            // them all (his AI row warns at no reaction above −980).
+            const CompanionLoyalty reactionMarks = CompanionLoyalty.CheckLeader | CompanionLoyalty.TestReaction;
             var state = host.State; var reactionBefore = state.Reaction(speaker.Index);
-            Require(_areaSession.AdjustReaction(_areaSession.Version, companion.Entity, state.NpcFacts(), state.PcFacts, -5).Disposition == GameSessionDisposition.Changed
-                && _areaSession.QueryCompanion(companion.Entity).Loyalty == (CompanionLoyalty.CheckLeader | CompanionLoyalty.TestReaction), "a leader's reaction drop arms him");
+            var dropped = _areaSession.AdjustReaction(_areaSession.Version, companion.Entity, state.NpcFacts(), state.PcFacts, -5);
+            Require(dropped.Disposition == GameSessionDisposition.Changed && (_areaSession.QueryCompanion(companion.Entity).Loyalty & reactionMarks) == reactionMarks,
+                $"a leader's reaction drop arms him: {dropped.Disposition} {dropped.Failure} {_areaSession.QueryCompanion(companion.Entity)}");
             for (var i = 0; i < 8 && _areaSession.QueryCompanion(companion.Entity).Loyalty != CompanionLoyalty.None; i++) AreaSmokeFrame();
             Require(_areaSession.QueryCompanion(companion.Entity) is { Loyalty: CompanionLoyalty.None, Standing: CompanionStanding.Following } && !companion.FollowGoal,
                 "the loyalty step ran on his AI tick and cleared his marks: " + _areaSession.QueryCompanion(companion.Entity));
@@ -269,7 +272,7 @@ public partial class TerrainViewerApp
             Require(companion.FollowGoal && _areaSession.AdjustReaction(_areaSession.Version, companion.Entity, state.NpcFacts(), state.PcFacts, -5).Disposition
                 == GameSessionDisposition.Changed, "armed again while his follow goal lives");
             for (var i = 0; i < 8; i++) AreaSmokeFrame();
-            Require(_areaSession.QueryCompanion(companion.Entity).Loyalty == (CompanionLoyalty.CheckLeader | CompanionLoyalty.TestReaction),
+            Require(_areaSession.QueryCompanion(companion.Entity).Loyalty == reactionMarks,
                 "no loyalty step while his follow goal lives: " + _areaSession.QueryCompanion(companion.Entity));
             Require(_areaSession.SetReaction(_areaSession.Version, companion.Entity, state.NpcFacts(), state.PcFacts, reactionBefore).Disposition != GameSessionDisposition.Rejected
                 && state.Reaction(speaker.Index) == reactionBefore, "his reaction restored");
