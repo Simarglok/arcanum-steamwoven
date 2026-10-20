@@ -413,5 +413,10 @@ dead humans have row 0 and no kill-on-sight flag.
   `No_Stack:` and the cancel sets, `No_Resist:` combined with maintenance or
   duration, item mana stores and charges). This note answers its key counts
   per record range and the Crash Site and cave college ranks and masteries.
+  The spell-record part (component types per action, `Dmg_Flags:`, summons and
+  factions, `No_Stack:` and the cancel sets, `No_Resist:` with maintenance or
+  duration, records 80..139) is answered by ARC-MAGIC-002 in the
+  [spell record contract](../formats/spell-records.md#installed-original);
+  item mana stores and charges remain open.
 - **U4** Only module `Arcanum` was measured; `Vormantown` was not.
 
