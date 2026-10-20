@@ -140,7 +140,7 @@ public sealed class SkillRulesTests
             "basic skills are checked first");
         Assert.IsTrue(SkillRules.CheckKeyStat(CharacterStat.Strength, 1, basic, tech).Allowed, "no skill keys on strength");
         basic[(int)Skill.Melee] = 2;   // base 8 on dexterity: dexterity 8 caps at 7
-        Assert.AreEqual(Skill.Melee, SkillRules.CheckKeyStat(CharacterStat.Dexterity, 8, basic, tech).Blocking, "bought points, never the monstrous 20");
+        Assert.AreEqual(Skill.Melee, SkillRules.CheckKeyStat(CharacterStat.Dexterity, 8, basic, tech).Blocking, "melee keys on dexterity by its bought points");
         Assert.IsTrue(SkillRules.CheckKeyStat(CharacterStat.Dexterity, 9, basic, tech).Allowed);
         Assert.AreEqual(SkillKeyStatStatus.Invalid, SkillRules.CheckKeyStat(CharacterStat.Perception, 12, basic[..11], tech).Status);
         Assert.AreEqual(SkillKeyStatStatus.Invalid, SkillRules.CheckKeyStat(CharacterStat.Perception, 12, basic, null).Status);

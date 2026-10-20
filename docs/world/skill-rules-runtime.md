@@ -51,7 +51,8 @@ Requirements: [FR-CHAR-016](../requirements/characters-skills.md#fr-char-016) (r
 
 Changes answer typed results: `SkillChangeStatus` `Changed`, `NegativePoints`, `KeyStatTooLow`, `SkipsTier`,
 `LevelTooLow` or `Invalid` (an undefined skill or tier, a value outside ±1,000,000, a level outside 0..20, a skill list of
-the wrong length), with the stored value after the call and the value the source returns. Points beyond ±1,000,000, where the source's 32-bit product could wrap, are `Invalid` (ledger SR9). The reads (`Level`, `Points`,
+the wrong length), with the stored value after the call and the value the source returns. For points beyond ±1,000,000
+the source answers too high for the key stat, and from 2^29 its 32-bit product wraps and writes them (ledger SR9). The reads (`Level`, `Points`,
 `Training`, ...) validate their inputs and throw `ArgumentException` outside the domain, as `CombatSkillRules` did.
 
 ## Boundaries
