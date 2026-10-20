@@ -102,13 +102,13 @@ public sealed class SpellRecordTableTests
             "Resist: (stat_willpower @ -2), Range: 8, ChargesFromCells: 1, ChargeBeginCost: 0, Info: aggressive, Disabled: 1";
         foreach (var mode in Modes)
         {
-            var r = Read(List((L(3, 1), line), (L(80, 1), "IQ: 30"), (L(81, 1), "Info: Friendly"), (L(82, 1), "Info: may_be_aggressive")), mode)[3];
+            var r = Read(List((L(3, 1), line), (L(81, 1), "Info: Friendly"), (L(82, 1), "Info: may_be_aggressive")), mode)[3];
             Assert.AreEqual((14, 5, 2, 30, 60, 6, 12, 4, 3), (r.MinimumWillpower, r.Cost, r.MaintainCost, r.MaintainPeriod, r.DurationSeconds,
                 r.DurationStat, r.DurationStatLevel, r.DurationStatModifier, r.DurationTriggerCount));
             Assert.AreEqual((6, -2, 8, true, true, SpellInfo.Aggressive, false), (r.ResistStat, r.ResistModifier, r.Range, r.ChargesFromCells,
                 r.SkipsBeginCost, r.Info, r.Enabled));
             Assert.AreEqual(12, r.KeysRead.Count);
-            var table = Read(List((L(80, 1), "IQ: 30"), (L(81, 1), "Info: Friendly"), (L(82, 1), "Info: may_be_aggressive"), (L(83, 1), "Disabled: 0")), mode);
+            var table = Read(List((L(80, 1), mode == SpellRecordMode.Strict ? "IQ: 0" : "IQ: 30"), (L(81, 1), "Info: Friendly"), (L(82, 1), "Info: may_be_aggressive"), (L(83, 1), "Disabled: 0")), mode);
             Assert.AreEqual(0, table[80].MinimumWillpower, "the willpower of a record from 80 is forced to 0 after its line is read");
             Assert.AreEqual((SpellInfo.Friendly, SpellInfo.MayBeAggressive, true), (table[81].Info, table[82].Info, table[83].Enabled));
         }
@@ -134,6 +134,10 @@ public sealed class SpellRecordTableTests
         Refused(unknown, SpellRecordMode.Strict, SpellDataStatus.UnknownKey, L(7, 1), "Speed:");
         Refused(List((L(7, 3), "No_Stack: 1, ItemTrigger: Wear")), SpellRecordMode.Strict, SpellDataStatus.UnknownKey, L(7, 3), "ItemTrigger:");
         Assert.AreEqual(0, Read(List((L(7, 1), "cost: 2")), SpellRecordMode.LikeOriginal)[7].Cost, "keys are case-sensitive");
+        // An empty value segment stops the cursor; strict mode names the first key it leaves unread.
+        var empty = List((L(7, 1), "Cost: 5,, Range: 3"));
+        Assert.AreEqual((5, 99), (Read(empty, SpellRecordMode.LikeOriginal)[7].Cost, Read(empty, SpellRecordMode.LikeOriginal)[7].Range));
+        Refused(empty, SpellRecordMode.Strict, SpellDataStatus.SkippedKey, L(7, 1), "Range:");
     }
 
     [TestMethod]
@@ -176,6 +180,9 @@ public sealed class SpellRecordTableTests
         var trailing = List((L(4, 1), "Maintain: (2 @ 3) x"));
         Assert.AreEqual((2, 3), (Read(trailing, SpellRecordMode.LikeOriginal)[4].MaintainCost, Read(trailing, SpellRecordMode.LikeOriginal)[4].MaintainPeriod));
         Refused(trailing, SpellRecordMode.Strict, SpellDataStatus.MalformedPair, L(4, 1));
+        var overflow = List((L(4, 1), "Maintain: (2 @ 4294967297)"));
+        Assert.AreEqual(1, Read(overflow, SpellRecordMode.LikeOriginal)[4].MaintainPeriod);
+        Refused(overflow, SpellRecordMode.Strict, SpellDataStatus.InvalidNumber, L(4, 1), "Maintain:(2 @ 4294967297)");
     }
 
     [TestMethod]
@@ -203,12 +210,18 @@ public sealed class SpellRecordTableTests
     [TestMethod]
     public void Line_one_values_the_original_drops_are_refused_in_strict_mode()
     {
-        var list = List((L(1, 1), "DurationTriggerCount: -2, ChargeBeginCost: 4, ChargesFromCells: 0"));
+        var list = List((L(1, 1), "DurationTriggerCount: -2, ChargesFromCells: 0, ChargeBeginCost: 4"));
         var r = Read(list, SpellRecordMode.LikeOriginal)[1];
         Assert.AreEqual((0, false, false), (r.DurationTriggerCount, r.SkipsBeginCost, r.ChargesFromCells));
         Refused(list, SpellRecordMode.Strict, SpellDataStatus.IgnoredValue, L(1, 1), "DurationTriggerCount:");
         Refused(List((L(1, 1), "ChargeBeginCost: 4")), SpellRecordMode.Strict, SpellDataStatus.IgnoredValue, L(1, 1), "ChargeBeginCost:");
         Assert.AreEqual(0, Read(List((L(1, 1), "DurationTriggerCount: 0")), SpellRecordMode.Strict)[1].DurationTriggerCount);
+        Assert.AreEqual((false, 3), (Read(list, SpellRecordMode.LikeOriginal)[1].SkipsBeginCost, Read(list, SpellRecordMode.LikeOriginal)[1].KeysRead.Count));
+        // A willpower minimum given to a record from 80 is read and then forced to 0.
+        var forced = List((L(80, 1), "IQ: 30"));
+        Assert.AreEqual(0, Read(forced, SpellRecordMode.LikeOriginal)[80].MinimumWillpower);
+        Refused(forced, SpellRecordMode.Strict, SpellDataStatus.IgnoredValue, L(80, 1), "IQ:");
+        Assert.AreEqual(0, Read(List((L(80, 1), "IQ: 0")), SpellRecordMode.Strict)[80].MinimumWillpower);
     }
 
     [TestMethod]
@@ -218,13 +231,18 @@ public sealed class SpellRecordTableTests
             "[End]Caster: 14, [End]Target: 15, [Callback]Caster: 16, [Callback]Target: 17, [EndCallback]Caster: 18, [EndCallback]Target: 19, Is_Tech: 1";
         foreach (var mode in Modes)
         {
-            var table = Read(List((L(100, 2), line), (L(101, 2), "Missile: 7, Is_Tech: 0")), mode);
+            var table = Read(List((L(100, 2), line), (L(101, 2), "Missile: 7, Is_Tech: 0"), (L(141, 2), "Is_Tech: 1")), mode);
+            Assert.IsTrue(table[141].IsTechnology);
             var r = table[100];
             Assert.AreEqual((3, 4, true, true), (r.CastingAnimation, r.Missile, r.IsTechnology, r.LinesPresent[2]));
             CollectionAssert.AreEqual(new[] { 10, 12, 14, 16, 18 }, r.CasterEyeCandy.ToArray());
             CollectionAssert.AreEqual(new[] { 11, 13, 15, 17, 19 }, r.TargetEyeCandy.ToArray());
             Assert.AreEqual((-1, 7, false), (table[101].CastingAnimation, table[101].Missile, table[101].IsTechnology));
         }
+        // Is_Tech: 0 cannot clear the flag forced from 140.
+        var cleared = List((L(140, 2), "Is_Tech: 0"));
+        Assert.IsTrue(Read(cleared, SpellRecordMode.LikeOriginal)[140].IsTechnology);
+        Refused(cleared, SpellRecordMode.Strict, SpellDataStatus.IgnoredValue, L(140, 2), "Is_Tech:");
     }
 
     [TestMethod]
@@ -246,6 +264,14 @@ public sealed class SpellRecordTableTests
             Refused(List((L(12, 3), "ItemTriggers: Wear|")), mode, SpellDataStatus.TrailingSeparator, L(12, 3));
         }
         // A space-separated name followed later by '|': the walk resumes after the '|', so the name between is never read.
+        foreach (var mode in Modes)
+        {
+            // '|' first: every name is read, and white space after a separator is skipped.
+            Assert.AreEqual(0b11100u, Read(List((L(12, 3), "Cancels_SF: OSF_BODY_OF_AIR|OSF_BODY_OF_EARTH OSF_BODY_OF_FIRE")), mode)[12].CancelsSpellFlags);
+            Assert.AreEqual(0b1100u, Read(List((L(12, 3), "Cancels_SF: OSF_BODY_OF_AIR|  OSF_BODY_OF_EARTH")), mode)[12].CancelsSpellFlags);
+            Refused(List((L(12, 3), "Cancels_SF: OSF_BODY_OF_AIR||OSF_BODY_OF_EARTH")), mode, SpellDataStatus.UnknownFlag, L(12, 3), "");
+            Refused(List((L(12, 3), "Cancels_SF: OSF_BODY_OF_AIR|  , No_Stack: 1")), mode, SpellDataStatus.UnknownFlag, L(12, 3), "");
+        }
         var skipping = List((L(12, 3), "Cancels_SF: OSF_BODY_OF_AIR OSF_BODY_OF_EARTH|OSF_BODY_OF_FIRE"));
         Assert.AreEqual(0b10100u, Read(skipping, SpellRecordMode.LikeOriginal)[12].CancelsSpellFlags);
         Refused(skipping, SpellRecordMode.Strict, SpellDataStatus.AmbiguousFlagList, L(12, 3));
@@ -267,6 +293,9 @@ public sealed class SpellRecordTableTests
         var zero = List((L(150, 4), "No_Resist: 0"));
         Assert.IsTrue(Read(zero, SpellRecordMode.LikeOriginal)[150].NoResist, "by presence, whatever the value");
         Refused(zero, SpellRecordMode.Strict, SpellDataStatus.IgnoredValue, L(150, 4), "No_Resist:");
+        var zeroReflect = List((L(150, 4), "No_Reflect: 0"));
+        Assert.IsTrue(Read(zeroReflect, SpellRecordMode.LikeOriginal)[150].NoReflect);
+        Refused(zeroReflect, SpellRecordMode.Strict, SpellDataStatus.IgnoredValue, L(150, 4), "No_Reflect:");
     }
 
     [TestMethod]
@@ -338,6 +367,15 @@ public sealed class SpellRecordTableTests
     }
 
     [TestMethod]
+    public void Arguments_are_checked_before_any_read()
+    {
+        var mes = Mes("{10}{a}");
+        Assert.ThrowsExactly<ArgumentNullException>(() => SpellData.Create(mes, null!, mes, SpellRecordMode.Strict));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SpellData.Create(mes, mes, mes, (SpellRecordMode)7));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SpellRecordTable.Read(mes, (SpellRecordMode)7));
+    }
+
+    [TestMethod]
     public void The_files_come_from_the_first_base_source_and_never_from_the_module()
     {
         var root = Path.Combine(Path.GetTempPath(), "arc-spells-" + Guid.NewGuid().ToString("N"));
@@ -359,6 +397,18 @@ public sealed class SpellRecordTableTests
                 Assert.AreEqual((3, "base name"), (load.Data!.Records[0].Cost, load.Data.Texts.Names[0]));
                 Assert.AreEqual(SpellDataStatus.MissingText, SpellData.Open(stack, SpellRecordMode.Strict).Status);
             }
+            // Two base sources: the first in search order wins (Arcanum4 before arcanum1).
+            File.WriteAllBytes(Path.Combine(root, "Arcanum4.dat"), Dat(("mes/spell.mes", Encoding.ASCII.GetBytes("{0}{first base name}"))));
+            using (var stack = Stack(root))
+                Assert.AreEqual("first base name", SpellData.Open(stack, SpellRecordMode.LikeOriginal).Data!.Texts.Names[0]);
+            File.WriteAllBytes(Path.Combine(root, "Arcanum4.dat"), Dat(("mes/spell.mes", Encoding.ASCII.GetBytes("no message here"))));
+            using (var stack = Stack(root))
+                Assert.AreEqual((SpellDataStatus.FileEmpty, SpellTexts.Path), (SpellData.Open(stack, SpellRecordMode.LikeOriginal).Status,
+                    SpellData.Open(stack, SpellRecordMode.LikeOriginal).Refusal!.File));
+            File.WriteAllBytes(Path.Combine(root, "Arcanum4.dat"), Dat(("mes/spell.mes", Encoding.ASCII.GetBytes("{0}{a}{0}{b}"))));
+            using (var stack = Stack(root))
+                Assert.AreEqual(SpellDataStatus.FileRefused, SpellData.Open(stack, SpellRecordMode.LikeOriginal).Status);
+            File.Delete(Path.Combine(root, "Arcanum4.dat"));
             File.WriteAllBytes(Path.Combine(root, "arcanum1.dat"), Dat(("mes/spell.mes", texts), ("rules/magictech.mes", components)));
             using (var stack = Stack(root))
             {

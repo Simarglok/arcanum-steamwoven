@@ -221,7 +221,7 @@ internal sealed class NamedKeyCursor(string text)
     private bool Open(out string token)
     {
         token = "";
-        if (_at < _text.Length && _text[_at] == '(') return true;
+        if (_at >= 0 && _at < _text.Length && _text[_at] == '(') return true;
         token = Take(out _);
         Fail(NamedKeyFault.MissingParenthesis, token);
         return false;

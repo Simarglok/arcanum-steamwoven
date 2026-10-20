@@ -71,7 +71,7 @@ the record keeps its defaults.
 | | `Range:` | number | `Range` | 99 |
 | | `ChargesFromCells:` | number, non-zero sets | `ChargesFromCells` | off |
 | | `ChargeBeginCost:` | number, **zero** sets (other values change nothing) | `SkipsBeginCost` | off |
-| | `Info:` | `neutral`, `friendly`, `aggressive`, `may_be_aggressive` | `Info` (flag bits 0, 1, 2, 3) | neutral |
+| | `Info:` | `neutral`, `friendly`, `aggressive`, `may_be_aggressive` | `Info` (values 0, 1, 2, 3, OR-ed into the flags: friendly 0x1, aggressive 0x2) | neutral |
 | | `Disabled:` | number: absent or 0 → enabled | `Enabled` | enabled |
 | +2 | `CastingAnim:`, `Missile:` | number | `CastingAnimation`, `Missile` | −1 |
 | | `[Begin]Caster:`, `[Begin]Target:`, … `[EndCallback]Target:` (five actions, caster then target) | number | `CasterEyeCandy`, `TargetEyeCandy` by `SpellAction` | −1 |
@@ -99,7 +99,7 @@ The original's named-key parser, with the comma as value delimiter:
   cursor where it is: a key out of order, a repeated key, an unknown key and everything after it on the line are not read.
 - **Value end.** A value runs to the next comma (the cursor then follows it) or to the end of the line (no later key is
   read). Parentheses do not protect a comma.
-- **Number.** C `atoi`: leading white space, one sign, decimal digits up to the first other character, 0 when there are
+- **Number.** C `atoi` (`atol` in the executable, the same on Win32): leading white space, one sign, decimal digits up to the first other character, 0 when there are
   none, 32-bit wrap on overflow.
 - **Pair** `(a@b)`. After white space the value must start with `(`, otherwise the original exits. a is `atoi` of the text
   after `(`, b of the text after `@`, or a again without `@` (so `Duration:(30)` has stat 30). `)` is never checked.
@@ -110,14 +110,16 @@ The original's named-key parser, with the comma as value delimiter:
   match ends the process.
 - **Flag list.** Names separated by a space or `|`, compared ASCII case-insensitively, each OR-ed in. A name ends at
   whichever comes first; when a space comes first and a `|` follows later, the walk resumes after that `|`, so the names
-  between are skipped (`A B|C` reads A and C; `A|B C` reads all three). An unknown or empty name (an empty value, a
-  doubled `|`) ends the process; a separator that is the last character of the value (`A ,`, `A|`) crashes it.
+  between are skipped (`A B|C` reads A and C; `A|B C` reads all three). White space after a separator is skipped
+  (`A|  B` reads A and B). An unknown or empty name (an empty value, a doubled `|`, only spaces after `|`) ends the
+  process; a separator that is the last character of the value (`A ,`, `A|`) crashes it.
 
 ## Reader modes
 
 Load-map policy 2. Both modes refuse what ends the original's process: `MissingParenthesis`, `UnknownName`, `UnknownFlag`,
 `TrailingSeparator`, and `NonAsciiByte` for a byte above 0x7F on lines +1..+4 (the original's white-space test reads
-memory before its character table for one, so its result depends on run-time data). A missing component type name is
+memory before its character table for one, so its result depends on run-time data; the refusal covers the whole line,
+deliberately broader than the places the original's skip meets the byte). A missing component type name is
 `MissingComponentName`.
 
 - **Like original** (`SpellRecordMode.LikeOriginal`) reads everything else as the original does: skipped and unknown keys
@@ -128,14 +130,17 @@ memory before its character table for one, so its result depends on run-time dat
 | --- | --- |
 | `MissingRequiredLine` | line +0 or +1 of a record is missing |
 | `MissingText` | a text of `mes\spell.mes` is missing |
-| `UnknownKey` | text is left after the cursor's last key and its key is not one of the line's |
+| `UnknownKey` | text is left after the cursor's last key and its first non-empty segment's key is not one of the line's |
 | `SkippedKey` | the left text starts with one of the line's keys (out of order, repeated, or a `DurationStatInfo:` after a stat of −1) |
-| `InvalidNumber` | a number that is not an optional sign and digits within 32 bits |
+| `InvalidNumber` | a number, alone or in a pair, that is not an optional sign and digits within 32 bits |
 | `MalformedPair` | a pair without `@`, with text after `)`, or a stat name followed by more than spaces |
 | `AmbiguousFlagList` | a flag list whose names the original reads only in part |
-| `IgnoredValue` | a negative `DurationTriggerCount:`, a non-zero `ChargeBeginCost:`, a zero `No_Resist:` or `No_Reflect:` |
+| `IgnoredValue` | a value read and then dropped: a negative `DurationTriggerCount:`, a non-zero `ChargeBeginCost:`, a zero `No_Resist:` or `No_Reflect:`, a non-zero `IQ:` on a record from 80 (forced to 0), `Is_Tech: 0` on a record from 140 (forced technology) |
 
-The first refusal in record order (file, message number, token) is returned. On the installed original both modes read
+The first refusal in record order (file, message number, token) is returned; within one line, a fault that ends the
+original's process takes priority over a strict refusal of an earlier key. Records are read before the texts of
+`mes\spell.mes` (the spell module reads those in a later init), so in strict mode a record refusal comes before a
+`MissingText`; the order changes no result. On the installed original both modes read
 all 223 records and give the same records.
 
 ## Installed original
@@ -148,6 +153,24 @@ strength 1; `Info:` aggressive 82, friendly 75; `No_Resist:` 2 (technology), `No
 `Info:` 37/43/77; the ten AI lists 7/16/25/32/7/3/1/3/1/2; component lines 0 / 1..4 / 5..9 / 10..13 in 5/123/86/9 records;
 strict mode reads it, so no unknown or skipped key. `AutoLevelTables.ReadSpellWillpower` (unchanged) gives the same
 willpower minima as the records.
+
+## Differences from the original
+
+Owner decision 2026-10-20: the original's bugs in this parse are fixed as proposed, and every difference is documented
+here ([anomaly decisions](../research/npc-combat-ai-plan.md#anomaly-decisions) SR12–SR14). None is a rule-mode switch:
+the reader modes cover them, and no installed record reaches any of them.
+
+| Original 1.0.7.4 | Steamwoven | Mode |
+| --- | --- | --- |
+| A pair without `(`, an unknown `Info:` name or an unknown or empty flag name logs and exits the process (SR11–SR13). | The spell data is refused with a typed reason naming file, message and token. | both |
+| A `Resist:` stat name that matches no key crashes on the key table's null entries (SR12). | Refused (`UnknownName`). | both |
+| A flag-list separator as the last character of the value crashes (SR13). | Refused (`TrailingSeparator`). | both |
+| A byte above 0x7F met by the white-space skip is classed by memory before the character table (SR14). | Refused (`NonAsciiByte`) on lines +1..+4. | both |
+| A missing file, component type name, or a file the original's loader rejects fails the magic-tech init (SR1). | Refused (`FileMissing`, `MissingComponentName`, `FileEmpty`, `FileUnreadable`); a file the [MES grammar](mes-reader.md) refuses is `FileRefused` (project policy). | both |
+| A missing text of `mes\spell.mes` is the shared "Error! Missing line N" text (SR15). | `null`; the host formats the missing text. Strict mode refuses it (`MissingText`). | both / strict |
+| A missing line +0 or +1, a key out of order or repeated, an unknown key, a non-numeric or overflowing number, a pair without `@`, a dropped value and a flag list read in part are read silently. | Read the same way in like-original mode; refused in strict mode (statuses under [Reader modes](#reader-modes)). | strict |
+| The flag-list parse overwrites separators in the loaded message text and can leave a cut in it. | The text is never changed; each line is parsed once in both programs, so no reading differs. | both |
+| Line +0 (target area), the component lines and `Rules\SpellEyeCandy.mes` are parsed by the same init. | Line +0 and the component lines are kept as text for slice MT2; the eye-candy file is not read. | both |
 
 ## Not ready
 

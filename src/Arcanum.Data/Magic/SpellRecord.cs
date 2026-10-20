@@ -86,14 +86,15 @@ public sealed record SpellRecord
     /// <summary>Lines +5 onward up to the first missing one (at most 44), as text; typed by the component reader.</summary>
     public required IReadOnlyList<string> ComponentLines { get; init; }
 
-    public bool Equals(SpellRecord? other) => other is not null && Key() == other.Key();
+    public bool Equals(SpellRecord? other) =>
+        other is not null && Scalars() == other.Scalars() && AreaLine == other.AreaLine && CasterEyeCandy.SequenceEqual(other.CasterEyeCandy)
+        && TargetEyeCandy.SequenceEqual(other.TargetEyeCandy) && AiPriorities.SequenceEqual(other.AiPriorities)
+        && LinesPresent.SequenceEqual(other.LinesPresent) && KeysRead.SequenceEqual(other.KeysRead) && ComponentLines.SequenceEqual(other.ComponentLines);
 
-    public override int GetHashCode() => Key().GetHashCode(StringComparison.Ordinal);
+    public override int GetHashCode() => HashCode.Combine(Scalars(), AreaLine, ComponentLines.Count, KeysRead.Count);
 
-    private string Key() => string.Join('|', Number, MinimumWillpower, Cost, MaintainCost, MaintainPeriod, DurationSeconds, DurationStat,
+    private string Scalars() => string.Join('|', Number, MinimumWillpower, Cost, MaintainCost, MaintainPeriod, DurationSeconds, DurationStat,
         DurationStatLevel, DurationStatModifier, DurationTriggerCount, ResistStat, ResistModifier, Range, IsTechnology, ChargesFromCells,
-        SkipsBeginCost, Info, Enabled, NoResist, NoReflect, CastingAnimation, Missile, string.Join(',', CasterEyeCandy),
-        string.Join(',', TargetEyeCandy), NoStack, CancelsSpellFlags, CancelsEnvironmentSpellFlags, DisallowedCasterSpellFlags,
-        DisallowedTargetSpellFlags, DisallowedTargetCritterFlags, ItemTriggers, string.Join(',', AiPriorities), AiDefensiveSecond,
-        string.Join(',', LinesPresent), string.Join(',', KeysRead), AreaLine ?? "\0", string.Join('\0', ComponentLines));
+        SkipsBeginCost, Info, Enabled, NoResist, NoReflect, CastingAnimation, Missile, NoStack, CancelsSpellFlags, CancelsEnvironmentSpellFlags,
+        DisallowedCasterSpellFlags, DisallowedTargetSpellFlags, DisallowedTargetCritterFlags, ItemTriggers, AiDefensiveSecond);
 }

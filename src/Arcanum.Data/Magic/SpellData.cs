@@ -50,7 +50,7 @@ public sealed class SpellTexts
     }
 
     /// <summary>The spell module's init: the college names, spell descriptions, college and mastery descriptions.</summary>
-    [OriginalFunction(0x4B1440, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4B1440, OriginalFunctionScope.Partial)]
     private static (string?[] Colleges, string?[] Descriptions, string?[] CollegeDescriptions, string?[] Masteries) SpellModuleTexts(MesFile file) =>
         (Range(file, FirstCollegeName, SpellRecord.Colleges), Range(file, FirstSpellDescription, SpellRecord.CollegeSpells),
          Range(file, FirstCollegeDescription, SpellRecord.Colleges), Range(file, FirstMasteryDescription, SpellRecord.Colleges));
@@ -95,6 +95,7 @@ public sealed class SpellData
     public static SpellDataLoad Open(ContentStack stack, SpellRecordMode mode, MesReaderOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stack);
+        ValidateMode(mode);
         options ??= new();
         options.Validate();
         if (Load(stack, ComponentTypesPath, options, out var componentFile) is { } componentRefusal) return Refused(componentRefusal);
@@ -108,6 +109,9 @@ public sealed class SpellData
     public static SpellDataLoad Create(MesFile componentTypes, MesFile spellTexts, MesFile spellList, SpellRecordMode mode)
     {
         ArgumentNullException.ThrowIfNull(componentTypes);
+        ArgumentNullException.ThrowIfNull(spellTexts);
+        ArgumentNullException.ThrowIfNull(spellList);
+        ValidateMode(mode);
         return ReadComponentTypes(componentTypes, out var names) is { } missing ? Refused(missing) : Create(names, spellTexts, spellList, mode);
     }
 
@@ -133,6 +137,11 @@ public sealed class SpellData
             names[i] = name;
         }
         return null;
+    }
+
+    private static void ValidateMode(SpellRecordMode mode)
+    {
+        if (mode is not (SpellRecordMode.Strict or SpellRecordMode.LikeOriginal)) throw new ArgumentOutOfRangeException(nameof(mode));
     }
 
     private static SpellDataLoad Refused(SpellDataRefusal refusal) => new(refusal.Status, null, refusal);

@@ -179,7 +179,11 @@ public sealed partial class SpellRecordTable
     private static SpellDataRefusal? ParseLine1(NamedKeyCursor cursor, Draft d, SpellRecordMode mode)
     {
         var check = new ValueCheck(mode, d.KeysRead);
-        if (check.Int(cursor, "IQ:") is { } iq) d.MinimumWillpower = iq;
+        if (check.Int(cursor, "IQ:") is { } iq)
+        {
+            d.MinimumWillpower = iq;
+            if (d.Number >= SpellRecord.CollegeSpells && iq != 0) check.Ignored("IQ:");
+        }
         if (check.Int(cursor, "Cost:") is { } cost) d.Cost = cost;
         if (check.Pair(cursor, "Maintain:") is { } maintain) (d.MaintainCost, d.MaintainPeriod) = maintain;
         if (check.Pair(cursor, "Duration:") is { } duration)
@@ -219,7 +223,11 @@ public sealed partial class SpellRecordTable
             if (check.Int(cursor, $"[{name}]Caster:") is { } caster) d.CasterEyeCandy[action] = caster;
             if (check.Int(cursor, $"[{name}]Target:") is { } target) d.TargetEyeCandy[action] = target;
         }
-        if (check.Int(cursor, "Is_Tech:") is { } tech && tech != 0) d.IsTechnology = true;
+        if (check.Int(cursor, "Is_Tech:") is { } tech)
+        {
+            if (tech != 0) d.IsTechnology = true;
+            else if (d.Number >= SpellRecord.FirstTechnology) check.Ignored("Is_Tech:");
+        }
         return check.Refusal;
     }
 
@@ -265,7 +273,8 @@ public sealed partial class SpellRecordTable
         return check.Refusal;
     }
 
-    /// <summary>Runs one line's parse. A missing line +1 (or +0) is the original's missing-line text, which holds no key; a
+    /// <summary>Runs one line's parse. A fault that ends the original's process takes priority over a strict refusal of an
+    /// earlier key on the same line. A missing line +1 (or +0) is the original's missing-line text, which holds no key; a
     /// missing optional line is not parsed. A line with a byte above 0x7F is refused in both modes; strict mode refuses what is
     /// left after the cursor's last key.</summary>
     private static SpellDataRefusal? Line(MesFile list, SpellRecordMode mode, int number, string[] keys,
@@ -274,6 +283,8 @@ public sealed partial class SpellRecordTable
         var text = Text(list, number);
         if (text is null && !always) return null;
         text ??= "";
+        // Broader than the original on purpose: a byte above 0x7F anywhere on the line, not only where the white-space skip
+        // meets it (ledger SR14).
         foreach (var c in text)
             if (c > '\x7f') return new(SpellDataStatus.NonAsciiByte, Path, number, c.ToString());
         var cursor = new NamedKeyCursor(text);
@@ -290,7 +301,7 @@ public sealed partial class SpellRecordTable
         if (mode == SpellRecordMode.LikeOriginal) return null;
         var rest = cursor.Rest();
         if (rest.Length == 0) return null;
-        var segment = rest.Split(',')[0];
+        var segment = rest.Split(',').FirstOrDefault(part => part.Trim().Length > 0)?.Trim() ?? rest;
         var colon = segment.IndexOf(':');
         var key = colon < 0 ? segment.Trim() : segment[..(colon + 1)];
         return new(keys.Contains(key, StringComparer.Ordinal) ? SpellDataStatus.SkippedKey : SpellDataStatus.UnknownKey, Path, number, key);
@@ -317,7 +328,7 @@ public sealed partial class SpellRecordTable
         {
             var value = cursor.NamedPair(key, out var token);
             if (value is not null) keys.Add(key);
-            if (value is not null && Strict && !PairNumbers(PairText().Match(token))) Refuse(SpellDataStatus.MalformedPair, $"{key}{token}");
+            if (value is not null && Strict) CheckPair(key, token, PairText().Match(token), first: true);
             return value;
         }
 
@@ -325,7 +336,7 @@ public sealed partial class SpellRecordTable
         {
             var value = cursor.NamedNamePair(key, names, out var token);
             if (value is not null) keys.Add(key);
-            if (value is not null && Strict && !PairNumbers(NamePairText().Match(token), first: false)) Refuse(SpellDataStatus.MalformedPair, $"{key}{token}");
+            if (value is not null && Strict) CheckPair(key, token, NamePairText().Match(token), first: false);
             return value;
         }
 
@@ -364,8 +375,11 @@ public sealed partial class SpellRecordTable
                 Refuse(SpellDataStatus.AmbiguousFlagList, $"{key}{text}");
         }
 
-        private static bool PairNumbers(Match match, bool first = true) =>
-            match.Success && (!first || Fits(match.Groups["a"].Value)) && Fits(match.Groups["b"].Value);
+        private void CheckPair(string key, string token, Match match, bool first)
+        {
+            if (!match.Success) Refuse(SpellDataStatus.MalformedPair, $"{key}{token}");
+            else if (first && !Fits(match.Groups["a"].Value) || !Fits(match.Groups["b"].Value)) Refuse(SpellDataStatus.InvalidNumber, $"{key}{token}");
+        }
 
         private static bool Fits(string number) => int.TryParse(number, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _);
 
