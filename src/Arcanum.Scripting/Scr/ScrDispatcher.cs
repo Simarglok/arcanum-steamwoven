@@ -28,7 +28,7 @@ public static class ScrDispatcher
         ArgumentNullException.ThrowIfNull(e);
         ArgumentNullException.ThrowIfNull(host);
         options ??= new();
-        options.Validate();
+        options.Validate(host);
         if (e.Point is < 0 or >= ScrPoint.Count || e.Point == ScrPoint.DialogOverride || e.Line < 0 || e.Attachee.Code is null || e.Triggerer is { Code: null } || e.Extra is { Code: null })
             return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         var slot = host.Slot(e.Attachee, e.Point);
@@ -82,7 +82,7 @@ public static class ScrDispatcher
     {
         ArgumentNullException.ThrowIfNull(e);
         options ??= new();
-        options.Validate();
+        options.Validate(host);
         if (e.Triggerer.Code is null) return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         return RunPlaced(ScrSource.Tile, e.Slot, new(e.Triggerer, null, null), host, options, discard: options.Rules.TileScriptChangesDiscarded);
     }
@@ -93,7 +93,7 @@ public static class ScrDispatcher
     {
         ArgumentNullException.ThrowIfNull(e);
         options ??= new();
-        options.Validate();
+        options.Validate(host);
         if (e.Player.Code is null) return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         return RunPlaced(ScrSource.Sector, e.Slot, new(e.Player, null, null), host, options, discard: false);
     }
@@ -108,7 +108,7 @@ public static class ScrDispatcher
         ArgumentNullException.ThrowIfNull(e);
         ArgumentNullException.ThrowIfNull(host);
         options ??= new();
-        options.Validate();
+        options.Validate(host);
         if (e.Line < 0 || e.Triggerer is { Code: null } || e.Attachee is { Code: null }) return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         if (e.Script == 0) return Ended(ScrOutcome.RunDefault, ScrStop.NoScript);
         var lookup = host.Script(e.Script);
@@ -172,12 +172,13 @@ public static class ScrDispatcher
 
     /// <summary>A finished run before its writeback is decided.</summary>
     internal sealed record Run(ScrRunResult Result, ScrSlot Slot, ScrRefusal? Refusal, IReadOnlyList<ScrFlagWrite>? Flags = null, int? Story = null, ScrDialogStart? Dialog = null,
-        IReadOnlyList<ScrCallRequest>? Calls = null, IReadOnlyList<ScrPrintLine>? Lines = null, IReadOnlyList<ScrSound>? Sounds = null)
+        IReadOnlyList<ScrCallRequest>? Calls = null, IReadOnlyList<ScrPrintLine>? Lines = null, IReadOnlyList<ScrSound>? Sounds = null,
+        IReadOnlyList<ScrTeleport>? Teleports = null)
     {
         internal ScrRunResult With(ScrWriteback? writeback, ScrObjectRef? destroy) => new(Result.Outcome, Result.Stop, Result.Script, Result.StopLine, null, Result.Trace,
             writeback is null && destroy is null && (Flags?.Count ?? 0) == 0 && Story is null && Dialog is null && (Calls?.Count ?? 0) == 0 && (Lines?.Count ?? 0) == 0
-                && (Sounds?.Count ?? 0) == 0
+                && (Sounds?.Count ?? 0) == 0 && (Teleports?.Count ?? 0) == 0
                 ? ScrEffects.None
-                : new ScrEffects(writeback, destroy, Array.AsReadOnly((Flags ?? Array.Empty<ScrFlagWrite>()).ToArray()), Story, Dialog, Calls, Lines, Sounds));
+                : new ScrEffects(writeback, destroy, Array.AsReadOnly((Flags ?? Array.Empty<ScrFlagWrite>()).ToArray()), Story, Dialog, Calls, Lines, Sounds, Teleports));
     }
 }
