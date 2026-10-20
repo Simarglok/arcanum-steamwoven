@@ -92,8 +92,9 @@ slots of the dictionary.
    [5](#5-eligibility)).
 6. **Items on the ground (S18).** When its look-for flags are set (out of
    ammunition sets ammunition and weapon; an NPC that drops a weapon or armour
-   looks for another), a non-monstrous NPC that is awake, not blind and not held
-   by the interface picks up the **nearest** item of the kind within
+   looks for another), a non-monstrous NPC that is awake, not blind and not
+   blocked by the interface's callback (**(inference)** a window holding an
+   object) picks up the **nearest** item of the kind within
    `clamp(Perception − 5, 1, 10)` tiles (P1: the earlier reading's "farthest" is a
    reconstruction slip), else the first such item from a junk pile in range; the
    new item makes it re-wield its best items on the next pass
@@ -108,7 +109,9 @@ slots of the dictionary.
    friendly-fire scan skips PCs, so a follower may blow up its PC leader (SP15);
    the enemy-list path of the danger update hands the spell's target, possibly
    the NPC itself, to the setter as the new focus (SP16); the fatigue rung tests
-   the healer's fatigue for every target (SP17) ([section 8](#8-anomalies-and-decisions)).
+   the healer's fatigue for every target (SP17). A latent out-of-bounds read in
+   the chooser (an item AI-action entry in the defensive list reads before the
+   spell table, SP18) is fixed in both settings ([section 8](#8-anomalies-and-decisions)).
 
 ## 1. The heal ladder
 
@@ -150,8 +153,9 @@ argument does not filter the resurrect step, which comes before it.
 Worked example: an NPC in COMBAT_FOCUS at 60 % HP, rested, not poisoned, with
 parameter 14 = 20: with 80 % chance per pass the argument is 0 but 60 > 30, so
 it does nothing for itself; with 20 % chance it reaches step 9 and, since 60 <
-70, tries the light healing list. Its leader at 25 % HP is tried in both cases
-and reaches the heavy healing list.
+70, tries the light healing list. When that self attempt finds no entry (always
+in the 80 % case), its leader at 25 % HP is tried next and reaches the heavy
+healing list.
 
 The heal skill step writes the action without testing the NPC's heal skill
 level; the skill's own rules run when perform executes it (stage A6). The fatigue
@@ -198,16 +202,23 @@ The flee list (0) is asked only by the flee spell step in state FLEE, in mode 1
 target). An empty list chooses nothing. The target comes from the mode: 1 the
 NPC, 2 the pass target, 8 the request's target; mode 4 decides per entry: the
 pass target when the spell's second defensive value (spell record +0x154, the
-value after `@` of `AI_Defensive:`) is not 0, else the NPC.
+value after `@` of `AI_Defensive:`, read by 0x4CC2A0) is not 0, else the NPC.
+That read is made for every visited entry, before the spell −1 test of step 1,
+and indexes the spell table by the entry's spell: for an item AI-action entry
+(spell −1) it reads the 4 bytes just before the table, and that value decides
+the target of the item use (SP18). Only an item whose AI action is the
+defensive list (2) can reach it; the installed data has none
+([census](combat-data-census.md#5-prototypes)), so the read is latent.
 
 Start: `random(1, 100) < 80` → index 0; otherwise `random(0, n − 1)`. So the
 first (highest) entry is the start with chance `0.79 + 0.21 / n`. Then each index
 `(start + i) mod n` for `i = 0 .. n − 1`:
 
 1. an entry whose spell is −1 (an item AI action, [section 4](#4-the-ten-action-lists))
-   is used at once (item use on object 0x462CC0, the NPC, the item, the target)
-   and the chooser reports success without writing the pass record: no
-   eligibility, no line of fire, no influence test;
+   is used at once (item use on object 0x462CC0, the NPC, the item, the target;
+   in mode 4 the target picked from the out-of-bounds read above, SP18) and the
+   chooser reports success without writing the pass record: no eligibility, no
+   line of fire, no influence test;
 2. the target already under the influence of that spell (0x459380) → next entry;
 3. the eligibility test ([section 5](#5-eligibility)) refuses → next entry;
 4. otherwise the pass records the spell, the item (or none) and the target, with
@@ -277,8 +288,9 @@ So a slot ever holds only the list that was requested when it was created, and
 that list is frozen (items or spells, the fatigue and combat mode at that time,
 the spells known then, the PC leader for the identification rule) until the
 slot is cleared: when an item is inserted into or force-removed from the critter
-(0x4CCC00 from 0x466640 and 0x467BF1), when one of the slot's listed items runs
-out of mana (0x4CCC40 from 0x450420), at a reset, or when round-robin reuse takes
+(0x4CCC00 from item insert 0x466640 and item force-remove 0x467860, call at
+0x467BF1), when one of the slot's listed items runs out of mana (0x4CCC40 from
+0x450420, call at 0x45062B), at a reset, or when round-robin reuse takes
 the slot. The lists built on the third path are never freed (the release
 function 0x4CCBF0 does nothing) (SP11). Which list is first depends on the
 pass: in a fight it is often the summon or offensive list of the danger update,
@@ -411,12 +423,13 @@ follow the original.
 | --- | --- | --- | --- |
 | P1 | The item search keeps the nearest candidate (strictly smaller distance; the first stays on a tie). | Reconstruction slip (confirms ARC-RES-048; the earlier reading kept the farthest) | Both settings follow the original; no switch. |
 | P4 | The heal helper tests the target's critter flag MECHANICAL first, so AI never heals or resurrects a mechanical critter; the heal skill check refuses mechanical and undead targets too. | Original (confirms ARC-RES-048; the earlier reading's "no-attack" name is the same bit of another flag set, so the behaviour is the same) | Kept in both settings; no switch. |
-| P7 | The defensive list is tried when parameter 13 < d100, a `100 − parameter 13` % chance; parameter 13 is a skip threshold. | Original (confirms ARC-RES-048) | Kept in both settings; the dictionary names slot 13 "defensive skip threshold". Whether the original `ai_params.mes` header labels it as a chance is a data question; the installed 0 in 12 rows (always defensive first) reads naturally only as a threshold **(inference)**. No switch. |
+| P7 | The defensive list is tried when parameter 13 < d100, a `100 − parameter 13` % chance; parameter 13 is a skip threshold. | Original (confirms ARC-RES-048) | Kept in both settings; the dictionary's d100-threshold reading of slot 13 stands (it is a threshold to skip the defensive list). Whether the original `ai_params.mes` header labels it as a chance is a data question; the installed 0 in 12 rows (always defensive first) reads naturally only as a threshold **(inference)**. No switch. |
 | SP8 | An item spell of the healing college skips the fail-chance test when the target is at or below 30 % HP **or** the user's fatigue is at least 80 %; a cast spell has only the HP exemption. | Original (intent unclear) | Kept in both settings: a rested user may simply not care about failure **(inference)**; nothing marks it as a slip. No switch. |
 | SP11 | The list cache stores only the list requested when a critter's slot was created and keeps it, frozen, until an inventory change, an exhausted listed item, a reset or round-robin reuse; every other list is rebuilt on each request and never freed. | Original bug | **(inference)** A cache meant to hold all ten lists, whose hit path writes the new list into the caller's copy instead of the slot; the stale list (items versus spells chosen by an old fatigue, spells known then) is a side effect, and the leak has no game effect. Proposed: Steamwoven builds each list fresh on every request; Original keeps the 40-slot cache with its first-list rule (`AiListCacheKeepsFirstList`, proposed; transient state, never saved, so no schema change). Owner to confirm, since the fix changes which spells or items an NPC uses after its fatigue or spells change. Lands with slice I8. |
 | SP15 | The grenade's friendly-fire scan asks for NPCs only (type mask NPC), so a PC in the blast never stops a throw: a PC's follower may throw at a target next to its PC leader. | Original bug | **(inference)** The protect rule it calls handles PC leaders (GROUP) and PC reputation (FACTION), which only matter if PCs are scanned. Proposed: Steamwoven scans PCs and NPCs; Original keeps NPCs only (`GrenadeIgnoresPcsInBlast`, proposed). Owner to confirm the visible change: followers stop throwing near their PC leader, and an NPC whose faction the PC's reputation grants also refuses to throw at that PC. Lands with slice I8. |
 | SP16 | In the danger update's enemy-list path the setter receives the pass record's target after the spell choice, which the chooser overwrites with the spell's target: a summon or self-aimed defensive spell makes the NPC its own combat focus for that pass. The other three paths pass a saved copy of the found target. | Original bug | The paths differ only in this, and a critter is never a valid focus of itself ([hostility validity](npc-ai-hostility.md#2-target-validity)); the next pass finds the focus invalid and searches again. Proposed: Steamwoven passes the enemy-list pick; Original keeps the overwritten target (`EnemyListFocusTakesSpellTarget`, proposed). Lands with slices I4/I8. |
-| SP17 | The fatigue-recovery rung (in danger) is tried when the **healer's** fatigue is below 20 % but aimed at the heal target, also when that target is the leader or a follower; every other rung tests the target. | Original bug | **(inference)** The rung reads as "restore your own fatigue", reached for other targets only because the helper runs for each of them; the self call comes first, so the leader or a follower gets it only when the self attempt was refused (already under the spell, a fail chance, the line of fire). Proposed: Steamwoven tries the rung only when the target is the healer; Original keeps it for every target (`HealFatigueRungForOthers`, proposed). Owner candidate: the other fix, testing the target's fatigue, would also make healers restore a tired leader, a new behaviour. Lands with slice I8. |
+| SP17 | The fatigue-recovery rung (in danger) is tried when the **healer's** fatigue is below 20 % but aimed at the heal target, also when that target is the leader or a follower; every other rung tests the target. | Original bug | The verdict rests on inference about intent only (as HS9's does). **(inference)** The rung reads as "restore your own fatigue", reached for other targets only because the helper runs for each of them; the self call comes first, so the leader or a follower gets it only when the self attempt was refused (already under the spell, a fail chance, the line of fire). Proposed: Steamwoven tries the rung only when the target is the healer; Original keeps it for every target (`HealFatigueRungForOthers`, proposed). Owner candidate: the other fix, testing the target's fatigue, would also make healers restore a tired leader, a new behaviour. Lands with slice I8. |
+| SP18 | In mode 4 the chooser reads the second defensive value (0x4CC2A0) for every visited entry before its spell −1 test; for an item AI-action entry that read indexes the spell table with −1 and takes the 4 bytes before it, which decide whether the item is used on the pass target or on the NPC. Only an item with AI action 2 (defensive) reaches it; the installed data has none. | Original bug (latent) | Both fixed (owner rule: Original never reproduces an out-of-bounds read): a spell −1 entry in mode 4 is used on the NPC itself, as a defensive spell with second value 0 would be (a defensive item is a self-help item **(inference)**, like the healing and fatigue items). No switch. Lands with slice I8. |
 
 The other rows (SP1–SP7, SP9, SP10, SP12–SP14) are the original's behaviour and
 are kept in both settings. SP9's pair default (the second defensive value copies
