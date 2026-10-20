@@ -83,7 +83,10 @@ public sealed class AreaMapWindowOriginalTests
         var chart = result.Area!.Plan.Chart;
         Assert.AreEqual(new Arcanum.Data.Traversal.AreaStepCell(102647, 116816), chart.ToWorld(chart.Spawn));
         Assert.AreEqual(9 * 4096, result.AreaStepSnapshot!.AdmittedCells);
-        Assert.IsTrue(result.Area.Snapshot.Objects.Any(o => o.WorldX == 102582 && o.WorldY == 116816 && o.PrototypeNumber == 4031));
+        var none = result.Area.Snapshot.Objects.Single(o => o.WorldX == 102582 && o.WorldY == 116816 && o.PrototypeNumber == 4031);
+        var row = result.Area.Plan.Coverage.Single(c => c.Identity == none.Key);
+        Assert.AreEqual((Arcanum.TerrainViewer.Core.AreaDisposition.Suppressed, "NoArt"), (row.Disposition, row.Reason));
+        Assert.IsFalse(result.Area.Plan.Commands.Any(c => c.Identity == none.Key));
         Assert.IsTrue(result.Area.Plan.DrawableBodies > 0);
     }
 

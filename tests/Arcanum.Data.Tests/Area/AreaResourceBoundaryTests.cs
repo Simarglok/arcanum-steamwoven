@@ -66,7 +66,8 @@ public sealed class AreaResourceBoundaryTests
         using var f = Make(uint.MaxValue);
         var snapshot = f.Owner.LoadStrict();
         var placed = snapshot.Objects.Single(o => o.Key.Kind == AreaSourceKind.Static);
-        Assert.AreEqual(AreaDisposition.BodyEligibleConditionally, placed.Disposition);
+        Assert.AreEqual((AreaDisposition.BodyEligibleConditionally, true, true, true),
+            (placed.Disposition, placed.SchemaReady, placed.PlacementReady, placed.RequiredLayersReady));
         Assert.IsFalse(snapshot.Visuals.Any(v => v.Key.Kind == AreaSourceKind.Static));
         // Any other ART type 15 id is still refused.
         using var other = Make(0xF0000000);

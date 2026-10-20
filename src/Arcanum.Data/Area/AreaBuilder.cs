@@ -314,8 +314,8 @@ public sealed partial class AreaDataOwner
                         throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
                     var aid = unchecked((uint)Number(effective, 0)); var ox = checked((int)Number(effective, 2)); var oy = checked((int)Number(effective, 3)); var scale = checked((int)Number(effective, 11));
                     // ARC-DATA-038: an ART id that names no ART has no body to draw; the object stays (its step evidence
-                    // does not read ART).
-                    if (!NamesNoArt(aid))
+                    // does not read ART). Walls and portals keep the refusal.
+                    if (!HasNoBody(record.Type, aid))
                     {
                         var visualSector = sector ?? new AreaSectorCoordinate(x.Value / 64, y.Value / 64);
                         var vkey = new AreaVisualKey(kind, new(Identity(input).Sha256, _plan.RuntimeMap, visualSector.Packed), ordinal, record.Own.Sha256, Object: key);
