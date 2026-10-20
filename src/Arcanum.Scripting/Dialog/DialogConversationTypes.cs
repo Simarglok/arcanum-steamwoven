@@ -37,6 +37,8 @@ public sealed record DialogConversationRequest(
 /// <paramref name="Skills"/> (ARC-SKILLS-004) admits the skill gates PS, HA, SK and TR and the actions TR and ET; without it
 /// they stay unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="MetBefore"/> (ARC-WORLD-043) answers the ME condition; without it ME is a static frontier.
+/// <paramref name="Reputations"/> (ARC-WORLD-044) admits RP as a condition and an action; without it RP stays unadmitted
+/// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
@@ -47,7 +49,8 @@ public sealed record DialogConversationPorts(
     IDialogInventoryPort? Inventory = null,
     IDialogRumorPort? Rumors = null,
     IDialogSkillPort? Skills = null,
-    IDialogMetBeforePort? MetBefore = null);
+    IDialogMetBeforePort? MetBefore = null,
+    IDialogReputationPort? Reputations = null);
 
 public enum DialogReactionMode
 {
@@ -172,6 +175,26 @@ public interface IDialogRumorPort
 public interface IDialogMetBeforePort
 {
     bool MetBefore(DialogReactionQuery query);
+}
+
+/// <summary>A reputation of the PC by number (ARC-WORLD-044).</summary>
+public readonly record struct DialogReputationQuery(DialogParticipantId PlayerCharacter, int Reputation);
+
+/// <summary>RP: <see cref="Add"/> gives the PC the reputation, otherwise it loses it (the source's add and remove).</summary>
+public sealed record ReputationCommand(DialogParticipantId PlayerCharacter, int Reputation, bool Add) : DialogCommand;
+
+/// <summary>What the reputation owner did with an RP action: applied (also a reputation already held or not held, which changes
+/// nothing), skipped (a number the owner does not admit, the dialog goes on), or rejected (the dialog fails).</summary>
+public enum DialogReputationResult { Applied, Skipped, Rejected }
+
+/// <summary>
+/// Reputation seam (ARC-WORLD-044): RP conditions and actions. Calls are synchronous and serialized by the host; a thrown
+/// exception fails the conversation (a query) or is recorded as indeterminate (an action).
+/// </summary>
+public interface IDialogReputationPort
+{
+    bool HasReputation(DialogReputationQuery query);
+    DialogReputationResult Execute(ReputationCommand command);
 }
 
 public sealed class DialogConversationOptions

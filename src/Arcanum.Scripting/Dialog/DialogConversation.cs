@@ -312,7 +312,7 @@ public sealed class DialogConversation
                 ConversationGlobalFlag global => ReadGlobal(global),
                 ConversationReactionGate reaction => ReadReaction(reaction),
                 ConversationWaiting waiting => ReadWaiting(waiting),
-                ConversationMetBefore met => ReadMetBefore(met),
+                ConversationMetBefore or ConversationReputation => ReadPcMemory(operation),
                 ConversationSkillGate skill => ReadSkill(skill),
                 // RA n>0: the PC race is n-1; RA n<=0: the PC race is not -n-1.
                 ConversationRaceGate race => race.Selector > 0
@@ -396,24 +396,33 @@ public sealed class DialogConversation
     }
 
     /// <summary>
-    /// ME 1: the NPC has met the PC before; ME 0: it has not. The original's condition (0x4150D0) asks the met-before
-    /// function (0x4C0C40), which leaves out the conversation in progress.
+    /// The ME and RP branches of the original's condition (0x4150D0). ME 1: the NPC has met the PC before; ME 0: it has not
+    /// (the met-before function 0x4C0C40 leaves out the conversation in progress). RP n (ARC-WORLD-044): n > 0 holds when the
+    /// PC has reputation n, n ≤ 0 when it lacks −n.
     /// </summary>
     [OriginalFunction(0x4150D0, OriginalFunctionScope.Partial)]
-    private bool? ReadMetBefore(ConversationMetBefore operation)
+    private bool? ReadPcMemory(ConversationOperation operation)
     {
-        bool met;
+        var pc = _request.Participants.PlayerCharacter;
         try
         {
-            met = _ports.MetBefore!.MetBefore(new DialogReactionQuery(_request.Participants.Npc, _request.Participants.PlayerCharacter));
+            if (operation is ConversationMetBefore met) return _ports.MetBefore!.MetBefore(new DialogReactionQuery(_request.Participants.Npc, pc)) == met.Value;
+            var reputation = ((ConversationReputation)operation).Value;
+            return reputation > 0
+                ? _ports.Reputations!.HasReputation(new DialogReputationQuery(pc, reputation))
+                : !_ports.Reputations!.HasReputation(new DialogReputationQuery(pc, -reputation));
         }
         catch (Exception)
         {
             Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, operation.Source));
             return null;
         }
-        return met == operation.Value;
     }
+
+    /// <summary>The RP branch of the original's action (0x415BA0): n > 0 adds reputation n to the PC, n ≤ 0 removes −n.</summary>
+    [OriginalFunction(0x415BA0, OriginalFunctionScope.Partial)]
+    private ReputationCommand Reputation(ConversationReputation operation) =>
+        new(_request.Participants.PlayerCharacter, operation.Value > 0 ? operation.Value : -operation.Value, operation.Value > 0);
 
     /// <summary>
     /// The insult of a picked Player <c>i:</c> reply (0x4191E0): the NPC's reaction changes by <see cref="InsultReaction"/>
@@ -547,6 +556,31 @@ public sealed class DialogConversation
                 }
                 return false;
             }
+            if (operation is ConversationReputation reputation)
+            {
+                var command = Reputation(reputation);
+                DialogReputationResult changed;
+                try
+                {
+                    changed = _ports.Reputations!.Execute(command);
+                }
+                catch (Exception)
+                {
+                    Record(command, operation.Source, DialogCommandAttemptOutcome.Indeterminate);
+                    Fail(new DialogConversationFailure(DialogConversationFailureKind.CommandIndeterminate, CurrentNode, operation.Source));
+                    return false;
+                }
+                // A skip is the owner's choice for a number it does not hold (A5): recorded, and the dialog goes on.
+                Record(command, operation.Source, changed switch
+                {
+                    DialogReputationResult.Applied => DialogCommandAttemptOutcome.Applied,
+                    DialogReputationResult.Skipped => DialogCommandAttemptOutcome.Skipped,
+                    _ => DialogCommandAttemptOutcome.Rejected,
+                });
+                if (changed is DialogReputationResult.Applied or DialogReputationResult.Skipped) continue;
+                Fail(new DialogConversationFailure(DialogConversationFailureKind.CommandRejected, CurrentNode, operation.Source));
+                return false;
+            }
             if (operation is ConversationGlobalFlag global)
             {
                 var owner = _ports.GlobalFlags!;
@@ -650,7 +684,7 @@ public sealed class DialogConversation
         var node = new DialogNodeId(npc.Id);
         try
         {
-            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null);
+            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Reputations is not null);
             if (MissingCapability(action) is { } missing)
             {
                 frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing);
@@ -737,7 +771,7 @@ public sealed class DialogConversation
                     record.AlternateText.PayloadOffset, 0, record.AlternateText.Length, 0), response);
             return null;
         }
-        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null);
+        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Reputations is not null);
         if (MissingCapability(condition) is { } missing)
         {
             frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing, response);
@@ -831,7 +865,7 @@ public sealed class DialogConversation
         {
             try
             {
-                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null);
+                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Reputations is not null);
                 if (MissingCapability(action) is { } actionMissing)
                 {
                     block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedOperation, actionMissing);
@@ -924,6 +958,7 @@ public sealed class DialogConversation
         ConversationJoin => _ports.World is null && _ports.Party is null,
         ConversationWaiting or ConversationUnwait => _ports.Party is null,
         ConversationMetBefore => _ports.MetBefore is null,
+        ConversationReputation => _ports.Reputations is null,
         ConversationQuellRumor => _ports.Rumors is null,
         ConversationSkillGate or ConversationSkillTraining or ConversationExpertTeacher => _ports.Skills is null,
         _ => false,

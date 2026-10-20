@@ -9,7 +9,8 @@ it to the dialog: the `ME` condition, the insult and the conversation slot opene
 ([Dialog binding](#dialog-binding-arc-world-043)). Requirements:
 [FR-SOCIAL-001](../requirements/story-social-ai.md#fr-social-001), with
 [FR-DIALOG-001, FR-DIALOG-002 and FR-DIALOG-004](../requirements/story-social-ai.md#fr-dialog-001) for the binding.
-Reputations (FR-SOCIAL-002), fate points and the AI consumers are not part of it ([Not ready](#not-ready)).
+Since ARC-WORLD-044 the reputation sum is the session PC's ([reputation runtime](reputation-runtime.md), FR-SOCIAL-002).
+Fate points and the AI consumers are not part of it ([Not ready](#not-ready)).
 
 ## Evidence
 
@@ -54,7 +55,7 @@ Single PC: the source's ten-slot memory with eviction of the slot closest to 50 
 
 | API | Behaviour |
 | --- | --- |
-| `QueryHeroReactionFacts()` | The hero's race, effective reaction modifier and extraordinary charisma (≥ 20); reputation 0 (no reputation owner); the reaction, good and bad reaction effects of its [durable effects](durable-effects-runtime.md) (ARC-WORLD-029; its innate effects keep only modelled stats, so the gnome's bad-reaction adjustment is still missing). `null` without a hero. |
+| `QueryHeroReactionFacts()` | The hero's race, effective reaction modifier and extraordinary charisma (≥ 20); since ARC-WORLD-044 the reputation sum for an NPC of origin 0 and faction 0 (`QueryHeroReactionFacts(origin, faction)` for another; [reputation runtime](reputation-runtime.md)); the reaction, good and bad reaction effects of its [durable effects](durable-effects-runtime.md) (ARC-WORLD-029; its innate effects keep only modelled stats, so the gnome's bad-reaction adjustment is still missing). `null` without a hero. |
 | `QueryReaction(entity, npc, pc, query)` | `SessionReactionView`: effective value, category, stored value, met before (remembered slot only, so false during the first conversation), in conversation, recorded. |
 | `QueryReactionRecord(entity)` / `QueryReactions()` | The record or `null`; a detached copy of the domain. |
 | `AdjustReaction(version, entity, npc, pc, delta)` | `Adjust` with "led by the PC" taken from the session party (following or waiting). The new value goes to the conversation slot while one is open, else to the remembered slot. |
@@ -150,8 +151,7 @@ the conversation slot, `ME` reads the remembered slot and the insult goes throug
 
 ## Not ready
 
-- Reputations (slice 4): the PC's list, `rules\gamerep.mes`, the reaction sum, faction membership, greetings. The
-  sum is an input, 0 from the hero.
+- Reputation greetings (slice 4 builds the list, the table, the sum and faction membership; [reputation runtime](reputation-runtime.md#not-ready)).
 - Fate points ("force good reaction", DR6), the AI's speak refusal and hostile end at the dialog start and pick, the
   insult phrase and the NPC's generated replies (generated text), `ME` operands other than 0 and 1.
 - The PC's `reaction`, good and bad adjustment effects of real data (the hero keeps none), fate points, enemy lists,

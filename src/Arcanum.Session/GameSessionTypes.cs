@@ -2,6 +2,7 @@ using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Reputation;
 
 namespace Arcanum.Session;
 
@@ -119,32 +120,33 @@ public sealed class GameSessionLimits
 /// <paramref name="Experience"/> (ARC-WORLD-030) is the experience data the host read (level thresholds, quest experience);
 /// without it the session awards no experience. <paramref name="Difficulty"/> is the starting game difficulty, the player's
 /// setting; an undefined value is <see cref="GameSessionFailure.InvalidDescriptor"/>. <paramref name="AutoLevel"/>
-/// (ARC-WORLD-036) is the scheme data the host read; without it no auto-level scheme runs.
+/// (ARC-WORLD-036) is the scheme data the host read; without it no auto-level scheme runs. <paramref name="Reputations"/>
+/// (ARC-WORLD-044) is the module's reputation table; without it a held reputation has no effect and grants no faction.
 /// </summary>
 public sealed record GameSessionDescriptor(ProfileBinding Clock, GlobalFlagOwnerDescriptor? Flags,
     ActorPlacement Actor, GameSessionLimits? Limits = null, SessionHeroDefinition? Hero = null, ulong RandomSeed = 0,
     RuleMode Rules = RuleMode.Steamwoven, SessionExperienceRules? Experience = null, GameDifficulty Difficulty = GameDifficulty.Normal,
-    SessionAutoLevelRules? AutoLevel = null);
+    SessionAutoLevelRules? AutoLevel = null, ReputationCatalog? Reputations = null);
 
 /// <summary>
 /// Restore expectations, checked before any component is built. <paramref name="FlagEpoch"/> is the
 /// new process-local GF epoch; saved epochs are not persisted. <paramref name="Rules"/> (ARC-WORLD-023) is the rule
 /// mode to continue under: a snapshot never records one, so any save loads under either mode (D4). <paramref name="Experience"/>
 /// and <paramref name="Difficulty"/> (ARC-WORLD-030) are data and a setting, never saved, as in the descriptor; so is
-/// <paramref name="AutoLevel"/> (ARC-WORLD-036).
+/// <paramref name="AutoLevel"/> (ARC-WORLD-036) and <paramref name="Reputations"/> (ARC-WORLD-044).
 /// <paramref name="SoundMapDefault"/> (ARC-WORLD-040) is the loaded map's default music and ambient pair (its map info's
 /// <c>SoundScheme</c>, null without one): the original opens the map, which plays it, before it loads the sound state.
 /// </summary>
 public sealed record GameSessionRestoreOptions(GlobalFlagIdentity ExpectedIdentity,
     ProfileBinding ExpectedClockProfile, OwnerEpoch FlagEpoch, GameSessionLimits? Limits = null,
     RuleMode Rules = RuleMode.Steamwoven, SessionExperienceRules? Experience = null, GameDifficulty Difficulty = GameDifficulty.Normal,
-    SessionAutoLevelRules? AutoLevel = null, SessionMapSound? SoundMapDefault = null);
+    SessionAutoLevelRules? AutoLevel = null, SessionMapSound? SoundMapDefault = null, ReputationCatalog? Reputations = null);
 
 public enum GameSessionFailure
 {
     None, InvalidDescriptor, ClockRejected, FlagsRejected, InvalidActor, InvalidMap, InvalidChangeKey,
     BudgetExceeded, StaleVersion, RevisionExhausted, UnsupportedSchema, WrongWorld, WrongModule,
-    IncompatibleClockProfile, InvalidSnapshot, InvalidQuest, InvalidQuestState, InvalidRumor, InvalidLighting,
+    IncompatibleClockProfile, InvalidSnapshot, InvalidQuest, InvalidQuestState, InvalidRumor, InvalidReputation, InvalidLighting,
     // Party domain (ARC-WORLD-013).
     InvalidCompanion, InvalidConsentFacts, ConsentRefused, LeaveRefused, NotInParty, NotWaiting,
     // Inventory domain (ARC-WORLD-014).
@@ -234,6 +236,9 @@ public readonly record struct SessionGlobalQuest(int Quest, SessionQuestState St
 /// <summary>A rumor the PC knows, with the session game time it was learned.</summary>
 public readonly record struct SessionRumor(int Rumor, long TimestampMs);
 
+/// <summary>ARC-WORLD-044: a reputation the PC holds, with the session game time it was first gained.</summary>
+public readonly record struct SessionReputation(int Reputation, long TimestampMs);
+
 /// <summary>Number ranges of the story domain: the source indexes quests and rumors from 1000.</summary>
 public static class SessionStoryLimits
 {
@@ -246,19 +251,31 @@ public static class SessionStoryLimits
 
     public static bool IsQuest(int quest) => quest is >= FirstQuest and <= LastQuest;
     public static bool IsRumor(int rumor) => rumor is >= FirstRumor and <= LastRumor;
+
+    /// <summary>ARC-WORLD-044: the reputation numbers the PC can hold (the table's range; the original stores any number, A5).</summary>
+    public const int FirstReputation = 1000;
+    public const int LastReputation = 1999;
+    public const int MaxReputations = LastReputation - FirstReputation + 1;
+
+    public static bool IsReputation(int reputation) => reputation is >= FirstReputation and <= LastReputation;
 }
 
 /// <summary>Saved story state: PC quests, non-default shared quest states, known rumors and quelled rumors (ARC-UI-008),
-/// each ascending.</summary>
+/// each ascending, and the PC's reputations in the order it gained them (ARC-WORLD-044).</summary>
 public sealed class SessionStoryState
 {
-    internal SessionStoryState(SessionQuest[] quests, SessionGlobalQuest[] globalQuests, SessionRumor[] rumors, int[] quelledRumors)
+    internal SessionStoryState(SessionQuest[] quests, SessionGlobalQuest[] globalQuests, SessionRumor[] rumors, int[] quelledRumors,
+        SessionReputation[] reputations)
     {
         Quests = Array.AsReadOnly(quests);
         GlobalQuests = Array.AsReadOnly(globalQuests);
         Rumors = Array.AsReadOnly(rumors);
         QuelledRumors = Array.AsReadOnly(quelledRumors);
+        Reputations = Array.AsReadOnly(reputations);
     }
+
+    /// <summary>ARC-WORLD-044: the PC's reputations in acquisition order (the original's list order), each with its time.</summary>
+    public IReadOnlyList<SessionReputation> Reputations { get; }
 
     public IReadOnlyList<SessionQuest> Quests { get; }
     public IReadOnlyList<SessionGlobalQuest> GlobalQuests { get; }
@@ -305,9 +322,10 @@ public sealed class GameSessionSnapshot
     /// to the retail executable (<see cref="Arcanum.Simulation.Clock.GameClockOwner.RetailExecutableSha256"/>, ARC-DEV-009); schema 17
     /// adds the hero's blessings and curses to <see cref="Effects"/> (ARC-WORLD-035); schema 18 adds <see cref="Sound"/> (ARC-WORLD-040); schema 19 adds the
     /// quelled rumors to the story (ARC-UI-008); schema 20 adds the hero's advancement fields and <see cref="Advancement"/> (ARC-WORLD-036);
-    /// schema 21 adds the hero's innate skill changes (ARC-SKILLS-002); schema 22 adds <see cref="Durability"/> (ARC-WORLD-053).
-    /// Schemas 1..21 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 22;
+    /// schema 21 adds the hero's innate skill changes (ARC-SKILLS-002); schema 22 adds <see cref="Durability"/> (ARC-WORLD-053);
+    /// schema 23 adds the PC's reputations to the story (ARC-WORLD-044).
+    /// Schemas 1..22 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 23;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

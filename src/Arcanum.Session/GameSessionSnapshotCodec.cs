@@ -50,10 +50,11 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] LightingFields = ["schemeId", "hour"];
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
-    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors"];
+    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "reputations"];
     private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
     private static readonly string[] RumorFields = ["rumor", "timestampMs"];
+    private static readonly string[] ReputationFields = ["reputation", "timestampMs"];
     private static readonly string[] PartyFields = ["followers", "others"];
     private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut"];
     private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted"];
@@ -216,6 +217,15 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteStartArray("quelledRumors");
             foreach (var rumor in story.QuelledRumors) w.WriteNumberValue(rumor);
+            w.WriteEndArray();
+            w.WriteStartArray("reputations");
+            foreach (var reputation in story.Reputations)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("reputation", reputation.Reputation);
+                w.WriteNumber("timestampMs", reputation.TimestampMs);
+                w.WriteEndObject();
+            }
             w.WriteEndArray();
             w.WriteEndObject();
 
@@ -927,7 +937,22 @@ public static class GameSessionSnapshotCodec
             quelled[i] = Int(items[i], path, SessionStoryLimits.FirstRumor, SessionStoryLimits.LastRumor);
             if (i > 0 && quelled[i] <= quelled[i - 1]) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
-        return new(quests, globals, rumors, quelled);
+        // ARC-WORLD-044: the PC's reputations in the order gained (not sorted): numbers in the reputation range, none repeated,
+        // times never decreasing.
+        items = Array(f["reputations"], p + ".reputations", SessionStoryLimits.MaxReputations);
+        var reputations = new SessionReputation[items.Length];
+        var held = new HashSet<int>();
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.reputations[{i}]";
+            var item = Fields(items[i], path, ReputationFields);
+            var reputation = Int(item["reputation"], path + ".reputation", SessionStoryLimits.FirstReputation, SessionStoryLimits.LastReputation);
+            if (!held.Add(reputation)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".reputation");
+            reputations[i] = new(reputation, Long(item["timestampMs"], path + ".timestampMs", 0, long.MaxValue));
+            if (i > 0 && reputations[i].TimestampMs < reputations[i - 1].TimestampMs)
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".timestampMs");
+        }
+        return new(quests, globals, rumors, quelled, reputations);
     }
 
     private static SessionPartyState Party(JsonElement element)
