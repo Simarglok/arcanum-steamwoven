@@ -163,8 +163,11 @@ an effect entry. `EffectRules.ReadAny(effects, module, number)` reads any effect
 the module, a number without an entry has no changes). Installed original: 18 blessings (50..67) and 17 curses (50..66).
 Blessings 50 and 51 name module effects 4 and 8, which the module does not define (no changes). **Curses 52, 53 and 54
 hold a placeholder that is no number, so the original adds the module's effect 0** (strength +6, beauty −6, intelligence −6,
-prowling −3, age +20, ARC-RES-027 SH-08) with the curse; no script gives them by a literal number, but 62 SCR operands of the
-blessing and curse operations are computed, so whether play reaches them is not established (BC6, owner question).
+prowling −3, age +20, ARC-RES-027 SH-08) with the curse. They are unused placeholder slots: their name and description are
+a placeholder too, and nothing in the installed game gives them (BC6). Ten scripts give curses: two by a literal number
+(curses 50 and 51, on two deaths) and eight altar scripts by their attachment's second counter, which the eight altars placed
+in the installed maps set to 55–58 and 60–63 (the same values as the scripts' own initial counters). So both modes follow the
+original, and no switch is needed (owner decision 2026-10-20).
 
 **Session.** `QueryHeroBlessings(kind)`, `AddHeroBlessing(expected, kind, number, effect)` and
 `RemoveHeroBlessing(expected, kind, number)` with `SessionBlessingKind` `Blessing` or `Curse`. Add: the hero, the version,
@@ -173,8 +176,7 @@ NoChange when held (the effect is not looked at), at most 64 entries per list (`
 (`BlessingRules.EffectOf`, then `EffectRules.ReadAny`, `SessionEffectDefinition.FromRule`) and shows the received message on a
 change. Remove: NoChange when not held; else the entry leaves the list and the first effect entry of the effect number it
 added is removed (none may be left). Each change is one revision; the entry keeps the effect number it added, which is what
-the source reads again at removal. Both modes behave as the original: the placeholder curses add effect 0 until the owner
-decides BC6.
+the source reads again at removal. Both modes behave as the original, the unreachable placeholder curses included (BC6).
 
 **Snapshot schema 17.** `SessionEffectState.Blessings` and `Curses`, in `effects` after `definitions`:
 `"blessings":[{"number":55,"effect":120,"timeMs":54000000}],"curses":[]` (list order). `Restore` refuses them without a hero

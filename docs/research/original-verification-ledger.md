@@ -587,7 +587,7 @@ is true in single player, so it is never taken. Every direct branch stays inside
 | BC3 | has (0x4C4280 / 0x4C3DD0) | A PC only; the number in its list. | Original |
 | BC4 | add (0x4C42F0 / 0x4C3E40) | A PC only; nothing when held; appends the number and the game time, the effect add (0x4E9F70) with the effect of BC2 and the bless or curse cause; for the local PC message 1000, a UI message and the logbook button. | Original |
 | BC5 | remove (0x4C4450 / 0x4C3FA0) | A PC only; the first entry only; later numbers and times move up; both lengths shortened; the typed removal (0x4EA100) with BC2's effect of the number; the logbook button for the local PC. Not held: nothing. | Original |
-| BC6 | BC2 with the installed `gamecurse.mes` | Curses 52, 53 and 54 hold a placeholder text that is no number, so receiving one adds the module's effect 0 (strength +6, beauty −6, intelligence −6, prowling −3, age +20). | Original bug (data); switch candidate, owner decision open; both modes follow the original until then |
+| BC6 | BC2 with the installed `gamecurse.mes` | Curses 52, 53 and 54 hold a placeholder text that is no number, so receiving one adds the module's effect 0 (strength +6, beauty −6, intelligence −6, prowling −3, age +20). Unreachable: the three are unused placeholder slots (their name and description are a placeholder too); the ten scripts that give curses use 50, 51 and, through the counters of the eight installed altars, 55–58 and 60–63. | Original (data placeholder, unreachable); no switch, both modes follow the original (owner decision 2026-10-20) |
 ## Auto-level schemes (ARC-WORLD-036)
 
 Source: [advancement runtime](../world/advancement-runtime.md) and
