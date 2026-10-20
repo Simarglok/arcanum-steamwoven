@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Simulation.Tests.Skills;
 
-// The shared skill check (ARC-SKILLS-003, ledger SC1–SC12): numbers read in the original 1.0.7.4 executable by two readers.
+// The shared skill check (ARC-SKILLS-003, ledger SC1–SC17): numbers read in the original 1.0.7.4 executable by two readers.
 [TestClass]
 public sealed class SkillCheckRulesTests
 {
@@ -58,8 +58,10 @@ public sealed class SkillCheckRulesTests
         Assert.AreEqual(60, E(Skill.PickLocks, 10));
         Assert.AreEqual(0, E(Skill.DisarmTraps, 0));
         Assert.AreEqual(24, E(Skill.DisarmTraps, 1));
-        // Opposed skills without a target read 100, capped at 95.
+        // Opposed skills without a target read 100, capped at 95 except prowling, which has no cap.
         Assert.AreEqual(95, E(Skill.Persuasion, 0));
+        Assert.AreEqual(100, E(Skill.Prowling, 0));
+        Assert.AreEqual(110, SkillCheckRules.Effectiveness(Skill.Prowling, 0, new() { ExtraordinaryIntelligence = true }));
         Assert.AreEqual(52, SkillCheckRules.Effectiveness(Skill.PickPocket, 5, new() { OpponentValue = 4 }));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => E(Skill.Bow, 21));
     }
@@ -293,6 +295,17 @@ public sealed class SkillCheckRulesTests
         Refused(new() { AimedLocation = (HitLocation)9 });
         Refused(new() { TargetConditions = (SkillTargetConditions)64 });
         Refused(new() { ArmorSilentMoves = new int[10] });
+        Refused(new() { SeeingCheck = true, HearingCheck = true });
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SkillCheckRules.LightPenalty(Skill.Bow, SkillTraining.None, new() { Light = -1 }));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SkillCheckRules.LightPenalty(Skill.Bow, (SkillTraining)7, new()));
+        // The critical facts are refused before any roll, also on a melee master's failure that never reads them.
+        var rolls = new Rolls(50, 50);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SkillCheckRules.Run(new SkillCheckRequest
+        {
+            Skill = Skill.Melee, Level = 0, Training = SkillTraining.Master, Difficulty = new() { Modifier = 100 },
+            Critical = new() { Item = true, ItemHitPoints = 5, ItemMaxHitPoints = 4 },
+        }, rolls, false));
+        Assert.AreEqual(0, rolls.Asked.Count);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SkillCheckRules.Difficulty(Skill.Bow, (SkillTraining)4, 50, new()));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SkillCheckRules.CriticalSuccessChance(Skill.Bow, 50,
             new() { CriticalHitEffects = [new EffectModifier(StatModifierOperator.Divide, 0)] }));

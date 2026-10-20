@@ -4,7 +4,7 @@ using Arcanum.Simulation.Combat;
 namespace Arcanum.Simulation.Skills;
 
 /// <summary>
-/// The shared skill check (ARC-SKILLS-003), checked in the original 1.0.7.4 executable by two readers (ledger SC1–SC12):
+/// The shared skill check (ARC-SKILLS-003), checked in the original 1.0.7.4 executable by two readers (ledger SC1–SC17):
 /// effectiveness from a per-skill formula or the opposed table, the difficulty of one invocation from explicit facts, the
 /// d100 roll against them, the critical chances of a success and of a failure, a forced success and the PC's fate. The attack
 /// resolver uses it for the attack and the dodge. Pure functions over explicit values; the inputs are validated
@@ -15,7 +15,7 @@ public static class SkillCheckRules
     /// <summary>The source's "impossible" difficulty: out of range, a blocked line of fire, a lock on anything but a portal or a
     /// container.</summary>
     public const int Impossible = 1_000_000;
-    /// <summary>The cap of a non-combat skill's effectiveness.</summary>
+    /// <summary>The cap of a capped skill's effectiveness (every skill but bow, melee, throwing, firearms and prowling).</summary>
     public const int EffectivenessCap = 95;
     /// <summary>Bound of the magnitude of a fact or an effectiveness these rules read (project policy).</summary>
     public const int MaxValue = 1_000_000;
@@ -90,7 +90,7 @@ public static class SkillCheckRules
     /// 4L + 10; heal 5L; repair 4L; firearms 5L + 25, −20 against a target in Magnetic Inversion; pick locks 6L; disarm traps
     /// 4L + 20 but 0 at level 0; backstab 0 (the prowling formula is unreachable, SK6). Then +10 for extraordinary
     /// intelligence, the local PC's game difficulty (easy + half, hard − a quarter, truncated toward zero), the 95 cap of the
-    /// non-combat skills, at least 0.
+    /// capped skills (not bow, melee, throwing, firearms or prowling), at least 0.
     /// </summary>
     [OriginalFunction(0x4C62E0, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x4C69F0, OriginalFunctionScope.Partial)]
@@ -243,6 +243,8 @@ public static class SkillCheckRules
     public static int LightPenalty(Skill skill, SkillTraining training, SkillDifficultyFacts facts)
     {
         ArgumentNullException.ThrowIfNull(facts);
+        if (!SkillRules.IsDefined(training) || facts.Light is < 0 or > 255 || !Enum.IsDefined(facts.SourceLight))
+            throw new ArgumentOutOfRangeException(nameof(facts));
         if (facts.SourceUndead) return 0;
         if (!Of(skill).HasFlag(SkillFlags.Light) && !facts.SeeingCheck) return 0;
         if (skill is Skill.Melee or Skill.PickLocks && training >= SkillTraining.Expert) return 0;
@@ -288,8 +290,6 @@ public static class SkillCheckRules
         ArgumentNullException.ThrowIfNull(facts);
         Check(effectiveness, nameof(effectiveness));
         Validate(facts);
-        if (facts.ItemHitPoints < 0 || facts.ItemMaxHitPoints < 0 || facts.ItemHitPoints > facts.ItemMaxHitPoints)
-            throw new ArgumentOutOfRangeException(nameof(facts));
         var divisor = IsCombat(skill) ? 7 : 2;
         var chance = (100 - effectiveness) / divisor;
         if (facts.Item && facts.ItemHitPoints < facts.ItemMaxHitPoints)
@@ -316,6 +316,9 @@ public static class SkillCheckRules
             throw new ArgumentOutOfRangeException(nameof(request));
         var effectiveness = Effectiveness(request.Skill, request.Level, request.Effectiveness);
         var difficulty = Difficulty(request.Skill, request.Training, effectiveness, request.Difficulty);
+        // The critical facts are checked before any roll is drawn, also on the melee master's path that never reads them.
+        ArgumentNullException.ThrowIfNull(request.Critical);
+        Validate(request.Critical);
         var total = (int)Math.Clamp(difficulty.Total + (modifierCountedTwice ? (long)request.Difficulty.Modifier : 0), int.MinValue, int.MaxValue);
         // Gambling uses the stored roll and stores the one it draws for the next check.
         var drawn = Roll(rolls, SkillCheckRoll.Check);
@@ -355,19 +358,19 @@ public static class SkillCheckRules
 
     private static Skill Defined(Skill skill) => SkillRules.IsDefined(skill) ? skill : throw new ArgumentOutOfRangeException(nameof(skill));
 
-    private static void Validate(SkillDifficultyFacts f)
+    private static void Validate(SkillDifficultyFacts facts)
     {
-        ArgumentNullException.ThrowIfNull(f.ArmorSilentMoves);
-        if (f.ArmorSilentMoves.Count > MaxWornArmor) throw new ArgumentOutOfRangeException(nameof(f));
-        int[] values = [f.Modifier, f.WeaponToHit, f.WeaponMinimumStrength, f.SourceStrength, f.TargetArmorClass, f.Distance,
-            f.SourcePerception, f.Cover, f.ItemLocation, f.ProwlerCover, f.HealingItemBonus, f.LockpickBonus, f.LockDifficulty,
-            f.TrapDifficulty, .. f.ArmorSilentMoves];
-        foreach (var value in values) Check(value, nameof(f));
-        if (f.Range is { } range) Check(range, nameof(f));
-        if (f.Light is < 0 or > 255 || f.ItemWidth is < 0 or > 64 || f.ItemHeight is < 0 or > 64 || f.Distance < 0 ||
-            f.TargetCritter && !f.Target || !Enum.IsDefined(f.SourceLight) || f.AimedLocation is { } location && !Enum.IsDefined(location) ||
-            (f.TargetConditions & ~AllConditions) != 0 || (f.SourceInjuries & ~AllInjuries) != 0)
-            throw new ArgumentOutOfRangeException(nameof(f));
+        ArgumentNullException.ThrowIfNull(facts.ArmorSilentMoves);
+        if (facts.ArmorSilentMoves.Count > MaxWornArmor) throw new ArgumentOutOfRangeException(nameof(facts));
+        int[] values = [facts.Modifier, facts.WeaponToHit, facts.WeaponMinimumStrength, facts.SourceStrength, facts.TargetArmorClass, facts.Distance,
+            facts.SourcePerception, facts.Cover, facts.ItemLocation, facts.ProwlerCover, facts.HealingItemBonus, facts.LockpickBonus, facts.LockDifficulty,
+            facts.TrapDifficulty, .. facts.ArmorSilentMoves];
+        foreach (var value in values) Check(value, nameof(facts));
+        if (facts.Range is { } range) Check(range, nameof(facts));
+        if (facts.Light is < 0 or > 255 || facts.ItemWidth is < 0 or > 64 || facts.ItemHeight is < 0 or > 64 || facts.Distance < 0 ||
+            facts.TargetCritter && !facts.Target || facts.SeeingCheck && facts.HearingCheck || !Enum.IsDefined(facts.SourceLight) || facts.AimedLocation is { } location && !Enum.IsDefined(location) ||
+            (facts.TargetConditions & ~AllConditions) != 0 || (facts.SourceInjuries & ~AllInjuries) != 0)
+            throw new ArgumentOutOfRangeException(nameof(facts));
     }
 
     private const SkillTargetConditions AllConditions = SkillTargetConditions.Paralyzed | SkillTargetConditions.Unconscious
@@ -375,16 +378,17 @@ public static class SkillCheckRules
     private const SkillSourceInjuries AllInjuries = SkillSourceInjuries.Blinded | SkillSourceInjuries.CrippledArmOne
         | SkillSourceInjuries.CrippledArmsBoth | SkillSourceInjuries.CrippledLegsBoth;
 
-    private static void Validate(SkillCriticalFacts f)
+    private static void Validate(SkillCriticalFacts facts)
     {
-        if (f.AimedLocation is { } location && !Enum.IsDefined(location) ||
-            !EffectModifiers.IsValid(f.CriticalHitEffects, MaxCriticalEffects, MaxValue) ||
-            !EffectModifiers.IsValid(f.CriticalMissEffects, MaxCriticalEffects, MaxValue))
-            throw new ArgumentOutOfRangeException(nameof(f));
-        Check(f.WeaponMagicCriticalHit, nameof(f));
-        Check(f.WeaponMagicCriticalMiss, nameof(f));
-        Check(f.BackstabTerm, nameof(f));
-        Check(f.ItemMaxHitPoints, nameof(f));
+        if (facts.AimedLocation is { } location && !Enum.IsDefined(location) ||
+            !EffectModifiers.IsValid(facts.CriticalHitEffects, MaxCriticalEffects, MaxValue) ||
+            !EffectModifiers.IsValid(facts.CriticalMissEffects, MaxCriticalEffects, MaxValue))
+            throw new ArgumentOutOfRangeException(nameof(facts));
+        Check(facts.WeaponMagicCriticalHit, nameof(facts));
+        Check(facts.WeaponMagicCriticalMiss, nameof(facts));
+        Check(facts.BackstabTerm, nameof(facts));
+        Check(facts.ItemMaxHitPoints, nameof(facts));
+        if (facts.ItemHitPoints < 0 || facts.ItemMaxHitPoints < 0 || facts.ItemHitPoints > facts.ItemMaxHitPoints) throw new ArgumentOutOfRangeException(nameof(facts));
     }
 
     private static void Check(int value, string name)
