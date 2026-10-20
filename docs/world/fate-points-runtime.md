@@ -29,7 +29,7 @@ Snapshot schema 26. Requirements: [FR-CHAR-024](../requirements/characters-skill
 | Force good reaction | 1 | conversation start (0x4C1020) | `BeginReactionConversation` |
 | Critical hit | 2 | the PC's attack (0x4B3170) | `AttackCritter` |
 | Critical miss | 3 | an attack on the PC by a non-PC (0x4B3170) | read into the hero's `Combatant`; no NPC attacks yet |
-| Save against magick | 4 | magic resistance (0x4537B0, 0x459C10) | `UseHeroFate` (the magic lane) |
+| Save against magick | 4 | magic resistance (0x4537B0, 0x459C10) | `HeroMagickSave` (ARC-MAGIC-005), which uses it through `UseHeroFate` |
 | Spell at maximum | 5 | the spell run (0x4510F0) | `UseHeroFate` (the magic lane) |
 | Gambling, heal, pick pocket, repair, pick locks, disarm traps | 6..11 | the skill check (0x4C7160, SC14) | `HeroSkillFate` and `UseHeroFate` (the skill uses) |
 
@@ -57,7 +57,8 @@ the revision. Every change is one revision; the full heal writes the points and 
   used in the same revision; at 100 or above it stays armed. The caller no longer passes a flag.
 - **Skill check** (`HeroSkillFate(skill)`): the armed kind the hero's check of the skill would use, for
   `SkillCheckRequest.FateArmed`; the caller uses it with `UseHeroFate` when the result is fated.
-- **Magic**: "save against magick" and "spell at maximum" through `HeroFateArmed` and `UseHeroFate`.
+- **Magic**: "save against magick" through `HeroMagickSave` (the resistance's fate port, ARC-MAGIC-005) and "spell at maximum"
+  through `HeroFateArmed` and `UseHeroFate`.
 - **Dialog** (`fp`, both NPC and Player actions, behind the optional `IDialogFatePort`; the AREA viewer passes
   `SessionDialogFatePort` with a session hero). `fp` takes no operand in this subset; one is outside it.
 

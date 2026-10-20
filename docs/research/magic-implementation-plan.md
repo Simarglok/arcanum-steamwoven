@@ -1,7 +1,7 @@
 # Magic implementation plan
 
 Status: **Plan**, work item ARC-RES-060 (2026-10-20), top-20 item 12; the owner approved starting the slices on 2026-10-20,
-and MT1, MT2, MT3 and MT5 are done as ARC-MAGIC-001, ARC-MAGIC-002, ARC-MAGIC-004 and ARC-MAGIC-003. It cuts the
+and MT1, MT2, MT3, MT5 and MT6 are done as ARC-MAGIC-001, ARC-MAGIC-002, ARC-MAGIC-004, ARC-MAGIC-003 and ARC-MAGIC-005. It cuts the
 [magic core research](magic-core-evidence.md) (ARC-RES-043) into ordered code slices, one PR each, and says for every
 slice what it builds, which requirements it covers, what it depends on, what it reuses and how it is checked against the
 original executable. It replaces the eight slices proposed at the end of that research
@@ -148,7 +148,7 @@ parallel. "Read" lists the function groups each slice reads twice in the executa
 | Slice | Type | Result | FR | Needs | Read / oracle | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
 | **MT5 Cost and payment** (done: ARC-MAGIC-003, [contract](../world/spell-cost-runtime.md)) | MAGIC | The three cost formulas as the original has them (run time `ceil(cost / 2)` for mastery then dwarf ×2; UI and AI with truncation; UI check without mastery, MG2); the pre-animation affordability check on the cast spell (MG1); a payment plan: free runs, `ChargeBeginCost: 0`, fatigue-limited half, worn mana stores first (MG20), fatigue refusal at −15, fail-after-pay for maintained or untimed spells, item spell charges; the charge-cell source (records with `ChargesFromCells:`) through a port the technology lane fills, taken first in the payment, before the fatigue-limiting, mana-store and fatigue steps, as the original's payment (0x450420) does; its amount and refusal are the technology lane's rules (its item-source surcharge is the technology research's (ARC-RES-062) anomaly TC1); the worn-store recharge amount. | 004 | MT1 | cost (0x4507D0, oracle), pay (0x450420), checks (0x4508A0 oracle, 0x450940), spell cost (0x4B1650, 0x4B1660 oracle, 0x4B16C0), recharge (0x459590, 0x459640, 0x459680) | MG20 (2nd reading only) |
-| **MT6 Resistance and save** | MAGIC | Per-target resolver returning the margin or a skip: stored magic resistance (O9), the tech-aligned raise, d100 margin, `Resist:` save d20, extraordinary willpower immunity, damaging floor 50, the fate save as an input (MG13); the fail-chance predictor exactly as the original, with its own labelled d20 (MG14); technology records skip it. | 005, 010 | MT1, fate input (the skills plan's S7 later) | resist (0x4537B0, oracle), fail chance (0x453B20 oracle, 0x453CC0) | MG4, O9 |
+| **MT6 Resistance and save** (done: ARC-MAGIC-005, [contract](../world/spell-resistance-runtime.md); resistance and predictor oracle F3; MG4 switch) | MAGIC | Per-target resolver returning the margin or a skip: stored magic resistance (O9), the tech-aligned raise, d100 margin, `Resist:` save d20, extraordinary willpower immunity, damaging floor 50, the fate save as an input (MG13); the fail-chance predictor exactly as the original, with its own labelled d20 (MG14); technology records skip it. | 005, 010 | MT1, fate input (the skills plan's S7 later) | resist (0x4537B0, oracle), fail chance (0x453B20 oracle, 0x453CC0) | MG4, O9 |
 | **MT7 Invocation check** | MAGIC | The check before any slot or payment, with a typed refusal per step: turn, spell number, range (Chebyshev, inventory always in range), line of fire through a port (filled by AI awareness I2 or a later LOS slice), forbidden flags, Bonds of Magick, NPC fallback radius 2, item aptitude gate and holder-can-use (0x456A10), intelligence 5, anti-teleport. | 003, 009 (gate), 010 | MT1, MT2 | check (0x4564E0), range (0x454700), LOS (0x456BC0), flags (0x456430), gate (0x456A10) | MG5 |
 | **MT8 Target areas** | MAGIC | Target lists for an action's area over a world query port (objects and tiles of the active map, party, parent, attacker, the run's object list) and the per-component filter and re-aim; reads the cone, count and radius branches the research left open (O3). | 003 | MT2 | targets (0x4F40B0) and the target functions it calls (0x4F24F0–0x4F4E40), apply area (0x453D40, 0x453EE0, 0x453F20) | MG18, MG21, MG22, MG23 (recorded by ARC-MAGIC-002) |
 
@@ -208,8 +208,8 @@ MG18 were taken up by the MT2 census (ARC-MAGIC-002): it settled MG7 (record onl
 component) and measured MG18, which stays record only and moves to MT8, to be classified with MG21–MG23, because whether it is a bug depends on how
 the target functions test the kind bits (its row below).
 
-The registry's reserved Magic row still lists the earlier proposals. The first magic slice that adds a switch brings it
-in line and adds `MagicAnomalyProfile` to `GameRules` (the registry is read by a root test, so it changes with code, not
+ARC-MAGIC-005 (MT6), the first magic slice with a switch, brought the registry's Magic row in line and added
+`MagicAnomalyProfile` to `GameRules`, as planned (the registry is read by a root test, so it changes with code, not
 in a docs-only PR; ARC-MAGIC-002 added no switch): MG5, MG6, O9, O10, the charm bonus and the summon palette move to
 "follow the original, no switch"; MG7 is record only; MG18 is classified in MT8; MG3, MG4, MG9, MG10, MG11, MG15 and
 MG19 stay as Steamwoven fixes with Original switches. The
