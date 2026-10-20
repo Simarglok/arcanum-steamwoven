@@ -238,10 +238,14 @@ in full and dropped (interrupt (0x456F70, 0x456FA0, 0x457000, 0x457030, 0x457060
 
 ```
 cost = Cost
-if spell < 80 and caster mastered its college: cost = cost / 2; if cost is odd: cost + 1
+if spell < 80 and caster mastered its college: cost = cost / 2, + 1 if Cost was odd
 if cheat mode: cost = 1
 if caster is a dwarf PC or NPC: cost × 2
 ```
+
+Read in the executable by ARC-MAGIC-003 (two readers, three functions in the function oracle):
+[ledger "Spell cost and payment"](original-verification-ledger.md#spell-cost-and-payment-arc-magic-003) and the
+[runtime contract](../world/spell-cost-runtime.md); the odd test reads the cost before halving.
 
 **From where** (pay (0x450420)):
 
@@ -269,9 +273,9 @@ seconds later that restores `2 × max(1, elapsed game seconds / 120)` points
 up to the amount drained and reschedules the rest; drains of the same item
 merge into one event (recharge (0x459590, 0x459640, 0x459680)).
 
-**Worked example.** `Cost: 6`, mastered college, dwarf caster: run time
-charges `6 / 2 = 3 → 4`, then `× 2 = 8` fatigue; the UI and AI formula
-`spell_cast_cost` gives `6 × 2 / 2 = 6` (MG2).
+**Worked example.** `Cost: 7`, mastered college, dwarf caster: run time
+charges `7 / 2 = 3 → 4` (7 is odd), then `× 2 = 8` fatigue; the UI and AI
+cast cost gives `7 × 2 / 2 = 7` (MG2). With `Cost: 6` both give 6 (ledger MG2, PC1).
 
 ### Resistance, saving throw and aptitude (FR-MAGIC-005, FR-MAGIC-010)
 
