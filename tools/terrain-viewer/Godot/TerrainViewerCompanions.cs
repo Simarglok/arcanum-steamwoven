@@ -30,7 +30,9 @@ public partial class TerrainViewerApp
         if (_areaSession is not { } session || _conversationHost is not { PartyWired: true } || _worldActor.Session is not AreaGridSession grid) return;
         // ARC-WORLD-037: in map mode only the NPCs the party has touched move as companions (following, waiting, or recorded
         // elsewhere than their T0 cell); every other speaker stays its T0 body until it joins.
-        var templates = _readyMapName is null ? _companionTemplates : _companionTemplates.Where(t => CompanionIncluded(session, t)).ToArray();
+        // ARC-WORLD-049: a dead NPC is a corpse where it lies, never a moving companion.
+        var templates = _readyMapName is null ? _companionTemplates
+            : _companionTemplates.Where(t => CompanionIncluded(session, t) && !SpeakerDead(t.Speaker)).ToArray();
         _areaCompanions = AreaCompanionGroup.Create(templates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time, grid.Timing);
         if (_readyMapName is not null) AdoptTravellers(_areaCompanions);
         foreach (var skipped in _areaCompanions.Skipped) GD.Print("ARC-WORLD-016 companion skipped " + skipped);
