@@ -103,6 +103,11 @@ the project's policy, not a rule of the original.
 
 - Dialog, dying, destroy, heartbeat and bust triggers and dialog resumption
   (ARC-RES-035 counts them; they need the SCR dispatcher, SCRIPT slice S4).
+- `Placed` (ARC-SCRIPT-017): every tile and sector script of the map's own sector files, teleport or not, as
+  `MapPlacedScript` (trigger, sector, tile index or −1, tile, header flags, counters, script number; script 0 left out),
+  for map mode's [tile and sector scripts](../rendering/area-map-mode.md#tile-and-sector-scripts-arc-script-017). The
+  original finds a tile's script by its tile index and tests no node flag (ledger TS1). Installed original: 3,012 tile
+  and 20 sector scripts, one per tile.
 - What a guard reads at T0 is not evaluated here; map mode runs the use script of a guarded use site
   (`ConditionalPath`/`ComputedDestination` only) since ARC-SCRIPT-015
   ([guarded use transitions](../rendering/area-map-mode.md#guarded-use-transitions-arc-script-015)); guarded tile and
