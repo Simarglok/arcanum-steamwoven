@@ -5,6 +5,7 @@ using Arcanum.Data.Messages;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Skills;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -250,42 +251,55 @@ public static class AreaStartingHero
     /// <summary>
     /// The host mapping from a pre-made hero (Arcanum.Data) to the session's hero definition (moved here from the
     /// ARC-WORLD-015 real-data test). Level-1 defaults per <see cref="PremadeHero"/>; effect changes on stats the character
-    /// owner models (primary, derived, magick and tech points) are kept, the others (skills, resistances, tech
-    /// disciplines, special values, level, alignment, age …) are dropped and counted in <paramref name="dropped"/>.
+    /// owner models (primary, derived, magick and tech points) are kept, and since ARC-SKILLS-002 the changes on basic and tech
+    /// skills too, as the hero's innate skill changes; the others (resistances, tech disciplines, special values, level,
+    /// alignment, age …) are dropped and counted in <paramref name="dropped"/>.
     /// </summary>
     public static SessionHeroDefinition Definition(PremadeHero hero, out int dropped)
     {
         ArgumentNullException.ThrowIfNull(hero);
         var count = 0;
-        StatEffectDefinition? Effect(EffectRule? rule)
+        var skills = new List<SessionInnateSkillChange>();
+        static StatModifierOperator Operator(EffectChangeOperator op) => op switch
+        {
+            EffectChangeOperator.Add => StatModifierOperator.Add, EffectChangeOperator.Percent => StatModifierOperator.Percent,
+            EffectChangeOperator.Minimum => StatModifierOperator.Minimum, EffectChangeOperator.Maximum => StatModifierOperator.Maximum,
+            EffectChangeOperator.Multiply => StatModifierOperator.Multiply, EffectChangeOperator.Divide => StatModifierOperator.Divide,
+            _ => throw new ArgumentOutOfRangeException(nameof(op)),
+        };
+        StatEffectDefinition? Effect(EffectRule? rule, EffectCause cause)
         {
             if (rule is null) return null;
             var modifiers = new List<StatModifier>();
             foreach (var change in rule.Changes)
             {
+                if (change.Kind is EffectAttributeKind.BasicSkill or EffectAttributeKind.TechSkill)
+                {
+                    var tech = change.Kind == EffectAttributeKind.TechSkill;
+                    if (change.Attribute >= 0 && change.Attribute < (tech ? SkillRules.TechCount : SkillRules.BasicCount))
+                    {
+                        skills.Add(new(cause, tech ? SkillRules.Tech(change.Attribute) : SkillRules.Basic(change.Attribute), Operator(change.Operator), change.Value));
+                        continue;
+                    }
+                }
                 if (change.Kind != EffectAttributeKind.Stat || Stat(change.Attribute) is not { } stat)
                 {
                     count++;
                     continue;
                 }
-                modifiers.Add(new(stat, change.Operator switch
-                {
-                    EffectChangeOperator.Add => StatModifierOperator.Add, EffectChangeOperator.Percent => StatModifierOperator.Percent,
-                    EffectChangeOperator.Minimum => StatModifierOperator.Minimum, EffectChangeOperator.Maximum => StatModifierOperator.Maximum,
-                    EffectChangeOperator.Multiply => StatModifierOperator.Multiply, EffectChangeOperator.Divide => StatModifierOperator.Divide,
-                    _ => throw new ArgumentOutOfRangeException(nameof(rule)),
-                }, change.Value));
+                modifiers.Add(new(stat, Operator(change.Operator), change.Value));
             }
             return modifiers.Count == 0 ? null : new(rule.Number, [.. modifiers]);
         }
-        var raceEffect = Effect(hero.RaceEffect);
-        var genderEffect = Effect(hero.GenderEffect);
+        var raceEffect = Effect(hero.RaceEffect, EffectCause.Race);
+        var genderEffect = Effect(hero.GenderEffect, EffectCause.Gender);
         dropped = count;
         return new(hero.Prototype, Races[hero.Race], hero.Gender == 0 ? CharacterGender.Female : CharacterGender.Male,
             [.. Enumerable.Repeat(PremadeHero.StartPrimaryStat, 8), 0, 0], PremadeHero.StartLevel, PremadeHero.StartUnspentPoints, hero.Alignment,
             raceEffect, genderEffect, hero.Gold,
             [.. hero.Items.Select(item => new SessionHeroKitItem(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description)))],
-            Advancement: SessionHeroAdvancement.WithScheme(hero.AutoLevelScheme is >= 0 and <= SessionAdvancementLimits.MaxScheme ? hero.AutoLevelScheme : 0));
+            Advancement: SessionHeroAdvancement.WithScheme(hero.AutoLevelScheme is >= 0 and <= SessionAdvancementLimits.MaxScheme ? hero.AutoLevelScheme : 0),
+            InnateSkills: skills);
     }
 
     /// <summary>A one-line HUD summary of the session's hero (no original text), or "diagnostic PC" without one.</summary>

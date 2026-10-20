@@ -48,6 +48,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private List<SessionLifeFiring>? _passFirings;
     private List<SessionScriptCallFiring>? _passCalls;
     private List<SessionEffectFiring>? _passEffects;
+    private List<SessionLockFiring>? _passLocks;
     // Replaced, not mutated, when a life step that drew on a trial copy commits.
     private SeededRandom _random;
     private readonly SessionCombatRolls _combatRolls;
@@ -95,7 +96,7 @@ public sealed partial class GameSessionOwner : IDisposable
         {
             hero = HeroDomain.Build(definition.Prototype, definition.Race, definition.Gender, definition.Stats, definition.Level,
                 definition.UnspentPoints, definition.Alignment, definition.RaceEffect, definition.GenderEffect, definition.Experience,
-                definition.Advancement);
+                definition.Advancement, definition.InnateSkills);
             var kit = definition.Kit?.ToArray();
             if (hero is null || definition.Gold < 0 || kit is null || kit.Length > limits.MaxPcItems)
                 return Rejected(GameSessionFailure.InvalidHero);
@@ -174,7 +175,7 @@ public sealed partial class GameSessionOwner : IDisposable
         failure = ImportSound(snapshot.Sound, GameRules.For(options.Rules).Sound, options.SoundMapDefault, out var sound);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         var sink = new SessionEventSink();
-        failure = ImportEvents(snapshot.Events, hero?.State, life, snapshot.Clock.GameTimestampMs, sink,
+        failure = ImportEvents(snapshot.Events, hero?.State, life, maps, snapshot.Clock.GameTimestampMs, sink,
             GameRules.For(options.Rules).Events, out var events);
         if (failure != GameSessionFailure.None) return Rejected(failure);
 
@@ -969,10 +970,12 @@ public sealed partial class GameSessionOwner : IDisposable
         var firings = new List<SessionLifeFiring>();
         var calls = new List<SessionScriptCallFiring>();
         var effects = new List<SessionEffectFiring>();
+        var locks = new List<SessionLockFiring>();
         _passWorld = world;
         _passFirings = firings;
         _passCalls = calls;
         _passEffects = effects;
+        _passLocks = locks;
         GameEventPassResult pass;
         try
         {
@@ -982,7 +985,9 @@ public sealed partial class GameSessionOwner : IDisposable
                 entity.Code == SessionEventKinds.AbsentRole
                 || (_life.Critters.ContainsKey(entity.Code)
                     ? world.CritterFacts(new(entity.Map), entity.Code) is not null
-                    : world is ISessionScriptWorld scripts && scripts.ObjectExists(new(entity.Map), entity.Code))));
+                    // A host that knows objects answers for every kind; otherwise a Lock event's object exists while the
+                    // session records its lock state (ARC-WORLD-050).
+                    : world is ISessionScriptWorld scripts ? scripts.ObjectExists(new(entity.Map), entity.Code) : LockObjectExists(entity))));
         }
         finally
         {
@@ -990,9 +995,11 @@ public sealed partial class GameSessionOwner : IDisposable
             _passFirings = null;
             _passCalls = null;
             _passEffects = null;
+            _passLocks = null;
         }
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
-            firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly() };
+            firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
+            Locks = locks.AsReadOnly() };
     }
 
     /// <summary>
@@ -1258,10 +1265,27 @@ public sealed partial class GameSessionOwner : IDisposable
         return GameSessionFailure.None;
     }
 
-    private FollowConsent Consent(PartyConsentFacts facts, bool forcedFollower, bool ignoreLimit) =>
-        FollowConsentRules.Evaluate(new(facts.MindControlledByPc, facts.PcPersuasion, facts.PcCharisma, facts.PcAlignment,
-            facts.PcLevel, facts.OtherLeaderCharisma, forcedFollower, facts.Reaction, facts.Thresholds, facts.NpcAlignment,
-            facts.NpcLevel, facts.MaxFollowers, _party.NonForcedFollowers, ignoreLimit));
+    // With a hero the session owns the PC's side of the check (ARC-SKILLS-002): its persuasion training, effective charisma and
+    // level, and the max followers they give with the hero's effects on that stat (ledger AP4: charisma / 4, +1 from expert
+    // persuasion, then the effects, clamped to 1..7); the caller's values stand in only without a hero. The alignment stays the
+    // caller's: the conversation host tracks the alignment its dialog actions change.
+    private FollowConsent Consent(PartyConsentFacts facts, bool forcedFollower, bool ignoreLimit)
+    {
+        var (persuasion, charisma, level, maxFollowers) = (facts.PcPersuasion, facts.PcCharisma, facts.PcLevel, facts.MaxFollowers);
+        if (_hero is { } hero)
+        {
+            persuasion = HeroPersuasion();
+            var snapshot = hero.Stats.Query(new(0)).Snapshot!;
+            charisma = snapshot.GetEffective(CharacterStat.Charisma);
+            level = hero.State.Level;
+            var unclamped = charisma / 4 + (persuasion >= PersuasionTraining.Expert ? 1 : 0);
+            maxFollowers = Math.Clamp(CharacterStatRules.ApplyModifiers(CharacterStat.MaxFollowers, unclamped, snapshot.AppliedEffects),
+                FollowConsentRules.MinMaxFollowers, FollowConsentRules.MaxMaxFollowers);
+        }
+        return FollowConsentRules.Evaluate(new(facts.MindControlledByPc, persuasion, charisma, facts.PcAlignment, level,
+            facts.OtherLeaderCharisma, forcedFollower, facts.Reaction, facts.Thresholds, facts.NpcAlignment, facts.NpcLevel, maxFollowers,
+            _party.NonForcedFollowers, ignoreLimit));
+    }
 
     private static bool ValidFacts(PartyConsentFacts facts) => Enum.IsDefined(facts.PcPersuasion);
 
@@ -1400,7 +1424,7 @@ public sealed partial class GameSessionOwner : IDisposable
         hero = null;
         if (saved is null) return GameSessionFailure.None;
         hero = HeroDomain.Build(saved.Prototype, saved.Race, saved.Gender, saved.Stats, saved.Level, saved.UnspentPoints, saved.Alignment,
-            saved.RaceEffect, saved.GenderEffect, saved.Experience, saved.Advancement);
+            saved.RaceEffect, saved.GenderEffect, saved.Experience, saved.Advancement, saved.InnateSkills);
         return hero is null ? GameSessionFailure.InvalidHero : GameSessionFailure.None;
     }
 
@@ -1558,7 +1582,8 @@ public sealed partial class GameSessionOwner : IDisposable
     // Saved timers: the queue's strict restore (registry version, kinds, sequences, order, payloads, keys), plus what only
     // the session knows: a hero timer needs the hero, an NPC timer a life record of its NPC, and every timer was set at a
     // game time no later than the saved clock, exactly its kind's delay before its deadline.
-    private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life, long clockMs,
+    private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life,
+        IReadOnlyDictionary<SessionMapId, Dictionary<MapChangeKey, long>> mapChanges, long clockMs,
         SessionEventSink sink, GameEventQueueProfile profile, out GameEventQueue? events)
     {
         events = null;
@@ -1590,6 +1615,18 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.LockReset)
+            {
+                // A Lock event (ARC-WORLD-050): one object whose lock state the saved map changes record, set no later than
+                // the saved clock, an hour (unlock) or a day (jam) before its deadline.
+                if (pending.Entities.Length != 1 || pending.Entities[0].Code == SessionEventKinds.AbsentRole ||
+                    RecordedIn(mapChanges, new(new(pending.Entities[0].Map), pending.Entities[0].Code)) is null ||
+                    pending.Values[0] < 0 || pending.Values[0] > clockMs ||
+                    (pending.DeadlineMs - pending.Values[0]) is not (Arcanum.Simulation.Locks.LockRules.UnlockResetDelayMs or Arcanum.Simulation.Locks.LockRules.JamResetDelayMs))
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
             var scheduledAt = pending.Values[0];
             if (scheduledAt < 0 || scheduledAt > clockMs || scheduledAt > long.MaxValue - SessionEventKinds.Delay(TimerOf(kind.Name)) ||
                 pending.DeadlineMs != scheduledAt + SessionEventKinds.Delay(TimerOf(kind.Name))) return GameSessionFailure.InvalidEvents;
@@ -1603,7 +1640,8 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         // No session kind is SavedUnlessRebuilt yet, so Rebuild is always empty; the AI tick (slice I6) reschedules it here.
         if (converted.Count(e => e.Kind == SessionEventKinds.ScriptCall) > SessionEventKinds.MaxScriptCalls ||
-            converted.Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) > SessionEffectLimits.MaxTimedEffects) return GameSessionFailure.EventBudgetExceeded;
+            converted.Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) > SessionEffectLimits.MaxTimedEffects ||
+            converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets) return GameSessionFailure.EventBudgetExceeded;
         var result = GameEventQueue.Restore(registry, new(saved.Registry, saved.NextSequence, converted.ToImmutable()), profile,
             SessionEventKinds.Limits);
         if (result.Queue is null)

@@ -302,5 +302,5 @@ the reader modes cover them, and no installed record reaches any of them.
 - No rule reads the records yet (spell book MT3, cost MT5, resistance MT6, invocation MT7, target lists MT8, components
   MT12–MT18); the auto-level scheme keeps its own willpower read. What the target names and the component data do at run
   time is those slices'.
-- The record 221 `Dmg_Flags:` data defect is recorded, not fixed (a data-fix row would need the owner's decision).
+- The record 221 `Dmg_Flags:` data defect is data fix DF4, decided 2026-10-21 under the owner's data-fix rule; it lands with MT12, where `Scaled` takes effect (the reader keeps reading the file as the original does).
 - The eye-candy file `Rules\SpellEyeCandy.mes` and the 512 run slots of the same init are not read here.
