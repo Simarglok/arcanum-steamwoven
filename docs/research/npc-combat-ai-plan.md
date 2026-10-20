@@ -332,7 +332,8 @@ are open, and the combat-core anomalies A1–A9 of
 [ARC-RES-030](combat-core-evidence.md#anomalies-recorded-not-adopted) follow
 the same rule when combat slice 2 settles them, as do the magic-core anomalies
 MG1..MG20 of [ARC-RES-043](magic-core-evidence.md#anomalies-recorded-not-adopted)
-when the magic slices settle them.
+when the magic slices settle them (the owner decided the magic rows on
+2026-10-20; each lands with the slice its row names).
 
 The combat-core rows below were also checked against the original 1.0.7.4
 executable ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)).
