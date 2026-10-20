@@ -608,7 +608,7 @@ this document start at F1 or F2.
    schematic number (subtype 5) moved to TECH-3, which needs the written-item read path. Synthetic fixtures; a `RealData` test on the Mac counts
    56 learned, 62 found and 8 placeholders and checks the learned-number
    formula.
-2. **TECH-2 Degrees and expertise** (Simulation, Session; FR-CHAR-017/020,
+2. **TECH-2 Degrees and expertise** (done: ARC-TECHNOLOGY-002, [runtime](../world/tech-degrees-runtime.md); Simulation, Session; FR-CHAR-017/020,
    FR-MAGIC-012 rules): degree get, raise and lower with the shared
    spend/refund path of ARC-SKILLS-005, effective expertise through the
    durable-effects owner (expertise effects become live), the intelligence
