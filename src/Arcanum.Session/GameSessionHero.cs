@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Skills;
 
 namespace Arcanum.Session;
 
@@ -41,26 +42,30 @@ public sealed record SessionHeroKitItem(SessionItemKind Kind);
 /// modelled change). <see cref="Kit"/> enters the PC's list in order, before any item the PC takes from the world.
 /// <see cref="Experience"/> (ARC-WORLD-030) is the stored experience; a pre-made hero has none. <see cref="Advancement"/>
 /// (ARC-WORLD-036) holds its skills, colleges, degrees, bought points and auto-level scheme (null: none bought, no scheme); with
-/// scheme data the session runs that scheme at creation, as a new PC's level set does.
+/// scheme data the session runs that scheme at creation, as a new PC's level set does. <see cref="InnateSkills"/>
+/// (ARC-SKILLS-002) are the skill changes of the same race and gender effects (null: none), applied whenever a skill level is
+/// read and never written into the stored points.
 /// </summary>
 public sealed record SessionHeroDefinition(int Prototype, CharacterRace Race, CharacterGender Gender, IReadOnlyList<int> Stats,
     int Level, int UnspentPoints, int Alignment, StatEffectDefinition? RaceEffect, StatEffectDefinition? GenderEffect, int Gold,
-    IReadOnlyList<SessionHeroKitItem> Kit, int Experience = 0, SessionHeroAdvancement? Advancement = null);
+    IReadOnlyList<SessionHeroKitItem> Kit, int Experience = 0, SessionHeroAdvancement? Advancement = null,
+    IReadOnlyList<SessionInnateSkillChange>? InnateSkills = null);
 
 /// <summary>
 /// Saved hero state: prototype, race, gender, stored stats in <see cref="SessionHeroLimits.StoredStats"/> order, level,
 /// experience (ARC-WORLD-030), unspent points, alignment, the advancement fields (ARC-WORLD-036) and the applied innate effects with their modifiers (race first, then gender; an innate
-/// effect without a modelled change is not listed). Gold and the kit items live in <see cref="SessionInventoryState"/>.
+/// effect without a modelled change is not listed), and the innate effects' skill changes (ARC-SKILLS-002). Gold and the kit items live in <see cref="SessionInventoryState"/>.
 /// </summary>
 public sealed class SessionHeroState
 {
     internal SessionHeroState(int prototype, CharacterRace race, CharacterGender gender, int[] stats, int level, int unspentPoints,
         int alignment, StatEffectDefinition? raceEffect, StatEffectDefinition? genderEffect, int experience = 0,
-        SessionHeroAdvancement? advancement = null)
+        SessionHeroAdvancement? advancement = null, ImmutableArray<SessionInnateSkillChange> innateSkills = default)
     {
         Prototype = prototype; Race = race; Gender = gender; Stats = Array.AsReadOnly(stats); Level = level;
         UnspentPoints = unspentPoints; Alignment = alignment; RaceEffect = raceEffect; GenderEffect = genderEffect;
         Experience = experience; Advancement = advancement ?? SessionHeroAdvancement.None;
+        InnateSkills = innateSkills.IsDefault ? [] : innateSkills;
     }
 
     public int Prototype { get; }
@@ -76,14 +81,16 @@ public sealed class SessionHeroState
     public StatEffectDefinition? GenderEffect { get; }
     /// <summary>The skills, colleges, degrees, bought points and auto-level scheme (ARC-WORLD-036).</summary>
     public SessionHeroAdvancement Advancement { get; }
+    /// <summary>The race and gender effects' skill changes (ARC-SKILLS-002), race first, in the effects' order.</summary>
+    public ImmutableArray<SessionInnateSkillChange> InnateSkills { get; }
 
     /// <summary>The same hero with a new level, experience and unspent points (an experience award).</summary>
     internal SessionHeroState WithExperience(int level, int experience, int unspentPoints) =>
-        new(Prototype, Race, Gender, [.. Stats], level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, Advancement);
+        new(Prototype, Race, Gender, [.. Stats], level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, Advancement, InnateSkills);
 
     /// <summary>The same hero with new stored stats, level, experience, unspent points and advancement (a scheme's purchases).</summary>
     internal SessionHeroState With(int[] stats, int level, int experience, int unspentPoints, SessionHeroAdvancement advancement) =>
-        new(Prototype, Race, Gender, stats, level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, advancement);
+        new(Prototype, Race, Gender, stats, level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, advancement, InnateSkills);
 }
 
 /// <summary>The hero domain of one owner: its saved fields and the character owner built from them.</summary>
@@ -118,15 +125,22 @@ internal sealed class HeroDomain
 
     /// <summary>
     /// Builds the hero from saved or new fields; null when any field is outside its range or an effect is not one the
-    /// character owner admits (no modifiers, an unknown stat or operator, a magnitude above its limit). The character owner
-    /// holds only this hero's race and gender effects; the session never calls its race or gender setters.
+    /// character owner admits (no modifiers, an unknown stat or operator, a magnitude above its limit), or an innate skill change
+    /// is not one <see cref="SessionInnateSkillChange.IsValid"/> admits, more than <see cref="SessionInnateSkillChange.MaxPerEffect"/> of
+    /// one cause, or a race change after a gender change (the effects' order, which the aggregation of bounds reads).
+    /// The character owner holds only this hero's race and gender effects; the session never calls its race or gender setters.
     /// </summary>
     internal static HeroDomain? Build(int prototype, CharacterRace race, CharacterGender gender, IReadOnlyList<int>? stats,
         int level, int unspentPoints, int alignment, StatEffectDefinition? raceEffect, StatEffectDefinition? genderEffect, int experience,
-        SessionHeroAdvancement? advancement)
+        SessionHeroAdvancement? advancement, IReadOnlyList<SessionInnateSkillChange>? innateSkills)
     {
         advancement ??= SessionHeroAdvancement.None;
         if (!advancement.IsValid()) return null;
+        ImmutableArray<SessionInnateSkillChange> skills = [.. innateSkills ?? []];
+        if (skills.Length > SessionInnateSkillChange.MaxChanges || !skills.All(SessionInnateSkillChange.IsValid)) return null;
+        var raceSkills = skills.Count(change => change.Cause == EffectCause.Race);
+        if (raceSkills > SessionInnateSkillChange.MaxPerEffect || skills.Length - raceSkills > SessionInnateSkillChange.MaxPerEffect ||
+            skills.Skip(raceSkills).Any(change => change.Cause == EffectCause.Race)) return null;
         // Checked on the copy, so a list whose count and contents disagree cannot pass.
         var values = stats?.ToArray();
         if (prototype < 1 || values is null || values.Length != SessionHeroLimits.StoredStats.Length) return null;
@@ -142,7 +156,7 @@ internal sealed class HeroDomain
         if (created.Owner is not { } owner) return null;
         for (var index = 0; index < values.Length; index++)
             if (owner.SetBase(SessionHeroLimits.StoredStats[index], values[index]).Disposition == CharacterStatsDisposition.Rejected) return null;
-        return new(new(prototype, race, gender, values, level, unspentPoints, alignment, raceEffect, genderEffect, experience, advancement), owner);
+        return new(new(prototype, race, gender, values, level, unspentPoints, alignment, raceEffect, genderEffect, experience, advancement, skills), owner);
     }
 
     /// <summary>The DLG reply-eligibility facts of this hero (see <see cref="GameSessionOwner.QueryHeroDialogFacts"/>).</summary>

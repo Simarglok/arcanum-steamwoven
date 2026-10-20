@@ -98,7 +98,9 @@ public static class AutoLevelRules
     public const int SkillPointMask = SkillRules.PointMask;
     /// <summary>The bound of hit and fatigue points and adjustments a sheet admits (project policy; the installed critters stay far below).</summary>
     public const int MaxPoolValue = 10_000;
-    private const int MaxPointStat = 210, MinimumSpellIntelligence = 5;
+    private const int MaxPointStat = 210;
+    /// <summary>The intelligence every spell rank needs (0x4502E0, before the spell table is loaded).</summary>
+    internal const int MinimumSpellIntelligence = 5;
 
     private static readonly string[][] Tokens =
     [
@@ -476,7 +478,7 @@ public static class AutoLevelRules
     }
 
     /// <summary>The mutable copy of a sheet one run works on, with the source's setters and level reads.</summary>
-    private sealed class Work
+    internal sealed class Work
     {
         private readonly AdvancementSheet _sheet;
         private readonly AdvancementModifiers _modifiers;
@@ -513,6 +515,9 @@ public static class AutoLevelRules
         internal ImmutableArray<AdvancementPurchase>.Builder Purchases { get; } = ImmutableArray.CreateBuilder<AdvancementPurchase>();
 
         internal void Log(AdvancementTrack track, int index, int value) => Purchases.Add(new(track, index, value));
+
+        /// <summary>The willpower a spell rank needs (the run's table).</summary>
+        internal int SpellWillpower(int spell) => _willpower[spell];
 
         // The stat setter clamps to the race's range.
         internal void SetStat(int stat, int value)

@@ -156,7 +156,7 @@ public partial class TerrainViewerApp
         var origin = _arguments!;
         _mapHandoff = new(loaded, _readyArea!.Snapshot.RuntimeMap, map.Name, actor.Facing, origin, grid.Chart.ToWorld(grid.State.CommittedCell), map.Name,
             Previous: _areaSession, Kind: MapHandoffKind.QuickLoad, OriginFacing: grid.State.Facing);
-        var next = origin with { AreaMapName = map.Name, AreaMapArrival = new(actor.Cell.X, actor.Cell.Y) };
+        var next = origin with { AreaMapName = map.Name, AreaMapArrival = new(actor.Cell.X, actor.Cell.Y), AreaMapSector = null };
         GD.Print("ARC-WORLD-038 quick-load map " + System.Text.Json.JsonSerializer.Serialize(new { From = _readyArea.Snapshot.RuntimeMap, To = map, actor.Cell }));
         SetQuickStatus($"F8 {status}; loading '{map.Name}'");
         _lastLoad = LoadTransferAsync(next);

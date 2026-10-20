@@ -236,6 +236,13 @@ public enum ScrSoundKind
 /// </summary>
 public readonly record struct ScrSound(ScrSoundKind Kind, int Id, int Ambient = 0, ScrObjectRef? Object = null);
 
+/// <summary>
+/// ARC-SCRIPT-016: a set-auto-level-scheme action (139) for one object of its object operand (ledger OL30): the original writes the
+/// number into the auto-level scheme of a PC or an NPC (0x4A6D90), with no range check, ignores any other object, and buys nothing
+/// until the object's next level step. The host decides what the object is.
+/// </summary>
+public readonly record struct ScrSchemeRequest(ScrObjectRef Object, int Scheme);
+
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
@@ -247,13 +254,14 @@ public sealed class ScrEffects
 {
     internal ScrEffects(ScrWriteback? writeback, ScrObjectRef? destroyTrapObject, IReadOnlyList<ScrFlagWrite> globalFlags, int? storyState, ScrDialogStart? dialog = null,
         IReadOnlyList<ScrCallRequest>? calls = null, IReadOnlyList<ScrPrintLine>? lines = null, IReadOnlyList<ScrSound>? sounds = null,
-        IReadOnlyList<ScrTeleport>? teleports = null)
+        IReadOnlyList<ScrTeleport>? teleports = null, IReadOnlyList<ScrSchemeRequest>? schemes = null)
     {
         Writeback = writeback; DestroyTrapObject = destroyTrapObject; GlobalFlags = globalFlags; StoryState = storyState; Dialog = dialog;
         Calls = calls ?? Array.Empty<ScrCallRequest>();
         Lines = lines ?? Array.Empty<ScrPrintLine>();
         Sounds = sounds ?? Array.Empty<ScrSound>();
         Teleports = teleports ?? Array.Empty<ScrTeleport>();
+        Schemes = schemes ?? Array.Empty<ScrSchemeRequest>();
     }
 
     public static ScrEffects None { get; } = new(null, null, Array.Empty<ScrFlagWrite>(), null);
@@ -271,8 +279,10 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrSound> Sounds { get; }
     /// <summary>The teleports to request, in action order (ARC-SCRIPT-014).</summary>
     public IReadOnlyList<ScrTeleport> Teleports { get; }
+    /// <summary>The auto-level schemes to set, in action order, one per object (ARC-SCRIPT-016).</summary>
+    public IReadOnlyList<ScrSchemeRequest> Schemes { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
-        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0;
+        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -299,7 +309,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S4"/>, admitted for the lines reachable from the event's line) and the executed-line
+/// at most <see cref="ScrAdmissionSet.S8"/>, admitted for the lines reachable from the event's line) and the executed-line
 /// budget.</summary>
 public sealed record ScrRunOptions
 {
@@ -316,7 +326,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Rules);
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S4)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S4.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S8)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S8.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

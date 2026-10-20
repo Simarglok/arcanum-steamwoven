@@ -255,8 +255,29 @@ class OracleSelfTest(unittest.TestCase):
             with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
                 call(address, *arguments)
 
-    def test_the_registry_names_five_functions_with_their_own_code_first(self):
-        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4A68B0, 0x4A6900, 0x4A6980, 0x4C5EB0, 0x4C6170])
+    def test_the_spell_cost_model_stays_in_the_csharp_domain_and_rejects_anything_else(self):
+        rng = random.Random(3)
+        draws = [oracle_functions.draw_spell_cost_case(rng) for _ in range(10_000)]
+        self.assertTrue(all(0 <= c.spell < 223 and -1 <= c.mastery <= 15 and c.cheat in (0, 1) and c.paid in (0, 1) for c in draws))
+        self.assertTrue(any(c.spell < 80 and c.mastery == c.spell // 5 for c in draws))
+        self.assertTrue({15, 16, 5} <= {c.kind for c in draws} and any(c.race == 1 for c in draws))
+        self.assertTrue(any(c.cost % 2 for c in draws) and min(c.cost for c in draws) == -0x80000000 and max(c.cost for c in draws) == 0x7FFFFFFF)
+        recorder = oracle_functions.PayRecorder([])
+        stubs = oracle_functions.spell_cost_stubs(draws[0], recorder)
+        handle = oracle_functions.HANDLE
+
+        def call(address, *arguments):
+            return stubs[address](lambda index: arguments[index])
+        self.assertEqual(call(oracle_functions.FIELD_GETTER, *handle, oracle_functions.FIELD_TYPE), draws[0].kind)
+        self.assertEqual(call(oracle_functions.PAY, *handle, 7, 1, 3), draws[0].paid)
+        self.assertEqual(recorder.calls, [(7, 1, 3)])
+        for address, arguments in ((oracle_functions.FIELD_GETTER, (*handle, 0xDA)), (oracle_functions.STAT_GETTER, (*handle, 4)),
+                                   (oracle_functions.MASTERY, (handle[0] + 1, handle[1])), (oracle_functions.PAY, (handle[0], 0, 1, 1, 0))):
+            with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
+                call(address, *arguments)
+
+    def test_the_registry_names_eight_functions_with_their_own_code_first(self):
+        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660, 0x4C5EB0, 0x4C6170])
         for address, spec in oracle_functions.FUNCTIONS.items():
             self.assertEqual(spec.code[0][0], address)
             self.assertTrue(all(start < end for start, end in spec.code))

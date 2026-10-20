@@ -121,6 +121,13 @@ public sealed class ScrAdmissionSet
             ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation]),
         S7.Actions.Append(ScrCatalogue.Action.Teleport).Append(ScrCatalogue.Action.FadeAndTeleport), S7.ValueKinds, S7.FocusKinds);
 
+    /// <summary>
+    /// The scheme set (ARC-SCRIPT-016): <see cref="S4"/> plus set auto-level scheme (139), which hands one
+    /// <see cref="ScrSchemeRequest"/> per object of its object operand to the host (ledger OL30). Its focus kinds stay the four
+    /// single objects of <see cref="S3"/>; focus groups are not admitted yet.
+    /// </summary>
+    public static ScrAdmissionSet S8 { get; } = new("S8", S4.Conditions, S4.Actions.Append(ScrCatalogue.Action.SetAutoLevelScheme), S4.ValueKinds, S4.FocusKinds);
+
     /// <summary>The conditions of <see cref="S4"/> a host answers through <see cref="IScrObjectQueries"/>.</summary>
     public static IReadOnlySet<int> ObjectQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed,
         ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation };

@@ -2,6 +2,7 @@ using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Skills;
 
 namespace Arcanum.Session;
 
@@ -142,6 +143,8 @@ public sealed partial class GameSessionOwner
                     continue;
                 }
                 if (!ValidWearable(facts) || facts.Weight is < 0 or > EquipmentChoice.MaxWeight) throw new Refused(GameSessionFailure.InvalidItem);
+                // The session's record of the item's condition (ARC-WORLD-053) wins over the host's data.
+                facts = owner.Conditioned(entity, facts);
                 if (facts.Kind != kind || !EquipmentDomain.Matches(kind.Type, facts.Item.Kind)) throw new Refused(GameSessionFailure.InventoryMismatch);
                 if (owner._equipment.SlotOf(entity) is { } slot && owner._equipment.Worn[slot].Item != facts.Item) throw new Refused(GameSessionFailure.InventoryMismatch);
                 Facts[entity] = facts;
@@ -227,22 +230,22 @@ public sealed partial class GameSessionOwner
         }
     }
 
-    /// <summary>The hero as the best-item choice scores it: its effective DamageBonus and aptitude, its weapon skill levels (no skill
-    /// points are session state, so the levels come from the stored 0 under the dexterity cap; firearms, a technological skill, is 0),
-    /// extraordinary intelligence, the local PC under the session's difficulty, and no ammunition (the PC's list holds none).</summary>
-    private EquipmentChooser HeroChooser()
+    /// <summary>The hero as the best-item choice scores it: its effective DamageBonus and aptitude, its weapon skill levels
+    /// (<see cref="QueryHeroSkills"/>, ARC-SKILLS-002; firearms a tech skill), extraordinary intelligence, the local PC under the
+    /// session's difficulty, and no ammunition (the PC's list holds none).</summary>
+    internal EquipmentChooser HeroChooser()
     {
         var state = _life.Hero!.Value.State;
         var snapshot = _hero!.Stats.Query(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!;
-        var dexterity = snapshot.GetEffective(CharacterStat.Dexterity);
+        var skills = HeroSkills();
         return new EquipmentChooser
         {
             DamageBonus = snapshot.GetEffective(CharacterStat.DamageBonus),
             MagickTechAptitude = HeroAptitude(),
-            MeleeLevel = CombatSkillRules.Level(BasicCombatSkill.Melee, 0, dexterity, false),
-            BowLevel = CombatSkillRules.Level(BasicCombatSkill.Bow, 0, dexterity, false),
-            ThrowingLevel = CombatSkillRules.Level(BasicCombatSkill.Throwing, 0, dexterity, false),
-            FirearmsLevel = 0,
+            MeleeLevel = skills[Skill.Melee].Level,
+            BowLevel = skills[Skill.Bow].Level,
+            ThrowingLevel = skills[Skill.Throwing].Level,
+            FirearmsLevel = skills[Skill.Firearms].Level,
             ExtraordinaryIntelligence = snapshot.GetEffective(CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold,
             IsPc = true,
             Difficulty = _difficulty,

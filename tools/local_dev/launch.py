@@ -63,7 +63,8 @@ ORIGINAL_EXE_NAME = "Arcanum.exe"
 ORIGINAL_EXE_SHA256 = "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52"
 ORACLE_TESTS = "tests/Arcanum.Simulation.Tests/Arcanum.Simulation.Tests.csproj"
 ORACLE_TEST_CLASSES = ("tests/Arcanum.Simulation.Tests/Character/ExperienceOriginalExeTests.cs",
-                       "tests/Arcanum.Simulation.Tests/Skills/SkillOriginalExeTests.cs")
+                       "tests/Arcanum.Simulation.Tests/Skills/SkillOriginalExeTests.cs",
+                       "tests/Arcanum.Simulation.Tests/Magic/SpellCostOriginalExeTests.cs")
 # ARC-DEV-008: where `./arcanum oracle` has the tests write their receipts (checked against docs/verification/functions.csv).
 ORACLE_RECEIPTS = "docs/verification/receipts"
 ORACLE_FUNCTIONS: dict[str, str] = {
@@ -72,6 +73,9 @@ ORACLE_FUNCTIONS: dict[str, str] = {
     "0x4A6980": "BonusPointsMatchTheOriginal",
     "0x4C5EB0": "SkillLevelMatchesTheOriginal",
     "0x4C6170": "TrainingSetMatchesTheOriginal",
+    "0x4507D0": "RunCostMatchesTheOriginal",
+    "0x4508A0": "CheckCostMatchesTheOriginal",
+    "0x4B1660": "CastCostMatchesTheOriginal",
 }
 
 FORBIDDEN = ("--self-test", "--native-smoke", "--smoke", "--matrix", "--capture", "--screenshot", "--headless", "--fullscreen", "--automated", "--resize", "--input")
@@ -138,8 +142,23 @@ def hero_arguments(hero: str | None) -> list[str]:
     return ["--hero", hero]
 
 
-def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None) -> list[str]:
-    """ARC-RENDER-017: the explicit argument set for one interior in crash-site-area map mode."""
+# ARC-RENDER-024: the sector map mode opens a map at (`--area-map-sector X,Y`, two numbers below 2^26).
+MAX_SECTOR = 67108863
+
+
+def sector_argument(sector: str | None) -> list[str]:
+    """`--area-map-sector X,Y` for a sector given as `X,Y`, nothing for None; anything else is refused."""
+    if sector is None:
+        return []
+    parts = sector.split(",") if isinstance(sector, str) else []
+    if len(parts) != 2 or not all(part.isascii() and part.isdigit() and 0 < len(part) <= 8 and int(part) <= MAX_SECTOR for part in parts):
+        raise ValueError("a sector is X,Y: two numbers from 0 to 67108863")
+    return ["--area-map-sector", f"{int(parts[0])},{int(parts[1])}"]
+
+
+def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None, sector: str | None = None) -> list[str]:
+    """ARC-RENDER-017: the explicit argument set for one map in crash-site-area map mode. ARC-RENDER-024: a map too large
+    to load whole (the main world map) opens as a window around `sector`, else around its map-list start."""
     if not isinstance(name, str) or not name.strip() or len(name) > MAX_MAP_NAME or any(
             character in "/\\" or not character.isprintable() for character in name):
         raise ValueError("map name must be one maps/ folder name")
@@ -151,7 +170,7 @@ def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None) ->
                          + "; run ./arcanum setup again)")
     arguments = ["--mode", "crash-site-area", "--module", _local(inputs, "module"), "--resource", _local(inputs, "terrainResource"),
                  "--source-id", _source_id(inputs), "--actor-resource", _local(inputs, "actorResource"),
-                 "--game-root", _local(inputs, "gameRoot", directory=True), "--area-map", name, *hero_arguments(hero)]
+                 "--game-root", _local(inputs, "gameRoot", directory=True), "--area-map", name, *hero_arguments(hero), *sector_argument(sector)]
     assert_ordinary(arguments)
     return arguments
 

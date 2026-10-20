@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4508A0",
+  "name": "spell-check-cost",
+  "method": "Arcanum.Simulation.Magic.SpellCostRules.CheckCost",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "900a8ec353c47fcfdb9a3975390f98656bd5f574d42c07618b36f9940e49ee36",
+  "configuration": "Debug"
+}

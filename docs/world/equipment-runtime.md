@@ -30,7 +30,7 @@ of [FR-ITEM-007](../requirements/items-economy.md#fr-item-007). The viewer uses 
 | --- | --- |
 | Slots | helmet 1000, ring 1001 and 1002, medallion 1003, weapon 1004, shield 1005, body armour 1006, gauntlets 1007, boots 1008 |
 | Slot of an item | a weapon the weapon slot; armour by the coverage of its inventory art (torso, shield, helmet, gauntlets, boots, ring, medallion); a generic item with the torch/shield flag the shield slot; anything else none |
-| Wear check, in order | a polymorphed or "body of" wearer: not wieldable; a magickal item (complexity > 0) and Magick Allergy; broken (destroyed art bit); not the item's slot (either ring slot takes a ring); weapon: a two-handed weapon with a fixed hand count is refused next to a shield and with any crippled arm, any other weapon only with both arms crippled; shield: refused next to such a weapon and with any crippled arm (EQ1); body armour: the race's size (dwarf, gnome, halfling small; half-ogre, ogre large; else medium), male-only before female-only, unique NPC art; then the wearer's art for a weapon, an armour shield or body armour (the host's answer). Minimum strength is never checked. |
+| Wear check, in order | a polymorphed or "body of" wearer: not wieldable; a magickal item (complexity > 0) and Magick Allergy; broken (destroyed art bit; since ARC-WORLD-053 the session's [durability](item-durability-runtime.md) record of the item wins over the host's data, also in `EquipBest`, and a first break takes a worn item off); not the item's slot (either ring slot takes a ring); weapon: a two-handed weapon with a fixed hand count is refused next to a shield and with any crippled arm, any other weapon only with both arms crippled; shield: refused next to such a weapon and with any crippled arm (EQ1); body armour: the race's size (dwarf, gnome, halfling small; half-ogre, ogre large; else medium), male-only before female-only, unique NPC art; then the wearer's art for a weapon, an armour shield or body armour (the host's answer). Minimum strength is never checked. |
 | Leaving a place | an item with the no-drop flag never leaves (wielding it is refused too); a worn item may always be taken off (the original's hexed-item check is a stub, EQ2) |
 | Effective power | `(complexity + aptitude) / 2` truncated toward zero, clamped to `0 .. complexity` on the item's side |
 | Magic adjustment | magickal `value × power / complexity`, technological `value − value × power / complexity`, neutral unchanged |
@@ -50,7 +50,7 @@ and unarmed bonus not negative, the blocks of its kind).
 | Entry | Contract |
 | --- | --- |
 | `QueryEquipment()` | The worn items in slot order: slot, the PC item entity (`kit:n` or a taken item), its saved values. |
-| `QueryHeroEquipmentCombat(training)` | `EquipmentRules.Evaluate` for the hero's effective magick/tech aptitude; null without a hero. Training is the caller's (skills are not session state). |
+| `QueryHeroEquipmentCombat(training)` | `EquipmentRules.Evaluate` for the hero's effective magick/tech aptitude; null without a hero. Without a training argument the hero's training in the wielded weapon's skill (ARC-SKILLS-002, [hero skills](hero-skills-runtime.md)); an explicit one overrides. |
 | `Equip(expected, entity, slot, item, artCheck, insertCheck)` | The original's wield (0x464AE0). Refusals, in order: input, version, no hero (`EquipmentUnavailable`), an item the hero does not hold (`ItemNotAvailable`) or another kind than the saved one (`InventoryMismatch`); NoChange when already in that slot; a `SAP_INSERT_ITEM`, `SAP_REMOVE_ITEM`, `SAP_WIELD_ON` or `SAP_WIELD_OFF` script (`ItemScriptUnsupported`) or item spells (`ItemEffectUnsupported`); the wear check with the hero's race, gender, aptitude and crippled arms from the life domain, then `artCheck` (`WearRefused` with the `EquipmentRefusal`); the no-drop flag of the item, then of the slot's occupant (`WearRefused`, `NotDroppable`); the insert check of the occupant going back to the grid (`InsertRefused`). A ring in the other ring slot moves. One revision. |
 | `Unequip(expected, slot, insertCheck)` | The original's unwield to the grid: NoChange for an empty slot; the no-drop flag, then the insert check. One revision. |
 
@@ -104,8 +104,8 @@ stays as the worth to beat, except in the weapon slot; any other comes off (no-d
 then the choice over the hero's items in creation order (the kit, then the items taken from the world), wielded as by
 `Equip`. The host gives every held item's facts (`SessionWearableLookup`; `SessionEquipmentFacts.Wearable` builds them from
 the stored combat fields, which now also read the script points) and answers the art and insert checks. The hero's weapon
-skill levels come from its stored 0 points under the dexterity cap without the race and gender effects on skills, which the
-session drops (skills are not session state), its tech level is 0, and it carries no ammunition. `SessionEquipBestStep` lists what happened per slot. Refused before any effect: version, no hero, invalid or
+skill levels (melee, bow, throwing, firearms) are its session skills since ARC-SKILLS-002 ([hero skills](hero-skills-runtime.md)), and it carries no
+ammunition. `SessionEquipBestStep` lists what happened per slot. Refused before any effect: version, no hero, invalid or
 mismatched facts, a callback that moved the session. **Project policy:** a chosen item with a move script or item spells
 is not wielded (the session runs neither; the original wears it and runs them): its step names it, the slot keeps what it
 held when the call began (a weapon taken off for the choice goes back on) and the call goes on.
@@ -146,7 +146,7 @@ pack.
 ## Not ready
 
 - **No paperdoll.** The viewer's inventory window has no paperdoll and no host calls `Equip`; the pre-made start wields the
-  kit (ARC-WORLD-034). The best-items choice uses skill levels from 0 points (no skill state) and no ammunition; a custom
+  kit (ARC-WORLD-034). The best-items choice reads the hero's skill levels (ARC-SKILLS-002) and no ammunition; a custom
   character's start (weapon and armour only) and the AI's call with a target are not wired.
 - **NPC equipment.** NPC slots stay the host's (seed inventory locations); `EquipmentRules.Evaluate` serves them too, and
   looting a worn item is still `WornItemUnsupported`.

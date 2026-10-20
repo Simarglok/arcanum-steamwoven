@@ -41,6 +41,7 @@ Largest installed value against each cap; "interiors" are the 80 maps a whole-ma
 | `GameSessionLimits.PolicyMaxChangesPerMap` (was 4,096) | 262,144 | 158,385 objects | arcanum1-024-fixed | 1.7× |
 | `GameSessionLimits.PolicyMaxTotalChanges` (was 16,384) | 524,288 | 276,625 objects | all maps | 1.9× |
 | `GameSessionLimits.PolicyMaxLifeRecords`, `…ReactionRecords`, `…ExperienceRecords` (were 4,096) | 8,192 | 3,792 NPCs | all maps | 2.2× |
+| `GameSessionLimits.PolicyMaxDurabilityRecords` (ARC-WORLD-053: changed and deleted items) | 8,192 | not counted: a policy cap as life, far above the items a playthrough damages; about 1–2 MB of snapshot at the cap | all maps | — |
 | `GameSessionSnapshotCodec.MaxEncodedCharacters` (save file, was 8 MiB) | 96 MiB | about 43 MB estimated | all maps | 2.3× |
 
 Notes on the policy caps:
@@ -52,12 +53,13 @@ Notes on the policy caps:
 - **Changes.** A whole playthrough is sized as a change of every object of the largest map, and
   of every object of every installed map, once. A change is a keyed property value
   ([game session](game-session-runtime.md)); most objects never change, and an object with
-  several changed properties uses several. The census counts sector objects and mobile objects
+  several changed properties uses several (an opened, unlocked or jammed portal or container
+  uses three, ARC-WORLD-050). The census counts sector objects and mobile objects
   of each map's own files (`map.patch` and generated objects are not counted).
 - **NPC records.** Life, reaction and experience records are kept for NPCs the session changed;
   each cap holds a record for every NPC of every installed map. The session's event queue is
-  derived from the life records (four timers each, [event queue](game-event-queue-runtime.md)):
-  33,859 events.
+  derived from the life records (four timers each, [event queue](game-event-queue-runtime.md)),
+  with fixed shares for script calls, timed effects and Lock events: 34,883 events.
 - **Snapshot size.** Raising the count caps needs a larger text cap: 262,144 sector changes
   alone take about 16.8 MB. The estimate of a whole playthrough is a change of every installed
   object under the viewer's 68-character object ids (`oid:` and a SHA-256), about 141 characters

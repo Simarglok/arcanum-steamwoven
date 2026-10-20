@@ -198,7 +198,7 @@ public sealed class EquipmentStateTests
             "\"broken\":false,\"uber\":false,\"light\":0,\"usesShieldLocation\":false,\"hp\":0,\"maxHp\":0,\"weapon\":null," +
             "\"armor\":{\"coverage\":\"Shield\",\"sizes\":0,\"maleOnly\":false,\"femaleOnly\":false,\"ac\":0,\"magicAc\":0," +
             "\"resistances\":[0,0,0,0,0],\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0}}}";
-        var paired = text.Replace("],\"effects\":", shieldJson + "],\"effects\":", StringComparison.Ordinal);
+        var paired = text.Replace("],\"durability\":", shieldJson + "],\"durability\":", StringComparison.Ordinal);
         Assert.AreEqual(GameSessionFailure.InvalidEquipment, GameSessionOwner.Restore(Decode(paired), RestoreOptions()).Failure);
         Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(Decode(paired.Replace("\"handCountFixed\":true", "\"handCountFixed\":false",
             StringComparison.Ordinal)), RestoreOptions()).Failure, "without the fixed hand count they share the hands");
@@ -311,7 +311,7 @@ public sealed class EquipmentStateTests
             "{\"slot\":\"Armor\",\"entity\":\"kit:2\",\"item\":{\"kind\":\"Armor\",\"complexity\":0,\"noDrop\":false,\"broken\":false," +
             "\"uber\":false,\"light\":0,\"usesShieldLocation\":false,\"hp\":0,\"maxHp\":0,\"weapon\":null,\"armor\":{\"coverage\":\"Torso\"," +
             "\"sizes\":2,\"maleOnly\":false,\"femaleOnly\":false,\"ac\":12,\"magicAc\":0,\"resistances\":[4,0,0,0,0]," +
-            "\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0}}}],\"effects\":");
+            "\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0}}}],\"durability\":");
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryEquipment().Worn.ToArray(), restored.QueryEquipment().Worn.ToArray());
         Assert.AreEqual(owner.QueryHeroEquipmentCombat(), restored.QueryHeroEquipmentCombat());
@@ -340,7 +340,7 @@ public sealed class EquipmentStateTests
         var text = GameSessionSnapshotCodec.Encode(saved);
         using var plain = GameSessionOwner.Create(Descriptor()).Owner!;
         var heroless = GameSessionSnapshotCodec.Encode(plain.Capture()).Replace(NoEquipment,
-            text[text.IndexOf(",\"equipment\":[", StringComparison.Ordinal)..text.IndexOf(",\"effects\":", StringComparison.Ordinal)], StringComparison.Ordinal);
+            text[text.IndexOf(",\"equipment\":[", StringComparison.Ordinal)..text.IndexOf(",\"durability\":", StringComparison.Ordinal)], StringComparison.Ordinal);
         Assert.AreEqual(GameSessionFailure.InvalidEquipment, GameSessionOwner.Restore(Decode(heroless), RestoreOptions()).Failure);
     }
 

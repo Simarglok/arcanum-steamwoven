@@ -43,9 +43,12 @@ two readers and stand at F2 or F3: storage, levels, caps, key stats, training ge
 setters, cost and refund, the next point's key stat, the stat-lowering guard and its caller, the tech points side effect,
 the skill effect collections, the Educator update, the skill module (names, the "follower skills" setting, the saved
 gambling roll), the new-character kit and the aptitude formula ([ledger](original-verification-ledger.md#skill-rules-arc-skills-001)
-FA7–FA9, AL5, SR1–SR14). They agree with the reading below. Still F0, apart from the − loop (SK2) and the training
-dispatch (SK3) already read by ARC-RES-048: the editor's + and − buttons, its floor and hint (0x57ACD0, 0x57AEB0, 0x55D3A0, 0x55D6F0, 0x5597C0, 0x55AE70, 0x55BD10; tasks S5, S6), the training sources (0x418CA0,
-0x418DE0, 0x418F30, 0x411940; S16), the dialog skill cases (0x4150D0, 0x415BA0; S4) and everything of sections 5 and 6
+FA7–FA9, AL5, SR1–SR14; since ARC-SKILLS-004 also the dialog skill conditions and the `tr` and `et` actions, [DS1–DS5](original-verification-ledger.md#dialog-skill-gates-arc-skills-004)). They agree with the reading below. The editor's + and − buttons, its floor, snapshot and
+hints (0x57ACD0, 0x57AEB0, 0x55D3A0, 0x55D6F0, 0x5597C0, 0x55AE70) stand at F2 since ARC-WORLD-052
+([ledger CP1–CP12](original-verification-ledger.md#character-point-pool-arc-world-052)), with one correction to section 2: the
+floor does not hold through a − click whose level an effect pins (CP6). Still F0, apart from the − loop (SK2) and the training
+dispatch (SK3) already read by ARC-RES-048: the sheet's skill page (0x55BD10; task S6), the training sources (0x418CA0,
+0x418DE0, 0x418F30, 0x411940; S16), and everything of sections 5 and 6
 (the check and the uses; S3 and later).
 
 No original file, probe or game data was read for the research work item ARC-RES-044 itself. Original
@@ -165,7 +168,9 @@ that would go below the value accepted when the editor opened
 "skill at maximum" when the level is already 20 and "stat too low" otherwise;
 the stat hint shows the key stat needed for the next point
 (hint (0x55AE70)). The basic − path loops until the visible level
-changes; see SK2.
+changes; see SK2. The floor is tested only before the loop, so when an effect
+holds the level the click passes it (ledger CP6, an original bug; Steamwoven
+stops at the floor in both modes, [character point pool](../world/character-point-pool.md)).
 
 **Auto-level** (auto level (0x4A76B0, 0x4A77A0)). A scheme step "skill N" buys points
 until the level reaches N; when a point is refused it raises the key stat by
@@ -447,10 +452,14 @@ would not buy; a master can buy "won't sell" and worn items
 Dialog `ps` compares the PC's effective level with a threshold (positive: at
 least, negative: at most) (conditions (0x4150D0)). Expert +1 maximum
 followers (followers (0x4B0490)); Master: every follow and leader check
-succeeds (follow (0x4AD950), leader (0x4ADB50)); Apprentice with
-extraordinary charisma lengthens a follower's "wait here" by one step
-(wait (0x4AA7A0)). Steamwoven already models the follower rules with the
-training as a caller fact ([follow consent](../../src/Arcanum.Simulation/Party/FollowConsentRules.cs)).
+succeeds (follow (0x4AD950), leader (0x4ADB50)); any persuasion training of
+the leader lengthens a follower's "wait here" by one step, unless its charisma is
+extraordinary, when no wait ends (wait (0x4AA7A0); this summary first said
+"apprentice with extraordinary charisma", which the executable does not do,
+[ledger HK2](original-verification-ledger.md#hero-skills-arc-skills-002)).
+Steamwoven models the follow rules ([follow consent](../../src/Arcanum.Simulation/Party/FollowConsentRules.cs)),
+and since ARC-SKILLS-002 the session reads the hero's persuasion training itself
+([hero skills](../world/hero-skills-runtime.md)).
 
 ### Dialog and scripts
 

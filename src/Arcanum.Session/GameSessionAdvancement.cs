@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using Arcanum.Data.Characters;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Skills;
 
 namespace Arcanum.Session;
 
@@ -98,6 +99,25 @@ public sealed class SessionAutoLevelRules
 /// </summary>
 public sealed record SessionNpcAdvancement(string Entity, AdvancementSheet Sheet, int AutoLevelScheme);
 
+/// <summary>
+/// Whose auto-level scheme a script sets (SCR action 139, ARC-SCRIPT-016): the hero, or an NPC with its map data (sheet and scheme,
+/// read only while the session has no record of it).
+/// </summary>
+public sealed class SessionSchemeTarget
+{
+    private SessionSchemeTarget(SessionNpcAdvancement? npc) => Npc = npc;
+
+    public static SessionSchemeTarget Hero { get; } = new(null);
+
+    public static SessionSchemeTarget ForNpc(SessionNpcAdvancement loaded) => new(loaded ?? throw new ArgumentNullException(nameof(loaded)));
+
+    /// <summary>The NPC's loaded record, or null for the hero.</summary>
+    public SessionNpcAdvancement? Npc { get; }
+}
+
+/// <summary>A scheme change: the scheme the target holds after the call (null for a refusal).</summary>
+public sealed record SessionSchemeResult(GameSessionDisposition Disposition, GameSessionFailure Failure, int? Scheme, GameSessionVersion Version);
+
 /// <summary>Saved advancement records of the NPCs the session levelled, in ordinal entity order (snapshot schema 20).</summary>
 public sealed class SessionAdvancementState
 {
@@ -147,17 +167,22 @@ internal sealed class AdvancementDomain(SessionAutoLevelRules? rules)
         });
 
     /// <summary>
-    /// The changes the hero's purchases read: the stat changes of every effect its character owner holds (innate ones
-    /// included), the skill and maxima changes of its durable effects, and its poison level.
+    /// The changes the hero's purchases and skill levels read: the stat changes of every effect its character owner holds
+    /// (innate ones included), the skill changes of its race and gender effects (ARC-SKILLS-002) and of its durable effects, the
+    /// maxima changes of its durable effects, and its poison level.
     /// </summary>
-    internal static AdvancementModifiers HeroModifiers(CharacterStatsOwner stats, EffectDomain effects, int poisonLevel)
+    internal static AdvancementModifiers HeroModifiers(HeroDomain hero, EffectDomain effects, int poisonLevel)
     {
-        var applied = stats.Query(new(0)).Snapshot!.AppliedEffects;
+        var applied = hero.Stats.Query(new(0)).Snapshot!.AppliedEffects;
         var changes = effects.Entries.SelectMany(entry => effects.Definitions[entry.Number].Changes).ToArray();
-        static SkillModifier[] Skills(IEnumerable<EffectChange> changes, EffectAttributeKind kind) =>
-            [.. changes.Where(c => c.Kind == kind).Select(c => new SkillModifier(c.Attribute, EffectDomain.Operator(c.Operator), c.Value))];
-        return new([.. applied.SelectMany(effect => effect.Definition.Modifiers)], [.. Skills(changes, EffectAttributeKind.BasicSkill)],
-            [.. Skills(changes, EffectAttributeKind.TechSkill)], effects.Maximum(EffectSpecial.MaxHitPoints), effects.Maximum(EffectSpecial.MaxFatigue),
+        SkillModifier[] Skills(EffectAttributeKind kind, bool tech) =>
+        [
+            .. hero.State.InnateSkills.Where(c => SkillRules.IsTech(c.Skill) == tech)
+                .Select(c => new SkillModifier(SkillRules.FamilyIndex(c.Skill), c.Operator, c.Value)),
+            .. changes.Where(c => c.Kind == kind).Select(c => new SkillModifier(c.Attribute, EffectDomain.Operator(c.Operator), c.Value)),
+        ];
+        return new([.. applied.SelectMany(effect => effect.Definition.Modifiers)], [.. Skills(EffectAttributeKind.BasicSkill, false)],
+            [.. Skills(EffectAttributeKind.TechSkill, true)], effects.Maximum(EffectSpecial.MaxHitPoints), effects.Maximum(EffectSpecial.MaxFatigue),
             poisonLevel);
     }
 }
@@ -211,6 +236,47 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, up, outcome, next, Version);
     }
 
+    /// <summary>
+    /// SCR action 139 (ARC-SCRIPT-016, ledger OL30): the target's auto-level scheme becomes <paramref name="scheme"/> (0x4A6D90 writes
+    /// a PC's or an NPC's scheme field). Nothing is bought now: the hero's scheme runs at its next level step, an NPC's when its level
+    /// rises (AL12), and a number without a rule then buys nothing, so the hero's points stay unspent. An NPC without a record gets one
+    /// from its loaded sheet. The original stores any number; the session keeps schemes within 0..199 (its snapshot bound, the numbers
+    /// the source looks up), so a number outside is refused here, a documented deviation that no installed script reaches. Refused, in
+    /// order: no hero for a hero target (<see cref="GameSessionFailure.AdvancementUnavailable"/>); a number outside 0..199 or an
+    /// invalid loaded record (<see cref="GameSessionFailure.InvalidAdvancement"/>); the version; a new record beyond the budget; the
+    /// revision. The same scheme is <see cref="GameSessionDisposition.NoChange"/>.
+    /// </summary>
+    [Simulation.OriginalFunction(0x4A6D90, Simulation.OriginalFunctionScope.Partial)]
+    public SessionSchemeResult SetAutoLevelScheme(GameSessionVersion expected, SessionSchemeTarget target, int scheme)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.Npc is null && _hero is null) return RejectScheme(GameSessionFailure.AdvancementUnavailable);
+        if (scheme is < 0 or > SessionAdvancementLimits.MaxScheme || (target.Npc is { } loaded && !AdvancementDomain.Valid(loaded)))
+            return RejectScheme(GameSessionFailure.InvalidAdvancement);
+        if (!IsCurrent(expected)) return RejectScheme(GameSessionFailure.StaleVersion);
+        if (target.Npc is not { } npc)
+        {
+            var hero = _hero!.State;
+            if (hero.Advancement.AutoLevelScheme == scheme) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, scheme, Version);
+            if (_revision == long.MaxValue) return RejectScheme(GameSessionFailure.RevisionExhausted);
+            _hero.Apply(hero.With([.. hero.Stats], hero.Level, hero.Experience, hero.UnspentPoints, hero.Advancement with { AutoLevelScheme = scheme }));
+        }
+        else
+        {
+            var saved = _advancement.Npcs.TryGetValue(npc.Entity, out var existing) ? existing : null;
+            var record = saved ?? npc;
+            if (record.AutoLevelScheme == scheme) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, scheme, Version);
+            if (saved is null && _advancement.Npcs.Count >= _limits.MaxAdvancementRecords) return RejectScheme(GameSessionFailure.BudgetExceeded);
+            if (_revision == long.MaxValue) return RejectScheme(GameSessionFailure.RevisionExhausted);
+            _advancement.Npcs[npc.Entity] = record with { AutoLevelScheme = scheme };
+        }
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, scheme, Version);
+    }
+
+    private SessionSchemeResult RejectScheme(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, new(_identity, _revision));
+
     private SessionFollowerLevelResult RejectFollower(GameSessionFailure failure) =>
         new(GameSessionDisposition.Rejected, failure, null, null, null, new(_identity, _revision));
 
@@ -223,7 +289,7 @@ public sealed partial class GameSessionOwner
     internal static AutoLevelOutcome? CreationScheme(HeroDomain hero, SessionAutoLevelRules? rules)
     {
         if (rules?.Scheme(hero.State.Advancement.AutoLevelScheme) is not { } scheme) return null;
-        var modifiers = AdvancementDomain.HeroModifiers(hero.Stats, new EffectDomain(), 0);
+        var modifiers = AdvancementDomain.HeroModifiers(hero, new EffectDomain(), 0);
         var outcome = AutoLevelRules.Apply(AdvancementDomain.HeroSheet(hero.State), modifiers, scheme, null, npc: false, rules.SpellWillpower);
         return AdvancementDomain.HeroBounded(outcome.Sheet) ? outcome : null;
     }
