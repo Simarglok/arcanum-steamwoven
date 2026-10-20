@@ -184,4 +184,27 @@ public sealed class AreaScenePlanTests
         Assert.ThrowsExactly<ArgumentException>(()=>TerrainViewerArguments.Parse(args.Concat(new[]{"--area-patch","second"}).ToArray()));
         Assert.ThrowsExactly<ArgumentException>(()=>TerrainViewerArguments.Parse(["--mode","world-diagnostic","--module","m","--resource","r","--actor-resource","a","--prototypes","p","--area-effects","e","--source-id","s"]));
     }
+
+    [TestMethod]
+    public void A_body_whose_art_id_names_no_art_is_suppressed_without_a_command()
+    {
+        // ARC-DATA-038: a core, unsuppressed scenery body with no visual and ART id 0xFFFFFFFF (ledger NA1) is covered as
+        // Suppressed "NoArt" and draws nothing; another type-15 id, or a wall with that id, still requires a visual.
+        var drawn = AreaCompositionFixture.Body(0);
+        var visual = AreaCompositionFixture.Visual(drawn, 160, 160, 40, 80);
+        AreaObjectRecord WithArt(int index, long art, int type = 3)
+        {
+            var body = AreaCompositionFixture.Body(index);
+            var fields = body.EffectiveFields.Append(AreaCompositionFixture.Field(0, art)).ToArray();
+            return body with { Type = type, DirectFields = fields, EffectiveFields = fields };
+        }
+        var none = WithArt(1, unchecked((int)uint.MaxValue));
+        var plan = AreaScenePlan.Create([], [drawn, none], [visual]);
+        Assert.AreEqual(1, plan.Commands.Count);
+        Assert.IsFalse(plan.Commands.Any(c => c.Identity == none.Key));
+        var row = plan.Coverage.Single(c => c.Identity == none.Key);
+        Assert.AreEqual((RenderDisposition.Suppressed, "NoArt", (AreaVisualKey?)null), (row.Disposition, row.Reason, row.Visual));
+        foreach (var refused in new[] { WithArt(2, unchecked((int)0xF0000000u)), WithArt(3, unchecked((int)uint.MaxValue), type: 0) })
+            Assert.AreEqual("AREA_VISUAL_REQUIRED", Assert.ThrowsExactly<InvalidOperationException>(() => AreaScenePlan.Create([], [drawn, refused], [visual])).Message);
+    }
 }

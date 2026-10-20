@@ -59,18 +59,32 @@ public sealed record MapTransitionSite(MapTransitionTrigger Trigger, WorldLocati
     public bool Unconditional => Guards == MapTransitionGuard.None;
 }
 
+/// <summary>
+/// ARC-SCRIPT-017: one tile or sector script of a map as its sector file places it, teleport or not: the trigger
+/// (<see cref="MapTransitionTrigger.TileEntry"/> or <see cref="MapTransitionTrigger.SectorEntry"/>), the sector, the tile
+/// index in it (−1 for the sector script), the tile (the sector origin for a sector script), and the attachment: its
+/// header flags, counters and script number. The original finds a tile's script by its tile index, the first node of the
+/// sector's list, and tests no node flag (tile script 0x4C0980, sector list lookup 0x4F6570).
+/// </summary>
+public sealed record MapPlacedScript(MapTransitionTrigger Trigger, WorldSectorCoordinate Sector, int Tile, WorldLocation Location, uint LocalFlags,
+    uint Counters, int Script);
+
 /// <summary>The transitions of one map and the reads that failed (a refused map file, sector, mobile file, prototype or
 /// script drops only what depends on it; a call graph over <see cref="MapTransitions.MaxVisits"/> is a
 /// <see cref="WorldIssueCode.LimitExceeded"/> for its script).</summary>
 public sealed class MapTransitionSet
 {
-    internal MapTransitionSet(WorldMap map, MapListEntry? entry, IReadOnlyList<MapTransitionSite> sites, IReadOnlyList<WorldIssue> issues)
-    { Map = map; Entry = entry; Sites = sites; Issues = issues; }
+    internal MapTransitionSet(WorldMap map, MapListEntry? entry, IReadOnlyList<MapTransitionSite> sites, IReadOnlyList<WorldIssue> issues,
+        IReadOnlyList<MapPlacedScript>? placed = null)
+    { Map = map; Entry = entry; Sites = sites; Issues = issues; Placed = placed ?? []; }
     public WorldMap Map { get; }
     /// <summary>The map's map-list row; null for an unlisted map (its sites then have no destination of their own map).</summary>
     public MapListEntry? Entry { get; }
     public IReadOnlyList<MapTransitionSite> Sites { get; }
     public IReadOnlyList<WorldIssue> Issues { get; }
+    /// <summary>ARC-SCRIPT-017: every tile and sector script of the map's own sector files (script 0 left out), in sector
+    /// file and node order, whether it teleports or not.</summary>
+    public IReadOnlyList<MapPlacedScript> Placed { get; }
     public IEnumerable<MapTransitionSite> Unconditional => Sites.Where(s => s.Unconditional);
 }
 
@@ -102,6 +116,7 @@ public static class MapTransitions
         var entry = list.Find(map.Name);
         var issues = new List<WorldIssue>();
         var sites = new List<MapTransitionSite>();
+        var placed = new List<MapPlacedScript>();
         var reader = new ScriptGraph(scripts, issues);
         issues.AddRange(map.Issues);
 
@@ -170,16 +185,23 @@ public static class MapTransitions
             {
                 // Node: flags, tile index, the attachment's header flags and counters, script number, spare.
                 if (tile.Count < 5 || tile[1] is < 0 or >= 4096) { issues.Add(new(WorldIssueCode.Malformed, sector.Path, null, "tile script tile")); continue; }
-                Attachment(MapTransitionTrigger.TileEntry, new(coordinate.X * 64L + (tile[1] & 63), coordinate.Y * 64L + (tile[1] >> 6)), null, 0, tile[4]);
+                var at = new WorldLocation(coordinate.X * 64L + (tile[1] & 63), coordinate.Y * 64L + (tile[1] >> 6));
+                if (tile[4] != 0) placed.Add(new(MapTransitionTrigger.TileEntry, coordinate, tile[1], at, unchecked((uint)tile[2]), unchecked((uint)tile[3]), tile[4]));
+                Attachment(MapTransitionTrigger.TileEntry, at, null, 0, tile[4]);
             }
             // Sector script: the attachment's header flags and counters, then its number.
-            if (sector.SectorScript is { Count: 3 } own) Attachment(MapTransitionTrigger.SectorEntry, new(coordinate.X * 64L, coordinate.Y * 64L), null, 0, own[2]);
+            if (sector.SectorScript is { Count: 3 } own)
+            {
+                var origin = new WorldLocation(coordinate.X * 64L, coordinate.Y * 64L);
+                if (own[2] != 0) placed.Add(new(MapTransitionTrigger.SectorEntry, coordinate, -1, origin, unchecked((uint)own[0]), unchecked((uint)own[1]), own[2]));
+                Attachment(MapTransitionTrigger.SectorEntry, origin, null, 0, own[2]);
+            }
             for (var index = 0; index < sector.Objects.Count; index++) Object(sector.Objects[index], coordinate, index);
         }
         var mobiles = catalog.ReadMobiles(map);
         issues.AddRange(mobiles.Issues);
         for (var index = 0; index < mobiles.Objects.Count; index++) Object(mobiles.Objects[index], null, index);
-        return new(map, entry, sites.AsReadOnly(), issues.AsReadOnly());
+        return new(map, entry, sites.AsReadOnly(), issues.AsReadOnly(), placed.AsReadOnly());
     }
 
     private enum Reach { Unreached, Conditional, Always }

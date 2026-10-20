@@ -75,22 +75,39 @@ public readonly record struct SessionPcItem(string Entity, SessionMapId Origin, 
 /// no map; in the PC's inventory they precede every item it took from the world.</summary>
 public readonly record struct SessionKitItem(string Entity, SessionItemKind Kind);
 
+/// <summary>An item the hero made from a schematic (ARC-TECHNOLOGY-004): entity <c>made:n</c> and its saved kind. Made items came
+/// from no map; in the hero's inventory they follow the items it took from the world.</summary>
+public readonly record struct SessionMadeItem(string Entity, SessionItemKind Kind)
+{
+    internal const string Prefix = "made:";
+
+    /// <summary>The number n of <c>made:n</c> (1 or more), or null for any other entity.</summary>
+    internal static int? Number(string entity) =>
+        entity.StartsWith(Prefix, StringComparison.Ordinal) && int.TryParse(entity.AsSpan(Prefix.Length), System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var n) && n >= 1 && entity == EntityOf(n) ? n : null;
+
+    internal static string EntityOf(int number) => Prefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+}
+
 /// <summary>
 /// Saved inventory state: the PC's gold (ARC-WORLD-015: the hero's starting coins; 0 without a hero), the hero's starting
-/// kit in kit order, and the items the PC took from the world in the order they entered its list.
+/// kit in kit order, the items the PC took from the world in the order they entered its list, and (ARC-TECHNOLOGY-004) the
+/// items the hero made from schematics, in the order they were made.
 /// </summary>
 public sealed class SessionInventoryState
 {
-    internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc)
+    internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made)
     {
         Gold = gold;
         Kit = Array.AsReadOnly(kit);
         Pc = Array.AsReadOnly(pc);
+        Made = Array.AsReadOnly(made);
     }
 
     public int Gold { get; }
     public IReadOnlyList<SessionKitItem> Kit { get; }
     public IReadOnlyList<SessionPcItem> Pc { get; }
+    public IReadOnlyList<SessionMadeItem> Made { get; }
 }
 
 public sealed record SessionInventoryItem(string Entity, SessionItemFacts Facts);
@@ -199,10 +216,18 @@ internal sealed class InventoryDomain
     internal int Gold { get; set; }
     internal List<SessionKitItem> Kit { get; } = [];
     internal List<SessionPcItem> Pc { get; } = [];
+    internal List<SessionMadeItem> Made { get; } = [];
     internal HashSet<string> Taken { get; } = new(StringComparer.Ordinal);
 
-    /// <summary>Items the PC holds: the kit and the taken items (the bound of <see cref="GameSessionLimits.MaxPcItems"/>).</summary>
-    internal int Held => Kit.Count + Pc.Count;
+    /// <summary>Items the PC holds: the kit, the taken and the made items (the bound of <see cref="GameSessionLimits.MaxPcItems"/>).</summary>
+    internal int Held => Kit.Count + Pc.Count + Made.Count;
+
+    /// <summary>A made item is also recorded as taken, so no seed can list it.</summary>
+    internal void Add(SessionMadeItem item)
+    {
+        Made.Add(item);
+        Taken.Add(item.Entity);
+    }
 
     internal void Add(SessionPcItem item)
     {
@@ -217,7 +242,7 @@ internal sealed class InventoryDomain
         Taken.Add(item.Entity);
     }
 
-    internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray());
+    internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray());
 
     /// <summary>The map's current inventory; an NPC holder is dead when its seed says so or <paramref name="killed"/> (the session's
     /// life records, ARC-COMBAT-005) does.</summary>

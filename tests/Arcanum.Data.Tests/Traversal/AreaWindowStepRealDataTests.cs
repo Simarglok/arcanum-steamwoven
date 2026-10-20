@@ -104,6 +104,32 @@ public sealed class AreaWindowStepRealDataTests
             Assert.AreEqual(1L, Math.Max(Math.Abs(route.Cells[i].X - route.Cells[i - 1].X), Math.Abs(route.Cells[i].Y - route.Cells[i - 1].Y)), $"step {i}");
         // Far longer than the straight line (2,750 cells): the way off the plateau goes south first.
         Assert.IsTrue(route.Cells.Count > 2751 && sectors > 40, $"cells {route.Cells.Count} sectors {sectors}");
+    public void Every_arrival_on_the_main_map_opens_a_complete_window()
+    {
+        // ARC-DATA-038: every transition of any listed map into the main map (runtime 1), guarded or not, arrives in a window
+        // that loads complete, with step evidence admitting the arrival. A window around Caladon (1603, 1825) held scenery whose
+        // ART id is 0xFFFFFFFF and was refused whole before.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DAT_ROOT"))) Assert.Inconclusive("DAT_ROOT is required.");
+        using var stack = Stack();
+        var catalog = WorldCatalog.Open(stack);
+        var list = MapList.Read(stack);
+        using var scripts = Arcanum.Data.Scripts.ScriptContent.Over(stack);
+        var arrivals = new List<WorldLocation>();
+        foreach (var map in catalog.Maps.Where(m => m.SectorFiles.Count > 0 && list.Find(m.Name) is not null))
+            arrivals.AddRange(MapTransitions.Read(catalog, list, map, scripts).Sites.Where(s => s.DestinationRuntime == 1).Select(s => s.Arrival));
+        var centres = arrivals.Distinct().GroupBy(a => WorldSectorCoordinate.Containing(a)).ToArray();
+        Console.WriteLine($"ARC-DATA-038 arrivals={arrivals.Count} distinct={arrivals.Distinct().Count()} windows={centres.Length}");
+        Assert.IsTrue(centres.Length > 1, "arrivals beyond the Crash Site");
+        foreach (var centre in centres)
+        {
+            var planned = AreaMapPlans.CreateWindow(stack, catalog, MainMap, centre.Key);
+            Assert.AreEqual(AreaMapPlanStatus.Ready, planned.Status, $"{centre.Key} {planned.Detail}");
+            using var owner = planned.Plan!.Open();
+            var inspection = owner.Inspect();
+            Assert.IsTrue(inspection.IsComplete, $"{centre.Key}: {string.Join(", ", inspection.Issues)}");
+            var steps = AreaStepInspector.InspectWholeMap(inspection.Snapshot!, stack, planned.Plan.Map.AggregatePath, 7);
+            foreach (var arrival in centre) Assert.IsTrue(steps.IsAdmitted(new(arrival.X, arrival.Y)), $"{centre.Key} {arrival}");
+        }
     }
 
     private static string Terrain(AreaStepTerrainEvidence? e) => e is null ? "-" : $"{e.RawArt}|{e.Coverage}|{e.Disposition}|{e.Source}|{e.ReasonCode}";

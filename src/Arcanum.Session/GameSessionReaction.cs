@@ -1,3 +1,4 @@
+using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Reaction;
 
@@ -14,7 +15,8 @@ public readonly record struct SessionReaction(string Entity, int? Remembered, in
     /// <summary>The source's stored value: the conversation slot, else the remembered slot, else the base.</summary>
     public int Stored(int baseReaction) => Conversation ?? Remembered ?? baseReaction;
 
-    public bool MetBefore => Remembered.HasValue;
+    /// <summary>The source's "met before" (0x4C0C40): the remembered slot only, so not during the first conversation.</summary>
+    public bool MetBefore { [OriginalFunction(0x4C0C40, OriginalFunctionScope.Partial)] get => Remembered.HasValue; }
     public bool InConversation => Conversation.HasValue;
     internal bool IsBaseline => Remembered is null && Conversation is null;
 }
@@ -172,6 +174,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>The conversation ends (R5): the stored value goes to the remembered slot and the conversation slot is cleared,
     /// so the NPC has met the PC. As in the source this also remembers the PC when no conversation was open.</summary>
+    [OriginalFunction(0x4C10A0, OriginalFunctionScope.Partial)]
     public SessionReactionResult EndReactionConversation(GameSessionVersion expected, string entity, ReactionNpcFacts npc)
     {
         ThrowIfDisposed();

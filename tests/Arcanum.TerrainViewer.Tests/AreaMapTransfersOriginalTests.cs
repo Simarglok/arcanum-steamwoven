@@ -51,7 +51,7 @@ public sealed class AreaMapTransfersOriginalTests
         // The 17 jump-point cells of the map, all on the same map (ARC-RES-035).
         Assert.AreEqual(17, transfers.TriggerCells.Count(cell => transfers.CellSite(cell)!.Trigger == MapTransitionTrigger.JumpPoint));
         var cell = transfers.TriggerCells.First(c => transfers.CellSite(c)!.Trigger == MapTransitionTrigger.JumpPoint && map.Steps.IsAdmitted(new(transfers.CellSite(c)!.Arrival.X, transfers.CellSite(c)!.Arrival.Y)));
-        var entered = transfers.Enter(cell)!;
+        var entered = transfers.Enter(cell)[0];
         Assert.AreEqual(AreaUseOutcome.Accepted, entered.Outcome, entered.Reason);
         Assert.IsTrue(transfers.Pending!.SameMap);
     }

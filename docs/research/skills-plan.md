@@ -202,6 +202,10 @@ Depends on: S2.
 ### Wave 2: after wave 1
 
 **S5 Buying and refunding character points** (rest of K1; a `WORLD` code).
+**Built by ARC-WORLD-052** (2026-10-21, [contract](../world/character-point-pool.md), ledger
+[CP1–CP12](original-verification-ledger.md#character-point-pool-arc-world-052)): the pool covers stats, hit and fatigue
+points and both skill families; spell ranks and tech degrees plug in through a lane (MT3, TECH-2); the − click is an
+option for S6, by default the original's "until the level changes", which stops at the floor in both modes (CP6).
 Result: the session's one spend-a-point / refund-a-point path over the hero's
 unspent points with the accepted floor, for basic and tech skills and primary
 stats; the magic lane's spell ranks use the same path.

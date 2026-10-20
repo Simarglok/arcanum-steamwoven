@@ -277,8 +277,9 @@ public partial class TerrainViewerApp
     /// </summary>
     private void SyncAreaAwards()
     {
-        if (_conversationHost?.State.TakeAwards() is not { Count: > 0 } awards) return;
-        foreach (var award in awards) LevelAreaFollowers(award);
+        // ARC-WORLD-048: a visitor's talk queues its awards on its own host.
+        foreach (var host in TalkHosts().ToArray())
+        foreach (var award in host.State.TakeAwards()) LevelAreaFollowers(award);
     }
 
     private void LevelAreaFollowers(SessionExperienceAward? award)
@@ -294,6 +295,12 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-WORLD-036 follower-level entity={follower.Record!.Entity} level={follower.Level!.Value.Level}"
                 + $" points={follower.Level.Value.PointsGained} purchases={follower.Scheme?.Purchases.Length ?? 0} completed={follower.Scheme?.Completed}");
     }
+
+    /// <summary>ARC-SCRIPT-016: an NPC's advancement as its home map stores it, for a script's scheme change; null without the combat
+    /// host or the effect rules (no <c>--hero</c>), or for an object that gives no admissible NPC sheet.</summary>
+    private SessionNpcAdvancement? AreaNpcAdvancement(string entity) =>
+        _combatHost is { } host && _areaEffectRules is { } effects && host.HomeMap(entity) is { } home && host.Fields(home, entity) is { } fields
+            ? AreaAdvancement.Npc(entity, fields, effects)?.Loaded : null;
 
     /// <summary>Stops the attack goal (a new click, the stick, a dialog, the map or the hero's state); <paramref name="why"/>
     /// goes to the status line.</summary>

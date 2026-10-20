@@ -40,7 +40,7 @@ public static class GameSessionSnapshotCodec
     /// it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
     public const int MaxEncodedCharacters = 96 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "sound", "events", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "sound", "events", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -66,10 +66,13 @@ public static class GameSessionSnapshotCodec
         "Gambling", "Haggle", "Heal", "Persuasion", "Repair", "Firearms", "PickLocks", "DisarmTraps"];
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
-    private static readonly string[] InventoryFields = ["gold", "kit", "pc"];
+    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made"];
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
     private static readonly string[] WornFields = ["slot", "entity", "item"];
+    private static readonly string[] DurabilityFields = ["items", "destroyed"];
+    private static readonly string[] SchematicsFields = ["found"];
+    private static readonly string[] ItemConditionFields = ["entity", "points", "adjustment", "damage", "broken", "inventoryArtBroken"];
     private static readonly string[] EquipmentItemFields = ["kind", "complexity", "noDrop", "broken", "uber", "light", "usesShieldLocation",
         "hp", "maxHp", "weapon", "armor"];
     private static readonly string[] EquipmentWeaponFields = ["twoHanded", "handCountFixed", "ignoresResistance", "damagesArmor", "skill",
@@ -307,11 +310,48 @@ public static class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+            w.WriteStartArray("made");
+            foreach (var item in snapshot.Inventory.Made)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", item.Entity);
+                w.WriteString("type", ItemTypeName(item.Kind.Type));
+                w.WriteNumber("prototype", item.Kind.Prototype);
+                w.WriteNumber("name", item.Kind.Name);
+                w.WriteNumber("description", item.Kind.Description);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
             w.WriteEndObject();
 
             w.WriteStartArray("equipment");
             foreach (var worn in snapshot.Equipment.Worn) WriteWorn(w, worn);
             w.WriteEndArray();
+
+            w.WriteStartObject("durability");
+            w.WriteStartArray("items");
+            foreach (var item in snapshot.Durability.Items)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", item.Entity);
+                w.WriteNumber("points", item.Condition.Points);
+                w.WriteNumber("adjustment", item.Condition.Adjustment);
+                w.WriteNumber("damage", item.Condition.Damage);
+                w.WriteBoolean("broken", item.Condition.Broken);
+                w.WriteBoolean("inventoryArtBroken", item.Condition.InventoryArtBroken);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("destroyed");
+            foreach (var entity in snapshot.Durability.Destroyed) w.WriteStringValue(entity);
+            w.WriteEndArray();
+            w.WriteEndObject();
+
+            w.WriteStartObject("schematics");
+            w.WriteStartArray("found");
+            foreach (var number in snapshot.Schematics.Found) w.WriteNumberValue(number);
+            w.WriteEndArray();
+            w.WriteEndObject();
 
             w.WriteStartObject("effects");
             w.WriteStartArray("hero");
@@ -583,7 +623,7 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
@@ -1089,7 +1129,18 @@ public static class GameSessionSnapshotCodec
             if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             pc[i] = new(entity, new(Int(item["map"], path + ".map", 1, int.MaxValue)), Kind(item, path));
         }
-        return new(gold, kit, pc);
+        var madeItems = Array(f["made"], p + ".made", GameSessionLimits.PolicyMaxPcItems);
+        if (kit.Length + items.Length + madeItems.Length > GameSessionLimits.PolicyMaxPcItems) throw new DecodeException(SnapshotDecodeFailure.BudgetExceeded, p + ".made");
+        var made = new SessionMadeItem[madeItems.Length];
+        for (var i = 0; i < madeItems.Length; i++)
+        {
+            var path = $"{p}.made[{i}]";
+            var item = Fields(madeItems[i], path, KitItemFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            made[i] = new(entity, Kind(item, path));
+        }
+        return new(gold, kit, pc, made);
     }
 
     private static void WriteWorn(Utf8JsonWriter w, SessionWornItem worn)
@@ -1193,6 +1244,47 @@ public static class GameSessionSnapshotCodec
             worn[i] = new(slot, entity, EquipmentItemValue(f["item"], path + ".item"));
         }
         return new(worn);
+    }
+
+    // The found numbers in registration order (not sorted); repeats, the hero's presence and the limit are Restore's.
+    private static SessionSchematicState Schematics(JsonElement element)
+    {
+        const string p = "$.schematics";
+        var f = Fields(element, p, SchematicsFields);
+        var rows = Array(f["found"], p + ".found", GameSessionLimits.PolicyMaxFoundSchematics);
+        var found = new int[rows.Length];
+        for (var i = 0; i < rows.Length; i++) found[i] = Int(rows[i], $"{p}.found[{i}]", int.MinValue, int.MaxValue);
+        return new([.. found]);
+    }
+
+    // Shapes, ranges and strictly ascending ordinal entities in each list; the record budget, a deleted item with a record and the
+    // lists' agreement with the inventory and the worn items are Restore's.
+    private static SessionDurabilityState Durability(JsonElement element)
+    {
+        const string p = "$.durability";
+        const int m = Arcanum.Simulation.Items.ItemDurabilityLimits.MaxMagnitude;
+        var f = Fields(element, p, DurabilityFields);
+        var rows = Array(f["items"], p + ".items", GameSessionLimits.PolicyMaxDurabilityRecords);
+        var items = new SessionItemDurability[rows.Length];
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var path = $"{p}.items[{i}]";
+            var item = Fields(rows[i], path, ItemConditionFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (i > 0 && string.CompareOrdinal(entity, items[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            items[i] = new(entity, new(Int(item["points"], path + ".points", -m, m), Int(item["adjustment"], path + ".adjustment", -m, m),
+                Int(item["damage"], path + ".damage", 0, Arcanum.Simulation.Items.ItemDurabilityLimits.MaxDamage),
+                Bool(item["broken"], path + ".broken"), Bool(item["inventoryArtBroken"], path + ".inventoryArtBroken")));
+        }
+        var listed = Array(f["destroyed"], p + ".destroyed", GameSessionLimits.PolicyMaxDurabilityRecords);
+        var destroyed = new string[listed.Length];
+        for (var i = 0; i < listed.Length; i++)
+        {
+            var path = $"{p}.destroyed[{i}]";
+            destroyed[i] = Entity(listed[i], path);
+            if (i > 0 && string.CompareOrdinal(destroyed[i], destroyed[i - 1]) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+        }
+        return new(items, destroyed);
     }
 
     // Shapes, names and ranges, definitions by strictly ascending number; causes, rules in use and the hero's presence are Restore's.

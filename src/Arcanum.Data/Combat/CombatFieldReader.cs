@@ -20,7 +20,7 @@ public static class CombatFieldReader
 {
     /// <summary>The stored ammunition type of a weapon that uses none.</summary>
     public const int NoAmmo = 10000;
-    public const int WeaponType = 5, AmmoType = 6, ArmorType = 7, GenericType = 14, PcType = 15, NpcType = 16;
+    public const int WeaponType = 5, AmmoType = 6, ArmorType = 7, WrittenType = 13, GenericType = 14, PcType = 15, NpcType = 16;
     public const int DamageTypes = 5, Resistances = 5, ItemSpells = 5, BaseStats = 28, BasicSkills = 12, TechSkills = 4, SpellTech = 25;
 
     // Common block.
@@ -40,6 +40,8 @@ public static class CombatFieldReader
     // Armour block (59..70).
     private const int ArmorFlagsSlot = 59, AcAdjustmentSlot = 61, MagicAcAdjustmentSlot = 62, ResistanceAdjustmentSlot = 63,
         MagicResistanceAdjustmentSlot = 64, SilentMoveSlot = 65, MagicSilentMoveSlot = 66, UnarmedBonusSlot = 67;
+    // Written block (59..66, ARC-TECHNOLOGY-003): flags, subtype, first and last text line, then pads.
+    private const int WrittenFlagsSlot = 59, WrittenSubtypeSlot = 60, WrittenStartLineSlot = 61, WrittenEndLineSlot = 62;
     // Generic block (59..63).
     private const int GenericFlagsSlot = 59, UsageBonusSlot = 60, UsageCountSlot = 61;
     // Critter block (36..68).
@@ -192,7 +194,9 @@ public static class CombatFieldReader
                 Int(MagicSilentMoveSlot), Int(UnarmedBonusSlot));
         else if (type == GenericType)
             generic = new(Flags(GenericFlagsSlot), Int(UsageBonusSlot), Int(UsageCountSlot));
-        return new(origin, common, item, weapon, ammo, armor, generic, null, null);
+        CombatWrittenFields? written = type == WrittenType
+            ? new(Flags(WrittenFlagsSlot), Int(WrittenSubtypeSlot), Int(WrittenStartLineSlot), Int(WrittenEndLineSlot)) : null;
+        return new(origin, common, item, weapon, ammo, armor, generic, null, null) { Written = written };
     }
 
     // The two parallel effect arrays: keys 0..n−1 in both, one word each; an absent or null array is empty. Anything else is

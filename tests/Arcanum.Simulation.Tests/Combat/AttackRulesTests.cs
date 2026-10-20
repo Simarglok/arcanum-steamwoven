@@ -119,7 +119,8 @@ public sealed class AttackRulesTests
         Assert.AreEqual(30, Penalty(0));
         Assert.AreEqual(14, Penalty(128));
         Assert.AreEqual(0, Penalty(255));
-        Assert.AreEqual(20, Penalty(0, LightEmission.Small));
+        // A small light keeps three quarters (the original's ×¾, ARC-SKILLS-003 SC9; it was ×⅔ = 20 before).
+        Assert.AreEqual(22, Penalty(0, LightEmission.Small));
         Assert.AreEqual(15, Penalty(0, LightEmission.Medium));
         Assert.AreEqual(10, Penalty(0, LightEmission.Large));
         Assert.AreEqual(7, Penalty(0, LightEmission.ExtraLarge));

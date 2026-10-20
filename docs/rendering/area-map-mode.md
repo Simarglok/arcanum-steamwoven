@@ -196,8 +196,9 @@ Map mode moves the player between maps by the map's own data: the
 content stack when the map loads, so every map works the same way and nothing
 is bound to a location. Unconditional transitions run as below; a use site whose
 teleport stands behind guards runs its use script since ARC-SCRIPT-015
-([guarded use transitions](#guarded-use-transitions-arc-script-015)); guarded tile
-and sector scripts are not triggers here yet.
+([guarded use transitions](#guarded-use-transitions-arc-script-015)), and every tile
+and sector script the player enters runs since ARC-SCRIPT-017
+([tile and sector scripts](#tile-and-sector-scripts-arc-script-017)).
 
 - **Triggers.** A left click on an object with an unconditional use teleport
   (scenery or a portal) is a use: accepted within Chebyshev distance 2 by the
@@ -208,8 +209,10 @@ and sector scripts are not triggers here yet.
   steps into is checked in step order, also when one frame completes several
   steps: a jump point or an unconditional tile script there fires, the jump
   point first (ledger TR3), and stops the click route (the actor may stand a
-  step further when the frame had already started it). Sector scripts are read
-  but none of the installed ones teleports, so they are not wired. One transfer
+  step further when the frame had already started it); since ARC-SCRIPT-017 the
+  tile's script runs instead of its unconditional teleport (which still fires when
+  the run is refused before it starts), and a sector script runs when a step
+  enters its sector. One transfer
   is pending at a time; the stick, clicks and hover actions wait while it is,
   and a reset or reload drops it; a reset puts the actor on its start without
   firing the start tile, as a load does.
@@ -282,14 +285,48 @@ with an unconditional exit stays that exit.
   is checked before anything is applied: the use is refused, the door stays as it was and its printed lines are not shown. A teleport of another object
   is not modelled: the run's effects are dropped and the use is refused. A run outside the set, without script content or
   after a script file changed is refused and changes nothing.
-- **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`): 21 guarded use sites on 6 of the 78 maps map
-  mode opens. With a new game's state (no flag, quest or item) 9 run and their guards hold the teleport back, 12 are
+- **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`): 21 guarded use sites on 6 of the 79 maps map
+  mode opens (none on the start map). With a new game's state (no flag, quest or item) 9 run and their guards hold the teleport back, 12 are
   refused because they need conditions or actions outside the set (immediate script calls, loops, other conditions). In
   `tulla interior` the door with script 2353 prints its line while global flag 2376 is clear and, once it is set,
   teleports the player to (168,218) on the same map.
-- **Not covered.** Guarded tile and sector scripts (the reader finds no guarded sector teleport); immediate script calls,
-  loops and focus groups; a teleport behind a deferred call (the call later runs under the dialog host's set, which has
+- **Not covered.** Immediate script calls, loops and focus groups; a teleport behind a deferred call (the call later runs under the dialog host's set, which has
   no teleport, and is refused); the PC's name number; a fade-and-teleport's fade, sound and movie.
+
+## Tile and sector scripts (ARC-SCRIPT-017)
+
+Every tile script and sector script of the shown map runs when the player enters it, teleport or not (plan slice S4,
+viewer part), through the same host and set as a guarded use. The [transition reader](../world/map-transitions.md) lists
+them as `MapTransitionSet.Placed`: 3,012 tile scripts and 20 sector scripts in the installed maps (2,439 tile scripts on
+the start map), one per tile.
+
+- **When.** For each step the actor completes, in step order (ledger TS2, read in the executable): the tile's jump point
+  first, then the tile's script, then, when the step enters another sector, that sector's script (only the player's
+  steps; the original also runs a tile script for an NPC entering the tile). A load, a reset, a transfer arrival and an F8
+  restore fire nothing; the original places an object on the map with the same notifications (TS2), which arrival path
+  a teleport takes is not read.
+- **Run** (ledger TS1, TS3): from line 0 as a use, the player the triggerer, no attachee, under "S4-area-use". The slot
+  is the sector file's attachment overridden by the session's map changes on the sector: `tile.N.script`, `tile.N.lf`,
+  `tile.N.counters` for tile index N, `sector.script`, `sector.lf`, `sector.counters`. A changed slot is written back
+  there; under the Original rules a tile script's change is discarded (ledger X3, the original stores the unchanged
+  record), a sector script's is kept in both modes.
+- **Effects and teleports** as for a guarded use: flags, schemes, deferred calls and the slot apply as the run goes; the
+  first teleport of the player is the transfer, checked before anything applies. A teleport asked while another transfer
+  is pending (the tile's jump point fired) is dropped and the run's other effects stay (TR4). A tile run refused before it
+  starts (an action or condition outside the set, no script content, no session) leaves the tile's unconditional
+  teleport of ARC-WORLD-031 to fire as before: the four same-map tile teleports of `void` keep working that way. An
+  entry run checks only the files it reads for changes (a changed script refuses it; a changed dialog file skips that
+  printed line, and later runs are refused), not every file seen so far as a click does.
+- **Status and log.** The status line shows a transfer, an exit map mode cannot take and a run that printed lines;
+  refused and silent runs are only logged (`ARC-WORLD-031 enter`), and nothing replaces an accepted transfer while it
+  is pending. One host serves every run of the shown map and session.
+- **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`, a new game's state for each script):
+  5 tile scripts teleport (the exit tiles of `iron clan hq`, script 2203, to the start map at (96948,75722)), 249 tile
+  scripts and 1 sector script run without one, 2,758 tile and 19 sector scripts are refused because they need actions or
+  conditions outside the set.
+- **Not covered.** Tile scripts for NPCs; the actions and conditions outside the set (most tile scripts); tile and
+  sector scripts of generated main-map sectors (only the map's own sector files are read); the arrival tile of a
+  transfer; a fade-and-teleport's fade, sound and movie.
 
 ## Dialogs (ARC-WORLD-032)
 
@@ -313,8 +350,9 @@ interiors have 182 dialog NPCs. Each one gets a typed start: 50 start a
 conversation, 1 ends with skip default, and 131 stop at an SCR action,
 condition, goto or value kind the dispatcher does not admit yet (most often
 action types 23 and 22, and condition type 21). Of the 50 conversations, 35 stop at a generated NPC
-line, which is not loaded yet, 8 at an unsupported DLG operation, and 7 offer
-replies at once; 6 end when the first choosable reply is always taken. Native smoke (`ARC-WORLD-032 native-smoke talk PASS`, after
+line, which is not loaded yet, 6 at an unsupported DLG operation, and 9 offer
+replies at once; 7 end when the first choosable reply is always taken (since ARC-WORLD-043 the `ME` condition is
+admitted: before, 8 stopped at an unsupported operation, 7 offered replies and 6 ended). Native smoke (`ARC-WORLD-032 native-smoke talk PASS`, after
 the roof smoke): from 4–6 cells away the NPC hovers as a walk to talk, a click
 through the production seam walks within reach and opens the panel (a walk
 that stops short is tried again from within reach, where the click must open
@@ -323,8 +361,10 @@ ends the modal panel; a start refused for missing script content, an entry
 error or a changed source fails the smoke. `FRONTIER` means every NPC tried (up
 to eight) stopped before offering a reply, `NOT-STARTED` that none started,
 `NO-REACHABLE-SPEAKER` that none could be clicked, and `NONE` that no NPC is
-drawn. Observed: `caladon-panarrii temple`, script 2969, 3 turns, the dialog
-ended, 1 effect in the session; `tulla interior` reports `FRONTIER` (generated
+drawn. Since ARC-WORLD-043 Close must also end the NPC's reaction conversation (the host holds no open slot and a
+started talk leaves the NPC remembering the PC, `MetBefore` in the record). Observed: `caladon-panarrii temple`, script
+2969, 3 turns, the dialog ended, 1 effect (3 session revisions with the reaction slot's open and close; 2026-10-21), the NPC
+remembers the PC; `tulla interior` reports `FRONTIER` (generated
 greetings); in `caladon-mafia underground` both NPCs are undrawn. That the
 consequences travel with the session to another map and back is the host's
 synthetic test (`AreaConversationTests`); the native smoke does not observe it.
@@ -471,10 +511,33 @@ tile. The jump-point smoke checks the same on a same-map jump. Observed on
 back to lev 2 with the companion) and on a `tulla interior` jump point
 (437,214 → 304,219, script 1982).
 
-Not covered: a companion visiting another map can be talked to only on its
-home map (the speakers are each map's own). After a quick load, a companion
-whose home map was not loaded in this run, or loaded without the party ever
-touching it, has no body and is skipped; a follower that is not a companion of
+- **Talking to a visitor** (ARC-WORLD-048). A companion standing on a map it
+  is not a speaker of (from another map, or on the main map from another
+  window) is talked to where it stands: a click, the hover action and the
+  walk-to-talk reach it as any speaker, and the conversation runs through its
+  own host (`AreaConversationHost.ForVisitor`) over its home map's dialog
+  state: its dialog slot, local flags and follow keys are its home map's, its
+  party commands (`JO`, `WA`, `UW`, `LV`) go to the session party with its
+  facts, so the talk is the same wherever it stands and one identity keeps one
+  state, as the original keeps one object
+  ([OL31–OL33](../research/companion-orders-loyalty-evidence.md#7-followers-across-maps-q7-companion-o7)).
+  After the conversation the companions are recorded, then the group is
+  rebuilt, so it stays where it stands. A negative `IN` moves the item through
+  its home map's inventory seed when the viewer has it attached and is refused
+  (a rejected command) when it has not. Its dialog script runs on its home-map
+  slot, its quest awards and script sounds are taken from its host like the
+  shown map's, and a deferred call whose attachee it is runs through the same
+  host. A home-map dialog state the session cannot read (a damaged save) makes
+  it not talkable, with a notice, never a crash. The native smoke talks to the
+  carried companion on the destination
+  (`ARC-WORLD-048 native-smoke visitor-talk PASS`, after the carry; observed on
+  `bates mansion lev 1` and on the main map, script 1160 from lev 2, whose
+  dialog script line 0 is not admitted yet, `EntryNotAdmitted`, as at home).
+
+Not covered: after a quick load, a companion whose home map was not loaded in
+this run, or loaded without the party ever touching it, has no body and is
+skipped: when it is recorded on a loaded cell of the shown map, the HUD names it
+as not talkable here (`AreaVisitors.Unbodied`), nothing is guessed; a follower that is not a companion of
 the shown map (no body, or its cell not admitted) is not carried and stays
 recorded where it was. There are
 no followers of followers, unconscious followers, carried inventory, orders,

@@ -224,6 +224,8 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectWear(GameSessionFailure.StaleVersion);
         if (_hero is null) return RejectWear(GameSessionFailure.EquipmentUnavailable);
         if (HeldKind(entity) is not { } kind) return RejectWear(GameSessionFailure.ItemNotAvailable);
+        // The session's record of the item's condition (ARC-WORLD-053) wins over the host's data: a broken item is refused.
+        item = Conditioned(entity, item);
         if (kind != item.Kind || !EquipmentDomain.Matches(kind.Type, item.Item.Kind)) return RejectWear(GameSessionFailure.InventoryMismatch);
         _equipment.Worn.TryGetValue(slot, out var current);
         if (current?.Entity == entity) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, EquipmentRefusal.None, null, null, Version);
@@ -299,6 +301,7 @@ public sealed partial class GameSessionOwner
     {
         foreach (var kit in _inventory.Kit) if (kit.Entity == entity) return kit.Kind;
         foreach (var pc in _inventory.Pc) if (pc.Entity == entity) return pc.Kind;
+        foreach (var made in _inventory.Made) if (made.Entity == entity) return made.Kind;
         return null;
     }
 
@@ -335,7 +338,7 @@ public sealed partial class GameSessionOwner
         equipment = new();
         if (saved.Worn.Count > 0 && !hero) return GameSessionFailure.InvalidEquipment;
         var kinds = inventory.Kit.Select(kit => (kit.Entity, kit.Kind)).Concat(inventory.Pc.Select(pc => (pc.Entity, pc.Kind)))
-            .ToDictionary(pair => pair.Entity, pair => pair.Kind, StringComparer.Ordinal);
+            .Concat(inventory.Made.Select(made => (made.Entity, made.Kind))).ToDictionary(pair => pair.Entity, pair => pair.Kind, StringComparer.Ordinal);
         foreach (var worn in saved.Worn)
         {
             if (worn is null || !Enum.IsDefined(worn.Slot) || !EquipmentRules.IsValid(worn.Item)) return GameSessionFailure.InvalidEquipment;

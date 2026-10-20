@@ -6,4 +6,7 @@
   <ItemGroup>
     <ProjectReference Include="../Arcanum.Data/Arcanum.Data.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Arcanum.Scripting.Tests" />
+  </ItemGroup>
 </Project>
