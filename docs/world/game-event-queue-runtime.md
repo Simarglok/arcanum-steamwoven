@@ -227,7 +227,8 @@ Slice E3 of the plan: the AREA viewer moves the session clock only through `Area
 - **Followers and the PC on another map.** The session moves a follower's timers and a call's player and follower roles
   with the PC; the world answers such a follower from the map whose T0 data holds it (`IAreaEventObjects.HomeMap`), so its
   timers keep running, and the call host takes the PC and its own speakers on its map by their ids
-  (`AreaScriptHost.Local`).
+  (`AreaScriptHost.Local`). An object counts as present when any covered map's T0 data holds it, because the viewer
+  does not model removing objects yet.
 - **Trace.** The area status line shows the pending events, the next deadline and the last pass's outcomes; the log
   prints a line per frame that took events (`ARC-WORLD-039 events ...`).
 
