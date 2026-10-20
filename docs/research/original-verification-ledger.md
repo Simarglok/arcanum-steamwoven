@@ -8,7 +8,7 @@ and its verdicts decide which differences become switches of the two rule settin
 decision D8 (see [the AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)).
 
 The combat-core anomalies A1–A10 were checked by ARC-COMBAT-001 and are not repeated here (A11 and A12 are in
-[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029), blessings and curses in [Blessings and curses](#blessings-and-curses-arc-world-035); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); auto-level schemes in [Auto-level schemes](#auto-level-schemes-arc-world-036); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026); the phase of other rule files in [Load phases](#load-phases-arc-data-027); `map.patch` in [Map patch](#map-patch-arc-data-028); audio in [Audio](#audio-arc-res-052); the logbook in [Logbook](#logbook-arc-ui-008); the map list size in [Limits census](#limits-census-arc-data-029); sector residency and loading in [Main-map streaming](#main-map-streaming-arc-data-030); terrain types and template paths in [Terrain templates](#terrain-templates-arc-data-031); the AI parameter rows, tick, gate and danger setter in [NPC AI core loop](#npc-ai-core-loop-arc-res-054); the implemented functions that stood at F0 in [Implemented functions](#implemented-functions-arc-dev-025); flee, surrender and back-off in [NPC AI morale](#npc-ai-morale-arc-res-058); hostility, targeting, the enemy list and the attack fan-out in [NPC AI hostility and targeting](#npc-ai-hostility-and-targeting-arc-res-057))
+[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029), blessings and curses in [Blessings and curses](#blessings-and-curses-arc-world-035); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); auto-level schemes in [Auto-level schemes](#auto-level-schemes-arc-world-036); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026); the phase of other rule files in [Load phases](#load-phases-arc-data-027); `map.patch` in [Map patch](#map-patch-arc-data-028); audio in [Audio](#audio-arc-res-052); the logbook in [Logbook](#logbook-arc-ui-008); the map list size in [Limits census](#limits-census-arc-data-029); sector residency and loading in [Main-map streaming](#main-map-streaming-arc-data-030); terrain types and template paths in [Terrain templates](#terrain-templates-arc-data-031); the AI parameter rows, tick, gate and danger setter in [NPC AI core loop](#npc-ai-core-loop-arc-res-054); the implemented functions that stood at F0 in [Implemented functions](#implemented-functions-arc-dev-025); flee, surrender and back-off in [NPC AI morale](#npc-ai-morale-arc-res-058); hostility, targeting, the enemy list and the attack fan-out in [NPC AI hostility and targeting](#npc-ai-hostility-and-targeting-arc-res-057); tech degrees, schematics, assembly, tech items and item durability in [Technology](#technology-arc-res-062))
 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). Domain
 documents keep their own tables; where a row below contradicts a domain document, this ledger is
 the newer evidence, and the domain document's "likely intent" column is superseded by the verdict.
@@ -859,6 +859,46 @@ result. Every direct branch stays inside `.text`.
 | HS20 | find target (0x4AB460) | Only the first 50 critters of the query are kept, before the distance sort. | Original (limit) |
 | HS21 | validity (0x4AB990), find target | During a scan the unconscious rule's nested scan does nothing, so an unconscious candidate is valid; outside a scan it is valid only while nothing else is found. | Original |
 | HS22 | reaction to an attack (0x4AA620) | The surrender branch calls the float callback (0x5F8488) without the null test every other caller makes. | Original bug (latent: the callback is always set) |
+
+## Technology (ARC-RES-062)
+
+Source: [technology research](technology-evidence.md). Question: how degrees and expertise work, how
+schematics are stored, learned, found and assembled, how technological items and records 140..222 behave
+against magic, which scripts and dialogs touch technology, and how item durability, breaking, price and the
+item side of repair work. Most of these functions had no earlier reading beyond the addresses of the
+requirements; the raise (AL8), item power (EQ9), the wear check (EQ1), the skill run (SK7) and the combat
+damage step and weapon wear (combat core C20, C21) were read before and agree. Read on 2026-10-20 by a first reader
+and, independently, a second reader that saw only the questions (method step 6) on 13 decision-bearing
+questions: 10 agree, the intelligence guard and the editor's decrease address were corrected to the second
+reader's version, and the button codes of the schematic page stay a disagreement (F1). The second reader
+found TC4. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| Degree raise | 0x4AFEC0 | Critter only, cap 7, the **effective** intelligence must meet {0, 5, 8, 11, 13, 15, 17, 19} for the new degree, base tech points + 1; unspent points are the editor wrapper's (0x589A20). | Original (agrees with AL8) |
+| Degree lower | 0x4AFFF0, sell wrapper 0x589AF0 | Degree > 0: base tech points − cost, degree − 1, no check; the wrapper refunds the point. | Original |
+| Effective expertise | 0x4B00B0 | Stored degree lowered until the effective intelligence meets its minimum, then {0, 10, 20, 35, 50, 65, 80, 100} through the expertise effects, unclamped; callers: sheet and schematic gate only. | Original |
+| Intelligence guard | 0x4B02B0, base stat set 0x4B0980 | Only a base intelligence decrease: the new effective intelligence must hold every spell and degree, else the base is restored; effects are not guarded. | Original |
+| Learned number | 0x4B0320 | `1990 + 200 × discipline + 10 × degree`; used by editor tooltips and the multiplayer auto-equip, not by the window. | Original |
+| Registration | 0x4B0120, reading 0x56BB60 | Subtype 5 document: number from the start text line; known → message 88, document kept; new → appended without limit, document destroyed, message 89. | Original |
+| Recipe | 0x56DBD0, parse 0x56DD20 | Seven lines (name, description, art, component 1, component 2, product, quantity), up to three alternatives (prototype = number + 20), one or two tokens repeat the last. | Original |
+| Window open | 0x56D130, dialog 0x567E30 (F2 for the dialog path) | No combat or dialog check of its own; learned tab = first stored-degree records of each discipline; found tab for a PC crafter; dialog `su` makes the NPC the crafter. | Original |
+| Component gate | 0x56E190 (F1; the button codes of 0x56DDC0 disagree between the readers) | Crafter's own inventory, exact prototype, worn, broken and changed-description items skipped; expertise in the component's discipline ≥ −complexity (signed). | Original |
+| Assembly | 0x56E720 | Find both, consume 1 then 2 (one ammunition unit or destroy), create the product quantity times into the crafter; no expertise check, roll, skill, AP, time or experience. | Original |
+| Tech maintenance | 0x453170 | MAINTAIN does not test the tech flag: maintained tech records check intelligence and willpower and pay maintenance. | Original (refines the magic study, which names only the BEGIN payment skip) |
+| Holder gate | 0x456A10, use 0x462CC0, triggers 0x4CB830 | Only magickal items in technological hands can be refused; technological items are never refused to mages outside combat. | Original |
+| Item break | 0x43F1C0 | First: destroyed art bit, damage reset to 0, unwield or drop, BUST script; second: delete, no BUST. | Original |
+| Sale price | 0x461F80 | Damage scales the price (`current / maximum`) only when the PC sells. | Original |
+| TC1 | payment 0x450420, 0x461590 | Cell-powered item source pays `cost × (1 + power / complexity)`: technologists pay up to double. | Original bug |
+| TC2 | action 129 (0x44A7BD), 0x460B50, 0x45FD40, 0x57C6E0 | Calls an unfilled slot of an uninitialised callback structure. | Original bug (crash class, both fixed) |
+| TC3 | 0x56E720 | A failed product creation returns after the components were consumed. | Original bug (latent) |
+| TC4 | 0x56E720 | Both components found before consuming; one item in both lists would be consumed twice. | Original bug (latent; no installed record) |
+| TC5 | 0x56E720 | The expertise gate is only the button's. | Original |
+| TC6 | 0x56DD20 | More than three tokens or a line over 2000 bytes write out of bounds. | Original bug (latent, both fixed) |
+| TC7 | repair quote 0x578760 | Damage counted twice in the quote. | Original |
+| TC8 | data: one schematic written prototype | Its schematic number is 0: reading registers a schematic 0 whose record reads all zeros. | Original (data) |
+| TC9 | 0x462CC0, 0x4CB830 | A broken item can be used and its spells fire. | Original |
+| TC10 | editor 0x55F5F0, 0x55D940, 0x589AF0 | Selling a degree ignores the level-start snapshot (written at 0x64DF10, never read). | Original bug (reachability O2) |
 
 ## Decisions to revisit
 
