@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S8"/>.
+/// <see cref="ScrAdmissionSet.S9"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -22,6 +22,7 @@ internal sealed class ScrInterpreter
     private readonly List<ScrSound> _sounds = new();
     private readonly List<ScrTeleport> _teleports = new();
     private readonly List<ScrSchemeRequest> _schemes = new();
+    private readonly List<ScrSchematicRequest> _schematics = new();
     private readonly ScrRunOptions _options;
     private readonly int[] _locals = new int[ScrCatalogue.LocalSlots];
     private readonly SortedDictionary<int, bool> _flags = new();
@@ -88,7 +89,8 @@ internal sealed class ScrInterpreter
         var result = new ScrRunResult(outcome, stop, _number, stopLine, null, Array.AsReadOnly(_trace.ToArray()), ScrEffects.None);
         return new(result, new ScrSlot(number, _localFlags, _counters), null, flags, story, _dialog, _calls.Count == 0 ? null : Array.AsReadOnly(_calls.ToArray()),
             _lines.Count == 0 ? null : Array.AsReadOnly(_lines.ToArray()), _sounds.Count == 0 ? null : Array.AsReadOnly(_sounds.ToArray()),
-            _teleports.Count == 0 ? null : Array.AsReadOnly(_teleports.ToArray()), _schemes.Count == 0 ? null : Array.AsReadOnly(_schemes.ToArray()));
+            _teleports.Count == 0 ? null : Array.AsReadOnly(_teleports.ToArray()), _schemes.Count == 0 ? null : Array.AsReadOnly(_schemes.ToArray()),
+            _schematics.Count == 0 ? null : Array.AsReadOnly(_schematics.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -177,6 +179,13 @@ internal sealed class ScrInterpreter
                 // The run goes on.
                 var scheme = Get(a, 1);
                 foreach (var obj in Objects(a, 0)) _schemes.Add(new(obj, scheme));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.StartSchematicUi:
+            {
+                // SW8 (TC2, both fixed): the object operand; an absent object opens nothing (the original's null test). The host
+                // resolves a PC or an NPC and its leader instead of the original's never-filled callback. The run goes on.
+                if (OptionalObject(a, 0) is { } who) _schematics.Add(new(who));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.RemoveThisScript: _changedNumber = 0; return (Step.Next, 0);

@@ -105,17 +105,18 @@ WORLD host (`TerrainViewerWorld.cs`).
    release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011)),
    and while its session inventory exists I toggles the inventory window on key down
    ([ARC-UI-004](../rendering/terrain-viewer.md#inventory-window-pickup-and-loot-arc-ui-004)); while it has a game
-   session C toggles the character sheet and L the logbook on key down
+   session C toggles the character sheet, L the logbook and T the schematic window on key down
    ([ARC-UI-007](../rendering/terrain-viewer.md#character-sheet-arc-ui-007),
-   [ARC-UI-008](../rendering/terrain-viewer.md#logbook-arc-ui-008)).
+   [ARC-UI-008](../rendering/terrain-viewer.md#logbook-arc-ui-008),
+   [ARC-TECHNOLOGY-005](../rendering/terrain-viewer.md#schematic-window-arc-technology-005)).
    `H` without modifiers (not an original key) switches the visual profile Legacy/HD on a fresh press
    while the world owns input ([ARC-UI-006](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006));
    the palette holds the same action. In `crash-site-area` Num Lock flips the original always-run lock and
    Ctrl+LMB on the ground runs once ([ARC-WORLD-020](../world/gait-runtime.md)); while it has a game session R
    toggles the combat mode ([ARC-COMBAT-004](../rendering/terrain-viewer.md#combat-mode-arc-combat-004)). So in `crash-site-area` with a
    session and its inventory the keys still reserved are Escape, F1–F6, F10, F12, Enter, Space, Home, 1–0, A, E,
-   F, K, M, O, S, T, V, W and held `,` `.` `/` (I too when the inventory seed was refused); without a session
-   (`world-diagnostic`, or a map or exterior drawn without a session clock) F7, F8, I, C, L and R are reserved
+   F, K, M, O, S, V, W and held `,` `.` `/` (I too when the inventory seed was refused); without a session
+   (`world-diagnostic`, or a map or exterior drawn without a session clock) F7, F8, I, C, L, R and T are reserved
    too, and Num Lock in `world-diagnostic`. Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
 3. **Palette route (palette open).** Up/Down navigate, Enter/Space activate,
    Escape/Backspace cancel (close); the numeric editor keeps its native digits,

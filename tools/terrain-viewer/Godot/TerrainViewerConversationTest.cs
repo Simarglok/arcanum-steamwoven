@@ -166,7 +166,7 @@ public partial class TerrainViewerApp
         {
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal && _conversationHost.Speakers.Count == 0, "closed at publication; the synthetic core has no dialog NPC");
             Click(GetViewport().GetVisibleRect().Size / 2); Press(Key.T);
-            TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "LMB off a dialog NPC and the reserved T key do not open a dialog");
+            TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "LMB off a dialog NPC and T (schematics, refused without a hero) do not open a dialog");
             // A row standing in for a speaker; the synthetic module is not inside a game folder, so there is no script
             // content (ARC-SCRIPT-011) and the start is a typed status.
             var row = _readyArea.Snapshot.Objects[0];
@@ -176,7 +176,8 @@ public partial class TerrainViewerApp
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryNotAdmitted))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.GenericGreeting))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.SourceChanged))
-                    || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.ContentUnavailable))), "the modal panel opens with the typed start status");
+                    || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.ContentUnavailable))),
+                "the modal panel opens with the typed start status: " + (_conversationPanel?.OutcomeForSelfTest ?? "no panel") + $" open={ConversationOpen} modal={WorldModal} gate={_worldGate.IsOpen}");
             foreach (var key in new[] { Key.Escape, Key.Key1, Key.Enter, Key.T }) Press(key);
             TerrainViewerSelfTest.Require(ConversationOpen, "keyboard key events are not redirected to dialog actions");
             // Polled keyboard levels too: full simulated frames with held Escape/Enter/Down-equivalent levels.
