@@ -188,7 +188,8 @@ def command_builds(args: argparse.Namespace) -> None:
              first_export=args.first_export))
     elif args.builds == "clean":
         # ARC-DEV-028: a dry-run report unless --apply (docs/workflow/build-retention.md).
-        clean.run(config.canonical_existing(args.checkout, directory=True), do_apply=args.apply, as_json=args.json)
+        if clean.run(config.canonical_existing(args.checkout, directory=True), do_apply=args.apply, as_json=args.json):
+            raise SystemExit(2)
     elif args.builds == "repair-registry":
         # ARC-DEV-026: dry run by default; --apply rewrites only the registry and configuration records.
         with config.registry_lock():

@@ -123,6 +123,7 @@ def builds(conf: dict[str, Any], registry: dict[str, Any]) -> list[dict[str, Any
         for tool, value in values.items() if isinstance(values, dict) else ():
             value = value.get("candidateId") if isinstance(value, dict) else value
             roles.setdefault(str(value), []).append(f"{label} of {tool}")
+    verified: dict[str, bool] = {}  # a current payload is hashed once, not once per build of its task
     results = []
     for entry in retention.inventory(conf, registry, show_paths=True):
         candidate_id = entry["candidateId"]
@@ -147,7 +148,10 @@ def builds(conf: dict[str, Any], registry: dict[str, Any]) -> list[dict[str, Any
         later = [value for value in currents.get((entry["rootId"], entry["task"]), set()) - {candidate_id}
                  if isinstance(mine, str) and isinstance(registered.get(value), dict)
                  and isinstance(registered[value].get("registeredAt"), str) and registered[value]["registeredAt"] > mine]
-        newer = sorted(value for value in later if _verifies(conf, registered, value))
+        for value in later:
+            if value not in verified:
+                verified[value] = _verifies(conf, registered, value)
+        newer = sorted(value for value in later if verified[value])
         if candidate_id in protected:
             item.update({"class": "protected", "reason": "; ".join(roles.get(candidate_id, ["current, selected, accepted, rollback or measurement"])),
                          "action": None})
@@ -197,7 +201,7 @@ def unmanaged(conf: dict[str, Any], checkout: Path) -> list[dict[str, Any]]:
     results = []
     artifacts = checkout / "artifacts"
     for child in sorted(artifacts.iterdir()) if artifacts.is_dir() and not artifacts.is_symlink() else ():
-        if child.name in (MARKER, ".DS_Store"):
+        if child.name in (MARKER, f".{MARKER}.tmp", ".DS_Store"):
             continue
         if child.resolve() in configured and child.is_dir() and not child.is_symlink():
             results += [{"path": str(task), "bytes": disk_bytes(task), "class": "keep",
@@ -304,13 +308,20 @@ def apply(checkout: Path) -> dict[str, Any]:
         try:
             # The locked apply rechecks every binding, pointer, payload identity and lease before each removal.
             result = retention._apply_plan_locked(plan, conf, registry, accepted_id=plan["id"])
-        except ValueError as error:
-            pruned = [item["candidateId"] for item in plan["payloads"]
-                      if (Path(item["path"]) / "payload-pruned-v1.json").is_file()]
+        except (OSError, ValueError) as error:
+            pruned = [item["candidateId"] for item in plan["payloads"] if _pruned_by(Path(item["path"]), plan["id"])]
             return {"retired": retired, "planId": plan["id"], "status": f"stopped: {error}", "removed": pruned,
                     "freedBytes": sum(item["payloadIdentity"]["bytes"] for item in plan["payloads"] if item["candidateId"] in pruned)}
     freed = sum(item["payloadIdentity"]["bytes"] for item in plan["payloads"] if item["candidateId"] in result["removed"])
     return {"retired": retired, **result, "freedBytes": freed}
+
+
+def _pruned_by(candidate: Path, plan_id: str) -> bool:
+    try:
+        encoded = config.optional_authority_bytes(candidate / "payload-pruned-v1.json")
+        return encoded is not None and json.loads(encoded).get("planId") == plan_id
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 def _size(value: int | None) -> str:
@@ -342,13 +353,14 @@ def render(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def run(checkout: Path, *, do_apply: bool, as_json: bool) -> None:
+def run(checkout: Path, *, do_apply: bool, as_json: bool) -> int:
     write_marker(checkout / "artifacts")
     if do_apply:
         result = apply(checkout)
         print(json.dumps(result, indent=2, sort_keys=True) if as_json else
               f"Retired {len(result['retired'])}, removed {len(result['removed'])} payload(s), "
               f"freed {_size(result.get('freedBytes', 0))} ({result['status']}).")
-        return
+        return 2 if result["status"].startswith("stopped") else 0
     result = report(config.load_config(), config.load_registry(), checkout)
     print(json.dumps(result, indent=2, sort_keys=True) if as_json else render(result))
+    return 0
