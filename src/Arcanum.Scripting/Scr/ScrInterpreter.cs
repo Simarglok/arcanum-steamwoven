@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S6"/>.
+/// <see cref="ScrAdmissionSet.S7"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -19,6 +19,7 @@ internal sealed class ScrInterpreter
     private ScrDialogStart? _dialog;
     private readonly List<ScrCallRequest> _calls = new();
     private readonly List<ScrPrintLine> _lines = new();
+    private readonly List<ScrSound> _sounds = new();
     private readonly ScrRunOptions _options;
     private readonly int[] _locals = new int[ScrCatalogue.LocalSlots];
     private readonly SortedDictionary<int, bool> _flags = new();
@@ -84,7 +85,7 @@ internal sealed class ScrInterpreter
         int? story = _story is { } s2 && s2 != _storyBefore ? s2 : null;
         var result = new ScrRunResult(outcome, stop, _number, stopLine, null, Array.AsReadOnly(_trace.ToArray()), ScrEffects.None);
         return new(result, new ScrSlot(number, _localFlags, _counters), null, flags, story, _dialog, _calls.Count == 0 ? null : Array.AsReadOnly(_calls.ToArray()),
-            _lines.Count == 0 ? null : Array.AsReadOnly(_lines.ToArray()));
+            _lines.Count == 0 ? null : Array.AsReadOnly(_lines.ToArray()), _sounds.Count == 0 ? null : Array.AsReadOnly(_sounds.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -135,6 +136,17 @@ internal sealed class ScrInterpreter
                 if (_roles.Attachee is not null) _lines.Add(new(_number, at, kind));
                 return (Step.Next, 0);
             }
+            // SN28: play sound plays the effect once without a position; play sound on plays it once on the object's tile;
+            // play sound scheme is the session's scheme request with the two ids as given.
+            case ScrCatalogue.Action.PlaySound: _sounds.Add(new(ScrSoundKind.Effect, Get(a, 0))); return (Step.Next, 0);
+            case ScrCatalogue.Action.PlaySoundOn:
+            {
+                // The original passes an absent object's null handle on to the sound call (undefined); nothing plays here.
+                var id = Get(a, 0);
+                if (OptionalObject(a, 1) is { } on) _sounds.Add(new(ScrSoundKind.OnObject, id, 0, on));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.PlaySoundScheme: _sounds.Add(new(ScrSoundKind.Scheme, Get(a, 0), Get(a, 1))); return (Step.Next, 0);
             case ScrCatalogue.Action.RemoveThisScript: _changedNumber = 0; return (Step.Next, 0);
             case ScrCatalogue.Action.ChangeThisScript:
             {

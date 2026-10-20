@@ -23,11 +23,28 @@ public sealed class AreaScriptHost : IScrHost
 
     /// <summary>
     /// The set the viewer runs: <see cref="ScrAdmissionSet.S3"/> without get and set story state, because the session
-    /// has no story-state number yet; a script that would use one is refused, not run on a made-up value.
+    /// has no story-state number yet (a script that would use one is refused, not run on a made-up value), plus the three
+    /// sound actions of <see cref="ScrAdmissionSet.S7"/> (ARC-SCRIPT-040).
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S3-area", ScrAdmissionSet.S3.Conditions,
-        ScrAdmissionSet.S3.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState),
+    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound", ScrAdmissionSet.S3.Conditions,
+        ScrAdmissionSet.S3.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState)
+            .Concat([ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme]),
         ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
+
+    private readonly List<ScrSound> _sounds = [];
+
+    /// <summary>ARC-SCRIPT-040: the effect sounds of the runs applied since the last call, in order, for the viewer to play
+    /// (scheme requests go to the session in <see cref="Apply"/>).</summary>
+    public IReadOnlyList<ScrSound> TakeSounds()
+    {
+        var sounds = _sounds.ToArray();
+        _sounds.Clear();
+        return sounds;
+    }
+
+    /// <summary>ARC-SCRIPT-040: the speaker the scripts name, or null for the PC and anything else (the viewer knows where it
+    /// stands now).</summary>
+    public AreaSpeaker? SpeakerOf(ScrObjectRef critter) => Speaker(critter);
 
     private readonly GameSessionOwner _session;
     private readonly SessionMapId _map;
@@ -145,6 +162,12 @@ public sealed class AreaScriptHost : IScrHost
             var receipt = flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(write.Index), write.Value));
             if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange)) return false;
         }
+        // ARC-SCRIPT-040: scheme pairs are the session's request, in action order; one the session drops (sound locked, as the
+        // original drops it) or refuses (a negative id, a project guard) changes nothing and stops nothing. Effect sounds wait
+        // for the viewer. Like the flags, they stay applied when a later step is refused (the original applies as it goes).
+        foreach (var sound in effects.Sounds)
+            if (sound.Kind == ScrSoundKind.Scheme) _session.PlaySoundScheme(_session.Version, sound.Id, sound.Ambient);
+            else _sounds.Add(sound);
         if (effects.Writeback is not { } writeback) return true;
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
             || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;

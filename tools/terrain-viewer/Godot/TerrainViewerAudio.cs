@@ -109,7 +109,7 @@ public partial class TerrainViewerApp
     private void TickAudio()
     {
         _audio?.Tick();
-        if (_readyMode == TerrainViewerMode.CrashSiteArea) { TickSceneSound(); TickPositionalSound(); TickDialogVoice(); }
+        if (_readyMode == TerrainViewerMode.CrashSiteArea) { TickSceneSound(); TickPositionalSound(); TickDialogVoice(); TickScriptSounds(); }
     }
 
     private void DisposeAudio()

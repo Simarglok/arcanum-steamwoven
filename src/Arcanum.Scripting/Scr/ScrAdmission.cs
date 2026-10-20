@@ -105,6 +105,11 @@ public sealed class ScrAdmissionSet
     /// docs/research/item-insert-script.md).</summary>
     public static ScrAdmissionSet S6 { get; } = new("S6", S5.Conditions, S5.Actions.Append(ScrCatalogue.Action.PrintLine), S5.ValueKinds, S5.FocusKinds);
 
+    /// <summary>The sound set (ARC-SCRIPT-040): <see cref="S6"/> plus play sound (82), play sound on (83) and play sound scheme
+    /// (87), which hand <see cref="ScrSound"/> effects to the host (audio study SN28).</summary>
+    public static ScrAdmissionSet S7 { get; } = new("S7", S6.Conditions,
+        S6.Actions.Append(ScrCatalogue.Action.PlaySound).Append(ScrCatalogue.Action.PlaySoundOn).Append(ScrCatalogue.Action.PlaySoundScheme), S6.ValueKinds, S6.FocusKinds);
+
     /// <summary>Whether every type and kind of this set is also in <paramref name="other"/>.</summary>
     public bool IsSubsetOf(ScrAdmissionSet other)
     {

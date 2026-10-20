@@ -77,8 +77,32 @@ public sealed class AreaScriptHostTests
         var flags = f.Session.Flags;
         Assert.AreEqual(true, flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(2593))).Value);
         Assert.IsFalse(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GetStoryState) || AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.SetStoryState));
-        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S3));
+        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S7));
+        Assert.IsTrue(new[] { ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme }.All(AreaScriptHost.Admission.Actions.Contains),
+            "ARC-SCRIPT-040: the sound actions run in the viewer");
         Assert.ThrowsExactly<InvalidOperationException>(() => f.Host.StoryState());
+    }
+
+    [TestMethod]
+    public void Scheme_requests_go_to_the_session_and_effect_sounds_wait_for_the_viewer()
+    {
+        using var f = Create();
+        var npc = f.Host.Object(f.Speaker);
+        var run = new FakeEffectsRun(f.Host, npc).Run(Program.Sounds(), new(777, 4, 0x0201));
+        Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.Code.ToString());
+        Assert.IsTrue(f.Host.Apply(run.Effects));
+        Assert.AreEqual((15, 39), (f.Session.QuerySound().State.Slot0, f.Session.QuerySound().State.Slot1), "play sound scheme is the session's request");
+        CollectionAssert.AreEqual(new[]
+        {
+            new ScrSound(ScrSoundKind.Effect, 3008),
+            new ScrSound(ScrSoundKind.OnObject, 4010, 0, npc),
+            new ScrSound(ScrSoundKind.OnObject, 4011, 0, f.Host.Pc),
+        }, f.Host.TakeSounds().ToArray());
+        Assert.AreEqual(0, f.Host.TakeSounds().Count, "taken once");
+        Assert.AreEqual(f.Speaker, f.Host.SpeakerOf(npc));
+        Assert.IsNull(f.Host.SpeakerOf(f.Host.Pc), "the PC's cell is the viewer's");
+        Assert.IsTrue(f.Host.Apply(run.Effects), "the same request again changes nothing and stops nothing");
+        Assert.AreEqual(3, f.Host.TakeSounds().Count);
     }
 
     [TestMethod]
@@ -243,6 +267,28 @@ public sealed class AreaScriptHostTests
         internal static ScrProgram SetGlobal(int flag) => Build((100, flag), (1, 0));
         internal static ScrProgram SetStory(int value) => Build((43, value), (1, 0));
 
+        // ARC-SCRIPT-040: play sound 3008, play sound 4010 on the attachee (focus kind 1), on the triggerer (kind 0), scheme 15/39.
+        internal static ScrProgram Sounds() => Lines(
+            (82, [(3, 3008)]), (83, [(3, 4010), (1, 0)]), (83, [(3, 4011), (0, 0)]), (87, [(3, 15), (3, 39)]), (1, []));
+
+        private static ScrProgram Lines(params (int Action, (byte Kind, int Value)[] Operands)[] lines)
+        {
+            var bytes = new byte[64 + lines.Length * 132];
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), lines.Length);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(56), lines.Length);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var at = 64 + i * 132 + 44;
+                System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(at), lines[i].Action);
+                for (var o = 0; o < lines[i].Operands.Length; o++)
+                {
+                    bytes[at + 4 + o] = lines[i].Operands[o].Kind;
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(at + 12 + 4 * o), lines[i].Operands[o].Value);
+                }
+            }
+            return ScrProgram.Read(bytes).Program!;
+        }
+
         private static ScrProgram Build(params (int Action, int Operand)[] lines)
         {
             var bytes = new byte[64 + lines.Length * 132];
@@ -262,7 +308,8 @@ public sealed class AreaScriptHostTests
     /// <summary>Wraps the fixture host so a run uses a given program and slot.</summary>
     private sealed class FakeEffectsRun(AreaScriptHost inner, ScrObjectRef npc, int? story = null)
     {
-        internal ScrRunResult Run(ScrProgram program, ScrSlot slot) => ScrDispatcher.RunObject(new(ScrPoint.Dialog, npc, inner.Pc, null), new With(inner, program, slot, story));
+        internal ScrRunResult Run(ScrProgram program, ScrSlot slot) => ScrDispatcher.RunObject(new(ScrPoint.Dialog, npc, inner.Pc, null), new With(inner, program, slot, story),
+            new() { Admission = ScrAdmissionSet.S7 });
 
         private sealed class With(AreaScriptHost inner, ScrProgram program, ScrSlot slot, int? story) : IScrHost
         {

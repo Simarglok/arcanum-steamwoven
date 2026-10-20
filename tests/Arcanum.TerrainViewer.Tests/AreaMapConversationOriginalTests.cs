@@ -21,6 +21,7 @@ public sealed class AreaMapConversationOriginalTests
         using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
         var catalog = WorldCatalog.Open(stack);
         using var scripts = ConversationSessionFixture.Scripts(root);
+        var sounds = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var statuses = new SortedDictionary<string, int>(StringComparer.Ordinal); var stops = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var maps = 0; var speakers = 0; var offered = 0; var ended = 0; var unlisted = new List<string>();
         void Count(SortedDictionary<string, int> into, string key) => into[key] = into.GetValueOrDefault(key) + 1;
@@ -39,6 +40,8 @@ public sealed class AreaMapConversationOriginalTests
                 speakers++;
                 var start = host.Begin(speaker);
                 Count(statuses, start.Status.ToString());
+                // ARC-SCRIPT-040: the sound actions the dialog scripts ran.
+                foreach (var sound in host.LastRun?.Effects.Sounds ?? []) Count(sounds, sound.Kind.ToString());
                 // The refusal of an entry the SCR admission set does not admit yet: its code and operation type.
                 if (start.Status == AreaConversationStartStatus.EntryNotAdmitted) Count(stops, start.Detail[(start.Detail.IndexOf(": ", StringComparison.Ordinal) + 2)..]);
                 if (start.Conversation is not { } conversation) continue;
@@ -56,6 +59,8 @@ public sealed class AreaMapConversationOriginalTests
         }
         Console.WriteLine($"maps {maps} speakers {speakers} offered {offered} ended {ended} statuses {string.Join(", ", statuses.Select(s => $"{s.Key}={s.Value}"))}");
         Console.WriteLine("stops " + string.Join("; ", stops.Select(d => $"{d.Key}={d.Value}")));
+        Console.WriteLine("sounds " + string.Join("; ", sounds.Select(d => $"{d.Key}={d.Value}")));
+        Assert.AreEqual(0, sounds.Count, "ARC-SCRIPT-040: no dialog script these talks run reaches a sound action yet");
         // Every speaker gets a typed start; the counts move only when the SCR admission set or the dialog runtime grows
         // (then this census is updated with them): 131 entries stop at an SCR action, condition, goto or value kind not admitted yet, and
         // 35 of the 50 started conversations stop at a generated NPC line, which is not loaded yet.
