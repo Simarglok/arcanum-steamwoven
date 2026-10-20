@@ -114,6 +114,10 @@ public sealed class AreaScenePlan
             var state = State(body);
             if (state.Suppressed)
             { coverage.Add(new(body.Key, visual?.Key, AreaDisposition.Suppressed, state.Reason)); continue; }
+            // ARC-DATA-038: an object whose ART id names no ART (ledger NA1) has no body to draw.
+            if (visual is null && body.EffectiveFields.SingleOrDefault(f => f.Slot == 0 && f.Presence == AreaPresence.Value)?.Number is { } art
+                && Arcanum.Data.Area.AreaDataOwner.HasNoBody(body.Type, unchecked((uint)art)))
+            { coverage.Add(new(body.Key, null, AreaDisposition.Suppressed, "NoArt")); continue; }
             if (visual is null || body.WorldX is null || body.WorldY is null)
                 throw new InvalidOperationException("AREA_VISUAL_REQUIRED");
             var phase = state.Flat ? state.UnderAll ? 2 : 3 : 4;

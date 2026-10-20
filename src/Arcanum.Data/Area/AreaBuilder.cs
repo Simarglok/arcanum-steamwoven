@@ -313,24 +313,29 @@ public sealed partial class AreaDataOwner
                         !(record.Type == 0 && WallsAdmitted) && !(record.Type == 1 && PortalsAdmitted))
                         throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
                     var aid = unchecked((uint)Number(effective, 0)); var ox = checked((int)Number(effective, 2)); var oy = checked((int)Number(effective, 3)); var scale = checked((int)Number(effective, 11));
-                    var visualSector = sector ?? new AreaSectorCoordinate(x.Value / 64, y.Value / 64);
-                    var vkey = new AreaVisualKey(kind, new(Identity(input).Sha256, _plan.RuntimeMap, visualSector.Packed), ordinal, record.Own.Sha256, Object: key);
-                    AdmitVisual(visuals);
-                    var request = ObjectRequest(aid, maps, token);
-                    output.Allocate(2048);
-                    var body = MakeVisual(vkey, aid, request.Lookup, request.Entry, request.Nominal, request.Group, request.Frame, request.Palette, request.Mirror, ox, oy, scale, record, token, request.Policy);
-                    AddVisual(visuals, body);
-                    // ARC-WORLD-051: every other frame of a door or window's ART, which its open and close steps select at
-                    // runtime (ledger LK10). A portal ART has one group; its frame is ART bits 14..18.
-                    if (record.Type == 1 && body.FrameCount is > 1 and <= 32)
-                        for (var other = 0; other < body.FrameCount; other++)
-                        {
-                            if (other == request.Frame) continue;
-                            var framed = (aid & ~(31U << 14)) | ((uint)other << 14);
-                            AdmitVisual(visuals); output.Allocate(2048);
-                            AddVisual(visuals, MakeVisual(vkey with { Layer = AreaLayerKind.PortalFrame, SparseIndex = other }, framed, framed, request.Entry,
-                                request.Nominal, request.Group, other, request.Palette, request.Mirror, ox, oy, scale, record, token, request.Policy));
-                        }
+                    // ARC-DATA-038: an ART id that names no ART has no body to draw; the object stays (its step evidence
+                    // does not read ART). Walls and portals keep the refusal.
+                    if (!HasNoBody(record.Type, aid))
+                    {
+                        var visualSector = sector ?? new AreaSectorCoordinate(x.Value / 64, y.Value / 64);
+                        var vkey = new AreaVisualKey(kind, new(Identity(input).Sha256, _plan.RuntimeMap, visualSector.Packed), ordinal, record.Own.Sha256, Object: key);
+                        AdmitVisual(visuals);
+                        var request = ObjectRequest(aid, maps, token);
+                        output.Allocate(2048);
+                        var body = MakeVisual(vkey, aid, request.Lookup, request.Entry, request.Nominal, request.Group, request.Frame, request.Palette, request.Mirror, ox, oy, scale, record, token, request.Policy);
+                        AddVisual(visuals, body);
+                        // ARC-WORLD-051: every other frame of a door or window's ART, which its open and close steps select at
+                        // runtime (ledger LK10). A portal ART has one group; its frame is ART bits 14..18.
+                        if (record.Type == 1 && body.FrameCount is > 1 and <= 32)
+                            for (var other = 0; other < body.FrameCount; other++)
+                            {
+                                if (other == request.Frame) continue;
+                                var framed = (aid & ~(31U << 14)) | ((uint)other << 14);
+                                AdmitVisual(visuals); output.Allocate(2048);
+                                AddVisual(visuals, MakeVisual(vkey with { Layer = AreaLayerKind.PortalFrame, SparseIndex = other }, framed, framed, request.Entry,
+                                    request.Nominal, request.Group, other, request.Palette, request.Mirror, ox, oy, scale, record, token, request.Policy));
+                            }
+                    }
                 }
                 if (!hidden || (flags & 0x3) == 0)
                     foreach (var (slot, bit, size) in new[] { (5, 0x8000U, 7), (6, 0x8000U, 7), (7, 0x10000U, 4) })

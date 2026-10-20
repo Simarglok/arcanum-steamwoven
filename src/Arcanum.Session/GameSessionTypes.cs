@@ -192,6 +192,8 @@ public enum GameSessionFailure
     InvalidDurability,
     // Schematic knowledge (ARC-TECHNOLOGY-003).
     InvalidSchematics,
+    // Schematic assembly (ARC-TECHNOLOGY-004).
+    AssemblyRefused,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -313,8 +315,9 @@ public sealed class GameSessionSnapshot
     /// adds the hero's blessings and curses to <see cref="Effects"/> (ARC-WORLD-035); schema 18 adds <see cref="Sound"/> (ARC-WORLD-040); schema 19 adds the
     /// quelled rumors to the story (ARC-UI-008); schema 20 adds the hero's advancement fields and <see cref="Advancement"/> (ARC-WORLD-036);
     /// schema 21 adds the hero's innate skill changes (ARC-SKILLS-002); schema 22 adds <see cref="Durability"/> (ARC-WORLD-053);
-    /// schema 23 adds <see cref="Schematics"/> (ARC-TECHNOLOGY-003). Schemas 1..22 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 23;
+    /// schema 23 adds <see cref="Schematics"/> (ARC-TECHNOLOGY-003); schema 24 adds the made items to <see cref="Inventory"/>
+    /// (ARC-TECHNOLOGY-004). Schemas 1..23 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 24;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
