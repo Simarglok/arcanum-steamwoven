@@ -461,4 +461,4 @@ them locally. Not legal advice.
   directories and were moved to the Trash on 2026-10-18 (see the owner decisions above).
 
 Provenance: frames from this repository's own decoder and Area code on the owner's installations; models and
-tools used as external programs and libraries; no CE source used.
+tools used as external programs and libraries; no source reconstruction used.
