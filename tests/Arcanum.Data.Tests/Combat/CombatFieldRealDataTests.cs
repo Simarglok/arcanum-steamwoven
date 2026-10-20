@@ -83,6 +83,7 @@ public sealed class CombatFieldRealDataTests
         // Virgil (2907): AI row 5, dodge, melee and heal 1; a carried (not wielded) weapon with fatigue damage, worn armour.
         var virgil = objects[2907].Fields;
         Assert.AreEqual((17102, 5), (virgil.Object.Prototype, virgil.Npc!.AiData));
+        Assert.AreEqual(6, virgil.Npc.Wait, "ARC-WORLD-045: wait index 6, no wait timer (ledger row Wait timer)");
         CollectionAssert.AreEqual(new[] { 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0 }, virgil.Critter!.BasicSkills.ToArray());
         Assert.IsTrue(virgil.Npc.Damage.All(d => d == default));
         var staff = objects[2421].Fields;
