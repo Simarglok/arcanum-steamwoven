@@ -295,6 +295,12 @@ public partial class TerrainViewerApp
                 + $" points={follower.Level.Value.PointsGained} purchases={follower.Scheme?.Purchases.Length ?? 0} completed={follower.Scheme?.Completed}");
     }
 
+    /// <summary>ARC-SCRIPT-016: an NPC's advancement as its home map stores it, for a script's scheme change; null without the combat
+    /// host or the effect rules (no <c>--hero</c>), or for an object that gives no admissible NPC sheet.</summary>
+    private SessionNpcAdvancement? AreaNpcAdvancement(string entity) =>
+        _combatHost is { } host && _areaEffectRules is { } effects && host.HomeMap(entity) is { } home && host.Fields(home, entity) is { } fields
+            ? AreaAdvancement.Npc(entity, fields, effects)?.Loaded : null;
+
     /// <summary>Stops the attack goal (a new click, the stick, a dialog, the map or the hero's state); <paramref name="why"/>
     /// goes to the status line.</summary>
     private void CancelAreaAttack(string? why)

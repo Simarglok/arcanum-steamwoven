@@ -224,6 +224,8 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectWear(GameSessionFailure.StaleVersion);
         if (_hero is null) return RejectWear(GameSessionFailure.EquipmentUnavailable);
         if (HeldKind(entity) is not { } kind) return RejectWear(GameSessionFailure.ItemNotAvailable);
+        // The session's record of the item's condition (ARC-WORLD-053) wins over the host's data: a broken item is refused.
+        item = Conditioned(entity, item);
         if (kind != item.Kind || !EquipmentDomain.Matches(kind.Type, item.Item.Kind)) return RejectWear(GameSessionFailure.InventoryMismatch);
         _equipment.Worn.TryGetValue(slot, out var current);
         if (current?.Entity == entity) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, EquipmentRefusal.None, null, null, Version);
