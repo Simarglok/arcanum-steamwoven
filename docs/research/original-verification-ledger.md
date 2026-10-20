@@ -1482,7 +1482,9 @@ and SCR action 139. Read on 2026-10-21 by a first reader and, independently, a s
 (method step 6). After resolving one data-reading difference (below), both agree on every behaviour and verdict. The second reader added that the PC's own text is floated over the PC first, that the curse line is a race insult of the generated race-line files and that the multiplayer phase scans players within a screen-sized rectangle; it first read keyword 116 ("stop") as having no rule entry, which the installed `Rules\BroadCastRules.mes` does have (back off), a data-reading difference, not a code one. Every direct branch stays inside `.text`. Message numbers are of the installed files
 named in the study; no game text is copied. Rows OL17–OL26 are implemented by ARC-WORLD-045
 ([party runtime](../world/party-runtime.md#wait-timer-and-loyalty-arc-world-045); registry rows 0x4AA7A0, 0x4AA990, 0x4AAA30,
-0x4AC380, 0x4ADB50 at F2); OL19's goal gate is the host's input (decision D5, both settings as the original until the owner decides).
+0x4AC380, 0x4ADB50 at F2); OL19's goal gate is the host's input (decision D5, both settings as the original until the owner decides). Rows OL1–OL16 are implemented by ARC-WORLD-046 ([companion orders](../world/companion-orders-runtime.md); registry rows
+0x4133B0, 0x4C31A0, 0x4C3BE0, 0x56A9D0 at F2; the reach is the Chebyshev tile distance 0x4B96F0, at most 10; the portrait text's format
+is two strings joined by a space); D1–D4 are rule-mode switches pending the owner.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
