@@ -4,7 +4,7 @@ Status: **Implemented bounded component**, task 6 of the
 [audio plan](../research/audio-evidence.md#task-plan). Godot-free rules that choose the sound of a
 world event (an item picked up or dropped, an attack, a critter's bark or step, a door or chest, a
 busted or animated object) as the original does, for any module. Nothing here plays sound: the
-viewer plays the cues positionally in ARC-UI-042.
+viewer plays the cues positionally ([ARC-UI-042](positional-sound.md)).
 
 ## Fields (Arcanum.Data.Audio)
 
@@ -69,14 +69,14 @@ Real-data test (`ObjectSoundRealDataTests`, `DAT_ROOT`): all 1,423 prototypes re
 15 of 15 portals, 38 of 38 containers, 3 of 45 scenery, 150 of 150 weapons, 13 of 13 PCs, 496 of
 497 NPCs; no wall, projectile, other item or trap has one; one gold prototype. 22 weapons have a
 base no table holds, nor any of its hit and critical ids (their hits use the material sounds); every other weapon's hit and critical ids
-are empty records, so in the original their hits are silent (a [switch candidate](../research/audio-evidence.md#switch-candidates-and-steamwoven-choices)
-for ARC-UI-042). Every footstep id 2900–2939, pickup and drop id and material hit id names an
+are empty records, so in the original their hits are silent (rule SN23: Steamwoven falls back to the material sound, [ARC-UI-042](positional-sound.md)). Every footstep id 2900–2939, pickup and drop id and material hit id names an
 installed file. The tile table has 31, 6, 2 and 13 tiles by category; classes 21 dirt, 3 sand,
 0 snow, 14 stone, 8 water, 6 wood.
 
 ## NOT READY
 
-- Playing the cues (position, attenuation, pan, the variant draw, the unresolved fallback):
-  ARC-UI-042.
+- Playing the cues: [ARC-UI-042](positional-sound.md) (position, attenuation, pan, the variant
+  draw, the fallback with its rule switch).
 - The self-hit of a critical miss; spell, eye-candy, looping scenery and AI alert sounds (later slices, audio plan "Later").
-- Callers: no viewer event emits cues yet (ARC-UI-042 wires footsteps, doors, pickup and combat).
+- Callers: the viewer plays footsteps, pickup and the hero's attacks (ARC-UI-042); doors, chests and
+  other events have no caller yet.

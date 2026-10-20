@@ -72,6 +72,7 @@ public partial class TerrainViewerApp
 
             var experience = session.QueryHeroExperience()?.Experience;
             var draws = session.QueryRandom().Draws;
+            var attackSounds = _cuePlays.GetValueOrDefault("attack");
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             AreaSmokeClick(point);
             Require(_attack is not null, "the click started an attack: " + _attackNotice);
@@ -88,6 +89,8 @@ public partial class TerrainViewerApp
             Require(session.QueryNpcKilled(target.Holder.Entity), $"killed after {frames} frames, attack {_attack is not null}: {_attackNotice}");
             Require(attackFrames > 0, "the attack ART was drawn");
             Require(session.QueryRandom().Draws > draws, "the attacks rolled");
+            // ARC-UI-042: every attack plays its result on the hero (a miss always has 4010, an unarmed hit the material sounds).
+            Require(_audio is null || _cuePlays.GetValueOrDefault("attack") > attackSounds, "the attacks played their sounds: " + _cueNotice);
             for (var i = 0; i < 4; i++) { _areaSmokeTime++; WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
             Require(_attack is null && _worldActor.State.Action != ActorDiagnosticAction.Attack, "the attack stops with the death");
             Require(session.QueryMapInventory(new(map.RuntimeMap))!.Holders.Single(h => h.Entity == target.Holder.Entity).Dead, "the corpse can be looted");

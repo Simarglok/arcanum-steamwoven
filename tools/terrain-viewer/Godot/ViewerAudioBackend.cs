@@ -162,6 +162,17 @@ public sealed class ViewerAudioBackend : IDisposable
         return true;
     }
 
+    /// <summary>Sets a live sound's volume (0–127) and pan (−1 … 1) when the listener moves (ARC-UI-042); a stale handle is a
+    /// no-op (false).</summary>
+    public bool Reposition(ViewerAudioHandle handle, int volume, double pan)
+    {
+        if (Current(handle) is not { } voice) return false;
+        SetVolume(voice.Player!, volume);
+        var bus = PanBus(voice.Channel, pan);
+        if (voice.Player!.Bus != bus) voice.Player.Bus = bus;
+        return true;
+    }
+
     /// <summary>True while the handle's sound is still the one in its slot and the engine is playing it.</summary>
     public bool IsPlaying(ViewerAudioHandle handle) => Current(handle) is { } voice && voice.Player!.Playing;
 

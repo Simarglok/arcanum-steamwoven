@@ -27,6 +27,9 @@ public static partial class TerrainViewerSelfTest
             Require(Math.Abs(backend.Volume(effect.Handle!.Value)!.Value - 63) < 0.5, "start volume 63 of 127");
             backend.FlattenChannel(AudioChannel.Effects, 101);
             Require(Math.Abs(backend.Volume(effect.Handle.Value)!.Value - 101) < 0.5, "a channel change sets the bare channel volume");
+            Require(backend.Reposition(effect.Handle.Value, 40, -1) && Math.Abs(backend.Volume(effect.Handle.Value)!.Value - 40) < 0.5,
+                "a listener move sets the volume (ARC-UI-042)");
+            Require(AudioServer.GetBusIndex(ViewerAudioBackend.BusName(AudioChannel.Effects) + " pan -4") >= 0, "and moves the voice to the hard-left bus");
             var music = backend.Play(payload, AudioChannel.Music, 20, loop: true);
             Require(music.Started && backend.ActiveVoices == 2, "a looped sound on the music bus");
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);

@@ -99,6 +99,7 @@ public partial class TerrainViewerApp
         _areaTransitions = null; _areaSession = null; _areaUseAfterRoute = null; _mapTransfers = null; _mapEntered.Clear();
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
         _audio?.StopAll(); _schemePlayer = null; _schemeVoices.Clear(); _combatStinger = _combatLoop = null; _soundSector = null;
+        StopPositionalSound(); _tileArt = null; // the scene's terrain must not outlive it (reload retention check)
     }
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>) on a trigger sprite: one use request.

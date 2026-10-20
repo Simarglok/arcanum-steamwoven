@@ -19,7 +19,7 @@ it from one explicitly selected archive. This study:
 
 - re-states the audio requirements as testable items for the whole game (AU1–AU14);
 - checks every audio behaviour those items rest on in the original executable (rows SN1–SN33;
-  ARC-WORLD-041 added SN34);
+  ARC-WORLD-041 and ARC-UI-042 added SN34 and SN35);
 - counts the installed sound data over all 81 maps of the module through the content stack;
 - corrects ARC-RES-022 where the executable or the whole-world rule disagrees;
 - splits full in-game audio into ordered, PR-sized tasks.
@@ -65,7 +65,7 @@ reading agrees, unintended; switch candidate), **Reconstruction change** (the ea
 marked a deliberate change; the row states the original).
 
 Evidence level ([F0–F4](original-executable-check.md#evidence-levels-for-a-function-f0f4)): **F2**
-(two independent readings) for every row but SN34 (F1, one reading by ARC-WORLD-041); SN21 was read by this task and again by the two
+(two independent readings) for every row but SN34 and SN35 (F1, read by ARC-WORLD-041 and ARC-UI-042); SN21 was read by this task and again by the two
 reviewers of ARC-RES-052 and ARC-DATA-040, and SN32 is a caller list the first reviewer checked. The readers checked operand widths, signed compares and rounding where the result
 depends on them (SN4 64-bit signed division and the rounded single-precision distance, SN8 and
 SN13 integer truncation, SN14 the absolute tick difference).
@@ -84,6 +84,7 @@ SN13 integer truncation, SN14 the absolute tick difference).
 | SN8 | volume get/changed (0x41C8A0–0x41C980), `adjust_volume` (0x41C9D0) | Effects and music: `setting × 127 / 10 × 80 / 100` (5 → 50, 10 → 101); voice: `setting × 127 / 10` (10 → 127). A slider change sets every live sound of that type to the flat channel volume, so per-song volume is lost until the next scheme load. Recalculation scales by /127 where the first play scaled by /100, so a positional sound gets about 21 % quieter at its first recalculation. | Original (quirks) |
 | SN9 | options control table (0x5CCD78), Audio tab handlers (0x589960–0x589A00) | The Audio tab has exactly three bars, Effects, Voice and Music, 0–10. There is no speech switch and no combat-music switch; "Combat Taunts" sits on the display and text tab. | Original |
 | SN10 | `gsound_lock` (0x41C610), `gsound_unlock` (0x41C660), caller `gmovie_play_path` (0x40DEE0) | While a movie plays: scheme loops stop at once, every new sound request is refused; one-shots and combat music keep playing. Unlock reloads the saved scheme pair. | Original |
+| SN35 | `location_xy` (0x4B8680), `recalc_positional_sound_volume` (0x41B3B0), `gsound_listener_set` (0x41C6D0), scroll caller (0x40E7F0) | A tile (X, Y) is at screen `(40 × (Y − X − 1), 20 × (X + Y))` plus the view origin (isometric view; the halves are read unsigned). The listener is set from a tile's position minus the sound origin, and every positional sound is then recalculated: parameters at its stored position, volume through the channel adjustment (× channel / 127), balance set. Scrolling sets the listener only when the tile at the view centre changed. | Original. Read once by ARC-UI-042 and again by its reviewer (F1) |
 
 ### Music and ambient schemes, combat music, save and map
 
@@ -200,7 +201,7 @@ under D2 for the owner. Proposed, not decided:
 | SN14 | A reversed hour window never plays (20 night entries silent). | Implemented (ARC-UI-041, `SoundRuleProfile.HourWindowsNeverWrap`): Steamwoven wraps past midnight, so `19-0` plays from 19:00 to 00:59. |
 | SN18 | A save made during combat loses the pre-combat schemes. | Implemented (ARC-WORLD-040, `SoundRuleProfile.CombatSaveLosesSchemes`): Steamwoven keeps the saved pre-combat pair on load. |
 | SN31 | Hot-key equip into an empty slot plays the slot number as a sound. | No sound (or the generic click). |
-| SN23 (data) | A weapon hit whose id is an empty record plays nothing: 128 installed weapons hit silently. | Proposed for ARC-UI-042: an empty record falls back to the material sound, as an id no table holds does. |
+| SN23 (data) | A weapon hit whose id is an empty record plays nothing: 128 installed weapons hit silently. | Implemented (ARC-UI-042, `SoundRuleProfile.EmptyHitRecordSilent`): Steamwoven falls back to the material sound, as for an id no table holds. |
 | SN12 | A 26th scheme entry crashes. | Both settings refuse the scheme with a typed issue (owner rule: Original never reproduces a crash). |
 
 Quirks kept in both settings unless the owner asks otherwise: the effects-volume change that
@@ -254,7 +255,7 @@ plus the root checks; viewer tasks follow the launcher rule (a new argument upda
 | 4 | ARC-WORLD-040 (done, [contract](../world/session-sound-runtime.md)) | Music and ambient state in the session | DATA-040 | Session scheme owner: map default on open, local PC sector change (0/0 skipped), script request, combat start by NPC and end by PC with restore, movie lock; snapshot schema bump; SN18 switch. Headless tests over synthetic schemes. |
 | 5 | ARC-UI-041 (done, [contract](../audio/scheme-player.md)) | Music and ambient play in the viewer | UI-040, WORLD-040 | Scheme player rules in `Arcanum.Presentation` and their host in AREA and map mode: 250 ms ticks on the session hour, loop windows, ambient chances with presentation random, one ambient per slot per tick, 25 ms fades, combat stinger and loop, cut on map change; SN14 switch. Smoke: map mode (`fal'kins maze`): the map's loop song, an ambient sound and combat music. |
 | 6 | ARC-WORLD-041 (done, [contract](../audio/sound-cues.md)) | Sound cues of world events | DATA-040 | Godot-free rules SN23–SN26 and SN27 (item, critter, footstep by tile sound class and armour, container, portal, misc, combat) and the session cue output; prototype and object sound fields through the stack; local-PC off rule. Headless tests. |
-| 7 | ARC-UI-042 | Positional effects in the viewer | UI-040, WORLD-041 | Positional rules in `Arcanum.Presentation` (SN4–SN7: listener at the view centre, attenuation and pan with per-size volume, recalculation on scroll) and their host; plays footsteps, doors, pickup, combat and looping scenery cues. |
+| 7 | ARC-UI-042 (done, [contract](../audio/positional-sound.md)) | Positional effects in the viewer | UI-040, WORLD-041 | Positional rules in `Arcanum.Presentation` (SN4–SN7: listener at the view centre, attenuation and pan with per-size volume, recalculation on scroll) and their host; plays the hero's footsteps, a pickup from the ground, the hero's attacks and the target's death. Doors and chests wait for the viewer to open them, looping scenery for animated scenery (both under [Later](#later-not-in-this-plan)). |
 | 8 | ARC-UI-043 | Dialogue voice | UI-040, DATA-040 | Speech id per NPC line in the conversation (SN21), voice by PC gender with fallback, start/replace/stop as SN22, voice bus; missing voice changes nothing. Smoke: Virgil's lines. |
 | 9 | ARC-SCRIPT-040 | Script sounds | WORLD-040, WORLD-041 | Admit `play_sound`, `play_sound_on`, `play_sound_scheme` in the SCR interpreter, output through the session's cue and scheme ports; teleport and fade sound operand when the teleport action is admitted. |
 | 10 | ARC-UI-044 | Interface sounds and audio options | UI-040 | SN31 ids on the existing windows (inventory and containers, character sheet, conversation, level up, quest complete) and the three sliders in the viewer settings, applied live (SN8). |
@@ -269,7 +270,8 @@ and 10. Each task updates
 
 World-map travel music (needs the world-map screen), story slides with voice (FR-MEDIA-002),
 movie sound tracks (FR-MEDIA-001), spell and eye-candy sounds (with the magic slices), AI
-alerted barks (with the AI slices), and voice of floating lines and combat taunts (with the
+alerted barks (with the AI slices), door, chest and window sounds (when the viewer opens them),
+looping scenery sounds (with animated scenery), NPC and companion footsteps (when they are animated), and voice of floating lines and combat taunts (with the
 text-float layer). Each reuses the catalogue, backend and cue output above.
 
 ## Not checked

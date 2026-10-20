@@ -130,6 +130,7 @@ public partial class TerrainViewerApp
         var name = _inventoryHost.Name(target.Entity, _hoverNames?.Catalog);
         _inventoryStatus = result.Disposition == GameSessionDisposition.Changed
             ? $"picked up {name}{AreaInventoryHost.Printed(result)}" : $"pickup refused: {AreaInventoryHost.Refusal(result.Failure)}";
+        if (result.Disposition == GameSessionDisposition.Changed) PlayPickupSound(target.Entity);
         GD.Print($"ARC-UI-004 pickup disposition={result.Disposition} failure={result.Failure} pc={_areaSession!.QueryPcInventory().Count}{InsertScriptLog(result)}");
         SyncAreaInventory(); RefreshAreaStatus();
     }

@@ -184,6 +184,7 @@ public partial class TerrainViewerApp
         goal.Player = new AreaAttackPlayer(clip, WorldMilliseconds());
         goal.RepeatAtMs = null;
         _worldActor.AttackPose = (goal.Octant, 0);
+        PlayAttackStartSounds(sound.Roll?.Value);
         GD.Print($"ARC-COMBAT-005 attack-start target={goal.Target.Entity} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs} rate={rate}"
             + $" sound={sound.Roll?.Value.ToString() ?? sound.Failure.ToString()} aim={goal.Aim?.ToString() ?? "none"}");
         PublishWorldSelection();
@@ -255,6 +256,7 @@ public partial class TerrainViewerApp
         goal.Attacks++;
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
+        PlayAttackResultSounds(result, goal.Target.Row, goal.Target.Entity);
         var life = owner.QueryLife(goal.Combat.Target).View;
         _attackNotice = AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
         GD.Print($"ARC-COMBAT-005 attack-hit target={goal.Target.Entity} disposition={result.Disposition} failure={result.Failure}"

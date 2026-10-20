@@ -153,4 +153,24 @@ public sealed class SoundCueRulesTests
         Assert.AreEqual(7, SoundCueRules.CritterArtArmor(0xC0F00000));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new SoundCue(1, 3));
     }
+
+    [TestMethod]
+    public void A_cue_draws_its_variant_and_falls_back_when_the_id_is_in_no_table()
+    {
+        var calls = new List<(int, int)>();
+        int Draw(int min, int max) { calls.Add((min, max)); return max; }
+        var states = new Dictionary<int, SoundIdState> { [7305] = SoundIdState.EmptyRecord, [7307] = SoundIdState.Named, [9001] = SoundIdState.Unknown };
+        SoundIdState Lookup(int id) => states.GetValueOrDefault(id, SoundIdState.Unknown);
+        Assert.AreEqual(2903, SoundCueRules.Choose(new(2900, 4), Lookup, Draw, false), "footsteps draw 0..3");
+        CollectionAssert.AreEqual(new[] { (0, 3) }, calls.ToArray());
+        calls.Clear();
+        Assert.AreEqual(4010, SoundCueRules.Choose(new(4010), Lookup, Draw, false), "one variant: no draw");
+        Assert.AreEqual(0, calls.Count);
+        var hit = new SoundCue(7304, 2, new(7040, 2));
+        Assert.AreEqual(7305, SoundCueRules.Choose(hit, Lookup, Draw, false), "an empty record counts as held (Original)");
+        Assert.AreEqual(7041, SoundCueRules.Choose(hit, Lookup, Draw, true), "Steamwoven: an empty record falls back");
+        Assert.AreEqual(7041, SoundCueRules.Choose(new(9000, 2, new(7040, 2)), Lookup, Draw, false), "an id no table holds falls back");
+        Assert.AreEqual(7307, SoundCueRules.Choose(new(7307, 1, new(7040, 2)), Lookup, Draw, true), "a named id plays");
+        Assert.ThrowsExactly<InvalidOperationException>(() => SoundCueRules.Choose(new(2900, 4), Lookup, (_, _) => 4, false));
+    }
 }

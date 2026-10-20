@@ -18,6 +18,9 @@ public sealed record SoundCue
     public SoundCue? Unresolved { get; }
 }
 
+/// <summary>What a sound table holds for an id: nothing, an empty record, or a name.</summary>
+public enum SoundIdState { Unknown, EmptyRecord, Named }
+
 /// <summary>Item and weapon sounds in the original's order (its sound field offsets differ; see <see cref="SoundCueRules.Item"/>).</summary>
 public enum ItemSoundAction { Pickup, Drop, Use, OutOfAmmo, Hit, Miss, CriticalHit }
 
@@ -227,6 +230,30 @@ public static class SoundCueRules
                 throw new ArgumentOutOfRangeException(nameof(outcome));
         }
         return cues.AsReadOnly();
+    }
+
+    /// <summary>
+    /// The id a cue plays (ARC-UI-042): <see cref="SoundCue.Id"/> plus <paramref name="draw"/>(0, variants − 1) when it has
+    /// variants; when that id is in no table and the cue has an <see cref="SoundCue.Unresolved"/> cue, that cue's id instead
+    /// (drawn the same way). The original counts an id held with an empty record as held, so a weapon hit whose records are
+    /// empty plays nothing; <paramref name="emptyRecordFallsBack"/> (the Steamwoven setting of rule SN23) lets it fall back too.
+    /// </summary>
+    /// <param name="lookup">What the sound tables hold for an id.</param>
+    /// <param name="draw">A uniform draw between both bounds, inclusive (the presentation's generator).</param>
+    public static int Choose(SoundCue cue, Func<int, SoundIdState> lookup, Func<int, int, int> draw, bool emptyRecordFallsBack)
+    {
+        ArgumentNullException.ThrowIfNull(cue); ArgumentNullException.ThrowIfNull(lookup); ArgumentNullException.ThrowIfNull(draw);
+        int Pick(SoundCue c)
+        {
+            if (c.Variants == 1) return c.Id;
+            var variant = draw(0, c.Variants - 1);
+            if (variant < 0 || variant >= c.Variants) throw new InvalidOperationException("draw out of range");
+            return unchecked(c.Id + variant);
+        }
+        var id = Pick(cue);
+        if (cue.Unresolved is not { } fallback) return id;
+        var state = lookup(id);
+        return state == SoundIdState.Unknown || (emptyRecordFallsBack && state == SoundIdState.EmptyRecord) ? Pick(fallback) : id;
     }
 
     /// <summary>Footsteps sound on frames 3 and 8 of a walk or run of a critter that is not monstrous (SN26); sneaking and
