@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4C62E0",
+  "name": "basic-skill-effectiveness",
+  "method": "Arcanum.Simulation.Skills.SkillCheckRules.Effectiveness",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 5,
+  "mutantsCaught": 5,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "06d075db794208d2560404de4120c161611aad13d94db9e0c4a91efb247786ef",
+  "configuration": "Debug"
+}

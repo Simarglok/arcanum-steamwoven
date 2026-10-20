@@ -23,6 +23,7 @@ internal sealed record ConversationUnwait(DialogOperationSource Source, int Node
 internal sealed record ConversationSkillGate(DialogOperationSource Source, int Skill, int Threshold, bool Training) : ConversationOperation(Source);
 internal sealed record ConversationSkillTraining(DialogOperationSource Source, int Skill, int Training) : ConversationOperation(Source);
 internal sealed record ConversationExpertTeacher(DialogOperationSource Source, int Skill, int Node) : ConversationOperation(Source);
+internal sealed record ConversationMetBefore(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
 
 internal enum ConversationField
 {
@@ -34,9 +35,10 @@ internal enum ConversationField
 /// <summary>
 /// conversation-grammar-v1: the bounded DLG operation subset of ARC-SCRIPT-005.
 /// <list type="bullet">
-/// <item>Player condition: ordered conjunction of LF, GF, RE (signed reaction threshold) and RA (signed race selector);
-/// with a party port also WA 0/1 (the NPC is not / is waiting for the PC); with a skill port also PS n and HA n (persuasion and
-/// haggle level gates), SK skill n (a level gate) and TR skill n (a training gate), ARC-SKILLS-004.</item>
+/// <item>Player condition: ordered conjunction of LF, GF, RE (signed reaction threshold), RA (signed race selector) and
+/// ME 0/1 (the NPC has not / has met the PC before, ARC-WORLD-043); with a party port also WA 0/1 (the NPC is not / is
+/// waiting for the PC); with a skill port also PS n and HA n (persuasion and haggle level gates), SK skill n (a level gate)
+/// and TR skill n (a training gate), ARC-SKILLS-004.</item>
 /// <item>Actions: LF, GF, QU, RU, RQ (quell a rumor, ARC-UI-008), RE and AL (unsigned target or lexically signed delta),
 /// negative IN (NPC gives an item), MM; a Player action may end with one JO 0 node or FL node, and with a party port with
 /// one UW 0 node; with a skill port TR skill tier (also in an NPC action), and a Player action may end with one ET skill node.</item>
@@ -80,7 +82,7 @@ internal static class DialogConversationGrammar
             var opcode = new string([(char)ToUpper(bytes[index]), (char)ToUpper(bytes[index + 1])]);
             index += 2;
             var admitted = role == ConversationField.PlayerCondition
-                ? opcode is "LF" or "GF" or "RE" or "RA" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
+                ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET");
             if (!admitted)
@@ -159,6 +161,9 @@ internal static class DialogConversationGrammar
                 "UW" when first == 0 && second > 0 => new ConversationUnwait(source, second),
                 "UW" when second > 0 => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "WA" when first is 0 or 1 => new ConversationWaiting(source, first == 1),
+                // The original passes any other ME operand without a test (0x4150D0): valid data outside this subset.
+                "ME" when first is 0 or 1 => new ConversationMetBefore(source, first == 1),
+                "ME" => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "FL" when first > 0 => new ConversationFinalLine(source, first),
                 "PS" when first != int.MinValue => new ConversationSkillGate(source, PersuasionSkill, first, false),
                 "HA" when first != int.MinValue => new ConversationSkillGate(source, HaggleSkill, first, false),
