@@ -40,6 +40,7 @@ public partial class TerrainViewerApp
         await RunAreaSchemeSmokeAsync();
         await RunAreaCueSmokeAsync();
         await RunAreaVoiceSmokeAsync();
+        RunAreaScriptSoundSmoke();
     }
 
     private sealed class FirstDraw : IAudioRandom

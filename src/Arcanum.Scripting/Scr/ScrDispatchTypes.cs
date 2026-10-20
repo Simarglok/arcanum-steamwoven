@@ -180,6 +180,24 @@ public sealed record ScrCallEvent(int Script, int Line, ScrObjectRef? Triggerer,
 /// </summary>
 public readonly record struct ScrPrintLine(int Script, int Line, int Kind);
 
+/// <summary>What a script's sound action asks for (ARC-SCRIPT-040).</summary>
+public enum ScrSoundKind
+{
+    /// <summary>Play sound (82): the effect <see cref="ScrSound.Id"/> once, not positional (volume 127, centre).</summary>
+    Effect,
+    /// <summary>Play sound on (83): the effect <see cref="ScrSound.Id"/> once on <see cref="ScrSound.Object"/>'s tile.</summary>
+    OnObject,
+    /// <summary>Play sound scheme (87): the scheme pair <see cref="ScrSound.Id"/> (music) and <see cref="ScrSound.Ambient"/>.</summary>
+    Scheme,
+}
+
+/// <summary>
+/// A sound action of a run (ARC-SCRIPT-040; checked in the 1.0.7.4 executable, docs/research/audio-evidence.md SN28): play sound
+/// and play sound on name an effect id, play sound scheme a music and an ambient scheme as the session's scheme request takes them.
+/// The original plays them at once; here the host plays them when it applies the run.
+/// </summary>
+public readonly record struct ScrSound(ScrSoundKind Kind, int Id, int Ambient = 0, ScrObjectRef? Object = null);
+
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
@@ -190,11 +208,12 @@ public readonly record struct ScrFlagWrite(int Index, bool Value);
 public sealed class ScrEffects
 {
     internal ScrEffects(ScrWriteback? writeback, ScrObjectRef? destroyTrapObject, IReadOnlyList<ScrFlagWrite> globalFlags, int? storyState, ScrDialogStart? dialog = null,
-        IReadOnlyList<ScrCallRequest>? calls = null, IReadOnlyList<ScrPrintLine>? lines = null)
+        IReadOnlyList<ScrCallRequest>? calls = null, IReadOnlyList<ScrPrintLine>? lines = null, IReadOnlyList<ScrSound>? sounds = null)
     {
         Writeback = writeback; DestroyTrapObject = destroyTrapObject; GlobalFlags = globalFlags; StoryState = storyState; Dialog = dialog;
         Calls = calls ?? Array.Empty<ScrCallRequest>();
         Lines = lines ?? Array.Empty<ScrPrintLine>();
+        Sounds = sounds ?? Array.Empty<ScrSound>();
     }
 
     public static ScrEffects None { get; } = new(null, null, Array.Empty<ScrFlagWrite>(), null);
@@ -208,8 +227,10 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrCallRequest> Calls { get; }
     /// <summary>The lines to print, in action order (ARC-SCRIPT-013).</summary>
     public IReadOnlyList<ScrPrintLine> Lines { get; }
+    /// <summary>The sounds to play and scheme pairs to request, in action order (ARC-SCRIPT-040).</summary>
+    public IReadOnlyList<ScrSound> Sounds { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
-        && Lines.Count == 0;
+        && Lines.Count == 0 && Sounds.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -236,7 +257,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S6"/>, admitted for the lines reachable from the event's line) and the executed-line
+/// at most <see cref="ScrAdmissionSet.S7"/>, admitted for the lines reachable from the event's line) and the executed-line
 /// budget.</summary>
 public sealed record ScrRunOptions
 {
@@ -253,6 +274,6 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Rules);
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S6)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S6.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S7)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S7.", nameof(Admission));
     }
 }

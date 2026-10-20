@@ -46,7 +46,7 @@ action, next line or null) and `Effects`.
 `ScrEffects`: the slot `Writeback` (source, attachee or null, point, new slot)
 or `DestroyTrapObject`, the changed `GlobalFlags` (final values, ascending, only
 those that differ from the host's), the new `StoryState`, the conversation to start (`Dialog`), the deferred `Calls`
-and the printed `Lines` (S6). A run reads its
+the printed `Lines` (S6) and the `Sounds` (S7). A run reads its
 own writes back from an overlay. Effects made before a stop are kept, as the
 original applies them as it goes; a refused script has none.
 
@@ -239,6 +239,28 @@ dialogue set at S3, so its talks never schedule a call.
   carries the registry mark of 0x44B390 (partial). The session uses both for an item's insert-item script
   ([inventory runtime](../world/inventory-runtime.md#insert-item-script-arc-script-013)).
 
+## Sound actions (ARC-SCRIPT-040, set S7)
+
+- **`ScrAdmissionSet.S7`** is S6 plus play sound (82), play sound on (83) and play sound scheme (87); `ScrRunOptions`
+  accepts any subset of S7. They return `ScrEffects.Sounds`, one `ScrSound(Kind, Id, Ambient, Object)` per action in
+  order (checked in the 1.0.7.4 executable, [audio study](../research/audio-evidence.md) SN28):
+  - **Play sound**: `Effect` with the id (a value operand): once, not positional (the original's plain play call,
+    volume 127, centre).
+  - **Play sound on**: `OnObject` with the id and the object: once, positional on the object's tile. The original passes
+    an absent object's null handle to the sound call (undefined); here nothing plays and the run goes on.
+  - **Play sound scheme**: `Scheme` with the music and ambient ids, the session's scheme request unchanged
+    (`PlaySoundScheme`, [session sound](../world/session-sound-runtime.md)).
+- **The AREA viewer** admits the three in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound"): `Apply` hands a
+  scheme pair to the session (one the session drops, while sound is locked, or refuses, a negative id, changes nothing and
+  stops nothing) and keeps the effect sounds for the viewer, which plays them on the next frame
+  (`TerrainViewerScriptSounds`: play sound through the effects channel at the plain volume, play sound on through the
+  positional rules on the PC's tile or where the speaker stands now, a companion's live cell,
+  [positional sound](../audio/positional-sound.md)). Like the flags, the scheme request and the queued sounds stay
+  applied when a later step of `Apply` is refused (the original applies as it goes).
+- The teleport and fade sound operands wait for those actions to be admitted.
+- Set numbers no longer follow the slice plan of the [event dispatcher research](../research/scr-event-dispatcher.md):
+  S6 is print line and S7 the sound actions, not heartbeat and combat.
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the
@@ -266,12 +288,17 @@ dialogue set at S3, so its talks never schedule a call.
 - `tests/Arcanum.Scripting.Tests/Scr/ScrPrintLineTests.cs` (ARC-SCRIPT-013): print line refused below S6, its lines
   in order from an object event and a call, none without an attachee, options wider than S6 refused, and the printed
   text rules (missing line, alternate text, tokens, action field, generated text).
+- `tests/Arcanum.Scripting.Tests/Scr/ScrSoundTests.cs` (ARC-SCRIPT-040): the sound actions refused below S7, returned in
+  action order with value operands read, an absent object playing nothing, a run with only sounds not empty. Opt-in
+  `ScrAdmissionRealDataTests`: S6 admits 336 installed scripts whole, S7 342; the six more each have a sound action.
 - `tests/Arcanum.TerrainViewer.Tests/AreaScriptHostTests.cs`: the viewer host's
   slot over the session keys, writeback and baseline clearing, refusals in
   `Apply`, invalid stored keys, scripts and dialogs found by number once, the
   NPC-node check. `AreaConversationTests` (opt-in original): Virgil's talk runs
   lines 0..4 to node 1, resumption at line 5 returns, a resumption at line 16 is
-  refused, following picks line 6 → node 385.
+  refused, following picks line 6 → node 385. ARC-SCRIPT-040: a scheme request reaches the session, effect sounds are
+  taken once, a speaker is found by its object; the opt-in map conversation census finds no first talk (line 0, no
+  follower, no resumption) that reaches a sound action yet.
 
 ## Not ready
 
@@ -280,9 +307,9 @@ dialogue set at S3, so its talks never schedule a call.
   the story-state actions and no admitted set reads global variables.
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
-- Only the AREA viewer's talk and resumption call the dispatcher (S3), and no
+- Only the AREA viewer's talk and resumption call the dispatcher (its set "S3-area-sound": S3 without story state, plus the sound actions), and no
   host runs deferred calls yet (S5 is headless until the viewer pumps the event
-  queue); use, tile and sector events are S4, heartbeat S6, combat S7, items S8.
+  queue); use, tile and sector events, heartbeat, combat and items are later slices.
 - Not in the admitted set yet: focus groups and local objects, loops, calls and
   call-ex, and every world action (float line, teleport, quests, reactions...).
 - The viewer's script host models only the dialog slot of the map's speakers;
