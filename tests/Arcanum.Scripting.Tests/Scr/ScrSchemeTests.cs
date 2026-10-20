@@ -13,8 +13,8 @@ public sealed class ScrSchemeTests
 {
     private const int Use = 1;
     private const byte Triggerer = 0, Attachee = 1, EveryFollower = 2, Extra = 12, Player = 21;
-    // S8 without the guard conditions of S4, which need a host with object queries (the fake host has none).
-    private static readonly ScrRunOptions S8 = new()
+    // ScrAdmissionSet.S8 without the guard conditions of S4, which need a host with object queries (the fake host has none).
+    private static readonly ScrRunOptions S7Scheme = new()
     {
         Admission = new("S7-scheme", ScrAdmissionSet.S7.Conditions, ScrAdmissionSet.S7.Actions.Append(ScrCatalogue.Action.SetAutoLevelScheme),
             ScrAdmissionSet.S7.ValueKinds, ScrAdmissionSet.S7.FocusKinds),
@@ -37,7 +37,7 @@ public sealed class ScrSchemeTests
         Assert.AreEqual((ScrOutcome.Refused, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.SetAutoLevelScheme),
             (refused.Outcome, refused.Refusal!.Code, refused.Refusal.Type));
 
-        var run = ScrDispatcher.RunObject(new(Use, Npc, Pc, null), host, S8);
+        var run = ScrDispatcher.RunObject(new(Use, Npc, Pc, null), host, S7Scheme);
         Assert.AreEqual(ScrStop.ReturnSkipDefault, run.Stop, "the run goes on after each request");
         CollectionAssert.AreEqual(new[]
         {
@@ -53,11 +53,11 @@ public sealed class ScrSchemeTests
     {
         var host = new FakeHost();
         host.Attach(Chest, Use, 600, Program(Do(C(ScrCatalogue.Action.SetAutoLevelScheme, (Triggerer, 0), N(0))), Do(C(ScrCatalogue.Action.ReturnRunDefault))));
-        var run = ScrDispatcher.RunObject(new(Use, Chest, Npc, null), host, S8);
+        var run = ScrDispatcher.RunObject(new(Use, Chest, Npc, null), host, S7Scheme);
         CollectionAssert.AreEqual(new[] { new ScrSchemeRequest(Npc, 0) }, run.Effects.Schemes.ToArray(), "the dispatcher does not decide what the object is");
         Assert.IsFalse(run.Effects.IsEmpty);
         Assert.IsTrue(ScrAdmissionSet.S4.IsSubsetOf(ScrAdmissionSet.S8));
-        Assert.IsTrue(S8.Admission.IsSubsetOf(ScrAdmissionSet.S8));
+        Assert.IsTrue(S7Scheme.Admission.IsSubsetOf(ScrAdmissionSet.S8));
         Assert.IsTrue(ScrAdmissionSet.S8.Actions.Contains(ScrCatalogue.Action.SetAutoLevelScheme));
         Assert.IsFalse(ScrAdmissionSet.S8.IsSubsetOf(ScrAdmissionSet.S4));
     }
@@ -67,7 +67,7 @@ public sealed class ScrSchemeTests
     {
         var host = new FakeHost();
         host.Attach(Npc, Use, 601, Program(Do(C(ScrCatalogue.Action.SetAutoLevelScheme, (EveryFollower, 0), N(101))), Do(C(ScrCatalogue.Action.ReturnSkipDefault))));
-        var run = ScrDispatcher.RunObject(new(Use, Npc, Pc, null), host, S8);
+        var run = ScrDispatcher.RunObject(new(Use, Npc, Pc, null), host, S7Scheme);
         Assert.AreEqual((ScrOutcome.Refused, ScrRefusalCode.FocusKindNotAdmitted), (run.Outcome, run.Refusal!.Code));
         Assert.AreEqual(0, run.Effects.Schemes.Count);
     }
@@ -77,7 +77,7 @@ public sealed class ScrSchemeTests
     {
         var host = new FakeHost();
         host.Attach(Npc, Use, 2023, Schemes());
-        var run = ScrDispatcher.RunCall(new(2023, 0, Pc, Npc), host, S8);
+        var run = ScrDispatcher.RunCall(new(2023, 0, Pc, Npc), host, S7Scheme);
         CollectionAssert.AreEqual(new[] { new ScrSchemeRequest(Pc, 101), new ScrSchemeRequest(Npc, 91), new ScrSchemeRequest(Pc, -5) },
             run.Effects.Schemes.ToArray());
     }

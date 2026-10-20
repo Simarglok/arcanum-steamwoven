@@ -280,8 +280,9 @@ conversation is not run).
   stores it and later buys nothing with it: a documented deviation no installed script reaches.
 - **The AREA viewer** admits 139 in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound-calls-scheme"); `Apply` hands each
   request to the session in action order: the PC's own scheme, or an NPC's record with its map data (the host's `npcAdvancement`,
-  which the viewer reads from the NPC's home-map fields with `--hero`); any other object is ignored, and a refused number changes
-  nothing and stops nothing, as the original's run goes on.
+  which the viewer reads from the NPC's home-map fields with `--hero`); any other object is ignored, and a refused number or a PC
+  without a hero changes nothing and stops nothing, as the original's run goes on; a change the session cannot take (the record
+  budget, the revision) stops the later steps, as a refused call request does (`AreaScriptHost.SchemeRefusalStops`).
 - **Installed original** (opt-in `ScrSchemeTests`, `DAT_ROOT`): one set-scheme action in all scripts, line 5 of the winning script
   2023 (on the triggerer, 101); S8 admits it from that line, and the next line (action 99) is the first refusal, so the script
   itself does not run yet.

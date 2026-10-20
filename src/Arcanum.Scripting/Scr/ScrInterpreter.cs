@@ -173,7 +173,8 @@ internal sealed class ScrInterpreter
             {
                 // OL30: the object operand is a list and every object in it gets the number (a value); the host writes it for a
                 // PC or an NPC and ignores any other object (0x4A6D90). The set's focus kinds name one object each, and an absent
-                // one names none: the original's list then holds a null handle, which its setter ignores. The run goes on.
+                // one names none (inference: the original's list would hold a null handle, which its setter refuses; not traced).
+                // The run goes on.
                 var scheme = Get(a, 1);
                 foreach (var obj in Objects(a, 0)) _schemes.Add(new(obj, scheme));
                 return (Step.Next, 0);
@@ -284,7 +285,8 @@ internal sealed class ScrInterpreter
         _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
     };
 
-    // The objects an object operand names, as the original's list (0x44B4E0): one for a single-object focus kind, none for an absent one.
+    // The objects an object operand names, as the original's list (0x44B4E0): one for a single-object focus kind, none for an absent
+    // one. Focus groups are not admitted yet.
     private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => OptionalObject(c, slot) is { } obj ? [obj] : [];
 
     private IScrObjectQueries Queries => _host as IScrObjectQueries

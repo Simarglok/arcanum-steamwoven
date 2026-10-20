@@ -136,6 +136,14 @@ public sealed class AreaScriptHostTests
         using var g = Create();
         Assert.IsTrue(g.Host.Apply(new FakeEffectsRun(g.Host, g.Host.Object(g.Speaker)).Run(program, new(777, 4, 0x0201), AreaScriptHost.Admission).Effects));
         Assert.IsNull(g.Session.QueryNpcAdvancement(g.Entity));
+
+        // Only a change the session cannot take stops the later steps.
+        Assert.IsFalse(AreaScriptHost.SchemeRefusalStops(GameSessionFailure.None));
+        Assert.IsFalse(AreaScriptHost.SchemeRefusalStops(GameSessionFailure.InvalidAdvancement));
+        Assert.IsFalse(AreaScriptHost.SchemeRefusalStops(GameSessionFailure.AdvancementUnavailable));
+        Assert.IsTrue(AreaScriptHost.SchemeRefusalStops(GameSessionFailure.BudgetExceeded));
+        Assert.IsTrue(AreaScriptHost.SchemeRefusalStops(GameSessionFailure.RevisionExhausted));
+        Assert.IsTrue(AreaScriptHost.SchemeRefusalStops(GameSessionFailure.StaleVersion));
     }
 
     [TestMethod]

@@ -282,8 +282,7 @@ public sealed class ScrEffects
     /// <summary>The auto-level schemes to set, in action order, one per object (ARC-SCRIPT-016).</summary>
     public IReadOnlyList<ScrSchemeRequest> Schemes { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
-        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0
-        && Schemes.Count == 0;
+        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went

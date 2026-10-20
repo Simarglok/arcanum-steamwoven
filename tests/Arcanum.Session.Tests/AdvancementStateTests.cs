@@ -261,6 +261,10 @@ public sealed class AdvancementStateTests
         var up = owner.LevelFollower(owner.Version, Follower(), AdvancementModifiers.None, new(1, 2));
         Assert.AreEqual((9, 8, 0), (up.Record!.Sheet.Stats[0], up.Record.Sheet.Stats[1], up.Record.Sheet.UnspentPoints));
         Assert.AreEqual(60, up.Record.AutoLevelScheme);
+        // A scheme without a rule: the next rise buys nothing, not even rule 70, and the point stays.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetAutoLevelScheme(owner.Version, SessionSchemeTarget.ForNpc(Follower("cutthroat")), 150).Disposition);
+        var plain = owner.LevelFollower(owner.Version, Follower("cutthroat"), AdvancementModifiers.None, new(1, 2));
+        Assert.AreEqual((2, 1, 8, 8), (plain.Record!.Sheet.Level, plain.Record.Sheet.UnspentPoints, plain.Record.Sheet.Stats[0], plain.Record.Sheet.Stats[2]));
         // A later change keeps the levelled sheet.
         Assert.AreEqual(GameSessionDisposition.Changed, owner.SetAutoLevelScheme(owner.Version, SessionSchemeTarget.ForNpc(Follower()), 0).Disposition);
         Assert.AreEqual((2, 0), (owner.QueryNpcAdvancement("virgil")!.Sheet.Level, owner.QueryNpcAdvancement("virgil")!.AutoLevelScheme));
