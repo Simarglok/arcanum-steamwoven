@@ -10,7 +10,9 @@ optional target critter with their skill levels, the target's perception, intell
 source's extraordinary intelligence, the local PC and the game difficulty; for the spell learn of ARC-MAGIC-004 one critter's
 college rank, level, intelligence, willpower and magick points, the spell's willpower minimum and recording rank and stat
 setters; for the fate functions of ARC-WORLD-054 one PC with its fate points and armed fates and recording stubs of the stat,
-field, hit-point and fatigue writes); the same model becomes the inputs of the OriginalExe tests. Importing this module does not
+field, hit-point and fatigue writes; for the invocation check's range, forbidden flags and item gate of ARC-MAGIC-006 the
+parent's location, the target tile and object, the record's range and forbidden masks, and a holder, an item and the power it
+draws); the same model becomes the inputs of the OriginalExe tests. Importing this module does not
 need Unicorn.
 """
 from __future__ import annotations
@@ -128,13 +130,26 @@ FATE_MASKS = (0x5BC48C, 0x5BC48C + 4 * FATE_KINDS)
 FATE_CALLBACK = 0x603D48        # the fate window's refresh callback; null in the world model
 FATE_IMMEDIATE_CODE = (0x4F52D0, 0x4F5320)
 
+# Service functions, fields and record offsets used by the invocation check's range, flags and item gate (ARC-MAGIC-006).
+FIELD64_GETTER = 0x406DA0       # 64-bit object field: (handle low, handle high, field) -> EDX:EAX; field 2 is the location
+FIELD_LOCATION = 2
+FIELD_OBJECT_FLAGS = 0x13
+IN_INVENTORY = 0x1000
+FIELD_CRITTER_FLAGS = 0xDA
+FIELD_COMPLEXITY = 0x60
+ITEM_POWER = 0x4614A0           # the power a holder draws from an item: (item low, item high, holder low, holder high); stubbed here
+RECORD_RANGE = 0x30
+RECORD_DISALLOWED = 0x11C       # caster spell flags, then target spell flags (+4) and target critter flags (+8)
+RANGE_CODE = ((0x450280, 0x4502B0), (0x4B96F0, 0x4B9760))
+ITEM = (0x5EED0004, 0x00000042)    # the item of the item gate
+
 
 @dataclass(frozen=True)
 class FunctionSpec:
     address: int
     name: str                          # Steamwoven's own name
     code: tuple[tuple[int, int], ...]  # allowed code ranges, [start, end), the function's own first
-    model: str                         # "experience", "bonus", "skill-level", "training-set", "spell-cost", "effectiveness", "spell-learn" or "fate"
+    model: str                         # "experience", "bonus", "skill-level", ..., "spell-range", "spell-flags" or "item-gate"
 
     @property
     def key(self) -> str:
@@ -160,6 +175,9 @@ FUNCTIONS: dict[int, FunctionSpec] = {spec.address: spec for spec in (
     FunctionSpec(0x4B1790, "spell-learn", SPELL_LEARN_CODE, "spell-learn"),
     FunctionSpec(0x4537B0, "spell-resist", ((0x4537B0, 0x453B20),), "spell-resist"),
     FunctionSpec(0x453B20, "spell-fail-chance", ((0x453B20, 0x453CC0),), "spell-fail-chance"),
+    FunctionSpec(0x454700, "spell-range", ((0x454700, 0x454790),) + RANGE_CODE, "spell-range"),
+    FunctionSpec(0x456430, "spell-flags", ((0x456430, 0x4564E0),), "spell-flags"),
+    FunctionSpec(0x456A10, "item-gate", ((0x456A10, 0x456A90),), "item-gate"),
 )}
 
 
@@ -740,6 +758,164 @@ def resist_stubs(case: ResistCase, recorder: ResistRecorder) -> dict:
             RANDOM: rolled, NOTIFY_AI: notify}
 
 
+@dataclass
+class RangeCase:
+    """The range's parent location (origin), target tile and optional target object (its object flags and location), the
+    spell, its record's Range: and whether the spell table is loaded. Coordinates are unsigned 32-bit; (0, 0) is none."""
+    origin: tuple[int, int]
+    tile: tuple[int, int]
+    target: int
+    flags: int
+    location: tuple[int, int]
+    spell: int
+    range: int
+    loaded: int
+
+
+def _coordinate(rng: random.Random) -> int:
+    return rng.randint(0, 200_000) if rng.random() < 0.9 else rng.choice((0, 1, 0x7FFFFFFF, 0x80000000, 0xFFFFFFFE, 0xFFFFFFFF))
+
+
+def _near(rng: random.Random, origin: tuple[int, int], reach: int) -> tuple[int, int]:
+    """A location around `origin`, often exactly `reach` away on one axis (the edge of the range)."""
+    if rng.random() < 0.15:
+        return (_coordinate(rng), _coordinate(rng))
+    dx, dy = rng.randint(-reach - 3, reach + 3), rng.randint(-reach - 3, reach + 3)
+    if rng.random() < 0.3:
+        dx = rng.choice((-1, 1)) * (reach + rng.choice((-1, 0, 1)))
+    return ((origin[0] + dx) & 0xFFFFFFFF, (origin[1] + dy) & 0xFFFFFFFF)
+
+
+def draw_range_case(rng: random.Random) -> RangeCase:
+    """Ranges mostly 0..30 (some negative or extreme), the table loaded mostly; locations around the parent's, on the edge of the
+    range often, sometimes far or at the 32-bit edges; no origin, no tile or no object location sometimes; a target object half
+    the time, in an inventory a third of those."""
+    reach = rng.randint(0, 30) if rng.random() < 0.85 else rng.choice((-1, -5, -0x80000000, 0x7FFFFFFF, 1000))
+    origin = (0, 0) if rng.random() < 0.08 else (_coordinate(rng), _coordinate(rng))
+    near = max(0, min(reach, 40))
+    tile = (0, 0) if rng.random() < 0.15 else _near(rng, origin, near)
+    target = int(rng.random() < 0.5)
+    flags = (IN_INVENTORY if rng.random() < 0.3 else 0) | rng.choice((0, 0, 0x20, 0x2000, 0x10000))
+    location = (0, 0) if rng.random() < 0.1 else _near(rng, origin, near)
+    return RangeCase(origin=origin, tile=tile, target=target, flags=flags, location=location, spell=rng.randrange(SPELL_RECORDS),
+                     range=reach, loaded=int(rng.random() < 0.9))
+
+
+def range_stubs(case: RangeCase) -> dict:
+    """Stubs answering from the target object: its object flags and its location; anything else is rejected."""
+    from oracle_emu import StubRejected
+
+    def target(argument) -> None:
+        if (argument(0), argument(1)) != TARGET:
+            raise StubRejected(f"handle {argument(0):#x}:{argument(1):#x} is not the world model's target")
+
+    def field(argument) -> int:
+        target(argument)
+        if argument(2) != FIELD_OBJECT_FLAGS:
+            raise StubRejected(f"field {argument(2):#x} is not in the world model")
+        return case.flags
+
+    def field64(argument) -> tuple[int, int]:
+        target(argument)
+        if argument(2) != FIELD_LOCATION:
+            raise StubRejected(f"64-bit field {argument(2):#x} is not in the world model")
+        return case.location
+
+    return {FIELD_GETTER: field, FIELD64_GETTER: field64}
+
+
+@dataclass
+class FlagsCase:
+    """The forbidden flags' caster (optional) and target (optional, its object type), their spell flags, the target's critter
+    flags and the record's three forbidden masks."""
+    caster: int
+    target: int
+    caster_flags: int
+    target_flags: int
+    kind: int
+    critter_flags: int
+    masks: tuple[int, int, int]
+
+
+def _flags(rng: random.Random) -> int:
+    """Few bits from a small pool (so a mask meets a flag often), the sign bit sometimes."""
+    pool = (0x1, 0x8, 0x200, 0x1000, 0x400000, 0x80000000)
+    return sum(bit for bit in pool if rng.random() < 0.2)
+
+
+def draw_flags_case(rng: random.Random) -> FlagsCase:
+    return FlagsCase(caster=int(rng.random() < 0.9), target=int(rng.random() < 0.8), caster_flags=_flags(rng), target_flags=_flags(rng),
+                     kind=rng.choice((15, 16, 16)) if rng.random() < 0.7 else rng.randint(0, 17), critter_flags=_flags(rng),
+                     masks=(_flags(rng), _flags(rng), _flags(rng)))
+
+
+def flags_stubs(case: FlagsCase) -> dict:
+    """Stubs answering the caster's spell flags and the target's spell flags, object type and critter flags."""
+    from oracle_emu import StubRejected
+
+    def field(argument) -> int:
+        handle, number = (argument(0), argument(1)), argument(2)
+        if handle == HANDLE and number == FIELD_SPELL_FLAGS:
+            return case.caster_flags
+        if handle == TARGET and number in (FIELD_SPELL_FLAGS, FIELD_TYPE, FIELD_CRITTER_FLAGS):
+            return {FIELD_SPELL_FLAGS: case.target_flags, FIELD_TYPE: case.kind, FIELD_CRITTER_FLAGS: case.critter_flags}[number]
+        raise StubRejected(f"field {number:#x} of {handle[0]:#x}:{handle[1]:#x} is not in the world model")
+
+    return {FIELD_GETTER: field}
+
+
+@dataclass
+class GateCase:
+    """The item gate's holder (optional) and its aptitude, the other object (optional) and its aptitude, the item's magic-tech
+    complexity and the power the holder draws from it."""
+    holder: int
+    aptitude: int
+    other: int
+    other_aptitude: int
+    complexity: int
+    power: int
+
+
+def draw_gate_case(rng: random.Random) -> GateCase:
+    return GateCase(holder=int(rng.random() < 0.9), aptitude=rng.randint(-100, 100), other=int(rng.random() < 0.5),
+                    other_aptitude=rng.randint(-100, 100), complexity=rng.choice((0, 0, -5)) if rng.random() < 0.3 else rng.randint(1, 100),
+                    power=rng.choice((0, 0, -1, -30)) if rng.random() < 0.4 else rng.randint(1, 100))
+
+
+@dataclass
+class GateRecorder:
+    """What one gate run asked: the power calls and the aptitude reads of the other object."""
+    powers: int = 0
+    other_reads: int = 0
+
+
+def gate_stubs(case: GateCase, recorder: GateRecorder) -> dict:
+    """Stubs answering the item's complexity, the holder's and the other object's aptitude and the holder's power over the item."""
+    from oracle_emu import StubRejected
+
+    def field(argument) -> int:
+        if (argument(0), argument(1)) != ITEM or argument(2) != FIELD_COMPLEXITY:
+            raise StubRejected(f"field {argument(2):#x} of {argument(0):#x}:{argument(1):#x} is not in the world model")
+        return case.complexity & 0xFFFFFFFF
+
+    def stat(argument) -> int:
+        handle = (argument(0), argument(1))
+        if argument(2) != STAT_APTITUDE or handle not in (HANDLE, OTHER_PC):
+            raise StubRejected(f"stat {argument(2)} of {handle[0]:#x}:{handle[1]:#x} is not in the world model")
+        if handle == OTHER_PC:
+            recorder.other_reads += 1
+            return case.other_aptitude & 0xFFFFFFFF
+        return case.aptitude & 0xFFFFFFFF
+
+    def power(argument) -> int:
+        if (argument(0), argument(1)) != ITEM or (argument(2), argument(3)) != HANDLE:
+            raise StubRejected("power of other objects")
+        recorder.powers += 1
+        return case.power & 0xFFFFFFFF
+
+    return {FIELD_GETTER: field, STAT_GETTER: stat, ITEM_POWER: power}
+
+
 # --- runs ------------------------------------------------------------------------------------------------------------
 
 def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str, unicorn_version: str,
@@ -967,6 +1143,58 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
                 progress(case_number)
         document.update(fields=["spell", "fateMaximized", "technology", "damaging", "period", "resistStat", "modifier", "type", "caster",
                                 "resistance", "aptitude", "statValue", "extraordinary", "d20", "result", "rolls"])
+    elif spec.model == "spell-range":
+        from oracle_emu import to_signed
+        table = emulator.write_heap(b"\0" * (SPELL_RECORD * SPELL_RECORDS))
+        emulator.set_global(SPELL_TABLE_POINTER, table)
+        for case_number in range(count):
+            case = draw_range_case(rng)
+            field = SPELL_RECORD * case.spell + RECORD_RANGE
+            emulator.write_heap(struct.pack("<i", case.range), field)
+            emulator.set_global(SPELLS_LOADED, case.loaded)
+            readable = (Range(SPELL_TABLE_POINTER, SPELL_TABLE_POINTER + 4), Range(SPELLS_LOADED, SPELLS_LOADED + 4),
+                        Range(table + field, table + field + 4))
+            target = TARGET if case.target else (0, 0)
+            result = emulator.call(spec.address, (*case.origin, *case.tile, *target, case.spell), code=code, stubs=range_stubs(case),
+                                   readable=readable)
+            emulator.write_heap(b"\0\0\0\0", field)
+            cases.append([*(to_signed(v) for v in (*case.origin, *case.tile)), case.target, case.flags,
+                          *(to_signed(v) for v in case.location), case.spell, case.range, case.loaded, result])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["originX", "originY", "tileX", "tileY", "target", "objectFlags", "locationX", "locationY", "spell", "range",
+                                "loaded", "result"])
+    elif spec.model == "spell-flags":
+        from oracle_emu import to_signed
+        record = emulator.write_heap(b"\0" * SPELL_RECORD)
+        for case_number in range(count):
+            case = draw_flags_case(rng)
+            emulator.write_heap(struct.pack("<3I", *case.masks), RECORD_DISALLOWED)
+            caster = HANDLE if case.caster else (0, 0)
+            target = TARGET if case.target else (0, 0)
+            result = emulator.call(spec.address, (*caster, *target, record), code=code, stubs=flags_stubs(case),
+                                   readable=(Range(record + RECORD_DISALLOWED, record + RECORD_DISALLOWED + 12),))
+            cases.append([case.caster, case.target, to_signed(case.caster_flags), to_signed(case.target_flags), case.kind,
+                          to_signed(case.critter_flags), *(to_signed(m) for m in case.masks), result])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["caster", "target", "casterFlags", "targetFlags", "type", "critterFlags", "disallowedCaster",
+                                "disallowedTarget", "disallowedCritter", "result"])
+    elif spec.model == "item-gate":
+        from oracle_emu import RunFailure
+        for case_number in range(count):
+            case = draw_gate_case(rng)
+            recorder = GateRecorder()
+            holder = HANDLE if case.holder else (0, 0)
+            other = OTHER_PC if case.other else (0, 0)
+            result = emulator.call(spec.address, (*holder, *other, *ITEM), code=code, stubs=gate_stubs(case, recorder))
+            if recorder.powers > 1 or recorder.other_reads > 1:
+                raise RunFailure("stub", f"unexpected calls {recorder}")
+            cases.append([case.holder, case.aptitude, case.other, case.other_aptitude, case.complexity, case.power, result, recorder.powers,
+                          recorder.other_reads])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["holder", "aptitude", "other", "otherAptitude", "complexity", "power", "result", "powerCalls", "otherReads"])
     else:
         raise ValueError(f"unknown model {spec.model}")
     document["cases"] = cases

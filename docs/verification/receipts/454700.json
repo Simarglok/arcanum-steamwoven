@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x454700",
+  "name": "spell-range",
+  "method": "Arcanum.Simulation.Magic.SpellInvocationRules.InRange",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 5,
+  "mutantsCaught": 5,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "6903fa48bb3914b55f2cfb6b8d261edaeedde0161a883f87978b7318bb2af991",
+  "configuration": "Debug"
+}
