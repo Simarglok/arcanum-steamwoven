@@ -22,7 +22,7 @@ Requirements: [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019) (t
 - The function oracle ([ARC-DEV-007](../../tools/original-oracle/README.md)) runs the basic effectiveness (0x4C62E0), the
   opposed effectiveness (0x4C6410) and the tech effectiveness (0x4C69F0) on 10,000 seeded inputs each (a source and an
   optional target, their levels, the target's perception, intelligence and Magnetic Inversion, extraordinary intelligence,
-  the local PC and the difficulty setting): no difference, three or four planted mutants caught per function (F3, receipts in
+  the local PC and the difficulty setting): no difference, three to five planted mutants caught per function (F3, receipts in
   [`docs/verification/receipts`](../verification/receipts)). The difficulty (0x4C8430), the run (0x4C7160) and the critical
   chances (0x4C81A0, 0x4C82E0) read the world (light, lines of fire, inventories, effects) through many service functions and
   stay at F2.
