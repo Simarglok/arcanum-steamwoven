@@ -32,8 +32,8 @@ script hooks of [FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002
    type: per-critter magic state for every NPC (P1) and creating objects at run time (P2).
 2. **First visible result** ("first cast"): the hero learns a spell in the character sheet and casts a damaging or
    healing spell at a critter in the AREA viewer, on any map: MT1, MT2, MT3, MT5–MT8, MT9a, MT10, MT12, MT19 and
-   MT20a, twelve PRs (plus the skills lane's point transaction). Damage and heal spells end right after BEGIN, so the
-   first cast needs no saved runs (MT9b) and no maintain bar (MT20b). MT4 and MT11 can run beside them.
+   MT20a, twelve PRs (plus the skills lane's point transaction). The first cast uses a damage or heal spell without
+   `Duration:` or `Maintain:`, which ends right after BEGIN, so it needs no saved runs (MT9b) and no maintain bar (MT20b). MT4 and MT11 can run beside them.
 3. **Most foundations exist**: the session clock, saved event queue, labelled seeded randomness, life state (hit points,
    fatigue, knockout, death, heal, resurrect), the attack resolver's typed damage and resistances, the hero's effect
    list, equipment, reaction memory, character stats with magick points and aptitude, auto-level spell purchases with
