@@ -124,7 +124,7 @@ public sealed class HealStateTests
         StringAssert.Contains(text, "\"uses\":[{\"entity\":\"kit:4\",\"uses\":6}]");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(new SessionItemUses(Bandage, 6), restored.QueryDurability().Uses.Single());
-        var zero = GameSessionOwner.Restore(Decode(text.Replace("\"uses\":6}", "\"uses\":0}")), RestoreOptions());
-        Assert.AreEqual(GameSessionFailure.InvalidDurability, zero.Failure);
+        var zero = GameSessionSnapshotCodec.TryDecode(text.Replace("\"uses\":6}", "\"uses\":0}"));
+        Assert.AreEqual((SnapshotDecodeFailure.OutOfRange, "$.durability.uses[0].uses"), (zero.Failure, zero.Path));
     }
 }

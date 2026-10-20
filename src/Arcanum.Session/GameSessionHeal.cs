@@ -48,8 +48,11 @@ public sealed partial class GameSessionOwner
     /// <item>The item loses one use, or five on a critical failure below expert, and is destroyed at 0 or less.</item>
     /// </list>
     /// The rolls (<c>skill</c> check, critical and amount) come from the session generator; the check, the life record, the fate
-    /// and the item are one revision. Nothing refuses a target at full hit points, an undead or mechanical target or the hero
-    /// itself (HL5). Refused before anything is charged or rolled: no hero (<see cref="GameSessionFailure.HealUnavailable"/>), an
+    /// and the item are one revision. Before a charge the heal's worst-case record budgets and revisions are checked, so only an
+    /// exhausted generator can refuse a heal after its charge (the charge stays, as any spent action point). Without a world no
+    /// action points are charged even in the hero's subturn (the caller's choice; the AREA viewer has no turn-based round). Nothing refuses a target at full hit points, an undead or mechanical target or the hero
+    /// itself (HL5). Refused before anything is charged or rolled: no hero or a dead one (<see cref="GameSessionFailure.HealUnavailable"/>, as every hero action;
+    /// an unconscious hero is not refused), an
     /// item that is not a healing item or holds values outside the bounds (<see cref="GameSessionFailure.InvalidHealingItem"/>), an
     /// item with a use or destroy script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), an item the hero does not hold
     /// or the session deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>), a target whose values do not hold, the version.
@@ -60,7 +63,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(item);
-        if (_hero is null) return RejectHeal(GameSessionFailure.HealUnavailable);
+        if (_hero is null || HeroDead()) return RejectHeal(GameSessionFailure.HealUnavailable);
         if (!item.Healing || item.UsageBonus is < -MaxHealingItemBonus or > MaxHealingItemBonus || item.Uses is < 0 or > SessionItemUseLimits.MaxUses ||
             !SessionValidation.Entity(item.Entity) || !ItemDurabilityRules.IsValid(item.Condition) || item.ScriptPoints is null)
             return RejectHeal(GameSessionFailure.InvalidHealingItem);
@@ -76,6 +79,12 @@ public sealed partial class GameSessionOwner
         SessionCombatResult? charge = null;
         if (world is not null && _combat.Round is { } round && round.Actor == SessionCombatant.Hero)
         {
+            // The heal's worst-case budgets and revisions before the charge, so a charged heal is not then refused for them.
+            var recordedCritter = !target.IsHero && _life.Critters.ContainsKey(target.Entity!);
+            if (!target.IsHero && !recordedCritter && _life.Critters.Count >= _limits.MaxLifeRecords || NewDurabilityRecord(item.Entity, destroyed: false) &&
+                _durability.Count >= _limits.MaxDurabilityRecords)
+                return RejectHeal(GameSessionFailure.BudgetExceeded);
+            if (_revision >= long.MaxValue - 1) return RejectHeal(GameSessionFailure.RevisionExhausted);
             charge = ConsumeActionPoints(Version, SessionCombatant.Hero, TurnBasedRules.UseItemCost, world);
             if (charge.Disposition == GameSessionDisposition.Rejected) return RejectHeal(charge.Failure) with { Charge = charge };
         }
@@ -141,7 +150,7 @@ public sealed partial class GameSessionOwner
         var destroyed = left <= 0;
         // Budgets before anything is written: a new NPC life record, a new use record.
         if (lifeChanged && !target.IsHero && !recorded && _life.Critters.Count >= _limits.MaxLifeRecords) return RejectHeal(GameSessionFailure.BudgetExceeded);
-        if (!destroyed && !_durability.Uses.ContainsKey(item.Entity) && _durability.Count >= _limits.MaxDurabilityRecords)
+        if (NewDurabilityRecord(item.Entity, destroyed) && _durability.Count >= _limits.MaxDurabilityRecords)
             return RejectHeal(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectHeal(GameSessionFailure.RevisionExhausted);
 
@@ -159,6 +168,12 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, check, outcome, life, destroyed ? null : (int)left, destroyed,
             check.Fated, Version);
     }
+
+    // Whether the item's change adds a durability record: a destroyed entry for an item with no condition or uses record, or a
+    // first uses record.
+    private bool NewDurabilityRecord(string entity, bool destroyed) => destroyed
+        ? !_durability.Records.ContainsKey(entity) && !_durability.Uses.ContainsKey(entity)
+        : !_durability.Uses.ContainsKey(entity);
 
     private SessionHealResult RejectHeal(GameSessionFailure failure) =>
         new(GameSessionDisposition.Rejected, failure, null, null, null, null, null, false, false, Version);

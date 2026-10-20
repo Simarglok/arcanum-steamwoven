@@ -1328,7 +1328,7 @@ public static class GameSessionSnapshotCodec
             var item = Fields(used[i], path, ItemUseFields);
             var entity = Entity(item["entity"], path + ".entity");
             if (i > 0 && string.CompareOrdinal(entity, uses[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
-            uses[i] = new(entity, Int(item["uses"], path + ".uses", int.MinValue, int.MaxValue));
+            uses[i] = new(entity, Int(item["uses"], path + ".uses", 1, SessionItemUseLimits.MaxUses));
         }
         return new(items, destroyed, uses);
     }
