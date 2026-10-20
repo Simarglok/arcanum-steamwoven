@@ -45,8 +45,8 @@ script hooks of [FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002
    ARC-DEV-025 no implemented function stays at F0; seven pure functions are proposed for the function oracle (F3)
    ([Checking against the original](#checking-against-the-original)).
 5. **Fifteen rows were decided by the owner on 2026-10-20** (eleven bugs of the original, four reconstruction
-   changes): every recommendation was accepted ([Anomaly decisions](#anomaly-decisions-accepted-2026-10-20)); MG7 and
-   MG18 stay conditional on the MT2 census. MG12 is fixed in both modes by the owner's no-crash rule; MG1, MG2, MG8, MG13, MG14, MG16, MG17 and MG20 follow the
+   changes): every recommendation was accepted ([Anomaly decisions](#anomaly-decisions-accepted-2026-10-20)); the MT2
+   census settled MG7 (record only) and moved MG18 to MT8 with MG21–MG23. MG12 is fixed in both modes by the owner's no-crash rule; MG1, MG2, MG8, MG13, MG14, MG16, MG17 and MG20 follow the
    original and need no decision.
 6. **Boundaries agreed with the parallel lanes (2026-10-20)**: skills builds the shared character-point transaction
    (slice S5 of the skills plan) and the fate owner (S7); technology (ARC-RES-062) owns tech degrees, schematics,
@@ -150,7 +150,7 @@ parallel. "Read" lists the function groups each slice reads twice in the executa
 | **MT5 Cost and payment** | MAGIC | The three cost formulas as the original has them (run time `ceil(cost / 2)` for mastery then dwarf ×2; UI and AI with truncation; UI check without mastery, MG2); the pre-animation affordability check on the cast spell (MG1); a payment plan: free runs, `ChargeBeginCost: 0`, fatigue-limited half, worn mana stores first (MG20), fatigue refusal at −15, fail-after-pay for maintained or untimed spells, item spell charges; the charge-cell source (records with `ChargesFromCells:`) through a port the technology lane fills, taken first in the payment, before the fatigue-limiting, mana-store and fatigue steps, as the original's payment (0x450420) does; its amount and refusal are the technology lane's rules (its item-source surcharge is the technology research's (ARC-RES-062) anomaly TC1); the worn-store recharge amount. | 004 | MT1 | cost (0x4507D0, oracle), pay (0x450420), checks (0x4508A0 oracle, 0x450940), spell cost (0x4B1650, 0x4B1660 oracle, 0x4B16C0), recharge (0x459590, 0x459640, 0x459680) | MG20 (2nd reading only) |
 | **MT6 Resistance and save** | MAGIC | Per-target resolver returning the margin or a skip: stored magic resistance (O9), the tech-aligned raise, d100 margin, `Resist:` save d20, extraordinary willpower immunity, damaging floor 50, the fate save as an input (MG13); the fail-chance predictor exactly as the original, with its own labelled d20 (MG14); technology records skip it. | 005, 010 | MT1, fate input (the skills plan's S7 later) | resist (0x4537B0, oracle), fail chance (0x453B20 oracle, 0x453CC0) | MG4, O9 |
 | **MT7 Invocation check** | MAGIC | The check before any slot or payment, with a typed refusal per step: turn, spell number, range (Chebyshev, inventory always in range), line of fire through a port (filled by AI awareness I2 or a later LOS slice), forbidden flags, Bonds of Magick, NPC fallback radius 2, item aptitude gate and holder-can-use (0x456A10), intelligence 5, anti-teleport. | 003, 009 (gate), 010 | MT1, MT2 | check (0x4564E0), range (0x454700), LOS (0x456BC0), flags (0x456430), gate (0x456A10) | MG5 |
-| **MT8 Target areas** | MAGIC | Target lists for an action's area over a world query port (objects and tiles of the active map, party, parent, attacker, the run's object list) and the per-component filter and re-aim; reads the cone, count and radius branches the research left open (O3). | 003 | MT2 | targets (0x4F40B0) and the target functions it calls (0x4F24F0–0x4F4E40), apply area (0x453D40, 0x453EE0, 0x453F20) | MG21, MG22, MG23 (recorded by ARC-MAGIC-002) |
+| **MT8 Target areas** | MAGIC | Target lists for an action's area over a world query port (objects and tiles of the active map, party, parent, attacker, the run's object list) and the per-component filter and re-aim; reads the cone, count and radius branches the research left open (O3). | 003 | MT2 | targets (0x4F40B0) and the target functions it calls (0x4F24F0–0x4F4E40), apply area (0x453D40, 0x453EE0, 0x453F20) | MG18, MG21, MG22, MG23 (recorded by ARC-MAGIC-002) |
 
 ### Phase C: active runs (`Arcanum.Session`)
 
@@ -204,12 +204,15 @@ every fix of a bug of the original be documented. The decided rows are recorded 
 [anomaly decisions](npc-combat-ai-plan.md#anomaly-decisions) (original behaviour, chosen behaviour, reason, switch).
 Each slice that implements a row names its switch there, adds it to the
 [rule-mode registry](../world/rule-modes.md#registry) and describes the difference in its runtime contract. MG7 and
-MG18 were settled by the MT2 census (ARC-MAGIC-002): MG7 record only, MG18 fixed with a switch.
+MG18 were settled by the MT2 census (ARC-MAGIC-002): MG7 is record only (no installed record has an Interrupt
+component); MG18 stays record only and is classified in MT8 with MG21–MG23, because whether it is a bug depends on how
+the target functions test the kind bits (its row below).
 
-ARC-MAGIC-002 brought the registry's reserved Magic row in line (the registry is read by a root test, so it changes
-with code, not in a docs-only PR): MG5, MG6, O9, O10, the charm bonus and the summon palette follow the original, no
-switch; MG7 is record only; MG18 is implemented (`MagicAnomalyProfile`); MG3, MG4, MG9, MG10, MG11, MG15 and MG19 stay
-Steamwoven fixes whose Original switches their slices add. The
+The registry's reserved Magic row still lists the earlier proposals. The first magic slice that adds a switch brings it
+in line and adds `MagicAnomalyProfile` to `GameRules` (the registry is read by a root test, so it changes with code, not
+in a docs-only PR; ARC-MAGIC-002 added no switch): MG5, MG6, O9, O10, the charm bonus and the summon palette move to
+"follow the original, no switch"; MG7 is record only; MG18 is classified in MT8; MG3, MG4, MG9, MG10, MG11, MG15 and
+MG19 stay as Steamwoven fixes with Original switches. The
 verdicts come from the
 [ledger](original-verification-ledger.md#magic-arc-res-043-load-map-arc-res-040). Under the
 [rule modes](../world/rule-modes.md), a reconstruction slip and the original's intended behaviour get no switch; a bug
@@ -231,7 +234,7 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG12 | original bug, out of bounds | fixed in both modes (owner rule 2026-10-17), "both fixed" in the registry | MT20b |
 | MG13, MG14, MG16, MG17, MG20 | the original | follow it in both modes; second reading in the slice | MT5, MT6, MT10 |
 | MG15 | original bug | fix (the reflected spell's own cost), switch | MT10 |
-| MG18 | original bug (target table) | fixed with switch `NotDeadCritterTargetLacksCritterBit`: the MT2 census finds 105 records naming the target | MT2 (done) |
+| MG18 | original bug (target table) | record only for now; classified in MT8 with MG21–MG23 once the target functions are read, fixed with a switch only if it proves a bug. Census (ARC-MAGIC-002): 105 installed records name it (100 line +0 areas, 15 components), but almost all of their masks already carry the critter bit through another target name, so adding it would change only two records: record 33 (Bolt of Lightning, all five line +0 areas, "any object except self and dead critters") and record 168 (two Maintain components, Heal and EyeCandy). With the bit the target functions gather critters only, so Bolt of Lightning would narrow to critters — bug or intent? | MT8 |
 | MG19 | original bug | fix (separate the two flags), switch; it reaches two technology records (`No_Resist:`) and the script action `cast_unresistable_spell` (7 live lines in 6 scripts); actions 121 and 122 are unused | MT9a |
 | MG21, MG22, MG23 | not decided (target values without a kind bit; ARC-MAGIC-002, ledger SC10) | open: decided with the target functions, when MT8 reads how the bits are tested; until then both modes keep the original's values | MT8 |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |

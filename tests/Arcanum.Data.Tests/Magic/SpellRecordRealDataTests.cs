@@ -96,11 +96,16 @@ public sealed class SpellRecordRealDataTests
             records.Count(r => r.DisallowedTargetSpellFlags != 0), records.Count(r => r.DisallowedTargetCritterFlags != 0)));
         Assert.AreEqual(0, records.Count(r => r.NoResist && (r.MaintainPeriod != 0 || r.DurationSeconds != 0 || r.DurationTriggerCount != 0)));
 
-        // MG18: the not-dead-critter target is named by 105 records (100 line +0 areas, 15 components).
+        // MG18: the not-dead-critter target is named by 105 records (100 line +0 areas, 15 components); adding the critter bit
+        // would change only the masks without it: record 33's five areas and record 168's two components.
         const ulong mg18 = 0x80000000UL;
         Assert.AreEqual((105, 100, 15), (
             records.Count(r => r.Areas.Any(a => (a.Targets & mg18) != 0) || r.Components.Any(c => ((c.Area.Targets | c.ApplyTargets) & mg18) != 0)),
             records.Count(r => r.Areas.Any(a => (a.Targets & mg18) != 0)), components.Count(c => ((c.Area.Targets | c.ApplyTargets) & mg18) != 0)));
+        static bool Changed(ulong mask) => (mask & mg18) != 0 && (mask & SpellComponentTables.CritterTargetBit) == 0;
+        Assert.AreEqual("33:5/0, 168:0/2", string.Join(", ", records.Select(r => (r.Number, Areas: r.Areas.Count(a => Changed(a.Targets)),
+                Components: r.Components.Count(c => Changed(c.Area.Targets) || Changed(c.ApplyTargets))))
+            .Where(r => r.Areas + r.Components > 0).Select(r => $"{r.Number}:{r.Areas}/{r.Components}")));
 
         // Text the original never reads: 43 words after a Destroy (40) or Identify (3) component, one repeated Dmg_Flags.
         Assert.AreEqual("SkippedKey=1, UnknownKey=43", string.Join(", ", table.Unread.GroupBy(u => u.Status).OrderBy(g => g.Key.ToString(), StringComparer.Ordinal)

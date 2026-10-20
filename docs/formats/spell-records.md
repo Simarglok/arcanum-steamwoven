@@ -4,8 +4,7 @@ Status: **Implemented, bounded**, work items ARC-MAGIC-001 and ARC-MAGIC-002 (20
 [magic implementation plan](../research/magic-implementation-plan.md). A Godot-free reader in `Arcanum.Data` of the
 spell table the original's magic-tech init loads: the 223 records of `rules\spelllist.mes` (lines +0..+4 and the effect
 components of lines +5 onward), the texts of `mes\spell.mes` and the 25 component type names of `rules\magictech.mes`.
-It applies no magic rule and changes no session, snapshot or viewer; the one rule-mode switch it brings (MG18) is applied
-where an area is used.
+It applies no magic rule and changes no session, snapshot, viewer or rule mode.
 
 Requirements: [FR-MAGIC-001](../requirements/combat-magic-tech.md#fr-magic-001) (definitions),
 [FR-MAGIC-003](../requirements/combat-magic-tech.md#fr-magic-003) and
@@ -31,8 +30,6 @@ Code: [`src/Arcanum.Data/Magic`](../../src/Arcanum.Data/Magic); tests:
   `SpellRecordTable.FirstMessage(n)` is record n's first message; `Unread` lists, in like-original mode, the text the
   original never reads (below). `SpellTexts.Read(file, mode)` reads the texts alone.
 - `SpellComponentTables` holds the target names and their 64-bit values and the name tables of the component data.
-- `Arcanum.Simulation.Magic.SpellTargetRules.Targets(mask, rules)` gives the mask an area tests under a rule setting
-  (MG18, [below](#mg18-the-not-dead-critter-target)); `MagicAnomalyProfile` is `GameRules.Magic`.
 - `SpellNameTables` holds the name tables values are matched against: 32 spell flags (`OSF_*`), 32 critter flags
   (`OCF_*`), 26 item triggers with their values, 23 stat keys, four `Info:` names, the ten `AI_*` keys.
 - Results are typed: `SpellDataLoad`, `SpellRecordRead`, `SpellTextsRead` with a `SpellDataStatus` and a
@@ -164,11 +161,10 @@ uses); the original resolves it to a prototype at load, which the summon slice (
 ### MG18: the not-dead-critter target
 
 The target name `Tgt_Obj_No_ST_Critter_Dead` has the value 0x80000004: it lacks the critter bit 0x40 that every other
-`Tgt_Obj_No_ST_Critter_*` name carries, so an area naming it does not require critters (ledger MG18, an original bug). The
-data keeps the original's masks; `SpellTargetRules.Targets` adds the critter bit to a mask naming that target under
-the Steamwoven setting and keeps it under Original (`MagicAnomalyProfile.NotDeadCritterTargetLacksCritterBit`, the
-[rule-mode registry](../world/rule-modes.md#registry)). 105 installed records name it (100 line +0 areas, 15 components),
-so the owner's decision makes it a fix (2026-10-20). Three further target values look inconsistent with their siblings —
+`Tgt_Obj_No_ST_Critter_*` name carries (ledger MG18). The data keeps the original's values and both rule modes behave as
+the original. 105 installed records name it (100 line +0 areas, 15 components), but almost all of their masks already carry the critter bit through another target name, so adding it would change only two records: record 33 (Bolt of Lightning, all five line +0 areas, "any object except self and dead critters") and record 168 (two Maintain components, Heal and EyeCandy). With the bit the target functions gather critters only, so Bolt of Lightning would narrow to critters. Whether that is a bug or the intent depends on how the target functions (0x4F40B0) test the kind bits, so MG18 is
+classified in the target slice (MT8) with MG21–MG23 and gets a switch only if it proves a bug (owner's decision row, "MT2
+or MT8"). Three further target values look inconsistent with their siblings —
 `Tgt_Non_Party_Critters` without the critter bit (20 records), `Tgt_Obj_Radius` without the object bit (24 records),
 `Tgt_Tile_Self` without the tile bit (unused) — and are recorded as MG21–MG23 (ledger SC10) for the target slice (MT8),
 which reads how the bits are tested; the data keeps their values.
@@ -275,7 +271,8 @@ Component census (ARC-MAGIC-002; the questions census U3 left open, counts only)
   unresistably ([plan](../research/magic-implementation-plan.md#anomaly-decisions-accepted-2026-10-20)).
 - Records 80..139: 57 have components (EyeCandy 69, ObjFlag 38, Effect 28, Heal 16, Damage 15, AGoal 5, Destroy 5,
   Summon 5, Trait 3, NoOp 2, Recharge 1), 16 have AI priorities and 23 item triggers.
-- MG18: `Tgt_Obj_No_ST_Critter_Dead` in 105 records (100 line +0 areas, 15 components).
+- MG18: `Tgt_Obj_No_ST_Critter_Dead` in 105 records (100 line +0 areas, 15 components); adding the critter bit would
+  change only records 33 and 168 ([above](#mg18-the-not-dead-critter-target)).
 
 ## Differences from the original
 
@@ -296,7 +293,7 @@ the reader modes cover them, and no installed record reaches any of them.
 | A positional component value read after its line has ended crashes (null cursor); a name of an ObjFlag field or a TraitIdx stat that matches nothing reaches a hole of its table and crashes (SC5). | Refused (`MissingValue`, `UnknownName`). | both |
 | An unknown action name or component type exits (SC5). | Refused (`UnknownName`). | both |
 | A missing `AoE:`, `Spell:`, `MagicTech:` or `Proto:` is logged, a missing `Type:` is not, and each is read on with a default (SC1, SC5, SC7, SC8). | The same default; strict mode refuses it (`MissingKey`). | strict |
-| `Tgt_Obj_No_ST_Critter_Dead` lacks the critter bit (MG18). | The data keeps the original's mask; the Steamwoven setting adds the bit where the area is used, the Original setting keeps it (switch `NotDeadCritterTargetLacksCritterBit`). | rule mode |
+| `Tgt_Obj_No_ST_Critter_Dead` lacks the critter bit (MG18); so might three other targets (MG21–MG23). | Kept: the data holds the original's values and both modes behave as the original; MT8 classifies them. | none |
 | `Proto:` is resolved to a prototype at load. | The basic prototype number is kept (resolution is the summon slice's). | both |
 | `Rules\SpellEyeCandy.mes` is parsed by the same init. | Not read. | both |
 

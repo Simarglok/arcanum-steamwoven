@@ -43,8 +43,6 @@ public sealed class RuleModeTests
             Assert.AreSame(rules.Mode == RuleMode.Steamwoven ? Arcanum.Data.Fixes.DataFixProfile.Steamwoven : Arcanum.Data.Fixes.DataFixProfile.Original, rules.Data);
             Assert.AreEqual(rules.Name, rules.Experience.Name);
             Assert.AreSame(rules.Experience, Arcanum.Simulation.Character.ExperienceRuleProfile.FromName(rules.Name));
-            Assert.AreEqual(rules.Name, rules.Magic.Name);
-            Assert.AreSame(rules.Magic, Arcanum.Simulation.Magic.MagicAnomalyProfile.FromName(rules.Name));
         }
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
