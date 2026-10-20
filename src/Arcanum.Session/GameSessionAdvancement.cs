@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using Arcanum.Data.Characters;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Skills;
 
 namespace Arcanum.Session;
 
@@ -147,17 +148,22 @@ internal sealed class AdvancementDomain(SessionAutoLevelRules? rules)
         });
 
     /// <summary>
-    /// The changes the hero's purchases read: the stat changes of every effect its character owner holds (innate ones
-    /// included), the skill and maxima changes of its durable effects, and its poison level.
+    /// The changes the hero's purchases and skill levels read: the stat changes of every effect its character owner holds
+    /// (innate ones included), the skill changes of its race and gender effects (ARC-SKILLS-002) and of its durable effects, the
+    /// maxima changes of its durable effects, and its poison level.
     /// </summary>
-    internal static AdvancementModifiers HeroModifiers(CharacterStatsOwner stats, EffectDomain effects, int poisonLevel)
+    internal static AdvancementModifiers HeroModifiers(HeroDomain hero, EffectDomain effects, int poisonLevel)
     {
-        var applied = stats.Query(new(0)).Snapshot!.AppliedEffects;
+        var applied = hero.Stats.Query(new(0)).Snapshot!.AppliedEffects;
         var changes = effects.Entries.SelectMany(entry => effects.Definitions[entry.Number].Changes).ToArray();
-        static SkillModifier[] Skills(IEnumerable<EffectChange> changes, EffectAttributeKind kind) =>
-            [.. changes.Where(c => c.Kind == kind).Select(c => new SkillModifier(c.Attribute, EffectDomain.Operator(c.Operator), c.Value))];
-        return new([.. applied.SelectMany(effect => effect.Definition.Modifiers)], [.. Skills(changes, EffectAttributeKind.BasicSkill)],
-            [.. Skills(changes, EffectAttributeKind.TechSkill)], effects.Maximum(EffectSpecial.MaxHitPoints), effects.Maximum(EffectSpecial.MaxFatigue),
+        SkillModifier[] Skills(EffectAttributeKind kind, bool tech) =>
+        [
+            .. hero.State.InnateSkills.Where(c => SkillRules.IsTech(c.Skill) == tech)
+                .Select(c => new SkillModifier(SkillRules.FamilyIndex(c.Skill), c.Operator, c.Value)),
+            .. changes.Where(c => c.Kind == kind).Select(c => new SkillModifier(c.Attribute, EffectDomain.Operator(c.Operator), c.Value)),
+        ];
+        return new([.. applied.SelectMany(effect => effect.Definition.Modifiers)], [.. Skills(EffectAttributeKind.BasicSkill, false)],
+            [.. Skills(EffectAttributeKind.TechSkill, true)], effects.Maximum(EffectSpecial.MaxHitPoints), effects.Maximum(EffectSpecial.MaxFatigue),
             poisonLevel);
     }
 }
@@ -223,7 +229,7 @@ public sealed partial class GameSessionOwner
     internal static AutoLevelOutcome? CreationScheme(HeroDomain hero, SessionAutoLevelRules? rules)
     {
         if (rules?.Scheme(hero.State.Advancement.AutoLevelScheme) is not { } scheme) return null;
-        var modifiers = AdvancementDomain.HeroModifiers(hero.Stats, new EffectDomain(), 0);
+        var modifiers = AdvancementDomain.HeroModifiers(hero, new EffectDomain(), 0);
         var outcome = AutoLevelRules.Apply(AdvancementDomain.HeroSheet(hero.State), modifiers, scheme, null, npc: false, rules.SpellWillpower);
         return AdvancementDomain.HeroBounded(outcome.Sheet) ? outcome : null;
     }

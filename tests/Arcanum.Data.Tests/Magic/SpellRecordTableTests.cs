@@ -14,13 +14,20 @@ public sealed class SpellRecordTableTests
 {
     private static readonly SpellRecordMode[] Modes = [SpellRecordMode.Strict, SpellRecordMode.LikeOriginal];
 
-    /// <summary>A record table with empty lines +0 and +1 for every record, then the given lines (number → text).</summary>
+    /// <summary>The 25 component type names in their installed order (type names are identifiers, not game text).</summary>
+    internal static readonly string[] Types =
+        ["NoOp", "AGoal", "AGoalTerminate", "AIRedirect", "Cast", "ChargeNBranch", "Damage", "Destroy", "Dispel", "Effect", "EnvFlag",
+         "EyeCandy", "Heal", "Identify", "Interrupt", "Movement", "ObjFlag", "Recharge", "Summon", "Terminate", "TestNBranch", "Trait",
+         "TraitIdx", "Trait64", "Use"];
+
+    /// <summary>A record table with line +0 <c>AoE: Tgt_Self</c> and an empty line +1 for every record, then the given lines
+    /// (number → text; null removes).</summary>
     internal static MesFile List(params (int Number, string Text)[] lines)
     {
         var all = new SortedDictionary<int, string>();
         for (var spell = 0; spell < SpellRecord.Count; spell++)
         {
-            all[SpellRecordTable.FirstMessage(spell)] = "";
+            all[SpellRecordTable.FirstMessage(spell)] = "AoE: Tgt_Self";
             all[SpellRecordTable.FirstMessage(spell) + 1] = "";
         }
         foreach (var (number, text) in lines)
@@ -39,14 +46,14 @@ public sealed class SpellRecordTableTests
 
     private static SpellRecordTable Read(MesFile list, SpellRecordMode mode)
     {
-        var read = SpellRecordTable.Read(list, mode);
+        var read = SpellRecordTable.Read(list, Types, mode);
         Assert.AreEqual(SpellDataStatus.Read, read.Status, $"{mode}: {read.Refusal}");
         return read.Table!;
     }
 
     private static void Refused(MesFile list, SpellRecordMode mode, SpellDataStatus status, int entry, string? token = null)
     {
-        var read = SpellRecordTable.Read(list, mode);
+        var read = SpellRecordTable.Read(list, Types, mode);
         Assert.AreEqual(status, read.Status, $"{mode}: {read.Refusal}");
         Assert.IsNull(read.Table);
         Assert.AreEqual((status, SpellRecordTable.Path, (int?)entry), (read.Refusal!.Status, read.Refusal.File, read.Refusal.Entry), $"{mode}");
@@ -85,7 +92,7 @@ public sealed class SpellRecordTableTests
             CollectionAssert.AreEqual(Enumerable.Repeat(-1, 5).ToArray(), r.TargetEyeCandy.ToArray());
             CollectionAssert.AreEqual(Enumerable.Repeat(-1, 10).ToArray(), r.AiPriorities.ToArray());
             CollectionAssert.AreEqual(new[] { true, true, false, false, false }, r.LinesPresent.ToArray());
-            Assert.AreEqual(("", 0, 0), (r.AreaLine, r.ComponentLines.Count, r.KeysRead.Count));
+            Assert.AreEqual(("AoE: Tgt_Self", 0, 0, 0), (r.AreaLine, r.ComponentLines.Count, r.Components.Count, r.KeysRead.Count));
             // Willpower {6, 9, 12, 15, 18} by rank for the college spells; 0 from record 80; technology forced from 140.
             CollectionAssert.AreEqual(new[] { 6, 9, 12, 15, 18, 6 }, table.Records.Take(6).Select(x => x.MinimumWillpower).ToArray());
             Assert.IsTrue(table.Records.Skip(80).All(x => x.MinimumWillpower == 0 && x.College is null && x.Rank is null));
@@ -308,14 +315,16 @@ public sealed class SpellRecordTableTests
     [TestMethod]
     public void Component_lines_run_from_plus_5_to_the_first_gap_and_at_most_44()
     {
-        var lines = Enumerable.Range(0, 46).Select(i => (L(40, 5 + i), $"c{i}")).Concat([(L(41, 5), "a"), (L(41, 6), "b"), (L(41, 8), "d")]).ToArray();
+        // Lines +5..+48 of record 40 (message 3050 is record 41's line +0); the 45th line is never read.
+        var lines = Enumerable.Range(0, 45).Select(i => (L(40, 5 + i), $"[Begin], Count: {i}, Type: NoOp"))
+            .Concat([(L(41, 5), "[End], Type: Destroy"), (L(41, 6), "[End], Type: Dispel"), (L(41, 8), "Bad")]).ToArray();
         foreach (var mode in Modes)
         {
             var table = Read(List(lines), mode);
-            Assert.AreEqual((44, "c43"), (table[40].ComponentLines.Count, table[40].ComponentLines[^1]));
-            CollectionAssert.AreEqual(new[] { "a", "b" }, table[41].ComponentLines.ToArray());
+            Assert.AreEqual((44, 43), (table[40].Components.Count, table[40].Components[^1].Area.Count));
+            CollectionAssert.AreEqual(new[] { SpellComponentType.Destroy, SpellComponentType.Dispel }, table[41].Components.Select(c => c.Type).ToArray());
+            Assert.AreEqual(2, table[41].ComponentLines.Count);
         }
-        Assert.AreEqual("AoE: Tgt_Self", Read(List((L(40, 0), "AoE: Tgt_Self")), SpellRecordMode.Strict)[40].AreaLine);
     }
 
     [TestMethod]
@@ -323,7 +332,7 @@ public sealed class SpellRecordTableTests
     {
         var list = List((L(0, 1), "  IQ: 14, Cost: 5"), (L(7, 1), "Cost: 2, IQ: 30"), (L(79, 1), "IQ:-2"));
         var willpower = AutoLevelTables.ReadSpellWillpower(list);
-        var table = SpellRecordTable.Read(list, SpellRecordMode.LikeOriginal).Table!;
+        var table = SpellRecordTable.Read(list, Types, SpellRecordMode.LikeOriginal).Table!;
         CollectionAssert.AreEqual(willpower.Minima!.ToArray(), table.Records.Take(80).Select(r => r.MinimumWillpower).ToArray());
     }
 
@@ -372,7 +381,7 @@ public sealed class SpellRecordTableTests
         var mes = Mes("{10}{a}");
         Assert.ThrowsExactly<ArgumentNullException>(() => SpellData.Create(mes, null!, mes, SpellRecordMode.Strict));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SpellData.Create(mes, mes, mes, (SpellRecordMode)7));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SpellRecordTable.Read(mes, (SpellRecordMode)7));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SpellRecordTable.Read(mes, Types, (SpellRecordMode)7));
     }
 
     [TestMethod]
@@ -386,7 +395,7 @@ public sealed class SpellRecordTableTests
             var components = Encoding.ASCII.GetBytes(string.Concat(Enumerable.Range(10, 25).Select(n => $"{{{n}}}{{type {n}}}\n")));
             var texts = Encoding.ASCII.GetBytes("{0}{base name}");
             var list = Encoding.ASCII.GetBytes(string.Concat(Enumerable.Range(0, SpellRecord.Count)
-                .Select(n => $"{{{SpellRecordTable.FirstMessage(n)}}}{{}}{{{SpellRecordTable.FirstMessage(n) + 1}}}{{Cost: {(n == 0 ? 3 : 0)}}}\n")));
+                .Select(n => $"{{{SpellRecordTable.FirstMessage(n)}}}{{AoE: Tgt_Self}}{{{SpellRecordTable.FirstMessage(n) + 1}}}{{Cost: {(n == 0 ? 3 : 0)}}}\n")));
             File.WriteAllBytes(Path.Combine(root, "arcanum1.dat"), Dat(("mes/spell.mes", texts), ("rules/magictech.mes", components), ("rules/spelllist.mes", list)));
             File.WriteAllBytes(Path.Combine(root, "modules", "Mod.dat"), Dat(("mes/spell.mes", Encoding.ASCII.GetBytes("{0}{module name}")),
                 ("rules/spelllist.mes", Encoding.ASCII.GetBytes("{1001}{Cost: 9}"))));

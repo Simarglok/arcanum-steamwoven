@@ -41,7 +41,9 @@ public sealed class SessionPartyState
 
 /// <summary>
 /// Caller-supplied facts of one follow check (see <see cref="FollowConsentInput"/>). The session adds what it owns:
-/// the NPC's forced flag, the PC's non-forced follower count and whether the charisma limit is ignored.
+/// the NPC's forced flag, the PC's non-forced follower count and whether the charisma limit is ignored, and with a hero
+/// (ARC-SKILLS-002) the PC's persuasion training, effective charisma, level and max followers in place of
+/// <see cref="PcPersuasion"/>, <see cref="PcCharisma"/>, <see cref="PcLevel"/> and <see cref="MaxFollowers"/>.
 /// </summary>
 public sealed record PartyConsentFacts(
     bool MindControlledByPc,

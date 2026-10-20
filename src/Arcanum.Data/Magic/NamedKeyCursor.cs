@@ -14,6 +14,9 @@ internal enum NamedKeyFault
     UnknownFlag,
     /// <summary>A flag-list separator right before the end of the value: the original reads through a null cursor and crashes.</summary>
     TrailingSeparator,
+    /// <summary>A positional value (one without a key) read after the line has ended: the original reads through a null cursor
+    /// and crashes.</summary>
+    MissingValue,
 }
 
 /// <summary>
@@ -74,7 +77,7 @@ internal sealed class NamedKeyCursor(string text)
 
     /// <summary>A named value that must be one of <paramref name="names"/>; the index.</summary>
     [OriginalFunction(0x532480, OriginalFunctionScope.Full)]
-    public int? NamedName(string key, IReadOnlyList<string> names, out string token)
+    public int? NamedName(string key, IReadOnlyList<string?> names, out string token)
     {
         token = "";
         if (!Key(key)) return null;
@@ -102,10 +105,48 @@ internal sealed class NamedKeyCursor(string text)
         return FlagsValue(names, values, out tokens, out value);
     }
 
-    /// <summary>The integer up to the delimiter, as C <c>atoi</c> reads it.</summary>
-    [OriginalFunction(0x531990, OriginalFunctionScope.Full)]
-    public int IntValue(out string token)
+    /// <summary>A named 64-bit flag list whose names stand for <paramref name="values"/> (the spell target names).</summary>
+    [OriginalFunction(0x5329E0, OriginalFunctionScope.Full)]
+    public ulong? NamedFlags64(string key, IReadOnlyList<string> names, IReadOnlyList<ulong> values, out IReadOnlyList<string> tokens, out string value)
     {
+        tokens = []; value = "";
+        if (!Key(key)) return null;
+        SkipSpace();
+        return Flags64Value(names, values, out tokens, out value);
+    }
+
+    /// <summary>A named range <c>a-b</c>: the key, white space, then <see cref="RangeValue"/>.</summary>
+    [OriginalFunction(0x532550, OriginalFunctionScope.Full)]
+    public (int First, int Second)? NamedRange(string key, out string token)
+    {
+        token = "";
+        if (!Key(key)) return null;
+        SkipSpace();
+        return RangeValue(out token);
+    }
+
+    /// <summary>
+    /// <c>a-b</c> up to the delimiter: a is the <c>atoi</c> of the text before the first <c>-</c>, b of the text after it, or a
+    /// again when there is no <c>-</c>.
+    /// </summary>
+    [OriginalFunction(0x531AB0, OriginalFunctionScope.Full)]
+    public (int First, int Second)? RangeValue(out string token)
+    {
+        SkipSpace();
+        token = Take(out var next);
+        _at = next;
+        var dash = token.IndexOf('-');
+        var first = SoundSchemeParser.Atoi(dash < 0 ? token : token[..dash]);
+        return (first, dash < 0 ? first : SoundSchemeParser.Atoi(token.AsSpan(dash + 1)));
+    }
+
+    /// <summary>The integer up to the delimiter, as C <c>atoi</c> reads it. On a spent cursor (a positional value after the
+    /// line has ended) it is a fault.</summary>
+    [OriginalFunction(0x531990, OriginalFunctionScope.Full)]
+    public int? IntValue(out string token)
+    {
+        token = "";
+        if (_at < 0) return Fail<int>(NamedKeyFault.MissingValue, "");
         SkipSpace();
         token = Take(out var next);
         _at = next;
@@ -152,10 +193,12 @@ internal sealed class NamedKeyCursor(string text)
     }
 
     /// <summary>The whole text up to the delimiter (trailing white space included) compared ASCII case-insensitively with each
-    /// name; no match is a fault.</summary>
+    /// name; no match is a fault (a null entry crashes the original before the end of its table), and so is a spent cursor.</summary>
     [OriginalFunction(0x531EE0, OriginalFunctionScope.Full)]
-    public int? NameValue(IReadOnlyList<string> names, out string token)
+    public int? NameValue(IReadOnlyList<string?> names, out string token)
     {
+        token = "";
+        if (_at < 0) return Fail<int>(NamedKeyFault.MissingValue, "");
         SkipSpace();
         token = Take(out var next);
         _at = next;
@@ -166,11 +209,16 @@ internal sealed class NamedKeyCursor(string text)
     /// <summary>A flag list whose names stand for bits (<see cref="Flags"/>).</summary>
     [OriginalFunction(0x532B90, OriginalFunctionScope.Full)]
     public uint? FlagBitsValue(IReadOnlyList<string> names, out IReadOnlyList<string> tokens, out string value) =>
-        Flags(names, index => 1u << index, out tokens, out value);
+        (uint?)Flags(names, index => 1u << index, out tokens, out value);
 
     /// <summary>A flag list whose names stand for table values (<see cref="Flags"/>).</summary>
     [OriginalFunction(0x531FB0, OriginalFunctionScope.Full)]
     public uint? FlagsValue(IReadOnlyList<string> names, IReadOnlyList<uint> values, out IReadOnlyList<string> tokens, out string value) =>
+        (uint?)Flags(names, index => values[index], out tokens, out value);
+
+    /// <summary>A flag list whose names stand for 64-bit values (<see cref="Flags"/>).</summary>
+    [OriginalFunction(0x532160, OriginalFunctionScope.Full)]
+    public ulong? Flags64Value(IReadOnlyList<string> names, IReadOnlyList<ulong> values, out IReadOnlyList<string> tokens, out string value) =>
         Flags(names, index => values[index], out tokens, out value);
 
     /// <summary>
@@ -179,14 +227,14 @@ internal sealed class NamedKeyCursor(string text)
     /// them are skipped (<c>A B|C</c> reads A and C). A name that matches no entry (an empty one included) is a fault; a
     /// separator that is the last character of the value is a fault (the original's cursor becomes null and is read).
     /// </summary>
-    private uint? Flags(IReadOnlyList<string> names, Func<int, uint> value, out IReadOnlyList<string> tokens, out string text)
+    private ulong? Flags(IReadOnlyList<string> names, Func<int, ulong> value, out IReadOnlyList<string> tokens, out string text)
     {
         SkipSpace();
         text = Take(out var next);
         _at = next;
         var read = new List<string>();
         tokens = read;
-        uint flags = 0;
+        ulong flags = 0;
         var cur = 0;
         while (true)
         {
@@ -199,12 +247,12 @@ internal sealed class NamedKeyCursor(string text)
             else (end, separator) = (space, bar);
             var name = text[cur..end];
             var index = Match(names, name);
-            if (index < 0) return Fail<uint>(NamedKeyFault.UnknownFlag, name);
+            if (index < 0) return Fail<ulong>(NamedKeyFault.UnknownFlag, name);
             read.Add(name);
             flags |= value(index);
             if (separator < 0) return flags;
             cur = separator + 1;
-            if (cur == text.Length) return Fail<uint>(NamedKeyFault.TrailingSeparator, text);
+            if (cur == text.Length) return Fail<ulong>(NamedKeyFault.TrailingSeparator, text);
             while (cur < text.Length && IsSpace(text[cur])) cur++;
         }
     }

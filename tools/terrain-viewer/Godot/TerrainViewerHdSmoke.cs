@@ -80,36 +80,44 @@ public partial class TerrainViewerApp
             var ceiling = HdDeviceBudget.Ceiling(4);
             hud.Visible = false;
             var lines = new List<string>(); var pixels = 0L; long firstBindMs = -1;
-            foreach (var (name, center, zoom) in views)
+            // ARC-RENDER-029: the views hold the camera, as the blend samples do (ARC-RENDER-023).
+            await WithAreaSmokeCameraHeld(async () =>
             {
-                _camera!.ResetWorld(center, WorldViewport, zoom);
-                canvas.SetVisualProfile(VisualProfile.Legacy, source, ceiling);
-                await NextFrameAsync(); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-                using var legacyImage = GetViewport().GetTexture().GetImage();
-                var legacy = legacyImage.GetData();
-                var bind = Stopwatch.StartNew();
-                canvas.SetVisualProfile(VisualProfile.Hd, source, ceiling);
-                await NextFrameAsync();
-                while (source.PendingCount > 0 || stats()[HdFallbackReason.Pending] > 0)
+                foreach (var (name, center, zoom) in views)
                 {
-                    if (bind.ElapsedMilliseconds > 60_000) throw new InvalidOperationException("HD_SMOKE_PENDING:" + name);
+                    _camera!.ResetWorld(center, WorldViewport, zoom);
+                    var view = _camera.State;
+                    canvas.SetVisualProfile(VisualProfile.Legacy, source, ceiling);
+                    await NextFrameAsync(); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var legacyImage = GetViewport().GetTexture().GetImage();
+                    var legacy = legacyImage.GetData();
+                    var bind = Stopwatch.StartNew();
+                    canvas.SetVisualProfile(VisualProfile.Hd, source, ceiling);
                     await NextFrameAsync();
+                    while (source.PendingCount > 0 || stats()[HdFallbackReason.Pending] > 0)
+                    {
+                        if (bind.ElapsedMilliseconds > 60_000) throw new InvalidOperationException("HD_SMOKE_PENDING:" + name);
+                        await NextFrameAsync();
+                    }
+                    bind.Stop(); if (firstBindMs < 0) firstBindMs = bind.ElapsedMilliseconds;
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var hdImage = GetViewport().GetTexture().GetImage();
+                    var hdPixels = hdImage.GetData();
+                    // Both reads must show the view just set.
+                    if (_camera.State != view) throw new InvalidOperationException($"HD_SMOKE_CAMERA_MOVED:{name}:{view}:{_camera.State}");
+                    var current = stats();
+                    if (current.Hd == 0 || current.Fallback != 0) throw new InvalidOperationException($"HD_SMOKE_COUNTS:{name}:{current.Format()}");
+                    if (viewCheck?.Invoke(name) is { } failed) throw new InvalidOperationException(failed);
+                    if (!legacy.AsSpan().SequenceEqual(hdPixels))
+                    {
+                        var differing = 0; for (var at = 0; at < legacy.Length; at += 4) if (!legacy.AsSpan(at, 4).SequenceEqual(hdPixels.AsSpan(at, 4))) differing++;
+                        throw new InvalidOperationException($"HD_SMOKE_RASTER:{name}:differing={differing}");
+                    }
+                    pixels += legacy.Length / 4;
+                    lines.Add($"{name} {current.Format()} bind={bind.ElapsedMilliseconds}ms");
                 }
-                bind.Stop(); if (firstBindMs < 0) firstBindMs = bind.ElapsedMilliseconds;
-                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-                using var hdImage = GetViewport().GetTexture().GetImage();
-                var hdPixels = hdImage.GetData();
-                var current = stats();
-                if (current.Hd == 0 || current.Fallback != 0) throw new InvalidOperationException($"HD_SMOKE_COUNTS:{name}:{current.Format()}");
-                if (viewCheck?.Invoke(name) is { } failed) throw new InvalidOperationException(failed);
-                if (!legacy.AsSpan().SequenceEqual(hdPixels))
-                {
-                    var differing = 0; for (var at = 0; at < legacy.Length; at += 4) if (!legacy.AsSpan(at, 4).SequenceEqual(hdPixels.AsSpan(at, 4))) differing++;
-                    throw new InvalidOperationException($"HD_SMOKE_RASTER:{name}:differing={differing}");
-                }
-                pixels += legacy.Length / 4;
-                lines.Add($"{name} {current.Format()} bind={bind.ElapsedMilliseconds}ms");
-            }
+                return lines.Count;
+            });
             GD.Print($"ARC-RENDER-014 native-smoke {domain} HD identity PASS views={views.Count} pixels={pixels} pack frames={frames.Length} ({census}) "
                 + $"png={packBytes} bytes write={write.ElapsedMilliseconds}ms first-bind={firstBindMs}ms HD textures={canvas.HdResidentCount}/{canvas.HdResidentBytes} bytes "
                 + $"(terrain chunks {canvas.HdTerrainResidentCount}/{canvas.HdTerrainResidentBytes} bytes) "
