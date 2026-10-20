@@ -131,6 +131,9 @@ public sealed class AreaGridSession : IGridSession
     public AreaChart Chart { get; }
     /// <summary>ARC-WORLD-016: the live actors this session's steps are admitted against (read at every assessment); null is T0 alone.</summary>
     public Func<AreaOccupancy?>? Occupancy { get; set; }
+    /// <summary>ARC-WORLD-051: the runtime passage of the map's doors and windows (read at every assessment); null keeps
+    /// their T0 rules.</summary>
+    public Func<IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? Portals { get; set; }
     /// <summary>ARC-WORLD-020: per-gait step durations. Null keeps the fixed <see cref="Duration"/> for every step.</summary>
     public GaitTiming? Timing { get; init; }
     /// <summary>ARC-WORLD-020: the gait a step starts with, read when it is admitted; null walks.</summary>
@@ -162,7 +165,7 @@ public sealed class AreaGridSession : IGridSession
 
     /// <summary>The exact production assessment movement admission uses for this directed step (pure, no state).</summary>
     public AreaStepAssessment Assess(CellCoord from, CellCoord to, NeighborDirection direction)
-        => Snapshot.Assess(Snapshot.Request(Chart.ToWorld(from), Chart.ToWorld(to), GridReplay.MapDirection(direction)));
+        => Snapshot.Assess(Snapshot.Request(Chart.ToWorld(from), Chart.ToWorld(to), GridReplay.MapDirection(direction)), Portals?.Invoke());
 
     public GridAdvance Advance(SimulationTime target, ReadOnlySpan<InputBatch> batches,
         Action<MovementState, MovementResult>? validatePresentation = null)

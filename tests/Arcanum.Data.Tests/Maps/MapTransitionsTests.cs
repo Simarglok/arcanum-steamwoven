@@ -148,6 +148,27 @@ public sealed class MapTransitionsTests
         Assert.AreEqual((new WorldLocation(100, 200), (WorldSectorCoordinate?)null, 0), (mobile.Location, mobile.Object!.Sector, mobile.Object.Index));
     }
 
+    // ARC-SCRIPT-017: every tile and sector script is listed with its attachment, teleport or not.
+    [TestMethod]
+    public void Every_tile_and_sector_script_is_listed_with_its_attachment()
+    {
+        Maps();
+        Script(10, Lines((Always, Teleport(0, 5001, 7, 8), Nothing)));
+        Script(12, Lines((Always, Clause.Of(1), Nothing)));
+        Write("maps/alpha/67108865.sec", Sector([(65 + 64 * 3, 10, 0, 0), (2, 12, 0x5, 0x0302), (7, 0, 0, 0)], (0x8, 0x01, 12)));
+
+        var set = Read("alpha");
+        Assert.AreEqual(0, set.Issues.Count, string.Join("; ", set.Issues));
+        var sector = new WorldSectorCoordinate(1, 1);
+        CollectionAssert.AreEqual(new[]
+        {
+            new MapPlacedScript(MapTransitionTrigger.TileEntry, sector, 65 + 64 * 3, new(65, 68), 0, 0, 10),
+            new MapPlacedScript(MapTransitionTrigger.TileEntry, sector, 2, new(66, 64), 0x5, 0x0302, 12),
+            new MapPlacedScript(MapTransitionTrigger.SectorEntry, sector, -1, new(64, 64), 0x8, 0x01, 12),
+        }, set.Placed.ToArray(), "script 0 is no script; the non-teleporting ones are listed too");
+        Assert.AreEqual(1, set.Sites.Count(s => s.Trigger == MapTransitionTrigger.TileEntry), "only the teleport is a site");
+    }
+
     [TestMethod]
     public void Area_endpoints_are_the_unconditional_use_sites_of_static_objects_in_the_core()
     {
@@ -277,13 +298,17 @@ public sealed class MapTransitionsTests
 
     /// <summary>A version-3 sector: no lights, blank tiles, no roofs, then tile script nodes (flags, tile, header flags,
     /// counters, script, spare), the sector script (header flags, counters, script), metadata and the objects.</summary>
-    private static byte[] Sector((int Tile, int Script)[] tiles, int? sectorScript, params byte[][] records)
+    private static byte[] Sector((int Tile, int Script)[] tiles, int? sectorScript, params byte[][] records) =>
+        Sector(tiles.Select(t => (t.Tile, t.Script, 0, 0)).ToArray(), (0, 0, sectorScript ?? 0), records);
+
+    private static byte[] Sector((int Tile, int Script, int Flags, int Counters)[] tiles, (int Flags, int Counters, int Script) sectorScript, params byte[][] records)
     {
         using var s = new MemoryStream();
         AreaIdentityTests.I32(s, 0); s.Write(new byte[16384]); AreaIdentityTests.I32(s, 1); AreaIdentityTests.I32(s, 0xAA0003);
         AreaIdentityTests.I32(s, tiles.Length);
-        foreach (var (tile, script) in tiles) { AreaIdentityTests.I32(s, 0); AreaIdentityTests.I32(s, tile); AreaIdentityTests.I32(s, 0); AreaIdentityTests.I32(s, 0); AreaIdentityTests.I32(s, script); AreaIdentityTests.I32(s, 0); }
-        AreaIdentityTests.I32(s, 0); AreaIdentityTests.I32(s, 0); AreaIdentityTests.I32(s, sectorScript ?? 0);
+        foreach (var (tile, script, flags, counters) in tiles)
+        { AreaIdentityTests.I32(s, 0); AreaIdentityTests.I32(s, tile); AreaIdentityTests.I32(s, flags); AreaIdentityTests.I32(s, counters); AreaIdentityTests.I32(s, script); AreaIdentityTests.I32(s, 0); }
+        AreaIdentityTests.I32(s, sectorScript.Flags); AreaIdentityTests.I32(s, sectorScript.Counters); AreaIdentityTests.I32(s, sectorScript.Script);
         AreaIdentityTests.I32(s, 2); s.Write(new byte[20]);
         foreach (var record in records) s.Write(record);
         AreaIdentityTests.I32(s, records.Length);

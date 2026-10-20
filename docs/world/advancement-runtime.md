@@ -72,11 +72,14 @@ after each level written and returns the unspent points left.
 
 ## Snapshot (schema 20)
 
+Since ARC-TECHNOLOGY-002 the editor buys and refunds `techDegrees` through the point pool and the session reads the
+expertise they give ([tech degrees](tech-degrees-runtime.md)).
+
 The hero gains `"advancement":{"basicSkills","techSkills","colleges","techDegrees","hitPointPoints","fatiguePoints","scheme"}`
 after `"alignment"`; the root gains `"advancement":{"npcs":[...]}` after `"experience"`, each record with its entity, race,
 monstrous flag, stats, magick and tech points, level, unspent points, skills, colleges, degrees, pools, adjustments and
 scheme, in ordinal entity order. Restore checks every range, the order and the budget. Schemas 1..19 are refused, not
-migrated. Since schema 22 (ARC-MAGIC-004) both the hero's advancement and each NPC record also carry `mastery` (the mastered
+migrated. Since schema 25 (ARC-MAGIC-004) both the hero's advancement and each NPC record also carry `mastery` (the mastered
 college, −1 none) after `colleges`, and the spell purchases learn through the [spell book](spell-book-runtime.md)'s one rule.
 
 ## Viewer host

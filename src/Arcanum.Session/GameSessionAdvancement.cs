@@ -22,7 +22,7 @@ public static class SessionAdvancementLimits
 /// <summary>
 /// The hero's purchasable fields besides its stats (ARC-WORLD-036): the stored basic and tech skill fields (points in bits
 /// 0..5, training in bits 6..7), the sixteen college levels, the eight tech degrees, the bought hit and fatigue points, and
-/// the auto-level scheme (0: none), and the mastered college (−1 none, ARC-MAGIC-004, snapshot schema 22). A pre-made hero starts
+/// the auto-level scheme (0: none), and the mastered college (−1 none, ARC-MAGIC-004, snapshot schema 25). A pre-made hero starts
 /// with none of them bought, no mastery and its prototype's scheme.
 /// </summary>
 public sealed record SessionHeroAdvancement(ImmutableArray<int> BasicSkills, ImmutableArray<int> TechSkills, ImmutableArray<int> Colleges,

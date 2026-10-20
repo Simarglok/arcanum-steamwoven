@@ -19,7 +19,7 @@ python3 -B tools/original-oracle/oracle.py list
 - Each function runs as one cdecl call; it may read only its stack frame (arguments included), the image globals and
   the heap data (the current table) its model names. Only its own code range and the ranges of game functions it is
   allowed to call execute (all inside `.text`); service functions are stubs that answer from one fictitious world model
-  and reject anything else. A run fails on any other callee, a stub rejection, any other read, any write but the stack, a fault, the instruction limit (no return), an unbalanced stack or a callee-saved
+  and reject anything else (a stub answers EAX, or EAX and EDX for a 64-bit object handle). A run fails on any other callee, a stub rejection, any other read, any write but the stack, a fault, the instruction limit (no return), an unbalanced stack or a callee-saved
   register not restored. Generation stops at the first failed run.
 - Inputs are drawn from a seed (default 20261017, at least 10,000 per function) inside the C# side's domain, so the
   same model is the input of both sides. Output: `<out>/<ADDR>.json` (default `research-private/oracle/`, or
@@ -36,6 +36,9 @@ python3 -B tools/original-oracle/oracle.py list
 | 0x4A6980 | level bonus points | two integers, no stubs | `BonusPointsMatchTheOriginal` |
 | 0x4C5EB0 | basic skill level | one critter (ARC-SKILLS-001): stubs for its type, its twelve stored basic skills, its eight primary stats, the monstrous test and an additive effect change; the key-stat and cap tables; may call the base level, points and cap | `SkillLevelMatchesTheOriginal` (`SkillOriginalExeTests`) |
 | 0x4C6170 | basic skill training set | the same critter and a requested tier (also outside 0..3); the network test answers single player; the array write and the Educator update are recorded stubs; may call the level | `TrainingSetMatchesTheOriginal` (`SkillOriginalExeTests`) |
+| 0x4C62E0 | basic skill effectiveness | a source and an optional target (ARC-SKILLS-003): stubs for their basic levels (0x4C5EB0), the target's perception and intelligence (0x4B0490), the source's extraordinary intelligence (0x4B0EE0), the local PC (0x40DA50, a 64-bit answer), the difficulty setting (0x404590); the skill flag and opposed tables; may call the opposed effectiveness | `BasicEffectivenessMatchesTheOriginal` (`SkillCheckOriginalExeTests`) |
+| 0x4C6410 | opposed skill effectiveness | the same model, for any basic skill | `OpposedEffectivenessMatchesTheOriginal` |
+| 0x4C69F0 | tech skill effectiveness | the same model with the tech levels (0x4C65E0) and the target's spell flags (field 0x14, Magnetic Inversion) | `TechEffectivenessMatchesTheOriginal` |
 | 0x4507D0 | spell run-time cost | one caster (ARC-MAGIC-003): stubs for its type, race and mastered college; one spell record's cost in a heap table behind 0x6876D8; the cheat flag 0x5E75FC; the payment 0x450420 is a recording stub (its arguments are the cost) | `RunCostMatchesTheOriginal` (`SpellCostOriginalExeTests`) |
 | 0x4508A0 | spell check cost | as above; the payment is asked without applying | `CheckCostMatchesTheOriginal` |
 | 0x4B1660 | spell cast cost (UI and AI) | as above, with the loaded flag 0x5E7618 and the cost getter 0x450340; no payment | `CastCostMatchesTheOriginal` |

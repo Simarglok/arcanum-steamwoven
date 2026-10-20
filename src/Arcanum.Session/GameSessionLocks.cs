@@ -68,6 +68,19 @@ public sealed partial class GameSessionOwner
         return ApplyChanges(expected, null, Edits(openable, baseline.Kind, flags, frame));
     }
 
+    /// <summary>ARC-WORLD-051: marks the object busted (bit 0x80) on frame 0, as the original busts a window (ledger LK12): a
+    /// busted portal is unlocked and opens for every walker. The busted ART (bit 0x200), a door the original destroys instead
+    /// and a destroyed state are the caller's. One revision; NoChange when already busted on frame 0.</summary>
+    public GameSessionMutationResult SetOpenableBusted(GameSessionVersion expected, SessionOpenable openable, SessionOpenableBaseline baseline)
+    {
+        ThrowIfDisposed();
+        if (!ValidOpenable(openable, baseline)) return Reject(GameSessionFailure.InvalidOpenable);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        var (flags, frame) = Current(openable, baseline);
+        if ((flags & LockRules.BustedBit) != 0 && frame == 0) return NoChange();
+        return ApplyChanges(expected, null, Edits(openable, baseline.Kind, flags | LockRules.BustedBit, 0));
+    }
+
     /// <summary>
     /// The open attempt of the player for the object (ledger LK7, LK8) with its current flags at the session's hour.
     /// <paramref name="scriptRefused"/> is the host's result of the object's unlock script (SAP 3); <paramref name="leaving"/>

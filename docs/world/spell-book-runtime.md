@@ -4,7 +4,7 @@ Status: **Implemented bounded component, not wired.** Work item ARC-MAGIC-004 (2
 [magic implementation plan](../research/magic-implementation-plan.md). One spell-book rule that auto-level, the character
 editor's point pool and the scripts share: learn rank r, unlearn the highest rank, mastery once with all five ranks, and the
 re-validation of known ranks when intelligence or willpower falls. Godot-free: pure rules in `Arcanum.Simulation.Magic`, the
-mastered college on the hero's and NPCs' advancement sheets in `Arcanum.Session` (snapshot schema 22).
+mastered college on the hero's and NPCs' advancement sheets in `Arcanum.Session` (snapshot schema 25).
 
 Requirements: [FR-MAGIC-002](../requirements/combat-magic-tech.md#fr-magic-002) (spell book and college order),
 [FR-CHAR-015](../requirements/characters-skills.md#fr-char-015) (points spent and refunded, the stat-decrease guard).
@@ -66,11 +66,11 @@ known rank needs it (`SpellNeedsStat`).
 | `MasterHeroCollege(expected, college)` | The script action's mastery (MT21 calls it): refused without a hero (`SpellBookUnavailable`), for a college outside 0..15 (`InvalidSpellBook`), a stale version, or by the rule (`SpellBookRefused` with `AlreadyMastered` or `RanksMissing`). |
 | `MasterNpcCollege(expected, loaded, college)` | The same on an NPC's advancement record (created from `loaded` when the session has none, within the record budget). |
 
-## Snapshot schema 22
+## Snapshot schema 25
 
 The hero's advancement (`advancement.mastery`) and each NPC advancement record (`mastery`) save the mastered college
 (−1 none), right after `colleges`. A new hero's mastery is −1 unless its definition says otherwise; a mastery outside −1..15 is
-`InvalidHero` (the hero) or `InvalidAdvancement` (an NPC record). Schema 21 is refused, not migrated
+`InvalidHero` (the hero) or `InvalidAdvancement` (an NPC record). Schema 24 is refused, not migrated
 ([game session](game-session-runtime.md)).
 
 ## Differences from the original

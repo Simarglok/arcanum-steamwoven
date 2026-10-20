@@ -42,6 +42,7 @@ WRITES = TEXT + 0x80  # writes the model's global
 CLOBBERS = TEXT + 0x90  # does not restore ebx
 READS_HEAP = TEXT + 0xA0  # reads the first heap word
 SECOND_ARGUMENT = TEXT + 0xB0  # returns its second argument
+HIGH_HALF = TEXT + 0xC0  # returns EDX of a 64-bit stub answer
 CODE = {
     SUM: bytes.fromhex("8b442404" "8b4c2408" "8d0448" "c3"),  # mov eax,[esp+4]; mov ecx,[esp+8]; lea eax,[eax+ecx*2]; ret
     STAT: bytes.fromhex("6a11" "ff74240c" "ff74240c") + b"\xe8" + rel32(STAT + 10, 5, STUB)  # push 0x11; push hi; push lo; call STUB
@@ -54,6 +55,7 @@ CODE = {
     CLOBBERS: bytes.fromhex("31db" "c3"),                                                     # xor ebx,ebx; ret
     READS_HEAP: b"\xa1" + struct.pack("<I", HEAP_BASE) + b"\xc3",                             # mov eax,[HEAP_BASE]; ret
     SECOND_ARGUMENT: bytes.fromhex("8b442408" "c3"),                                          # mov eax,[esp+8]; ret
+    HIGH_HALF: b"\xe8" + rel32(HIGH_HALF, 5, STUB) + bytes.fromhex("89d0" "c3"),               # call STUB; mov eax,edx; ret
     STUB: b"\xcc",                                                                            # int3
 }
 
@@ -143,6 +145,9 @@ class OracleSelfTest(unittest.TestCase):
                                       readable=(Range(GLOBAL, GLOBAL + 4),))
         self.assertEqual(result, 42)
         self.assertEqual(seen, [(0x1234, 0x42, 0x11)])
+
+    def test_a_stub_may_answer_a_64_bit_handle(self):
+        self.assertEqual(self.emulator().call(HIGH_HALF, (), code=own(HIGH_HALF), stubs={STUB: lambda argument: (7, 0x42)}), 0x42)
 
     def test_a_stub_rejecting_its_arguments_fails_the_run(self):
         stub, _ = self.stat_stub(0x12, 5)
@@ -300,8 +305,44 @@ class OracleSelfTest(unittest.TestCase):
             with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
                 call(address, *arguments)
 
-    def test_the_registry_names_nine_functions_with_their_own_code_first(self):
-        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660, 0x4B1790, 0x4C5EB0, 0x4C6170])
+    def test_the_effectiveness_model_stays_in_the_csharp_domain_and_rejects_anything_else(self):
+        rng = random.Random(3)
+        basic = [oracle_functions.draw_effectiveness_case(rng, tech=False) for _ in range(10_000)]
+        tech = [oracle_functions.draw_effectiveness_case(rng, tech=True) for _ in range(2_000)]
+        self.assertEqual({c.skill for c in basic}, set(range(12)))
+        self.assertEqual({c.skill for c in tech}, set(range(4)))
+        self.assertTrue(all(0 <= c.level <= 20 and 0 <= c.target_level <= 20 for c in basic + tech))
+        self.assertEqual({c.local for c in basic}, {0, 1, 2})
+        self.assertTrue({0, 1, 2, -1, 3} <= {c.difficulty for c in basic} and {0, 1} == {c.target for c in basic})
+        self.assertTrue(any(c.level - c.target_pe >= 10 for c in basic) and any(c.level - c.target_pe <= -10 for c in basic))
+        mi = oracle_functions.MAGNETIC_INVERSION
+        self.assertTrue(any(c.spell_flags & mi for c in tech) and any(c.spell_flags & ~mi for c in tech))
+        case = next(c for c in basic if c.target and c.local == 0)
+        stubs = oracle_functions.effectiveness_stubs(case)
+        source, target = oracle_functions.HANDLE, oracle_functions.TARGET
+
+        def call(address, *arguments):
+            return stubs[address](lambda index: arguments[index])
+        self.assertEqual(call(oracle_functions.BASIC_LEVEL, *source, case.skill), case.level)
+        self.assertEqual(call(oracle_functions.BASIC_LEVEL, *target, case.skill), case.target_level)
+        self.assertEqual(call(oracle_functions.STAT_GETTER, *target, oracle_functions.STAT_PE), case.target_pe & 0xFFFFFFFF)
+        self.assertEqual(call(oracle_functions.EXTRAORDINARY, *source, oracle_functions.STAT_IN), case.extraordinary)
+        self.assertEqual(call(oracle_functions.LOCAL_PC), source)
+        for address, arguments in ((oracle_functions.BASIC_LEVEL, (*source, (case.skill + 1) % 12)),
+                                   (oracle_functions.STAT_GETTER, (*source, oracle_functions.STAT_PE)),
+                                   (oracle_functions.STAT_GETTER, (*target, 0)),
+                                   (oracle_functions.EXTRAORDINARY, (*target, oracle_functions.STAT_IN)),
+                                   (oracle_functions.FIELD_GETTER, (*target, oracle_functions.FIELD_TYPE)),
+                                   (oracle_functions.BASIC_LEVEL, (*oracle_functions.OTHER_PC, case.skill))):
+            with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
+                call(address, *arguments)
+        alone = next(c for c in basic if not c.target)
+        with self.assertRaises(StubRejected):
+            oracle_functions.effectiveness_stubs(alone)[oracle_functions.STAT_GETTER](lambda index: (*target, 5)[index])
+
+    def test_the_registry_names_twelve_functions_with_their_own_code_first(self):
+        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660, 0x4B1790,
+                                                              0x4C5EB0, 0x4C6170, 0x4C62E0, 0x4C6410, 0x4C69F0])
         for address, spec in oracle_functions.FUNCTIONS.items():
             self.assertEqual(spec.code[0][0], address)
             self.assertTrue(all(start < end for start, end in spec.code))

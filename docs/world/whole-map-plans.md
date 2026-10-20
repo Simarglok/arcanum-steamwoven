@@ -110,6 +110,16 @@ Every plan:
   so such an object needs no ART; the viewer draws no such body anyway. The
   original still draws a don't-draw object's overlays, so their admission check
   still applies to it; a destroyed or off object is not checked;
+- resolves no body for an object other than a wall or portal whose ART id is
+  0xFFFFFFFF (ARC-DATA-038): the original names no ART for ART type 15, so its
+  object draw gets an empty rectangle
+  ([ledger NA1](../research/original-verification-ledger.md#objects-without-art-arc-data-038));
+  the object stays, with its step evidence, and the viewer counts it as suppressed
+  (`NoArt`). Any other type-15 ID, and a wall or portal with that ID, is still
+  refused. A main-map window around Caladon holds such scenery; every window a
+  transition into the main map arrives in now loads complete and admits its
+  arrival (`AreaWindowStepRealDataTests`; 62 windows for 73 arrivals on the
+  installed original, 2026-10-21);
 - names art as the original does (ARC-DATA-023, rules N1–N7 of the
   [art gaps study](../research/whole-map-art-gaps.md)):
   - critter, monster and unique NPC art (classes 2, 12, 13) in any of the 25
@@ -212,7 +222,7 @@ concealed monsters, 111 critters without standing art, a damaged wall and a
 tile-art scenery object, all drawn since ARC-DATA-023, and K'na Tha, which stopped
 at the cumulative encoded-frame budget after 28,091 frame requests (15,374 objects
 refused; 260 distinct art ids among its 43,219 objects). With shared frame
-selections (ARC-DATA-024) K'na Tha needs 477 frame decodes and inspects in about
+selections (ARC-DATA-024) K'na Tha needs 477 frame decodes (488 since ARC-WORLD-051 also decodes the other frames of its multi-frame door and window ARTs) and inspects in about
 8 s (Release, scratch runner). No eye-candy overlay is active at T0 in any
 interior.
 

@@ -35,8 +35,8 @@ counts the voices played.
 ## Checks
 
 Unit tests: `DialogVoiceTests` (Presentation), `AreaDialogVoiceTests` (viewer core). Opt-in real-data
-census `AreaDialogVoiceOriginalTests` (`DAT_ROOT`): of the 57 NPC lines the interiors' conversations
-show today (first choosable reply each turn), 27 have a voice identity and every one names an installed
+census `AreaDialogVoiceOriginalTests` (`DAT_ROOT`): of the 124 NPC lines the interiors' conversations
+show today (first choosable reply each turn, never an insult; 57 before ARC-WORLD-043 admitted the `ME` condition), 27 have a voice identity and every one names an installed
 file, for a male and a female PC. Native smoke `ARC-UI-043 native-smoke voice PASS` (any map, after the
 audio smoke): an installed line voice plays on the voice channel at the voice volume, a missing one
 stops it and plays nothing; the talk smoke records each tried speaker's voice (no map's talk smoke

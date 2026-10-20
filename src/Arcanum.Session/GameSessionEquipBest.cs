@@ -132,7 +132,8 @@ public sealed partial class GameSessionOwner
 
         internal void Collect()
         {
-            var kinds = owner._inventory.Kit.Select(kit => (kit.Entity, kit.Kind)).Concat(owner._inventory.Pc.Select(pc => (pc.Entity, pc.Kind)));
+            var kinds = owner._inventory.Kit.Select(kit => (kit.Entity, kit.Kind)).Concat(owner._inventory.Pc.Select(pc => (pc.Entity, pc.Kind)))
+                .Concat(owner._inventory.Made.Select(made => (made.Entity, made.Kind)));
             foreach (var (entity, kind) in kinds)
             {
                 var facts = lookup(entity);
@@ -143,6 +144,8 @@ public sealed partial class GameSessionOwner
                     continue;
                 }
                 if (!ValidWearable(facts) || facts.Weight is < 0 or > EquipmentChoice.MaxWeight) throw new Refused(GameSessionFailure.InvalidItem);
+                // The session's record of the item's condition (ARC-WORLD-053) wins over the host's data.
+                facts = owner.Conditioned(entity, facts);
                 if (facts.Kind != kind || !EquipmentDomain.Matches(kind.Type, facts.Item.Kind)) throw new Refused(GameSessionFailure.InventoryMismatch);
                 if (owner._equipment.SlotOf(entity) is { } slot && owner._equipment.Worn[slot].Item != facts.Item) throw new Refused(GameSessionFailure.InventoryMismatch);
                 Facts[entity] = facts;

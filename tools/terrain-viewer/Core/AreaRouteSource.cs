@@ -10,7 +10,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// receives. Only Supported Open is Open; Unknown and Unsupported (core edge) stay distinct from Blocked. With an
 /// <paramref name="occupancy"/> provider (ARC-WORLD-016) every step gets the same live overlay the session admits it with.
 /// </summary>
-public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart = null, Func<AreaOccupancy?>? occupancy = null) : IRouteStepSource
+public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart = null, Func<AreaOccupancy?>? occupancy = null,
+    Func<IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? portals = null) : IRouteStepSource
 {
     public AreaStepSnapshot Snapshot { get; } = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
     public AreaChart Chart { get; } = chart ?? AreaChart.Exterior;
@@ -31,7 +32,8 @@ public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart 
     {
         if (_last is { } last && last.From == from && last.Direction == direction) return last.Value;
         var to = RoutePlanner.Neighbor(from, direction);
-        var assessment = Snapshot.Assess(Snapshot.Request(Chart.ToWorld(from), Chart.ToWorld(to), GridReplay.MapDirection(direction)));
+        // ARC-WORLD-051: doors and windows by their runtime state, as the actor's steps admit them.
+        var assessment = Snapshot.Assess(Snapshot.Request(Chart.ToWorld(from), Chart.ToWorld(to), GridReplay.MapDirection(direction)), portals?.Invoke());
         _last = (from, direction, assessment);
         return assessment;
     }

@@ -4,6 +4,8 @@ using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
+using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Technology;
 using Arcanum.Simulation.Reaction;
 
 namespace Arcanum.Session;
@@ -30,7 +32,8 @@ public enum RuleMode
 public sealed class GameRules
 {
     private GameRules(RuleMode mode, CombatAnomalyProfile combat, GameEventQueueProfile events, ScrRuleProfile scripts,
-        ReactionRuleProfile reaction, DataFixProfile data, ExperienceRuleProfile experience, SoundRuleProfile sound)
+        ReactionRuleProfile reaction, DataFixProfile data, ExperienceRuleProfile experience, SoundRuleProfile sound, ItemRuleProfile items,
+        TechnologyRuleProfile technology)
     {
         Mode = mode;
         Combat = combat;
@@ -40,6 +43,8 @@ public sealed class GameRules
         Data = data;
         Experience = experience;
         Sound = sound;
+        Items = items;
+        Technology = technology;
     }
 
     public RuleMode Mode { get; }
@@ -69,13 +74,19 @@ public sealed class GameRules
     /// SN14, reversed hour windows never play.</summary>
     public SoundRuleProfile Sound { get; }
 
+    /// <summary>Items (ARC-WORLD-053): TC7, the repair quote counts damage twice.</summary>
+    public ItemRuleProfile Items { get; }
+
+    /// <summary>Technology (ARC-TECHNOLOGY-003): TC8, a schematic document numbered 0 registers.</summary>
+    public TechnologyRuleProfile Technology { get; }
+
     /// <summary>The default mode: the original with every recorded fix.</summary>
     public static GameRules Steamwoven { get; } = new(RuleMode.Steamwoven, CombatAnomalyProfile.Steamwoven, GameEventQueueProfile.Steamwoven, ScrRuleProfile.Steamwoven,
-        ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven, ExperienceRuleProfile.Steamwoven, SoundRuleProfile.Steamwoven);
+        ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven, ExperienceRuleProfile.Steamwoven, SoundRuleProfile.Steamwoven, ItemRuleProfile.Steamwoven, TechnologyRuleProfile.Steamwoven);
 
     /// <summary>The retail 1.0.7.4 behaviour in every domain.</summary>
     public static GameRules Original { get; } = new(RuleMode.Original, CombatAnomalyProfile.Original, GameEventQueueProfile.Original, ScrRuleProfile.Original,
-        ReactionRuleProfile.Original, DataFixProfile.Original, ExperienceRuleProfile.Original, SoundRuleProfile.Original);
+        ReactionRuleProfile.Original, DataFixProfile.Original, ExperienceRuleProfile.Original, SoundRuleProfile.Original, ItemRuleProfile.Original, TechnologyRuleProfile.Original);
 
     /// <summary>Both modes, default first.</summary>
     public static IReadOnlyList<GameRules> All { get; } = [Steamwoven, Original];

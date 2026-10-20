@@ -56,7 +56,7 @@ public sealed partial class GameSessionOwner
     /// an undefined track or click, or an index out of range (<see cref="GameSessionFailure.InvalidPointTarget"/>); the version; the rules'
     /// refusal (<see cref="GameSessionFailure.PointRefused"/>, the answer in <see cref="SessionPointResult.Change"/>; a pool stops at
     /// <see cref="SessionAdvancementLimits.MaxHeroPoolPoints"/>); the revision. Spell ranks learn through the spell book
-    /// (<see cref="SpellRankLane"/>); tech degrees answer <see cref="PointChangeStatus.LaneNotReady"/> until their lane plugs in.
+    /// (<see cref="SpellRankLane"/>, ARC-MAGIC-004); tech degrees go through <see cref="TechDegreeRules.Lane"/> (ARC-TECHNOLOGY-002).
     /// </summary>
     public SessionPointResult SpendHeroPoint(GameSessionVersion expected, AdvancementTrack track, int index)
     {
@@ -84,10 +84,15 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// The lane of a track the pool does not buy itself: spell ranks (<see cref="AdvancementTrack.College"/>) are the spell book's
-    /// (<see cref="SpellRankLane"/>, ARC-MAGIC-004); tech degrees (<see cref="AdvancementTrack.TechDiscipline"/>) are the technology
-    /// lane's (TECH-2), which adds its <see cref="IPointLane"/> here; until then the pool answers <see cref="PointChangeStatus.LaneNotReady"/>.
+    /// (<see cref="SpellRankLane"/>, ARC-MAGIC-004), tech degrees (<see cref="AdvancementTrack.TechDiscipline"/>) the technology
+    /// lane's (<see cref="TechDegreeRules.Lane"/>, ARC-TECHNOLOGY-002).
     /// </summary>
-    private IPointLane? PointLane(AdvancementTrack track) => track == AdvancementTrack.College ? new SpellRankLane(SpellWillpower()) : null;
+    private IPointLane? PointLane(AdvancementTrack track) => track switch
+    {
+        AdvancementTrack.College => new SpellRankLane(SpellWillpower()),
+        AdvancementTrack.TechDiscipline => TechDegreeRules.Lane,
+        _ => null,
+    };
 
     private SessionPointResult? PointPrecheck(GameSessionVersion expected, AdvancementTrack track, int index,
         SkillRefundClick click = SkillRefundClick.UntilLevelChanges)

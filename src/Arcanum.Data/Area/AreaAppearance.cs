@@ -34,6 +34,16 @@ public sealed partial class AreaDataOwner
         return result;
     }
     private static string Mapped(Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps, AreaMappingRole role, int key) => maps.TryGetValue(role, out var table) && table.TryGetValue(key, out var value) ? Safe(value) : throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping);
+    /// <summary>ARC-DATA-038: the ART id that names no ART file (ledger NA1). The game's ART name callback names none for ART
+    /// type 15 (bits 28-31), so the ART cache finds nothing, the frame data fails and the object draw gets an empty rectangle.
+    /// Only 0xFFFFFFFF, the id the installed data carries, is admitted this way; any other type-15 id stays refused.</summary>
+    [OriginalFunction(0x41DAE0, OriginalFunctionScope.Partial)]
+    public static bool NamesNoArt(uint aid) => aid == uint.MaxValue;
+
+    /// <summary>ARC-DATA-038: an object of this type and ART id has no body to draw: its ART id names no ART. Walls and portals
+    /// (types 0 and 1), whose wall check and edge rules read their ART, keep the refusal.</summary>
+    public static bool HasNoBody(int type, uint aid) => type is not 0 and not 1 && NamesNoArt(aid);
+
     private Request ObjectRequest(uint aid, Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps, CancellationToken token)
     {
         var cls = aid >> 28; var frame = cls == 6 ? 0 : (int)((aid >> 14) & 31); var nominal = cls == 6 ? 0 : (int)((aid >> 11) & 7);
@@ -202,7 +212,8 @@ public sealed partial class AreaDataOwner
         _budget.EndFrame();
         var visual = new AreaVisualRecord(key, raw, lookup, entry, sha, view, nominal, group, physical, frame, palette, decoded.EffectivePaletteSlot, mirrored,
             decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY, decoded.Frame.OffsetX, decoded.Frame.OffsetY, ox, oy, scale,
-            descriptor.Metadata.EncodedPayloadLength, decoded.Rgba.Count, rgbaSha, policy);
+            descriptor.Metadata.EncodedPayloadLength, decoded.Rgba.Count, rgbaSha, policy)
+        { FrameCount = descriptor.GroupFrames, FramesPerSecond = descriptor.FramesPerSecond };
         if (_sharedFrames is not null) { _budget.Reserve(512); _sharedFrames.Add(shared, visual); }
         return visual;
     }
@@ -254,7 +265,7 @@ public sealed partial class AreaDataOwner
         catch (ArgumentOutOfRangeException) { throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame); }
     }
     /// <summary>The selected frame's metadata, the ART's frame count and the bytes after its last frame payload.</summary>
-    private (ArtFrameMetadata Metadata, int Frames, int Trailing) InspectFrame(ReadOnlySpan<byte> bytes, int group, int frame, int palette)
+    private (ArtFrameMetadata Metadata, int Frames, int Trailing, int GroupFrames, int FramesPerSecond) InspectFrame(ReadOnlySpan<byte> bytes, int group, int frame, int palette)
     {
         _budget.Context = _budget.Context with { Callsite = AreaBudgetCallsite.ArtTable };
         if (bytes.Length < 132) throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame);
@@ -266,7 +277,7 @@ public sealed partial class AreaDataOwner
         {
             var metadata = ArtDecoder.Inspect(bytes, ArtOptions);
             if (palette is < 0 or > 3) throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame);
-            return (metadata.GetFrame(group, frame), frames * groups, metadata.TrailingBytes);
+            return (metadata.GetFrame(group, frame), frames * groups, metadata.TrailingBytes, frames, metadata.Header.FramesPerSecond);
         }
         catch (Exception error) when (error is ArtException or ArgumentOutOfRangeException)
         { throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame); }

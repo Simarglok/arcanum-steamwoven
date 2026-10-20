@@ -23,7 +23,10 @@ roll it made. Numbers are a reading of the original's combat, skill, item,
 object and random functions (the research's C15–C21 and the "Hit, dodge and
 critical" steps), re-read for this task. Original executable parity is
 **NOT_VERIFIED** (evidence level F0), except for the anomaly switches below,
-which were checked against the original 1.0.7.4 executable.
+which were checked against the original 1.0.7.4 executable, and the attack and
+dodge checks (steps 2, 6 and 7), which run through the shared
+[skill check](skill-check-runtime.md) and were read in the executable with the
+attack's invocation by two readers (ARC-SKILLS-003, ledger SC1–SC17).
 
 ## Inputs
 
@@ -63,7 +66,8 @@ which were checked against the original 1.0.7.4 executable.
   names `steamwoven` and `original` (`FromName`, `All`); see below.
 
 Helpers in `AttackRules` expose each formula on its own: effectiveness, dodge
-effectiveness, critical hit and miss chances, true-backstab bonus,
+effectiveness, critical hit and miss chances and the light penalty (these four call
+`SkillCheckRules`), true-backstab bonus,
 technology-failure and magick-cancel chances, light penalty, armour class,
 backstab eligibility, weapon damage range, material reduction and the hit
 location table.
@@ -94,7 +98,8 @@ once those draws are modelled as well.
    (paralysed, unconscious, falling or stunned, sleeping, unaware), aim (⅔
    for firearms experts), armour (`effectiveness × (AC/2)/100`, skipped by a
    trained true backstab), range (out of range or blocked = +1 000 000,
-   5 per cell beyond PE/2 unless master), cover, light, injury.
+   5 per cell beyond PE/2 unless master), cover, light (a small own light keeps
+   ¾ of the penalty, SC9; before ARC-SKILLS-003 it kept ⅔), injury.
 7. **Dodge** of a hit critter: `2 × level` capped at 95 (unreachable: at most 75; the original's
    formula, ledger row Dodge (SKX1) in the
    [verification ledger](../research/original-verification-ledger.md)), difficulty from

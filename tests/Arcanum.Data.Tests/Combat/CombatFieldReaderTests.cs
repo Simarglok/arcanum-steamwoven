@@ -265,6 +265,23 @@ public sealed class CombatFieldReaderTests
     }
 
     [TestMethod]
+    public void AWrittenItemReadsItsSubtypeAndStartLineAndAnInstanceOverridesThem()
+    {
+        // Written block 59..66 (ARC-TECHNOLOGY-003): flags 59, subtype 60, first text line 61, last text line 62, then pads.
+        var values = Item(0, new() { [59] = 0x1, [60] = CombatWrittenFields.SchematicSubtype, [61] = 4150, [62] = 4150 });
+        var fields = Read(14082, 13, values);
+        Assert.AreEqual(new CombatWrittenFields(0x1, 5, 4150, 4150), fields.Written);
+        Assert.IsTrue(fields.Written!.IsSchematic);
+        Assert.IsNull(Read(6218, Weapon, WeaponValues()).Written, "only a written item has the block");
+        var document = CombatFieldReader.Read(Row(2, 14082, 13, values, Instance(60, 1), Instance(61, 300)));
+        Assert.AreEqual(CombatFieldFailure.None, document.Failure);
+        Assert.AreEqual((1, 300, false), (document.Fields!.Written!.Subtype, document.Fields.Written.TextStartLine, document.Fields.Written.IsSchematic));
+        // A written item whose first text line does not resolve is refused at that slot.
+        var refused = CombatFieldReader.Read(Row(3, 14082, 13, values, new AreaFieldValue(61, AreaPresence.Absent, AreaValueOrigin.Instance, null, [], null)));
+        Assert.AreEqual((CombatFieldFailure.FieldUnresolved, 61), Refusal(refused));
+    }
+
+    [TestMethod]
     public void AnAreaObjectReadsItsInstanceValuesOverItsPrototype()
     {
         var npc = Row(4, 29001, Npc, NpcValues(), Instance(27, -7), Instance(71, 17),

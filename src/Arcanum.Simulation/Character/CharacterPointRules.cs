@@ -27,8 +27,10 @@ public enum PointChangeStatus
     SpellNeedsStat,
     /// <summary>Lowering intelligence would leave a tech degree below its minimum.</summary>
     DegreeNeedsStat,
-    /// <summary>The track's lane (tech degrees: the technology lane) has not plugged in.</summary>
+    /// <summary>The track's lane was not given (the session gives spell ranks and tech degrees theirs).</summary>
     LaneNotReady,
+    /// <summary>Raising a tech degree needs more effective intelligence than the critter has (ARC-TECHNOLOGY-002).</summary>
+    IntelligenceTooLow,
     /// <summary>The character level is below the step's minimum (a spell rank's 1, 1, 5, 10, 15).</summary>
     LevelTooLow,
     /// <summary>A stat is below the step's minimum (a spell rank's intelligence or willpower; <see cref="PointChange.Stat"/> names it).</summary>
@@ -318,7 +320,8 @@ public static class CharacterPointRules
         if (cost > sheet.UnspentPoints) return Refused(PointChangeStatus.NotEnoughPoints, sheet, track, index);
         var step = raise ? lane.Raise(sheet, modifiers, index) : lane.Lower(sheet, modifiers, index);
         if (step.Status != PointChangeStatus.Changed)
-            return Refused(Enum.IsDefined(step.Status) ? step.Status : PointChangeStatus.Invalid, sheet, track, index, step.Stat);
+            return Refused(Enum.IsDefined(step.Status) ? step.Status : PointChangeStatus.Invalid, sheet, track, index,
+                step.Stat ?? (step.Status == PointChangeStatus.IntelligenceTooLow ? CharacterStat.Intelligence : null));
         if (!AutoLevelRules.IsValid(step.Sheet) || step.Points < 0 || (raise && step.Points != cost) ||
             !OwnStep(sheet, step.Sheet, track, index, raise ? 1 : -1))
             return Refused(PointChangeStatus.Invalid, sheet, track, index);
