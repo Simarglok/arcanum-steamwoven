@@ -146,11 +146,10 @@ public partial class TerrainViewerApp
         return host;
     }
 
-    /// <summary>The host a speaker talks through: the shown map's, or a visitor's own; null for a speaker of neither (never mixed:
-    /// a speaker's index means something only in its own host).</summary>
+    /// <summary>The host a speaker talks through (<see cref="AreaTalkRouting.HostOf"/>): a visitor's own, never the shown map's for a
+    /// visitor's speaker; any other speaker the shown map's.</summary>
     private AreaConversationHost? HostOf(AreaSpeaker speaker) =>
-        _conversationHost!.Speakers.Contains(speaker) ? _conversationHost
-            : _visitorHosts.Values.Select(v => v.Host).FirstOrDefault(h => h.Speakers.Contains(speaker));
+        AreaTalkRouting.HostOf(speaker, _conversationHost!, _visitorHosts.Values.Select(v => v.Host));
 
     /// <summary>ARC-WORLD-048: the host of a deferred call whose attachee is a companion visiting the shown map, else null (the
     /// shown map's host runs it).</summary>
