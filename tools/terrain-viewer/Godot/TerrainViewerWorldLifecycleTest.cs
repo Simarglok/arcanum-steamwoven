@@ -399,8 +399,9 @@ public partial class TerrainViewerApp
             GetViewport().PushInput(new InputEventKey { Keycode = Key.F9, Pressed = false, CtrlPressed = true, ShiftPressed = true });
             KeyEvent(Key.Shift,false); KeyEvent(Key.Ctrl,false);
             Require(WorldModal, "actual Ctrl+Shift+F9 did not open"); Frame(none); Frame(none); Frame(none);
+            // Four input numbers, the zoom editor and the three volumes (ARC-UI-044).
             var spins = _worldPanel!.FindChildren("*","SpinBox",true,false).Cast<SpinBox>().ToArray();
-            Require(spins.Length == 5 && GetViewport().GuiGetFocusOwner() == spins[0].GetLineEdit(), "initial native numeric focus");
+            Require(spins.Length == 8 && GetViewport().GuiGetFocusOwner() == spins[0].GetLineEdit(), "initial native numeric focus");
             var position = _worldActor.State.Position; var center = _camera!.State;
             KeyEvent(Key.Down,true);
             Require(GetViewport().GuiGetFocusOwner() == spins[1].GetLineEdit(), "digital press must navigate exactly one");

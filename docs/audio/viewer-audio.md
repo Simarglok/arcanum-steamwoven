@@ -5,7 +5,7 @@ Status: **Implemented bounded component**, task 3 of the
 mode) can play the original's sounds: the module's [sound catalogue](sound-catalog.md) resolves
 an id or a file, the payload is admitted, and the engine decodes and plays it on one of the
 original's three channels at the original's volumes. Music and ambient play through it since ARC-UI-041 ([scheme player](scheme-player.md)), positional event sounds
-since ARC-UI-042 ([positional sound](positional-sound.md)), the dialogue voice since ARC-UI-043 ([dialogue voice](dialogue-voice.md)); interface sounds (ARC-UI-044) will use it too.
+since ARC-UI-042 ([positional sound](positional-sound.md)), the dialogue voice since ARC-UI-043 ([dialogue voice](dialogue-voice.md)) and interface sounds since ARC-UI-044 ([interface sounds](interface-sounds.md)).
 
 ## Volume rules (Godot-free)
 
@@ -63,7 +63,8 @@ setting.
   original's fixed interface sounds (3008, 3009, 3010, 3011, 3002–3007, 3027, 3028; SN31) and
   reports the outcome; the palette's sound line shows the device, the three settings, the
   catalogue and the last result, and the AREA status line shows the last result.
-- The volume settings have no controls yet (ARC-UI-044 adds them); the file can be edited.
+- The palette's **Effects / Voice / Music volume** controls (ARC-UI-044) change the settings at once
+  ([interface sounds and volumes](interface-sounds.md)).
 
 ## Checks
 

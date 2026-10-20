@@ -142,6 +142,7 @@ public partial class TerrainViewerApp
         _worldPanel.VisualToggleRequested += PaletteVisualToggle;
         _worldPanel.AlwaysRunToggleRequested += PaletteAlwaysRunToggle;
         _worldPanel.SoundTestRequested += PaletteSoundTest;
+        _worldPanel.VolumeChanged += PaletteVolumeChanged;
         _worldPanel.OverlayToggled += SetPassabilityOverlay; _overlayPanelState = null;
         _hud!.SettingsRequested += ToggleWorldSettings;
         Input.JoyConnectionChanged += WorldConnectionChanged;
@@ -854,6 +855,7 @@ public partial class TerrainViewerApp
                     panel.VisualToggleRequested -= PaletteVisualToggle;
                     panel.AlwaysRunToggleRequested -= PaletteAlwaysRunToggle;
                     panel.SoundTestRequested -= PaletteSoundTest;
+                    panel.VolumeChanged -= PaletteVolumeChanged;
                     panel.Hide(); RemoveChild(panel); panel.QueueFree();
                 }
             }

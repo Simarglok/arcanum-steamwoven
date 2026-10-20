@@ -19,7 +19,7 @@ it from one explicitly selected archive. This study:
 
 - re-states the audio requirements as testable items for the whole game (AU1–AU14);
 - checks every audio behaviour those items rest on in the original executable (rows SN1–SN33;
-  ARC-WORLD-041, ARC-UI-042 and ARC-UI-043 added SN34–SN36);
+  ARC-WORLD-041 and ARC-UI-042…044 added SN34–SN37);
 - counts the installed sound data over all 81 maps of the module through the content stack;
 - corrects ARC-RES-022 where the executable or the whole-world rule disagrees;
 - splits full in-game audio into ordered, PR-sized tasks.
@@ -65,7 +65,7 @@ reading agrees, unintended; switch candidate), **Reconstruction change** (the ea
 marked a deliberate change; the row states the original).
 
 Evidence level ([F0–F4](original-executable-check.md#evidence-levels-for-a-function-f0f4)): **F2**
-(two independent readings) for every row but SN34, SN35 and SN36 (F1, read by ARC-WORLD-041, ARC-UI-042 and ARC-UI-043); SN21 was read by this task and again by the two
+(two independent readings) for every row but SN34–SN37 (F1, read by ARC-WORLD-041, ARC-UI-042, ARC-UI-043 and ARC-UI-044); SN21 was read by this task and again by the two
 reviewers of ARC-RES-052 and ARC-DATA-040, and SN32 is a caller list the first reviewer checked. The readers checked operand widths, signed compares and rounding where the result
 depends on them (SN4 64-bit signed division and the rounded single-precision distance, SN8 and
 SN13 integer truncation, SN14 the absolute tick difference).
@@ -120,6 +120,7 @@ SN13 integer truncation, SN14 the absolute tick difference).
 | SN32 | `gsound_play_scheme` callers | Requests come only from the map default, sector changes, `play_sound_scheme`, unlock, load, `/over` completion and the end of combat (plus a multiplayer relay). | Original (the executable's callers of 0x41BD50 are exactly these) |
 | SN33 | `random_between` (0x4CEF00) | Ambient chances, volume and balance draws, footstep variants and the combat stinger all advance the shared game random generator. | Original |
 | SN34 | `load_tile_names` (0x4EB2E0), `a_name_tile_sound` (0x4EBBE0), critter art armour (0x504030), `item_weight` (0x461370) | `tilename.mes` (needs record 0) gives four tables of footstep classes by record range (0–99 outdoor flippable, 100–199 outdoor, 200–299 indoor flippable, 300–399 indoor; the position restarts at 100, 200 and 300; reading stops at 400). A record with `/` takes flag letters up to the first space and `atoi` of the rest; a record without one shorter than three characters fails the load, otherwise its class is `atoi` of the text after the third character, read **before** the name is cut there. A tile's class: art bit 8 outdoor, bit 7 flippable, bits 22–27 the position, no bound check. A critter art's armour is bits 20–23 for art type 2, bits 20–22 for type 12, else 0. Item weight: gold 0; stored weight plus the magic adjustment scaled by the holder; ammunition times its quantity / 4. | Original (all 21 installed records without flags carry their class after the third character; 17 are stone or wood). Read once by ARC-WORLD-041 (F1) |
+| SN37 | logbook open (0x53F2B5 in the open function), tab select (0x53F490), tab page (0x53F5F0), next and previous page (0x53F640, 0x53F6A0), close (0x53F2F0); `quest_state_set_internal` (0x4C4E60), un-botch (0x4C5070) | Opening the logbook selects its tab, which plays 3011 and then the tab's 3010, and then plays 3008. A tab button press plays 3010 (no same-tab test); a page turn plays 3010 only when the page changes; closing plays 3009. All through the plain play call. Setting a PC's quest to completed plays 3028 through the sound library's quick play, every time it is set; un-botching a completed quest of the local PC plays it too. | Original. Read by ARC-UI-044 and its reviewer (F1) |
 
 Rows SN23–SN25 were read again by ARC-WORLD-041 (the offsets, the gold field, the empty-record
 test of the weapon hit, the local PC's off flag) with no difference.
@@ -259,7 +260,7 @@ plus the root checks; viewer tasks follow the launcher rule (a new argument upda
 | 7 | ARC-UI-042 (done, [contract](../audio/positional-sound.md)) | Positional effects in the viewer | UI-040, WORLD-041 | Positional rules in `Arcanum.Presentation` (SN4–SN7: listener at the view centre, attenuation and pan with per-size volume, recalculation on scroll) and their host; plays the hero's footsteps, a pickup from the ground, the hero's attacks and the target's death. Doors and chests wait for the viewer to open them, looping scenery for animated scenery (both under [Later](#later-not-in-this-plan)). |
 | 8 | ARC-UI-043 (done, [contract](../audio/dialogue-voice.md)) | Dialogue voice | UI-040, DATA-040 | Speech id per NPC line in the conversation (SN21), voice by PC gender with fallback, start/replace/stop as SN22, voice bus; missing voice changes nothing. Smoke: an installed line voice in map mode. |
 | 9 | ARC-SCRIPT-040 (done, [contract](../scripting/scr-dispatcher-runtime.md#sound-actions-arc-script-040-set-s7)) | Script sounds | WORLD-040, WORLD-041 | Admit `play_sound`, `play_sound_on`, `play_sound_scheme` in the SCR interpreter, output through the session's cue and scheme ports; teleport and fade sound operand when the teleport action is admitted. |
-| 10 | ARC-UI-044 | Interface sounds and audio options | UI-040 | SN31 ids on the existing windows (inventory and containers, character sheet, conversation, level up, quest complete) and the three sliders in the viewer settings, applied live (SN8). |
+| 10 | ARC-UI-044 (done, [contract](../audio/interface-sounds.md)) | Interface sounds and audio options | UI-040 | SN31 ids on the existing windows (inventory and containers, character sheet, conversation, level up, quest complete) and the three sliders in the viewer settings, applied live (SN8). |
 
 Order 1 → 2 → 3 is the trunk; after it, 4 → 5, 6 → 7 and 8 can run in parallel threads with
 rebases (WORLD-040 and WORLD-041 both touch the session, the UI tasks the viewer host), then 9

@@ -98,6 +98,7 @@ public partial class TerrainViewerApp
     {
         if (_worldPanel is null || !GodotObject.IsInstanceValid(_worldPanel)) return;
         _worldPanel.SetSoundStatus($"Sound: {AudioSummary()}.");
+        _worldPanel.BindVolumes(_audioVolumes);
     }
 
     private string AudioSummary() => _audio is null ? "off"
@@ -109,7 +110,7 @@ public partial class TerrainViewerApp
     private void TickAudio()
     {
         _audio?.Tick();
-        if (_readyMode == TerrainViewerMode.CrashSiteArea) { TickSceneSound(); TickPositionalSound(); TickDialogVoice(); TickScriptSounds(); }
+        if (_readyMode == TerrainViewerMode.CrashSiteArea) { TickSceneSound(); TickPositionalSound(); TickDialogVoice(); TickScriptSounds(); TickInterfaceSounds(); }
     }
 
     private void DisposeAudio()

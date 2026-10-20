@@ -52,6 +52,8 @@ its Close button. Contents:
 - **Sound test: next interface sound** (ARC-UI-040): plays the next of the original's fixed interface
   sounds by id from the area module's sound catalogue; the line under it shows the output device,
   the three channel settings, the catalogue and the last result ([viewer audio](../audio/viewer-audio.md)).
+- **Effects / Voice / Music volume** (ARC-UI-044): the original's three settings, 0–10, applied at
+  once and saved outside game saves ([interface sounds and volumes](../audio/interface-sounds.md)).
 - **Show passability (read-only)**: the [passability overlay](../rendering/passability-overlay.md)
   checkbox (ARC-RENDER-008), OFF at launch, navigable while a movement session exists;
   without one it reads "unavailable" and is not navigable. The host binds it through
