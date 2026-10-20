@@ -3,7 +3,7 @@
 Status: **Implemented bounded component, not wired.** Work item ARC-TECHNOLOGY-003 (2026-10-21), slice TECH-3 of the
 [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted). The
 learned and found schematic lists of a crafter (Data, over the [schematic catalogue](../formats/schematics.md)), the
-found-schematic registration (Simulation) and the hero's found list in the session (snapshot schema 25). No viewer, reading
+found-schematic registration (Simulation) and the hero's found list in the session (snapshot schema 23). No viewer, reading
 window or schematic window calls them yet.
 
 Requirements: [FR-ITEM-017](../requirements/items-economy.md#fr-item-017) (found and learned schematics);
@@ -61,9 +61,8 @@ project improvement; [rule modes](rule-modes.md#registry)). One installed docume
   (`BudgetExceeded`, `GameSessionLimits.MaxFoundSchematics`, 128 by default: the original has no limit, the installed data 62
   found records) and a spent budget of durability records for the document's deletion (`BudgetExceeded`). A registration is one revision; the document is deleted as the [durability](item-durability-runtime.md)
   deletion does (it leaves the hero's lists and every seed). Every other outcome is NoChange with its `Reading`.
-- **Snapshot (schema 25)**: `"schematics":{"found":[number]}` in registration order. Restore refuses a repeated number or a list
-  without a hero (`InvalidSchematics`) and a list over the limit (`BudgetExceeded`). Schemas 23 and 24 are the reaction and
-  companion slices'; schemas 1..24 are refused, not migrated.
+- **Snapshot (schema 23)**: `"schematics":{"found":[number]}` in registration order. Restore refuses a repeated number or a list
+  without a hero (`InvalidSchematics`) and a list over the limit (`BudgetExceeded`). Schemas 1..22 are refused, not migrated.
 
 ## Differences from the original
 

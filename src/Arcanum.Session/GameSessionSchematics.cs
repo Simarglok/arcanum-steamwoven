@@ -15,7 +15,7 @@ public readonly record struct SessionWrittenFacts(int Subtype, int TextStartLine
     }
 }
 
-/// <summary>Saved schematic knowledge of the hero (snapshot schema 25): the numbers of its found schematics in the order they
+/// <summary>Saved schematic knowledge of the hero (snapshot schema 23): the numbers of its found schematics in the order they
 /// were registered. Learned schematics are not saved: they follow the stored degrees.</summary>
 public sealed class SessionSchematicState
 {
