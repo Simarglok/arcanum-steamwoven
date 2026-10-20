@@ -104,7 +104,7 @@ and the session runtime stay `WORLD`. So S5 (the shared point pool, stats
 included) and S7 (fate points) take the next free `ARC-WORLD-NNN` codes, and
 the other fifteen take `ARC-SKILLS-NNN` codes in the order they are created
 (none is used on 2026-10-20: no branch, PR or commit has the type), S1 being
-`ARC-SKILLS-001`; created in order, S3 is `ARC-SKILLS-003`, the code ARC-RES-056 already names
+`ARC-SKILLS-001`; `ARC-SKILLS-003` is kept for S3 whatever the creation order, the code ARC-RES-056 already names
 for the prowling margin. Each task is one PR on the Mac (.NET and the original data)
 unless marked; the components listed exclude tests and docs, which every task
 has; the contract is written in the
