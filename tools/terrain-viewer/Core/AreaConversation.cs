@@ -81,6 +81,7 @@ public sealed class AreaConversationHost
     private readonly bool _party;
     private readonly AreaConversationProfile _baseProfile;
     private readonly Func<AreaSpeaker, AreaCompanionFacts?> _companions;
+    private readonly Func<string, SessionNpcAdvancement?>? _npcAdvancement;
 
     /// <param name="inventory">ARC-UI-004: when it covers this map, negative IN moves the item in the session inventory
     /// (<see cref="SessionDialogInventoryPort"/>); otherwise IN is only recorded in <see cref="AreaConversationState.Items"/>.</param>
@@ -92,10 +93,13 @@ public sealed class AreaConversationHost
     /// <paramref name="contentDetail"/>.</param>
     /// <param name="companions">ARC-WORLD-037: the follow facts of a speaker that can join the party (null when it cannot); by
     /// default the measured roster (<see cref="AreaCompanionRoster.For"/>).</param>
+    /// <param name="npcAdvancement">ARC-SCRIPT-016: an NPC's stored advancement for a script's scheme change
+    /// (<see cref="AreaScriptHost"/>); null: only the PC's scheme changes.</param>
     public AreaConversationHost(AreaSnapshot snapshot, ScriptContent? content, GameSessionOwner session,
         AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, bool party = false, string contentDetail = "no script content",
-        Func<AreaSpeaker, AreaCompanionFacts?>? companions = null)
+        Func<AreaSpeaker, AreaCompanionFacts?>? companions = null, Func<string, SessionNpcAdvancement?>? npcAdvancement = null)
     {
+        _npcAdvancement = npcAdvancement;
         _companions = companions ?? AreaCompanionRoster.For;
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -111,7 +115,7 @@ public sealed class AreaConversationHost
         State = new AreaConversationState(session, new SessionMapId(snapshot.RuntimeMap),
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
             party ? Speakers.Where(speaker => _companions(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null);
-        Scripts = new AreaScriptHost(session, new SessionMapId(snapshot.RuntimeMap), Speakers, State, content);
+        Scripts = new AreaScriptHost(session, new SessionMapId(snapshot.RuntimeMap), Speakers, State, content, npcAdvancement);
     }
 
     /// <summary>True when roster speakers talk through the session party (ARC-WORLD-016).</summary>
@@ -122,7 +126,7 @@ public sealed class AreaConversationHost
     /// PC facts follow the new session's hero (ARC-WORLD-027).
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, _baseProfile, _inventory, _party, _contentDetail, _companions);
+    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, _baseProfile, _inventory, _party, _contentDetail, _companions, _npcAdvancement);
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;

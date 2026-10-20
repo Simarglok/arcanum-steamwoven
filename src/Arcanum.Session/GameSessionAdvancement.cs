@@ -99,6 +99,25 @@ public sealed class SessionAutoLevelRules
 /// </summary>
 public sealed record SessionNpcAdvancement(string Entity, AdvancementSheet Sheet, int AutoLevelScheme);
 
+/// <summary>
+/// Whose auto-level scheme a script sets (SCR action 139, ARC-SCRIPT-016): the hero, or an NPC with its map data (sheet and scheme,
+/// read only while the session has no record of it).
+/// </summary>
+public sealed class SessionSchemeTarget
+{
+    private SessionSchemeTarget(SessionNpcAdvancement? npc) => Npc = npc;
+
+    public static SessionSchemeTarget Hero { get; } = new(null);
+
+    public static SessionSchemeTarget ForNpc(SessionNpcAdvancement loaded) => new(loaded ?? throw new ArgumentNullException(nameof(loaded)));
+
+    /// <summary>The NPC's loaded record, or null for the hero.</summary>
+    public SessionNpcAdvancement? Npc { get; }
+}
+
+/// <summary>A scheme change: the scheme the target holds after the call (null for a refusal).</summary>
+public sealed record SessionSchemeResult(GameSessionDisposition Disposition, GameSessionFailure Failure, int? Scheme, GameSessionVersion Version);
+
 /// <summary>Saved advancement records of the NPCs the session levelled, in ordinal entity order (snapshot schema 20).</summary>
 public sealed class SessionAdvancementState
 {
@@ -216,6 +235,47 @@ public sealed partial class GameSessionOwner
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, up, outcome, next, Version);
     }
+
+    /// <summary>
+    /// SCR action 139 (ARC-SCRIPT-016, ledger OL30): the target's auto-level scheme becomes <paramref name="scheme"/> (0x4A6D90 writes
+    /// a PC's or an NPC's scheme field). Nothing is bought now: the hero's scheme runs at its next level step, an NPC's when its level
+    /// rises (AL12), and a number without a rule then buys nothing, so the hero's points stay unspent. An NPC without a record gets one
+    /// from its loaded sheet. The original stores any number; the session keeps schemes within 0..199 (its snapshot bound, the numbers
+    /// the source looks up), so a number outside is refused here, a documented deviation that no installed script reaches. Refused, in
+    /// order: no hero for a hero target (<see cref="GameSessionFailure.AdvancementUnavailable"/>); a number outside 0..199 or an
+    /// invalid loaded record (<see cref="GameSessionFailure.InvalidAdvancement"/>); the version; a new record beyond the budget; the
+    /// revision. The same scheme is <see cref="GameSessionDisposition.NoChange"/>.
+    /// </summary>
+    [Simulation.OriginalFunction(0x4A6D90, Simulation.OriginalFunctionScope.Partial)]
+    public SessionSchemeResult SetAutoLevelScheme(GameSessionVersion expected, SessionSchemeTarget target, int scheme)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.Npc is null && _hero is null) return RejectScheme(GameSessionFailure.AdvancementUnavailable);
+        if (scheme is < 0 or > SessionAdvancementLimits.MaxScheme || (target.Npc is { } loaded && !AdvancementDomain.Valid(loaded)))
+            return RejectScheme(GameSessionFailure.InvalidAdvancement);
+        if (!IsCurrent(expected)) return RejectScheme(GameSessionFailure.StaleVersion);
+        if (target.Npc is not { } npc)
+        {
+            var hero = _hero!.State;
+            if (hero.Advancement.AutoLevelScheme == scheme) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, scheme, Version);
+            if (_revision == long.MaxValue) return RejectScheme(GameSessionFailure.RevisionExhausted);
+            _hero.Apply(hero.With([.. hero.Stats], hero.Level, hero.Experience, hero.UnspentPoints, hero.Advancement with { AutoLevelScheme = scheme }));
+        }
+        else
+        {
+            var saved = _advancement.Npcs.TryGetValue(npc.Entity, out var existing) ? existing : null;
+            var record = saved ?? npc;
+            if (record.AutoLevelScheme == scheme) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, scheme, Version);
+            if (saved is null && _advancement.Npcs.Count >= _limits.MaxAdvancementRecords) return RejectScheme(GameSessionFailure.BudgetExceeded);
+            if (_revision == long.MaxValue) return RejectScheme(GameSessionFailure.RevisionExhausted);
+            _advancement.Npcs[npc.Entity] = record with { AutoLevelScheme = scheme };
+        }
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, scheme, Version);
+    }
+
+    private SessionSchemeResult RejectScheme(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, new(_identity, _revision));
 
     private SessionFollowerLevelResult RejectFollower(GameSessionFailure failure) =>
         new(GameSessionDisposition.Rejected, failure, null, null, null, new(_identity, _revision));

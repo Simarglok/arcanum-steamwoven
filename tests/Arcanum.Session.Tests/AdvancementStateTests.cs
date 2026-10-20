@@ -215,4 +215,93 @@ public sealed class AdvancementStateTests
             Hero = HalfElf() with { Advancement = SessionHeroAdvancement.None with { Colleges = [6, .. new int[15]] } },
         }).Failure);
     }
+
+    // ARC-SCRIPT-016: SCR action 139 sets a scheme and buys nothing until the next level step (ledger OL30).
+    [TestMethod]
+    public void AScriptSchemeIsStoredAndRunsOnlyAtTheNextLevel()
+    {
+        using var owner = Owner(0);
+        var before = owner.QueryHero()!;
+        var revision = owner.Version.Revision;
+        var set = owner.SetAutoLevelScheme(owner.Version, SessionSchemeTarget.Hero, 60);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, (int?)60), (set.Disposition, set.Failure, set.Scheme));
+        var hero = owner.QueryHero()!;
+        Assert.AreEqual((60, 5, 8, revision + 1), (hero.Advancement.AutoLevelScheme, hero.UnspentPoints, hero.Stats[0], owner.Version.Revision),
+            "nothing is bought at once");
+        CollectionAssert.AreEqual(before.Stats.ToArray(), hero.Stats.ToArray());
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.SetAutoLevelScheme(owner.Version, SessionSchemeTarget.Hero, 60).Disposition);
+
+        // The next level runs it: strength 9 and 10 among the purchases.
+        var award = owner.AwardHeroExperience(owner.Version, T(2));
+        Assert.IsNotNull(award.Award!.Purchases);
+        Assert.AreEqual(10, owner.QueryHero()!.Stats[0]);
+        Assert.IsTrue(owner.QueryHero()!.UnspentPoints < 6);
+    }
+
+    [TestMethod]
+    public void ASchemeWithoutARuleBuysNothingAndKeepsThePoints()
+    {
+        using var owner = Owner(60);
+        var start = owner.QueryHero()!;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetAutoLevelScheme(owner.Version, SessionSchemeTarget.Hero, 150).Disposition);
+        var award = owner.AwardHeroExperience(owner.Version, T(2));
+        Assert.IsNull(award.Award!.Purchases);
+        Assert.AreEqual((150, start.UnspentPoints + 1, start.Stats[0]), (owner.QueryHero()!.Advancement.AutoLevelScheme, owner.QueryHero()!.UnspentPoints,
+            owner.QueryHero()!.Stats[0]));
+    }
+
+    [TestMethod]
+    public void AnNpcSchemeMakesARecordThatItsNextLevelStepRuns()
+    {
+        using var owner = Owner(0);
+        var set = owner.SetAutoLevelScheme(owner.Version, SessionSchemeTarget.ForNpc(Follower()), 60);
+        Assert.AreEqual(GameSessionDisposition.Changed, set.Disposition);
+        Assert.AreEqual(Follower() with { AutoLevelScheme = 60 }, owner.QueryNpcAdvancement("virgil"), "the loaded sheet, nothing bought");
+        // A loaded scheme no longer counts: the record wins. One point: scheme 60 buys strength 9 (not dexterity, scheme 62).
+        var up = owner.LevelFollower(owner.Version, Follower(), AdvancementModifiers.None, new(1, 2));
+        Assert.AreEqual((9, 8, 0), (up.Record!.Sheet.Stats[0], up.Record.Sheet.Stats[1], up.Record.Sheet.UnspentPoints));
+        Assert.AreEqual(60, up.Record.AutoLevelScheme);
+        // A later change keeps the levelled sheet.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetAutoLevelScheme(owner.Version, SessionSchemeTarget.ForNpc(Follower()), 0).Disposition);
+        Assert.AreEqual((2, 0), (owner.QueryNpcAdvancement("virgil")!.Sheet.Level, owner.QueryNpcAdvancement("virgil")!.AutoLevelScheme));
+    }
+
+    [TestMethod]
+    public void SchemeChangesAreRefusedOutsideTheSessionBounds()
+    {
+        using var owner = Owner(0, limits: new(maxAdvancementRecords: 1));
+        var revision = owner.Version.Revision;
+        void Refused(SessionSchemeTarget target, int scheme, GameSessionFailure failure) =>
+            Assert.AreEqual((GameSessionDisposition.Rejected, failure, (int?)null),
+                (owner.SetAutoLevelScheme(owner.Version, target, scheme).Disposition, owner.SetAutoLevelScheme(owner.Version, target, scheme).Failure,
+                    owner.SetAutoLevelScheme(owner.Version, target, scheme).Scheme));
+        // The original stores any number; the session keeps 0..199 (documented deviation).
+        Refused(SessionSchemeTarget.Hero, 200, GameSessionFailure.InvalidAdvancement);
+        Refused(SessionSchemeTarget.Hero, -1, GameSessionFailure.InvalidAdvancement);
+        Refused(SessionSchemeTarget.ForNpc(Follower("bad id")), 60, GameSessionFailure.InvalidAdvancement);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.SetAutoLevelScheme(new(owner.Identity, 7), SessionSchemeTarget.Hero, 60).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetAutoLevelScheme(owner.Version, SessionSchemeTarget.ForNpc(Follower()), 60).Disposition);
+        Refused(SessionSchemeTarget.ForNpc(Follower("second")), 60, GameSessionFailure.BudgetExceeded);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.SetAutoLevelScheme(owner.Version, SessionSchemeTarget.ForNpc(Follower("second")), 62).Disposition,
+            "the loaded scheme already");
+        Assert.AreEqual((0, revision + 1), (owner.QueryHero()!.Advancement.AutoLevelScheme, owner.Version.Revision));
+        Assert.ThrowsExactly<ArgumentNullException>(() => SessionSchemeTarget.ForNpc(null!));
+
+        using var heroless = GameSessionOwner.Create(Descriptor()).Owner!;
+        Assert.AreEqual(GameSessionFailure.AdvancementUnavailable, heroless.SetAutoLevelScheme(heroless.Version, SessionSchemeTarget.Hero, 60).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            heroless.SetAutoLevelScheme(heroless.Version, SessionSchemeTarget.ForNpc(Follower()), 60).Disposition, "an NPC needs no hero");
+    }
+
+    [TestMethod]
+    public void ScriptSchemesRoundTripThroughTheSnapshot()
+    {
+        using var owner = Owner(0);
+        owner.SetAutoLevelScheme(owner.Version, SessionSchemeTarget.Hero, 61);
+        owner.SetAutoLevelScheme(owner.Version, SessionSchemeTarget.ForNpc(Follower()), 101);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text), RestoreOptions() with { AutoLevel = Rules(), Experience = ExperienceStateTests.Rules() });
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        Assert.AreEqual((61, 101), (restored.QueryHero()!.Advancement.AutoLevelScheme, restored.QueryNpcAdvancement("virgil")!.AutoLevelScheme));
+    }
 }

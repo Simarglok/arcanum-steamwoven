@@ -83,7 +83,7 @@ public sealed class AreaScriptHostTests
         var flags = f.Session.Flags;
         Assert.AreEqual(true, flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(2593))).Value);
         Assert.IsFalse(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GetStoryState) || AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.SetStoryState));
-        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S7));
+        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S8));
         Assert.IsTrue(new[] { ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme }.All(AreaScriptHost.Admission.Actions.Contains),
             "ARC-SCRIPT-040: the sound actions run in the viewer");
         Assert.ThrowsExactly<InvalidOperationException>(() => f.Host.StoryState());
@@ -109,6 +109,33 @@ public sealed class AreaScriptHostTests
         Assert.IsNull(f.Host.SpeakerOf(f.Host.Pc), "the PC's cell is the viewer's");
         Assert.IsTrue(f.Host.Apply(run.Effects), "the same request again changes nothing and stops nothing");
         Assert.AreEqual(3, f.Host.TakeSounds().Count);
+    }
+
+    // ARC-SCRIPT-016: set auto-level scheme (139) on the triggerer (the PC), twice on the attachee (101, then 200, which the session
+    // refuses), on the absent extra object, and on the attachee again for a host that cannot read the NPC.
+    [TestMethod]
+    public void Scheme_requests_go_to_the_npc_record_and_other_objects_are_ignored()
+    {
+        using var f = Create();
+        var npc = f.Host.Object(f.Speaker);
+        Assert.IsTrue(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.SetAutoLevelScheme));
+        var loaded = new SessionNpcAdvancement(f.Entity, new(Arcanum.Simulation.Character.CharacterRace.Human, false, [.. Enumerable.Repeat(8, 8)], 0, 0, 1, 0,
+            [.. new int[12]], [.. new int[4]], [.. new int[16]], [.. new int[8]], 1, 2, 0, 0), 62);
+        var host = new AreaScriptHost(f.Session, f.Map, [f.Speaker], f.State, null, entity => entity == f.Entity ? loaded : null);
+        var program = Program.Schemes();
+        var run = new FakeEffectsRun(host, npc).Run(program, new(777, 4, 0x0201), AreaScriptHost.Admission);
+        Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.Code.ToString());
+        CollectionAssert.AreEqual(new[] { new ScrSchemeRequest(host.Pc, 60), new ScrSchemeRequest(npc, 101), new ScrSchemeRequest(npc, 200) },
+            run.Effects.Schemes.ToArray());
+        var revision = f.Session.Version.Revision;
+        Assert.IsTrue(host.Apply(run.Effects), "a refused number and a PC without a hero stop nothing");
+        Assert.AreEqual(loaded with { AutoLevelScheme = 101 }, f.Session.QueryNpcAdvancement(f.Entity), "200 is refused, 101 stays");
+        Assert.AreEqual(revision + 1, f.Session.Version.Revision, "this session has no hero: the PC's request changes nothing");
+
+        // A host that cannot read the object as an NPC ignores the request, as the original ignores an object that is no critter.
+        using var g = Create();
+        Assert.IsTrue(g.Host.Apply(new FakeEffectsRun(g.Host, g.Host.Object(g.Speaker)).Run(program, new(777, 4, 0x0201), AreaScriptHost.Admission).Effects));
+        Assert.IsNull(g.Session.QueryNpcAdvancement(g.Entity));
     }
 
     [TestMethod]
@@ -274,6 +301,10 @@ public sealed class AreaScriptHostTests
         internal static ScrProgram SetStory(int value) => Build((43, value), (1, 0));
 
         // ARC-SCRIPT-040: play sound 3008, play sound 4010 on the attachee (focus kind 1), on the triggerer (kind 0), scheme 15/39.
+        // ARC-SCRIPT-016: scheme 60 on the triggerer, 101 and 200 on the attachee, 70 on the absent extra object (kind 12).
+        internal static ScrProgram Schemes() => Lines(
+            (139, [(0, 0), (3, 60)]), (139, [(1, 0), (3, 101)]), (139, [(12, 0), (3, 70)]), (139, [(1, 0), (3, 200)]), (1, []));
+
         internal static ScrProgram Sounds() => Lines(
             (82, [(3, 3008)]), (83, [(3, 4010), (1, 0)]), (83, [(3, 4011), (0, 0)]), (87, [(3, 15), (3, 39)]), (1, []));
 
@@ -314,8 +345,8 @@ public sealed class AreaScriptHostTests
     /// <summary>Wraps the fixture host so a run uses a given program and slot.</summary>
     private sealed class FakeEffectsRun(AreaScriptHost inner, ScrObjectRef npc, int? story = null)
     {
-        internal ScrRunResult Run(ScrProgram program, ScrSlot slot) => ScrDispatcher.RunObject(new(ScrPoint.Dialog, npc, inner.Pc, null), new With(inner, program, slot, story),
-            new() { Admission = ScrAdmissionSet.S7 });
+        internal ScrRunResult Run(ScrProgram program, ScrSlot slot, ScrAdmissionSet? admission = null) =>
+            ScrDispatcher.RunObject(new(ScrPoint.Dialog, npc, inner.Pc, null), new With(inner, program, slot, story), new() { Admission = admission ?? ScrAdmissionSet.S7 });
 
         private sealed class With(AreaScriptHost inner, ScrProgram program, ScrSlot slot, int? story) : IScrHost
         {

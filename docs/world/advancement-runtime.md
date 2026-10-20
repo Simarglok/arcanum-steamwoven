@@ -67,6 +67,7 @@ after each level written and returns the unspent points left.
 | Pool bound | The hero holds at most `SessionAdvancementLimits.MaxHeroPoolPoints` (100) bought hit and fatigue points each, so the effect bounds of its maxima hold; a scheme run (at creation or for one level) that would go past it buys nothing and leaves that level's points unspent. A project guard: a pre-made hero buys at most 64 points in all. |
 | Experience awards (`AwardHeroExperience`, `AwardQuestExperience`, `SetQuestState`, hits and kills) | The hero's scheme spends each level's points as the level is written (AL12), with its effects' changes and poison; the award's `Purchases` lists what it bought (null when nothing). A level raises the maxima by the bought points too. |
 | `LevelFollower(expected, loaded, modifiers, step)` | For one follower or waiting follower after an award's `Followers` step: its level and points ([experience](experience-runtime.md), XP7), then its scheme and rule 70 (AL1). `loaded` is the NPC's map data, read only while the session has no record of it. A level that does not rise is `NoChange`. Refused, in order: no scheme data (`AdvancementUnavailable`), an invalid entity, sheet, scheme, modifiers or step (`InvalidAdvancement`), the version, a new record over `GameSessionLimits.MaxAdvancementRecords` (256, `BudgetExceeded`), the revision. One revision. |
+| `SetAutoLevelScheme(expected, target, scheme)` | SCR action 139 (ARC-SCRIPT-016, ledger OL30, 0x4A6D90): the target (`SessionSchemeTarget.Hero` or `ForNpc(loaded)`) gets the scheme; nothing is bought now, the next level step runs it (the hero's next level written, an NPC's next rise), and a number without a rule then buys nothing (the hero's points stay unspent). An NPC without a record gets one from its loaded sheet. The original stores any number; the session keeps 0..199, so a number outside is refused (a documented deviation no installed script reaches). Refused, in order: no hero for a hero target (`AdvancementUnavailable`), a number outside 0..199 or an invalid loaded record (`InvalidAdvancement`), the version, a new record over the budget (`BudgetExceeded`), the revision; the same scheme is `NoChange`. One revision. No snapshot change: the scheme fields already exist. |
 | `QueryNpcAdvancement(entity)`, `AutoLevel` | The NPC's saved record (null until levelled) and the session's scheme data. |
 
 ## Snapshot (schema 20)
@@ -113,6 +114,7 @@ skill target.
   [ARC-RES-064](../research/companion-orders-loyalty-evidence.md#5-waiting-followers-and-the-level-step-q5-xp5-xp7) OL29). An NPC whose home map the viewer has not loaded (map mode covers one
   map) is skipped, even when the session already holds its record.
 - Viewer: an award reached while the viewer has no combat host or effect rules (no `--hero`) levels no follower.
-- Script changes of a scheme (Virgil's script 2023 sets scheme 101) have no runtime; action 139 is read in
-  [ARC-RES-064](../research/companion-orders-loyalty-evidence.md#6-scr-action-139-set-auto-level-scheme-q6) (OL30).
+- Script changes of a scheme run in the viewer's dialog scripts since ARC-SCRIPT-016 ([set S8](../scripting/scr-dispatcher-runtime.md#set-auto-level-scheme-arc-script-016-set-s8));
+  Virgil's script 2023, the one installed action, is not run yet (its other lines use actions no set admits), and an NPC's
+  scheme change needs its map data (`--hero`).
 - Multiplayer and network branches (AL13) are out of scope.
