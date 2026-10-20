@@ -98,7 +98,9 @@ public static class AutoLevelRules
     public const int SkillPointMask = SkillRules.PointMask;
     /// <summary>The bound of hit and fatigue points and adjustments a sheet admits (project policy; the installed critters stay far below).</summary>
     public const int MaxPoolValue = 10_000;
-    private const int MaxPointStat = 210, MinimumSpellIntelligence = 5;
+    private const int MaxPointStat = 210;
+    /// <summary>The intelligence every spell rank needs (0x4502E0, before the spell table is loaded).</summary>
+    internal const int MinimumSpellIntelligence = 5;
 
     private static readonly string[][] Tokens =
     [
@@ -226,8 +228,14 @@ public static class AutoLevelRules
     public static int SpellMinimumLevel(int spell) => spell is >= 0 and < Spells ? SpellMinimumLevels[spell % 5]
         : throw new ArgumentOutOfRangeException(nameof(spell));
 
-    /// <summary>The intelligence a tech degree needs: 0, 5, 8, 11, 13, 15, 17, 19.</summary>
+    /// <summary>The intelligence a tech degree needs (0x4B0110): 0, 5, 8, 11, 13, 15, 17, 19.</summary>
+    [OriginalFunction(0x4B0110, OriginalFunctionScope.Full)]
     public static int DegreeMinimumIntelligence(int degree) => degree is >= 0 and <= MaxDegree ? DegreeIntelligence[degree]
+        : throw new ArgumentOutOfRangeException(nameof(degree));
+
+    /// <summary>The tech points a degree costs (0x4B00A0): 0 for degree 0, 1 for each of 1..7.</summary>
+    [OriginalFunction(0x4B00A0, OriginalFunctionScope.Full)]
+    public static int DegreeCost(int degree) => degree is >= 0 and <= MaxDegree ? DegreeCosts[degree]
         : throw new ArgumentOutOfRangeException(nameof(degree));
 
     // One rule (0x4A7340): each step buys until its target; running out of points ends the rule, not completed;
@@ -476,7 +484,7 @@ public static class AutoLevelRules
     }
 
     /// <summary>The mutable copy of a sheet one run works on, with the source's setters and level reads.</summary>
-    private sealed class Work
+    internal sealed class Work
     {
         private readonly AdvancementSheet _sheet;
         private readonly AdvancementModifiers _modifiers;
@@ -513,6 +521,9 @@ public static class AutoLevelRules
         internal ImmutableArray<AdvancementPurchase>.Builder Purchases { get; } = ImmutableArray.CreateBuilder<AdvancementPurchase>();
 
         internal void Log(AdvancementTrack track, int index, int value) => Purchases.Add(new(track, index, value));
+
+        /// <summary>The willpower a spell rank needs (the run's table).</summary>
+        internal int SpellWillpower(int spell) => _willpower[spell];
 
         // The stat setter clamps to the race's range.
         internal void SetStat(int stat, int value)
@@ -598,6 +609,17 @@ public static class AutoLevelRules
             TechPoints = Math.Clamp(TechPoints + DegreeCosts[degree + 1], 0, MaxPointStat);
             Degrees[discipline] = degree + 1;
             return degree + 1;
+        }
+
+        // 0x4AFFF0: a degree above 0 falls by one and the tech points by its cost; no intelligence check.
+        [OriginalFunction(0x4AFFF0, OriginalFunctionScope.Full)]
+        internal int LowerDegree(int discipline)
+        {
+            var degree = Degrees[discipline];
+            if (degree == 0) return degree;
+            TechPoints = Math.Clamp(TechPoints - DegreeCosts[degree], 0, MaxPointStat);
+            Degrees[discipline] = degree - 1;
+            return degree - 1;
         }
 
         internal int MaxHitPoints() => LifeRules.MaxHitPoints(Facts(), _modifiers.PoisonLevel);

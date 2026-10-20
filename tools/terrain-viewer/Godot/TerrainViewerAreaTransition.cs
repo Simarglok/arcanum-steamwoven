@@ -69,7 +69,7 @@ public partial class TerrainViewerApp
         BindAreaInventory(arguments, result);
         // ARC-UI-041: the map opens: its default music and ambient pair plays. ARC-WORLD-038: a session a quick load (or its
         // fallback) brings keeps the sound state it holds, as a same-map quick load does.
-        if (_mapHandoff is { Kind: MapHandoffKind.QuickLoad } && ReferenceEquals(carried, _areaSession)) RebindAreaSound();
+        if (_mapHandoff is { Kind: MapHandoffKind.QuickLoad or MapHandoffKind.Stream } && ReferenceEquals(carried, _areaSession)) RebindAreaSound();
         else EnterAreaMapSound(area.Snapshot.CatalogueMap);
         if (mapMode)
         {
@@ -96,7 +96,7 @@ public partial class TerrainViewerApp
         UnbindAreaCompanions();
         // A session a map transfer carries outlives the scene it leaves (ARC-WORLD-031).
         if (!ReferenceEquals(_areaSession, _mapHandoff?.Session) && !ReferenceEquals(_areaSession, _mapHandoff?.Previous)) _areaSession?.Dispose();
-        _areaTransitions = null; _areaSession = null; _areaUseAfterRoute = null; _mapTransfers = null; _mapEntered.Clear();
+        _areaTransitions = null; _areaSession = null; _areaUseAfterRoute = null; _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
         _audio?.StopAll(); _schemePlayer = null; _schemeVoices.Clear(); _combatStinger = _combatLoop = null; _soundSector = null;
         StopPositionalSound(); _tileArt = null; // the scene's terrain must not outlive it (reload retention check)

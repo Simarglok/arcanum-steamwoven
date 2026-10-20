@@ -3,7 +3,7 @@
 Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
 inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019; life state ARC-COMBAT-002;
 event queue ARC-WORLD-024; NPC reaction ARC-WORLD-026; turn-based round ARC-COMBAT-003; equipment ARC-WORLD-028;
-durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20); the hero's skills in play ARC-SKILLS-002 (schema 21).
+durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20); the hero's skills in play ARC-SKILLS-002 (schema 21); item durability ARC-WORLD-053 (schema 22). The character editor's point pool ARC-WORLD-052 ([character point pool](character-point-pool.md)) adds no saved state: its floor lives only while the editor is open.
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
@@ -157,7 +157,7 @@ state that left `Accepted` (`InvalidQuestState`). A shared state without a PC re
 as the source's shared state is not owned by one PC.
 
 
-## Snapshot schema 21
+## Snapshot schema 22
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -169,6 +169,7 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 `Hero` (the player character or `null`; [starting hero runtime](starting-hero-runtime.md#snapshot-schema-6)),
 `Inventory` (the PC's gold, the starting kit and the taken items in list order; [inventory runtime](inventory-runtime.md#snapshot-schema-5)),
 `Equipment` (the hero's worn items in slot order; [equipment](equipment-runtime.md#snapshot-schema-12)),
+`Durability` (the changed items' conditions and the deleted items, each in ordinal order; [item durability](item-durability-runtime.md#snapshot-schema-22)),
 `Effects` (the hero's durable entries in list order and the rule of each number; [durable effects](durable-effects-runtime.md#snapshot-schema-13)),
 `Experience` (the changed NPCs' experience worth and pool in ordinal order; the hero's experience is in `Hero`; [experience](experience-runtime.md#snapshot-schema-14)),
 `Advancement` (the levelled NPCs' sheets and schemes in ordinal order; the hero's fields are in `Hero`; [auto-level schemes](advancement-runtime.md#snapshot-schema-20)),
@@ -240,7 +241,9 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 21 is the only accepted version. ARC-SKILLS-002 added the hero's `innateSkills` list
+**Migration decision: none.** Schema 22 is the only accepted version. ARC-WORLD-053 added the required `durability`
+section ([item durability](item-durability-runtime.md#snapshot-schema-22)); schema 21 is refused like
+the earlier ones. ARC-SKILLS-002 had added the hero's `innateSkills` list
 (the race and gender effects' skill changes, [hero skills](hero-skills-runtime.md#snapshot-schema-21)); schema 20 is refused
 like the earlier ones, also a heroless one of the same structure. ARC-WORLD-036 had added the hero's `advancement` fields
 and the root `advancement` section; schema 19 is refused like the earlier ones (see
@@ -283,7 +286,8 @@ added the sound state as schema 18 and refuses schema 17. ARC-UI-008 added the q
 schema 19 and refuses schema 18 (a quick save of an older schema loads as incompatible). ARC-WORLD-036 added the hero's
 advancement fields and the levelled NPCs' sheets as schema 20 and refuses schema 19
 ([auto-level schemes](advancement-runtime.md#snapshot-schema-20)). ARC-SKILLS-002 added the hero's innate skill changes as
-schema 21 and refuses schema 20. Adding another domain needs schema 22 with its own explicit migration decision.
+schema 21 and refuses schema 20. ARC-WORLD-053 added item durability as schema 22 and refuses schemas 1..21.
+Adding another domain needs the next free schema number with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
 

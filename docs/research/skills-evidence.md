@@ -43,9 +43,12 @@ two readers and stand at F2 or F3: storage, levels, caps, key stats, training ge
 setters, cost and refund, the next point's key stat, the stat-lowering guard and its caller, the tech points side effect,
 the skill effect collections, the Educator update, the skill module (names, the "follower skills" setting, the saved
 gambling roll), the new-character kit and the aptitude formula ([ledger](original-verification-ledger.md#skill-rules-arc-skills-001)
-FA7–FA9, AL5, SR1–SR14). They agree with the reading below. Still F0, apart from the − loop (SK2) and the training
-dispatch (SK3) already read by ARC-RES-048: the editor's + and − buttons, its floor and hint (0x57ACD0, 0x57AEB0, 0x55D3A0, 0x55D6F0, 0x5597C0, 0x55AE70, 0x55BD10; tasks S5, S6), the training sources (0x418CA0,
-0x418DE0, 0x418F30, 0x411940; S16), the dialog skill cases (0x4150D0, 0x415BA0; S4) and everything of sections 5 and 6
+FA7–FA9, AL5, SR1–SR14; since ARC-SKILLS-004 also the dialog skill conditions and the `tr` and `et` actions, [DS1–DS5](original-verification-ledger.md#dialog-skill-gates-arc-skills-004)). They agree with the reading below. The editor's + and − buttons, its floor, snapshot and
+hints (0x57ACD0, 0x57AEB0, 0x55D3A0, 0x55D6F0, 0x5597C0, 0x55AE70) stand at F2 since ARC-WORLD-052
+([ledger CP1–CP12](original-verification-ledger.md#character-point-pool-arc-world-052)), with one correction to section 2: the
+floor does not hold through a − click whose level an effect pins (CP6). Still F0, apart from the − loop (SK2) and the training
+dispatch (SK3) already read by ARC-RES-048: the sheet's skill page (0x55BD10; task S6), the training sources (0x418CA0,
+0x418DE0, 0x418F30, 0x411940; S16), and everything of sections 5 and 6
 (the check and the uses; S3 and later).
 
 No original file, probe or game data was read for the research work item ARC-RES-044 itself. Original
@@ -92,7 +95,8 @@ use of skill conditions) are listed for the census in
    success or failure, then fate for the PC, then the skill's own handler
    (run (0x4C7160)). Effectiveness is a per-skill formula of the level, an
    opposed table for four skills, +10 for extraordinary intelligence, the game
-   difficulty for the PC and a 95 % cap for non-combat skills
+   difficulty for the PC and a 95 % cap for every skill but bow, melee,
+   throwing, firearms and prowling ([SC1](original-verification-ledger.md#skill-check-arc-skills-003))
    (effectiveness (0x4C62E0), opposed (0x4C6410), tech (0x4C69F0)).
 7. **Persuasion and haggle in dialog are thresholds, not rolls.** Dialog
    conditions `ps`, `ha`, `sk` and `tr` compare the PC's effective level or
@@ -165,7 +169,9 @@ that would go below the value accepted when the editor opened
 "skill at maximum" when the level is already 20 and "stat too low" otherwise;
 the stat hint shows the key stat needed for the next point
 (hint (0x55AE70)). The basic − path loops until the visible level
-changes; see SK2.
+changes; see SK2. The floor is tested only before the loop, so when an effect
+holds the level the click passes it (ledger CP6, an original bug; Steamwoven
+stops at the floor in both modes, [character point pool](../world/character-point-pool.md)).
 
 **Auto-level** (auto level (0x4A76B0, 0x4A77A0)). A scheme step "skill N" buys points
 until the level reaches N; when a point is refused it raises the key stat by
@@ -277,6 +283,11 @@ values divided by four: −9…+9 → 13, 16, 19, 22, 26, 30, 34, 38, 42, 47, 52
 
 ### 5.3 Difficulty
 
+**Original check (ARC-SKILLS-003):** sections 5.2–5.4 were read in the retail 1.0.7.4 executable by two readers, rows
+[SC1–SC17](original-verification-ledger.md#skill-check-arc-skills-003). They agree with this reading except that a small own
+light keeps three quarters of the darkness penalty (SC9), and they complete it: heal without a healing item is impossible,
+and each worn armour's silent-move adjustment is halved on its own (SC11).
+
 Summed, in this order (difficulty (0x4C8430)):
 
 1. the invocation modifier;
@@ -295,7 +306,7 @@ Summed, in this order (difficulty (0x4C8430)):
    purpose is unclear and only the flag name says cover);
 6. **light** (not for an undead source) for bow, melee, throwing, firearms,
    spot trap, pick locks, disarm traps and seeing checks: up to +30 in full
-   darkness, divided by the source's own light (4, 3, 2 or ×2/3 by size),
+   darkness, divided by the source's own light (4, 3, 2 or ×3/4 by size; SC9),
    replaced by 30 − penalty when the source has dark sight (for a seeing
    check: unless the observer has dark sight); skipped by an expert in melee or pick locks; spot,
    disarm and seeing checks apply it only while untrained;
@@ -305,7 +316,7 @@ Summed, in this order (difficulty (0x4C8430)):
 8. **per skill**: pick pocket +30..1000 for worn slots (helmet 50, rings and
    medallion 30, weapon and shield 70, armour, gauntlets and boots 1000) and
    `5 × width × height` for size, halved for an expert; prowling (section 6);
-   heal minus the healing item's usage bonus; pick locks minus the lockpick
+   heal minus the healing item's usage bonus (impossible without one, SC11); pick locks minus the lockpick
    bonus plus the lock's difficulty (halved for a master), impossible on
    anything but a portal or container; disarm plus the trap's difficulty.
 

@@ -17,11 +17,12 @@ namespace Arcanum.TerrainViewer;
 // with the actor where it stood. A reset or reload drops a queued transfer.
 public partial class TerrainViewerApp
 {
-    private enum MapHandoffKind { Transfer, QuickLoad }
+    // ARC-RENDER-024: Stream moves the window of a map too large to load whole (the main map) around the walking actor.
+    private enum MapHandoffKind { Transfer, QuickLoad, Stream }
     private AreaMapTransfers? _mapTransfers;
     private MapTransferHandoff? _mapHandoff;
     // Tiles the actor stepped into since the last frame, in order (a frame can complete several steps; ledger TR3 fires on each).
-    private readonly Queue<AreaStepCell> _mapEntered = new();
+    private readonly Queue<(AreaStepCell From, AreaStepCell To)> _mapEntered = new();
     private string? _lastPublishedFailure;
 
     /// <summary>A load of another map in progress: the session the destination adopts (null on an unlit map without one),
@@ -44,7 +45,8 @@ public partial class TerrainViewerApp
         public GameSessionOwner? Released => Previous is null ? null : Fallback ? Session : Previous;
     }
 
-    private bool AreaTransferPending => _areaTransitions?.Pending is not null || _mapTransfers?.Pending is not null || _mapHandoff is not null;
+    // A window move (ARC-RENDER-024) loads in the background and leaves the shown map playable.
+    private bool AreaTransferPending => _areaTransitions?.Pending is not null || _mapTransfers?.Pending is not null || _mapHandoff is { Kind: not MapHandoffKind.Stream };
 
     private bool IsAreaTrigger(AreaObjectKey key) =>
         _mapTransfers?.Site(key) is not null || _mapTransfers?.ScriptedSite(key) is not null || _areaTransitions?.Triggers().Any(t => t.Trigger.Key == key) == true;
@@ -58,7 +60,7 @@ public partial class TerrainViewerApp
 
     private void StartMapTransfers(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
-        _mapTransfers = null; _mapEntered.Clear();
+        _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
         var area = result.Area!; var steps = result.AreaStepSnapshot!; var chart = area.Plan.Chart;
         var handoff = _mapHandoff; _mapHandoff = null;
         // A carried session that this map did not adopt (another load published meanwhile) is released.
@@ -78,7 +80,9 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-031 transfer arrived " + System.Text.Json.JsonSerializer.Serialize(new {
                 Kind = handoff.Kind.ToString(), From = handoff.FromMap, To = area.Snapshot.RuntimeMap, Arrival = arrival, handoff.Fallback,
                 Session = placed.Disposition.ToString(), placed.Failure, Revision = session.Version.Revision }));
-            if (placed.Disposition == GameSessionDisposition.Rejected) handoff = handoff with { Failure = handoff.Failure ?? $"session refused the arrival ({placed.Failure})" };
+            if (placed.Disposition == GameSessionDisposition.Rejected && handoff.Kind == MapHandoffKind.Stream)
+                _mapStreamStatus = $"window moved but the session refused the actor's placement ({placed.Failure})";
+            else if (placed.Disposition == GameSessionDisposition.Rejected) handoff = handoff with { Failure = handoff.Failure ?? $"session refused the arrival ({placed.Failure})" };
             // A quick load asked for the saved cell; the map stands the actor on its start when the cell is not admitted.
             if (handoff is { Kind: MapHandoffKind.QuickLoad, Fallback: false } && arguments.AreaMapArrival is { } asked && (asked.X != arrival.X || asked.Y != arrival.Y))
                 SetQuickStatus($"F8 quick loaded, but the saved cell ({asked.X},{asked.Y}) is not admitted here: the actor stands on the map's start ({arrival.X},{arrival.Y})");
@@ -90,11 +94,13 @@ public partial class TerrainViewerApp
         }
         _mapTransfers = new(new(area.Snapshot, steps, chart), transitions, destinations);
         // ARC-SCRIPT-015: a guarded use site runs its use script on the session; the hosts are read at the click.
-        _mapTransfers.ScriptRunner = (_, row, refusal) => _areaSession is { } owner
-            ? new AreaUseScriptHost(owner, area.Snapshot.RuntimeMap, area.Snapshot.Objects, _inventoryHost?.Maps ?? [], _conversationContent?.Load.Content).Run(row, owner.Rules.Scripts, refusal)
-            : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
+        _mapTransfers.ScriptRunner = (_, row, refusal) => UseScriptHost(area.Snapshot) is { } host
+            ? host.Run(row, _areaSession!.Rules.Scripts, refusal) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
+        // ARC-SCRIPT-017: every tile and sector script the player enters runs on the session the same way.
+        _mapTransfers.PlacedRunner = (placed, refusal) => UseScriptHost(area.Snapshot) is { } host
+            ? host.RunPlaced(placed, _areaSession!.Rules.Scripts, refusal) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
         var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
-        var arrived = handoff is null ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
+        var arrived = handoff is null || handoff.Kind == MapHandoffKind.Stream ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
             : handoff.Kind == MapHandoffKind.Transfer ? $"; arrived from map {handoff.FromMap}" : $"; quick load from map {handoff.FromMap}";
         _areaUseStatus = $"map {arguments.AreaMapName}: {_mapTransfers.Triggers.Count} exit objects, {_mapTransfers.TriggerCells.Count} exit tiles{arrived}";
         GD.Print("ARC-WORLD-031 transfers-ready " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -153,6 +159,20 @@ public partial class TerrainViewerApp
         _ => $"use refused: {result.Outcome} {result.Reason}" + ScriptedLines(),
     };
 
+    // ARC-SCRIPT-017: one use-script host per shown map, session and script content (entry runs come every step).
+    private (AreaSnapshot Snapshot, GameSessionOwner Session, Arcanum.Data.Scripts.ScriptContent? Content, AreaInventoryHost? Inventory, AreaUseScriptHost Host)? _useScriptHost;
+
+    private AreaUseScriptHost? UseScriptHost(AreaSnapshot snapshot)
+    {
+        if (_areaSession is not { } owner) return null;
+        var content = _conversationContent?.Load.Content;
+        if (_useScriptHost is { } cached && ReferenceEquals(cached.Snapshot, snapshot) && ReferenceEquals(cached.Session, owner)
+            && ReferenceEquals(cached.Content, content) && ReferenceEquals(cached.Inventory, _inventoryHost)) return cached.Host;
+        var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content);
+        _useScriptHost = (snapshot, owner, content, _inventoryHost, host);
+        return host;
+    }
+
     // ARC-SCRIPT-015: the floating lines the last scripted use printed (shown on the status line).
     private string ScriptedLines() => _mapTransfers?.LastScripted is { Lines.Count: > 0 } ran ? " — \"" + string.Join(" / ", ran.Lines) + "\"" : "";
 
@@ -161,7 +181,8 @@ public partial class TerrainViewerApp
     /// actor's place changed.</summary>
     private bool ProcessAreaMapTransfer()
     {
-        if (_mapTransfers is null || _mapHandoff is not null) return false;
+        // A window move in flight (ARC-RENDER-024) keeps the shown map playable; a transfer it meets supersedes it.
+        if (_mapTransfers is null || _mapHandoff is { Kind: not MapHandoffKind.Stream }) return false;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending)
         {
             CancelAreaUseApproach("reset/reload"); CancelTalkApproach("reset/reload"); CancelInventoryApproach("reset/reload");
@@ -181,16 +202,38 @@ public partial class TerrainViewerApp
             else _areaUseStatus = "walk to use stopped: " + (route.StopReason ?? route.Status.ToString());
             RefreshAreaStatus();
         }
-        // The original fires a jump point or tile script on every tile the player enters (ledger TR3), in step order.
-        while (_mapEntered.TryDequeue(out var cell))
+        // The original fires a jump point or tile script on every tile the player enters (ledger TR3), in step order; since
+        // ARC-SCRIPT-017 every tile script runs through the session, then the script of a sector the step enters.
+        while (_mapEntered.TryDequeue(out var step))
         {
-            if (_mapTransfers.Enter(cell) is not { } entered) continue;
-            _areaUseStatus = (entered.Site!.Trigger == Arcanum.Data.Maps.MapTransitionTrigger.JumpPoint ? "jump point: " : "tile script: ") + DescribeMapUse(entered);
-            GD.Print("ARC-WORLD-031 enter " + System.Text.Json.JsonSerializer.Serialize(new { Trigger = entered.Site.Trigger.ToString(), Cell = cell,
-                Outcome = entered.Outcome.ToString(), entered.Reason }));
-            RefreshAreaStatus();
-            if (entered.Outcome == AreaUseOutcome.Accepted) { StopWorldRoute("ROUTE_REPLACED_BY_TRANSFER"); _mapEntered.Clear(); }
+            var queued = false;
+            // The status line shows a transfer, a refused exit and a run that printed; refusals and silent runs are logged
+            // only, and nothing replaces an accepted transfer while it is pending. A jump point's line carries the printed
+            // lines of the tile script run with it.
+            void Note(AreaMapUseResult entered)
+            {
+                var trigger = entered.Site!.Trigger;
+                var shown = entered.Outcome is AreaUseOutcome.Accepted or AreaUseOutcome.DestinationUnavailable
+                    || (entered.Outcome == AreaUseOutcome.ScriptEnded && _mapTransfers!.LastScripted is { Lines.Count: > 0 });
+                if (shown && !queued && (_mapTransfers!.Pending is null || entered.Outcome == AreaUseOutcome.Accepted))
+                {
+                    _areaUseStatus = (trigger switch
+                    {
+                        Arcanum.Data.Maps.MapTransitionTrigger.JumpPoint => "jump point: ",
+                        Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry => "sector script: ",
+                        _ => "tile script: ",
+                    }) + (entered.Outcome == AreaUseOutcome.ScriptEnded ? "ran" + ScriptedLines() : DescribeMapUse(entered));
+                    RefreshAreaStatus();
+                }
+                GD.Print("ARC-WORLD-031 enter " + System.Text.Json.JsonSerializer.Serialize(new { Trigger = trigger.ToString(), Cell = step.To,
+                    Outcome = entered.Outcome.ToString(), entered.Reason }));
+                queued |= entered.Outcome == AreaUseOutcome.Accepted;
+            }
+            foreach (var entered in _mapTransfers.Enter(step.To)) Note(entered);
+            if (_mapTransfers.EnterSector(step.From, step.To) is { } sector) Note(sector);
+            if (queued) { StopWorldRoute("ROUTE_REPLACED_BY_TRANSFER"); _mapEntered.Clear(); }
         }
+        if (_mapTransfers.Pending is null) ProcessAreaMapStream(session);
         if (_mapTransfers.Pending is not { } transfer || WorldModal || session.State.Phase != MovementPhase.Settled) return false;
         _mapTransfers.Clear();
         // A map change leaves combat mode, as the source's teleport does (ARC-COMBAT-004).
@@ -231,7 +274,8 @@ public partial class TerrainViewerApp
         var origin = _arguments!;
         _mapHandoff = new(_areaSession, transfer.FromMap, transfer.To.Name, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell), transfer.To.Name,
             Companions: LeavingCompanions());
-        var next = origin with { AreaMapName = transfer.To.Name, AreaMapArrival = new(transfer.Arrival.X, transfer.Arrival.Y) };
+        // The destination opens at the arrival: an opening sector of this map (a window move or --area-map-sector) is not its.
+        var next = origin with { AreaMapName = transfer.To.Name, AreaMapArrival = new(transfer.Arrival.X, transfer.Arrival.Y), AreaMapSector = null };
         _areaUseStatus = $"loading '{transfer.To.Name}' ({transfer.To.Catalogue})";
         GD.Print("ARC-WORLD-031 transfer load " + System.Text.Json.JsonSerializer.Serialize(new { transfer.FromMap, To = transfer.To, transfer.Arrival, Trigger = transfer.Site.Trigger.ToString() }));
         _lastLoad = LoadTransferAsync(next);
@@ -278,7 +322,7 @@ public partial class TerrainViewerApp
         if (_mapTransfers is null) return;
         foreach (var evidence in advance.AreaEvidence)
             if ((evidence.Live?.Disposition ?? evidence.Assessment.Disposition) == Arcanum.Data.Traversal.CardinalTraversalDisposition.Open)
-                _mapEntered.Enqueue(_mapTransfers.Map.Chart.ToWorld(evidence.Key.To));
+                _mapEntered.Enqueue((_mapTransfers.Map.Chart.ToWorld(evidence.Key.From), _mapTransfers.Map.Chart.ToWorld(evidence.Key.To)));
     }
 
     // Native observation (ARC-WORLD-031, map mode, after the resource stages): stand next to an exit object whose
@@ -322,7 +366,7 @@ public partial class TerrainViewerApp
                 for (var i = 0; i < 3; i++) AreaSmokeFrame();
                 QuickKey(Key.F8);
                 if (_quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) != true || ReferenceEquals(running, _areaSession)
-                    || ((AreaGridSession)_worldActor.Session!).State.CommittedCell != near || _readyMapName != from)
+                    || ((AreaGridSession)_worldActor.Session!).State.CommittedCell != near || !SameMapName(_readyMapName, from))
                     throw new InvalidOperationException("AREA_MAP_QUICK_LOAD_SAME_MAP " + _quickSaveStatus);
                 sameMapLoad = new { Map = from, Cell = map.Chart.ToWorld(near), Away = map.Chart.ToWorld(away) };
                 for (var i = 0; i < 3; i++) AreaSmokeFrame();
@@ -334,10 +378,10 @@ public partial class TerrainViewerApp
             AreaSmokeFrame();
             if (!pending.SameMap)
             {
-                if (_mapHandoff is null && _readyMapName == from) throw new InvalidOperationException("AREA_MAP_TRANSFER_LOAD_NOT_STARTED " + _areaUseStatus);
+                if (_mapHandoff is null && SameMapName(_readyMapName, from)) throw new InvalidOperationException("AREA_MAP_TRANSFER_LOAD_NOT_STARTED " + _areaUseStatus);
                 await (_lastLoad ?? Task.CompletedTask);
             }
-            if (_readyMapName != pending.To.Name || _worldActor.Session is not AreaGridSession arrived) throw new InvalidOperationException("AREA_MAP_TRANSFER_NOT_PUBLISHED " + _areaUseStatus);
+            if (!SameMapName(_readyMapName, pending.To.Name) || _worldActor.Session is not AreaGridSession arrived) throw new InvalidOperationException("AREA_MAP_TRANSFER_NOT_PUBLISHED " + _areaUseStatus);
             var at = arrived.Chart.ToWorld(arrived.State.CommittedCell);
             if (at != pending.Arrival) throw new InvalidOperationException($"AREA_MAP_TRANSFER_ARRIVAL {at} {pending.Arrival}");
             if (session is not null && (!ReferenceEquals(_areaSession, session) || _areaSession.QueryActor().Map.RuntimeMap != pending.To.Runtime
@@ -368,7 +412,8 @@ public partial class TerrainViewerApp
                 QuickKey(Key.F8);
                 if (_mapHandoff is null) throw new InvalidOperationException("AREA_MAP_QUICK_LOAD_NOT_STARTED " + _quickSaveStatus);
                 await (_lastLoad ?? Task.CompletedTask);
-                if (_readyMapName != from || _worldActor.Session is not AreaGridSession back || back.State.CommittedCell != near
+                // The saved cell in world cells: a window map (ARC-RENDER-024) loads again around the saved cell, on its own chart.
+                if (!SameMapName(_readyMapName, from) || _worldActor.Session is not AreaGridSession back || back.Chart.ToWorld(back.State.CommittedCell) != map.Chart.ToWorld(near)
                     || _areaSession is null || ReferenceEquals(_areaSession, carried) || _areaSession.QueryActor().Map.RuntimeMap != map.RuntimeMap
                     || _areaSession.QueryActor().Cell.X != map.Chart.ToWorld(near).X || _areaSession.QueryActor().Cell.Y != map.Chart.ToWorld(near).Y)
                     throw new InvalidOperationException($"AREA_MAP_QUICK_LOAD_OTHER_MAP map={_readyMapName} status={_quickSaveStatus} use={_areaUseStatus}");
@@ -389,6 +434,10 @@ public partial class TerrainViewerApp
             if (quickDirectory is not null) try { System.IO.Directory.Delete(quickDirectory, recursive: true); } catch (System.IO.IOException) { }
         }
     }
+
+    // Map folder names compare without case: a destination spells its folder as the catalogue does, the command line as
+    // the user typed it (ARC-RENDER-024: the main map, Arcanum1-024-fixed, comes back as arcanum1-024-fixed).
+    private static bool SameMapName(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     // On the map shown, a jump point reachable from the actor: a ground click on its tile walks there, and entering it moves
     // the actor to the jump point's arrival.

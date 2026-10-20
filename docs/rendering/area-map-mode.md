@@ -12,7 +12,11 @@ from the module's content stack and the
 profiles and every exterior smoke stay as they were.
 
     ./arcanum map "elven ruins"            # needs ./arcanum setup (any installation) and an ARC-DEV-015 or ARC-RENDER-008 build with map mode
-    viewer: --mode crash-site-area --module … --resource … --source-id … --actor-resource … --game-root GAME --area-map "elven ruins"
+    ./arcanum map Arcanum1-024-fixed [--sector X,Y]   # the main world map, streamed by window (ARC-RENDER-024); a build exported after it
+    viewer: --mode crash-site-area --module … --resource … --source-id … --actor-resource … --game-root GAME --area-map "elven ruins" [--area-map-sector X,Y]
+
+Since ARC-RENDER-024 the main world map opens here too, as a window that moves with the actor
+([the main world map](#the-main-world-map-arc-render-024)).
 
 ## What it does
 
@@ -192,8 +196,9 @@ Map mode moves the player between maps by the map's own data: the
 content stack when the map loads, so every map works the same way and nothing
 is bound to a location. Unconditional transitions run as below; a use site whose
 teleport stands behind guards runs its use script since ARC-SCRIPT-015
-([guarded use transitions](#guarded-use-transitions-arc-script-015)); guarded tile
-and sector scripts are not triggers here yet.
+([guarded use transitions](#guarded-use-transitions-arc-script-015)), and every tile
+and sector script the player enters runs since ARC-SCRIPT-017
+([tile and sector scripts](#tile-and-sector-scripts-arc-script-017)).
 
 - **Triggers.** A left click on an object with an unconditional use teleport
   (scenery or a portal) is a use: accepted within Chebyshev distance 2 by the
@@ -204,17 +209,19 @@ and sector scripts are not triggers here yet.
   steps into is checked in step order, also when one frame completes several
   steps: a jump point or an unconditional tile script there fires, the jump
   point first (ledger TR3), and stops the click route (the actor may stand a
-  step further when the frame had already started it). Sector scripts are read
-  but none of the installed ones teleports, so they are not wired. One transfer
+  step further when the frame had already started it); since ARC-SCRIPT-017 the
+  tile's script runs instead of its unconditional teleport (which still fires when
+  the run is refused before it starts), and a sector script runs when a step
+  enters its sector. One transfer
   is pending at a time; the stick, clicks and hover actions wait while it is,
   and a reset or reload drops it; a reset puts the actor on its start without
   firing the start tile, as a load does.
 - **Destinations.** A transfer applies once the actor is settled. On the same
   map the actor moves to the authored arrival. Another map must be one map mode
-  can open: listed in the map list with 1 to 256 sector files (78 of the 79
-  installed map folders; the 2000 × 2000 start map is the one it cannot open, so
-  every exit to it is refused with `DESTINATION_NOT_OPENED_IN_MAP_MODE 5000` and
-  the HUD says so). The destination is loaded through the ordinary load path
+  can open: listed in the map list with a sector file (every installed map folder
+  of the list since ARC-RENDER-024: a map with more than 256 sector files, the
+  2000 × 2000 start map, opens as a window around the arrival; before it every exit
+  to the start map was refused with `DESTINATION_NOT_OPENED_IN_MAP_MODE 5000`). The destination is loaded through the ordinary load path
   with the authored arrival (`AreaMapArrival`, never a command-line option): the
   actor starts exactly there when the step evidence admits the tile (the
   original places the player without a passability check, W9), otherwise at the
@@ -278,14 +285,48 @@ with an unconditional exit stays that exit.
   is checked before anything is applied: the use is refused, the door stays as it was and its printed lines are not shown. A teleport of another object
   is not modelled: the run's effects are dropped and the use is refused. A run outside the set, without script content or
   after a script file changed is refused and changes nothing.
-- **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`): 21 guarded use sites on 6 of the 78 maps map
-  mode opens. With a new game's state (no flag, quest or item) 9 run and their guards hold the teleport back, 12 are
+- **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`): 21 guarded use sites on 6 of the 79 maps map
+  mode opens (none on the start map). With a new game's state (no flag, quest or item) 9 run and their guards hold the teleport back, 12 are
   refused because they need conditions or actions outside the set (immediate script calls, loops, other conditions). In
   `tulla interior` the door with script 2353 prints its line while global flag 2376 is clear and, once it is set,
   teleports the player to (168,218) on the same map.
-- **Not covered.** Guarded tile and sector scripts (the reader finds no guarded sector teleport); immediate script calls,
-  loops and focus groups; a teleport behind a deferred call (the call later runs under the dialog host's set, which has
+- **Not covered.** Immediate script calls, loops and focus groups; a teleport behind a deferred call (the call later runs under the dialog host's set, which has
   no teleport, and is refused); the PC's name number; a fade-and-teleport's fade, sound and movie.
+
+## Tile and sector scripts (ARC-SCRIPT-017)
+
+Every tile script and sector script of the shown map runs when the player enters it, teleport or not (plan slice S4,
+viewer part), through the same host and set as a guarded use. The [transition reader](../world/map-transitions.md) lists
+them as `MapTransitionSet.Placed`: 3,012 tile scripts and 20 sector scripts in the installed maps (2,439 tile scripts on
+the start map), one per tile.
+
+- **When.** For each step the actor completes, in step order (ledger TS2, read in the executable): the tile's jump point
+  first, then the tile's script, then, when the step enters another sector, that sector's script (only the player's
+  steps; the original also runs a tile script for an NPC entering the tile). A load, a reset, a transfer arrival and an F8
+  restore fire nothing; the original places an object on the map with the same notifications (TS2), which arrival path
+  a teleport takes is not read.
+- **Run** (ledger TS1, TS3): from line 0 as a use, the player the triggerer, no attachee, under "S4-area-use". The slot
+  is the sector file's attachment overridden by the session's map changes on the sector: `tile.N.script`, `tile.N.lf`,
+  `tile.N.counters` for tile index N, `sector.script`, `sector.lf`, `sector.counters`. A changed slot is written back
+  there; under the Original rules a tile script's change is discarded (ledger X3, the original stores the unchanged
+  record), a sector script's is kept in both modes.
+- **Effects and teleports** as for a guarded use: flags, schemes, deferred calls and the slot apply as the run goes; the
+  first teleport of the player is the transfer, checked before anything applies. A teleport asked while another transfer
+  is pending (the tile's jump point fired) is dropped and the run's other effects stay (TR4). A tile run refused before it
+  starts (an action or condition outside the set, no script content, no session) leaves the tile's unconditional
+  teleport of ARC-WORLD-031 to fire as before: the four same-map tile teleports of `void` keep working that way. An
+  entry run checks only the files it reads for changes (a changed script refuses it; a changed dialog file skips that
+  printed line, and later runs are refused), not every file seen so far as a click does.
+- **Status and log.** The status line shows a transfer, an exit map mode cannot take and a run that printed lines;
+  refused and silent runs are only logged (`ARC-WORLD-031 enter`), and nothing replaces an accepted transfer while it
+  is pending. One host serves every run of the shown map and session.
+- **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`, a new game's state for each script):
+  5 tile scripts teleport (the exit tiles of `iron clan hq`, script 2203, to the start map at (96948,75722)), 249 tile
+  scripts and 1 sector script run without one, 2,758 tile and 19 sector scripts are refused because they need actions or
+  conditions outside the set.
+- **Not covered.** Tile scripts for NPCs; the actions and conditions outside the set (most tile scripts); tile and
+  sector scripts of generated main-map sectors (only the map's own sector files are read); the arrival tile of a
+  transfer; a fade-and-teleport's fade, sound and movie.
 
 ## Dialogs (ARC-WORLD-032)
 
@@ -309,8 +350,9 @@ interiors have 182 dialog NPCs. Each one gets a typed start: 50 start a
 conversation, 1 ends with skip default, and 131 stop at an SCR action,
 condition, goto or value kind the dispatcher does not admit yet (most often
 action types 23 and 22, and condition type 21). Of the 50 conversations, 35 stop at a generated NPC
-line, which is not loaded yet, 8 at an unsupported DLG operation, and 7 offer
-replies at once; 6 end when the first choosable reply is always taken. Native smoke (`ARC-WORLD-032 native-smoke talk PASS`, after
+line, which is not loaded yet, 6 at an unsupported DLG operation, and 9 offer
+replies at once; 7 end when the first choosable reply is always taken (since ARC-WORLD-043 the `ME` condition is
+admitted: before, 8 stopped at an unsupported operation, 7 offered replies and 6 ended). Native smoke (`ARC-WORLD-032 native-smoke talk PASS`, after
 the roof smoke): from 4–6 cells away the NPC hovers as a walk to talk, a click
 through the production seam walks within reach and opens the panel (a walk
 that stops short is tried again from within reach, where the click must open
@@ -319,8 +361,10 @@ ends the modal panel; a start refused for missing script content, an entry
 error or a changed source fails the smoke. `FRONTIER` means every NPC tried (up
 to eight) stopped before offering a reply, `NOT-STARTED` that none started,
 `NO-REACHABLE-SPEAKER` that none could be clicked, and `NONE` that no NPC is
-drawn. Observed: `caladon-panarrii temple`, script 2969, 3 turns, the dialog
-ended, 1 effect in the session; `tulla interior` reports `FRONTIER` (generated
+drawn. Since ARC-WORLD-043 Close must also end the NPC's reaction conversation (the host holds no open slot and a
+started talk leaves the NPC remembering the PC, `MetBefore` in the record). Observed: `caladon-panarrii temple`, script
+2969, 3 turns, the dialog ended, 1 effect (3 session revisions with the reaction slot's open and close; 2026-10-21), the NPC
+remembers the PC; `tulla interior` reports `FRONTIER` (generated
 greetings); in `caladon-mafia underground` both NPCs are undrawn. That the
 consequences travel with the session to another map and back is the host's
 synthetic test (`AreaConversationTests`); the native smoke does not observe it.
@@ -339,7 +383,7 @@ queued transfer.
   as on the exterior: the shown map's inventory seeds and dialog state are
   checked against it, then it replaces the running session.
 - **Another map.** A save whose actor stands on another map that map mode can
-  open (listed, 1 to 256 sector files) passes the same checks of the slot, the
+  open (listed with a sector file; the main map as a window around the saved cell, ARC-RENDER-024) passes the same checks of the slot, the
   restore and the shown map, then loads that map through the ordinary load
   path with the actor on the saved cell, as a transfer does; the shown scene is
   cleared as the load starts, as for any load. The loaded session keeps its
@@ -527,6 +571,70 @@ The smoke prints `NONE` on a map without a door that opens. An opt-in test
 (`AreaPortalsOriginalTests`) checks every installed interior: the frames of
 every multi-frame door and window are in the map's repository, and a step from
 the tile of every closed, unlocked door opens it.
+## The main world map (ARC-RENDER-024)
+
+The 2000 × 2000-sector start map (`Arcanum1-024-fixed`, catalogue 5000, runtime 1; 621 sector files, the rest
+generated from terrain templates, ARC-DATA-031) is too large to load whole, so map mode loads it as a
+[window](../world/whole-map-plans.md#window-plans-arc-data-032): 3×3 core sectors around a centre and their context
+ring (25 sectors), with the [window step evidence](../world/area-step-assessment.md#windows-arc-data-034), window
+lighting and stationary lights (ARC-DATA-035), its transitions and its dialog NPCs, through the same load path as any
+map.
+
+- **Where it opens.** A map with more than `AreaMapPlans.MaxSectorFiles` (256) sector files opens as a window around
+  the sector of a transfer's or quick load's arrival, else around `--area-map-sector X,Y` (launcher
+  `./arcanum map NAME --sector X,Y`), else around the sector of its map-list start tile. A transfer or quick load to
+  another map drops the opening sector, so the destination opens at its own arrival. That start tile is the new-game start: row 5000 of
+  `rules/maplist.mes` puts it at (92958, 82592), the Crash Site sector (1452, 1290); `gameinit.mes` names no start map
+  or location (both entries are empty and marked unused). The actor stands on the arrival when admitted; with a sector
+  asked, on the open core tile nearest that sector's middle (a sector without open ground of its own, such as the
+  generated mountains at (1450, 1290), gives a tile of a neighbour); otherwise on the start tile when it can stand
+  there, else on the first open core tile. With a sector asked on
+  a map that loads whole, the actor stands near that sector the same way.
+- **Streaming.** When the actor stands 16 cells (`StreamMargin`) beyond the window's centre sector, the window around
+  the sector it stands in loads in the background (about 5 s on the owner's Mac) while the shown window stays drawn and
+  playable. Once loaded it replaces the shown window in one publication, but not while the shown scene holds an intent a
+  new scene would drop or a state that must not move: a pending transfer (it applies and supersedes the move), a walk
+  to use, talk or pick up (it runs to its end first), combat mode, or an open dialog, inventory, sheet, logbook or palette;
+  no move starts in any of these either. The publication: the game session is carried as on a transfer (`MapTransferHandoff`, kind `Stream`), the
+  companions' cells are written to the session first and they are bound again where they stand, the actor stands on
+  the cell it reached meanwhile, and a walk keeps its goal when the new window holds it. Music and ambient sound go on
+  (no map change). The margin keeps a walk along a border, or a path that bends back over it, from reloading the
+  window at every step; the actor always has at least 48 loaded cells ahead. The original keeps no fixed window: its
+  sector cache holds the 16 most recently used sectors and a teleport pre-caches the 3×3 around its target
+  ([main-map streaming](../research/main-map-streaming.md), SS1–SS4); the 3×3 core is that pre-cache kept around the
+  actor. A window that cannot load leaves the shown one in place; it is tried again once the actor has stood in the
+  centre sector again (another sector is tried at once). A move whose new window no longer holds the actor when it can
+  publish (a hold let it walk off that core, or a same-map jump moved it) is given up, and the next frame starts the
+  window around where the actor stands. In a native smoke the window moves only in its own stage. A transfer or reload during a window load supersedes
+  it (the move gives up its session to the scene, which carries or ends it); F7/F8 wait while a move is pending, loading
+  or held ("another map is loading"). A publication that fails publishes the failure as any load does, and the game
+  session ends with the scene (no fallback to the shown window).
+- **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
+  Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
+  (92913, 82598). Every listed map is a destination.
+- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream`
+  narrows a run to those stages), in this order: the map battery at the new-game start (the Crash Site window: walk,
+  logbook, sound, dialog with Virgil, who then follows); the resource sweep and reload; the companion follow smoke and
+  the map transfer smoke (exit to another map, jump point, F7/F8); `ARC-RENDER-024 native-smoke round-trip PASS`: into
+  the cave and back onto the main map by the two exits; and last `ARC-RENDER-024 native-smoke stream PASS`: walks by the
+  production route follower into sectors the actor has not stood in until the window has moved three times, each move
+  with the session carried (and Virgil following), the actor inside the new core and the walk's goal reached, the first
+  one met mid-walk. The map battery and the stream run with `--area-map-sector` at a town (1409, 1314) and a generated
+  wilderness sector (1384, 239). The smoke counts only the plan's own commands in the resource sweep (a companion
+  visiting from another window is drawn from its kept body) and picks, for the follow smoke, a free NPC that can walk
+  6 cells.
+- **Memory.** One window holds 1,300 to 4,900 visuals and 10 to 26 MB of CPU frames; after a full collection the
+  managed heap of a run that moved the window seven times followed the window's contents (368 to 435 MB), with no
+  growth from move to move; the resource stage's reload after the map battery leaves the heap 5.5 MB smaller (since
+  ARC-UI-045 released the closed conversation's voice start, which had kept 25 to 30 MB after a dialog).
+
+**NOT READY:** the window is a fixed 3×3 core, not the original's 16-sector cache; a move costs a background load of
+the whole window (no sector is reused) and one publication, which rebuilds the scene (a frame hitch at the swap; a step
+in progress ends on its committed cell); saved sector differences (`.dif`) are not modelled; the world map's own travel
+(the original's world-map screen) is not implemented; a companion more than one sector from the actor when the window
+moves is bound only if the new window holds its cell; on the same map, an F8 save or a jump point or teleport whose cell
+lies outside the shown window is refused (the cell is not admitted in this window; another map's save or exit opens the
+window around it); routes reach 32 cells per axis (ARC-WORLD-042). Original parity NOT_VERIFIED.
 
 ## Not yet
 
@@ -536,7 +644,7 @@ the tile of every closed, unlocked door opens it.
 - Doors and windows open, close and animate since ARC-WORLD-051 (above). Keys are
   not held, NPCs do not open doors, an unlock script is not run, and a door the
   original destroys when busted has no destroyed state.
-- The main world map (ARC-RES-034) and therefore every exit to it, guarded tile
-  and sector transitions and use scripts outside the set, and door runtime on these maps; the dialog gaps
-  above (SCR admission, generated lines).
+- Guarded tile and sector transitions and use scripts outside the set, and door runtime on these maps; the dialog
+  gaps above (SCR admission, generated lines). On the main world map: the limits listed in
+  [its section](#the-main-world-map-arc-render-024).
 - Original-executable parity is NOT_VERIFIED.

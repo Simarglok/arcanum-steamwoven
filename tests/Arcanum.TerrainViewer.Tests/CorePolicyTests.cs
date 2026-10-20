@@ -38,6 +38,15 @@ public sealed class CorePolicyTests
         AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(map.Where((_, i) => i is not (10 or 11)).ToArray()));
         AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(map.Where((_, i) => i is not (6 or 7)).ToArray()));
         AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "world-diagnostic", .. map[2..]]));
+        // ARC-RENDER-024: the opening sector, X,Y with two numbers below 2^26, map mode only, given once.
+        Assert.IsNull(parsed.AreaMapSector);
+        Assert.AreEqual(new Arcanum.Data.Area.AreaSectorCoordinate(1409, 1314), TerrainViewerArguments.Parse([.. map, "--area-map-sector", "1409,1314"]).AreaMapSector);
+        Assert.AreEqual(new Arcanum.Data.Area.AreaSectorCoordinate(0, 67108863), TerrainViewerArguments.Parse([.. map, "--area-map-sector", "0,67108863"]).AreaMapSector);
+        foreach (var bad in new[] { "", "1", "1,2,3", "-1,2", "1, 2", "x,2", "67108864,0", "123456789,1", "1.5,2", "+1,2" })
+            AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse([.. map, "--area-map-sector", bad]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse([.. map, "--area-map-sector", "1,2", "--area-map-sector", "1,2"]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", "m", "--resource", "r",
+            "--actor-resource", "a", "--prototypes", "p", "--area-mobile", "o", "--area-effects", "e", "--area-patch", "x", "--source-id", "fixture", "--area-map-sector", "1,2"]));
         // The game folder alone is not a mode.
         AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", "m", "--resource", "r",
             "--actor-resource", "a", "--prototypes", "p", "--area-mobile", "o", "--area-effects", "e", "--area-patch", "x", "--source-id", "fixture", "--game-root", "g"]));

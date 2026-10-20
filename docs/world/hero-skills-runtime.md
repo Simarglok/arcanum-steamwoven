@@ -32,6 +32,7 @@ applied whenever a level is read, never written into the stored points. Snapshot
 | `QueryNpcSkills(entity, modifiers)` | The same from an NPC's saved advancement sheet (a levelled follower, [auto-level schemes](advancement-runtime.md)) under the caller's modifiers (its effects now, as `LevelFollower` takes them), with the monstrous melee tiers; null while the session holds no record. |
 | `QueryHeroAttack()` | The weapon skill's level and training (melee bare-handed, firearms a tech skill), dodge and backstab level and training in the `Combatant`, and the weapon speed with that training (an apprentice +5, 0x465CF0). |
 | `QueryHeroEquipmentCombat(training?)` | Null training reads the hero's training in the wielded weapon's skill; an explicit value still overrides. |
+| `SetHeroSkillTraining(version, skill, tier)` | ARC-SKILLS-004 (the dialog action `TR`): the hero's training through `SkillRules.SetTraining` with the skill's effective level now; a tier the rules refuse or the same tier is `NoChange` with the rules' answer; no Educator update (no background is modelled). Refused: no hero (`SkillsUnavailable`), an undefined skill or tier (`InvalidSkill`), the version, the revision. Saved with the hero's stored skills (schema 21, no new field). |
 | Best items | The chooser scores melee, bow, throwing and firearms with the hero's levels. |
 | Follow check | With a hero the session supplies the PC's persuasion training, effective charisma, level and max followers (charisma / 4, +1 from expert persuasion, then the hero's effects on the stat, clamped to 1..7, ledger AP4) in place of the caller's `PartyConsentFacts`; without a hero the caller's values stand. The alignment stays the caller's (the conversation host tracks what its dialog actions change). |
 | Attack on a levelled follower | `AttackCritter` reads the defender's dodge and backstab (level and training, under the sheet's own stats, as `QueryNpcSkills` reads them without effects) and its level from the session's advancement record when it has one, its map data otherwise. |
@@ -43,7 +44,7 @@ fewer points for the same target, as in the original, where the race effect is i
 
 The hero gains `"innateSkills":[{"cause","skill","operator","value"}]` (cause `Race` or `Gender`, the `Skill` name, the effect
 operator name); the decoder checks the shape and at most 14 entries, the import every value. Schema 20 is refused like the
-earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-schema-21)).
+earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-schema-22)).
 
 ## Viewer host
 
@@ -53,7 +54,7 @@ earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-sche
 
 ## Not ready
 
-- No skill page, point buying or training in play (tasks S5, S6, S16); dialog skill gates are S4; the shared skill check S3.
+- No skill page or point buying (tasks S5, S6) and no trainers (S16); the dialog gates and `tr` are ARC-SKILLS-004 ([skill gates](../scripting/dialog-conversation-runtime.md#skill-gates-arc-skills-004)); the shared skill check is S3.
 - The leader check (HK1) and the wait timer (HK2) have no runtime, so the persuasion training reaches only the follow check.
 - A levelled follower defends with its sheet read without effects (its current stat effects and poison do not change its
   dodge); the map path reads poison.

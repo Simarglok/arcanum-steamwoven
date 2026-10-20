@@ -61,6 +61,9 @@ public sealed class AreaScenePlan
         .Concat(PortalFrames.Values.SelectMany(frames => frames).Select(AreaFrameKey.From));
     /// <summary>The chart whose origin every projection and sort key of this plan is relative to.</summary>
     public AreaChart Chart { get; }
+    /// <summary>ARC-RENDER-024: the same plan with its chart's spawn moved (a window move stands the actor where it walked
+    /// meanwhile); every projection keeps the chart origin.</summary>
+    public AreaScenePlan WithSpawn(Arcanum.Simulation.Movement.CellCoord spawn) => new(WorldBounds, Commands, Coverage, Chart with { Spawn = spawn }, Roofs);
     public TerrainRect WorldBounds { get; }
     public IReadOnlyList<AreaDrawCommand> Commands { get; }
     public IReadOnlyList<AreaCoverage> Coverage { get; }

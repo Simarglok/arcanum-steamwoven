@@ -35,7 +35,7 @@ CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_
 SCRATCH_FILL = 0xCCCCCCCC
 
 ArgumentReader = Callable[[int], int]
-Stub = Callable[[ArgumentReader], int]
+Stub = Callable[[ArgumentReader], int | tuple[int, int]]
 
 
 class RunFailure(Exception):
@@ -145,6 +145,10 @@ class Emulator:
                 except StubRejected as error:
                     fail("stub", f"stub {address:#x} called from {caller:#x}: {error}")
                     return
+                # A stub of a 64-bit answer (an object handle) returns (EAX, EDX).
+                if isinstance(result, tuple):
+                    result, high = result
+                    uc.reg_write(UC_X86_REG_EDX, high & 0xFFFFFFFF)
                 uc.reg_write(UC_X86_REG_EAX, result & 0xFFFFFFFF)
                 uc.reg_write(UC_X86_REG_ESP, sp + 4)
                 uc.reg_write(UC_X86_REG_EIP, caller)
