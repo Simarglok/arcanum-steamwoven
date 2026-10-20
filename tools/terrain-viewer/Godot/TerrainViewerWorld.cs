@@ -655,6 +655,8 @@ public partial class TerrainViewerApp
     {
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         if (input is InputEventKey modifierKey) TrackAttackModifiers(modifierKey);
+        // ARC-INPUT-003: the reserved-key notice in the sticky HUD header lasts until the next key press.
+        if (input is InputEventKey { Pressed: true, Echo: false }) _hud?.SetNotice(null);
         if (ConversationOpen && input is InputEventKey conversationKey && HandleConversationKey(conversationKey))
         {
             GetViewport().SetInputAsHandled();
@@ -700,7 +702,10 @@ public partial class TerrainViewerApp
             }
             // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
             if (!RouteQuickKey(decision) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            {
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
+                _hud?.SetNotice("Reserved key: " + _worldLastReserved);
+            }
         }
         var raw = _worldAdapter.Map(input, _worldFocused);
         if (input is InputEventMouseButton)

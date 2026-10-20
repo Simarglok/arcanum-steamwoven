@@ -1059,6 +1059,15 @@ low-intelligence texts, rebuild on change, dead-hero close and refusal); native 
 map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`
 on the live session; on a detached copy every quest and rumor that has a text is listed with it).
 
+### Reserved-key hint (ARC-INPUT-003)
+
+An original key that is reserved, not implemented ([keyboard routing](../input/diagnostic-palette.md#keyboard-routing)),
+is named in the HUD's sticky header ("Reserved key: F1 = Followers: go to point (original; NOT IMPLEMENTED)") until the
+next key press, so it is visible without scrolling; the detail text keeps its "last reserved key" entry. Native smoke
+after the logbook stage (exterior and map mode): `ARC-INPUT-003 native-smoke reserved-key hint PASS` (F1 pushed through
+the viewport's input path; the notice is in the sticky header, every header line shown inside the panel and the window;
+Z, an unmapped key, removes it).
+
 ### Sound output (ARC-UI-040)
 
 The viewer plays the original's sounds through the module's [sound catalogue](../audio/sound-catalog.md)
