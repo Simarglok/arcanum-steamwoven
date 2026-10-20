@@ -68,7 +68,7 @@ profiles and every exterior smoke stay as they were.
 - **Transitions.** See [map transitions](#map-transitions-arc-world-031) below.
 - **Dialogs.** See [dialogs in map mode](#dialogs-arc-world-032) below.
 - **Quick save.** See [quick save in map mode](#quick-save-arc-world-038) below.
-- **Not in map mode.** Companions; the HUD says so.
+- **Companions.** See [companions in map mode](#companions-arc-world-037) below.
 
 ## Coverage on the installed original
 
@@ -227,7 +227,8 @@ quest flag, a held item, a dialog) is not a trigger here (SCRIPT slice S4).
 - **Not covered.** A teleport into another jump point does not chain (the
   original nests up to 9). Tile scripts fire for the player only (the original
   runs them for any critter). No fade, sound, movie or time advance of a
-  fade-and-teleport. Companions do not travel in map mode (ARC-WORLD-037).
+  fade-and-teleport. Followers travel with the player since ARC-WORLD-037
+  ([companions](#companions-arc-world-037)).
 
 Opt-in tests (`tests/Arcanum.TerrainViewer.Tests/AreaMapTransfersOriginalTests.cs`):
 `crematorium-lev 1` has its two exits; the way down is accepted and loads
@@ -252,8 +253,9 @@ dispatcher run and DLG reading are those of the exterior
 with the game's script content found from the module archive. The consequences
 (GF, quests, rumors, an NPC's local flags, reaction and dialog slot) are
 session state on the map's runtime number, so they go with the session to the
-next map and come back with it. The party commands keep the diagnostic follow
-key: no NPC follows the player in map mode yet (ARC-WORLD-037). A map the map
+next map and come back with it. Since ARC-WORLD-037 the party commands (`JO`,
+`WA`, `UW`) of a speaker with follow facts go through the session party
+([companions](#companions-arc-world-037)). A map the map
 list does not name (`scienticians underground lev 2`) has no runtime number,
 hence no session and no dialogs.
 
@@ -345,6 +347,69 @@ not run for this change (it stops earlier at a known pixel-sample failure). Othe
 samplers that reset the camera and then read a frame live (the exterior lighting
 and class samples, cave lighting) are not changed and may flake the same way.
 
+## Companions (ARC-WORLD-037)
+
+Any dialog NPC of a map can be a companion: once in the party it follows and
+travels with the player. Nothing is pinned to Virgil or to a location.
+
+- **Facts from the data.** The follow check's NPC side comes from the NPC's own
+  fields: the AI row its AI data field names in the
+  [AI parameter table](../world/ai-parameters.md) (fields 5..8), and its level
+  and alignment as the original's stat getter reads them. That means the stored
+  stat, then every effect of its effect list that changes it (the effect tables
+  from the content stack, the original's aggregation), then the getter's clamp of
+  0..51 and −1000..1000 ([ledger AP5](../research/original-verification-ledger.md#ai-parameters-and-follow-consent-arc-data-033));
+  an effect number without a definition changes nothing, as in the original.
+  `AreaCompanionData` opens the tables once per module. The PC side stays the
+  AREA diagnostic profile (charisma 8, level 1), so through a dialog `JO` the
+  level gate refuses most NPCs (most rows have a gate of 2 and about 170 of the
+  NPCs are level 3 or above); the PC side from the session hero is not done. On
+  the installed original all 185 interior dialog NPCs read, on ten distinct
+  follow rows (`AreaMapCompanionOriginalTests`); Virgil's facts read this way
+  equal the measured ones.
+- **Joining.** The conversation host passes every speaker with facts through the
+  session party port, so a `JO` runs the follow check. A speaker the party has
+  touched (following, waiting, or recorded away from its T0 cell) becomes a
+  moving companion of the map with its T0 body; every other speaker stays its
+  T0 body. The group is rebuilt when a conversation ends (the follow smoke closes a
+  conversation after the join and checks the rebuilt companion).
+- **Following.** These are the companion follow rules of the exterior
+  ([companion follow runtime](../world/companion-follow-runtime.md)): start
+  beyond 4 cells, stop within 2, and the 30-cell catch-up.
+- **Travel.** Before the player leaves, the companions' cells are recorded. On
+  a transfer to another map, every follower arrives on the arrival cell in the
+  player's own session step; its home map names the map it is on. On the same
+  map a follower moves to the arrival with the player. Its T0 body (commands,
+  visuals and frames from its home map) is kept for the rest of the run, so it is
+  drawn, lit and picked on any map. Its frames join the shown map's frame
+  repository as visiting frames. Waiting companions stay where they stand.
+- **Saves.** F7 records the companions' cells. F8 brings them back from the
+  session.
+
+Native smoke (`ARC-WORLD-037 native-smoke follow PASS`, before the transfer
+smoke). A drawn speaker with facts joins through the session's forced join, as
+a script follow does; the dialog's `JO` uses the same session party, and
+dialogs that offer a `JO` from their start are rare (see the dialog census). It
+follows the player placed 6 cells away (on a cell it can walk to) to within 2
+and is drawn there,
+unless a roof over its cell hides it (the player outside the building).
+The transfer smoke then carries it (`ARC-WORLD-037 native-smoke carry PASS`:
+it stands with the player on the destination and is drawn there, or hidden by a
+roof). A companion is covered by a roof at the cell it stands on, not at its T0
+tile. The jump-point smoke checks the same on a same-map jump. Observed on
+`bates mansion lev 2` → `bates mansion lev 1` (script 1160, level 35, then F8
+back to lev 2 with the companion) and on a `tulla interior` jump point
+(437,214 → 304,219, script 1982).
+
+Not covered: a companion visiting another map can be talked to only on its
+home map (the speakers are each map's own). After a quick load, a companion
+whose home map was not loaded in this run, or loaded without the party ever
+touching it, has no body and is skipped; a follower that is not a companion of
+the shown map (no body, or its cell not admitted) is not carried and stays
+recorded where it was. There are
+no followers of followers, unconscious followers, carried inventory, orders,
+loyalty or wait timer. The exterior keeps its measured roster (Virgil).
+
 ## Not yet
 
 - Roofs are drawn, hidden and faded since ARC-RENDER-022 ([roofs](roofs.md)).
@@ -354,6 +419,6 @@ and class samples, cave lighting) are not changed and may flake the same way.
   for opens only for a step leaving a building, as the original executable decides
   it (ARC-RES-049); doors are not opened or animated.
 - The main world map (ARC-RES-034) and therefore every exit to it, conditional
-  transitions, door runtime and companions on these maps; the dialog gaps
+  transitions and door runtime on these maps; the dialog gaps
   above (SCR admission, generated lines).
 - Original-executable parity is NOT_VERIFIED.

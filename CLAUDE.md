@@ -133,7 +133,8 @@ under `docs/research`. Details: `docs/project/status.md`.
   `arcanum-steamwoven/t_<id>-arc-*` branches are left from the retired task board.
   Don't modify or delete them; they are evidence — except the one worktree your
   task explicitly names (e.g. ARC-GPAD-005: `.worktrees/t_6346b4d1`). ARC-GPAD-005
-  (`arcanum-steamwoven/t_6346b4d1-arc-gpad-005-gamepad-lab`) is still unmerged;
+  (`arcanum-steamwoven/t_6346b4d1-arc-gpad-005-gamepad-lab`) merged as PR #67 on
+  2026-10-14; its owner controller check (L3) is still pending.
   ARC-DATA-010 has no branch on the remote and is still todo.
 
 ## 5. Where the rules live

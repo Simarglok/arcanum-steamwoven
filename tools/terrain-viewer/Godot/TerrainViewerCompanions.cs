@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
@@ -27,7 +28,11 @@ public partial class TerrainViewerApp
     {
         _areaCompanions = null;
         if (_areaSession is not { } session || _conversationHost is not { PartyWired: true } || _worldActor.Session is not AreaGridSession grid) return;
-        _areaCompanions = AreaCompanionGroup.Create(_companionTemplates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time, grid.Timing);
+        // ARC-WORLD-037: in map mode only the NPCs the party has touched move as companions (following, waiting, or recorded
+        // elsewhere than their T0 cell); every other speaker stays its T0 body until it joins.
+        var templates = _readyMapName is null ? _companionTemplates : _companionTemplates.Where(t => CompanionIncluded(session, t)).ToArray();
+        _areaCompanions = AreaCompanionGroup.Create(templates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time, grid.Timing);
+        if (_readyMapName is not null) AdoptTravellers(_areaCompanions);
         foreach (var skipped in _areaCompanions.Skipped) GD.Print("ARC-WORLD-016 companion skipped " + skipped);
         GD.Print("ARC-WORLD-016 companions bound " + System.Text.Json.JsonSerializer.Serialize(_areaCompanions.Companions.Select(c => new {
             c.Speaker.ScriptId, Standing = c.Standing.ToString(), Cell = grid.Chart.ToWorld(c.Grid.State.CommittedCell), Visiting = c.Template.Home.RuntimeMap != CurrentAreaMap }).ToArray())
@@ -35,6 +40,81 @@ public partial class TerrainViewerApp
     }
 
     private void UnbindAreaCompanions() { _areaCompanions = null; _companionNotice = null; }
+
+    // ARC-WORLD-037: companions on any map (--area-map). Their follow facts come from the map's own data (AreaCompanionData:
+    // the AI parameter table and the effect tables); a companion that follows the PC to another map goes with it, and its
+    // T0 body (commands, visuals and frames from its home map) is kept for the rest of the run, so it is drawn wherever it
+    // stands. A companion whose home map was not loaded in this run (after a quick load) has no body and is skipped.
+    private (string Module, AreaCompanionData? Data, string Detail)? _companionData;
+    private readonly Dictionary<AreaObjectKey, AreaCompanionFacts?> _companionFacts = new();
+    private readonly Dictionary<string, (AreaCompanionTemplate Template, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Frames)> _travellers =
+        new(StringComparer.Ordinal);
+
+    private AreaCompanionData? MapCompanionData(string module)
+    {
+        if (_companionData is { } cached && cached.Module == module) return cached.Data;
+        var (status, data, detail) = AreaCompanionData.Open(module);
+        GD.Print($"ARC-WORLD-037 companion data status={status} detail={detail}");
+        _companionData = (module, data, $"{status}: {detail}"); _companionFacts.Clear();
+        return data;
+    }
+
+    private AreaCompanionFacts? MapCompanionFacts(AreaSpeaker speaker)
+    {
+        if (_companionData?.Data is not { } data) return null;
+        if (_companionFacts.TryGetValue(speaker.Row.Key, out var known)) return known;
+        var facts = data.Facts(speaker, out var refusal);
+        if (refusal is not null) GD.Print($"ARC-WORLD-037 companion facts script={speaker.ScriptId} refused: {refusal}");
+        _companionFacts[speaker.Row.Key] = facts;
+        return facts;
+    }
+
+    /// <summary>The map's own companion templates (every drawn speaker with follow facts) and the travellers met earlier.</summary>
+    private IReadOnlyList<AreaCompanionTemplate> MapCompanionTemplates(TerrainViewerArguments arguments, AreaLoadResult area)
+    {
+        if (MapCompanionData(arguments.ModulePath) is null) return [];
+        var own = AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(area.Snapshot), area.Plan, area.Snapshot.Visuals, area.Plan.Chart,
+            new(area.Snapshot.RuntimeMap), MapCompanionFacts);
+        var entities = own.Select(t => t.Entity).ToHashSet(StringComparer.Ordinal);
+        return [.. own, .. _travellers.Values.Select(t => t.Template).Where(t => !entities.Contains(t.Entity))];
+    }
+
+    private static bool CompanionIncluded(GameSessionOwner session, AreaCompanionTemplate template)
+    {
+        if (session.QueryCompanion(template.Entity).Standing != Arcanum.Session.CompanionStanding.Free) return true;
+        var where = AreaCompanionPlacement.Where(session, template.Home, template.Entity);
+        return where.Map != template.Home || where.Placement is not null || where.Error is not null;
+    }
+
+    /// <summary>Keeps the bodies of the group's companions for later maps, and adds the frames of those visiting from
+    /// another map to the shown map's frame repository.</summary>
+    private void AdoptTravellers(AreaCompanionGroup group)
+    {
+        var frames = (AreaFrameOverlay)AreaFrames();
+        foreach (var companion in group.Companions)
+        {
+            var template = companion.Template;
+            if (_travellers.TryGetValue(template.Entity, out var known))
+            {
+                foreach (var command in template.Commands)
+                    if (known.Frames.TryGetValue(command.Frame, out var frame)) frames.Add(command.Frame, frame);
+                    else GD.Print($"ARC-WORLD-037 companion script={template.Speaker.ScriptId} frame {command.Frame} not kept; not drawn here");
+                continue;
+            }
+            var own = new Dictionary<AreaFrameKey, DecodedAreaFrame>();
+            foreach (var key in template.Commands.Select(c => c.Frame).Distinct())
+                if (frames.TryGetValue(key, out var frame)) own[key] = frame;
+            _travellers[template.Entity] = (template, own);
+        }
+    }
+
+    /// <summary>The companions that follow the PC off this map, with their facing (recorded before the PC leaves).</summary>
+    private IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)> LeavingCompanions()
+    {
+        if (_areaCompanions is not { } group || _areaSession is not { } session) return [];
+        RecordAreaCompanions("leaving the map");
+        return group.Following(session);
+    }
 
     /// <summary>Writes the companions' cells to the session (quick save, leaving the map). False when the session refused.</summary>
     private bool RecordAreaCompanions(string why)

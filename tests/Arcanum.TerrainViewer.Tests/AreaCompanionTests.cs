@@ -376,4 +376,30 @@ public sealed class AreaCompanionTests
         Assert.AreEqual((t0.Destination.X - home.X + here.X, t0.Destination.Y - home.Y + here.Y), (drawn.Destination.X, drawn.Destination.Y));
         Assert.AreEqual(((int)world.X, (int)world.Y), (drawn.MapX, drawn.MapY));
     }
+
+    [TestMethod]
+    public void A_following_companion_arrives_with_the_pc_from_any_map_and_comes_home()
+    {
+        // ARC-WORLD-037: map 1 (home) → 2 → 3 → 1, each arrival written in the PC's session step; on the same map only the cell.
+        var f = Load();
+        var template = Templates(f).Single();
+        using var session = ConversationSessionFixture.Create();
+        SessionMapId home = new(1), second = new(2), third = new(3);
+        var entity = template.Entity;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, entity).Disposition);
+        CellCoord At(int x) => new(checked((int)f.Speaker.WorldX + x), checked((int)f.Speaker.WorldY));
+        void Go(SessionMapId from, SessionMapId to, CellCoord cell) => Assert.AreNotEqual(GameSessionDisposition.Rejected,
+            session.ApplyChanges(session.Version, new ActorPlacement(to, cell, NeighborDirection.XPlus),
+                AreaCompanionGroup.Arrive(template, from, to, cell, NeighborDirection.YPlus)).Disposition);
+        Go(home, second, At(2));
+        Go(second, third, At(3));
+        Assert.AreEqual(new AreaCompanionWhere(third, (At(3), NeighborDirection.YPlus), null), AreaCompanionPlacement.Where(session, home, entity));
+        Assert.IsNull(session.QueryMapChange(second, AreaCompanionPlacement.Key(entity)), "the map it left forgets it");
+        Assert.AreEqual(1, AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, third, SimulationTime.At(0)).Companions.Count);
+        Assert.AreEqual(0, AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, second, SimulationTime.At(0)).Companions.Count);
+        Assert.AreEqual(1, AreaCompanionGroup.Arrive(template, third, third, At(4), NeighborDirection.XPlus).Count, "on the same map only the cell");
+        Go(third, home, At(1));
+        Assert.IsNull(session.QueryMapChange(home, AreaCompanionPlacement.MapKey(entity)), "home again: no away map");
+        Assert.AreEqual(new AreaCompanionWhere(home, (At(1), NeighborDirection.YPlus), null), AreaCompanionPlacement.Where(session, home, entity));
+    }
 }

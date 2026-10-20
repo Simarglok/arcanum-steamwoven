@@ -158,6 +158,8 @@ public partial class TerrainCanvas
     // ARC-RENDER-022: a body a roof covers is not drawn (the pick does not test the cover).
     internal bool AreaHiddenOf(AreaDrawCommand command) => command.Identity is { } key && (_areaHidden?.Contains(key) == true || _areaAbsent?.Contains(key) == true
         || key == _areaSmokeOmitted || _areaCovered?.Contains(key) == true);
+    /// <summary>ARC-WORLD-037 smoke seam: whether a roof covers the body (it is then not drawn, as in the original).</summary>
+    internal bool AreaRoofCovers(AreaObjectKey key) => _areaCovered?.Contains(key) == true;
     internal AreaWallFade AreaWallFadeOf(AreaDrawCommand command)
         => command.Identity is { } key && _areaWallFades is { } fades && fades.TryGetValue(key, out var fade) ? fade : AreaWallFade.None;
     // One ambient multiplier per chunk item: a chunk is drawn as a chunk under lighting only
