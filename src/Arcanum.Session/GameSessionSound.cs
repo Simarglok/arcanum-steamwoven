@@ -54,8 +54,18 @@ public sealed record SoundRuleProfile
     /// </summary>
     public bool HourWindowsNeverWrap { get; init; }
 
+    /// <summary>
+    /// Ledger SN23: a weapon hit falls back to the material sound only when its id is in no sound table; an id held with an
+    /// empty record counts as held and plays nothing, so 128 installed weapons hit silently, as the retail executable does
+    /// (0x4F0BF0). Steamwoven lets an empty record fall back too. The viewer's cue player reads it (ARC-UI-042).
+    /// </summary>
+    public bool EmptyHitRecordSilent { get; init; }
+
     public static readonly SoundRuleProfile Steamwoven = new() { Name = "steamwoven" };
-    public static readonly SoundRuleProfile Original = new() { Name = "original", CombatSaveLosesSchemes = true, HourWindowsNeverWrap = true };
+    public static readonly SoundRuleProfile Original = new()
+    {
+        Name = "original", CombatSaveLosesSchemes = true, HourWindowsNeverWrap = true, EmptyHitRecordSilent = true,
+    };
     public static IReadOnlyList<SoundRuleProfile> All { get; } = new[] { Steamwoven, Original };
     public static SoundRuleProfile? FromName(string? name) => All.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
 }

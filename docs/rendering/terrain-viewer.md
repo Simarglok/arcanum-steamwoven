@@ -1069,6 +1069,13 @@ the map's default pair when a map opens, a sector's pair when the PC enters it, 
 sounds by chance every 250 ms, combat music when an NPC enters combat mode ([contract](../audio/scheme-player.md)). The
 status line shows the slots and voices. Native smoke marker `ARC-UI-041 native-smoke schemes PASS` (map mode).
 
+### Positional event sounds (ARC-UI-042)
+
+The hero's footsteps, a pickup from the ground and the hero's attacks (use, attacking bark, hit, critical, miss, the
+target's death) play on their tiles with the original's attenuation and pan around the tile at the centre of the view
+([contract](../audio/positional-sound.md)); the status line counts them. Native smoke marker
+`ARC-UI-042 native-smoke cues PASS` (exterior AREA and `--area-map`).
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)

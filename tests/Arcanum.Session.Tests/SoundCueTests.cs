@@ -20,6 +20,13 @@ public sealed class SoundCueTests
             null, null, null, default, false, null, []);
 
     [TestMethod]
+    public void Only_the_original_setting_keeps_an_empty_hit_record_silent()
+    {
+        Assert.IsTrue(SoundRuleProfile.Original.EmptyHitRecordSilent, "SN23 in the Original setting");
+        Assert.IsFalse(SoundRuleProfile.Steamwoven.EmptyHitRecordSilent);
+    }
+
+    [TestMethod]
     public void Fields_become_rule_facts_with_the_item_weight_and_the_local_pc_state()
     {
         var ammo = Object(6, 0, 5) with { Item = new(3, 0, 1000) };

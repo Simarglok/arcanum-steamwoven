@@ -58,6 +58,17 @@ public sealed class AreaCombatHost
     public CombatFields? Fields(int runtimeMap, string entity) =>
         _maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(entity, out var row) ? CombatFieldReader.Read(row).Fields : null;
 
+    /// <summary>ARC-UI-042: the body armour an NPC wears on a map this host covers: the first item its seed lists whose stored
+    /// inventory location is the armour slot (1006), or null. A hit on the NPC sounds as a hit on it (audio study SN23).</summary>
+    public AreaObjectRecord? WornArmor(int runtimeMap, string entity)
+    {
+        if (!_maps.TryGetValue(runtimeMap, out var map) || map.Seed.Holders.FirstOrDefault(h => h.Entity == entity) is not { } holder) return null;
+        foreach (var item in holder.Items)
+            if (map.TryGetRow(item, out var row) && CombatFieldReader.Read(row).Fields?.Item?.InventoryLocation == (int)Arcanum.Simulation.Equipment.EquipmentSlot.Armor)
+                return row;
+        return null;
+    }
+
     /// <summary>ARC-WORLD-036: the map whose stored objects hold the NPC (its home map, wherever it stands now), or null when
     /// no covered map does.</summary>
     public int? HomeMap(string entity) =>

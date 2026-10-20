@@ -43,6 +43,8 @@ public sealed class ObjectSoundTests
         Assert.AreEqual((2100, 9056, (int?)null, 14, 15), (weapon.Weight, weapon.UnknownDescription, weapon.AmmoQuantity, weapon.MagicWeightAdjustment, weapon.MagickTechComplexity));
         Assert.AreEqual(30, ObjectSoundReader.ReadPrototype(files, 1003).Fields!.Item!.AmmoQuantity, "ammunition has its quantity");
         Assert.IsNull(ObjectSoundReader.ReadPrototype(files, 1004).Fields!.Item);
+        Assert.AreEqual((0u, 11u), (ObjectSoundReader.ReadPrototype(files, 1004).Fields!.SceneryFlags, ObjectSoundReader.ReadPrototype(Files((1006, 3)), 1006).Fields!.SceneryFlags),
+            "only scenery reads its flags (slot 36)");
         Assert.AreEqual(7300, ObjectSoundReader.ReadPrototype(files, 1005).Fields!.SoundEffect, "a trap reads its common fields");
         Assert.AreEqual(ObjectSoundFailure.PrototypeMissing, ObjectSoundReader.ReadPrototype(files, 1009).Failure);
         Assert.AreEqual(ObjectSoundFailure.PrototypeMissing, ObjectSoundReader.ReadPrototype(files, -1).Failure);

@@ -13,6 +13,8 @@ namespace Arcanum.Data.Audio;
 public sealed record ObjectSoundFields(int Type, int Prototype, int SoundEffect, int Material, uint CurrentArt, uint Flags)
 {
     public ObjectSoundItemFields? Item { get; init; }
+    /// <summary>Scenery (type 3) only: the scenery flags, whose bits 0x40, 0x80 and 0x100 give a sound's size (ARC-UI-042).</summary>
+    public uint SceneryFlags { get; init; }
 }
 
 /// <summary>An item's fields for its pickup, drop and hit sounds: the stored weight, the unknown-description number (gold is
@@ -45,13 +47,13 @@ public sealed record ObjectSoundRead(ObjectSoundFailure Failure, ObjectSoundFiel
 /// <see cref="Content.ContentPrototypes.Read"/>, base sources only) or from an Area object's effective fields (an instance's
 /// own field over its prototype's), in the v119 slot layout of the combat field reader (docs/formats/combat-fields.md):
 /// common slots 0 current art, 18 flags, 29 material, 32 sound; item slots 38 weight, 39 magic weight adjustment, 45
-/// complexity, 47 unknown description; ammunition slot 60 quantity. Fail-closed: a field that is not a plain number refuses the object.
+/// complexity, 47 unknown description; ammunition slot 60 quantity; scenery slot 36 scenery flags. Fail-closed: a field that is not a plain number refuses the object.
 /// </summary>
 public static class ObjectSoundReader
 {
     public const int WeaponType = 5, AmmoType = 6, GenericType = 14, LastType = 17;
     private const int CurrentArtSlot = 0, FlagsSlot = 18, MaterialSlot = 29, SoundSlot = 32, WeightSlot = 38, UnknownDescriptionSlot = 47,
-        AmmoQuantitySlot = 60, MagicWeightSlot = 39, ComplexitySlot = 45;
+        AmmoQuantitySlot = 60, MagicWeightSlot = 39, ComplexitySlot = 45, SceneryFlagsSlot = 36, SceneryType = 3;
 
     public static ObjectSoundRead ReadPrototype(Func<int, PrototypeFile> lookup, int prototype)
     {
@@ -85,6 +87,7 @@ public static class ObjectSoundReader
             return 0;
         }
         var fields = new ObjectSoundFields(type, prototype, Int(SoundSlot), Int(MaterialSlot), unchecked((uint)Int(CurrentArtSlot)), unchecked((uint)Int(FlagsSlot)));
+        if (type == SceneryType) fields = fields with { SceneryFlags = unchecked((uint)Int(SceneryFlagsSlot)) };
         if (type is >= WeaponType and <= GenericType)
             fields = fields with
             {
