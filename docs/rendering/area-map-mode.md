@@ -471,10 +471,29 @@ tile. The jump-point smoke checks the same on a same-map jump. Observed on
 back to lev 2 with the companion) and on a `tulla interior` jump point
 (437,214 → 304,219, script 1982).
 
-Not covered: a companion visiting another map can be talked to only on its
-home map (the speakers are each map's own). After a quick load, a companion
-whose home map was not loaded in this run, or loaded without the party ever
-touching it, has no body and is skipped; a follower that is not a companion of
+- **Talking to a visitor** (ARC-WORLD-048). A companion standing on a map it
+  is not a speaker of (from another map, or on the main map from another
+  window) is talked to where it stands: a click, the hover action and the
+  walk-to-talk reach it as any speaker, and the conversation runs through its
+  own host (`AreaConversationHost.ForVisitor`) over its home map's dialog
+  state: its dialog slot, local flags and follow keys are its home map's, its
+  party commands (`JO`, `WA`, `UW`, `LV`) go to the session party with its
+  facts, so the talk is the same wherever it stands and one identity keeps one
+  state, as the original keeps one object
+  ([OL31–OL33](../research/companion-orders-loyalty-evidence.md#7-followers-across-maps-q7-companion-o7)).
+  After the conversation the companions are recorded, then the group is
+  rebuilt, so it stays where it stands. A negative `IN` moves the item through
+  its home map's inventory seed when the viewer has it attached and is refused
+  (a rejected command) when it has not. After a quick load, a companion
+  recorded on the shown map whose home map was not loaded in this run has no
+  body: it is not drawn and the HUD names it as not talkable here
+  (`AreaVisitors.Unbodied`); nothing is guessed. The native smoke talks to the
+  carried companion on the destination
+  (`ARC-WORLD-048 native-smoke visitor-talk PASS`, after the carry).
+
+Not covered: after a quick load, a companion whose home map was not loaded in
+this run, or loaded without the party ever touching it, has no body and is
+skipped; a follower that is not a companion of
 the shown map (no body, or its cell not admitted) is not carried and stays
 recorded where it was. There are
 no followers of followers, unconscious followers, carried inventory, orders,

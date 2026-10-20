@@ -122,5 +122,36 @@ public partial class TerrainViewerApp
         GD.Print("ARC-WORLD-037 native-smoke carry PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             From = from, To = _readyMapName, SameMap = sameMap, Visiting = companion.Template.Home.RuntimeMap != CurrentAreaMap,
             At = $"{cell.X},{cell.Y}", Drawn = drawn }));
+        if (companion.Template.Home.RuntimeMap != CurrentAreaMap) TalkToAreaMapVisitor(companion);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-048: on the destination the carried companion is a visitor: it talks through its own host over its home map's
+    /// dialog state, its follow standing stays the session party's, and after the conversation it stands where it stood.
+    /// </summary>
+    private void TalkToAreaMapVisitor(AreaCompanion companion)
+    {
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-WORLD-048 visitor-talk smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_MAP_VISITOR_TALK_FAILED");
+        }
+        var cell = companion.Grid.State.CommittedCell;
+        Require(_conversationHost is not null && !_conversationHost.Speakers.Any(s => s.Row.Key == companion.Key), "the shown map's host does not hold the visitor");
+        var speaker = VisitorSpeaker(companion.Key);
+        Require(speaker is not null && SpeakerPresent(speaker), "the visitor is a speaker here");
+        BeginConversation(speaker!);
+        Require(ConversationOpen && _talkHost is { } host && host.Map == companion.Template.Home && host.Speakers.Contains(speaker!),
+            $"the talk opened through its home-map host: open {ConversationOpen}, host map {_talkHost?.Map.RuntimeMap}, notice {_conversationNotice}");
+        var started = _voiceStart?.Status;
+        var detail = _voiceStart?.Detail;
+        EndConversation();
+        var after = _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == companion.Entity);
+        Require(after is not null && after.Grid.State.CommittedCell == cell && after.Standing == CompanionStanding.Following,
+            $"after the talk it stands where it stood and still follows: {_areaCompanions?.Status()}");
+        GD.Print("ARC-WORLD-048 native-smoke visitor-talk PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            Map = CurrentAreaMap, Home = companion.Template.Home.RuntimeMap, Script = companion.Speaker.ScriptId, Status = started?.ToString(), Detail = detail,
+            At = $"{cell.X},{cell.Y}" }));
     }
 }

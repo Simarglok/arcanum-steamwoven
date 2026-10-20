@@ -18,6 +18,8 @@ namespace Arcanum.TerrainViewer;
 // ARC-WORLD-032: in map mode (--area-map) the speakers are the dialog NPCs of the map's own snapshot, talking through
 // the same host with the game's script content and the session the map carries, so their consequences go with it to
 // the next map; since ARC-WORLD-037 the party commands of a speaker with follow facts go through the session party.
+// ARC-WORLD-048: a companion visiting the shown map from another map talks through its own host over its home map's dialog
+// state (AreaConversationHost.ForVisitor), so the talk is the same wherever it stands.
 public partial class TerrainViewerApp
 {
     private AreaConversationHost? _conversationHost;
@@ -27,12 +29,16 @@ public partial class TerrainViewerApp
     // ARC-WORLD-016: the session party port of the open conversation, for a refused JO/UW's reason.
     private Arcanum.Session.SessionDialogPartyPort? _conversationParty;
     private bool ConversationOpen => _conversationPanel?.IsOpen == true;
+    // ARC-WORLD-048: the hosts of companions visiting the shown map, by entity, with the session each was built over; and the host
+    // of the open conversation (the shown map's or a visitor's).
+    private readonly Dictionary<string, (Arcanum.Session.GameSessionOwner Session, AreaConversationHost Host)> _visitorHosts = new(StringComparer.Ordinal);
+    private AreaConversationHost? _talkHost;
 
     private void BindAreaConversations(TerrainViewerArguments arguments, AreaLoadResult area)
     {
         EndConversation();
         // The old host may borrow content that is released below; it is never used again.
-        _conversationHost = null;
+        _conversationHost = null; _visitorHosts.Clear();
         _conversationNotice = null; _talkAfterRoute = null;
         // ARC-SCRIPT-006: dialog consequences live in the area session, which outlives map changes.
         // ARC-WORLD-016: Virgil's JO/WA/UW go through the session party with his measured follow inputs.
@@ -82,7 +88,7 @@ public partial class TerrainViewerApp
     {
         EndConversation();
         UnbindAreaCompanions();
-        _conversationHost = null; _conversationNotice = null; _talkAfterRoute = null; _voiceStart = null; _storyStatus = null;
+        _conversationHost = null; _visitorHosts.Clear(); _conversationNotice = null; _talkAfterRoute = null; _voiceStart = null; _storyStatus = null;
     }
 
     private bool TalkMapActive => _conversationHost is not null && (!InCave || _areaCompanions is { Companions.Count: > 0 });
@@ -99,7 +105,43 @@ public partial class TerrainViewerApp
     private AreaSpeaker? SpeakerAtScreen(Vector2 screen)
     {
         if (!TalkMapActive || AreaObjectAtScreen(screen) is not { } identity) return null;
-        return _conversationHost!.Speakers.FirstOrDefault(candidate => candidate.Row.Key == identity && SpeakerPresent(candidate));
+        return _conversationHost!.Speakers.FirstOrDefault(candidate => candidate.Row.Key == identity && SpeakerPresent(candidate)) ?? VisitorSpeaker(identity);
+    }
+
+    /// <summary>ARC-WORLD-048: the speaker of a companion standing here that the shown host does not hold (its dialog state lives on
+    /// its home map), as its visitor host's speaker; null for anything else.</summary>
+    private AreaSpeaker? VisitorSpeaker(AreaObjectKey identity) =>
+        _areaCompanions?.Companions.FirstOrDefault(c => c.Key == identity) is { } companion && VisitorHost(companion.Template) is { } host ? host.Speakers[0] : null;
+
+    private AreaConversationHost? VisitorHost(AreaCompanionTemplate template)
+    {
+        // A companion of the shown host talks through it; any other one (from another map, or on the main map from another
+        // window, whose home map is the shown map but whose speaker this host does not hold) through its own host.
+        if (_conversationHost is not { PartyWired: true } shown || _areaSession is not { } session
+            || shown.Speakers.Any(s => s.Row.Key == template.Key)) return null;
+        if (_visitorHosts.TryGetValue(template.Entity, out var known) && ReferenceEquals(known.Session, session)) return known.Host;
+        var content = _conversationContent?.Load;
+        var host = AreaConversationHost.ForVisitor(template, content?.Content, session, inventory: _inventoryHost,
+            contentDetail: content is { } load ? $"{load.Status}: {load.Detail}" : "no script content", npcAdvancement: AreaNpcAdvancement);
+        _visitorHosts[template.Entity] = (session, host);
+        GD.Print($"ARC-WORLD-048 visitor host script={template.Speaker.ScriptId} home={template.Home.RuntimeMap} shown={shown.Map.RuntimeMap} inventory={host.InventoryWired}");
+        return host;
+    }
+
+    /// <summary>The host a speaker talks through: a visitor's own host, else the shown map's.</summary>
+    private AreaConversationHost HostOf(AreaSpeaker speaker) =>
+        _conversationHost!.Speakers.Contains(speaker) ? _conversationHost
+            : _visitorHosts.Values.Select(v => v.Host).FirstOrDefault(h => h.Speakers.Contains(speaker)) ?? _conversationHost;
+
+    /// <summary>The nearest speaker in reach: the shown map's present speakers and the visitors standing here.</summary>
+    private AreaSpeaker? NearestTalkable(long x, long y)
+    {
+        var shown = _conversationHost!.Nearest(x, y, SpeakerCell, SpeakerPresent);
+        var visitors = (_areaCompanions?.Companions ?? []).Select(c => VisitorHost(c.Template)?.Speakers[0]).OfType<AreaSpeaker>()
+            .Select(s => (Speaker: s, Distance: AreaConversationHost.Distance(s, x, y, SpeakerCell))).Where(v => v.Distance <= _conversationHost.Profile.Reach);
+        if (shown is null) return visitors.OrderBy(v => v.Distance).Select(v => v.Speaker).FirstOrDefault();
+        var near = AreaConversationHost.Distance(shown, x, y, SpeakerCell);
+        return visitors.Where(v => v.Distance < near).OrderBy(v => v.Distance).Select(v => v.Speaker).FirstOrDefault() ?? shown;
     }
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>): true when it hit a dialog NPC.</summary>
@@ -158,7 +200,9 @@ public partial class TerrainViewerApp
         QuarantineWorld();
         _conversationNotice = null;
         AreaConversationStart start;
-        try { start = _conversationHost.Begin(speaker); }
+        var host = HostOf(speaker);
+        _talkHost = host;
+        try { start = host.Begin(speaker); }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DatException)
         {
             start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
@@ -200,16 +244,19 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-009: a "return to script" end resumes the speaker's dialog script through the dispatcher; a new
         // dialog action opens the next conversation, anything else is a notice.
         var speaker = _conversationSpeaker; _conversationSpeaker = null;
-        if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && _conversationHost is not null)
+        var talkHost = _talkHost; _talkHost = null;
+        if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)
         {
             AreaConversationStart resumed;
-            try { resumed = _conversationHost.Resume(speaker, line); }
+            _talkHost = talkHost;
+            try { resumed = talkHost.Resume(speaker, line); }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DatException)
             {
                 resumed = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
             }
             GD.Print($"ARC-SCRIPT-009 script resumed line={line.Value} status={resumed.Status} detail={resumed.Detail}");
             if (resumed.Status == AreaConversationStartStatus.Started) { OpenConversation(speaker, resumed); RefreshReadyStatus(); return; }
+            _talkHost = null;
             _conversationNotice = $"script continued: {resumed.Status}: {resumed.Detail}";
         }
         QuarantineWorld(); RefreshReadyStatus();
@@ -235,8 +282,9 @@ public partial class TerrainViewerApp
     private string ConversationPrompt()
     {
         if (_conversationNotice is { } notice) return $" | {notice}";
-        if (!TalkMapActive || _conversationHost!.Speakers.Count == 0) return " | talk: no dialog NPC on this map";
-        return ActorCell() is { } cell && _conversationHost!.Nearest(cell.X, cell.Y, SpeakerCell, SpeakerPresent) is { } speaker
+        if (!TalkMapActive || (_conversationHost!.Speakers.Count == 0 && !(_areaCompanions?.Companions.Any(c => VisitorHost(c.Template) is not null) ?? false)))
+            return " | talk: no dialog NPC on this map";
+        return ActorCell() is { } cell && NearestTalkable(cell.X, cell.Y) is { } speaker
             ? $" | dialog NPC script {speaker.ScriptId} in reach: left-click it to talk"
             : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count(SpeakerPresent)} on this map; walks within {_conversationHost.Profile.Reach} tiles first)";
     }
