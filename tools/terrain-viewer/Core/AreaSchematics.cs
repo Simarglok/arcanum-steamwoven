@@ -139,7 +139,7 @@ public static class AreaSchematics
         var description = Text(data.Catalog.Text(record?.DescriptionText ?? -1), profile);
         var disciplineName = Text(data.Texts.DisciplineNames[discipline], profile) is { Length: > 0 } n ? n : $"Discipline {discipline}";
         if (record is null || pages == 0)
-            return new(AreaSchematicRefusal.None, new(tab, discipline, disciplineName, 0, 0, number, true, name, description, null, null, null, 0,
+            return new(AreaSchematicRefusal.None, new(tab, discipline, disciplineName, shown, pages, number, true, name, description, null, null, null, 0,
                 AssemblyButton.ItemMissing, null, Hover(data), technology[discipline].Expertise, pages == 0 ? "no schematic in this tab" : "record unreadable"));
         var plan = session.QueryHeroAssembly(record, items, data.Facts)!;
         var product = plan.ProductBase is { } p ? p + SchematicAlternatives.PrototypeOffset

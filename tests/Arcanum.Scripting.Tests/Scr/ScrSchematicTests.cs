@@ -12,7 +12,8 @@ public sealed class ScrSchematicTests
 {
     private const int Use = 1;
     private const byte Triggerer = 0, Attachee = 1, Extra = 12;
-    // ScrAdmissionSet.S9 without the guard conditions of S4, which need a host with object queries (the fake host has none).
+    // S7 plus start schematic UI (a subset of ScrAdmissionSet.S9 without S4's guard conditions, which need a host with object
+    // queries; the fake host has none).
     private static readonly ScrRunOptions S7Schematic = new()
     {
         Admission = new("S7-schematic", ScrAdmissionSet.S7.Conditions, ScrAdmissionSet.S7.Actions.Append(ScrCatalogue.Action.StartSchematicUi),

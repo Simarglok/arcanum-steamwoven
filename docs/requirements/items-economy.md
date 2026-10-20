@@ -216,7 +216,7 @@
 
 [ARC-RES-023 items and inventory](../research/crash-site-item-inventory.md) — research по данным T0: кто держит какие предметы на месте крушения (кольцо у Вергилия, его отдаёт единственная операция `IN` в первом узле диалога), как их получить (подбор, обыск мёртвых, генерация сундуков при первом обыске), как выбирается имя. Inventory owner, перенос и UI не реализованы.
 
-[ARC-TECHNOLOGY-001 schematic data](../formats/schematics.md) — Godot-free `Arcanum.Data.Technology` читает тексты `mes\tech.mes` и каталог схем `rules\schematic.mes` + `mes\schematic_text.mes` (записи из семи строк, альтернативы, диапазоны изученных/найденных/заглушек, дисциплина схемы, выбор страницы, номер изученной схемы): данные FR-ITEM-017 и FR-ITEM-018 без хоста; степени, список найденных, гейт, сборка и окно — следующие срезы технологии.
+[ARC-TECHNOLOGY-001 schematic data](../formats/schematics.md) — Godot-free `Arcanum.Data.Technology` читает тексты `mes\tech.mes` и каталог схем `rules\schematic.mes` + `mes\schematic_text.mes` (записи из семи строк, альтернативы, диапазоны изученных/найденных/заглушек, дисциплина схемы, выбор страницы, номер изученной схемы): данные FR-ITEM-017 и FR-ITEM-018 без хоста; степени, список найденных, гейт, сборка и окно схем героя реализованы следующими срезами (ARC-TECHNOLOGY-002..005, [окно схем](../world/schematic-window-runtime.md)).
 
 ## Покрытие Steamwoven до 2026-10-20
 

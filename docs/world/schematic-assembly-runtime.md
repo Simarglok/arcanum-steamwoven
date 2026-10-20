@@ -1,10 +1,10 @@
 # Schematic assembly runtime
 
-Status: **Implemented bounded component, not wired.** Work item ARC-TECHNOLOGY-004 (2026-10-21), slice TECH-4 of the
+Status: **Implemented bounded component, wired for the hero.** Work item ARC-TECHNOLOGY-004 (2026-10-21), slice TECH-4 of the
 [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted). The
 schematic component gate, the assemble button and the assembly plan as pure rules in `Arcanum.Simulation.Technology`, and the
-hero's assembly as one session change that makes items into its inventory (snapshot schema 24: the made items). No viewer or
-schematic window calls them yet.
+hero's assembly as one session change that makes items into its inventory (snapshot schema 24: the made items). The viewer's
+[schematic window](schematic-window-runtime.md) (ARC-TECHNOLOGY-005) calls them for the hero.
 
 Requirements: [FR-ITEM-018](../requirements/items-economy.md#fr-item-018) (assembly).
 
@@ -94,7 +94,6 @@ an entity that is not `made:n` with strictly ascending n or that was deleted (`I
 
 ## Not ready
 
-- No caller: the schematic window (TECH-5) and its tabs, pages, sounds and messages.
 - NPC crafters (the dialog's `su`): the rules take any crafter's item view and expertise, but the session wiring for an NPC's
   inventory and degrees is not done.
 - Ammunition and stack products and components in the hero's lists (ARC-WORLD-014 refuses stacks).

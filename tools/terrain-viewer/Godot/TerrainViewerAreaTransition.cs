@@ -92,7 +92,7 @@ public partial class TerrainViewerApp
     {
         EndSheet(); _sheetStatus = null;
         EndLogbook(); _logbookStatus = null;
-        EndSchematics(); _schematicsStatus = null; _schematicScriptOpen = false;
+        EndSchematics(); _schematicsStatus = null; _schematicScriptOpen = null;
         UnbindAreaInventory();
         UnbindAreaCompanions();
         // A session a map transfer carries outlives the scene it leaves (ARC-WORLD-031).

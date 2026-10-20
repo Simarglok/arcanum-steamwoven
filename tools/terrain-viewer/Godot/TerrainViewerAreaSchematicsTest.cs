@@ -133,12 +133,16 @@ public partial class TerrainViewerApp
             Require(_schematicsPanel.ViewForSelfTest is { Button: AssemblyButton.ItemMissing }, "the parts are gone");
             InventoryKey(Key.Tab);
             Require(_schematicsPanel.MessageForSelfTest == "Missing", "text 0 for a missing item");
+            TurnSchematicPage(1);
+            Require(_schematicsPanel.ViewForSelfTest is { Page: 1 }, "page 1 before closing");
             InventoryKey(Key.Escape);
             Require(!SchematicsOpen && !WorldModal && _schematicSounds.Last() == BookCloseSound, "Escape closed it (3009)");
-            SelectSchematicDiscipline(0);
-            TurnSchematicPage(1);
+            Require(GetViewport().GuiGetFocusOwner() is null, "closing releases the GUI focus");
+            SelectSchematicDiscipline(1);
+            TurnSchematicPage(-1);
+            SelectSchematicTab(AreaSchematicTab.Found);
             InventoryKey(Key.T);
-            Require(_schematicsPanel.ViewForSelfTest is { Tab: AreaSchematicTab.Learned, Discipline: 0, Page: 0 }, "the controls act only while open; the position is kept");
+            Require(_schematicsPanel.ViewForSelfTest is { Tab: AreaSchematicTab.Learned, Discipline: 0, Page: 1 }, "the controls act only while open; the position is kept");
             static GamepadLab.Core.IntentFrame Pulse(bool confirm, bool cancel) =>
                 new(default, default, confirm, cancel, false, false, false, false, false, 0, 0, GamepadLab.Core.InputMethod.Gamepad, true, "ARC-TECHNOLOGY-005 self-test");
             HandleWorldPulse(Pulse(confirm: false, cancel: true), true);

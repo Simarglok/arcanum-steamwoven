@@ -20,12 +20,14 @@ SW1–SW8). Code: [`AreaSchematics`](../../tools/terrain-viewer/Core/AreaSchemat
 [`AreaSchematicsTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaSchematicsTests.cs),
 [`AreaScriptHostTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaScriptHostTests.cs),
 [`ScrSchematicTests`](../../tests/Arcanum.Scripting.Tests/Scr/ScrSchematicTests.cs), the Godot self-test
-`ARC-TECHNOLOGY-005 self-test PASS` and the native smoke `ARC-TECHNOLOGY-005 native-smoke schematics PASS`.
+`ARC-TECHNOLOGY-005 self-test PASS` and the native smoke `ARC-TECHNOLOGY-005 native-smoke schematics PASS`. The full
+`--self-test` currently stops earlier, at a conversation-routing check that also fails on main (2026-10-21), so the window's
+self-test was observed in a local run with it moved before that check.
 
 ## Opening and closing (SW1–SW3)
 
 - `T` (logical key down) opens the window for the session's hero as crafter and viewer, as the original's in-game key handler
-  calls the open with the local PC twice (SW1). It acts from the world only: not while the palette, a dialog, another window or
+  calls the open with the local PC as both arguments (SW1). It acts from the world only: not while the palette, a dialog, another window or
   UI focus owns input (the original's guards are those of C and L; its mode change would close another open window instead,
   the viewer's modal windows own their keys). `T` is no longer a reserved key in `crash-site-area` with a session.
 - It opens only with a hero, and never for a dead one (the original returns for a dead crafter or viewer); the HUD names the
@@ -87,6 +89,8 @@ No installed script uses action 129.
 | --- | --- |
 | Action 129 calls a pointer the game never fills (TC2). | The PC opens its window; an NPC with a PC leader is refused by name until the NPC crafter slice. |
 | `T` with another window open: the mode change closes that window and opens the schematics. | The open window owns the keys; `T` acts from the world only. |
+| `T` also plays the generic click sound 0. | Only the window's own sounds play. |
+| Assemble acts on the button's release. | The mouse button does too; `Tab` and a controller confirm act on their press. |
 | The window does not pause the game. | Modal: the clock pauses and the actor gate closes, as the viewer's other windows. |
 | The original window art and layout. | A diagnostic panel (above). |
 

@@ -27,7 +27,8 @@ public partial class TerrainViewerApp
     private string? _schematicDataModule;
     private AreaSchematicDataLoad? _schematicData;
     private string? _schematicMessage;
-    private bool _schematicScriptOpen;
+    // SW8: the session whose script asked to open the window; a replaced session (a quick load) drops the request.
+    private GameSessionOwner? _schematicScriptOpen;
     // The window's sound requests, newest last (the self-test and the smoke read them; the audio may be absent).
     private readonly Queue<int> _schematicSounds = new();
     private bool SchematicsOpen => _schematicsPanel?.IsOpen == true;
@@ -126,7 +127,7 @@ public partial class TerrainViewerApp
     /// <summary>SW4: previous and next move one page and play 3010; the window disables them on the first and last page.</summary>
     private void TurnSchematicPage(int by)
     {
-        if (!SchematicsOpen || _schematicsPanel!.ViewForSelfTest is not { } view) return;
+        if (!SchematicsOpen || _schematicsPanel!.View is not { } view) return;
         var page = view.Page + by;
         if (page < 0 || page >= view.Pages) return;
         _schematicTabState[(int)_schematicTab] = (SchematicPosition.Discipline, page); _schematicMessage = null;
@@ -138,7 +139,7 @@ public partial class TerrainViewerApp
     /// and the completion shows text 2 and plays 3018 + the discipline (SW6).</summary>
     private void AssembleSchematic()
     {
-        if (!SchematicsOpen || _schematicsPanel!.ViewForSelfTest is not { Placeholder: false } view || _schematicData?.Data is not { } data) return;
+        if (!SchematicsOpen || _schematicsPanel!.View is not { Placeholder: false } view || _schematicData?.Data is not { } data) return;
         if (view.Button != AssemblyButton.CanAssemble) { _schematicMessage = view.ButtonText; Render(); return; }
         if (data.Catalog.Read(view.Record).Record is not { } record) return;
         var insert = _inventoryHost?.InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck;
@@ -198,10 +199,12 @@ public partial class TerrainViewerApp
     /// </summary>
     private void TakeScriptSchematics()
     {
-        if (_readyMode != TerrainViewerMode.CrashSiteArea) { _schematicScriptOpen = false; return; }
+        if (_readyMode != TerrainViewerMode.CrashSiteArea) { _schematicScriptOpen = null; return; }
         foreach (var scripts in TalkHosts().Select(h => h.Scripts).ToArray()) QueueScriptSchematics(scripts.TakeSchematics());
-        if (!_schematicScriptOpen || SchematicsOpen || WorldModal) return;
-        _schematicScriptOpen = false;
+        if (_schematicScriptOpen is null) return;
+        if (!ReferenceEquals(_schematicScriptOpen, _areaSession)) { _schematicScriptOpen = null; return; }
+        if (SchematicsOpen || WorldModal) return;
+        _schematicScriptOpen = null;
         OpenSchematics();
     }
 
@@ -210,7 +213,7 @@ public partial class TerrainViewerApp
         foreach (var request in requests)
         {
             GD.Print($"ARC-TECHNOLOGY-005 script schematics crafter={request.Crafter.Code} viewer={request.Viewer.Code} status={request.Status}");
-            if (request.Status == AreaSchematicScriptStatus.Open) _schematicScriptOpen = true;
+            if (request.Status == AreaSchematicScriptStatus.Open) _schematicScriptOpen = _areaSession;
             else { _schematicsStatus = "script 129: an NPC crafter is not ready (later slice)"; RefreshAreaStatus(); }
         }
     }

@@ -1081,7 +1081,8 @@ once nothing else owns input; for an NPC with a PC leader it is refused by name 
 The HUD adds `T schematics` and the last refusal.
 
 **Not implemented:** the original window art, slot pictures and overlays, the interface button, the slot item description box,
-the tab and discipline hover texts, the NPC crafter (dialog `su`). Self-test `ARC-TECHNOLOGY-005 self-test PASS` (synthetic
+the tab and discipline hover texts, the NPC crafter (dialog `su`). Self-test `ARC-TECHNOLOGY-005 self-test PASS` (observed with
+the stage moved first: the full run stops earlier at a conversation-routing check that also fails on main; synthetic
 records and hero: refusal without a hero, `T`, controls and their sounds and bounds, keys owned, refused texts, an assembly
 through the session, `Escape`, position kept, controller cancel, script 129 for the PC and the NPC refusal, dead-hero close);
 native smoke after the logbook stage: `ARC-TECHNOLOGY-005 native-smoke schematics PASS` (the module's schematic data load; with

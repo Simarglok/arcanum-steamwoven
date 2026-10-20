@@ -29,6 +29,7 @@ public partial class AreaSchematicsPanel : CanvasLayer
     public event Action<int>? PageRequested;
     public event Action? AssembleRequested;
     public bool IsOpen => Visible;
+    public AreaSchematicsView? View => _view;
     internal AreaSchematicsView? ViewForSelfTest => _view;
     internal string TextForSelfTest => _body.GetParsedText();
     internal string MessageForSelfTest => _message.Text;
@@ -100,7 +101,7 @@ public partial class AreaSchematicsPanel : CanvasLayer
         _close.GrabFocus();
     }
 
-    public void CloseView() { Hide(); _view = null; _message.Text = ""; }
+    public void CloseView() { Hide(); _view = null; _message.Text = ""; GetViewport().GuiReleaseFocus(); }
 
     /// <summary>Renders a page; <paramref name="message"/> replaces the message line (null keeps it empty).</summary>
     public void Render(AreaSchematicsView view, string? message)

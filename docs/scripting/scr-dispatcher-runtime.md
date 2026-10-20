@@ -406,7 +406,7 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
   clicks on guarded use sites run it under "S4-area-use", and since ARC-SCRIPT-017 the tile and sector scripts the player
   enters; heartbeat and combat are later slices.
 - Not in any admitted set yet: focus groups and local objects, loops, immediate calls and
-  call-ex, and the world actions other than teleport and fade-and-teleport (set S4) set auto-level scheme (set S8) and start schematic UI (set S9); float line, quests,
+  call-ex, and the world actions other than teleport and fade-and-teleport (set S4), set auto-level scheme (set S8) and start schematic UI (set S9); float line, quests,
   reactions... are not admitted.
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
