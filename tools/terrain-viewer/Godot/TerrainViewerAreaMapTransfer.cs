@@ -80,7 +80,9 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-031 transfer arrived " + System.Text.Json.JsonSerializer.Serialize(new {
                 Kind = handoff.Kind.ToString(), From = handoff.FromMap, To = area.Snapshot.RuntimeMap, Arrival = arrival, handoff.Fallback,
                 Session = placed.Disposition.ToString(), placed.Failure, Revision = session.Version.Revision }));
-            if (placed.Disposition == GameSessionDisposition.Rejected) handoff = handoff with { Failure = handoff.Failure ?? $"session refused the arrival ({placed.Failure})" };
+            if (placed.Disposition == GameSessionDisposition.Rejected && handoff.Kind == MapHandoffKind.Stream)
+                _mapStreamStatus = $"window moved but the session refused the actor's placement ({placed.Failure})";
+            else if (placed.Disposition == GameSessionDisposition.Rejected) handoff = handoff with { Failure = handoff.Failure ?? $"session refused the arrival ({placed.Failure})" };
             // A quick load asked for the saved cell; the map stands the actor on its start when the cell is not admitted.
             if (handoff is { Kind: MapHandoffKind.QuickLoad, Fallback: false } && arguments.AreaMapArrival is { } asked && (asked.X != arrival.X || asked.Y != arrival.Y))
                 SetQuickStatus($"F8 quick loaded, but the saved cell ({asked.X},{asked.Y}) is not admitted here: the actor stands on the map's start ({arrival.X},{arrival.Y})");
@@ -235,7 +237,8 @@ public partial class TerrainViewerApp
         var origin = _arguments!;
         _mapHandoff = new(_areaSession, transfer.FromMap, transfer.To.Name, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell), transfer.To.Name,
             Companions: LeavingCompanions());
-        var next = origin with { AreaMapName = transfer.To.Name, AreaMapArrival = new(transfer.Arrival.X, transfer.Arrival.Y) };
+        // The destination opens at the arrival: an opening sector of this map (a window move or --area-map-sector) is not its.
+        var next = origin with { AreaMapName = transfer.To.Name, AreaMapArrival = new(transfer.Arrival.X, transfer.Arrival.Y), AreaMapSector = null };
         _areaUseStatus = $"loading '{transfer.To.Name}' ({transfer.To.Catalogue})";
         GD.Print("ARC-WORLD-031 transfer load " + System.Text.Json.JsonSerializer.Serialize(new { transfer.FromMap, To = transfer.To, transfer.Arrival, Trigger = transfer.Site.Trigger.ToString() }));
         _lastLoad = LoadTransferAsync(next);

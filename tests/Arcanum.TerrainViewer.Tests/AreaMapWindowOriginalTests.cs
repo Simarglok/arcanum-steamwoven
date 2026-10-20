@@ -60,6 +60,10 @@ public sealed class AreaMapWindowOriginalTests
         Assert.AreEqual(new AreaSectorCoordinate(1451, 1290), result.AreaMapWindowCentre);
         var chart = result.Area!.Plan.Chart;
         Assert.AreEqual(new Arcanum.Data.Traversal.AreaStepCell(92913, 82598), chart.ToWorld(chart.Spawn));
+        // An arrival wins over an opening sector the arguments still carry (a window move or --area-map-sector).
+        var stale = AreaLoadOperation.Execute(7, Arguments(Root(), new AreaSectorCoordinate(1409, 1314)) with { AreaMapArrival = new WorldLocation(92913, 82598) }, default);
+        Assert.AreEqual(new AreaSectorCoordinate(1451, 1290), stale.AreaMapWindowCentre);
+        Assert.AreEqual(new Arcanum.Data.Traversal.AreaStepCell(92913, 82598), stale.Area!.Plan.Chart.ToWorld(stale.Area.Plan.Chart.Spawn));
         // The cave lists the main map as a destination.
         var cave = AreaLoadOperation.Execute(6, Arguments(Root(), null, "crash site cave"), default);
         Assert.IsNull(cave.AreaMapWindowCentre);

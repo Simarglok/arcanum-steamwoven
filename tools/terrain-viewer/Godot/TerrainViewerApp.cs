@@ -93,6 +93,9 @@ public partial class TerrainViewerApp : Node
         _hud?.SetMode(arguments.Mode);
         if (IsWorldMode(arguments.Mode)) { InitializeWorld(); QuarantineWorld(); }
         GD.Print($"ARC-RENDER-004 load stage=begin smoke={orchestrateSmoke}");
+        // ARC-RENDER-024: a load (a reload, a transfer, a quick load) supersedes a window move in flight; the move's session
+        // stays the scene's (the load either carries it or ends it with the scene).
+        if (_mapHandoff is { Kind: MapHandoffKind.Stream }) _mapHandoff = null;
         var priorCancellation = Interlocked.Exchange(ref _loadCancellation, new CancellationTokenSource());
         priorCancellation?.Cancel();
         priorCancellation?.Dispose();

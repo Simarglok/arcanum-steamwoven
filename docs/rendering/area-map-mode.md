@@ -472,8 +472,9 @@ lighting and stationary lights (ARC-DATA-035), its transitions and its dialog NP
 map.
 
 - **Where it opens.** A map with more than `AreaMapPlans.MaxSectorFiles` (256) sector files opens as a window around
-  `--area-map-sector X,Y` (launcher `./arcanum map NAME --sector X,Y`), else around a transfer's or quick load's
-  arrival, else around the sector of its map-list start tile. That start tile is the new-game start: row 5000 of
+  the sector of a transfer's or quick load's arrival, else around `--area-map-sector X,Y` (launcher
+  `./arcanum map NAME --sector X,Y`), else around the sector of its map-list start tile. A transfer or quick load to
+  another map drops the opening sector, so the destination opens at its own arrival. That start tile is the new-game start: row 5000 of
   `rules/maplist.mes` puts it at (92958, 82592), the Crash Site sector (1452, 1290); `gameinit.mes` names no start map
   or location (both entries are empty and marked unused). The actor stands on the arrival when admitted; with a sector
   asked, on the open core tile nearest that sector's middle (a sector without open ground of its own, such as the
@@ -481,8 +482,10 @@ map.
   a map that loads whole, the actor stands near that sector the same way.
 - **Streaming.** When the actor stands 16 cells (`StreamMargin`) beyond the window's centre sector, the window around
   the sector it stands in loads in the background (about 5 s on the owner's Mac) while the shown window stays drawn and
-  playable. Once loaded, and when no dialog, inventory, sheet, logbook or palette is open, it replaces the shown window
-  in one publication: the game session is carried as on a transfer (`MapTransferHandoff`, kind `Stream`), the
+  playable. Once loaded it replaces the shown window in one publication, but not while the shown scene holds an intent a
+  new scene would drop or a state that must not move: a pending transfer (it applies and supersedes the move), a walk
+  to use, talk or pick up (it runs to its end first), combat mode, or an open dialog, inventory, sheet, logbook or palette;
+  no move starts in any of these either. The publication: the game session is carried as on a transfer (`MapTransferHandoff`, kind `Stream`), the
   companions' cells are written to the session first and they are bound again where they stand, the actor stands on
   the cell it reached meanwhile, and a walk keeps its goal when the new window holds it. Music and ambient sound go on
   (no map change). The margin keeps a walk along a border, or a path that bends back over it, from reloading the
@@ -490,8 +493,9 @@ map.
   sector cache holds the 16 most recently used sectors and a teleport pre-caches the 3×3 around its target
   ([main-map streaming](../research/main-map-streaming.md), SS1–SS4); the 3×3 core is that pre-cache kept around the
   actor. A window that cannot load leaves the shown one in place and is tried again when the actor enters another
-  sector. No window moves in combat mode, while a transfer or quick load is pending, or (in a native smoke) outside
-  its own stage. A transfer, quick load or reload during a window load supersedes it.
+  sector. In a native smoke the window moves only in its own stage. A transfer or reload during a window load supersedes
+  it (the move gives up its session to the scene, which carries or ends it); F7/F8 wait while a window loads ("another map
+  is loading"). A publication that fails publishes the failure as any load does.
 - **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
   Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
   (92913, 82598). Every listed map is a destination.
@@ -512,10 +516,12 @@ map.
   ARC-UI-045 released the closed conversation's voice start, which had kept 25 to 30 MB after a dialog).
 
 **NOT READY:** the window is a fixed 3×3 core, not the original's 16-sector cache; a move costs a background load of
-the whole window (no sector is reused) and one publication, which rebuilds the scene (a frame hitch at the swap); saved
-sector differences (`.dif`) are not modelled; the world map's own travel (the original's world-map screen) is not
-implemented; a companion more than one sector from the actor when the window moves is bound only if the new window
-holds its cell. Original parity NOT_VERIFIED.
+the whole window (no sector is reused) and one publication, which rebuilds the scene (a frame hitch at the swap; a step
+in progress ends on its committed cell); saved sector differences (`.dif`) are not modelled; the world map's own travel
+(the original's world-map screen) is not implemented; a companion more than one sector from the actor when the window
+moves is bound only if the new window holds its cell; on the same map, an F8 save or a jump point or teleport whose cell
+lies outside the shown window is refused (the cell is not admitted in this window; another map's save or exit opens the
+window around it); routes reach 32 cells per axis (ARC-WORLD-042). Original parity NOT_VERIFIED.
 
 ## Not yet
 

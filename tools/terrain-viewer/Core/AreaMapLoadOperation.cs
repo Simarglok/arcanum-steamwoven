@@ -11,7 +11,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>ARC-RENDER-017: loads one interior of the game folder's module content stack in the
 /// AREA viewer under a whole-map plan (ARC-DATA-019) with whole-map step evidence (ARC-WORLD-018).
 /// ARC-RENDER-024: a map with more sector files than a whole-map plan admits (the main world map) loads as a window
-/// (ARC-DATA-032) around <see cref="TerrainViewerArguments.AreaMapSector"/>, the transfer arrival or the map-list start
+/// (ARC-DATA-032) around the transfer arrival, <see cref="TerrainViewerArguments.AreaMapSector"/> or the map-list start
 /// tile, with window step evidence (ARC-DATA-034); the viewer moves the window as the actor walks.
 /// The pinned exterior path (<see cref="AreaLoadOperation"/>) is untouched.</summary>
 internal static class AreaMapLoadOperation
@@ -52,10 +52,8 @@ internal static class AreaMapLoadOperation
             // Step evidence from this same strict publication, and one chart over every sector of the map.
             steps = AreaStepInspector.InspectWholeMap(snapshot, stack, mapPlan.Map.AggregatePath, generation);
             var chart = Chart(snapshot);
-            // The sector the actor is asked to stand in: the explicit sector, else the window's centre (a window opened
-            // around the map-list start keeps the start tile), else none.
-            var near = arguments.AreaMapSector ?? (centre is { } middle && arguments.AreaMapArrival is null && !Inside(mapPlan.StartTile, middle) ? middle : null);
-            return chart with { Spawn = chart.ToChart(Spawn(steps, mapPlan.StartTile, snapshot, arguments.AreaMapArrival, near)) };
+            // The arrival when admitted, else near the sector asked, else the map-list start (ARC-RENDER-024).
+            return chart with { Spawn = chart.ToChart(Spawn(steps, mapPlan.StartTile, snapshot, arguments.AreaMapArrival, arguments.AreaMapSector)) };
         }, mapPlan.Limits);
         var snapshot = area.Snapshot; var plan = area.Plan;
         var moduleIdentity = snapshot.Inputs.Single(i => i.Key.Role == AreaSourceRole.Module);
@@ -115,20 +113,17 @@ internal static class AreaMapLoadOperation
     }
 
     /// <summary>ARC-RENDER-024: the centre of the window a map opens as, or null when it loads whole. A map with more sector
-    /// files than <see cref="AreaMapPlans.MaxSectorFiles"/> opens as a window around the asked sector, else the sector of the
-    /// transfer arrival, else the sector of its map-list start tile (the new-game start of the main map: the map list's
-    /// start tile, not <c>gameinit.mes</c>, whose start map and location are unused).</summary>
+    /// files than <see cref="AreaMapPlans.MaxSectorFiles"/> opens as a window around the sector of the transfer's (or quick
+    /// load's, or window move's) arrival, else the asked sector, else the sector of its map-list start tile (the new-game
+    /// start of the main map: the map list's start tile, not <c>gameinit.mes</c>, whose start map and location are unused).</summary>
     internal static AreaSectorCoordinate? WindowCentre(ContentStack stack, WorldCatalog catalog, string mapName, TerrainViewerArguments arguments)
     {
         if (catalog.Find(mapName) is not { } map || map.SectorFiles.Count <= AreaMapPlans.MaxSectorFiles) return null;
-        if (arguments.AreaMapSector is { } asked) return asked;
+        if (arguments.AreaMapArrival is null && arguments.AreaMapSector is { } asked) return asked;
         var tile = arguments.AreaMapArrival ?? MapList.Read(stack).Find(map.Name)?.Start ?? throw new InvalidOperationException("AREA_MAP_WINDOW_NO_START");
         var sector = WorldSectorCoordinate.Containing(tile);
         return new(sector.X, sector.Y);
     }
-
-    private static bool Inside(WorldLocation? tile, AreaSectorCoordinate sector) =>
-        tile is { } t && t.X >> 6 == sector.X && t.Y >> 6 == sector.Y;
 
     /// <summary>The widest chart (in sectors) a whole map may span; the largest installed interior spans 14.</summary>
     internal const int MaxChartSectors = 32;

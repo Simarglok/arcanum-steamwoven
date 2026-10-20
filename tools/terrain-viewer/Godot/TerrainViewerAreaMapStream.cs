@@ -45,16 +45,24 @@ public partial class TerrainViewerApp
         Math.Max(Math.Max(sector.OriginX - cell.X, cell.X - (sector.OriginX + 63)), Math.Max(Math.Max(sector.OriginY - cell.Y, cell.Y - (sector.OriginY + 63)), 0));
 
     /// <summary>Per frame in map mode: starts the load of the window around the actor's sector when the actor has left the
-    /// shown window's centre sector.</summary>
+    /// shown window's centre sector by the margin. A walk to use, talk or pick up, a pending transfer, combat mode or an open
+    /// dialog, inventory, sheet, logbook or palette keep the window where it is until it ends.</summary>
     private void ProcessAreaMapStream(AreaGridSession session)
     {
-        if (_mapWindowCentre is not { } centre || _mapHandoff is not null || _mapTransfers?.Pending is not null || WorldModal || HeroInCombatMode
-            || _readyMapName is null || _arguments is null || (_nativeSmoke && !_mapStreamSmokeActive)) return;
+        if (_mapWindowCentre is not { } centre || _mapHandoff is not null || StreamHeld || _readyMapName is null || _arguments is null
+            || (_nativeSmoke && !_mapStreamSmokeActive)) return;
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         var sector = new AreaSectorCoordinate(cell.X >> 6, cell.Y >> 6);
-        if (sector == centre || sector == _mapStreamFailedAt || Beyond(centre, cell) < StreamMargin) return;
+        // A sector whose window failed is tried again once the actor has stood in the centre sector again.
+        if (sector == centre) { _mapStreamFailedAt = null; return; }
+        if (sector == _mapStreamFailedAt || Beyond(centre, cell) < StreamMargin) return;
         BeginMapStream(session, cell, sector);
     }
+
+    /// <summary>What keeps the shown window: an intent the scene holds that a new scene would drop (a pending transfer, a walk
+    /// to use, talk or pick up), combat mode, or a modal panel.</summary>
+    private bool StreamHeld => _mapTransfers?.Pending is not null || _areaUseAfterRoute is not null || _talkAfterRoute is not null
+        || _inventoryAfterRoute is not null || HeroInCombatMode || WorldModal;
 
     private void BeginMapStream(AreaGridSession session, AreaStepCell cell, AreaSectorCoordinate sector)
     {
@@ -69,8 +77,17 @@ public partial class TerrainViewerApp
         _lastLoad = StreamMapWindowAsync(next, handoff, sector);
     }
 
+    /// <summary>A stream that ends without publishing gives up its handoff; the session it carried ends unless the scene or a
+    /// newer handoff still holds it (a reload during the stream leaves it to nobody).</summary>
+    private void EndMapStream(MapTransferHandoff handoff)
+    {
+        if (ReferenceEquals(_mapHandoff, handoff)) _mapHandoff = null;
+        if (handoff.Session is { } session && !ReferenceEquals(session, _areaSession) && !ReferenceEquals(session, _mapHandoff?.Session)
+            && !ReferenceEquals(session, _mapHandoff?.Previous)) session.Dispose();
+    }
+
     /// <summary>Loads the next window in the background and publishes it in place of the shown one; the shown scene stays
-    /// until then. A newer load (a transfer, a quick load, a reload) supersedes the stream.</summary>
+    /// until then. A newer load (a transfer, a reload) supersedes the stream; F7/F8 wait for it (another map is loading).</summary>
     private async Task StreamMapWindowAsync(TerrainViewerArguments next, MapTransferHandoff handoff, AreaSectorCoordinate sector)
     {
         if (_exiting) return;
@@ -82,28 +99,27 @@ public partial class TerrainViewerApp
         var generation = _generation;
         TerrainLoadResult result;
         try { result = await _coordinator.LoadAsync(generation, next, token); }
-        catch (OperationCanceledException) { if (ReferenceEquals(_mapHandoff, handoff)) _mapHandoff = null; return; }
+        catch (OperationCanceledException) { EndMapStream(handoff); return; }
         catch (Exception exception)
         {
             if (_exiting) return;
-            var frontier = exception is AreaException refused ? $"{refused.Issue.Stage}/{refused.Issue.Code}" : exception.Message.StartsWith("AREA_", StringComparison.Ordinal) ? exception.Message : exception.GetType().Name;
-            if (ReferenceEquals(_mapHandoff, handoff)) _mapHandoff = null;
-            _mapStreamFailedAt = sector;
-            _mapStreamStatus = $"window around ({sector.X},{sector.Y}) not loaded ({frontier}); the shown window stays";
-            GD.Print("ARC-RENDER-024 stream failed " + frontier);
-            RefreshAreaStatus();
-            if (_nativeSmoke) { GD.Print("ARC-RENDER-007 frontier=AREA_STREAM_" + frontier.Replace('/', '_').ToUpperInvariant()); GetTree().Quit(1); }
+            // A superseded stream ends quietly; the newer load owns the scene and the status.
+            if (!ReferenceEquals(_mapHandoff, handoff)) { EndMapStream(handoff); return; }
+            EndMapStream(handoff);
+            StreamFailed(sector, Frontier(exception), "not loaded");
             return;
         }
         var loaded = System.Environment.TickCount64 - started;
-        // A dialog, inventory, sheet, logbook or palette opened meanwhile keeps the shown window until it closes.
-        while (!_exiting && ReferenceEquals(_mapHandoff, handoff) && (WorldModal || _worldLifecycleSession is not null || _worldResetPending || _worldReloadPending))
+        // The shown window stays while an intent the new scene would drop is pending (a transfer applies and supersedes the
+        // stream; a walk to use, talk or pick up runs to its end), in combat mode, and while a panel is open.
+        while (!_exiting && ReferenceEquals(_mapHandoff, handoff) && (StreamHeld || _worldLifecycleSession is not null || _worldResetPending || _worldReloadPending))
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        if (_exiting || !ReferenceEquals(_mapHandoff, handoff)) return;
-        // The actor stands where it walked meanwhile when the new window admits that cell (it does: the window is the 3×3
-        // around the sector the walk started in, and the walk is that short), else on the cell the stream began at.
+        if (_exiting) return;
+        if (!ReferenceEquals(_mapHandoff, handoff)) { EndMapStream(handoff); return; }
+        // The actor stands where it walked meanwhile when the new window admits that cell; otherwise it stands on the new
+        // window's own spawn (the cell the stream began at when admitted, ARC-WORLD-031's arrival rule).
         var area = result.Area!; var chart = area.Plan.Chart;
-        AreaStepCell at = handoff.OriginCell; var facing = handoff.Facing; AreaStepCell? goal = null;
+        AreaStepCell at = chart.ToWorld(chart.Spawn); var facing = handoff.Facing; AreaStepCell? goal = null;
         if (_worldActor.Session is AreaGridSession walking)
         {
             var now = walking.Chart.ToWorld(walking.State.CommittedCell);
@@ -117,18 +133,30 @@ public partial class TerrainViewerApp
         var arrived = next with { AreaMapArrival = new(at.X, at.Y) };
         var from = _mapWindowCentre;
         // The companions' cells go to the session first, so the new window binds them where they stand.
-        if (!_coordinator.TryPublish(generation, () => { RecordAreaCompanions("window move"); ClearPublishedScene(); _arguments = arrived; PublishReadyResult(arrived, result); }))
+        Exception? refused = null;
+        var published = _coordinator.TryPublish(generation, () =>
         {
-            if (ReferenceEquals(_mapHandoff, moved)) _mapHandoff = null;
+            try { RecordAreaCompanions("window move"); ClearPublishedScene(); _arguments = arrived; PublishReadyResult(arrived, result); }
+            catch (Exception exception) when (exception is not OperationCanceledException) { refused = exception; }
+        });
+        if (refused is not null)
+        {
+            // The shown scene is gone: the failure is published as for any load (the session ends with the scene).
+            EndMapStream(moved);
+            GD.Print("ARC-RENDER-024 stream publication failed " + Frontier(refused));
+            PublishFailure(TerrainViewerMode.CrashSiteArea, new(TerrainViewerErrorCode.RenderFailure, Stage: TerrainViewerFailureStage.Upload));
+            if (_nativeSmoke) { GD.Print("ARC-RENDER-007 frontier=AREA_STREAM_PUBLICATION"); GetTree().Quit(1); }
             return;
         }
+        if (!published) { EndMapStream(moved); return; }
         _mapWindowMoves++; _mapStreamFailedAt = null;
         // The walk goes on to its goal when the new window holds it.
         var resumed = false;
         if (goal is { } wanted && _worldActor.Session is AreaGridSession placed && placed.Chart.Contains(placed.Chart.ToChart(wanted)) && WorldRoute(placed) is { } follower)
         { follower.SetTarget(placed.Chart.ToChart(wanted), WorldTime); resumed = true; }
         if (from is { } previous) _mapStreamLog.Add((previous, sector, at, resumed, _areaSession, loaded));
-        _mapStreamStatus = $"window moved to sector ({sector.X},{sector.Y}) in {loaded} ms (move {_mapWindowMoves})";
+        _mapStreamStatus = (_mapStreamStatus?.StartsWith("window moved but", StringComparison.Ordinal) == true ? _mapStreamStatus + "; " : string.Empty)
+            + $"window moved to sector ({sector.X},{sector.Y}) in {loaded} ms (move {_mapWindowMoves})";
         GD.Print("ARC-RENDER-024 stream published " + System.Text.Json.JsonSerializer.Serialize(new {
             From = from is { } f ? new { f.X, f.Y } : null, To = new { sector.X, sector.Y }, Actor = at, Goal = goal, Resumed = resumed, LoadMs = loaded,
             Moves = _mapWindowMoves, Sectors = area.Snapshot.Sectors.Count(s => s.Present), Visuals = area.Snapshot.Visuals.Count, area.CpuRgbaBytes,
@@ -136,13 +164,33 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
+    private void StreamFailed(AreaSectorCoordinate sector, string frontier, string what)
+    {
+        _mapStreamFailedAt = sector;
+        _mapStreamStatus = $"window around ({sector.X},{sector.Y}) {what} ({frontier}); the shown window stays";
+        GD.Print("ARC-RENDER-024 stream failed " + frontier);
+        RefreshAreaStatus();
+        if (_nativeSmoke) { GD.Print("ARC-RENDER-007 frontier=AREA_STREAM_" + frontier.Replace('/', '_').ToUpperInvariant()); GetTree().Quit(1); }
+    }
+
+    private static string Frontier(Exception exception) => exception is AreaException refused ? $"{refused.Issue.Stage}/{refused.Issue.Code}"
+        : exception.Message.StartsWith("AREA_", StringComparison.Ordinal) && exception.Message.All(c => char.IsAsciiLetterOrDigit(c) || c == '_') ? exception.Message
+        : exception.GetType().Name;
+
     private const int StreamSmokeMoves = 3;
     // Every window publication of this run (smoke report): the centres, the actor's cell, the walk and the session.
     private readonly List<(AreaSectorCoordinate From, AreaSectorCoordinate To, AreaStepCell Actor, bool Walking, GameSessionOwner? Session, long LoadMs)> _mapStreamLog = [];
 
-    private static HashSet<string>? MapSmokeStages() =>
-        System.Environment.GetEnvironmentVariable("ARC_AREA_MAP_SMOKE_ONLY") is { Length: > 0 } list
-            ? list.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal) : null;
+    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream"];
+
+    /// <summary>The stages <c>ARC_AREA_MAP_SMOKE_ONLY</c> names (null: all); an unknown name is refused, so a typo cannot skip
+    /// every stage and still pass.</summary>
+    private static HashSet<string>? MapSmokeStages()
+    {
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_MAP_SMOKE_ONLY") is not { Length: > 0 } list) return null;
+        var stages = list.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
+        return stages.Count > 0 && stages.All(MapSmokeStageNames.Contains) ? stages : throw new InvalidOperationException("AREA_MAP_SMOKE_STAGES_UNKNOWN");
+    }
 
     // Native observation (ARC-RENDER-024, a window map): walks, by the production route follower, to a cell deep in a core
     // sector the actor has not stood in yet, until the window has moved at least three times. Each move loads in the

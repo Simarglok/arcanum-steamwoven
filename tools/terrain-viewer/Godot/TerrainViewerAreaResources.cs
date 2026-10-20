@@ -42,6 +42,7 @@ public partial class TerrainViewerApp
         // T0 command is hidden). A companion visiting from another map or window (ARC-WORLD-037, ARC-RENDER-024) is drawn from
         // its kept body, whose identity is in no command of this plan: it is not part of the coverage count.
         HashSet<AreaObjectKey>? identities = _readyArea!.Plan.Commands.Where(c => c.Identity is not null).Select(c => c.Identity!.Value).ToHashSet();
+        var companions = _areaCompanions?.Companions.Select(c => c.Key).ToHashSet() ?? [];
         async Task<(int Steps, int Swept, int MaxVisible, int MaxLive, long MaxBytes, int MaxChunks, long MaxChunkBytes)> Sweep(bool chunked)
         {
             _canvas!.AreaTerrainChunksEnabled = chunked;
@@ -56,6 +57,8 @@ public partial class TerrainViewerApp
                 // ARC-RENDER-023: the view must still be the one set (the sweep holds the camera).
                 Require(_camera.State == view, "CAMERA_MOVED");
                 steps++; seen.UnionWith(_canvas.AreaVisibleCommands.Where(c => c.Identity is not { } key || identities!.Contains(key)));
+                // A body of no plan command is a visiting companion's, never anything else.
+                Require(_canvas.AreaVisibleCommands.All(c => c.Identity is not { } key || identities!.Contains(key) || companions.Contains(key)), "UNPLANNED_BODY");
                 Require(!_canvas.AreaVisibleCommands.Any(_canvas.AreaHiddenOf), "TAKEN_ITEM_DRAWN");
                 maxLive = Math.Max(maxLive, _cache.AreaCount); maxVisible = Math.Max(maxVisible, _canvas.AreaVisibleCount);
                 maxBytes = Math.Max(maxBytes, _cache.AreaRgbaBytes);
