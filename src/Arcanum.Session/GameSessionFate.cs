@@ -49,8 +49,9 @@ public sealed partial class GameSessionOwner
         {
             var life = _life.Hero!.Value;
             heal = LifeRules.FateFullHeal(life.State, HeroLifeFacts(life.State));
+            // Nothing is spent: the answer carries no change, only the refused heal.
             if (heal.Events.HasFlag(LifeEvents.AlreadyDead))
-                return new(GameSessionDisposition.Rejected, GameSessionFailure.FateRefused, change, heal, Version);
+                return new(GameSessionDisposition.Rejected, GameSessionFailure.FateRefused, null, heal, Version);
         }
         if (_revision == long.MaxValue) return RejectFate(GameSessionFailure.RevisionExhausted);
         _hero.Apply(_hero.State.WithFate(change.After));
@@ -121,8 +122,8 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, change, null, Version);
     }
 
-    // The attack's fate (0x4B3170 → 0x4F5270, ledger FT6): the resolver read the armed kinds; the one it used is cleared here,
-    // without a revision of its own, inside the attack's commit.
+    // The attack's fate (0x4B3170 → 0x4F5270, ledger FT6): the resolver read the armed kinds; the one it used is cleared here and
+    // the caller (AttackCritter) counts the revision.
     private void ClearUsedAttackFate(FateUse use)
     {
         var kind = use switch

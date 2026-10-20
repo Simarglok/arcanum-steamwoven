@@ -157,7 +157,7 @@ diagnostic PC has no skills, so the gates stay unadmitted there.
 
 Installed original (`DialogSkillRealDataTests`, `DAT_ROOT`, first observation 2026-10-21): over the 709 DLG files the content
 stack resolves, 937 `TR`, 440 `SK`, 354 `HA` and 275 `PS` conditions, 53 player and 62 NPC `TR` actions and 118 `ET`
-actions (in 20 files); every one parses on its own. Of the 1,582 fields that hold one, 1,215 parse whole and 367 stop at an
+actions (in 20 files); every one parses on its own. Of the 1,582 fields that hold one, 1,218 parse whole and 364 stop at an
 operation outside this subset (money `$$` 121, rumors 84, quests 47, …), never at a skill operation.
 
 ## Fate point action (ARC-WORLD-054)

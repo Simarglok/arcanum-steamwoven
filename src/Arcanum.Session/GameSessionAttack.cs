@@ -326,8 +326,10 @@ public sealed partial class GameSessionOwner
     /// are skipped without experience data. Refused before any roll, in order: no hero (<see cref="GameSessionFailure.AttackUnavailable"/>),
     /// a target whose values do not hold (<see cref="GameSessionFailure.InvalidLifeTarget"/> …), an aim at the torso, a distance
     /// below 0 or beyond the weapon's reach (<see cref="GameSessionFailure.InvalidAttack"/>), a wielded weapon that is not melee
-    /// (<see cref="GameSessionFailure.AttackUnsupported"/>), the version. A resolver refusal (the hero cannot act, the target is dead)
-    /// is NoChange with the resolution. The resolution's draws are spent once it ran; each later step commits on its own revision.
+    /// (<see cref="GameSessionFailure.AttackUnsupported"/>), the version, an exhausted revision (<see cref="GameSessionFailure.RevisionExhausted"/>).
+    /// A resolver refusal (the hero cannot act, the target is dead) is NoChange with the resolution. The resolution's draws are spent
+    /// once it ran; a fate the resolver used (ARC-WORLD-054) is cleared in a revision of its own, so such an attack is Changed even
+    /// without damage; each later step commits on its own revision.
     /// Not modelled: the target's taking-damage and dying scripts, its reaction and AI, critical-effect tables, weapon wear,
     /// backstab, the target's awareness (an NPC always sees the hero) and light (every position is lit).
     /// </summary>

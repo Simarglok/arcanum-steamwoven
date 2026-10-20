@@ -33,9 +33,13 @@ public sealed class DialogFateTests
         Assert.AreEqual(DialogConversationSelectStatus.Continued, conversation.Select(conversation.Options[0].Token).Status);
         CollectionAssert.AreEqual(new long[] { 800, 800 }, fate.Granted);
         CollectionAssert.AreEqual(new[] { "MM:1" }, world.Commands);
+        var receipts = conversation.Effects.Where(e => e.Command is FatePointCommand).ToArray();
+        Assert.AreEqual(2, receipts.Length);
+        Assert.IsTrue(receipts.All(e => e.Outcome == DialogCommandAttemptOutcome.Applied && ((FatePointCommand)e.Command).PlayerCharacter.Value == 800));
 
         var rejected = Start(document, new Ports(), Owner(), world: new World(), fate: new Fate { Result = DialogCommandResult.Rejected });
         Assert.AreEqual(DialogConversationFailureKind.CommandRejected, rejected.Failure!.Kind);
+        Assert.AreEqual(DialogCommandAttemptOutcome.Rejected, rejected.Effects.Single(e => e.Command is FatePointCommand).Outcome);
     }
 
     [TestMethod]

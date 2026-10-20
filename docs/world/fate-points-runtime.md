@@ -17,7 +17,8 @@ Snapshot schema 26. Requirements: [FR-CHAR-024](../requirements/characters-skill
 - The function oracle ([ARC-DEV-007](../../tools/original-oracle/README.md)) runs the armed test (0x4F5090), arm (0x4F50C0), undo
   (0x4F51B0) and use (0x4F5270) on 10,000 seeded inputs each (one PC with its points and armed flags, recording stubs of every
   write): no difference, two or three planted mutants caught per function (F3, receipts in
-  [`docs/verification/receipts`](../verification/receipts)).
+  [`docs/verification/receipts`](../verification/receipts)). The stat setter is a stub there: its clamp to 100 (FT7) is applied
+  by the test to the written count, so the refund cap rests on the static reading (F2).
 - Installed original (opt-in): the dialog census below.
 
 ## Fate kinds
