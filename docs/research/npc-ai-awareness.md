@@ -95,14 +95,14 @@ between the two objects' tiles; loudness is an index 0 = silent, 1 = normal,
    and does not have that critter as PC leader, and that sees it or hears it at
    silent loudness, counts as attacked by it (silent, no flags).
 8. **Anomalies.** No first-pass anomaly belongs to A2. Two double counts are
-   proposed as bugs of the original with Original switches, as the plan's
-   precedents A6, A7 and MR3: a corner step of the line counts the corner
-   tile's soundproofing and cover twice (AW13, with AW14, the last corner step
-   skipping objects on the side tiles), and an NPC inside both alert squares is
-   handled twice (AW16). Kept in both settings: living critters block lines
-   although the walk asks to ignore critters (AW15), lines longer than about
-   1000 screen pixels fail with cost 100 (AW17, flagged for the owner because
-   long ranged shots get +100 difficulty), the walk is shifted by the
+   bugs of the original with Original switches (owner decision 2026-10-20), as
+   the plan's precedents A6, A7 and MR3: a corner step of the line counts the
+   corner tile's soundproofing and cover twice (AW13, with AW14, the last corner
+   step skipping objects on the side tiles), and an NPC inside both alert
+   squares is handled twice (AW16). Kept in both settings: living critters block
+   lines although the walk asks to ignore critters (AW15), lines longer than
+   about 1000 screen pixels fail with cost 100 (AW17, flagged for the owner
+   because long ranged shots get +100 difficulty), the walk is shifted by the
    observer's pixel offset (AW18), and a sleeping witness wakes without any
    perception test (AW19) ([anomalies](#9-anomalies-and-decisions)).
 
@@ -411,22 +411,24 @@ dynamite. The table index therefore stays 0..2 (a 3 would read the global
 
 ## 9. Anomalies and decisions
 
-Verdicts and rows: [ledger](original-verification-ledger.md#npc-ai-awareness-arc-res-056).
-No first-pass anomaly (P1–P7) belongs to A2, and the F0 summaries of S6–S9 were
+Verdicts and rows:
+[ledger](original-verification-ledger.md#npc-ai-awareness-arc-res-056). No
+first-pass anomaly (P1–P7) belongs to A2, and the F0 summaries of S6–S9 were
 confirmed or refined, none contradicted. The rows below are behaviour of the
 original that looks unplanned; none crashes or reads out of bounds. Decisions
-follow D2 and D8 and the plan's precedents (A6 and A7: double counts are bugs
-of the original with Original switches; MR3 of ARC-RES-058): a double count
-gets a Steamwoven fix and a proposed Original switch that keeps the retail
-behaviour; behaviour that looks designed or is a limit is kept in both
-settings, no switch.
+follow D2 and D8 and the plan's precedents (A6 and A7: double counts are bugs of
+the original with Original switches; MR3 of ARC-RES-058): a double count gets a
+Steamwoven fix and a proposed Original switch that keeps the retail behaviour;
+behaviour that looks designed or is a limit is kept in both settings, no switch.
+The owner accepted every proposed Original switch of this table on 2026-10-20
+(ARC-RES-063).
 
 | ID | Original 1.0.7.4 | Verdict | Proposed decision |
 | --- | --- | --- | --- |
-| AW13 | A corner step of the line is priced as both L-shaped routes around the corner: each side tile once, the corner tile twice (a soundproof tile +16, a see-through cover object +40, so one such object on a corner tile already denies a clear shot), and a blocker on either side tile blocks the corner. | Original bug for the corner tile's double cost (the step function serves walking, where only a blocker matters); the side-tile blocking is the original's design | Steamwoven: the corner tile's soundproofing and objects count once; side tiles and blockers as in the original. Original setting keeps both routes summed (`CornerStepCountsBothRoutes`, proposed). |
-| AW14 | On the last step, "skip objects" also skips objects on the two side tiles of a corner step. | Original bug (same reuse as AW13) | Follows AW13: Steamwoven skips only the target tile's objects; the same proposed switch keeps the original. |
+| AW13 | A corner step of the line is priced as both L-shaped routes around the corner: each side tile once, the corner tile twice (a soundproof tile +16, a see-through cover object +40, so one such object on a corner tile already denies a clear shot), and a blocker on either side tile blocks the corner. | Original bug for the corner tile's double cost (the step function serves walking, where only a blocker matters); the side-tile blocking is the original's design | Steamwoven: the corner tile's soundproofing and objects count once; side tiles and blockers as in the original. Original setting keeps both routes summed (`CornerStepCountsBothRoutes`, owner decision 2026-10-20). |
+| AW14 | On the last step, "skip objects" also skips objects on the two side tiles of a corner step. | Original bug (same reuse as AW13) | Follows AW13: Steamwoven skips only the target tile's objects; the same switch keeps the original (owner decision 2026-10-20). |
 | AW15 | The line passes "ignore critters", but under "projectile" a living critter still goes to the shoot-through test, so critters block lines of fire and sight (the flag has no effect there). | Original (likely intended: no shooting through bodies) | Kept in both settings, no switch. |
-| AW16 | An NPC inside both alert squares (around the attacker and around the victim) is handled twice; the second time repeats the attacked reaction, including its target-choice roll (stage A3). | Original bug (the A7 pattern: one event processed twice) | Steamwoven: each NPC is handled once per attack (the attacker's square first). Original setting handles it twice (`WitnessHandledTwice`, proposed). |
+| AW16 | An NPC inside both alert squares (around the attacker and around the victim) is handled twice; the second time repeats the attacked reaction, including its target-choice roll (stage A3). | Original bug (the A7 pattern: one event processed twice) | Steamwoven: each NPC is handled once per attack (the attacker's square first). Original setting handles it twice (`WitnessHandledTwice`, owner decision 2026-10-20). |
 | AW17 | A line of 100 samples (about 1000 screen pixels along its major axis: some 12 tiles along the screen-horizontal tile diagonal, 24–25 along a tile axis or the screen vertical) fails: the line of fire returns 100 without a blocker (attack difficulty +100, no magick line of sight, AI refusal 5) and the sound cost is 100. The geometry also depends on the view option (0x5FC2D0, isometric or the editor's top-down view). | Original (limit) | Kept for the isometric view in both settings, no switch; the top-down view is not modelled. **For the owner:** beyond about 12 tiles along the screen-horizontal diagonal every ranged shot gets +100 difficulty and the animation never finds a clear shot. |
 | AW18 | The walk adds the observer's pixel offset to a line built between tile centres, so a moving observer's line is shifted and may end beside the target tile (then the last-step skip never applies). | Original | Kept in both settings, no switch (inference: a standing critter has offset 0, so only a moving observer is affected). |
 | AW19 | A witness inside an alert square is woken before any perception test. | Original | Kept in both settings, no switch. |
