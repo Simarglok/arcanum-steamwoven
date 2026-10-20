@@ -93,8 +93,9 @@ under `docs/research`. Details: `docs/project/status.md`.
 - HD: a pack (PNG + JSON, `docs/formats/hd-pack.md`) is local, built from the
   player's own installation or imported from another of the player's devices,
   and never distributed; the AREA/WORLD viewers draw characters and objects from it with
-  per-frame Legacy fallback. Build/import tooling is ARC-DEV-003, terrain HD
-  ARC-RENDER-016 (both not merged yet).
+  per-frame Legacy fallback, and the AREA also walls and level-0 terrain
+  chunks since ARC-RENDER-016 (PR #206). Build/import tooling is ARC-DEV-003, deferred by the
+  owner (not started).
 - Hard rules: no original/extracted game content, nothing derived from it (HD
   packs and frames, screenshots, model weights), toolkit archives, secrets or
   personal paths in git (`toolkit/`, `artifacts/`, `local/`, `research-private/`
