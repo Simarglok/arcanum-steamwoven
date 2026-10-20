@@ -10,8 +10,10 @@ and consent part of [FR-SOCIAL-003](../requirements/story-social-ai.md#fr-social
 
 **NOT READY:** since ARC-WORLD-016 the AREA viewer passes `SessionDialogPartyPort` for Virgil and he
 follows the PC ([companion follow runtime](companion-follow-runtime.md)); other speakers keep the
-diagnostic `follow.pc` key. There is no map-change group, orders, loyalty test, wait timer or death
-handling, and no generated refusal line text. Since ARC-DATA-033 the follow check and the max-followers stat
+diagnostic `follow.pc` key. Since ARC-WORLD-045 the session has the original's wait timer and follower loyalty
+([below](#wait-timer-and-loyalty-arc-world-045)); there are no orders (so nothing in play makes a companion wait yet: the
+dialog `WA` action and the wait order are not admitted), no NPC leaders other than the PC, and no generated line text (lines
+are named by their message range). Since ARC-DATA-033 the follow check and the max-followers stat
 are checked in the retail executable ([ledger AP3, AP4](../research/original-verification-ledger.md#ai-parameters-and-follow-consent-arc-data-033));
 the rest of the party state's numbers and order are earlier source claims, **NOT_VERIFIED** in the executable.
 
@@ -49,11 +51,11 @@ The session owns the PC's party: the ordered follower array and one record per N
 at the baseline (free, no flags). An NPC is named by its session entity id (the same
 1..128-character code as map-change entities; the viewer uses `oid:<object id SHA-256>`).
 
-`SessionCompanion(Entity, Standing, Forced, SpreadOut, Jilted)`: `Standing` is `Free`,
+`SessionCompanion(Entity, Standing, Forced, SpreadOut, Jilted, Loyalty)`: `Standing` is `Free`,
 `Following` (in the array) or `Waiting` (outside the array, PC kept as leader). `LedByPc` is
 true while following **or** waiting, as the source's `FO` / SCR `FOLLOWING` read only the
 leader. `Forced` exists only while following, `Jilted` only while free; `SpreadOut` is kept in
-every standing.
+every standing, and so are the loyalty marks (`Loyalty`, ARC-WORLD-045).
 
 | Entry | Contract (refusal order: input, version, standing, consent, NoChange, budget, revision; `LeaveParty` reports a free NPC as NoChange before its leave guard) |
 | --- | --- |
@@ -61,8 +63,8 @@ every standing.
 | `JoinParty(expected, entity, facts, force)` | Dialog `JO force node` ([C1](../research/companion-follow-evidence.md#findings), [C5](../research/companion-follow-evidence.md#findings)): the follow check with the session's own inputs added (the NPC's forced flag, the PC's non-forced follower count, `IgnoreCharismaLimit = force`). A refusal is `ConsentRefused` with the reason in `PartyMutationResult.Consent`. Success leaves any standing and appends the NPC at the end of the array (never a duplicate), forced when `force`, jilted cleared. The last follower joining again unchanged is `NoChange`. As read in the source, an NPC already in the array counts toward the limit itself, and an unforced join makes a forced follower unforced. |
 | `ForceJoinParty(expected, entity)` | Script follow, mind control, the follow spell ([C17](../research/companion-follow-evidence.md#findings)): no check, always forced; also brings a waiting NPC back. |
 | `UnwaitParty(expected, entity, facts, force)` | Dialog `UW force node` ([C11](../research/companion-follow-evidence.md#findings)): only a waiting NPC (`NotWaiting` otherwise); the check as for join (a waiting NPC is never forced and is outside the array). A refusal keeps it waiting; success re-appends it. |
-| `WaitParty(expected, entity)` | The source's dialog `WA` action (not admitted by the conversation runtime yet), wait order, script wait: a follower leaves the array, forced cleared (wait is a forced leave), PC kept. Already waiting is `NoChange`; a free NPC is `NotInParty`. |
-| `LeaveParty(expected, entity, PartyLeave)` | [C6](../research/companion-follow-evidence.md#findings): a follower or waiting NPC becomes free, forced cleared, `SpreadOut` kept, `Jilted` when `Jilt`. An unforced leave under an extraordinary-charisma leader or mind control is `LeaveRefused`; a free NPC is `NoChange`. |
+| `WaitParty(expected, entity, timer?)` | The source's dialog `WA` action (not admitted by the conversation runtime yet), wait order, script wait: a follower leaves the array, forced cleared (wait is a forced leave), PC kept. Already waiting is `NoChange`; a free NPC is `NotInParty`. With `PartyWaitFacts` the wait timer is scheduled ([below](#wait-timer-and-loyalty-arc-world-045)). |
+| `LeaveParty(expected, entity, PartyLeave)` | [C6](../research/companion-follow-evidence.md#findings): a follower or waiting NPC becomes free, forced cleared, `SpreadOut` kept, `Jilted` when `Jilt`. An unforced leave under an extraordinary-charisma leader or mind control is `LeaveRefused`; a free NPC is `NoChange`. A waiting NPC's wait timer is removed. |
 | `SetSpreadOut(expected, entity, value)` | Dialog `SO` / `SC` in any standing. |
 
 Facts naming another leader (`OtherLeaderCharisma`) for an NPC the PC already leads contradict the
@@ -72,20 +74,79 @@ session revision; refusals change nothing. `GameSessionLimits.MaxCompanions`
 existing record may still change. New failures: `InvalidCompanion`, `InvalidConsentFacts`,
 `ConsentRefused`, `LeaveRefused`, `NotInParty`, `NotWaiting`.
 
-Not stored yet (later slices, after O3/O4 of the research): the check-leader flag, the three
-loyalty-test bits, the wait timer, death, NPC leaders other than the PC, and the NPC flags an
-area record may carry at T0 (a new session starts with no records; Virgil's bits are clear, ARC-RES-026).
+Not stored yet: death (a dead NPC keeps its standing; the session removes its wait timer), NPC leaders other than the PC,
+and the NPC flags an area record may carry at T0 (a new session starts with no records; Virgil's bits are clear, ARC-RES-026).
+
+## Wait timer and loyalty (ARC-WORLD-045)
+
+The original's wait timer and follower loyalty, read in the retail executable
+([companion orders and loyalty](../research/companion-orders-loyalty-evidence.md#2-loyalty-while-following-q2-companion-c13-o4),
+rows OL17–OL26; registry rows 0x4AA7A0, 0x4AA990, 0x4AAA30, 0x4AC380, 0x4ADB50 at F2). Universal: nothing names Virgil.
+Pure rules in `Arcanum.Simulation.Party.CompanionLoyaltyRules`; state and entry points in `GameSessionOwner`
+(`GameSessionLoyalty.cs`).
+
+**Wait timer.** `WaitParty(expected, entity, PartyWaitFacts(WaitIndex, LeaderPersuasion, LeaderCharisma, MindControlled))`
+schedules the event `party.wait` ([event queue](game-event-queue-runtime.md#session-wiring-arc-world-024)) on the actor's map, naming the NPC,
+when the leader's charisma is below 20 and the NPC is not mind controlled. The duration is the wait field's (NPC field 300) entry
+of 0, 15 min, 2 h, 1 day, 7 days, 30 days for 0..5; any Persuasion training of the leader adds one step before the cut (index 0
+becomes 15 min, index 5 none); 6 or more (Virgil's 6) and a negative index schedule none. A duration of 0 is stored as 1 ms: the
+NPC is jilted at the next pass. With a hero its training and effective charisma replace the caller's (here and when the timer
+fires). No room for the timer (`SessionEventKinds.MaxWaitTimers` = 64, or the queue) is `EventBudgetExceeded` and changes nothing.
+
+**Expiry** (OL24). In one revision: the reaction change `2 × (charisma − 20)` (the hero's effective charisma, else the one saved
+in the event) through the ordinary reaction rules while the PC still leads the NPC, so a negative change arms its marks (OL22); then
+the NPC is free and jilted, forced cleared, its marks kept. The reaction facts are the host's: a pass host that implements
+`ISessionPartyEventWorld` gives the NPC's (and without a hero the PC's) `Reaction…Facts`; without them, or when the stored
+value would leave its bounds or no reaction record is left, the NPC is jilted without the change and `SessionWaitFiring.ReactionFailure`
+says why. No line, animation or script. A pass result lists the firings in `SessionEventPassResult.Waits`.
+
+**Cancel** (OL25). Every way out of waiting removes the NPC's timer wherever it is parked: `UnwaitParty`, `JoinParty`,
+`ForceJoinParty`, `LeaveParty` (forced or not) and an NPC's death (`Life` with `Died`). A refused unwait or leave keeps it.
+Destruction is the host's: a pass drops an event whose NPC the host no longer reports.
+
+**Maps** (OL26). The event stays with the waiting NPC's map (only followers' events travel with the actor), so it is parked while
+the PC is away and fires, overdue, at the first pass after the PC returns.
+
+**Loyalty marks** (OL17, OL22). `CompanionLoyalty` holds check-leader and three test bits. A reaction change that asks for the leader
+check (`ReactionAdjustment.LeaderCheck`: a negative change that applies while the PC leads the NPC, waiting included) arms
+check-leader and the reaction bit in the same revision, also when the PC's bad-reaction effects reduce it to 0.
+`RecordPcAlignmentChange(expected, previous, current)` (the caller owns the alignment; the AREA viewer's `AL`) arms each follower
+in the array, not a waiting one, with check-leader and the too-good bit (rose) or the too-bad bit (fell). The marks stay in every
+standing until a loyalty step clears them.
+
+**Loyalty step** (OL18–OL21). `RunLoyaltyStep(expected, entity, PartyConsentFacts, actionGoalRunning)` is the loyalty part of a
+follower's non-combat AI pass. A waiting or free NPC gets no step (`Step` null, `NoChange`). While `actionGoalRunning` (the
+host's answer: a goal of the action class runs, a follow goal included; decision D5, both settings as the original) the step is
+`GoalRunning`. Otherwise the follow check runs with the charisma limit ignored; a refusal makes the follower leave unforced
+(free, jilted, marks kept) unless the leave is refused (charisma 20+ or mind control, the hero's charisma with a hero), and the
+host shows the refusal line range of its reason (`LoyaltyStepResult.RefusalLines`: too good 1600, too evil 1700, dislike 1800,
+already grouped 2600, limit 2700, not allowed 2800, low level 2900, 100 lines each). A passed check or a refused leave goes on:
+an armed follower clears all its marks and runs the check-leader test (no warning under mind control by the leader, Persuasion
+Master or for a forced follower; else reaction bit and reaction ≤ AI field 5 + 20 → low reaction; else by which alignment is
+higher, too-good bit and gap > field 6 − 100 or too-bad bit and gap > field 7 − 100), whose warning range the host shows
+(`WarningLines`: 5200, 5300, 5400). No reaction change; one revision when the record changed.
+
+**Snapshot schema 24.** Every party record carries `"loyalty"`, the marks' bit sum 0..15 (check-leader 1, reaction 2, too good 4,
+too bad 8); decode refuses another value (`OutOfRange`) or a missing one (`MissingField`), restore an undefined one
+(`InvalidCompanion`). A free record with only marks is kept (OL22). A pending `party.wait` event is admitted only for an NPC the
+saved party records waiting, set no later than the saved clock, with a duration of the table exactly before its deadline, one per
+NPC (`InvalidEvents`). Schema 23 is refused, not migrated.
+
+Not modelled: the network-client branch of the expiry; leading NPCs other than the PC; the loyalty step's host part (leaving combat
+mode, the follow request, the item search) and the lines' text and speech.
 
 ## Snapshot schema 4
 
 `GameSessionSnapshot.Party` is encoded between `story` and `lighting`:
 
 ```json
-"party":{"followers":[{"entity":"golem","forced":true,"spreadOut":true},
-                      {"entity":"ari","forced":false,"spreadOut":false}],
-         "others":[{"entity":"sogg","standing":"Waiting","spreadOut":false,"jilted":false},
-                   {"entity":"virgil","standing":"Free","spreadOut":false,"jilted":true}]}
+"party":{"followers":[{"entity":"golem","forced":true,"spreadOut":true,"loyalty":0},
+                      {"entity":"ari","forced":false,"spreadOut":false,"loyalty":3}],
+         "others":[{"entity":"sogg","standing":"Waiting","spreadOut":false,"jilted":false,"loyalty":0},
+                   {"entity":"virgil","standing":"Free","spreadOut":false,"jilted":true,"loyalty":0}]}
 ```
+
+(`loyalty` since schema 24, ARC-WORLD-045.)
 
 Decoding keeps the follower order and refuses an entity listed twice anywhere or unsorted
 `others` (`NotCanonical`), a standing other than `Waiting`/`Free`, a waiting record marked
@@ -129,6 +190,12 @@ uses the hero's persuasion, charisma, level and max followers instead (ARC-SKILL
 - `tests/Arcanum.Scripting.Tests/Dialog/DialogPartyTests.cs`: `WA` gating, `UW` continuation,
   refusal and rejection, `JO` through the party port, no admission without the port,
   unadmitted forms and a throwing port.
+- `tests/Arcanum.Simulation.Tests/Party/CompanionLoyaltyRulesTests.cs` and
+  `tests/Arcanum.Session.Tests/CompanionLoyaltyStateTests.cs` (ARC-WORLD-045): every duration and the Persuasion step, no timer at
+  charisma 20, mind control or index 6+, expiry effects and order, every cancel path, a timer parked across maps, arming by reaction
+  and alignment, the step's refusal and jilt, a refused leave, the warning, the goal gate, the snapshot round trip and the decode and
+  restore refusals; `tests/Arcanum.TerrainViewer.Tests/AreaCompanionLoyaltyTests.cs` the viewer's AI tick, follow-goal gate, wait
+  expiry through the event pump and `AL` arming.
 - `tests/Arcanum.TerrainViewer.Tests/VirgilPartyTests.cs` (opt-in `RealData`,
   `ARC_AREA_CONVERSATION_GAME_ROOT`): Virgil's original DLG with the session party port. The
   first talk walks the same 13 nodes and joins him through the session; waiting, a save/load
@@ -146,4 +213,5 @@ ARC_AREA_CONVERSATION_GAME_ROOT=<installation> "$DOTNET" test tests/Arcanum.Terr
 
 The viewer wiring and follower movement (slice 3) are ARC-WORLD-016
 ([companion follow runtime](companion-follow-runtime.md)); the cross-map group (slice 4) is ARC-WORLD-017
-([map change](companion-follow-runtime.md#map-change-arc-world-017)). Next: orders, loyalty and the wait timer (slice 5).
+([map change](companion-follow-runtime.md#map-change-arc-world-017)); the wait timer and loyalty are ARC-WORLD-045 (above). Next:
+orders ([companion orders](../research/companion-orders-loyalty-evidence.md#implementation-slices)) and the dialog `WA` action.

@@ -147,6 +147,33 @@ public partial class TerrainViewerApp
                     + (advance.AreaEvidence.LastOrDefault(e => e.Key == item.Key) is { } evidence ? $" step={evidence.Live?.ReasonCode ?? evidence.Assessment.ReasonCode}" : ""));
         foreach (var companion in group.Companions.Where(c => c.LastUpdate.Action == FollowAction.Jump && c.Grid.State.Time == frontier))
             GD.Print($"ARC-WORLD-016 companion script={companion.Speaker.ScriptId} jumped onto the PC cell {pc.State.CommittedCell}");
+        RunCompanionLoyalty(group, owner, pc, frontier);
+    }
+
+    // ARC-WORLD-045: each following companion's AI tick runs the loyalty step (the original's non-combat pass, so none while a
+    // turn-based round runs) with the shown area's conversation state as the PC side; a step that changed the session or was
+    // refused is logged, and its line range shown on the HUD.
+    private void RunCompanionLoyalty(AreaCompanionGroup group, GameSessionOwner owner, AreaGridSession pc, SimulationTime now)
+    {
+        if (_conversationHost is not { } host || owner.QueryCombatRound() is not null) return;
+        foreach (var (companion, result) in group.Loyalty(owner, pc.State, now, c => AreaCompanionLoyalty.Facts(owner, c, host.State)))
+        {
+            if (result.Disposition == GameSessionDisposition.NoChange) continue;
+            GD.Print(AreaCompanionLoyalty.Log(companion, result));
+            if (result.Step is { } step && AreaCompanionLoyalty.Shown(step) is { } shown) _companionNotice = $"companion script {companion.Speaker.ScriptId}: {shown}";
+            else if (result.Disposition == GameSessionDisposition.Rejected) _companionNotice = $"companion script {companion.Speaker.ScriptId}: loyalty step refused ({result.Failure})";
+        }
+    }
+
+    // ARC-WORLD-045: a wait timer that came due made its companion free and jilted; the HUD names it.
+    private void ReportCompanionWaits(IReadOnlyList<SessionWaitFiring> waits)
+    {
+        foreach (var firing in waits)
+        {
+            GD.Print(AreaCompanionLoyalty.Log(firing));
+            _companionNotice = $"wait ended for {firing.Entity}: jilted" + (firing.Reaction is { } reaction ? $" (reaction {reaction.Delta:+0;-0;0})" : " (no reaction facts)");
+        }
+        if (waits.Count > 0 && _areaSession is { } session) _areaCompanions?.Refresh(session);
     }
 
     /// <summary>The companions' bodies as they stand now, for the shown plan only.</summary>
@@ -213,6 +240,15 @@ public partial class TerrainViewerApp
             EndConversation();
             Require(_areaSession!.QueryCompanion(companion.Entity).Standing == CompanionStanding.Following, "the dialog joined him through the session: " + conversation.Phase);
 
+            // ARC-WORLD-045: a negative reaction change by his leader arms his loyalty marks; standing near the PC without a follow
+            // goal, his next AI tick runs the loyalty step, which clears them (his AI row warns at no reaction above −980).
+            var state = host.State; var reactionBefore = state.Reaction(speaker.Index);
+            Require(_areaSession.AdjustReaction(_areaSession.Version, companion.Entity, state.NpcFacts(), state.PcFacts, -5).Disposition == GameSessionDisposition.Changed
+                && _areaSession.QueryCompanion(companion.Entity).Loyalty == (CompanionLoyalty.CheckLeader | CompanionLoyalty.TestReaction), "a leader's reaction drop arms him");
+            for (var i = 0; i < 8 && _areaSession.QueryCompanion(companion.Entity).Loyalty != CompanionLoyalty.None; i++) AreaSmokeFrame();
+            Require(_areaSession.QueryCompanion(companion.Entity) is { Loyalty: CompanionLoyalty.None, Standing: CompanionStanding.Following } && !companion.FollowGoal,
+                "the loyalty step ran on his AI tick and cleared his marks: " + _areaSession.QueryCompanion(companion.Entity));
+
             // The PC 12 cells away: frames bring Virgil within 2, settled, and draw him there.
             var far = AreaSmokeStandable(map, origin with { X = origin.X + 12 }, 3);
             AreaSmokePlace(map, far);
@@ -226,6 +262,15 @@ public partial class TerrainViewerApp
             var plans = companion.Follow.Route.PlannedSegments;
             Require(FollowDistanceRules.Distance(cell, pc) <= FollowDistanceRules.Range && companion.Grid.State.Phase == MovementPhase.Settled,
                 $"Virgil followed within 2: {cell} vs PC {pc}; {group()}");
+            // ARC-WORLD-045 (decision D5): his follow goal lives on after he arrived, so the loyalty step does not run; the reaction
+            // goes back to what it was before the check.
+            Require(companion.FollowGoal && _areaSession.AdjustReaction(_areaSession.Version, companion.Entity, state.NpcFacts(), state.PcFacts, -5).Disposition
+                == GameSessionDisposition.Changed, "armed again while his follow goal lives");
+            for (var i = 0; i < 8; i++) AreaSmokeFrame();
+            Require(_areaSession.QueryCompanion(companion.Entity).Loyalty == (CompanionLoyalty.CheckLeader | CompanionLoyalty.TestReaction),
+                "no loyalty step while his follow goal lives: " + _areaSession.QueryCompanion(companion.Entity));
+            Require(_areaSession.SetReaction(_areaSession.Version, companion.Entity, state.NpcFacts(), state.PcFacts, reactionBefore).Disposition != GameSessionDisposition.Rejected
+                && state.Reaction(speaker.Index) == reactionBefore, "his reaction restored");
             // Frame the PC (an earlier stage may have left the camera elsewhere), then observe the drawn submission.
             _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
             PublishWorldSelection();
@@ -260,7 +305,9 @@ public partial class TerrainViewerApp
             Require(host.Nearest(map.Chart.ToWorld(pc).X, map.Chart.ToWorld(pc).Y, SpeakerCell) == speaker, "within talk reach where he stands");
 
             // Waiting: the PC goes back to where Virgil started; he stays on his recorded cell.
-            Require(_areaSession.WaitParty(_areaSession.Version, companion.Entity).Disposition == GameSessionDisposition.Changed, "wait");
+            // ARC-WORLD-045: his wait index 6 schedules no wait timer.
+            Require(_areaSession.WaitParty(_areaSession.Version, companion.Entity, AreaCompanionRoster.WaitFacts(companion.Facts)).Disposition
+                == GameSessionDisposition.Changed && _areaSession.QueryWaitTimer(companion.Entity) is null, "wait, with no wait timer");
             AreaSmokePlace(map, AreaSmokeStandable(map, origin, 2));
             companion = _areaCompanions!.Companions.Single();
             Require(companion.Grid.State.CommittedCell == cell && companion.Standing == CompanionStanding.Waiting, "rebound waiting on his recorded cell: " + group());
@@ -269,6 +316,8 @@ public partial class TerrainViewerApp
             Require(companion.Grid.State.CommittedCell == cell && companion.Standing == CompanionStanding.Waiting
                 && FollowDistanceRules.Distance(cell, ((AreaGridSession)_worldActor.Session!).State.CommittedCell) > FollowDistanceRules.StartDistance,
                 "a waiting Virgil stays although the PC is farther than 4");
+            GD.Print("ARC-WORLD-045 native-smoke loyalty PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Script = speaker.ScriptId, StepClearedMarks = true, GoalGated = true, WaitTimer = "none (index 6)", Parity = "NOT_VERIFIED" }));
             GD.Print("ARC-WORLD-016 native-smoke follow PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Origin = new { speaker.WorldX, speaker.WorldY }, Pc = map.Chart.ToWorld(pc), Followed = world, Distance = FollowDistanceRules.Distance(cell, pc),
                 Plans = plans, Session = revision, Parity = "NOT_VERIFIED" }));
@@ -349,7 +398,8 @@ public partial class TerrainViewerApp
             EndConversation();
 
             // Waiting in the cave: the PC leaves alone; he stays, and the exterior has no T0 Virgil.
-            Require(session.WaitParty(session.Version, entity).Disposition == GameSessionDisposition.Changed, "wait in the cave");
+            Require(session.WaitParty(session.Version, entity, AreaCompanionRoster.WaitFacts(template.Facts)).Disposition == GameSessionDisposition.Changed
+                && session.QueryWaitTimer(entity) is null, "wait in the cave, with no wait timer");
             // The smoke stands the PC next to the exit with a fresh session, which rebuilds the group from the session: his
             // cell is recorded first, as F7 or leaving the map would.
             Require(RecordAreaCompanions("smoke"), "placement recorded");

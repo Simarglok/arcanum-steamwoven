@@ -1,5 +1,6 @@
 using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Reaction;
 
 namespace Arcanum.Session;
@@ -207,12 +208,23 @@ public sealed partial class GameSessionOwner
         var follow = followCheck?.Invoke() ?? false;
         if (requested is not { } value) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, follow, Version);
         if (!ReactionLimits.InRange(value)) return RejectReaction(GameSessionFailure.InvalidReactionAmount, follow);
-        var adjustment = ReactionRules.Adjust((int)value, npc, pc, LedByPc(entity));
+        var planned = PlanReaction(record, stored, (int)value, npc, pc, LedByPc(entity), out var adjustment, out var updated);
         if (!adjustment.Applies) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, adjustment, follow, Version);
-        var next = (long)stored + adjustment.Delta;
-        if (!ReactionLimits.InRange(next)) return RejectReaction(GameSessionFailure.InvalidReactionAmount, follow);
-        var updated = record.InConversation ? record with { Conversation = (int)next } : record with { Remembered = (int)next };
+        if (planned != GameSessionFailure.None) return RejectReaction(planned, follow);
         return Commit(expected, updated, adjustment, follow);
+    }
+
+    // The change's decision and the record it writes; a new stored value beyond the bounds is InvalidReactionAmount.
+    private static GameSessionFailure PlanReaction(SessionReaction record, int stored, int delta, ReactionNpcFacts npc, ReactionPcFacts pc,
+        bool ledByPc, out ReactionAdjustment adjustment, out SessionReaction updated)
+    {
+        adjustment = ReactionRules.Adjust(delta, npc, pc, ledByPc);
+        updated = record;
+        if (!adjustment.Applies) return GameSessionFailure.None;
+        var next = (long)stored + adjustment.Delta;
+        if (!ReactionLimits.InRange(next)) return GameSessionFailure.InvalidReactionAmount;
+        updated = record.InConversation ? record with { Conversation = (int)next } : record with { Remembered = (int)next };
+        return GameSessionFailure.None;
     }
 
     private SessionReactionResult StepReaction(GameSessionVersion expected, string entity, ReactionNpcFacts npc,
@@ -223,16 +235,26 @@ public sealed partial class GameSessionOwner
         return Commit(expected, step(_reactions.Get(entity)), null, false);
     }
 
+    // ARC-WORLD-045 (OL17): a change that asks for the leader check arms the follower's check-leader and reaction marks in the
+    // same revision, also when its delta after the PC's effects leaves the stored value as it was.
     private SessionReactionResult Commit(GameSessionVersion expected, SessionReaction next, ReactionAdjustment? adjustment, bool follow)
     {
         if (!IsCurrent(expected)) return RejectReaction(GameSessionFailure.StaleVersion);
         var recorded = _reactions.Records.TryGetValue(next.Entity, out var current);
-        if (recorded ? current == next : next.IsBaseline)
+        var unchanged = recorded ? current == next : next.IsBaseline;
+        var companion = _party.Get(next.Entity);
+        var armed = adjustment is { LeaderCheck: true } ? companion with { Loyalty = CompanionLoyaltyRules.ArmReaction(companion.Loyalty) } : companion;
+        if (unchanged && armed == companion)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, adjustment, follow, Version);
-        if (!recorded && _reactions.Records.Count >= _limits.MaxReactionRecords) return RejectReaction(GameSessionFailure.BudgetExceeded, follow);
+        if (!unchanged && !recorded && _reactions.Records.Count >= _limits.MaxReactionRecords) return RejectReaction(GameSessionFailure.BudgetExceeded, follow);
         if (_revision == long.MaxValue) return RejectReaction(GameSessionFailure.RevisionExhausted, follow);
-        if (next.IsBaseline) _reactions.Records.Remove(next.Entity);
-        else _reactions.Records[next.Entity] = next;
+        if (!unchanged)
+        {
+            if (next.IsBaseline) _reactions.Records.Remove(next.Entity);
+            else _reactions.Records[next.Entity] = next;
+        }
+        // The leader check needs a PC leader, so the NPC already has a party record and keeps its place in the array.
+        if (armed != companion) _party.Put(armed, false);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, adjustment, follow, Version);
     }

@@ -585,9 +585,13 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     public DialogCommandResult Execute(GiveItemCommand command) { _items.Add(command.ItemName); return DialogCommandResult.Applied; }
     public DialogCommandResult Execute(MarkAreaCommand command) { _areas.Add(command.Area); return DialogCommandResult.Applied; }
 
+    /// <summary>AL: the diagnostic PC alignment; since ARC-WORLD-045 a change arms the session followers' loyalty marks (OL17)
+    /// first, and a refusal there leaves the alignment as it was.</summary>
     public DialogCommandResult Execute(AlignmentCommand command)
     {
-        Alignment = command.Mode == DialogReactionMode.Target ? command.Value : checked(Alignment + command.Value);
+        var next = command.Mode == DialogReactionMode.Target ? command.Value : checked(Alignment + command.Value);
+        if (_session.RecordPcAlignmentChange(_session.Version, Alignment, next).Disposition == GameSessionDisposition.Rejected) return DialogCommandResult.Rejected;
+        Alignment = next;
         return DialogCommandResult.Applied;
     }
 

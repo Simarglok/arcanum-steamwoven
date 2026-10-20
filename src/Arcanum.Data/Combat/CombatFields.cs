@@ -112,9 +112,10 @@ public sealed record CombatCritterFields(uint Flags, uint Flags2, IReadOnlyList<
 public readonly record struct CombatEffectEntry(int Number, int Cause);
 
 /// <summary>NPC fields the combat and AI domains read: flags, AI parameter row, experience worth and pool, faction,
-/// reaction base, social class and the monster damage table (five ranges by <see cref="CombatDamageIndex"/>).</summary>
+/// reaction base, social class and the monster damage table (five ranges by <see cref="CombatDamageIndex"/>), and since
+/// ARC-WORLD-045 the wait field (300), the index of the follower's wait timer (0 when a caller built the record without it).</summary>
 public sealed record CombatNpcFields(uint Flags, int AiData, int ExperienceWorth, int ExperiencePool, int Faction, int ReactionBase,
-    int SocialClass, IReadOnlyList<CombatDamageRange> Damage);
+    int SocialClass, IReadOnlyList<CombatDamageRange> Damage, int Wait = 0);
 
 /// <summary>
 /// The combat-relevant stored fields of one object (ARC-DATA-021): the common block always; the item block for items

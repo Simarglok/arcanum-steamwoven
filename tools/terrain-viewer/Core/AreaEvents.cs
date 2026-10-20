@@ -31,6 +31,9 @@ public sealed record AreaEventReport(int Steps, int Passes, int Fired, int Dropp
 {
     public static AreaEventReport None { get; } = new(0, 0, 0, 0, 0, 0, false, false, 0, null);
 
+    /// <summary>ARC-WORLD-045: the wait timers that came due, in firing order.</summary>
+    public IReadOnlyList<SessionWaitFiring> Waits { get; init; } = [];
+
     /// <summary>The diagnostic status line (FR-RUNTIME-001 trace).</summary>
     public string Status(long nowMs) =>
         $"events pending {Pending}, next {(NextDeadlineMs is { } next ? $"in {(next - nowMs) / 1000.0:0.###} s" : "none")}, last pass fired {Fired} dropped {Dropped}"
@@ -135,6 +138,7 @@ public sealed class AreaEventPump
             tally.Passes++;
             tally.Fired += outcome.Fired; tally.Dropped += outcome.Dropped;
             tally.Calls += result.ScriptCalls.Count; tally.CallsRun += result.ScriptCalls.Count(c => c.Ran);
+            tally.Waits.AddRange(result.Waits);
             tally.BudgetLeft = outcome.BudgetExhausted;
             if (!outcome.BudgetExhausted) return;
         }
@@ -144,9 +148,10 @@ public sealed class AreaEventPump
     {
         public int Steps, Passes, Fired, Dropped, Calls, CallsRun;
         public bool Coalesced, BudgetLeft;
+        public List<SessionWaitFiring> Waits { get; } = [];
 
         public AreaEventReport Report(AreaEventPump pump) => new(Steps, Passes, Fired, Dropped, Calls, CallsRun, Coalesced, BudgetLeft,
-            pump._session.QueryEvents().Count, pump.NextDeadline(pump._session.QueryClockSnapshot().GameTimestampMs));
+            pump._session.QueryEvents().Count, pump.NextDeadline(pump._session.QueryClockSnapshot().GameTimestampMs)) { Waits = Waits.ToArray() };
     }
 }
 
@@ -165,9 +170,10 @@ public interface IAreaEventObjects
 /// the PC or a row of its map. A follower the session moved to another map (its timers and call roles travel with it) is
 /// answered from the map whose data holds it, so its events are not dropped as missing. A call runs through the shown area's conversation host and its SCR dispatcher
 /// (<see cref="AreaConversationHost.RunCall"/>). The providers are read at each question, so the world follows the
-/// viewer's current hosts.
+/// viewer's current hosts. ARC-WORLD-045: a wait timeout's reaction change reads the shown area's conversation state (its
+/// diagnostic NPC facts, and the hero's or the diagnostic PC's facts); without a conversation host it has none.
 /// </summary>
-public sealed class AreaEventWorld : ISessionScriptWorld
+public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld
 {
     private readonly Func<IAreaEventObjects?> _combat;
     private readonly Func<AreaConversationHost?> _talk;
@@ -197,6 +203,10 @@ public sealed class AreaEventWorld : ISessionScriptWorld
     public bool ObjectExists(SessionMapId map, string entity) =>
         entity == SessionEventKinds.PlayerEntity
         || (_combat() is { } objects && (objects.HasObject(map.RuntimeMap, entity) || objects.HomeMap(entity) is not null));
+
+    public Arcanum.Simulation.Reaction.ReactionNpcFacts? ReactionNpcFacts(SessionMapId map, string entity) => _talk()?.State.NpcFacts();
+
+    public Arcanum.Simulation.Reaction.ReactionPcFacts? ReactionPcFacts() => _talk()?.State.PcFacts;
 
     public bool RunScriptCall(SessionScriptCall call)
     {

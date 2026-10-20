@@ -1250,8 +1250,8 @@ questions (method step 6); they agree on both rows. Every direct branch stays in
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
-| HK1 | leader check (0x4ADB50) | Arguments: the NPC, then the prospective leader. It first clears three bits of the NPC's flags field 0xDB (0x01000000, 0x02000000, 0x04000000) and tests the values it read before. Under mind control the controller (or, with none found, any PC leader) passes. Then a leader with persuasion training master passes at once; then NPC flag 0x400 of field 0x118 passes; then the saved bits gate a reaction refusal (3) and the two alignment refusals (1, 2) against the NPC's AI parameter row. | Original (the earlier reading agrees for master); not implemented (no leader-check caller in Steamwoven) |
-| HK2 | wait (0x4AA7A0) | For an NPC not already waiting: unless the leader's charisma is extraordinary or the NPC is mind-controlled, its wait index (field 0x12C) rises by one when the leader has **any** persuasion training (apprentice, expert or master alike), and an index of 6 or more schedules no timer; 0..5 schedule 0, 15 minutes, 2 hours, 1 day, 7 days or 30 days. Then the NPC leaves the follower list, keeps its leader and is marked waiting. | Reconstruction slip of the skills study's summary ("apprentice with extraordinary charisma"); the companion study's C12 already read it so; the timer itself is row Wait timer above. Not implemented (no wait timer runtime) |
+| HK1 | leader check (0x4ADB50) | Arguments: the NPC, then the prospective leader. It first clears three bits of the NPC's flags field 0xDB (0x01000000, 0x02000000, 0x04000000) and tests the values it read before. Under mind control the controller (or, with none found, any PC leader) passes. Then a leader with persuasion training master passes at once; then NPC flag 0x400 of field 0x118 passes; then the saved bits gate a reaction refusal (3) and the two alignment refusals (1, 2) against the NPC's AI parameter row. | Original (the earlier reading agrees for master); implemented by ARC-WORLD-045 (`CompanionLoyaltyRules.CheckLeader`, called by the loyalty step) |
+| HK2 | wait (0x4AA7A0) | For an NPC not already waiting: unless the leader's charisma is extraordinary or the NPC is mind-controlled, its wait index (field 0x12C) rises by one when the leader has **any** persuasion training (apprentice, expert or master alike), and an index of 6 or more schedules no timer; 0..5 schedule 0, 15 minutes, 2 hours, 1 day, 7 days or 30 days. Then the NPC leaves the follower list, keeps its leader and is marked waiting. | Reconstruction slip of the skills study's summary ("apprentice with extraordinary charisma"); the companion study's C12 already read it so; the timer itself is row Wait timer above. Implemented by ARC-WORLD-045 (`CompanionLoyaltyRules.WaitTimerMs`, `GameSessionOwner.WaitParty`) |
 
 ## Character point pool (ARC-WORLD-052)
 
@@ -1371,7 +1371,9 @@ Source: [companion orders and loyalty](companion-orders-loyalty-evidence.md) (qu
 and C16, O4 and O7 of the [companion study](companion-follow-evidence.md#open-questions), XP5's message and waiting followers
 and SCR action 139. Read on 2026-10-21 by a first reader and, independently, a second reader that saw only the questions
 (method step 6). After resolving one data-reading difference (below), both agree on every behaviour and verdict. The second reader added that the PC's own text is floated over the PC first, that the curse line is a race insult of the generated race-line files and that the multiplayer phase scans players within a screen-sized rectangle; it first read keyword 116 ("stop") as having no rule entry, which the installed `Rules\BroadCastRules.mes` does have (back off), a data-reading difference, not a code one. Every direct branch stays inside `.text`. Message numbers are of the installed files
-named in the study; no game text is copied.
+named in the study; no game text is copied. Rows OL17–OL26 are implemented by ARC-WORLD-045
+([party runtime](../world/party-runtime.md#wait-timer-and-loyalty-arc-world-045); registry rows 0x4AA7A0, 0x4AA990, 0x4AAA30,
+0x4AC380, 0x4ADB50 at F2); OL19's goal gate is the host's input (decision D5, both settings as the original until the owner decides).
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |

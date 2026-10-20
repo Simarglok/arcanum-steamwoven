@@ -12,9 +12,10 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
 /// Measured follow inputs of one area NPC (ARC-RES-026): the NPC is matched by prototype and dialog script, and
-/// <see cref="Thresholds"/>, <see cref="Level"/> and <see cref="Alignment"/> are its T0 values.
+/// <see cref="Thresholds"/>, <see cref="Level"/> and <see cref="Alignment"/> are its T0 values. <see cref="WaitIndex"/> is its wait
+/// field (300), the index of its wait timer (ARC-WORLD-045).
 /// </summary>
-public sealed record AreaCompanionFacts(int Prototype, int ScriptId, FollowThresholds Thresholds, int Level, int Alignment);
+public sealed record AreaCompanionFacts(int Prototype, int ScriptId, FollowThresholds Thresholds, int Level, int Alignment, int WaitIndex);
 
 /// <summary>
 /// The NPCs whose follow consent and follow movement run through the session party (ARC-WORLD-013, ARC-WORLD-016).
@@ -24,8 +25,9 @@ public sealed record AreaCompanionFacts(int Prototype, int ScriptId, FollowThres
 /// </summary>
 public static class AreaCompanionRoster
 {
-    /// <summary>Virgil at T0 (ARC-RES-026): prototype 17102, script 1324, AI row 5 (−1000, 2001, 2001, 30), level 1, alignment 1.</summary>
-    public static AreaCompanionFacts Virgil { get; } = new(17102, 1324, new(-1000, 2001, 2001, 30), 1, 1);
+    /// <summary>Virgil at T0 (ARC-RES-026): prototype 17102, script 1324, AI row 5 (−1000, 2001, 2001, 30), level 1, alignment 1,
+    /// wait index 6 (no wait timer, ledger row Wait timer).</summary>
+    public static AreaCompanionFacts Virgil { get; } = new(17102, 1324, new(-1000, 2001, 2001, 30), 1, 1, 6);
     public const int DiagnosticPcCharisma = 8, DiagnosticPcLevel = 1;
 
     public static AreaCompanionFacts? For(AreaSpeaker speaker)
@@ -40,6 +42,10 @@ public static class AreaCompanionRoster
         MindControlledByPc: false, PcPersuasion: PersuasionTraining.None, PcCharisma: DiagnosticPcCharisma, PcAlignment: pcAlignment,
         PcLevel: DiagnosticPcLevel, OtherLeaderCharisma: null, Reaction: reaction, Thresholds: npc.Thresholds,
         NpcAlignment: npc.Alignment, NpcLevel: level ?? npc.Level, MaxFollowers: FollowConsentRules.MaxFollowers(DiagnosticPcCharisma, PersuasionTraining.None));
+
+    /// <summary>ARC-WORLD-045: the wait timer facts of <paramref name="npc"/> against the diagnostic PC (with a session hero the
+    /// session uses the hero's training and charisma).</summary>
+    public static PartyWaitFacts WaitFacts(AreaCompanionFacts npc) => new(npc.WaitIndex, PersuasionTraining.None, DiagnosticPcCharisma, false);
 }
 
 /// <summary>
@@ -208,6 +214,12 @@ public sealed class AreaCompanion
     public CompanionStanding Standing { get; internal set; }
     public CompanionFollowUpdate LastUpdate { get; internal set; }
     public int Jumps { get; internal set; }
+    /// <summary>ARC-WORLD-045: whether the companion's follow goal lives (the original's goal starts when the leader is beyond the
+    /// start distance and is never ended by the goal itself, OL19); it ends when the companion stops following, a conversation
+    /// with it starts, or the group is rebuilt (a map change or a load). The loyalty step runs only without it (decision D5).</summary>
+    public bool FollowGoal { get; internal set; }
+    /// <summary>ARC-WORLD-045: when the companion's next AI tick (and loyalty step) is due, or null before its first.</summary>
+    public SimulationTime? NextAiTick { get; internal set; }
 }
 
 /// <summary>
@@ -341,6 +353,40 @@ public sealed class AreaCompanionGroup
         foreach (var companion in _companions) companion.Standing = session.QueryCompanion(companion.Entity).Standing;
     }
 
+    /// <summary>ARC-WORLD-045: a conversation with the companion interrupts its goals, the follow goal too (OL19).</summary>
+    public void InterruptGoals(AreaObjectKey key)
+    {
+        foreach (var companion in _companions.Where(c => c.Key == key)) companion.FollowGoal = false;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-045: the AI ticks due at <paramref name="now"/> (the PC stands as <paramref name="pc"/>). A following companion's
+    /// tick runs the session's loyalty step (<see cref="GameSessionOwner.RunLoyaltyStep"/>) with the facts the host gives (none:
+    /// no step) and whether its follow goal lives, then schedules its next tick by its distance to the PC
+    /// (<see cref="AreaCompanionLoyalty.AiTickDelayMs"/>); a waiting or free companion has no tick. Returns each step's result.
+    /// </summary>
+    public IReadOnlyList<(AreaCompanion Companion, SessionLoyaltyResult Result)> Loyalty(GameSessionOwner session, MovementState pc, SimulationTime now,
+        Func<AreaCompanion, PartyConsentFacts?> facts)
+    {
+        ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(pc); ArgumentNullException.ThrowIfNull(facts);
+        var results = new List<(AreaCompanion, SessionLoyaltyResult)>();
+        foreach (var companion in _companions)
+        {
+            companion.Standing = session.QueryCompanion(companion.Entity).Standing;
+            if (companion.Standing != CompanionStanding.Following) { companion.FollowGoal = false; companion.NextAiTick = null; continue; }
+            // A host clock that went back (a fresh actor session) leaves a tick further away than any delay: it is due now.
+            if (companion.NextAiTick is { } due && now.Value < due.Value &&
+                due.Value <= now.Value + ExactScalar.Create(AreaCompanionLoyalty.MaxAiTickDelayMs, 1000)) continue;
+            var delay = AreaCompanionLoyalty.AiTickDelayMs(FollowDistanceRules.Distance(companion.Grid.State.CommittedCell, pc.CommittedCell));
+            companion.NextAiTick = new SimulationTime(now.Value + ExactScalar.Create(delay, 1000));
+            if (facts(companion) is not { } stepFacts) continue;
+            var result = session.RunLoyaltyStep(session.Version, companion.Entity, stepFacts, companion.FollowGoal);
+            if (result.Step is { Kind: LoyaltyStepKind.Left }) { companion.Standing = CompanionStanding.Free; companion.FollowGoal = false; }
+            results.Add((companion, result));
+        }
+        return results;
+    }
+
     /// <summary>
     /// One frame: the PC stands as <paramref name="pc"/> after its advance to <paramref name="frontier"/>; each
     /// following companion decides and drives to the same boundary. A jump stands it settled on the PC's cell (the
@@ -359,6 +405,9 @@ public sealed class AreaCompanionGroup
             if (frontier.Value <= grid.State.Time.Value) continue;
             var update = companion.Follow.Update(grid.State, pc.CommittedCell, record.SpreadOut, record.Standing == CompanionStanding.Following, frontier);
             companion.LastUpdate = update;
+            // ARC-WORLD-045: an approach starts the follow goal, which then lives until something interrupts it.
+            if (record.Standing != CompanionStanding.Following) companion.FollowGoal = false;
+            else if (update.Action is FollowAction.Walk or FollowAction.Run or FollowAction.Jump) companion.FollowGoal = true;
             if (update.JumpTo is { } jump)
             {
                 if (!Admitted(_steps, _chart, jump)) continue;
