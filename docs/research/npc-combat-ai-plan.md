@@ -172,8 +172,8 @@ the AI functions (0x4A8320–0x4AFC70) unless named.
 | S11 | Target search and choice | 0x4AB0B0, 0x4AB460, 0x4AB990, 0x4ABBC0 | Nearest-first scan in a square box, KOS, ally help, avenge; two-candidate choice: 50 % nearest, 50 % level − distance; 20-cell leash. | A3 |
 | S12 | Enemy list and target lock | 0x4AF8C0, 0x4AF930, 0x4AF9D0, 0x4AFA90, 0x4AFB30, 0x4AFBB0, 0x4AFBD0, 0x4AFC70 | Team added on attack, random valid pick, lock for orders. | A3 |
 | S13 | Attack event fan-out | 0x4A94C0, 0x4A9530, 0x4A9560, 0x4A9650, 0x4A9B80, 0x4A9C00, 0x4AA300, 0x4AA420, 0x4AA4A0, 0x4AA580, 0x4AA620 | Redirect, followers, reaction changes, jilted follower, peace (focus cleared, reaction raised to 50). | A3 |
-| S14 | Morale | 0x4AAF50, 0x4AB030, 0x4AB2A0, 0x4AB2F0, 0x4AB400, 0x4AB430, 0x4AC620, 0x4AC660, 0x4AF130, 0x4AF170, 0x4AF1D0, 0x4AF210 | Flee rule, spell-assisted flee, flee → surrender, recovery. | A4 |
-| S15 | Back off and min distance | 0x4AC6E0, 0x4AC7B0 | Parameter 15, path away, kill-triggered back off. | A4 |
+| S14 | Morale | 0x4AAF50, 0x4AB030, 0x4AB2A0, 0x4AB2F0, 0x4AB400, 0x4AB430, 0x4AC620, 0x4AC660, 0x4AF130, 0x4AF170, 0x4AF1D0, 0x4AF210 | Flee rule, spell-assisted flee, flee → surrender, recovery. | A4 (done: [morale](npc-ai-morale.md)) |
+| S15 | Back off and min distance | 0x4AC6E0, 0x4AC7B0 | Parameter 15, path away, kill-triggered back off. | A4 (done: [morale](npc-ai-morale.md)) |
 | S16 | Heal and support | 0x4A8940, 0x4A8AA0 | Resurrect, healer's own fatigue < 20 %, heal skill < 90 % out of combat, heavy < 40, medium < 55, poison, light < 70 (< 90 out of combat); self, leader, followers. | A5 |
 | S17 | Spell/item choice | 0x4ABC20, 0x4ABC70, 0x4ABE20, 0x4ABEB0, 0x4ABF10, 0x4AE720, AI spell lists (0x4CC2A0, 0x4CC2D0, 0x4CC310, 0x4CC350, 0x4CC380, 0x4CC470, 0x4CC4C0, 0x4CC4F0, 0x4CC520, 0x4CC580, 0x4CC6F0, 0x4CC740, 0x4CC770, 0x4CC810, 0x4CC8A0, 0x4CC930, 0x4CCA30, 0x4CCA90, 0x4CCAD0, 0x4CCB10, 0x4CCB50, 0x4CCB90, 0x4CCBF0, 0x4CCC00, 0x4CCC40) | Summon when alone, defensive by parameter 13 (see P7), offensive; chooser takes the first entry, 21 % a random start; item entries without a spell are used at once, unchecked; refusal codes 1–8. | A5 |
 | S18 | Items, weapons, grenades | 0x4A8E70, 0x4A8F90, 0x4AC910, 0x4ADFF0 | Look for ammo/weapon/armour, wield best, grenade with friendly-fire check. | A5 |
@@ -190,7 +190,8 @@ the AI functions (0x4A8320–0x4AFC70) unless named.
   although it tracks a "nearest" variable (items (0x4A8E70, 0x4A8F90)).
 - **P2** The party-level sum adds the leader's level once per follower instead
   of each follower's level, which skews the "outlevelled" flee test
-  (party (0x4AE020, 0x4AE0A0)).
+  (party (0x4AE020, 0x4AE0A0)). Settled by ARC-RES-058: a reconstruction slip,
+  the original sums each member's own level ([morale](npc-ai-morale.md#5-anomalies-and-decisions)).
 - **P3** The redirect filter compares the intelligence of the threshold number
   instead of the candidate's (redirect (0x4A94C0, 0x4A9530, 0x4A9560, 0x4A9650)).
 - **P4** The heal step tests an NPC-flag constant (no-attack) against the
@@ -203,6 +204,8 @@ the AI functions (0x4A8320–0x4AFC70) unless named.
 - **P6** Whether FLEE → SURRENDER on the first fleeing action is the intended
   morale model or a reconstruction slip needs a second reading against
   the turn-based UI functions and the scripts that test "surrendered" (perform (0x4AC620, 0x4AC660)).
+  Settled by ARC-RES-058: the original's design, kept
+  ([morale](npc-ai-morale.md#3-a-surrendered-npc)).
 - **P7** Parameter 13 is described as the chance of a defensive spell, but
   the defensive list is tried when the roll is **above** it, so the chance is
   `100 − parameter 13` % (spell choice (0x4ABC20, 0x4ABC70, 0x4ABE20, 0x4ABEB0)).
@@ -235,7 +238,7 @@ Codes are allocated when each task is created (D6).
 | A1 | ARC-RES-054 | Core loop: S1–S5. Parameter semantics, tick cadence, pipeline order, danger state machine with every flag and script, turn-based and real-time entry points. | State diagram, transition table, cadence formula, parameter dictionary: [core loop](npc-ai-core-loop.md) (done). |
 | A2 | on creation | Awareness: S6–S9. See/hear formulas, loudness, line of fire, witnesses. | Pure-function specs with worked numbers; closes combat O4. |
 | A3 | on creation | Hostility and targeting: S10–S13. | KOS/protect/upset decision tables, target scan order, enemy-list lifecycle. |
-| A4 | on creation | Morale: S14–S15. | Flee/surrender/back-off rules, P2 and P6 settled. |
+| A4 | ARC-RES-058 | Morale: S14–S15. | Flee/surrender/back-off rules, P2 and P6 settled: [morale](npc-ai-morale.md) (done). |
 | A5 | on creation | Support and magic: S16–S18. | Heal ladder, ten action lists, eligibility codes, item search (P1, P4, P7). |
 | A6 | on creation | Execution: S19 and the animation attack, approach, flee and run goals. | How an intention becomes movement and attacks in both modes; closes companion O5. |
 | A7 | on creation | Followers in combat and orders: S20. | Order effects, follower join rules, post-fight cleanup. |
@@ -352,6 +355,13 @@ game really has.
 | CL2 (ARC-RES-054) | Reconstruction only: after the full re-wield only "check wield" is cleared, so the next pass re-wields the weapon. The original clears "check weapon" too ([ledger CL2](original-verification-ledger.md#npc-ai-core-loop-arc-res-054)). | As the original. | Reconstruction slip. Lands with slice I6. | none: both settings follow the original |
 | CL4 (ARC-RES-054) | Original 1.0.7.4: a surrender leaves combat mode and then writes back critter flags read before, so the combat-mode bit is set again and the surrendered NPC still counts as in combat mode ([ledger CL4](original-verification-ledger.md#npc-ai-core-loop-arc-res-054)). | A surrender leaves the combat-mode bit cleared. | A stale write; the setter clearly means to leave combat mode. Proposed by ARC-RES-054; lands with slice I2. | `SurrenderKeepsCombatModeFlag` (Original setting), proposed |
 | CL5 (ARC-RES-054) | Original 1.0.7.4: the gate's blind, crippled and stun writes use critter flags read before the combat scripts of the same pass, undoing a script's flag change ([ledger CL5](original-verification-ledger.md#npc-ai-core-loop-arc-res-054)). | Each write changes only its own bits of the current flags. | A stale write (latent). Proposed by ARC-RES-054; lands with slice I6. | `GateRecoveryWritesStaleFlags` (Original setting), proposed |
+| P2 (ARC-RES-039) | Reconstruction only: the party-level sum of the flee test adds the leader's level once per follower. The original adds each member's own level, followers of followers included ([ledger MR2](original-verification-ledger.md#npc-ai-morale-arc-res-058)). | As the original. | Reconstruction slip, confirmed by two readers. Lands with slice I5. | none: both settings follow the original |
+| P6 (ARC-RES-039) | Original 1.0.7.4: a fleeing NPC's next pass without an action requests SURRENDER and starts the flee goal; the dialog start, the dialog script point, the greeting, "can speak" and leaving combat mode treat SURRENDER as a lasting "out of the fight" state ([morale](npc-ai-morale.md#3-a-surrendered-npc)). | Kept in both settings. | The original's design, which the interface and scripts are written against ([ledger MR8, MR11](original-verification-ledger.md#npc-ai-morale-arc-res-058)). Proposed by ARC-RES-058. | none |
+| MR3 (ARC-RES-058) | Original 1.0.7.4: a leaderless NPC counts as a party of one for the flee test, its own followers ignored, while each of its followers counts the whole group. | A leaderless NPC counts its own followers like a PC. | Looks unintended: the same group is sized differently by its leader and its members. Proposed by ARC-RES-058; owner decision needed; lands with slice I5. | `NpcLeaderPartyCountsAlone` (Original setting), proposed |
+| MR7 (ARC-RES-058) | Original 1.0.7.4: the "flee spell used" flag (SPELL_FLEE) is cleared only by the flee-spell step, so a flight left before that step makes the next flight skip its flee spell or item once. | SPELL_FLEE is cleared when the NPC leaves FLEE. | A stale flag from an earlier flight (latent). Proposed by ARC-RES-058; lands with slices I5/I8. | `StaleSpellFleeSkipsFleeSpell` (Original setting), proposed |
+| MR9 (ARC-RES-058) | Original 1.0.7.4: perform fleeing starts the flee goal even when the setter refused the surrender (invulnerable, or a leader with extraordinary charisma). | The flee goal starts only when SURRENDER was applied. | An ignored result (latent: needs invulnerability or the leader's charisma to change during a flight). Proposed by ARC-RES-058; lands with slice I5. | `FleeGoalAfterRefusedSurrender` (Original setting), proposed |
+| MR13 (ARC-RES-058) | Original 1.0.7.4: mind control sets NO_FLEE and its end does not clear it, so a formerly controlled NPC never flees again. | The end of mind control restores NO_FLEE to its value before the control (one remembered bit, stored in both settings). | Looks unintended: the flag outlives the control and cannot be told from data. Proposed by ARC-RES-058; owner decision needed; lands with the magic slice for mind control. | `MindControlLeavesNoFlee` (Original setting), proposed |
+| MR15 (ARC-RES-058) | Original 1.0.7.4: when no straight "away" line is clear, the back-off path retries a line that already failed, so the back-off ends. | The back-off ends when no straight line is clear, as in the original. | The retry changes nothing; no visible difference to keep. Proposed by ARC-RES-058; lands with slices I5/I7. | none |
 
 ## Owner decisions (2026-10-16)
 
