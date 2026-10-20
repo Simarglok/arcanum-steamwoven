@@ -150,8 +150,70 @@ may not list an item another attached seed lists (one object lies on one map).
 incompatible version" with the running session kept, and the next F7 overwrites it. The viewer has no inventory state
 in schema 4 to lose (its `IN` record was in memory only).
 
+## NPC inventory changes (ARC-WORLD-055)
+
+One store of NPC inventory changes for every NPC on every map (`GameSessionNpcInventory.cs`), read in the executable first
+([ledger "NPC inventory changes"](../research/original-verification-ledger.md#npc-inventory-changes-arc-world-055), NI1–NI7).
+
+**Original (NI1–NI5).** The original keeps no inventory store of its own: an NPC's list is fields of the NPC, each item its own
+object with a parent field, and all of them are saved with the map the NPC stands on when the PC leaves it (changed fields of
+original objects, deleted original objects by ID, whole records of objects created in play) and read back when the PC returns.
+A follower carried to another map takes its whole inventory with it, parentage kept, and from then on is that map's object.
+
+**Steamwoven.** The session keys the changes by the NPC's entity identity (the `oid:` entity of its home map), not by the map:
+the NPC's list is its seed list on whatever attached seed lists it, minus the items the PC took or the session deleted, followed by
+the made items the session added to it. Because an object stands on one map at a time and carries its items (NI4), keying by the
+NPC gives the same visible result: the changes are there after the PC leaves and returns, and they follow a companion that
+visits another map. The changes are:
+
+- **Added made items** (`SessionInventoryState.Npcs`: `SessionNpcInventory(npc, items)`; `QueryNpcInventory(npc)`): `made:n`
+  items with their saved kind, numbered with the hero's made items (one past every made number held by the hero or an NPC, deleted
+  or with a durability record), in the order they entered the NPC's list. `AddItemToNpc(expected, npc, kind, insertCheck)` makes one
+  (the creation 0x4ED8B0 and the transfer 0x4617F0 into the NPC, as the NPC crafter's product enters its inventory).
+- **Deleted items**: `RemoveItemFromNpc(expected, npc, item)` deletes an added item or a seed item still in the NPC's list with the
+  [durability](item-durability-runtime.md) deletion (hidden from every seed, the condition record dropped, recorded as deleted;
+  the original's destroyed original object, whose ID goes to `mobile.des`, NI3). No item script runs.
+- **Items the PC takes** (loot, negative `IN`) leave the list as before; an added made item keeps its entity and kind and joins
+  the hero's made items (`QueryMadeItems`), never the taken world items.
+
+`QueryMapInventory`, `LootItem` and `GiveItemToPc` see the added items after the seed items; a corpse's added items are loot (life
+from the session's life records), a living NPC's are not. The AREA viewer's loot window reads `QueryMapInventory`, so it shows
+them; no viewer path adds or deletes items yet.
+
+The NPC must be known to the session: an NPC holder of an attached seed, a party record, or an NPC that already holds added items
+(else `UnknownHolder`). Refusals, before any effect: `InvalidItem` (an invalid id, a `made:` id as the NPC, an undefined type),
+`StaleVersion`, `UnknownHolder`, then for an addition `ItemTypeUnsupported` (gold, ammunition, keys and key rings, as for the PC),
+`BudgetExceeded` (the NPC's list at 512 with its seed items, the store at `GameSessionLimits.MaxNpcItems` = 4,096, or no free made
+number), `RevisionExhausted` and last `InsertRefused` (the host's insert check for the NPC; a call back into the owner from it is
+`StaleVersion`); for a deletion `ItemNotAvailable` (not in the NPC's current list), `WornItemUnsupported` (unequipping an NPC is not
+modelled), `BudgetExceeded` (the durability records) and `RevisionExhausted`. Each change is one revision. A seed that lists an NPC
+holding added items as a container is `InventoryMismatch`.
+
+**Snapshot schema 28.** `"inventory":{…,"made":[…],"npcs":[{"npc":"oid:…","items":[{"entity","type","prototype","name","description"}]}]}`,
+the NPCs in ordinal order. Decoding refuses an unordered NPC list or an empty item list, and an item held twice in the whole
+inventory (`NotCanonical`); restore refuses an item that is not `made:n`, a `made:` NPC id, a deleted item or one held twice
+(`InvalidSnapshot`), a type the lists do not admit (`InvalidItem`) and more than the caller's `MaxNpcItems` (`BudgetExceeded`).
+Since the PC can take a made item from an NPC, the hero's made list keeps entry order and needs no hero. Schemas 1..27 are refused,
+not migrated.
+
+**Differences from the original (both modes).**
+
+| Original 1.0.7.4 | Steamwoven |
+| --- | --- |
+| Changes are saved with the map the NPC stands on (NI1–NI3). | Changes are saved by NPC identity; the visible result is the same because the NPC carries its items (NI4). |
+| A reference to an item no longer found is kept as a null list element with the count unchanged (NI2). | The list holds only items it has; a deleted item is gone from it. |
+| Closing a barter window restocks a non-follower NPC with an inventory source after 12–24 game hours, destroying items without the persistent flag (NI6, F1). | Not modelled (no barter); added items stay. |
+| A teleport clears an NPC's substitute-inventory link; an insert makes the NPC re-equip its best items (NI7, F1). | Not modelled. |
+| Any object type can enter an NPC's list. | Gold, ammunition, keys and key rings are refused, as for the PC's lists. |
+
+Not modelled: moving a seed item from one NPC to another (no caller yet), giving an NPC an item from the PC (barter, drop on a
+follower), NPC worn slots, stacks.
+
 ## Evidence
 
+- Synthetic (ARC-WORLD-055): [NpcInventoryStateTests](../../tests/Arcanum.Session.Tests/NpcInventoryStateTests.cs) (addition and numbering,
+  every refusal, a party record without a seed, loot and `IN` of added items, deletion with the durability rules, round trip, the
+  attach check, codec and restore refusals).
 - Synthetic: [InventoryStateTests](../../tests/Arcanum.Session.Tests/InventoryStateTests.cs) (seed validation and
   copy, every refusal and its order, the insert check, list order, budget, codec and restore refusals, attach after
   restore, the dialog port) and [DialogInventoryTests](../../tests/Arcanum.Scripting.Tests/Dialog/DialogInventoryTests.cs)
