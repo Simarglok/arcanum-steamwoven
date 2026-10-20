@@ -405,7 +405,7 @@ reset: `AREA_CLASS_CAMERA_MOVED`, `AREA_LIGHTING_CAMERA_MOVED`,
 exterior runs with the focus state held on complete (class samples, HD, lighting,
 transition with cave lighting, sweep and reload PASS); in the first, before the HD
 views held the camera, the widest-body view counted 46 HD draws (the actor view's)
-instead of 15, and the three after it count 15. Three runs without it complete, the
+instead of 15, and the three after it count 15. Five runs without it complete, the
 `crash site cave` map smoke passes and the WORLD smoke passes. A window that really holds the focus was not observed: neither
 `osascript` nor Godot's own move to the foreground could take it from a background
 run.
