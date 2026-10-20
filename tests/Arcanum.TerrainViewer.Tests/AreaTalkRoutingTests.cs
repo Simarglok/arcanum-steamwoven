@@ -14,7 +14,7 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaTalkRoutingTests
 {
     [TestMethod]
-    public void A_speaker_no_host_lists_talks_through_the_shown_host_and_a_visitors_only_through_its_own()
+    public void A_speaker_talks_only_through_the_host_that_lists_it()
     {
         using var source = new AreaOwnerFixture(motionBodies: true);
         var area = source.Owner.LoadStrict();
@@ -22,11 +22,10 @@ public sealed class AreaTalkRoutingTests
         var shown = new AreaConversationHost(area, null, session);
         Assert.AreEqual(0, shown.Speakers.Count, "the synthetic core has no dialog NPC");
 
-        // The self-test's stand-in: a row of the map as speaker 0. It reaches the shown host, whose start is a typed status.
+        // A row standing in for a speaker (the viewer self-test's): no host lists it, so it has none (the self-test routes it).
         var row = area.Objects[0];
         var standIn = new AreaSpeaker(0, row, 1, row.WorldX ?? 0, row.WorldY ?? 0);
-        Assert.AreSame(shown, AreaTalkRouting.HostOf(standIn, shown, []));
-        Assert.AreEqual(AreaConversationStartStatus.ContentUnavailable, shown.Begin(standIn).Status);
+        Assert.IsNull(AreaTalkRouting.HostOf(standIn, shown, []));
 
         // A visiting companion talks through its own host, never the shown one.
         var scenery = area.Objects.Single(o => o.WorldX == AreaGridSession.ChartOriginX + 5 && o.WorldY == AreaGridSession.ChartOriginY + 1);
@@ -37,13 +36,13 @@ public sealed class AreaTalkRoutingTests
             AreaScenePlan.Create(area), area.Visuals, AreaChart.Exterior, new(1)).Single();
         var visitor = AreaConversationHost.ForVisitor(template, null, session);
         Assert.AreSame(visitor, AreaTalkRouting.HostOf(visitor.Speakers[0], shown, [visitor]));
-        // A speaker of that companion's object that its host does not list (an earlier host's) has no host.
-        Assert.IsNull(AreaTalkRouting.HostOf(visitor.Speakers[0] with { Index = 3 }, shown, [visitor]));
-        // The shown host keeps its own speakers.
+        // A speaker no host lists has none, even when its index would name one of the shown host's speakers: that would read and
+        // write another NPC's dialog state.
+        Assert.IsNull(AreaTalkRouting.HostOf(visitor.Speakers[0] with { Index = 3 }, shown, [visitor]), "an earlier host's speaker");
         var listed = new AreaConversationHost(area, [standIn], null, session);
-        Assert.AreSame(listed, AreaTalkRouting.HostOf(standIn, listed, [visitor]));
-        var other = area.Objects.First(o => o.Key != scenery.Key);
-        Assert.AreSame(shown, AreaTalkRouting.HostOf(new AreaSpeaker(0, other, 1, other.WorldX ?? 0, other.WorldY ?? 0), shown, [visitor]),
-            "a stand-in of another object than the visitor's");
+        Assert.AreSame(listed, AreaTalkRouting.HostOf(standIn, listed, [visitor]), "the shown host keeps its own speakers");
+        var other = area.Objects.First(o => o.Key != row.Key);
+        Assert.IsNull(AreaTalkRouting.HostOf(new AreaSpeaker(0, other, 1, other.WorldX ?? 0, other.WorldY ?? 0), listed, [visitor]),
+            "index 0 of another object is not the shown host's speaker 0");
     }
 }
