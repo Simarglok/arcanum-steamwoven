@@ -17,7 +17,7 @@ public delegate SessionCraftFacts? SessionCraftLookup(string entity);
 /// The outcome of an assembly (ARC-TECHNOLOGY-004): the plan (the gate's state of both components and the product), the items
 /// made (<c>made:n</c>) and the consumed components. On success the host shows <c>schematic_text.mes</c>
 /// <see cref="SchematicAssemblyRules.CompletedMessage"/> and plays <see cref="SchematicAssemblyRules.CompletedSoundBase"/> + the
-/// current tab; a refusal of the gate (<see cref="GameSessionFailure.AssemblyRefused"/>) shows the message of
+/// current discipline; a refusal of the gate (<see cref="GameSessionFailure.AssemblyRefused"/>) shows the message of
 /// <see cref="SchematicAssemblyRules.RefusalMessage"/>.
 /// </summary>
 public sealed record SessionAssemblyResult(GameSessionDisposition Disposition, GameSessionFailure Failure, AssemblyPlan? Plan,

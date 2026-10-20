@@ -69,7 +69,7 @@ a creation fails):
   session's own: a seed or a taken item may not carry it). No roll, skill, action points, time or experience.
 
 The result names the plan, the made and the consumed items. The host shows `schematic_text.mes` 2 and plays sound 3018 + the
-current tab (the window's, TECH-5) on success, or the refusal message of the plan's button.
+current discipline (3018..3025, the window's, ARC-TECHNOLOGY-005) on success, or the refusal message of the plan's button.
 
 `QueryHeroAssembly(schematic, items, facts)` gives the plan without changing anything (the page the window draws).
 
