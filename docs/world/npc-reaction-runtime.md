@@ -32,7 +32,7 @@ Reputations (FR-SOCIAL-002), fate points and the AI consumers are not part of it
 | --- | --- |
 | `ReactionRules.Effective(stored, npc, pc, query)` | 0 when the PC is on the NPC's enemy list; otherwise `stored` + race term (`RaceReaction`, row NPC race, column PC race) + the PC's reaction modifier (both skipped for an aloof or monstrous NPC; in `ReactionQuery.Hostility` the two together are floored at −49) + the reputation sum, then the PC's `reaction` effects, then at least 50 when this PC mind-controls the NPC. No clamp. |
 | `ReactionRules.Category(value)` | ≤ 0 hatred, ≤ 20 dislike, ≤ 40 suspicious, ≤ 60 neutral, ≤ 80 courteous, ≤ 100 amiable, above love; enum order love … hatred as in the source. |
-| `ReactionRules.Adjust(delta, npc, pc, ledByPc)` | Skips a delta of 0, an NPC this PC mind-controls, and a negative delta while the PC has extraordinary charisma and leads the NPC (`ReactionSkip`). Otherwise the delta passes through the PC's bad (negative) or good (positive) adjustment effects; the result is added even when it is 0. `LeaderCheck` marks a negative change of a follower of this PC. |
+| `ReactionRules.Adjust(delta, npc, pc, ledByPc)` | Skips a delta of 0, an NPC this PC mind-controls, and a negative delta while the PC has extraordinary charisma and leads the NPC (`ReactionSkip`). Otherwise the delta passes through the PC's bad (negative) or good (positive) adjustment effects; the result is added even when it is 0. `LeaderCheck` marks a negative change of a follower of this PC; since ARC-WORLD-045 the session arms that follower's check-leader and reaction marks in the same revision ([party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045)). |
 | `ReactionRules.DeltaTo(target, effective)` | "Set to *v*" is the delta `v − effective`, then `Adjust`. |
 | `ReactionRules.ConversationStart(stored, force)` | 100 when the stored value is below 100 and the "force good reaction" fate point is spent. |
 | `ReactionRules.PcHit(stored, npc, pc, ai, ledByPc, deliberate, profile)` | Follower of the attacker: deliberate hit ± AI parameter 9 (A2, below), accidental nothing; the follow check runs either way. Any other NPC: accidental −10; deliberate lowers it to parameter 10 when its hostility-variant reaction is above it. |
@@ -155,6 +155,6 @@ the conversation slot, `ME` reads the remembered slot and the insult goes throug
 - The fate window that arms "force good reaction" (the fate itself is ARC-WORLD-054), the AI's speak refusal and hostile end at the dialog start and pick, the
   insult phrase and the NPC's generated replies (generated text), `ME` operands other than 0 and 1.
 - The PC's `reaction`, good and bad adjustment effects of real data (the hero keeps none), enemy lists,
-  mind control, charm (A4, decision D2 open), barter prices, gifts, hover colour, AI consumers (KOS at parameter 10, the
-  follower loyalty pass that reads the leader check and the follow check after a hit).
+  mind control, charm (A4, decision D2 open), barter prices, gifts, hover colour, AI consumers (KOS at parameter 10; the
+  follower loyalty step that reads the leader check is ARC-WORLD-045, the follow check after a hit has no caller yet).
 - The source's ten-slot memory for several PCs.

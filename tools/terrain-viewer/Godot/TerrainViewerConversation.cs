@@ -228,6 +228,8 @@ public partial class TerrainViewerApp
         if (!LeaveCombatModeForDialog()) { RefreshReadyStatus(); return; }
         QuarantineWorld();
         _conversationNotice = null;
+        // ARC-WORLD-045: talking interrupts the speaker's goals, its follow goal too (OL19).
+        _areaCompanions?.InterruptGoals(speaker.Row.Key);
         AreaConversationStart start;
         if (HostOf(speaker) is not { } host) { _conversationNotice = $"dialog NPC script {speaker.ScriptId} has no host here"; RefreshReadyStatus(); return; }
         _talkHost = host;
