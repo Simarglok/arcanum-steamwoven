@@ -83,7 +83,7 @@ public sealed class AreaCompanionData
         refusal = null;
         return new(speaker.Row.PrototypeNumber, speaker.ScriptId, new FollowThresholds(row.DislikeReaction, row.MaxAlignmentAbove, row.MaxAlignmentBelow, row.LevelGate),
             Math.Clamp(EffectModifiers.Apply(critter.BaseStats[LevelStat], level), MinLevel, MaxLevel),
-            Math.Clamp(EffectModifiers.Apply(critter.BaseStats[AlignmentStat], alignment), MinAlignment, MaxAlignment));
+            Math.Clamp(EffectModifiers.Apply(critter.BaseStats[AlignmentStat], alignment), MinAlignment, MaxAlignment), npc.Wait);
     }
 
     private static StatModifierOperator Operator(EffectChangeOperator op) => op switch

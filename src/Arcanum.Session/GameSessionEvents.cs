@@ -58,6 +58,8 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionEffectFiring> Effects { get; init; } = Array.Empty<SessionEffectFiring>();
     /// <summary>The Lock events that came due (ARC-WORLD-050), in firing order.</summary>
     public IReadOnlyList<SessionLockFiring> Locks { get; init; } = Array.Empty<SessionLockFiring>();
+    /// <summary>The wait timers that came due (ARC-WORLD-045), in firing order.</summary>
+    public IReadOnlyList<SessionWaitFiring> Waits { get; init; } = Array.Empty<SessionWaitFiring>();
 }
 
 /// <summary>One saved pending event: the queue record without its derived domain and scope map.</summary>
@@ -90,8 +92,8 @@ public sealed class SessionEventState
 public static class SessionEventKinds
 {
     /// <summary>
-    /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/>, ARC-WORLD-029 <see cref="HeroEffectEnd"/> and ARC-WORLD-050
-    /// <see cref="LockReset"/> without a new version:
+    /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/>, ARC-WORLD-029 <see cref="HeroEffectEnd"/>, ARC-WORLD-050
+    /// <see cref="LockReset"/> and ARC-WORLD-045 <see cref="PartyWait"/> without a new version:
     /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
     /// </summary>
     public const int RegistryVersion = 1;
@@ -108,6 +110,15 @@ public static class SessionEventKinds
     /// per object (each unlock or jam adds one). Entity: the object; value: the game time it was scheduled at.
     /// </summary>
     public const string LockReset = "lock.reset";
+
+    /// <summary>
+    /// The original's wait timer (kind 17; ARC-WORLD-045, OL23–OL26): a follower told to wait stops waiting, jilted, when it
+    /// comes due. Scoped to the NPC's map, one per NPC. Entity: the NPC; values: the game time it was scheduled at, its duration
+    /// (0 up to 30 days; the queue stores 0 as 1 ms) and the leader's charisma then (read again from a hero when it fires).
+    /// </summary>
+    public const string PartyWait = "party.wait";
+    /// <summary>Pending wait timers a session holds: one per recorded companion.</summary>
+    public const int MaxWaitTimers = GameSessionLimits.PolicyMaxCompanions;
 
     /// <summary>
     /// A deferred SCR call (ARC-SCRIPT-010): global, any number per key. Entities: the triggerer and the attachee (the
@@ -143,9 +154,9 @@ public static class SessionEventKinds
     public const long RestingDelayMs = 3_600_000;
 
     /// <summary>Pending events a session holds: four timers for each NPC life record and three for the hero, so a life step
-    /// can always set its timers, the deferred calls, the timed effects' ENDs and the Lock events.</summary>
+    /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events and the wait timers.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets;
+        + MaxLockResets + MaxWaitTimers;
     /// <summary>Pending Lock events a session holds (project policy; the original has no bound).</summary>
     public const int MaxLockResets = 1024;
 
@@ -171,8 +182,19 @@ public static class SessionEventKinds
                 new EffectEndHandler(owner), Validate: EffectEndPayload),
             new(LockReset, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 1, 0, 0,
                 new LockResetHandler(owner), Validate: payload => payload.Values[0] >= 0),
+            new(PartyWait, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.KeepExisting, GameEventScopeRule.EntityMap, 1, 3, 1, 0,
+                new WaitTimerHandler(owner), Validate: WaitPayload),
         ]);
     }
+
+    /// <summary>The original's wait-event predicate (0x4AAA30): whether the event names the NPC.</summary>
+    [Arcanum.Simulation.OriginalFunction(0x4AAA30, Arcanum.Simulation.OriginalFunctionScope.Full)]
+    internal static bool NamesNpc(GameEvent e, string entity) => e.Payload.Entities[0].Code == entity;
+
+    // Scheduled at a game time, a duration of the wait table, any charisma.
+    private static bool WaitPayload(GameEventPayload payload) =>
+        payload.Values[0] >= 0 && Arcanum.Simulation.Party.CompanionLoyaltyRules.WaitDurationsMs.Contains(payload.Values[1]) &&
+        payload.Values[2] is >= int.MinValue and <= int.MaxValue && payload.Entities[0].Code != AbsentRole;
 
     // Set at a game time, a duration of 1 ms up to the longest, a number of the effect tables and a count the hero's list holds.
     private static bool EffectEndPayload(GameEventPayload payload) =>
@@ -249,6 +271,12 @@ internal sealed class LifeTimerHandler(SessionEventSink sink, LifeTimer timer) :
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireLifeTimer(timer, firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class WaitTimerHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireWaitTimer(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class LockResetHandler(SessionEventSink sink) : IGameEventHandler
