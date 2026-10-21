@@ -22,12 +22,19 @@ namespace Arcanum.TerrainViewer;
 // actor has stood in the centre sector again; another sector is tried at once. No window moves while the scene holds an
 // intent a new scene would drop, in combat mode or under a panel (StreamHeld); a move whose window no longer holds the
 // actor when it can publish is given up.
+// ARC-WORLD-042: a route goal the new window does not hold (the walk bent away from it and the window followed) is not
+// dropped: the walk heads for the end of a partial corridor toward it over the new window (RouteCorridor), the cell nearest
+// it, and the far goal is kept, so each later move hands it on until a window holds it. A new goal (a click) replaces it.
 public partial class TerrainViewerApp
 {
     private AreaSectorCoordinate? _mapWindowCentre;
     private AreaSectorCoordinate? _mapStreamFailedAt;
     private string? _mapStreamStatus;
     private int _mapWindowMoves;
+    // A route goal beyond the shown window and the cell of it the walk heads for (ARC-WORLD-042).
+    private (AreaStepCell Goal, AreaStepCell Toward)? _mapFarGoal;
+    // Window moves given up (the actor walked off the new core) or loaded but not published; the walk smoke needs 0.
+    private int _mapStreamGivenUp;
     /// <summary>Cells beyond the centre sector's edge (either axis) the actor stands before the window moves.</summary>
     internal const int StreamMargin = 16;
     // In a native smoke the window moves only in its own stage, so the other stages observe one fixed window.
@@ -37,7 +44,7 @@ public partial class TerrainViewerApp
     private void NoteMapWindow(TerrainLoadResult result)
     {
         _mapWindowCentre = result.AreaMapWindowCentre;
-        if (_mapWindowCentre is null) { _mapStreamStatus = null; _mapWindowMoves = 0; _mapStreamFailedAt = null; }
+        if (_mapWindowCentre is null) { _mapStreamStatus = null; _mapWindowMoves = 0; _mapStreamFailedAt = null; _mapFarGoal = null; }
     }
 
     private bool MapStreamInFlight => _mapHandoff is { Kind: MapHandoffKind.Stream };
@@ -128,14 +135,20 @@ public partial class TerrainViewerApp
             if (!chart.Contains(chart.ToChart(now)) || !result.AreaStepSnapshot!.IsAdmitted(now))
             {
                 EndMapStream(handoff);
-                _mapStreamStatus = $"window around ({sector.X},{sector.Y}) given up: the actor walked off it meanwhile";
+                _mapStreamStatus = $"window around ({sector.X},{sector.Y}) given up: the actor walked off it meanwhile"; _mapStreamGivenUp++;
                 GD.Print("ARC-RENDER-024 stream abandoned " + System.Text.Json.JsonSerializer.Serialize(new { To = new { sector.X, sector.Y }, Actor = now }));
                 RefreshAreaStatus();
                 return;
             }
             at = now; facing = walking.State.Facing;
-            if (ReferenceEquals(_worldRouteSession, walking) && _worldRoute is { Status: RouteFollowStatus.Following } route && route.Target is { } target)
-                goal = walking.Chart.ToWorld(target);
+            if (ReferenceEquals(_worldRouteSession, walking) && _worldRoute is { Status: RouteFollowStatus.Following or RouteFollowStatus.Arrived } route
+                && route.Target is { } target)
+            {
+                var heading = walking.Chart.ToWorld(target);
+                // Heading for (or already on) the cell nearest a far goal: the far goal is handed on. Another arrived walk ends.
+                if (_mapFarGoal is { } far && far.Toward == heading) goal = far.Goal;
+                else if (route.Status == RouteFollowStatus.Following) goal = heading;
+            }
         }
         var moved = handoff with { Facing = facing, OriginCell = at };
         _mapHandoff = moved;
@@ -158,17 +171,22 @@ public partial class TerrainViewerApp
             if (_nativeSmoke) { GD.Print("ARC-RENDER-007 frontier=AREA_STREAM_PUBLICATION"); GetTree().Quit(1); }
             return;
         }
-        if (!published) { EndMapStream(moved); return; }
+        if (!published) { EndMapStream(moved); _mapStreamGivenUp++; return; }
         _mapWindowMoves++; _mapStreamFailedAt = null;
-        // The walk goes on to its goal when the new window holds it.
-        var resumed = false;
-        if (goal is { } wanted && _worldActor.Session is AreaGridSession placed && placed.Chart.Contains(placed.Chart.ToChart(wanted)) && WorldRoute(placed) is { } follower)
-        { follower.SetTarget(placed.Chart.ToChart(wanted), WorldTime); resumed = true; }
+        // The walk goes on to its goal when the new window holds it, else toward it through the cell of the window nearest it.
+        var resumed = false; _mapFarGoal = null;
+        if (goal is { } wanted && _worldActor.Session is AreaGridSession placed && WorldRoute(placed) is { } follower
+            && AreaMapGoalHandOff.Resume(new AreaRouteSource(placed.Snapshot, placed.Chart, placed.Occupancy, () => placed.Portals?.Invoke()), placed.Chart, placed.State.CommittedCell, wanted) is { } resume)
+        {
+            follower.SetTarget(resume.Target, WorldTime); resumed = true;
+            if (resume.FarGoal is { } far) _mapFarGoal = (far, placed.Chart.ToWorld(resume.Target));
+        }
         if (from is { } previous) _mapStreamLog.Add((previous, sector, at, resumed, _areaSession, loaded));
         _mapStreamStatus = (_mapStreamStatus?.StartsWith("window moved but", StringComparison.Ordinal) == true ? _mapStreamStatus + "; " : string.Empty)
             + $"window moved to sector ({sector.X},{sector.Y}) in {loaded} ms (move {_mapWindowMoves})";
         GD.Print("ARC-RENDER-024 stream published " + System.Text.Json.JsonSerializer.Serialize(new {
-            From = from is { } f ? new { f.X, f.Y } : null, To = new { sector.X, sector.Y }, Actor = at, Goal = goal, Resumed = resumed, LoadMs = loaded,
+            From = from is { } f ? new { f.X, f.Y } : null, To = new { sector.X, sector.Y }, Actor = at, Goal = goal, Resumed = resumed,
+            Toward = _mapFarGoal?.Toward, LoadMs = loaded,
             Moves = _mapWindowMoves, Sectors = area.Snapshot.Sectors.Count(s => s.Present), Visuals = area.Snapshot.Visuals.Count, area.CpuRgbaBytes,
             Session = _areaSession?.Version.Revision }));
         RefreshAreaStatus();
@@ -191,7 +209,8 @@ public partial class TerrainViewerApp
     // Every window publication of this run (smoke report): the centres, the actor's cell, the walk and the session.
     private readonly List<(AreaSectorCoordinate From, AreaSectorCoordinate To, AreaStepCell Actor, bool Walking, GameSessionOwner? Session, long LoadMs)> _mapStreamLog = [];
 
-    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap"];
+    // "walk" (ARC-WORLD-042) runs only when named: it walks across the main map for minutes.
+    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap", "walk"];
 
     /// <summary>The stages <c>ARC_AREA_MAP_SMOKE_ONLY</c> names (null: all); an unknown name is refused, so a typo cannot skip
     /// every stage and still pass.</summary>

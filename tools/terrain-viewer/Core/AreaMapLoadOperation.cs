@@ -235,3 +235,20 @@ internal static class AreaMapLoadOperation
             throw new InvalidOperationException("AREA_MAP_SOURCES_MISMATCH");
     }
 }
+
+/// <summary>ARC-WORLD-042: a walking route over a window map's windows.</summary>
+public static class AreaMapWalk
+{
+    /// <summary>The route (<see cref="AreaWindowRoute"/>) on the module content stack of the arguments' game folder; the native
+    /// walk smoke steers by it.</summary>
+    public static AreaWindowRouteResult Plan(TerrainViewerArguments arguments, AreaStepCell from, AreaStepCell to, CancellationToken token)
+    {
+        var mapName = arguments.AreaMapName ?? throw new InvalidOperationException("AREA_MAP_REQUIRED");
+        var discovery = ContentMountPlan.Discover(arguments.GameRoot ?? throw new InvalidOperationException("AREA_MAP_GAME_ROOT_REQUIRED"));
+        if (discovery.Status != ContentMountStatus.Ready) throw new InvalidOperationException("AREA_MAP_MOUNT_" + discovery.Status.ToString().ToUpperInvariant());
+        var opened = ContentStack.Open(discovery.Plan!);
+        if (opened.Status != ContentStackStatus.Ready) throw new InvalidOperationException("AREA_MAP_STACK_" + opened.Status.ToString().ToUpperInvariant());
+        using var stack = opened.Stack!;
+        return AreaWindowRoute.Plan(stack, WorldCatalog.Open(stack), mapName, from, to, token: token);
+    }
+}
