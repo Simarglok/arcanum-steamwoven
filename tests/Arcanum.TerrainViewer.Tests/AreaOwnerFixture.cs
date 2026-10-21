@@ -111,7 +111,7 @@ internal sealed class AreaOwnerFixture : IDisposable
         foreach(var record in records) writer.Write(record);
         writer.Write(records.Length); return stream.ToArray();
     }
-    private static byte[] Art(int width,int height,int hotX,int hotY,bool body,bool seamMarkers=false)
+    internal static byte[] Art(int width,int height,int hotX,int hotY,bool body,bool seamMarkers=false)
     {
         var bytes=new byte[1184+width*height];
         void I(int at,int value)=>BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(at),value);

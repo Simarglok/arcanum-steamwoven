@@ -9,7 +9,7 @@ namespace Arcanum.Data.Area;
 
 public sealed partial class AreaDataOwner
 {
-    private static readonly MesReaderOptions MappingMesOptions = new() { MaxBytes = 16 * 1048576, MaxMessages = 8192 };
+    internal static readonly MesReaderOptions MappingMesOptions = new() { MaxBytes = 16 * 1048576, MaxMessages = 8192 };
 
     private Dictionary<AreaMappingRole, SortedDictionary<int, string>> ReadMappings(CancellationToken token, AreaOwnership ownership)
     {
@@ -49,19 +49,18 @@ public sealed partial class AreaDataOwner
         var cls = aid >> 28; var frame = cls == 6 ? 0 : (int)((aid >> 14) & 31); var nominal = cls == 6 ? 0 : (int)((aid >> 11) & 7);
         var palette = (int)((aid >> 4) & 3); var mirror = cls is 2 or 12 or 13 && nominal is 1 or 2 or 3; var group = mirror ? 8 - nominal : nominal;
         string path; var lookup = aid;
-        if (cls is 4 or 7)
+        if (cls is 4 or 6 or 7)
         {
-            var role = cls == 4 ? AreaMappingRole.Scenery : AreaMappingRole.Container;
-            var key = (int)(1000 * ((aid >> 6) & 31) + ((aid >> 19) & 511));
-            path = (cls == 4 ? "art/scenery/" : "art/container/") + Mapped(maps, role, key);
-        }
-        else if (cls == 6)
-        {
-            if (((aid >> 12) & 3) != 0) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
-            var type = aid & 15; var subtype = (aid >> 6) & 15; var number = (aid >> 17) & 2047; var coverage = (aid >> 14) & 7;
-            var key = checked((int)(number + 20 * (subtype + 50 * type) + (type == 2 && coverage != 0 ? 20 * (5 * coverage + 10) : 0)));
-            path = "art/item/" + Mapped(maps, AreaMappingRole.ItemGround, key);
-            lookup = aid & ~0x30U;
+            // ARC-RENDER-033: the same rules, shared with the viewer's art of bodies not drawn at T0.
+            var resolved = AreaObjectArt.Resolve(aid, (role, key) => maps.TryGetValue(role, out var table) && table.TryGetValue(key, out var value) ? value : null);
+            var selection = resolved.Status switch
+            {
+                AreaObjectArtStatus.Resolved => resolved.Path!,
+                AreaObjectArtStatus.Unsupported => throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance),
+                AreaObjectArtStatus.UnsafeName => throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Mapping),
+                _ => throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping),
+            };
+            path = selection.Path; lookup = selection.Lookup;
         }
         else if (cls is 2 or 12 or 13)
         {

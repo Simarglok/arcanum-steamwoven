@@ -127,7 +127,7 @@ public partial class TerrainViewerApp : Node
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
                         {
-                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaCriticalSmokeAsync(); }
+                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaCriticalSmokeAsync(); }
                         }
                         else await RunAreaSmokeAsync(result);
                         // S5 must observe the retired generation become
@@ -1041,6 +1041,8 @@ public partial class TerrainViewerApp : Node
         _canvas?.ReleaseHd(); _hdSource?.Dispose();
         _conversationHost = null; ReleaseConversationContent();
         DisposeAudio();
+        // ARC-RENDER-033: the extra art's content stack.
+        _extraArt?.Dispose(); _extraArt = null;
         _cache.Dispose();
         // ARC-DEV-032: the main app (not a self-test's child) removes the automated run's own folder after its last save.
         if (!SelfTestBootstrap) ViewerAutomatedStorage.Delete();
