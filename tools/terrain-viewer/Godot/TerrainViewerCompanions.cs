@@ -38,6 +38,8 @@ public partial class TerrainViewerApp
         var templates = _readyMapName is null ? _companionTemplates
             : _companionTemplates.Where(t => CompanionIncluded(session, t) && !SpeakerDead(t.Speaker)).ToArray();
         _areaCompanions = AreaCompanionGroup.Create(templates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time, grid.Timing);
+        // ARC-WORLD-065: the companions step over what the session destroyed or switched off, as the PC does.
+        _areaCompanions.Removed = AreaRemovedObjects;
         if (_readyMapName is not null) AdoptTravellers(_areaCompanions);
         // ARC-WORLD-048: a companion recorded here without a body kept in this run (after a quick load) cannot be talked to here.
         if (_readyMapName is not null) _unbodiedVisitors = AreaVisitors.Unbodied(session, new(CurrentAreaMap), _companionTemplates,
