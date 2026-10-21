@@ -8,7 +8,7 @@ namespace Arcanum.Session;
 /// (<c>CombatFields.Written</c>, a prototype or an instance over it).</summary>
 public readonly record struct SessionWrittenFacts(int Subtype, int TextStartLine)
 {
-    /// <summary>ARC-UI-049: the item's prototype number (14072 is the alternate newspaper).</summary>
+    /// <summary>ARC-UI-049: the item's prototype number (14092, the executable's 14072, is the alternate newspaper).</summary>
     public int Prototype { get; init; }
     /// <summary>ARC-UI-049: the item has a use script (attachment point 1), which runs before the reading and can cancel it.</summary>
     public bool UseScript { get; init; }

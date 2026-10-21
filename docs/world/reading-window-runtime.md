@@ -24,7 +24,9 @@ Tests: [`WrittenTextsTests`](../../tests/Arcanum.Data.Tests/Written/WrittenTexts
 [`WrittenRealDataTests`](../../tests/Arcanum.Data.Tests/Written/WrittenRealDataTests.cs) (opt-in, `DAT_ROOT`),
 [`WrittenUseStateTests`](../../tests/Arcanum.Session.Tests/WrittenUseStateTests.cs),
 [`ScrReadingTests`](../../tests/Arcanum.Scripting.Tests/Scr/ScrReadingTests.cs),
-[`AreaReadingTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaReadingTests.cs), the Godot self-test `ARC-UI-049 self-test PASS`
+[`AreaReadingTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaReadingTests.cs), the PC-viewer filter in
+[`AreaScriptHostTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaScriptHostTests.cs) and
+[`AreaUseScriptHostTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaUseScriptHostTests.cs), the Godot self-test `ARC-UI-049 self-test PASS`
 and the native smoke `ARC-UI-049 native-smoke reading PASS`.
 
 ## Texts (Data, WR1, WR3–WR11)
@@ -85,7 +87,7 @@ only for a player viewer (no dead check). Action 94 (set a written item's first 
   document numbered 0 has its own text); the document leaves the list when new. Any other kind replaces the inventory window with
   the reading window, as the original's mode change pops the inventory's mode.
 - A script's reading request opens the window once no dialog, window or palette owns input (PROJECT: the original changes the mode
-  at once; a later request of the same frame replaces an earlier one). A quick load drops a waiting request and closes an open window.
+  at once; a later request replaces a waiting one). A quick load drops a waiting request and closes an open window.
 - The window is modal like the schematic window (gate closed, clock paused) and owns every key. Escape, a controller cancel or the
   Close button close it (PROJECT keys: the original's window takes no key and closes by its frame hotspot or a mode change); a book's
   Previous and Next, Left/Right or Page Up/Down turn two pages. Sounds: open 3008, a book's page 3010, close 3009 by the player

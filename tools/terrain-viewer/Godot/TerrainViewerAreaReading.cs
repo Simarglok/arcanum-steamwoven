@@ -15,7 +15,7 @@ namespace Arcanum.TerrainViewer;
 // destroyed when new), any other kind gives its document, and the window opens in place of the inventory (the original pops the
 // current interface mode and pushes the reading mode). Script actions 64 (book), 65 (picture) and 114 (plaque) of the dialog, use,
 // tile and sector scripts the viewer runs open the window for a PC viewer once no dialog, window or palette owns input (PROJECT:
-// the original changes the mode at once; a later request of the same frame replaces an earlier one). The window is modal like the
+// the original changes the mode at once; a later request replaces a waiting one). The window is modal like the
 // schematic window (gate closed, clock paused); Escape, a controller cancel or the close button close it (PROJECT keys: the
 // original's window takes no keys and closes by its frame hotspot or any mode change). Sounds: open 3008, a book's page 3010, close
 // 3009 (ledger WR rows). The texts load once per module in the background.
@@ -90,7 +90,8 @@ public partial class TerrainViewerApp
     private void OpenReading(WrittenDocument document, string title)
     {
         if (!ReadingActive || _readingData?.Data is not { } data) return;
-        // The original's open toggles: a second open closes the window.
+        // The original's open toggles: a second open closes the window (WR2). The viewer's callers never reach it today: the inventory
+        // closes first and a script request waits while any window is open.
         if (ReadingOpen) { CloseReadingByPlayer(); return; }
         if (AreaReading.View(document, data.Texts, 0, AreaHoverIndex.TextProfile) is not { } view)
         {

@@ -48,7 +48,7 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.NoChange, GameSessionFailure.None, SchematicReading.NotSchematic, null, false, document, Version);
     }
 
-    /// <summary>The document the reading window shows for a written item's facts (0x56BC00 / 0x56BCC0), the prototype 14072 alternate
+    /// <summary>The document the reading window shows for a written item's facts (0x56BC00 / 0x56BCC0), the prototype 14092 (the executable's 14072) alternate
     /// newspaper included; changes nothing and needs no hero (a script opener reads the same way).</summary>
     public WrittenDocument QueryWrittenDocument(SessionWrittenFacts facts, WrittenTexts texts)
     {

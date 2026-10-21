@@ -72,6 +72,8 @@ public sealed class WrittenTextsTests
         var gap = WrittenTexts.Create(null, null, Mes("{10}{1 Ten}{12}{1 Twelve}"), null, null);
         CollectionAssert.AreEqual(new[] { 10 }, gap.NewspaperFiller(0, 5).Select(m => m.Number).ToArray(), "a missing number stops the filling");
         Assert.AreEqual(0, WrittenTexts.Create(null, null, Mes("{11}{1 Eleven}"), null, null).NewspaperFillers, "no message 10: no filler");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Texts().NewspaperFiller(1300, WrittenTexts.MaxFillerCount + 1), "a bounded request");
+        Assert.AreEqual(WrittenTexts.MaxFillerCount, Texts().NewspaperFiller(1300, WrittenTexts.MaxFillerCount).Count, "the fill wraps");
     }
 
     [TestMethod]

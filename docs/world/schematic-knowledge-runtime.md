@@ -4,8 +4,8 @@ Status: **Implemented bounded component, partly wired.** Work item ARC-TECHNOLOG
 [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted). The
 learned and found schematic lists of a crafter (Data, over the [schematic catalogue](../formats/schematics.md)), the
 found-schematic registration (Simulation) and the hero's found list in the session (snapshot schema 23). The viewer's
-[schematic window](schematic-window-runtime.md) (ARC-TECHNOLOGY-005) shows the hero's tabs; no reading window calls the
-registration yet.
+[schematic window](schematic-window-runtime.md) (ARC-TECHNOLOGY-005) shows the hero's tabs; the inventory's Read button of the
+[reading window](reading-window-runtime.md) (ARC-UI-049) calls the registration.
 
 Requirements: [FR-ITEM-017](../requirements/items-economy.md#fr-item-017) (found and learned schematics);
 [FR-ITEM-010](../requirements/items-economy.md#fr-item-010) only for the written item's subtype and first text line.

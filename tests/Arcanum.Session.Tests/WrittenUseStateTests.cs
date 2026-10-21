@@ -63,4 +63,33 @@ public sealed class WrittenUseStateTests
         Assert.AreEqual(GameSessionFailure.InvalidLifeTarget, heroless.UseWrittenItem(heroless.Version, "kit:1", new(0, 100), Texts).Failure);
         Assert.AreEqual(WrittenReadStatus.Read, heroless.QueryWrittenDocument(new(0, 100), Texts).Status, "a script opener needs no hero");
     }
+
+    [TestMethod]
+    public void A_dead_hero_cannot_read()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Hero).Disposition);
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionFailure.InvalidLifeTarget, owner.UseWrittenItem(owner.Version, "kit:1", new(0, 100), Texts).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidLifeTarget,
+            owner.UseWrittenItem(owner.Version, "kit:1", new(SchematicKnowledgeRules.SchematicSubtype, 4150), Texts).Failure);
+        Assert.AreEqual(revision, owner.Version.Revision);
+    }
+
+    [TestMethod]
+    public void The_written_facts_come_from_the_fields()
+    {
+        static Arcanum.Data.Combat.CombatFields Fields(IReadOnlyList<int> points, int spellMana, uint itemFlags) =>
+            new(Arcanum.Data.Combat.CombatFieldOrigin.Prototype,
+                new(13, 14092, 0, 0, 0, 0, 0, 1, 0, 0, 0, [0, 0, 0, 0, 0], 0) { ScriptPoints = points },
+                new(itemFlags, 1, 1, 0, 0, 0, 0, [], spellMana, 0, 0, 0), null, null, null, null, null, null)
+            { Written = new(0, 2, 1300, 0) };
+        Assert.AreEqual(new SessionWrittenFacts(2, 1300) { Prototype = 14092 }, SessionWrittenFacts.FromCombatFields(Fields([0, 21], 0, 0)),
+            "an examine or insert script is not a use script");
+        Assert.IsTrue(SessionWrittenFacts.FromCombatFields(Fields([1], 0, 0))!.Value.UseScript, "attachment point 1");
+        Assert.IsTrue(SessionWrittenFacts.FromCombatFields(Fields([], 5, 0))!.Value.ItemSpell, "a spell mana store");
+        Assert.IsTrue(SessionWrittenFacts.FromCombatFields(Fields([], 0, 0x4))!.Value.ItemSpell, "the magical item flag");
+        Assert.IsFalse(SessionWrittenFacts.FromCombatFields(Fields([], 0, 0x8))!.Value.ItemSpell);
+        Assert.IsNull(SessionWrittenFacts.FromCombatFields(Fields([], 0, 0) with { Written = null }), "not a written item");
+    }
 }

@@ -63,8 +63,10 @@ public sealed class WrittenTexts
     public const int MessagesPerDocument = 10, FrameArt = 494, NewspaperAlternatePrototype = 14092, NewspaperAlternateArt = 817,
         NewspaperAlternateFont = 815, MaxArt = 4095, TelegramSuffix = 1012, FirstTelegramHeader = 1000, LastTelegramHeader = 1011,
         FirstNewspaperFiller = 10, LastNewspaperFiller = 999, BookPreviousArt = 495, BookNextArt = 496;
+    /// <summary>The most filler messages one call gives (the original fills by the remaining column height; a caller asks for a few).</summary>
+    public const int MaxFillerCount = 1_000;
     /// <summary>The note and telegram buffer of the original (0x67BE00): texts are appended without a bound (WR anomaly); the
-    /// composition stops at this many bytes in both modes.</summary>
+    /// composition stops one byte short of this (19,999 bytes) in both modes.</summary>
     public const int JoinedBufferBytes = 20_000;
     /// <summary>The book page table of the original holds 100 page starts and one more page writes past it (WR anomaly); both modes
     /// stop at this many pages.</summary>
@@ -97,6 +99,7 @@ public sealed class WrittenTexts
     public int NewspaperFillers { get; }
 
     /// <summary>Loads the five files from the content stack (the module is mounted when the reading UI inits); each that fails is a refusal.</summary>
+    [OriginalFunction(0x56BAA0, OriginalFunctionScope.Partial)]
     public static WrittenTexts Open(ContentStack stack, MesReaderOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -128,7 +131,7 @@ public sealed class WrittenTexts
 
     /// <summary>
     /// The document of a written item or a script opener (0x56BC00 / 0x56BCC0): <paramref name="subtype"/> and the start line, and
-    /// whether the item is the alternate newspaper prototype 14072. A schematic, a subtype outside 0..6, a missing file or a picture
+    /// whether the item is the alternate newspaper prototype 14092 (the executable's 14072). A schematic, a subtype outside 0..6, a missing file or a picture
     /// art outside 0..4095 is a refusal with no body.
     /// </summary>
     [OriginalFunction(0x56BCC0, OriginalFunctionScope.Partial)]
@@ -141,7 +144,7 @@ public sealed class WrittenTexts
             return startLine is < 0 or > MaxArt ? Refused(WrittenReadStatus.ArtOutOfRange, kind, startLine)
                 : new(WrittenReadStatus.Read, kind, startLine, startLine, [], [], startLine);
         if (File(kind) is not { } file) return Refused(WrittenReadStatus.TextsUnavailable, kind, startLine);
-        // The prototype-14072 flag selects art 817 for every subtype but a picture (WR5); only that newspaper prototype sets it.
+        // The prototype-14092 flag selects art 817 for every subtype but a picture (WR3); only that newspaper prototype sets it.
         var background = alternateNewspaper ? NewspaperAlternateArt : BackgroundArts[subtype];
         var raw = Lines(file, startLine).ToArray();
         IReadOnlyList<WrittenMessage> body = kind switch
@@ -171,8 +174,9 @@ public sealed class WrittenTexts
     public IReadOnlyList<WrittenMessage> NewspaperFiller(int startLine, int count)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(count, MaxFillerCount);
         if (File(WrittenSubtype.Newspaper) is not { } file) return [];
-        var result = new List<WrittenMessage>(count);
+        var result = new List<WrittenMessage>(Math.Min(count, NewspaperFillers));
         var end = (long)FirstNewspaperFiller + NewspaperFillers;
         var number = FirstNewspaperFiller + (long)startLine / 10;
         if (number >= end) number = FirstNewspaperFiller;

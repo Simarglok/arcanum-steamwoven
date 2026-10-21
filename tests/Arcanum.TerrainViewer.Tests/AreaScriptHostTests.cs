@@ -175,6 +175,22 @@ public sealed class AreaScriptHostTests
         Assert.IsNull(AreaScriptHost.ResolveSchematic(npc, false, null));
     }
 
+    // ARC-UI-049 (WR15): reading actions reach the viewer only for a PC viewer; an NPC viewer or an absent one shows nothing.
+    [TestMethod]
+    public void Reading_requests_are_kept_for_the_pc_viewer_only()
+    {
+        using var f = Create();
+        var npc = f.Host.Object(f.Speaker);
+        var run = new FakeEffectsRun(f.Host, npc).Run(Program.Readings(), new(777, 4, 0x0201), AreaScriptHost.Admission);
+        Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.Code.ToString());
+        Assert.AreEqual(2, run.Effects.Readings.Count, "the absent extra object names none");
+        var revision = f.Session.Version.Revision;
+        Assert.IsTrue(f.Host.Apply(run.Effects));
+        Assert.AreEqual(revision, f.Session.Version.Revision, "a reading changes no session state");
+        CollectionAssert.AreEqual(new[] { new ScrReadingRequest(ScrReadingKind.Book, 1020, f.Host.Pc) }, f.Host.TakeReadings().ToArray());
+        Assert.AreEqual(0, f.Host.TakeReadings().Count, "taken once");
+    }
+
     [TestMethod]
     public void The_pc_leads_a_following_speaker_and_is_the_only_pc()
     {
@@ -343,6 +359,8 @@ public sealed class AreaScriptHostTests
             (139, [(0, 0), (3, 60)]), (139, [(1, 0), (3, 101)]), (139, [(12, 0), (3, 70)]), (139, [(1, 0), (3, 200)]), (1, []));
 
         // ARC-TECHNOLOGY-005: start schematic UI (129) on the triggerer (the PC), the attachee, and the absent extra object (kind 12).
+        internal static ScrProgram Readings() => Lines((64, [(3, 1020), (0, 0)]), (65, [(3, 900), (1, 0)]), (114, [(3, 1500), (12, 0)]), (1, []));
+
         internal static ScrProgram Schematics() => Lines((129, [(0, 0)]), (129, [(1, 0)]), (129, [(12, 0)]), (1, []));
 
         internal static ScrProgram Sounds() => Lines(
