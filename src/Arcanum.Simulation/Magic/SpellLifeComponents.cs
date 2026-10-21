@@ -46,7 +46,7 @@ public static class SpellLifeComponents
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(profile);
         var packet = SpellDamageRules.Damage(component, run, world.CurrentFatigue(target), rolls, profile);
-        var source = run.Other ?? run.Parent;
+        var source = SpellDamageRules.Source(run);
         if (packet.Route == SpellDamageRoute.Cancelled) return new(packet, [], source);
         var attacker = run.Parent is { } parent ? world.Combatant(parent) : new Combatant();
         var weapon = run.Parent is { } holder && profile.SpellDamageUsesCastersWeapon ? world.WieldedWeapon(holder) : CombatWeapon.Unarmed();
@@ -62,9 +62,19 @@ public static class SpellLifeComponents
             return new(on.Id, step, kind == AttackTargetKind.Critter ? LifeDamage.FromStep(step, HitLocation.Torso, packet.PlainDeath) : null);
         }
         if (packet.Route == SpellDamageRoute.Step) return new(packet, [Step(target, packet.Damage)], source);
+        // The acid (0x4B5810): its plan gives the items and whether the wearer takes a share; the amounts chain through the steps
+        // themselves, as the original's step lowers the context's amounts in place (none for a prevented step, and none when the
+        // context's weapon ignores resistance, MG36).
         var acid = SpellDamageRules.Acid(packet, target.IsCritter, target.IsCritter ? world.WornItems(target) : [], profile);
-        var steps = acid.Items.Select(i => Step(new SpellRunObject(i.Item.Id, 0), i.Damage)).ToList();
-        if (acid.Wearer is { } share) steps.Add(Step(target, share));
+        var steps = new List<SpellDamageStep>();
+        var amount = packet.Damage;
+        foreach (var (item, _) in acid.Items)
+        {
+            var step = Step(new SpellRunObject(item.Id, 0), amount);
+            if (step.Damage.Prevented == DamagePrevention.None) amount = step.Damage.Final;
+            steps.Add(step);
+        }
+        if (acid.Wearer is not null) steps.Add(Step(target, amount with { Normal = amount.Normal / 3 }));
         return new(packet, steps, source);
     }
 

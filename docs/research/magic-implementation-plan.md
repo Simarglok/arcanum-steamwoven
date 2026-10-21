@@ -252,7 +252,7 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG35 | original bug (ARC-MAGIC-012, ledger MG35; **pending the owner**, recommended fix built) | a Steamwoven fix with an Original switch `DifficultyScalesKillDamage`: a PC's full or death hit takes the current hit points without the difficulty share, so it kills on hard too | MT12 |
 | MG36 | original bug (ARC-MAGIC-012, ledger MG36; **pending the owner**, recommended fix built) | a Steamwoven fix with an Original switch `SpellDamageUsesCastersWeapon`: a spell's damage step has no weapon, so the caster's weapon flags (ignore resistance, "uber", damage armour) do not reach it | MT12 |
 | MG37 | original bug (ARC-MAGIC-012, ledger MG37; **pending the owner**, recommended fix built) | a Steamwoven fix with an Original switch `MarginTakesFromNoDamage`: a margin takes nothing from an amount of 0 or less | MT12 |
-| MG38 | original bug (ARC-MAGIC-012, ledger MG38; **pending the owner**, recommended fix built) | a Steamwoven fix with an Original switch `AcidIgnoresBodyArmour`: body armour spares the acid's wearer | MT12 |
+| MG38 | original bug (ARC-MAGIC-012, ledger MG38; **pending the owner**, recommended fix built) | a Steamwoven fix with an Original switch `AcidIgnoresBodyArmour`: a wearer who wears body armour is spared | MT12 |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |
 | O10 shell and reflection order | reconstruction change | the original in both modes | MT10 |
 | Charm asymmetry | reconstruction change confirmed | the original (+30 and −30 both through the reaction effects) | MT14 |

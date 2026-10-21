@@ -112,6 +112,8 @@ before this schema, so nothing is lost.
   return to the main menu for a dead PC, logbook injuries.
 - The dying and taking-damage scripts (no SCR runtime). The raise script is a port of `LifeRules.Heal` and the session's
   `Heal` since ARC-MAGIC-012 (asked even when the target's flags refuse the raise; either refusal stops it); the host runs it.
+  The session asks it while computing the step, before the call's later refusals, so it must have no side effects and must not
+  call the session.
   A damage packet's `PlainDeath` (a spell's death flag) picks the plain dying animation ([spell damage and
   heal](spell-damage-heal.md)). Encumbrance fatigue, the scarring effect's stat change
   (only the count is kept), Tempus Fugit and background stat adjustments. Effects on maximum HP or fatigue and their damage

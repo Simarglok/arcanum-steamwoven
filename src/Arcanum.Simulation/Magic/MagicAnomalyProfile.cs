@@ -96,7 +96,7 @@ public sealed record MagicAnomalyProfile
     /// <summary>
     /// MG38 (ARC-MAGIC-012; pending the owner, recommended fix): the acid damage's body-armour test compares the slot loop's index
     /// (0..8) with the body-armour slot 1006, so it never holds and the wearer always takes a third of the acid after its worn
-    /// items. Steamwoven spares a wearer whose body armour took the acid.
+    /// items. Steamwoven spares a wearer who wears body armour.
     /// </summary>
     public bool AcidIgnoresBodyArmour { get; init; }
 

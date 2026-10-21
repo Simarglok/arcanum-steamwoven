@@ -108,7 +108,7 @@ public sealed partial class SpellRecordTable
                 var flags = check.Triggers(cursor, "Dmg_Flags:", SpellComponentTables.DamageFlags, SpellComponentTables.DamageFlagValues) ?? 0;
                 // DF4: the original reads the key once; the Steamwoven data fix ORs a repeated one in (record 221's Scaled).
                 while (d.RepeatedDamageFlags && cursor.Fault == NamedKeyFault.None &&
-                    cursor.NamedFlags("Dmg_Flags:", SpellComponentTables.DamageFlags, SpellComponentTables.DamageFlagValues, out _, out _) is { } more)
+                    check.Triggers(cursor, "Dmg_Flags:", SpellComponentTables.DamageFlags, SpellComponentTables.DamageFlagValues) is { } more)
                     flags |= more;
                 if (type == SpellComponentType.Damage) d.HasDamage = true;
                 return new DamageData(damageType, range?.First ?? 0, range?.Second ?? 0, flags);

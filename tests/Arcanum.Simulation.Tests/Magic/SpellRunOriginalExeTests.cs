@@ -352,27 +352,27 @@ public sealed class SpellRunOriginalExeTests
             new("a full fatigue hit is the current fatigue", c => Damage(c, MagicAnomalyProfile.Original, fatigueBonus: -10)));
     }
 
-    private static (SpellDamagePacket? Packet, RollReplay Rolls) Packet(Row c, MagicAnomalyProfile profile, bool anyParent = false, bool noMargin = false,
+    private static (SpellDamagePacket? Packet, RollReplay Rolls, SpellRun? Run) Packet(Row c, MagicAnomalyProfile profile, bool anyParent = false, bool noMargin = false,
         int fatigueBonus = 0, int clearFlags = 0)
     {
         var rolls = new RollReplay(c["drawn"]);
-        if (c["target"] == 0) return (null, rolls);
+        if (c["target"] == 0) return (null, rolls, null);
         var parent = c["parent"] != 0 ? new SpellRunObject("parent", anyParent ? 16 : c["parentType"], c["aptitude"]) : null;
         var run = new SpellRun(0, 0, SpellRunAction.Begin, parent, parent, SpellLocation.None, null, SpellLocation.None,
             c["other"] != 0 ? new SpellRunObject("other", 16) : null, SpellRunFlags.Active, Margin: noMargin ? 0 : c["margin"]);
         var component = new SpellDamageComponent(c["type"], c["min"], c["max"], c["flags"] & ~clearFlags);
-        return (SpellDamageRules.Damage(component, run, c["fatigue"] + fatigueBonus, rolls, profile), rolls);
+        return (SpellDamageRules.Damage(component, run, c["fatigue"] + fatigueBonus, rolls, profile), rolls, run);
     }
 
     private static string Damage(Row c, MagicAnomalyProfile profile, bool anyParent = false, bool deathSurvives = false, int fatigueBonus = 0)
     {
-        var (packet, rolls) = Packet(c, profile, anyParent, fatigueBonus: fatigueBonus, clearFlags: deathSurvives ? SpellDamageFlags.Death : 0);
+        var (packet, rolls, run) = Packet(c, profile, anyParent, fatigueBonus: fatigueBonus, clearFlags: deathSurvives ? SpellDamageFlags.Death : 0);
         var drawn = rolls.Calls.Count == 0 ? "0 0 0" : $"{rolls.Calls[0].Min} {rolls.Calls[0].Max} {c["drawn"]}";
         var head = $"{(packet is null ? 0 : 1)} {rolls.Calls.Count} {drawn}";
         if (packet is null || packet.Route == SpellDamageRoute.Cancelled) return $"{head} 0 0 0 0 0 0 0 0 -9";
         var d = packet.Damage;
         var flags = packet.Flags | (deathSurvives ? c["flags"] & SpellDamageFlags.Death : 0);
-        var source = c["other"] != 0 ? 2 : c["parent"] != 0 ? 0 : -1;
+        var source = SpellDamageRules.Source(run!)?.Id switch { "other" => 2, "parent" => 0, _ => -1 };
         return $"{head} {(packet.Route == SpellDamageRoute.Step ? 1 : 2)} {d.Normal} {d.Poison} {d.Electrical} {d.Fire} {d.Fatigue} {flags} {0x280} {source}";
     }
 

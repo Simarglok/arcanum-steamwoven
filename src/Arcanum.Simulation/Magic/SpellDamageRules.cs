@@ -42,7 +42,9 @@ public sealed record SpellDamagePacket(SpellDamageRoute Route, DamageByType Dama
 public sealed record SpellAcidItem(string Id, int Slot, bool Untouched, int NormalResistance);
 
 /// <summary>An acid's steps (0x4B5810): each worn item with the damage it receives (the normal amount, lowered by the resistance of
-/// every item before it), then the wearer's share (a third of what is left) unless spared.</summary>
+/// every item before it), then the wearer's share (a third of what is left) unless spared. <see cref="SpellLifeComponents"/> takes
+/// the items and the wearer's share from it and chains the amounts through the damage steps themselves (the step's own
+/// resistance, which a weapon that ignores resistance skips).</summary>
 public sealed record SpellAcidPlan(IReadOnlyList<(SpellAcidItem Item, DamageByType Damage)> Items, DamageByType? Wearer);
 
 /// <summary>
@@ -129,8 +131,8 @@ public static class SpellDamageRules
 
     /// <summary>The acid's steps (0x4B5810) for a critter target: each item worn in slots 1000..1008 takes the normal amount, which
     /// that item's resistance then lowers for the next one (the step changes the context's amounts in place); the wearer takes a
-    /// third (toward zero) of what is left — always in the original (MG38: its body-armour test never holds), only without body
-    /// armour (slot 1006) in Steamwoven. Any other target takes a third at once.</summary>
+    /// third (toward zero) of what is left — always in the original (MG38: its body-armour test never holds), only when it wears no
+    /// body armour (slot 1006) in Steamwoven. Any other target takes a third at once.</summary>
     [OriginalFunction(0x4B5810, OriginalFunctionScope.Partial)]
     public static SpellAcidPlan Acid(SpellDamagePacket packet, bool targetIsCritter, IReadOnlyList<SpellAcidItem> worn, MagicAnomalyProfile profile)
     {
@@ -154,6 +156,14 @@ public static class SpellDamageRules
         }
         DamageByType? wearer = armour && !profile.AcidIgnoresBodyArmour ? null : damage with { Normal = damage.Normal / 3 };
         return new(items, wearer);
+    }
+
+    /// <summary>The object the damage counts as coming from for experience and the AI (the context's +0x30): the run's other
+    /// object, else its parent (0x4518D0).</summary>
+    public static SpellRunObject? Source(SpellRun run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        return run.Other ?? run.Parent;
     }
 
     /// <summary>The damage flags that are life effects: stun (0x40), blinding (0x200), an arm (0x400), the legs (0x800), a scar

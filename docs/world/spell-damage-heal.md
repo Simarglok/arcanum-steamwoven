@@ -86,7 +86,8 @@ blinding (0x200), an arm (0x400), the legs (0x800), a scar (0x1000) and the drop
 
 **Acid** (`SpellDamageRules.Acid`, 0x4B5810).
 - On a critter, each item worn in slots 1000..1008 takes the normal amount, in slot order. The step lowers the amount in
-  place by that item's resistance, so it shrinks from item to item.
+  place by that item's resistance, so it shrinks from item to item. The executor chains the amounts through the steps
+  themselves: a prevented step lowers nothing, and neither does one whose context weapon ignores resistance (MG36).
 - The wearer then takes a third of what is left. In the original this happens even when it wears body armour (MG38).
 - Any other target takes a third at once.
 
@@ -110,14 +111,16 @@ duties:
 - **No margin.** A heal takes no margin and no AI notice.
 - **Applier.** The session's heal (`LifeRules.Heal`, 0x4B58C0, ledger HL4) applies it.
 - **Raise.** A raise first asks the target's raise script (point 0x12), the host's port. The original runs that script even
-  when the target's flags refuse the raise, and either refusal stops it.
+  when the target's flags refuse the raise, and either refusal stops it. The session asks the port while it computes the step,
+  before its later refusals, so the port answers without side effects and does not call the session.
 
 ## Data fix DF4
 
 - **Defect.** Record 221's Damage component writes `Dmg_Flags:` twice. The original reads each key once, so it loses the
   second value, `Scaled`.
 - **Fix.** Under the owner's data-fix rule (ARC-DATA-022), Steamwoven reads the repeated value and ORs it in
-  (`DataFixProfile.RepeatedDamageFlagsLost`, Original true). The spell data takes the rule mode's profile (`SpellData.Open`).
+  (`DataFixProfile.RepeatedDamageFlagsLost`, Original true). Callers pass the rule mode's profile to `SpellData.Open`; none
+  reads the data as the original does. The viewer's spells page passes none, as it reads no damage flags.
 - **No effect on damage.** Under the original's damage rules the restored flag changes nothing. The component is a full death
   hit with a 0–0 range: its amount is the target's current hit points whatever `Scaled` gives, and a margin cancels it either
   way.
@@ -131,7 +134,7 @@ Owner decisions 2026-10-20 and 2026-10-21: every difference is documented.
 | A PC's full or death hit is scaled by difficulty after it took the current hit points: on hard the target lives with a quarter (MG35). | The amount is not scaled. | `MagicAnomalyProfile.DifficultyScalesKillDamage` (pending the owner, recommended) |
 | The spell's context carries the caster's wielded weapon: ignore-resistance, "uber" and damage-armour flags reach the spell (MG36). | No weapon: a nigh-invulnerable critter takes no spell damage. | `MagicAnomalyProfile.SpellDamageUsesCastersWeapon` (pending the owner, recommended) |
 | A margin takes at least 1 from an amount of 0, so a resisted stun-only spell heals a hit point (MG37). | Nothing is taken from 0 or less. | `MagicAnomalyProfile.MarginTakesFromNoDamage` (pending the owner, recommended) |
-| The acid's body-armour test compares the loop index with the slot, so the wearer always takes a third (MG38). | Body armour spares the wearer. | `MagicAnomalyProfile.AcidIgnoresBodyArmour` (pending the owner, recommended) |
+| The acid's body-armour test compares the loop index with the slot, so the wearer always takes a third (MG38). | A wearer who wears body armour is spared. | `MagicAnomalyProfile.AcidIgnoresBodyArmour` (pending the owner, recommended) |
 | Record 221 loses its repeated `Scaled` (DF4). | Restored (no effect on any amount). | `DataFixProfile.RepeatedDamageFlagsLost` (decided) |
 | A spell's damage step is cancelled by the target's taking-damage script; the AI notice, experience share, item effects and eye candy run inside the step. | The host's (no SCR runtime for point 0x17 yet; the session applies the life damage). | — |
 

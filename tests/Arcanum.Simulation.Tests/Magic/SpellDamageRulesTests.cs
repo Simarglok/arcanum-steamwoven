@@ -127,6 +127,29 @@ public sealed class SpellDamageRulesTests
     }
 
     [TestMethod]
+    public void The_executor_passes_the_rule_modes_kill_and_weapon_switches_to_the_step_Mg35_Mg36()
+    {
+        var hard = new World { Hard = true, Weapon = new CombatWeapon { Kind = WeaponKind.Weapon, IgnoresResistance = true } };
+        hard.Targets["orc"] = new Combatant { Resistances = new(50, 0, 0, 0) };
+        var kill = Component(0, 0, 0, SpellDamageFlags.Full | SpellDamageFlags.Death);
+        Assert.AreEqual(23, SpellLifeComponents.Damage(kill, Run(), Orc, hard, new Rolls(), MagicAnomalyProfile.Original).Steps.Single().Damage.HitPointDamage,
+            "a quarter of 30 off on hard: the orc lives");
+        Assert.AreEqual(30, SpellLifeComponents.Damage(kill, Run(), Orc, hard, new Rolls(), MagicAnomalyProfile.Steamwoven).Steps.Single().Damage.HitPointDamage);
+        var bolt = Component(0, 40, 40);
+        Assert.AreEqual(30, SpellLifeComponents.Damage(bolt, Run(), Orc, hard, new Rolls(), MagicAnomalyProfile.Original).Steps.Single().Damage.HitPointDamage,
+            "the caster's weapon ignores the orc's resistance; hard takes a quarter");
+        Assert.AreEqual(15, SpellLifeComponents.Damage(bolt, Run(), Orc, hard, new Rolls(), MagicAnomalyProfile.Steamwoven).Steps.Single().Damage.HitPointDamage,
+            "resisted, then a quarter off");
+        hard.Worn.Add(new SpellAcidItem("helmet", 1000, false, 50));
+        hard.Targets["helmet"] = new Combatant { Resistances = new(50, 0, 0, 0) };
+        var acid = Component(5, 60, 60);
+        Assert.AreEqual("helmet:45 orc:15", string.Join(" ", SpellLifeComponents.Damage(acid, Run(), Orc, hard, new Rolls(), MagicAnomalyProfile.Original).Steps
+            .Select(s => $"{s.Object}:{s.Damage.HitPointDamage}")), "the weapon ignores the helmet's resistance: the wearer's third of 60, then hard");
+        Assert.AreEqual("helmet:23 orc:4", string.Join(" ", SpellLifeComponents.Damage(acid, Run(), Orc, hard, new Rolls(), MagicAnomalyProfile.Original with
+            { SpellDamageUsesCastersWeapon = false }).Steps.Select(s => $"{s.Object}:{s.Damage.HitPointDamage}")), "the helmet's step halves what the wearer gets");
+    }
+
+    [TestMethod]
     public void The_executor_hands_the_host_the_life_damage_and_the_acid_steps()
     {
         var world = new World();
@@ -169,7 +192,8 @@ public sealed class SpellDamageRulesTests
         public Combatant Combatant(SpellRunObject who) => who.Id == "mage" ? Pc : Targets.TryGetValue(who.Id, out var c) ? c : new Combatant();
         public AttackTargetKind Kind(SpellRunObject who) => who.IsCritter ? AttackTargetKind.Critter : AttackTargetKind.OtherObject;
         public CombatWeapon WieldedWeapon(SpellRunObject who) => Weapon;
-        public GameDifficulty Difficulty => GameDifficulty.Normal;
+        public bool Hard { get; init; }
+        public GameDifficulty Difficulty => Hard ? GameDifficulty.Hard : GameDifficulty.Normal;
         public int CurrentHitPoints(SpellRunObject who) => 30;
         public int CurrentFatigue(SpellRunObject who) => 18;
         public IReadOnlyList<SpellAcidItem> WornItems(SpellRunObject critter) => Worn;

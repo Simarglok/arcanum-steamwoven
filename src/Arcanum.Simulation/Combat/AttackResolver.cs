@@ -584,7 +584,7 @@ public static class AttackResolver
         Check(Enum.IsDefined(request.Difficulty), "Difficulty");
         Check(Enum.IsDefined(request.Weapon.Kind), "Weapon.Kind");
         Check((request.Effects & ~AllEffects) == 0, "Effects");
-        foreach (var type in Enum.GetValues<DamageType>()) Check(Math.Abs(request.Damage[type]) <= MaxMagnitude, $"Damage.{type}");
+        foreach (var type in Enum.GetValues<DamageType>()) Check(request.Damage[type] is >= -MaxMagnitude and <= MaxMagnitude, $"Damage.{type}");
         Check(request.FullAmount is null or >= -MaxMagnitude and <= MaxMagnitude, "FullAmount");
         ValidateCombatant(request.Attacker, "Attacker");
         ValidateCombatant(request.Target, "Target");
