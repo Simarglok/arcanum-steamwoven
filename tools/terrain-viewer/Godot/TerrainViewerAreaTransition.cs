@@ -44,8 +44,10 @@ public partial class TerrainViewerApp
         _companionTemplates = mapMode ? MapCompanionTemplates(arguments, area) : AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(area.Snapshot), area.Plan, area.Snapshot.Visuals,
             AreaChart.Exterior, new(area.Snapshot.RuntimeMap));
         var moduleSha = area.Lighting?.Source.ModuleSha256 ?? area.Snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256;
+        // ARC-WORLD-057: an unlit map's session starts from the module's clock alone.
         ProfileBinding? clock = area.Lighting is { } lighting
             ? AreaAmbientDriver.ClockProfile(lighting.Source)
+            : result.UnlitSessionStartup is { } startup ? AreaAmbientDriver.ClockProfile(moduleSha, startup)
             : SelfTestBootstrap ? new(1, AreaAmbientDriver.ClockPolicy, AreaAmbientDriver.ClockSourceRevision, moduleSha, moduleSha, 1885, 15) : null;
         // ARC-WORLD-031: a map reached by a transfer keeps the game session it carried.
         var carried = mapMode ? AdoptHandoffSession(arguments) : null;

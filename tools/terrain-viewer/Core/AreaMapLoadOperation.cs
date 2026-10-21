@@ -125,6 +125,7 @@ internal static class AreaMapLoadOperation
             mf, rf, mf, rf, area.CpuRgbaBytes + actor.CheckedRgbaBytes, elapsed, 1)
         { Area = area, ActorPlan = actor.Plan, ActorTextures = actor.Textures, AreaStepSnapshot = traversal,
             MapTransitions = transitions, MapDestinations = destinations, MapTransitionsFailure = transitionsFailure, AreaMapWindowCentre = centre,
+            UnlitSessionStartup = lit is null ? AreaLightingReader.ReadStartup(stack).Startup : null,
             ActorResourceFingerprint = new(actorIdentity.Length, actorIdentity.Sha256), ActorResourceFingerprintAfter = new(actorIdentity.Length, actorIdentity.Sha256) };
     }
 
