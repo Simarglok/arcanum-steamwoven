@@ -294,13 +294,18 @@ internal sealed class InventoryDomain
     internal static SessionItemFacts MadeFacts(SessionItemKind kind) => new(kind, 0, 0, -1, null, []);
 
     /// <summary>The map's current inventory; an NPC holder is dead when its seed says so or <paramref name="killed"/> (the session's
-    /// life records, ARC-COMBAT-005) does.</summary>
-    internal SessionMapInventory View(SessionMapId map, Seed seed, Func<string, bool> killed) => new(map,
+    /// life records, ARC-COMBAT-005) does. A container an attack broke (<paramref name="spilled"/>, ARC-COMBAT-008) holds nothing:
+    /// its items lie on the ground at its cell, after the seed's ground items.</summary>
+    internal SessionMapInventory View(SessionMapId map, Seed seed, Func<string, bool> killed, Func<string, CellCoord?> spilled) => new(map,
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))
-            .Select(item => new SessionGroundItem(new(item.Entity, item.Facts), item.Cell!.Value)).ToArray(),
+            .Select(item => new SessionGroundItem(new(item.Entity, item.Facts), item.Cell!.Value))
+            .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Container).SelectMany(holder =>
+                spilled(holder.Entity) is { } cell ? Current(seed, holder).Select(item => new SessionGroundItem(item, cell)) : []))
+            .ToArray(),
         seed.Source.Holders.Select(holder => new SessionHolderInventory(holder.Entity, holder.Kind,
             holder.Dead || holder.Kind == SessionHolderKind.Npc && killed(holder.Entity),
-            Array.AsReadOnly(Current(seed, holder).ToArray()))).ToArray());
+            holder.Kind == SessionHolderKind.Container && spilled(holder.Entity) is not null ? Array.Empty<SessionInventoryItem>()
+                : Array.AsReadOnly(Current(seed, holder).ToArray()))).ToArray());
 
     /// <summary>The holder's list in its order without the taken and deleted items; an NPC's list is followed by the made items the
     /// session added to it (ARC-WORLD-055).</summary>

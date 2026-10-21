@@ -176,6 +176,9 @@ public sealed class DialogConversation
                     Finish(new DialogConversationEnd(DialogEndKind.NpcFinalLine, null));
                 }
                 return Result();
+            case DialogOptionTransition.Schematics:
+                Finish(new DialogConversationEnd(DialogEndKind.SchematicWindow, null));
+                return Result();
             case DialogOptionTransition.Exit:
                 Finish(new DialogConversationEnd(DialogEndKind.ReturnToScript, new DialogScriptLine(_request.CallerLine.Value + 1)));
                 return Result();
@@ -396,6 +399,14 @@ public sealed class DialogConversation
     }
 
     /// <summary>
+    /// SU (ARC-TECHNOLOGY-006, ledger NC1): the action interpreter's case (0x415BA0, registered with <see cref="Reputation"/>, one method
+    /// per address) asks for the schematic window with the NPC as crafter and the PC as viewer; its operand is read and ignored, the
+    /// rest of the field still runs, and the reply's target node is not entered (the caller's transition ends the talk).
+    /// </summary>
+    private OpenSchematicsCommand SchematicsCommand() =>
+        new(_request.Participants.Npc, _request.Participants.PlayerCharacter);
+
+    /// <summary>
     /// The ME and RP branches of the original's condition (0x4150D0). ME 1: the NPC has met the PC before; ME 0: it has not
     /// (the met-before function 0x4C0C40 leaves out the conversation in progress). RP n (ARC-WORLD-044): n > 0 holds when the
     /// PC has reputation n, n ≤ 0 when it lacks −n.
@@ -611,6 +622,7 @@ public sealed class DialogConversation
                 ConversationAlignment alignment => new AlignmentCommand(_request.Participants.PlayerCharacter, alignment.Mode, alignment.Value),
                 ConversationSkillTraining training => new SkillTrainingCommand(_request.Participants.PlayerCharacter, training.Skill, training.Training),
                 ConversationFatePoint => new FatePointCommand(_request.Participants.PlayerCharacter),
+                ConversationSchematics => SchematicsCommand(),
                 _ => throw new InvalidOperationException("Unadmitted action."),
             };
             DialogCommandResult result;
@@ -628,6 +640,7 @@ public sealed class DialogConversation
                     AlignmentCommand alignment => _ports.World!.Execute(alignment),
                     SkillTrainingCommand training => _ports.Skills!.Execute(training),
                     FatePointCommand fate => _ports.Fate!.Execute(fate),
+                    OpenSchematicsCommand schematics => _ports.Schematics!.Execute(schematics),
                     _ => throw new InvalidOperationException("Unadmitted command."),
                 };
             }
@@ -686,7 +699,7 @@ public sealed class DialogConversation
         var node = new DialogNodeId(npc.Id);
         try
         {
-            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null);
+            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null);
             if (MissingCapability(action) is { } missing)
             {
                 frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing);
@@ -773,7 +786,7 @@ public sealed class DialogConversation
                     record.AlternateText.PayloadOffset, 0, record.AlternateText.Length, 0), response);
             return null;
         }
-        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null);
+        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null);
         if (MissingCapability(condition) is { } missing)
         {
             frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing, response);
@@ -831,6 +844,7 @@ public sealed class DialogConversation
 
         var value = record.ResponseValue ?? 0;
         var transition = DialogOptionTransition.Exit;
+        DialogConversationFailure? targetFailure = null;
         DlgRecord? target = null;
         DialogScriptLine? line = null;
         if (block is not null)
@@ -840,15 +854,15 @@ public sealed class DialogConversation
         else if (value > 0)
         {
             transition = DialogOptionTransition.Direct;
+            // A missing or non-NPC target fails the step, unless the reply's action holds SU, whose reply never enters it (checked
+            // after the action is parsed below).
             if (!_document.TryGetRecord(value, out target) || target is null)
             {
-                failure = new DialogConversationFailure(DialogConversationFailureKind.MissingTarget, node, Response: response);
-                return null;
+                targetFailure = new DialogConversationFailure(DialogConversationFailureKind.MissingTarget, node, Response: response);
             }
-            if (target.Role != DlgRecordRole.Npc)
+            else if (target.Role != DlgRecordRole.Npc)
             {
-                failure = new DialogConversationFailure(DialogConversationFailureKind.WrongTargetRole, node, Response: response);
-                return null;
+                targetFailure = new DialogConversationFailure(DialogConversationFailureKind.WrongTargetRole, node, Response: response);
             }
         }
         else if (value < 0)
@@ -867,7 +881,7 @@ public sealed class DialogConversation
         {
             try
             {
-                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null);
+                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null);
                 if (MissingCapability(action) is { } actionMissing)
                 {
                     block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedOperation, actionMissing);
@@ -879,6 +893,15 @@ public sealed class DialogConversation
                     exception.Kind == DialogFailureKind.UnsupportedOperation ? DialogOptionBlockKind.UnsupportedOperation : DialogOptionBlockKind.InvalidOperation,
                     exception.OperationSource);
             }
+        }
+        if (targetFailure is not null)
+        {
+            if (block is not null || action?.Any(operation => operation is ConversationSchematics) != true)
+            {
+                failure = targetFailure;
+                return null;
+            }
+            target = null;
         }
         if (block is null && insult is not null)
         {
@@ -916,6 +939,21 @@ public sealed class DialogConversation
                     _ => DialogOptionTransition.Join,
                 };
                 target = next;
+                line = null;
+            }
+        }
+        if (block is null && action is not null && action.FirstOrDefault(operation => operation is ConversationSchematics) is { } schematics)
+        {
+            // SU (0x415BA0) sets the pending window code and every action of the field still runs; the reply's target node is never
+            // entered. A dialog transfer (JO/UW/FL/ET) or an insult in the same reply is outside this subset.
+            if (insult is not null || action.Any(operation => operation is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher))
+            {
+                block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, schematics.Source);
+            }
+            else
+            {
+                transition = DialogOptionTransition.Schematics;
+                target = null;
                 line = null;
             }
         }
@@ -964,6 +1002,7 @@ public sealed class DialogConversation
         ConversationQuellRumor => _ports.Rumors is null,
         ConversationSkillGate or ConversationSkillTraining or ConversationExpertTeacher => _ports.Skills is null,
         ConversationFatePoint => _ports.Fate is null,
+        ConversationSchematics => _ports.Schematics is null,
         _ => false,
     })?.Source;
 

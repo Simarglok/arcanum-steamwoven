@@ -212,6 +212,8 @@ public enum GameSessionFailure
     HealUnavailable, InvalidHealingItem,
     // Combat wear (ARC-COMBAT-007).
     InvalidWear,
+    // Object damage (ARC-COMBAT-008).
+    InvalidObject, ObjectUnavailable,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }

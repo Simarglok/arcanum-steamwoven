@@ -71,6 +71,7 @@ whether it is a junk pile.
   A lock that needs a key therefore stays locked, and `AttemptOpen` passes no keys.
 - **Bust and magic.** `SetOpenableBusted` (ARC-WORLD-051) sets the busted bit on frame 0, as the
   original busts a window; its busted ART (bit 0x200) is not stored. A door the original destroys instead
-  has no destroyed state here, and magically held writes have no caller yet.
+  is destroyed in the [object damage](object-damage-runtime.md) domain (ARC-COMBAT-008, condition `Destroyed`),
+  which also busts a window through the same bit when an attack breaks it. Magically held writes have no caller yet.
 - **Not modelled.** NPC open attempts (an NPC walker), the multiplayer key branch and the
   bust script (SAP 30).
