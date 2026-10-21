@@ -31,7 +31,7 @@ Godot references: [C# prerequisites](https://docs.godotengine.org/en/stable/tuto
 
 ## Checking that a run started (ARC-DEV-029)
 
-A run is evidence only when it ran what was intended. After starting any Godot or launcher run (viewer mode, native smoke, self-test, lab, export, `./arcanum ...`), check within the first minute that it started the intended mode, and stop it if it did not:
+A run is evidence only when it ran what was intended. After starting any Godot or launcher run (viewer mode, native smoke, self-test, lab, export, `./arcanum ...`), check within the first minute that it started the intended mode, and stop it if it did not. A run started through the [launch queue](#launch-queue-arc-dev-033) may first wait for its turn: check its `ARCANUM_QUEUE` lines first, then these:
 
 - **Started:** the log shows the mode's own startup and stage lines (a viewer prints `ARC-RENDER-004 load stage=begin` and a native smoke prints its stages as it goes; an export or a headless self-test prints its own progress lines), and a windowed run shows the viewer or lab window with its HUD. When the log is written only at exit (output redirected to a file can be buffered), check the process instead: its command line (`ps -o pid,args -p PID`) and its window.
 - **Not started:** the Godot project manager or an empty editor window (Godot did not get `--path` or its arguments); an argument failure on the viewer's HUD (`failure stage=Arguments code=Usage`, drawn on the window and not printed to the log, so the stage lines above never appear); "unrecognized arguments" from the launcher; a log without the expected mode's lines and no viewer window. An interactive viewer that has finished loading may idle at low CPU; that is not a failed start.
@@ -43,6 +43,58 @@ Known pitfalls:
 - The exterior AREA mode rejects `--game-root` (a map-mode argument) with a Usage failure on its HUD and leaves its window open.
 - A windowed native smoke needs its window visible: a hidden or covered window is one cause of a stop at the first pixel stage (`AREA_CLASS_PIXEL_NOT_OBSERVED`). Make the window visible and rerun; a stop there with the window visible and unobstructed is a result. Before ARC-RENDER-029 the exterior smoke also stopped there with its window focus simulated on (the camera follow moved the sampled view back to the actor); its samplers now hold the camera and refuse a moved view with a `..._CAMERA_MOVED` code ([map mode](../rendering/area-map-mode.md#camera-held-during-smoke-samples-arc-render-023)). A run with real window focus was not observed; if the stop persists with a visible window, compare with `main` before blaming the change.
 - A command given to the owner is one you ran yourself, or one checked with the launcher's `--dry-run` (on `area`, `world` and `map`) or `--help` and [the launcher docs](local-development.md#project-launcher). A dry run checks the launcher's command and build, not the viewer's own arguments: a viewer argument is checked by a run.
+
+## Launch queue (ARC-DEV-033)
+
+Several threads work on the owner's Mac at once. Every Godot run, every export and every `dotnet` build or test goes
+through one first-in, first-out queue, so Godot windows never open over each other, timing-sensitive runs are not
+starved, and an export gets a quiet Mac in its turn instead of waiting for one. It replaces the earlier
+`lockf /tmp/arcanum-godot-window.lock` rule, which was not first-in, first-out and covered windows only.
+
+    ./arcanum run --kind window|headless|export|dotnet [--timeout MIN] [--label TEXT] -- COMMAND [ARGS...]
+    ./arcanum queue                 # the runs holding a place, then the waiters in order
+    ./arcanum queue --history N     # the last N finished runs: waited, ran, exit
+
+| Kind | Use it for | Rule | Default limit |
+|---|---|---|---|
+| `window` | any Godot run with a window: native smokes, the viewer self-test, labs | the single Godot slot, in arrival order | 30 min |
+| `headless` | `Godot --headless`, a project import | the same Godot slot | 30 min |
+| `export` | an export endpoint (`tools/arcanum-local ... export`, the validation commands that export) | the Godot slot; when it is next, new `dotnet` runs wait and running ones finish, then it runs alone | 180 min |
+| `dotnet` | `dotnet restore/build/test`; give the root checks as one command (`sh -c '... && ... && ...'`) | runs alongside other `dotnet` and Godot runs; waits only for an export that is running or next | 45 min |
+
+- **Order and gaps.** Places are numbered as runs arrive; a waiter checks the queue every 0.25 s, so the next run
+  starts within that of the previous one ending. An export has no priority: it waits for its turn like any run, and
+  its turn always comes. Other commands (git, Python self-tests, reading logs) are not queued.
+- **Start check.** The wrapper prints `ARCANUM_QUEUE queued ticket=N kind=K ahead=A waiting-for=#M ...` while it waits
+  (again when its position changes), `ARCANUM_QUEUE start ticket=N kind=K waited=Ss` when the command starts, and
+  `ARCANUM_QUEUE end ticket=N exit=E ran=Ss` at the end, on stderr. Within the first minute after starting, check that
+  one of the first two lines is there; after `start`, check the command itself as [above](#checking-that-a-run-started-arc-dev-029).
+  A queued run is not stuck: `./arcanum queue` shows what it waits for.
+- **Limits.** A run that exceeds its limit has its whole process group stopped (SIGTERM, then SIGKILL after 10 s) and
+  exits 124 with `ARCANUM_QUEUE timeout`. `--timeout MIN` changes the limit, `--timeout 0` removes it. Stopping the
+  wrapper (Ctrl-C, SIGTERM, SIGHUP, a stopped background task) stops its command and gives up its place; the wrapper
+  exits with the command's exit code, or 128+N when stopped by signal N. A wrapper killed with SIGKILL cannot stop its
+  command: a Godot command then keeps the place until it ends or its limit plus 10 s passes, when the next waiter
+  (or `./arcanum queue`) stops its process group; a `dotnet` command keeps running outside the queue.
+- **Crashes.** Each place is a ticket file in `~/Library/Application Support/Arcanum Steamwoven/run-queue/` (or
+  `$ARCANUM_LOCAL_HOME/run-queue`) whose lock the wrapper holds; for Godot kinds the command holds it too, so a run
+  whose wrapper was killed keeps its place until its command ends or runs out of time. The kernel drops the lock of a dead process, and a
+  lock held only by a leftover descendant (a build server that inherited it) does not count, so a crashed run never
+  blocks the queue. Process start times are compared in the C locale and UTC, so lanes with different locales agree;
+  when `ps` cannot answer, the run counts as alive. Never delete ticket files by hand; `history.jsonl` there records every run.
+- **Nesting.** A queued command that calls `./arcanum run` again (or `./arcanum area|world|map`) runs inside its
+  parent's place when that place covers it: an export covers every kind, a `window` or `headless` run covers Godot
+  and `dotnet` runs, a `dotnet` run covers `dotnet` runs. Any other nesting (an export inside a Godot run, a Godot
+  run inside a `dotnet` run) would wait for its own parent and is refused: queue it on its own.
+- **The owner's viewer.** `./arcanum area`, `world` and `map` take the Godot slot first in line (after the run holding
+  it), with no time limit, and keep it until the viewer window closes; the command stays in the terminal until then.
+  Ctrl-C there, or closing the terminal, gives the place up while the viewer stays open. `--no-queue` starts at
+  once, and `--dry-run` never queues.
+- **Lanes still on lockf.** While some threads still use the lockf rule, a run holding the Godot slot also takes
+  `/tmp/arcanum-godot-window.lock`, so the two never overlap (a queued run then prints that it waits for a lockf user).
+
+Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (order, gaps, export quiet, crashed and killed runs,
+limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
 
 ## Root solution synthetic checks
 
