@@ -44,7 +44,7 @@ fewer points for the same target, as in the original, where the race effect is i
 
 The hero gains `"innateSkills":[{"cause","skill","operator","value"}]` (cause `Race` or `Gender`, the `Skill` name, the effect
 operator name); the decoder checks the shape and at most 14 entries, the import every value. Schema 20 is refused like the
-earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-schema-37)).
+earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-schema-38)).
 
 ## Viewer host
 

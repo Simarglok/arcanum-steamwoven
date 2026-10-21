@@ -517,6 +517,9 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
 
     /// <summary>ARC-WORLD-036: the experience awards the talk's commands gave (a completed quest) since the last call, in order;
     /// the host passes their follower steps on (<see cref="AreaAdvancement.LevelFollowers"/>).</summary>
+    /// <summary>ARC-SCRIPT-019: an award of a dialog script's quest action (<see cref="AreaScriptHost"/>), queued with the commands' own.</summary>
+    internal void AddAward(SessionExperienceAward award) => _awards.Add(award ?? throw new ArgumentNullException(nameof(award)));
+
     public IReadOnlyList<SessionExperienceAward> TakeAwards()
     {
         var awards = _awards.ToArray();
