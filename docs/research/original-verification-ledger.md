@@ -1831,7 +1831,7 @@ Anomalies (none needs a switch; the owner may still ask for one under D8):
 Source: the [object damage runtime](../world/object-damage-runtime.md). Question: what does the original's attack do to a
 non-critter object (the object branch of the damage step 0x4B4390, the break 0x43F1C0 and its callees)? Read on 2026-10-21
 by this task and, independently, by a fresh agent that saw only the questions and the project's records of the callees (method
-step 6). Both agree on every row; OD1–OD12 are F2 and OD13, found while answering the review, has one reading (F1). Every direct branch stays inside `.text`. The second reader saw one summary
+step 6). Both agree on every row; OD1–OD12 are F2; OD13 (found while answering the review) and OD14 (read for the viewer, part 2) have one reading each (F1). Every direct branch stays inside `.text`. The second reader saw one summary
 line of the new `ObjectDamageRules` while searching for the door/window meaning of portal ART bit 10 (which comes from the
 project's portal naming, not this reading); its reading of 0x4F06E0 rests on the listing and agrees with LK12, already F2.
 
@@ -1850,7 +1850,6 @@ project's portal naming, not this reading); its reading of 0x4F06E0 rests on the
 | OD11 | 0x43F1C0, trap | Field 25 = −1 or trap flag 0x2 already set: destroyed (sound 1). Otherwise the ART of field 25, damage 0, trap flag 0x2, sound 0, BUST script. | Original |
 | OD12 | 0x43F1C0, items | As DU4: an item whose art carries the destroyed bit is deleted (sound 1); otherwise both arts take the bit, damage 0, the item leaves a wear slot (or drops), sound 0 and its BUST script. | Original (confirms DU4) |
 | OD13 | drop (0x466E50, 0x466EF0), read by this task only (F1) | A dropped item joins a junk pile (prototype 3023) already at the location; else, when items lie there, a new junk pile is created and those items and the dropped one go into it; else it lies loose. Each drop schedules the item's decay two game days later (0x468090). So a container spilling two or more items leaves them in a junk pile. | Original; the session lays spilled items loose (a recorded difference in the [object damage runtime](../world/object-damage-runtime.md#differences-from-the-original)) |
-
 | OD14 | object click (0x54ED30), combat mode, read by this task only (F1) | In combat mode the click's goal follows the target's type (byte table 0x54FCA0): a wall, portal or scenery gets the attack goal (Shift: attempt attack) only with left or right Alt held, else the use goal; a container with Alt the attack goal, else the use-container goal; an item the pick-up goal; a trap a walk to its location; critters as FA1–FA3. | Original; the viewer attacks objects only with Alt (ARC-COMBAT-008 part 2) |
 
 Anomalies (none needs a switch):

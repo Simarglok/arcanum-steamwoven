@@ -61,7 +61,6 @@ public partial class TerrainViewerApp
             HoverAtForSelfTest(point);
             var revision = session.Version.Revision;
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
-            _worldTestTime = SimulationTime.At(_areaSmokeTime);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point, AltPressed = true });
             Require(_attack is { Object: not null }, "the Alt-click started an object attack: " + _attackNotice);
             var walked = _attack!.Approaching;
@@ -75,7 +74,7 @@ public partial class TerrainViewerApp
             CancelAreaAttack(null);
             var after = session.QueryObject(target.Object!);
             Require(attacks > 0 && session.Version.Revision > revision, $"the attack hit through the session (attacks {attacks}, notice {_attackNotice})");
-            Require(after.Damage >= before.Damage || after.Condition != SessionObjectCondition.Whole, "the object's damage did not fall");
+            Require(after.Damage > before.Damage || after.Condition != before.Condition, "the hits changed the object's damage or condition");
             SyncAreaInventory();
             var gone = after.Condition is SessionObjectCondition.Destroyed or SessionObjectCondition.Off;
             Require(!gone || _inventoryHidden?.Contains(key) == true, "a destroyed or switched-off object is no longer drawn");

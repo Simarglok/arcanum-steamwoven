@@ -23,7 +23,7 @@ public enum SessionObjectCondition
 /// The T0 facts of a portal, container, scenery or trap an attack can damage, read by the host from the object's data: its kind, its
 /// stored hit points (hp_pts, hp_adj, hp_damage), its material and stored resistances (normal, fire, electrical, poison, magic, as
 /// stored), the invulnerable object flag (0x400000), whether a portal is a window (it has a busted ART), a container a junk pile
-/// (prototype 3023), a scenery respawning (scenery flag 0x20) with its respawn field (71), whether a scenery or trap has a destroyed
+/// (prototype file 3043, the container whose number less 20 is 3023), a scenery respawning (scenery flag 0x20) with its respawn field (71), whether a scenery or trap has a destroyed
 /// ART (field 25 not −1) and is busted (its busted flag 0x2), whether its use script is a trap (the trap test 0x4BBDD0), its cell
 /// (where a container spills) and a portal's or container's lock baseline (<see cref="SessionOpenableBaseline"/>).
 /// </summary>
@@ -56,7 +56,7 @@ public sealed record SessionObjectBaseline
 /// </summary>
 public static class SessionObjectFacts
 {
-    public const int JunkPilePrototypeFile = 3043;
+    public const int JunkPilePrototypeFile = ObjectDamageRules.JunkPilePrototype + 20;
     private const uint InvulnerableObject = 0x400000, RespawnableScenery = 0x20, BustedFlag = 0x2;
 
     public static SessionObjectBaseline? FromCombatFields(Arcanum.Data.Combat.CombatBreakableFields fields, CellCoord cell,

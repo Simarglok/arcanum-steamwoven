@@ -117,15 +117,22 @@ The registry version stays 1, as when the Lock event was added.
 
   It also names the objects the session destroyed or switched off. The view no longer draws or picks those, and a destroyed
   door's passage is open.
+
+  It works on every map the viewer shows. The exterior and the cave have no session portals, so there only containers and
+  scenery are targets. A static container's entity is its inventory holder's `oid:` id, not the `sector:` id of
+  `AreaUseScriptHost.EntityId`; a later container lock or use host must use the holder id too.
 - **Input.** In combat mode, an Alt-click on a door, window, container or scenery walks within reach, plays the attack and
   runs `AttackObject` with the hero's worn items. The attack repeats while the object stays whole and stops when it breaks.
+  Stopping at a break is the viewer's own choice, not read in the executable: a busted window or a spared junk pile would break
+  again on every further hit (ODA3).
   This is the original's click (ledger OD14). Without Alt, the object is used as out of combat. An item on the ground is
   picked up and a trap walked to, as the original does, so neither is attacked by a click. The status line names the hit and
   the break, and the log prints `ARC-COMBAT-008 object-attack-hit`.
 - **Wear in play.** The hero's attack on an NPC (`AttackCritter`) now passes both sides' worn items with their durability
   values, so armour and weapon wear happen in play:
   - the hero's kit, from `AreaHeroLoad.KitDurability`;
-  - the NPC's items in wear slots, from `AreaCombatHost.WornItems`.
+  - the NPC's items in wear slots, from `AreaCombatHost.WornItems`. An item the session broke counts as taken off, as the
+    original takes it off at its first break.
 - **Native smoke.** With `--hero`, as the last stage of map mode (the map keeps what the hits did), the hero Alt-clicks the
   drawn door, window, container or scenery with the fewest hit points it can damage. It attacks until the object breaks or
   40 attacks have run. Each hit goes through the session, and a destroyed or switched-off object is no longer drawn. The

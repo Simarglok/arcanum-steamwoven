@@ -77,9 +77,10 @@ public sealed class AreaCombatHost : IAreaEventObjects
 
     /// <summary>
     /// ARC-COMBAT-008: the items in the NPC's wear slots with their durability values, for the attack's wear: the items of its list as
-    /// the session shows it now whose stored inventory location is a wear slot (1000..1008), each through
-    /// <see cref="SessionWearItem.FromCombatFields"/>. Null when the map is not covered, an item does not read or two share a slot (the
-    /// attack then wears none of the NPC's items).
+    /// the session shows it now whose stored inventory location is a wear slot (1000..1008) and that are not broken (the original takes
+    /// an item off at its first break; for an NPC that is the host's, so a broken item is no longer worn), each through
+    /// <see cref="SessionWearItem.FromCombatFields"/>. Null when the map is not covered, a worn item does not read or two share a slot
+    /// (the attack then wears none of the NPC's items).
     /// </summary>
     public IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? WornItems(GameSessionOwner session, int runtimeMap, string entity)
     {
@@ -88,11 +89,12 @@ public sealed class AreaCombatHost : IAreaEventObjects
         var worn = new Dictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>();
         foreach (var item in holder.Items)
         {
-            if (!map.TryGetRow(item.Entity, out var row)) continue;
-            if (CombatFieldReader.Read(row).Fields is not { Item: { } stored } fields) return null;
-            var slot = (Arcanum.Simulation.Equipment.EquipmentSlot)stored.InventoryLocation;
-            if (!Enum.IsDefined(slot)) continue;
-            if (SessionWearItem.FromCombatFields(item.Entity, fields) is not { } wear || !worn.TryAdd(slot, wear)) return null;
+            var slot = (Arcanum.Simulation.Equipment.EquipmentSlot)item.Facts.InventoryLocation;
+            if (!Enum.IsDefined(slot) || !map.TryGetRow(item.Entity, out var row)) continue;
+            if (CombatFieldReader.Read(row).Fields is not { Item: not null } fields || SessionWearItem.FromCombatFields(item.Entity, fields) is not { } wear)
+                return null;
+            if (session.QueryItemCondition(item.Entity, wear.Baseline) is not { Broken: false }) continue;
+            if (!worn.TryAdd(slot, wear)) return null;
         }
         return worn;
     }

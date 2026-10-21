@@ -152,11 +152,14 @@ public partial class TerrainViewerApp
 
     private AreaObjectTargets? ObjectTargets()
     {
-        if (!AttackMapActive || _readyArea is not { } area || _areaPortals is not { } portals) return null;
-        var stamp = (area, portals);
+        // The exterior and the cave have no session portals (map mode binds them): their containers and scenery are targets all the same.
+        if (!AttackMapActive || _readyArea is not { } area) return null;
+        var stamp = (area, (object?)_areaPortals);
         if (!Equals(stamp, _objectTargetsStamp))
         {
-            _objectTargets = AreaObjectTargets.From(area.Snapshot, portals, _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == area.Snapshot.RuntimeMap));
+            var inventory = _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == area.Snapshot.RuntimeMap);
+            _objectTargets = _areaPortals is { } portals ? AreaObjectTargets.From(area.Snapshot, portals, inventory)
+                : new AreaObjectTargets(area.Snapshot.RuntimeMap, area.Snapshot.Objects, new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), inventory);
             _objectTargetsStamp = stamp;
             GD.Print($"ARC-COMBAT-008 object-targets map={_readyMapName} objects={_objectTargets.Count}");
         }
@@ -482,7 +485,7 @@ public partial class TerrainViewerApp
     {
         if (!AttackMapActive) return string.Empty;
         var state = _attack is null ? string.Empty : _attack.Approaching ? " (walking to attack)" : _attack.Player is not null ? " (attacking)" : " (attack repeats)";
-        return _attackNotice is null && _attack is null ? (HeroInCombatMode ? " | attack: left-click an NPC" : string.Empty)
+        return _attackNotice is null && _attack is null ? (HeroInCombatMode ? " | attack: left-click an NPC, Alt+click an object" : string.Empty)
             : $" | attack{state}: {_attackNotice ?? "-"}";
     }
 }
