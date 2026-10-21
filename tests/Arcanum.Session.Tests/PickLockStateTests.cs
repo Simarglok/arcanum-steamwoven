@@ -102,8 +102,10 @@ public sealed class PickLockStateTests
     {
         using var owner = Picker(5, SkillTraining.Master);
         var junk = new SessionOpenableBaseline(OpenableKind.Container, 0, 0, 0, JunkPile: true);
+        var before = owner.Version.Revision;
         var result = owner.PickLock(owner.Version, Target(junk), Lockpick());
-        Assert.AreEqual((PickLockResult.Locked, false), (result.Outcome!.Value.Result, result.State!.Value.Locked));
+        Assert.AreEqual((PickLockResult.Locked, false, before + 1), (result.Outcome!.Value.Result, result.State!.Value.Locked, owner.Version.Revision),
+            "the check's draws still take a revision");
         Assert.IsNull(owner.QueryMapChange(Exterior, MapChangeKey.ForEntity(Door.Entity, GameSessionOwner.FlagsProperty)));
     }
 
@@ -155,5 +157,22 @@ public sealed class PickLockStateTests
             (result.Charge!.Charge, owner.QueryCombatRound()!.ActionPoints, owner.Version.Revision));
         Assert.IsNull(owner.PickLock(owner.Version, Target(), null, world).Charge, "without the item there is no item use to charge");
         Assert.AreEqual(points - TurnBasedRules.UseItemCost, owner.QueryCombatRound()!.ActionPoints);
+    }
+
+    [TestMethod]
+    public void AFullLockEventShareIsRefusedBeforeTheCharge()
+    {
+        using var owner = Picker(5, SkillTraining.Master);
+        // Every Lock event the queue keeps, each from unlocking another locked door.
+        for (var i = 0; i < SessionEventKinds.MaxLockResets; i++)
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.SetOpenableLocked(owner.Version, new(Exterior, $"door:x{i}"), LockedDoor, false).Disposition);
+        var world = new World();
+        Assert.AreEqual(GameSessionFailure.None, owner.StartCombatRound(owner.Version, world).Failure);
+        for (var i = 0; i < 4 && owner.QueryCombatRound()!.Actor != SessionCombatant.Hero; i++)
+            owner.EndCombatTurn(owner.Version, owner.QueryCombatRound()!.Actor, world);
+        var (points, revision, draws) = (owner.QueryCombatRound()!.ActionPoints, owner.Version.Revision, owner.QueryRandom().Draws);
+        var refused = owner.PickLock(owner.Version, Target(), Lockpick(), world);
+        Assert.AreEqual((GameSessionFailure.EventBudgetExceeded, (SessionCombatResult?)null), (refused.Failure, refused.Charge));
+        Assert.AreEqual((points, revision, draws), (owner.QueryCombatRound()!.ActionPoints, owner.Version.Revision, owner.QueryRandom().Draws), "nothing charged or drawn");
     }
 }

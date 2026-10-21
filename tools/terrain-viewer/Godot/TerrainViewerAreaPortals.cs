@@ -38,6 +38,7 @@ public partial class TerrainViewerApp
         if (_readyMapName is null || _readyArea is not { } area || _areaSession is not { } session || _worldActor.Session is not AreaGridSession grid)
         {
             _areaPortals = null; _areaPortalsStamp = null; _portalAnimations.Clear(); _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
+            _lockpickArmed = null; _portalPickWith = null;
             return;
         }
         var stamp = (area, session);
@@ -45,6 +46,7 @@ public partial class TerrainViewerApp
         {
             _areaPortals = AreaPortals.From(area.Snapshot, area.Plan);
             _areaPortalsStamp = stamp; _portalAnimations.Clear(); _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
+            _lockpickArmed = null; _portalPickWith = null;
             GD.Print($"ARC-WORLD-051 portals bound map={_readyMapName} portals={_areaPortals.All.Count} multi-frame={_areaPortals.All.Count(p => p.Frames.Count > 1)}");
         }
         var portals = _areaPortals!;
@@ -100,6 +102,13 @@ public partial class TerrainViewerApp
         else { _portalNotice = $"{PortalName(portal)}: no cell in reach"; _portalPickWith = null; }
         RefreshAreaStatus();
         return true;
+    }
+
+    /// <summary>Drops armed lockpicks with the reason on the HUD (nothing when none are armed).</summary>
+    private void CancelArmedLockpicks(string why)
+    {
+        if (_lockpickArmed is null) return;
+        _lockpickArmed = null; _portalNotice = "pick a lock cancelled: " + why;
     }
 
     /// <summary>Drops a walk to a door and a use waiting for the step to settle (another click, a reset or a reload replaced it),
@@ -174,7 +183,7 @@ public partial class TerrainViewerApp
             if (_portalUseWhenSettled is { } waiting)
             {
                 _portalUseWhenSettled = null;
-                if (!PortalUseAdmitted(out var why)) { _portalNotice = "door use dropped: " + why; RefreshAreaStatus(); }
+                if (!PortalUseAdmitted(out var why)) { _portalNotice = "door use dropped: " + why; _portalPickWith = null; RefreshAreaStatus(); }
                 else if (portals.TryGet(waiting, out var door) && PortalInReach(settled, area.Snapshot.Objects.Single(o => o.Key == waiting), PendingPortalRange)) UsePortal(door);
             }
             if (_portalUseAfterRoute is { } key && ReferenceEquals(_worldRouteSession, settled) && _worldRoute is { } route && route.Status != RouteFollowStatus.Following)
@@ -184,6 +193,8 @@ public partial class TerrainViewerApp
                 else if (route.Status != RouteFollowStatus.Arrived) _portalNotice = "walk to the door stopped: " + (route.StopReason ?? route.Status.ToString());
                 else if (portals.TryGet(key, out var target) && PortalInReach(settled, area.Snapshot.Objects.Single(o => o.Key == key), PendingPortalRange)) UsePortal(target);
                 else _portalNotice = "walk to the door ended out of reach";
+                // A pick that did not run (dropped, stopped or out of reach) is not kept for a later use.
+                _portalPickWith = null;
                 RefreshAreaStatus();
             }
         }

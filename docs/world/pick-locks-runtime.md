@@ -8,7 +8,7 @@ bonus, the fate, and the 4 action points of the inventory use in a turn-based ro
 [`GameSessionPickLock.cs`](../../src/Arcanum.Session/GameSessionPickLock.cs); viewer: **Pick a lock** in the AREA inventory window,
 then a press on a door or window in map mode ([doors and windows](../rendering/area-map-mode.md#doors-and-windows-arc-world-051)).
 No snapshot schema change: the lock state is map changes, the Lock event is the existing kind.
-Requirements: [FR-ITEM-004](../requirements/items-economy.md#fr-item-004) (locks), [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019)
+Requirements: [FR-NAV-007](../requirements/world-travel-runtime.md#fr-nav-007) (lock picking and the access state), [FR-ITEM-004](../requirements/items-economy.md#fr-item-004) (locks), [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019)
 (a skill used). [FR-AI-003](../requirements/story-social-ai.md#fr-ai-003) (NPCs and doors), which the plan lists for S9, is
 not covered: NPC pickers and the witnesses' reaction are not modelled.
 
@@ -16,7 +16,7 @@ not covered: NPC pickers and the witnesses' reaction are not modelled.
 
 - The retail 1.0.7.4 `Arcanum.exe`, read statically per the [original executable check](../research/original-executable-check.md)
   by two independent readers: rows PL1–PL7 of the [verification ledger](../research/original-verification-ledger.md#pick-locks-arc-skills-006).
-  They agree on every row; no anomaly that needs a rule-mode switch (PL7 corrects the earlier reading's SK4).
+  They agree on every row; no anomaly that needs a rule-mode switch (PL7 confirms the ledger's SK4).
 - The check, its difficulty and the fate: [SC1–SC17](../research/original-verification-ledger.md#skill-check-arc-skills-003), FT6.
   The lock setters and the Lock event: [LK2–LK5](../research/original-verification-ledger.md#doors-containers-and-locks-arc-res-065).
 - Installed original (opt-in, [below](#real-data-census)).

@@ -83,7 +83,7 @@ public partial class TerrainViewerApp
                     || _portalNotice.EndsWith(": Jammed", StringComparison.Ordinal) || _portalNotice.EndsWith(": MagicallyHeld", StringComparison.Ordinal)),
                     $"the locked door {locked.Portal.Entity} was refused: {_portalNotice}");
                 refused = new { locked.Portal.Entity, Notice = _portalNotice, Flags = locked.Portal.Baseline.Flags };
-                RunAreaPickLockSmoke(locked.Portal, command);
+                await RunAreaPickLockSmokeAsync(locked.Portal, command);
             }
             else GD.Print($"ARC-SKILLS-006 native-smoke pick NONE map={_readyMapName} (no door the player cannot open)");
             GD.Print("ARC-WORLD-051 native-smoke portal PASS " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -97,28 +97,40 @@ public partial class TerrainViewerApp
         }
     }
 
-    // ARC-SKILLS-006 native observation on the refused locked door (the PC stands next to it): with lockpicks in the PC's list
-    // (the halfling-male hero's kit), the inventory's Pick a lock button arms them and the next press on the door picks its
-    // lock through the production click route; the session's answer and the door's lock state agree. NONE without lockpicks.
-    private void RunAreaPickLockSmoke(AreaPortal door, AreaDrawCommand command)
+    // ARC-SKILLS-006 native observation on the refused door when it is locked (the PC stands next to it): with lockpicks in the
+    // PC's list (the halfling-male hero's kit), a press of the inventory's Pick a lock button arms them and the next press on the
+    // door picks its lock through the production click route; the session's lock state follows the outcome. NONE without
+    // lockpicks or when the refused door is jammed or held but not locked.
+    private async Task RunAreaPickLockSmokeAsync(AreaPortal door, AreaDrawCommand command)
     {
-        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-SKILLS-006 pick smoke: " + why); }
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-SKILLS-006 pick smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_PICK_SMOKE_FAILED");
+        }
         var session = _areaSession!;
+        if (!session.QueryOpenable(_areaPortals!.Openable(door), door.Baseline).Locked)
+        { GD.Print($"ARC-SKILLS-006 native-smoke pick NONE map={_readyMapName} (the refused door is not locked)"); return; }
         if (_inventoryHost is null || !InventoryView(null).Pc.Any(line => line.Lockpick))
         { GD.Print($"ARC-SKILLS-006 native-smoke pick NONE map={_readyMapName} (no lockpicks in the PC's list)"); return; }
         InventoryKey(Key.I);
         Require(InventoryOpen && _inventoryPanel!.PickButtonsForSelfTest.Count > 0, "the window lists a Pick a lock button");
-        var picks = _inventoryPanel!.ViewForSelfTest!.Pc.First(line => line.Lockpick).Entity;
-        ArmLockpick(picks);
-        Require(!InventoryOpen && _lockpickArmed == picks, "the button closed the window and armed the lockpicks");
+        _inventoryPanel!.PickButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Require(!InventoryOpen && _lockpickArmed is not null, "the button closed the window and armed the lockpicks: " + _portalNotice);
+        // The closed window quarantined the world: neutral frames reopen the gate, as after any window.
+        for (var i = 0; i < 3; i++) AreaSmokeFrame();
+        Require(_worldGate.IsOpen && _lockpickArmed is not null, "the gate reopened with the lockpicks armed");
         var revision = session.Version.Revision;
-        var point = PortalCenterPoint(command);
-        AreaSmokeClick(point);
-        for (var i = 0; i < 300 && _portalNotice.StartsWith("walking", StringComparison.Ordinal); i++) AreaSmokeFrame();
-        var state = session.QueryOpenable(_areaPortals!.Openable(door), door.Baseline);
+        AreaSmokeClick(PortalCenterPoint(command));
+        for (var i = 0; i < 300 && (_portalNotice.StartsWith("walking", StringComparison.Ordinal) || _portalNotice.EndsWith("after this step", StringComparison.Ordinal)); i++)
+            AreaSmokeFrame();
+        var state = session.QueryOpenable(_areaPortals.Openable(door), door.Baseline);
         var notice = _portalNotice;
         Require(notice.Contains("the lock opens") || notice.Contains("the pick failed") || notice.Contains("the lock jams"), "the press picked the lock: " + notice);
-        Require(session.Version.Revision > revision && state.Locked == !notice.Contains("the lock opens"), $"the session's lock state follows the pick: locked {state.Locked}, {notice}");
+        Require(session.Version.Revision > revision && state.Locked == !notice.Contains("the lock opens") && _lockpickArmed is null,
+            $"the session's lock state follows the pick: locked {state.Locked}, {notice}");
         GD.Print("ARC-SKILLS-006 native-smoke pick PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = _readyMapName, door.Entity, door.LockDifficulty, Notice = notice, Locked = state.Locked, Parity = "NOT_VERIFIED" }));
     }

@@ -210,12 +210,12 @@ public enum GameSessionFailure
     InvalidArea,
     // Heal with a healing item (ARC-SKILLS-005).
     HealUnavailable, InvalidHealingItem,
-    // Pick locks (ARC-SKILLS-006).
-    PickLockUnavailable, InvalidLockpick,
     // Combat wear (ARC-COMBAT-007).
     InvalidWear,
     // Object damage (ARC-COMBAT-008).
     InvalidObject, ObjectUnavailable,
+    // Pick locks (ARC-SKILLS-006).
+    PickLockUnavailable, InvalidLockpick,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }

@@ -49,7 +49,7 @@ public sealed partial class GameSessionOwner
     /// 0x462CC0 → the use-item-with-skill goal → the shared check and the pick-locks case, ledger PL1–PL6). In order:
     /// <list type="number">
     /// <item>With lockpicks, a world and a turn-based round whose subturn is the hero's, 4 action points are charged
-    /// (<see cref="ConsumeActionPoints"/>, its own revision; the heal goes on whatever the charge answers, as for any item use).
+    /// (<see cref="ConsumeActionPoints"/>, its own revision; the pick goes on whatever the charge answers, as for any item use).
     /// The worst-case budgets and revisions are checked before it. Without lockpicks (the path of a script or a service) nothing
     /// is charged.</item>
     /// <item>The check (<see cref="SkillCheckRules.Run"/>): the hero's pick-locks level and training, the lockpick's bonus, the
@@ -95,7 +95,8 @@ public sealed partial class GameSessionOwner
             var (flags, frame) = Current(target.Openable, target.Baseline);
             if (!ChangesFit(EffectiveChanges(Edits(target.Openable, target.Baseline.Kind, flags ^ LockRules.LockedBit, frame))))
                 return RejectPickLock(GameSessionFailure.BudgetExceeded);
-            if (LockEventsFull(2)) return RejectPickLock(GameSessionFailure.EventBudgetExceeded);
+            if (LockEventsFull(2) || _clock.QueryClockSnapshot().GameTimestampMs > long.MaxValue - LockRules.JamResetDelayMs)
+                return RejectPickLock(GameSessionFailure.EventBudgetExceeded);
             if (_revision >= long.MaxValue - 1) return RejectPickLock(GameSessionFailure.RevisionExhausted);
             charge = ConsumeActionPoints(Version, SessionCombatant.Hero, TurnBasedRules.UseItemCost, world);
             if (charge.Disposition == GameSessionDisposition.Rejected) return RejectPickLock(charge.Failure) with { Charge = charge };
