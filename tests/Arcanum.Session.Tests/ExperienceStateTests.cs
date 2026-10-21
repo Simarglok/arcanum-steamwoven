@@ -87,7 +87,9 @@ public sealed class ExperienceStateTests
 
         // 500 + 3700 = 4200 reaches levels 2, 3, 4 and 5 (one point each, two for level 5).
         var big = Changed(owner.AwardHeroExperience(owner.Version, 3700), owner);
-        Assert.AreEqual(new SessionExperienceAward(3700, 4, 5, new(1, 5)), big.Award);
+        Assert.AreEqual(new SessionExperienceAward(3700, 4, 5, new(1, 5)), big.Award! with { LevelUps = null });
+        // ARC-UI-046: one level-up message per level written, with the points held after it.
+        CollectionAssert.AreEqual(new SessionLevelUp[] { new(2, 6, null), new(3, 7, null), new(4, 8, null), new(5, 10, null) }, big.Award!.LevelUps!.ToArray());
         Assert.AreEqual((5, 4200, 10), Hero(owner));
         Assert.AreEqual(new SessionExperienceView(5, 4200, 10, T(6) - 4200, 1000 - 1000 * (T(6) - 4200) / (T(6) - T(5))),
             owner.QueryHeroExperience());
@@ -223,7 +225,8 @@ public sealed class ExperienceStateTests
         SessionFixtures.Changed(owner.SetQuestState(owner.Version, 1003, SessionQuestState.Accepted, out var accepted), owner, 2);
         Assert.IsNull(accepted);
         SessionFixtures.Changed(owner.SetQuestState(owner.Version, 1003, SessionQuestState.Completed, out var completed), owner, 3);
-        Assert.AreEqual(new SessionExperienceAward(1300, 1, 1, new(1, 2)), completed);
+        Assert.AreEqual(new SessionExperienceAward(1300, 1, 1, new(1, 2)), completed! with { LevelUps = null });
+        CollectionAssert.AreEqual(new SessionLevelUp[] { new(2, 6, null) }, completed!.LevelUps!.ToArray(), "a quest's experience posts its level-up message too");
         Assert.AreEqual((2, 2000, 6), Hero(owner));
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.SetQuestState(owner.Version, 1003, SessionQuestState.Completed).Disposition);
         SessionFixtures.Changed(owner.SetQuestState(owner.Version, 1004, SessionQuestState.Completed), owner, 4);

@@ -61,7 +61,9 @@ by level, the worth function 0x45F0B0); the session never reads it.
 admission: an equal step would divide by zero in the progress formula; the installed table qualifies). `ToNextLevel`,
 `Progress`, `BonusPoints`, `Advance` (the recalculation for a PC without an auto-level scheme and without level effects:
 level, experience, unspent points, levels and points gained, and the step for the followers or null when it stopped early;
-an optional callback spends each level's points as it is written, ARC-WORLD-036),
+an optional callback spends each level's points as it is written, ARC-WORLD-036, and another reports each level written, with
+the unspent points before it and its points, ARC-UI-046), `LevelMessagePoints` (the points a level-up message names: the sum
+before the cap of 56 under the Original rules, ledger OL28, the capped value under Steamwoven, owner decision D6 2026-10-21),
 `FollowerLevel`, `AdjustForDifficulty`, `KillAward` and `DamageShare`. `DamageShare` computes without the original's
 32-bit wrap of worth × percentage, which installed worths (a few thousand) reach only with a hit thousands of times larger
 than the maximum hit points.
@@ -74,7 +76,7 @@ than the maximum hit points.
 | `Difficulty`, `SelectDifficulty`, descriptor and restore `Difficulty` | The game difficulty (`GameDifficulty`, the player's setting): Normal by default, switched at once without a revision, not saved, like the rule mode. An undefined value is `InvalidDescriptor` or `Rejected`. |
 | `SessionHeroDefinition.Experience`, `SessionHeroState.Experience` | The stored experience (0..2,000,000,000, else `InvalidHero`); a pre-made hero has 0. |
 | `QueryHeroExperience` | Level, experience, unspent points, and with data the remaining experience and the progress. |
-| `AwardHeroExperience(expected, amount)` | XP1 and XP5 for the hero: amount within ±100,000,000 (`InvalidExperience`); a zero amount and a dead hero are `NoChange` with no award. The result's `SessionExperienceAward` has the award after difficulty and effects, the levels and points gained and the followers' level step. One revision. An award that leaves the hero unchanged (a negative one at 0, or the last-level branch from level 50's threshold) is `NoChange` with its award set, and its follower step still applies, as the source runs the followers' update every time. |
+| `AwardHeroExperience(expected, amount)` | XP1 and XP5 for the hero: amount within ±100,000,000 (`InvalidExperience`); a zero amount and a dead hero are `NoChange` with no award. The result's `SessionExperienceAward` has the award after difficulty and effects, the levels and points gained, the followers' level step and, since ARC-UI-046, `LevelUps`: one `SessionLevelUp` per level written in the normal branch (none in the last-level branch, none for followers, OL27), with the level and either the points the message names (`LevelMessagePoints` under the active rules) for a hero without a scheme number, or `SessionLevelUpScheme`: no rule (a scheme number without a rule, or no scheme data), or that level's purchases and whether the rule completed (a scheme run the session refuses for its pool bound keeps nothing, so that level names no purchase and no completion). One revision. An award that leaves the hero unchanged (a negative one at 0, or the last-level branch from level 50's threshold) is `NoChange` with its award set, and its follower step still applies, as the source runs the followers' update every time. |
 | `AwardQuestExperience(expected, level)` | The dialog `XP` action and the script quest-experience action: `xp_quest.mes`[level], 0 (no change) without an entry. |
 | `SetQuestState` | A Completed request that passes the quest rules gives the quest's experience first, in the same revision; the overload with `out SessionExperienceAward?` returns it. |
 | `RecordNpcDamage(expected, loaded, damage, maxHitPoints, byHero)` | XP10: the NPC's record (or its loaded worth and pool while it has none) loses the hit's share; the hero gets it when `byHero`. Damage 0..1,000,000 and maximum 1..1,000,000. The host calls it only for an NPC not turned to stone, with an attacker. |
@@ -96,9 +98,12 @@ refused, not migrated.
 ## Tests
 
 - `tests/Arcanum.Simulation.Tests/Character/ExperienceRulesTests.cs`: table admission, to-next and progress at and around
-  thresholds, the points schedule, single and multi-level advances, the unspent cap, the last-level branch, followers,
+  thresholds, the points schedule, single and multi-level advances, the unspent cap, the levels reported for the message and
+  their points under both settings, the last-level branch, followers,
   difficulty, kill and pool shares.
 - `tests/Arcanum.Data.Tests/Characters/ExperienceTablesTests.cs`: the four readers on synthetic MES text.
+- `tests/Arcanum.Session.Tests/LevelUpMessageStateTests.cs` (ARC-UI-046): one message per level, the points under both settings
+  past the cap (D6), a scheme's purchases per level and its completion, no rule, none for a follower's level update.
 - `tests/Arcanum.Session.Tests/ExperienceStateTests.cs`: awards, levels and points, maximum hit points, clamps, the last
   level, difficulty, the `xpgain` effect, a dead hero, quest experience through `SetQuestState`, pool and kill records,
   the budget, the revision limit, the snapshot and its refusals.
@@ -111,9 +116,9 @@ refused, not migrated.
 - Viewer host, partial (ARC-UI-007): with `--hero` the AREA session gets the three tables (`AreaStartingHero.Experience`,
   kept over F8), so a dialog's quest completion gives quest experience and the
   [character sheet](../rendering/terrain-viewer.md#character-sheet-arc-ui-007) shows the experience to the next level. Not
-  wired: the dialog `XP` action and a level-up message (the original's message is read in
-  [ARC-RES-064](../research/companion-orders-loyalty-evidence.md#4-level-up-message-q4-xp5), OL27); hits and kills give experience since ARC-COMBAT-005 and the
-  points are spent by the hero's scheme since ARC-WORLD-036.
+  wired: the dialog `XP` action. Hits and kills give experience since ARC-COMBAT-005, the points are spent by the hero's scheme
+  since ARC-WORLD-036, and every level written posts its
+  [level-up message](../rendering/terrain-viewer.md#level-up-messages-arc-ui-046) since ARC-UI-046.
 - Auto-level schemes are [ARC-WORLD-036](advancement-runtime.md): the hero's scheme spends its points at creation and at
   each level, and the followers' level step is applied to their saved sheets with their schemes. Point purchases by the
   player and the Educator background are not modelled.

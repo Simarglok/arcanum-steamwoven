@@ -43,6 +43,12 @@ public readonly record struct ExperienceAdvance(int Level, int Experience, int U
 /// <summary>The PC level step a follower's level follows: the PC's level before the recalculation and the level it reached.</summary>
 public readonly record struct FollowerLevelStep(int OldPcLevel, int NewPcLevel);
 
+/// <summary>
+/// One level the source's recalculation writes in its normal branch (0x4A69C0; ARC-UI-046, ledger OL27): the level, the unspent
+/// points stored before it and the points it grants. The level-up message is posted for it before the PC's scheme spends.
+/// </summary>
+public readonly record struct ExperienceLevelWritten(int Level, int UnspentBefore, int Points);
+
 /// <summary>A PC level step a waiting follower missed and how many times in a row it came (ARC-WORLD-047).</summary>
 public readonly record struct MissedLevelStep(FollowerLevelStep Step, int Times);
 
@@ -114,7 +120,9 @@ public static class ExperienceRules
     /// The source's level recalculation after the experience changed (0x4A69C0), for a PC with no
     /// effects on its level. Its auto-level scheme runs through <paramref name="spend"/> (ARC-WORLD-036): after each level is
     /// written with its points, the callback gets the new level and unspent points and returns the unspent points the scheme
-    /// left (the caller keeps what the scheme bought); without it the points stay unspent. Nothing changes at or above the maximum level or while the next level
+    /// left (the caller keeps what the scheme bought); without it the points stay unspent. <paramref name="written"/> reports each
+    /// level written, with the unspent points before it and its points, before they are added and spent (ARC-UI-046: the source
+    /// posts the level-up message there). Nothing changes at or above the maximum level or while the next level
     /// is not reached. Otherwise each reached level is written with its points (the unspent total capped at
     /// <see cref="MaxUnspentPoints"/>), until a level is not reached or the next one would be <see cref="MaxLevel"/>: then the
     /// original writes the threshold of the PC's current level (<c>MaxLevel − 1</c>) as its experience, keeps the level and
@@ -123,7 +131,7 @@ public static class ExperienceRules
     /// </summary>
     [OriginalFunction(0x4A69C0, OriginalFunctionScope.Partial)]
     public static ExperienceAdvance Advance(ExperienceTable table, int level, int experience, int unspentPoints,
-        Func<int, int, int>? spend = null)
+        Func<int, int, int>? spend = null, Action<ExperienceLevelWritten>? written = null)
     {
         ArgumentNullException.ThrowIfNull(table);
         ValidateLevel(level);
@@ -149,6 +157,7 @@ public static class ExperienceRules
             var bonus = BonusPoints(current - 1, current);
             gained++;
             points += bonus;
+            written?.Invoke(new(level, unspentPoints, bonus));
             unspentPoints = Math.Min(MaxUnspentPoints, unspentPoints + bonus);
             if (spend is not null)
             {
@@ -213,6 +222,19 @@ public static class ExperienceRules
         else if (list.Count >= MaxMissedStepEntries) return null;
         else list.Add(new(step, 1));
         return list.AsReadOnly();
+    }
+
+    /// <summary>
+    /// The points a level-up message names for a PC without an auto-level scheme (ARC-UI-046): the original names the stored
+    /// unspent points plus the level's points, summed before the setter caps unspent points at <see cref="MaxUnspentPoints"/>
+    /// (ledger OL28, 0x4A6A90–0x4A6AC4), so it can name points the PC does not have; Steamwoven names the capped value the PC
+    /// holds (decision D6, <see cref="ExperienceRuleProfile.LevelMessagePointsBeforeCap"/>).
+    /// </summary>
+    public static int LevelMessagePoints(ExperienceLevelWritten written, ExperienceRuleProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        var sum = written.UnspentBefore + written.Points;
+        return profile.LevelMessagePointsBeforeCap ? sum : Math.Min(MaxUnspentPoints, sum);
     }
 
     /// <summary>

@@ -21,6 +21,13 @@ public sealed record ExperienceRuleProfile
     public bool ProgressProductWraps { get; init; }
 
     /// <summary>
+    /// Ledger OL28 (decision D6, ARC-UI-046): the level-up message of a PC without an auto-level scheme names the stored unspent
+    /// points plus the level's points, summed before the cap of 56 (0x4A6A90–0x4A6AC4), so past the cap it names points the PC
+    /// does not have (a cosmetic bug). Steamwoven names the capped value the PC holds (owner decision D6, 2026-10-21).
+    /// </summary>
+    public bool LevelMessagePointsBeforeCap { get; init; }
+
+    /// <summary>
     /// Ledger OL29 (owner decision D7, 2026-10-21, ARC-WORLD-047): after the followers in its array, the PC's level step reaches only
     /// the waiting followers among the loaded objects inside a rectangle the size of the game window centred on the PC (0x4A69C0,
     /// 0x440FC0), so one waiting farther away or on another map never gets it and stays behind for good. Steamwoven gives the step
@@ -32,7 +39,10 @@ public sealed record ExperienceRuleProfile
     public static readonly ExperienceRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly ExperienceRuleProfile Original = new() { Name = "original", ProgressProductWraps = true, WaitingFollowersStepOnlyNearPc = true };
+    public static readonly ExperienceRuleProfile Original = new()
+    {
+        Name = "original", ProgressProductWraps = true, LevelMessagePointsBeforeCap = true, WaitingFollowersStepOnlyNearPc = true,
+    };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<ExperienceRuleProfile> All { get; } = new[] { Steamwoven, Original };

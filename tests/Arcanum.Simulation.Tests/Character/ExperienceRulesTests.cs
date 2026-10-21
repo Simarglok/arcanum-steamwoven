@@ -111,6 +111,38 @@ public sealed class ExperienceRulesTests
     }
 
     [TestMethod]
+    public void EveryLevelWrittenIsReportedBeforeItsPointsAreCapped()
+    {
+        // ARC-UI-046 (OL27): one report per level of the normal branch, with the unspent points stored before it.
+        var written = new List<ExperienceLevelWritten>();
+        ExperienceRules.Advance(Table(), 3, T(6), 54, written: written.Add);
+        CollectionAssert.AreEqual(new ExperienceLevelWritten[] { new(4, 54, 1), new(5, 55, 2), new(6, 56, 1) }, written);
+        // The scheme spends after the report: the next level's report sees what it left.
+        written.Clear();
+        ExperienceRules.Advance(Table(), 1, T(3), 5, (_, unspent) => 0, written.Add);
+        CollectionAssert.AreEqual(new ExperienceLevelWritten[] { new(2, 5, 1), new(3, 0, 1) }, written);
+        // The last-level branch writes no level and reports none.
+        written.Clear();
+        ExperienceRules.Advance(Table(), 49, T(51), 3, written: written.Add);
+        CollectionAssert.AreEqual(new ExperienceLevelWritten[] { new(50, 3, 2) }, written);
+        written.Clear();
+        ExperienceRules.Advance(Table(), 50, T(51), 3, written: written.Add);
+        Assert.AreEqual(0, written.Count);
+    }
+
+    [TestMethod]
+    public void TheLevelMessageNamesThePointsBeforeTheCapOnlyInTheOriginalSetting()
+    {
+        // OL28 / D6: 55 stored plus a 2-point level is 57 in the original's message; Steamwoven names the 56 the PC holds.
+        Assert.AreEqual(57, ExperienceRules.LevelMessagePoints(new(5, 55, 2), ExperienceRuleProfile.Original));
+        Assert.AreEqual(56, ExperienceRules.LevelMessagePoints(new(5, 55, 2), ExperienceRuleProfile.Steamwoven));
+        Assert.AreEqual(8, ExperienceRules.LevelMessagePoints(new(2, 7, 1), ExperienceRuleProfile.Original));
+        Assert.AreEqual(8, ExperienceRules.LevelMessagePoints(new(2, 7, 1), ExperienceRuleProfile.Steamwoven));
+        Assert.IsTrue(ExperienceRuleProfile.Original.LevelMessagePointsBeforeCap);
+        Assert.IsFalse(ExperienceRuleProfile.Steamwoven.LevelMessagePointsBeforeCap);
+    }
+
+    [TestMethod]
     public void UnspentPointsStopAtFiftySix()
     {
         var advance = ExperienceRules.Advance(Table(), 7, T(10), 54);
