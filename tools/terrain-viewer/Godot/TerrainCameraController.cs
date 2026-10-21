@@ -39,10 +39,12 @@ public sealed class TerrainCameraController
         Fit(viewport);
     }
 
-    /// <summary>An AREA plan; <paramref name="window"/>: a map loaded as a window, whose zoom has a floor (ARC-RENDER-032).</summary>
-    public void SetAreaPlan(AreaScenePlan plan, Vector2 viewport, bool window)
+    /// <summary>An AREA plan; <paramref name="window"/>: a map loaded as a window, whose zoom has a floor (ARC-RENDER-032) unless
+    /// <paramref name="overview"/> (ARC-RENDER-034, the terrain overview's bounds) widens the bounds: then the view may reach the
+    /// overview and the floor is the ordinary 1/8.</summary>
+    public void SetAreaPlan(AreaScenePlan plan, Vector2 viewport, bool window, Arcanum.Data.Terrain.TerrainRect? overview = null)
     {
-        _world = true; _plan = null; _bounds = plan.WorldBounds; WindowFloored = window; Fit(viewport);
+        _world = true; _plan = null; _bounds = overview ?? plan.WorldBounds; WindowFloored = window && overview is null; Fit(viewport);
     }
     /// <summary>Whether the shown plan is a window whose zoom has a floor (ARC-RENDER-032).</summary>
     public bool WindowFloored { get; private set; }

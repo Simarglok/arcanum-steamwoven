@@ -1320,7 +1320,7 @@ WORLD starts in Follow at preferred zoom 2.00 when no valid preference exists.
 This is a hypothesis for an assessable actor, not a QHD comfort measurement.
 LT out / RT in are admitted complete-frame levels with deadzone 0.10 and full
 drive one octave/second. The ratio remains 0.125..8 with nearest filtering (on a map loaded as a window the
-smallest is its zoom floor, ARC-RENDER-032, [map mode](area-map-mode.md#the-main-world-map-arc-render-024));
+smallest is its zoom floor, ARC-RENDER-032, or 1/8 again over its terrain overview since ARC-RENDER-034, [map mode](area-map-mode.md#the-main-world-map-arc-render-024));
 camera zoom never changes simulation, asset geometry, UI scale or display DPI.
 Numerical 1.00 does not prove physical 1:1 on a HiDPI framebuffer.
 

@@ -691,7 +691,23 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   its goal held by the new window (the far-goal hand-over was not needed on this walk; unit tests cover it), at least
   179 visible bodies after each move. Managed heap after a full collection: 265 MB at the start and 413 MB at the end
   in the Shrouded Hills window (observed values, not a growth measure; the stream smoke's windows take 368 to 435 MB).
-- **Zoom floor (ARC-RENDER-032).** On a map loaded as a window the smallest zoom is not the viewer's ordinary 1/8 but
+- **Terrain overview (ARC-RENDER-034).** Beyond the window's 3×3 core the viewer draws a terrain overview: every sector within
+  6 of the window's centre (`AreaTerrainOverview.Radius`; 160 sectors at most) is one flat diamond (5,120 × 2,560 px) in the
+  colour of its base terrain type, read from the map's terrain grid (`terrain.tdf`) and the type's editor colour in
+  `terrain\terrain.mes` (message 100 + type, `R,G,B`, `TerrainEditorColours`; a type without one is grey). It is drawn behind
+  everything (`AreaOverviewLayer`, one polygon per sector, redrawn only when a window publishes). Objects, critters and tiles
+  appear only inside the loaded window. The overview's bounds become the camera's, so the window's zoom floor is the viewer's
+  ordinary 1/8 again: at 1/8 a 2560 × 1440 view (20,480 × 11,520 px) reaches past the window onto the overview, and every
+  corner and edge midpoint of the view falls on the core or an overview sector. The editor colours are data the original's
+  terrain initialisation does not read; the overview is a Steamwoven viewer feature (the original has no zoom), so no parity
+  applies. A window whose terrain grid or types cannot be read has no overview and keeps the floor below (the load log says
+  why: `ARC-RENDER-034 overview unavailable`). Load cost on the owner's Mac (2026-10-21): the grid and colours read in 40 ms
+  per window load; the farthest frame at 2560 × 1440 took 15 ms with 269 level-3 chunks and 37,363 visible commands. Native
+  check in the map battery: `ARC-RENDER-034 native-smoke overview PASS` (at the smoke's window size and at 2560 × 1440 the
+  zoom reaches 1/8, the view stays inside the overview's bounds, past the window on the large display, with no empty ground,
+  the overview drawn, the first far frame within the census frame budget). Tests: `AreaTerrainOverviewTests` (sectors,
+  colours, diamonds, bounds), `TerrainEditorColourTests` (the colour messages).
+- **Zoom floor (ARC-RENDER-032).** Without a terrain overview (ARC-RENDER-034, above), on a map loaded as a window the smallest zoom is not the viewer's ordinary 1/8 but
   the smallest power of two (1/2^k), at least 1/8, at which the view is no wider and no taller than the window's drawn
   bounds (`WorldZoomPolicy.WindowFloor`: the viewport over the bounds of the 3×3 core on the tighter axis, rounded up).
   The camera keeps the view inside those bounds, so the view never reaches past what the window loads and draws; at 1/8
@@ -724,10 +740,9 @@ in progress ends on its committed cell); saved sector differences (`.dif`) are n
 moves is bound only if the new window holds its cell; on the same map, an F8 save or a jump point or teleport whose cell
 lies outside the shown window is refused (the cell is not admitted in this window; another map's save or exit opens the
 window around it); a click is a goal inside the shown window (a goal farther away is reached only by a host that plans
-it, as the walk smoke does with the window route); far out, the view is bounded by the window (the zoom floor):
-there is no overview of the terrain beyond it (a terrain overview from `terrain.mes` colours or thinned chunks is a
-follow-up and NOT READY), and the corners of the window's bounding box outside its diamond stay empty, as at any
-map's edge. Original parity NOT_VERIFIED.
+it, as the walk smoke does with the window route); far out, the view shows the terrain overview beyond the window
+(ARC-RENDER-034): flat colours by terrain type, sector by sector, no tile detail, objects or critters, and nothing beyond
+6 sectors from the window's centre (the camera keeps the view inside). Original parity NOT_VERIFIED.
 
 ## World map (ARC-UI-048)
 
