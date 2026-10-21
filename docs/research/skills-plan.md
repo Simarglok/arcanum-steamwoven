@@ -219,6 +219,10 @@ setting, the original's "one click removes points until the level changes" or
 Depends on: S1.
 
 **S6 Skills page on the character sheet** (UI part of K7).
+**Built by ARC-UI-009** (2026-10-21, [viewer](../rendering/terrain-viewer.md#skills-page-arc-ui-009), ledger
+[SP1–SP8](original-verification-ledger.md#skills-page-arc-ui-009)): the sixteen skills in the original's four groups with the
+skill texts of `mes\skill.mes` (`SkillTexts`, Data), + and − through the point pool with the editor the sheet opens; the − click
+is the original's default (no owner choice of the alternative). The owner's look at the page (L3) is still open.
 Result: the AREA viewer's sheet shows the 16 skills with level, training and
 the key-stat hint, and + and − buy and refund points through S5.
 Components: viewer core, Godot viewer (its smoke run is an acceptance criterion).

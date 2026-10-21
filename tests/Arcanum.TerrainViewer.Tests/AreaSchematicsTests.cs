@@ -4,6 +4,7 @@ using Arcanum.Data.Messages;
 using Arcanum.Data.Technology;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Technology;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -122,5 +123,54 @@ public sealed class AreaSchematicsTests
         Assert.AreEqual(3025, AreaSchematics.CompletedSound(7), "3018 + the current discipline (SW6), not the tab");
         var refused = session.AssembleSchematic(session.Version, record, InBag, data.Facts, data.Kind, AreaInventoryHost.DiagnosticInsertCheck);
         Assert.AreEqual("an item is missing", AreaSchematics.Refused(refused));
+    }
+
+    // ARC-TECHNOLOGY-006: an NPC crafter (degree 1 in discipline 0, two parts in its list) on a seed the session holds.
+    private static SessionNpcCrafter Smith(string npc = "smith", int degree = 1) =>
+        new(new(npc, new(CharacterRace.Human, false, [8, 8, 8, 8, 8, 8, 8, 8], 0, 0, 1, 0, [.. new int[12]], [.. new int[4]], [.. new int[16]],
+            [degree, 0, 0, 0, 0, 0, 0, 0], 1, 2, 0, 0), 0), AdvancementModifiers.None);
+
+    private static void AttachSmith(GameSessionOwner session, bool dead = false)
+    {
+        var facts = new SessionItemFacts(Part, 5, 0, 10, null, []);
+        var seed = new SessionMapInventorySeed([new("smith", SessionHolderKind.Npc, dead, false, [], ["s1", "s2"])],
+            [new("s1", facts, null), new("s2", facts, null)]);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.AttachMapInventory(session.QueryActor().Map, seed).Disposition);
+    }
+
+    [TestMethod]
+    public void An_npc_crafter_shows_its_own_degrees_list_and_an_empty_found_tab()
+    {
+        using var session = Hero();
+        AttachSmith(session);
+        var data = Data();
+        var build = AreaSchematics.Build(session, data, AreaSchematicTab.Learned, 0, 0, InBag, MesTextProfile.Windows1252, Smith());
+        Assert.AreEqual(AreaSchematicRefusal.None, build.Refusal);
+        var view = build.View!;
+        Assert.AreEqual(("smith", 1, 2000, AssemblyButton.CanAssemble), (view.Crafter, view.Pages, view.Record, view.Button), "degree 1: one learned record");
+        Assert.AreEqual(("s1", "s2"), (view.Component1!.Found ? "s1" : null, view.Component2!.Found ? "s2" : null));
+        var found = AreaSchematics.Build(session, data, AreaSchematicTab.Found, 0, 0, InBag, MesTextProfile.Windows1252, Smith()).View!;
+        Assert.AreEqual((true, 0), (found.Placeholder, found.Pages), "an NPC crafter has no found tab");
+        var result = session.AssembleSchematicForNpc(session.Version, Smith(), data.Catalog.Read(2000).Record!, InBag, data.Facts, data.Kind,
+            AreaInventoryHost.DiagnosticInsertCheck);
+        Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition, result.Failure.ToString());
+        Assert.AreEqual(2, session.QueryNpcInventory("smith").Count, "the products go to the NPC");
+        Assert.AreEqual(2, session.QueryHeroKit().Count, "the hero's parts are untouched");
+        Assert.AreEqual(AssemblyButton.ItemMissing,
+            AreaSchematics.Build(session, data, AreaSchematicTab.Learned, 0, 0, InBag, MesTextProfile.Windows1252, Smith()).View!.Button);
+    }
+
+    [TestMethod]
+    public void An_npc_crafter_is_refused_unknown_or_dead()
+    {
+        using var session = Hero();
+        var data = Data();
+        Assert.AreEqual(AreaSchematicRefusal.NoCrafter,
+            AreaSchematics.Build(session, data, AreaSchematicTab.Learned, 0, 0, InBag, MesTextProfile.Windows1252, Smith()).Refusal, "no seed lists it");
+        AttachSmith(session, dead: true);
+        Assert.AreEqual(AreaSchematicRefusal.Dead,
+            AreaSchematics.Build(session, data, AreaSchematicTab.Learned, 0, 0, InBag, MesTextProfile.Windows1252, Smith()).Refusal);
+        var invalid = Smith() with { Loaded = Smith().Loaded with { Entity = "bad id" } };
+        Assert.AreEqual(AreaSchematicRefusal.NoCrafter, AreaSchematics.Refusal(session, invalid));
     }
 }

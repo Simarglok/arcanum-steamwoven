@@ -147,9 +147,10 @@ public sealed class AreaScriptHostTests
     }
 
     // ARC-TECHNOLOGY-005 (SW8, TC2 both fixed): the PC opens its own window; an NPC without a leader opens nothing; an NPC with its
-    // PC leader is refused by name (the NPC crafter is a later slice); an absent object names none. No session state changes.
+    // PC leader opens the window with the NPC as crafter and the leader as viewer (ARC-TECHNOLOGY-006); an absent object names none.
+    // No session state changes.
     [TestMethod]
-    public void Schematic_requests_open_the_pc_window_and_refuse_an_npc_crafter_by_name()
+    public void Schematic_requests_open_the_pc_window_and_an_npc_crafter_with_its_pc_leader()
     {
         using var f = Create();
         var npc = f.Host.Object(f.Speaker);
@@ -169,8 +170,8 @@ public sealed class AreaScriptHostTests
         CollectionAssert.AreEqual(new[]
         {
             new AreaSchematicScriptOpen(f.Host.Pc, f.Host.Pc, AreaSchematicScriptStatus.Open),
-            new AreaSchematicScriptOpen(npc, f.Host.Pc, AreaSchematicScriptStatus.NpcCrafterNotReady),
-        }, f.Host.TakeSchematics().ToArray(), "a following NPC is the crafter, its PC leader the viewer: refused by name");
+            new AreaSchematicScriptOpen(npc, f.Host.Pc, AreaSchematicScriptStatus.Open),
+        }, f.Host.TakeSchematics().ToArray(), "a following NPC is the crafter, its PC leader the viewer");
         Assert.IsNull(AreaScriptHost.ResolveSchematic(npc, false, null));
     }
 
