@@ -349,6 +349,7 @@ public sealed class SpellRunSystemTests
             host.Records[7] = Record() with { Duration = new(30) };
             var system = new SpellRunSystem(SpellRunTable.Empty.With(Run(flags: SpellRunFlags.Active)), host, profile);
             system.Begin(0);
+            Assert.IsTrue(system.Notes.Any(n => n is { Kind: SpellRunNoteKind.Resisted, Target.Object.Id: "hero" }), "the caster resisted its own spell");
             return string.Join(",", host.Applied.Select(a => a.Target)) + "/" + system.Table[0]!.Source!.Id;
         }
         // The wand is turned too (the run stays reflected): in the original the swapped-in orc is the "caster" it turns on, and the
