@@ -10,7 +10,8 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     // Native observation (ARC-COMBAT-008) with --hero, the last stage of map mode (the map keeps what the hits did): in combat mode the
-    // hero Alt-clicks the drawn door, window, container or scenery it can damage that has the fewest hit points (scenery, and portals
+    // hero Alt-clicks the drawn door, window, container (not a junk pile, which never breaks) or scenery it can damage that has the
+    // fewest hit points (scenery, and portals
     // and containers whose material subtracts nothing, first), walks within reach and attacks until it breaks or a bounded number of
     // attacks ran; each hit runs through the session, and an object the hit destroyed or switched off is no longer drawn. NONE on a
     // map without such an object.
@@ -30,7 +31,7 @@ public partial class TerrainViewerApp
         var candidates = area.Snapshot.Objects.Where(row => row.Scope == AreaScope.Core && commands.ContainsKey(row.Key))
             .Select(row => targets.Target(session, row.Key))
             .Where(t => t is { Refusal: null, Object: { } o } && t.Kind is DamageableObjectKind.Portal or DamageableObjectKind.Container or DamageableObjectKind.Scenery
-                && !o.Baseline.Invulnerable && !o.Baseline.Busted)
+                && !o.Baseline.Invulnerable && !o.Baseline.Busted && !o.Baseline.JunkPile)
             .Select(t => (Target: t!, State: session.QueryObject(t!.Object!), Reduced: t!.Kind != DamageableObjectKind.Scenery
                 && AttackRules.MaterialDamageReduction(t.Object!.Baseline.Material) > 0))
             .Where(c => c.State.HitPoints > 0)
