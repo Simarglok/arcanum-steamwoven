@@ -23,6 +23,7 @@ public sealed class SpellTargetRulesTests
         public HashSet<SpellLocation> Blocked { get; } = [];
         public List<SpellTargetObject> PartyMembers { get; } = [];
         public int Facing { get; init; } = 1;
+        public Func<SpellLocation, int> Sectors { get; init; } = _ => 0;
 
         public SpellTargetObject? Object(string id) => Objects.FirstOrDefault(o => o.Id == id);
 
@@ -36,7 +37,7 @@ public sealed class SpellTargetRulesTests
 
         public bool PathExists(SpellTargetObject source, SpellLocation tile) => true;
 
-        public int SectorKind(SpellLocation location) => 0;
+        public int SectorKind(SpellLocation location) => Sectors(location);
 
         public int Direction(SpellLocation from, SpellLocation to) => Facing;
 
@@ -233,6 +234,15 @@ public sealed class SpellTargetRulesTests
         Assert.IsTrue(areas.TargetMatchesBeginArea(atHero with { Spell = 2 }));
         var result = SpellInvocationRules.Check(atHero, new(false, 10, 0, 0, 0), areas, new NoRolls());
         Assert.AreEqual((SpellInvocationRefusal.None, new SpellLocation(12, 8)), (result.Refusal, result.ReplacedTile));
+
+        // The origin is the source's location (the invocation's +0x38), not the parent's: a wand lying indoors (x ≥ 30) while
+        // its holder stands outdoors finds no tile of the same kind near the hero.
+        var indoors = new World { Sectors = l => l.X >= 30 ? 1 : 0 };
+        indoors.Objects.Add(new("hero", 15, new(14, 10)));
+        var wandAreas = new SpellInvocationAreas(indoors, _ => Tile | TileEmpty, (_, _) => new(0, null), MagicAnomalyProfile.Steamwoven);
+        var wand = new SpellObjectFacts("wand", 5, new(40, 40));
+        Assert.AreEqual(SpellLocation.None, wandAreas.FirstTileInBeginArea(atHero with { Source = wand }, SpellInvocationRules.FallbackRadius));
+        Assert.AreEqual(new SpellLocation(12, 8), wandAreas.FirstTileInBeginArea(atHero, SpellInvocationRules.FallbackRadius), "the shaman's own cast");
     }
 
     [TestMethod]

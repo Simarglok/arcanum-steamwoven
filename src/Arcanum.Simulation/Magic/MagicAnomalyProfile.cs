@@ -26,11 +26,34 @@ public sealed record MagicAnomalyProfile
     /// </summary>
     public bool SummonedTestReadsLastFlags { get; init; }
 
+    /// <summary>
+    /// MG3 (ARC-MAGIC-009): a maintenance tick of a run with a resistance margin charges the plain maintenance and then the
+    /// surcharged one. Steamwoven charges only the surcharged maintenance.
+    /// </summary>
+    public bool MaintenancePaysBoth { get; init; }
+
+    /// <summary>
+    /// MG11 (ARC-MAGIC-009): the count of a critter's maintained runs (0x450AC0) walks the run table and answers 0, so its free
+    /// maintenance slots are always intelligence / 4 (the AI's "no free slot" test). Steamwoven counts the runs that hold its slots.
+    /// </summary>
+    public bool MaintainedCountIsZero { get; init; }
+
+    /// <summary>
+    /// MG19 (ARC-MAGIC-009): one run flag (0x10) means both "unresistable" (<c>No_Resist:</c>, a script's unresistable cast) and
+    /// "final END scheduled", so an unresistable spell ends right after BEGIN and a run whose END is scheduled is unresistable.
+    /// Steamwoven keeps the two apart.
+    /// </summary>
+    public bool UnresistableIsFinalEnd { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly MagicAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly MagicAnomalyProfile Original = new() { Name = "original", SaveSubtractsResistance = true, SummonedTestReadsLastFlags = true };
+    public static readonly MagicAnomalyProfile Original = new()
+    {
+        Name = "original", SaveSubtractsResistance = true, SummonedTestReadsLastFlags = true, MaintenancePaysBoth = true,
+        MaintainedCountIsZero = true, UnresistableIsFinalEnd = true,
+    };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<MagicAnomalyProfile> All { get; } = new[] { Steamwoven, Original };

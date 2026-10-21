@@ -96,7 +96,7 @@ parent, once per target in a row (0x453EE0, 0x453F20).
 ## Invocation check (`SpellInvocationAreas`)
 
 The MT7 check's area questions: the BEGIN target mask alone (no spell flags), radius 2, no count, with the parent as self,
-the invocation's source, the parent's location as origin and the target object and tile as candidate and action target. The
+the invocation's source, the source's location as origin (the invocation's +0x38) and the target object and tile as candidate and action target. The
 NPC fallback marks the target's location as candidate and target tile, adds the tile-radius and indoor/outdoor bits, gathers
 the list and answers the first tile that passes the same test (an object target with object bits fails again; tile areas find
 a tile). The line of fire stays the caller's (I2).
