@@ -9,9 +9,10 @@ namespace Arcanum.TerrainViewer.Core;
 /// <see cref="AreaStepSnapshot.Assess"/> the session admits steps with, so a planned Open step is the step the runtime
 /// receives. Only Supported Open is Open; Unknown and Unsupported (core edge) stay distinct from Blocked. With an
 /// <paramref name="occupancy"/> provider (ARC-WORLD-016) every step gets the same live overlay the session admits it with.
-/// ARC-WORLD-073: while <paramref name="crittersPass"/> answers yes (the Original rule mode's walk plan outside combat mode, the request's
-/// flag 0x10, ledger LR2 and LRA1), living critters do not block a planned step: the T0 PC and NPC records on it count as moved and
-/// the live actors are left out, as the original's traversal mode 4 (DC5); removed objects still do not block.
+/// ARC-WORLD-073: while <paramref name="crittersPass"/> answers yes (a walk's plan outside combat mode in both rule modes, the request's
+/// flag 0x10, ledger LR2; the owner's decision of 2026-10-21 that outside combat NPCs do not block the way), living critters do not block
+/// a planned step: the T0 PC and NPC records on it count as moved and the live actors are left out, as the original's traversal mode 4
+/// (DC5); removed objects still do not block; a living critter on the goal still refuses it (DC2, <see cref="GoalHoldsCritter"/>).
 /// </summary>
 public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart = null, Func<AreaOccupancy?>? occupancy = null,
     Func<IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? portals = null, Func<bool>? crittersPass = null) : IRouteStepSource
@@ -28,6 +29,30 @@ public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart 
     /// scenery, a trap, a critter or a live actor), which drops the tile from the request's search on a cardinal step.</summary>
     public bool StepRefusedByObject(CellCoord from, NeighborDirection direction) =>
         Overlaid(from, direction).ReasonCode is "DESTINATION_OBJECT_BLOCKER" or AreaOccupancyRules.DestinationActor;
+
+    /// <summary>ARC-WORLD-073 (ledger DC2): while critters pass, whether a living critter (a T0 PC or NPC that blocks, or a live actor)
+    /// stands on the goal; the steps already refuse it otherwise.</summary>
+    public bool GoalHoldsCritter(CellCoord goal)
+    {
+        if (crittersPass?.Invoke() != true) return false;
+        foreach (var direction in Enum.GetValues<NeighborDirection>())
+        {
+            var delta = RoutePlanner.Neighbor(default, direction);
+            var neighbor = new CellCoord(goal.X - delta.X, goal.Y - delta.Y);
+            if (Contains(neighbor)) return StepEntersCritter(neighbor, direction);
+        }
+        return false;
+    }
+
+    /// <summary>ARC-WORLD-073 (ledger LR5): whether the cell the step enters holds a living PC or NPC (a T0 record the step's evidence
+    /// blocks on, not moved by the overlay, or a live actor's cell).</summary>
+    public bool StepEntersCritter(CellCoord from, NeighborDirection direction)
+    {
+        var live = occupancy?.Invoke();
+        if (live?.Occupied.Contains(RoutePlanner.Neighbor(from, direction)) == true) return true;
+        return Assessment(from, direction).Objects.Any(o => o.Role == AreaStepObjectRole.Destination && o.ObjectType is PcType or NpcType
+            && o.Disposition == CardinalTraversalDisposition.Blocked && live?.Moved.Contains(o.Key) != true);
+    }
 
     private AreaStepVerdict Overlaid(CellCoord from, NeighborDirection direction)
     {

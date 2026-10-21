@@ -14,7 +14,8 @@ public static class RoutePlanner
 {
     private const int MaximumExtraCost = 1000;
 
-    public static RoutePlan Plan(IRouteStepSource source, CellCoord from, CellCoord target, RouteLimits? limits = null)
+    /// <param name="avoid">Cells no step may enter in this plan (the follower's cells where a step was refused, ARC-WORLD-073).</param>
+    public static RoutePlan Plan(IRouteStepSource source, CellCoord from, CellCoord target, RouteLimits? limits = null, IReadOnlySet<CellCoord>? avoid = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         limits ??= new RouteLimits();
@@ -23,7 +24,7 @@ public static class RoutePlanner
         if (from == target) return new(from, target, RouteOutcome.AlreadyAtTarget, null, "ROUTE_ALREADY_AT_TARGET", [], 0, 0, 0, 0, 0, 0);
         if (Math.Abs((long)target.X - from.X) > limits.AxisDistance || Math.Abs((long)target.Y - from.Y) > limits.AxisDistance)
             return Refused(from, target, "ROUTE_TARGET_OUT_OF_RANGE");
-        var map = new SourceMap(source, target);
+        var map = new SourceMap(source, target, avoid);
         OriginalPath path;
         try { path = OriginalPathRequest.Request(map, from, target, limits.Budget); }
         catch (OverflowException) { return Refused(from, target, "ROUTE_COORDINATE_OVERFLOW"); }
@@ -125,7 +126,7 @@ public static class RoutePlanner
     /// object refused drops its tile; every step costs 10; the goal's gate is an admitted neighbour entering it by an Open step. Each
     /// directed step is asked at most once per plan.
     /// </summary>
-    internal sealed class SourceMap(IRouteStepSource source, CellCoord target) : IOriginalPathMap
+    internal sealed class SourceMap(IRouteStepSource source, CellCoord target, IReadOnlySet<CellCoord>? avoid = null) : IOriginalPathMap
     {
         private readonly Dictionary<(CellCoord, NeighborDirection), RouteStepVerdict> _verdicts = [];
         private readonly Dictionary<(CellCoord, NeighborDirection), int> _extras = [];
@@ -143,6 +144,7 @@ public static class RoutePlanner
         public OriginalPathTraversal Traverse(CellCoord from, int rotation)
         {
             var direction = (NeighborDirection)rotation;
+            if (avoid is { Count: > 0 } && avoid.Contains(OriginalPathRequest.Neighbor(from, rotation))) return new(true, false, null);
             if (Verdict(from, direction) != RouteStepVerdict.Open)
                 return new(true, false, (rotation & 1) == 1 && source.StepRefusedByObject(from, direction) ? 2 : null);
             return new(false, Extra(from, direction) > 0, null);
@@ -152,6 +154,7 @@ public static class RoutePlanner
 
         public bool DestinationOpen(CellCoord to)
         {
+            if (avoid?.Contains(to) == true || source.GoalHoldsCritter(to)) return false;
             foreach (var direction in Enum.GetValues<NeighborDirection>())
             {
                 var (dx, dy) = MovementGeometry.Delta(direction);

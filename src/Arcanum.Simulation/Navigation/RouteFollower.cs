@@ -22,7 +22,10 @@ public sealed record RouteDrive(MovementState State, IReadOnlyList<MovementResul
 /// plan is a first one), and the walker takes at most 8 rotations before it plans again; a host that walks the PC
 /// (<c>straightRetry</c>) gets the straight-line retry when a plan finds no path (<see cref="RoutePlanner.StraightRetry"/>), and every
 /// later plan toward that goal is the straight line again; the movement tests its steps as they are walked (a refused one stops
-/// the walk, <c>ROUTE_STEP_DENIED</c>).
+/// the walk, <c>ROUTE_STEP_DENIED</c>). With <c>segmentEndCritterEndsWalk</c> answering yes (the Original rule mode, ledger LR5) the
+/// walk ends before a segment's last step into a cell holding a living critter (<c>ROUTE_SEGMENT_END_CRITTER</c>). A host that asks
+/// for it (<c>replanOnDenial</c>, the viewer's click route until ARC-WORLD-074 lets the walker step through critters) gets, for a
+/// refused step of a normal plan, a new plan that avoids the refused cell, at most <see cref="DenialReplanMaximum"/> times a goal.
 /// ARC-WORLD-042: with corridor limits given (a host opts in; the player's click route does, a companion follow does not),
 /// a goal of the source the local planner cannot reach (beyond its 32-cell reach, or behind its window's edge or expansion
 /// limit) is followed along a <see cref="RouteCorridor"/> over the whole source, from waypoint to waypoint with the local
@@ -45,9 +48,13 @@ public sealed class RouteFollower
     private SimulationTime? _requestedAt;
     private InputKey? _issued;
 
+    public const int DenialReplanMaximum = 8;
+
     public RouteFollower(IRouteStepSource source, RouteLimits? limits = null, RouteCorridorLimits? corridorLimits = null, Func<bool>? corridorAllowed = null,
-        bool straightRetry = false)
+        bool straightRetry = false, Func<bool>? segmentEndCritterEndsWalk = null, bool replanOnDenial = false)
     {
+        _segmentEndCritter = segmentEndCritterEndsWalk;
+        _replanOnDenial = replanOnDenial;
         _source = source ?? throw new ArgumentNullException(nameof(source));
         _limits = limits ?? new RouteLimits();
         _corridorLimits = corridorLimits;
@@ -61,6 +68,10 @@ public sealed class RouteFollower
     private bool _farCorridorForGoal;
     // The straight-line retry entered for this goal (LR4, the run's flag 0x400): every later plan is the straight line.
     private bool _retried;
+    private readonly Func<bool>? _segmentEndCritter;
+    private readonly bool _replanOnDenial;
+    // Cells where a step of this goal's walk was refused, which its later plans avoid.
+    private readonly HashSet<CellCoord> _avoid = [];
     private int _waypointNext;
     private bool _corridorRebuilt;
     /// <summary>The corridor followed toward the current goal (ARC-WORLD-042), null while the local planner reaches it.</summary>
@@ -88,7 +99,7 @@ public sealed class RouteFollower
         if (Status == RouteFollowStatus.Following && Target == target && Range == range && farCorridor == _farCorridorForGoal) return false;
         Target = target; Range = range; Status = RouteFollowStatus.Following; StopReason = null; LastPlan = null; PlannedSegments = 0;
         _requestedAt = observedAt; ResetSegment(); Corridor = null; _waypointNext = 0; _corridorRebuilt = false;
-        _farCorridorForGoal = farCorridor; _retried = false;
+        _farCorridorForGoal = farCorridor; _retried = false; _avoid.Clear();
         return true;
     }
 
@@ -152,7 +163,13 @@ public sealed class RouteFollower
                 { _segmentNext++; _segmentCell = e.Key.To; }
                 else ResetSegment(); // Someone else moved the actor: plan again from where it stands.
             }
-            else if (e.Kind == MovementEventKind.StepRejected) Finish(RouteFollowStatus.Stopped, "ROUTE_STEP_DENIED");
+            else if (e.Kind == MovementEventKind.StepRejected)
+            {
+                // Until the walker steps through critters (ARC-WORLD-074) a refused step of a normal plan plans again around its cell.
+                var refused = RoutePlanner.Neighbor(e.Key.From, e.Key.Direction);
+                if (_replanOnDenial && !_retried && Target is { } goal && refused != goal && _avoid.Count < DenialReplanMaximum && _avoid.Add(refused)) ResetSegment();
+                else Finish(RouteFollowStatus.Stopped, "ROUTE_STEP_DENIED");
+            }
         }
         var state = result.State;
         if (Status == RouteFollowStatus.Following && state.Phase == MovementPhase.Settled && Reached(state.CommittedCell))
@@ -208,6 +225,9 @@ public sealed class RouteFollower
             if (plan.Outcome != RouteOutcome.Found) { Finish(RouteFollowStatus.Stopped, corridorStop ?? plan.ReasonCode); return ActorIntent.Neutral; }
             _segment = plan.Segment.ToArray(); _segmentNext = 0; _segmentCell = cell; PlannedSegments++;
         }
+        // LR5: before a segment's last step the cell it enters is checked for a living critter (Original ends the walk there).
+        if (_segmentNext == _segment.Length - 1 && _segmentEndCritter?.Invoke() == true && _source.StepEntersCritter(cell, _segment[_segmentNext]))
+        { Finish(RouteFollowStatus.Stopped, "ROUTE_SEGMENT_END_CRITTER"); return ActorIntent.Neutral; }
         return ActorIntent.Toward(_segment[_segmentNext]);
     }
 
@@ -217,7 +237,7 @@ public sealed class RouteFollower
 
     // LR2: every plan asks min(4 × distance + 5, 200) from where the walker stands (and at most the host's own limit).
     private RoutePlan Plan(CellCoord cell, CellCoord local) =>
-        RoutePlanner.Plan(_source, cell, local, _limits.WithBudget(Math.Min(RouteLimits.WalkBudget(cell, local), _limits.Budget)));
+        RoutePlanner.Plan(_source, cell, local, _limits.WithBudget(Math.Min(RouteLimits.WalkBudget(cell, local), _limits.Budget)), _avoid);
 
     /// <summary>The cell the local planner heads for: the goal, or along a corridor its next waypoint not yet reached; null
     /// at the end of a corridor that only nears the goal.</summary>

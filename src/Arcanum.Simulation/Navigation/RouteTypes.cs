@@ -24,6 +24,14 @@ public interface IRouteStepSource
     /// which drops the tile stepped onto from the search (no other step may then enter it). Asked only for refused cardinal steps.
     /// Default no.</summary>
     bool StepRefusedByObject(CellCoord from, NeighborDirection direction) => false;
+
+    /// <summary>ARC-WORLD-073 (ledger DC2): whether a living PC or NPC stands on the goal, which refuses it even when the plan's steps
+    /// pass critters (outside combat mode). Default no.</summary>
+    bool GoalHoldsCritter(CellCoord goal) => false;
+
+    /// <summary>ARC-WORLD-073 (ledger LR5, 0x427110): whether the cell this step enters holds a living PC or NPC (the dead skipped),
+    /// asked before a segment's last step. Default no.</summary>
+    bool StepEntersCritter(CellCoord from, NeighborDirection direction) => false;
 }
 
 public enum RouteOutcome { Found, AlreadyAtTarget, Refused, NoRoute }

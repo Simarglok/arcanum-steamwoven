@@ -603,11 +603,12 @@ public partial class TerrainViewerApp
         {
             // ARC-WORLD-042: the player's click route follows a corridor to a goal beyond the local planner's reach; ARC-WORLD-072:
             // not under the Original rule mode, read from the session's rules when a click sets the goal (the PC does not move).
-            // ARC-WORLD-073: the original's walk (its request, budget, segments and the PC's straight-line retry); under the Original
-            // rule mode its plan ignores living critters outside combat mode (LRA1, the planning side).
-            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy, () => area.Portals?.Invoke(),
-                    () => _areaSession?.Rules.Navigation.MidSegmentCrittersWalkedThrough == true && !HeroInCombatMode),
-                corridorLimits: new RouteCorridorLimits(), corridorAllowed: () => _areaSession?.Rules.Navigation.FarClickDoesNotMove != true, straightRetry: true);
+            // ARC-WORLD-073: the original's walk (its request, budget, segments and the PC's straight-line retry); outside combat mode its
+            // plan passes living critters in both rule modes (the owner's decision 2026-10-21), and under Original the walk ends before
+            // a segment's last step onto one (LR5). Until the walker steps through critters (ARC-WORLD-074) a refused step plans around.
+            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy, () => area.Portals?.Invoke(), () => !HeroInCombatMode),
+                corridorLimits: new RouteCorridorLimits(), corridorAllowed: () => _areaSession?.Rules.Navigation.FarClickDoesNotMove != true, straightRetry: true,
+                segmentEndCritterEndsWalk: () => _areaSession?.Rules.Navigation.SegmentEndCritterEndsWalk == true, replanOnDenial: true);
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;

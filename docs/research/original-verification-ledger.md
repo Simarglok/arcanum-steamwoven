@@ -2453,13 +2453,13 @@ questions (method step 6). Rows are F2 where both readers read the code, F1 wher
 Anomalies. Since ARC-WORLD-073 (owner decision "Перевести", 2026-10-21) the click route is this walk, on the one path request
 the drop shares ([comparison](../world/click-route-runtime.md#original-check-arc-world-060)). The far click of LR4 and LR7 is a rule-mode
 switch since ARC-WORLD-072 (owner decision 2026-10-21): Steamwoven walks the corridor, Original does not move
-(`NavigationRuleProfile.FarClickDoesNotMove`). LRA1 is a question to the owner:
+(`NavigationRuleProfile.FarClickDoesNotMove`). LRA1 is decided:
 
 - LRA1 (LR5): a living critter on a step other than a segment's last one is walked through (the plan ignores critters outside
-  combat, LR2, and the walk checks only the segment's last step). In the original. The owner's decision of 2026-10-21 made it a
-  switch, `NavigationRuleProfile.MidSegmentCrittersWalkedThrough`: Original follows the executable; Steamwoven is the project's
-  proposal (living critters block the plan and every step, a refused step ends the walk). ARC-WORLD-073 implements the
-  planning side; the walk-through in the movement's step admission is ARC-WORLD-074.
+  combat, LR2, and the walk checks only the segment's last step). In the original. Owner decision of 2026-10-21 12:09 ("вне боя
+  NPC не мешают проходить"): outside combat the walk through critters is the behaviour of both modes (ARC-WORLD-073 plans it,
+  ARC-WORLD-074 steps it); the segment-end stop is the switch `NavigationRuleProfile.SegmentEndCritterEndsWalk`: Original keeps it,
+  Steamwoven removes it as a bug.
 - LRA2 (LR1, LR3): the cap of 8 discards the rest of a route planned with a budget of up to 200, so a long walk is planned
   again every 8 steps. In the original; no switch proposed.
 - LRA3 (DC4, F1): with flag 0x1 the search's step onto the goal reuses the window flag of an earlier neighbour, which can add a

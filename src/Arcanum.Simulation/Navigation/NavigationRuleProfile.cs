@@ -13,16 +13,15 @@ public sealed record NavigationRuleProfile
     /// <see cref="RouteCorridor"/> (ARC-WORLD-042).</summary>
     public bool FarClickDoesNotMove { get; init; }
 
-    /// <summary>Ledger LRA1 (LR2, LR5; ARC-WORLD-073, the owner's decision 2026-10-21 made it a switch): outside combat mode the
-    /// original plans a walk with living critters ignored (the request's flag 0x10) and checks them only before each segment's last
-    /// step, so the walker passes through one on any other step. Steamwoven (the project's proposal): living critters block the plan
-    /// and every step, and a refused step ends the walk. ARC-WORLD-073 implements the planning side (read when a plan is made); the
-    /// walk-through in the movement's step admission is ARC-WORLD-074 (NOT READY: until then a refused step ends the walk in both modes).</summary>
-    public bool MidSegmentCrittersWalkedThrough { get; init; }
+    /// <summary>Ledger LR5 (LRA1; ARC-WORLD-073, the owner's decision of 2026-10-21 12:09 that outside combat NPCs do not block the
+    /// way): outside combat mode a walk plans and steps through living critters in both modes (the request's flag 0x10, LR2), but the
+    /// original checks the tile before each segment's last step for a living PC or NPC and ends the walk on one (0x427110). Steamwoven
+    /// walks on through (the stop is the original's bug); Original keeps it.</summary>
+    public bool SegmentEndCritterEndsWalk { get; init; }
 
     public static readonly NavigationRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
-    public static readonly NavigationRuleProfile Original = new() { Name = "original", FarClickDoesNotMove = true, MidSegmentCrittersWalkedThrough = true };
+    public static readonly NavigationRuleProfile Original = new() { Name = "original", FarClickDoesNotMove = true, SegmentEndCritterEndsWalk = true };
 
     public static IReadOnlyList<NavigationRuleProfile> All { get; } = new[] { Steamwoven, Original };
 
