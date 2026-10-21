@@ -2039,7 +2039,8 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
         for address, value in ((RUN_TABLE_POINTER, runs), (SPELL_TABLE_POINTER, table)):
             emulator.set_global(address, value)
         parents = [(0x5EED0060 + i, 0x42) for i in range(3)]
-        for case_number in range(count):
+        redrawn = case_number = 0
+        while case_number < count:
             spells = [rng.randrange(SPELL_RECORDS) for _ in range(6)]
             records = {sp: (int(rng.random() < 0.2), rng.choice((0, 0, 5, 30, -1))) for sp in spells}
             others = []
@@ -2087,14 +2088,16 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
             except RunFailure as failure:
                 if "a null handle" not in str(failure):
                     raise
-                result = -2   # the original reads a missing parent's type through handle 0 (MG26)
+                redrawn += 1   # the original reads a missing parent's type through handle 0 (MG26): outside the model
+                continue
             slots = [[0, this_spell, parent_index, this_flag]] + [[slot, sp, parents.index(parent), flag] for slot, (sp, parent, flag) in sorted(written.items())]
             flat = [v for row in slots for v in row] + [-1] * 4 * (15 - len(slots))
             cases.append([int(this_source), parent_type, intelligence, len(slots), *flat,
                           *(v for sp in spells for v in (sp, *records[sp])), result, len(asked)])
+            case_number += 1
             if progress and case_number % 1000 == 0:
                 progress(case_number)
-        document.update(fields=["source", "parentType", "intelligence", "runs", *(f"run{i}{n}" for i in range(15) for n in ("Slot", "Spell", "Parent", "Flags")),
+        document.update(redrawn=redrawn, fields=["source", "parentType", "intelligence", "runs", *(f"run{i}{n}" for i in range(15) for n in ("Slot", "Spell", "Parent", "Flags")),
                                 *(f"spell{i}{n}" for i in range(6) for n in ("", "Technology", "Period")), "result", "rangeAsked"])
     else:
         raise ValueError(f"unknown model {spec.model}")

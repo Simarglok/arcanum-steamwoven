@@ -7,12 +7,12 @@ public enum SpellRunAction { Begin = 0, Maintain = 1, End = 2, Callback = 3, End
 
 /// <summary>
 /// A run's flags (+0x13C): active (set by the allocator), free (no BEGIN or maintenance cost: the invocation's request),
-/// maintained (set by the scheduler, MT9a-2), unresistable (<c>No_Resist:</c> or the invocation's request) and final END
+/// processed (set by every pass of the processing, MT9a-2; never cleared), unresistable (<c>No_Resist:</c> or the invocation's request) and final END
 /// (the scheduler's mark that the next event is the END). The original keeps unresistable and final END in one bit, 0x10
 /// (MG19); <see cref="MagicAnomalyProfile.UnresistableIsFinalEnd"/> keeps them one.
 /// </summary>
 [Flags]
-public enum SpellRunFlags { None = 0, Active = 0x1, Free = 0x2, Maintained = 0x4, Unresistable = 0x10, FinalEnd = 0x10000 }
+public enum SpellRunFlags { None = 0, Active = 0x1, Free = 0x2, Processed = 0x4, Unresistable = 0x10, FinalEnd = 0x10000 }
 
 /// <summary>An object a run names, captured when the run is created: its id, object type and, for a PC or NPC, its effective
 /// magick/tech aptitude (stat 16) at that moment.</summary>
@@ -221,7 +221,8 @@ public static class SpellRunRules
     /// block it; then the cancels run. MAINTAIN: for a PC or NPC parent — the technology flag is not tested — the same checks,
     /// the maintenance (<see cref="MaintainCost"/>) unless free or the intelligence check failed, and with a resistance margin
     /// the surcharged maintenance (<see cref="SurchargedCost"/>; MG3: the original pays both, Steamwoven only the surcharged; the
-    /// surcharge is paid even for a free run or after a failed check, MG29, both modes); a failure turns the run to END. Other
+    /// surcharge is paid even for a free run or after a failed check, MG29, as the original in both modes until the owner decides);
+    /// a failure turns the run to END. Other
     /// actions proceed.
     /// </summary>
     [OriginalFunction(0x452F20, OriginalFunctionScope.Partial)]
@@ -396,9 +397,10 @@ public static class SpellRunRules
     [OriginalFunction(0x450B90, OriginalFunctionScope.Full)]
     public static int MaintainSlots(int intelligence) => intelligence / 4;
 
-    // A run that holds a maintenance slot of a parent: active, a magic record with a maintenance period, maintained, that parent.
+    // A run that holds a maintenance slot of a parent: active, processed at least once, a magic record with a maintenance
+    // period, that parent.
     private static bool HoldsSlot(SpellRun run, string parent, Func<int, SpellRunRecord> records) =>
-        (run.Flags & SpellRunFlags.Active) != 0 && (run.Flags & SpellRunFlags.Maintained) != 0 && run.Parent?.Id == parent
+        (run.Flags & SpellRunFlags.Active) != 0 && (run.Flags & SpellRunFlags.Processed) != 0 && run.Parent?.Id == parent
         && records(run.Spell) is { Technology: false, MaintainPeriod: > 0 };
 
     /// <summary>

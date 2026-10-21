@@ -116,9 +116,8 @@ public sealed class SpellRunOriginalExeTests
     public void CapMatchesTheOriginal()
     {
         var file = OracleFile.Load("4545E0", "spell-cap", TestContext);
-        var known = file.Cases.Where(c => c["result"] != -2).ToList();
-        TestContext.WriteLine($"  {file.Cases.Count - known.Count} inputs read a missing parent's type through handle 0 (MG26), not compared");
-        Run(file with { Cases = known }, c => Cap(c), c => $"{c["result"]}", (NoSwitch, NoSwitch, _ => false, c => Cap(c)),
+        // Inputs where the original reads a missing parent's type through handle 0 (MG26) are redrawn by the model.
+        Run(file, c => Cap(c), c => $"{c["result"]}", (NoSwitch, NoSwitch, _ => false, c => Cap(c)),
             new Mutant("technology records count", c => Cap(c, technologyCounts: true)),
             new("the cap is intelligence / 3", c => Cap(c, divisor: 3)),
             new("unmaintained runs count", c => Cap(c, anyFlags: true)));
@@ -136,7 +135,7 @@ public sealed class SpellRunOriginalExeTests
             var parentIndex = c[$"run{i}Parent"];
             var parent = parentIndex < 0 ? null : new SpellRunObject($"p{parentIndex}", i == 0 ? c["parentType"] : 16);
             var flags = (SpellRunFlags)c[$"run{i}Flags"];
-            if (anyFlags) flags |= SpellRunFlags.Maintained;
+            if (anyFlags) flags |= SpellRunFlags.Processed;
             var run = new SpellRun(c[$"run{i}Slot"], c[$"run{i}Spell"], SpellRunAction.Maintain, i == 0 && c["source"] == 0 ? null : new("source", 16), parent,
                 SpellLocation.None, null, SpellLocation.None, null, flags);
             table = table.With(run);

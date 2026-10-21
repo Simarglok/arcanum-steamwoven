@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "function": "0x452F20",
+  "name": "spell-stage",
+  "method": "Arcanum.Simulation.Magic.SpellRunRules.Stage",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 4,
+  "mutantsCaught": 4,
+  "differences": 0,
+  "otherMode": {
+    "mode": "steamwoven",
+    "ledger": "MG3",
+    "ledgerInputs": 1127,
+    "differ": 498,
+    "outsideLedger": 0
+  },
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "fe3ed30e708163ad1084e5d1c2dba4bfe4b3ac058806e4e81142ea13514571eb",
+  "configuration": "Debug"
+}

@@ -396,6 +396,13 @@ below do not test the technology flag (open question O8).
 
 ### Duration, maintenance and ending (FR-MAGIC-006)
 
+Read in the executable by two readers for the run's creation, stage, times and cap (ARC-MAGIC-009,
+[ledger "Spell runs"](original-verification-ledger.md#spell-runs-arc-magic-009), RN1–RN14; time, stage and cap F3), with these
+precisions: a timed run makes `DurationTriggerCount:` + 1 periods before its END; the cap counts runs that were processed at
+least once and refuses a parent that is no critter; MAINTAIN checks and charges technology records too, and charges the
+surcharged maintenance even for a free run (MG29); a full run table quits the game (MG28). The implementation is the
+[spell run rules](../world/spell-run-rules.md); the scheduler's order and the interrupts below are MT9a-2's.
+
 After each action the scheduler decides what comes next
 (schedule (0x453FA0), timers (0x454790, 0x4547F0, 0x4548D0), time (0x455250)):
 
