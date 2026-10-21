@@ -141,6 +141,14 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S10 { get; } = new("S10", S9.Conditions,
         S9.Actions.Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]), S9.ValueKinds, S9.FocusKinds);
 
+    /// <summary>
+    /// The skill set (ARC-SKILLS-009, ledger SX1–SX4): <see cref="S10"/> plus get skill (47), which stores an object's effective skill
+    /// level and needs a host that implements <see cref="IScrSkillQueries"/>, and use item with skill (79), which hands one request to
+    /// the host.
+    /// </summary>
+    public static ScrAdmissionSet S11 { get; } = new("S11", S10.Conditions,
+        S10.Actions.Concat([ScrCatalogue.Action.GetSkill, ScrCatalogue.Action.UseItemWithSkill]), S10.ValueKinds, S10.FocusKinds);
+
     /// <summary>The conditions of <see cref="S4"/> a host answers through <see cref="IScrObjectQueries"/>.</summary>
     public static IReadOnlySet<int> ObjectQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed,
         ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation };
@@ -271,6 +279,8 @@ public static class ScrAdmission
                     if ((ScrFocusKind)kind == ScrFocusKind.LocalObject && value is < 0 or >= ScrCatalogue.LocalSlots) return Refuse(ScrRefusalCode.IndexOutOfRange, true);
                     break;
             }
+            // Get skill stores into its third operand (SX1), the only store outside slot 0.
+            if (!condition && type == ScrCatalogue.Action.GetSkill && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.
             if (slot != 0) continue;
             var literal = (ScrValueKind)kind == ScrValueKind.Number;
