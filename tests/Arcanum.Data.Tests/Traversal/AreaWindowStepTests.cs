@@ -142,6 +142,26 @@ public sealed class AreaWindowStepTests
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new AreaWindowRouteLimits(maxResidentWindows: 0));
     }
 
+    [TestMethod]
+    public void A_window_route_walks_by_the_host_s_step_verdict()
+    {
+        // ARC-WORLD-060: a host's verdict (here: every step onto column 100 refused but row 50) replaces the T0 disposition, in the
+        // search and in the goal's pre-check.
+        Install(Sector());
+        using var stack = Stack();
+        var catalog = WorldCatalog.Open(stack);
+        bool Open(AreaStepAssessment assessment, AreaStepCell cell, CardinalTraversalDirection direction)
+        {
+            var next = AreaWindowRoute.Step(cell, direction);
+            return assessment.Disposition == CardinalTraversalDisposition.Open && (next.X != 100 || next.Y == 50);
+        }
+        var route = AreaWindowRoute.Plan(stack, catalog, Map, new(10, 10), new(180, 170), stepOpen: Open);
+        Assert.AreEqual(AreaWindowRouteStatus.Found, route.Status, route.Detail);
+        CollectionAssert.AreEqual(new[] { new AreaStepCell(100, 50) }, route.Cells.Where(c => c.X == 100).ToArray());
+        Assert.AreEqual("ROUTE_GOAL_UNENTERABLE",
+            AreaWindowRoute.Plan(stack, catalog, Map, new(10, 10), new(100, 60), stepOpen: Open).Detail);
+    }
+
     private static byte[] BaseWithout(string name)
     {
         using var archive = DatArchive.Open(new MemoryStream(Base(Sector())));

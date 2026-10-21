@@ -2233,6 +2233,37 @@ agent that saw only the questions (method step 6). Both agree on every row; the 
 No anomaly: Steamwoven follows the original (the live overlay moves the removed objects' T0 records for the PC and the companions);
 a respawning scenery blocks again once it is back, as its off flag clears.
 
+## Long and far routes (ARC-WORLD-060)
+
+Source: the [click-to-move route](../world/click-route-runtime.md#original-check-arc-world-060) and its WORLD-042 corridor,
+window route and far-goal hand-off. Question: how does the original build a walk to a clicked tile, how long a route can be,
+what a click beyond its reach does, how it re-plans while walking and around occupants, and how routes cross sector borders?
+The path request itself (0x41F3C0, 0x41F840, 0x41F9F0, the step tests) is DC2–DC8, and destroyed and switched-off objects are
+FC1–FC3; neither was read again. Read on 2026-10-21 by this task and, independently, by a fresh agent that saw only the
+questions (method step 6). Rows are F2 where both readers read the code, F1 where one did. Every direct branch stays inside
+`.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| LR1 | path request (0x41F3C0) for every caller | DC2–DC4 hold for a walk too: the straight attempt refuses a target more than 32 tiles away (the larger axis), the search one 32 or more away on either axis; neither returns a partial route (no route is 0, never a path toward the nearest reached tile); the result is capped at 8 rotations for every caller, whatever budget it asked (200 for a walk, the drop and others). | Original (F2) |
+| LR2 | walk path (0x426040 → 0x426500 → 0x426560), budget (0x426320), flags (0x425BF0) | A ground click starts goal 3, move to tile (0x433640; goal 4, run to tile, with always-run). Its path step plans from the walker's tile (the next tile along its facing in mid-step) to the goal tile with a budget of `min(4 × distance + 5, 200)` on the first plan (the run's buffer holds 200, 0x44CA9B), 5 more on each later plan up to a ceiling; flag 0x1000 would give 200. The search drops a tile whose estimate over 10 exceeds the budget (DC4), so a detour longer than the budget fails. A PC or NPC mover outside combat mode asks with flag 0x10 (0x4B3D50): PCs and NPCs do not block its plan (DC5, mode 4); a living critter on the goal tile still refuses it (DC2). | Original (F2) |
+| LR3 | replanning (goal 3, attempt move goal 5, cleanup 0x430F20) | The walker uses the at most 8 rotations returned, then the goal plans again from the tile it stands on toward the same goal tile, until it stands on it (0x424D90). A second click while the goal runs replaces its goal tile and sets the run's flag 0x4 (0x433640), applied at the next step boundary. | Original (F2; the cleanup's "needs path" bit and node 0x425430 F1) |
+| LR4 | no path (0x426040) | When the plan fails for a PC that has not tried yet, the run sets its flag 0x400 and plans once more with flags 0x78: a straight line, every step accepted, critters ignored, no search; the walk then tests each step as it goes (0x425760) and stops at the first refused one. Beyond 32 tiles that plan fails too: the goal ends and the PC does not move (outside a turn-based round after a wait of about a second, goal 6). | Original (F2; the end's timing F1) |
+| LR5 | the step check while walking (0x427110) | Before the last step of each returned segment the next tile is checked for a living PC or NPC (mask 0x18000, the dead skipped); with the run's flag 0x400 every step is tested (0x425760); a trap the walker avoids (DC8) is checked on every step. A living critter there ends the run (after a random 0–300 ms, node 10): no re-route. | Original (F2; the end F1) |
+| LR6 | tiles across sectors (0x4D7110 → 0x4D70B0, 0x4BB410) | A tile test locks the tile's sector by id through the sector cache (lock, read, unlock; the cache loads a sector on its first lock, SS2), so a route crosses sector borders freely; the search window spans at most 2 × 2 sectors against a 16-sector cache. Nothing treats an unloaded sector as blocked; a failed lock reads as not blocked. | Original (F2; the failed lock F1) |
+| LR7 | long routes | There is no long or hierarchical walking route; far travel on the main map is the world map's (0x4207D0, its 16 × 16 sector search). A click more than 32 tiles away cannot start a walk (LR4), and at the original's fixed view a click lands well within that. | Original (F2) |
+| LR8 | alternate search (0x420E30) | A PC-only best-first search over a window sized from the sector's town-map info, 10 a step and 1 a turn, critters ignored, limited by its argument (300 ms); it runs for flag 0x1000, which no caller in 1.0.7.4 sets. | Original (F1, dead code) |
+
+Anomalies (both settings follow the original until the owner decides; LRA1 and LRA2 are questions to the owner):
+
+- LRA1 (LR5): a living critter on a step other than a segment's last one is walked through (the plan ignores critters outside
+  combat, LR2, and the walk checks only the segment's last step). In the original; a D8 candidate.
+- LRA2 (LR1, LR3): the cap of 8 discards the rest of a route planned with a budget of up to 200, so a long walk is planned
+  again every 8 steps. In the original; no switch proposed.
+- LRA3 (DC4, F1): with flag 0x1 the search's step onto the goal reuses the window flag of an earlier neighbour, which can add a
+  spurious 50. In the original; no walk passes flag 0x1.
+- LRA4 (LR8): 0x420E30 does not check that the town-map info loaded. Dead in 1.0.7.4; nothing to decide.
+
 ## Charge cells (ARC-TECHNOLOGY-007)
 
 Source: the [charge-cell runtime](../world/charge-cell-runtime.md) and the [technology study](technology-evidence.md#technological-items-fr-magic-010-fr-magic-011)

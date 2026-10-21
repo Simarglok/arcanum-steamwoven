@@ -44,15 +44,21 @@ public sealed class AreaWindowRouteResult
 /// assessed by a window whose core holds both of its cells, loaded on demand around the step's sector and kept in a
 /// bounded cache. The route is the step evidence's own: a step is taken only when the window assesses it Open. It is a
 /// planning aid (a long walk's waypoints), not the original's path search (parity NOT_VERIFIED); routes within one window
-/// are the route follower's (<c>RouteCorridor</c>).
+/// are the route follower's (<c>RouteCorridor</c>). ARC-WORLD-060: a host whose steps differ from the T0 evidence (objects the
+/// session destroyed or switched off, which the original's object lists skip, ledger FC2) passes the verdict it walks by
+/// (<c>stepOpen</c>, over the window's assessment), so the route reads the same state as the walk.
 /// </summary>
 public static class AreaWindowRoute
 {
     private static readonly CardinalTraversalDirection[] Directions = Enum.GetValues<CardinalTraversalDirection>();
 
+    /// <param name="stepOpen">Whether a step the window assessed is walkable (the assessment, the step's cell and direction); by default
+    /// its T0 disposition is Open.</param>
     public static AreaWindowRouteResult Plan(ContentStack stack, WorldCatalog catalog, string mapName, AreaStepCell from, AreaStepCell to,
-        AreaWindowRouteLimits? limits = null, CancellationToken token = default)
+        AreaWindowRouteLimits? limits = null, CancellationToken token = default,
+        Func<AreaStepAssessment, AreaStepCell, CardinalTraversalDirection, bool>? stepOpen = null)
     {
+        stepOpen ??= static (assessment, _, _) => assessment.Disposition == CardinalTraversalDisposition.Open;
         ArgumentNullException.ThrowIfNull(stack); ArgumentNullException.ThrowIfNull(catalog); ArgumentNullException.ThrowIfNull(mapName);
         limits ??= new();
         var windows = new Windows(stack, catalog, mapName, limits);
@@ -65,7 +71,7 @@ public static class AreaWindowRoute
             // A goal no window admits, or no step enters, is refused before the search floods the map toward it.
             if (windows.For(to, to) is not { } last || !last.IsAdmitted(to))
                 return new(AreaWindowRouteStatus.Refused, "ROUTE_GOAL_NOT_ADMITTED", [], windows.Loads, 0);
-            if (!Directions.Any(direction => Entered(windows, Step(to, direction), to)))
+            if (!Directions.Any(direction => Entered(windows, Step(to, direction), to, stepOpen)))
                 return new(AreaWindowRouteStatus.Refused, "ROUTE_GOAL_UNENTERABLE", [], windows.Loads, 0);
             long Estimate(AreaStepCell c) => Math.Max(Math.Abs(c.X - to.X), Math.Abs(c.Y - to.Y));
             var cost = new Dictionary<AreaStepCell, long> { [from] = 0 };
@@ -92,7 +98,7 @@ public static class AreaWindowRoute
                     if (closed.Contains(next)) continue;
                     var window = windows.For(cell, next);
                     if (window is null || !window.IsAdmitted(cell) || !window.IsAdmitted(next)) continue;
-                    if (window.Assess(window.Request(cell, next, direction)).Disposition != CardinalTraversalDisposition.Open) continue;
+                    if (!stepOpen(window.Assess(window.Request(cell, next, direction)), cell, direction)) continue;
                     var total = cost[cell] + 1;
                     if (cost.TryGetValue(next, out var known) && known <= total) continue;
                     cost[next] = total; parent[next] = cell; open.Enqueue(next, (total + Estimate(next), Estimate(next)));
@@ -105,11 +111,11 @@ public static class AreaWindowRoute
     }
 
     /// <summary>Whether the step from <paramref name="from"/> onto its neighbour <paramref name="to"/> is Open.</summary>
-    private static bool Entered(Windows windows, AreaStepCell from, AreaStepCell to)
+    private static bool Entered(Windows windows, AreaStepCell from, AreaStepCell to, Func<AreaStepAssessment, AreaStepCell, CardinalTraversalDirection, bool> stepOpen)
     {
         var direction = Directions.First(d => Step(from, d) == to);
         return windows.For(from, to) is { } window && window.IsAdmitted(from) && window.IsAdmitted(to)
-            && window.Assess(window.Request(from, to, direction)).Disposition == CardinalTraversalDisposition.Open;
+            && stepOpen(window.Assess(window.Request(from, to, direction)), from, direction);
     }
 
     internal static AreaStepCell Step(AreaStepCell cell, CardinalTraversalDirection direction) => direction switch
