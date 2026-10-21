@@ -51,28 +51,36 @@ fails does not stop the others.
 | move | `MoveRequested`: the host's "please move" goal; it shows the acknowledgement when the goal starts, "cannot" otherwise | host | OL7 |
 | stay close / spread out | the spread flag cleared / set (`SpreadCleared`, `SpreadSet`; follow distances 4/2 or 7/5); `StartSpreadGoal` when spread out set a clear flag | acknowledgement | OL8 |
 | walk here | with a tile: `WalkRequested` (the host runs the follower there and it follows again after); without: `NoTile` | acknowledgement | OL9 |
-| attack, back off, curse | `CombatOrder`: stage A7's frontier, nothing here | none | OL10, OL11 |
+| attack, back off, curse | `CombatOrder`: stage A7's frontier, nothing here (A7 adds back off's acknowledgement before "stop attacking", FO5) | none | OL10, OL11 |
 | none, join, disband, follow other | `NoOrder` (the AI pass only; join and disband act in the multiplayer phase) | none | OL3 |
 
-Whole-order refusals (nothing applied): an undefined type or addressing, an invalid or repeated entity or a missing name
-(`InvalidCompanion`), follow facts naming another leader or undefined trainings (`InvalidConsentFacts`), a portrait for an NPC that
-does not follow (`NotInParty`), a stale version. No new saved state: no snapshot change.
+Whole-order refusals (nothing applied): an undefined type or addressing, an invalid or repeated entity, a missing name or a portrait
+order without a valid clicked follower (`InvalidCompanion`), follow facts naming another leader or undefined trainings
+(`InvalidConsentFacts`), a portrait for an NPC that does not follow (`NotInParty`), a stale version. Mind control is the host's
+answer in three places (`CompanionOrderFacts.MindControlled` for leave and wait, the follow facts' `MindControlledByPc`, the wait
+facts' `MindControlled`); the host keeps them consistent. No new saved state: no snapshot change.
 
 ## AREA viewer
 
-- **F1–F6** (the original's preset keys, until now reserved and not implemented) send the presets with the chart cell under the
-  pointer as the walk tile, while the session party is wired (`RouteOrderKey`). F6 under the Original rules shows "no order (the
-  original's preset names nobody)". Without a party they stay reserved keys.
+- **F1–F6** (the original's preset keys, until now reserved and not implemented) without modifiers send the presets with the chart
+  cell under the pointer as the walk tile, while the session party is wired and the world owns input (focused, no modal window or
+  control focus, no map change pending; `RouteOrderKey`). F6 under the Original rules shows "no order (the original's preset names
+  nobody)". Without a party they stay reserved keys.
 - **Follower portraits** (`AreaFollowerPortraits`, bottom left): one button per follower in the array (in its order; none for a waiting
   one), each opening the portrait menu: walk, attack, stay close, spread out, back off, wait, and inventory and character sheet
-  shown disabled. Walk asks for a tile with the next left press on the ground (the original's target cursor). The menu's labels are
+  shown disabled. Walk asks for a tile with the next left press on the ground (the original's target cursor; not while the hero is
+  dead or unconscious, OL1); the HUD shows the pending walk order, and any key, a modal window or a rebuilt group cancels it. Attack
+  is sent at once, with no target cursor (it reaches A7's frontier and does nothing yet). The strip is hidden and its menu closed
+  while a modal window is open, and a menu choice is refused unless the world owns input (as for F1–F6). The menu's labels are
   the viewer's own words (the original reads `mes\follower_ui.mes`); the Original name addressing compares them as the label.
 - **Facts** (`AreaCompanionOrders.Facts`): the following and waiting companions of the shown map, the hover name (else "script N"),
   the Chebyshev distance of its cell to the PC's, the loyalty step's follow facts and `AreaCompanionRoster.WaitFacts`.
 - **Goals**: walk here and the spread-out step are ordered goals of the companion's `CompanionFollower` (`WalkTo`): following does not
   replace them, and once they end the companion decides again from where it stands (beyond the start distance it approaches, OL9).
   The spread-out step walks 3 cells straight away from the PC (`AreaCompanionOrders.SpreadStep`), a project approximation of the
-  original's "attempt spread out" goal (69), whose move-away distance is not read.
+  original's "attempt spread out" goal (69), whose move-away distance is not read. A goal whose cell is off the map's steps does not
+  start; the log and HUD name those companions. A walk to a tile more than 30 cells from the PC ends with the project's jump onto the
+  PC once the ordered goal ends (the follow distances' rule beyond 30, [follow rules](companion-follow-runtime.md)).
 - **HUD and log**: the companion line names each reached follower's effect and line range ("F4: oid:… SpreadOut -> SpreadSet lines
   2100-2199"); the log prints `ARC-WORLD-046 order source=<F1..F6|portrait> type=… disposition=… reached=N | …`.
 

@@ -55,31 +55,35 @@ public static class AreaCompanionOrders
 
     /// <summary>
     /// Sends the order and runs its goals at <paramref name="at"/>: a walk-here outcome walks the companion to <see cref="CompanionOrderRequest.Tile"/>,
-    /// a spread-out outcome that asks for the step walks it <see cref="SpreadStep"/> cells away from the PC (when that cell is on the map).
-    /// Returns the session's result; the group's standings are read again.
+    /// a spread-out outcome that asks for the step walks it <see cref="SpreadStep"/> cells away from the PC. Returns the session's result
+    /// and the companions whose goal did not start (its cell is off the map's steps); the group's standings are read again.
     /// </summary>
-    public static SessionCompanionOrderResult Issue(GameSessionOwner session, AreaCompanionGroup group, CompanionOrderRequest request, CellCoord pc,
-        SimulationTime at)
+    public static (SessionCompanionOrderResult Result, IReadOnlyList<string> GoalsNotStarted) Issue(GameSessionOwner session, AreaCompanionGroup group,
+        CompanionOrderRequest request, CellCoord pc, SimulationTime at)
     {
         ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(group); ArgumentNullException.ThrowIfNull(request);
         var result = session.IssueCompanionOrder(session.Version, request);
         group.Refresh(session);
+        var notStarted = new List<string>();
         foreach (var outcome in result.Outcomes)
         {
             if (group.Companions.FirstOrDefault(c => c.Entity == outcome.Entity) is not { } companion) continue;
-            if (outcome.Effect == CompanionOrderEffect.WalkRequested && request.Tile is { } tile) companion.Follow.WalkTo(tile, at);
-            else if (outcome.StartSpreadGoal) companion.Follow.WalkTo(Away(companion.Grid.State.CommittedCell, pc), at);
+            var started = outcome.Effect == CompanionOrderEffect.WalkRequested && request.Tile is { } tile ? companion.Follow.WalkTo(tile, at)
+                : outcome.StartSpreadGoal ? companion.Follow.WalkTo(Away(companion.Grid.State.CommittedCell, pc), at)
+                : true;
+            if (!started) notStarted.Add(outcome.Entity);
         }
-        return result;
+        return (result, notStarted);
     }
 
     /// <summary>The cell <see cref="SpreadStep"/> cells farther from <paramref name="pc"/> along each axis the companion stands off it
-    /// (straight away from the PC's side; on the PC's own cell, toward +X).</summary>
+    /// (straight away from the PC's side; on the PC's own cell, toward +X); clamped to the cell range, where the step source refuses it.</summary>
     public static CellCoord Away(CellCoord cell, CellCoord pc)
     {
         var dx = Math.Sign((long)cell.X - pc.X); var dy = Math.Sign((long)cell.Y - pc.Y);
         if (dx == 0 && dy == 0) dx = 1;
-        return new(checked(cell.X + dx * SpreadStep), checked(cell.Y + dy * SpreadStep));
+        static int Clamp(long value) => (int)Math.Clamp(value, int.MinValue, int.MaxValue);
+        return new(Clamp(cell.X + (long)dx * SpreadStep), Clamp(cell.Y + (long)dy * SpreadStep));
     }
 
     /// <summary>One outcome for the log and the HUD: entity, order, effect and the line range shown.</summary>

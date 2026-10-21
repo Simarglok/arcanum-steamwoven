@@ -13,13 +13,20 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     private AreaFollowerPortraits? _followerPortraits;
-    // A portrait walk order waiting for its tile (the original's target cursor).
+    // A portrait walk order waiting for its tile (the original's target cursor); any key, a modal window or a rebuilt group drops it.
     private string? _pendingWalkOrder;
+    // The portraits' last state (session, revision, group, modal), so a frame with nothing new does not rebuild them.
+    private (Arcanum.Session.GameSessionOwner? Session, long Revision, AreaCompanionGroup? Group, bool Modal, object? Names)? _portraitStamp;
 
-    /// <summary>F1–F6 while the session party is wired: the presets. Other keys, or no party, are not orders.</summary>
-    private bool RouteOrderKey(WorldKeyDecision decision)
+    /// <summary>Orders are taken only while the world owns input: focused, no modal window or control focus, no transfer pending.</summary>
+    private bool OrderInputOpen => _worldFocused && !WorldModal && !WorldUiFocus && !AreaTransferPending;
+
+    /// <summary>F1–F6 without modifiers while the session party is wired: the presets. Other keys, a modifier, or no party, are not
+    /// orders.</summary>
+    private bool RouteOrderKey(WorldKeyDecision decision, WorldKeyModifiers modifiers)
     {
-        if (decision.Key is < WorldKey.F1 or > WorldKey.F6 || !decision.Pressed || decision.Echo || WorldModal || WorldUiFocus) return false;
+        if (decision.Key is < WorldKey.F1 or > WorldKey.F6 || !decision.Pressed || decision.Echo || modifiers != WorldKeyModifiers.None
+            || !OrderInputOpen) return false;
         if (_areaSession is not { } session || _areaCompanions is null || _conversationHost is not { PartyWired: true }) return false;
         var preset = CompanionOrderRules.Preset(decision.Key - WorldKey.F1, session.Rules.Orders);
         var key = decision.Key.ToString();
@@ -48,11 +55,12 @@ public partial class TerrainViewerApp
         if (_areaSession is not { } session || _areaCompanions is not { } group || _conversationHost is not { } host
             || _worldActor.Session is not AreaGridSession pc) return null;
         var facts = AreaCompanionOrders.Facts(session, group, pc.State.CommittedCell, host.State, CompanionName);
-        var result = AreaCompanionOrders.Issue(session, group, request with { Followers = facts }, pc.State.CommittedCell, WorldTime);
-        GD.Print(AreaCompanionOrders.Log(source, request.Type, result));
+        var (result, noGoal) = AreaCompanionOrders.Issue(session, group, request with { Followers = facts }, pc.State.CommittedCell, WorldTime);
+        GD.Print(AreaCompanionOrders.Log(source, request.Type, result) + (noGoal.Count == 0 ? "" : " | goal not started: " + string.Join(", ", noGoal)));
         _companionNotice = result.Failure != GameSessionFailure.None ? $"{source}: order refused ({result.Failure})"
             : result.Outcomes.Count == 0 ? $"{source}: {request.Type} reached no follower within {CompanionOrderRules.Reach} tiles"
-            : $"{source}: " + string.Join("; ", result.Outcomes.Select(AreaCompanionOrders.Describe));
+            : $"{source}: " + string.Join("; ", result.Outcomes.Select(AreaCompanionOrders.Describe))
+                + (noGoal.Count == 0 ? "" : $" (no goal started for {noGoal.Count}: tile off the map)");
         RefreshFollowerPortraits();
         RefreshReadyStatus();
         return result;
@@ -63,12 +71,19 @@ public partial class TerrainViewerApp
         _hoverIndex is { } index && ReferenceEquals(_hoverIndexArea, _readyArea) && index.Contains(companion.Key) && index.Name(companion.Key) is { } name
             ? name : $"script {companion.Speaker.ScriptId}";
 
-    /// <summary>Shows a portrait per follower in the array (in its order) while the session party is wired.</summary>
+    /// <summary>Shows a portrait per follower in the array (in its order) while the session party is wired; none while a modal window
+    /// is open (its menu closes and a pending walk order is dropped). Rebuilt only when the session, its revision, the group or the
+    /// modal state changed.</summary>
     private void RefreshFollowerPortraits()
     {
-        if (_areaSession is not { } session || _areaCompanions is not { } group || _conversationHost is not { PartyWired: true })
+        var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, _areaCompanions, WorldModal, (object?)_hoverIndex);
+        if (_portraitStamp == stamp) return;
+        _portraitStamp = stamp;
+        if (_areaSession is not { } session || _areaCompanions is not { } group || _conversationHost is not { PartyWired: true } || WorldModal)
         {
             _followerPortraits?.Show([]);
+            _followerPortraits?.CloseMenu();
+            if (WorldModal) CancelPendingWalkOrder("a window opened");
             return;
         }
         if (_followerPortraits is null)
@@ -83,6 +98,12 @@ public partial class TerrainViewerApp
 
     private void FollowerMenuChosen(string entity, FollowerMenuItem item)
     {
+        if (!OrderInputOpen)
+        {
+            _companionNotice = "follower order ignored: a window is open, the world has no input focus or a map change is pending";
+            RefreshReadyStatus();
+            return;
+        }
         if (CompanionOrderRules.PortraitOrder(item, false) is not { } type)
         {
             _companionNotice = $"{AreaCompanionOrders.Label(item)}: not modelled for followers";
@@ -91,12 +112,27 @@ public partial class TerrainViewerApp
         }
         if (type == CompanionOrderType.WalkHere)
         {
+            // OL1: the target cursor does not open for a dead or unconscious PC.
+            if (_areaSession?.QueryHeroLife()?.Status is { IsDead: true } or { IsUnconscious: true })
+            {
+                _companionNotice = "walk: not while the hero is dead or unconscious";
+                RefreshReadyStatus();
+                return;
+            }
             _pendingWalkOrder = entity;
-            _companionNotice = "walk: click the tile to walk to";
+            _companionNotice = "walk: click the tile to walk to (any key cancels)";
             RefreshReadyStatus();
             return;
         }
         IssueAreaOrder("portrait", new(type, CompanionOrderAddressing.Portrait, [], entity, AreaCompanionOrders.Label(item)));
+    }
+
+    /// <summary>Drops a pending walk order with its reason in the HUD (nothing when none is pending).</summary>
+    private void CancelPendingWalkOrder(string why)
+    {
+        if (_pendingWalkOrder is null) return;
+        _pendingWalkOrder = null;
+        _companionNotice = $"walk order cancelled: {why}";
     }
 
     /// <summary>The walk order's tile: the next ground press after choosing walk (true when it took the press).</summary>

@@ -163,7 +163,6 @@ public sealed class CompanionFollowTests
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => route.SetTarget(new(9, 1), host.State.Time, RouteLimits.AxisDistanceMaximum + 1));
     }
 
-    // One host frame per quarter unit: the leader's cell, an update at the frame boundary, then the drive to it.
     [TestMethod]
     public void An_ordered_walk_is_not_replaced_by_following_and_following_resumes_after_it()
     {
@@ -187,6 +186,7 @@ public sealed class CompanionFollowTests
         Assert.IsFalse(follow.Ordered);
     }
 
+    // One host frame per quarter unit: the leader's cell, an update at the frame boundary, then the drive to it.
     private static List<FollowAction> Frames(RouteHost host, CompanionFollower follow, Func<CellCoord> leader, int frames,
         bool spreadOut = false, bool following = true)
     {

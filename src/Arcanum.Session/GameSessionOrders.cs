@@ -110,8 +110,8 @@ public sealed partial class GameSessionOwner
         List<(string Entity, CompanionOrderType Type)> receivers;
         if (request.Addressing == CompanionOrderAddressing.Portrait)
         {
-            if (request.Clicked is not { } clicked || _party.Get(clicked).Standing != CompanionStanding.Following)
-                return RejectOrder(GameSessionFailure.NotInParty);
+            if (request.Clicked is not { } clicked || !SessionValidation.Entity(clicked)) return RejectOrder(GameSessionFailure.InvalidCompanion);
+            if (_party.Get(clicked).Standing != CompanionStanding.Following) return RejectOrder(GameSessionFailure.NotInParty);
             receivers = CompanionOrderRules.PortraitReceiver(array, clicked, request.Type, request.Label, profile) is { } one ? [one] : [];
         }
         else
@@ -173,7 +173,7 @@ public sealed partial class GameSessionOwner
             case CompanionOrderType.WalkHere:
                 return tile is null ? new(entity, type, CompanionOrderEffect.NoTile, null)
                     : new(entity, type, CompanionOrderEffect.WalkRequested, CompanionOrderLine.Acknowledge);
-            case CompanionOrderType.Attack or CompanionOrderType.BackOff or CompanionOrderType.Curse:
+            case var combat when CompanionOrderRules.IsCombat(combat):
                 return new(entity, type, CompanionOrderEffect.CombatOrder, null);
             default:
                 return new(entity, type, CompanionOrderEffect.NoOrder, null);

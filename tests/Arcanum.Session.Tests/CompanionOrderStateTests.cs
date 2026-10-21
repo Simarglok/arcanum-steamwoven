@@ -178,6 +178,8 @@ public sealed class CompanionOrderStateTests
         Assert.AreEqual(GameSessionFailure.InvalidConsentFacts, Failure(new(CompanionOrderType.Wait, CompanionOrderAddressing.All,
             [F("oid:a") with { Wait = new(3, (PersuasionTraining)9, 8, false) }])));
         Assert.AreEqual(GameSessionFailure.NotInParty, Failure(new(CompanionOrderType.Wait, CompanionOrderAddressing.Portrait, [F("oid:a")], "oid:z", "wait")));
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, Failure(new(CompanionOrderType.Wait, CompanionOrderAddressing.Portrait, [F("oid:a")], "", "wait")));
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, Failure(new(CompanionOrderType.Wait, CompanionOrderAddressing.Portrait, [F("oid:a")])), "no clicked follower");
         Assert.AreEqual(GameSessionFailure.StaleVersion,
             owner.IssueCompanionOrder(new GameSessionVersion(owner.Identity, 0), new(CompanionOrderType.Wait, CompanionOrderAddressing.All, [F("oid:a")])).Failure);
         Assert.AreEqual(CompanionStanding.Following, owner.QueryCompanion("oid:a").Standing);

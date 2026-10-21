@@ -63,5 +63,7 @@ public partial class TerrainViewerApp
         var interval = FramePacingPolicy.Idle(PacingNow() - _pacingLastActivity) ? FramePacingPolicy.IdleStatusRefreshSeconds : FramePacingPolicy.StatusRefreshSeconds;
         if (!PacingAutomated && _statusAge < interval) return;
         _statusAge = 0; RefreshReadyStatus();
+        // ARC-WORLD-046: the follower portraits follow modal windows and party changes (cheap when nothing changed).
+        if (_readyArea is not null) RefreshFollowerPortraits();
     }
 }

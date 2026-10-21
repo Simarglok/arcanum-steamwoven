@@ -58,19 +58,22 @@ public sealed class AreaCompanionOrderTests
         CompanionOrderRequest Order(CompanionOrderType type, CellCoord? tile = null) =>
             new(type, CompanionOrderAddressing.All, AreaCompanionOrders.Facts(session, group, pc, state, _ => "Virgil"), Tile: tile);
 
-        var walk = AreaCompanionOrders.Issue(session, group, Order(CompanionOrderType.WalkHere, new(12, 1)), pc, SimulationTime.At(1));
+        var (walk, walkNoGoal) = AreaCompanionOrders.Issue(session, group, Order(CompanionOrderType.WalkHere, new(12, 1)), pc, SimulationTime.At(1));
+        Assert.AreEqual(0, walkNoGoal.Count);
+        var (_, offMap) = AreaCompanionOrders.Issue(session, group, Order(CompanionOrderType.WalkHere, new(5000, 1)), pc, SimulationTime.At(1));
+        CollectionAssert.AreEqual(new[] { companion.Entity }, offMap.ToArray(), "a tile off the map's steps starts no goal");
         Assert.AreEqual(CompanionOrderEffect.WalkRequested, walk.Outcomes.Single().Effect);
         Assert.IsTrue(companion.Follow.Ordered);
         Assert.AreEqual(new CellCoord(12, 1), companion.Follow.Route.Target);
 
-        var spread = AreaCompanionOrders.Issue(session, group, Order(CompanionOrderType.SpreadOut), pc, SimulationTime.At(2));
+        var (spread, _) = AreaCompanionOrders.Issue(session, group, Order(CompanionOrderType.SpreadOut), pc, SimulationTime.At(2));
         Assert.IsTrue(spread.Outcomes.Single().StartSpreadGoal);
         Assert.IsTrue(session.QueryCompanion(companion.Entity).SpreadOut);
         Assert.AreEqual(AreaCompanionOrders.Away(new(5, 1), pc), companion.Follow.Route.Target);
         StringAssert.Contains(AreaCompanionOrders.Log("F4", CompanionOrderType.SpreadOut, spread),
             $"ARC-WORLD-046 order source=F4 type=SpreadOut disposition=Changed failure=None reached=1 | {companion.Entity} SpreadOut -> SpreadSet lines 2100-2199");
 
-        var wait = AreaCompanionOrders.Issue(session, group, Order(CompanionOrderType.Wait), pc, SimulationTime.At(3));
+        var (wait, _) = AreaCompanionOrders.Issue(session, group, Order(CompanionOrderType.Wait), pc, SimulationTime.At(3));
         Assert.AreEqual(CompanionOrderEffect.Waited, wait.Outcomes.Single().Effect);
         Assert.AreEqual(CompanionStanding.Waiting, companion.Standing, "the group reads the standing again");
         Assert.IsNull(session.QueryWaitTimer(companion.Entity), "Virgil's index 6: no timer");
@@ -82,6 +85,7 @@ public sealed class AreaCompanionOrderTests
         Assert.AreEqual(new CellCoord(8, 1), AreaCompanionOrders.Away(new(5, 1), new(4, 1)));
         Assert.AreEqual(new CellCoord(2, 7), AreaCompanionOrders.Away(new(5, 4), new(6, 3)));
         Assert.AreEqual(new CellCoord(8, 4), AreaCompanionOrders.Away(new(5, 4), new(5, 4)), "on the PC's cell: toward +X");
+        Assert.AreEqual(new CellCoord(int.MaxValue, 4), AreaCompanionOrders.Away(new(int.MaxValue - 1, 4), new(0, 4)), "clamped, no overflow");
         Assert.AreEqual("wait", AreaCompanionOrders.Label(FollowerMenuItem.Wait));
     }
 }
