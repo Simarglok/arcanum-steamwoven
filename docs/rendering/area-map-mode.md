@@ -678,6 +678,27 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   its goal held by the new window (the far-goal hand-over was not needed on this walk; unit tests cover it), at least
   179 visible bodies after each move. Managed heap after a full collection: 265 MB at the start and 413 MB at the end
   in the Shrouded Hills window (observed values, not a growth measure; the stream smoke's windows take 368 to 435 MB).
+- **Zoom floor (ARC-RENDER-032).** On a map loaded as a window the smallest zoom is not the viewer's ordinary 1/8 but
+  the smallest power of two (1/2^k), at least 1/8, at which the view is no wider and no taller than the window's drawn
+  bounds (`WorldZoomPolicy.WindowFloor`: the viewport over the bounds of the 3×3 core on the tighter axis, rounded up).
+  The camera keeps the view inside those bounds, so the view never reaches past what the window loads and draws; at 1/8
+  the screen would otherwise cover 25 to 40 sectors on a large display while the window draws 9. A power of two keeps the
+  terrain in its exact reduced chunks ([chunks](crash-site-area-draw-calls.md), which only such zooms have); at the exact
+  floor of a 2560 × 1440 view (0.1875) it would fall back to one item per tile. The floor applies to every way the AREA
+  viewer zooms: LT/RT, the palette's 100/200/300 presets and numeric editor, Fit, a window resize, and every scene reset or
+  publication (the wheel and `+`/`-` do not zoom there); the zoom preference other maps open at keeps the value asked, and
+  a trigger held at the floor leaves it unchanged. A whole map keeps 1/8. The HUD's window status shows the floor. Zoom is
+  a Steamwoven viewer feature, the original has none, so no parity applies. Native check in the map battery:
+  `ARC-RENDER-032 native-smoke zoom floor PASS` (in the smoke's window and in a 2560 × 1440 one: a window zoomed out to
+  1/8 is raised to its floor by the resize, a zoom asked below the floor stops at it, the view lies inside the window's
+  bounds with the terrain chunked, and the window size is restored; a whole map reaches 1/8). The JSON reports the texture
+  memory, the resident index rows and the first far frame; driver memory per row texture is not measured otherwise. On
+  the owner's Mac (2026-10-21) at the Crash Site: 1280 × 800 floor 1/8 (view 10,240 × 6,400, 228 level-3 chunks, 326
+  rows, first far frame 13 ms); 2560 × 1440 floor 1/4 (view 10,240 × 5,760, 214 level-2 chunks, 503 rows, 15 ms).
+  Between a floor and the next power of two a continuous trigger zoom can still leave the chunks for one item per tile;
+  on a large view that needs more nearest-index rows than the renderer allowed (8,192) and made the viewer drop the scene
+  (`AREA_NEAREST_MAPPING_BUDGET`), so the row cap is now 65,536, more than a window's commands
+  ([nearest sampling](area-nearest-sampling.md)).
 - **Memory.** One window holds 1,300 to 4,900 visuals and 10 to 26 MB of CPU frames; after a full collection the
   managed heap of a run that moved the window seven times followed the window's contents (368 to 435 MB), with no
   growth from move to move; the resource stage's reload after the map battery leaves the heap 5.5 MB smaller (since
@@ -690,7 +711,10 @@ in progress ends on its committed cell); saved sector differences (`.dif`) are n
 moves is bound only if the new window holds its cell; on the same map, an F8 save or a jump point or teleport whose cell
 lies outside the shown window is refused (the cell is not admitted in this window; another map's save or exit opens the
 window around it); a click is a goal inside the shown window (a goal farther away is reached only by a host that plans
-it, as the walk smoke does with the window route). Original parity NOT_VERIFIED.
+it, as the walk smoke does with the window route); far out, the view is bounded by the window (the zoom floor):
+there is no overview of the terrain beyond it (a terrain overview from `terrain.mes` colours or thinned chunks is a
+follow-up and NOT READY), and the corners of the window's bounding box outside its diamond stay empty, as at any
+map's edge. Original parity NOT_VERIFIED.
 
 ## World map (ARC-UI-048)
 
