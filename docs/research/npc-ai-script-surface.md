@@ -77,7 +77,9 @@ Conventions: the danger states are NONE 0, COMBAT_FOCUS 1, FLEE 2, SURRENDER 3
    NPC's door or container; enter-combat (13), exit-combat (14), start-combat (15)
    and end-combat (16) are notifications whose result is ignored. Dying (12) is
    fired by the death processing before the AI's kill notification and can veto
-   all of it. The roles and moments are in [section 1](#1-attachment-points).
+   all of it. Pick pocket's caught-thief (33, ignored) and catching-thief (11)
+   points gate a detected theft's attack event (ARC-SKILLS-010). The roles and
+   moments are in [section 1](#1-attachment-points).
 2. **Scripts read AI state only through five conditions and the reaction.**
    Surrendered (25), in a conversation (26), in combat mode (31: the combat-mode
    bit, not the danger state), jilted (39) and waiting (52); no condition reads
@@ -123,7 +125,8 @@ it. Every row was read at the call site named.
 | 13 | ENTER_COMBAT | setter 0x4AABE0 (0x4AAE29) | the new target / NPC / — | rule 7: COMBAT_FOCUS requested, not target-locked, FIGHTING not yet set; after FIGHTING, CHECK_WIELD and CHECK_GRENADE are set | ignored; the alerted sound follows |
 | 14 | EXIT_COMBAT | setter (0x4AAF32) | the requested target (may be null) / NPC / — | rule 10: any other state while FIGHTING was set; after FIGHTING and BACKING_OFF are cleared and DEMAINTAIN_SPELLS set (not for FLEE) | ignored |
 | 22 | WILL_KOS | kill-on-sight 0x4AE120 (0x4AE179) | candidate / NPC / — | after the validity test passes, before every kill-on-sight rule; kill-on-sight runs from find target, the dialog start 0x412FD0 and every reply 0x413130 | skip default: not kill-on-sight |
-| 11 | CATCHING_THIEF_PC | portal and container guards 0x4AEE50 (0x4AEFCD); also the pickpocket check (skills) | criminal / guard / the object | for each nearby guard that sees or hears the crime (S22) | run default only: the guard's reaction −20 and, at or below parameter 10, the attack event (criminal on guard); skip default: the guard is skipped |
+| 11 | CATCHING_THIEF_PC | portal and container guards 0x4AEE50 (0x4AEFCD) | criminal / guard / the object | for each nearby guard that sees or hears the crime (S22) | run default only: the guard's reaction −20 and, at or below parameter 10, the attack event (criminal on guard); skip default: the guard is skipped |
+| 33, 11 | CAUGHT_THIEF, CATCHING_THIEF_PC | pick pocket, skill use 0x4C7160 (steal: 0x4C76CE, 0x4C76E5; plant: 0x4C78E9, 0x4C7900) | victim / thief / item (33); thief / victim / item (11) | a detected theft or plant | 33 is ignored; on 11 anything but run default cancels the rest; then, unless the victim is an NPC the thief leads directly, the attack event (thief on victim, loudness 1, flags 0; calls 0x4C7728, 0x4C793B). The skills lane's reading (ARC-SKILLS-010, its S15 rows) agrees; nothing else on the theft path writes reaction, focus, who-hit-me-last or the enemy list |
 | 3 | UNLOCK | AI portal open 0x4AEB70 (0x4AEBC5), container open 0x4AED80 (0x4AEDC4) | NPC / portal or container / — | an NPC's open attempt (S22) | gates the open |
 | 12 | DYING | death 0x45DA20 (0x45DA57) | killer / victim / — | any death | skip default ends the whole processing at once (see below) |
 | 20 | LEADER_KILLING | death (0x45DB95) | victim / each PC follower / PC | a kill by the PC or a PC-led critter | ignored |

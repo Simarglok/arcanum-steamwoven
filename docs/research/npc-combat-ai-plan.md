@@ -267,7 +267,7 @@ A9 is part of A0.
 | I1 AI parameters | A1, A0 | Data reader for both files and a typed 17-field record with names from A1. |
 | I2 Awareness | A2, I1, ARC-SKILLS-003 (prowling margin) | Pure see/hear/line-of-fire functions over explicit inputs; synthetic matrix (FR-AI-002 acceptance). |
 | I3 Danger state | A1, I1 | Session-owned per-NPC state, flags, focus, enemy list, snapshot schema version, script hook points as typed events. |
-| I4 Hostility and targets | A3, I2, I3 | KOS/protect/upset with reason codes, scan and choice with injected rolls. |
+| I4 Hostility and targets | A3, I2, I3 | KOS/protect/upset with reason codes, scan and choice with injected rolls; the attack event's callers include the script and DLG attacks of [A8](npc-ai-script-surface.md#3-actions) and pick pocket's typed detection result (thief, victim, steal or plant, reason) of ARC-SKILLS-010 (S15). |
 | I5 Morale | A4, I4 | Flee/surrender/back-off decisions and their state transitions. |
 | I6 Scheduler | A1, I3 | AI time event on the session clock, 30-cell activity, turn-based subturn entry. |
 | I7 Melee and ranged executor | A6, combat slices, I4 | Intent to route planner and attack resolver; real-time and turn-based. |
