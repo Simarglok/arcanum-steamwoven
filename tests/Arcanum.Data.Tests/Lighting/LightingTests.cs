@@ -271,6 +271,10 @@ public sealed class LightingTests
     /// <summary>A synthetic installation: tig.dat, the fixture's module archive as <c>modules/Mod.dat</c>, then the given loose
     /// files (relative to the game folder) and base archives.</summary>
     private static AreaLightingReadResult ReadStack(Fixture fixture, (string Path, byte[] Bytes)[]? loose = null, (string Name, byte[] Bytes)[]? arcanum1 = null)
+        => WithStack(fixture, stack => AreaLightingReader.Read(stack, fixture.Snapshot), loose, arcanum1);
+
+    private static T WithStack<T>(Fixture fixture, Func<Arcanum.Data.Content.ContentStack, T> read, (string Path, byte[] Bytes)[]? loose = null,
+        (string Name, byte[] Bytes)[]? arcanum1 = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "arc-light-stack-" + Guid.NewGuid().ToString("N"));
         try
@@ -290,9 +294,25 @@ public sealed class LightingTests
             var opened = Arcanum.Data.Content.ContentStack.Open(discovery.Plan!);
             Assert.AreEqual(Arcanum.Data.Content.ContentStackStatus.Ready, opened.Status, opened.Status + " " + opened.Detail);
             using var stack = opened.Stack!;
-            return AreaLightingReader.Read(stack, fixture.Snapshot);
+            return read(stack);
         }
         finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [TestMethod]
+    public void The_start_clock_reads_alone_for_an_unlit_map()
+    {
+        // ARC-WORLD-057: the same start clock as the whole lighting read, from the same stack; a malformed one is refused.
+        var fixture = Build();
+        var startup = WithStack(fixture, AreaLightingReader.ReadStartup);
+        Assert.AreEqual(LightingFailure.None, startup.Failure);
+        Assert.AreEqual(ReadStack(fixture).Source!.Startup, startup.Startup);
+        var malformed = WithStack(Build(new Dictionary<string, byte[]> { ["rules/gameinit.mes"] = Encoding.ASCII.GetBytes("{4}{1885}") }), AreaLightingReader.ReadStartup);
+        // A map whose sectors lack the metadata section is drawn unlit, yet its start clock reads.
+        var unlit = Build(placeholderB: 0xAA0002);
+        Assert.AreEqual(LightingFailure.SectorMetadataAbsent, ReadStack(unlit).Failure);
+        Assert.AreEqual(startup.Startup, WithStack(unlit, AreaLightingReader.ReadStartup).Startup);
+        Assert.AreEqual((LightingFailure.StartupMalformed, (StartupClockDeclaration?)null), (malformed.Failure, malformed.Startup));
     }
 
     [TestMethod]

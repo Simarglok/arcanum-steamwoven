@@ -163,7 +163,8 @@ public partial class TerrainViewerApp
     private async Task RunAreaLogbookSmokeAsync()
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-008 logbook smoke: " + why); }
-        // An unlit map has no session (TerrainViewerAreaMap); there is no logbook to observe.
+        // A map without a session clock has no session (ARC-WORLD-057: only one whose start clock cannot be read); there is
+        // no logbook to observe.
         if (_areaSession is not { } session) { GD.Print("ARC-UI-008 native-smoke logbook SKIP (no area session)"); return; }
         for (var i = 0; i < 600 && _logbookTexts is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptLogbookTexts(); }
         Require(_logbookTexts is { Status: AreaLogbookTextsStatus.Ready, Texts: not null }, "texts " + _logbookTexts?.Status + " " + _logbookTexts?.Detail);

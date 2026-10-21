@@ -45,6 +45,9 @@ public sealed class LightSchemeTable
 /// It is a clock bootstrap declaration, not a running clock.</summary>
 public sealed record StartupClockDeclaration(int Year, int Hour, string PayloadSha256);
 
+/// <summary>ARC-WORLD-057: the module's start clock, or why it cannot be read.</summary>
+public sealed record StartupClockRead(LightingFailure Failure, StartupClockDeclaration? Startup);
+
 /// <summary>Detached lighting inputs of one loaded area: map default, the raw serialized scheme
 /// word of each admitted sector (0 is the map-default sentinel) and every referenced scheme.</summary>
 public sealed class AreaLightingSource
