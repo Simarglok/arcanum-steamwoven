@@ -88,26 +88,76 @@ public sealed class AreaAdvancementTests
         }, modifiers.Stats.ToArray());
     }
 
+    private static GameSessionOwner Session(RuleMode rules = RuleMode.Steamwoven)
+    {
+        var flags = AreaStartingHero.NewGameFlags(new(new(Guid.NewGuid()), new(Guid.NewGuid())), new(Guid.NewGuid()), null);
+        return GameSessionOwner.Create(new(ConversationSessionFixture.Clock, flags,
+            new(new(1), new(1, 1), Arcanum.Simulation.Movement.NeighborDirection.XPlus), AutoLevel: Rules()) { Rules = rules }).Owner!;
+    }
+
+    private static (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)? Sheet(string entity) =>
+        entity is "virgil" or "far" or "near" or "dead" ? AreaAdvancement.Npc(entity, Follower(), Effect) : null;
+
     [TestMethod]
     public void AnAwardsFollowerStepLevelsTheHerosFollowers()
     {
-        var flags = AreaStartingHero.NewGameFlags(new(new(Guid.NewGuid()), new(Guid.NewGuid())), new(Guid.NewGuid()), null);
-        using var session = GameSessionOwner.Create(new(ConversationSessionFixture.Clock, flags,
-            new(new(1), new(1, 1), Arcanum.Simulation.Movement.NeighborDirection.XPlus), AutoLevel: Rules())).Owner!;
+        using var session = Session();
         Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, "virgil").Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, "nobody").Disposition);
         var award = new SessionExperienceAward(2100, 1, 1, new(1, 2));
-        var raised = AreaAdvancement.LevelFollowers(session, award, entity => entity == "virgil" ? AreaAdvancement.Npc(entity, Follower(), Effect) : null);
-        Assert.AreEqual(1, raised.Count);
+        var report = AreaAdvancement.LevelFollowers(session, award, Sheet, _ => new(false, null));
+        Assert.AreEqual(1, report.Raised.Count);
         var record = session.QueryNpcAdvancement("virgil")!;
         // One point: dexterity 9 completes nothing more (intelligence 9 cannot be paid), so rule 70 does not run.
         Assert.AreEqual((2, 9, 8, 0), (record.Sheet.Level, record.Sheet.Stats[1], record.Sheet.Stats[4], record.Sheet.UnspentPoints));
         Assert.AreEqual(2, AreaAdvancement.Level(session, "virgil", 1));
         Assert.AreEqual(7, AreaAdvancement.Level(session, "nobody", 7));
-        // A follower is with the hero on any map; another NPC counts only on the map it stands on (here its home map).
-        Assert.IsTrue(AreaAdvancement.Nearby(session, "virgil", 5, 79));
-        Assert.IsTrue(AreaAdvancement.Nearby(session, "stranger", 79, 79));
-        Assert.IsFalse(AreaAdvancement.Nearby(session, "stranger", 5, 79));
-        Assert.AreEqual(0, AreaAdvancement.LevelFollowers(session, award with { Followers = null }, _ => null).Count);
+        Assert.AreEqual(0, AreaAdvancement.LevelFollowers(session, award with { Followers = null }, Sheet, _ => new(false, null)).Raised.Count);
+    }
+
+    [TestMethod]
+    public void WaitingFollowersGetTheStepByTheRuleSetting()
+    {
+        // ARC-WORLD-047 (OL29, owner decision D7). Four waiting followers: "near" on the loaded map 5 tiles away, "far" on the loaded map
+        // 20 tiles away, "away" on another map (no sheet readable here), "dead" next to the PC.
+        AreaWaitingPlace Place(string entity) => entity switch
+        {
+            "near" => new(false, (5, -3)), "far" => new(false, (20, 0)), "dead" => new(true, (1, 0)), _ => new(false, null),
+        };
+        GameSessionOwner Waiting(RuleMode rules)
+        {
+            var session = Session(rules);
+            foreach (var entity in new[] { "near", "far", "away", "dead" })
+            {
+                Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, entity).Disposition);
+                Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, entity).Disposition);
+            }
+            return session;
+        }
+        var award = new SessionExperienceAward(2100, 1, 1, new(1, 2));
+
+        // Original: only the one inside the window's rectangle; nothing is kept for later.
+        using (var original = Waiting(RuleMode.Original))
+        {
+            var report = AreaAdvancement.LevelFollowers(original, award, Sheet, Place);
+            CollectionAssert.AreEqual(new[] { "near" }, report.Raised.Select(r => r.Record!.Entity).ToArray());
+            Assert.AreEqual(0, report.Deferred.Count);
+            Assert.IsNull(original.QueryNpcAdvancement("far"));
+            Assert.AreEqual(0, original.QueryMissedLevelEntities().Count);
+        }
+
+        // Steamwoven: every one that is not dead; the one whose sheet cannot be read keeps the step until its map loads.
+        using var steamwoven = Waiting(RuleMode.Steamwoven);
+        var levelled = AreaAdvancement.LevelFollowers(steamwoven, award, Sheet, Place);
+        CollectionAssert.AreEquivalent(new[] { "near", "far" }, levelled.Raised.Select(r => r.Record!.Entity).ToArray());
+        CollectionAssert.AreEqual(new[] { "away" }, levelled.Deferred.ToArray());
+        Assert.IsNull(steamwoven.QueryNpcAdvancement("dead"));
+        Assert.AreEqual(1, AreaAdvancement.LevelFollowers(steamwoven, award with { Followers = new(2, 3) }, Sheet, Place).Deferred.Count);
+        CollectionAssert.AreEqual(new MissedLevelStep[] { new(new(1, 3), 1) }, steamwoven.QueryMissedLevelSteps("away")!.ToArray());
+        // Nothing to apply while its map data cannot be read; once it can, both steps land at once (level 1 → 3).
+        Assert.AreEqual(0, AreaAdvancement.ApplyMissed(steamwoven, Sheet).Count);
+        var applied = AreaAdvancement.ApplyMissed(steamwoven, entity => entity == "away" ? AreaAdvancement.Npc(entity, Follower(), Effect) : null);
+        Assert.AreEqual(3, applied.Single().Record!.Sheet.Level);
+        Assert.AreEqual(0, steamwoven.QueryMissedLevelEntities().Count);
     }
 }

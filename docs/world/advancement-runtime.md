@@ -66,6 +66,7 @@ after each level written and returns the unspent points left.
 | `Create` | With scheme data, a new hero's scheme runs once over its starting points (AL11) with its innate effects only. |
 | Pool bound | The hero holds at most `SessionAdvancementLimits.MaxHeroPoolPoints` (100) bought hit and fatigue points each, so the effect bounds of its maxima hold; a scheme run (at creation or for one level) that would go past it buys nothing and leaves that level's points unspent. A project guard: a pre-made hero buys at most 64 points in all. |
 | Experience awards (`AwardHeroExperience`, `AwardQuestExperience`, `SetQuestState`, hits and kills) | The hero's scheme spends each level's points as the level is written (AL12), with its effects' changes and poison; the award's `Purchases` lists what it bought (null when nothing). A level raises the maxima by the bought points too. |
+| `DeferFollowerLevel(expected, entity, step)`, `ApplyMissedFollowerLevels(expected, loaded, modifiers)`, `QueryMissedLevelSteps`, `QueryMissedLevelEntities` | ARC-WORLD-047 (owner decision D7, Steamwoven): a waiting follower whose sheet the host cannot read now (its map is not loaded) keeps the step as missed; consecutive steps merge into one (`ExperienceRules.AppendMissedStep`: a step continuing the last one merges, an identical one counts once more up to 51, at most 8 entries), which gives the same levels and points as the steps in turn (tested over every PC level history). `ApplyMissedFollowerLevels` applies them in order through the follower update and forgets them in one revision, when the host can read the sheet. Defer is refused without scheme data, for an invalid entity or a step that does not rise, for an NPC that is not waiting (`NotInParty`), past the bound or the record budget (`BudgetExceeded`). |
 | `LevelFollower(expected, loaded, modifiers, step)` | For one follower or waiting follower after an award's `Followers` step: its level and points ([experience](experience-runtime.md), XP7), then its scheme and rule 70 (AL1). `loaded` is the NPC's map data, read only while the session has no record of it. A level that does not rise is `NoChange`. Refused, in order: no scheme data (`AdvancementUnavailable`), an invalid entity, sheet, scheme, modifiers or step (`InvalidAdvancement`), the version, a new record over `GameSessionLimits.MaxAdvancementRecords` (256, `BudgetExceeded`), the revision. One revision. |
 | `SetAutoLevelScheme(expected, target, scheme)` | SCR action 139 (ARC-SCRIPT-016, ledger OL30, 0x4A6D90): the target (`SessionSchemeTarget.Hero` or `ForNpc(loaded)`) gets the scheme; nothing is bought now, the next level step runs it (the hero's next level written, an NPC's next rise), and a number without a rule then buys nothing (the hero's points stay unspent). An NPC without a record gets one from its loaded sheet. The original stores any number; the session keeps 0..199, so a number outside is refused (a documented deviation no installed script reaches). Refused, in order: no hero for a hero target (`AdvancementUnavailable`), a number outside 0..199 or an invalid loaded record (`InvalidAdvancement`), the version, a new record over the budget (`BudgetExceeded`), the revision; the same scheme is `NoChange`. One revision. No snapshot change: the scheme fields already exist. |
 | `QueryNpcAdvancement(entity)`, `AutoLevel` | The NPC's saved record (null until levelled) and the session's scheme data. |
@@ -81,16 +82,32 @@ monstrous flag, stats, magick and tech points, level, unspent points, skills, co
 scheme, in ordinal entity order. Restore checks every range, the order and the budget. Schemas 1..19 are refused, not
 migrated. Since schema 25 (ARC-MAGIC-004) both the hero's advancement and each NPC record also carry `mastery` (the mastered
 college, −1 none) after `colleges`, and the spell purchases learn through the [spell book](spell-book-runtime.md)'s one rule.
+Since schema 32 (ARC-WORLD-047) `"advancement"` also has `"missed":[{"entity","steps":[{"oldPcLevel","newPcLevel","times"}]}]`
+after `"npcs"`, in ordinal entity order: levels 0..51, a count 1..51, 1..8 steps that each rise; schema 31 is refused, not
+migrated.
 
 ## Viewer host
 
 With `--hero` the AREA viewer reads `gamelevel.mes`, `userlevel.mes` and `spelllist.mes` with the hero's other start tables
 (`AreaAdvancement.Rules`) and the module's `gameeffect.mes` effect rules, so the hero's scheme spends its starting points and
-each level's. After every award (a dialog's quest completion, a hit or a kill) the followers and the waiting NPCs on the
-current map follow the hero's level step (`AreaAdvancement.LevelFollowers`) from their stored fields
-(`CombatFieldReader`, from the map whose objects hold the NPC; a waiting NPC counts while the session places it on the
-current map) and effects; the conversation reads a levelled follower's level from the session. The smoke log prints
-`ARC-WORLD-036 follower-level`.
+each level's. After every award (a dialog's quest completion, a hit or a kill) the followers follow the hero's level step
+(`AreaAdvancement.LevelFollowers`) from their stored fields (`CombatFieldReader`, from the map whose objects hold the NPC) and
+effects, and so do the waiting followers by the rule setting (ARC-WORLD-047, ledger
+[OL29](../research/companion-orders-loyalty-evidence.md#5-waiting-followers-and-the-level-step-q5-xp5-xp7), owner decision D7):
+
+- **Original** (`ExperienceRuleProfile.WaitingFollowersStepOnlyNearPc`): only one drawn on the current map (among the loaded
+  objects, so on the main map one outside the loaded window never counts) whose tile offset from the PC is within
+  `ExperienceRules.WaitingStepReach` on both axes and that is not dead. The original finds the objects of the bounding box, in
+  tiles, of a game-window-sized screen rectangle centred on the PC (0x440FF0, 0x4B9130, 0x440B40); measured with the original's
+  800 × 600 screen (the view window's own size is set by its caller, 0x43A570, not traced; the viewer's window never decides it),
+  the box reaches 12.5 tiles, so 12 whole tiles; its edge is NOT_VERIFIED. Every other waiting follower gets nothing, then or
+  later, as in the original.
+- **Steamwoven:** every waiting follower that is not dead, wherever it waits: at once when its stored fields can be read from a
+  map this run covers, else its step is kept as missed in the session and applied when the companions bind on a map that
+  covers it (a map load, a transfer, the main map's window), and before its next step.
+
+The conversation reads a levelled follower's level from the session. The smoke log prints `ARC-WORLD-036 follower-level`,
+`ARC-WORLD-047 level step kept` and `ARC-WORLD-047 missed level steps applied`.
 
 ## Tests
 
@@ -112,11 +129,10 @@ skill target.
 ## Not ready
 
 - The scheme choice (the character screen's auto-level selection) and point purchases by the player; the Educator
-  background; the level-up message.
-- Waiting followers "nearby" are the ones on the current map; a waiting follower on another map does not follow the level
-  step (the source's distance test is not modelled; it is a screen-sized rectangle around the PC,
-  [ARC-RES-064](../research/companion-orders-loyalty-evidence.md#5-waiting-followers-and-the-level-step-q5-xp5-xp7) OL29). An NPC whose home map the viewer has not loaded (map mode covers one
-  map) is skipped, even when the session already holds its record.
+  background.
+- The waiting followers' rectangle is measured with the original's 800 × 600 screen; the view window's own size and the box
+  edge (the half tile) are NOT_VERIFIED. No native smoke reaches a level step (without `--hero` the session has no scheme data);
+  the rules are covered by synthetic and opt-in tests.
 - Viewer: an award reached while the viewer has no combat host or effect rules (no `--hero`) levels no follower.
 - Script changes of a scheme run in the viewer's dialog scripts since ARC-SCRIPT-016 ([set S8](../scripting/scr-dispatcher-runtime.md#set-auto-level-scheme-arc-script-016-set-s8));
   Virgil's script 2023, the one installed action, is not run yet (its other lines use actions no set admits), and an NPC's

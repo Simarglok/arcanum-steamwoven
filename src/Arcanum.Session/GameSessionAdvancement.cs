@@ -280,6 +280,13 @@ public sealed partial class GameSessionOwner
         return _advancement.Missed.GetValueOrDefault(entity);
     }
 
+    /// <summary>The NPCs the session holds missed level steps for, in ordinal entity order (ARC-WORLD-047).</summary>
+    public IReadOnlyList<string> QueryMissedLevelEntities()
+    {
+        ThrowIfDisposed();
+        return _advancement.Missed.Keys.OrderBy(entity => entity, StringComparer.Ordinal).ToArray();
+    }
+
     /// <summary>
     /// ARC-WORLD-047 (Steamwoven, owner decision D7): records a PC level step a waiting follower missed because the host cannot read its
     /// sheet now (its map is not loaded); <see cref="ApplyMissedFollowerLevels"/> applies the steps when it can

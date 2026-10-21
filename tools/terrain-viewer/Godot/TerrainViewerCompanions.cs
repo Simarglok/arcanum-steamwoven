@@ -44,6 +44,8 @@ public partial class TerrainViewerApp
             world => grid.Chart.Contains(grid.Chart.ToChart(new(world.X, world.Y))));
         foreach (var entity in _unbodiedVisitors) GD.Print("ARC-WORLD-048 visitor not talkable entity=" + entity + " reason=no body kept this run");
         foreach (var skipped in _areaCompanions.Skipped) GD.Print("ARC-WORLD-016 companion skipped " + skipped);
+        // ARC-WORLD-047: a waiting follower whose map data this run can read now gets the level steps it missed.
+        ApplyMissedAreaLevels();
         RefreshFollowerPortraits();
         GD.Print("ARC-WORLD-016 companions bound " + System.Text.Json.JsonSerializer.Serialize(_areaCompanions.Companions.Select(c => new {
             c.Speaker.ScriptId, Standing = c.Standing.ToString(), Cell = grid.Chart.ToWorld(c.Grid.State.CommittedCell), Visiting = c.Template.Home.RuntimeMap != CurrentAreaMap }).ToArray())
