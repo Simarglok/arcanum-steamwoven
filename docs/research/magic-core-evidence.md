@@ -195,6 +195,14 @@ character editor reports a failed learn by testing the level and then intelligen
 
 ### Choosing the target (FR-MAGIC-003)
 
+Read in the executable by two readers (ARC-MAGIC-006, [ledger "Spell invocation"](original-verification-ledger.md#spell-invocation-arc-magic-006),
+IV1–IV12): the steps below are F2, the range, the flags and the item gate F3 (function oracle). Precisions from that reading:
+the turn test applies to a PC or NPC parent only; the range measures from the parent's location and admits a parent without
+one; the NPC fallback tests only the record's BEGIN target mask and lists the tiles of radius 2 around the target object in the
+target collection's order, replacing an object target by a tile; intelligence 5 holds for technology records too; the MG5 d100
+is drawn whenever the target's aptitude is negative. The implementation is the
+[spell invocation runtime](../world/spell-invocation-runtime.md).
+
 The invocation check runs before any slot or payment (check (0x4564E0)):
 
 1. In turn-based mode only the critter whose turn it is may cast.

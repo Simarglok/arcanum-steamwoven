@@ -23,6 +23,7 @@ public sealed class SpellResistanceSessionTests
         Assert.IsTrue(value is >= 1 and <= 20);
         Assert.AreEqual(before.Draws + 1, owner.QueryRandom().Draws);
         Assert.AreEqual("magic.FailChanceD20", SessionSpellRolls.Label(SpellRollPurpose.FailChanceD20));
+        Assert.AreEqual("magic.InvocationAptitudeD100", SessionSpellRolls.Label(SpellRollPurpose.InvocationAptitudeD100));
         Assert.AreEqual(0, owner.Version.Revision, "a roll does not move the revision");
 
         using var replay = Create();
