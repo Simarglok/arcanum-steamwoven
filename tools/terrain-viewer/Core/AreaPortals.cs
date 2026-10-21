@@ -10,6 +10,9 @@ namespace Arcanum.TerrainViewer.Core;
 public sealed record AreaPortal(AreaObjectKey Key, string Entity, AreaStepCell Cell, SessionOpenableBaseline Baseline, PortalArt Art, int FramesPerSecond,
     bool UnlockScript, IReadOnlyList<AreaVisualRecord> Frames)
 {
+    /// <summary>ARC-SKILLS-006: the lock's difficulty (portal field 47, the record's slot 37), bounded to the session's range.</summary>
+    public int LockDifficulty { get; init; }
+
     /// <summary>The visual of one frame of the portal's ART, or null when the ART has no such frame.</summary>
     public AreaVisualRecord? Visual(int frame) => Frames.FirstOrDefault(v => (int)((v.RawArt >> 14) & 31) == frame);
 
@@ -31,7 +34,9 @@ public enum AreaPortalUse { Opened, Closed, Locked, Jammed, MagicallyHeld, Scrip
 /// </summary>
 public sealed class AreaPortals
 {
-    private const int FlagsSlot = 36, KeySlot = 38;
+    private const int FlagsSlot = 36, DifficultySlot = 37, KeySlot = 38;
+    /// <summary>ARC-SKILLS-006: the range of the use-item-with-skill goal that picks a lock (1, ledger PL3).</summary>
+    public const int PickRange = 1;
     private readonly Dictionary<AreaObjectKey, AreaPortal> _portals;
 
     private AreaPortals(SessionMapId map, Dictionary<AreaObjectKey, AreaPortal> portals) { Map = map; _portals = portals; }
@@ -62,7 +67,10 @@ public sealed class AreaPortals
             var flags = unchecked((int)Field(FlagsSlot)) | ((raw & 0x200) != 0 ? LockRules.BustedBit : 0);
             var baseline = new SessionOpenableBaseline(OpenableKind.Portal, flags, unchecked((int)Field(KeySlot)), (int)((raw >> 14) & 31));
             var script = AreaStepInspector.HasUnlockScript(row);
-            portals.Add(row.Key, new(row.Key, AreaUseScriptHost.EntityId(row), new(x, y), baseline, art, body.FramesPerSecond, script, frames));
+            portals.Add(row.Key, new(row.Key, AreaUseScriptHost.EntityId(row), new(x, y), baseline, art, body.FramesPerSecond, script, frames)
+            {
+                LockDifficulty = (int)Math.Clamp(Field(DifficultySlot), -GameSessionOwner.MaxLockDifficulty, GameSessionOwner.MaxLockDifficulty),
+            });
         }
         return new(new(snapshot.RuntimeMap), portals);
     }
@@ -91,6 +99,14 @@ public sealed class AreaPortals
                 opened.Add(portal);
         }
         return opened;
+    }
+
+    /// <summary>ARC-SKILLS-006: the hero picks the portal's lock with <paramref name="lockpick"/> (null: no lockpicks), at the light
+    /// <paramref name="light"/> of the portal (full light when the host has none). The session's answer; nothing opens.</summary>
+    public SessionPickLockResult Pick(GameSessionOwner session, AreaPortal portal, SessionLockpick? lockpick, int light = SessionPickLockTarget.FullLight)
+    {
+        ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(portal);
+        return session.PickLock(session.Version, new(Openable(portal), portal.Baseline, portal.LockDifficulty, light), lockpick);
     }
 
     /// <summary>A use of the portal by the player (FR-SCENE-014): an open portal closes; a closed one opens when the

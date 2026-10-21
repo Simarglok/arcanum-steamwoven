@@ -36,11 +36,23 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
 
     /// <summary>
     /// The set a use click runs: <see cref="ScrAdmissionSet.S4"/> without the story-state actions (the session has no
-    /// story-state number) and without the dialog action (a use click does not open a conversation here).
+    /// story-state number) and without the dialog action (a use click does not open a conversation here), plus the reading actions of
+    /// <see cref="ScrAdmissionSet.S10"/> (ARC-UI-049: a plaque, book or picture a use, tile or sector script shows).
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S4-area-use", ScrAdmissionSet.S4.Conditions,
-        ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState and not ScrCatalogue.Action.Dialog),
+    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading", ScrAdmissionSet.S4.Conditions,
+        ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState and not ScrCatalogue.Action.Dialog)
+            .Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]),
         ScrAdmissionSet.S4.ValueKinds, ScrAdmissionSet.S4.FocusKinds);
+
+    private readonly List<ScrReadingRequest> _readings = [];
+
+    /// <summary>ARC-UI-049: the reading actions of the runs applied since the last call whose viewer is the PC, in order.</summary>
+    public IReadOnlyList<ScrReadingRequest> TakeReadings()
+    {
+        var readings = _readings.ToArray();
+        _readings.Clear();
+        return readings;
+    }
 
     /// <summary>
     /// The session entity of a row: a mobile's own id (<see cref="AreaConversationState.EntityId"/>, as the inventory and
@@ -284,6 +296,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
                 : _session.RemoveScriptCall(_session.Version, request.Script, AreaScriptHost.Role(request.Attachee));
             if (queued.Disposition == GameSessionDisposition.Rejected) return false;
         }
+        // ARC-UI-049: a reading action shows its document to the PC only; it changes no session state.
+        foreach (var request in effects.Readings)
+            if (IsPc(request.Viewer)) _readings.Add(request);
         return effects.Writeback is not { } writeback || writeSlot(writeback);
     }
 

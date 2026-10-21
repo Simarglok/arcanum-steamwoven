@@ -8,10 +8,22 @@ namespace Arcanum.Session;
 /// (<c>CombatFields.Written</c>, a prototype or an instance over it).</summary>
 public readonly record struct SessionWrittenFacts(int Subtype, int TextStartLine)
 {
+    /// <summary>ARC-UI-049: the item's prototype number (14092, the executable's 14072, is the alternate newspaper).</summary>
+    public int Prototype { get; init; }
+    /// <summary>ARC-UI-049: the item has a use script (attachment point 1), which runs before the reading and can cancel it.</summary>
+    public bool UseScript { get; init; }
+    /// <summary>ARC-UI-049: the item has a spell mana store or the magical item flag, so its use takes the item-spell path.</summary>
+    public bool ItemSpell { get; init; }
+
     public static SessionWrittenFacts? FromCombatFields(Arcanum.Data.Combat.CombatFields fields)
     {
         ArgumentNullException.ThrowIfNull(fields);
-        return fields.Written is { } written ? new(written.Subtype, written.TextStartLine) : null;
+        // The use script is attachment point 1; the item-spell path takes an item with a spell mana store or the magical flag (0x4).
+        return fields.Written is { } written ? new(written.Subtype, written.TextStartLine)
+        {
+            Prototype = fields.Object.Prototype, UseScript = fields.Object.ScriptPoints.Contains(1),
+            ItemSpell = fields.Item is { } item && (item.SpellManaStore != 0 || (item.Flags & 0x4) != 0),
+        } : null;
     }
 }
 

@@ -61,6 +61,7 @@ public partial class TerrainViewerApp
         }
         _areaEffectRules = result.Hero?.Effects;
         _areaKitHealing = result.Hero?.KitHealing;
+        _areaKitLockpicks = result.Hero?.KitLockpicks;
         _areaKitDurability = result.Hero?.KitDurability;
         if (carried is not null) _areaSession = carried;
         else
@@ -102,6 +103,7 @@ public partial class TerrainViewerApp
         EndSheet(); _sheetStatus = null;
         EndLogbook(); _logbookStatus = null;
         EndSchematics(); _schematicsStatus = null; _schematicScriptOpen = null;
+        EndReading(); _readingStatus = null; _readingScriptOpen = null;
         EndWorldMap(); _worldMapStatus = null;
         UnbindAreaInventory();
         UnbindAreaCompanions();

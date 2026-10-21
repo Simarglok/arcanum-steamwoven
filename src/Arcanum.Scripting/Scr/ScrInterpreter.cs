@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S9"/>.
+/// <see cref="ScrAdmissionSet.S10"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -23,6 +23,7 @@ internal sealed class ScrInterpreter
     private readonly List<ScrTeleport> _teleports = new();
     private readonly List<ScrSchemeRequest> _schemes = new();
     private readonly List<ScrSchematicRequest> _schematics = new();
+    private readonly List<ScrReadingRequest> _readings = new();
     private readonly ScrRunOptions _options;
     private readonly int[] _locals = new int[ScrCatalogue.LocalSlots];
     private readonly SortedDictionary<int, bool> _flags = new();
@@ -90,7 +91,8 @@ internal sealed class ScrInterpreter
         return new(result, new ScrSlot(number, _localFlags, _counters), null, flags, story, _dialog, _calls.Count == 0 ? null : Array.AsReadOnly(_calls.ToArray()),
             _lines.Count == 0 ? null : Array.AsReadOnly(_lines.ToArray()), _sounds.Count == 0 ? null : Array.AsReadOnly(_sounds.ToArray()),
             _teleports.Count == 0 ? null : Array.AsReadOnly(_teleports.ToArray()), _schemes.Count == 0 ? null : Array.AsReadOnly(_schemes.ToArray()),
-            _schematics.Count == 0 ? null : Array.AsReadOnly(_schematics.ToArray()));
+            _schematics.Count == 0 ? null : Array.AsReadOnly(_schematics.ToArray()),
+            _readings.Count == 0 ? null : Array.AsReadOnly(_readings.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -179,6 +181,22 @@ internal sealed class ScrInterpreter
                 // The run goes on.
                 var scheme = Get(a, 1);
                 foreach (var obj in Objects(a, 0)) _schemes.Add(new(obj, scheme));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.ShowBook:
+            case ScrCatalogue.Action.ShowPicture:
+            case ScrCatalogue.Action.ShowPlaque:
+            {
+                // ARC-UI-049 (0x447220 cases 64, 65, 114): the number (a start line, or a picture's art) and the viewer object; an absent
+                // viewer shows nothing (the original's open needs the local player). The run goes on.
+                var number = Get(a, 0);
+                var kind = a.Type switch
+                {
+                    ScrCatalogue.Action.ShowBook => ScrReadingKind.Book,
+                    ScrCatalogue.Action.ShowPicture => ScrReadingKind.Picture,
+                    _ => ScrReadingKind.Plaque,
+                };
+                if (OptionalObject(a, 1) is { } viewer) _readings.Add(new(kind, number, viewer));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.StartSchematicUi:

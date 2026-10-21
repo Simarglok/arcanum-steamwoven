@@ -27,17 +27,18 @@ public sealed class AreaScriptHost : IScrHost
     /// sound actions of <see cref="ScrAdmissionSet.S7"/> (ARC-SCRIPT-040), plus call script in and remove script call of
     /// <see cref="ScrAdmissionSet.S5"/> since the viewer pumps the session's event queue (ARC-WORLD-039), plus set auto-level
     /// scheme of <see cref="ScrAdmissionSet.S8"/> (ARC-SCRIPT-016), plus start schematic UI of <see cref="ScrAdmissionSet.S9"/>
-    /// (ARC-TECHNOLOGY-005).
+    /// (ARC-TECHNOLOGY-005), plus the reading actions of <see cref="ScrAdmissionSet.S10"/> (ARC-UI-049).
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic", ScrAdmissionSet.S3.Conditions,
+    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading", ScrAdmissionSet.S3.Conditions,
         ScrAdmissionSet.S3.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState)
             .Concat([ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
                 ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
-                ScrCatalogue.Action.StartSchematicUi]),
+                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]),
         ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
 
     private readonly List<ScrSound> _sounds = [];
     private readonly List<AreaSchematicScriptOpen> _schematics = [];
+    private readonly List<ScrReadingRequest> _readings = [];
 
     /// <summary>ARC-SCRIPT-040: the effect sounds of the runs applied since the last call, in order, for the viewer to play
     /// (scheme requests go to the session in <see cref="Apply"/>).</summary>
@@ -55,6 +56,15 @@ public sealed class AreaScriptHost : IScrHost
         var schematics = _schematics.ToArray();
         _schematics.Clear();
         return schematics;
+    }
+
+    /// <summary>ARC-UI-049: the reading actions of the runs applied since the last call whose viewer is the PC, in order (the original
+    /// opens the window for the local player only), for the viewer to show.</summary>
+    public IReadOnlyList<ScrReadingRequest> TakeReadings()
+    {
+        var readings = _readings.ToArray();
+        _readings.Clear();
+        return readings;
     }
 
     /// <summary>ARC-SCRIPT-040: the speaker the scripts name, or null for the PC and anything else (the viewer knows where it
@@ -218,6 +228,9 @@ public sealed class AreaScriptHost : IScrHost
         // and its PC leader); it changes no session state, so it neither stops nor is stopped by a later step.
         foreach (var request in effects.Schematics)
             if (ResolveSchematic(request.Object, IsPc(request.Object), Leader(request.Object)) is { } open) _schematics.Add(open);
+        // ARC-UI-049: a reading action shows its document to the PC only (0x4EE290); it changes no session state either.
+        foreach (var request in effects.Readings)
+            if (IsPc(request.Viewer)) _readings.Add(request);
         if (effects.Writeback is not { } writeback) return true;
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
             || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;

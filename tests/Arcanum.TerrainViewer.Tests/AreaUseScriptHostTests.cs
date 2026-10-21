@@ -101,6 +101,9 @@ public sealed class AreaUseScriptHostTests
             // 706: a tile script that keeps a local flag and teleports the player; 707: a sector script that sets a flag.
             Write("scr/00706tile.scr", Program(Do(new(ScrCatalogue.Action.SetLocalFlag, N(2))), Do(TeleportPc(5076)), Do(Skip)));
             Write("scr/00707sector.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(9))), Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(Skip)));
+            // 708 (ARC-UI-049): a book for the PC (the triggerer) and a plaque for the gate (not a PC).
+            Write("scr/00708read.scr", Program(Do(new(ScrCatalogue.Action.ShowBook, N(1020), (Triggerer, 0))),
+                Do(new(ScrCatalogue.Action.ShowPlaque, N(1500), (Attachee, 0))), Do(Skip)));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -189,6 +192,22 @@ public sealed class AreaUseScriptHostTests
             var held = Host(session, content, controlled);
             Assert.IsTrue(held.IsMindControlled(new(1, Entity(0))));
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, held.Run(controlled, session.Rules.Scripts).Outcome, "a mind-controlled object is never named");
+        });
+    }
+
+    [TestMethod]
+    public void A_reading_action_for_the_pc_is_kept_and_one_for_another_viewer_is_not()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var host = Host(session, content, Gate(708));
+            var ran = host.Run(Gate(708), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(2, ran.Run!.Effects.Readings.Count, "the run asked for both");
+            CollectionAssert.AreEqual(new[] { new ScrReadingRequest(ScrReadingKind.Book, 1020, new ScrObjectRef(1, AreaScriptHost.PcCode)) },
+                host.TakeReadings().ToArray(), "only a player viewer gets the window (WR15)");
+            Assert.AreEqual(0, host.TakeReadings().Count, "taken once");
         });
     }
 

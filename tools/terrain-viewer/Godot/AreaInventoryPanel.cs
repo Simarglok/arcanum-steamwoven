@@ -15,6 +15,7 @@ public partial class AreaInventoryPanel : CanvasLayer
     private Label _pc = null!;
     private VBoxContainer _use = null!;
     private readonly List<Button> _useButtons = new();
+    private readonly List<Button> _pickButtons = new();
     private Label _lootHeader = null!;
     private VBoxContainer _loot = null!;
     private Label _message = null!;
@@ -30,12 +31,17 @@ public partial class AreaInventoryPanel : CanvasLayer
     public event Action? TakeAllRequested;
     /// <summary>ARC-SKILLS-005: use a healing item of the PC's list on the PC.</summary>
     public event Action<string>? UseRequested;
+    /// <summary>ARC-UI-049: use a written item of the PC's list (read it, or register a schematic document).</summary>
+    public event Action<string>? ReadRequested;
+    /// <summary>ARC-SKILLS-006: lockpicks chosen to pick a lock (the original's use of lockpicks on an object).</summary>
+    public event Action<string>? PickRequested;
     public bool IsOpen => Visible;
     /// <summary>The looted holder's entity, or null in the plain inventory view.</summary>
     public string? Holder => IsOpen ? _view?.Holder : null;
     internal AreaInventoryView? ViewForSelfTest => _view;
     internal IReadOnlyList<Button> TakeButtonsForSelfTest => _buttons;
     internal IReadOnlyList<Button> UseButtonsForSelfTest => _useButtons;
+    internal IReadOnlyList<Button> PickButtonsForSelfTest => _pickButtons;
     internal Button TakeAllForSelfTest => _takeAll;
     internal string MessageForSelfTest => _message.Text;
     internal string PcTextForSelfTest => _pc.Text;
@@ -94,8 +100,8 @@ public partial class AreaInventoryPanel : CanvasLayer
         var focus = Focusable().FindIndex(button => button.HasFocus());
         foreach (var button in _buttons) { _loot.RemoveChild(button); button.QueueFree(); }
         _buttons.Clear();
-        foreach (var button in _useButtons) { _use.RemoveChild(button); button.QueueFree(); }
-        _useButtons.Clear();
+        foreach (var button in _useButtons.Concat(_pickButtons)) { _use.RemoveChild(button); button.QueueFree(); }
+        _useButtons.Clear(); _pickButtons.Clear();
         _view = view;
         _header.Text = $"Inventory | PC items {view.Pc.Count} | gold {view.Gold}" + (view.Holder is null ? string.Empty : " | looting a dead NPC");
         _pc.Text = view.Pc.Count == 0 ? "(nothing taken yet)" : string.Join("\n", view.Pc.Select((line, index) => $"{index + 1}. {line.Text}"));
@@ -109,6 +115,28 @@ public partial class AreaInventoryPanel : CanvasLayer
             };
             use.Pressed += () => Callable.From(() => UseRequested?.Invoke(entity)).CallDeferred();
             _use.AddChild(use); _useButtons.Add(use);
+        }
+        foreach (var line in view.Pc.Where(line => line.Written))
+        {
+            var entity = line.Entity;
+            var read = new Button
+            {
+                Name = $"Read{_useButtons.Count + 1}", Text = "Read: " + line.Text, Alignment = HorizontalAlignment.Left,
+                AutowrapMode = TextServer.AutowrapMode.WordSmart, FocusMode = Control.FocusModeEnum.All,
+            };
+            read.Pressed += () => Callable.From(() => ReadRequested?.Invoke(entity)).CallDeferred();
+            _use.AddChild(read); _useButtons.Add(read);
+        }
+        foreach (var line in view.Pc.Where(line => line.Lockpick))
+        {
+            var entity = line.Entity;
+            var pick = new Button
+            {
+                Name = $"Pick{_pickButtons.Count + 1}", Text = "Pick a lock with: " + line.Text, Alignment = HorizontalAlignment.Left,
+                AutowrapMode = TextServer.AutowrapMode.WordSmart, FocusMode = Control.FocusModeEnum.All,
+            };
+            pick.Pressed += () => Callable.From(() => PickRequested?.Invoke(entity)).CallDeferred();
+            _use.AddChild(pick); _pickButtons.Add(pick);
         }
         var looting = view.Holder is not null;
         _lootHeader.Visible = looting; _loot.Visible = looting; _takeAll.Visible = looting;
@@ -131,7 +159,9 @@ public partial class AreaInventoryPanel : CanvasLayer
         }
         _message.Text = message ?? string.Empty;
         _hint.Text = (looting ? "Click an item to take it (controller: D-pad, confirm) | " : string.Empty)
-            + (_useButtons.Count > 0 ? "Use on self heals the hero with a healing item | " : string.Empty)
+            + (view.Pc.Any(line => line.Healing) ? "Use on self heals the hero with a healing item | " : string.Empty)
+            + (view.Pc.Any(line => line.Written) ? "Read opens a written item (a schematic document registers) | " : string.Empty)
+            + (_pickButtons.Count > 0 ? "Pick a lock closes the window; then press a door or window | " : string.Empty)
             + "I, Escape or cancel closes | PROJECT diagnostic window: no grid, equipment, drop or weight limit; original UI parity NOT_VERIFIED";
         var enabled = Focusable();
         enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
@@ -140,7 +170,7 @@ public partial class AreaInventoryPanel : CanvasLayer
 
     private List<Button> Focusable()
     {
-        var list = _useButtons.Concat(_buttons).ToList();
+        var list = _useButtons.Concat(_pickButtons).Concat(_buttons).ToList();
         if (_takeAll.Visible && !_takeAll.Disabled) list.Add(_takeAll);
         list.Add(_close);
         return list;
