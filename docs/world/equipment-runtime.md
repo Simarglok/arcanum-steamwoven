@@ -116,6 +116,27 @@ from the hero's content prototypes and yes to the art and insert checks (one dia
 armour and boots on, except the human woman, whose body armour 8220 carries wield-on and wield-off scripts and stays in the
 pack.
 
+## Backgrounds (ARC-WORLD-069)
+
+The hero carries its background id in the session (`SessionHeroState.Background`, snapshot schema 35; a pre-made hero's comes from
+its prototype, 39–50, through `SessionHeroDefinition.Background`; 0 none), read in the executable
+([ledger BG1–BG8](../research/original-verification-ledger.md#backgrounds-arc-world-069)). `QueryHeroBackground()` gives it. Only a
+PC has a background (the original's reader answers 0 for any other object), so an NPC is never refused. Two rules read it:
+
+- **Magick Allergy (69, BG3).** The hero as a wearer is `MagickAllergy`, so the wear check refuses a magickal item (complexity above
+  0) with `WieldMagicItems` (the original's code 18, `mes\item.mes` 118), for `Equip` and the best-items choice (which skips it).
+- **Technophobia (72, BG4).** The insert check's background part (`SessionBackgrounds.RefusesCarry`) refuses an item of negative
+  complexity for the hero (`InsertRefused` with `SessionInsertVerdict.TechnologyRefused`, the original's code 15, `item.mes` 115),
+  after the host's weight answer and before its room answer: on pickup, loot, negative `IN` and an assembly product. All-or-nothing:
+  the refusal comes from the insert check, before any effect. The session applies it where it knows the item's complexity (a seed
+  item's facts, a product's component facts); a made or placed item taken back has no complexity in the session, so the host's
+  insert check answers for it. The AREA viewer names the refusal in its inventory messages.
+
+Out of scope (ledger BG2, BG5–BG8; [characters and skills](../requirements/characters-skills.md)): choosing a background at character
+creation, its effect line (stats, skills, resistances and so on), the start kit's gold and items, the low-intelligence speech, dark
+sight, the time- and place-dependent stat changes, Educator, the container seed, and the unwield refusal of a technological item for a
+technophobe (no unwield path in the session).
+
 ## Tests
 
 - `Arcanum.Simulation.Tests/Equipment/EquipmentRulesTests`: slot mapping, race sizes, the wear check's order and every

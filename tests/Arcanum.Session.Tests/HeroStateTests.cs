@@ -200,7 +200,7 @@ public sealed class HeroStateTests
         "{\"stat\":\"Beauty\",\"operator\":\"Add\",\"value\":1},{\"stat\":\"Constitution\",\"operator\":\"Add\",\"value\":-1}," +
         "{\"stat\":\"MagickPoints\",\"operator\":\"Add\",\"value\":1}]}," +
         "\"genderEffect\":{\"effect\":330,\"modifiers\":[{\"stat\":\"Strength\",\"operator\":\"Add\",\"value\":-1}," +
-        "{\"stat\":\"Constitution\",\"operator\":\"Add\",\"value\":1}]},\"innateSkills\":[],\"fatePoints\":0,\"armedFates\":0}";
+        "{\"stat\":\"Constitution\",\"operator\":\"Add\",\"value\":1}]},\"innateSkills\":[],\"fatePoints\":0,\"armedFates\":0,\"background\":0}";
     internal const string KitInventory =
         ",\"inventory\":{\"gold\":385,\"kit\":[{\"entity\":\"kit:1\",\"type\":\"Weapon\",\"prototype\":6049,\"name\":4021,\"description\":6029}," +
         "{\"entity\":\"kit:2\",\"type\":\"Armor\",\"prototype\":8188,\"name\":2850,\"description\":8168}," +

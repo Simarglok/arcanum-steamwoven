@@ -121,7 +121,8 @@ public sealed partial class GameSessionOwner
         {
             var entity = into?.Entity ?? (made.Length > 0 ? made[ammo is null ? unit : 0] : SessionMadeItem.EntityOf((int)next));
             var unitFacts = new SessionItemFacts(kind, 0, 0, -1, ammo?.Units, []) { AmmoType = ammo?.AmmoType };
-            var verdict = insertCheck(new SessionInventoryItem(entity, unitFacts));
+            // ARC-WORLD-069: a Technophobia hero cannot take a technological product (the insert check's background part).
+            var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(entity, unitFacts)), facts(prototype)?.Complexity ?? 0);
             ThrowIfDisposed();
             if (_revision != revision) return RejectAssembly(GameSessionFailure.StaleVersion);
             if (verdict != SessionInsertVerdict.Accepted) return RejectAssembly(GameSessionFailure.InsertRefused, plan);

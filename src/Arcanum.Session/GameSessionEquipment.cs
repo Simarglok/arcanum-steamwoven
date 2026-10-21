@@ -312,8 +312,8 @@ public sealed partial class GameSessionOwner
     private int HeroAptitude() =>
         Math.Clamp(_hero!.Stats.Query(new(0)).Snapshot!.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
 
-    /// <summary>The hero as a wearer: race, gender, aptitude and the crippled arms of its life state. No spell, background or unique
-    /// art is session state, so the hero is never transformed, magick-allergic or unique.</summary>
+    /// <summary>The hero as a wearer: race, gender, aptitude, the crippled arms of its life state and (ARC-WORLD-069) the Magick Allergy
+    /// background. No spell or unique art is session state, so the hero is never transformed or unique.</summary>
     private EquipmentWearer HeroWearer()
     {
         var conditions = _life.Hero?.State.Conditions ?? LifeConditions.None;
@@ -324,6 +324,7 @@ public sealed partial class GameSessionOwner
             MagickTechAptitude = HeroAptitude(),
             CrippledArmOne = conditions.HasFlag(LifeConditions.CrippledArmOne),
             CrippledArmsBoth = conditions.HasFlag(LifeConditions.CrippledArmsBoth),
+            MagickAllergy = _hero.State.Background == SessionBackgrounds.MagickAllergy,
         };
     }
 
