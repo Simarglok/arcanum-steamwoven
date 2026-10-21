@@ -98,6 +98,19 @@ class Emulator:
             raise ValueError(f"global {address:#x} outside the image")
         self.mu.mem_write(address, struct.pack("<I", value & 0xFFFFFFFF))
 
+    def poke(self, address: int, data: bytes) -> None:
+        """Write a stub's out-parameter (a list it answers) into the stack or the heap during a call; the write is the world
+        model's, not the function's, so it passes no guard. Anywhere else is refused."""
+        if not any(address in r and address + len(data) <= r.end for r in (self.stack, self.heap)):
+            raise ValueError(f"poke {address:#x} outside the stack and the heap")
+        self.mu.mem_write(address, data)
+
+    def peek(self, address: int, size: int) -> bytes:
+        """Read an argument a stub was given by pointer (on the stack or the heap)."""
+        if not any(address in r and address + size <= r.end for r in (self.stack, self.heap)):
+            raise ValueError(f"peek {address:#x} outside the stack and the heap")
+        return bytes(self.mu.mem_read(address, size))
+
     def read_u32(self, address: int) -> int:
         """Read a 32-bit value the oracle placed or the function wrote (a world-model output), unsigned."""
         if not (address in self.image_range or address in self.heap) or address + 4 > (self.image_range.end if address in self.image_range else self.heap.end):
