@@ -164,7 +164,7 @@ public partial class TerrainViewerApp
                 var distance = Math.Max(Math.Abs(row.WorldX!.Value - actor.X), Math.Abs(row.WorldY!.Value - actor.Y));
                 return distance <= AreaTransitionCoordinator.UseRange ? AreaHoverAction.Use : AreaHoverAction.WalkToUse;
             }
-            if (InventoryActive && _inventoryHost!.Target(_areaSession!, CurrentAreaMap, hit) is { } target)
+            if (InventoryActive && AreaInventoryTargetOf(hit) is { } target)
             {
                 var near = Chebyshev(target.Row, (actor.X, actor.Y)) <= AreaInventoryHost.Reach;
                 return target.Kind == AreaInventoryTargetKind.GroundItem

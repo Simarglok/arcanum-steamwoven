@@ -110,6 +110,7 @@ public sealed class AreaObjectTargetsTests
         Condition(AreaUseScriptHost.EntityId(barrel), SessionObjectCondition.Off);
         Condition(AreaUseScriptHost.EntityId(statue), SessionObjectCondition.Busted);
         CollectionAssert.AreEquivalent(new[] { door.Key, barrel.Key }, targets.Gone(session).ToArray(), "a busted scenery still stands");
+        CollectionAssert.AreEqual(new[] { statue.Key }, targets.Busted(session).ToArray(), "ARC-RENDER-033: a busted scenery takes its destroyed ART");
         Assert.IsNull(targets.Target(session, door.Key));
         Assert.IsNull(targets.Target(session, barrel.Key));
         Assert.IsNotNull(targets.Target(session, statue.Key));

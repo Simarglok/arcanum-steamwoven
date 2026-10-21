@@ -230,6 +230,23 @@ public sealed class AreaScenePlan
         };
     }
 
+    /// <summary>
+    /// ARC-RENDER-033: a body the T0 plan does not hold (an item lying where no T0 body stood), drawn from <paramref name="visual"/>
+    /// at world cell (<paramref name="worldX"/>, <paramref name="worldY"/>) by the rule <see cref="Create"/> places a body with: no
+    /// object offset, scale 100, no blend, upright (phase 4) unless <paramref name="flat"/> (phase 3).
+    /// </summary>
+    public static AreaDrawCommand Place(AreaChart chart, AreaObjectKey identity, AreaVisualRecord visual, long worldX, long worldY, bool flat)
+    {
+        ArgumentNullException.ThrowIfNull(chart); ArgumentNullException.ThrowIfNull(visual);
+        if (visual.Width <= 0 || visual.Height <= 0 || visual.RawArt >> 28 is 1 or 3) throw new ArgumentException("AREA_PLACE_BODY");
+        var projected = TerrainGeometry.Project(checked((int)(worldX - chart.OriginX)), checked((int)(worldY - chart.OriginY)));
+        var (hotX, hotY) = Hotspot(visual);
+        var destination = new TerrainRect(checked(projected.X + 40 - hotX), checked(projected.Y + 20 - hotY), visual.Width, visual.Height);
+        var ranks = SameCellRanks(0, 0);
+        return new(visual.Key, AreaFrameKey.From(visual), identity, new(0, 0, visual.Width, visual.Height), destination, visual.Mirrored, false,
+            flat ? 3 : 4, checked((int)worldX), checked((int)worldY), ranks.First, ranks.Second, 255, false) { ArtClass = (int)(visual.RawArt >> 28) };
+    }
+
     /// <summary>The drawn hotspot. Walls (art class 1, ARC-WORLD-009) and portals (class 3, doors and windows of
     /// whole maps, ARC-RENDER-017): rotations 0, 1, 6 and 7 move it 40 left and 20 down, then the flip bit mirrors
     /// it as width − x − 2 (research T7 and the pinned tig art.c 1235–1253). The pinned Crash Site profiles draw no
@@ -272,6 +289,36 @@ public sealed class AreaScenePlan
     }
 
     /// <summary>The seven <see cref="UprightOrder"/> keys, in order.</summary>
+    /// <summary>ARC-RENDER-033: the plan's order of two commands (phase first, then the upright order and the visual's index), as
+    /// <see cref="Create"/> sorts them.</summary>
+    public static int ComparePlan(AreaDrawCommand a, AreaDrawCommand b)
+    {
+        ArgumentNullException.ThrowIfNull(a); ArgumentNullException.ThrowIfNull(b);
+        var c = a.Phase.CompareTo(b.Phase); if (c != 0) return c;
+        c = CompareUpright(a, b); if (c != 0) return c;
+        return a.Visual.SourceIndex.CompareTo(b.Visual.SourceIndex);
+    }
+
+    /// <summary>ARC-RENDER-033: <paramref name="flat"/> (commands in plan order) less the bodies <paramref name="movingKeys"/> name,
+    /// with the flat ones of <paramref name="moving"/> (phase below 4) inserted in plan order.</summary>
+    public static IReadOnlyList<AreaDrawCommand> WithMovingFlat(IEnumerable<AreaDrawCommand> flat, IReadOnlyList<AreaDrawCommand>? moving,
+        IReadOnlySet<AreaObjectKey?> movingKeys)
+    {
+        ArgumentNullException.ThrowIfNull(flat); ArgumentNullException.ThrowIfNull(movingKeys);
+        var list = flat.Where(command => command.Identity is null || !movingKeys.Contains(command.Identity)).ToList();
+        foreach (var command in (moving ?? []).Where(command => command.Phase < 4))
+        {
+            int low = 0, high = list.Count;
+            while (low < high)
+            {
+                var middle = low + (high - low) / 2;
+                if (ComparePlan(list[middle], command) <= 0) low = middle + 1; else high = middle;
+            }
+            list.Insert(low, command);
+        }
+        return list;
+    }
+
     internal static int CompareUpright(AreaDrawCommand a, AreaDrawCommand b)
     {
         var c = a.MapY.CompareTo(b.MapY); if (c != 0) return c;

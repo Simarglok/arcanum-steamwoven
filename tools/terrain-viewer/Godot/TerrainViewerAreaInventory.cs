@@ -97,7 +97,7 @@ public partial class TerrainViewerApp
     private AreaInventoryTarget? InventoryTargetAt(Vector2 screen)
     {
         if (!InventoryActive || AreaObjectAtScreen(screen) is not { } key) return null;
-        return _inventoryHost!.Target(_areaSession!, CurrentAreaMap, key);
+        return AreaInventoryTargetOf(key);
     }
 
     private static long Chebyshev(AreaObjectRecord row, (long X, long Y) cell) =>
@@ -160,7 +160,7 @@ public partial class TerrainViewerApp
             || !ReferenceEquals(_worldRouteSession, walking) || _worldRoute is not { } route || route.Status == RouteFollowStatus.Following) return;
         _inventoryAfterRoute = null;
         var cell = ActorCell()!.Value;
-        var target = InventoryActive ? _inventoryHost!.Target(_areaSession!, CurrentAreaMap, pending.Key) : null;
+        var target = InventoryActive ? AreaInventoryTargetOf(pending.Key) : null;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) _inventoryStatus = "walk to pick up/loot cancelled: reset/reload";
         else if (route.Status != RouteFollowStatus.Arrived) _inventoryStatus = "walk to pick up/loot stopped: " + (route.StopReason ?? route.Status.ToString());
         else if (!_worldFocused || WorldModal || WorldUiFocus) _inventoryStatus = "walk to pick up/loot dropped: input quarantined/modal";

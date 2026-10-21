@@ -79,7 +79,11 @@ public sealed partial class GameSessionOwner
     internal CellCoord? LooseCell(SessionMapId map, InventoryDomain.Seed seed, string item) =>
         seed.Items.TryGetValue(item, out var row) ? row.Cell ?? SpilledCell(map, seed, item) ?? DroppedCell(map, seed, item) : null;
 
-    private static long DroppedValue(CellCoord cell) => ((long)cell.Y << 24 | (uint)cell.X) + 1;
+    private static long DroppedValue(CellCoord cell) => ItemDroppedValue(cell);
+
+    /// <summary>The <see cref="ItemDroppedProperty"/> value of a cell (each coordinate 0 .. 2^24 − 1, packed in 24 bits, + 1), for a
+    /// host that observes the drop's map change (ARC-RENDER-033).</summary>
+    public static long ItemDroppedValue(CellCoord cell) => ((long)cell.Y << 24 | (uint)cell.X) + 1;
 
     /// <summary>A cell the drop's packing holds: each coordinate 0 .. 2^24 − 1.</summary>
     internal static bool DropCellFits(CellCoord cell) => cell.X is >= 0 and < 1 << 24 && cell.Y is >= 0 and < 1 << 24;
