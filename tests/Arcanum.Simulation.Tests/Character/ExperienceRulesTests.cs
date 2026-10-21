@@ -254,7 +254,7 @@ public sealed class ExperienceRulesTests
         {
             IReadOnlyList<MissedLevelStep> recorded = [];
             foreach (var step in history) recorded = ExperienceRules.AppendMissedStep(recorded, step)!;
-            Assert.IsTrue(recorded.Count <= 3, "at most three entries: " + string.Join(", ", recorded));
+            Assert.IsTrue(recorded.Count <= history.Length, "one entry per step at most: " + string.Join(", ", recorded));
             for (var level = 1; level < ExperienceRules.MaxLevel; level++)
             {
                 int Apply(IEnumerable<FollowerLevelStep> steps, out int points)
@@ -273,7 +273,13 @@ public sealed class ExperienceRulesTests
         IReadOnlyList<MissedLevelStep> many = [];
         for (var i = 0; i < 80; i++) many = ExperienceRules.AppendMissedStep(many, new(50, 51))!;
         Assert.AreEqual(new MissedLevelStep(new(50, 51), ExperienceRules.MaxLevel), many.Single());
-        IReadOnlyList<MissedLevelStep> full = Enumerable.Range(0, ExperienceRules.MaxMissedStepEntries).Select(i => new MissedLevelStep(new(i, i + 2), 1)).ToArray();
-        Assert.IsNull(ExperienceRules.AppendMissedStep(full, new(1, 3)));
+        IReadOnlyList<MissedLevelStep> full = Enumerable.Range(0, ExperienceRules.MaxMissedStepEntries).Select(i => new MissedLevelStep(new(i % 50, i % 50 + 1), 1)).ToArray();
+        Assert.IsNull(ExperienceRules.AppendMissedStep(full, new(7, 9)));
+        // Every rising history from level 1 to the last-level branch with repeats fits.
+        IReadOnlyList<MissedLevelStep> longest = [];
+        for (var level = 1; level < 50; level++) longest = ExperienceRules.AppendMissedStep(longest, new(level, level + 1))!;
+        longest = ExperienceRules.AppendMissedStep(longest, new(50, 51))!;
+        longest = ExperienceRules.AppendMissedStep(longest, new(50, 51))!;
+        Assert.AreEqual(50, longest.Count);
     }
 }

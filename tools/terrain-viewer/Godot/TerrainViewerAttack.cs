@@ -401,6 +401,8 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-WORLD-036 follower-level entity={follower.Record!.Entity} level={follower.Record.Sheet.Level}"
                 + $" points={follower.Level?.PointsGained} purchases={follower.Scheme?.Purchases.Length ?? 0} completed={follower.Scheme?.Completed}");
         foreach (var entity in report.Deferred) GD.Print($"ARC-WORLD-047 level step kept for entity={entity} (sheet not readable here)");
+        foreach (var missed in report.MissedApplied)
+            GD.Print($"ARC-WORLD-047 missed level steps applied entity={missed.Record!.Entity} level={missed.Record.Sheet.Level}");
     }
 
     /// <summary>ARC-WORLD-047: a waiting follower's missed level steps, applied when its map data can be read (companions bind).</summary>

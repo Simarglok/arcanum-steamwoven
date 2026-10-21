@@ -114,7 +114,8 @@ public static class AreaAdvancement
         ArgumentNullException.ThrowIfNull(place);
         var raised = new List<SessionFollowerLevelResult>();
         var deferred = new List<string>();
-        if (award?.Followers is not { } step || session.AutoLevel is null) return new(raised.AsReadOnly(), deferred.AsReadOnly());
+        var applied = new List<SessionFollowerLevelResult>();
+        if (award?.Followers is not { } step || session.AutoLevel is null) return new(raised.AsReadOnly(), deferred.AsReadOnly(), applied.AsReadOnly());
         var party = session.QueryParty();
         var rules = session.Rules.Experience;
         // An NPC's missed steps come before this one, as they came before it; when they cannot be applied the new step is not applied
@@ -123,7 +124,7 @@ public static class AreaAdvancement
         {
             var before = Level(session, input.Loaded.Entity, input.Loaded.Sheet.Level);
             var result = session.ApplyMissedFollowerLevels(session.Version, input.Loaded, input.Modifiers);
-            if (result.Disposition == GameSessionDisposition.Changed && result.Record!.Sheet.Level != before) raised.Add(result);
+            if (result.Disposition == GameSessionDisposition.Changed && result.Record!.Sheet.Level != before) applied.Add(result);
             return result.Disposition != GameSessionDisposition.Rejected;
         }
         void Step((SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers) input)
@@ -131,8 +132,9 @@ public static class AreaAdvancement
             var result = session.LevelFollower(session.Version, input.Loaded, input.Modifiers, step);
             if (result.Disposition == GameSessionDisposition.Changed) raised.Add(result);
         }
+        // The original's array loop has no death test (A5): a follower gets the step; a dead one never gets its missed steps.
         foreach (var entity in party.Followers.Select(f => f.Entity))
-            if (npc(entity) is { } input && Missed(input)) Step(input);
+            if (npc(entity) is { } input && (session.QueryNpcDead(entity) || Missed(input))) Step(input);
         foreach (var entity in party.Others.Where(o => o.Standing == CompanionStanding.Waiting).Select(o => o.Entity))
         {
             var where = place(entity);
@@ -141,7 +143,7 @@ public static class AreaAdvancement
             else if (!rules.WaitingFollowersStepOnlyNearPc
                 && session.DeferFollowerLevel(session.Version, entity, step).Disposition == GameSessionDisposition.Changed) deferred.Add(entity);
         }
-        return new(raised.AsReadOnly(), deferred.AsReadOnly());
+        return new(raised.AsReadOnly(), deferred.AsReadOnly(), applied.AsReadOnly());
     }
 
     /// <summary>
@@ -198,5 +200,7 @@ public static class AreaAdvancement
 /// stands among the loaded objects (drawn on the current map), else null.</summary>
 public readonly record struct AreaWaitingPlace(bool Dead, (int X, int Y)? Offset);
 
-/// <summary>An award's follower step: the followers whose level rose, the waiting followers whose step was kept as missed.</summary>
-public sealed record AreaFollowerLevelReport(IReadOnlyList<SessionFollowerLevelResult> Raised, IReadOnlyList<string> Deferred);
+/// <summary>An award's follower step: the followers whose level rose by it, the waiting followers whose step was kept as missed, and
+/// the missed steps applied first that raised a level.</summary>
+public sealed record AreaFollowerLevelReport(IReadOnlyList<SessionFollowerLevelResult> Raised, IReadOnlyList<string> Deferred,
+    IReadOnlyList<SessionFollowerLevelResult> MissedApplied);

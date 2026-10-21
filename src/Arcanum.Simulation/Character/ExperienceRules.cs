@@ -199,26 +199,23 @@ public static class ExperienceRules
         return offset is { } d && Math.Abs((long)d.X) <= reach && Math.Abs((long)d.Y) <= reach;
     }
 
-    /// <summary>The most entries a waiting follower's missed steps can hold: a chain of contiguous steps, the step into the last-level
-    /// branch, and that branch's repeated step (project bound with room to spare).</summary>
-    public const int MaxMissedStepEntries = 8;
+    /// <summary>The most entries a waiting follower's missed steps can hold: one per rising PC level step (levels 1..50, the last one
+    /// into the last-level branch) and that branch's repeated step (project bound with room to spare).</summary>
+    public const int MaxMissedStepEntries = 52;
 
     /// <summary>
     /// The PC level steps a waiting follower missed with one more appended (ARC-WORLD-047), applied later in order, each
-    /// <see cref="MissedLevelStep.Times"/> times. A step that continues the last one (its old level is the last one's new level) merges
-    /// with it: one step from the earlier old level to the later new level gives the same level and points as the two in turn (the
-    /// update keeps a gap below the old level, pulls a level between to the new one, leaves one at or above it), and the scheme then
-    /// runs once with all the points. The same step again counts once more (the last-level branch repeats 50 → 51 on every award), up
-    /// to <see cref="MaxLevel"/> times, after which another changes no level. Anything else is appended. Null when the list would
-    /// pass <see cref="MaxMissedStepEntries"/>.
+    /// <see cref="MissedLevelStep.Times"/> times, so it gets every step as it would have in turn: its scheme runs at each level as it
+    /// would have (a merged step would give the same level and points but one scheme run at the last level, which can buy
+    /// differently: a spell rank the earlier level refused is skipped, not waited for). The same step again counts once more (the
+    /// last-level branch repeats 50 → 51 on every award), up to <see cref="MaxLevel"/> times, after which another changes no level.
+    /// Null when the list would pass <see cref="MaxMissedStepEntries"/>.
     /// </summary>
     public static IReadOnlyList<MissedLevelStep>? AppendMissedStep(IReadOnlyList<MissedLevelStep> steps, FollowerLevelStep step)
     {
         ArgumentNullException.ThrowIfNull(steps);
         var list = steps.ToList();
-        if (list.Count > 0 && list[^1] is var last && last.Times == 1 && last.Step.NewPcLevel == step.OldPcLevel)
-            list[^1] = new(new(last.Step.OldPcLevel, step.NewPcLevel), 1);
-        else if (list.Count > 0 && list[^1].Step == step)
+        if (list.Count > 0 && list[^1].Step == step)
             list[^1] = list[^1] with { Times = Math.Min(MaxLevel, list[^1].Times + 1) };
         else if (list.Count >= MaxMissedStepEntries) return null;
         else list.Add(new(step, 1));

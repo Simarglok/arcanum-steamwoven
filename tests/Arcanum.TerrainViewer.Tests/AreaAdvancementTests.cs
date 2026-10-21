@@ -153,8 +153,8 @@ public sealed class AreaAdvancementTests
         CollectionAssert.AreEqual(new[] { "away" }, levelled.Deferred.ToArray());
         Assert.IsNull(steamwoven.QueryNpcAdvancement("dead"));
         Assert.AreEqual(1, AreaAdvancement.LevelFollowers(steamwoven, award with { Followers = new(2, 3) }, Sheet, Place).Deferred.Count);
-        CollectionAssert.AreEqual(new MissedLevelStep[] { new(new(1, 3), 1) }, steamwoven.QueryMissedLevelSteps("away")!.ToArray());
-        // Nothing to apply while its map data cannot be read; once it can, both steps land at once (level 1 → 3).
+        CollectionAssert.AreEqual(new MissedLevelStep[] { new(new(1, 2), 1), new(new(2, 3), 1) }, steamwoven.QueryMissedLevelSteps("away")!.ToArray());
+        // Nothing to apply while its map data cannot be read; once it can, both steps land in order (level 1 → 2 → 3).
         Assert.AreEqual(0, AreaAdvancement.ApplyMissed(steamwoven, Sheet).Count);
         var applied = AreaAdvancement.ApplyMissed(steamwoven, entity => entity == "away" ? AreaAdvancement.Npc(entity, Follower(), Effect) : null);
         Assert.AreEqual(3, applied.Single().Record!.Sheet.Level);
@@ -173,7 +173,7 @@ public sealed class AreaAdvancementTests
         Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, "virgil").Disposition);
         var report = AreaAdvancement.LevelFollowers(session, new SessionExperienceAward(2100, 2, 2, new(3, 5)), Sheet, _ => new(false, null));
         Assert.AreEqual(5, session.QueryNpcAdvancement("virgil")!.Sheet.Level);
-        Assert.AreEqual(2, report.Raised.Count, "the missed steps and the new one each raised the level");
+        Assert.AreEqual((1, 1), (report.MissedApplied.Count, report.Raised.Count), "the missed steps and the new one each raised the level");
         Assert.AreEqual(0, session.QueryMissedLevelEntities().Count);
     }
 }

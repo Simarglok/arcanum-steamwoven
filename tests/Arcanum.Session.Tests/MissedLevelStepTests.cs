@@ -39,9 +39,9 @@ public sealed class MissedLevelStepTests
         var revision = owner.Version.Revision;
         var first = owner.DeferFollowerLevel(owner.Version, "virgil", new(1, 3));
         Assert.AreEqual(GameSessionDisposition.Changed, first.Disposition);
-        // A step that continues the last merges with it; the same step again counts once more.
+        // Each step is kept as it came (its scheme run at that level); the same step again counts once more.
         owner.DeferFollowerLevel(owner.Version, "virgil", new(3, 5));
-        CollectionAssert.AreEqual(new MissedLevelStep[] { new(new(1, 5), 1) }, owner.QueryMissedLevelSteps("virgil")!.ToArray());
+        CollectionAssert.AreEqual(new MissedLevelStep[] { new(new(1, 3), 1), new(new(3, 5), 1) }, owner.QueryMissedLevelSteps("virgil")!.ToArray());
         Assert.AreEqual(revision + 2, owner.Version.Revision);
 
         var applied = owner.ApplyMissedFollowerLevels(owner.Version, Follower(), AdvancementModifiers.None);
@@ -73,6 +73,23 @@ public sealed class MissedLevelStepTests
         // At the repeat cap one more step changes nothing.
         for (var i = 0; i < ExperienceRules.MaxLevel; i++) later.DeferFollowerLevel(later.Version, "virgil", new(50, 51));
         Assert.AreEqual(GameSessionDisposition.NoChange, later.DeferFollowerLevel(later.Version, "virgil", new(50, 51)).Disposition);
+    }
+
+    [TestMethod]
+    public void Steps_in_a_row_run_the_scheme_at_each_level_as_in_turn()
+    {
+        // Scheme 61 ("fire 3"): rank 3 needs level 5, so at level 4 the step fails and is skipped. Missed steps 3 → 4 and 4 → 5 must
+        // buy what the two updates in turn buy, scheme runs included.
+        var follower = Follower(level: 3) with { AutoLevelScheme = 61 };
+        using var later = Waiting();
+        later.DeferFollowerLevel(later.Version, "virgil", new(3, 4));
+        later.DeferFollowerLevel(later.Version, "virgil", new(4, 5));
+        var applied = later.ApplyMissedFollowerLevels(later.Version, follower, AdvancementModifiers.None).Record!;
+        using var inTurn = Waiting();
+        var record = inTurn.LevelFollower(inTurn.Version, follower, AdvancementModifiers.None, new(3, 4)).Record!;
+        record = inTurn.LevelFollower(inTurn.Version, record, AdvancementModifiers.None, new(4, 5)).Record!;
+        Assert.AreEqual(record, applied);
+        Assert.AreEqual(5, applied.Sheet.Level);
     }
 
     [TestMethod]

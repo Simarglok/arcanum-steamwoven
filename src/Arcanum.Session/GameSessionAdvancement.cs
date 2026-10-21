@@ -126,7 +126,7 @@ public sealed record SessionSchemeResult(GameSessionDisposition Disposition, Gam
 public sealed record SessionMissedLevelSteps(string Entity, IReadOnlyList<MissedLevelStep> Steps);
 
 /// <summary>Saved advancement records of the NPCs the session levelled, in ordinal entity order (snapshot schema 20), and the waiting
-/// followers' missed level steps, in ordinal entity order (snapshot schema 32).</summary>
+/// followers' missed level steps, in ordinal entity order (snapshot schema 33).</summary>
 public sealed class SessionAdvancementState
 {
     internal SessionAdvancementState(SessionNpcAdvancement[] npcs, SessionMissedLevelSteps[] missed)
