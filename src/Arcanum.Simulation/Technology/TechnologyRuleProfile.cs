@@ -18,11 +18,20 @@ public sealed record TechnologyRuleProfile
     /// </summary>
     public bool RegistersSchematicZero { get; init; }
 
+    /// <summary>
+    /// Ledger TC1: an item that pays a spell from charge cells needs <c>2 × cost − adjust(cost)</c>, and the magic adjustment of a
+    /// technological item is <c>cost − trunc(cost × p / c)</c>, so the item needs <c>cost + trunc(cost × p / c)</c>: a strong
+    /// technologist pays twice the cost and a mage the cost, as the retail executable does (0x450420 with 0x461590). Steamwoven
+    /// needs <c>2 × cost − trunc(cost × p / c)</c> for a technological item, so an experienced technologist pays fewer cells
+    /// (owner decision 2026-10-20). Magickal and neutral items are the same in both.
+    /// </summary>
+    public bool ItemCellsFavourMagick { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly TechnologyRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly TechnologyRuleProfile Original = new() { Name = "original", RegistersSchematicZero = true };
+    public static readonly TechnologyRuleProfile Original = new() { Name = "original", RegistersSchematicZero = true, ItemCellsFavourMagick = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<TechnologyRuleProfile> All { get; } = new[] { Steamwoven, Original };
