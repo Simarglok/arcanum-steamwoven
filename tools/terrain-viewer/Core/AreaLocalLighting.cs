@@ -40,6 +40,8 @@ public sealed class AreaLocalLighting
     // ARC-RENDER-030: with object lights the night and the day differ (nocturnal scenery, ledger LT4/LT5); the night form
     // keeps the day form here. Without them both are this one.
     private AreaLocalLighting? _day;
+    // ARC-RENDER-031: the animated lights' poses of this view (null: the loaded poses).
+    private readonly IReadOnlyDictionary<int, LightPose>? _poses;
 
     private AreaLocalLighting(StationaryLightField field, AreaChart chart, Dictionary<(long, long), AreaAmbientChannel> tiles,
         Dictionary<AreaVisualKey, AreaVisualRecord> visuals)
@@ -50,6 +52,21 @@ public sealed class AreaLocalLighting
         var lattice = field.Lattice(AmbientPair.Neutral);
         if (_hourIndependent) _lattice = lattice;
     }
+
+    // A view of the same lighting with the animated lights posed (shares the field, tiles and visuals).
+    private AreaLocalLighting(AreaLocalLighting basis, IReadOnlyDictionary<int, LightPose> poses)
+    {
+        Field = basis.Field; Chart = basis.Chart; _tiles = basis._tiles; _visuals = basis._visuals;
+        _hourIndependent = false; _lattice = null; _poses = poses;
+    }
+
+    /// <summary>ARC-RENDER-031: this lighting with its animated lights where they stand after <paramref name="animationMs"/>
+    /// (<see cref="StationaryLightField.PosesAt"/>); this one when nothing animates.</summary>
+    public AreaLocalLighting AtAnimation(long animationMs) => Field.Animated.Count == 0 ? this : new(this, Field.PosesAt(animationMs));
+
+    /// <summary>The animated lights' poses as a comparable key (empty when nothing animates).</summary>
+    public string AnimationKey(long animationMs) => Field.Animated.Count == 0 ? ""
+        : string.Join(";", Field.PosesAt(animationMs).OrderBy(p => p.Key).Select(p => $"{p.Key}:{p.Value.Frame}:{p.Value.OffsetX}:{p.Value.OffsetY}"));
 
     public StationaryLightField Field { get; }
     public AreaChart Chart { get; }
@@ -152,7 +169,7 @@ public sealed class AreaLocalLighting
     public AmbientColor Point(long worldX, long worldY, int offsetX, int offsetY, AmbientPair pair)
     {
         var tile = TileScreen(worldX, worldY);
-        return Field.Point(checked(tile.X + offsetX + 40L), checked(tile.Y + offsetY + 20L), Ambient(TileChannel(worldX, worldY), pair), pair);
+        return Field.Point(checked(tile.X + offsetX + 40L), checked(tile.Y + offsetY + 20L), Ambient(TileChannel(worldX, worldY), pair), pair, poses: _poses);
     }
 
     /// <summary>The controlled actor (a critter) at its chart-relative placement.</summary>
@@ -194,7 +211,7 @@ public sealed class AreaLocalLighting
             4 => light.X > wallX,
             _ => light.Y >= wallY,
         };
-        AmbientColor At(int column) => lit ? Field.Point(x + column, y + column / 2 * step, baseColor, pair, Front) : baseColor;
+        AmbientColor At(int column) => lit ? Field.Point(x + column, y + column / 2 * step, baseColor, pair, Front, _poses) : baseColor;
         return new(At(0), At(width - 1));
     }
 
@@ -206,6 +223,6 @@ public sealed class AreaLocalLighting
         foreach (var command in plan.Commands.Where(command => command.Identity is not null))
             bodies[command.Visual] = Body(command, channels.TryGetValue(command.Visual, out var channel) ? channel
                 : throw new InvalidOperationException("AREA_AMBIENT_VISUAL_REQUIRED"), pair);
-        return new(_hourIndependent ? _lattice : Field.Lattice(pair), new ReadOnlyDictionary<AreaVisualKey, AreaLitColors>(bodies), placement => Actor(placement, pair));
+        return new(_hourIndependent ? _lattice : Field.Lattice(pair, _poses), new ReadOnlyDictionary<AreaVisualKey, AreaLitColors>(bodies), placement => Actor(placement, pair));
     }
 }
