@@ -18,6 +18,13 @@ public sealed record RouteDrive(MovementState State, IReadOnlyList<MovementResul
 /// A click sets a goal cell; the follower turns <see cref="RoutePlanner"/> segments into ordinary actor intents
 /// at exact step boundaries, plans again after each segment and never cancels a step it started: a new goal or a
 /// stop takes effect at the next cell centre. It owns no clock, I/O or evidence; the host runs every advance.
+/// ARC-WORLD-042: with corridor limits given (a host opts in; the player's click route does, a companion follow does not),
+/// a goal of the source the local planner cannot reach (beyond its 32-cell reach, or behind its window's edge or expansion
+/// limit) is followed along a <see cref="RouteCorridor"/> over the whole source, from waypoint to waypoint with the local
+/// planner; a leg that fails on the way (an occupant on a waypoint) builds the corridor again once from where the actor
+/// stands; a corridor that only nears the goal (no route reaches it) stops at its end with <c>ROUTE_PARTIAL</c>, and one
+/// that reaches nothing stops with its own reason. A goal outside the source stays refused; a host heads for one through
+/// the end of its own partial corridor (a streamed window, ARC-RENDER-024).
 /// </summary>
 public sealed class RouteFollower
 {
@@ -30,11 +37,17 @@ public sealed class RouteFollower
     private SimulationTime? _requestedAt;
     private InputKey? _issued;
 
-    public RouteFollower(IRouteStepSource source, RouteLimits? limits = null)
+    public RouteFollower(IRouteStepSource source, RouteLimits? limits = null, RouteCorridorLimits? corridorLimits = null)
     {
         _source = source ?? throw new ArgumentNullException(nameof(source));
         _limits = limits ?? new RouteLimits();
+        _corridorLimits = corridorLimits;
     }
+    private readonly RouteCorridorLimits? _corridorLimits;
+    private int _waypointNext;
+    private bool _corridorRebuilt;
+    /// <summary>The corridor followed toward the current goal (ARC-WORLD-042), null while the local planner reaches it.</summary>
+    public RouteCorridor? Corridor { get; private set; }
 
     public RouteFollowStatus Status { get; private set; }
     public CellCoord? Target { get; private set; }
@@ -55,7 +68,7 @@ public sealed class RouteFollower
         if (range is < 0 or > RouteLimits.AxisDistanceMaximum) throw new ArgumentOutOfRangeException(nameof(range));
         if (Status == RouteFollowStatus.Following && Target == target && Range == range) return false;
         Target = target; Range = range; Status = RouteFollowStatus.Following; StopReason = null; LastPlan = null; PlannedSegments = 0;
-        _requestedAt = observedAt; ResetSegment();
+        _requestedAt = observedAt; ResetSegment(); Corridor = null; _waypointNext = 0; _corridorRebuilt = false;
         return true;
     }
 
@@ -150,12 +163,40 @@ public sealed class RouteFollower
         if (Status != RouteFollowStatus.Following || Target is not { } goal || Reached(cell)) return ActorIntent.Neutral;
         if (_segmentCell != cell || _segmentNext == _segment.Length)
         {
-            var plan = RoutePlanner.Plan(_source, cell, goal, _limits);
+            var local = LocalGoal(cell, goal);
+            if (local is null) { Finish(RouteFollowStatus.Stopped, "ROUTE_PARTIAL"); return ActorIntent.Neutral; }
+            var plan = RoutePlanner.Plan(_source, cell, local.Value, _limits);
+            // Beyond the local reach: a corridor over the whole source, once per goal; a leg along it that fails (an occupant
+            // on its waypoint) builds it once more from here.
+            if (plan.Outcome != RouteOutcome.Found && _corridorLimits is { } corridorLimits
+                && (Corridor is null ? CorridorReasons.Contains(plan.ReasonCode) : !_corridorRebuilt))
+            {
+                _corridorRebuilt = Corridor is not null;
+                Corridor = RouteCorridor.Plan(_source, cell, goal, corridorLimits); _waypointNext = 0;
+                if (Corridor.Outcome is RouteCorridorOutcome.NoRoute or RouteCorridorOutcome.Refused)
+                { LastPlan = plan; Finish(RouteFollowStatus.Stopped, Corridor.ReasonCode); return ActorIntent.Neutral; }
+                if (LocalGoal(cell, goal) is not { } waypoint) { Finish(RouteFollowStatus.Stopped, "ROUTE_PARTIAL"); return ActorIntent.Neutral; }
+                plan = RoutePlanner.Plan(_source, cell, waypoint, _limits);
+            }
             LastPlan = plan;
             if (plan.Outcome != RouteOutcome.Found) { Finish(RouteFollowStatus.Stopped, plan.ReasonCode); return ActorIntent.Neutral; }
             _segment = plan.Segment.ToArray(); _segmentNext = 0; _segmentCell = cell; PlannedSegments++;
         }
         return ActorIntent.Toward(_segment[_segmentNext]);
+    }
+
+    // The local planner's refusals a longer corridor may get past (a route outside its window).
+    private static readonly HashSet<string> CorridorReasons = new(StringComparer.Ordinal)
+        { "ROUTE_TARGET_OUT_OF_RANGE", "ROUTE_WINDOW_EXHAUSTED", "ROUTE_EXPANSION_LIMIT" };
+
+    /// <summary>The cell the local planner heads for: the goal, or along a corridor its next waypoint not yet reached; null
+    /// at the end of a corridor that only nears the goal.</summary>
+    private CellCoord? LocalGoal(CellCoord cell, CellCoord goal)
+    {
+        if (Corridor is not { } corridor) return goal;
+        while (_waypointNext < corridor.Waypoints.Count && corridor.Waypoints[_waypointNext] == cell) _waypointNext++;
+        if (_waypointNext < corridor.Waypoints.Count) return corridor.Waypoints[_waypointNext];
+        return corridor.Outcome == RouteCorridorOutcome.Found ? goal : null;
     }
 
     private bool Reached(CellCoord cell) => Target is { } goal &&

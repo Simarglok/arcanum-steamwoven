@@ -243,7 +243,7 @@ public static class EquipmentRules
 
     /// <summary>
     /// What a wearer strikes with: bare hands with the worn gauntlets' unarmed bonus (read for melee only, as the source does), or
-    /// the wielded weapon with its stored damage, to-hit and charts and its magic adjustments, range and minimum strength for this
+    /// the wielded weapon with its stored damage, to-hit and charts, whether it has an ammunition type, its magic adjustments, range and minimum strength for this
     /// wielder (<see cref="MinimumStrength"/>; a range below 0 becomes 0). A thrown attack's range is the throwing distance, which the caller sets; a
     /// monstrous critter attacks with its own table (<see cref="CombatWeapon.Natural"/>).
     /// </summary>
@@ -278,6 +278,7 @@ public static class EquipmentRules
             IgnoresResistance = w.IgnoresResistance,
             DamagesArmor = w.DamagesArmor,
             Uber = item.Uber,
+            UsesAmmunition = w.AmmoType is not null,
         };
     }
 
