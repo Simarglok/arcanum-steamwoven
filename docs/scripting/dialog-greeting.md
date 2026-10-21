@@ -139,3 +139,4 @@ AREA map census (`AreaMapConversationOriginalTests`, `DAT_ROOT`): the 35 convers
 - The states without an owner (surrender, summoned associates, the PC's spell flags, the art code) read as not that state.
 - Floating lines are shown in the conversation panel with the conversation's end, not as speech over the NPC.
 - The PC option files (`gd_pc*`, `gd_cls_pc*`), the story files (`gd_sto_*`) and the broadcast lines (0x4133B0) have no consumer.
+- The logbook's reputation tab (FR-SOCIAL-008) is a later logbook task (owner decision 2026-10-21: greetings first).

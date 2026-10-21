@@ -110,7 +110,8 @@ refused, so a quick save of schema 29 loads as written by an incompatible versio
 
 ## Not ready
 
-- The logbook's reputation tab (FR-SOCIAL-008), the logbook button flash and network messages. (Greetings: ARC-WORLD-058.)
+- The logbook's reputation tab (FR-SOCIAL-008; a later logbook task, owner decision 2026-10-21), the logbook button flash and
+  network messages. (Greetings: ARC-WORLD-058.)
 - The AI consumers of `FactionSame`, `GrantsFaction` and `OriginSame` (kill-on-sight, protect, upset, last hitter): their
   slices call these functions.
 - NPC origins set by the dialog `OR` action and factions by scripts or summons (the viewer reads the loaded fields only).
