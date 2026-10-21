@@ -272,8 +272,9 @@ object of another kind, an object off or not clickable at T0, a teleport of anot
 with an unconditional exit stays that exit.
 
 - **Run.** The click goes through the same use rule and walk-to-use as an unconditional exit. Within range,
-  `AreaUseScriptHost` runs the object's use script once, with the PC as the triggerer, under the set "S4-area-use": S4
-  without the story-state actions (the session has no story-state number) and without the dialog action. The use slot is
+  `AreaUseScriptHost` runs the object's use script once, with the PC as the triggerer, under the set "S4-area-use-reading": S4
+  without the story-state actions (the session has no story-state number) and without the dialog action, plus the reading actions
+  64, 65 and 114 (ARC-UI-049: a PC viewer's request opens the [reading window](../world/reading-window-runtime.md)). The use slot is
   the row's script attachment, overridden by the session's map changes `use.lf`, `use.counters` and `use.script` of the
   object (a mobile by its own id; a sector object, whose id is null, by its sector and window ordinal,
   `AreaUseScriptHost.EntityId`), and a changed slot is written back there (a value equal to the loaded one clears its key), so a door that
@@ -310,7 +311,7 @@ the start map), one per tile.
   steps; the original also runs a tile script for an NPC entering the tile). A load, a reset, a transfer arrival and an F8
   restore fire nothing; the original places an object on the map with the same notifications (TS2), which arrival path
   a teleport takes is not read.
-- **Run** (ledger TS1, TS3): from line 0 as a use, the player the triggerer, no attachee, under "S4-area-use". The slot
+- **Run** (ledger TS1, TS3): from line 0 as a use, the player the triggerer, no attachee, under "S4-area-use-reading". The slot
   is the sector file's attachment overridden by the session's map changes on the sector: `tile.N.script`, `tile.N.lf`,
   `tile.N.counters` for tile index N, `sector.script`, `sector.lf`, `sector.counters`. A changed slot is written back
   there; under the Original rules a tile script's change is discarded (ledger X3, the original stores the unchanged
@@ -586,6 +587,10 @@ the executable as read in
   player's open attempt succeeds. A locked, jammed or magically held one plays
   the locked sound and stays closed. One with an unlock script is not opened (its
   script is not run).
+- **Pick a lock (ARC-SKILLS-006).** The inventory window's *Pick a lock with:* button on lockpicks closes it and arms
+  them; the next left press on a door or window picks its lock ([pick locks](../world/pick-locks-runtime.md)), walking within
+  range 1 first; a press anywhere else, a key press, focus loss, a follower walk order, a map change or a reload cancels it. The HUD names the outcome (the lock opens, locked it, the lock jams, the pick
+  failed); nothing opens by itself. Full light and no turn-based round are passed.
 - **Saves.** F7/F8 and map changes carry the state, because it is part of the
   session's map changes. A Lock event that comes due locks, unjams and closes
   the portal while its map is shown, and waits while another map is.
@@ -599,6 +604,10 @@ Native smoke (`ARC-WORLD-051 native-smoke portal PASS`, after the talk smoke):
 2. A press on the door closes it, and it is drawn on its T0 frame again.
 3. When the map has a door the player cannot open, a press next to it is
    refused and that door stays closed.
+4. Since ARC-SKILLS-006, when the PC holds lockpicks (the halfling-male hero's kit), the inventory's *Pick a lock* button arms
+   them and a press on that door picks its lock; the session's lock state follows the outcome
+   (`ARC-SKILLS-006 native-smoke pick PASS`; `NONE` without lockpicks or when the refused door is jammed or held but not
+   locked).
 
 The smoke prints `NONE` on a map without a door that opens. An opt-in test
 (`AreaPortalsOriginalTests`) checks every installed interior: the frames of
@@ -677,6 +686,27 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   its goal held by the new window (the far-goal hand-over was not needed on this walk; unit tests cover it), at least
   179 visible bodies after each move. Managed heap after a full collection: 265 MB at the start and 413 MB at the end
   in the Shrouded Hills window (observed values, not a growth measure; the stream smoke's windows take 368 to 435 MB).
+- **Zoom floor (ARC-RENDER-032).** On a map loaded as a window the smallest zoom is not the viewer's ordinary 1/8 but
+  the smallest power of two (1/2^k), at least 1/8, at which the view is no wider and no taller than the window's drawn
+  bounds (`WorldZoomPolicy.WindowFloor`: the viewport over the bounds of the 3×3 core on the tighter axis, rounded up).
+  The camera keeps the view inside those bounds, so the view never reaches past what the window loads and draws; at 1/8
+  the screen would otherwise cover 25 to 40 sectors on a large display while the window draws 9. A power of two keeps the
+  terrain in its exact reduced chunks ([chunks](crash-site-area-draw-calls.md), which only such zooms have); at the exact
+  floor of a 2560 × 1440 view (0.1875) it would fall back to one item per tile. The floor applies to every way the AREA
+  viewer zooms: LT/RT, the palette's 100/200/300 presets and numeric editor, Fit, a window resize, and every scene reset or
+  publication (the wheel and `+`/`-` do not zoom there); the zoom preference other maps open at keeps the value asked, and
+  a trigger held at the floor leaves it unchanged. A whole map keeps 1/8. The HUD's window status shows the floor. Zoom is
+  a Steamwoven viewer feature, the original has none, so no parity applies. Native check in the map battery:
+  `ARC-RENDER-032 native-smoke zoom floor PASS` (in the smoke's window and in a 2560 × 1440 one: a window zoomed out to
+  1/8 is raised to its floor by the resize, a zoom asked below the floor stops at it, the view lies inside the window's
+  bounds with the terrain chunked, and the window size is restored; a whole map reaches 1/8). The JSON reports the texture
+  memory, the resident index rows and the first far frame; driver memory per row texture is not measured otherwise. On
+  the owner's Mac (2026-10-21) at the Crash Site: 1280 × 800 floor 1/8 (view 10,240 × 6,400, 228 level-3 chunks, 326
+  rows, first far frame 13 ms); 2560 × 1440 floor 1/4 (view 10,240 × 5,760, 214 level-2 chunks, 503 rows, 15 ms).
+  Between a floor and the next power of two a continuous trigger zoom can still leave the chunks for one item per tile;
+  on a large view that needs more nearest-index rows than the renderer allowed (8,192) and made the viewer drop the scene
+  (`AREA_NEAREST_MAPPING_BUDGET`), so the row cap is now 65,536, more than a window's commands
+  ([nearest sampling](area-nearest-sampling.md)).
 - **Memory.** One window holds 1,300 to 4,900 visuals and 10 to 26 MB of CPU frames; after a full collection the
   managed heap of a run that moved the window seven times followed the window's contents (368 to 435 MB), with no
   growth from move to move; the resource stage's reload after the map battery leaves the heap 5.5 MB smaller (since
@@ -689,7 +719,10 @@ in progress ends on its committed cell); saved sector differences (`.dif`) are n
 moves is bound only if the new window holds its cell; on the same map, an F8 save or a jump point or teleport whose cell
 lies outside the shown window is refused (the cell is not admitted in this window; another map's save or exit opens the
 window around it); a click is a goal inside the shown window (a goal farther away is reached only by a host that plans
-it, as the walk smoke does with the window route). Original parity NOT_VERIFIED.
+it, as the walk smoke does with the window route); far out, the view is bounded by the window (the zoom floor):
+there is no overview of the terrain beyond it (a terrain overview from `terrain.mes` colours or thinned chunks is a
+follow-up and NOT READY), and the corners of the window's bounding box outside its diamond stay empty, as at any
+map's edge. Original parity NOT_VERIFIED.
 
 ## World map (ARC-UI-048)
 

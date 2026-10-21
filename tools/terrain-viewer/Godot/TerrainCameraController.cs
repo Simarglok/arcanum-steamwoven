@@ -26,29 +26,37 @@ public sealed class TerrainCameraController
 
     public void SetPlan(TerrainScenePlan plan, Vector2 viewport)
     {
-        _plan = plan;
+        _plan = plan; WindowFloored = false;
         _bounds = plan.WorldBounds;
         Fit(viewport);
     }
 
     public void SetPlan(DiagnosticScenePlan plan, Vector2 viewport)
     {
-        _world = plan.IsWorldDiagnostic;
+        _world = plan.IsWorldDiagnostic; WindowFloored = false;
         _plan = plan.Terrain;
         _bounds = plan.WorldBounds;
         Fit(viewport);
     }
 
-    public void SetAreaPlan(AreaScenePlan plan, Vector2 viewport)
+    /// <summary>An AREA plan; <paramref name="window"/>: a map loaded as a window, whose zoom has a floor (ARC-RENDER-032).</summary>
+    public void SetAreaPlan(AreaScenePlan plan, Vector2 viewport, bool window)
     {
-        _world = true; _plan = null; _bounds = plan.WorldBounds; Fit(viewport);
+        _world = true; _plan = null; _bounds = plan.WorldBounds; WindowFloored = window; Fit(viewport);
     }
+    /// <summary>Whether the shown plan is a window whose zoom has a floor (ARC-RENDER-032).</summary>
+    public bool WindowFloored { get; private set; }
+    /// <summary>The smallest zoom for the viewport: the window floor of a window plan, else the ordinary 1/8.</summary>
+    public double ZoomFloor(Vector2 viewport) => WindowFloored && _bounds is { } b && viewport.X > 0 && viewport.Y > 0
+        ? WorldZoomPolicy.WindowFloor(viewport.X, viewport.Y, b.Width, b.Height) : CameraPolicy.MinimumZoom;
+    private double Floored(double zoom, Vector2 viewport) => Math.Max(zoom, ZoomFloor(viewport));
 
     public void Fit(Vector2 viewport)
     {
         if (_bounds is null || viewport.X <= 64 || viewport.Y <= 64) return;
         var bounds = _bounds.Value;
         _state = CameraPolicy.Fit(bounds.X, bounds.Y, bounds.Width, bounds.Height, viewport.X, viewport.Y);
+        _state = _state with { Zoom = Floored(_state.Zoom, viewport) };
         _center = new(_state.X, _state.Y);
         WantedCenter = _center;
         if (_world) _followState = new(CameraMode.Manual, false, false);
@@ -68,7 +76,7 @@ public sealed class TerrainCameraController
     }
     public void ResetWorld(Vec2 actor, Vector2 viewport, double zoom = 2)
     {
-        _state = _state with { Zoom = WorldZoomPolicy.Absolute(_state.Zoom, zoom), FitMode = false };
+        _state = _state with { Zoom = Floored(WorldZoomPolicy.Absolute(_state.Zoom, zoom), viewport), FitMode = false };
         if (_bounds is null || viewport.X <= 0 || viewport.Y <= 0) return;
         var step = _follow.ResetCentered(actor, Bounds(viewport));
         WantedCenter = actor;
@@ -86,6 +94,8 @@ public sealed class TerrainCameraController
     {
         if (_bounds is null || viewport.X <= 0 || viewport.Y <= 0) return;
         WantedCenter = _followState.Mode == CameraMode.Follow && _followState.TrackingActor ? actor : _center;
+        // A larger viewport raises a window's floor.
+        _state = _state with { Zoom = Floored(_state.Zoom, viewport) };
         _center = Bounds(viewport).ClampCenter(WantedCenter);
         ApplyWorld();
     }
@@ -96,7 +106,7 @@ public sealed class TerrainCameraController
     public void SetWorldZoom(double zoom, Vec2 actor, Vector2 viewport)
     {
         if (!double.IsFinite(zoom)) return;
-        _state = _state with { Zoom = WorldZoomPolicy.Absolute(_state.Zoom, zoom), FitMode = false };
+        _state = _state with { Zoom = Floored(WorldZoomPolicy.Absolute(_state.Zoom, zoom), viewport), FitMode = false };
         ResizeWorld(actor, viewport);
     }
     private void ApplyWorld()

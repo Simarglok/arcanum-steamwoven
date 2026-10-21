@@ -143,6 +143,7 @@ public partial class TerrainViewerApp
             }
             // The HUD's companion status names the pending walk while it waits.
             _pendingWalkOrder = entity;
+            CancelArmedLockpicks("a walk order took the next press");
             _companionNotice = null;
             RefreshReadyStatus();
             return;

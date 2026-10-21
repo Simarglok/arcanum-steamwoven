@@ -1235,6 +1235,25 @@ native smoke after the logbook stage: `ARC-TECHNOLOGY-005 native-smoke schematic
 `--hero`, `T` opens over the live session, the controls move, `Escape` closes, nothing changes; on a detached synthetic hero
 holding a learned record's components one assembly makes its product).
 
+### Reading window (ARC-UI-049)
+
+The inventory window shows a `Read:` button for each written item the hero holds; the session decides the use
+([reading window runtime](../world/reading-window-runtime.md), ledger
+[WR1–WR16](../research/original-verification-ledger.md#reading-window-arc-ui-049)). A schematic document registers and the
+inventory message shows `tech.mes` 89 with its name (88 when known); any other kind replaces the inventory with a modal reading
+window, as the original's mode change pops the inventory. Script actions 64, 65 and 114 of the dialog, use, tile and sector scripts
+open it for a PC viewer once nothing else owns input. The window owns every key: `Escape` or a controller cancel closes it, a book's
+`Previous`/`Next`, `Left`/`Right` or `Page Up`/`Page Down` turn two pages; sounds 3008, 3010, 3009. The texts and the written
+prototypes load once per module in the background; the HUD adds `reading: Escape closes` while open and the last refusal.
+
+**Not implemented:** the original background, frame and page art, fonts, pixel paging (the panel pages by 700 characters, two pages
+a spread), newspaper columns and picture drawing; an item's use script (refused), the item-spell path. Self-test `ARC-UI-049
+self-test PASS` (synthetic texts and hero: Read buttons, a schematic document registered and gone, a book replacing the inventory,
+page turns with sounds and bounds, keys owned, `Escape`, a script plaque waiting for the palette, controller cancel, a picture art
+refused, a dead hero refused); native smoke after the schematic stage: `ARC-UI-049 native-smoke reading PASS` (the texts and the 68
+written prototypes load, every readable one builds a view; on a detached synthetic hero one readable item opens in the window and
+one schematic document registers).
+
 ### Reserved-key hint (ARC-INPUT-003)
 
 An original key that is reserved, not implemented ([keyboard routing](../input/diagnostic-palette.md#keyboard-routing)),
@@ -1289,7 +1308,8 @@ item taken from a body plays its pickup sound; the palette has the three volume 
 WORLD starts in Follow at preferred zoom 2.00 when no valid preference exists.
 This is a hypothesis for an assessable actor, not a QHD comfort measurement.
 LT out / RT in are admitted complete-frame levels with deadzone 0.10 and full
-drive one octave/second. The ratio remains 0.125..8 with nearest filtering;
+drive one octave/second. The ratio remains 0.125..8 with nearest filtering (on a map loaded as a window the
+smallest is its zoom floor, ARC-RENDER-032, [map mode](area-map-mode.md#the-main-world-map-arc-render-024));
 camera zoom never changes simulation, asset geometry, UI scale or display DPI.
 Numerical 1.00 does not prove physical 1:1 on a HiDPI framebuffer.
 

@@ -27,11 +27,22 @@ public sealed record ExperienceRuleProfile
     /// </summary>
     public bool LevelMessagePointsBeforeCap { get; init; }
 
+    /// <summary>
+    /// Ledger OL29 (owner decision D7, 2026-10-21, ARC-WORLD-047): after the followers in its array, the PC's level step reaches only
+    /// the waiting followers among the loaded objects inside a rectangle the size of the game window centred on the PC (0x4A69C0,
+    /// 0x440FC0), so one waiting farther away or on another map never gets it and stays behind for good. Steamwoven gives the step
+    /// to every waiting follower wherever it waits (one whose map is not loaded gets it when its map loads).
+    /// </summary>
+    public bool WaitingFollowersStepOnlyNearPc { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly ExperienceRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly ExperienceRuleProfile Original = new() { Name = "original", ProgressProductWraps = true, LevelMessagePointsBeforeCap = true };
+    public static readonly ExperienceRuleProfile Original = new()
+    {
+        Name = "original", ProgressProductWraps = true, LevelMessagePointsBeforeCap = true, WaitingFollowersStepOnlyNearPc = true,
+    };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<ExperienceRuleProfile> All { get; } = new[] { Steamwoven, Original };

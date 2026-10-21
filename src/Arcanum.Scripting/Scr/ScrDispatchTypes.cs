@@ -250,6 +250,16 @@ public readonly record struct ScrSchemeRequest(ScrObjectRef Object, int Scheme);
 /// </summary>
 public readonly record struct ScrSchematicRequest(ScrObjectRef Object);
 
+/// <summary>ARC-UI-049: what a reading action shows: a book (64), a picture (65) or a plaque (114).</summary>
+public enum ScrReadingKind { Book, Picture, Plaque }
+
+/// <summary>
+/// ARC-UI-049: a reading action (64 show book, 65 show picture, 114 show plaque; ledger WR rows) with its number operand (the start
+/// line, or the art of a picture) and its viewer object. The original opens the reading window only for the local player, with no
+/// item and no dead check; the host decides what the viewer is.
+/// </summary>
+public readonly record struct ScrReadingRequest(ScrReadingKind Kind, int Number, ScrObjectRef Viewer);
+
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
@@ -261,7 +271,8 @@ public sealed class ScrEffects
 {
     internal ScrEffects(ScrWriteback? writeback, ScrObjectRef? destroyTrapObject, IReadOnlyList<ScrFlagWrite> globalFlags, int? storyState, ScrDialogStart? dialog = null,
         IReadOnlyList<ScrCallRequest>? calls = null, IReadOnlyList<ScrPrintLine>? lines = null, IReadOnlyList<ScrSound>? sounds = null,
-        IReadOnlyList<ScrTeleport>? teleports = null, IReadOnlyList<ScrSchemeRequest>? schemes = null, IReadOnlyList<ScrSchematicRequest>? schematics = null)
+        IReadOnlyList<ScrTeleport>? teleports = null, IReadOnlyList<ScrSchemeRequest>? schemes = null, IReadOnlyList<ScrSchematicRequest>? schematics = null,
+        IReadOnlyList<ScrReadingRequest>? readings = null)
     {
         Writeback = writeback; DestroyTrapObject = destroyTrapObject; GlobalFlags = globalFlags; StoryState = storyState; Dialog = dialog;
         Calls = calls ?? Array.Empty<ScrCallRequest>();
@@ -270,6 +281,7 @@ public sealed class ScrEffects
         Teleports = teleports ?? Array.Empty<ScrTeleport>();
         Schemes = schemes ?? Array.Empty<ScrSchemeRequest>();
         Schematics = schematics ?? Array.Empty<ScrSchematicRequest>();
+        Readings = readings ?? Array.Empty<ScrReadingRequest>();
     }
 
     public static ScrEffects None { get; } = new(null, null, Array.Empty<ScrFlagWrite>(), null);
@@ -291,8 +303,10 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrSchemeRequest> Schemes { get; }
     /// <summary>The schematic windows to open, in action order (ARC-TECHNOLOGY-005).</summary>
     public IReadOnlyList<ScrSchematicRequest> Schematics { get; }
+    /// <summary>ARC-UI-049: the reading actions in action order.</summary>
+    public IReadOnlyList<ScrReadingRequest> Readings { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
-        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0;
+        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -319,7 +333,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S9"/>, admitted for the lines reachable from the event's line) and the executed-line
+/// at most <see cref="ScrAdmissionSet.S10"/>, admitted for the lines reachable from the event's line) and the executed-line
 /// budget.</summary>
 public sealed record ScrRunOptions
 {
@@ -336,7 +350,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Rules);
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S9)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S9.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S10)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S10.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

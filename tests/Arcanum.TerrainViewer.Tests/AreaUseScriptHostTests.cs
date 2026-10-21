@@ -101,6 +101,16 @@ public sealed class AreaUseScriptHostTests
             // 706: a tile script that keeps a local flag and teleports the player; 707: a sector script that sets a flag.
             Write("scr/00706tile.scr", Program(Do(new(ScrCatalogue.Action.SetLocalFlag, N(2))), Do(TeleportPc(5076)), Do(Skip)));
             Write("scr/00707sector.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(9))), Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(Skip)));
+            // 708 (ARC-UI-049): a book for the PC (the triggerer) and a plaque for the gate (not a PC).
+            Write("scr/00708read.scr", Program(Do(new(ScrCatalogue.Action.ShowBook, N(1020), (Triggerer, 0))),
+                Do(new(ScrCatalogue.Action.ShowPlaque, N(1500), (Attachee, 0))), Do(Skip)));
+            // 709..712 (ARC-COMBAT-011): header flags 0x1 (non-magical trap), 0x2 (magical trap), 0x4 (removes itself, no trap), both trap bits.
+            foreach (var (number, flags) in new[] { (709, 0x1u), (710, 0x2u), (711, 0x4u), (712, 0x3u) })
+            {
+                var trap = Program(Do(Skip));
+                BinaryPrimitives.WriteUInt32LittleEndian(trap.AsSpan(48), flags);
+                Write($"scr/00{number}trap.scr", trap);
+            }
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -109,6 +119,33 @@ public sealed class AreaUseScriptHostTests
 
     private static AreaUseScriptHost Host(GameSessionOwner session, ScriptContent? content, params AreaObjectRecord[] shown) =>
         new(session, 1, shown, [Inventory()], content);
+
+    [TestMethod]
+    public void A_use_script_is_a_trap_by_its_header_flags()
+    {
+        // ARC-COMBAT-011 (0x4BBDD0, OD6): the point-1 script as the session holds it, flags 0x1 or 0x2; no script, a script the
+        // content lacks and other flags are none; without content the answer is unknown.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var host = Host(session, content, Gate(709), Row(1, 3, 710, 3001), Row(2, 3, 711, 3002), Row(3, 3, 0, 3003), Row(6, 3, 799, 3006));
+            Assert.AreEqual(true, host.IsTrap(Gate(709)));
+            Assert.AreEqual(true, host.IsTrap(Row(1, 3, 710, 3001)));
+            Assert.AreEqual(false, host.IsTrap(Row(2, 3, 711, 3002)));
+            Assert.AreEqual(false, host.IsTrap(Row(3, 3, 0, 3003)), "no use script");
+            Assert.AreEqual(false, host.IsTrap(Row(6, 3, 799, 3006)), "a script the content does not hold");
+            Assert.AreEqual(false, host.IsTrap(Gate(700)), "a use script without trap flags");
+            Assert.AreEqual(true, host.IsTrap(Row(7, 3, 712, 3007)), "both trap bits");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new SessionMapId(1),
+                MapChangeKey.ForEntity(Entity(1), AreaUseScriptHost.ScriptProperty), 1L << 40).Disposition);
+            Assert.AreEqual(false, host.IsTrap(Row(1, 3, 710, 3001)), "a stored number no script can have");
+            // The session's script replaces the loaded one (a use script that removed itself, or another written back).
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new SessionMapId(1),
+                MapChangeKey.ForEntity(Entity(0), AreaUseScriptHost.ScriptProperty), 0).Disposition);
+            Assert.AreEqual(false, host.IsTrap(Gate(709)));
+            Assert.IsNull(Host(session, null, Gate(709)).IsTrap(Gate(709)), "no script content");
+        });
+    }
 
     [TestMethod]
     public void A_guard_holds_back_the_teleport_until_the_pc_holds_the_item()
@@ -189,6 +226,22 @@ public sealed class AreaUseScriptHostTests
             var held = Host(session, content, controlled);
             Assert.IsTrue(held.IsMindControlled(new(1, Entity(0))));
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, held.Run(controlled, session.Rules.Scripts).Outcome, "a mind-controlled object is never named");
+        });
+    }
+
+    [TestMethod]
+    public void A_reading_action_for_the_pc_is_kept_and_one_for_another_viewer_is_not()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var host = Host(session, content, Gate(708));
+            var ran = host.Run(Gate(708), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(2, ran.Run!.Effects.Readings.Count, "the run asked for both");
+            CollectionAssert.AreEqual(new[] { new ScrReadingRequest(ScrReadingKind.Book, 1020, new ScrObjectRef(1, AreaScriptHost.PcCode)) },
+                host.TakeReadings().ToArray(), "only a player viewer gets the window (WR15)");
+            Assert.AreEqual(0, host.TakeReadings().Count, "taken once");
         });
     }
 

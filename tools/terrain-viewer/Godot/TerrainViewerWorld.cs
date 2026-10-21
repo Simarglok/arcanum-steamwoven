@@ -111,7 +111,7 @@ public partial class TerrainViewerApp
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
     private bool PaletteOpen => _worldPanel?.IsOpen == true;
-    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || WorldMapOpen;
+    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -187,7 +187,7 @@ public partial class TerrainViewerApp
     }
     private void ToggleWorldSettings()
     {
-        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || WorldMapOpen) return;
+        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); _visualKeyNotice = null; }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); _overlayPanelState = null; SyncPassabilityOverlay(); }
@@ -258,8 +258,12 @@ public partial class TerrainViewerApp
     private void ApplyPreferredWorldZoom(double value, bool continuous)
     {
         if (!double.IsFinite(value) || _camera is null) return;
+        var shown = _camera.State.Zoom;
         _camera.SetWorldZoom(value, WorldAnchor, WorldViewport); _worldFitView = false;
-        _worldPreferredZoom = _camera.State.Zoom;
+        // ARC-RENDER-032: a window's floor limits the shown zoom, not the preference other maps open at; a held trigger at the
+        // floor (the shown zoom unchanged) leaves the preference as it is.
+        if (continuous && _camera.WindowFloored && _camera.State.Zoom == shown) return;
+        _worldPreferredZoom = _camera.WindowFloored ? WorldZoomPolicy.Absolute(_worldPreferredZoom, value) : _camera.State.Zoom;
         _worldZoomPending = true; _worldZoomSaveFailed = false; _worldZoomSettled = 0;
         if (!continuous) FlushWorldZoom();
         BindWorldZoom(); RefreshReadyStatus();
@@ -324,7 +328,7 @@ public partial class TerrainViewerApp
         WorldObservation(() =>
         {
             _worldFocused = focused;
-            if (!focused) { CancelPendingWalkOrder("the window lost focus"); _orderKeyArmed = null; }
+            if (!focused) { CancelPendingWalkOrder("the window lost focus"); _orderKeyArmed = null; CancelArmedLockpicks("the window lost focus"); }
             _worldReducer.FocusChanged(focused); QuarantineWorld(); RefreshReadyStatus();
             TraceWorldInput("NativeFocus:transition");
         });
@@ -338,6 +342,7 @@ public partial class TerrainViewerApp
         if (SheetOpen) { HandleSheetPulse(intent); return; }
         if (LogbookOpen) { HandleLogbookPulse(intent); return; }
         if (SchematicsOpen) { HandleSchematicsPulse(intent); return; }
+        if (ReadingOpen) { HandleReadingPulse(intent); return; }
         if (WorldMapOpen) { HandleWorldMapPulse(intent); return; }
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
@@ -649,7 +654,19 @@ public partial class TerrainViewerApp
         }
         if (TryPendingWalkOrder(screen)) return;
         // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
-        CancelPortalApproach("another click replaced it");
+        CancelPortalApproach("another click replaced it", keepArmed: true);
+        // ARC-SKILLS-006: armed lockpicks take this press: a door or window has its lock picked, anything else cancels the pick.
+        if (_lockpickArmed is not null)
+        {
+            CancelAreaAttack("armed lockpicks took the press");
+            if (TryAreaPortalUse(screen)) SetObjectApproachGait();
+            else
+            {
+                CancelTalkApproach("a press cancelled the pick"); CancelAreaUseApproach("a press cancelled the pick"); CancelInventoryApproach("a press cancelled the pick");
+                RefreshReadyStatus();
+            }
+            return;
+        }
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
         if (TryAreaAttack(screen, alt)) return;
         CancelAreaAttack("another click replaced it");
@@ -689,6 +706,7 @@ public partial class TerrainViewerApp
             if (!Modifier(pressedKey.Keycode) && !Modifier(pressedKey.PhysicalKeycode))
             {
                 CancelPendingWalkOrder("a key was pressed");
+                CancelArmedLockpicks("a key was pressed");
                 _followerPortraits?.CloseMenu();
                 // Disarms an F1–F6 whose release was lost (a modifier held, a window that took it); a bare F1–F6 in an open world
                 // re-arms in RouteOrderKey below.
@@ -725,6 +743,13 @@ public partial class TerrainViewerApp
         if (SchematicsOpen && input is InputEventKey schematicsKey)
         {
             HandleSchematicsKey(schematicsKey);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // ARC-UI-049: the open reading window owns every key (Escape closes it, Left/Right turn a book's pages).
+        if (ReadingOpen && input is InputEventKey readingKey)
+        {
+            HandleReadingKey(readingKey);
             GetViewport().SetInputAsHandled();
             return;
         }

@@ -91,4 +91,20 @@ public sealed class WorldZoomTests
         reducer.Reduce(neutral,context); reducer.Reduce(pad,context); reducer.Reduce(neutral,context);
         Assert.IsFalse(reducer.Reduce(pad,context).Accepted);
     }
+
+    [TestMethod]
+    public void A_window_map_floor_keeps_the_view_inside_its_bounds()
+    {
+        // ARC-RENDER-032: a 3×3-sector window draws a 15,360 × 7,680 diamond's box. A 1280 × 800 view fits at 1/8 already;
+        // a 2560 × 1440 view needs 1440 / 7680 = 0.1875 on the tighter axis, rounded up to the power of two 1/4 (exact
+        // reduced terrain chunks); 0.25 itself stays; a view larger than any bound stops at 8.
+        Assert.AreEqual(.125, WorldZoomPolicy.WindowFloor(1280, 800, 15360, 7680));
+        Assert.AreEqual(.25, WorldZoomPolicy.WindowFloor(2560, 1440, 15360, 7680));
+        Assert.AreEqual(.25, WorldZoomPolicy.WindowFloor(3840, 1200, 15360, 7680));
+        Assert.AreEqual(.5, WorldZoomPolicy.WindowFloor(3840, 2160, 15360, 7680));
+        Assert.AreEqual(8, WorldZoomPolicy.WindowFloor(100000, 100000, 100, 100));
+        foreach (var (vw, vh, bw, bh, name) in new[] { (0d, 800d, 15360d, 7680d, "viewportWidth"), (1280d, 0d, 15360d, 7680d, "viewportHeight"),
+            (1280d, 800d, 0d, 7680d, "boundsWidth"), (double.NaN, 800d, 15360d, 7680d, "viewportWidth"), (1280d, 800d, 15360d, double.PositiveInfinity, "boundsHeight") })
+            Assert.AreEqual(name, Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => WorldZoomPolicy.WindowFloor(vw, vh, bw, bh)).ParamName);
+    }
 }
