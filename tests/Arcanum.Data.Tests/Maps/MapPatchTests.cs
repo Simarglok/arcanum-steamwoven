@@ -66,8 +66,9 @@ public sealed class MapPatchTests
     private static ObjectWireValue Array(params (int Key, long[] Words)[] elements) =>
         new(ObjectWirePresence.Array, null, elements.Select(e => new ObjectWireElement(e.Key, e.Words)).ToArray());
 
-    private static MapPatchApplier.Result Apply(ObjectWireRecord record, ObjectWireRecord prototype, string attributes, Func<int, MapPatchScriptHeader?>? scripts = null) =>
-        MapPatchApplier.Apply(record, prototype, [new MapPatchLine(9, Guid, attributes)], scripts ?? (_ => null));
+    private static MapPatchApplier.Result Apply(ObjectWireRecord record, ObjectWireRecord prototype, string attributes, Func<int, MapPatchScriptHeader?>? scripts = null,
+        bool scriptZeroClears = false) =>
+        MapPatchApplier.Apply(record, prototype, [new MapPatchLine(9, Guid, attributes)], scripts ?? (_ => null), scriptZeroClears);
 
     private static long? Number(MapPatchApplier.Result result, int slot) => result.Record.Fields.TryGetValue(slot, out var v) ? v.Number : null;
 
@@ -120,6 +121,36 @@ public sealed class MapPatchTests
         CollectionAssert.AreEqual(new long[] { 5, 6, 2000 }, scripts.Single(e => e.Key == 9).Words.ToArray(), "the script file's header and its number");
         Assert.AreEqual(1, scripts.Count, "a script the original cannot load attaches nothing");
         Assert.IsFalse(Apply(Record(Weapon), Record(Weapon), "alignment 5").Record.Fields.ContainsKey(38), "only critters have stats");
+    }
+
+    [TestMethod]
+    public void Script_zero_clears_the_attachment_only_when_the_switch_says_so()
+    {
+        // ARC-DATA-037 (ledger MP7): the original attaches nothing for script 0; Steamwoven empties the attachment, copying the
+        // prototype's other attachments as any element write does.
+        var proto = Record(Npc, (31, Array((1, [3, 4, 30]), (9, [5, 6, 2000]))));
+        var original = Apply(Record(Npc), proto, "script 9 0");
+        Assert.IsFalse(original.Record.Fields.ContainsKey(31), "Original: nothing attached, the prototype's dialog script stays");
+        CollectionAssert.AreEqual(new[] { 9 }, original.Application.Lines.ToArray());
+
+        var cleared = Apply(Record(Npc), proto, "script 9 0", scriptZeroClears: true);
+        var scripts = cleared.Record.Fields[31].Elements;
+        CollectionAssert.AreEqual(new[] { 1, 9 }, scripts.Select(e => e.Key).ToArray());
+        CollectionAssert.AreEqual(new long[] { 0, 0, 0 }, scripts.Single(e => e.Key == 9).Words.ToArray(), "no flags, no counters, script 0");
+        CollectionAssert.AreEqual(new long[] { 3, 4, 30 }, scripts.Single(e => e.Key == 1).Words.ToArray());
+        Assert.AreEqual(0, cleared.Application.Unmodelled.Count);
+
+        // Only a written zero clears: an unlisted number, an absent or a non-numeric value attach nothing; a header still attaches.
+        foreach (var text in new[] { "script 9 77", "script 9", "script", "script 9 x", "script 9 0x10", "script 9 -" })
+            Assert.IsFalse(Apply(Record(Npc), proto, text, scriptZeroClears: true).Record.Fields.ContainsKey(31), text);
+        CollectionAssert.AreEqual(new long[] { 0, 0, 0 }, Apply(Record(Npc), proto, "script 9 -00", scriptZeroClears: true).Record.Fields[31].Elements.Single(e => e.Key == 9).Words.ToArray());
+        CollectionAssert.AreEqual(new long[] { 7, 8, 42 }, Apply(Record(Npc), proto, "script 9 42", n => n == 42 ? new MapPatchScriptHeader(7, 8) : null, scriptZeroClears: true)
+            .Record.Fields[31].Elements.Single(e => e.Key == 9).Words.ToArray());
+        // A header answered for script 0 is never asked for.
+        Assert.IsFalse(Apply(Record(Npc), proto, "script 9 0", _ => new MapPatchScriptHeader(1, 1)).Record.Fields.ContainsKey(31));
+        // Under Steamwoven a negative slot is unmodelled, as a script with a header at a negative slot is in both modes.
+        StringAssert.Contains(Apply(Record(Npc), proto, "script -1 0", scriptZeroClears: true).Application.Unmodelled.Single(), "attachment -1");
+        Assert.AreEqual(0, Apply(Record(Npc), proto, "script -1 0").Application.Unmodelled.Count, "Original: script 0 attaches nothing at any slot");
     }
 
     [TestMethod]

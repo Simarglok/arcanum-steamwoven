@@ -29,6 +29,9 @@ public static class ScrDispatcher
         ArgumentNullException.ThrowIfNull(host);
         options ??= new();
         options.Validate(host);
+        // ARC-SCRIPT-018: a callee of a dialog-point run would need the runner's dialog gates (E6), which are not modelled.
+        if (e.Point == ScrPoint.Dialog && options.Admission.Actions.Contains(ScrCatalogue.Action.CallScript))
+            throw new ArgumentException("A dialog-point event cannot run a set with call script (the callee's dialog gates are not modelled).", nameof(options));
         if (e.Point is < 0 or >= ScrPoint.Count || e.Point == ScrPoint.DialogOverride || e.Line < 0 || e.Attachee.Code is null || e.Triggerer is { Code: null } || e.Extra is { Code: null })
             return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         var slot = host.Slot(e.Attachee, e.Point);
@@ -145,10 +148,10 @@ public static class ScrDispatcher
         return run.With(!discard && run.Slot != slot ? new ScrWriteback(source, null, ScrPoint.Use, run.Slot) : null, null);
     }
 
-    private static bool IsTrapScript(int number, ScrProgram program) => number is >= FirstTrapScript and <= LastTrapScript &&
+    internal static bool IsTrapScript(int number, ScrProgram program) => number is >= FirstTrapScript and <= LastTrapScript &&
         (program.FileFlags & (ScrCatalogue.FileFlag.NonmagicalTrap | ScrCatalogue.FileFlag.MagicalTrap)) != 0;
 
-    private static ScrStop? Unavailable(ScrScriptLookup lookup) => lookup?.Status switch
+    internal static ScrStop? Unavailable(ScrScriptLookup lookup) => lookup?.Status switch
     {
         ScrScriptStatus.Found when lookup.Program is not null => null,
         ScrScriptStatus.Unreadable => ScrStop.UnreadableScript,

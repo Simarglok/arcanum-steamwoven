@@ -99,7 +99,7 @@ public static class ScrCatalogue
             LoopFor = 18, LoopEnd = 19, LoopBreak = 20, GetStoryState = 42, SetStoryState = 43, Teleport = 44,
             CallScriptIn = 54, CallScriptAt = 55, CallScriptEx = 81, PlaySound = 82, PlaySoundOn = 83, PlaySoundScheme = 87, SetGlobalFlag = 100, ClearGlobalFlag = 101, FadeAndTeleport = 102,
             RemoveScriptCall = 125, StartSchematicUi = 129, SetAutoLevelScheme = 139, ShowBook = 64, ShowPicture = 65, ShowPlaque = 114,
-            GetSkill = 47, UseItemWithSkill = 79;
+            GetSkill = 47, UseItemWithSkill = 79, AssignObject = 15, GetObjectType = 34;
     }
 
     /// <summary>Script file flags.</summary>

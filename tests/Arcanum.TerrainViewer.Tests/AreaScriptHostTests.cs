@@ -83,7 +83,7 @@ public sealed class AreaScriptHostTests
         var flags = f.Session.Flags;
         Assert.AreEqual(true, flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(2593))).Value);
         Assert.IsFalse(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GetStoryState) || AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.SetStoryState));
-        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S10));
+        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S10), "ARC-SCRIPT-018: the S12 actions stay out of the dialog set");
         Assert.IsTrue(new[] { ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme }.All(AreaScriptHost.Admission.Actions.Contains),
             "ARC-SCRIPT-040: the sound actions run in the viewer");
         Assert.ThrowsExactly<InvalidOperationException>(() => f.Host.StoryState());

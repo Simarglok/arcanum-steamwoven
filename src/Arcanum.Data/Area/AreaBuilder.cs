@@ -273,7 +273,7 @@ public sealed partial class AreaDataOwner
         MapPatchApplication? patched = null;
         if (patchLines is { Count: > 0 })
         {
-            var result = MapPatchApplier.Apply(record, prototype, patchLines, number => _plan.MapPatch!.ScriptHeaders.GetValueOrDefault(number));
+            var result = MapPatchApplier.Apply(record, prototype, patchLines, number => _plan.MapPatch!.ScriptHeaders.GetValueOrDefault(number), _plan.MapPatch!.ScriptZeroClears);
             record = result.Record; patched = result.Application;
         }
         using var temporary = new AreaOwnership(_budget);
