@@ -43,6 +43,8 @@ public sealed partial class GameSessionOwner
     // Set while the run rules act (a call or a magic-tech event): a host port calling back into the runs is refused, so no
     // change is overwritten by the outer call's table.
     private bool _spellRunsBusy;
+    // The last positive cost a payment charged (the original's global 0x5E762C, which its reflection charges, MG15); not saved.
+    private int _spellLastCost;
 
     /// <summary>The session's spell runs (ARC-MAGIC-010; not saved).</summary>
     public SpellRunTable QuerySpellRuns() { ThrowIfDisposed(); return _spellRuns; }
@@ -99,7 +101,11 @@ public sealed partial class GameSessionOwner
         try { Act(system, action); }
         finally { _spellRunsBusy = false; }
         if (!system.Changed(_spellRuns))
+        {
+            // Its payments come back for the host to apply, so their last cost follows (not saved, no revision).
+            _spellLastCost = system.LastCostCharged;
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, system.Notes, Version);
+        }
         if (!SpellEventsFit(system.Queued.Count)) return RejectRun(GameSessionFailure.EventBudgetExceeded);
         if (_revision == long.MaxValue) return RejectRun(GameSessionFailure.RevisionExhausted);
         CommitSpellSystem(system);
@@ -142,6 +148,7 @@ public sealed partial class GameSessionOwner
         finally { _spellRunsBusy = false; }
         if (!system.Changed(_spellRuns))
         {
+            _spellLastCost = system.LastCostCharged;
             _passSpellRuns?.Add(new(firing.Event, run, code, true, system.Notes));
             return GameEventHandlerOutcome.Completed;
         }
@@ -158,7 +165,7 @@ public sealed partial class GameSessionOwner
     }
 
     private SpellRunSystem NewSpellSystem(ISpellRunHost host) =>
-        new(_spellRuns, host, _rules.Magic, _events.QueryPending().Where(IsSpellTick).Select(e => (int)e.Payload.Values[1]));
+        new(_spellRuns, host, _rules.Magic, _events.QueryPending().Where(IsSpellTick).Select(e => (int)e.Payload.Values[1]), _spellLastCost);
 
     private static bool IsSpellTick(GameEvent e) => e.Kind == SessionEventKinds.SpellRun && e.Payload.Values[2] == (long)SpellRunEventCode.Tick;
 
@@ -169,6 +176,9 @@ public sealed partial class GameSessionOwner
     private void CommitSpellSystem(SpellRunSystem system)
     {
         _spellRuns = system.Table;
+        _spellLastCost = system.LastCostCharged;
+        foreach (var run in system.RemovedEvents)
+            _events.RemoveAll(SessionEventKinds.SpellRun, e => e.Payload.Values[1] == run);
         foreach (var run in system.RemovedTicks)
             _events.RemoveAll(SessionEventKinds.SpellRun, e => e.Payload.Values[1] == run && e.Payload.Values[2] == (long)SpellRunEventCode.Tick);
         QueueSpellEvents(system.Queued);

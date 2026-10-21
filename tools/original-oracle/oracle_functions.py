@@ -211,6 +211,11 @@ RUN_TRIGGERS_LEFT, RECORD_DURATION, RECORD_TRIGGER_COUNT, RECORD_END_COUNT = 0x1
 CALLBACK_ACTION, RUN_FREE, TARGET_REFRESH, MAINTAIN_BAR_ADD, ADD_TICK, FIND_PLAYER = 0x457030, 0x4558D0, 0x4601C0, 0x4604A0, 0x4548D0, 0x4A2B10
 CAP_CHECK = 0x4545E0
 RUN_LOOKUP, REMOVE_EVENTS, REMOVE_GUARD = 0x4557C0, 0x45BFF0, 0x5E7604
+
+# The per-target stage, no-stack and cancels (ARC-MAGIC-011).
+FLAG_CASTER, LAST_COST, ENVIRONMENT, INTERRUPT = 0x459040, 0x5E762C, 0x458A80, 0x457110
+RUN_SET_FLAGS, RECORD_BEGIN_AREA, RECORD_CANCELS, RECORD_CANCELS_ENV = 0x138, 0x70, 0x118, 0x128
+STAGE_HANDLES = tuple((0x5EED0070 + i, 0x42) for i in range(4))   # source, parent, the candidate, the reflection's caster
 SCHEDULE_CALLS = 6
 SCHEDULE_CODE = ((0x454790, 0x4548D0), (0x4503E0, 0x450420), (0x45A950, 0x45A970), (0x455250, 0x455350))
 
@@ -258,6 +263,9 @@ FUNCTIONS: dict[int, FunctionSpec] = {spec.address: spec for spec in (
     FunctionSpec(0x4545E0, "spell-cap", ((0x4545E0, 0x454700), (0x450B90, 0x450BB0)), "spell-cap"),
     FunctionSpec(0x453FA0, "spell-schedule", ((0x453FA0, 0x4545E0),) + SCHEDULE_CODE, "spell-schedule"),
     FunctionSpec(0x457110, "spell-interrupt", ((0x457110, 0x4571E0),), "spell-interrupt"),
+    FunctionSpec(0x455550, "spell-target-stage", ((0x455550, 0x455710),), "spell-target-stage"),
+    FunctionSpec(0x453410, "spell-no-stack", ((0x453410, 0x4534E0),), "spell-no-stack"),
+    FunctionSpec(0x4534E0, "spell-cancels", ((0x4534E0, 0x453630),), "spell-cancels"),
 )}
 
 
@@ -2283,6 +2291,143 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
             if progress and case_number % 1000 == 0:
                 progress(case_number)
         document.update(fields=["action", "callbackCount", "endCallbackCount", "found", "busy", "listed", "actionAfter", "listAfter", "processed"])
+    elif spec.model == "spell-target-stage":
+        from oracle_emu import StubRejected, to_signed
+        run_address = emulator.write_heap(b"\0" * RUN_SLOT, 0)
+        table = emulator.write_heap(b"\0" * (SPELL_RECORD * SPELL_RECORDS), 0x1000)
+        context = emulator.write_heap(b"\0" * 0x80, 0x200)
+        source_h, parent_h, candidate_h, caster_h = STAGE_HANDLES
+        emulator.set_global(RUN_POINTER, run_address)
+        emulator.set_global(MAGIC_MESSAGES, 0x77)
+        for case_number in range(count):
+            spell = rng.randrange(SPELL_RECORDS)
+            candidate = rng.choice(("none", "parent", "source", "other", "other", "other"))
+            target_flags = rng.choice((0, 0x800, 0x2000, 0x2800, 0x2000, rng.getrandbits(16)))
+            set_flags = rng.choice((0, 0, 0x800, 0x2000, 0x2800))
+            run_flags = 1 | (0x8 if rng.random() < 0.2 else 0)
+            source_flags = rng.choice((0, 0, 0x2000, 0x800))
+            no_reflect, local, found = int(rng.random() < 0.2), int(rng.random() < 0.5), int(rng.random() < 0.7)
+            last_cost = rng.choice((0, 0, 5, 13, -4))
+            handle = {"none": (0, 0), "parent": parent_h, "source": source_h, "other": candidate_h}[candidate]
+            emulator.write_heap(struct.pack("<iii", 0, spell, rng.randrange(3)), 0)
+            emulator.write_heap(struct.pack("<II", *source_h), RUN_SOURCE)
+            emulator.write_heap(struct.pack("<II", *parent_h), RUN_PARENT)
+            emulator.write_heap(struct.pack("<II", set_flags, run_flags), RUN_SET_FLAGS)
+            emulator.write_heap(struct.pack("<II", *handle), 0x200 + 0x20)
+            emulator.write_heap(struct.pack("<II", source_flags, 0xDEAD), 0x200 + 0x5C)
+            record = table + SPELL_RECORD * spell
+            emulator.write_heap(struct.pack("<I", 0x400 if no_reflect else 0), 0x1000 + SPELL_RECORD * spell + RECORD_FLAGS)
+            emulator.set_global(RECORD_POINTER, record)
+            emulator.set_global(LAST_COST, last_cost & 0xFFFFFFFF)
+            seen = {"pay": [], "message": -1, "bar": 0, "caster": 0}
+
+            def field(argument) -> int:
+                if (argument(0), argument(1)) != handle or argument(2) != 0x14:
+                    raise StubRejected(f"field {argument(2):#x}")
+                return target_flags
+
+            def flag_caster(argument) -> int:
+                if (argument(0), argument(1)) != handle or argument(2) != 0x2000:
+                    raise StubRejected("a flag caster of another object")
+                # 0x459040 finds a caster only for a target that carries the flag (both readers): the stub keeps that precondition.
+                seen["caster"] += 1
+                hit = int(found and (target_flags & 0x2000) != 0)
+                emulator.poke(argument(3), struct.pack("<II", *(caster_h if hit else (0, 0))))
+                return hit
+
+            def pay(argument) -> int:
+                who = (argument(0), argument(1))
+                seen["pay"].append((STAGE_HANDLES.index(who) if who in STAGE_HANDLES else -1, to_signed(argument(2)), argument(3), argument(4)))
+                return 1
+
+            def message(argument) -> int:
+                seen["message"] = struct.unpack("<i", emulator.peek(argument(1), 4))[0]
+                return 0
+            stubs = {FIELD_GETTER: field, FLAG_CASTER: flag_caster, PAY: pay, IS_PLAYER: lambda a: int(local and (a(0), a(1)) == parent_h),
+                     MESSAGE_TEXT: message, MESSAGE_SHOW: lambda a: 0, MAINTAIN_BAR: lambda a: seen.__setitem__("bar", seen["bar"] + 1) or 0}
+            readable = (Range(record, record + SPELL_RECORD), Range(context, context + 0x80),
+                        *(Range(a, a + 4) for a in (RUN_POINTER, RECORD_POINTER, MAGIC_MESSAGES, LAST_COST)))
+            writable = (Range(run_address, run_address + RUN_SLOT), Range(context + 0x20, context + 0x28), Range(context + 0x60, context + 0x64))
+            result = emulator.call(spec.address, (context, run_address), code=code, stubs=stubs, readable=readable, writable=writable)
+            if len(seen["pay"]) > 1:
+                raise RunFailure("stub", f"two payments {seen}")
+            def which(address: int) -> int:
+                h = struct.unpack("<II", emulator.peek(address, 8))
+                return STAGE_HANDLES.index(h) if h in STAGE_HANDLES else -1
+            payer, cost, apply_flag, paid_spell = seen["pay"][0] if seen["pay"] else (-9, 0, 0, 0)
+            cases.append([spell, ("none", "parent", "source", "other").index(candidate), target_flags, set_flags, run_flags, source_flags, no_reflect, local, found,
+                          last_cost, result, which(run_address + RUN_SOURCE), which(context + 0x20), emulator.read_u32(run_address + RUN_FLAG_WORD), seen["message"],
+                          seen["bar"], payer, cost, apply_flag, paid_spell, emulator.read_u32(context + 0x60)])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["spell", "candidate", "targetFlags", "setFlags", "runFlags", "sourceFlags", "noReflect", "local", "found", "lastCost",
+                                "result", "sourceAfter", "candidateAfter", "runFlagsAfter", "message", "bar", "payer", "cost", "apply", "paidSpell", "flagsStored"])
+    elif spec.model in ("spell-no-stack", "spell-cancels"):
+        from oracle_emu import StubRejected
+        runs = emulator.write_heap(b"\0" * (RUN_SLOT * 512), 0)
+        table = emulator.write_heap(b"\0" * (SPELL_RECORD * SPELL_RECORDS), 0x40000)
+        for address, value in ((RUN_TABLE_POINTER, runs), (SPELL_TABLE_POINTER, table)):
+            emulator.set_global(address, value)
+        objects = [(0x5EED0080 + i, 0x42) for i in range(4)]
+        for case_number in range(count):
+            emulator.write_heap(b"\0" * (RUN_SLOT * 512), 0)
+            spells = [rng.randrange(SPELL_RECORDS) for _ in range(5)]
+            records = {sp: (rng.getrandbits(1), rng.choice((0, 0, 1 << rng.randrange(6), rng.getrandbits(6))), rng.choice((0, 0, 0, 1 << rng.randrange(6), rng.getrandbits(6))))
+                        for sp in spells}
+            for sp, (self_bit, cancels, env) in records.items():
+                base = 0x40000 + SPELL_RECORD * sp
+                emulator.write_heap(struct.pack("<I", self_bit), base + RECORD_BEGIN_AREA)
+                emulator.write_heap(struct.pack("<I", cancels), base + RECORD_CANCELS)
+                emulator.write_heap(struct.pack("<I", env), base + RECORD_CANCELS_ENV)
+            slots = {}
+            for k in range(rng.randint(0, 12)):
+                slot = rng.randrange(512)
+                slots[slot] = (rng.choice(spells), rng.choice(objects + [(0, 0)]), rng.choice(objects + [(0, 0)]), rng.choice(objects + [(0, 0)]),
+                               rng.choice((1, 1, 1, 0, 5)))
+            this_slot = rng.randrange(512)
+            slots[this_slot] = (rng.choice(spells), rng.choice(objects), rng.choice(objects + [(0, 0)]), rng.choice(objects + [(0, 0)]), rng.choice((1, 1, 0)))
+            for slot, (sp, source, parent, target, flag) in slots.items():
+                base = RUN_SLOT * slot
+                emulator.write_heap(struct.pack("<ii", slot, sp), base)
+                emulator.write_heap(struct.pack("<II", *source), base + RUN_SOURCE)
+                emulator.write_heap(struct.pack("<II", *parent), base + RUN_PARENT)
+                emulator.write_heap(struct.pack("<II", *target), base + RUN_TARGET_OBJECT)
+                emulator.write_heap(struct.pack("<I", flag), base + RUN_FLAG_WORD)
+            readable = (Range(runs, runs + RUN_SLOT * 512), Range(table, table + SPELL_RECORD * SPELL_RECORDS),
+                        Range(RUN_TABLE_POINTER, RUN_TABLE_POINTER + 4), Range(SPELL_TABLE_POINTER, SPELL_TABLE_POINTER + 4))
+            def encode(o): return objects.index(o) if o in objects else -1
+            flat = [v for slot, (sp, source, parent, target, flag) in sorted(slots.items())
+                    for v in (slot, sp, encode(source), encode(parent), encode(target), flag)]
+            flat += [-1] * 6 * (13 - len(slots))
+            records_flat = [v for sp in spells for v in (sp, *records[sp])]
+            if spec.model == "spell-no-stack":
+                spell = rng.choice(spells + [rng.randrange(SPELL_RECORDS)])
+                on = rng.choice(objects + [(0, 0)])
+                out = runs + RUN_SLOT * 512 - 8
+                emulator.write_heap(struct.pack("<i", -7), RUN_SLOT * 512 - 8)
+                writable = (Range(out, out + 4),)
+                result = emulator.call(spec.address, (this_slot, spell, on[0], on[1], out), code=code, readable=readable[1:] + (Range(runs, out),), writable=writable)
+                cases.append([this_slot, spell, encode(on), len(slots), *flat, *records_flat, result, struct.unpack("<i", emulator.peek(out, 4))[0]])
+            else:
+                env = int(rng.random() < 0.5)
+                interrupted: list[int] = []
+                asked: list[int] = []
+
+                def environment(argument) -> int:
+                    asked.append(argument(0))
+                    return env
+                stubs = {INTERRUPT: lambda a: interrupted.append(a(0)) or 0, ENVIRONMENT: environment}
+                emulator.call(spec.address, (runs + RUN_SLOT * this_slot,), code=code, stubs=stubs, readable=readable)
+                interrupted += [-1] * (13 - len(interrupted))
+                cases.append([this_slot, env, len(asked), len(slots), *flat, *records_flat, *interrupted[:13]])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        slot_fields = [f"run{i}{n}" for i in range(13) for n in ("Slot", "Spell", "Source", "Parent", "Target", "Flags")]
+        record_fields = [f"spell{i}{n}" for i in range(5) for n in ("", "Self", "Cancels", "Env")]
+        if spec.model == "spell-no-stack":
+            document.update(fields=["run", "spell", "on", "runs", *slot_fields, *record_fields, "result", "out"])
+        else:
+            document.update(fields=["run", "env", "envAsked", "runs", *slot_fields, *record_fields, *(f"interrupt{i}" for i in range(13))])
     else:
         raise ValueError(f"unknown model {spec.model}")
     document["cases"] = cases

@@ -373,11 +373,12 @@ class OracleSelfTest(unittest.TestCase):
             with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
                 call(address, *arguments)
 
-    def test_the_registry_names_thirty_functions_with_their_own_code_first(self):
-        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x452F20, 0x4537B0, 0x453B20, 0x453D40, 0x453EE0, 0x453FA0, 0x4545E0,
-                                                              0x454700, 0x455250, 0x456430, 0x456A10, 0x457110, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660,
-                                                              0x4B1790, 0x4C5EB0, 0x4C6170, 0x4C62E0, 0x4C6410, 0x4C69F0, 0x4F2D20, 0x4F40B0,
-                                                              0x4F5090, 0x4F50C0, 0x4F51B0, 0x4F5270])
+    def test_the_registry_names_thirty_three_functions_with_their_own_code_first(self):
+        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x452F20, 0x453410, 0x4534E0, 0x4537B0, 0x453B20, 0x453D40,
+                                                              0x453EE0, 0x453FA0, 0x4545E0, 0x454700, 0x455250, 0x455550, 0x456430, 0x456A10,
+                                                              0x457110, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660, 0x4B1790, 0x4C5EB0, 0x4C6170,
+                                                              0x4C62E0, 0x4C6410, 0x4C69F0, 0x4F2D20, 0x4F40B0, 0x4F5090, 0x4F50C0, 0x4F51B0,
+                                                              0x4F5270])
         for address, spec in oracle_functions.FUNCTIONS.items():
             self.assertEqual(spec.code[0][0], address)
             self.assertTrue(all(start < end for start, end in spec.code))
@@ -475,6 +476,8 @@ class OracleSelfTest(unittest.TestCase):
         self.assertEqual((schedule.model, schedule.code[0]), ("spell-schedule", (0x453FA0, 0x4545E0)))
         self.assertIn((0x454790, 0x4548D0), schedule.code)
         self.assertEqual((oracle_functions.CALLBACK_GUARD, oracle_functions.RUN_TRIGGERS_LEFT, oracle_functions.RECORD_END_COUNT), (0x5E7630, 0x150, 0xF8))
+        self.assertEqual(oracle_functions.FUNCTIONS[0x455550].model, "spell-target-stage")
+        self.assertEqual((oracle_functions.RECORD_CANCELS, oracle_functions.RECORD_CANCELS_ENV, oracle_functions.LAST_COST), (0x118, 0x128, 0x5E762C))
 
     def test_generated_inputs_stay_out_of_the_work_tree(self):
         with self.assertRaises(ValueError):

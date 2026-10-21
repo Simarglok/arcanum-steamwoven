@@ -15,6 +15,11 @@ public sealed class TechMaintainCellsTests
     private static readonly SpellRunRecord Device = new(Technology: true, Cost: 9, MaintainCost: 3, MaintainPeriod: 5, ChargesFromCells: true);
     private static readonly SpellStageFacts Facts = new(SourcePayer: new SpellPayer(SpellPayerKind.Item, ItemCharges: 1));
 
+    private sealed class NoRolls : ISpellRollSource
+    {
+        public int Roll(SpellRollPurpose purpose, int min, int max) => throw new Microsoft.VisualStudio.TestTools.UnitTesting.AssertFailedException("no roll");
+    }
+
     private sealed class NoStacking : ISpellRunStacking
     {
         public int? Blocking(SpellRun run, SpellRunObject target) => null;
@@ -111,14 +116,18 @@ public sealed class TechMaintainCellsTests
         public SpellStageFacts StageFacts(SpellRun run) => Facts;
         public ISpellCellSource Cells => _cells = new ChargeCellSource(
             new CellPayer(SpellPayerKind.Item, CellOwnerKind.Critter, Units > 0 ? new CellStack("cells", Units) : null, -80, -60), profile);
-        public ISpellRunStacking Stacking { get; } = new NoStacking();
         public bool FlagsAllow(SpellRun run) => true;
-        public int SourceSpellFlags(SpellRun run) => 0;
+        public int SpellFlags(SpellRunObject who) => 0;
+        public int? PlayerSpellFlags => null;
+        public bool PlayerPerceptionExtraordinary => false;
+        public SpellPayer? Payer(SpellRunObject who) => null;
+        public SpellResistRecord ResistRecord(int spell) => new(spell, true, false, false, 0, SpellResistanceRules.NoSave, 0);
+        public SpellResistTarget ResistTarget(SpellRun run, SpellRunTarget target) => new(false, SpellTargetKind.Other, false, 0, 0, 0, false);
+        public ISpellRollSource Rolls { get; } = new NoRolls();
+        public ISpellFateSave FateSave => SpellFateSave.None;
         public bool IsLocalPlayer(SpellRunObject? who) => false;
         public IReadOnlyList<SpellRunTarget> Collect(SpellRun run) => [new(run.Parent, SpellLocation.None)];
         public bool UseSpellAtMaximum(SpellRunObject pc) => false;
-        public bool PerTarget(SpellRun run, SpellRunTarget target) => true;
-        public bool TakesEffect(SpellRun run, SpellRunTarget target) => true;
         public SpellComponentGate Gate(SpellRun run, int component, SpellRunTarget target) => new(true, target);
         public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target) => SpellComponentOutcome.None;
         public SpellTimeFacts TimeFacts(SpellRun run) => new(true);

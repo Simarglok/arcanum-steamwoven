@@ -155,6 +155,114 @@ public sealed class SpellRunOriginalExeTests
             new("the callback components are ignored", c => Interrupt(c, (a, r) => SpellRunSystem.InterruptAction(a, r with { ActionComponents = [0, 0, 0, 0, r.Components(SpellRunAction.EndCallback)] }))));
     }
 
+    private static readonly string[] StageObjects = ["source", "parent", "other", "caster"];
+
+    /// <summary>ARC-MAGIC-011: the per-target stage (<see cref="SpellTargetStage.Decide"/>, 0x455550, model
+    /// <c>spell-target-stage</c>): the answer, the run's source and the candidate after it, the run flags, the message, the maintain
+    /// bar and the reflecting caster's payment; Steamwoven differs only on MG15's inputs (a payment whose last cost is not the
+    /// reflected cost).</summary>
+    [TestMethod, TestCategory(Category)]
+    public void TargetStageMatchesTheOriginal()
+    {
+        var file = OracleFile.Load("455550", "spell-target-stage", TestContext);
+        const int ReflectedCost = 7;
+        static int Index(SpellRunObject? o) => o is null ? -1 : Array.IndexOf(StageObjects, o.Id);
+        string Stage(Row c, MagicAnomalyProfile profile, Func<SpellTargetStageFacts, SpellTargetStageFacts>? change = null, bool clearReflected = false)
+        {
+            SpellRunObject Obj(int i) => new(StageObjects[i], i == 2 || i == 3 ? 16 : 15);
+            var candidate = c["candidate"] switch { 0 => null, 1 => Obj(1), 2 => Obj(0), _ => Obj(2) };
+            var flags = (SpellRunFlags)c["runFlags"] & (clearReflected ? ~SpellRunFlags.Reflected : (SpellRunFlags)~0);
+            var run = new SpellRun(0, c["spell"], SpellRunAction.Begin, Obj(0), Obj(1), SpellLocation.None, null, SpellLocation.None, null, flags)
+            { SetSpellFlags = c["setFlags"] };
+            var facts = new SpellTargetStageFacts(c["targetFlags"], c["sourceFlags"], c["local"] != 0,
+                c["found"] != 0 && (c["targetFlags"] & SpellTargetStage.FullReflection) != 0 ? Obj(3) : null, c["lastCost"], ReflectedCost);
+            if (change is not null) facts = change(facts);
+            var result = SpellTargetStage.Decide(run, new SpellRunRecord { NoReflect = c["noReflect"] != 0 }, new(candidate, SpellLocation.None), facts, profile);
+            var pay = result.Payment is { } p ? $"{Index(p.Payer)} {p.Cost} 1 {SpellPaymentRules.NoSpell}" : "-9 0 0 0";
+            return $"{(result.Passes ? 1 : 0)} {Index(result.Run.Source)} {Index(result.Target.Object)} {(int)result.Run.Flags} {result.Message ?? -1} {(result.MaintainBar ? 1 : 0)} {pay}";
+        }
+        static bool Mg15(Row c) => c["payer"] != -9 && c["cost"] != ReflectedCost;
+        Run(file, c => Stage(c, MagicAnomalyProfile.Original),
+            c => $"{c["result"]} {c["sourceAfter"]} {c["candidateAfter"]} {c["runFlagsAfter"]} {c["message"]} {c["bar"]} {c["payer"]} {c["cost"]} {c["apply"]} {c["paidSpell"]}",
+            ("steamwoven", "MG15", Mg15, c => Stage(c, MagicAnomalyProfile.Steamwoven)),
+            new Mutant("no reflection payment", c => Stage(c, MagicAnomalyProfile.Original, f => f with { ReflectionCaster = null })),
+            new("a run reflected earlier is left alone", c => Stage(c, MagicAnomalyProfile.Original, clearReflected: true)),
+            new("the caster's own reflection does not fizzle", c => Stage(c, MagicAnomalyProfile.Original, f => f with { SourceSpellFlags = 0 })));
+    }
+
+    /// <summary>ARC-MAGIC-011: the no-stack test (<see cref="SpellTargetStage.Blocking"/>, 0x453410, model <c>spell-no-stack</c>).</summary>
+    [TestMethod, TestCategory(Category)]
+    public void NoStackMatchesTheOriginal()
+    {
+        var file = OracleFile.Load("453410", "spell-no-stack", TestContext);
+        string Block(Row c, bool parentForSelf = true, bool sameIdBlocks = false)
+        {
+            var (table, records) = Table(c);
+            if (c["on"] < 0) return "0 -7";
+            var on = new SpellRunObject($"o{c["on"]}", 16);
+            int? found = null;
+            foreach (var other in table.Runs)
+            {
+                if ((other.Flags & SpellRunFlags.Active) == 0) continue;
+                if (other.Target?.Id == on.Id) { if (other.Spell == c["spell"] && (sameIdBlocks || other.Id != c["run"])) { found = other.Id; break; } }
+                else if (other.Target is null && records(other.Spell).SelfSpell && other.Spell == c["spell"] && other.Id != c["run"]
+                    && (parentForSelf ? other.Parent : other.Source)?.Id == on.Id) { found = other.Id; break; }
+            }
+            if (parentForSelf && !sameIdBlocks)
+                found = SpellTargetStage.Blocking(table, new(c["run"], c["spell"], SpellRunAction.Begin, null, null, SpellLocation.None, null, SpellLocation.None, null,
+                    SpellRunFlags.Active), on, records);
+            return found is { } id ? $"1 {id}" : "0 -7";
+        }
+        Run(file, c => Block(c), c => $"{c["result"]} {c["out"]}", (NoSwitch, NoSwitch, _ => false, c => Block(c)),
+            new Mutant("a self spell matched by its source", c => Block(c, parentForSelf: false)),
+            new("the run blocks itself", c => Block(c, sameIdBlocks: true)));
+    }
+
+    /// <summary>ARC-MAGIC-011: the cancels (<see cref="SpellTargetStage.Cancelled"/>, 0x4534E0, model <c>spell-cancels</c>): the runs
+    /// interrupted in order and how often the environment was asked; the second loop compares this record's own fields (MG33).</summary>
+    [TestMethod, TestCategory(Category)]
+    public void CancelsMatchTheOriginal()
+    {
+        var file = OracleFile.Load("4534E0", "spell-cancels", TestContext);
+        string Cancel(Row c, Func<SpellRunTable, SpellRun, Func<int, SpellRunRecord>, Func<int, bool>, IReadOnlyList<int>>? rule = null)
+        {
+            var (table, records) = Table(c);
+            var asked = 0;
+            var run = table[c["run"]]!;
+            var ids = (rule ?? SpellTargetStage.Cancelled)(table, run, records, _ => { asked++; return c["env"] != 0; });
+            return $"{asked} " + string.Join(",", ids);
+        }
+        static IReadOnlyList<int> OtherRecordsEnv(SpellRunTable table, SpellRun run, Func<int, SpellRunRecord> records, Func<int, bool> env)
+        {
+            var ids = new List<int>();
+            if ((run.Flags & SpellRunFlags.Active) == 0) return ids;
+            var record = records(run.Spell);
+            bool Same(SpellRun o) => (o.Flags & SpellRunFlags.Active) != 0 && o.Source?.Id == run.Source?.Id && o.Id != run.Id;
+            if (record.CancelsSpellFlags != 0) ids.AddRange(table.Runs.Where(o => Same(o) && (records(o.Spell).CancelsSpellFlags & record.CancelsSpellFlags) != 0).Select(o => o.Id));
+            if (record.CancelsEnvironmentSpellFlags != 0 && env(record.CancelsEnvironmentSpellFlags))
+                ids.AddRange(table.Runs.Where(o => Same(o) && (records(o.Spell).CancelsEnvironmentSpellFlags & record.CancelsSpellFlags) != 0).Select(o => o.Id));
+            return ids;
+        }
+        Run(file, c => Cancel(c), c => $"{c["envAsked"]} " + string.Join(",", Enumerable.Range(0, 13).Select(i => c[$"interrupt{i}"]).Where(v => v >= 0)),
+            (NoSwitch, NoSwitch, _ => false, c => Cancel(c)),
+            new Mutant("the second loop compares the other run's Cancels_EnvSF", c => Cancel(c, OtherRecordsEnv)),
+            new("no environment loop", c => Cancel(c, (t, r, rec, e) => SpellTargetStage.Cancelled(t, r, rec, _ => false))));
+    }
+
+    // The run table and records of a no-stack or cancels case.
+    private static (SpellRunTable Table, Func<int, SpellRunRecord> Records) Table(Row c)
+    {
+        static SpellRunObject? Obj(int i) => i < 0 ? null : new($"o{i}", 16);
+        var table = SpellRunTable.Empty;
+        for (var i = 0; i < c["runs"]; i++)
+            table = table.With(new(c[$"run{i}Slot"], c[$"run{i}Spell"], SpellRunAction.Begin, Obj(c[$"run{i}Source"]), Obj(c[$"run{i}Parent"]), SpellLocation.None,
+                Obj(c[$"run{i}Target"]), SpellLocation.None, null, (SpellRunFlags)c[$"run{i}Flags"]));
+        var records = new Dictionary<int, SpellRunRecord>();
+        for (var i = 0; i < 5; i++)
+            records[c[$"spell{i}"]] = new() { SelfSpell = (c[$"spell{i}Self"] & 1) != 0, CancelsSpellFlags = c[$"spell{i}Cancels"], CancelsEnvironmentSpellFlags = c[$"spell{i}Env"] };
+        return (table, spell => records.TryGetValue(spell, out var r) ? r : new());
+    }
+
     private static string Expected(Row c) =>
         $"{c["actionAfter"]} {c["flagsAfter"]} {c["leftAfter"]} " + string.Join(",", Enumerable.Range(0, c["calls"]).Select(i => $"{c[$"call{i}Kind"]}:{c[$"call{i}Value"]}"));
 
