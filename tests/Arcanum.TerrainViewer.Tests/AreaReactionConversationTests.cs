@@ -18,7 +18,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaReactionConversationTests
 {
-    private const string Dialog = "{1}{Hello.}{}{}{}{}{}"
+    private const string Dialog = "{1}{Hello.}{}{}{}{}{RP 1001}"
         + "{2}{First time.}{}{1}{ME 0}{0}{}"
         + "{3}{Again.}{}{1}{ME 1}{0}{}"
         + "{4}{i:}{}{1}{}{0}{}";
@@ -35,6 +35,7 @@ public sealed class AreaReactionConversationTests
         Assert.AreEqual(0, f.Host.ReactionOpen);
         Assert.AreEqual(new SessionReaction(f.Entity, null, 50), f.Session.QueryReactionRecord(f.Entity), "the talk opened the conversation slot");
         Assert.IsFalse(f.Host.State.MetBefore(0));
+        Assert.IsTrue(f.Session.HeroHasReputation(1001), "ARC-WORLD-044: the host passes the reputation port (RP in the NPC's line)");
 
         Assert.AreEqual(DialogConversationSelectStatus.Ended, talk.Select(talk.Options[0].Token).Status);
         Assert.IsTrue(f.Host.EndReaction());
@@ -67,7 +68,7 @@ public sealed class AreaReactionConversationTests
         Assert.AreEqual(DialogConversationSelectStatus.Ended, last.Select(last.Options.Single(o => o.Marker is not null).Token).Status);
         Assert.AreEqual(new DialogConversationEnd(DialogEndKind.Insulted, null), last.End);
         Assert.AreEqual("[the insult ended the dialog: the NPC's generated reply is not loaded]", AreaConversationText.Outcome(last));
-        StringAssert.EndsWith(AreaConversationText.Effect(last.Effects.Single()), "RE adjust -10 (insult) [Applied]");
+        StringAssert.EndsWith(AreaConversationText.Effect(last.Effects.Last()), "RE adjust -10 (insult) [Applied]");
         Assert.AreEqual(20, f.Host.State.Reaction(0));
         f.Host.EndReaction();
         Assert.AreEqual(new SessionReaction(f.Entity, 20, null), f.Session.QueryReactionRecord(f.Entity));

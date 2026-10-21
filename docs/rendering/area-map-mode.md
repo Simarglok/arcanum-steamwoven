@@ -276,7 +276,7 @@ with an unconditional exit stays that exit.
 - **Guards** (ledger SG1–SG6) are answered from the session: the PC's quest log (botched reads 6) and, for any other
   object, the quest's global state; the hero's kit and carried items and their worn slots; a holder's current list and
   its items' inventory locations; any object's name number and spell flags from its row (the PC has no row: name 0, no
-  spell flags); no reputations (only a PC has them and the session holds none yet).
+  spell flags); the PC's reputations from the session (ARC-WORLD-044, [reputation runtime](../world/reputation-runtime.md); only a PC has them).
 - **Effects**, applied as the run goes, as for a dialog script: global flags, sound-scheme requests, deferred calls to the
   session's queue, the use slot; a step the session refuses leaves the earlier ones applied and the use is reported
   refused. Printed lines show on the status line; effect sounds are not played. The first teleport of the player is the
