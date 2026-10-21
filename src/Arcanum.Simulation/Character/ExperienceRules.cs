@@ -43,6 +43,12 @@ public readonly record struct ExperienceAdvance(int Level, int Experience, int U
 /// <summary>The PC level step a follower's level follows: the PC's level before the recalculation and the level it reached.</summary>
 public readonly record struct FollowerLevelStep(int OldPcLevel, int NewPcLevel);
 
+/// <summary>
+/// One level the source's recalculation writes in its normal branch (0x4A69C0; ARC-UI-046, ledger OL27): the level, the unspent
+/// points stored before it and the points it grants. The level-up message is posted for it before the PC's scheme spends.
+/// </summary>
+public readonly record struct ExperienceLevelWritten(int Level, int UnspentBefore, int Points);
+
 /// <summary>A follower's level after the source's update and the points it granted (0 when the level stays).</summary>
 public readonly record struct FollowerLevelUp(int Level, int PointsGained);
 
@@ -120,7 +126,7 @@ public static class ExperienceRules
     /// </summary>
     [OriginalFunction(0x4A69C0, OriginalFunctionScope.Partial)]
     public static ExperienceAdvance Advance(ExperienceTable table, int level, int experience, int unspentPoints,
-        Func<int, int, int>? spend = null)
+        Func<int, int, int>? spend = null, Action<ExperienceLevelWritten>? written = null)
     {
         ArgumentNullException.ThrowIfNull(table);
         ValidateLevel(level);
@@ -146,6 +152,7 @@ public static class ExperienceRules
             var bonus = BonusPoints(current - 1, current);
             gained++;
             points += bonus;
+            written?.Invoke(new(level, unspentPoints, bonus));
             unspentPoints = Math.Min(MaxUnspentPoints, unspentPoints + bonus);
             if (spend is not null)
             {
@@ -155,6 +162,19 @@ public static class ExperienceRules
             toNext = ToNextLevel(table, level, experience);
         }
         return new(level, experience, unspentPoints, gained, points, new(old, current));
+    }
+
+    /// <summary>
+    /// The points a level-up message names for a PC without an auto-level scheme (ARC-UI-046): the original names the stored
+    /// unspent points plus the level's points, summed before the setter caps unspent points at <see cref="MaxUnspentPoints"/>
+    /// (ledger OL28, 0x4A6A90–0x4A6AC4), so it can name points the PC does not have; Steamwoven names the capped value the PC
+    /// holds (decision D6, <see cref="ExperienceRuleProfile.LevelMessagePointsBeforeCap"/>).
+    /// </summary>
+    public static int LevelMessagePoints(ExperienceLevelWritten written, ExperienceRuleProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        var sum = written.UnspentBefore + written.Points;
+        return profile.LevelMessagePointsBeforeCap ? sum : Math.Min(MaxUnspentPoints, sum);
     }
 
     /// <summary>

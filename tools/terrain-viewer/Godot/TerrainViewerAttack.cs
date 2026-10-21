@@ -284,6 +284,8 @@ public partial class TerrainViewerApp
 
     private void LevelAreaFollowers(SessionExperienceAward? award)
     {
+        // ARC-UI-046: the hero's level-up messages come first, as the source posts them before passing the step on.
+        ShowLevelUps(award);
         if (award?.Followers is null || _areaSession is null || _combatHost is null || _areaEffectRules is not { } effects) return;
         var map = CurrentAreaMap;
         // Fields come from the NPC's home map; a waiting NPC counts only while it stands on this map.

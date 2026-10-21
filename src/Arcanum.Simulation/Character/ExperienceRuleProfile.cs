@@ -20,11 +20,19 @@ public sealed record ExperienceRuleProfile
     /// </summary>
     public bool ProgressProductWraps { get; init; }
 
+    /// <summary>
+    /// Ledger OL28 (decision D6, ARC-UI-046): the level-up message of a PC without an auto-level scheme names the stored unspent
+    /// points plus the level's points, summed before the cap of 56 (0x4A6A90–0x4A6AC4), so past the cap it names points the PC
+    /// does not have (a cosmetic bug). Steamwoven names the capped value the PC holds (the recommended option; the owner's answer
+    /// to D6 is pending).
+    /// </summary>
+    public bool LevelMessagePointsBeforeCap { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly ExperienceRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly ExperienceRuleProfile Original = new() { Name = "original", ProgressProductWraps = true };
+    public static readonly ExperienceRuleProfile Original = new() { Name = "original", ProgressProductWraps = true, LevelMessagePointsBeforeCap = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<ExperienceRuleProfile> All { get; } = new[] { Steamwoven, Original };
