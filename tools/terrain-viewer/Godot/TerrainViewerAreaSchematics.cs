@@ -172,7 +172,7 @@ public partial class TerrainViewerApp
         }
         else
         {
-            _schematicMessage = "not assembled: " + AreaSchematics.Refused(result);
+            _schematicMessage = "not assembled: " + AreaSchematics.Refused(result, _schematicCrafter is not null);
             GD.Print($"ARC-TECHNOLOGY-005 assembly refused={result.Failure}");
         }
         SyncAreaSchematics(force: true);

@@ -252,6 +252,7 @@ public sealed class AreaConversationHost
 
     public AreaConversationStart Begin(AreaSpeaker? speaker, CancellationToken token = default)
     {
+        SchematicCrafter = null;
         if (speaker is null) return new(AreaConversationStartStatus.NoSpeaker, null, null, "no dialog NPC within reach");
         return Run(speaker, 0, token);
     }
@@ -263,6 +264,7 @@ public sealed class AreaConversationHost
     /// </summary>
     public AreaConversationStart Resume(AreaSpeaker speaker, DialogScriptLine line, CancellationToken token = default)
     {
+        SchematicCrafter = null;
         ArgumentNullException.ThrowIfNull(speaker);
         return Run(speaker, line.Value, token);
     }

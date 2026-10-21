@@ -178,7 +178,7 @@ With the optional `IDialogSchematicPort` (`DialogConversationPorts.Schematics`) 
 dialog action `su`, code 30 of its action table, [NC1–NC2](../research/original-verification-ledger.md#npc-schematic-crafter-arc-technology-006)):
 an operand is read and ignored; the receipt is an `OpenSchematicsCommand` (the NPC as crafter, the PC as viewer) recorded in field
 order, so the field's other actions run before and after it; the reply's transition is `DialogOptionTransition.Schematics` with no
-target node (no look-ahead), and picking it ends the conversation with `DialogEndKind.SchematicWindow`: no further NPC line, no SCR
+target node (no look-ahead; a missing or non-NPC response target does not fail the step, since the reply never enters it), and picking it ends the conversation with `DialogEndKind.SchematicWindow`: no further NPC line, no SCR
 continuation, and the talk does not resume when the window closes (the original's interface mode change ends the dialog). A
 rejected command (the AREA port refuses a dead NPC or PC) fails the conversation. Outside the subset: `SU` with JO, UW, FL, ET or an
 insult in the same reply (offered blocked, `UnsupportedInteraction`) and `SU` in an NPC line's own action (an unsupported-operation

@@ -1094,8 +1094,8 @@ the tab and discipline hover texts, an NPC's weight and room for its products. S
 records and hero: refusal without a hero, `T`, controls and their sounds and bounds, keys owned, refused texts, an assembly
 through the session, `Escape`, position kept, controller cancel, script 129 for the PC and an NPC without data, an NPC crafter's
 window with its reset, empty found tab and assembly into its list, dead-hero close); native smoke `ARC-TECHNOLOGY-006 native-smoke npc
-crafter PASS` (exterior with the cave and `--hero`: a Crash Site speaker opened through the `su` path, one assembly into its list on a
-detached copy);
+crafter PASS` (exterior with the cave and `--hero`: a Crash Site speaker opened through the window path `su` takes after its talk ended, one assembly into its list on
+a detached copy; the reply pick is covered by `AreaSchematicConversationTests`);
 native smoke after the logbook stage: `ARC-TECHNOLOGY-005 native-smoke schematics PASS` (the module's schematic data load; with
 `--hero`, `T` opens over the live session, the controls move, `Escape` closes, nothing changes; on a detached synthetic hero
 holding a learned record's components one assembly makes its product).

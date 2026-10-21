@@ -11,7 +11,6 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>The two tabs of the schematic window, in the original's order: learned (with the degrees) and found (documents).</summary>
 public enum AreaSchematicTab { Learned, Found }
 
-/// <summary>Why the schematic window does not open: no hero, or a dead crafter.</summary>
 /// <summary>Why the window does not open: no hero (a hero crafter), the crafter or the hero is dead, or (ARC-TECHNOLOGY-006) the NPC
 /// crafter's data are invalid or the session does not know the NPC.</summary>
 public enum AreaSchematicRefusal { None, NoHero, Dead, NoCrafter }
@@ -111,7 +110,7 @@ public static class AreaSchematics
         ArgumentNullException.ThrowIfNull(session);
         if (crafter is not null)
         {
-            if (session.QueryNpcTechnology(crafter) is null) return AreaSchematicRefusal.NoCrafter;
+            if (session.QueryNpcTechnology(crafter) is null || !session.QueryNpcKnown(crafter.Npc)) return AreaSchematicRefusal.NoCrafter;
             if (session.QueryNpcDead(crafter.Npc) || session.QueryHeroLife() is { Status.IsDead: true }) return AreaSchematicRefusal.Dead;
             return AreaSchematicRefusal.None;
         }
@@ -190,13 +189,15 @@ public static class AreaSchematics
     public static int CompletedSound(int discipline) => SchematicAssemblyRules.CompletedSoundBase + discipline;
 
     /// <summary>The text of a session refusal of an assembly for the status line.</summary>
-    public static string Refused(SessionAssemblyResult result) => result.Failure switch
+    public static string Refused(SessionAssemblyResult result, bool npc = false) => result.Failure switch
     {
         GameSessionFailure.AssemblyRefused => result.Plan?.Button == AssemblyButton.ExpertiseLacking ? "expertise lacking" : "an item is missing",
         GameSessionFailure.InsertRefused => "no room for the product (the original would leave it on the ground)",
         GameSessionFailure.ItemTypeUnsupported => "the product is not an item the session holds (stack or key)",
         GameSessionFailure.BudgetExceeded => "inventory limit",
-        GameSessionFailure.InvalidLifeTarget => "the hero is dead",
+        GameSessionFailure.InvalidLifeTarget => npc ? "the NPC crafter is dead" : "the hero is dead",
+        GameSessionFailure.UnknownHolder => "the session does not know the NPC crafter",
+        GameSessionFailure.InvalidAdvancement => "the NPC crafter's data are invalid",
         GameSessionFailure.StaleVersion => "the session changed",
         _ => result.Failure.ToString(),
     };

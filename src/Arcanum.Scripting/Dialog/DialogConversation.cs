@@ -403,7 +403,7 @@ public sealed class DialogConversation
     /// per address) asks for the schematic window with the NPC as crafter and the PC as viewer; its operand is read and ignored, the
     /// rest of the field still runs, and the reply's target node is not entered (the caller's transition ends the talk).
     /// </summary>
-    private OpenSchematicsCommand SchematicsCommand(ConversationSchematics operation) =>
+    private OpenSchematicsCommand SchematicsCommand() =>
         new(_request.Participants.Npc, _request.Participants.PlayerCharacter);
 
     /// <summary>
@@ -622,7 +622,7 @@ public sealed class DialogConversation
                 ConversationAlignment alignment => new AlignmentCommand(_request.Participants.PlayerCharacter, alignment.Mode, alignment.Value),
                 ConversationSkillTraining training => new SkillTrainingCommand(_request.Participants.PlayerCharacter, training.Skill, training.Training),
                 ConversationFatePoint => new FatePointCommand(_request.Participants.PlayerCharacter),
-                ConversationSchematics schematics => SchematicsCommand(schematics),
+                ConversationSchematics => SchematicsCommand(),
                 _ => throw new InvalidOperationException("Unadmitted action."),
             };
             DialogCommandResult result;
@@ -844,6 +844,7 @@ public sealed class DialogConversation
 
         var value = record.ResponseValue ?? 0;
         var transition = DialogOptionTransition.Exit;
+        DialogConversationFailure? targetFailure = null;
         DlgRecord? target = null;
         DialogScriptLine? line = null;
         if (block is not null)
@@ -853,15 +854,15 @@ public sealed class DialogConversation
         else if (value > 0)
         {
             transition = DialogOptionTransition.Direct;
+            // A missing or non-NPC target fails the step, unless the reply's action holds SU, whose reply never enters it (checked
+            // after the action is parsed below).
             if (!_document.TryGetRecord(value, out target) || target is null)
             {
-                failure = new DialogConversationFailure(DialogConversationFailureKind.MissingTarget, node, Response: response);
-                return null;
+                targetFailure = new DialogConversationFailure(DialogConversationFailureKind.MissingTarget, node, Response: response);
             }
-            if (target.Role != DlgRecordRole.Npc)
+            else if (target.Role != DlgRecordRole.Npc)
             {
-                failure = new DialogConversationFailure(DialogConversationFailureKind.WrongTargetRole, node, Response: response);
-                return null;
+                targetFailure = new DialogConversationFailure(DialogConversationFailureKind.WrongTargetRole, node, Response: response);
             }
         }
         else if (value < 0)
@@ -892,6 +893,15 @@ public sealed class DialogConversation
                     exception.Kind == DialogFailureKind.UnsupportedOperation ? DialogOptionBlockKind.UnsupportedOperation : DialogOptionBlockKind.InvalidOperation,
                     exception.OperationSource);
             }
+        }
+        if (targetFailure is not null)
+        {
+            if (block is not null || action?.Any(operation => operation is ConversationSchematics) != true)
+            {
+                failure = targetFailure;
+                return null;
+            }
+            target = null;
         }
         if (block is null && insult is not null)
         {

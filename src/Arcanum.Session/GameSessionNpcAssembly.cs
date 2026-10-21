@@ -21,7 +21,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// An NPC's eight disciplines now (ARC-TECHNOLOGY-006, 0x4AFE60 and 0x4B00B0 for a critter): the stored degrees of its sheet (the
     /// session's advancement record when it levelled the NPC, else <see cref="SessionNpcCrafter.Loaded"/>), each lowered while its
-    /// effective intelligence (<see cref="AutoLevelRules.Effective"/> with the crafter's modifiers) is below the degree's minimum, and
+    /// effective intelligence (<see cref="AutoLevelRules.EffectiveStat"/> with the crafter's modifiers) is below the degree's minimum, and
     /// the expertise of the counting degree. The "expertise in discipline" effect changes the original applies to every critter are
     /// not modelled for NPCs (the session keeps no NPC effects). Null for an invalid crafter.
     /// </summary>
@@ -31,7 +31,7 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(crafter);
         if (!AdvancementDomain.Valid(crafter.Loaded) || !AutoLevelRules.IsValid(crafter.Modifiers)) return null;
         var sheet = (_advancement.Npcs.TryGetValue(crafter.Npc, out var saved) ? saved : crafter.Loaded).Sheet;
-        var intelligence = AutoLevelRules.Effective(sheet, crafter.Modifiers, CharacterStat.Intelligence);
+        var intelligence = AutoLevelRules.EffectiveStat(sheet, crafter.Modifiers, CharacterStat.Intelligence);
         var result = ImmutableArray.CreateBuilder<SessionTechDiscipline>(TechDegreeRules.Disciplines);
         for (var discipline = 0; discipline < TechDegreeRules.Disciplines; discipline++)
         {
@@ -168,6 +168,15 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (!SessionValidation.Entity(npc)) throw new ArgumentException("Invalid entity id.", nameof(npc));
         return NpcDead(npc);
+    }
+
+    /// <summary>Whether the session knows an NPC: an NPC holder of an attached seed, a party record, or an NPC holding added items
+    /// (the NPCs whose list the inventory and crafter calls can read). An invalid entity id throws.</summary>
+    public bool QueryNpcKnown(string npc)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(npc)) throw new ArgumentException("Invalid entity id.", nameof(npc));
+        return KnownNpc(npc);
     }
 
     private bool NpcDead(string npc) => KilledNpc(npc) ||

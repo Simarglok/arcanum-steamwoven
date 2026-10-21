@@ -143,4 +143,50 @@ public sealed class NpcAssemblyStateTests
         using var records = Owner(new GameSessionLimits(maxDurabilityRecords: 1));
         Assert.AreEqual(GameSessionFailure.BudgetExceeded, records.AssembleSchematicForNpc(records.Version, Crafter(), parts, InBag, Facts, Kinds, Accept).Failure);
     }
+
+    [TestMethod]
+    public void The_session_advancement_record_wins_over_the_map_sheet()
+    {
+        var created = GameSessionOwner.Create(Descriptor() with { AutoLevel = AdvancementStateTests.Rules() });
+        Assert.AreEqual(GameSessionFailure.None, created.Failure);
+        using var owner = created.Owner!;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, Seed()).Disposition);
+        // The session levels the smith from map data with no degree; the crafter's later map data claim degree 1 in discipline 3.
+        var map = Crafter().Loaded with { AutoLevelScheme = 62 };
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LevelFollower(owner.Version, map, AdvancementModifiers.None, new(1, 2)).Disposition);
+        var claimed = Crafter(gearDegree: 1);
+        Assert.AreEqual(0, owner.QueryNpcTechnology(claimed)!.Value[3].Degree, "the record's degree, not the map data's");
+        Assert.AreEqual(AssemblyButton.ExpertiseLacking, owner.QueryNpcAssembly(claimed, Schematic([2100], [2200]), InBag, Facts)!.Button);
+    }
+
+    [TestMethod]
+    public void A_crafter_killed_by_the_session_or_known_through_the_party_or_with_a_full_list()
+    {
+        using var owner = Owner();
+        var killed = owner.Kill(owner.Version, SessionLifeTarget.Critter("smith", new(), Arcanum.Simulation.Combat.LifeState.Unharmed));
+        Assert.AreEqual(GameSessionDisposition.Changed, killed.Disposition);
+        Assert.IsTrue(owner.QueryNpcDead("smith"));
+        Assert.AreEqual(GameSessionFailure.InvalidLifeTarget,
+            owner.AssembleSchematicForNpc(owner.Version, Crafter(), Schematic([2100], [2100]), InBag, Facts, Kinds, Accept).Failure);
+
+        // A party record without any seed is a known crafter; its list holds only its added items.
+        using var party = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, party.ForceJoinParty(party.Version, "oid:smith").Disposition);
+        Assert.IsTrue(party.QueryNpcKnown("oid:smith"));
+        Assert.AreEqual(GameSessionDisposition.Changed, party.AddItemToNpc(party.Version, "oid:smith", Part, Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, party.AddItemToNpc(party.Version, "oid:smith", Part, Accept).Disposition);
+        var made = party.AssembleSchematicForNpc(party.Version, Crafter("oid:smith"), Schematic([2100], [2100]), InBag, Facts, Kinds, Accept);
+        Assert.AreEqual(GameSessionDisposition.Changed, made.Disposition, made.Failure.ToString());
+        CollectionAssert.AreEqual(new[] { "made:3" }, party.QueryNpcInventory("oid:smith").Select(i => i.Entity).ToArray());
+
+        // A list at its 512-item bound cannot take more products than the components it frees.
+        using var full = Create();
+        var items = Enumerable.Range(0, SessionMapInventorySeed.MaxListLength).Select(i => new SessionSeedItem($"i{i}", ItemFacts(Part), null)).ToArray();
+        Assert.AreEqual(GameSessionDisposition.Changed, full.AttachMapInventory(Exterior,
+            new([new("smith", SessionHolderKind.Npc, false, false, [], [.. items.Select(i => i.Entity)])], items)).Disposition);
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded,
+            full.AssembleSchematicForNpc(full.Version, Crafter(), Schematic([2100], [2100], quantity: 3), InBag, Facts, Kinds, Accept).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            full.AssembleSchematicForNpc(full.Version, Crafter(), Schematic([2100], [2100], quantity: 2), InBag, Facts, Kinds, Accept).Disposition);
+    }
 }

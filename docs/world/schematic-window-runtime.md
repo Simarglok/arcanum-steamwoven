@@ -23,7 +23,8 @@ SW1–SW8, and ["NPC schematic crafter"](../research/original-verification-ledge
 [`AreaScriptHostTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaScriptHostTests.cs),
 [`ScrSchematicTests`](../../tests/Arcanum.Scripting.Tests/Scr/ScrSchematicTests.cs), the Godot self-test
 `ARC-TECHNOLOGY-005 self-test PASS` (since ARC-TECHNOLOGY-006 with an NPC crafter) and the native smokes
-`ARC-TECHNOLOGY-005 native-smoke schematics PASS` and `ARC-TECHNOLOGY-006 native-smoke npc crafter PASS`; the NPC crafter in
+`ARC-TECHNOLOGY-005 native-smoke schematics PASS` and `ARC-TECHNOLOGY-006 native-smoke npc crafter PASS` (the window path `su` takes
+after its talk ended, with a real speaker; the reply pick itself is covered by [`AreaSchematicConversationTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaSchematicConversationTests.cs)); the NPC crafter in
 [`NpcAssemblyStateTests`](../../tests/Arcanum.Session.Tests/NpcAssemblyStateTests.cs) and
 [`DialogSchematicsTests`](../../tests/Arcanum.Scripting.Tests/Dialog/DialogSchematicsTests.cs).
 
@@ -33,8 +34,10 @@ SW1–SW8, and ["NPC schematic crafter"](../research/original-verification-ledge
   calls the open with the local PC as both arguments (SW1). It acts from the world only: not while the palette, a dialog, another window or
   UI focus owns input (the original's guards are those of C and L; its mode change would close another open window instead,
   the viewer's modal windows own their keys). `T` is no longer a reserved key in `crash-site-area` with a session.
-- It opens only with a hero, and never for a dead one (the original returns for a dead crafter or viewer); the HUD names the
-  refusal (`no hero (start with --hero)`, `refused: the hero is dead`).
+- The hero's window opens only with a hero, and never for a dead one (the original returns for a dead crafter or viewer); the HUD
+  names the refusal (`no hero (start with --hero)`, `refused: the hero is dead`). An NPC crafter's window needs no hero (the viewer is
+  the PC, which the diagnostic session may run without one) but refuses a dead hero or NPC, and an NPC without data or one the
+  session does not know (`refused: no data of the NPC crafter`).
 - Open plays 3008; the player's close (`T`, `Escape`, a controller cancel or the Close button) plays 3009 (SW3). A teardown (a
   map change, the session's end, the hero's death) closes it silently.
 - Like the character sheet and the logbook it is modal: the actor gate closes, the clock pauses, a walk stops (the original
@@ -81,7 +84,7 @@ run goes on); the admission set S9 adds it to S8, and the viewer's dialog-script
 | Object | Original intent (arguments of the open) | Viewer |
 | --- | --- | --- |
 | the PC | (PC, PC) | the hero's window opens, as with `T`, once no dialog, window or palette owns input (a dialog's script runs while its dialog is open; the original's mode change would end the dialog first) |
-| an NPC with a PC leader (the first PC up its leader chain, NC3) | (NPC, leader) | the NPC crafter's window (below), from the NPC's home-map data |
+| an NPC with a PC leader (the original walks its leader chain to the first PC, NC3; the viewer's leader is the direct follow, the same while no NPC leads another) | (NPC, leader) | the NPC crafter's window (below), from the NPC's home-map data |
 | an NPC without a leader, an absent object | nothing | nothing |
 
 No installed script uses action 129.
@@ -110,8 +113,6 @@ text and hears its sound. Both modes do the same; any NPC on any map.
 - **Assemble.** `GameSessionOwner.AssembleSchematicForNpc` (the hero's rules, TC3/TC4/TC5): both components leave the NPC with the
   durability deletion and the products enter its list as `made:n`, one revision; text 2 and sound 3018 + the discipline. The viewer
   has no NPC weight or room model, so its insert check for the NPC accepts; the session itself refuses a full list or store.
-
-## Differences from the original
 
 ## Differences from the original
 

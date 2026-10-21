@@ -111,8 +111,12 @@ internal static class DialogConversationGrammar
                 // The source's scanner reads a number after every code and the SU case ignores it (0x415BA0).
                 var afterCode = index;
                 while (index < bytes.Count && bytes[index] is (byte)' ' or (byte)'\t') index++;
+                // atoi: an optional sign and any digits (none reads 0, an overflow is ignored like every value); nothing is checked.
                 if (index < bytes.Count && bytes[index] is (byte)'-' or (byte)'+' or (>= (byte)'0' and <= (byte)'9'))
-                    ParseInteger(bytes, ref index, record, field, start, operations.Count);
+                {
+                    if (bytes[index] is (byte)'-' or (byte)'+') index++;
+                    while (index < bytes.Count && bytes[index] is >= (byte)'0' and <= (byte)'9') index++;
+                }
                 else
                     index = afterCode;
                 if (index < bytes.Count && !IsSeparator(bytes[index]))

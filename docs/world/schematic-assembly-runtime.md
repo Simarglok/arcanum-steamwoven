@@ -1,6 +1,6 @@
 # Schematic assembly runtime
 
-Status: **Implemented bounded component, wired for the hero.** Work item ARC-TECHNOLOGY-004 (2026-10-21), slice TECH-4 of the
+Status: **Implemented bounded component, wired for the hero and NPC crafters.** Work item ARC-TECHNOLOGY-004 (2026-10-21), slice TECH-4 of the
 [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted). The
 schematic component gate, the assemble button and the assembly plan as pure rules in `Arcanum.Simulation.Technology`, and the
 hero's assembly as one session change that makes items into its inventory (snapshot schema 24: the made items). The viewer's
@@ -111,6 +111,6 @@ the NPC cannot take on the ground at the crafter and still completes (NC7); the 
 
 ## Not ready
 
-- NPC crafters are done by ARC-TECHNOLOGY-006 (below); the "expertise in discipline" effects of an NPC are not modelled.
+- NPC crafters are done by ARC-TECHNOLOGY-006 (above); the "expertise in discipline" effects of an NPC are not modelled.
 - Ammunition and stack products and components in the hero's lists (ARC-WORLD-014 refuses stacks).
 - Dropping a product on the ground when the inventory cannot take it.

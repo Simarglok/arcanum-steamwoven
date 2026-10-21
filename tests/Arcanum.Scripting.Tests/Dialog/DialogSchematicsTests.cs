@@ -48,11 +48,16 @@ public sealed class DialogSchematicsTests
         var reply = Read(Record("10", "?") + Record("11", "Build.", iq: "1", response: "0", action: "su"));
         var plain = Start(reply, new Ports(), Owner());
         Assert.IsNotNull(plain.Options[0].Block, "unadmitted without a schematic port");
-        foreach (var action in new[] { "su 3", "su3", "SU -1" })
+        foreach (var action in new[] { "su 3", "su3", "SU -1", "su+", "su-", "su 99999999999" })
         {
             var numbered = Start(Read(Record("10", "?") + Record("11", "Build.", iq: "1", response: "0", action: action)), new Ports(), Owner(), schematics: new Schematics());
             Assert.AreEqual((DialogOptionTransition.Schematics, (DialogOptionBlock?)null), (numbered.Options[0].Transition, numbered.Options[0].Block), action);
         }
+        // The reply's target node is never entered, so a missing one does not fail the step (the original skips it).
+        var missing = Start(Read(Record("10", "?") + Record("11", "Build.", iq: "1", response: "77", action: "su")), new Ports(), Owner(), schematics: new Schematics());
+        Assert.AreEqual((DialogOptionTransition.Schematics, (DialogConversationFailure?)null), (missing.Options[0].Transition, missing.Failure));
+        var missingPlain = Start(Read(Record("10", "?") + Record("11", "Go.", iq: "1", response: "77")), new Ports(), Owner(), schematics: new Schematics());
+        Assert.AreEqual(DialogConversationFailureKind.MissingTarget, missingPlain.Failure!.Kind, "without SU a missing target still fails");
         var npcLine = Start(Read(Record("10", "?", action: "su")), new Ports(), Owner(), schematics: new Schematics());
         Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, npcLine.Frontier!.Kind, "not an NPC line's action");
         var withFinal = Start(Read(Record("10", "?") + Record("11", "Build.", iq: "1", response: "0", action: "su, fl 20") + Record("20", "Bye.")),

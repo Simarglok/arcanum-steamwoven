@@ -19,7 +19,8 @@ public static partial class TerrainViewerSelfTest
     /// a synthetic hero and synthetic schematic data T opens the window (3008), the discipline, page and tab controls move with
     /// their sounds, the window owns the keys, Tab assembles through the session (text 2, 3018 + discipline), a refused button
     /// shows its text, Escape closes (3009), the position is kept, the controller closes, script action 129 opens it for the PC
-    /// and refuses an NPC crafter by name, and a dead hero closes and refuses it.</summary>
+    /// and names an NPC without data, an NPC crafter's window (ARC-TECHNOLOGY-006) resets the tabs, has an empty found tab and
+    /// assembles into the NPC's list, and a dead hero closes and refuses it.</summary>
     private static async Task AssertAreaSchematicsAsync(Node host)
     {
         using var source = new AreaOwnerFixture(motionBodies: true);
@@ -172,11 +173,17 @@ public partial class TerrainViewerApp
             Require(owner.AttachMapInventory(new SessionMapId(actor.Map.RuntimeMap + 1), smithSeed).Disposition == GameSessionDisposition.Changed, "attach the smith");
             var smith = new SessionNpcCrafter(new("smith", new(CharacterRace.Human, false, [8, 8, 8, 8, 8, 8, 8, 8], 0, 0, 1, 0, [.. new int[12]], [.. new int[4]],
                 [.. new int[16]], [1, 0, 0, 0, 0, 0, 0, 0], 1, 2, 0, 0), 0), AdvancementModifiers.None);
+            // NC5: the hero's window left on the found tab at another discipline; an NPC crafter's open resets both tabs.
+            InventoryKey(Key.T);
             SelectSchematicTab(AreaSchematicTab.Found);
+            SelectSchematicDiscipline(2);
+            InventoryKey(Key.Escape);
+            Require(!SchematicsOpen && _schematicTab == AreaSchematicTab.Found && SchematicPosition.Discipline == 2, "the hero's window closed on the found tab");
             _schematicScriptOpen = (owner, smith);
             TakeScriptSchematics();
             Require(SchematicsOpen && _schematicsPanel.ViewForSelfTest is { Crafter: "smith", Tab: AreaSchematicTab.Learned, Pages: 1, Record: 2000, Button: AssemblyButton.CanAssemble },
                 "the NPC crafter's window opened, reset to the learned tab: " + _schematicsPanel.ViewForSelfTest);
+            Require(_schematicTabState[0] == (0, 0) && _schematicTabState[1] == (0, 0), "both tabs' discipline and page were reset");
             SelectSchematicTab(AreaSchematicTab.Found);
             Require(_schematicsPanel.ViewForSelfTest is { Tab: AreaSchematicTab.Found, Placeholder: true, Pages: 0 }, "an NPC crafter's found tab is empty");
             SelectSchematicTab(AreaSchematicTab.Learned);
@@ -187,8 +194,12 @@ public partial class TerrainViewerApp
                 "the NPC assembled from its own list into its own list (text 2, 3018)");
             InventoryKey(Key.Escape);
             Require(!SchematicsOpen, "Escape closed the NPC crafter's window");
+            _schematicScriptOpen = (owner, smith);
+            TakeScriptSchematics();
+            Require(SchematicsOpen, "the NPC crafter's window is open again");
 
-            // A hero who dies while the window is open closes it; T is then refused.
+            // A hero (the viewer) who dies while the window is open closes it, an NPC crafter's included (the original's open refuses a
+            // dead viewer); T is then refused.
             Require(owner.Kill(owner.Version, SessionLifeTarget.Hero).Disposition == GameSessionDisposition.Changed, "kill the hero");
             SyncAreaSchematics();
             Require(!SchematicsOpen, "the dead hero's window closed");
@@ -305,7 +316,7 @@ public partial class TerrainViewerApp
         Require(_schematicData is { Status: AreaSchematicDataStatus.Ready, Data: not null }, "data " + _schematicData?.Status);
         var data = _schematicData!.Data!;
         var npc = _conversationHost.Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row))
-            .FirstOrDefault(entity => AreaNpcCrafter(entity) is not null && !session.QueryNpcDead(entity));
+            .FirstOrDefault(entity => AreaNpcCrafter(entity) is not null && !session.QueryNpcDead(entity) && session.QueryNpcAdvancement(entity) is null);
         if (npc is null)
         {
             var speakers = _conversationHost.Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray();
