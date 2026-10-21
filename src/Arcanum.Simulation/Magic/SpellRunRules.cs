@@ -7,12 +7,13 @@ public enum SpellRunAction { Begin = 0, Maintain = 1, End = 2, Callback = 3, End
 
 /// <summary>
 /// A run's flags (+0x13C): active (set by the allocator), free (no BEGIN or maintenance cost: the invocation's request),
-/// processed (set by every pass of the processing, MT9a-2; never cleared), unresistable (<c>No_Resist:</c> or the invocation's request) and final END
-/// (the scheduler's mark that the next event is the END). The original keeps unresistable and final END in one bit, 0x10
-/// (MG19); <see cref="MagicAnomalyProfile.UnresistableIsFinalEnd"/> keeps them one.
+/// processed (set by every pass of the processing, MT9a-2; never cleared), unresistable (<c>No_Resist:</c> or the invocation's request), forced end
+/// (0x457270: the run was made to end) and final END (the scheduler's mark that the next event is the END, also set when the
+/// source is detached). The original keeps unresistable and final END in one bit, 0x10 (MG19);
+/// <see cref="MagicAnomalyProfile.UnresistableIsFinalEnd"/> keeps them one.
 /// </summary>
 [Flags]
-public enum SpellRunFlags { None = 0, Active = 0x1, Free = 0x2, Processed = 0x4, Unresistable = 0x10, FinalEnd = 0x10000 }
+public enum SpellRunFlags { None = 0, Active = 0x1, Free = 0x2, Processed = 0x4, Unresistable = 0x10, ForcedEnd = 0x40, FinalEnd = 0x10000 }
 
 /// <summary>An object a run names, captured when the run is created: its id, object type and, for a PC or NPC, its effective
 /// magick/tech aptitude (stat 16) at that moment.</summary>
@@ -32,6 +33,10 @@ public sealed record SpellRun(int Id, int Spell, SpellRunAction Action, SpellRun
     SpellRunObject? Target, SpellLocation TargetTile, SpellRunObject? Other, SpellRunFlags Flags, int Triggers = 0, int Margin = 0, int TriggerCount = 0)
 {
     public bool Free => (Flags & SpellRunFlags.Free) != 0;
+
+    /// <summary>The spell flags the run's components set (+0x138, MT12–MT18); the anti-magic shell (0x800) among them lets the
+    /// run go on although its source is shelled (MT9a-2).</summary>
+    public int SetSpellFlags { get; init; }
 }
 
 /// <summary>
@@ -98,6 +103,17 @@ public sealed record SpellRunRecord(bool Technology = false, bool NoResist = fal
     bool StackingRules = false, bool ChargesFromCells = false, SpellInvocationRecord Invocation = default)
 {
     public SpellPaymentRecord Payment => new(ChargesFromCells, MaintainPeriod, Duration.Seconds);
+
+    /// <summary>The component count of each action (+0xE8 + 8 × action, in action order; MT9a-2); none when not given.</summary>
+    public ImmutableArray<int> ActionComponents { get; init; }
+
+    /// <summary>Whether the record names item triggers (+0x38 non-zero: <c>ItemTriggers:</c>), which gate its components and keep
+    /// an untimed run from ending when its source faints (MT9a-2).</summary>
+    public bool ItemTriggers { get; init; }
+
+    /// <summary>The component count of an action.</summary>
+    public int Components(SpellRunAction action) =>
+        !ActionComponents.IsDefault && (int)action >= 0 && (int)action < ActionComponents.Length ? ActionComponents[(int)action] : 0;
 }
 
 public enum SpellRunCreationStatus
@@ -288,7 +304,9 @@ public static class SpellRunRules
                 if (!payment.Succeeded) (failed, status) = (true, SpellStageStatus.MaintainCost);
             }
         }
-        if (run.Margin != 0)
+        // MG29: the original charges the surcharge in every case; Steamwoven not for a free run, after a failure, or at a
+        // maintenance cost of 0.
+        if (run.Margin != 0 && (profile.SurchargeAlways || (pay && !failed && record.MaintainCost != 0)))
         {
             var cost = SurchargedCost(record.MaintainCost, run.Margin, facts.SourceCaster);
             var payment = PayMaintenance(cost, run, record, facts, cells);

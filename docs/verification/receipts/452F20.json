@@ -10,13 +10,13 @@
   "differences": 0,
   "otherMode": {
     "mode": "steamwoven",
-    "ledger": "MG3",
+    "ledger": "MG3, MG29",
     "ledgerInputs": 1127,
-    "differ": 498,
+    "differ": 1127,
     "outsideLedger": 0
   },
   "result": "pass",
   "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
-  "ilSha256": "63b4b88ee1ccce94adb9805b72c8008462120f761adb58766aaee443bd7c2855",
+  "ilSha256": "ee701a4aef3153f9923f1846de731c48efd47ae6589560d3b114d802a7a6507c",
   "configuration": "Debug"
 }
