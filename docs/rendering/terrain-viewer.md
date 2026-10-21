@@ -289,7 +289,8 @@ lab retains its historical true/true default. Common engine-free v1 settings
 codec supports the host fallback, but WORLD stores only
 `user://world_diagnostic_input_v1.json`, never the lab file. Missing, unreadable,
 corrupt or unsupported settings fall back to WORLD defaults; isolated automated
-restart tests do not overwrite ordinary preferences.
+restart tests do not overwrite ordinary preferences, and since ARC-DEV-032 no automated run reads or writes
+them ([automated runs](#automated-runs-and-the-players-settings-arc-dev-032)).
 Modal digital navigation is single-press edge driven, not render/event-rate
 repeat; held keys, D-pad, echo and unrelated mouse events do not advance it.
 Focused numeric editors retain native digit/edit/Enter/Tab input. Mouse clicks
@@ -516,7 +517,8 @@ step.
 
 While `crash-site-area` has a game session (every published area since ARC-SCRIPT-006),
 the original **F7** saves and **F8** loads one quick-save slot,
-`user://saves/quicksave.json` (Godot user data of the viewer). There is no save
+`user://saves/quicksave.json` (Godot user data of the viewer; an automated run keeps its slots in its own
+folder, [ARC-DEV-032](#automated-runs-and-the-players-settings-arc-dev-032)). There is no save
 list, naming, confirmation or autosave. Elsewhere F7/F8 stay reserved. Map mode
 has its own slot and also loads a save of another map
 ([ARC-WORLD-038](area-map-mode.md#quick-save-arc-world-038)).
@@ -664,6 +666,10 @@ the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
   inside holders are not targets. A ground item the session refuses (gold, ammunition, keys,
   a pickup or insert script; none on the exterior core) is still shown as *pick up* and the
   click reports the refusal. Not modelled: the pickup animation and action-point cost.
+- **Use on self (ARC-SKILLS-005).** A healing item in the PC's list (the kit's from the hero load's prototype fields, a taken
+  item's from its object row) gets a *Use on self* button under the list: the hero heals itself through the session's heal
+  check ([heal runtime](../world/heal-runtime.md)), and the message line names the amount, the cure and the uses left or the item
+  used up. No pre-made kit and nothing on the Crash Site exterior is a healing item; the synthetic self-test covers the button.
 - **Taken items.** An item the PC took is neither drawn nor picked any more (the canvas
   skips its body; the hover pick passes over it), also after a quick load. The resource
   sweep of the native smoke counts those bodies as taken.
@@ -778,7 +784,8 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
   still override it for that run with environment variables: `ARC_HD_PACK=DIR` (one pack directory
   outside the repository; implies profile Hd), `ARC_VISUAL_PROFILE=hd|legacy` (`hd` without a pack
   draws everything Legacy as `NoPack`) and `ARC_HD_BUDGET_PATH=FILE` (default
-  `user://hd_budget_v1.json`; missing or invalid means the ceilings). The start line
+  `user://hd_budget_v1.json`, which an automated run does not read (ARC-DEV-032); missing or invalid means the
+  ceilings). The start line
   `ARC-RENDER-014 visual profile=…` names the pack id, scale and open status, never a path.
 
 Checks: `HdPresentationTests` (scaled crop and axis limit; frame questions; the nearest pack at
@@ -971,7 +978,7 @@ living NPC with combat values.
 
 ### Character sheet (ARC-UI-007)
 
-The original Character sheet key `C` (logical key down) toggles a read-only diagnostic sheet of the session's hero in
+The original Character sheet key `C` (logical key down) toggles a diagnostic sheet of the session's hero in
 crash-site-area (exterior, cave and `--area-map`). It shows what the original sheet of the PC shows
 (`charedit` in active mode, checked in the original executable, ledger rows
 [CS1–CS7](../research/original-verification-ledger.md#character-sheet-arc-ui-007)), every value a session query:
@@ -1007,12 +1014,44 @@ dialog that completes a quest now gives the quest's experience as the original d
 wired). A table that is missing or
 not admitted fails the load (`AREA_HERO_TableUnavailable`, `AREA_HERO_ExperienceInvalid`).
 
+#### Skills page (ARC-UI-009)
+
+Since ARC-UI-009 (task S6 of the [skills plan](../research/skills-plan.md)) the sheet has the original's skills page, checked
+in the original executable (ledger rows [SP1–SP8](../research/original-verification-ledger.md#skills-page-arc-ui-009)):
+
+- the sixteen skills in the original's four groups of four (three of basic skills, the fourth the tech skills), all four
+  groups at once instead of the original's tabs;
+- each row the skill's name with its training name in brackets (none untrained), from the player's `mes\skill.mes`, loaded
+  in the background through the module's game folder when the area binds and adopted at the first open after it finished (texts
+  that arrive while the sheet is open appear at the next open) (the project's labels without it, for example a module outside
+  `<game>/modules/`), then, as project text, the effective level out of 20 (the original draws a bar of level / 20 and
+  prints no number), the stored points and the key stat the next point needs (`MinimumKeyStat(4 × points + 4)`, "no
+  further point" when no stat value allows it);
+- on hover the original's hint: the name, the description and the key stat with its minimum;
+- `−` and `+` buttons on each row. Opening the sheet opens the hero's character editor in the session
+  (`OpenHeroEditor`, its floor is the hero's sheet at that moment, as the original's snapshot), closing it closes the editor:
+  points bought while the sheet was open can be refunded until it closes, never below the floor. `+` spends one point
+  (`SpendHeroPoint`); `−` uses the original's click (`RefundHeroPoint` with `UntilLevelChanges`: points come back one at a
+  time until the skill's level changes, stopping at the floor). The owner has not chosen the alternative "one point per
+  click" (skills plan S5), so the page uses the original's default. Every press reports its outcome on the page: the points
+  spent or refunded, or the refusal in project words (not enough unspent points, at the maximum, the key stat too low,
+  nothing to refund since the sheet opened, no points); the original shows its `charedit.mes` texts with sound 3004 instead.
+
+Differences from the original, all of the page's presentation: no tabs (all groups shown), the level as a number instead
+of a bar, the hint's lines also always visible on the row, project refusal texts and no refusal sound, and names and
+training texts redrawn on every change (the original redraws them only at the open and on a tab press, SP2), the hint only over
+the row text (the original also over its + and −, whose tooltips here are the project's), a success reported as the points
+spent or refunded (the original clears the text bar, SP7) and no 3 s hint delay after a refusal (SP5). The view-only
+mode of the original (mode 2, + and − hidden) has no caller in the viewer.
+
 **Not implemented:** spending unspent points on stats, hit points or fatigue (the original's +/− buttons and their
-errors), skills, tech disciplines, spells and schematics panels, age (not session state), the portrait and PC lens,
+errors), tech disciplines, spells and schematics panels, age (not session state), the portrait and PC lens,
 followers' sheets (passive mode from dialog or the follower menu), switching straight from one window to another by
 key. Self-test `ARC-UI-007 self-test PASS` (synthetic hero session: no-hero refusal, `C`/close/`Escape`, keys owned
-while open, rebuild on change, dead-hero close and refusal); native smoke with `--hero` after the hero stage:
-`ARC-UI-007 native-smoke character sheet PASS`.
+while open, rebuild on change, the skills page's `+` and `−` with the editor's floor over a close and reopen, dead-hero close
+and refusal); native smoke with `--hero` after the hero stage: `ARC-UI-009 native-smoke skills page PASS` (the original skill
+texts describe all sixteen rows; a `+` the pool accepts, its `−` and a refused second `−`, or with no unspent points a refused
+`+`) and `ARC-UI-007 native-smoke character sheet PASS`.
 
 ### Logbook (ARC-UI-008)
 
@@ -1059,6 +1098,38 @@ sounds, the PC lens, `RU`/`RQ` as reply conditions, scripts' rumor actions. Self
 low-intelligence texts, rebuild on change, dead-hero close and refusal); native smoke after the hero stage (exterior and
 map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`
 on the live session; on a detached copy every quest and rumor that has a text is listed with it).
+
+### Schematic window (ARC-TECHNOLOGY-005)
+
+The original Technical schematics key `T` (logical key down; the original's in-game key handler opens the window for the local
+PC as crafter and viewer, ledger [SW1](../research/original-verification-ledger.md#schematic-window-arc-technology-005)) toggles
+a diagnostic schematic window of the session's hero in crash-site-area (exterior, cave and `--area-map`), with the learned and
+found tabs, the eight discipline tabs, Previous and Next, the record's name and description, the two components (found or
+missing, the expertise they need), the product and quantity, and the Assemble button with its state. Contract:
+[schematic window runtime](../world/schematic-window-runtime.md).
+
+It opens from the world only (no palette, dialog, other window or UI focus), only with a hero and never for a dead one. Open
+plays 3008, the player's close 3009, a discipline or page 3010, a tab 3011 (only from the other tab), a successful assembly
+3018 + the current discipline with `schematic_text.mes` 2; a refused button shows `schematic_text.mes` 0 or 1. Like the
+character sheet it is modal (gate closed, clock paused, a walk stopped) and owns every key while open: `T`, `Escape` or a
+controller cancel closes it, `Tab` or a controller confirm assembles. Each tab keeps its discipline and page across close and
+open; a new session (a quick load) starts at the learned tab. Script action 129 of a dialog script opens the window for the PC
+once nothing else owns input; for an NPC with a PC leader, and after a conversation ended by the dialog action `su`
+(ARC-TECHNOLOGY-006), it opens with that NPC as crafter: the NPC's degrees and own list, an empty found tab, the products into its
+list ([NPC crafter](../world/schematic-window-runtime.md#npc-crafter-arc-technology-006)). The data
+(`schematic.mes`, `schematic_text.mes`, `tech.mes` and the prototypes the records name) load once per module in the background.
+The HUD adds `T schematics` and the last refusal.
+
+**Not implemented:** the original window art, slot pictures and overlays, the interface button, the slot item description box,
+the tab and discipline hover texts, an NPC's weight and room for its products. Self-test `ARC-TECHNOLOGY-005 self-test PASS` (synthetic
+records and hero: refusal without a hero, `T`, controls and their sounds and bounds, keys owned, refused texts, an assembly
+through the session, `Escape`, position kept, controller cancel, script 129 for the PC and an NPC without data, an NPC crafter's
+window with its reset, empty found tab and assembly into its list, dead-hero close); native smoke `ARC-TECHNOLOGY-006 native-smoke npc
+crafter PASS` (exterior with the cave and `--hero`: a Crash Site speaker opened through the window path `su` takes after its talk ended, one assembly into its list on
+a detached copy; the reply pick is covered by `AreaSchematicConversationTests`);
+native smoke after the logbook stage: `ARC-TECHNOLOGY-005 native-smoke schematics PASS` (the module's schematic data load; with
+`--hero`, `T` opens over the live session, the controls move, `Escape` closes, nothing changes; on a detached synthetic hero
+holding a learned record's components one assembly makes its product).
 
 ### Reserved-key hint (ARC-INPUT-003)
 
@@ -1127,7 +1198,8 @@ ARC-INPUT-001 the world wheel and `+`/`-` do not zoom in WORLD (they did, with
 factors 1.25/0.8 stopping exactly at 1.00); exact zoom is a palette action.
 Standalone preview controls remain unchanged.
 
-Separate `user://world_diagnostic_zoom_v1.json` stores numeric
+Separate `user://world_diagnostic_zoom_v1.json` (an automated run uses its own file,
+[ARC-DEV-032](#automated-runs-and-the-players-settings-arc-dev-032)) stores numeric
 `{"version":1,"zoom":2.0}` with finite inclusive 0.125..8. Missing, unreadable,
 malformed/type/version/range-invalid files fall back to 2.00. Reset scene/Reload retain
 the preferred value and reset actor/Follow; Reset preferences persists
@@ -1245,6 +1317,32 @@ separate. Ordinary `tools/arcanum-local launch terrain --mode world-diagnostic`
 must use the selected sealed RENDER006 manifest, no automation flags, and owned
 isolated preference paths; actual Idle/Walk observation and post-run signature
 and complete payload integrity are still mandatory outside the sealed bundle.
+
+## Automated runs and the player's settings (ARC-DEV-032)
+
+A self-test (`--self-test`), a native smoke (`--native-smoke`) or the WORLD settings validation (`--world-settings-test`)
+never reads, writes or deletes the player's saved
+viewer files: the app marks the process automated before it reads any setting (`ViewerAutomatedStorage`). Each store
+then picks its path by `ViewerStoragePaths.Choose` (Core): an explicit test path wins
+(`WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH`, `WORLD_DIAGNOSTIC_ZOOM_TEST_PATH`, and as before `ALWAYS_RUN_TEST_PATH`,
+`VISUAL_PROFILE_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `ARC_HD_BUDGET_PATH`); otherwise an automated run uses a fresh
+temporary folder of its own process (`arcanum-viewer-automated-<pid>-<id>` under the system temporary folder, deleted when
+the viewer app exits); only an ordinary run uses the `user://` file. Per setting:
+
+| Setting | Ordinary run | Automated run without a test path |
+| --- | --- | --- |
+| Input preferences `world_diagnostic_input_v1.json` | `user://` | the run's folder (starts at the WORLD defaults) |
+| Zoom `world_diagnostic_zoom_v1.json` | `user://` | the run's folder (starts at 2.00) |
+| Quick saves `saves/`, `saves/map/` | `user://` | the run's folder (stages that test saving use their own slot as before) |
+| HD budget `hd_budget_v1.json` | `user://` | none (the contract ceilings) |
+| Always run, visual profile, audio volumes | `user://` | none, as before (off, Legacy, defaults) |
+| HD pack folders | discovered | not searched, as before |
+
+So a zoom the player saved (for example 1.70) no longer changes a self-test, and a self-test's own zoom steps no longer
+land in the player's file. The self-test checks it first and fails with `SELF_TEST_SETTINGS_NOT_ISOLATED` when the zoom or
+input store would use a `user://` path; the log prints `ARC-DEV-032 self-test PASS settings isolated (the zoom and input stores use no user:// file)` and
+`ARC-DEV-032 automated run: settings and saves are isolated from the player's files` when the folder is first used. The
+WORLD settings validation launch still requires both explicit test paths. Checks: `ViewerStoragePathsTests`.
 
 ## Reproducible local verification
 

@@ -56,7 +56,10 @@ instead of the world port; `IN` then needs only one of the two. The optional `ID
 answers the PC's skill levels and training and takes `TR`; when present it admits `PS`, `HA`, `SK`, `TR` and `ET`, and
 without it they stay `UnsupportedOperation`. The optional `IDialogMetBeforePort` (ARC-WORLD-043,
 [dialog binding](../world/npc-reaction-runtime.md#dialog-binding-arc-world-043)) answers `ME`; without it an `ME` condition is
-a static `CapabilityUnavailable` frontier.
+a static `CapabilityUnavailable` frontier. The optional `IDialogReputationPort` (ARC-WORLD-044,
+[reputation runtime](../world/reputation-runtime.md#dialog-and-scripts)) admits `RP` as a condition and an action; without it
+`RP` stays `UnsupportedOperation`. A skipped `RP` action (a number the owner does not admit) is recorded as
+`DialogCommandAttemptOutcome.Skipped` and the dialog goes on.
 
 ## Flow and source semantics
 
@@ -117,8 +120,8 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 
 | Field | Admitted operations (domains) |
 | --- | --- |
-| Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1), `ME v` (ARC-WORLD-043; v 1: the NPC has met the PC before, 0: it has not; the original passes any other operand untested; here it is an `UnsupportedOperation` frontier); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not); with a skill port `PS n`, `HA n`, `SK s n`, `TR s t` ([skill gates](#skill-gates-arc-skills-004)). |
-| NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0); with a skill port `TR s t` (set the PC's training). |
+| Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1), `ME v` (ARC-WORLD-043; v 1: the NPC has met the PC before, 0: it has not; the original passes any other operand untested; here it is an `UnsupportedOperation` frontier); with a reputation port `RP n` (n > 0: the PC holds n; n ≤ 0: it lacks −n); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not); with a skill port `PS n`, `HA n`, `SK s n`, `TR s t` ([skill gates](#skill-gates-arc-skills-004)). |
+| NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0); with a skill port `TR s t` (set the PC's training); with a reputation port `RP n` (n > 0: add n; n ≤ 0: remove −n). |
 | Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically). |
 
 Unknown opcodes, `$`, combinators, `RE`/`AL` with `>`/`<`, non-negative `IN`, `JO`/`UW` with a non-zero
@@ -157,8 +160,30 @@ diagnostic PC has no skills, so the gates stay unadmitted there.
 
 Installed original (`DialogSkillRealDataTests`, `DAT_ROOT`, first observation 2026-10-21): over the 709 DLG files the content
 stack resolves, 937 `TR`, 440 `SK`, 354 `HA` and 275 `PS` conditions, 53 player and 62 NPC `TR` actions and 118 `ET`
-actions (in 20 files); every one parses on its own. Of the 1,582 fields that hold one, 1,215 parse whole and 367 stop at an
+actions (in 20 files); every one parses on its own. Of the 1,582 fields that hold one, 1,218 parse whole and 364 stop at an
 operation outside this subset (money `$$` 121, rumors 84, quests 47, …), never at a skill operation.
+
+## Fate point action (ARC-WORLD-054)
+
+With the optional `IDialogFatePort` (`DialogConversationPorts.Fate`) the NPC and Player actions admit `FP`: the PC gets one fate
+point (the source's dialog action `fp`, code 29 of its action table, [FT8](../research/original-verification-ledger.md#fate-points-arc-world-054)).
+The receipt is a `FatePointCommand`; Applied also covers a PC already at 100 points. Every installed `fp` is written without an
+operand, so `FP` takes none here; a number after it is an `UnsupportedOperation` frontier (the source reads it and ignores it).
+Without the port `FP` stays unadmitted. The session's port is `SessionDialogFatePort` over the hero
+([fate points](../world/fate-points-runtime.md)); the AREA viewer passes it when the session has a hero.
+
+## Schematic window action (ARC-TECHNOLOGY-006)
+
+With the optional `IDialogSchematicPort` (`DialogConversationPorts.Schematics`) a Player reply's action admits `SU` (the source's
+dialog action `su`, code 30 of its action table, [NC1–NC2](../research/original-verification-ledger.md#npc-schematic-crafter-arc-technology-006)):
+an operand is read and ignored; the receipt is an `OpenSchematicsCommand` (the NPC as crafter, the PC as viewer) recorded in field
+order, so the field's other actions run before and after it; the reply's transition is `DialogOptionTransition.Schematics` with no
+target node (no look-ahead; a missing or non-NPC response target does not fail the step, since the reply never enters it), and picking it ends the conversation with `DialogEndKind.SchematicWindow`: no further NPC line, no SCR
+continuation, and the talk does not resume when the window closes (the original's interface mode change ends the dialog). A
+rejected command (the AREA port refuses a dead NPC or PC) fails the conversation. Outside the subset: `SU` with JO, UW, FL, ET or an
+insult in the same reply (offered blocked, `UnsupportedInteraction`) and `SU` in an NPC line's own action (an unsupported-operation
+frontier; the source also sets its window code there, NC8, one reader). The AREA viewer's port records the speaker for the window
+([schematic window](../world/schematic-window-runtime.md#npc-crafter-arc-technology-006)).
 
 ## Bounds and failure accounting
 
@@ -222,6 +247,7 @@ capture/encode/decode/restore of the session, and they change the next conversat
 | QU | Session quest rules ([story domain](../world/game-session-runtime.md#story-domain)); a QU that leaves a quest Accepted lifts the NPC's effective reaction to at least 41 (a delta through the reaction domain), Completed adds 10 (source rule, checked in the original executable); such a QU takes two session revisions (quest, then reaction). A quest outside 1000..1999 is refused and fails the dialog. |
 | RU | Session rumors with their game time; outside 1000..2999 is refused. |
 | RQ | ARC-UI-008: the session's game-wide quelled rumors (no participant, as the original's dialog action); quelling a quelled rumor is no change; outside 1000..2999 is refused and fails the dialog. |
+| RP | The session PC's reputations (ARC-WORLD-044, [reputation runtime](../world/reputation-runtime.md)): `RP` reads and changes the list; a number outside 1000..1999 is skipped. |
 | RE, ME, insult | The session reaction domain ([NPC reaction runtime](../world/npc-reaction-runtime.md), ARC-WORLD-026): `RE t` reads the speaker's effective reaction, unsigned `RE v` sets it as a delta to the effective value, `RE ±d` and an insult's −10 adjust it through the PC's adjustment effects; while a talk is open they land in its conversation slot (ARC-WORLD-043). `ME` reads the remembered slot. Facts are diagnostic (human NPC with the initial reaction as base; the session hero or a human PC). |
 | LF, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `follow.pc`. A value equal to the loaded baseline (attachment flags, not following) clears the key. A session holding values these ports cannot read (LF outside 32 bits, follow other than 1) is refused when the state is built. |
 | AL, IN, MM | Still in memory on the state object and lost with it; PC alignment, items and known areas wait for their own owners. |

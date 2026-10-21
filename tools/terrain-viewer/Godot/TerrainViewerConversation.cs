@@ -146,11 +146,15 @@ public partial class TerrainViewerApp
         return host;
     }
 
-    /// <summary>The host a speaker talks through: the shown map's, or a visitor's own; null for a speaker of neither (never mixed:
-    /// a speaker's index means something only in its own host).</summary>
+    /// <summary>The host that lists a speaker (<see cref="AreaTalkRouting.HostOf"/>): the shown map's or a visitor's own; null for a
+    /// speaker no host lists (never mixed: a speaker's index means something only in its own host). The self-test's synthetic map has
+    /// no dialog NPC, so its stand-in speaker (<see cref="_selfTestStandInSpeaker"/>) talks through the shown host.</summary>
     private AreaConversationHost? HostOf(AreaSpeaker speaker) =>
-        _conversationHost!.Speakers.Contains(speaker) ? _conversationHost
-            : _visitorHosts.Values.Select(v => v.Host).FirstOrDefault(h => h.Speakers.Contains(speaker));
+        AreaTalkRouting.HostOf(speaker, _conversationHost!, _visitorHosts.Values.Select(v => v.Host))
+        ?? (SelfTestBootstrap && ReferenceEquals(speaker, _selfTestStandInSpeaker) ? _conversationHost : null);
+
+    // The viewer self-test's stand-in speaker (a map row; the synthetic core has no dialog NPC), routed to the shown host.
+    private AreaSpeaker? _selfTestStandInSpeaker;
 
     /// <summary>ARC-WORLD-048: the host of a deferred call whose attachee is a companion visiting the shown map, else null (the
     /// shown map's host runs it).</summary>
@@ -228,6 +232,8 @@ public partial class TerrainViewerApp
         if (!LeaveCombatModeForDialog()) { RefreshReadyStatus(); return; }
         QuarantineWorld();
         _conversationNotice = null;
+        // ARC-WORLD-045: talking interrupts the speaker's goals, its follow goal too (OL19).
+        _areaCompanions?.InterruptGoals(speaker.Row.Key);
         AreaConversationStart start;
         if (HostOf(speaker) is not { } host) { _conversationNotice = $"dialog NPC script {speaker.ScriptId} has no host here"; RefreshReadyStatus(); return; }
         _talkHost = host;
@@ -279,6 +285,9 @@ public partial class TerrainViewerApp
         // dialog action opens the next conversation, anything else is a notice.
         var speaker = _conversationSpeaker; _conversationSpeaker = null;
         var talkHost = _talkHost; _talkHost = null;
+        // ARC-TECHNOLOGY-006: SU ended the talk; the window opens with the NPC as crafter and the talk does not resume (NC2).
+        if (conversation?.End is { Kind: DialogEndKind.SchematicWindow } && talkHost?.TakeSchematicCrafter() is { } crafter && _areaSession is not null)
+            QueueDialogSchematics(crafter);
         if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)
         {
             AreaConversationStart resumed;

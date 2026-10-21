@@ -31,8 +31,9 @@ public partial class TerrainViewerApp
     private bool InCave => _readyArea is not null && _caveLoad is not null && ReferenceEquals(_readyArea, _caveLoad.Area);
 
     // ARC-SCRIPT-006: the area's game session exists with or without the cave; dialogs keep their consequences in it.
-    // Its clock profile comes from the area lighting source. A synthetic self-test publication has no lighting and
-    // gets an invented synthetic profile instead (never used for original data).
+    // Its clock profile comes from the area lighting source, or for a map drawn unlit from the module's start clock alone
+    // (ARC-WORLD-057; the module id is the snapshot's module input, as the lighting source's). A synthetic self-test
+    // publication has no lighting and gets an invented synthetic profile instead (never used for original data).
     private void StartAreaTransitions(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
         StopAreaTransitions();
@@ -44,26 +45,34 @@ public partial class TerrainViewerApp
         _companionTemplates = mapMode ? MapCompanionTemplates(arguments, area) : AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(area.Snapshot), area.Plan, area.Snapshot.Visuals,
             AreaChart.Exterior, new(area.Snapshot.RuntimeMap));
         var moduleSha = area.Lighting?.Source.ModuleSha256 ?? area.Snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256;
+        // ARC-WORLD-057: an unlit map's session starts from the module's clock alone.
         ProfileBinding? clock = area.Lighting is { } lighting
             ? AreaAmbientDriver.ClockProfile(lighting.Source)
+            : result.UnlitSessionStartup is { } startup ? AreaAmbientDriver.ClockProfile(moduleSha, startup)
             : SelfTestBootstrap ? new(1, AreaAmbientDriver.ClockPolicy, AreaAmbientDriver.ClockSourceRevision, moduleSha, moduleSha, 1885, 15) : null;
         // ARC-WORLD-031: a map reached by a transfer keeps the game session it carried.
         var carried = mapMode ? AdoptHandoffSession(arguments) : null;
         if (carried is null && clock is null)
         {
             if (mapMode) StartMapTransfers(arguments, result);
-            _areaUseStatus = mapMode ? $"map {arguments.AreaMapName}: drawn unlit ({area.UnlitReason}), no session clock; " + _areaUseStatus : "cave: not loaded (no session clock)";
+            _areaUseStatus = mapMode ? $"map {arguments.AreaMapName}: drawn unlit ({area.UnlitReason}), no session clock ({result.UnlitSessionStartupFailure}); " + _areaUseStatus
+                : "cave: not loaded (no session clock)";
             return;
         }
         _areaEffectRules = result.Hero?.Effects;
+        _areaKitHealing = result.Hero?.KitHealing;
+        _areaKitDurability = result.Hero?.KitDurability;
         if (carried is not null) _areaSession = carried;
         else
         {
             // The game-generated object file carries an empty module GUID here, so the session's module id is
             // project-defined: the first 16 bytes of the authenticated module SHA-256. The world id is this session's.
             var header = Convert.FromHexString(moduleSha)[..16];
+            // ARC-WORLD-044: the module's reputation table, read through the game folder's content stack.
+            var reputations = AreaReputations.Load(arguments.ModulePath);
+            GD.Print($"ARC-WORLD-044 reputations status={reputations.Status} detail={reputations.Detail}");
             var created = AreaTransitionCoordinator.CreateSession(clock!.Value, Guid.NewGuid(), new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap,
-                result.Hero);
+                result.Hero, reputations.Catalog);
             _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
         }
         BindAreaInventory(arguments, result);
@@ -92,6 +101,8 @@ public partial class TerrainViewerApp
     {
         EndSheet(); _sheetStatus = null;
         EndLogbook(); _logbookStatus = null;
+        EndSchematics(); _schematicsStatus = null; _schematicScriptOpen = null;
+        EndWorldMap(); _worldMapStatus = null;
         UnbindAreaInventory();
         UnbindAreaCompanions();
         // A session a map transfer carries outlives the scene it leaves (ARC-WORLD-031).

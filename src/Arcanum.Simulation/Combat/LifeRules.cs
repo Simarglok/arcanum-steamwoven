@@ -118,8 +118,10 @@ public static class LifeRules
     /// reanimated or an unresurrectable one that is not (the resurrect script is not run); a resurrection clears the stun
     /// and sets fatigue damage to 10. Then the full heal or the single cures (crippled legs heal crippled legs, as in the
     /// original game, anomaly A5), and the hit-point, fatigue and poison amounts, each only
-    /// while there is damage to remove.
+    /// while there is damage to remove. Re-read in the retail executable by two readers (ARC-SKILLS-005, ledger HL4): the record
+    /// applier 0x4B58C0, without its network, script, art, AI and reaction side effects.
     /// </summary>
+    [OriginalFunction(0x4B58C0, OriginalFunctionScope.Partial)]
     public static LifeOutcome Heal(LifeState state, LifeFacts facts, LifeHeal heal)
     {
         ArgumentNullException.ThrowIfNull(heal);
@@ -159,6 +161,42 @@ public static class LifeRules
         if (fatigue > 0 && s.FatigueDamage != 0) s = s with { FatigueDamage = Math.Max(0, s.FatigueDamage - fatigue) };
         if (heal.Poison > 0 && s.PoisonLevel != 0) s = s with { PoisonLevel = PoisonLevel(s.PoisonLevel - (long)heal.Poison, facts) };
         return new(state, s, events | Consciousness(state, s, facts), 0, DeathAnimation.None);
+    }
+
+    /// <summary>
+    /// A heal skill's outcome on its target (ARC-SKILLS-005, the heal case of 0x4C7160 then 0x4B58C0, ledger HL1, HL4): a cure first
+    /// removes one scar and the first of blinded, both arms, one arm and both legs crippled (also on a dead critter, as the
+    /// original's cure does not look at life), then the hit points heal as <see cref="Heal"/> heals them (nothing on a dead critter).
+    /// </summary>
+    public static LifeOutcome SkillHeal(LifeState state, LifeFacts facts, int hitPoints, bool cure)
+    {
+        Check(state, facts);
+        if (hitPoints is < 0 or > LifeLimits.MaxAmount) throw new ArgumentOutOfRangeException(nameof(hitPoints));
+        var cured = state;
+        if (cure)
+        {
+            var conditions = state.Conditions;
+            var first = new[] { LifeConditions.Blinded, LifeConditions.CrippledArmsBoth, LifeConditions.CrippledArmOne, LifeConditions.CrippledLegsBoth }
+                .FirstOrDefault(condition => conditions.HasFlag(condition));
+            cured = state with { Scars = Math.Max(0, state.Scars - 1), Conditions = conditions & ~first };
+        }
+        var healed = Heal(cured, facts, new LifeHeal { HitPoints = hitPoints });
+        return healed with { Before = state, Events = healed.Events | Consciousness(state, healed.After, facts) };
+    }
+
+    /// <summary>
+    /// The PC's "full heal" fate (ARC-WORLD-054, 0x4F52D0 kind 0, ledger FT5): hit-point damage, poison level and fatigue damage
+    /// are set to 0, nothing else (scars, blindness and crippled limbs stay). The project refuses it for a dead critter
+    /// (<see cref="LifeEvents.AlreadyDead"/>, nothing changed); the original writes the values whatever the state, but a dead PC
+    /// cannot reach the fate window.
+    /// </summary>
+    [OriginalFunction(0x4F52D0, OriginalFunctionScope.Partial)]
+    public static LifeOutcome FateFullHeal(LifeState state, LifeFacts facts)
+    {
+        Check(state, facts);
+        if (IsDead(state, facts)) return new(state, state, LifeEvents.AlreadyDead, 0, DeathAnimation.None);
+        var after = state with { HitPointDamage = 0, PoisonLevel = 0, FatigueDamage = 0 };
+        return new(state, after, Consciousness(state, after, facts), 0, DeathAnimation.None);
     }
 
     /// <summary>

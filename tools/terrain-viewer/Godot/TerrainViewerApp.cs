@@ -63,6 +63,9 @@ public partial class TerrainViewerApp : Node
         // The process hosting --self-test is automated too: its frame loop drives the frame-bound
         // tests, so it must not cap the engine frame rate (ARC-RENDER-009 pacing).
         _automatedHost = args.Contains("--self-test", StringComparer.Ordinal);
+        // ARC-DEV-032: a self-test, a native smoke or the WORLD settings validation never reads or writes the player's settings and saves.
+        if (_automatedHost || args.Contains("--native-smoke", StringComparer.Ordinal) || args.Contains("--world-settings-test", StringComparer.Ordinal))
+            ViewerAutomatedStorage.MarkAutomated();
         if (RunWorldSettingsTest(args)) return;
         if (args.Contains("--self-test", StringComparer.Ordinal))
         {
@@ -117,13 +120,14 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, walk) narrows a
-                        // map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but walk run.
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk)
+                        // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
+                        // walk run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
                         {
-                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLogbookSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); }
+                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); }
                         }
                         else await RunAreaSmokeAsync(result);
                         // S5 must observe the retired generation become
@@ -138,6 +142,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && Stage("stream")) await RunAreaMapStreamSmokeAsync();
                         // ARC-WORLD-042: only when named, a long walk across the main map by its window route.
                         if (_readyMapName is not null && only?.Contains("walk") == true) await RunAreaMapWalkSmokeAsync();
+                        // ARC-UI-048: after the stream, as the landing loads the start map around another place.
+                        if (_readyMapName is not null && Stage("worldmap")) await RunAreaWorldMapSmokeAsync();
                         GetTree().Quit(0);
                     }
                     else await RunNativeSmokeAsync(result);
@@ -865,7 +871,7 @@ public partial class TerrainViewerApp : Node
         TickAudio();
         if (IsWorld)
         {
-            try { TickAreaClock(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaAwards(); }
+            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaWorldMap(delta); SyncAreaAwards(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
@@ -1028,6 +1034,8 @@ public partial class TerrainViewerApp : Node
         _conversationHost = null; ReleaseConversationContent();
         DisposeAudio();
         _cache.Dispose();
+        // ARC-DEV-032: the main app (not a self-test's child) removes the automated run's own folder after its last save.
+        if (!SelfTestBootstrap) ViewerAutomatedStorage.Delete();
     }
 }
 

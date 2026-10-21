@@ -126,6 +126,29 @@ object check (`ISessionScriptWorld`) lets it run while the session records the o
 as a call (set no later than the saved clock, exactly an hour or a day before its deadline) and refuses one whose object
 has no recorded lock state. See [lock state](lock-state-runtime.md).
 
+**Respawn events (ARC-COMBAT-008).** The kind `object.respawn` (also added to registry version 1 without a new version) is
+the original's Scenery Respawn event (kind 33, ledger OD10): game time, saved, scoped to the scenery's map, any number, at
+most `SessionEventKinds.MaxObjectRespawns` (1,024) on top of the others. One entity, the scenery; values: the game time it was
+set at and its delay (from the scenery's respawn field: seconds × 8,000 ms, game minutes, or 1 day + 1 ms). An attack that
+breaks a respawning scenery sets it; when due it switches the scenery on again (its `object.condition` change removed), one
+revision, and `SessionEventPassResult.Respawns` reports it. A host without an object check lets it run while the session
+records the scenery off; a host whose `ISessionScriptWorld.ObjectExists` answers false for an object that is off drops it, and
+the scenery stays off. A restore refuses one whose scenery is not recorded off, set after the saved clock, with a delay below
+1 ms or above `MaxRespawnDelayMs`, or whose deadline is not its time plus its delay. See [object damage](object-damage-runtime.md).
+
+**Wait timers (ARC-WORLD-045).** The kind `party.wait` (also added to registry version 1 without a new version) is the
+original's wait event (kind 17, OL23–OL26): game time, saved, scoped to the waiting NPC's map, one per NPC, at most
+`SessionEventKinds.MaxWaitTimers` (64, one per recorded companion) on top of the others. One entity, the NPC; values: the game
+time it was set at, its duration (0 up to 30 days; 0 is stored as 1 ms) and the leader's charisma then. `WaitParty` with
+`PartyWaitFacts` sets it; every way out of waiting (unwait, join, leave, death) removes it (the original's predicate 0x4AAA30);
+when due the NPC stops waiting, jilted, after its reaction change, one revision, and `SessionEventPassResult.Waits` reports it.
+Only followers' events travel with the actor, so a waiting NPC's timer stays parked on its map and fires overdue after the PC
+returns. A host without an object check (`ISessionScriptWorld`) lets it run while the session records the NPC waiting; a host that
+implements `ISessionPartyEventWorld` gives the reaction facts. A restore refuses one whose NPC the saved party does not record
+waiting, one set after the saved clock or not exactly a table duration (0 as 1 ms) before its deadline, a second one for the
+same NPC, and one on another map than the NPC's life timers. A waiting NPC's timer counts for the one-map rule of its life timers:
+a life step on another map takes it along, and from the host's world port during a pass such a step is `InvalidEventPass`. See [party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045).
+
 A positive write is a step that changes the stored value to a positive one, or the timer's own handler writing what it
 found positive (the source writes those back even when the heal rate is 0). **Deliberate difference:** the source's
 damage step writes hit-point damage and the poison level on every hit, even with an unchanged value, so a hit that
@@ -141,9 +164,9 @@ poison schedule (0x4B1350), hit-point write (0x43D530), poison write (0x4B0980).
 Rules of the wiring:
 
 - **Scheduling with the step.** Every life call (`ApplyDamage`, `Kill`, `Heal`, the ticks) sets its timers in the same
-  step. The session's queue holds 34,883 events (`SessionEventKinds.MaxPending`: four per NPC life record, 8,192 records
-  since ARC-DATA-029, and three for the hero, plus the 1,024 deferred script calls, 64 timed-effect ENDs and 1,024 Lock
-  events), so the
+  step. The session's queue holds 34,947 events (`SessionEventKinds.MaxPending`: four per NPC life record, 8,192 records
+  since ARC-DATA-029, and three for the hero, plus the 1,024 deferred script calls, 64 timed-effect ENDs, 1,024 Lock
+  events and 64 wait timers), so the
   timers of a step always fit; a step whose timers would not fit, or whose deadline would pass the clock's range, is
   refused whole (`EventBudgetExceeded`) with nothing drawn or changed.
 - **Map of an NPC timer.** The map the NPC is on: the actor's map when a life call sets it (the host acts on NPCs of the
@@ -197,7 +220,7 @@ D2: the Steamwoven mode applies one tick per period, the Original mode keeps two
 ```
 
 Pending events are in queue order. Decoding checks shapes and ranges: registry and next sequence at least 1, at most
-34,883 events, 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
+34,947 events (34,883 before ARC-WORLD-045), 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
 (`OutOfRange`, `BudgetExceeded`, missing, unknown and wrongly typed fields). Restore refuses (`InvalidEvents`) another
 registry version, an unknown kind, a value count other than the kind's (2 for poison recovery, else 1), a recovery
 value other than 1 or 2, an NPC with timers on two maps, a timer whose deadline is not its kind's delay after its scheduling time or that was

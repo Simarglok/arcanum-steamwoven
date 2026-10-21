@@ -1,5 +1,6 @@
 using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Reaction;
 
 namespace Arcanum.Session;
@@ -76,12 +77,12 @@ internal sealed class ReactionDomain
 public sealed partial class GameSessionOwner
 {
     /// <summary>
-    /// The hero's reaction facts: race, effective reaction modifier and whether its effective charisma is extraordinary.
-    /// The reputation sum is 0 and the reaction, good and bad reaction effects are empty: there is no reputation owner yet,
-    /// and the hero's innate effects keep only the stats the character owner models. Null for a session without a hero, whose host
-    /// supplies PC facts itself.
+    /// The hero's reaction facts: race, effective reaction modifier, whether its effective charisma is extraordinary, its
+    /// durable effects' reaction, good and bad reaction effects, and since ARC-WORLD-044 the reputation sum for an NPC of origin
+    /// 0 and faction 0 (<see cref="QueryHeroReactionFacts(int, int)"/> for another NPC). Null for a session without a hero, whose
+    /// host supplies PC facts itself.
     /// </summary>
-    public ReactionPcFacts? QueryHeroReactionFacts() { ThrowIfDisposed(); return _hero is null ? null : ReactionDomain.HeroFacts(_hero, _effects); }
+    public ReactionPcFacts? QueryHeroReactionFacts() => QueryHeroReactionFacts(0, 0);
 
     /// <summary>The NPC's saved reaction record, or null while the session never changed it. An invalid entity id throws.</summary>
     public SessionReaction? QueryReactionRecord(string entity)
@@ -161,15 +162,25 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// A conversation with the NPC starts (R5): the stored value moves into the conversation slot, raised to 100 when it is
-    /// below and the PC spends its "force good reaction" fate point (<paramref name="forceGoodReaction"/>; fate points are not
-    /// session state yet). Changes made until <see cref="EndReactionConversation"/> go to that slot; "met before" stays as it was.
+    /// below and the hero's "force good reaction" fate is armed; that fate is then used in the same revision (DR6, ARC-WORLD-054),
+    /// while at 100 or above it stays armed for a later talk. Changes made until <see cref="EndReactionConversation"/> go to that
+    /// slot; "met before" stays as it was.
     /// </summary>
-    public SessionReactionResult BeginReactionConversation(GameSessionVersion expected, string entity, ReactionNpcFacts npc,
-        bool forceGoodReaction = false)
+    public SessionReactionResult BeginReactionConversation(GameSessionVersion expected, string entity, ReactionNpcFacts npc)
     {
         ThrowIfDisposed();
-        return StepReaction(expected, entity, npc, record =>
-            record with { Conversation = ReactionRules.ConversationStart(record.Stored(npc.BaseReaction), forceGoodReaction) });
+        var force = _hero is { } hero && FateRules.IsArmed(hero.State.Fate, FateKind.ForceGoodReaction);
+        var used = false;
+        var result = StepReaction(expected, entity, npc, record =>
+        {
+            var stored = record.Stored(npc.BaseReaction);
+            used = force && stored < ReactionRules.ForcedGoodReaction;
+            return record with { Conversation = ReactionRules.ConversationStart(stored, force) };
+        });
+        // The raised start always changes the slot, so a used fate commits with it.
+        if (used && result.Disposition == GameSessionDisposition.Changed)
+            _hero!.Apply(_hero.State.WithFate(FateRules.Use(_hero.State.Fate, FateKind.ForceGoodReaction).After));
+        return result;
     }
 
     /// <summary>The conversation ends (R5): the stored value goes to the remembered slot and the conversation slot is cleared,
@@ -207,12 +218,23 @@ public sealed partial class GameSessionOwner
         var follow = followCheck?.Invoke() ?? false;
         if (requested is not { } value) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, follow, Version);
         if (!ReactionLimits.InRange(value)) return RejectReaction(GameSessionFailure.InvalidReactionAmount, follow);
-        var adjustment = ReactionRules.Adjust((int)value, npc, pc, LedByPc(entity));
+        var planned = PlanReaction(record, stored, (int)value, npc, pc, LedByPc(entity), out var adjustment, out var updated);
         if (!adjustment.Applies) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, adjustment, follow, Version);
-        var next = (long)stored + adjustment.Delta;
-        if (!ReactionLimits.InRange(next)) return RejectReaction(GameSessionFailure.InvalidReactionAmount, follow);
-        var updated = record.InConversation ? record with { Conversation = (int)next } : record with { Remembered = (int)next };
+        if (planned != GameSessionFailure.None) return RejectReaction(planned, follow);
         return Commit(expected, updated, adjustment, follow);
+    }
+
+    // The change's decision and the record it writes; a new stored value beyond the bounds is InvalidReactionAmount.
+    private static GameSessionFailure PlanReaction(SessionReaction record, int stored, int delta, ReactionNpcFacts npc, ReactionPcFacts pc,
+        bool ledByPc, out ReactionAdjustment adjustment, out SessionReaction updated)
+    {
+        adjustment = ReactionRules.Adjust(delta, npc, pc, ledByPc);
+        updated = record;
+        if (!adjustment.Applies) return GameSessionFailure.None;
+        var next = (long)stored + adjustment.Delta;
+        if (!ReactionLimits.InRange(next)) return GameSessionFailure.InvalidReactionAmount;
+        updated = record.InConversation ? record with { Conversation = (int)next } : record with { Remembered = (int)next };
+        return GameSessionFailure.None;
     }
 
     private SessionReactionResult StepReaction(GameSessionVersion expected, string entity, ReactionNpcFacts npc,
@@ -223,16 +245,26 @@ public sealed partial class GameSessionOwner
         return Commit(expected, step(_reactions.Get(entity)), null, false);
     }
 
+    // ARC-WORLD-045 (OL17): a change that asks for the leader check arms the follower's check-leader and reaction marks in the
+    // same revision, also when its delta after the PC's effects leaves the stored value as it was.
     private SessionReactionResult Commit(GameSessionVersion expected, SessionReaction next, ReactionAdjustment? adjustment, bool follow)
     {
         if (!IsCurrent(expected)) return RejectReaction(GameSessionFailure.StaleVersion);
         var recorded = _reactions.Records.TryGetValue(next.Entity, out var current);
-        if (recorded ? current == next : next.IsBaseline)
+        var unchanged = recorded ? current == next : next.IsBaseline;
+        var companion = _party.Get(next.Entity);
+        var armed = adjustment is { LeaderCheck: true } ? companion with { Loyalty = CompanionLoyaltyRules.ArmReaction(companion.Loyalty) } : companion;
+        if (unchanged && armed == companion)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, adjustment, follow, Version);
-        if (!recorded && _reactions.Records.Count >= _limits.MaxReactionRecords) return RejectReaction(GameSessionFailure.BudgetExceeded, follow);
+        if (!unchanged && !recorded && _reactions.Records.Count >= _limits.MaxReactionRecords) return RejectReaction(GameSessionFailure.BudgetExceeded, follow);
         if (_revision == long.MaxValue) return RejectReaction(GameSessionFailure.RevisionExhausted, follow);
-        if (next.IsBaseline) _reactions.Records.Remove(next.Entity);
-        else _reactions.Records[next.Entity] = next;
+        if (!unchanged)
+        {
+            if (next.IsBaseline) _reactions.Records.Remove(next.Entity);
+            else _reactions.Records[next.Entity] = next;
+        }
+        // The leader check needs a PC leader, so the NPC already has a party record and keeps its place in the array.
+        if (armed != companion) _party.Put(armed, false);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, adjustment, follow, Version);
     }

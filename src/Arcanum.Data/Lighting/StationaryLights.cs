@@ -4,11 +4,18 @@ using Arcanum.Data.Content;
 
 namespace Arcanum.Data.Lighting;
 
-/// <summary>Serialized light flag bits whose source disposition is established (RES-018): OFF excludes
-/// the light, DARK subtracts instead of adding, INDOOR/OUTDOOR take the emitter tint from the current
-/// ambient pair (INDOOR first). Any other bit is refused, never guessed.</summary>
+/// <summary>Serialized light flag bits whose disposition is established (RES-018; exe-checked LT8, LT14 of ARC-RES-069): OFF
+/// excludes the light, DARK subtracts instead of adding, INDOOR/OUTDOOR take the emitter tint from the current ambient pair
+/// (INDOOR first), NO_SHADOW (0x40) only keeps the light out of the original's object shadows, which are not drawn. Any
+/// other bit is refused, never guessed.</summary>
 [Flags]
-public enum StationaryLightFlags : uint { None = 0, Off = 1, Dark = 2, Indoor = 8, Outdoor = 16 }
+public enum StationaryLightFlags : uint
+{
+    None = 0, Off = 1, Dark = 2, Indoor = 8, Outdoor = 16,
+    /// <summary>Keeps an object light from animating (LT6); object lights only.</summary>
+    NoAnimation = 32,
+    NoShadow = 64,
+}
 
 /// <summary>One decoded stationary sector light (FR-LIGHT-008): the 48-byte wire of the pinned source
 /// (owner word 0, absolute world location inside its own sector, signed screen offset, flags, light ART
@@ -19,19 +26,40 @@ public sealed record StationaryLight(long Sector, int Index, long X, long Y, int
 {
     /// <summary>Light ART number (bits 19..27), the key of <c>art/light/light.mes</c>.</summary>
     public int ArtNumber => (int)((ArtId >> 19) & 511);
+    /// <summary>The ART frame the light shows (bits 12..18); 0 for a stationary light.</summary>
+    public int Frame => (int)((ArtId >> 12) & 127);
+    /// <summary>ARC-RENDER-030: the object an object light belongs to (null for a stationary light) and its slot (−1 primary,
+    /// 0..3 overlay).</summary>
+    public AreaObjectKey? Owner { get; init; }
+    public int Slot { get; init; } = -1;
 }
 
-/// <summary>Detached frame 0 of one static light ART: size, hotspot and an RGB contribution mask.
+/// <summary>Detached frame of one light ART: size, hotspot and an RGB contribution mask.
 /// <see cref="Mask"/> is width*height RGBA; alpha 0 marks a pixel equal to the colour key
-/// (palette index 0's colour), which contributes nothing.</summary>
+/// (palette index 0's colour), which contributes nothing. ARC-DATA-039: the frame a light ART number maps to is its
+/// frame 0, whose <see cref="Frames"/> lists every frame of an animated ART in order (itself first) with the ART's
+/// <see cref="FramesPerSecond"/>; each frame carries the ART's own offset step (<see cref="StepX"/>, <see cref="StepY"/>),
+/// by which the original moves a light when it steps to that frame (ledger LT7).</summary>
 public sealed class StationaryLightFrame
 {
-    internal StationaryLightFrame(int number, string name, string payloadSha256, int width, int height, int hotX, int hotY, byte[] mask)
+    /// <param name="later">Frames 1.. of an animated ART (frame 0 is this one); null for a static light.</param>
+    internal StationaryLightFrame(int number, string name, string payloadSha256, int width, int height, int hotX, int hotY, byte[] mask,
+        int stepX = 0, int stepY = 0, IReadOnlyList<StationaryLightFrame>? later = null, int framesPerSecond = 0)
     {
         Number = number; Name = name; PayloadSha256 = payloadSha256; Width = width; Height = height; HotX = hotX; HotY = hotY;
-        Mask = Array.AsReadOnly(mask);
+        Mask = Array.AsReadOnly(mask); StepX = stepX; StepY = stepY;
+        Frames = Array.AsReadOnly(new[] { this }.Concat(later ?? []).ToArray());
+        FramesPerSecond = Frames.Count > 1 ? framesPerSecond : 0;
     }
     public int Number { get; }
+    /// <summary>Every frame of the ART, frame 0 (this) first; one for a static light. Described on frame 0 only: a later
+    /// frame lists itself alone.</summary>
+    public IReadOnlyList<StationaryLightFrame> Frames { get; }
+    /// <summary>The ART's frame rate (on frame 0); 0 for a static light.</summary>
+    public int FramesPerSecond { get; }
+    public int StepX { get; }
+    public int StepY { get; }
+    public bool Animated => Frames.Count > 1;
     public string Name { get; }
     public string PayloadSha256 { get; }
     public int Width { get; }
@@ -84,6 +112,29 @@ public sealed class AreaStationaryLightSource
     public string? NamesSha256 { get; }
     public IReadOnlyList<StationaryLight> Lights { get; }
     public IReadOnlyDictionary<int, StationaryLightFrame> Frames { get; }
+
+    /// <summary>
+    /// ARC-RENDER-030: the stationary lights with the object lights the original has built at <paramref name="hour"/> (ledger
+    /// LT4, LT5): every object light except nocturnal scenery on an outdoor tile by day, with the flags of
+    /// <see cref="ObjectLightReader.FlagsAtLoad"/>. The object lights follow the stationary ones in object order; drawing
+    /// order between the two kinds is not read (NOT_VERIFIED).
+    /// </summary>
+    public AreaStationaryLightSource WithObjectLights(AreaObjectLightSource objects, int hour)
+    {
+        ArgumentNullException.ThrowIfNull(objects);
+        if (objects.CatalogueMap != CatalogueMap) throw new ArgumentException("The object lights belong to another map.", nameof(objects));
+        var lights = Lights.ToList();
+        foreach (var light in objects.Lights)
+        {
+            if (!ObjectLightReader.BuiltAtLoad(light, hour)) continue;
+            var sector = new AreaSectorCoordinate(light.X >> 6, light.Y >> 6).Packed;
+            lights.Add(new StationaryLight(sector, -1, light.X, light.Y, light.OffsetX, light.OffsetY, ObjectLightReader.FlagsAtLoad(light, hour),
+                light.ArtId, light.Color, light.Object.ObjectIdSha256) { Owner = light.Object, Slot = light.Slot });
+        }
+        var frames = new Dictionary<int, StationaryLightFrame>(Frames);
+        foreach (var (number, frame) in objects.Frames) frames.TryAdd(number, frame);
+        return new(CatalogueMap, NamesSha256 ?? objects.NamesSha256, lights, frames);
+    }
 }
 
 public sealed record StationaryLightReadResult(LightingFailure Failure, AreaStationaryLightSource? Source);
@@ -97,8 +148,9 @@ public sealed record StationaryLightReadResult(LightingFailure Failure, AreaStat
 /// <see cref="Read(DatArchive, AreaSnapshot, CancellationToken)"/> reads both from one ART resource archive (the
 /// snapshot's Resource2, which the caller re-verifies afterwards).
 /// Fail-closed policy: an owner word other than 0 (an object light), a location outside the record's own
-/// sector, an unknown flag bit, an ART id that is not a plain light (type 9, frame/rotation/flags 0), an
-/// animated or multi-group light ART, a missing or ambiguous resource, and every cap are typed failures.
+/// sector, an unknown flag bit, an ART id that is not a plain light (type 9, frame/rotation/flags 0), a
+/// multi-group light ART or one of more than <see cref="MaxArtFrames"/> frames, a missing or ambiguous resource,
+/// and every cap are typed failures. Since ARC-DATA-039 an animated light ART is read with all its frames.
 /// The raw location is taken as the absolute world location inside the record's own sector: an adopted
 /// policy (NOT_VERIFIED), since the decompiled sector-relative rebuild is marked TODO in the source and is
 /// not taken literally; a location outside the sector is refused.
@@ -107,10 +159,18 @@ public static class StationaryLightReader
 {
     /// <summary>ARC-DATA-029: the largest installed interior has 207 stationary lights and 9 light frames.</summary>
     public const int MaxLights = 512;
-    public const int MaxFrames = 16;
+    /// <summary>Distinct light ART per snapshot; ARC-DATA-039 raised it from 16 for object lights: the installed name table
+    /// has 28 entries.</summary>
+    public const int MaxFrames = 32;
+    /// <summary>ARC-DATA-039: frames of one animated light ART; the installed module's longest has 15.</summary>
+    public const int MaxArtFrames = 32;
+    /// <summary>ARC-DATA-039: the RGBA bytes of every light ART frame one read keeps (project policy, the old bound of 16
+    /// one-frame ARTs at the largest side).</summary>
+    public const long MaxLightRgbaBytes = 64L * 1024 * 1024;
     public const int MaxFrameSide = 1024;
     public const int MaxOffset = 16384;
-    public const StationaryLightFlags KnownFlags = StationaryLightFlags.Off | StationaryLightFlags.Dark | StationaryLightFlags.Indoor | StationaryLightFlags.Outdoor;
+    public const StationaryLightFlags KnownFlags = StationaryLightFlags.Off | StationaryLightFlags.Dark | StationaryLightFlags.Indoor | StationaryLightFlags.Outdoor
+        | StationaryLightFlags.NoShadow;
 
     /// <summary>The pinned profiles' read: the name table and every light ART from <paramref name="artResource"/> alone.</summary>
     public static StationaryLightReadResult Read(DatArchive artResource, AreaSnapshot snapshot, CancellationToken token = default)
@@ -170,59 +230,82 @@ public static class StationaryLightReader
                 lights.Add(light!);
             }
         }
-        var frames = new Dictionary<int, StationaryLightFrame>();
-        string? namesSha256 = null;
-        if (lights.Count > 0)
-        {
-            // The name table is read at game start (a_name_light_init); a light ART when it is first drawn.
-            var failure = files.Read("art/light/light.mes", ContentLoadPhase.GameStart, out var namesBytes);
-            if (failure != LightingFailure.None) return failure;
-            failure = LightingMes.TryParse(namesBytes, out var names);
-            if (failure != LightingFailure.None) return failure;
-            namesSha256 = LightingMes.Hash(namesBytes);
-            foreach (var number in lights.Select(light => light.ArtNumber).Distinct().Order())
-            {
-                token.ThrowIfCancellationRequested();
-                if (frames.Count == MaxFrames) return LightingFailure.LimitExceeded;
-                if (!names.TryGetValue(number, out var raw)) return LightingFailure.LightArtNotCatalogued;
-                var file = AreaLightingReader.SafeName(raw);
-                if (file is null) return LightingFailure.UnsafeResourceName;
-                var name = "art/light/" + file.ToLowerInvariant() + ".art";
-                failure = files.Read(name, ContentLoadPhase.ModuleLoaded, out var artBytes);
-                if (failure != LightingFailure.None) return failure;
-                failure = DecodeFrame(number, name, artBytes, out var frame);
-                if (failure != LightingFailure.None) return failure;
-                frames.Add(number, frame!);
-            }
-        }
+        var loaded = LoadFrames(files, lights.Select(light => light.ArtNumber), token, out var namesSha256, out var frames);
+        if (loaded != LightingFailure.None) return loaded;
         token.ThrowIfCancellationRequested();
         source = new AreaStationaryLightSource(snapshot.CatalogueMap, namesSha256, lights, frames);
         return LightingFailure.None;
     }
 
-    // Static lights only: one group of one frame (an animated light ART is refused, not frozen).
+    /// <summary>The light ART frames of <paramref name="numbers"/> (ARC-DATA-027 phases): the name table at game start, each
+    /// ART when it is drawn. Shared by the stationary and the object lights (ARC-DATA-039).</summary>
+    internal static LightingFailure LoadFrames(AreaLightingReader.ILightingFiles files, IEnumerable<int> numbers, CancellationToken token,
+        out string? namesSha256, out Dictionary<int, StationaryLightFrame> frames)
+    {
+        frames = new(); namesSha256 = null;
+        var wanted = numbers.Distinct().Order().ToArray();
+        if (wanted.Length == 0) return LightingFailure.None;
+        // The name table is read at game start (a_name_light_init); a light ART when it is first drawn.
+        var failure = files.Read("art/light/light.mes", ContentLoadPhase.GameStart, out var namesBytes);
+        if (failure != LightingFailure.None) return failure;
+        failure = LightingMes.TryParse(namesBytes, out var names);
+        if (failure != LightingFailure.None) return failure;
+        namesSha256 = LightingMes.Hash(namesBytes);
+        long rgba = 0;
+        foreach (var number in wanted)
+        {
+            token.ThrowIfCancellationRequested();
+            if (frames.Count == MaxFrames) return LightingFailure.LimitExceeded;
+            if (!names.TryGetValue(number, out var raw)) return LightingFailure.LightArtNotCatalogued;
+            var file = AreaLightingReader.SafeName(raw);
+            if (file is null) return LightingFailure.UnsafeResourceName;
+            var name = "art/light/" + file.ToLowerInvariant() + ".art";
+            failure = files.Read(name, ContentLoadPhase.ModuleLoaded, out var artBytes);
+            if (failure != LightingFailure.None) return failure;
+            failure = DecodeFrame(number, name, artBytes, out var frame);
+            if (failure != LightingFailure.None) return failure;
+            rgba += frame!.Frames.Sum(f => (long)f.Mask.Count);
+            if (rgba > MaxLightRgbaBytes) return LightingFailure.LimitExceeded;
+            frames.Add(number, frame);
+        }
+        return LightingFailure.None;
+    }
+
+    // One group of up to MaxArtFrames frames; ARC-DATA-039 admits an animated light ART (ledger LT6, LT7) with all its frames.
     private static LightingFailure DecodeFrame(int number, string name, byte[] bytes, out StationaryLightFrame? frame)
     {
         frame = null;
-        ArtFrame decoded;
+        var hash = LightingMes.Hash(bytes);
+        var decodedFrames = new List<(int W, int H, int X, int Y, byte[] Mask, int Sx, int Sy)>();
+        int fps;
         try
         {
             var metadata = ArtDecoder.Inspect(bytes);
-            if (metadata.Header.PhysicalGroupCount != 1 || metadata.Header.FramesPerGroup != 1) return LightingFailure.LightArtUnsupported;
-            var first = metadata.Frames[0];
-            if (first.Width is <= 0 or > MaxFrameSide || first.Height is <= 0 or > MaxFrameSide) return LightingFailure.LimitExceeded;
-            decoded = ArtDecoder.Decode(bytes, new ArtFrameSelection(0, 0, 0));
+            var count = metadata.Header.FramesPerGroup;
+            if (metadata.Header.PhysicalGroupCount != 1 || count < 1) return LightingFailure.LightArtUnsupported;
+            if (count > MaxArtFrames) return LightingFailure.LimitExceeded;
+            fps = count > 1 ? metadata.Header.FramesPerSecond : 0;
+            if (count > 1 && fps <= 0) return LightingFailure.LightArtUnsupported;
+            for (var index = 0; index < count; index++)
+            {
+                var meta = metadata.Frames[index];
+                if (meta.Width is <= 0 or > MaxFrameSide || meta.Height is <= 0 or > MaxFrameSide) return LightingFailure.LimitExceeded;
+                var decoded = ArtDecoder.Decode(bytes, new ArtFrameSelection(0, index, 0));
+                // The source keys out every pixel whose colour equals palette index 0's colour (the ART colour
+                // key), not only index 0, which the decoder already leaves transparent.
+                var palette = decoded.PalettesBySlot[decoded.EffectivePaletteSlot]!.RawTable;
+                byte keyR = palette[2], keyG = palette[1], keyB = palette[0];
+                var mask = decoded.Rgba.ToArray();
+                for (var at = 0; at < mask.Length; at += 4)
+                    if (mask[at + 3] != 0 && mask[at] == keyR && mask[at + 1] == keyG && mask[at + 2] == keyB) mask[at + 3] = 0;
+                decodedFrames.Add((decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY, mask, meta.OffsetX, meta.OffsetY));
+            }
         }
         catch (ArtException) { return LightingFailure.LightArtUnsupported; }
         catch (ArgumentOutOfRangeException) { return LightingFailure.LightArtUnsupported; }
-        // The source keys out every pixel whose colour equals palette index 0's colour (the ART colour
-        // key), not only index 0, which the decoder already leaves transparent.
-        var palette = decoded.PalettesBySlot[decoded.EffectivePaletteSlot]!.RawTable;
-        byte keyR = palette[2], keyG = palette[1], keyB = palette[0];
-        var mask = decoded.Rgba.ToArray();
-        for (var at = 0; at < mask.Length; at += 4)
-            if (mask[at + 3] != 0 && mask[at] == keyR && mask[at + 1] == keyG && mask[at + 2] == keyB) mask[at + 3] = 0;
-        frame = new(number, name, LightingMes.Hash(bytes), decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY, mask);
+        StationaryLightFrame Make((int W, int H, int X, int Y, byte[] Mask, int Sx, int Sy) f, IReadOnlyList<StationaryLightFrame>? later = null) =>
+            new(number, name, hash, f.W, f.H, f.X, f.Y, f.Mask, f.Sx, f.Sy, later, fps);
+        frame = Make(decodedFrames[0], Array.AsReadOnly(decodedFrames.Skip(1).Select(f => Make(f)).ToArray()));
         return LightingFailure.None;
     }
 }

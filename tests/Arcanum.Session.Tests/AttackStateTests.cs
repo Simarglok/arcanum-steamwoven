@@ -21,8 +21,8 @@ public sealed class AttackStateTests
 
     internal static CombatFields Npc(int[]? stats = null, uint critterFlags = 0x8, int hpAdjustment = -3, int hpDamage = 0, int ac = 0,
         int[]? resistances = null, int[]? skills = null, uint objectFlags = 0, uint spellFlags = 0, int worth = 160, int pool = 160,
-        int type = CombatFieldReader.NpcType, uint flags2 = 0) => new(CombatFieldOrigin.AreaObject,
-        new CombatObjectFields(type, 28359, objectFlags, spellFlags, 0, 0, ac, 0, hpAdjustment, hpDamage, 4, resistances ?? [0, 0, 0, 0, 0], 0),
+        int type = CombatFieldReader.NpcType, uint flags2 = 0, int material = 4) => new(CombatFieldOrigin.AreaObject,
+        new CombatObjectFields(type, 28359, objectFlags, spellFlags, 0, 0, ac, 0, hpAdjustment, hpDamage, material, resistances ?? [0, 0, 0, 0, 0], 0),
         null, null, null, null, null,
         new CombatCritterFields(critterFlags, flags2, stats ?? Stats(), skills ?? new int[12], new int[4], new int[25], 0, 0, 0, 1, 0, 0),
         type == CombatFieldReader.NpcType ? new CombatNpcFields(0, 19, worth, pool, 19, 0, 0, [.. Enumerable.Repeat(new CombatDamageRange(1, 3), 5)]) : null);
@@ -59,6 +59,13 @@ public sealed class AttackStateTests
             LifeTraits.Stoned | LifeTraits.NighInvulnerable, undead.Facts.Traits);
         var human = Combat(Npc(critterFlags: 0));
         Assert.IsFalse(human.Monstrous);
+        // ARC-COMBAT-007: the stored material is what the NPC defends as (a melee hit on it wears by it).
+        var status = new LifeStatus(10, 10, 10, 10, false, false, true);
+        Assert.AreEqual(ObjectMaterial.Flesh, human.Combatant(status, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven).Material);
+        Assert.AreEqual(ObjectMaterial.Stone, Combat(Npc(material: 0)).Combatant(status, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven).Material);
+        // A material outside the fourteen wears nothing in the original, as flesh does.
+        foreach (var odd in new[] { 14, -1, 255 })
+            Assert.AreEqual(ObjectMaterial.Flesh, Combat(Npc(material: odd)).Combatant(status, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven).Material);
     }
 
     [TestMethod]
@@ -111,6 +118,24 @@ public sealed class AttackStateTests
         Assert.AreEqual(SessionCritterCombatFailure.InvalidWornItem, SessionCritterCombat.From(Rat, Npc(), [odd]).Failure);
         var carried = odd with { Item = odd.Item! with { InventoryLocation = 3 } };
         Assert.AreEqual(SessionCritterCombatFailure.None, SessionCritterCombat.From(Rat, Npc(), [carried]).Failure, "only worn items count");
+    }
+
+    [TestMethod]
+    public void AnArmedCriticalHitFateMakesTheNextAttackACriticalHitAndIsUsed()
+    {
+        // ARC-WORLD-054 (FT6): the hero's armed critical-hit fate is read by the resolver and used by the attack.
+        using var owner = Owner();
+        owner.GrantHeroFatePoint(owner.Version);
+        owner.ArmHeroFate(owner.Version, Arcanum.Simulation.Character.FateKind.CriticalHit);
+        Assert.IsTrue(owner.QueryHeroAttack()!.Combatant.CriticalHitFateArmed);
+        var tough = Combat(Npc(hpAdjustment: 5000));
+        var before = owner.Version.Revision;
+        var fated = owner.AttackCritter(owner.Version, new(tough));
+        Assert.AreEqual((FateUse.AttackerCriticalHit, AttackOutcome.CriticalHit), (fated.Resolution!.Fate, fated.Resolution.Outcome));
+        Assert.IsFalse(owner.HeroFateArmed(Arcanum.Simulation.Character.FateKind.CriticalHit));
+        Assert.AreEqual(new Arcanum.Simulation.Character.FateState(0, 0), owner.QueryHeroFate());
+        Assert.IsTrue(owner.Version.Revision >= before + 2, "the used fate, then the damage");
+        Assert.AreEqual(FateUse.None, owner.AttackCritter(owner.Version, new(tough)).Resolution!.Fate);
     }
 
     [TestMethod]

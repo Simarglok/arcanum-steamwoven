@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Combat;
 using Arcanum.Data.Inventory;
 using Arcanum.Data.Messages;
 using Arcanum.Data.Scripts;
@@ -123,7 +124,11 @@ public enum AreaInventoryTargetKind { GroundItem, DeadNpc }
 /// <summary>A clickable inventory object of the current map: an item on its ground, or a dead NPC to loot.</summary>
 public sealed record AreaInventoryTarget(AreaInventoryTargetKind Kind, string Entity, AreaObjectRecord Row);
 
-public sealed record AreaInventoryLine(string Entity, string Text);
+public sealed record AreaInventoryLine(string Entity, string Text)
+{
+    /// <summary>ARC-SKILLS-005: the PC can use this item to heal (a healing item it holds).</summary>
+    public bool Healing { get; init; }
+}
 
 /// <summary>What the inventory window shows: the PC's list and, when looting, the dead NPC's current list.</summary>
 public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, string? Holder, string? HolderTitle, IReadOnlyList<AreaInventoryLine> Loot)
@@ -233,31 +238,59 @@ public sealed class AreaInventoryHost
 
     /// <summary>The window's lines: the PC's list in order and, for <paramref name="holder"/> on <paramref name="runtimeMap"/>,
     /// that holder's current list.</summary>
-    public AreaInventoryView View(GameSessionOwner session, ObjectDescriptionCatalog? catalog, int runtimeMap, string? holder = null)
+    public AreaInventoryView View(GameSessionOwner session, ObjectDescriptionCatalog? catalog, int runtimeMap, string? holder = null,
+        IReadOnlyList<SessionHealingItem?>? kitHealing = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         // ARC-WORLD-027: the hero's starting kit precedes the items taken from the world, as in the session's PC list; an
         // item the hero wears (ARC-WORLD-028 session equipment) is marked.
         var worn = session.QueryEquipment().Worn.Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
         string Worn(string entity) => worn.Contains(entity) ? " (worn)" : string.Empty;
-        var pc = session.QueryHeroKit().Select(item => new AreaInventoryLine(item.Entity, Line(KitName(item, catalog), item.Kind.Type, null) + " (starting kit)" + Worn(item.Entity)))
-            .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)) + Worn(item.Entity))))
+        var pc = session.QueryHeroKit().Select(item => new AreaInventoryLine(item.Entity, Line(KitName(item, catalog), item.Kind.Type, null) + " (starting kit)" + Worn(item.Entity))
+            { Healing = HealingItem(session, item.Entity, kitHealing) is not null })
+            .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)) + Worn(item.Entity))
+            { Healing = HealingItem(session, item.Entity, kitHealing) is not null }))
+            // ARC-WORLD-055: the items the hero made or took from an NPC that held made items follow, named by their kind.
+            .Concat(session.QueryMadeItems().Select(item => new AreaInventoryLine(item.Entity, Line(KindName(item.Kind, catalog), item.Kind.Type, null) + " (made)" + Worn(item.Entity))))
             .ToArray();
         var gold = session.QueryGold();
         if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>()) { Gold = gold };
         var list = session.QueryMapInventory(new(runtimeMap))?.Holders.FirstOrDefault(h => h.Entity == holder)?.Items ?? [];
-        var loot = list.Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Facts.Kind.Type, item.Facts.Weight)
+        // ARC-WORLD-055: a made item the session added to the NPC has no area row; its kind names it.
+        static bool Made(string entity) => entity.StartsWith("made:", StringComparison.Ordinal);
+        var loot = list.Select(item => new AreaInventoryLine(item.Entity, Line(Made(item.Entity)
+                ? KindName(item.Facts.Kind, catalog) + " (made)" : Name(item.Entity, catalog), item.Facts.Kind.Type, Made(item.Entity) ? null : item.Facts.Weight)
             + (item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
         return new(Array.AsReadOnly(pc), holder, Name(holder, catalog), Array.AsReadOnly(loot)) { Gold = gold };
     }
 
+    /// <summary>
+    /// ARC-SKILLS-005: the healing-item facts of an item the PC holds: a kit item's from <paramref name="kitHealing"/> (the hero
+    /// load's, by kit entity), a taken item's from its object row's fields (<see cref="AreaHealingItems.From"/>); null for anything
+    /// else, an item the session no longer has, or a session without a hero (nobody to use it).
+    /// </summary>
+    public SessionHealingItem? HealingItem(GameSessionOwner session, string entity, IReadOnlyList<SessionHealingItem?>? kitHealing)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.QueryHero() is null || session.IsItemDestroyed(entity)) return null;
+        // A kit entity keeps its number when an earlier kit item is gone, so the facts are found by entity.
+        if (session.QueryHeroKit().Any(item => item.Entity == entity)) return kitHealing?.FirstOrDefault(item => item?.Entity == entity);
+        if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;
+        foreach (var map in _maps.Values)
+            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return AreaHealingItems.From(entity, fields);
+        return null;
+    }
+
     /// <summary>A kit item's shown name: the text of its prototype's description number (the identified name; the kit's
     /// identification state is not modelled). No catalog, an absent or undecodable text gives a bracketed label.</summary>
-    public static string KitName(SessionKitItem item, ObjectDescriptionCatalog? catalog)
+    public static string KitName(SessionKitItem item, ObjectDescriptionCatalog? catalog) => KindName(item.Kind, catalog);
+
+    /// <summary>An item's shown name from its saved kind: the text of its description number, as <see cref="KitName"/>.</summary>
+    public static string KindName(SessionItemKind kind, ObjectDescriptionCatalog? catalog)
     {
-        var type = AreaHoverIndex.TypeName((int)item.Kind.Type);
+        var type = AreaHoverIndex.TypeName((int)kind.Type);
         if (catalog is null) return $"[{type}: name unavailable]";
-        var found = catalog.Find(item.Kind.Description);
+        var found = catalog.Find(kind.Description);
         if (found.Status != DescriptionLookupStatus.Found || found.Message is null) return $"[{type}: unnamed]";
         return MesText.Decode(found.Message, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { Length: > 0 } decoded }
             ? decoded : $"[{type}: name not decodable]";

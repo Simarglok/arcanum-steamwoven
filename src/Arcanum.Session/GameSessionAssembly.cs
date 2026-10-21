@@ -17,7 +17,7 @@ public delegate SessionCraftFacts? SessionCraftLookup(string entity);
 /// The outcome of an assembly (ARC-TECHNOLOGY-004): the plan (the gate's state of both components and the product), the items
 /// made (<c>made:n</c>) and the consumed components. On success the host shows <c>schematic_text.mes</c>
 /// <see cref="SchematicAssemblyRules.CompletedMessage"/> and plays <see cref="SchematicAssemblyRules.CompletedSoundBase"/> + the
-/// current tab; a refusal of the gate (<see cref="GameSessionFailure.AssemblyRefused"/>) shows the message of
+/// current discipline; a refusal of the gate (<see cref="GameSessionFailure.AssemblyRefused"/>) shows the message of
 /// <see cref="SchematicAssemblyRules.RefusalMessage"/>.
 /// </summary>
 public sealed record SessionAssemblyResult(GameSessionDisposition Disposition, GameSessionFailure Failure, AssemblyPlan? Plan,
@@ -128,11 +128,12 @@ public sealed partial class GameSessionOwner
         return result.AsReadOnly();
     }
 
-    /// <summary>The next made number: one past every made entity the hero holds, the session deleted or keeps a durability record
-    /// of (no seed or taken item can carry the prefix); past int.MaxValue there is none (long.MaxValue).</summary>
+    /// <summary>The next made number: one past every made entity the hero or an NPC (ARC-WORLD-055) holds, the session deleted or
+    /// keeps a durability record of (no seed or taken item can carry the prefix); past int.MaxValue there is none.</summary>
     private long NextMadeNumber()
     {
-        var numbers = _inventory.Made.Select(item => item.Entity).Concat(_durability.Destroyed).Concat(_durability.Records.Keys)
+        var numbers = _inventory.Made.Select(item => item.Entity).Concat(_inventory.Npcs.Values.SelectMany(list => list).Select(item => item.Entity))
+            .Concat(_durability.Destroyed).Concat(_durability.Records.Keys)
             .Select(entity => (long)(SessionMadeItem.Number(entity) ?? 0));
         return numbers.DefaultIfEmpty(0).Max() + 1;
     }

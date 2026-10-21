@@ -74,7 +74,7 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
 /// stack (ARC-SCRIPT-011, <see cref="ScriptContent"/>): the original's name for each script number and the winning copy,
 /// the same for every map. Synchronous, single-threaded; Begin and Resume read the files every time.
 /// ARC-WORLD-043: as the original's dialog start and end (0x412FD0, 0x413280), every started conversation opens the NPC's
-/// reaction conversation slot in the session (<see cref="GameSessionOwner.BeginReactionConversation"/>, no fate point) before
+/// reaction conversation slot in the session (<see cref="GameSessionOwner.BeginReactionConversation"/>, which uses the hero's armed "force good reaction" fate, ARC-WORLD-054) before
 /// its first effect, and the caller closes it with <see cref="EndReaction"/> on every exit path, before a resumed script runs.
 /// </summary>
 public sealed class AreaConversationHost
@@ -164,7 +164,8 @@ public sealed class AreaConversationHost
         _party = party;
         State = new AreaConversationState(session, map,
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
-            party ? Speakers.Where(speaker => _companions(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null);
+            party ? Speakers.Where(speaker => _companions(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null,
+            Speakers.Select(speaker => Scope(speaker.Row)).ToArray());
         Scripts = new AreaScriptHost(session, map, Speakers, State, content, npcAdvancement);
     }
 
@@ -207,6 +208,16 @@ public sealed class AreaConversationHost
         return speakers.AsReadOnly();
     }
 
+    /// <summary>ARC-WORLD-044: an NPC's origin (field 0x123) and faction (field 0x124), its effective fields' slots 80 and 81;
+    /// 0 when absent or not an NPC. They pick the reputation effects of its reaction to the PC.</summary>
+    public static (int Origin, int Faction) Scope(AreaObjectRecord row) =>
+        row.Type == 16 ? (Field(row, OriginSlot), Field(row, FactionSlot)) : (0, 0);
+
+    private const int OriginSlot = 80, FactionSlot = 81;
+
+    private static int Field(AreaObjectRecord row, int slot) =>
+        row.EffectiveFields.FirstOrDefault(field => field.Slot == slot) is { Presence: AreaPresence.Value, Number: { } n } && n is >= int.MinValue and <= int.MaxValue ? (int)n : 0;
+
     /// <summary>The speaker whose drawn body covers a canvas point; the last (frontmost) covering command wins.</summary>
     public AreaSpeaker? SpeakerAt(IReadOnlyList<AreaDrawCommand> commands, double x, double y)
     {
@@ -241,6 +252,7 @@ public sealed class AreaConversationHost
 
     public AreaConversationStart Begin(AreaSpeaker? speaker, CancellationToken token = default)
     {
+        SchematicCrafter = null;
         if (speaker is null) return new(AreaConversationStartStatus.NoSpeaker, null, null, "no dialog NPC within reach");
         return Run(speaker, 0, token);
     }
@@ -252,6 +264,7 @@ public sealed class AreaConversationHost
     /// </summary>
     public AreaConversationStart Resume(AreaSpeaker speaker, DialogScriptLine line, CancellationToken token = default)
     {
+        SchematicCrafter = null;
         ArgumentNullException.ThrowIfNull(speaker);
         return Run(speaker, line.Value, token);
     }
@@ -364,7 +377,13 @@ public sealed class AreaConversationHost
             new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
             new DialogConversationPorts(State, State, _session.Flags, State, party, InventoryPort(), State,
                 // ARC-SKILLS-004: the skill gates read the session hero; the diagnostic PC has no skills, so they stay unadmitted.
-                _session.QueryHero() is null ? null : new SessionDialogSkillPort(_session, AreaConversationState.PcParticipant), State));
+                _session.QueryHero() is null ? null : new SessionDialogSkillPort(_session, AreaConversationState.PcParticipant), State,
+                // ARC-WORLD-054: FP gives the session hero a fate point; without a hero it stays unadmitted.
+                _session.QueryHero() is null ? null : new SessionDialogFatePort(_session, AreaConversationState.PcParticipant),
+                // ARC-WORLD-044: RP reads and changes the session PC's reputations.
+                new SessionDialogReputationPort(_session, AreaConversationState.PcParticipant),
+                // ARC-TECHNOLOGY-006: SU asks for the schematic window with the speaker as crafter; the host opens it once the talk ended.
+                new SchematicPort(this)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script);
     }
@@ -391,6 +410,30 @@ public sealed class AreaConversationHost
         public DialogCommandResult Execute(GiveItemCommand command) => DialogCommandResult.Rejected;
     }
 
+    /// <summary>ARC-TECHNOLOGY-006: the NPC crafter the last SU asked for (its entity), set when the port applied it; the host opens the
+    /// schematic window with it after the conversation ended with <see cref="DialogEndKind.SchematicWindow"/>.</summary>
+    public string? SchematicCrafter { get; private set; }
+
+    /// <summary>Takes the crafter the last SU asked for, once.</summary>
+    public string? TakeSchematicCrafter()
+    {
+        var crafter = SchematicCrafter;
+        SchematicCrafter = null;
+        return crafter;
+    }
+
+    // SU (ledger NC1): the original's open refuses a dead crafter or viewer; the session knows both lives.
+    private sealed class SchematicPort(AreaConversationHost host) : IDialogSchematicPort
+    {
+        public DialogCommandResult Execute(OpenSchematicsCommand command)
+        {
+            if (command.PlayerCharacter != AreaConversationState.PcParticipant || host.SpeakerEntity(command.Npc) is not { } entity) return DialogCommandResult.Rejected;
+            if (host._session.QueryNpcDead(entity) || host._session.QueryHeroLife() is { Status.IsDead: true }) return DialogCommandResult.Rejected;
+            host.SchematicCrafter = entity;
+            return DialogCommandResult.Applied;
+        }
+    }
+
     private string? SpeakerEntity(DialogParticipantId npc) =>
         npc.Value - 1000 is var index && index >= 0 && index < Speakers.Count ? AreaConversationState.EntityId(Speakers[(int)index].Row) : null;
 }
@@ -403,7 +446,8 @@ public sealed class AreaConversationHost
 /// follow consent as map-local entity changes on the speaker's map (absent = loaded baseline: attachment flags
 /// from the area, not following). Reaction facts are diagnostic: every speaker is a human, not aloof NPC with the
 /// profile's initial reaction as base; the PC is the session hero when there is one, else a human with reaction modifier
-/// 0 and no reputation or effects. Since ARC-WORLD-043 the host opens the speaker's reaction conversation slot for each
+/// 0 and no effects; both carry the session PC's reputation sum for the speaker's origin and faction (ARC-WORLD-044,
+/// <see cref="PcFactsFor"/>). Since ARC-WORLD-043 the host opens the speaker's reaction conversation slot for each
 /// conversation and closes it at its end, so changes during a talk land in that slot and ME reads the session's "met
 /// before". Still PROJECT diagnostic, in memory only and
 /// lost with this object: PC alignment, items given (IN) when the host has no session inventory (ARC-UI-004 wires it),
@@ -431,6 +475,7 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     private readonly int _initialReaction;
     private readonly HashSet<int> _party;
     private readonly List<SessionExperienceAward> _awards = [];
+    private readonly (int Origin, int Faction)[] _scopes;
 
     /// <summary>ARC-WORLD-036: the experience awards the talk's commands gave (a completed quest) since the last call, in order;
     /// the host passes their follower steps on (<see cref="AreaAdvancement.LevelFollowers"/>).</summary>
@@ -444,9 +489,13 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     /// <param name="speakerEntities">Stable session entity id of each speaker index (see <see cref="EntityId"/>).</param>
     /// <param name="partySpeakers">ARC-WORLD-016: speaker indexes whose "following" is the session party standing
     /// (<see cref="SessionCompanion.LedByPc"/>, true while waiting too) instead of the diagnostic follow key.</param>
+    /// <param name="scopes">ARC-WORLD-044: each speaker's origin and faction (its NPC fields), which select the reputation
+    /// effects of its reaction; 0 and 0 when not given.</param>
     public AreaConversationState(GameSessionOwner session, SessionMapId map, IReadOnlyList<string> speakerEntities, int initialReaction,
-        IReadOnlySet<int>? partySpeakers = null)
+        IReadOnlySet<int>? partySpeakers = null, IReadOnlyList<(int Origin, int Faction)>? scopes = null)
     {
+        _scopes = scopes?.ToArray() ?? [];
+        if (scopes is not null && _scopes.Length != speakerEntities.Count) throw new ArgumentException("One scope per speaker.", nameof(scopes));
         _session = session ?? throw new ArgumentNullException(nameof(session));
         ArgumentNullException.ThrowIfNull(speakerEntities);
         _map = map; _entities = speakerEntities.ToArray(); _initialReaction = initialReaction;
@@ -482,13 +531,22 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
         ? _session.QueryCompanion(_entities[speaker]).LedByPc : Read(speaker, FollowProperty) == 1;
     public bool LocalFlag(int speaker, int bit) => (LocalFlags(speaker) & (1u << bit)) != 0;
     public int Reaction(int speaker) =>
-        _session.QueryReaction(_entities[speaker], NpcFacts(), PcFacts).View?.Effective ?? throw new InvalidOperationException("AREA_SESSION_REACTION_INVALID");
+        _session.QueryReaction(_entities[speaker], NpcFacts(), PcFactsFor(speaker)).View?.Effective ?? throw new InvalidOperationException("AREA_SESSION_REACTION_INVALID");
 
     /// <summary>The diagnostic NPC side of every speaker's reaction.</summary>
     public ReactionNpcFacts NpcFacts() => new(_initialReaction, CharacterRace.Human, false, false);
 
     /// <summary>The PC side: the session hero's facts, else <see cref="DiagnosticPc"/>.</summary>
-    public ReactionPcFacts PcFacts => _session.QueryHeroReactionFacts() ?? DiagnosticPc;
+    public ReactionPcFacts PcFacts => PcFactsFor(-1);
+
+    /// <summary>ARC-WORLD-044: the PC side toward a speaker: the hero's facts, else <see cref="DiagnosticPc"/>, with the session's
+    /// reputation sum for the speaker's origin and faction (0 and 0 for an unknown speaker index).</summary>
+    public ReactionPcFacts PcFactsFor(int speaker)
+    {
+        var (origin, faction) = speaker >= 0 && speaker < _scopes.Length ? _scopes[speaker] : (0, 0);
+        return _session.QueryHeroReactionFacts(origin, faction)
+            ?? DiagnosticPc with { ReputationAdjustment = (int)Math.Clamp(_session.QueryReputationReaction(origin, faction), int.MinValue, int.MaxValue) };
+    }
 
     /// <summary>Records the loaded effective SAP_DIALOG attachment flags as the speaker's baseline.</summary>
     internal void Bind(int speaker, uint loadedFlags) => _baseline[speaker] = loadedFlags;
@@ -541,8 +599,8 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
         var written = _session.QueryQuest(command.QuestId)!.Value.Effective switch
         {
             SessionQuestState.Accepted when Reaction(speaker) < AcceptedQuestReaction =>
-                _session.SetReaction(_session.Version, entity, NpcFacts(), PcFacts, AcceptedQuestReaction),
-            SessionQuestState.Completed => _session.AdjustReaction(_session.Version, entity, NpcFacts(), PcFacts, CompletedQuestReactionBonus),
+                _session.SetReaction(_session.Version, entity, NpcFacts(), PcFactsFor(speaker), AcceptedQuestReaction),
+            SessionQuestState.Completed => _session.AdjustReaction(_session.Version, entity, NpcFacts(), PcFactsFor(speaker), CompletedQuestReactionBonus),
             _ => null,
         };
         // The quest change is already committed: a refused reaction write is a partial effect, reported as indeterminate.
@@ -562,7 +620,7 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
 
     /// <summary>Whether the speaker has met the PC before (the session's remembered reaction slot).</summary>
     public bool MetBefore(int speaker) =>
-        _session.QueryReaction(_entities[speaker], NpcFacts(), PcFacts).View?.MetBefore ?? throw new InvalidOperationException("AREA_SESSION_REACTION_INVALID");
+        _session.QueryReaction(_entities[speaker], NpcFacts(), PcFactsFor(speaker)).View?.MetBefore ?? throw new InvalidOperationException("AREA_SESSION_REACTION_INVALID");
 
     /// <summary>ARC-WORLD-043: opens the speaker's reaction conversation slot (no "force good reaction" fate point: fate points
     /// are not session state).</summary>
@@ -577,17 +635,21 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     {
         var entity = _entities[Speaker(command.Npc)];
         var result = command.Mode == DialogReactionMode.Target
-            ? _session.SetReaction(_session.Version, entity, NpcFacts(), PcFacts, command.Value)
-            : _session.AdjustReaction(_session.Version, entity, NpcFacts(), PcFacts, command.Value);
+            ? _session.SetReaction(_session.Version, entity, NpcFacts(), PcFactsFor(Speaker(command.Npc)), command.Value)
+            : _session.AdjustReaction(_session.Version, entity, NpcFacts(), PcFactsFor(Speaker(command.Npc)), command.Value);
         return result.Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
     }
 
     public DialogCommandResult Execute(GiveItemCommand command) { _items.Add(command.ItemName); return DialogCommandResult.Applied; }
     public DialogCommandResult Execute(MarkAreaCommand command) { _areas.Add(command.Area); return DialogCommandResult.Applied; }
 
+    /// <summary>AL: the diagnostic PC alignment; since ARC-WORLD-045 a change arms the session followers' loyalty marks (OL17)
+    /// first, and a refusal there leaves the alignment as it was.</summary>
     public DialogCommandResult Execute(AlignmentCommand command)
     {
-        Alignment = command.Mode == DialogReactionMode.Target ? command.Value : checked(Alignment + command.Value);
+        var next = command.Mode == DialogReactionMode.Target ? command.Value : checked(Alignment + command.Value);
+        if (_session.RecordPcAlignmentChange(_session.Version, Alignment, next).Disposition == GameSessionDisposition.Rejected) return DialogCommandResult.Rejected;
+        Alignment = next;
         return DialogCommandResult.Applied;
     }
 
@@ -639,7 +701,9 @@ public static class AreaConversationText
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",
             SkillTrainingCommand training => $"TR skill {training.Skill} -> tier {training.Training}",
+            FatePointCommand => "FP fate point +1",
             JoinCommand => "JO follow request",
+            ReputationCommand reputation => $"RP {(reputation.Add ? "add" : "remove")} {reputation.Reputation}",
             _ => receipt.Command.GetType().Name,
         };
         return $"#{receipt.Ordinal} turn {receipt.Turn}: {command} [{receipt.Outcome}]";

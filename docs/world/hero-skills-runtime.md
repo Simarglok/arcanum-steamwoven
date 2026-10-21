@@ -44,7 +44,7 @@ fewer points for the same target, as in the original, where the race effect is i
 
 The hero gains `"innateSkills":[{"cause","skill","operator","value"}]` (cause `Race` or `Gender`, the `Skill` name, the effect
 operator name); the decoder checks the shape and at most 14 entries, the import every value. Schema 20 is refused like the
-earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-schema-24)).
+earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-schema-31)).
 
 ## Viewer host
 
@@ -54,7 +54,7 @@ earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-sche
 
 ## Not ready
 
-- No skill page or point buying (tasks S5, S6) and no trainers (S16); the dialog gates and `tr` are ARC-SKILLS-004 ([skill gates](../scripting/dialog-conversation-runtime.md#skill-gates-arc-skills-004)); the shared skill check is S3.
+- The skill page and point buying are ARC-UI-009 and ARC-WORLD-052 ([viewer](../rendering/terrain-viewer.md#skills-page-arc-ui-009)); no trainers (S16); the dialog gates and `tr` are ARC-SKILLS-004 ([skill gates](../scripting/dialog-conversation-runtime.md#skill-gates-arc-skills-004)); the shared skill check is S3.
 - The leader check (HK1) and the wait timer (HK2) have no runtime, so the persuasion training reaches only the follow check.
 - A levelled follower defends with its sheet read without effects (its current stat effects and poison do not change its
   dodge); the map path reads poison.

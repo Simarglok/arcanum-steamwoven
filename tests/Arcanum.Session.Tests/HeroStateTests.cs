@@ -195,16 +195,16 @@ public sealed class HeroStateTests
     internal const string HeroJson =
         ",\"hero\":{\"prototype\":16089,\"race\":\"HalfElf\",\"gender\":\"Female\"," +
         "\"stats\":{\"strength\":8,\"dexterity\":8,\"constitution\":8,\"beauty\":8,\"intelligence\":8,\"perception\":8," +
-        "\"willpower\":8,\"charisma\":8,\"magickPoints\":0,\"techPoints\":0},\"level\":1,\"experience\":0,\"unspentPoints\":5,\"alignment\":0,\"advancement\":{\"basicSkills\":[0,0,0,0,0,0,0,0,0,0,0,0],\"techSkills\":[0,0,0,0],\"colleges\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"techDegrees\":[0,0,0,0,0,0,0,0],\"hitPointPoints\":0,\"fatiguePoints\":0,\"scheme\":0}," +
+        "\"willpower\":8,\"charisma\":8,\"magickPoints\":0,\"techPoints\":0},\"level\":1,\"experience\":0,\"unspentPoints\":5,\"alignment\":0,\"advancement\":{\"basicSkills\":[0,0,0,0,0,0,0,0,0,0,0,0],\"techSkills\":[0,0,0,0],\"colleges\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"mastery\":-1,\"techDegrees\":[0,0,0,0,0,0,0,0],\"hitPointPoints\":0,\"fatiguePoints\":0,\"scheme\":0}," +
         "\"raceEffect\":{\"effect\":67,\"modifiers\":[{\"stat\":\"Dexterity\",\"operator\":\"Add\",\"value\":1}," +
         "{\"stat\":\"Beauty\",\"operator\":\"Add\",\"value\":1},{\"stat\":\"Constitution\",\"operator\":\"Add\",\"value\":-1}," +
         "{\"stat\":\"MagickPoints\",\"operator\":\"Add\",\"value\":1}]}," +
         "\"genderEffect\":{\"effect\":330,\"modifiers\":[{\"stat\":\"Strength\",\"operator\":\"Add\",\"value\":-1}," +
-        "{\"stat\":\"Constitution\",\"operator\":\"Add\",\"value\":1}]},\"innateSkills\":[]}";
+        "{\"stat\":\"Constitution\",\"operator\":\"Add\",\"value\":1}]},\"innateSkills\":[],\"fatePoints\":0,\"armedFates\":0}";
     internal const string KitInventory =
         ",\"inventory\":{\"gold\":385,\"kit\":[{\"entity\":\"kit:1\",\"type\":\"Weapon\",\"prototype\":6049,\"name\":4021,\"description\":6029}," +
         "{\"entity\":\"kit:2\",\"type\":\"Armor\",\"prototype\":8188,\"name\":2850,\"description\":8168}," +
-        "{\"entity\":\"kit:3\",\"type\":\"Armor\",\"prototype\":8069,\"name\":2851,\"description\":8049}],\"pc\":[],\"made\":[]}";
+        "{\"entity\":\"kit:3\",\"type\":\"Armor\",\"prototype\":8069,\"name\":2851,\"description\":8049}],\"pc\":[],\"made\":[],\"npcs\":[]}";
     internal const string UnharmedHeroLife =
         ",\"life\":{\"hero\":{\"hpDamage\":0,\"fatigueDamage\":0,\"poison\":0,\"conditions\":[],\"scars\":0,\"deathTimeMs\":null},\"critters\":[]}";
     internal static readonly string HeroGolden = GoldenJson.Replace(NoHero + EmptyInventory, HeroJson + KitInventory).Replace(NoLife, UnharmedHeroLife);
@@ -297,9 +297,9 @@ public sealed class HeroStateTests
         var noHero = HeroGolden.Replace(HeroJson, NoHero).Replace(UnharmedHeroLife, NoLife);
         Refused(noHero, GameSessionFailure.InvalidSnapshot);
         Refused(noHero.Replace("\"gold\":385", "\"gold\":0"), GameSessionFailure.InvalidSnapshot);
-        Refused(noHero.Replace(KitInventory, ",\"inventory\":{\"gold\":1,\"kit\":[],\"pc\":[],\"made\":[]}"), GameSessionFailure.InvalidSnapshot);
+        Refused(noHero.Replace(KitInventory, ",\"inventory\":{\"gold\":1,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[]}"), GameSessionFailure.InvalidSnapshot);
         Restore(Decode(noHero.Replace(KitInventory, EmptyInventory))).Dispose();
-        Restore(Decode(HeroGolden.Replace(KitInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[]}"))).Dispose();
+        Restore(Decode(HeroGolden.Replace(KitInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[]}"))).Dispose();
         Refused(HeroGolden.Replace("\"entity\":\"kit:1\"", "\"entity\":\"kit:9\""), GameSessionFailure.InvalidSnapshot);
         Refused(HeroGolden.Replace("\"entity\":\"kit:1\"", "\"entity\":\"kit:0\""), GameSessionFailure.InvalidSnapshot);
         Refused(HeroGolden.Replace("\"type\":\"Weapon\"", "\"type\":\"Gold\""), GameSessionFailure.InvalidItem);

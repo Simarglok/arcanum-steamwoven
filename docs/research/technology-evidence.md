@@ -40,8 +40,8 @@ Agreed through the coordinator on 2026-10-20:
   tech items, owned by the magic research; this document only says which tech items reach it.
 - The **skills** research owns the four technical skills, the Repair skill
   rule ([SK7](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)),
-  fate points (ARC-SKILLS-007) and the shared character-point spend and refund
-  path (ARC-SKILLS-005). Item durability (item hit points and the broken
+  fate points (built as ARC-WORLD-054) and the shared character-point spend and refund
+  path (built as ARC-WORLD-052). Item durability (item hit points and the broken
   state) is owned here and is the input of the Repair slice ARC-SKILLS-011.
 
 ## Vocabulary and evidence
@@ -290,7 +290,10 @@ The Schematic-UI module runs from init 0x56CD60 (reset 0x56D0B0, exit
    transfer it to the crafter (0x4617F0, result unchecked). A failed creation
    returns 0 at once, components already spent (TC3).
 6. Completion (0x4EE0F0 → 0x56E950): when the viewer is the local player,
-   `schematic_text.mes` 2 and sound `3018 + current tab`.
+   `schematic_text.mes` 2 and sound `3018 + current discipline` (3018..3025;
+   corrected by ARC-TECHNOLOGY-005: the first reading wrote "current tab", but
+   the value is read from the current discipline, not the learned/found tab;
+   [ledger SW6](original-verification-ledger.md#schematic-window-arc-technology-005)).
 
 Assembly does **not** check expertise (TC5). There is no random roll, skill
 check, action-point or time cost and no experience.
@@ -343,9 +346,10 @@ check, action-point or time cost and no experience.
   the sheet and the schematic gate; degrees act on devices only through tech
   points → aptitude → item power. The four tech skills work in their own
   domains and do not modify device spells.
-- **Wear**: the weapon wear on a hit (0x4B5580, [combat core](combat-core-evidence.md) C21) grows with
-  `|complexity|`, up to × 2 at 100, for magickal and technological weapons
-  alike.
+- **Wear**: the weapon wear on a hit (0x4B5580, [combat core](combat-core-evidence.md) C21) **falls** with
+  `|complexity|`, to nothing at 100, for magickal and technological weapons
+  alike (ARC-COMBAT-007 corrected the earlier "up to × 2",
+  [ledger CW6](original-verification-ledger.md#combat-wear-arc-combat-007)).
 
 ### Scripts and dialogs
 
@@ -391,16 +395,17 @@ slots and the item is dropped when it fails, and the repair table (training none
     Spell and explosion areas reach objects in the area this way, and so does
     script action 60 (damage);
   - armour at the hit location (head 1000, arms 1007, legs 1008, else 1006):
-    +10 on fire damage or with weapon flag 0x100 ([combat core](combat-core-evidence.md) C20); at 0 it breaks
-    (message 24, else 7);
-  - the target's weapon on critical flags: "damage weapon" +10, breaking it at
-    0 (messages 23, 8); "destroy weapon" deletes it at once without a break
+    +10 on fire damage after resistance, with weapon flag 0x100 or on the "damage armour" critical, once
+    ([combat core](combat-core-evidence.md) C20); at 0 it breaks (message 24, else 7); the invulnerable flag is not tested;
+  - the weapon of the critter that took the damage (the target, or the attacker of a critical self-hit) on critical
+    flags, unless it is invulnerable: "damage weapon" +10, breaking it at
+    0 (messages 23, 8); "destroy weapon" (and "explode weapon") deletes it at once without a break
     (message 22);
-  - the attacker's own weapon on a hit (0x4B5580, combat core C21) by the target's
+  - the attacker's own weapon on a melee hit that dealt damage (0x4B5580, combat core C21) by the target's
     material: stone 4, brick 3, wood 2, plant 1, metal 5, fire 5, glass 5 only for
-    an unarmed attacker, others 0; plus the `|complexity|` share up to × 2; minus 2 for
-    subtype 4 and minus 1 for subtypes 5 and 13. Unarmed it hurts the attacker
-    but does not kill;
+    an unarmed attacker, others 0; **minus** `trunc(wear × min(|complexity|, 100) / 100)`; minus 2 for
+    art subtype 4 and minus 1 for subtypes 5 and 13. Unarmed it hurts the attacker
+    but never takes its last hit point (ARC-COMBAT-007, [ledger CW5–CW7](original-verification-ledger.md#combat-wear-arc-combat-007));
   - script action 40 (transform) keeps the health percentage. Items inside an
     inventory, other than worn ones, are not reached by areas.
 - **Break** (0x43F1C0, item types 5..14, F2): the first time sets the destroyed
@@ -473,7 +478,7 @@ decided every row on 2026-10-20 ([owner decisions](#owner-decisions-2026-10-20))
 | ID | Where | Original 1.0.7.4 | Verdict | Proposal (Steamwoven / Original) |
 | --- | --- | --- | --- | --- |
 | TC1 | cell payment (0x450420 with 0x461590), F2 | An item source pays `cost × (1 + p / c)` cells: a strong technologist pays double, a mage the minimum; the technological adjustment branch looks swapped | Original bug | **Decided** ([owner](#owner-decisions-2026-10-20)): switch. Steamwoven `2 × cost − trunc(cost × p / c)` (a technologist pays fewer cells); Original keeps it. Reaches records 147 (one weapon) and 168 (three armours); TECH-6 |
-| TC2 | action 129 (0x44A7BD, 0x460B50, 0x45FD40, 0x57C6E0), F2 | Calls an unfilled slot of an uninitialised callback structure: undefined | Original bug (crash class) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: open the window with (PC, PC) or (NPC, its PC leader); unused in the data; TECH-5 |
+| TC2 | action 129 (0x44A7BD, 0x460B50, 0x45FD40, 0x57C6E0), F2 | Calls an unfilled slot of an uninitialised callback structure: undefined | Original bug (crash class) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: open the window with (PC, PC) or (NPC, its PC leader); unused in the data; **implemented** for the PC by ARC-TECHNOLOGY-005 and for an NPC with a PC leader by ARC-TECHNOLOGY-006 |
 | TC3 | assembly (0x56E720), F2 | A failed product creation returns after the components are spent and some products given | Original bug (latent) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes all or nothing (room and creation checked before consuming); no switch; TECH-4 |
 | TC4 | assembly (0x56E720), second reader | Both components are found before consuming, so one item matching both lists would be consumed twice (the second time a deleted object) | Original bug (latent, use of a deleted object) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: a found item is reserved for one component; no installed record triggers it; TECH-4 |
 | TC5 | assembly (0x56E720) | Expertise is gated only by the button state; assembly itself does not check (a multiplayer host does not re-check a client) | Original (no single-player effect) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes: assembly re-checks the gate, which changes nothing a single-player player can do; TECH-4 |
@@ -614,7 +619,7 @@ this document start at F1 or F2.
    formula.
 2. **TECH-2 Degrees and expertise** (done: ARC-TECHNOLOGY-002, [runtime](../world/tech-degrees-runtime.md); Simulation, Session; FR-CHAR-017/020,
    FR-MAGIC-012 rules): degree get, raise and lower with the shared
-   spend/refund path of ARC-SKILLS-005, effective expertise through the
+   spend/refund path of ARC-WORLD-052, effective expertise through the
    durable-effects owner (expertise effects become live), the intelligence
    guard on a base decrease, and the level-start snapshot for selling (TC10
    decided). Reuses the auto-level degree rules; no schema change if the
@@ -631,12 +636,15 @@ this document start at F1 or F2.
    units, product alternative and quantity into the crafter's inventory, an NPC
    crafter for the dialog path (its degrees and inventory come from map
    instances, O5).
-5. **TECH-5 Schematic window** (viewer, UI lane; FR-MAGIC-012, FR-ITEM-017/018
-   integration): key `T` and the button with the sheet's guard, learned and
-   found tabs, discipline tabs, pages, button texts and hover texts, sounds
-   3008/3010/3011/3018 + tab; the dialog action `su` through the dialog port
-   (NPC crafter), and script action 129 (TC2 decided). Launcher and docs move
-   with it if the viewer gains an input.
+5. **TECH-5 Schematic window** (done for the PC: ARC-TECHNOLOGY-005,
+   [runtime](../world/schematic-window-runtime.md); viewer, UI lane; FR-MAGIC-012, FR-ITEM-017/018
+   integration): key `T` with the sheet's guard, learned and
+   found tabs, discipline tabs, pages, button texts and hover text, sounds
+   3008/3009/3010/3011/3018 + discipline, and script action 129 for the PC (TC2). The NPC
+   crafter (the dialog action `su` and action 129 for an NPC with a PC leader) is done by
+   ARC-TECHNOLOGY-006 over the NPC inventory store (ARC-WORLD-055), its degrees from the NPC's
+   map data ([ledger NC1–NC8](original-verification-ledger.md#npc-schematic-crafter-arc-technology-006)).
+   No launcher change (no new argument).
 6. **TECH-6 Charge cells and tech devices** (Simulation, with the magic
    engine; FR-MAGIC-010/011): the cell source behind the engine's payment port
    (critter `cost`, item source TC1 decided, ammunition type 2), the list of
@@ -660,7 +668,7 @@ area damage to items join when those owners exist.
 
 Order and dependencies: TECH-1 → TECH-2 → TECH-3 → durability → TECH-4 →
 TECH-5; TECH-6 after the magic engine's payment step and the shared item
-trigger slice. TECH-2 needs ARC-SKILLS-005 (spend/refund); TECH-4 needs the
+trigger slice. TECH-2 needs ARC-WORLD-052 (spend/refund); TECH-4 needs the
 inventory owner and durability (the broken skip); TECH-3 needs a written-item read path
 (FR-ITEM-010); TECH-5 needs the dialog port for `su`, and the NPC crafter path
 needs NPC degrees and inventories from map instances (O5).

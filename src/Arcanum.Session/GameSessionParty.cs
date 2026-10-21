@@ -10,14 +10,17 @@ public enum CompanionStanding { Free = 0, Following = 1, Waiting = 2 }
 
 /// <summary>
 /// One NPC's party record. <see cref="Forced"/> only while following; <see cref="Jilted"/> only while free (a join
-/// clears it); <see cref="SpreadOut"/> in any standing. An NPC without a record is free with no flags.
+/// clears it); <see cref="SpreadOut"/> in any standing. <see cref="Loyalty"/> (ARC-WORLD-045) are the follower's loyalty marks
+/// in any standing: a reaction change arms them while the PC leads it, the loyalty step clears them, and marks armed just
+/// before the leader is cleared stay until the NPC follows again (OL22). An NPC without a record is free with no flags.
 /// </summary>
-public readonly record struct SessionCompanion(string Entity, CompanionStanding Standing, bool Forced, bool SpreadOut, bool Jilted)
+public readonly record struct SessionCompanion(string Entity, CompanionStanding Standing, bool Forced, bool SpreadOut, bool Jilted,
+    CompanionLoyalty Loyalty = CompanionLoyalty.None)
 {
     /// <summary>The source's "leader is this PC" (dialog FO, SCR FOLLOWING): true while waiting too.</summary>
     public bool LedByPc => Standing != CompanionStanding.Free;
 
-    internal bool IsBaseline => Standing == CompanionStanding.Free && !SpreadOut && !Jilted;
+    internal bool IsBaseline => Standing == CompanionStanding.Free && !SpreadOut && !Jilted && Loyalty == CompanionLoyalty.None;
 }
 
 /// <summary>

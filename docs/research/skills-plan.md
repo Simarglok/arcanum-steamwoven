@@ -219,6 +219,10 @@ setting, the original's "one click removes points until the level changes" or
 Depends on: S1.
 
 **S6 Skills page on the character sheet** (UI part of K7).
+**Built by ARC-UI-009** (2026-10-21, [viewer](../rendering/terrain-viewer.md#skills-page-arc-ui-009), ledger
+[SP1–SP8](original-verification-ledger.md#skills-page-arc-ui-009)): the sixteen skills in the original's four groups with the
+skill texts of `mes\skill.mes` (`SkillTexts`, Data), + and − through the point pool with the editor the sheet opens; the − click
+is the original's default (no owner choice of the alternative). The owner's look at the page (L3) is still open.
 Result: the AREA viewer's sheet shows the 16 skills with level, training and
 the key-stat hint, and + and − buy and refund points through S5.
 Components: viewer core, Godot viewer (its smoke run is an acceptance criterion).
@@ -228,6 +232,9 @@ Human-Gates: an owner look at the page (separate L3 item, does not block merge).
 Depends on: S2, S5.
 
 **S7 Fate points** (shared owner; a `WORLD` code).
+**Built by ARC-WORLD-054** (2026-10-21, [contract](../world/fate-points-runtime.md), ledger
+[FT1–FT8](original-verification-ledger.md#fate-points-arc-world-054)): the session's fate owner with the attack, conversation-start
+and dialog `fp` readers; the skill uses and magic call its API. Snapshot schema 26.
 Result: the hero's fate points in the session: count, armed fate per kind
 (skill critical success, attack critical hit and miss, spell at maximum, save
 against magick), consumed on use, saved; the skill check and the attack
@@ -240,6 +247,9 @@ callers in 0x4C7160 and the attack), read them by two readers; the fated repair
 Depends on: S3.
 
 **S8 Heal with bandages and healing items** (first K4 use).
+**Built by ARC-SKILLS-005** (2026-10-21, [contract](../world/heal-runtime.md), ledger
+[HL1–HL5](original-verification-ledger.md#heal-arc-skills-005)): the hero heals any critter with a healing item; the best-follower
+substitution and target choice in the viewer are left out. Snapshot schema 31 (the items' uses).
 Result: the hero (or the best follower) uses a healing item on any living
 critter: the check, healed amount, Master and critical cures, item charges and
 destruction, 4 action points in a round.

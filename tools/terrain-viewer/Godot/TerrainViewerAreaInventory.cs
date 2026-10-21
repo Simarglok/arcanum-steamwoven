@@ -21,6 +21,10 @@ public partial class TerrainViewerApp
     private AreaInventoryHost? _inventoryHost;
     private string _inventoryStatus = "inventory: not loaded";
     private AreaInventoryPanel? _inventoryPanel;
+    // ARC-SKILLS-005: the hero's kit healing items from its load (null without --hero).
+    private IReadOnlyList<SessionHealingItem?>? _areaKitHealing;
+    // ARC-COMBAT-008: the kit's durability values for the attack's wear.
+    private IReadOnlyList<SessionWearItem?>? _areaKitDurability;
     // A pickup or loot clicked from too far: the click route walks within reach first, then the same action runs once.
     private (AreaObjectKey Key, AreaInventoryTargetKind Kind)? _inventoryAfterRoute;
     private (GameSessionOwner Session, long Revision, int Map)? _inventoryHiddenStamp;
@@ -80,6 +84,8 @@ public partial class TerrainViewerApp
         {
             _inventoryHiddenStamp = stamp;
             _inventoryHidden = _inventoryHost!.Taken(_areaSession, CurrentAreaMap);
+            // ARC-COMBAT-008: the objects an attack destroyed or switched off are not drawn either.
+            if (ObjectTargets()?.Gone(_areaSession) is { Count: > 0 } gone) _inventoryHidden = _inventoryHidden.Concat(gone).ToHashSet();
         }
         if (!ReferenceEquals(_canvas.AreaHidden, _inventoryHidden)) _canvas.SetAreaHidden(_inventoryHidden);
     }
@@ -173,6 +179,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.CloseRequested += EndInventory;
             _inventoryPanel.TakeRequested += TakeFromBody;
             _inventoryPanel.TakeAllRequested += TakeAllFromBody;
+            _inventoryPanel.UseRequested += HealSelf;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
@@ -181,7 +188,32 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
-    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder);
+    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing);
+
+    /// <summary>ARC-SKILLS-005: the hero uses a healing item on itself (the inventory use passes the user as the target, as the
+    /// original's inventory window does). Outside a turn-based round, so no action points are charged.</summary>
+    private void HealSelf(string item)
+    {
+        if (!InventoryOpen || !InventoryActive) return;
+        var holder = _inventoryPanel!.Holder;
+        var healing = _inventoryHost!.HealingItem(_areaSession!, item, _areaKitHealing);
+        string message;
+        if (healing is null) message = "not used: not a healing item the hero holds";
+        else
+        {
+            var result = _areaSession!.HealWithItem(_areaSession.Version, SessionLifeTarget.Hero, healing);
+            var life = _areaSession.QueryHeroLife()?.Record.State;
+            message = result.Disposition == GameSessionDisposition.Rejected ? $"not used: {result.Failure}"
+                : (result.Check!.Success ? $"healed {result.Heal!.Value.HitPoints} hit point(s){(result.Heal.Value.Cure ? " and cured an injury" : string.Empty)}" : "the heal failed")
+                + (result.ItemDestroyed ? "; the item is used up" : $"; {result.UsesLeft} use(s) left") + (result.FateUsed ? " (fate point)" : string.Empty);
+            GD.Print($"ARC-SKILLS-005 heal disposition={result.Disposition} failure={result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} " +
+                $"healed={result.Heal?.HitPoints} cure={result.Heal?.Cure} uses-left={result.UsesLeft?.ToString() ?? "-"} destroyed={result.ItemDestroyed} " +
+                $"hp-damage={life?.HitPointDamage}");
+        }
+        _inventoryStatus = message;
+        _inventoryPanel.Render(InventoryView(holder), message);
+        RefreshReadyStatus();
+    }
 
     private void EndInventory()
     {
@@ -215,7 +247,7 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-004 loot-all-item disposition={result.Disposition} failure={result.Failure}{InsertScriptLog(result)}");
             // One pickup sound for the whole take (the first item's), not one voice per item in the same frame.
             if (result.Disposition == GameSessionDisposition.Changed) { if (taken++ == 0) PlayTakenItemSound(line.Entity); printed.Append(AreaInventoryHost.Printed(result)); }
-            else refused.Add($"{_inventoryHost.Name(line.Entity, _hoverNames?.Catalog)}: {AreaInventoryHost.Refusal(result.Failure)}");
+            else refused.Add($"{line.Text}: {AreaInventoryHost.Refusal(result.Failure)}");
         }
         var message = $"took {taken} item(s){printed}" + (refused.Count == 0 ? string.Empty : "; not taken: " + string.Join("; ", refused));
         GD.Print($"ARC-UI-004 loot-all taken={taken} refused={refused.Count} pc={_areaSession!.QueryPcInventory().Count}");

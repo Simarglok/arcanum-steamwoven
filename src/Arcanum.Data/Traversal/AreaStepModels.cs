@@ -113,15 +113,20 @@ public sealed class AreaStepAssessment
 {
     internal AreaStepAssessment(AreaStepRequest request, AreaStepInputIdentity identity, long epoch, CardinalTraversalCoverage coverage,
         CardinalTraversalDisposition? disposition, string reason, AreaStepTerrainEvidence? terrain,
-        IEnumerable<AreaStepObjectEvidence> objects, IEnumerable<AreaStepGap> gaps, AreaObjectKey? wallBlocker = null, AreaObjectKey? windowJump = null)
+        IEnumerable<AreaStepObjectEvidence> objects, IEnumerable<AreaStepGap> gaps, AreaObjectKey? wallBlocker = null, AreaObjectKey? windowJump = null,
+        IEnumerable<AreaObjectKey>? portals = null)
     {
         WallBlocker = wallBlocker; WindowJump = windowJump;
+        Portals = Array.AsReadOnly((portals ?? []).Distinct().ToArray());
         if ((coverage == CardinalTraversalCoverage.Supported) != disposition.HasValue) throw new ArgumentException("Whole Supported requires disposition.");
         Request = request; InputIdentity = identity; EvidenceEpoch = epoch; Coverage = coverage; Disposition = disposition; ReasonCode = reason;
         DestinationTerrain = terrain; Objects = Array.AsReadOnly(objects.ToArray()); Gaps = Array.AsReadOnly(gaps.ToArray());
         ContextFingerprint = CardinalTraversalEncoding.ContextDigest(request.Context);
     }
     public AreaStepRequest Request { get; }
+    /// <summary>ARC-WORLD-051: the doors and windows on the step's legs (whole maps), in leg order; a closed one the step
+    /// passes is the one the walker opens.</summary>
+    public IReadOnlyList<AreaObjectKey> Portals { get; }
     public AreaStepInputIdentity InputIdentity { get; }
     public string EvidenceSha256 => InputIdentity.EvidenceSha256;
     public long EvidenceEpoch { get; }
@@ -152,6 +157,14 @@ public sealed class AreaStepAssessment
 /// building as the original's two open attempts see it; any other step is blocked (a plain lock) or
 /// Unknown (a lock that depends on the hour).</summary>
 internal enum AreaStepEdgeRule { Legacy, Block, Pass, Unknown, WindowJump, Leaving }
+
+/// <summary>
+/// ARC-WORLD-051: a door or window's passage at runtime, which replaces its T0 edge rule: <see cref="Open"/> (open, busted,
+/// or opening for the walker), <see cref="LeavingOnly"/> (locked: only a step leaving a building passes, ledger LV5),
+/// <see cref="Blocked"/> (jammed, magically held, always locked without a key) or <see cref="Unresolved"/> (an unlock
+/// script decides: the T0 rule stays).
+/// </summary>
+public enum AreaPortalPassage { Open, LeavingOnly, Blocked, Unresolved }
 
 /// <summary>One wall or portal on one tile edge (odd direction 1, 3, 5, 7). A <see cref="AreaStepEdgeRule.Leaving"/>
 /// portal keeps its raw ART rotation 0..7, which its leaving test steps by.</summary>

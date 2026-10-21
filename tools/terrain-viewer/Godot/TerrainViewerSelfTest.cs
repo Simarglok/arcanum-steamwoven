@@ -13,6 +13,11 @@ public static partial class TerrainViewerSelfTest
     {
         try
         {
+            // ARC-DEV-032: the self-test reads and writes no setting of the player.
+            if (!ViewerAutomatedStorage.Automated || DiagnosticZoomSettingsStore.StoragePath.StartsWith("user://", StringComparison.Ordinal)
+                || DiagnosticInputSettingsStore.StoragePath.StartsWith("user://", StringComparison.Ordinal))
+                throw new InvalidOperationException("SELF_TEST_SETTINGS_NOT_ISOLATED");
+            GD.Print("ARC-DEV-032 self-test PASS settings isolated (the zoom and input stores use no user:// file)");
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_GRID_PROBE") == "1")
             {
                 if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("AREA_GRID_NATIVE_REQUIRED");
@@ -120,6 +125,7 @@ public static partial class TerrainViewerSelfTest
             await AssertAreaInventoryAsync(host);
             await AssertAreaSheetAsync(host);
             await AssertAreaLogbookAsync(host);
+            await AssertAreaSchematicsAsync(host);
             await AssertViewerAudioAsync(host);
             await AssertVisualToggleAppAsync(host);
 

@@ -57,7 +57,7 @@ layout of the StaticObjects loader, in the source's field order
 | Armour | 59..67 | armour flags, AC adjustment and magic adjustment, resistance adjustments and magic adjustments (five each), silent-move adjustment and magic adjustment, unarmed bonus damage |
 | Generic | 59..61 | generic flags (lockpick, trap device, healing item, grenade and others), usage bonus, remaining usage count |
 | Critter | 36..63 | critter flags and flags 2, 28 base stats, 12 basic and 4 tech skills, 25 spell/tech values, fatigue points, adjustment and damage, critical-hit body type, inventory source, auto-level scheme |
-| NPC | 69..92 | NPC flags, AI parameter row, experience worth and pool, faction, reaction base, social class, monster damage (five min/max pairs) |
+| NPC | 69..92 | NPC flags, AI parameter row, experience worth and pool, faction, reaction base, social class, wait (slot 89, field 300: the wait timer index, ARC-WORLD-045), monster damage (five min/max pairs) |
 
 Index orders differ and are kept as stored: damage arrays by
 `CombatDamageIndex` (normal, poison, electrical, fire, fatigue), resistance
@@ -86,6 +86,12 @@ the use-art fragment's bits 6..9 the art subtype a wearer's art takes, and bit 1
 (broken) item. The [equipment runtime](../world/equipment-runtime.md) turns these fields into wear values
 (`SessionEquipmentFacts.FromCombatFields`).
 
+**Breakable objects (ARC-COMBAT-008).** `CombatFieldReader.ReadBreakable(row)` reads a portal (1), container (2), scenery (3) or
+trap (17) of an Area snapshot, static or mobile: the common block and `CombatBreakableFields`. These are the first field of
+its type block, its flags (portal field 46, container 56, scenery 69, trap 307; slot 36); a scenery's respawn delay (field 71,
+slot 38); and the destroyed ART of a scenery or trap (field 25, slot 24, −1 for none). The field numbers come from the
+executable's field-name table. Another type is `TypeUnsupported`, and a field that is not a plain number refuses the object.
+
 ## Boundaries
 
 Values are stored values. Nothing here applies stats, effects, aptitude scaling
@@ -94,9 +100,9 @@ those belong to the attack resolver and its future data bridge. HP points of
 critters are the stored base (0 on the Crash Site creatures); maximum HP is a
 rule over stats and level.
 
-NOT READY: portals, containers, walls and scenery (types 0..4) and traps (17)
-are refused as `TypeUnsupported`, although portals and containers can be
-attacked; critter ammunition pools (four object handles) and inventory gear
+NOT READY: `Read` refuses portals, containers, walls and scenery (types 0..4)
+and traps (17) as `TypeUnsupported` (their damage fields come through
+`ReadBreakable`, above); critter ammunition pools (four object handles) and inventory gear
 (use the [Area inventory view](../world/area-inventory-view.md) and
 `InventoryLocation` 1004 wielded, 1006 worn); the spell, AI
 parameter and critical tables the stored numbers point to; generated

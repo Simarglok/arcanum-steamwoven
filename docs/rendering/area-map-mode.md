@@ -64,9 +64,14 @@ Since ARC-RENDER-024 the main world map opens here too, as a window that moves w
   Site profiles draw no portal, so their plans are unchanged.
 - **Lighting and session.** The map's own ambient scheme and stationary lights
   when its sources admit them (the lighting reader now reads up to 256 core
-  sectors; otherwise the map is drawn unlit, has no session clock and the HUD
-  names the lighting failure). The session places the actor on the map's
-  runtime number.
+  sectors; otherwise the map is drawn unlit and the HUD names the lighting failure). Since ARC-WORLD-057 an unlit map
+  still has its game session: its clock starts from the module's `rules/gameinit.mes` alone
+  (`AreaLightingReader.ReadStartup`), with the same clock profile as a lit map of the module, so a session carries
+  between them (native smoke on `bessietoonesmine-fixed`, drawn unlit for sectors without the metadata section: the map
+  battery with `--hero`, the transfer to the main map and F7/F8 pass). A map whose start clock cannot be read has none.
+  On an unlit map the session clock stands still: with no ambient driver it does not flow, holds no modal pause and runs
+  no event passes, and the palette's wait is unavailable; time and the pending timers go on on the next lit map.
+  The session places the actor on the map's runtime number.
 - **Inventory.** With a session, ground pickup, looting and the inventory window
   work on the map as on the exterior (the map's T0 items seed the session).
 - **Transitions.** See [map transitions](#map-transitions-arc-world-031) below.
@@ -91,7 +96,7 @@ draws, a left click through the production ground-click seam sets a route goal
 up to 8 open steps away, frames walk the actor there on the map's chart, and the
 resource sweep and overlapped reload pass (`ARC-RENDER-017 native-smoke map
 PASS`, `ARC-RENDER-007 resources reload PASS`). Since ARC-WORLD-021 a map with a reachable window also
-steps the actor across it with the vault (`ARC-WORLD-021 native-smoke vault PASS`; otherwise `NO-WINDOW`). Since ARC-COMBAT-005, with `--hero` and a lit map, the hero attacks the living NPC with the fewest hit points until it dies ([hero attack](../world/hero-attack-runtime.md#viewer-area); `ARC-COMBAT-005 native-smoke attack PASS`, otherwise `NO-TARGET`; observed on `crash site cave`: a rat of 6 hit points, walk to reach, 12 attacks, fallen pose read, 192 experience). Observed on `elven ruins`
+steps the actor across it with the vault (`ARC-WORLD-021 native-smoke vault PASS`; otherwise `NO-WINDOW`). Since ARC-COMBAT-005, with `--hero` and a lit map, the hero attacks the living NPC with the fewest hit points until it dies ([hero attack](../world/hero-attack-runtime.md#viewer-area); `ARC-COMBAT-005 native-smoke attack PASS`, otherwise `NO-TARGET`; observed on `crash site cave`: a rat of 6 hit points, walk to reach, 12 attacks, fallen pose read, 192 experience). Since ARC-COMBAT-008, the last stage Alt-clicks the attackable door, window, container or scenery with the fewest hit points and attacks it until it breaks or 40 attacks ran ([object damage](../world/object-damage-runtime.md#viewer-arc-combat-008-part-2); `ARC-COMBAT-008 native-smoke object-attack PASS`, otherwise `NONE`). Observed on `elven ruins`
 (9 sectors), `bates mansion lev 1` (9), `crash site cave` (1) and
 `caladon-castle main floor` (79 sectors, 323,584 terrain cells, 2,967 bodies,
 load about 14 s). Since ARC-DATA-023 also on `crematorium-lev 2` (concealed
@@ -276,7 +281,7 @@ with an unconditional exit stays that exit.
 - **Guards** (ledger SG1–SG6) are answered from the session: the PC's quest log (botched reads 6) and, for any other
   object, the quest's global state; the hero's kit and carried items and their worn slots; a holder's current list and
   its items' inventory locations; any object's name number and spell flags from its row (the PC has no row: name 0, no
-  spell flags); no reputations (only a PC has them and the session holds none yet).
+  spell flags); the PC's reputations from the session (ARC-WORLD-044, [reputation runtime](../world/reputation-runtime.md); only a PC has them).
 - **Effects**, applied as the run goes, as for a dialog script: global flags, sound-scheme requests, deferred calls to the
   session's queue, the use slot; a step the session refuses leaves the earlier ones applied and the use is reported
   refused. Printed lines show on the status line; effect sounds are not played. The first teleport of the player is the
@@ -375,7 +380,8 @@ With a session, F7 and F8 work on any map as on the exterior
 ([quick save](terrain-viewer.md#quick-save-and-quick-load-arc-world-011): keys on
 release, the same guards, atomic slot, every check before anything changes),
 with their own slot, `user://saves/map/quicksave.json`, so the Crash Site slot
-is never touched. A save records the actor on the map's runtime number. While
+is never touched (an automated run keeps both slots in its own folder,
+[ARC-DEV-032](terrain-viewer.md#automated-runs-and-the-players-settings-arc-dev-032)). A save records the actor on the map's runtime number. While
 another map loads there is no session, so F7/F8 do nothing; a load drops a
 queued transfer.
 
@@ -516,7 +522,9 @@ back to lev 2 with the companion) and on a `tulla interior` jump point
   window) is talked to where it stands: a click, the hover action and the
   walk-to-talk reach it as any speaker, and the conversation runs through its
   own host (`AreaConversationHost.ForVisitor`) over its home map's dialog
-  state: its dialog slot, local flags and follow keys are its home map's, its
+  state (`AreaTalkRouting.HostOf`: a speaker goes only to the host that lists
+  it, since its index means something only there; the viewer self-test routes
+  its stand-in row itself): its dialog slot, local flags and follow keys are its home map's, its
   party commands (`JO`, `WA`, `UW`, `LV`) go to the session party with its
   facts, so the talk is the same wherever it stands and one identity keeps one
   state, as the original keeps one object
@@ -542,6 +550,60 @@ the shown map (no body, or its cell not admitted) is not carried and stays
 recorded where it was. There are
 no followers of followers, unconscious followers, carried inventory, orders,
 loyalty or wait timer. The exterior keeps its measured roster (Virgil).
+
+## Doors and windows (ARC-WORLD-051)
+
+Doors and windows keep their state in the session's lock owner
+([lock state](../world/lock-state-runtime.md), ARC-WORLD-050). Their rules follow
+the executable as read in
+[ledger LK1–LK13](../research/original-verification-ledger.md#doors-containers-and-locks-arc-res-065).
+
+- **Frames.** The area owner decodes every frame of a portal ART with more than
+  one frame as `PortalFrame` visuals, and the plan copies them into the map's
+  repository (`AreaScenePlan.PortalFrames`). A door whose even rotation is 0 or
+  6 opens through frames 4..6; one of 2 or 4 opens through frames 1..3. A window
+  uses frames 0 and 1. A portal off its T0 frame is drawn like a moved body,
+  from its current frame placed by the frame's own hot spot
+  (`AreaScenePlan.PortalFrame`).
+- **Steps.** The actor's steps and the click route use the portal's current
+  state instead of its T0 edge rule (`AreaStepSnapshot.Assess` with
+  `AreaPortalPassage`):
+  - an open or busted portal passes;
+  - otherwise the player's open attempt decides at the session hour: an
+    unlocked one passes, a locked one passes only a step leaving a building
+    (ledger LV5), and jammed, magically held and always-locked ones block (the
+    session holds no keys yet);
+  - an unlock script keeps the T0 rule.
+- **Opening by a step.** When a started step crosses a closed portal it may
+  pass, the session records the portal open (the last frame of its range) at
+  once. The frames then play at 1000 / fps ms each, with the portal's open
+  sound. The actor does not wait for the animation (the original's door goal
+  sequencing is not modelled). A diagonal step opens every passable closed portal
+  on its four legs, the legs the step's evidence checks (parity NOT_VERIFIED).
+- **Use.** A left press on a door or window uses it, walking within the use
+  range (2 cells) first; a press while the actor is mid-step uses it once the step
+  has settled, and any other click replaces a pending door use. An open portal closes. A closed one opens when the
+  player's open attempt succeeds. A locked, jammed or magically held one plays
+  the locked sound and stays closed. One with an unlock script is not opened (its
+  script is not run).
+- **Saves.** F7/F8 and map changes carry the state, because it is part of the
+  session's map changes. A Lock event that comes due locks, unjams and closes
+  the portal while its map is shown, and waits while another map is.
+- **Not covered.** Maps without a runtime number (not in the map list) keep their
+  portals at T0.
+
+Native smoke (`ARC-WORLD-051 native-smoke portal PASS`, after the talk smoke):
+1. The PC stands on a closed, unlocked door's tile and steps across its edge.
+   The session then records the door open, and after the animation it is drawn
+   on its open frame.
+2. A press on the door closes it, and it is drawn on its T0 frame again.
+3. When the map has a door the player cannot open, a press next to it is
+   refused and that door stays closed.
+
+The smoke prints `NONE` on a map without a door that opens. An opt-in test
+(`AreaPortalsOriginalTests`) checks every installed interior: the frames of
+every multi-frame door and window are in the map's repository, and a step from
+the tile of every closed, unlocked door opens it.
 
 ## The main world map (ARC-RENDER-024)
 
@@ -588,8 +650,8 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 - **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
   Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
   (92913, 82598). Every listed map is a destination.
-- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,walk`
-  narrows a run to those stages; without it all but `walk` run), in this order: the map battery at the new-game start (the Crash Site window: walk,
+- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,worldmap,walk`
+  narrows a run to those stages; without it all but `walk` run; `worldmap` is [the world map](#world-map-arc-ui-048), after the stream), in this order: the map battery at the new-game start (the Crash Site window: walk,
   logbook, sound, dialog with Virgil, who then follows); the resource sweep and reload; the companion follow smoke and
   the map transfer smoke (exit to another map, jump point, F7/F8); `ARC-RENDER-024 native-smoke round-trip PASS`: into
   the cave and back onto the main map by the two exits; and last `ARC-RENDER-024 native-smoke stream PASS`: walks by the
@@ -619,21 +681,63 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 **NOT READY:** the window is a fixed 3×3 core, not the original's 16-sector cache; a move costs a background load of
 the whole window (no sector is reused) and one publication, which rebuilds the scene (a frame hitch at the swap; a step
 in progress ends on its committed cell); saved sector differences (`.dif`) are not modelled; the world map's own travel
-(the original's world-map screen) is not implemented; a companion more than one sector from the actor when the window
+(the original's world-map screen) is not implemented (the diagnostic [world map](#world-map-arc-ui-048) travels by its rules since ARC-UI-048); a companion more than one sector from the actor when the window
 moves is bound only if the new window holds its cell; on the same map, an F8 save or a jump point or teleport whose cell
 lies outside the shown window is refused (the cell is not admitted in this window; another map's save or exit opens the
 window around it); a click is a goal inside the shown window (a goal farther away is reached only by a host that plans
 it, as the walk smoke does with the window route). Original parity NOT_VERIFIED.
+
+## World map (ARC-UI-048)
+
+On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the world map is keyed to) the original key
+**W** opens a diagnostic world-map panel over the travel rules of ARC-WORLD-056
+([world-map travel rules](../world/world-map-travel-runtime.md)).
+
+- **Opening.** W acts on its logical key down under the guards of C, L and T: not with the palette, a dialog or another
+  window open, not under UI focus. The panel is modal: the gate closes, the clock pauses for the frames and a walk stops.
+  It refuses on another map ("only on the start map"), in combat mode, while the actor is between cells, and until the
+  module's world-map data have loaded (in the background, once per module).
+- **What it shows.** It shows the project's own 500 × 500 picture of the start map. The picture is drawn from its terrain:
+  one pixel for 4 × 4 sectors, coloured by terrain type, darker where travel is blocked, and brighter where a blocked type
+  has its own sector file. On top are the PC, the areas (known ones in yellow), the waypoints and the planned route. A list
+  holds every area by its data name.
+  - A click on the picture adds a waypoint at that pixel's sector. A known area within 320 tiles takes its place.
+  - A double-click in the list adds a waypoint at that area (a diagnostic shortcut for clicking it).
+  - A refused segment shows "no route there (the original's message 601)". Clear drops the waypoints.
+- **Travel.** Travel, Enter or confirm starts the journey. It runs one travel step per 62 real ms, at most four per frame.
+  - Each step's game time jumps the session clock through the event pump, as an explicit wait does. Events that came due
+    fire once, late. On a map without lighting the clock jumps without event passes.
+  - An area the step discovers becomes known in the session, and the last discovered record is cleared again.
+- **Landing.** At the end the panel closes and the start map loads around the landing location, as a transfer does:
+  the session is carried and following companions arrive with the PC. W, Escape or cancel during the journey lands
+  where it stands, by the setting's cancel rule (A4).
+- **Native smoke** (stage `worldmap`, last; skipped off the start map). It starts wherever the earlier stages left the
+  actor; the figures below are those of `ARC_AREA_MAP_SMOKE_ONLY=worldmap` at the new-game start:
+  1. W opens the panel.
+  2. The farthest area refuses its one-waypoint route.
+  3. The nearest unknown area that travel can discover and whose route plans is chosen; from the Crash Site that is
+     Shrouded Hills, 43 steps.
+  4. Enter travels. The run checks one step per 62 ms, the clock gained exactly 43 h, Crash Site and Shrouded Hills
+     known, the start map loaded around the landing with the session carried, and the actor on the area's location:
+     `ARC-UI-048 native-smoke worldmap PASS`.
+
+**NOT READY:**
+- The original's world-map screen is not drawn: no map art, zoom, notes or town maps.
+- The original keeps the world map unwalkable in a sector with a town map; that check is not made.
+- Travel music, hiding the party, random encounters and the script-blocked list's writers are missing.
+- The journey is not saved. When the landing load fails, the start map reloads where the PC stood, with the journey's
+  hours and discoveries kept.
+- Original parity NOT_VERIFIED.
 
 ## Not yet
 
 - Roofs are drawn, hidden and faded since ARC-RENDER-022 ([roofs](roofs.md)).
   Wall fade uses the ARC-RENDER-011 wall check; inside buildings an actor north
   of a wall can still be hidden by it (parity with the original not verified).
-- Door passability follows the step evidence: a locked door the player has no key
-  for opens only for a step leaving a building, as the original executable decides
-  it (ARC-RES-049); doors are not opened or animated.
-- Guarded tile and sector transitions and use scripts outside the set, and door runtime on these maps; the dialog
+- Doors and windows open, close and animate since ARC-WORLD-051 (above). Keys are
+  not held, NPCs do not open doors, an unlock script is not run, and a door the
+  original destroys when busted has no destroyed state.
+- Guarded tile and sector transitions and use scripts outside the set; the dialog
   gaps above (SCR admission, generated lines). On the main world map: the limits listed in
   [its section](#the-main-world-map-arc-render-024).
 - Original-executable parity is NOT_VERIFIED.

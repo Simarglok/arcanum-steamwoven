@@ -36,7 +36,8 @@ point, `RefundHeroPoint` lowers one and credits the point. The pool checks the u
 
 - **Order of the buy (0x589A20):** a degree at 7 is "at maximum"; then the cost of the next degree against the unspent
   points (`NotEnoughPoints`); then the raise (`IntelligenceTooLow`). The original reads the cost of degree 8 one past its
-  table (the next table's 0), so at the cap it, too, ends at the raise's refusal.
+  table (the next table's 0), so at the cap it, too, ends at the raise's refusal. Since ARC-MAGIC-004 the lane also states
+  that cost (`IPointLane.Cost`: the next degree's, 0 at degree 7), which the pool tests before it asks for the raise.
 - **TC10, owner decision 2026-10-20, both modes, no switch:** a degree is sold only down to the value it had when the
   character editor opened (the pool's floor, as for skills and colleges). The original's sell wrapper has no such compare;
   the owner's play experience is that a point invested earlier cannot be taken back.
@@ -50,7 +51,8 @@ effects (every cause; counted on the installed data with the repository's effect
 change, all adds, none a race or the female effect, whose discipline changes the session therefore does not carry). These
 changes were inert until now ([durable effects](durable-effects-runtime.md)); the schematic component gate (TECH-4) and the
 character sheet will read the expertise. A bought degree moves the tech points and so the aptitude
-([character stats](character-stats-runtime.md)). NPC degrees stay in their advancement records; no NPC query is added yet.
+([character stats](character-stats-runtime.md)). NPC degrees stay in their advancement records or their map data; `QueryNpcTechnology` (ARC-TECHNOLOGY-006, [NPC crafter](schematic-assembly-runtime.md#npc-crafter-arc-technology-006))
+reads them for the NPC schematic crafter.
 
 ## Differences from the original
 
@@ -64,7 +66,8 @@ character sheet will read the expertise. A bought degree moves the tech points a
 
 ## Not ready
 
-- No caller: the character sheet's + and − buttons (skills plan S6) and the schematic window (TECH-5) come later.
+- No caller of the buy and refund: the character sheet's + and − buttons (skills plan S6) come later; the viewer's
+  [schematic window](schematic-window-runtime.md) (ARC-TECHNOLOGY-005) reads the degrees and expertise.
 - The schematic knowledge (TECH-3) and the component gate (TECH-4) do not read the expertise yet.
 - Spell ranks in the intelligence guard are read from the sheet; the spell lane is the magic slice MT3.
 - The race and gender effects' tech-discipline changes are not carried into the expertise (no installed one has any); a

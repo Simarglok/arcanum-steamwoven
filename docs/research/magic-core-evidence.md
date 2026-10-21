@@ -161,6 +161,14 @@ drives the resistance rules below.
 
 ### Learning, colleges and mastery (FR-MAGIC-002)
 
+**Original check (ARC-MAGIC-004, 2026-10-21).** The facts of this section, Answer items 2 and 3 and the state model's "Known
+spells" and "Magick points" rows were read in the executable by two readers ([ledger SB1–SB11](original-verification-ledger.md#spell-book-arc-magic-004); the learn by the
+function oracle, F3) and stand at F2. Three corrections to the text below: the forced learn adds the magick points of the
+missing ranks only and never lowers a rank (SB3); unlearning keeps the mastered college (SB6); and the re-validation on a stat
+decrease runs for a base decrease of intelligence or willpower through the stat setter, not for an effect (SB11). The
+character editor reports a failed learn by testing the level and then intelligence, naming willpower for anything else
+(SB8). The runtime is the [spell book](../world/spell-book-runtime.md).
+
 - **Order.** Learning rank r of a college requires knowing exactly r − 1
   ranks, character level ≥ {1, 1, 5, 10, 15}[r − 1], intelligence ≥ 5 and
   willpower ≥ the record's `IQ:` (add (0x4B1530, 0x4B1570, 0x4B15A0, 0x4B1600, 0x4B1620, 0x4B1650, 0x4B1660, 0x4B16C0, 0x4B1740, 0x4B1750, 0x4B1760, 0x4B1770, 0x4B1790, 0x4B1950, 0x4B19B0, 0x4B1A40)).
@@ -186,6 +194,14 @@ drives the resistance rules below.
   other casts) costs a flat 100 coins (money (0x4B1650, 0x4B1660, 0x4B16C0, 0x4B1740)).
 
 ### Choosing the target (FR-MAGIC-003)
+
+Read in the executable by two readers (ARC-MAGIC-006, [ledger "Spell invocation"](original-verification-ledger.md#spell-invocation-arc-magic-006),
+IV1–IV12): the steps below are F2, the range, the flags and the item gate F3 (function oracle). Precisions from that reading:
+the turn test applies to a PC or NPC parent only; the range measures from the parent's location and admits a parent without
+one; the NPC fallback tests only the record's BEGIN target mask and lists the tiles of radius 2 around the target object in the
+target collection's order, replacing an object target by a tile; intelligence 5 holds for technology records too; the MG5 d100
+is drawn whenever the target's aptitude is negative. The implementation is the
+[spell invocation runtime](../world/spell-invocation-runtime.md).
 
 The invocation check runs before any slot or payment (check (0x4564E0)):
 
@@ -278,6 +294,14 @@ charges `7 / 2 = 3 → 4` (7 is odd), then `× 2 = 8` fatigue; the UI and AI
 cast cost gives `7 × 2 / 2 = 7` (MG2). With `Cost: 6` both give 6 (ledger MG2, PC1).
 
 ### Resistance, saving throw and aptitude (FR-MAGIC-005, FR-MAGIC-010)
+
+**Original check (ARC-MAGIC-005, 2026-10-21).** The resistance pseudo-code below, the predictor paragraph and the fate save
+against magick were read in the executable by two readers ([ledger RS1–RS10](original-verification-ledger.md#spell-resistance-arc-magic-005))
+and run in the function oracle (the resistance and the predictor, F3); they stand at F2/F3. Two precisions: an action other
+than BEGIN, a technology record or an unresistable run returns before the margins are reset, so the run keeps its previous
+margin; and the predictor answers the resistance R itself (its save penalty is R / 10) unless it answers 100, at least 50 or 0.
+MG4 is fixed in Steamwoven (the penalty is added) behind the Original switch; the runtime is the
+[spell resistance](../world/spell-resistance-runtime.md).
 
 Applied at BEGIN to each target, for magic records only, and skipped for
 self-targets, `No_Resist:` records and unresistable runs (script "cast

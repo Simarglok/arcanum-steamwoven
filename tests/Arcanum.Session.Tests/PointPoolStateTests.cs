@@ -96,7 +96,7 @@ public sealed class PointPoolStateTests
     }
 
     [TestMethod]
-    public void RefusalsComeInOrderAndTheSpellLaneIsNotReady()
+    public void RefusalsComeInOrder()
     {
         using var none = Create();
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.HeroEditorUnavailable),
@@ -110,7 +110,6 @@ public sealed class PointPoolStateTests
         Failed(owner.RefundHeroPoint(new GameSessionVersion(owner.Identity, 7), AdvancementTrack.Stat, 0, (SkillRefundClick)5), owner,
             GameSessionFailure.InvalidPointTarget, 0);
         Failed(owner.SpendHeroPoint(new GameSessionVersion(owner.Identity, 7), AdvancementTrack.Stat, 0), owner, GameSessionFailure.StaleVersion, 0);
-        Refused(owner.SpendHeroPoint(owner.Version, AdvancementTrack.College, 3), owner, PointChangeStatus.LaneNotReady, 0);
         Spent(owner.SpendHeroPoint(owner.Version, AdvancementTrack.BasicSkill, (int)Skill.Persuasion), owner, 1);
         var key = Refused(owner.SpendHeroPoint(owner.Version, AdvancementTrack.BasicSkill, (int)Skill.Persuasion), owner,
             PointChangeStatus.KeyStatTooLow, 1);

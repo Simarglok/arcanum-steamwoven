@@ -187,8 +187,10 @@ public sealed class CharacterPointRulesTests
 
     // A spell-rank lane (degrees with tech): one rank and one magick point a step; the flags break its contract on purpose.
     private sealed class Ranks(int cost = 1, bool tech = false, bool touchUnspent = false, bool touchOther = false, int step = 1,
-        PointChangeStatus refuse = PointChangeStatus.Changed) : IPointLane
+        PointChangeStatus refuse = PointChangeStatus.Changed, int? reported = null) : IPointLane
     {
+        public int Cost(AdvancementSheet sheet, int index) => cost;
+
         public PointLaneStep Raise(AdvancementSheet sheet, AdvancementModifiers modifiers, int index) => Step(sheet, index, step);
 
         public PointLaneStep Lower(AdvancementSheet sheet, AdvancementModifiers modifiers, int index) => Step(sheet, index, -step);
@@ -201,7 +203,7 @@ public sealed class CharacterPointRulesTests
                 : sheet with { Colleges = sheet.Colleges.SetItem(index, sheet.Colleges[index] + by), MagickPoints = sheet.MagickPoints + by };
             if (touchUnspent) after = after with { UnspentPoints = 0 };
             if (touchOther) after = after with { Colleges = after.Colleges.SetItem((index + 1) % 16, 1) };
-            return new(PointChangeStatus.Changed, after, cost);
+            return new(PointChangeStatus.Changed, after, reported ?? cost);
         }
     }
 
@@ -230,6 +232,8 @@ public sealed class CharacterPointRulesTests
         Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(touchUnspent: true)).Status);
         Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(cost: -1)).Status);
         Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(touchOther: true)).Status);
+        Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(reported: 2)).Status,
+            "a step that charges other than its stated cost");
         Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(step: 2)).Status);
         Assert.AreEqual(PointChangeStatus.Invalid, Spend(floor, AdvancementTrack.College, 2, lane: new Ranks(step: -1)).Status, "the wrong way");
         Assert.AreEqual(PointChangeStatus.SpellNeedsStat, Spend(floor, AdvancementTrack.College, 2,

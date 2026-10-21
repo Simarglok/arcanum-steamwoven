@@ -64,7 +64,7 @@ public sealed class CombatFieldReaderTests
 
     private static Dictionary<int, object> NpcValues() => CritterValues(new()
     {
-        [69] = 0x1306, [71] = 23, [74] = 40, [75] = 7, [81] = 11, [84] = 50, [85] = 3, [92] = Map(2, 6, 0, 0, 0, 0, 1, 2, 0, 0),
+        [69] = 0x1306, [71] = 23, [74] = 40, [75] = 7, [81] = 11, [84] = 50, [85] = 3, [89] = 2, [92] = Map(2, 6, 0, 0, 0, 0, 1, 2, 0, 0),
     });
 
     private static Func<int, PrototypeFile> Files(params (int Number, int Type, Dictionary<int, object> Values)[] prototypes)
@@ -180,6 +180,7 @@ public sealed class CombatFieldReaderTests
         Assert.AreEqual((2, -1, 1), (c.SpellTech[3], c.SpellTech[16], c.SpellTech[21]));
         var n = npc.Npc!;
         Assert.AreEqual((0x1306u, 23, 40, 7, 11, 50, 3), (n.Flags, n.AiData, n.ExperienceWorth, n.ExperiencePool, n.Faction, n.ReactionBase, n.SocialClass));
+        Assert.AreEqual(2, n.Wait, "ARC-WORLD-045: the wait field (300)");
         CollectionAssert.AreEqual(new CombatDamageRange[] { new(2, 6), new(0, 0), new(0, 0), new(1, 2), new(0, 0) }, n.Damage.ToArray());
         Assert.IsNull(npc.Item);
 
@@ -297,6 +298,30 @@ public sealed class CombatFieldReaderTests
         var weapon = Row(5, 6218, Weapon, WeaponValues(), Instance(43, 1004), Instance(70, 9));
         Assert.AreEqual((1004, 9), (CombatFieldReader.Read(weapon).Fields!.Item!.InventoryLocation, CombatFieldReader.Read(weapon).Fields!.Weapon!.MinimumStrength));
     }
+
+    [TestMethod]
+    public void ABreakableObjectReadsItsCommonFieldsTypeFlagsRespawnAndDestroyedArt()
+    {
+        // ARC-COMBAT-008: portal 1, container 2, scenery 3 and trap 17; their type block's first field (flags) is slot 36, a
+        // scenery's respawn delay slot 38, the destroyed ART slot 24.
+        var portal = CombatFieldReader.ReadBreakable(Row(6, 1001, 1, Common(new() { [36] = 0x81, [24] = -1 })));
+        Assert.AreEqual(CombatFieldFailure.None, portal.Failure);
+        Assert.AreEqual((1, 20, -3, 4, 5, 0x81u, 0, CombatBreakableFields.NoArt), (portal.Fields!.Object.Type, portal.Fields.Object.HitPoints,
+            portal.Fields.Object.HitPointAdjustment, portal.Fields.Object.HitPointDamage, portal.Fields.Object.Material, portal.Fields.TypeFlags,
+            portal.Fields.RespawnDelay, portal.Fields.DestroyedArt), "a portal reads no respawn or destroyed ART");
+        var scenery = CombatFieldReader.ReadBreakable(Row(7, 4050, Scenery, Common(new() { [36] = 0x22, [38] = -3, [24] = 0x30000100 })));
+        Assert.AreEqual((0x22u, -3, 0x30000100u), (scenery.Fields!.TypeFlags, scenery.Fields.RespawnDelay, scenery.Fields.DestroyedArt));
+        var trap = CombatFieldReader.ReadBreakable(Row(8, 26001, 17, Common(new() { [36] = 0x2, [24] = -1 })));
+        Assert.AreEqual((0x2u, 0, CombatBreakableFields.NoArt), (trap.Fields!.TypeFlags, trap.Fields.RespawnDelay, trap.Fields.DestroyedArt));
+        var chest = CombatFieldReader.ReadBreakable(Row(9, 3043, 2, Common(new() { [36] = 0x200 })));
+        Assert.AreEqual((2, 3043, 0x200u), (chest.Fields!.Object.Type, chest.Fields.Object.Prototype, chest.Fields.TypeFlags));
+        Assert.AreEqual((CombatFieldFailure.TypeUnsupported, 16), Refusal(CombatFieldReader.ReadBreakable(Row(4, 29001, Npc, NpcValues()))));
+        var unresolved = Row(10, 4050, Scenery, Common(new() { [36] = 0x20, [24] = -1 }),
+            new AreaFieldValue(38, AreaPresence.Absent, AreaValueOrigin.Instance, null, [], null));
+        Assert.AreEqual((CombatFieldFailure.FieldUnresolved, 38), Refusal(CombatFieldReader.ReadBreakable(unresolved)), "a scenery needs its respawn field");
+    }
+
+    private static (CombatFieldFailure, int) Refusal(CombatBreakableRead read) => (read.Failure, read.Detail ?? -1);
 
     [TestMethod]
     public void AnAreaObjectWithoutAMandatoryFieldIsRefusedAtThatSlot()

@@ -222,7 +222,7 @@ concealed monsters, 111 critters without standing art, a damaged wall and a
 tile-art scenery object, all drawn since ARC-DATA-023, and K'na Tha, which stopped
 at the cumulative encoded-frame budget after 28,091 frame requests (15,374 objects
 refused; 260 distinct art ids among its 43,219 objects). With shared frame
-selections (ARC-DATA-024) K'na Tha needs 477 frame decodes and inspects in about
+selections (ARC-DATA-024) K'na Tha needs 477 frame decodes (488 since ARC-WORLD-051 also decodes the other frames of its multi-frame door and window ARTs) and inspects in about
 8 s (Release, scratch runner). No eye-candy overlay is active at T0 in any
 interior.
 

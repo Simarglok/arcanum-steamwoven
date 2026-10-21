@@ -111,7 +111,7 @@ public partial class TerrainViewerApp
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
     private bool PaletteOpen => _worldPanel?.IsOpen == true;
-    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen;
+    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || WorldMapOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -187,7 +187,7 @@ public partial class TerrainViewerApp
     }
     private void ToggleWorldSettings()
     {
-        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen) return;
+        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || WorldMapOpen) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); _visualKeyNotice = null; }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); _overlayPanelState = null; SyncPassabilityOverlay(); }
@@ -333,6 +333,8 @@ public partial class TerrainViewerApp
         if (InventoryOpen) { HandleInventoryPulse(intent); return; }
         if (SheetOpen) { HandleSheetPulse(intent); return; }
         if (LogbookOpen) { HandleLogbookPulse(intent); return; }
+        if (SchematicsOpen) { HandleSchematicsPulse(intent); return; }
+        if (WorldMapOpen) { HandleWorldMapPulse(intent); return; }
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
         if (intent.MenuPressedDirection != 0) _worldPanel?.Navigate(intent.MenuPressedDirection);
@@ -450,6 +452,8 @@ public partial class TerrainViewerApp
             FollowAreaAmbient(); FollowAreaWalls(); FollowAreaRoofs();
             // ARC-COMBAT-005: fallen bodies move like companions, from the frame repository with their poses.
             SyncAreaCombatBodies();
+            // ARC-WORLD-051: portals off their T0 frame are drawn like moved bodies.
+            FollowAreaPortals();
             _canvas!.SetAreaMovingBodies(AreaMovingCommands()); _canvas.SetAreaAbsent(_areaCompanions?.Absent);
             _canvas.PublishArea(_readyArea.Plan, AreaFrames(), actor, input, _cache); return;
         }
@@ -551,6 +555,7 @@ public partial class TerrainViewerApp
         _worldAdvanceObserverForSelfTest?.Invoke(advance);
         ObserveCombatRunSteps(advance);
         NoteMapEntries(advance);
+        NoteMapPortals(advance);
         foreach (var evidence in advance.AreaEvidence)
         {
             _worldActorDenied |= evidence.Live?.ReasonCode is AreaOccupancyRules.DestinationActor or AreaOccupancyRules.ShoulderActor;
@@ -585,7 +590,8 @@ public partial class TerrainViewerApp
         if (!ReferenceEquals(_worldRouteSession, session))
         {
             // ARC-WORLD-042: the player's click route follows a corridor to a goal beyond the local planner's reach.
-            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy), corridorLimits: new RouteCorridorLimits());
+            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy, () => area.Portals?.Invoke()),
+                corridorLimits: new RouteCorridorLimits());
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;
@@ -629,6 +635,8 @@ public partial class TerrainViewerApp
             _worldRouteClick = "ignored (map transfer pending)";
             RefreshReadyStatus(); return;
         }
+        // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
+        CancelPortalApproach("another click replaced it");
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
         if (TryAreaAttack(screen, alt)) return;
         CancelAreaAttack("another click replaced it");
@@ -636,6 +644,8 @@ public partial class TerrainViewerApp
         if (TryAreaTalk(screen)) { SetObjectApproachGait(); return; }
         // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
         if (TryAreaUse(screen)) { SetObjectApproachGait(); return; }
+        // ARC-WORLD-051: a press on a door or window uses it (walking within use range first).
+        if (TryAreaPortalUse(screen)) { SetObjectApproachGait(); return; }
         // ARC-UI-004: a press on an item on the ground picks it up, on a dead NPC loots it (walking within reach first).
         if (TryAreaInventoryClick(screen)) { SetObjectApproachGait(); return; }
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
@@ -685,6 +695,20 @@ public partial class TerrainViewerApp
             GetViewport().SetInputAsHandled();
             return;
         }
+        // ARC-TECHNOLOGY-005: the open schematic window owns every key (T and Escape close it, Tab assembles).
+        if (SchematicsOpen && input is InputEventKey schematicsKey)
+        {
+            HandleSchematicsKey(schematicsKey);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // ARC-UI-048: the open world map owns every key (W and Escape close it or end the journey, Enter travels).
+        if (WorldMapOpen && input is InputEventKey worldMapKey)
+        {
+            HandleWorldMapKey(worldMapKey);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         var wasModal = WorldModal;
         _worldAdapter.PaletteOpen = PaletteOpen;
         if (input is InputEventKey chordKey)
@@ -703,7 +727,7 @@ public partial class TerrainViewerApp
                 return;
             }
             // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
-            if (!RouteQuickKey(decision) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            if (!RouteQuickKey(decision) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSchematicsKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
             {
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
                 _hud?.SetNotice($"Reserved: {routedKey} = {decision.OriginalAction} (NOT IMPLEMENTED)");

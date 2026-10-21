@@ -9,6 +9,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Randomness;
+using Arcanum.Simulation.Reputation;
 
 namespace Arcanum.Session;
 
@@ -49,6 +50,8 @@ public sealed partial class GameSessionOwner : IDisposable
     private List<SessionScriptCallFiring>? _passCalls;
     private List<SessionEffectFiring>? _passEffects;
     private List<SessionLockFiring>? _passLocks;
+    private List<SessionWaitFiring>? _passWaits;
+    private List<SessionRespawnFiring>? _passRespawns;
     // Replaced, not mutated, when a life step that drew on a trial copy commits.
     private SeededRandom _random;
     private readonly SessionCombatRolls _combatRolls;
@@ -124,7 +127,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
             new(), new(), new(descriptor.Experience), new(descriptor.AutoLevel), new(descriptor.RandomSeed), life, new(), new(), null, sink,
             new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits))
-        { _rules = GameRules.For(descriptor.Rules), _difficulty = descriptor.Difficulty };
+        { _rules = GameRules.For(descriptor.Rules), _difficulty = descriptor.Difficulty, _reputationCatalog = descriptor.Reputations ?? ReputationCatalog.Empty };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -181,7 +184,7 @@ public sealed partial class GameSessionOwner : IDisposable
         failure = ImportSound(snapshot.Sound, GameRules.For(options.Rules).Sound, options.SoundMapDefault, out var sound);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         var sink = new SessionEventSink();
-        failure = ImportEvents(snapshot.Events, hero?.State, life, maps, snapshot.Clock.GameTimestampMs, sink,
+        failure = ImportEvents(snapshot.Events, hero?.State, life, party, maps, snapshot.Clock.GameTimestampMs, sink,
             GameRules.For(options.Rules).Events, out var events);
         if (failure != GameSessionFailure.None) return Rejected(failure);
 
@@ -207,7 +210,8 @@ public sealed partial class GameSessionOwner : IDisposable
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party,
             hero, inventory, equipment, effects, experience, advancement, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat,
             snapshot.Lighting, sink, events!)
-        { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _durability = durability, _foundSchematics = found };
+        { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _durability = durability, _foundSchematics = found,
+          _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -645,24 +649,33 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>
     /// Wait (C11; the source's dialog WA action, not admitted by the conversation runtime yet, the wait order and the
     /// script wait): a follower leaves the array (forced cleared) and keeps the PC as leader. Already waiting is NoChange; a free NPC is <see cref="GameSessionFailure.NotInParty"/>.
+    /// With <paramref name="timer"/> (ARC-WORLD-045, OL23) the original's wait timer is scheduled on the actor's map when the
+    /// leader's charisma is not extraordinary, the NPC is not mind controlled and its wait index (one step higher with any
+    /// leader Persuasion training) is below 6; when it comes due the NPC stops waiting, jilted (<see cref="SessionEventKinds.PartyWait"/>).
+    /// No room for the timer is <see cref="GameSessionFailure.EventBudgetExceeded"/> and changes nothing; an undefined training
+    /// is <see cref="GameSessionFailure.InvalidConsentFacts"/>. Without <paramref name="timer"/> no timer is scheduled.
     /// </summary>
-    public GameSessionMutationResult WaitParty(GameSessionVersion expected, string entity)
+    public GameSessionMutationResult WaitParty(GameSessionVersion expected, string entity, PartyWaitFacts? timer = null)
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(entity)) return Reject(GameSessionFailure.InvalidCompanion);
+        if (timer is not null && !Enum.IsDefined(timer.LeaderPersuasion)) return Reject(GameSessionFailure.InvalidConsentFacts);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var current = _party.Get(entity);
         if (current.Standing == CompanionStanding.Free) return Reject(GameSessionFailure.NotInParty);
         if (current.Standing == CompanionStanding.Waiting) return NoChange();
+        var delay = WaitDelay(timer, out var charisma);
+        if (delay is { } d && !WaitTimerFits(d, entity)) return Reject(GameSessionFailure.EventBudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         _party.Put(current with { Standing = CompanionStanding.Waiting, Forced = false }, false);
+        if (delay is { } wait) ScheduleWaitTimer(entity, wait, charisma);
         return Changed();
     }
 
     /// <summary>
     /// Leave (C6): a follower or waiting NPC becomes free, forced and waiting cleared, spread out kept; jilted when
     /// <see cref="PartyLeave.Jilt"/>. An unforced leave is <see cref="GameSessionFailure.LeaveRefused"/> under an
-    /// extraordinary-charisma leader or mind control. A free NPC is NoChange.
+    /// extraordinary-charisma leader or mind control. A free NPC is NoChange. A waiting NPC's wait timer is removed (OL25).
     /// </summary>
     public GameSessionMutationResult LeaveParty(GameSessionVersion expected, string entity, PartyLeave leave)
     {
@@ -677,6 +690,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The NPC already has a record, so a flagged free record needs no new budget.
         _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, Jilted = leave.Jilt }, false);
+        if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(entity);
         return Changed();
     }
 
@@ -717,11 +731,18 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity)) ||
             admitted.Items.Keys.Any(entity => entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)))
             return Reject(GameSessionFailure.InventoryMismatch);
+        // ARC-WORLD-055: a holder that holds added items is an NPC, not a container, and its seed items and added items fit one list.
+        if (admitted.Holders.Values.Any(holder => holder.Kind != SessionHolderKind.Npc && _inventory.Npcs.ContainsKey(holder.Entity)))
+            return Reject(GameSessionFailure.InventoryMismatch);
+        if (admitted.Holders.Values.Any(holder => _inventory.AddedTo(holder.Entity).Count +
+                holder.Items.Count(entity => !_inventory.Taken.Contains(entity)) > SessionMapInventorySeed.MaxListLength))
+            return Reject(GameSessionFailure.BudgetExceeded);
         // An object lies on one map: an item another attached map lists would be hidden there too once taken.
         foreach (var (other, attached) in _inventory.Seeds)
             if (other != map && admitted.Items.Keys.Any(attached.Items.ContainsKey)) return Reject(GameSessionFailure.InventoryMismatch);
         if (!_inventory.Seeds.ContainsKey(map) && _inventory.Seeds.Count >= _limits.MaxMaps) return Reject(GameSessionFailure.BudgetExceeded);
         _inventory.Seeds[map] = admitted;
+        _inventory.SeedGeneration++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, new(_identity, _revision));
     }
 
@@ -730,14 +751,15 @@ public sealed partial class GameSessionOwner : IDisposable
     public SessionMapInventory? QueryMapInventory(SessionMapId map)
     {
         ThrowIfDisposed();
-        return _inventory.Seeds.TryGetValue(map, out var seed) ? _inventory.View(map, seed, KilledNpc) : null;
+        return _inventory.Seeds.TryGetValue(map, out var seed) ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder)) : null;
     }
 
     /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
     /// starting kit, which precedes them, is <see cref="QueryHeroKit"/>.</summary>
     public IReadOnlyList<SessionPcItem> QueryPcInventory() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Pc.ToArray()); }
 
-    /// <summary>Detached copy of the items the hero made from schematics (ARC-TECHNOLOGY-004), in the order they were made.</summary>
+    /// <summary>Detached copy of the PC's made items (ARC-TECHNOLOGY-004): made from schematics or taken from an NPC that held them
+    /// (ARC-WORLD-055), in the order they entered the list.</summary>
     public IReadOnlyList<SessionMadeItem> QueryMadeItems() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Made.ToArray()); }
 
     /// <summary>
@@ -756,7 +778,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
-        if (!seed.Items.TryGetValue(item, out var row) || row.Cell is null || _inventory.Taken.Contains(item))
+        // ARC-COMBAT-008: an item of a container an attack broke lies on the ground at the container's cell.
+        if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item) || row.Cell is null && SpilledCell(_actor.Map, seed, item) is null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         return Take(seed, new(item, row.Facts), false, insertCheck, scripts);
     }
@@ -780,6 +803,9 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!seed.Holders.TryGetValue(holder, out var row)) return RejectItem(GameSessionFailure.UnknownHolder);
         if (row.Kind != SessionHolderKind.Npc || !row.Dead && !KilledNpc(holder)) return RejectItem(GameSessionFailure.HolderNotLootable);
         if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
+        // ARC-WORLD-055: a made item the session added to this NPC is in its list too.
+        if (_inventory.AddedTo(holder).FirstOrDefault(added => added.Entity == item) is { Entity: not null } made)
+            return Take(seed, new(item, InventoryDomain.MadeFacts(made.Kind)), true, insertCheck, scripts);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != holder || _inventory.Taken.Contains(item))
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         return Take(seed, new(item, seed.Items[item].Facts), true, insertCheck, scripts);
@@ -982,11 +1008,15 @@ public sealed partial class GameSessionOwner : IDisposable
         var calls = new List<SessionScriptCallFiring>();
         var effects = new List<SessionEffectFiring>();
         var locks = new List<SessionLockFiring>();
+        var waits = new List<SessionWaitFiring>();
+        var respawns = new List<SessionRespawnFiring>();
+        _passRespawns = respawns;
         _passWorld = world;
         _passFirings = firings;
         _passCalls = calls;
         _passEffects = effects;
         _passLocks = locks;
+        _passWaits = waits;
         GameEventPassResult pass;
         try
         {
@@ -997,8 +1027,10 @@ public sealed partial class GameSessionOwner : IDisposable
                 || (_life.Critters.ContainsKey(entity.Code)
                     ? world.CritterFacts(new(entity.Map), entity.Code) is not null
                     // A host that knows objects answers for every kind; otherwise a Lock event's object exists while the
-                    // session records its lock state (ARC-WORLD-050).
-                    : world is ISessionScriptWorld scripts ? scripts.ObjectExists(new(entity.Map), entity.Code) : LockObjectExists(entity))));
+                    // session records its lock state (ARC-WORLD-050), and a waiting NPC while the session records it waiting
+                    // (ARC-WORLD-045).
+                    : world is ISessionScriptWorld scripts ? scripts.ObjectExists(new(entity.Map), entity.Code)
+                    : LockObjectExists(entity) || RespawnObjectExists(entity) || _party.Get(entity.Code).Standing == CompanionStanding.Waiting)));
         }
         finally
         {
@@ -1007,10 +1039,12 @@ public sealed partial class GameSessionOwner : IDisposable
             _passCalls = null;
             _passEffects = null;
             _passLocks = null;
+            _passWaits = null;
+            _passRespawns = null;
         }
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
-            Locks = locks.AsReadOnly() };
+            Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly() };
     }
 
     /// <summary>
@@ -1263,6 +1297,13 @@ public sealed partial class GameSessionOwner : IDisposable
             if (!SessionStoryLimits.IsRumor(rumor)) return GameSessionFailure.InvalidRumor;
             if (!story.QuelledRumors.Add(rumor)) return GameSessionFailure.InvalidSnapshot;
         }
+        // ARC-WORLD-056: known areas, and a last discovered area that the PC knows (the original sets it with the known bit).
+        foreach (var area in saved.KnownAreas)
+            if (!SessionStoryLimits.IsArea(area) || !story.KnownAreas.Add(area)) return GameSessionFailure.InvalidSnapshot;
+        if (saved.LastArea != 0 && !story.KnownAreas.Contains(saved.LastArea)) return GameSessionFailure.InvalidSnapshot;
+        story.LastArea = saved.LastArea;
+        var reputations = ImportReputations(saved.Reputations, clockMs, story.Reputations);
+        if (reputations != GameSessionFailure.None) return reputations;
         foreach (var quest in story.Quests.Values)
         {
             var shared = quest.Effective switch
@@ -1300,7 +1341,8 @@ public sealed partial class GameSessionOwner : IDisposable
 
     private static bool ValidFacts(PartyConsentFacts facts) => Enum.IsDefined(facts.PcPersuasion);
 
-    // Join and unwait share the commit: leave any standing, append at the end of the array.
+    // Join and unwait share the commit: leave any standing, append at the end of the array. A waiting NPC's wait timer is
+    // removed (OL25: join leaves first, and unwait cancels it).
     private PartyMutationResult Append(SessionCompanion current, bool forced, FollowConsent? consent)
     {
         var next = current with { Standing = CompanionStanding.Following, Forced = forced, Jilted = false };
@@ -1311,6 +1353,7 @@ public sealed partial class GameSessionOwner : IDisposable
             return RejectParty(GameSessionFailure.BudgetExceeded, consent);
         if (_revision == long.MaxValue) return RejectParty(GameSessionFailure.RevisionExhausted, consent);
         _party.Put(next, true);
+        if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(current.Entity);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, consent, new(_identity, _revision));
     }
@@ -1326,15 +1369,15 @@ public sealed partial class GameSessionOwner : IDisposable
         if (saved.Followers.Count + saved.Others.Count > limits.MaxCompanions) return GameSessionFailure.BudgetExceeded;
         foreach (var record in saved.Followers)
         {
-            if (!SessionValidation.Entity(record.Entity) || record.Standing != CompanionStanding.Following || record.Jilted)
-                return GameSessionFailure.InvalidCompanion;
+            if (!SessionValidation.Entity(record.Entity) || record.Standing != CompanionStanding.Following || record.Jilted ||
+                !CompanionLoyaltyRules.IsValid(record.Loyalty)) return GameSessionFailure.InvalidCompanion;
             if (party.Records.ContainsKey(record.Entity)) return GameSessionFailure.InvalidSnapshot;
             party.Put(record, true);
         }
         string? previous = null;
         foreach (var record in saved.Others)
         {
-            if (!SessionValidation.Entity(record.Entity) || record.Forced || record.IsBaseline ||
+            if (!SessionValidation.Entity(record.Entity) || record.Forced || record.IsBaseline || !CompanionLoyaltyRules.IsValid(record.Loyalty) ||
                 record.Standing is not (CompanionStanding.Waiting or CompanionStanding.Free) ||
                 (record.Standing == CompanionStanding.Waiting && record.Jilted)) return GameSessionFailure.InvalidCompanion;
             if (party.Records.ContainsKey(record.Entity) ||
@@ -1361,8 +1404,10 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var (revision, map, flagVersion) = (_revision, _actor.Map, _flags.Version);
+        // ARC-WORLD-055: a made item comes from the NPC that holds it (and is in Taken while it does), any other from a seed.
+        var npc = _inventory.NpcOf(item.Entity);
         bool Stale() => _revision != revision || _actor.Map != map || _flags.Version != flagVersion || !_inventory.Seeds.TryGetValue(map, out var current) ||
-            !ReferenceEquals(current, seed) || _inventory.Taken.Contains(item.Entity);
+            !ReferenceEquals(current, seed) || (npc is null ? _inventory.Taken.Contains(item.Entity) : _inventory.NpcOf(item.Entity) != npc);
         var verdict = insertCheck(item);
         ThrowIfDisposed();
         if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict);
@@ -1387,7 +1432,13 @@ public sealed partial class GameSessionOwner : IDisposable
             if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = run };
             if (failure != GameSessionFailure.None) return RejectItem(failure, verdict) with { InsertScript = run };
         }
-        _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
+        if (npc is not null)
+        {
+            // A made item keeps its entity and kind: it leaves the NPC's added items and joins the hero's made items.
+            _inventory.RemoveFromNpc(item.Entity);
+            _inventory.Add(new SessionMadeItem(item.Entity, facts.Kind));
+        }
+        else _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
         foreach (var write in run?.Effects.GlobalFlags ?? [])
         {
             var receipt = _flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), _flags.Version, new FlagId(write.Index), write.Value));
@@ -1435,7 +1486,7 @@ public sealed partial class GameSessionOwner : IDisposable
         hero = null;
         if (saved is null) return GameSessionFailure.None;
         hero = HeroDomain.Build(saved.Prototype, saved.Race, saved.Gender, saved.Stats, saved.Level, saved.UnspentPoints, saved.Alignment,
-            saved.RaceEffect, saved.GenderEffect, saved.Experience, saved.Advancement, saved.InnateSkills);
+            saved.RaceEffect, saved.GenderEffect, saved.Experience, saved.Advancement, saved.InnateSkills, saved.Fate);
         return hero is null ? GameSessionFailure.InvalidHero : GameSessionFailure.None;
     }
 
@@ -1466,16 +1517,33 @@ public sealed partial class GameSessionOwner : IDisposable
                 item.Entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)) return GameSessionFailure.InvalidSnapshot;
             inventory.Add(item);
         }
-        // Made items (ARC-TECHNOLOGY-004): made:n with strictly ascending n, a hero's, an admitted type, not deleted.
-        var lastMade = 0;
+        // Made items (ARC-TECHNOLOGY-004): made:n, an admitted type, not deleted, each once. Since ARC-WORLD-055 the PC can take a made
+        // item from an NPC (with or without a hero), so the list keeps entry order, not number order.
         foreach (var item in saved.Made)
         {
-            if (!hero) return GameSessionFailure.InvalidSnapshot;
             if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
-            if (SessionMadeItem.Number(item.Entity) is not { } number || number <= lastMade || destroyed.Contains(item.Entity))
+            if (SessionMadeItem.Number(item.Entity) is null || destroyed.Contains(item.Entity) || inventory.Taken.Contains(item.Entity))
                 return GameSessionFailure.InvalidSnapshot;
-            lastMade = number;
             inventory.Add(item);
+        }
+        // ARC-WORLD-055: the made items added to NPCs, by NPC entity in ordinal order, each list non-empty and within one list's bound;
+        // the same item rules as the hero's made items, and no item held twice.
+        if (saved.Npcs.Sum(npc => (long)(npc.Items?.Count ?? 0)) > limits.MaxNpcItems) return GameSessionFailure.BudgetExceeded;
+        string? previous = null;
+        foreach (var npc in saved.Npcs)
+        {
+            if (npc?.Items is null || !SessionValidation.Entity(npc.Npc) || npc.Npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) ||
+                npc.Items.Count is 0 or > SessionMapInventorySeed.MaxListLength || previous is not null && string.CompareOrdinal(previous, npc.Npc) >= 0)
+                return GameSessionFailure.InvalidSnapshot;
+            previous = npc.Npc;
+            foreach (var item in npc.Items)
+            {
+                if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
+                if (SessionMadeItem.Number(item.Entity) is null || destroyed.Contains(item.Entity) || inventory.Taken.Contains(item.Entity))
+                    return GameSessionFailure.InvalidSnapshot;
+                inventory.AddToNpc(npc.Npc, item);
+                inventory.Taken.Add(item.Entity);
+            }
         }
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.
         foreach (var entity in destroyed) inventory.Taken.Add(entity);
@@ -1532,6 +1600,8 @@ public sealed partial class GameSessionOwner : IDisposable
         else _life.Critters[target.Entity!] = next;
         EndSubturnOnIncapacitation(target, outcome);
         if (outcome.Events.HasFlag(LifeEvents.Died)) LeaveCombatModeOnDeath(target);
+        // OL25: the kill notification unwaits the NPC, which removes its wait timer.
+        if (outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero) CancelWaitTimers(target.Entity!);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision));
     }
@@ -1548,11 +1618,12 @@ public sealed partial class GameSessionOwner : IDisposable
     private static readonly string[] NpcKinds = [SessionEventKinds.NpcFatigue, SessionEventKinds.NpcPoisonDamage,
         SessionEventKinds.NpcPoisonRecovery, SessionEventKinds.NpcResting];
 
-    // The maps other than this one where the NPC has pending timers (none while the one-map rule holds).
+    // The maps other than this one where the NPC has pending timers (none while the one-map rule holds); its wait timer
+    // (ARC-WORLD-045) counts too.
     private int[] StrayMaps(string entity, int map)
     {
         var maps = new SortedSet<int>();
-        foreach (var kind in NpcKinds)
+        foreach (var kind in NpcKinds.Append(SessionEventKinds.PartyWait))
             _events.Any(kind, e =>
             {
                 var at = e.Payload.Entities[0];
@@ -1611,7 +1682,7 @@ public sealed partial class GameSessionOwner : IDisposable
     // Saved timers: the queue's strict restore (registry version, kinds, sequences, order, payloads, keys), plus what only
     // the session knows: a hero timer needs the hero, an NPC timer a life record of its NPC, and every timer was set at a
     // game time no later than the saved clock, exactly its kind's delay before its deadline.
-    private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life,
+    private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life, PartyDomain party,
         IReadOnlyDictionary<SessionMapId, Dictionary<MapChangeKey, long>> mapChanges, long clockMs,
         SessionEventSink sink, GameEventQueueProfile profile, out GameEventQueue? events)
     {
@@ -1656,6 +1727,32 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.ObjectRespawn)
+            {
+                // A respawn event (ARC-COMBAT-008): one scenery the saved map changes record switched off, set no later than the
+                // saved clock, its delay before its deadline.
+                if (pending.Entities.Length != 1 || pending.Entities[0].Code == SessionEventKinds.AbsentRole ||
+                    RecordedObject(mapChanges, new(pending.Entities[0].Map), pending.Entities[0].Code) is not { Condition: SessionObjectCondition.Off } ||
+                    pending.Values[0] < 0 || pending.Values[0] > clockMs || pending.Values[1] is < 1 or > SessionEventKinds.MaxRespawnDelayMs ||
+                    pending.DeadlineMs != pending.Values[0] + pending.Values[1])
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
+            if (pending.Kind == SessionEventKinds.PartyWait)
+            {
+                // A wait timer (ARC-WORLD-045): one NPC the saved party records waiting, set no later than the saved clock, its
+                // duration of the wait table (0 stored as 1 ms) before its deadline, any charisma; one per NPC.
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || party.Get(pending.Entities[0].Code).Standing != CompanionStanding.Waiting ||
+                    pending.Values[0] < 0 || pending.Values[0] > clockMs || !CompanionLoyaltyRules.WaitDurationsMs.Contains(pending.Values[1]) ||
+                    pending.DeadlineMs != pending.Values[0] + Math.Max(pending.Values[1], 1) || pending.Values[2] is < int.MinValue or > int.MaxValue ||
+                    converted.Any(e => e.Kind == SessionEventKinds.PartyWait && SessionEventKinds.NamesNpc(e, pending.Entities[0].Code)) ||
+                    // One map per NPC's timers, as for the life timers.
+                    (!maps.TryAdd(pending.Entities[0].Code, pending.Entities[0].Map) && maps[pending.Entities[0].Code] != pending.Entities[0].Map))
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
             var scheduledAt = pending.Values[0];
             if (scheduledAt < 0 || scheduledAt > clockMs || scheduledAt > long.MaxValue - SessionEventKinds.Delay(TimerOf(kind.Name)) ||
                 pending.DeadlineMs != scheduledAt + SessionEventKinds.Delay(TimerOf(kind.Name))) return GameSessionFailure.InvalidEvents;
@@ -1670,7 +1767,8 @@ public sealed partial class GameSessionOwner : IDisposable
         // No session kind is SavedUnlessRebuilt yet, so Rebuild is always empty; the AI tick (slice I6) reschedules it here.
         if (converted.Count(e => e.Kind == SessionEventKinds.ScriptCall) > SessionEventKinds.MaxScriptCalls ||
             converted.Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) > SessionEffectLimits.MaxTimedEffects ||
-            converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets) return GameSessionFailure.EventBudgetExceeded;
+            converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets ||
+            converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns) return GameSessionFailure.EventBudgetExceeded;
         var result = GameEventQueue.Restore(registry, new(saved.Registry, saved.NextSequence, converted.ToImmutable()), profile,
             SessionEventKinds.Limits);
         if (result.Queue is null)
@@ -1774,10 +1872,15 @@ internal sealed class Story
     internal Dictionary<int, SessionQuestState> GlobalQuests { get; } = [];
     internal Dictionary<int, long> Rumors { get; } = [];
     internal HashSet<int> QuelledRumors { get; } = [];
+    internal HashSet<int> KnownAreas { get; } = [];
+    internal int LastArea { get; set; }
+    /// <summary>ARC-WORLD-044: the PC's reputations in acquisition order.</summary>
+    internal List<SessionReputation> Reputations { get; } = [];
 
     internal SessionStoryState Capture() => new(
         Quests.Values.OrderBy(quest => quest.Quest).ToArray(),
         GlobalQuests.OrderBy(pair => pair.Key).Select(pair => new SessionGlobalQuest(pair.Key, pair.Value)).ToArray(),
         Rumors.OrderBy(pair => pair.Key).Select(pair => new SessionRumor(pair.Key, pair.Value)).ToArray(),
-        QuelledRumors.Order().ToArray());
+        QuelledRumors.Order().ToArray(), KnownAreas.Order().ToArray(), LastArea,
+        Reputations.ToArray());
 }

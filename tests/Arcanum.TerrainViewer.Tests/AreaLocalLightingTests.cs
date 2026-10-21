@@ -38,6 +38,58 @@ public sealed class AreaLocalLightingTests
             AreaStationaryLightSource.Create(5000, lights, [Uniform(7, 10, 10, 0, 0, 100), Uniform(8, 400, 400, 200, 200, 100)]));
 
     [TestMethod]
+    public void Object_lights_join_by_hour_and_nocturnal_scenery_lights_only_at_night()
+    {
+        // ARC-RENDER-030 (ledger LT4, LT5): a nocturnal lamp on the outdoor tile is built only at night; another object light always.
+        var body = AreaCompositionFixture.Body(0);
+        var visual = AreaCompositionFixture.Visual(body, 160, 160, 40, 80);
+        var command = AreaScenePlan.Create([], [body], [visual]).Commands.Single();
+        ObjectLight Lamp(int index, long x, bool nocturnal, bool outdoor) => new(new(Digest, 5000, AreaSourceKind.Static, 100, index, index, Digest, 1), 3, -1,
+            x, 82560, 0, 0, StationaryLightFlags.Off, 8u << 19 | 9u << 28, AmbientColor.Neutral, false, nocturnal, outdoor);
+        var stationary = AreaStationaryLightSource.Create(5000, [], [Uniform(8, 400, 400, 200, 200, 100)]);
+        var objects = new AreaObjectLightSource(5000, null, [Lamp(0, 92929, true, true)], new Dictionary<int, StationaryLightFrame>(stationary.Frames));
+        var local = AreaLocalLighting.Create(Tiles, [visual], AreaChart.Exterior, stationary, objects);
+        Assert.AreEqual(1, local.AtHour(22).ObjectLightCount);
+        Assert.AreEqual(0, local.AtHour(12).ObjectLightCount);
+        Assert.AreSame(local, local.AtHour(5));
+        Assert.AreNotSame(local, local.AtHour(6));
+        Assert.AreNotSame(local, local.AtHour(17));
+        Assert.AreSame(local, local.AtHour(18));
+        Assert.AreEqual(new AmbientColor(150, 60, 70), local.AtHour(22).Body(command, AreaAmbientChannel.Outdoor, Pair).Left, "switched on: OFF cleared");
+        Assert.AreEqual(new AmbientColor(50, 60, 70), local.AtHour(12).Body(command, AreaAmbientChannel.Outdoor, Pair).Left);
+        // Without a light that differs by day both hours are the same lighting; a saved OFF on another object light stays off.
+        var plain = AreaLocalLighting.Create(Tiles, [visual], AreaChart.Exterior, stationary,
+            new AreaObjectLightSource(5000, null, [Lamp(0, 92929, false, true)], new Dictionary<int, StationaryLightFrame>(stationary.Frames)));
+        Assert.AreSame(plain, plain.AtHour(12));
+        Assert.AreEqual(new AmbientColor(50, 60, 70), plain.Body(command, AreaAmbientChannel.Outdoor, Pair).Left);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => local.AtHour(24));
+    }
+
+    [TestMethod]
+    public void An_animated_light_poses_the_view_and_names_its_state()
+    {
+        // ARC-RENDER-031: two frames at 10 per second; the key changes with the frame, the view stays the same object without
+        // animation.
+        var body = AreaCompositionFixture.Body(0);
+        var visual = AreaCompositionFixture.Visual(body, 160, 160, 40, 80);
+        var still = Local([visual], Light(92928, 82560, 0, 0, 8));
+        Assert.AreSame(still, still.AtAnimation(1000));
+        Assert.AreEqual("", still.AnimationKey(1000));
+        var mask = Uniform(8, 400, 400, 200, 200, 100).Item6;
+        var later = new StationaryLightFrame(8, "a", "h", 400, 400, 200, 200, mask, stepX: 1000);
+        var first = new StationaryLightFrame(8, "a", "h", 400, 400, 200, 200, mask, stepX: -1000, later: [later], framesPerSecond: 10);
+        var objects = new AreaObjectLightSource(5000, null, [new ObjectLight(new(Digest, 5000, AreaSourceKind.Static, 100, 0, 0, Digest, 1), 3, -1,
+            92928, 82560, 0, 0, 0, 8u << 19 | 9u << 28, AmbientColor.Neutral, false, false, false)], new Dictionary<int, StationaryLightFrame> { [8] = first });
+        var animated = AreaLocalLighting.Create(Tiles, [visual], AreaChart.Exterior, AreaStationaryLightSource.Create(5000, [], []), objects);
+        Assert.AreNotEqual(animated.AnimationKey(0), animated.AnimationKey(100));
+        Assert.AreEqual(animated.AnimationKey(0), animated.AnimationKey(200), "two steps make a cycle");
+        var command = AreaScenePlan.Create([], [body], [visual]).Commands.Single();
+        Assert.AreEqual(new AmbientColor(150, 60, 70), animated.AtAnimation(0).Body(command, AreaAmbientChannel.Outdoor, Pair).Left);
+        // At frame 1 the light stands 1000 pixels away: the body keeps its tile's ambient.
+        Assert.AreEqual(new AmbientColor(50, 60, 70), animated.AtAnimation(100).Body(command, AreaAmbientChannel.Outdoor, Pair).Left);
+    }
+
+    [TestMethod]
     public void Body_takes_the_tile_class_ambient_plus_the_lights_at_its_anchor()
     {
         var body = AreaCompositionFixture.Body(0);
