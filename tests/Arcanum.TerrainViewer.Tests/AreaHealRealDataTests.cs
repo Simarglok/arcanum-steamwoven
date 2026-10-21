@@ -34,6 +34,8 @@ public sealed class AreaHealRealDataTests
             .ToArray();
         var ground = healing.Where(item => item.Cell is not null).ToArray();
         Console.WriteLine($"kit healing items {kits}; crash site healing items {healing.Length} (ground {ground.Length})");
+        // First observation (2026-10-21): no pre-made hero's kit and nothing on the Crash Site exterior is a healing item.
+        Assert.AreEqual((0, 0), (kits, healing.Length), "the census changed: update the contract and the self-heal check below");
 
         var hero = AreaStartingHero.Load(module, AreaStartingHero.Find("half-elf-male")!);
         using var session = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),

@@ -146,13 +146,13 @@ public partial class TerrainViewerApp
             Require(_areaSession.QueryPcInventory().Count == 2 && _inventoryPanel.ViewForSelfTest!.Loot.Count == 0 && _inventoryPanel.TakeAllForSelfTest.Disabled,
                 "the take button moved the item: " + _inventoryPanel.MessageForSelfTest);
             Require(_inventoryPanel.MessageForSelfTest.StartsWith("took ", StringComparison.Ordinal), "window message " + _inventoryPanel.MessageForSelfTest);
-            // ARC-SKILLS-005: a healing line gets a use button that runs the heal through the app; this session has no hero, so the
-            // app reports that the item is not one the hero can use.
+            // ARC-SKILLS-005: a healing line gets a use button that runs the heal through the app; the synthetic line names no item
+            // the host knows (and this session has no hero), so the app finds no healing item and reports it.
             _inventoryPanel.Render(new AreaInventoryView([new("syn:item", "bandage") { Healing = true }, new("syn:listed", "sword")], null, null, []), null);
             Require(_inventoryPanel.UseButtonsForSelfTest.Count == 1, "one use button for the one healing line");
             _inventoryPanel.UseButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-            Require(_inventoryStatus.StartsWith("not used:", StringComparison.Ordinal) && _inventoryPanel.UseButtonsForSelfTest.Count == 0,
+            Require(_inventoryStatus == "not used: not a healing item the hero holds" && _inventoryPanel.UseButtonsForSelfTest.Count == 0,
                 "the use button ran the app's heal: " + _inventoryStatus);
             InventoryKey(Key.Escape);
             Require(!InventoryOpen, "Escape closed the loot window");

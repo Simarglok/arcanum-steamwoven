@@ -262,12 +262,12 @@ public sealed class AreaInventoryHost
     /// <summary>
     /// ARC-SKILLS-005: the healing-item facts of an item the PC holds: a kit item's from <paramref name="kitHealing"/> (the hero
     /// load's, by kit entity), a taken item's from its object row's fields (<see cref="AreaHealingItems.From"/>); null for anything
-    /// else or an item the session no longer has.
+    /// else, an item the session no longer has, or a session without a hero (nobody to use it).
     /// </summary>
     public SessionHealingItem? HealingItem(GameSessionOwner session, string entity, IReadOnlyList<SessionHealingItem?>? kitHealing)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (session.IsItemDestroyed(entity)) return null;
+        if (session.QueryHero() is null || session.IsItemDestroyed(entity)) return null;
         // A kit entity keeps its number when an earlier kit item is gone, so the facts are found by entity.
         if (session.QueryHeroKit().Any(item => item.Entity == entity)) return kitHealing?.FirstOrDefault(item => item?.Entity == entity);
         if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;

@@ -427,7 +427,7 @@ public sealed class CompanionLoyaltyStateTests
             Assert.AreEqual("$.party.followers[0].loyalty", result.Path, bad);
         }
         Assert.AreEqual(SnapshotDecodeFailure.MissingField, GameSessionSnapshotCodec.TryDecode(text.Replace(",\"loyalty\":0", "")).Failure);
-        Assert.AreNotEqual(SnapshotDecodeFailure.None, GameSessionSnapshotCodec.TryDecode(text.Replace("\"schemaVersion\":28", "\"schemaVersion\":26")).Failure);
+        Assert.AreNotEqual(SnapshotDecodeFailure.None, GameSessionSnapshotCodec.TryDecode(text.Replace("\"schemaVersion\":29", "\"schemaVersion\":26")).Failure);
 
         // A free record with only marks is a state the transitions produce (OL22); undefined marks are not.
         var saved = owner.Capture();

@@ -39,5 +39,8 @@ public sealed class AreaHealingItemsTests
         Assert.IsNull(host.HealingItem(session, "kit:1", null), "no kit facts without a hero load");
         Assert.IsTrue(host.View(session, null, 1, null, kit).Pc.Single().Healing);
         Assert.IsFalse(host.View(session, null, 1).Pc.Single().Healing);
+        using var heroless = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1).Owner!;
+        Assert.IsNull(host.HealingItem(heroless, "kit:1", kit), "nobody to use it without a hero");
     }
 }

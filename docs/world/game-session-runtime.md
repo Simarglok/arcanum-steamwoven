@@ -157,7 +157,7 @@ state that left `Accepted` (`InvalidQuestState`). A shared state without a PC re
 as the source's shared state is not owned by one PC.
 
 
-## Snapshot schema 28
+## Snapshot schema 29
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,

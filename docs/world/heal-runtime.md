@@ -5,7 +5,7 @@ the first use of the [shared skill check](skill-check-runtime.md). The hero uses
 the heal check, the healed amount, the master's and the critical success's cure, the item's uses and its destruction, and the
 4 action points in a turn-based round. Pure rules: `HealRules` in [`Arcanum.Simulation.Skills`](../../src/Arcanum.Simulation/Skills/HealRules.cs)
 and `LifeRules.SkillHeal`; session: `HealWithItem` in [`GameSessionHeal.cs`](../../src/Arcanum.Session/GameSessionHeal.cs);
-viewer: "Use on self" in the AREA inventory window. Snapshot schema 28 (the items' remaining uses).
+viewer: "Use on self" in the AREA inventory window. Snapshot schema 29 (the items' remaining uses).
 Requirements: [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019) (a skill used),
 [FR-ITEM-009](../requirements/items-economy.md#fr-item-009) (item use and charges),
 [FR-CHAR-026](../requirements/characters-skills.md#fr-char-026) (healing the life state).
@@ -35,18 +35,22 @@ Requirements: [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019) (a
 | Use (HL2, HL3) | The inventory passes the user as the target; nothing refuses a target at full hit points, an undead or mechanical one, or the user itself. The item must be the user's. 4 action points are charged at the use in a turn-based round, and the heal goes on whatever the charge answers. | `HealWithItem` |
 
 `HealWithItem(version, target, item, world?)` takes a `SessionHealingItem` (the host's fields: flags, usage bonus, uses, condition,
-script points; `AreaHealingItems.From` builds it from ARC-DATA-021 fields). It refuses before any roll or charge: no hero
-(`HealUnavailable`), not a healing item or values outside the bounds (`InvalidHealingItem`), a use or destroy script
+script points; `AreaHealingItems.From` builds it from ARC-DATA-021 fields). It refuses before any roll or charge: no hero or a dead one
+(`HealUnavailable`, as every hero action; an unconscious hero is not refused here, as the session has no action gate for it), not a healing item or values outside the bounds (`InvalidHealingItem`), a use or destroy script
 (`ItemScriptUnsupported`, as the session runs none), an item the hero does not hold or the session deleted (`ItemNotAvailable`), an
-invalid target, the version. With a world and the hero's subturn it first charges 4 action points (`ConsumeActionPoints`, its own
-revision; overexertion as there). Then the check, the life record, the fate and the item are one revision; the rolls (check,
+invalid target, the version. With a world and the hero's subturn it first checks the heal's worst-case budgets (a new NPC life
+record, a new durability record) and two free revisions, then charges 4 action points (`ConsumeActionPoints`, its own revision;
+overexertion as there); only an exhausted generator can then refuse the heal, and the charge stays. Without a world nothing is
+charged, even in the hero's subturn (the caller's choice). A destroyed item counts against the durability budget unless it
+already had a record. Then the check, the life record, the fate and the item are one revision; the rolls (check,
 critical, amount) come from the session generator. The answer carries the check, the outcome, the life outcome, the uses left or
 the destruction, and whether the heal fate was used.
 
-## Snapshot schema 28
+## Snapshot schema 29
 
 The `durability` section gains `uses`: the remaining uses of every item whose uses the session spent (entity and count 1..1,000,000,
-ordinal order; a used-up item is in `destroyed`). Schema 27 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-28)).
+ordinal order; a used-up item is in `destroyed`). The decoder refuses a count outside the range (`OutOfRange`), an out-of-order or
+repeated entity (`NotCanonical`) and a missing or unknown field; Restore refuses a uses record of a destroyed item (`InvalidDurability`). Schema 28 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-29)).
 
 ## Viewer
 
@@ -72,4 +76,5 @@ no action points). The window reports the amount, the cure, the uses left or the
 ## Checks
 
 `tests/Arcanum.Simulation.Tests/Skills/HealRulesTests.cs`, `tests/Arcanum.Session.Tests/HealStateTests.cs` (master, failure and
-destruction, fate, NPC target, refusals, snapshot), the viewer self-test (the use button) and the two real-data tests.
+destruction, a critical failure's five uses, fate, NPC target, the turn-based charge, budgets before the charge, a dead hero,
+refusals, the snapshot and its uses list), the viewer self-test (the use button) and the two real-data tests.

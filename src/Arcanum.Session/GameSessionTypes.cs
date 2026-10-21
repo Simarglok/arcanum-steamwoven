@@ -342,7 +342,7 @@ public sealed class GameSessionSnapshot
     /// (ARC-WORLD-045); schema 28 adds the PC's known world-map areas and last discovered area to the story (ARC-WORLD-056);
     /// schema 29 adds the items' remaining uses to <see cref="Durability"/> (ARC-SKILLS-005). Schemas 1..28 are refused, not
     /// migrated.</summary>
-    public const int CurrentSchemaVersion = 28;
+    public const int CurrentSchemaVersion = 29;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
