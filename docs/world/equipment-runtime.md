@@ -51,8 +51,8 @@ and unarmed bonus not negative, the blocks of its kind).
 | --- | --- |
 | `QueryEquipment()` | The worn items in slot order: slot, the PC item entity (`kit:n` or a taken item), its saved values. |
 | `QueryHeroEquipmentCombat(training)` | `EquipmentRules.Evaluate` for the hero's effective magick/tech aptitude; null without a hero. Without a training argument the hero's training in the wielded weapon's skill (ARC-SKILLS-002, [hero skills](hero-skills-runtime.md)); an explicit one overrides. |
-| `Equip(expected, entity, slot, item, artCheck, insertCheck)` | The original's wield (0x464AE0). Refusals, in order: input, version, no hero (`EquipmentUnavailable`), an item the hero does not hold (`ItemNotAvailable`) or another kind than the saved one (`InventoryMismatch`); NoChange when already in that slot; a `SAP_INSERT_ITEM`, `SAP_REMOVE_ITEM`, `SAP_WIELD_ON` or `SAP_WIELD_OFF` script (`ItemScriptUnsupported`) or item spells (`ItemEffectUnsupported`); the wear check with the hero's race, gender, aptitude and crippled arms from the life domain, then `artCheck` (`WearRefused` with the `EquipmentRefusal`); the no-drop flag of the item, then of the slot's occupant (`WearRefused`, `NotDroppable`); the insert check of the occupant going back to the grid (`InsertRefused`). A ring in the other ring slot moves. One revision. |
-| `Unequip(expected, slot, insertCheck)` | The original's unwield to the grid: NoChange for an empty slot; the no-drop flag, then the insert check. One revision. |
+| `Equip(expected, entity, slot, item, artCheck, insertCheck)` | The original's wield (0x464AE0). Refusals, in order: input, version, no hero (`EquipmentUnavailable`), an item the hero does not hold (`ItemNotAvailable`) or another kind than the saved one (`InventoryMismatch`); NoChange when already in that slot; a `SAP_INSERT_ITEM`, `SAP_REMOVE_ITEM`, `SAP_WIELD_ON` or `SAP_WIELD_OFF` script (`ItemScriptUnsupported`) or item spells (`ItemEffectUnsupported`); the wear check with the hero's race, gender, aptitude and crippled arms from the life domain, then `artCheck` (`WearRefused` with the `EquipmentRefusal`); the no-drop flag of the item, then of the slot's occupant (`WearRefused`, `NotDroppable`); the insert check of the occupant going back to the grid (`InsertRefused`; `TechnologyRefused` for a technological occupant of a Technophobia hero, [backgrounds](#backgrounds-arc-world-069)). A ring in the other ring slot moves. One revision. |
+| `Unequip(expected, slot, insertCheck)` | The original's unwield to the grid: NoChange for an empty slot; the no-drop flag, then the insert check (`TechnologyRefused` for a technological item of a Technophobia hero). One revision. |
 
 `SessionWearableItem` is what the host offers: the saved kind, script points, whether the item has item spells, and its
 `EquipmentItem` values. `SessionEquipmentFacts.FromCombatFields` builds the values from the stored combat fields
@@ -115,6 +115,29 @@ from the hero's content prototypes and yes to the art and insert checks (one dia
 `worn N`. Installed original (opt-in, `ARC_AREA_CONVERSATION_GAME_ROOT`): every pre-made hero starts with a weapon, body
 armour and boots on, except the human woman, whose body armour 8220 carries wield-on and wield-off scripts and stays in the
 pack.
+
+## Backgrounds (ARC-WORLD-069)
+
+The hero carries its background id in the session (`SessionHeroState.Background`, snapshot schema 36; a pre-made hero's comes from
+its prototype, 39–50, through `SessionHeroDefinition.Background`; 0 none), read in the executable
+([ledger BG1–BG8](../research/original-verification-ledger.md#backgrounds-arc-world-069)). `QueryHeroBackground()` gives it. Only a
+PC has a background (the original's reader answers 0 for any other object), so an NPC is never refused. Two rules read it:
+
+- **Magick Allergy (69, BG3).** The hero as a wearer is `MagickAllergy`, so the wear check refuses a magickal item (complexity above
+  0) with `WieldMagicItems` (the original's code 18, `mes\item.mes` 118), for `Equip` and the best-items choice (which skips it).
+- **Technophobia (72, BG4).** The insert check's background part (`SessionBackgrounds.RefusesCarry`) refuses an item of negative
+  complexity for the hero (`InsertRefused` with `SessionInsertVerdict.TechnologyRefused`, the original's code 15, `item.mes` 115),
+  after the host's weight answer and before its room answer: on pickup (a placed seed item taken back too, while its origin map's seed is attached), loot, negative `IN`, an
+  assembly product (`SessionAssemblyResult.Verdict`) and the unwield (`Unequip`, the item a swap in `Equip` or the best-items
+  choice takes off: a worn technological item stays worn). All-or-nothing: the refusal comes from the insert check, before any
+  effect. The session applies it where it knows the item's complexity (a seed item's facts, a worn item's equipment facts, a
+  product's component facts, 0 when the host gives none); a made item (looted from or given by an NPC, or dropped and taken back)
+  has no complexity in the session, so only the host's insert check answers for it. The start kit enters without an insert check
+  (as the host-free start of ARC-WORLD-015). The AREA viewer names the refusal in its inventory and schematic messages.
+
+Out of scope (ledger BG2, BG5–BG8; [characters and skills](../requirements/characters-skills.md)): choosing a background at character
+creation, its effect line (stats, skills, resistances and so on), the start kit's gold and items, the low-intelligence speech, dark
+sight, the time- and place-dependent stat changes, Educator and the container seed.
 
 ## Tests
 

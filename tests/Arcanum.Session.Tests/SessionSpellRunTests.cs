@@ -27,30 +27,38 @@ public sealed class SessionSpellRunTests
         public int Applied { get; private set; }
         /// <summary>Called by a component, as a port that calls back into the session would.</summary>
         public Action? OnApply { get; set; }
+        public Dictionary<string, int> Flags { get; } = [];
+        public int SetFlags { get; set; }
+        public bool Pays { get; set; }
+        public IReadOnlyList<SpellPayment> Charge { get; set; } = [];
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
         public ISpellRunHost SpellRuns => this;
         public SpellRunRecord Record(int spell) => record;
         public SpellStageFacts StageFacts(SpellRun run) => new(false, false, 12, 20, false, new SpellPayer(SpellPayerKind.Critter, CurrentFatigue: 50), new(true, 0, -1));
         public ISpellCellSource Cells { get; } = new NoCells();
-        public ISpellRunStacking Stacking { get; } = new NoStacking();
         public bool FlagsAllow(SpellRun run) => true;
-        public int SourceSpellFlags(SpellRun run) => 0;
+        public int SpellFlags(SpellRunObject who) => Flags.TryGetValue(who.Id, out var flags) ? flags : 0;
+        public int? PlayerSpellFlags => null;
+        public bool PlayerPerceptionExtraordinary => false;
+        public SpellPayer? Payer(SpellRunObject who) => Pays ? new(SpellPayerKind.Critter, CurrentFatigue: 50) : null;
+        public SpellResistRecord ResistRecord(int spell) => new(spell, true, false, false, 0, SpellResistanceRules.NoSave, 0);
+        public SpellResistTarget ResistTarget(SpellRun run, SpellRunTarget target) => new(false, SpellTargetKind.Other, false, 0, 0, 0, false);
+        public ISpellRollSource Rolls { get; } = new NoRolls();
+        public ISpellFateSave FateSave => SpellFateSave.None;
         public bool IsLocalPlayer(SpellRunObject? who) => false;
         public IReadOnlyList<SpellRunTarget> Collect(SpellRun run) => [new(run.Target, run.TargetTile)];
         public bool UseSpellAtMaximum(SpellRunObject pc) => false;
-        public bool PerTarget(SpellRun run, SpellRunTarget target) => true;
-        public bool TakesEffect(SpellRun run, SpellRunTarget target) => true;
         public SpellComponentGate Gate(SpellRun run, int component, SpellRunTarget target) => new(true, target);
         public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target)
         {
             Applied++;
             OnApply?.Invoke();
-            return SpellComponentOutcome.None;
+            return new(SetSpellFlags: SetFlags);
         }
         public SpellTimeFacts TimeFacts(SpellRun run) => new(true);
         public int? Stat(SpellRunObject who, int stat) => 12;
         public bool MaintainBarHasSlot(SpellRun run) => true;
-        public IReadOnlyList<SpellPayment> ChargeBegin(SpellRun run) => [];
+        public IReadOnlyList<SpellPayment> ChargeBegin(SpellRun run) => Charge;
     }
 
     private sealed class NoCells : ISpellCellSource
@@ -149,5 +157,40 @@ public sealed class SessionSpellRunTests
         Assert.AreEqual((GameSessionFailure.InvalidSpellRun, GameSessionDisposition.Changed), (inner!.Failure, outer.Disposition));
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.ActOnSpellRun(owner.Version, world, new(SessionSpellRunActionKind.ClearSource, 5)).Disposition,
             "nothing in the slot: no change, no revision");
+    }
+
+    [TestMethod]
+    public void Mg32_a_freed_runs_pending_events_go_in_Steamwoven_and_stay_in_the_original()
+    {
+        foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        {
+            using var owner = Create();
+            owner.SelectRules(mode);
+            Start(owner, new(33, null, Trap, Orc, SpellLocation.None), Instant);
+            Assert.AreEqual(1, owner.QueryEvents().Count, "its BEGIN's process event");
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.ActOnSpellRun(owner.Version, new Spells(Instant), new(SessionSpellRunActionKind.Free, 0)).Disposition);
+            Assert.AreEqual(mode == RuleMode.Original ? 1 : 0, owner.QueryEvents().Count, $"{mode}");
+        }
+    }
+
+    [TestMethod]
+    public void The_last_cost_charged_carries_over_to_a_later_calls_reflection_in_the_original_Mg15()
+    {
+        using var owner = Create();
+        owner.SelectRules(RuleMode.Original);
+        // The hero's timed run sets the full reflection on the orc.
+        var shield = Start(owner, new(33, Hero, Hero, Orc, SpellLocation.None), Timed).Creation!.Run!.Id;
+        owner.ActOnSpellRun(owner.Version, new Spells(Timed) { SetFlags = SpellTargetStage.FullReflection }, new(SessionSpellRunActionKind.Begin, shield));
+        Assert.AreEqual(SpellTargetStage.FullReflection, owner.QuerySpellRuns()[shield]!.SetSpellFlags);
+        // A charged free pays 7 in one call; a later call's reflection charges the hero that last cost.
+        var charged = Start(owner, new(33, null, Trap, Orc, SpellLocation.None), Instant).Creation!.Run!.Id;
+        var free = new Spells(Instant) { Charge = [new(SpellPaymentStatus.Paid, 7, [], 7, false, false, null)] };
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ActOnSpellRun(owner.Version, free, new(SessionSpellRunActionKind.FreeCharged, charged)).Disposition);
+        var trap = Start(owner, new(33, null, Trap, Orc, SpellLocation.None), Instant).Creation!.Run!.Id;
+        var world = new Spells(Instant) { Pays = true };
+        world.Flags["orc"] = SpellTargetStage.FullReflection;
+        var cast = owner.ActOnSpellRun(owner.Version, world, new(SessionSpellRunActionKind.Begin, trap));
+        var reflection = cast.Notes.Single(n => n.Kind == SpellRunNoteKind.ReflectionPayment);
+        Assert.AreEqual(("hero", (int?)7), (reflection.Target!.Object!.Id, reflection.Payments!.Single().LastCost));
     }
 }

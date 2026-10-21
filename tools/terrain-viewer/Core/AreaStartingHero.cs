@@ -359,7 +359,8 @@ public static class AreaStartingHero
             raceEffect, genderEffect, hero.Gold,
             [.. hero.Items.Select(item => new SessionHeroKitItem(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description)))],
             Advancement: SessionHeroAdvancement.WithScheme(hero.AutoLevelScheme is >= 0 and <= SessionAdvancementLimits.MaxScheme ? hero.AutoLevelScheme : 0),
-            InnateSkills: skills);
+            // A scheme or background outside the session's range starts as 0 (none), as the pre-made data never has one (39..50 installed).
+            InnateSkills: skills, Background: hero.Background is >= SessionHeroLimits.MinBackground and <= SessionHeroLimits.MaxBackground ? hero.Background : 0);
     }
 
     /// <summary>A one-line HUD summary of the session's hero (no original text), or "diagnostic PC" without one.</summary>

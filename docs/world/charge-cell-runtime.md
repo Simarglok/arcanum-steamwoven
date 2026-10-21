@@ -26,10 +26,11 @@ and [`GameSessionCells`](../../src/Arcanum.Session/GameSessionCells.cs); tests
 - A critter (or any payer that is not an item) pays from itself; an item (types 5..14) from its parent (`CellOwnerKind`): a
   critter parent, a container, no parent, or another object.
 - Cells are ammunition of type 2 (prototype 7060). A critter has one power-cell stack (the original merges ammunition into
-  one stack per type); a container's cells would be the first item of prototype 7060 in its inventory, but the original's
-  lookup passes the raw prototype number where a handle is compared and never finds it (ledger [AM6](../research/original-verification-ledger.md#ammunition-arc-world-066),
-  ARC-WORLD-066), so a container has none in both settings until the owner decides; no parent or another object
-  has none. The host finds the stack and gives it as `CellStack(entity, units)`.
+  one stack per type); a container's cells are its first stack of type 2, but the original's lookup passes the raw prototype
+  number where a handle is compared and never finds it (ledger [AM6](../research/original-verification-ledger.md#ammunition-arc-world-066)).
+  AMA5 is a switch (owner decision 2026-10-21, ARC-TECHNOLOGY-009): `ItemRuleProfile.ContainerStackLookupFails` (Original `true`)
+  keeps the failed lookup; Steamwoven finds the stack. The lookup is the host's: the rules pay from the stack the host gives
+  (`CellStack(entity, units)`, null when it found none) for a critter or a container; no parent or another object has none.
 
 ## The need (CC4, TC1)
 
@@ -55,7 +56,8 @@ and keeps the plan (`LastPlan`).
 
 The original takes the cells even for an affordability check that does not apply the payment (CCA1: the interface's check before
 a cast and the animation goal's check). Both settings answer such a request exactly as the original does and write nothing
-(`CellPlan.Applied` false, `Writes` false).
+(`CellPlan.Applied` false, `Writes` false): decided by the owner on 2026-10-21, no switch (ARC-TECHNOLOGY-009 tests it for the
+hero, an item it holds and a container in both modes, `TechnologyFixesStateTests`).
 
 Crash class, fixed in both settings (CCA2): a need or a product `power × cost` that does not fit 32 bits (the original wraps
 and can add cells or fault on a division), and a complexity or aptitude out of range, are refused (`OutOfRange`). An item
@@ -71,6 +73,12 @@ the port over the hero's own power-cell stack, which spends the cells of an appl
 writes nothing for an unapplied request ([ammunition](inventory-runtime.md#ammunition-arc-world-066)). A spend moves the session's
 revision, so a caller holding a version takes the new one; a spend the session refuses (a full durability budget at the last cell,
 the revision) answers the payment as refused (`CellRefusal.WriteRefused`, nothing taken).
+
+ARC-TECHNOLOGY-009 adds `ContainerCellSource(container, itemComplexity)`: the port for a device inside a container of an attached
+seed (the item's parent is the container, so the need uses the complexity as the power). It pays from the container's first
+power-cell stack where the session's item rules find it (AMA5: Steamwoven; in Original the lookup fails and the device has no
+cells) and spends an applied, paid plan through `SpendAmmo(SessionAmmoHolder.ContainerOf(container))`; null for a container no
+attached seed lists (a spilled container's items lie on the ground and count for none).
 
 ## Not implemented
 

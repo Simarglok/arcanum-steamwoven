@@ -3,12 +3,13 @@ using Arcanum.Simulation.Technology;
 
 namespace Arcanum.Session;
 
-/// <summary>Who spends ammunition (ARC-WORLD-066): the hero, or an NPC by its entity (its seed list and the items the session
-/// added to it).</summary>
-public readonly record struct SessionAmmoHolder(string? Npc)
+/// <summary>Who spends ammunition (ARC-WORLD-066): the hero, an NPC by its entity (its seed list and the items the session added
+/// to it), or (ARC-TECHNOLOGY-009) a container of an attached seed by its entity (its seed list).</summary>
+public readonly record struct SessionAmmoHolder(string? Npc, string? Container = null)
 {
     public static SessionAmmoHolder Hero => new(null);
-    public bool IsHero => Npc is null;
+    public static SessionAmmoHolder ContainerOf(string container) => new(null, container);
+    public bool IsHero => Npc is null && Container is null;
 }
 
 /// <summary>
@@ -54,22 +55,26 @@ public sealed partial class GameSessionOwner
     /// Spends <paramref name="count"/> units of ammunition type <paramref name="ammoType"/> from a holder (the unit use 0x4658E0 with
     /// no destination, as a shot, a cell payment, an assembly component or a script takes them): the holder's first stack of that
     /// type in its list order (the original finds the one stack its critter field names; a holder has one stack a type unless two
-    /// prototypes share a type, which no installed prototype does). Fewer units than the count spend nothing
+    /// prototypes share a type, which no installed prototype does). A container's stack is found only where the session's item rules
+    /// find it (AMA5, <see cref="Arcanum.Simulation.Items.ItemRuleProfile.ContainerStackLookupFails"/>: never in Original). Fewer units than the count spend nothing
     /// (<see cref="GameSessionFailure.AmmoShort"/>, also when the holder has no stack); exactly the count deletes the stack (the
     /// durability deletion); more leave the rest. A count of 0 changes nothing. Refused before any effect: an invalid input
     /// (<see cref="GameSessionFailure.InvalidAmmo"/>: a negative count, which the original would add to the source, or a type out of
-    /// 0..3), no hero (<see cref="GameSessionFailure.InvalidLifeTarget"/>) or an NPC the session does not know
-    /// (<see cref="GameSessionFailure.UnknownHolder"/>), the version, the record and durability budgets
+    /// 0..3, or a holder naming both an NPC and a container), no hero (<see cref="GameSessionFailure.InvalidLifeTarget"/>) or an NPC or
+    /// container no attached seed lists (<see cref="GameSessionFailure.UnknownHolder"/>), the version, the record and durability budgets
     /// (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. One revision.
     /// </summary>
     public SessionAmmoUse SpendAmmo(GameSessionVersion expected, SessionAmmoHolder holder, int ammoType, int count)
     {
         ThrowIfDisposed();
-        if (count < 0 || ammoType is < 0 or >= SessionAmmoRecord.AmmoTypes || holder.Npc is { } bad && (!SessionValidation.Entity(bad) ||
-            bad.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal))) return RejectAmmo(GameSessionFailure.InvalidAmmo);
-        if (holder.IsHero ? _hero is null : !KnownNpc(holder.Npc!)) return RejectAmmo(holder.IsHero ? GameSessionFailure.InvalidLifeTarget : GameSessionFailure.UnknownHolder);
+        if (count < 0 || ammoType is < 0 or >= SessionAmmoRecord.AmmoTypes || holder is { Npc: not null, Container: not null } ||
+            (holder.Npc ?? holder.Container) is { } bad && (!SessionValidation.Entity(bad) || bad.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)))
+            return RejectAmmo(GameSessionFailure.InvalidAmmo);
+        if (holder.IsHero ? _hero is null : holder.Container is { } box ? !KnownContainer(box) : !KnownNpc(holder.Npc!))
+            return RejectAmmo(holder.IsHero ? GameSessionFailure.InvalidLifeTarget : GameSessionFailure.UnknownHolder);
         if (!IsCurrent(expected)) return RejectAmmo(GameSessionFailure.StaleVersion);
-        var stack = holder.IsHero ? HeroStackOfType(ammoType) : NpcStackOfType(holder.Npc!, ammoType);
+        var stack = holder.IsHero ? HeroStackOfType(ammoType) : holder.Container is { } container ? ContainerStackOfType(container, ammoType)
+            : NpcStackOfType(holder.Npc!, ammoType);
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, stack?.Entity, stack?.Units ?? 0, false, Version);
         if (stack is not { } found || SchematicAssemblyRules.UseUnits(found.Units, count) is not { } left)
             return new(GameSessionDisposition.Rejected, GameSessionFailure.AmmoShort, stack?.Entity, stack?.Units ?? 0, false, Version);
@@ -97,10 +102,24 @@ public sealed partial class GameSessionOwner
         return _hero is null ? null : new SessionCellSource(this, itemComplexity);
     }
 
+    /// <summary>
+    /// ARC-TECHNOLOGY-009: the engine's charge-cell port for an item (a device) inside a container of an attached seed, paying from the
+    /// container's power-cell stack (AMA5): the item's parent is the container, so the need uses the item's complexity as the power
+    /// (<see cref="ChargeCellRules.Need"/>). The stack is found only where the session's item rules find it
+    /// (<see cref="Arcanum.Simulation.Items.ItemRuleProfile.ContainerStackLookupFails"/>): in Original the lookup fails, so the device has
+    /// no cells. An applied, paid plan spends the cells at once (<see cref="SpendAmmo"/> from the container, type 2); an unapplied request
+    /// writes nothing. Null for an invalid entity or a container no attached seed lists.
+    /// </summary>
+    public ISpellCellSource? ContainerCellSource(string container, int itemComplexity)
+    {
+        ThrowIfDisposed();
+        return SessionValidation.Entity(container) && KnownContainer(container) ? new SessionCellSource(this, itemComplexity, container) : null;
+    }
+
     /// <summary>The hero's power-cell stack as the cell rules see it (null without one).</summary>
     private CellStack? HeroCells() => HeroStackOfType(SessionAmmoRecord.Cells) is { } stack ? new CellStack(stack.Entity, stack.Units) : null;
 
-    private sealed class SessionCellSource(GameSessionOwner owner, int? itemComplexity) : ISpellCellSource
+    private sealed class SessionCellSource(GameSessionOwner owner, int? itemComplexity, string? container = null) : ISpellCellSource
     {
         public CellPlan? LastPlan { get; private set; }
 
@@ -108,13 +127,16 @@ public sealed partial class GameSessionOwner
         {
             ArgumentNullException.ThrowIfNull(request);
             owner.ThrowIfDisposed();
-            if (owner._hero is null) { LastPlan = null; return new(false, 0); }
-            var payer = itemComplexity is { } complexity
+            if (container is null ? owner._hero is null : !owner.KnownContainer(container)) { LastPlan = null; return new(false, 0); }
+            var payer = container is not null
+                ? new CellPayer(SpellPayerKind.Item, CellOwnerKind.Container, owner.ContainerCells(container), itemComplexity!.Value)
+                : itemComplexity is { } complexity
                 ? new CellPayer(SpellPayerKind.Item, CellOwnerKind.Critter, owner.HeroCells(), complexity, owner.HeroAptitude())
                 : new CellPayer(SpellPayerKind.Critter, CellOwnerKind.Critter, owner.HeroCells());
             var plan = request.Payer != payer.Payer ? new CellPlan(false, CellRefusal.PayerMismatch, 0, null, 0, false, request.Apply)
                 : ChargeCellRules.Plan(payer, request.Cost, request.Apply, owner._rules.Technology);
-            if (plan.Writes && plan.Need > 0 && owner.SpendAmmo(owner.Version, SessionAmmoHolder.Hero, SessionAmmoRecord.Cells, plan.Need) is { Disposition: not GameSessionDisposition.Changed } refused)
+            var holder = container is null ? SessionAmmoHolder.Hero : SessionAmmoHolder.ContainerOf(container);
+            if (plan.Writes && plan.Need > 0 && owner.SpendAmmo(owner.Version, holder, SessionAmmoRecord.Cells, plan.Need) is { Disposition: not GameSessionDisposition.Changed } refused)
                 plan = plan with { Paid = false, Refusal = refused.Failure == GameSessionFailure.AmmoShort ? CellRefusal.TooFewCells : CellRefusal.WriteRefused,
                     UnitsAfter = plan.Stack?.Units ?? 0, StackRemoved = false };
             LastPlan = plan;
@@ -154,6 +176,32 @@ public sealed partial class GameSessionOwner
 
     private SessionAmmoRecord? NpcStackOfType(string npc, int ammoType) =>
         NpcStacks(npc).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault(stack => stack!.Value.AmmoType == ammoType);
+
+    /// <summary>A container of an attached seed (not spilled: a spilled container's items lie on the ground).</summary>
+    private bool KnownContainer(string container) => _inventory.Seeds.Any(pair => pair.Value.Holders.TryGetValue(container, out var holder) &&
+        holder.Kind == SessionHolderKind.Container && SpillCell(pair.Key, pair.Value, container) is null);
+
+    /// <summary>
+    /// ARC-TECHNOLOGY-009: a container's first stack of an ammunition type in its list order (its seed items still in it, with their
+    /// tracked or seed units), or null. The original's lookup by type (0x465870, its container branch; marked on
+    /// <see cref="HeroStackOfType"/>) passes the raw prototype number where a handle is compared and never finds one (ledger AM6); under
+    /// <see cref="Arcanum.Simulation.Items.ItemRuleProfile.ContainerStackLookupFails"/> this answers null as there (AMA5).
+    /// </summary>
+    private SessionAmmoRecord? ContainerStackOfType(string container, int ammoType)
+    {
+        if (_rules.Items.ContainerStackLookupFails) return null;
+        foreach (var (map, seed) in _inventory.Seeds)
+            if (seed.Holders.TryGetValue(container, out var holder) && holder.Kind == SessionHolderKind.Container && SpillCell(map, seed, container) is null)
+                foreach (var entity in holder.Items)
+                    if (!_inventory.Taken.Contains(entity) && !Dropped(entity) && seed.Items[entity].Facts is { AmmoType: { } type, Quantity: { } units } &&
+                        type == ammoType)
+                        return _inventory.Ammo.TryGetValue(entity, out var tracked) ? tracked : new(entity, type, units);
+        return null;
+    }
+
+    /// <summary>A container's power-cell stack as the cell rules see it (null when the lookup finds none).</summary>
+    private CellStack? ContainerCells(string container) =>
+        ContainerStackOfType(container, SessionAmmoRecord.Cells) is { } stack ? new CellStack(stack.Entity, stack.Units) : null;
 
     /// <summary>The ammunition type and units an item brings into a list: its tracked stack, else its facts' (a seed item); null for
     /// an item that is not ammunition or carries none.</summary>

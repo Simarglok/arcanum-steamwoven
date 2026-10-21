@@ -20,11 +20,19 @@ public sealed record ItemRuleProfile
     /// </summary>
     public bool RepairQuoteCountsDamageTwice { get; init; }
 
+    /// <summary>
+    /// Ledger AM6 (AMA5): a container's stack of an ammunition type (the cell, gold and ammunition lookups 0x465870 and 0x4647D0) is
+    /// looked up by passing the raw prototype number where a prototype handle is compared, so it is never found: a device in a
+    /// container has no cells, as the retail executable does. Steamwoven finds the container's first stack of the type in its list
+    /// (owner decision 2026-10-21, ARC-TECHNOLOGY-009; the ammunition lookups, cells included; gold is not modelled).
+    /// </summary>
+    public bool ContainerStackLookupFails { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly ItemRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly ItemRuleProfile Original = new() { Name = "original", RepairQuoteCountsDamageTwice = true };
+    public static readonly ItemRuleProfile Original = new() { Name = "original", RepairQuoteCountsDamageTwice = true, ContainerStackLookupFails = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<ItemRuleProfile> All { get; } = new[] { Steamwoven, Original };

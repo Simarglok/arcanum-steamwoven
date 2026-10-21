@@ -5,9 +5,10 @@ MT9a-1 "Run creation and payment stage") and ARC-MAGIC-010 (2026-10-21, slice MT
 [magic implementation plan](../research/magic-implementation-plan.md) (the owner split MT9a into the two on 2026-10-21). The
 original's run table, a run's creation, its stage at BEGIN and MAINTAIN with the payments, its time intervals and the maintenance
 cap (MT9a-1); the processing of each action, the scheduler, the magic-tech events and the interrupts (MT9a-2), as the original has
-them. Godot-free rules in `Arcanum.Simulation.Magic` for any caster, item, target and map, over ports for the world, the
-per-target stage and the components; the session holds the runs and queues their events. Saved runs are MT9b's. Three rule-mode
-switches (MG3, MG11, MG19); runs and their events are not saved yet.
+them. Godot-free rules in `Arcanum.Simulation.Magic` for any caster, item, target and map, over ports for the world and the
+components; the per-target stage, the no-stack test and the cancels are ARC-MAGIC-011's ([spell per-target
+stage](spell-target-stage.md)); the session holds the runs and queues their events. Saved runs are MT9b's. Rule-mode switches MG3,
+MG11, MG19, MG29 (and, with the per-target stage, MG15, MG30, MG32); runs and their events are not saved yet.
 
 Requirements: [FR-MAGIC-006](../requirements/combat-magic-tech.md#fr-magic-006) (a spell's life: begin, maintenance and its
 payment, duration, the cap of maintained spells).
@@ -51,7 +52,8 @@ Before an action's components:
   NPC: an item's spell ignores them); then the source pays the BEGIN cost (`SpellCostRules.RunCost`, `SpellPaymentRules.Pay`)
   unless the run is free or the record skips its BEGIN cost. A technology record, or a parent that is no PC or NPC, skips the
   checks and the cost. Then, when the record has stacking rules, a run of the spell already on the target (else the source) may
-  block it (`ISpellRunStacking`, 0x453410; no refund), and the cancels run (0x4534E0) — both MT10's.
+  block it (0x453410; no refund), and the cancels run (0x4534E0) — the [per-target stage](spell-target-stage.md)'s rules
+  (ARC-MAGIC-011).
 - **MAINTAIN.** For a PC or NPC parent — **the technology flag is not tested**, so maintained technology records (146, 149, 168,
   187, 209, 216) are checked and pay — the same checks; the maintenance (`Maintain:` cost, ×2 for a dwarf PC or NPC source, no
   mastery or cheat) unless the run is free or the intelligence check failed; with a resistance margin the surcharged maintenance
@@ -102,7 +104,8 @@ the function oracle on 10,000 seeded inputs each (F3, receipts [`453FA0.json`](.
    END components still run.
 3. An action without components counts as applied. Otherwise the target list (MT8, the host's port); a PC source's armed fate
    "spell at maximum" is used on every such pass (both aptitudes 100); an empty list counts as applied. For each target: the
-   per-target stage (MT10, a port) may skip it; a resisted target (MT6) is reported and skipped; each component's gate (its area
+   per-target stage (the shell and reflection, [ARC-MAGIC-011](spell-target-stage.md)) may skip it; a resisted target (MT6, the run's
+   margin written) is reported and skipped; each component's gate (its area
    test and re-aim, a port) and item triggers (TA15), then applied, the AI notice (a note) and the component itself (a port): it may
    set spell flags on the run, jump to another component, let go of the run's source, or ask for its callback (pending while its
    animation plays, or at once when the animation could not start). When the source was let go, the current target becomes the
@@ -153,14 +156,14 @@ Owner decisions 2026-10-20: every difference is documented.
 
 MG6 (the aptitude scaling of durations never applies) follows the original in both modes, as decided. Three more are recorded for the owner by ARC-MAGIC-010, each following the
 original in both modes until decided: MG30 (the cancels' interrupts are refused by the guard and leave runs without a tick or an
-END; MT10), MG31 (interrupting a timed run with CALLBACK but no END_CALLBACK components does not end it; one technology record),
-MG32 (an interrupt or process event outlives the free and can hit a new run in the reused slot). The session keeps the runs unchanged when
+END), MG31 (interrupting a timed run with CALLBACK but no END_CALLBACK components does not end it; one technology record), MG32 (an
+interrupt or process event outlives the free and can hit a new run in the reused slot). ARC-MAGIC-011 built the recommended fixes
+of MG30 and MG32 as switches (`ReEntryDropsRuns`, `FreeKeepsOtherEvents`; still pending the owner); MG31 keeps the original. The session keeps the runs unchanged when
 an action's or event's queued events do not fit; what the host's ports already did (a component's effect) is the host's.
 
 ## Not ready
 
-- No viewer caller: the casting UI (MT20a) starts runs and their BEGIN; the per-target stage (resistance, shells, reflection,
-  stacking and cancels behind `ISpellRunStacking`) is MT10's; the components are MT12–MT18's; the maintain bar is MT20b's;
+- No viewer caller: the casting UI (MT20a) starts runs and their BEGIN; the components are MT12–MT18's; the maintain bar is MT20b's;
   the endings' callers (fainting, rest, travel, death) are MT11's; saved runs and events are MT9b's.
 - The other object (the invocation's +0xA0, copied to the run's +0x108) is not carried by MT7's invocation yet, so a run's
   `Other` is always null; the slice that needs it (a spell aimed at a second object) adds it to the invocation.

@@ -174,13 +174,14 @@ public static class ScrDispatcher
     internal sealed record Run(ScrRunResult Result, ScrSlot Slot, ScrRefusal? Refusal, IReadOnlyList<ScrFlagWrite>? Flags = null, int? Story = null, ScrDialogStart? Dialog = null,
         IReadOnlyList<ScrCallRequest>? Calls = null, IReadOnlyList<ScrPrintLine>? Lines = null, IReadOnlyList<ScrSound>? Sounds = null,
         IReadOnlyList<ScrTeleport>? Teleports = null, IReadOnlyList<ScrSchemeRequest>? Schemes = null, IReadOnlyList<ScrSchematicRequest>? Schematics = null,
-        IReadOnlyList<ScrReadingRequest>? Readings = null)
+        IReadOnlyList<ScrReadingRequest>? Readings = null, IReadOnlyList<ScrSkillUse>? SkillUses = null)
     {
         internal ScrRunResult With(ScrWriteback? writeback, ScrObjectRef? destroy) => new(Result.Outcome, Result.Stop, Result.Script, Result.StopLine, null, Result.Trace,
             writeback is null && destroy is null && (Flags?.Count ?? 0) == 0 && Story is null && Dialog is null && (Calls?.Count ?? 0) == 0 && (Lines?.Count ?? 0) == 0
                 && (Sounds?.Count ?? 0) == 0 && (Teleports?.Count ?? 0) == 0 && (Schemes?.Count ?? 0) == 0 && (Schematics?.Count ?? 0) == 0 && (Readings?.Count ?? 0) == 0
+                && (SkillUses?.Count ?? 0) == 0
                 ? ScrEffects.None
                 : new ScrEffects(writeback, destroy, Array.AsReadOnly((Flags ?? Array.Empty<ScrFlagWrite>()).ToArray()), Story, Dialog, Calls, Lines, Sounds, Teleports, Schemes,
-                    Schematics, Readings));
+                    Schematics, Readings, SkillUses));
     }
 }

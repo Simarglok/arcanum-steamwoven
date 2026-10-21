@@ -94,11 +94,23 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-SKILLS-009: an NPC's skills under <paramref name="modifiers"/>: from the sheet the session saved for it (a levelled follower),
+    /// else from <paramref name="loaded"/>, its map data's sheet (the host's input). Invalid input throws.
+    /// </summary>
+    public SessionSkills QueryNpcSkills(SessionNpcAdvancement loaded, AdvancementModifiers modifiers)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(loaded);
+        if (!AutoLevelRules.IsValid(loaded.Sheet)) throw new ArgumentException("Invalid advancement sheet.", nameof(loaded));
+        return QueryNpcSkills(loaded.Entity, modifiers) ?? SessionSkills.Of(loaded.Sheet, modifiers);
+    }
+
+    /// <summary>
     /// Sets the hero's training in a skill (ARC-SKILLS-004; the dialog action TR, the source's training setters 0x4C6170 and
     /// 0x4C6850) through <see cref="SkillRules.SetTraining"/> with the skill's effective level now: one tier up at a time, any tier
     /// down, the tier's minimum level. A refused tier, or the same tier, changes nothing (<see cref="GameSessionDisposition.NoChange"/>,
-    /// with the rules' answer). The source then runs the Educator update for an Educator PC; no background is modelled, so nothing
-    /// follows. Refused, in order: no hero (<see cref="GameSessionFailure.SkillsUnavailable"/>), an undefined skill or tier
+    /// with the rules' answer). The source then runs the Educator update for an Educator PC; the session holds the hero's background
+    /// (ARC-WORLD-069) but not the Educator update, so nothing follows. Refused, in order: no hero (<see cref="GameSessionFailure.SkillsUnavailable"/>), an undefined skill or tier
     /// (<see cref="GameSessionFailure.InvalidSkill"/>), the version, the revision.
     /// </summary>
     public SessionSkillTrainingResult SetHeroSkillTraining(GameSessionVersion expected, Skill skill, SkillTraining training)

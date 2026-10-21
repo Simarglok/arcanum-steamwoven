@@ -52,6 +52,12 @@ body (from 10 + start / 10, wrapping to 10 at 10 + the filler count, a gap stopp
 the digits, drops the next character (centred when it is `c` or `C`) and one whitespace character more. The item's last text line and
 its written flags are never read (WR4).
 
+**Rule setting (WRD3, ARC-TECHNOLOGY-009).** `Read`, `NewspaperFiller` and `Markup` take the session's `WrittenRuleProfile`
+(`GameRules.Written`; `QueryWrittenDocument` and the viewer pass the session's). Original (and no profile, a tool's view) drops the
+first character of a message without a font prefix as above. Steamwoven reads a message whose first character is not an ASCII digit
+as having no markup: its whole text, font 0, not centred (owner decision 2026-10-21; switch `UnprefixedMessageLosesFirstCharacter`).
+A message that starts with an ASCII digit reads the same in both; one whose `atoi` prefix follows white space or a sign gets that font in Original and font 0 (whole text) in Steamwoven.
+
 Refused as the original cannot show them, in both rule settings (WRA1–WRA4): a subtype outside 0..6 (`SubtypeOutOfRange`), a picture
 art outside 0..4095 (`ArtOutOfRange`), a missing text file (`TextsUnavailable`, as the original refuses silently); the note and
 telegram buffer stops at 19,999 bytes; a markup font outside the range is 0; the viewer's book pages stop at 100.
@@ -103,7 +109,7 @@ only for a player viewer (no dead check). Action 94 (set a written item's first 
 16 newspaper fillers. Every one is read or a schematic document (no crash-class record). Four template prototypes start at line 0
 where no message exists and read empty (WRD1; one gets its line from its insert-item script's action 94), the two newspapers at
 line 0 show the masthead messages as their body, the last text line is 0 everywhere (WRD2), two documents have a message without a
-font prefix (WRD3). Two readable prototypes have a use script and one more only an insert-item script; none is magical. The native
+font prefix (WRD3: whole in Steamwoven, first character dropped in Original). Two readable prototypes have a use script and one more only an insert-item script; none is magical. The native
 smoke reads a newspaper template (the first readable prototype with text and no use script) and registers schematic document 14093
 (schematic 4000) on a detached session.
 

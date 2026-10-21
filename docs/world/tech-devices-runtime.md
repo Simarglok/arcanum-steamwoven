@@ -37,7 +37,8 @@ complexity, slot, record, spell charges); a spell outside 0..222 is a `TechDevic
 
 The installed data (opt-in census): 70 item spell slots name technology records, 65 distinct records, on 70 items (61
 technological; nine others: six food and three scrolls); charges −1 ×21, 0 ×2, 1 ×47; no slot out of range. The two devices without charges also lack the magical flag, so they never fire on
-use (ledger DVD1, a proposal for the owner). Maintained
+use (ledger DVD1). Their records also sit in slot 1 with no item triggers, so unlimited charges alone would not make them fire;
+the owner's decision on a fix is open (ARC-TECHNOLOGY-009 found this; both settings follow the data). Maintained
 technology records: 146, 149 (maintenance 1 every 10 s, the source's payment), 168, 187 (maintenance 0: cells come from their
 ChargeNBranch, 168 one cell a MAINTAIN tick, 187 one at BEGIN), 209, 216 (maintenance 0). Cell records 147 (one weapon, BEGIN
 branch), 168 (three armours, Maintain branch), 187 (no item). Only 168 is both maintained and carried.
@@ -52,8 +53,11 @@ after tick over a worn device whose host writes each applied plan.
 
 The same over game time with the run system (ARC-MAGIC-010): `TechMaintainCellsTests` begins the run, fires each tick the run
 system queues (40,000 game ms for a 5-second maintenance) and writes each plan: the cells are paid tick after tick in both TC1
-settings until a tick finds too few, which ends the run and frees it. **Not yet tested:** the ChargeNBranch components (the
-component runner is a later magic slice).
+settings until a tick finds too few, which ends the run and frees it: the end-to-end MAINTAIN test of MT9a-2 is **done**
+([#369](https://github.com/Simarglok/arcanum-steamwoven/pull/369), ARC-MAGIC-010). ARC-TECHNOLOGY-009 adds that the MG29 switch
+(`SurchargeAlways`) still pays through the cell source: with a resistance margin Steamwoven pays the surcharged maintenance once,
+Original the plain one and then the surcharge, and for a free run Original takes the surcharge from the cells while Steamwoven takes
+nothing. **Not yet tested:** the ChargeNBranch components (the component runner is a later magic slice).
 
 ## A device for its holder (DV2–DV6)
 
@@ -78,7 +82,8 @@ slice runs item spells (DV3; the magic plan's "Item spells").
 
 ## Not implemented
 
+The background refusals of DV6 are implemented by ARC-WORLD-069 ([backgrounds](equipment-runtime.md#backgrounds-arc-world-069)).
+
 - Running a device's spells: the item trigger executor (DV3), the use's spell path, item spell charges spent by the payment's
   item branch in session state, and the lift of the equipment's refusal (the shared item trigger slice).
-- The background refusals of DV6 (backgrounds are not modelled).
-- The ChargeNBranch components (the end-to-end MAINTAIN over game time is tested since ARC-MAGIC-010).
+- The ChargeNBranch components (the end-to-end MAINTAIN over game time is done, ARC-MAGIC-010, #369).

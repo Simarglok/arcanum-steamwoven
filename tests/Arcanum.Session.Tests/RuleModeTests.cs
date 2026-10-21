@@ -55,6 +55,8 @@ public sealed class RuleModeTests
             Assert.AreSame(rules.Orders, Arcanum.Simulation.Party.CompanionOrderRuleProfile.FromName(rules.Name));
             Assert.AreEqual(rules.Name, rules.Dialog.Name);
             Assert.AreSame(rules.Dialog, Arcanum.Scripting.Dialog.DialogRuleProfile.FromName(rules.Name));
+            Assert.AreEqual(rules.Name, rules.Written.Name);
+            Assert.AreSame(rules.Written, Arcanum.Data.Written.WrittenRuleProfile.FromName(rules.Name));
         }
         Assert.AreSame(Arcanum.Simulation.Items.ItemRuleProfile.Steamwoven, GameRules.Steamwoven.Items);
         Assert.AreSame(Arcanum.Simulation.Items.ItemRuleProfile.Original, GameRules.Original.Items);
@@ -70,6 +72,13 @@ public sealed class RuleModeTests
         Assert.AreSame(Arcanum.Scripting.Dialog.DialogRuleProfile.Original, GameRules.Original.Dialog);
         Assert.IsTrue(GameRules.Original.Dialog.GeneratedLinePickSpansGaps);
         Assert.IsFalse(GameRules.Steamwoven.Dialog.GeneratedLinePickSpansGaps);
+        Assert.AreSame(Arcanum.Data.Written.WrittenRuleProfile.Steamwoven, GameRules.Steamwoven.Written);
+        Assert.AreSame(Arcanum.Data.Written.WrittenRuleProfile.Original, GameRules.Original.Written);
+        // ARC-TECHNOLOGY-009: WRD3 and AMA5 are Steamwoven fixes with Original switches.
+        Assert.IsTrue(GameRules.Original.Written.UnprefixedMessageLosesFirstCharacter);
+        Assert.IsFalse(GameRules.Steamwoven.Written.UnprefixedMessageLosesFirstCharacter);
+        Assert.IsTrue(GameRules.Original.Items.ContainerStackLookupFails);
+        Assert.IsFalse(GameRules.Steamwoven.Items.ContainerStackLookupFails);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
 

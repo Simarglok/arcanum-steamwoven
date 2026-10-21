@@ -7,13 +7,13 @@ public enum SpellRunAction { Begin = 0, Maintain = 1, End = 2, Callback = 3, End
 
 /// <summary>
 /// A run's flags (+0x13C): active (set by the allocator), free (no BEGIN or maintenance cost: the invocation's request),
-/// processed (set by every pass of the processing, MT9a-2; never cleared), unresistable (<c>No_Resist:</c> or the invocation's request), forced end
+/// processed (set by every pass of the processing, MT9a-2; never cleared), reflected (a target's full reflection turned it, MT10), unresistable (<c>No_Resist:</c> or the invocation's request), forced end
 /// (0x457270: the run was made to end) and final END (the scheduler's mark that the next event is the END, also set when the
 /// source is detached). The original keeps unresistable and final END in one bit, 0x10 (MG19);
 /// <see cref="MagicAnomalyProfile.UnresistableIsFinalEnd"/> keeps them one.
 /// </summary>
 [Flags]
-public enum SpellRunFlags { None = 0, Active = 0x1, Free = 0x2, Processed = 0x4, Unresistable = 0x10, ForcedEnd = 0x40, FinalEnd = 0x10000 }
+public enum SpellRunFlags { None = 0, Active = 0x1, Free = 0x2, Processed = 0x4, Reflected = 0x8, Unresistable = 0x10, ForcedEnd = 0x40, FinalEnd = 0x10000 }
 
 /// <summary>An object a run names, captured when the run is created: its id, object type and, for a PC or NPC, its effective
 /// magick/tech aptitude (stat 16) at that moment.</summary>
@@ -110,6 +110,17 @@ public sealed record SpellRunRecord(bool Technology = false, bool NoResist = fal
     /// <summary>Whether the record names item triggers (+0x38 non-zero: <c>ItemTriggers:</c>), which gate its components and keep
     /// an untimed run from ending when its source faints (MT9a-2).</summary>
     public bool ItemTriggers { get; init; }
+
+    /// <summary>The record's <c>No_Reflect:</c> (+0x34 flag 0x400): a target's full reflection does not turn it (MT10).</summary>
+    public bool NoReflect { get; init; }
+
+    /// <summary><c>Cancels_SF:</c> (+0x118) and <c>Cancels_EnvSF:</c> (+0x128), spell-flag bits (MT10).</summary>
+    public int CancelsSpellFlags { get; init; }
+    public int CancelsEnvironmentSpellFlags { get; init; }
+
+    /// <summary>Whether the BEGIN area has the self bit (+0x70 bit 0x1): a self spell, which the no-stack test matches by its
+    /// parent when it has no target object (MT10).</summary>
+    public bool SelfSpell { get; init; }
 
     /// <summary>The component count of an action.</summary>
     public int Components(SpellRunAction action) =>
@@ -237,7 +248,7 @@ public static class SpellRunRules
     /// block it; then the cancels run. MAINTAIN: for a PC or NPC parent — the technology flag is not tested — the same checks,
     /// the maintenance (<see cref="MaintainCost"/>) unless free or the intelligence check failed, and with a resistance margin
     /// the surcharged maintenance (<see cref="SurchargedCost"/>; MG3: the original pays both, Steamwoven only the surcharged; the
-    /// surcharge is paid even for a free run or after a failed check, MG29, as the original in both modes until the owner decides);
+    /// surcharge is paid even for a free run or after a failed check, MG29, in Original only, <see cref="MagicAnomalyProfile.SurchargeAlways"/>);
     /// a failure turns the run to END. Other
     /// actions proceed.
     /// </summary>

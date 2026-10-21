@@ -49,12 +49,13 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>The document the reading window shows for a written item's facts (0x56BC00 / 0x56BCC0), the prototype 14092 (the executable's 14072) alternate
-    /// newspaper included; changes nothing and needs no hero (a script opener reads the same way).</summary>
+    /// newspaper included, its markup under the session's reading rules (WRD3); changes nothing and needs no hero (a script opener reads
+    /// the same way).</summary>
     public WrittenDocument QueryWrittenDocument(SessionWrittenFacts facts, WrittenTexts texts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(texts);
-        return texts.Read(facts.Subtype, facts.TextStartLine, facts.Prototype == WrittenTexts.NewspaperAlternatePrototype);
+        return texts.Read(facts.Subtype, facts.TextStartLine, facts.Prototype == WrittenTexts.NewspaperAlternatePrototype, _rules.Written);
     }
 
     private SessionWrittenUse RejectUse(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, null, false, null, Version);

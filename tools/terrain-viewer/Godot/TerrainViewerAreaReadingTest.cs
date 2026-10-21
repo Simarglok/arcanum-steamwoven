@@ -190,7 +190,7 @@ public partial class TerrainViewerApp
             var revision = session.Version.Revision;
             var readable = data.Prototypes.OrderBy(p => p.Key)
                 .Where(p => session.QueryWrittenDocument(p.Value, data.Texts) is { Readable: true }).ToArray();
-            var views = readable.Count(p => AreaReading.View(session.QueryWrittenDocument(p.Value, data.Texts), data.Texts, 0, AreaHoverIndex.TextProfile) is not null);
+            var views = readable.Count(p => AreaReading.View(session.QueryWrittenDocument(p.Value, data.Texts), data.Texts, 0, AreaHoverIndex.TextProfile, session.Rules.Written) is not null);
             Require(readable.Length > 0 && views == readable.Length, $"readable {readable.Length}, views {views}");
             // A use script or the item-spell path is refused here (not run): the first readable item without either, a book when there is one.
             var plain = readable.Where(p => !p.Value.UseScript && !p.Value.ItemSpell).ToArray();

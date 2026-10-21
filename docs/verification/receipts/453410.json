@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x453410",
+  "name": "spell-no-stack",
+  "method": "Arcanum.Simulation.Magic.SpellTargetStage.Blocking",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 2,
+  "mutantsCaught": 2,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "535a2e1663c0d9fd55aee970fa1c95c08691da6cbb408e2201d34ed1e4684cd8",
+  "configuration": "Debug"
+}

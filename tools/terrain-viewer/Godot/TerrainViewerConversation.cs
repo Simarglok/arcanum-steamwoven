@@ -51,7 +51,7 @@ public partial class TerrainViewerApp
             // ARC-WORLD-037: in map mode every speaker with follow facts from the map's data joins through the session party.
             _conversationHost = new AreaConversationHost(area.Snapshot, content.Content, session, inventory: _inventoryHost,
                 party: arguments.AreaMapName is null || _companionData?.Data is not null, contentDetail: $"{content.Status}: {content.Detail}",
-                companions: arguments.AreaMapName is null ? null : MapCompanionFacts, npcAdvancement: AreaNpcAdvancement);
+                companions: arguments.AreaMapName is null ? null : MapCompanionFacts, npcAdvancement: AreaNpcAdvancement, npcSheet: AreaFollowerSheet);
         }
         else _conversationHost = null;
         if (_conversationPanel is null)
@@ -132,7 +132,7 @@ public partial class TerrainViewerApp
         try
         {
             host = AreaConversationHost.ForVisitor(template, content?.Content, session, inventory: _inventoryHost,
-                contentDetail: content is { } load ? $"{load.Status}: {load.Detail}" : "no script content", npcAdvancement: AreaNpcAdvancement);
+                contentDetail: content is { } load ? $"{load.Status}: {load.Detail}" : "no script content", npcAdvancement: AreaNpcAdvancement, npcSheet: AreaFollowerSheet);
         }
         catch (ArgumentException exception)
         {
