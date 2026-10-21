@@ -35,6 +35,25 @@ public sealed class RouteWalkTests
     }
 
     [TestMethod]
+    public void A_short_detour_past_the_budget_is_walked_by_the_corridor_under_Steamwoven()
+    {
+        // The walk's budget 13 drops the 14-step detour through the gap at x 12; the corridor's single leg asks the whole budget.
+        var source = new GridSource(Enumerable.Range(0, 5).Select(y => y == 2 ? new string('#', 12) + "." + new string('#', 7) : new string('.', 20)).ToArray());
+        Assert.AreEqual("ROUTE_BUDGET_EXHAUSTED", RoutePlanner.Plan(source, new(5, 1), new(5, 3), new RouteLimits(budget: RouteLimits.WalkBudget(new(5, 1), new(5, 3)))).ReasonCode);
+        foreach (var profile in NavigationRuleProfile.All)
+        {
+            var host = new RouteHost(source, new(5, 1), Step);
+            var follower = new RouteFollower(source, corridorLimits: new(), corridorAllowed: () => !profile.FarClickDoesNotMove, straightRetry: true);
+            follower.SetTarget(new(5, 3), host.State.Time);
+            host.Frames(follower, 4 * 60);
+            var at = (follower.Status, follower.StopReason, host.State.CommittedCell);
+            // Original has no corridor: the PC's straight line meets the wall.
+            if (profile.FarClickDoesNotMove) Assert.AreEqual((RouteFollowStatus.Stopped, "ROUTE_STEP_DENIED", new CellCoord(5, 1)), at, $"{at}");
+            else Assert.AreEqual((RouteFollowStatus.Arrived, "ROUTE_ARRIVED", new CellCoord(5, 3)), at, $"{at}");
+        }
+    }
+
+    [TestMethod]
     public void The_pcs_straight_retry_goes_on_in_straight_lines_until_a_step_is_refused()
     {
         // No path (a wall without a gap): the retry heads straight for the goal and is refused at the wall (LR4: every later plan is

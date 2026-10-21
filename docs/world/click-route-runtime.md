@@ -35,14 +35,16 @@ RoutePlan RoutePlanner.Plan(IRouteStepSource source, CellCoord from, CellCoord t
 RoutePlan RoutePlanner.StraightRetry(IRouteStepSource source, CellCoord from, CellCoord target, RouteLimits? limits = null);
 RoutePlan RoutePlanner.PlanApproach(IRouteStepSource source, CellCoord from, CellCoord target, RouteLimits? limits = null);
 interface IRouteStepSource { bool Contains(CellCoord cell); RouteStepVerdict Assess(CellCoord from, NeighborDirection direction);
-    int ExtraCost(...) => 0; bool StepRefusedByObject(...) => false; }
+    int ExtraCost(...) => 0; bool StepRefusedByObject(...) => false; bool GoalHoldsCritter(CellCoord goal) => false;
+    bool StepEntersCritter(CellCoord from, NeighborDirection direction) => false; }
 ```
 
 1. **Refusals, never searched:** source or target outside `Contains`
    (`ROUTE_SOURCE_OUTSIDE_AREA`, `ROUTE_TARGET_OUTSIDE_AREA`); more than
    `AxisDistance` (32) cells on either axis (`ROUTE_TARGET_OUT_OF_RANGE`: the direct attempt refuses more than 32 on the
    larger axis and the search 32 or more on either). The same cell is `AlreadyAtTarget`.
-2. **The goal's gate** (DC2): some admitted neighbour enters the goal by an `Open` step, else `ROUTE_NOT_FOUND`
+2. **The goal's gate** (DC2): some admitted neighbour enters the goal by an `Open` step and no living critter stands on it
+   (`GoalHoldsCritter`, while the plan passes critters) and it is not a cell the follower avoids, else `ROUTE_NOT_FOUND`
    (`ROUTE_EVIDENCE_INCOMPLETE` if one of those steps is Unknown), answered from the eight entries alone.
 3. **Direct attempt** (DC3): from each cell step toward the target, diagonally unless the minor remaining delta is under
    half of the major one (`RoutePlanner.Toward`, 0x4B8D50). Every step must be `Open` and cross no window piece (no extra
@@ -54,8 +56,8 @@ interface IRouteStepSource { bool Contains(CellCoord cell); RouteStepVerdict Ass
    (`RouteLimits.Budget`, at most 200) is dropped; a refused cardinal step the source says an object refused
    (`StepRefusedByObject`, not a wall or portal) drops its cell (`ROUTE_LOCAL_SEARCH` on success). Cells outside the window
    are never asked about. The route is the original's choice by its costs, not a shortest one.
-5. **No route:** `ROUTE_EVIDENCE_INCOMPLETE` when an `Unknown` step was met, otherwise `ROUTE_BUDGET_EXHAUSTED` when the
-   budget dropped a cell, otherwise `ROUTE_WINDOW_EXHAUSTED` when the window edge cut the search, otherwise
+5. **No route:** `ROUTE_BUDGET_EXHAUSTED` when the budget dropped a cell, otherwise `ROUTE_EVIDENCE_INCOMPLETE` when an
+   `Unknown` step was met, otherwise `ROUTE_WINDOW_EXHAUSTED` when the window edge cut the search, otherwise
    `ROUTE_NOT_FOUND`. `ROUTE_COORDINATE_OVERFLOW` is a defensive refusal only.
 6. **`StraightRetry`** (LR4, 0x426040 with flags 0x78): a straight line toward the target, every step accepted and none
    tested when planned (`ROUTE_STRAIGHT_RETRY`, method `StraightRetry`); nothing beyond 32 cells.
@@ -97,8 +99,8 @@ RouteDrive Drive(MovementState state, SimulationTime target, Func<SimulationTime
 - The goal is reached when the actor is settled on it (`Arrived`, intent Neutral). A
   failed plan stops with the plan's reason; a step the runtime denies stops with
   `ROUTE_STEP_DENIED`, and the next advance clears the intent (possibly in the next
-  `Drive` call). A route is never continued through a denial; a new click after it
-  starts cleanly.
+  `Drive` call), unless the host asked for `replanOnDenial` (the viewer's click route, ARC-WORLD-073, below): then
+  the next plan avoids the refused cell. A new click after a stop starts cleanly.
 - While a goal is followed it owns movement and stops the actor on the goal even if
   another source set the same direction; otherwise the follower clears only an intent
   it issued itself, so a host may keep driving it while another input source moves the
@@ -117,7 +119,10 @@ RouteDrive Drive(MovementState state, SimulationTime target, Func<SimulationTime
   route plans through them outside combat mode in both rule modes, refuses a goal that holds one, and with `segmentEndCritterEndsWalk`
   (Original, LR5) ends the walk before a segment's last step onto one (`ROUTE_SEGMENT_END_CRITTER`). With `replanOnDenial` a step the
   movement refuses during a normal plan (until ARC-WORLD-074, a critter's tile) makes the next plan avoid that cell, at most
-  `DenialReplanMaximum` (8) cells a goal; so no walk stalls: it goes round, or stops with a typed reason.
+  `DenialReplanMaximum` (8) cells a goal, after which a refused step stops with `ROUTE_STEP_DENIED`; so no walk stalls: it goes
+  round, or stops with a typed reason. A diagonal step refused for a critter on its shoulder avoids the step's destination, not
+  the shoulder (bounded by the same limit). Critters the session killed are dead for these checks. A leg of Steamwoven's
+  corridor asks the whole budget (200), since the corridor exists to pass the walk's budget.
 - `Drive` runs `Next`/`Observe` through the host's advance up to the frame target,
   at most 1,024 sub-advances per call, and returns every `MovementResult` in order for
   presentation.
@@ -332,11 +337,11 @@ movement speed or original path choice. Unknown or unsupported evidence is
 reported, not explored. A goal beyond the local planner's 32-cell reach is followed along a corridor over the
 source (ARC-WORLD-042; Steamwoven only since ARC-WORLD-072/073). The step through a critter's tile outside combat mode is
 ARC-WORLD-074 for both modes: until then the movement's step admission refuses a step onto a critter, and the click route plans
-around the refused cell (at most 8 cells a goal, then the plan's reason; a step refused during the straight-line retry ends the
+around the refused cell (at most 8 cells a goal, then `ROUTE_STEP_DENIED`; a step refused during the straight-line retry ends the
 walk); a companion's follow has no re-plan and stops (`ROUTE_STEP_DENIED`). The attack's approach walks to its cell with the
 click route's rules (its plan passes critters outside combat mode, and it has the straight-line retry), while the original's
 approach keeps critters blocking and has no retry; a step refused on
-the way ends the walk and the attack (the original re-plans in goal 79, AP5, F1); a target that moves while the PC walks is
+the way is planned around as for any click walk (the original re-plans in goal 79, AP5, F1); a target that moves while the PC walks is
 re-approached only when the walk ends. Traps, fire and light costs are not in the step source yet. On the main map a click is a goal inside the shown window; a goal outside it arises only when a
 walk bends out of the window, and is approached greedily (above); a farther goal is walked only from a host's plan (the
 walk smoke's window route). The corridor and the window route are this project's searches (shortest by their costs),

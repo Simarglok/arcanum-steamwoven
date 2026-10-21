@@ -15,7 +15,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// (DC5); removed objects still do not block; a living critter on the goal still refuses it (DC2, <see cref="GoalHoldsCritter"/>).
 /// </summary>
 public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart = null, Func<AreaOccupancy?>? occupancy = null,
-    Func<IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? portals = null, Func<bool>? crittersPass = null) : IRouteStepSource
+    Func<IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? portals = null, Func<bool>? crittersPass = null,
+    Func<Arcanum.Data.Area.AreaObjectKey, bool>? dead = null) : IRouteStepSource
 {
     private const int PcType = 15, NpcType = 16;
     public AreaStepSnapshot Snapshot { get; } = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
@@ -45,13 +46,13 @@ public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart 
     }
 
     /// <summary>ARC-WORLD-073 (ledger LR5): whether the cell the step enters holds a living PC or NPC (a T0 record the step's evidence
-    /// blocks on, not moved by the overlay, or a live actor's cell).</summary>
+    /// blocks on, not moved by the overlay and not dead in the session by <c>dead</c>, or a live actor's cell).</summary>
     public bool StepEntersCritter(CellCoord from, NeighborDirection direction)
     {
         var live = occupancy?.Invoke();
         if (live?.Occupied.Contains(RoutePlanner.Neighbor(from, direction)) == true) return true;
         return Assessment(from, direction).Objects.Any(o => o.Role == AreaStepObjectRole.Destination && o.ObjectType is PcType or NpcType
-            && o.Disposition == CardinalTraversalDisposition.Blocked && live?.Moved.Contains(o.Key) != true);
+            && o.Disposition == CardinalTraversalDisposition.Blocked && live?.Moved.Contains(o.Key) != true && dead?.Invoke(o.Key) != true);
     }
 
     private AreaStepVerdict Overlaid(CellCoord from, NeighborDirection direction)

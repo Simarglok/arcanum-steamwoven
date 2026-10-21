@@ -202,7 +202,7 @@ public sealed class RouteFollower
         {
             var local = LocalGoal(cell, goal);
             if (local is null) { Finish(RouteFollowStatus.Stopped, "ROUTE_PARTIAL"); return ActorIntent.Neutral; }
-            var plan = _retried ? RoutePlanner.StraightRetry(_source, cell, local.Value, _limits) : Plan(cell, local.Value);
+            var plan = _retried ? RoutePlanner.StraightRetry(_source, cell, local.Value, _limits) : Plan(cell, local.Value, Corridor is not null);
             string? corridorStop = null;
             // Beyond the request's reach: a corridor over the whole source, once per goal; a leg along it that fails (an occupant
             // on its waypoint) builds it once more from here.
@@ -213,7 +213,7 @@ public sealed class RouteFollower
                 Corridor = RouteCorridor.Plan(_source, cell, goal, corridorLimits); _waypointNext = 0;
                 if (Corridor.Outcome is RouteCorridorOutcome.NoRoute or RouteCorridorOutcome.Refused) corridorStop = Corridor.ReasonCode;
                 else if (LocalGoal(cell, goal) is not { } waypoint) { Finish(RouteFollowStatus.Stopped, "ROUTE_PARTIAL"); return ActorIntent.Neutral; }
-                else { local = waypoint; plan = Plan(cell, waypoint); }
+                else { local = waypoint; plan = Plan(cell, waypoint, corridor: true); }
             }
             // LR4: no path for the PC: a straight line toward the cell it heads for, tested as it is walked; from then on every plan.
             if (plan.Outcome != RouteOutcome.Found && _straightRetry && !_retried && plan.Outcome == RouteOutcome.NoRoute)
@@ -235,9 +235,10 @@ public sealed class RouteFollower
     private static readonly HashSet<string> CorridorReasons = new(StringComparer.Ordinal)
         { "ROUTE_TARGET_OUT_OF_RANGE", "ROUTE_SEARCH_OUT_OF_RANGE", "ROUTE_WINDOW_EXHAUSTED", "ROUTE_BUDGET_EXHAUSTED" };
 
-    // LR2: every plan asks min(4 × distance + 5, 200) from where the walker stands (and at most the host's own limit).
-    private RoutePlan Plan(CellCoord cell, CellCoord local) =>
-        RoutePlanner.Plan(_source, cell, local, _limits.WithBudget(Math.Min(RouteLimits.WalkBudget(cell, local), _limits.Budget)), _avoid);
+    // LR2: every plan asks min(4 × distance + 5, 200) from where the walker stands (and at most the host's own limit); a leg of
+    // Steamwoven's corridor, which exists to pass the budget, asks the host's whole budget.
+    private RoutePlan Plan(CellCoord cell, CellCoord local, bool corridor = false) =>
+        RoutePlanner.Plan(_source, cell, local, corridor ? _limits : _limits.WithBudget(Math.Min(RouteLimits.WalkBudget(cell, local), _limits.Budget)), _avoid);
 
     /// <summary>The cell the local planner heads for: the goal, or along a corridor its next waypoint not yet reached; null
     /// at the end of a corridor that only nears the goal.</summary>

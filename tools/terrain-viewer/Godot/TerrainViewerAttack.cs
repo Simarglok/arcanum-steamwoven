@@ -255,9 +255,14 @@ public partial class TerrainViewerApp
     }
 
     // Whether a critter row is dead in the session or its map data (a drop's and a line of fire's dead test).
-    private bool AreaCritterDead(GameSessionOwner owner, int map, AreaObjectRecord row) =>
-        _combatHost?.Target(owner, map, row.Key) is { } target &&
+    private bool AreaCritterDead(GameSessionOwner owner, int map, AreaObjectRecord row) => AreaCritterDead(owner, map, row.Key);
+
+    private bool AreaCritterDead(GameSessionOwner owner, int map, AreaObjectKey key) =>
+        _combatHost?.Target(owner, map, key) is { } target &&
             (target.Dead || target.Build.Combat is { } combat && owner.QueryLife(combat.Target).View?.Status.IsDead == true);
+
+    /// <summary>ARC-WORLD-073: whether a T0 critter record is dead in the session or its map data (the click route's critter checks).</summary>
+    private bool AreaCritterDeadNow(AreaObjectKey key) => _areaSession is { } owner && AreaCritterDead(owner, CurrentAreaMap, key);
 
     /// <summary>ARC-WORLD-065: the shown map's objects the session destroyed or switched off (the same set while nothing changed);
     /// the original's object lists skip them, so they block no step (ledger FC1–FC3).</summary>

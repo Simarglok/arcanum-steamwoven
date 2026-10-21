@@ -2450,20 +2450,21 @@ questions (method step 6). Rows are F2 where both readers read the code, F1 wher
 | LR8 | alternate search (0x420E30) | A PC-only best-first search over a window sized from the sector's town-map info, 10 a step and 1 a turn, critters ignored, limited by its argument (300 ms); it runs for flag 0x1000, which no caller in 1.0.7.4 sets. | Original (F1, dead code) |
 | LR9 | walk flags (0x425BF0), their effect (0x41F3C0, 0x41F9F0) | For a PC or NPC mover the builder sets 0x2 and 0x4 when 0x45F550 and 0x45F570 answer no, 0x200 when 0x45EDE0 answers yes and skill 6 (0x4C60C0) is 0 or less, 0x400 when the light at the mover (0x43D6D0) is under 45 and 0x4B0490 answers yes, and refuses (no request) for a mover whose field 0x14 has bit 0x1000000. Flag 0x200 skips the straight attempt and makes the search cost light: 40 more onto a tile more than 20 brighter, 6 less onto one more than 20 darker (0x4D9240); flag 0x400 adds 80 onto a tile with fire (0x444500). DC2 and DC4 do not name these. | Original (F2: this task and the reviewer) |
 
-Anomalies. Since ARC-WORLD-073 (owner decision "Перевести", 2026-10-21) the click route is this walk, on the one path request
+Anomalies. Since ARC-WORLD-073 (owner decision "Port it", 2026-10-21) the click route is this walk, on the one path request
 the drop shares ([comparison](../world/click-route-runtime.md#original-check-arc-world-060)). The far click of LR4 and LR7 is a rule-mode
 switch since ARC-WORLD-072 (owner decision 2026-10-21): Steamwoven walks the corridor, Original does not move
 (`NavigationRuleProfile.FarClickDoesNotMove`). LRA1 is decided:
 
 - LRA1 (LR5): a living critter on a step other than a segment's last one is walked through (the plan ignores critters outside
-  combat, LR2, and the walk checks only the segment's last step). In the original. Owner decision of 2026-10-21 12:09 ("вне боя
-  NPC не мешают проходить"): outside combat the walk through critters is the behaviour of both modes (ARC-WORLD-073 plans it,
+  combat, LR2, and the walk checks only the segment's last step). In the original. Owner decision of 2026-10-21 12:09 ("outside combat
+  NPCs do not block the way"): outside combat the walk through critters is the behaviour of both modes (ARC-WORLD-073 plans it,
   ARC-WORLD-074 steps it); the segment-end stop is the switch `NavigationRuleProfile.SegmentEndCritterEndsWalk`: Original keeps it,
   Steamwoven removes it as a bug.
 - LRA2 (LR1, LR3): the cap of 8 discards the rest of a route planned with a budget of up to 200, so a long walk is planned
   again every 8 steps. In the original; no switch proposed.
 - LRA3 (DC4, F1): with flag 0x1 the search's step onto the goal reuses the window flag of an earlier neighbour, which can add a
-  spurious 50. In the original; no walk passes flag 0x1.
+  spurious 50. In the original; no walk passes flag 0x1. Since ARC-WORLD-073 the attack's approach passes flag 0x1 (AP2); the shared request takes the step onto the goal as an
+  open one without the window cost, so the possible spurious 50 is not modelled.
 - LRA4 (LR8): 0x420E30 does not check that the town-map info loaded. Dead in 1.0.7.4; nothing to decide.
 
 ## Attack approach (ARC-WORLD-073)

@@ -39,8 +39,9 @@ public static class RoutePlanner
         {
             OriginalPathEnd.Gate => map.Unknown ? "ROUTE_EVIDENCE_INCOMPLETE" : "ROUTE_NOT_FOUND",
             OriginalPathEnd.SearchOutOfRange => "ROUTE_SEARCH_OUT_OF_RANGE",
-            _ when map.Unknown => "ROUTE_EVIDENCE_INCOMPLETE",
+            // The budget dropped a cell: a corridor may pass it, whatever evidence was Unknown.
             OriginalPathEnd.SearchPruned => "ROUTE_BUDGET_EXHAUSTED",
+            _ when map.Unknown => "ROUTE_EVIDENCE_INCOMPLETE",
             _ when path.WindowEdge => "ROUTE_WINDOW_EXHAUSTED",
             _ => "ROUTE_NOT_FOUND",
         };
@@ -79,8 +80,9 @@ public static class RoutePlanner
         {
             OriginalPathEnd.Direct or OriginalPathEnd.Search => "ROUTE_APPROACH_ADJACENT",
             OriginalPathEnd.SearchOutOfRange => "ROUTE_SEARCH_OUT_OF_RANGE",
-            _ when map.Unknown => "ROUTE_EVIDENCE_INCOMPLETE",
+            // The budget dropped a cell: a corridor may pass it, whatever evidence was Unknown.
             OriginalPathEnd.SearchPruned => "ROUTE_BUDGET_EXHAUSTED",
+            _ when map.Unknown => "ROUTE_EVIDENCE_INCOMPLETE",
             _ when path.WindowEdge => "ROUTE_WINDOW_EXHAUSTED",
             _ => "ROUTE_NOT_FOUND",
         };

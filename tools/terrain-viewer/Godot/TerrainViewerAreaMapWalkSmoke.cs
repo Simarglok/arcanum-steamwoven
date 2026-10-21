@@ -22,7 +22,7 @@ public partial class TerrainViewerApp
     private CancellationTokenSource? _walkPlanCancellation;
     private static readonly AreaStepCell WalkGoal = new(1409 * 64 + 32, 1314 * 64 + 32);
     // A second's walk is at most 6 steps: the run takes 9 steps in 1.578 s (ARC-WORLD-020 native smoke).
-    private const int WalkFrameLimit = 20000, WalkStallFrames = 300, WalkStepsPerFrame = 6, ProgressAhead = 64, ProgressNear = 3;
+    private const int WalkFrameLimit = 20000, WalkStallFrames = 300, WalkStepsPerFrame = 6, ProgressAhead = 24, ProgressNear = 3;
 
     private async Task RunAreaMapWalkSmokeAsync()
     {
