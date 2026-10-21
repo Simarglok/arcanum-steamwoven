@@ -21,6 +21,8 @@ public partial class TerrainViewerApp
     private AreaInventoryHost? _inventoryHost;
     private string _inventoryStatus = "inventory: not loaded";
     private AreaInventoryPanel? _inventoryPanel;
+    // ARC-SKILLS-005: the hero's kit healing items from its load (null without --hero).
+    private IReadOnlyList<SessionHealingItem?>? _areaKitHealing;
     // A pickup or loot clicked from too far: the click route walks within reach first, then the same action runs once.
     private (AreaObjectKey Key, AreaInventoryTargetKind Kind)? _inventoryAfterRoute;
     private (GameSessionOwner Session, long Revision, int Map)? _inventoryHiddenStamp;
@@ -173,6 +175,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.CloseRequested += EndInventory;
             _inventoryPanel.TakeRequested += TakeFromBody;
             _inventoryPanel.TakeAllRequested += TakeAllFromBody;
+            _inventoryPanel.UseRequested += HealSelf;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
@@ -181,7 +184,32 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
-    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder);
+    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing);
+
+    /// <summary>ARC-SKILLS-005: the hero uses a healing item on itself (the inventory use passes the user as the target, as the
+    /// original's inventory window does). Outside a turn-based round, so no action points are charged.</summary>
+    private void HealSelf(string item)
+    {
+        if (!InventoryOpen || !InventoryActive) return;
+        var holder = _inventoryPanel!.Holder;
+        var healing = _inventoryHost!.HealingItem(_areaSession!, item, _areaKitHealing);
+        string message;
+        if (healing is null) message = "not used: not a healing item the hero holds";
+        else
+        {
+            var result = _areaSession!.HealWithItem(_areaSession.Version, SessionLifeTarget.Hero, healing);
+            var life = _areaSession.QueryHeroLife()?.Record.State;
+            message = result.Disposition == GameSessionDisposition.Rejected ? $"not used: {result.Failure}"
+                : (result.Check!.Success ? $"healed {result.Heal!.Value.HitPoints} hit point(s){(result.Heal.Value.Cure ? " and cured an injury" : string.Empty)}" : "the heal failed")
+                + (result.ItemDestroyed ? "; the item is used up" : $"; {result.UsesLeft} use(s) left") + (result.FateUsed ? " (fate point)" : string.Empty);
+            GD.Print($"ARC-SKILLS-005 heal disposition={result.Disposition} failure={result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} " +
+                $"healed={result.Heal?.HitPoints} cure={result.Heal?.Cure} uses-left={result.UsesLeft?.ToString() ?? "-"} destroyed={result.ItemDestroyed} " +
+                $"hp-damage={life?.HitPointDamage}");
+        }
+        _inventoryStatus = message;
+        _inventoryPanel.Render(InventoryView(holder), message);
+        RefreshReadyStatus();
+    }
 
     private void EndInventory()
     {

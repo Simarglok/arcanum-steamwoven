@@ -63,6 +63,36 @@ public sealed class ObjectLightFieldTests
     }
 
     [TestMethod]
+    public void An_animated_light_steps_its_frame_and_offsets_with_the_animation_time()
+    {
+        // ARC-RENDER-031 (ledger LT6, LT7): three frames at 5 per second (a step every 200 ms); stepping to frame 1 moves the
+        // light by (4, 0), to frame 2 by (0, 2), back to frame 0 by (-4, -2).
+        var f1 = new StationaryLightFrame(7, "a", "h", 2, 2, 0, 0, Solid(2, 2, 0, 90, 0), stepX: 4);
+        var f2 = new StationaryLightFrame(7, "a", "h", 2, 2, 0, 0, Solid(2, 2, 0, 0, 90), stepY: 2);
+        var f0 = new StationaryLightFrame(7, "a", "h", 2, 2, 0, 0, Solid(2, 2, 90, 0, 0), stepX: -4, stepY: -2, later: [f1, f2], framesPerSecond: 5);
+        var source = AreaStationaryLightSource.Create(1, [], []).WithObjectLights(new AreaObjectLightSource(1, null,
+            [Object(0, 0, 0, 0, false, false), Object(1, 0, 0, StationaryLightFlags.NoAnimation, false, false)],
+            new Dictionary<int, StationaryLightFrame> { [7] = f0 }), 12);
+        var field = new StationaryLightField(source, 0, 0);
+        CollectionAssert.AreEqual(new[] { 0 }, field.Animated.ToArray(), "0x20 keeps the second light still");
+        Assert.AreEqual(new LightPose(0, 0, 0), field.PosesAt(199)[0]);
+        Assert.AreEqual(new LightPose(1, 4, 0), field.PosesAt(200)[0]);
+        Assert.AreEqual(new LightPose(2, 4, 2), field.PosesAt(400)[0]);
+        Assert.AreEqual(new LightPose(0, 0, 0), field.PosesAt(600)[0], "a whole cycle comes back");
+        Assert.AreEqual(new LightPose(1, 4, 0), field.PosesAt(600 * 1000 + 200)[0]);
+        // Posed, the light draws its frame where it stands: frame 1 at (40 + 4, 20), tinted by the colour (10, 20, 30).
+        var poses = field.PosesAt(200);
+        Assert.AreEqual(new AmbientColor(0, 90 * 20 / 255, 0), field.Point(44, 20, default, AmbientPair.Neutral, poses: poses));
+        Assert.AreEqual(new AmbientColor(90 * 10 / 255, 0, 0), field.Point(40, 20, default, AmbientPair.Neutral, poses: poses), "only the still light is left there");
+        Assert.AreEqual(new AmbientColor(90 * 10 / 255 * 2, 0, 0), field.Point(40, 20, default, AmbientPair.Neutral), "unposed: both at frame 0");
+        Assert.AreEqual(new AmbientColor(90 * 10 / 255 * 2, 0, 0), field.Point(40, 20, default, AmbientPair.Neutral, poses: field.PosesAt(0)));
+        // The lattice follows the pose too: the node (40, 20) loses the moved light.
+        var still = field.Lattice(AmbientPair.Neutral)!; var moved = field.Lattice(AmbientPair.Neutral, poses)!;
+        Assert.AreEqual(new AmbientColor(90 * 10 / 255 * 2, 0, 0), still.At(1, 1).Lighter);
+        Assert.AreEqual(new AmbientColor(90 * 10 / 255, 0, 0), moved.At(1, 1).Lighter);
+    }
+
+    [TestMethod]
     public void The_bucketed_field_and_the_per_light_lattice_equal_the_node_by_node_reference()
     {
         var random = new Random(30);

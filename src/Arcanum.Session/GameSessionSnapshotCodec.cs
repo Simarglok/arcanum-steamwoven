@@ -73,7 +73,8 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
     private static readonly string[] WornFields = ["slot", "entity", "item"];
-    private static readonly string[] DurabilityFields = ["items", "destroyed"];
+    private static readonly string[] DurabilityFields = ["items", "destroyed", "uses"];
+    private static readonly string[] ItemUseFields = ["entity", "uses"];
     private static readonly string[] SchematicsFields = ["found"];
     private static readonly string[] ItemConditionFields = ["entity", "points", "adjustment", "damage", "broken", "inventoryArtBroken"];
     private static readonly string[] EquipmentItemFields = ["kind", "complexity", "noDrop", "broken", "uber", "light", "usesShieldLocation",
@@ -368,6 +369,15 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteStartArray("destroyed");
             foreach (var entity in snapshot.Durability.Destroyed) w.WriteStringValue(entity);
+            w.WriteEndArray();
+            w.WriteStartArray("uses");
+            foreach (var item in snapshot.Durability.Uses)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", item.Entity);
+                w.WriteNumber("uses", item.Uses);
+                w.WriteEndObject();
+            }
             w.WriteEndArray();
             w.WriteEndObject();
 
@@ -1378,7 +1388,17 @@ public static class GameSessionSnapshotCodec
             destroyed[i] = Entity(listed[i], path);
             if (i > 0 && string.CompareOrdinal(destroyed[i], destroyed[i - 1]) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
-        return new(items, destroyed);
+        var used = Array(f["uses"], p + ".uses", GameSessionLimits.PolicyMaxDurabilityRecords);
+        var uses = new SessionItemUses[used.Length];
+        for (var i = 0; i < used.Length; i++)
+        {
+            var path = $"{p}.uses[{i}]";
+            var item = Fields(used[i], path, ItemUseFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (i > 0 && string.CompareOrdinal(entity, uses[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            uses[i] = new(entity, Int(item["uses"], path + ".uses", 1, SessionItemUseLimits.MaxUses));
+        }
+        return new(items, destroyed, uses);
     }
 
     // Shapes, names and ranges, definitions by strictly ascending number; causes, rules in use and the hero's presence are Restore's.

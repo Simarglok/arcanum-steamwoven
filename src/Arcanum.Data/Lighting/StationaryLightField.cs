@@ -30,6 +30,9 @@ public sealed class StationaryLightLattice
     }
 }
 
+/// <summary>ARC-RENDER-031: where an animated light stands at a moment: its ART frame and its offsets (ledger LT7).</summary>
+public readonly record struct LightPose(int Frame, int OffsetX, int OffsetY);
+
 /// <summary>
 /// FR-LIGHT-008 composition of stationary lights in one map chart (ARC-RENDER-012), following the source's
 /// light rectangle and render functions and the TIG colour helpers (docs/rendering/area-lighting.md, F0). Independently written; parity of TIG rounding, blit LERP and palettes is
@@ -46,6 +49,7 @@ public sealed class StationaryLightField
     // Point queries look only at the lights whose rectangle meets the query's bucket (source order kept).
     private const int BucketSide = 256;
     private readonly (StationaryLight Light, StationaryLightFrame Frame, TerrainRect Rect)[] _placements;
+    private readonly TerrainPoint[] _tiles;
     private readonly Dictionary<(long, long), int[]> _buckets = new();
 
     public StationaryLightField(AreaStationaryLightSource source, long chartOriginX, long chartOriginY)
@@ -62,6 +66,10 @@ public sealed class StationaryLightField
             return (light, frame, new TerrainRect(checked(tile.X + light.OffsetX + 40 - frame.HotX), checked(tile.Y + light.OffsetY + 20 - frame.HotY), frame.Width, frame.Height));
         }).ToArray();
         Placements = new ReadOnlyCollection<(StationaryLight, TerrainRect)>(_placements.Select(p => (p.Light, p.Rect)).ToArray());
+        _tiles = source.Lights.Select(light => TerrainGeometry.Project(checked((int)(light.X - chartOriginX)), checked((int)(light.Y - chartOriginY)))).ToArray();
+        // ARC-RENDER-031 (ledger LT6): a light animates when its ART has more than one frame and it does not carry 0x20.
+        Animated = Array.AsReadOnly(Enumerable.Range(0, _placements.Length)
+            .Where(i => source.Frames[_placements[i].Light.ArtNumber].Animated && (_placements[i].Light.Flags & StationaryLightFlags.NoAnimation) == 0).ToArray());
         var buckets = new Dictionary<(long, long), List<int>>();
         for (var index = 0; index < _placements.Length; index++)
         {
@@ -77,6 +85,44 @@ public sealed class StationaryLightField
     }
 
     private static long Floor(long value) => (long)Math.Floor(value / (double)BucketSide);
+
+    /// <summary>The indexes of the animated lights, ascending.</summary>
+    public IReadOnlyList<int> Animated { get; }
+
+    /// <summary>
+    /// ARC-RENDER-031: every animated light's pose after <paramref name="animationMs"/> of animation time from the load (ledger
+    /// LT6, LT7): one step every ⌊1000 / frames per second⌋ ms; each step goes to the next frame, wrapping after the last, and
+    /// moves the light by that frame's offset step. The light starts at its saved frame and offsets.
+    /// </summary>
+    public IReadOnlyDictionary<int, LightPose> PosesAt(long animationMs)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(animationMs);
+        var poses = new Dictionary<int, LightPose>();
+        foreach (var index in Animated)
+        {
+            var light = _placements[index].Light;
+            var art = Source.Frames[light.ArtNumber];
+            var frames = art.Frames;
+            // A rate above 1,000 frames per second steps every 1 ms (the original's delay would be 0; none is installed).
+            if (art.FramesPerSecond <= 0) throw new InvalidOperationException("LIGHT_ANIMATION_RATE");
+            var steps = animationMs / Math.Max(1, 1000 / art.FramesPerSecond);
+            long cycleX = frames.Sum(f => (long)f.StepX), cycleY = frames.Sum(f => (long)f.StepY);
+            var cycles = steps / frames.Count; var rest = (int)(steps % frames.Count);
+            long x = checked(light.OffsetX + cycles * cycleX), y = checked(light.OffsetY + cycles * cycleY);
+            for (var j = 1; j <= rest; j++) { var f = frames[(light.Frame + j) % frames.Count]; x += f.StepX; y += f.StepY; }
+            poses[index] = new((int)((light.Frame + steps) % frames.Count), checked((int)x), checked((int)y));
+        }
+        return poses;
+    }
+
+    private (StationaryLight Light, StationaryLightFrame Frame, TerrainRect Rect) Posed(int index, IReadOnlyDictionary<int, LightPose>? poses)
+    {
+        if (poses is null || !poses.TryGetValue(index, out var pose)) return _placements[index];
+        var light = _placements[index].Light;
+        var frame = Source.Frames[light.ArtNumber].Frames[pose.Frame];
+        var tile = _tiles[index];
+        return (light, frame, new TerrainRect(checked(tile.X + pose.OffsetX + 40 - frame.HotX), checked(tile.Y + pose.OffsetY + 20 - frame.HotY), frame.Width, frame.Height));
+    }
 
     public AreaStationaryLightSource Source { get; }
     /// <summary>Every light with its chart screen rectangle, in source order.</summary>
@@ -112,13 +158,17 @@ public sealed class StationaryLightField
 
     /// <summary>Point colour (the source's object sampling): starting from <paramref name="baseColor"/>, each
     /// admitted light in source order adds, or for DARK subtracts, its contribution at (x, y).</summary>
-    public AmbientColor Point(long x, long y, AmbientColor baseColor, AmbientPair pair, Func<StationaryLight, bool>? admit = null)
+    public AmbientColor Point(long x, long y, AmbientColor baseColor, AmbientPair pair, Func<StationaryLight, bool>? admit = null,
+        IReadOnlyDictionary<int, LightPose>? poses = null)
     {
         var color = baseColor;
-        if (!_buckets.TryGetValue((Floor(x), Floor(y)), out var near)) return color;
-        foreach (var index in near)
+        _buckets.TryGetValue((Floor(x), Floor(y)), out var near);
+        // ARC-RENDER-031: a posed light is checked wherever it stands now; the rest by their bucket, all in source order.
+        IEnumerable<int> order = near ?? [];
+        if (poses is { Count: > 0 }) order = order.Where(i => !poses.ContainsKey(i)).Concat(poses.Keys).Order();
+        foreach (var index in order)
         {
-            var placement = _placements[index];
+            var placement = Posed(index, poses);
             if (admit is not null && !admit(placement.Light)) continue;
             if (!TryContribution(placement, x, y, pair, out var contribution)) continue;
             color = (placement.Light.Flags & StationaryLightFlags.Dark) != 0 ? Subtract(color, contribution) : Add(color, contribution);
@@ -128,9 +178,9 @@ public sealed class StationaryLightField
 
     /// <summary>The terrain lattice over the union of the active lights' rectangles, or null when no
     /// light is active. Nodes outside it carry no light.</summary>
-    public StationaryLightLattice? Lattice(AmbientPair pair)
+    public StationaryLightLattice? Lattice(AmbientPair pair, IReadOnlyDictionary<int, LightPose>? poses = null)
     {
-        var active = _placements.Where(p => (p.Light.Flags & StationaryLightFlags.Off) == 0).ToArray();
+        var active = Enumerable.Range(0, _placements.Length).Select(i => Posed(i, poses)).Where(p => (p.Light.Flags & StationaryLightFlags.Off) == 0).ToArray();
         if (active.Length == 0) return null;
         var left = active.Min(p => (long)p.Rect.X); var top = active.Min(p => (long)p.Rect.Y);
         var right = active.Max(p => (long)p.Rect.X + p.Rect.Width); var bottom = active.Max(p => (long)p.Rect.Y + p.Rect.Height);
