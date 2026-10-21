@@ -234,6 +234,10 @@ command). A placed item stays taken, so its seed never shows it at its seed posi
   (`SessionCriticalStepOutcome.Dropped`). One revision. A no-drop item is refused, as in the original (PI1); an item an earlier
   step of the same attack broke has already left its slot (`NoItem`); a made item's number is never handed out again while it lies
   on the ground.
+- **Assembly products** (ARC-WORLD-070): a schematic product unit the inventory's insert check refuses lies on the crafter's tile
+  as a made item (source `made`): the hero's tile for the hero's assembly, the tile the host gives for an NPC crafter (on the hero's
+  map), as the original's creation on the tile and unchecked transfer leave it (SA3–SA5). An ammunition unit there is a stack of its
+  own with its units. The assembly checks the store's bound before it spends anything ([assembly](schematic-assembly-runtime.md)).
 - **Pickup**: `PickUpItem` of a placed item on the actor's map returns it to its list, a kit item at its kit number's place (the
   kit stays in number order), a taken or made item at the end of its list. The host's insert check runs first (a call back into the
   owner from it is `StaleVersion`); one revision. On another map the item is not available.

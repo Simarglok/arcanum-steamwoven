@@ -119,7 +119,7 @@ text and hears its sound. Both modes do the same; any NPC on any map.
 | Original 1.0.7.4 | Steamwoven (both modes) |
 | --- | --- |
 | Action 129 calls a pointer the game never fills (TC2). | The PC opens its window; an NPC with a PC leader opens the NPC crafter's window. |
-| A product the NPC cannot take stays on the ground at the crafter, with a floating refusal text, and the assembly still completes (NC7). | The assembly is refused before anything is consumed (the session keeps no new ground items), as for the hero; the viewer's insert check for an NPC accepts. |
+| A product the NPC cannot take stays on the ground at the crafter, with a floating refusal text, and the assembly still completes (NC7). | The session does the same since ARC-WORLD-070 (the host gives the NPC's tile); the viewer's insert check for an NPC accepts, so its products always enter the list. The status line names a hero's products left on the ground with the refusal (no floating text). |
 | An NPC crafter's expertise includes the "expertise in discipline" effects of its effect list (NC4). | Not modelled: the session keeps no NPC effects. |
 | `su` in an NPC line's own action also opens the window (NC8, F1). | Not admitted (an unsupported-operation frontier). |
 | When the open refuses (a dead NPC or PC), the dialog text was cleared and later picks are ignored (NC2, inferred). | The schematic port refuses and the conversation fails with a rejected command (nothing applied). |
@@ -133,5 +133,4 @@ text and hears its sound. Both modes do the same; any NPC on any map.
 
 - The interface button, the window art, the slot pictures and overlays, the item description box on slot hover, the tab and
   discipline hover texts, the close spot.
-- Dropping a product on the ground when the inventory cannot take it (the assembly is refused, [assembly](schematic-assembly-runtime.md)).
 - An NPC's weight, background and room in the viewer's insert check for an NPC crafter; NPC effects on expertise.
