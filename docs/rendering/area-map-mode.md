@@ -96,7 +96,7 @@ draws, a left click through the production ground-click seam sets a route goal
 up to 8 open steps away, frames walk the actor there on the map's chart, and the
 resource sweep and overlapped reload pass (`ARC-RENDER-017 native-smoke map
 PASS`, `ARC-RENDER-007 resources reload PASS`). Since ARC-WORLD-021 a map with a reachable window also
-steps the actor across it with the vault (`ARC-WORLD-021 native-smoke vault PASS`; otherwise `NO-WINDOW`). Since ARC-COMBAT-005, with `--hero` and a lit map, the hero attacks the living NPC with the fewest hit points until it dies ([hero attack](../world/hero-attack-runtime.md#viewer-area); `ARC-COMBAT-005 native-smoke attack PASS`, otherwise `NO-TARGET`; observed on `crash site cave`: a rat of 6 hit points, walk to reach, 12 attacks, fallen pose read, 192 experience). Since ARC-COMBAT-008, the last stage Alt-clicks the attackable door, window, container or scenery with the fewest hit points and attacks it until it breaks or 40 attacks ran ([object damage](../world/object-damage-runtime.md#viewer-arc-combat-008-part-2); `ARC-COMBAT-008 native-smoke object-attack PASS`, otherwise `NONE`). Observed on `elven ruins`
+steps the actor across it with the vault (`ARC-WORLD-021 native-smoke vault PASS`; otherwise `NO-WINDOW`). Since ARC-COMBAT-005, with `--hero` and a lit map, the hero attacks the living NPC with the fewest hit points until it dies ([hero attack](../world/hero-attack-runtime.md#viewer-area); `ARC-COMBAT-005 native-smoke attack PASS`, otherwise `NO-TARGET`; observed on `crash site cave`: a rat of 6 hit points, walk to reach, 12 attacks, fallen pose read, 192 experience). Since ARC-COMBAT-008, a stage Alt-clicks the attackable door, window, container or scenery with the fewest hit points and attacks it until it breaks or 40 attacks ran ([object damage](../world/object-damage-runtime.md#viewer-arc-combat-008-part-2); `ARC-COMBAT-008 native-smoke object-attack PASS`, otherwise `NONE`). Since ARC-COMBAT-009 the last stage arms the hero's critical-hit fate (a granted point) and attacks the living NPC with the most hit points through the session, so the original's critical-effect tables run over that NPC's real data ([critical effects](../world/hero-attack-runtime.md#critical-effects-arc-combat-009); `ARC-COMBAT-009 native-smoke critical PASS` with the body type, the effects and the item steps, otherwise `NONE`). Observed on `elven ruins`
 (9 sectors), `bates mansion lev 1` (9), `crash site cave` (1) and
 `caladon-castle main floor` (79 sectors, 323,584 terrain cells, 2,967 bodies,
 load about 14 s). Since ARC-DATA-023 also on `crematorium-lev 2` (concealed
@@ -631,7 +631,11 @@ map.
   to use, talk or pick up (it runs to its end first), combat mode, or an open dialog, inventory, sheet, logbook or palette;
   no move starts in any of these either. The publication: the game session is carried as on a transfer (`MapTransferHandoff`, kind `Stream`), the
   companions' cells are written to the session first and they are bound again where they stand, the actor stands on
-  the cell it reached meanwhile, and a walk keeps its goal when the new window holds it. Music and ambient sound go on
+  the cell it reached meanwhile, and a walk keeps its goal when the new window holds it; when it does not (the walk bent
+away from the goal and the window followed, ARC-WORLD-042), the walk heads for the end of a partial
+[corridor](../world/click-route-runtime.md#corridors-beyond-the-local-reach-arc-world-042) toward the goal over the new
+window (its cell nearest the goal) and the goal is handed on to each later move until a window holds it; a new click
+replaces it. A click beyond the route follower's 32-cell reach is walked along a corridor over the window. Music and ambient sound go on
   (no map change). The margin keeps a walk along a border, or a path that bends back over it, from reloading the
   window at every step; the actor always has at least 48 loaded cells ahead. The original keeps no fixed window: its
   sector cache holds the 16 most recently used sectors and a teleport pre-caches the 3×3 around its target
@@ -646,8 +650,8 @@ map.
 - **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
   Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
   (92913, 82598). Every listed map is a destination.
-- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,worldmap`
-  narrows a run to those stages; `worldmap` is [the world map](#world-map-arc-ui-048), after the stream), in this order: the map battery at the new-game start (the Crash Site window: walk,
+- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,worldmap,walk`
+  narrows a run to those stages; without it all but `walk` run; `worldmap` is [the world map](#world-map-arc-ui-048), after the stream), in this order: the map battery at the new-game start (the Crash Site window: walk,
   logbook, sound, dialog with Virgil, who then follows); the resource sweep and reload; the companion follow smoke and
   the map transfer smoke (exit to another map, jump point, F7/F8); `ARC-RENDER-024 native-smoke round-trip PASS`: into
   the cave and back onto the main map by the two exits; and last `ARC-RENDER-024 native-smoke stream PASS`: walks by the
@@ -657,6 +661,22 @@ map.
   wilderness sector (1384, 239). The smoke counts only the plan's own commands in the resource sweep (a companion
   visiting from another window is drawn from its kept body) and picks, for the follow smoke, a free NPC that can walk
   6 cells.
+- **Walk smoke** (ARC-WORLD-042; the stage `walk`, run only when named: `ARC_AREA_MAP_SMOKE_ONLY=walk`, on the main
+  map from the new-game start): plans the walk to the middle of the Shrouded Hills town sector (90208, 84128) over the
+  map's windows in the background ([window route](../world/click-route-runtime.md#world-routes-across-windows-arc-world-042)),
+  then walks it with the production route follower, which it gives the farthest route cell of the shown window each time
+  the follower arrives or the window moves, while the window streams. A smoke frame is one second of walk; while a window
+  loads, one frame a second of wall time. It requires no seam: the follower never stops short (a denied step, no route
+  or a partial corridor fails the smoke at once), the actor's cell changes by no more than a second's run a frame
+  (6 steps), every window move publishes the actor on the cell it stood on, inside the new core and drawn, with the
+  session carried, no window fails to load and no move is given up (a counter of abandoned or superseded moves stays
+  0). Named on another map, the stage fails. It reports its slowest frame (the walk, its route plans with corridors and
+  the steering on the main thread). `ARC-WORLD-042 native-smoke walk PASS` on the owner's Mac (2026-10-21, on main with
+  #345): route planned in 225 s (3,106 cells, 88 sectors, 51 window loads, 143,401 expansions), walked in 2,330 frames
+  with at most 2 steps a frame and a slowest frame of 188 ms, 72 window moves (loads up to 8.8 s), each resumed with
+  its goal held by the new window (the far-goal hand-over was not needed on this walk; unit tests cover it), at least
+  179 visible bodies after each move. Managed heap after a full collection: 265 MB at the start and 413 MB at the end
+  in the Shrouded Hills window (observed values, not a growth measure; the stream smoke's windows take 368 to 435 MB).
 - **Memory.** One window holds 1,300 to 4,900 visuals and 10 to 26 MB of CPU frames; after a full collection the
   managed heap of a run that moved the window seven times followed the window's contents (368 to 435 MB), with no
   growth from move to move; the resource stage's reload after the map battery leaves the heap 5.5 MB smaller (since
@@ -668,7 +688,8 @@ in progress ends on its committed cell); saved sector differences (`.dif`) are n
 (the original's world-map screen) is not implemented (the diagnostic [world map](#world-map-arc-ui-048) travels by its rules since ARC-UI-048); a companion more than one sector from the actor when the window
 moves is bound only if the new window holds its cell; on the same map, an F8 save or a jump point or teleport whose cell
 lies outside the shown window is refused (the cell is not admitted in this window; another map's save or exit opens the
-window around it); routes reach 32 cells per axis (ARC-WORLD-042). Original parity NOT_VERIFIED.
+window around it); a click is a goal inside the shown window (a goal farther away is reached only by a host that plans
+it, as the walk smoke does with the window route). Original parity NOT_VERIFIED.
 
 ## World map (ARC-UI-048)
 

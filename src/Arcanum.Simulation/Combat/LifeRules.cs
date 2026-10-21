@@ -63,7 +63,7 @@ public static class LifeRules
     /// <summary>
     /// Applies one damage packet (the source's critter damage step). Undead and mechanical critters take no poison, a
     /// stoned one no hit-point, fatigue or poison damage; a dead critter takes nothing (<see cref="LifeEvents.AlreadyDead"/>).
-    /// Then, in order: stun (unless a knockdown or knockout comes with it), knockdown, knockout (a critter still conscious
+    /// Then, in order: stun (unless a knockdown or knockout comes with it, or the critter is unconscious, paralysed or stoned), knockdown, knockout (a critter still conscious
     /// gets fatigue damage <c>max fatigue + 10..20</c>, rolled as <see cref="CombatRollPurpose.KnockoutFatigue"/>), scar,
     /// blinding, an arm (the first, else the second on <see cref="CombatRollPurpose.CrippleBothArms"/> d100 ≤ 50), legs,
     /// hit-point damage (never below 0), fatigue damage (positive, not fatigue-immune), the poison level (0..1000, and 0
@@ -349,7 +349,10 @@ public static class LifeRules
         var effects = damage.Effects;
         var conditions = s.Conditions;
         const CriticalHitEffects Down = CriticalHitEffects.Knockdown | CriticalHitEffects.Knockout;
-        if (effects.HasFlag(CriticalHitEffects.Stun) && !conditions.HasFlag(LifeConditions.Stunned) && (effects & Down) == 0)
+        // ARC-COMBAT-009: the stun starts only on a critter that can act (0x4357B0 through 0x45D790: alive, conscious, not
+        // stunned, paralysed or stoned); the stun animation's own start is the host's.
+        if (effects.HasFlag(CriticalHitEffects.Stun) && !conditions.HasFlag(LifeConditions.Stunned) && (effects & Down) == 0
+            && !IsUnconscious(s, facts) && (facts.Traits & (LifeTraits.Paralyzed | LifeTraits.Stoned)) == 0)
         {
             conditions |= LifeConditions.Stunned;
             events |= LifeEvents.Stunned;
