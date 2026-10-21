@@ -140,6 +140,8 @@ public sealed record SessionObjectAttack
     public HitLocation? Aim { get; init; }
     public int Distance { get; init; } = 1;
     public IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? HeroWorn { get; init; }
+    /// <summary>The actor's map for a critical self-hit's drops (ARC-COMBAT-010, as <see cref="SessionAttack.DropMap"/>).</summary>
+    public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
 }
 
 /// <summary>What the host does after an object hit: the scripts, sounds and visual effects the session does not run.</summary>
@@ -315,7 +317,7 @@ public sealed partial class GameSessionOwner
             if (applied.Disposition == GameSessionDisposition.Rejected)
                 return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, applied.Failure, Version);
             var criticals = new List<SessionCriticalStep>();
-            var (selfWear, selfFailure) = CriticalAndWearSteps(resolution, applied.Outcome!, heroSide, objectSide, null, null, criticals);
+            var (selfWear, selfFailure) = CriticalAndWearSteps(resolution, applied.Outcome!, heroSide, objectSide, null, null, attack.DropMap, criticals);
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, applied.Outcome, selfWear, SessionObjectHostSteps.None,
                 selfFailure, Version) { Criticals = criticals };
         }

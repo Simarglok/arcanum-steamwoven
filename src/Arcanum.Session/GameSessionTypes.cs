@@ -214,6 +214,8 @@ public enum GameSessionFailure
     InvalidWear,
     // Object damage (ARC-COMBAT-008).
     InvalidObject, ObjectUnavailable,
+    // Pick locks (ARC-SKILLS-006).
+    PickLockUnavailable, InvalidLockpick,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }

@@ -134,6 +134,13 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S9 { get; } = new("S9", S8.Conditions, S8.Actions.Append(ScrCatalogue.Action.StartSchematicUi), S8.ValueKinds, S8.FocusKinds);
 
+    /// <summary>
+    /// The reading set (ARC-UI-049): <see cref="S9"/> plus show book (64), show picture (65) and show plaque (114), each handing one
+    /// <see cref="ScrReadingRequest"/> (its number and its viewer object) to the host (ledger WR rows).
+    /// </summary>
+    public static ScrAdmissionSet S10 { get; } = new("S10", S9.Conditions,
+        S9.Actions.Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]), S9.ValueKinds, S9.FocusKinds);
+
     /// <summary>The conditions of <see cref="S4"/> a host answers through <see cref="IScrObjectQueries"/>.</summary>
     public static IReadOnlySet<int> ObjectQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed,
         ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation };

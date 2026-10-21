@@ -105,43 +105,14 @@ public sealed partial class GameSessionOwner
     private SessionHealResult HealStep(SessionLifeTarget target, SessionHealingItem item, SessionLifeRecord record, LifeFacts facts, bool recorded)
     {
         var hero = _hero!;
-        var skills = HeroSkills();
-        var heal = skills[Skill.Heal];
-        var snapshot = hero.Stats.Query(new(0, _life.Hero!.Value.State.PoisonLevel)).Snapshot!;
-        var heroConditions = _life.Hero!.Value.State.Conditions;
+        var heal = HeroSkills()[Skill.Heal];
         var condition = QueryItemCondition(item.Entity, item.Condition)!.Value;
-        var fateArmed = FateRules.IsArmed(hero.State.Fate, FateKind.Heal);
-        var request = new SkillCheckRequest
+        var request = HeroSkillRequest(Skill.Heal, condition);
+        request = request with
         {
-            Skill = Skill.Heal,
-            Level = heal.Level,
-            Training = heal.Training,
-            Effectiveness = new()
-            {
-                ExtraordinaryIntelligence = snapshot.GetEffective(CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold,
-                LocalPc = true,
-                Difficulty = _difficulty,
-            },
-            Difficulty = new()
-            {
-                Target = true,
-                TargetCritter = true,
-                HealingItem = true,
-                HealingItemBonus = item.UsageBonus,
-                SourceInjuries = (heroConditions.HasFlag(LifeConditions.Blinded) ? SkillSourceInjuries.Blinded : 0)
-                    | (heroConditions.HasFlag(LifeConditions.CrippledArmOne) ? SkillSourceInjuries.CrippledArmOne : 0)
-                    | (heroConditions.HasFlag(LifeConditions.CrippledArmsBoth) ? SkillSourceInjuries.CrippledArmsBoth : 0)
-                    | (heroConditions.HasFlag(LifeConditions.CrippledLegsBoth) ? SkillSourceInjuries.CrippledLegsBoth : 0),
-            },
-            Critical = new()
-            {
-                Item = true,
-                ItemHitPoints = Math.Clamp(condition.HitPoints, 0, Math.Max(0, condition.MaximumHitPoints)),
-                ItemMaxHitPoints = Math.Max(0, condition.MaximumHitPoints),
-            },
-            FateArmed = fateArmed,
+            Difficulty = request.Difficulty with { Target = true, TargetCritter = true, HealingItem = true, HealingItemBonus = item.UsageBonus },
         };
-        var rolls = new HealRolls(new SeededRandom(_random.Seed, _random.Draws));
+        var rolls = new SkillRolls(new SeededRandom(_random.Seed, _random.Draws));
         SkillCheckResult check;
         HealOutcome outcome;
         try
@@ -149,7 +120,7 @@ public sealed partial class GameSessionOwner
             check = SkillCheckRules.Run(request, rolls, _rules.Combat.InvocationModifierCountedTwice);
             outcome = HealRules.Resolve(check.Success, check.Critical, heal.Level, heal.Training, rolls);
         }
-        catch (HealRolls.ExhaustedException) { return RejectHeal(GameSessionFailure.RandomExhausted); }
+        catch (SkillRolls.ExhaustedException) { return RejectHeal(GameSessionFailure.RandomExhausted); }
 
         LifeOutcome? life = check.Success ? LifeRules.SkillHeal(record.State, facts, outcome.HitPoints, outcome.Cure) : null;
         var lifeChanged = life is not null && life.After != record.State;
@@ -203,8 +174,48 @@ public sealed partial class GameSessionOwner
     private SessionHealResult RejectHeal(GameSessionFailure failure) =>
         new(GameSessionDisposition.Rejected, failure, null, null, null, null, null, false, false, Version);
 
-    // The heal's draws from a trial copy of the session generator: the check's two d100 and the amount.
-    private sealed class HealRolls(SeededRandom trial) : ISkillCheckRolls, IHealRolls
+    /// <summary>
+    /// The shared check of a hero's skill use (ARC-SKILLS-005, ARC-SKILLS-006): the hero's level and training of
+    /// <paramref name="skill"/>, the effectiveness facts (extraordinary intelligence, the local PC, the game difficulty), the hero's
+    /// blindness and crippled arms and legs, the used item's condition for a critical failure (none without an item) and the armed
+    /// fate of the skill. The caller adds the skill's own difficulty terms.
+    /// </summary>
+    private SkillCheckRequest HeroSkillRequest(Skill skill, ItemCondition? item)
+    {
+        var hero = _hero!;
+        var level = HeroSkills()[skill];
+        var snapshot = hero.Stats.Query(new(0, _life.Hero!.Value.State.PoisonLevel)).Snapshot!;
+        var conditions = _life.Hero!.Value.State.Conditions;
+        return new()
+        {
+            Skill = skill,
+            Level = level.Level,
+            Training = level.Training,
+            Effectiveness = new()
+            {
+                ExtraordinaryIntelligence = snapshot.GetEffective(CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold,
+                LocalPc = true,
+                Difficulty = _difficulty,
+            },
+            Difficulty = new()
+            {
+                SourceInjuries = (conditions.HasFlag(LifeConditions.Blinded) ? SkillSourceInjuries.Blinded : 0)
+                    | (conditions.HasFlag(LifeConditions.CrippledArmOne) ? SkillSourceInjuries.CrippledArmOne : 0)
+                    | (conditions.HasFlag(LifeConditions.CrippledArmsBoth) ? SkillSourceInjuries.CrippledArmsBoth : 0)
+                    | (conditions.HasFlag(LifeConditions.CrippledLegsBoth) ? SkillSourceInjuries.CrippledLegsBoth : 0),
+            },
+            Critical = item is { } condition ? new()
+            {
+                Item = true,
+                ItemHitPoints = Math.Clamp(condition.HitPoints, 0, Math.Max(0, condition.MaximumHitPoints)),
+                ItemMaxHitPoints = Math.Max(0, condition.MaximumHitPoints),
+            } : new(),
+            FateArmed = HeroSkillFate(skill) is { } fate && FateRules.IsArmed(hero.State.Fate, fate),
+        };
+    }
+
+    // A skill use's draws from a trial copy of the session generator: the check's two d100 and, for a heal, the amount.
+    private sealed class SkillRolls(SeededRandom trial) : ISkillCheckRolls, IHealRolls
     {
         internal SeededRandom Trial { get; } = trial;
 

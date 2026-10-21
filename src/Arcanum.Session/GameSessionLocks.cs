@@ -24,7 +24,7 @@ public sealed record SessionLockFiring(GameEvent Event, SessionOpenable Object, 
 
 /// <summary>
 /// ARC-WORLD-050: the lock state owner of portals and containers on any map, for doors and windows at runtime
-/// (ARC-WORLD-051) and the pick-locks skill (skills plan S9). An object's state is its T0 baseline until a lock, jam or
+/// (ARC-WORLD-051) and the pick-locks skill (ARC-SKILLS-006). An object's state is its T0 baseline until a lock, jam or
 /// frame write; the first write records its kind, flags and frame as map changes of its entity (<see cref="FlagsProperty"/>,
 /// <see cref="FrameProperty"/>, <see cref="KindProperty"/>), which the snapshot already carries, so the domain adds no
 /// schema. Unlocking a locked object and jamming one that was not jammed schedule the original's Lock event
