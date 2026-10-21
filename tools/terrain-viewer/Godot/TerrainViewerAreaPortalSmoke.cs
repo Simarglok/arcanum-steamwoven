@@ -12,7 +12,7 @@ namespace Arcanum.TerrainViewer;
 // animation has run; a left press on the door then closes it (frame 0, drawn on its T0 command). When the map has a door
 // the player cannot open (locked, jammed or held), a press next to it is refused and the door stays closed. NONE on a map
 // without a door that opens. An open frame that a body drawn in front hides at every pixel cannot be pressed (ashbury
-// haunted castle: a tall wall two tiles south of a door); such a door is closed again by a use and the next door is tried.
+// haunted castle: a tall wall two tiles south of a door); such a door is closed again by a use and the next door is tried (the first eight).
 public partial class TerrainViewerApp
 {
     private async Task RunAreaPortalSmokeAsync()
@@ -73,16 +73,18 @@ public partial class TerrainViewerApp
                 Require(openCommand is not null, $"the open door is drawn on frame {openFrame}: drawn {DrawnFrames(door.Portal)}");
                 if ((openPoint = await TryPortalPointAsync(openCommand!)) is not null) break;
                 // Hidden at every pixel by bodies drawn in front: close it again by a use and try the next door.
-                hidden.Add(new { door.Portal.Entity, By = HidingBodies(openCommand!) });
-                GD.Print($"ARC-WORLD-051 portal hidden entity={door.Portal.Entity} pc={map.Chart.ToWorld(door.To)} by={HidingBodies(openCommand!)}");
+                var by = HidingBodies(openCommand!);
+                hidden.Add(new { door.Portal.Entity, By = by });
+                GD.Print($"ARC-WORLD-051 portal hidden entity={door.Portal.Entity} pc={map.Chart.ToWorld(door.To)} by={by}");
                 UsePortal(door.Portal);
                 Require(portals.Frame(session, door.Portal) == 0, $"a use closed the hidden door {door.Portal.Entity}: {_portalNotice}");
                 await ToSignal(GetTree().CreateTimer((3 * door.Portal.StepMs + 200) / 1000.0), SceneTreeTimer.SignalName.Timeout);
             }
             Require(openPoint is not null, $"one of {targets.Length} doors shows a pixel of its open frame: hidden {System.Text.Json.JsonSerializer.Serialize(hidden)}");
             // A press on the open door closes it.
+            _portalNotice = "";
             AreaSmokeClick(openPoint!.Value);
-            Require(portals.Frame(session, door.Portal) == 0, $"a press closed the door: {_portalNotice}");
+            Require(portals.Frame(session, door.Portal) == 0, $"a press closed the door {door.Portal.Entity}: {_portalNotice}");
             await ToSignal(GetTree().CreateTimer((3 * door.Portal.StepMs + 200) / 1000.0), SceneTreeTimer.SignalName.Timeout);
             var closed = await PortalDrawnAsync(door.Portal, door.Portal.Baseline.Frame);
             Require(closed is not null, $"the closed door is drawn on its T0 frame: drawn {DrawnFrames(door.Portal)}");
