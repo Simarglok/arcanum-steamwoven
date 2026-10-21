@@ -93,6 +93,18 @@ public sealed class MesFile
         return index >= 0 ? _messages[index] : null;
     }
 
+    /// <summary>The original's run count (0x4D4550): 0 without an entry numbered exactly <paramref name="first"/>, else how
+    /// many entries from it, in number order, are numbered ≤ <paramref name="last"/>, gaps or not.</summary>
+    [OriginalFunction(0x4D4550, OriginalFunctionScope.Full)]
+    public int RunLength(int first, int last)
+    {
+        var start = Array.BinarySearch(_numbers, first);
+        if (start < 0) return 0;
+        var end = start;
+        while (end < _numbers.Length && _numbers[end] <= last) end++;
+        return end - start;
+    }
+
     public static MesParseResult Parse(ReadOnlySpan<byte> payload, MesReaderOptions? options = null)
     {
         options ??= new();

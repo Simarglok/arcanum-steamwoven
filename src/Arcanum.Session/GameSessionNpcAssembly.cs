@@ -147,7 +147,7 @@ public sealed partial class GameSessionOwner
         foreach (var seed in _inventory.Seeds.Values)
             if (seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == SessionHolderKind.Npc)
                 foreach (var entity in holder.Items)
-                    if (!_inventory.Taken.Contains(entity))
+                    if (!_inventory.Taken.Contains(entity) && !Dropped(entity))
                         listed.Add((entity, seed.Items[entity].Facts.Kind.Prototype, seed.Items[entity].Facts.InventoryLocation));
         foreach (var item in _inventory.AddedTo(npc)) listed.Add((item.Entity, item.Kind.Prototype, -1));
         var result = new List<CraftItem>(listed.Count);

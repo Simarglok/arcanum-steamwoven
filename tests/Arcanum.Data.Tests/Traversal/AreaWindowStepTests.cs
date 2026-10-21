@@ -104,6 +104,44 @@ public sealed class AreaWindowStepTests
         }
     }
 
+    [TestMethod]
+    public void A_window_route_crosses_sectors_through_windows_loaded_on_demand()
+    {
+        // ARC-WORLD-042: from sector (0, 0) to sector (2, 2) of the open 3×3-sector map, diagonally, one window per step's sector.
+        Install(Sector());
+        using var stack = Stack();
+        var catalog = WorldCatalog.Open(stack);
+        var route = AreaWindowRoute.Plan(stack, catalog, Map, new(10, 10), new(180, 170));
+        Assert.AreEqual((AreaWindowRouteStatus.Found, "ROUTE_WINDOWS"), (route.Status, route.Detail));
+        Assert.AreEqual(171, route.Cells.Count); // the start plus 170 steps (the Chebyshev distance on an open map)
+        Assert.AreEqual((new AreaStepCell(10, 10), new AreaStepCell(180, 170)), (route.Cells[0], route.Cells[^1]));
+        for (var i = 1; i < route.Cells.Count; i++)
+            Assert.AreEqual(1L, Math.Max(Math.Abs(route.Cells[i].X - route.Cells[i - 1].X), Math.Abs(route.Cells[i].Y - route.Cells[i - 1].Y)));
+        Assert.IsTrue(route.WindowLoads >= 2, $"loads {route.WindowLoads}");
+
+        // One resident window still finds it (evicted windows are reloaded); one window load in all does not.
+        var single = AreaWindowRoute.Plan(stack, catalog, Map, new(10, 10), new(180, 170), new(maxResidentWindows: 1));
+        Assert.AreEqual((AreaWindowRouteStatus.Found, 171), (single.Status, single.Cells.Count));
+        var loads = AreaWindowRoute.Plan(stack, catalog, Map, new(10, 10), new(180, 170), new(maxWindowLoads: 1));
+        Assert.AreEqual((AreaWindowRouteStatus.LimitExceeded, "ROUTE_WINDOW_LIMIT"), (loads.Status, loads.Detail));
+        var expansions = AreaWindowRoute.Plan(stack, catalog, Map, new(10, 10), new(180, 170), new(maxExpansions: 5));
+        Assert.AreEqual((AreaWindowRouteStatus.LimitExceeded, "ROUTE_EXPANSION_LIMIT", 5), (expansions.Status, expansions.Detail, expansions.Expansions));
+    }
+
+    [TestMethod]
+    public void A_window_route_refuses_a_start_or_a_goal_off_the_map()
+    {
+        Install(Sector());
+        using var stack = Stack();
+        var catalog = WorldCatalog.Open(stack);
+        Assert.AreEqual("ROUTE_START_NOT_ADMITTED", AreaWindowRoute.Plan(stack, catalog, Map, new(-5, 10), new(20, 20)).Detail);
+        Assert.AreEqual((AreaWindowRouteStatus.Found, 1), (AreaWindowRoute.Plan(stack, catalog, Map, new(5, 5), new(5, 5)) is var at ? (at.Status, at.Cells.Count) : default));
+        // Sector (3, 0) is off the 3×3-sector map: the goal is refused before any search.
+        var off = AreaWindowRoute.Plan(stack, catalog, Map, new(150, 10), new(200, 10));
+        Assert.AreEqual((AreaWindowRouteStatus.Refused, "ROUTE_GOAL_NOT_ADMITTED", 0), (off.Status, off.Detail, off.Expansions));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new AreaWindowRouteLimits(maxResidentWindows: 0));
+    }
+
     private static byte[] BaseWithout(string name)
     {
         using var archive = DatArchive.Open(new MemoryStream(Base(Sector())));

@@ -28,6 +28,28 @@ public enum CombatRollPurpose
     KnockoutFatigue,
     /// <summary>The d100 (≤ 50) that cripples the second arm of a critter with one crippled arm (<see cref="LifeRules.ApplyDamage"/>).</summary>
     CrippleBothArms,
+    // ARC-COMBAT-009: the rolls of the original's critical-effect procedures (OriginalCriticalEffects), each d100 against its
+    // threshold, and the constitution checks (1 .. the race's constitution maximum against constitution + modifier).
+    CriticalStun,
+    CriticalStunCheck,
+    CriticalKnockout,
+    CriticalKnockoutCheck,
+    CriticalCrippleArm,
+    CriticalCrippleArmCheck,
+    CriticalCrippleLeg,
+    CriticalCrippleLegCheck,
+    CriticalDropHelmet,
+    CriticalBlind,
+    CriticalBlindCheck,
+    CriticalScar,
+    CriticalKnockdown,
+    CriticalDamageWeapon,
+    CriticalDropWeapon,
+    CriticalDamageArmor,
+    CriticalDestroyWeapon,
+    CriticalExplodeWeapon,
+    CriticalDestroyAmmo,
+    CriticalLoseAmmo,
 }
 
 /// <summary>

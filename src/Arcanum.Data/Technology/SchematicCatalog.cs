@@ -249,8 +249,8 @@ public sealed class SchematicCatalog
     public SchematicRecordRead RecordToShow(int selected, int discipline) => Read(selected == -1 ? PlaceholderNumber(discipline) : selected);
 
     /// <summary>One record: the seven entries n..n+6, name, description, art and quantity through C <c>atoi</c>, the three lists
-    /// through <see cref="ParseAlternatives"/>. A missing entry is the original's missing-line text ("Error! Missing line N in
-    /// rules\schematic.mes"): <c>atoi</c> reads it as 0, and the list parse reads its first three tokens as 0 and writes the
+    /// through <see cref="ParseAlternatives"/>. A missing entry is the original's missing-line message (it names the
+    /// number and <c>rules\schematic.mes</c>): <c>atoi</c> reads it as 0, and the list parse reads its first three tokens as 0 and writes the
     /// other three past the field (TC6 class); Steamwoven keeps the three zeros and drops the rest in both modes. The
     /// placeholder for a selection of −1 is <see cref="RecordToShow"/>.</summary>
     [OriginalFunction(0x56DBD0, OriginalFunctionScope.Partial)]
