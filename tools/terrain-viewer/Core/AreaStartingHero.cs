@@ -54,7 +54,11 @@ public enum AreaHeroStatus
 /// <see cref="AreaTransitionCoordinator.CreateSession"/> gives the session's best-items call; null unless ready.</param>
 public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, SessionHeroDefinition? Definition, int? Flag,
     int DroppedChanges, PremadeHeroRead? Read, string Detail, SessionExperienceRules? Experience = null,
-    SessionAutoLevelRules? AutoLevel = null, Func<int, EffectRule?>? Effects = null, IReadOnlyList<SessionWearableItem?>? KitWear = null);
+    SessionAutoLevelRules? AutoLevel = null, Func<int, EffectRule?>? Effects = null, IReadOnlyList<SessionWearableItem?>? KitWear = null)
+{
+    /// <summary>ARC-SKILLS-005: the kit's healing items, by kit index (null for anything else), from the same prototype fields.</summary>
+    public IReadOnlyList<SessionHealingItem?>? KitHealing { get; init; }
+}
 
 /// <summary>
 /// ARC-WORLD-027: the AREA viewer's start as an original pre-made hero (<c>--hero</c>). Reads the hero with
@@ -133,7 +137,10 @@ public static class AreaStartingHero
         if (Flag(menu, hero) is not { } flag) return new(AreaHeroStatus.FlagInvalid, hero, null, null, 0, read, $"message {FirstFlagMessage + hero.Index}");
         var definition = Definition(read.Hero, out var dropped);
         if (KitWear(prototypes.Read, definition, out detail) is not { } wear) return new(AreaHeroStatus.KitUnreadable, hero, null, null, 0, read, detail!);
-        return new(AreaHeroStatus.Ready, hero, definition, flag, dropped, read, "hero ready", experience, autoLevel, Effect, wear);
+        return new(AreaHeroStatus.Ready, hero, definition, flag, dropped, read, "hero ready", experience, autoLevel, Effect, wear)
+        {
+            KitHealing = KitHealing(prototypes.Read, definition),
+        };
     }
 
     /// <summary>
@@ -165,6 +172,16 @@ public static class AreaStartingHero
             wear.Add(wearable);
         }
         return wear.AsReadOnly();
+    }
+
+    /// <summary>ARC-SKILLS-005: each kit item's healing-item facts (<see cref="AreaHealingItems.From"/>) under its kit entity, null for an
+    /// item that is not a healing item or whose prototype does not read.</summary>
+    public static IReadOnlyList<SessionHealingItem?> KitHealing(Func<int, PrototypeFile> prototypes, SessionHeroDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(prototypes);
+        ArgumentNullException.ThrowIfNull(definition);
+        return definition.Kit.Select((item, index) => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields is { } fields
+            ? AreaHealingItems.From("kit:" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), fields) : null).ToArray();
     }
 
     /// <summary>The session's experience data from the three tables (ARC-WORLD-030 readers), or null with the reason.</summary>

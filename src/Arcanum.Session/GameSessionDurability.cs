@@ -7,23 +7,35 @@ namespace Arcanum.Session;
 /// <summary>One item whose durability the session changed: its entity and its whole condition.</summary>
 public readonly record struct SessionItemDurability(string Entity, ItemCondition Condition);
 
+/// <summary>One item whose remaining uses the session changed (ARC-SKILLS-005: a healing item's charges, field 0xD5).</summary>
+public readonly record struct SessionItemUses(string Entity, int Uses);
+
 /// <summary>
 /// Saved durability (ARC-WORLD-053, schema 22): the condition of every item the session damaged, broke or repaired, by entity
 /// in ordinal order, and the items it deleted (a second break or a destroying critical), in ordinal order. An item without a
-/// record has its host's baseline.
+/// record has its host's baseline. Since ARC-SKILLS-005 also the remaining uses of every item whose uses the session spent
+/// (<see cref="Uses"/>, in ordinal order; at most <see cref="SessionItemUseLimits.MaxUses"/> each).
 /// </summary>
 public sealed class SessionDurabilityState
 {
-    internal SessionDurabilityState(SessionItemDurability[] items, string[] destroyed)
+    internal SessionDurabilityState(SessionItemDurability[] items, string[] destroyed, SessionItemUses[]? uses = null)
     {
         Items = Array.AsReadOnly(items);
         Destroyed = Array.AsReadOnly(destroyed);
+        Uses = Array.AsReadOnly(uses ?? []);
     }
 
     public static SessionDurabilityState Empty { get; } = new([], []);
 
     public IReadOnlyList<SessionItemDurability> Items { get; }
     public IReadOnlyList<string> Destroyed { get; }
+    public IReadOnlyList<SessionItemUses> Uses { get; }
+}
+
+/// <summary>Bounds of an item's remaining uses (project policy; the source's field is a 32-bit count).</summary>
+public static class SessionItemUseLimits
+{
+    public const int MaxUses = 1_000_000;
 }
 
 /// <summary>
@@ -61,11 +73,13 @@ internal sealed class DurabilityDomain
 {
     internal SortedDictionary<string, ItemCondition> Records { get; } = new(StringComparer.Ordinal);
     internal SortedSet<string> Destroyed { get; } = new(StringComparer.Ordinal);
+    internal SortedDictionary<string, int> Uses { get; } = new(StringComparer.Ordinal);
 
-    internal int Count => Records.Count + Destroyed.Count;
+    internal int Count => Records.Count + Destroyed.Count + Uses.Count;
 
     internal SessionDurabilityState Capture() =>
-        new([.. Records.Select(pair => new SessionItemDurability(pair.Key, pair.Value))], [.. Destroyed]);
+        new([.. Records.Select(pair => new SessionItemDurability(pair.Key, pair.Value))], [.. Destroyed],
+            [.. Uses.Select(pair => new SessionItemUses(pair.Key, pair.Value))]);
 }
 
 /// <summary>
@@ -73,8 +87,7 @@ internal sealed class DurabilityDomain
 /// and the items of every attached map seed (any map, any holder or the ground). An item's condition is its host's baseline
 /// (<see cref="SessionItemConditions.FromCombatFields"/>) until the session damages, breaks or repairs it; from then on the
 /// session's record holds it, saved in <see cref="GameSessionSnapshot.Durability"/>. The rules are
-/// <see cref="ItemDurabilityRules"/>. Combat does not call these yet: the attack resolver produces no armour or weapon wear
-/// (combat core C20, C21), so its callers come with the combat item-damage slice.
+/// <see cref="ItemDurabilityRules"/>. Combat calls them through the attack's wear (<see cref="ApplyAttackWear"/>, ARC-COMBAT-007).
 /// </summary>
 public sealed partial class GameSessionOwner
 {
@@ -206,6 +219,7 @@ public sealed partial class GameSessionOwner
         // Taken hides an item from every seed view and from pickup and loot.
         _inventory.Taken.Add(entity);
         _durability.Records.Remove(entity);
+        _durability.Uses.Remove(entity);
         _durability.Destroyed.Add(entity);
     }
 
@@ -224,7 +238,7 @@ public sealed partial class GameSessionOwner
     private static GameSessionFailure ImportDurability(SessionDurabilityState saved, GameSessionLimits limits, out DurabilityDomain durability)
     {
         durability = new();
-        if (saved.Items.Count + saved.Destroyed.Count > limits.MaxDurabilityRecords) return GameSessionFailure.BudgetExceeded;
+        if (saved.Items.Count + saved.Destroyed.Count + saved.Uses.Count > limits.MaxDurabilityRecords) return GameSessionFailure.BudgetExceeded;
         foreach (var entity in saved.Destroyed)
             if (!SessionValidation.Entity(entity) || !durability.Destroyed.Add(entity)) return GameSessionFailure.InvalidDurability;
         foreach (var item in saved.Items)
@@ -232,6 +246,9 @@ public sealed partial class GameSessionOwner
             if (!SessionValidation.Entity(item.Entity) || !ItemDurabilityRules.IsValid(item.Condition) || durability.Destroyed.Contains(item.Entity) ||
                 !durability.Records.TryAdd(item.Entity, item.Condition)) return GameSessionFailure.InvalidDurability;
         }
+        foreach (var item in saved.Uses)
+            if (!SessionValidation.Entity(item.Entity) || item.Uses is < 1 or > SessionItemUseLimits.MaxUses || durability.Destroyed.Contains(item.Entity) ||
+                !durability.Uses.TryAdd(item.Entity, item.Uses)) return GameSessionFailure.InvalidDurability;
         return GameSessionFailure.None;
     }
 
