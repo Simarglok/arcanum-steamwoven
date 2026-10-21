@@ -66,7 +66,7 @@ public partial class TerrainViewerApp
             foreach (var command in candidates)
             {
                 var ambient = AreaLocalLighting.Ambient(lighting.Channels[command.Visual], pair);
-                if (!await ObserveTerrainLitAsync(command, ambient, world => StationaryLightField.TerrainPixel(lattice, ambient, world.X, world.Y))) continue;
+                if (!await ObserveTerrainLitAsync(area, command, ambient, world => StationaryLightField.TerrainPixel(lattice, ambient, world.X, world.Y))) continue;
                 observed++;
                 if ((light.Flags & StationaryLightFlags.Dark) != 0) dark++;
                 break;
@@ -82,19 +82,19 @@ public partial class TerrainViewerApp
             Map = area.Snapshot.CatalogueMap, Hour = driver.Clock.Hour, Lights = local.LightCount, ObjectLights = local.ObjectLightCount,
             NightOnlyDiffers = !ReferenceEquals(all.AtHour(0), all.AtHour(12)), Observed = observed, Dark = dark, Tried = tried, ViewMs = viewMs }));
         return new { ObjectLights = observed };
+    }
 
-        async Task<bool> ObserveTerrainLitAsync(AreaDrawCommand command, Arcanum.Data.Lighting.AmbientColor plain, Func<Vector2, (double R, double G, double B)> tintAt)
-        {
-            _camera!.ResetWorld(new GamepadLab.Core.Vec2(command.Destination.X + command.Destination.Width / 2d,
-                command.Destination.Y + command.Destination.Height / 2d), WorldViewport, 1);
-            var cameraView = _camera.State;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-            using var image = GetViewport().GetTexture().GetImage();
-            if (_camera.State != cameraView) throw new InvalidOperationException($"OBJECT_LIGHTS_CAMERA_MOVED {cameraView} {_camera.State}");
-            return TryAreaPixel(command, area.Frames, _canvas!.AreaVisibleCommands, image, GetViewport(), _hud!.Rect,
-                _readyActor is { } actor ? new Rect2(actor.Destination.X - 5, actor.Destination.Y - 5, actor.Destination.Width + 10, actor.Destination.Height + 10) : null,
-                1, out _, out _, plain, tintAt);
-        }
+    private async Task<bool> ObserveTerrainLitAsync(AreaLoadResult area, AreaDrawCommand command, Arcanum.Data.Lighting.AmbientColor plain, Func<Vector2, (double R, double G, double B)> tintAt)
+    {
+        _camera!.ResetWorld(new GamepadLab.Core.Vec2(command.Destination.X + command.Destination.Width / 2d,
+            command.Destination.Y + command.Destination.Height / 2d), WorldViewport, 1);
+        var cameraView = _camera.State;
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        using var image = GetViewport().GetTexture().GetImage();
+        if (_camera.State != cameraView) throw new InvalidOperationException($"OBJECT_LIGHTS_CAMERA_MOVED {cameraView} {_camera.State}");
+        return TryAreaPixel(command, area.Frames, _canvas!.AreaVisibleCommands, image, GetViewport(), _hud!.Rect,
+            _readyActor is { } actor ? new Rect2(actor.Destination.X - 5, actor.Destination.Y - 5, actor.Destination.Width + 10, actor.Destination.Height + 10) : null,
+            1, out _, out _, plain, tintAt);
     }
 }

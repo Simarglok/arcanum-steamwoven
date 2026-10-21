@@ -59,7 +59,8 @@ public partial class TerrainViewerApp
     private async Task RunAreaSchemeSmokeAsync()
     {
         static void Require(bool value, string why) { if (value) return; GD.Print("ARC-UI-041 scheme smoke: FAIL " + why); throw new InvalidOperationException("ARC-UI-041 scheme smoke: " + why); }
-        // ARC-UI-045: an area loaded without a session clock (a map drawn unlit) has no session and so no schemes.
+        // ARC-UI-045: an area loaded without a session clock (ARC-WORLD-057: a map whose start clock cannot be read) has no
+        // session and so no schemes.
         if (_areaSession is null) { GD.Print("ARC-UI-041 native-smoke schemes NONE (no session clock)"); return; }
         Require(_schemePlayer is not null && AreaSoundCatalog() is not null, "no player or catalogue");
         var session = _areaSession!;
