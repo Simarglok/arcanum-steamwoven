@@ -278,6 +278,7 @@ public static class EquipmentRules
             IgnoresResistance = w.IgnoresResistance,
             DamagesArmor = w.DamagesArmor,
             Uber = item.Uber,
+            ArtSubtype = w.ArtSubtype,
         };
     }
 
@@ -319,6 +320,7 @@ public static class EquipmentRules
             if (!All(w.ToHit, w.MagicToHit, w.Range, w.MagicRange, w.MinimumStrength, w.MagicMinimumStrength, w.AmmoConsumption,
                     w.MagicCriticalHitChance, w.MagicCriticalHitEffect, w.MagicCriticalMissChance, w.MagicCriticalMissEffect)) return false;
             if (w.AmmoType is < 0 or > EquipmentLimits.MaxMagnitude || w.AmmoConsumption < 0) return false;
+            if (w.ArtSubtype is < 0 or > CombatWearRules.MaxArtSubtype) return false;
         }
         if (item.Armor is { } a)
         {

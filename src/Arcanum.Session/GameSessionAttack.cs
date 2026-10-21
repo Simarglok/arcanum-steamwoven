@@ -24,7 +24,8 @@ public enum SessionCritterCombatFailure
     InvalidExperience,
     /// <summary>A worn item (inventory location 1000..1008) is not a wearable the wear rules admit, or two share a slot.</summary>
     InvalidWornItem,
-    /// <summary>A stored skill, resistance or armour class is beyond the bound the combat rules read (±1,000,000).</summary>
+    /// <summary>A stored skill, resistance or armour class is beyond the bound the combat rules read (±1,000,000), or the
+    /// material is not one of the fourteen (0..13).</summary>
     InvalidCombatValues,
 }
 
@@ -38,7 +39,8 @@ public sealed record SessionCritterCombatBuild(SessionCritterCombatFailure Failu
 /// <see cref="Arcanum.Simulation.Combat.Combatant"/> it defends as under a life state. Effective stats are the character owner's
 /// for the NPC's race and gender over its stored base stats, each clamped to the race's range first (monsters store values
 /// beyond it); the NPC's stored effects are not applied (no reader yet). Skills follow <see cref="CombatSkillRules"/>
-/// (melee 20 for a monstrous critter); the worn armour gives armour class, resistances and light through the wear rules.
+/// (melee 20 for a monstrous critter); the worn armour gives armour class, resistances and light through the wear rules; its stored
+/// material is what a melee hit on it wears the attacker's weapon or hands by (ARC-COMBAT-007).
 /// Immutable.
 /// </summary>
 public sealed class SessionCritterCombat
@@ -63,13 +65,15 @@ public sealed class SessionCritterCombat
     private readonly DamageResistances _storedResistances;
     private readonly LightEmission _ownLight;
     private readonly CombatantFlags _flags;
+    private readonly ObjectMaterial _material;
 
     private SessionCritterCombat(string entity, CharacterStatsOwner stats, IReadOnlyDictionary<EquipmentSlot, EquipmentItem> worn,
         IReadOnlyList<int> basicSkills, int baseArmorClass, DamageResistances storedResistances, LightEmission ownLight, CombatantFlags flags,
-        LifeFacts facts, LifeState loaded, SessionNpcExperience experience, bool monstrous, int level, SessionSkills? sheetSkills = null)
+        ObjectMaterial material, LifeFacts facts, LifeState loaded, SessionNpcExperience experience, bool monstrous, int level,
+        SessionSkills? sheetSkills = null)
     {
         Entity = entity; _stats = stats; _worn = worn; _basicSkills = basicSkills; _sheetSkills = sheetSkills; _baseArmorClass = baseArmorClass;
-        _storedResistances = storedResistances; _ownLight = ownLight; _flags = flags; Facts = facts; Loaded = loaded;
+        _storedResistances = storedResistances; _ownLight = ownLight; _flags = flags; _material = material; Facts = facts; Loaded = loaded;
         Experience = experience; Monstrous = monstrous; Level = level;
         Target = SessionLifeTarget.Critter(entity, facts, loaded);
     }
@@ -90,7 +94,7 @@ public sealed class SessionCritterCombat
     /// follower's saved advancement record, read under the sheet's own stats as <see cref="GameSessionOwner.QueryNpcSkills"/>
     /// reads it) and that sheet's level; its other values stay the map data's.</summary>
     internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, _baseArmorClass,
-        _storedResistances, _ownLight, _flags, Facts, Loaded, Experience, Monstrous, sheet.Level, SessionSkills.Of(sheet, AdvancementModifiers.None));
+        _storedResistances, _ownLight, _flags, _material, Facts, Loaded, Experience, Monstrous, sheet.Level, SessionSkills.Of(sheet, AdvancementModifiers.None));
 
     /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
@@ -106,7 +110,8 @@ public sealed class SessionCritterCombat
         var raceValue = stats[RaceStat]; var genderValue = stats[GenderStat];
         if (raceValue is < 0 or > 10 || genderValue is not (0 or 1)) return Fail(SessionCritterCombatFailure.InvalidRaceOrGender);
         static bool Bounded(int value) => Math.Abs((long)value) <= CombatSkillRules.MaxValue;
-        if (critter.BasicSkills.Count < 5 || !critter.BasicSkills.All(Bounded) || !fields.Object.Resistances.All(Bounded) || !Bounded(fields.Object.ArmorClass))
+        if (critter.BasicSkills.Count < 5 || !critter.BasicSkills.All(Bounded) || !fields.Object.Resistances.All(Bounded) || !Bounded(fields.Object.ArmorClass)
+            || !Enum.IsDefined((ObjectMaterial)fields.Object.Material))
             return Fail(SessionCritterCombatFailure.InvalidCombatValues);
         var race = (CharacterRace)raceValue;
         var gender = genderValue == 0 ? CharacterGender.Female : CharacterGender.Male;
@@ -187,7 +192,8 @@ public sealed class SessionCritterCombat
         if (!ExperienceDomain.Valid(experience)) return Fail(SessionCritterCombatFailure.InvalidExperience);
         var lightEmission = (LightEmission)Math.Max((int)light, (int)equipment.Light);
         return new(SessionCritterCombatFailure.None, new(entity, owner, worn, critter.BasicSkills, fields.Object.ArmorClass,
-            StoredResistances(fields.Object.Resistances), lightEmission, combatFlags, facts, loaded, experience, monstrous, level));
+            StoredResistances(fields.Object.Resistances), lightEmission, combatFlags, (ObjectMaterial)fields.Object.Material, facts, loaded, experience,
+            monstrous, level));
 
         static SessionCritterCombatBuild Fail(SessionCritterCombatFailure failure) => new(failure, null);
     }
@@ -218,6 +224,7 @@ public sealed class SessionCritterCombat
             Resistances = CombatantRules.Resistances(_storedResistances, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), Monstrous),
             Conditions = CombatantRules.Conditions(status, state, Facts.Traits, _flags),
             LightEmission = _ownLight,
+            Material = _material,
             DodgeLevel = _sheetSkills?[Skill.Dodge].Level ?? SkillLevel(BasicCombatSkill.Dodge),
             DodgeTraining = _sheetSkills?[Skill.Dodge].Training
                 ?? CombatSkillRules.Training(BasicCombatSkill.Dodge, _basicSkills[(int)BasicCombatSkill.Dodge], Monstrous, 0, Level),
@@ -254,22 +261,32 @@ public sealed record SessionHeroAttack(Combatant Combatant, CombatWeapon Weapon,
 /// <summary>
 /// One attack of the hero on an NPC (<see cref="GameSessionOwner.AttackCritter"/>). <see cref="Aim"/> is the aimed location (null:
 /// not aimed, rolled); <see cref="Distance"/> the Chebyshev distance to the target (a melee attack needs 1 or less).
+/// <see cref="HeroWorn"/> and <see cref="TargetWorn"/> are the items in the hero's and the target's wear slots with their durability
+/// baselines, for the attack's wear (ARC-COMBAT-007, <see cref="GameSessionOwner.ApplyAttackWear"/>); the hero's must be exactly the
+/// items it wears. Null: the host passes no item data and that side's items take no wear (the bare-handed hero's own wear still
+/// applies).
 /// </summary>
 public sealed record SessionAttack(SessionCritterCombat Target)
 {
     public HitLocation? Aim { get; init; }
     public int Distance { get; init; } = 1;
+    public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? HeroWorn { get; init; }
+    public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? TargetWorn { get; init; }
 }
 
 /// <summary>
 /// The result of <see cref="GameSessionOwner.AttackCritter"/>: the resolution (null when refused before the rolls), who took the
-/// damage and the life outcome of that step (null when none was dealt), and what the target's experience paid the hero for the
-/// hit and the kill. A later step that was refused (an experience or life budget, the revision) is <see cref="StepFailure"/>; the
-/// steps before it stay applied, as each one is a step of the source's damage sequence.
+/// damage and the life outcome of that step (null when none was dealt), what the target's experience paid the hero for the
+/// hit and the kill, and the attack's armour and weapon wear (<see cref="Wear"/>, ARC-COMBAT-007; null when no wear step ran). A
+/// later step that was refused (an experience, life or item budget, the revision) is <see cref="StepFailure"/>; the steps before it
+/// stay applied, as each one is a step of the source's damage sequence.
 /// </summary>
 public sealed record SessionAttackResult(GameSessionDisposition Disposition, GameSessionFailure Failure, AttackResolution? Resolution,
     DamageRecipient? Recipient, LifeOutcome? Life, SessionExperienceAward? HitAward, SessionExperienceAward? KillAward,
-    GameSessionFailure StepFailure, GameSessionVersion Version);
+    GameSessionFailure StepFailure, GameSessionVersion Version)
+{
+    public SessionAttackWearResult? Wear { get; init; }
+}
 
 public sealed partial class GameSessionOwner
 {
@@ -323,15 +340,21 @@ public sealed partial class GameSessionOwner
     /// <c>combat.*</c>), its damage applied to the target, or to the hero on a critical self-hit (<see cref="ApplyDamage"/>), then an
     /// NPC's hit-point damage takes its share of the experience pool for the hero unless the NPC is stoned
     /// (<see cref="RecordNpcDamage"/>), and a kill pays the hero a fifth of the worth (<see cref="RecordNpcKill"/>); experience calls
-    /// are skipped without experience data. Refused before any roll, in order: no hero (<see cref="GameSessionFailure.AttackUnavailable"/>),
-    /// a target whose values do not hold (<see cref="GameSessionFailure.InvalidLifeTarget"/> …), an aim at the torso, a distance
-    /// below 0 or beyond the weapon's reach (<see cref="GameSessionFailure.InvalidAttack"/>), a wielded weapon that is not melee
-    /// (<see cref="GameSessionFailure.AttackUnsupported"/>), the version, an exhausted revision (<see cref="GameSessionFailure.RevisionExhausted"/>).
+    /// are skipped without experience data. Last, the attack's armour and weapon wear (<see cref="ApplyAttackWear"/>, ARC-COMBAT-007)
+    /// with the hero as attacker and the NPC as target and the items of <see cref="SessionAttack.HeroWorn"/> and
+    /// <see cref="SessionAttack.TargetWorn"/>: the armour of whoever took the damage at the hit location, the critical weapon effects,
+    /// the hero's weapon or bare hands by the NPC's material. Refused before any roll, in order: no hero
+    /// (<see cref="GameSessionFailure.AttackUnavailable"/>), a target whose values do not hold
+    /// (<see cref="GameSessionFailure.InvalidLifeTarget"/> …), wear items that do not hold (<see cref="GameSessionFailure.InvalidWear"/>), an
+    /// aim at the torso, a distance below 0 or beyond the weapon's reach (<see cref="GameSessionFailure.InvalidAttack"/>), a wielded
+    /// weapon that is not melee (<see cref="GameSessionFailure.AttackUnsupported"/>), the version, an exhausted revision
+    /// (<see cref="GameSessionFailure.RevisionExhausted"/>).
     /// A resolver refusal (the hero cannot act, the target is dead) is NoChange with the resolution. The resolution's draws are spent
     /// once it ran; a fate the resolver used (ARC-WORLD-054) is cleared in a revision of its own, so such an attack is Changed even
     /// without damage; each later step commits on its own revision.
-    /// Not modelled: the target's taking-damage and dying scripts, its reaction and AI, critical-effect tables, weapon wear,
-    /// backstab, the target's awareness (an NPC always sees the hero) and light (every position is lit).
+    /// Not modelled: the target's taking-damage and dying scripts, its reaction and AI, critical-effect tables (so the critical
+    /// weapon and armour effects never come up yet), backstab, the target's awareness (an NPC always sees the hero) and light (every
+    /// position is lit).
     /// </summary>
     public SessionAttackResult AttackCritter(GameSessionVersion expected, SessionAttack attack)
     {
@@ -342,6 +365,9 @@ public sealed partial class GameSessionOwner
         var resolved = Resolve(target.Target, out var record, out var facts, out _);
         if (resolved != GameSessionFailure.None) return RejectAttack(resolved);
         var hero = QueryHeroAttack()!;
+        var heroSide = new SessionWearSide { Life = SessionLifeTarget.Hero, Worn = attack.HeroWorn };
+        var targetSide = new SessionWearSide { Life = target.Target, Worn = attack.TargetWorn };
+        if (!ValidWear(heroSide, targetSide, targetBroken: false, wear: null)) return RejectAttack(GameSessionFailure.InvalidWear);
         if (attack.Aim is HitLocation.Torso || attack.Aim is { } aim && !Enum.IsDefined(aim) || attack.Distance < 0 || attack.Distance > hero.Range)
             return RejectAttack(GameSessionFailure.InvalidAttack);
         if (!hero.Supported) return RejectAttack(GameSessionFailure.AttackUnsupported);
@@ -405,7 +431,16 @@ public sealed partial class GameSessionOwner
                 if (kill.Disposition == GameSessionDisposition.Rejected) stepFailure = kill.Failure;
             }
         }
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, outcome, hitAward, killAward, stepFailure, Version);
+        SessionAttackWearResult? wear = null;
+        if (stepFailure == GameSessionFailure.None)
+        {
+            wear = WearSteps(new SessionAttackWear { Resolution = resolution, Attacker = heroSide, Target = targetSide });
+            stepFailure = wear.StepFailure;
+        }
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, outcome, hitAward, killAward, stepFailure, Version)
+        {
+            Wear = wear,
+        };
     }
 
     /// <summary>Whether an NPC is dead in this session: its saved record holds the pinned death damage (every death through the

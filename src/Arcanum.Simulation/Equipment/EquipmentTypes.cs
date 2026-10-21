@@ -66,6 +66,9 @@ public sealed record EquipmentWeapon
     public int MagicCriticalHitEffect { get; init; }
     public int MagicCriticalMissChance { get; init; }
     public int MagicCriticalMissEffect { get; init; }
+    /// <summary>The art subtype of the weapon's use art (bits 6..9 of its use-art fragment, 0..15), which the combat wear reads
+    /// (<see cref="CombatWeapon.ArtSubtype"/>, ARC-COMBAT-007).</summary>
+    public int ArtSubtype { get; init; }
 }
 
 /// <summary>

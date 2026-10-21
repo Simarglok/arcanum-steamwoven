@@ -21,8 +21,8 @@ public sealed class AttackStateTests
 
     internal static CombatFields Npc(int[]? stats = null, uint critterFlags = 0x8, int hpAdjustment = -3, int hpDamage = 0, int ac = 0,
         int[]? resistances = null, int[]? skills = null, uint objectFlags = 0, uint spellFlags = 0, int worth = 160, int pool = 160,
-        int type = CombatFieldReader.NpcType, uint flags2 = 0) => new(CombatFieldOrigin.AreaObject,
-        new CombatObjectFields(type, 28359, objectFlags, spellFlags, 0, 0, ac, 0, hpAdjustment, hpDamage, 4, resistances ?? [0, 0, 0, 0, 0], 0),
+        int type = CombatFieldReader.NpcType, uint flags2 = 0, int material = 4) => new(CombatFieldOrigin.AreaObject,
+        new CombatObjectFields(type, 28359, objectFlags, spellFlags, 0, 0, ac, 0, hpAdjustment, hpDamage, material, resistances ?? [0, 0, 0, 0, 0], 0),
         null, null, null, null, null,
         new CombatCritterFields(critterFlags, flags2, stats ?? Stats(), skills ?? new int[12], new int[4], new int[25], 0, 0, 0, 1, 0, 0),
         type == CombatFieldReader.NpcType ? new CombatNpcFields(0, 19, worth, pool, 19, 0, 0, [.. Enumerable.Repeat(new CombatDamageRange(1, 3), 5)]) : null);
@@ -59,6 +59,10 @@ public sealed class AttackStateTests
             LifeTraits.Stoned | LifeTraits.NighInvulnerable, undead.Facts.Traits);
         var human = Combat(Npc(critterFlags: 0));
         Assert.IsFalse(human.Monstrous);
+        // ARC-COMBAT-007: the stored material is what the NPC defends as (a melee hit on it wears by it).
+        var status = new LifeStatus(10, 10, 10, 10, false, false, true);
+        Assert.AreEqual(ObjectMaterial.Flesh, human.Combatant(status, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven).Material);
+        Assert.AreEqual(ObjectMaterial.Stone, Combat(Npc(material: 0)).Combatant(status, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven).Material);
     }
 
     [TestMethod]
@@ -104,6 +108,8 @@ public sealed class AttackStateTests
         var skills = new int[12]; skills[1] = int.MinValue;
         Assert.AreEqual(SessionCritterCombatFailure.InvalidCombatValues, SessionCritterCombat.From(Rat, Npc(skills: skills)).Failure);
         Assert.AreEqual(SessionCritterCombatFailure.InvalidCombatValues, SessionCritterCombat.From(Rat, Npc(ac: -2_000_000)).Failure);
+        Assert.AreEqual(SessionCritterCombatFailure.InvalidCombatValues, SessionCritterCombat.From(Rat, Npc(material: 14)).Failure, "ARC-COMBAT-007");
+        Assert.AreEqual(SessionCritterCombatFailure.InvalidCombatValues, SessionCritterCombat.From(Rat, Npc(material: -1)).Failure);
         // An item in the weapon slot that is no wearable weapon.
         var odd = new CombatFields(CombatFieldOrigin.AreaObject, new CombatObjectFields(14, 5000, 0, 0, 0, 0, 0, 10, 0, 0, 4, [0, 0, 0, 0, 0], 0),
             new CombatItemFields(0, 1, 1, 0, 0, 0, 1004, [10000, 10000, 10000, 10000, 10000], 0, 0, 0, 0), null, null, null,

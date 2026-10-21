@@ -7,7 +7,10 @@ of the [combat core research](../research/combat-core-evidence.md#proposed-imple
 validity, partly), [FR-COMBAT-005](../requirements/combat-magic-tech.md#fr-combat-005)
 (hit, dodge, miss, critical) and
 [FR-COMBAT-008](../requirements/combat-magic-tech.md#fr-combat-008) (typed
-damage, immunities, resistances, portal and container material).
+damage, immunities, resistances, portal and container material; since ARC-COMBAT-007
+the armour and weapon wear of the damage step, below) and
+[FR-COMBAT-009](../requirements/combat-magic-tech.md#fr-combat-009) (the hook and,
+since ARC-COMBAT-007, the item effects of its weapon and armour criticals as wear).
 
 `Arcanum.Simulation.Combat` resolves **one attack** as a pure function:
 
@@ -129,7 +132,27 @@ and final values per type, multiplier, critical effects, armour wear and why
 damage was prevented. Applying it to HP, fatigue, poison, knockout, death and
 injuries is the [life state](life-state-runtime.md)'s job (ARC-COMBAT-002:
 `LifeDamage.FromAttack`, `LifeRules.ApplyDamage`, `GameSessionOwner.ApplyDamage`);
-item wear, drops and busting stay with the item owners.
+applying the wear below is the session's (`GameSessionOwner.ApplyAttackWear`); drops and busting
+stay with the item owners.
+
+## Wear (ARC-COMBAT-007)
+
+`AttackResolution.Wear` (`AttackWear`, built by `CombatWearRules.Of`) names the item steps of the
+original's damage step (0x4B4390), read in the executable by two readers
+([ledger CW1–CW10](../research/original-verification-ledger.md#combat-wear-arc-combat-007), F2). It is
+null without a damage packet and when invulnerability, nigh-invulnerability or a wall prevented the
+damage (the original returns before any item step). The wearer is whoever took the damage: the
+target, or the attacker of a critical self-hit, which keeps the attack's location.
+
+| Step | Rule |
+| --- | --- |
+| Armour (`ArmorDamage`, `ArmorSlot`) | Fire damage above 0 after resistance, a weapon with the damage-armour flag or the "damage armour" critical: the wearer's armour at the hit location (`CombatWearRules.ArmorSlot`, 0x4B54B0: head helmet, arm gauntlets, leg boots, torso body armour) loses 10, once. A critter wearer only. |
+| The wearer's weapon (`WeaponDamage`, `DestroyWeapon`, `ExplodeWeapon`) | "Damage weapon" 10, then "destroy weapon" or "explode weapon" deletes it without a break; the session passes an invulnerable weapon by. A critter wearer only. These come from the critical-effect tables (FR-COMBAT-009, ARC-COMBAT-009), so they stay unreachable until those exist. |
+| The attacker's side (`AttackerWear`, `AttackerWearAmount`) | A melee attack (armed or bare-handed; never a throw, bow or firearm) that dealt damage (hit points above 0, or for a critter fatigue above 0): `CombatWearRules.WeaponWear` (0x4B5580) by the struck one's material, stone 4, brick 3, wood 2, plant 1, metal 5, fire 5, glass 5 bare-handed only, others 0; a weapon's wear then falls by `trunc(wear × min(|complexity|, 100) / 100)` and by 2 for art subtype 4 or 1 for subtypes 5 and 13 (`CombatWeapon.ArtSubtype`); bare hands hurt the attacker itself, never its last hit point (`HandsWear`). On an object target only while the hit left it whole (`AttackerWearNeedsWholeTarget`). No roll. |
+
+The material is `Combatant.Material`, now read for critters too (a stone golem wears a sword). The
+original applies the armour and critical weapon steps before the hit-point damage and the attacker's
+wear last, after death and experience; the session step keeps that order within the wear.
 
 ## Rule settings and anomaly switches
 
@@ -159,8 +182,8 @@ flags after a critical miss retargets the attack to the attacker.
 - Ammunition, approach to melee range, line of fire and cover (the caller
   passes the effective target, cover and blocked flag), projectile flight and
   where a missed throw lands (FR-COMBAT-007).
-- Scripts (`SAP_TAKING_DAMAGE` veto, hit/miss events), sounds, floating text,
-  AI reaction to the attack, experience and weapon wear.
+- Scripts (`SAP_TAKING_DAMAGE` veto, hit/miss events), sounds, floating text
+  (the wear messages included), AI reaction to the attack and experience.
 - Critical-effect tables (FR-COMBAT-009) beyond the injected hook; effects
   are additive stand-ins, not the effect engine.
 - Skill levels, AC, resistances and weapon data come from the caller (for the hero, the worn part of AC and resistances,
@@ -176,4 +199,6 @@ original data. Formula tables and boundaries (`AttackRulesTests`), resolution
 paths and thresholds, dodge, fate, technology failure, magick cancel,
 objects, invulnerability, difficulty parts, awareness order, backstab,
 damage immunities and body spells, refusals, roll trace and seeded replay
-(`AttackResolverTests`), and both settings and each switch (`CombatAnomalyProfileTests`).
+(`AttackResolverTests`), both settings and each switch (`CombatAnomalyProfileTests`), and the wear: every
+material for a weapon and bare hands, the complexity and subtype steps, the hand cap, the packet rules and
+the resolver's wear of a hit, a fiery hit, a resisted fire, a self-hit and an object (`CombatWearRulesTests`).

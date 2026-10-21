@@ -157,6 +157,7 @@ public static class SessionEquipmentFacts
             CriticalMissChart = Defined<CriticalMissChart>(w.CriticalMissChart),
             MagicCriticalHitChance = w.MagicCriticalHitChance, MagicCriticalHitEffect = w.MagicCriticalHitEffect,
             MagicCriticalMissChance = w.MagicCriticalMissChance, MagicCriticalMissEffect = w.MagicCriticalMissEffect,
+            ArtSubtype = Arcanum.Data.Combat.CombatItemArt.Subtype(item.UseArtFragment),
         };
     }
 

@@ -206,6 +206,8 @@ public enum GameSessionFailure
     FateUnavailable, InvalidFateKind, FateRefused,
     // World-map areas (ARC-WORLD-056).
     InvalidArea,
+    // Combat wear (ARC-COMBAT-007).
+    InvalidWear,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
