@@ -216,6 +216,8 @@ public enum GameSessionFailure
     InvalidObject, ObjectUnavailable,
     // Pick locks (ARC-SKILLS-006).
     PickLockUnavailable, InvalidLockpick,
+    // Spell runs (ARC-MAGIC-010).
+    InvalidSpellRun, SpellRunRefused,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }

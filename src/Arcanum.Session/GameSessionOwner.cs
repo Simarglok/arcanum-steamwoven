@@ -1026,7 +1026,9 @@ public sealed partial class GameSessionOwner : IDisposable
         var locks = new List<SessionLockFiring>();
         var waits = new List<SessionWaitFiring>();
         var respawns = new List<SessionRespawnFiring>();
+        var spellRuns = new List<SessionSpellRunFiring>();
         _passRespawns = respawns;
+        _passSpellRuns = spellRuns;
         _passWorld = world;
         _passFirings = firings;
         _passCalls = calls;
@@ -1057,10 +1059,11 @@ public sealed partial class GameSessionOwner : IDisposable
             _passLocks = null;
             _passWaits = null;
             _passRespawns = null;
+            _passSpellRuns = null;
         }
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
-            Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly() };
+            Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly() };
     }
 
     /// <summary>

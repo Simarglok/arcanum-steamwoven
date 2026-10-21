@@ -204,6 +204,16 @@ STAGE_CODE = ((0x4532F0, 0x453410), (0x4507D0, 0x4508A0), (0x4502E0, 0x450340), 
 STAT_WILLPOWER_RUN, STAT_RACE_RUN = 6, 27
 RUN_SOURCE_H, RUN_PARENT_H, RUN_TARGET_H = (0x5EED0050, 0x42), (0x5EED0051, 0x42), (0x5EED0052, 0x42)
 
+# The scheduler (ARC-MAGIC-010): its per-pass globals, run and record fields and the calls it makes.
+CALLBACK_PENDING, CALLBACK_NOW, CALLBACK_END, APPLIED, CALLBACK_GUARD = 0x5E75CC, 0x5E75D4, 0x5E75D8, 0x5E75DC, 0x5E7630
+NETWORK_FLAGS = 0x62AC6C
+RUN_TRIGGERS_LEFT, RECORD_DURATION, RECORD_TRIGGER_COUNT, RECORD_END_COUNT = 0x150, 0x1C, 0x2C, 0xF8
+CALLBACK_ACTION, RUN_FREE, TARGET_REFRESH, MAINTAIN_BAR_ADD, ADD_TICK, FIND_PLAYER = 0x457030, 0x4558D0, 0x4601C0, 0x4604A0, 0x4548D0, 0x4A2B10
+CAP_CHECK = 0x4545E0
+RUN_LOOKUP, REMOVE_EVENTS, REMOVE_GUARD = 0x4557C0, 0x45BFF0, 0x5E7604
+SCHEDULE_CALLS = 6
+SCHEDULE_CODE = ((0x454790, 0x4548D0), (0x4503E0, 0x450420), (0x45A950, 0x45A970), (0x455250, 0x455350))
+
 
 @dataclass(frozen=True)
 class FunctionSpec:
@@ -246,6 +256,8 @@ FUNCTIONS: dict[int, FunctionSpec] = {spec.address: spec for spec in (
     FunctionSpec(0x455250, "spell-time", ((0x455250, 0x455350),), "spell-time"),
     FunctionSpec(0x452F20, "spell-stage", ((0x452F20, 0x4532F0),) + STAGE_CODE, "spell-stage"),
     FunctionSpec(0x4545E0, "spell-cap", ((0x4545E0, 0x454700), (0x450B90, 0x450BB0)), "spell-cap"),
+    FunctionSpec(0x453FA0, "spell-schedule", ((0x453FA0, 0x4545E0),) + SCHEDULE_CODE, "spell-schedule"),
+    FunctionSpec(0x457110, "spell-interrupt", ((0x457110, 0x4571E0),), "spell-interrupt"),
 )}
 
 
@@ -2111,6 +2123,168 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
                 progress(case_number)
         document.update(redrawn=redrawn, fields=["source", "parentType", "intelligence", "runs", *(f"run{i}{n}" for i in range(15) for n in ("Slot", "Spell", "Parent", "Flags")),
                                 *(f"spell{i}{n}" for i in range(6) for n in ("", "Technology", "Period")), "result", "rangeAsked"])
+    elif spec.model == "spell-schedule":
+        from oracle_emu import RunFailure, StubRejected, to_signed
+        run_address = emulator.write_heap(b"\0" * RUN_SLOT, 0)
+        table = emulator.write_heap(b"\0" * (SPELL_RECORD * SPELL_RECORDS), 0x1000)
+        for address, value in ((RUN_POINTER, run_address), (SPELL_TABLE_POINTER, table), (MAGIC_MESSAGES, 0x77), (NETWORK_FLAGS, 0)):
+            emulator.set_global(address, value)
+        for case_number in range(count):
+            spell = rng.randrange(SPELL_RECORDS)
+            action = rng.choice((0, 0, 1, 1, 2, 3, 4))
+            flags = 1 | 4 | (0x10 if rng.random() < 0.15 else 0)
+            source = rng.random() < 0.8
+            parent = rng.random() < 0.85
+            parent_type = rng.choice((15, 16, 16, 3)) if parent else -1
+            target = rng.random() < 0.7
+            target_type = rng.choice((15, 16, 8)) if target else -1
+            left = rng.choice((0, 0, 1, 2, 5, -1))
+            period = rng.choice((0, 0, 0, 1, 5))
+            seconds = rng.choice((0, 1, 10, 30))
+            stat = rng.choice((-1, -1, 4, 6))
+            level, per_point = rng.randint(0, 20), rng.randint(0, 5)
+            record_count = rng.choice((0, 0, 3))
+            technology = int(rng.random() < 0.2)
+            end_count, cb_count, ecb_count = (int(rng.random() < 0.4) for _ in range(3))
+            callback_now, callback_end, applied = int(rng.random() < 0.1), int(rng.random() < 0.5), int(rng.random() < 0.8)
+            pending, guard = int(rng.random() < 0.15), int(rng.random() < 0.5)
+            within, tick_added, bar_adds = int(rng.random() < 0.8), int(rng.random() < 0.9), int(rng.random() < 0.8)
+            parent_local, target_local = int(parent and rng.random() < 0.5), int(target and rng.random() < 0.3)
+            stat_value, mastery = rng.randint(0, 20), rng.choice((-1, spell // 5, 3))
+            aptitudes = (rng.randint(-100, 100), rng.randint(-100, 100))
+            emulator.write_heap(struct.pack("<iii", 0, spell, action), 0)
+            emulator.write_heap(struct.pack("<II", *(RUN_SOURCE_H if source else (0, 0))), RUN_SOURCE)
+            emulator.write_heap(struct.pack("<II", *(RUN_PARENT_H if parent else (0, 0))), RUN_PARENT)
+            emulator.write_heap(struct.pack("<i", parent_type), RUN_PARENT_TYPE)
+            emulator.write_heap(struct.pack("<II", *(RUN_TARGET_H if target else (0, 0))), RUN_TARGET_OBJECT)
+            emulator.write_heap(struct.pack("<i", target_type), RUN_TARGET_TYPE)
+            emulator.write_heap(struct.pack("<I", flags), RUN_FLAG_WORD)
+            emulator.write_heap(struct.pack("<i", left), RUN_TRIGGERS_LEFT)
+            record_offset = 0x1000 + SPELL_RECORD * spell
+            record = table + SPELL_RECORD * spell
+            emulator.write_heap(struct.pack("<iiiiiii", 2, period, seconds, stat, level, per_point, record_count), record_offset + RECORD_MAINTAIN)
+            emulator.write_heap(struct.pack("<I", FLAG_TECHNOLOGY if technology else 0), record_offset + RECORD_FLAGS)
+            emulator.write_heap(struct.pack("<iiiiii", end_count, 0, cb_count, 0, ecb_count, 0), record_offset + RECORD_END_COUNT)
+            emulator.set_global(RECORD_POINTER, record)
+            for address, value in ((CALLBACK_NOW, callback_now), (CALLBACK_END, callback_end), (APPLIED, applied), (CALLBACK_PENDING, pending),
+                                   (CALLBACK_GUARD, guard)):
+                emulator.set_global(address, value)
+            # The calls in order as (kind, value): 1 callback (action), 2 maintain bar, 3 free, 4 target refresh, 5 message (number),
+            # 6 process (the run's action then), 7 tick (game ms), 8 maintain-bar add.
+            calls: list[tuple[int, int]] = []
+
+            def handle_of(argument, first: int = 0) -> tuple[int, int]:
+                return (argument(first), argument(first + 1))
+
+            def local(argument) -> int:
+                handle = handle_of(argument)
+                return int(parent and handle == RUN_PARENT_H and parent_local or target and handle == RUN_TARGET_H and target_local)
+
+            def stat_get(argument) -> int:
+                handle = handle_of(argument)
+                if handle not in (RUN_PARENT_H, RUN_TARGET_H) or handle == (0, 0):
+                    raise StubRejected(f"stat of {handle}")
+                if argument(2) == STAT_APTITUDE:
+                    return aptitudes[0 if handle == RUN_PARENT_H else 1] & 0xFFFFFFFF
+                if argument(2) != stat:
+                    raise StubRejected(f"stat {argument(2)}")
+                return stat_value
+
+            def mastered(argument) -> int:
+                if handle_of(argument) != RUN_PARENT_H:
+                    raise StubRejected("mastery of another object")
+                return mastery & 0xFFFFFFFF
+
+            def add_tick(argument) -> int:
+                days, ms = struct.unpack("<II", emulator.peek(argument(1), 8))
+                if days:
+                    raise StubRejected("a tick of days")
+                calls.append((7, to_signed(ms)))
+                return tick_added
+
+            def process(argument) -> int:
+                calls.append((6, struct.unpack("<i", emulator.peek(argument(0) + 8, 4))[0]))
+                return 0
+
+            def message(argument) -> int:
+                calls.append((5, struct.unpack("<i", emulator.peek(argument(1), 4))[0]))
+                return 0
+            stubs = {CAP_CHECK: lambda a: within, ADD_TICK: add_tick, IS_PLAYER: local, MAINTAIN_BAR_ADD: lambda a: calls.append((8, 0)) or bar_adds,
+                     MAINTAIN_BAR: lambda a: calls.append((2, 0)) or 0, RUN_FREE: lambda a: calls.append((3, 0)) or 0,
+                     TARGET_REFRESH: lambda a: calls.append((4, 0)) or 0, PROCESS_RUN: process,
+                     CALLBACK_ACTION: lambda a: calls.append((1, a(1))) or 0, MESSAGE_TEXT: message, MESSAGE_SHOW: lambda a: 0,
+                     STAT_GETTER: stat_get, MASTERY: mastered, FIND_PLAYER: lambda a: 0xFFFFFFFF}
+            readable = (Range(record, record + SPELL_RECORD),
+                        *(Range(a, a + 4) for a in (RUN_POINTER, RECORD_POINTER, SPELL_TABLE_POINTER, MAGIC_MESSAGES, NETWORK_FLAGS,
+                                                    CALLBACK_NOW, CALLBACK_END, APPLIED)))
+            writable = (Range(run_address, run_address + RUN_SLOT), Range(CALLBACK_GUARD, CALLBACK_GUARD + 4), Range(CALLBACK_PENDING, CALLBACK_PENDING + 4))
+            emulator.call(spec.address, (), code=code, stubs=stubs, readable=readable, writable=writable)
+            action_after, = struct.unpack("<i", emulator.peek(run_address + 8, 4))
+            flags_after = emulator.read_u32(run_address + RUN_FLAG_WORD)
+            left_after, = struct.unpack("<i", emulator.peek(run_address + RUN_TRIGGERS_LEFT, 4))
+            if len(calls) > SCHEDULE_CALLS:
+                raise RunFailure("stub", f"unexpected calls {calls}")
+            padded = calls + [(0, 0)] * (SCHEDULE_CALLS - len(calls))
+            cases.append([spell, action, flags, int(source), parent_type, target_type, left, period, seconds, stat, level, per_point, record_count,
+                          technology, end_count, cb_count, ecb_count, callback_now, callback_end, applied, pending, guard, within, tick_added,
+                          bar_adds, parent_local, target_local, stat_value, mastery, *aptitudes, action_after, to_signed(flags_after), left_after,
+                          len(calls), *(v for call in padded for v in call)])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["spell", "action", "flags", "source", "parentType", "targetType", "left", "period", "seconds", "stat", "level",
+                                "perPoint", "recordCount", "technology", "endCount", "callbackCount", "endCallbackCount", "callbackNow",
+                                "callbackEnd", "applied", "pending", "guard", "withinCap", "tickAdded", "barAdds", "parentLocal", "targetLocal",
+                                "statValue", "mastery", "parentAptitude", "targetAptitude", "actionAfter", "flagsAfter", "leftAfter", "calls",
+                                *(f"call{i}{n}" for i in range(SCHEDULE_CALLS) for n in ("Kind", "Value"))])
+    elif spec.model == "spell-interrupt":
+        from oracle_emu import StubRejected
+        run_address = emulator.write_heap(b"\0" * RUN_SLOT, 0)
+        table = emulator.write_heap(b"\0" * (SPELL_RECORD * SPELL_RECORDS), 0x1000)
+        emulator.set_global(SPELL_TABLE_POINTER, table)
+        for case_number in range(count):
+            spell, run_id = rng.randrange(SPELL_RECORDS), rng.randrange(512)
+            action = rng.choice((0, 1, 1, 2, 3, 4, rng.randint(-3, 9)))
+            counts = (rng.choice((0, 0, 1, 2, -1)), rng.choice((0, 0, 1, 3, -1)))
+            found, busy, listed = int(rng.random() < 0.9), int(rng.random() < 0.2), rng.randint(0, 30)
+            emulator.write_heap(struct.pack("<iii", run_id, spell, action), 0)
+            emulator.write_heap(struct.pack("<iiii", counts[0], 0, counts[1], 0), 0x1000 + SPELL_RECORD * spell + RECORD_END_COUNT + 8)
+            emulator.set_global(REMOVE_GUARD, busy)
+            emulator.set_global(TARGET_LIST, listed)
+            seen: list[tuple[int, int]] = []
+
+            def lookup(argument) -> int:
+                if argument(0) != run_id:
+                    raise StubRejected(f"run {argument(0)}")
+                if not found:
+                    return 0
+                emulator.poke(argument(1), struct.pack("<I", run_address))
+                return 1
+
+            def remove(argument) -> int:
+                if argument(0) != 5 or argument(1) != 0x4570E0 or emulator.read_u32(0x5B0BA0) != run_id:
+                    raise StubRejected("a removal of other events")
+                seen.append((1, 0))
+                return 0
+
+            def process(argument) -> int:
+                if argument(0) != run_address:
+                    raise StubRejected("another run processed")
+                seen.append((2, struct.unpack("<i", emulator.peek(run_address + 8, 4))[0]))
+                return 0
+            readable = (Range(table + SPELL_RECORD * spell, table + SPELL_RECORD * (spell + 1)), Range(SPELL_TABLE_POINTER, SPELL_TABLE_POINTER + 4),
+                        Range(run_address, run_address + 8))
+            writable = (Range(run_address + 8, run_address + 12), Range(TARGET_LIST, TARGET_LIST + 4), Range(REMOVE_GUARD, REMOVE_GUARD + 4),
+                        Range(0x5B0BA0, 0x5B0BA4))
+            emulator.call(spec.address, (run_id,), code=code, stubs={RUN_LOOKUP: lookup, REMOVE_EVENTS: remove, PROCESS_RUN: process},
+                          readable=readable, writable=writable)
+            after, = struct.unpack("<i", emulator.peek(run_address + 8, 4))
+            removed = int(any(kind == 1 for kind, _ in seen))
+            processed = next((value for kind, value in seen if kind == 2), -9)
+            cases.append([action, *counts, found, busy, listed, after, emulator.read_u32(TARGET_LIST), removed, processed, emulator.read_u32(REMOVE_GUARD)])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["action", "callbackCount", "endCallbackCount", "found", "busy", "listed", "actionAfter", "listAfter", "removed",
+                                "processed", "busyAfter"])
     else:
         raise ValueError(f"unknown model {spec.model}")
     document["cases"] = cases

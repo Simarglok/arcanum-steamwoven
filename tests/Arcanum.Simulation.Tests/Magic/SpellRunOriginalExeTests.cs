@@ -118,6 +118,79 @@ public sealed class SpellRunOriginalExeTests
         return $"{(result.Proceeds ? 1 : 0)} {action} {result.Costs.Count} {pays[0]} {pays[1]} {result.Message ?? -1} {stacking.Asked} {stacking.Cancels} {bar} {(result.Ends ? 1 : 0)} {stacking.On}";
     }
 
+    /// <summary>ARC-MAGIC-010: the scheduler (<see cref="SpellRunScheduler.Decide"/>, 0x453FA0 with the tick helpers 0x454790 and
+    /// 0x4547F0, model <c>spell-schedule</c>): the run after it and its calls in order; Steamwoven differs only on MG19's inputs
+    /// (bit 0x10 at BEGIN, MAINTAIN or CALLBACK, which Steamwoven reads as unresistable only).</summary>
+    [TestMethod, TestCategory(Category)]
+    public void ScheduleMatchesTheOriginal()
+    {
+        var file = OracleFile.Load("453FA0", "spell-schedule", TestContext);
+        static bool Mg19(Row c) => (c["flags"] & 0x10) != 0 && c["callbackNow"] == 0 && c["action"] is 0 or 1 or 3;
+        Run(file, c => Schedule(c, MagicAnomalyProfile.Original), Expected,
+            ("steamwoven", "MG19", Mg19, c => Schedule(c, MagicAnomalyProfile.Steamwoven)),
+            new Mutant("the tail ignores the callback components", c => Schedule(c, MagicAnomalyProfile.Original, r => r with { ActionComponents = [0, 0, 0, 0, 0] })),
+            new("a sourceless run always ticks 8 times", c => Schedule(c, MagicAnomalyProfile.Original, r => r with { TriggerCount = 0 })),
+            new("no stat bonus", c => Schedule(c, MagicAnomalyProfile.Original, null, f => f with { StatValue = null })),
+            new("the cap is not checked", c => Schedule(c, MagicAnomalyProfile.Original, null, f => f with { WithinCap = true })),
+            new("nothing applied goes on", c => Schedule(c, MagicAnomalyProfile.Original, null, f => f with { Applied = true })));
+    }
+
+    /// <summary>ARC-MAGIC-010: the interrupt's action (<see cref="SpellRunSystem.InterruptAction"/>, 0x457110, model
+    /// <c>spell-interrupt</c>): a run that exists turns to it, its target list empties and it is processed with it.</summary>
+    [TestMethod, TestCategory(Category)]
+    public void InterruptMatchesTheOriginal()
+    {
+        var file = OracleFile.Load("457110", "spell-interrupt", TestContext);
+        string Interrupt(Row c, Func<SpellRunAction, SpellRunRecord, SpellRunAction> rule)
+        {
+            if (c["found"] == 0) return $"{c["action"]} {c["listed"]} -9";
+            var record = new SpellRunRecord { ActionComponents = [0, 0, 0, c["callbackCount"], c["endCallbackCount"]] };
+            var action = (int)rule((SpellRunAction)c["action"], record);
+            return $"{action} 0 {action}";
+        }
+        Run(file, c => Interrupt(c, SpellRunSystem.InterruptAction), c => $"{c["actionAfter"]} {c["listAfter"]} {c["processed"]}",
+            (NoSwitch, NoSwitch, _ => false, c => Interrupt(c, SpellRunSystem.InterruptAction)),
+            new Mutant("MAINTAIN picks END_CALLBACK", c => Interrupt(c, (a, r) => SpellRunSystem.InterruptAction(a == SpellRunAction.Maintain ? SpellRunAction.Begin : a, r))),
+            new("the callback components are ignored", c => Interrupt(c, (a, r) => SpellRunSystem.InterruptAction(a, r with { ActionComponents = [0, 0, 0, 0, r.Components(SpellRunAction.EndCallback)] }))));
+    }
+
+    private static string Expected(Row c) =>
+        $"{c["actionAfter"]} {c["flagsAfter"]} {c["leftAfter"]} " + string.Join(",", Enumerable.Range(0, c["calls"]).Select(i => $"{c[$"call{i}Kind"]}:{c[$"call{i}Value"]}"));
+
+    private static string Schedule(Row c, MagicAnomalyProfile profile, Func<SpellRunRecord, SpellRunRecord>? record = null,
+        Func<SpellScheduleFacts, SpellScheduleFacts>? facts = null)
+    {
+        // The input bit 0x10: the one bit of the original, unresistable at creation (the final END too in the Original setting).
+        var flags = (SpellRunFlags)(c["flags"] & ~0x10) | ((c["flags"] & 0x10) != 0 ? SpellRunRules.Unresistable(profile) : SpellRunFlags.None);
+        var parent = c["parentType"] == -1 ? null : new SpellRunObject("parent", c["parentType"]);
+        var target = c["targetType"] == -1 ? null : new SpellRunObject("target", c["targetType"]);
+        var run = new SpellRun(0, c["spell"], (SpellRunAction)c["action"], c["source"] != 0 ? new("source", 15) : null, parent, SpellLocation.None,
+            target, SpellLocation.None, null, flags, TriggerCount: c["left"]);
+        var theRecord = new SpellRunRecord(Technology: c["technology"] != 0, MaintainCost: 2, MaintainPeriod: c["period"],
+            Duration: new(c["seconds"], c["stat"], c["level"], c["perPoint"]), TriggerCount: c["recordCount"])
+        { ActionComponents = [0, 0, c["endCount"], c["callbackCount"], c["endCallbackCount"]] };
+        if (record is not null) theRecord = record(theRecord);
+        var holder = SpellRunRules.DurationStatHolder(run);
+        var theFacts = new SpellScheduleFacts(c["callbackNow"] != 0, c["callbackEnd"] != 0, c["guard"] != 0, c["applied"] != 0, c["pending"] != 0,
+            c["withinCap"] != 0, c["tickAdded"] != 0, c["barAdds"] != 0, c["parentLocal"] != 0, c["targetLocal"] != 0,
+            c["stat"] > -1 && holder is not null ? c["statValue"] : null,
+            new(parent?.IsCritter == true, c["mastery"], target?.IsCritter == true, c["parentAptitude"], c["targetAptitude"]));
+        if (facts is not null) theFacts = facts(theFacts);
+        var outcome = SpellRunScheduler.Decide(run, theRecord, theFacts, profile);
+        // The original's flag word: the one bit 0x10 for either flag.
+        var after = outcome.Run.Flags;
+        var word = (int)(after & ~(SpellRunFlags.Unresistable | SpellRunFlags.FinalEnd))
+            | ((after & (SpellRunFlags.Unresistable | SpellRunFlags.FinalEnd)) != 0 ? 0x10 : 0);
+        static int Kind(SpellScheduleEffect effect) => effect switch
+        {
+            SpellScheduleEffect.CallbackAction => 1, SpellScheduleEffect.MaintainBarRefresh => 2, SpellScheduleEffect.Free => 3,
+            SpellScheduleEffect.TargetRefresh => 4, SpellScheduleEffect.Message => 5, SpellScheduleEffect.Process => 6,
+            SpellScheduleEffect.Tick => 7, _ => 8,
+        };
+        return $"{(int)outcome.Run.Action} {word} {outcome.Run.TriggerCount} " +
+            string.Join(",", outcome.Calls.Select(call => $"{Kind(call.Effect)}:{unchecked((int)call.Value)}"));
+    }
+
     [TestMethod, TestCategory(Category)]
     public void CapMatchesTheOriginal()
     {

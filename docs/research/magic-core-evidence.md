@@ -404,7 +404,14 @@ Read in the executable by two readers for the run's creation, stage, times and c
 precisions: a timed run makes `DurationTriggerCount:` + 1 periods before its END; the cap counts runs that were processed at
 least once and refuses a parent that is no critter; MAINTAIN checks and charges technology records too, and charges the
 surcharged maintenance even for a free run (MG29); a full run table quits the game (MG28). The implementation is the
-[spell run rules](../world/spell-run-rules.md); the scheduler's order and the interrupts below are MT9a-2's.
+[spell run rules](../world/spell-run-rules.md). The scheduler and the interrupts below were read the same way by ARC-MAGIC-010
+([ledger "Spell run processing"](original-verification-ledger.md#spell-run-processing-arc-magic-010), RP1–RP14; the scheduler
+and the interrupt's action F3) and stand at F2/F3, with these precisions: "nothing applied" is decided per pass (an action
+without components or with an empty target list counts as applied; every target resisted or filtered does not); an unresistable
+run ends after BEGIN because of the shared bit (MG19); a sourceless maintained run ends inside its last counted tick; a callback
+whose animation cannot start runs once and frees the run; the interrupt picks END over END_CALLBACK from MAINTAIN; a refused
+BEGIN still runs its END components (through its interrupt event); detaching a source marks the run's final END unless it is
+being processed; three bugs are recorded for the owner (MG30–MG32). The implementation is the run system of the same contract.
 
 After each action the scheduler decides what comes next
 (schedule (0x453FA0), timers (0x454790, 0x4547F0, 0x4548D0), time (0x455250)):
