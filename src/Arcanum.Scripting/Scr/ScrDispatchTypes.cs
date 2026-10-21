@@ -294,10 +294,6 @@ public readonly record struct ScrReadingRequest(ScrReadingKind Kind, int Number,
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
-/// <summary>
-/// Every change of one dispatch, for the caller to apply together: the slot writeback (or the trap object to destroy
-/// instead), the global flags in ascending order and the new story state. Empty when nothing changed.
-/// </summary>
 /// <summary>ARC-SCRIPT-019: which game state a state request changes (actions 16, 49, 50, 72, 73).</summary>
 public enum ScrStateKind { QuestState, KnownArea, Rumor, AddReputation, RemoveReputation }
 
@@ -309,6 +305,10 @@ public enum ScrStateKind { QuestState, KnownArea, Rumor, AddReputation, RemoveRe
 /// </summary>
 public sealed record ScrStateRequest(ScrStateKind Kind, ScrObjectRef Object, int Number, int Value = 0, ScrObjectRef? Giver = null);
 
+/// <summary>
+/// Every change of one dispatch, for the caller to apply together: the slot writeback (or the trap object to destroy
+/// instead), the global flags in ascending order and the new story state. Empty when nothing changed.
+/// </summary>
 public sealed class ScrEffects
 {
     internal ScrEffects(ScrWriteback? writeback, ScrObjectRef? destroyTrapObject, IReadOnlyList<ScrFlagWrite> globalFlags, int? storyState, ScrDialogStart? dialog = null,
@@ -354,7 +354,7 @@ public sealed class ScrEffects
     /// <summary>ARC-SCRIPT-019: the quest, area, rumor and reputation requests in action order.</summary>
     public IReadOnlyList<ScrStateRequest> States { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
-        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0;
+        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went

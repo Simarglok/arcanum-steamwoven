@@ -12,24 +12,28 @@ namespace Arcanum.TerrainViewer.Core;
 /// </summary>
 public static class AreaScriptStory
 {
-    public static bool Apply(GameSessionOwner session, ScrEffects effects, Func<ScrObjectRef, bool> isPc)
+    /// <param name="award">Takes the experience a completed quest gave (the host passes its follower step and level-up messages on,
+    /// as for a dialog's quest command).</param>
+    public static bool Apply(GameSessionOwner session, ScrEffects effects, Func<ScrObjectRef, bool> isPc, Action<SessionExperienceAward> award)
     {
         ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(effects); ArgumentNullException.ThrowIfNull(isPc);
+        ArgumentNullException.ThrowIfNull(award);
         if (effects.StoryState is { } story && session.RaiseStoryState(session.Version, story).Disposition == GameSessionDisposition.Rejected) return false;
         foreach (var request in effects.States)
         {
             if (!isPc(request.Object)) continue;
+            SessionExperienceAward? gained = null;
             GameSessionMutationResult? result = request.Kind switch
             {
-                ScrStateKind.QuestState => request.Value is >= 0 and <= (int)SessionQuestState.Botched
-                    ? session.SetQuestState(session.Version, request.Number, (SessionQuestState)request.Value)
-                    : null,
+                // A state outside 0..6 is refused by the session (the original stores it unchecked), and stops the later steps.
+                ScrStateKind.QuestState => session.SetQuestState(session.Version, request.Number, (SessionQuestState)request.Value, out gained),
                 ScrStateKind.KnownArea => session.DiscoverArea(session.Version, request.Number),
                 ScrStateKind.Rumor => session.LearnRumor(session.Version, request.Number),
                 ScrStateKind.AddReputation => session.AddReputation(session.Version, request.Number),
                 ScrStateKind.RemoveReputation => session.RemoveReputation(session.Version, request.Number),
                 _ => null,
             };
+            if (gained is not null) award(gained);
             if (result is not { Disposition: not GameSessionDisposition.Rejected }) return false;
         }
         return true;

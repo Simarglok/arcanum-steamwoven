@@ -46,7 +46,7 @@ public sealed class ScrStoryTests
     public void An_absent_object_asks_for_nothing_and_the_run_goes_on()
     {
         var run = Use(Program(Do(C(16, (Extra, 0), N(1016), N(2))), Do(C(49, N(44), (Extra, 0))), Do(C(50, N(2107), (Extra, 0))),
-            Do(C(72, (Extra, 0), N(1005))), Do(C(100, N(9))), Do(C(1))));
+            Do(C(72, (Extra, 0), N(1005))), Do(C(73, (Extra, 0), N(1005))), Do(C(100, N(9))), Do(C(1))));
         Assert.AreEqual(0, run.Effects.States.Count);
         Assert.AreEqual(9, run.Effects.GlobalFlags.Single().Index);
     }
@@ -88,5 +88,17 @@ public sealed class ScrStoryTests
         public bool HasReputation(ScrObjectRef obj, int reputation) => false;
         public int? ObjectType(ScrObjectRef obj) => null;
         public int SkillLevel(ScrObjectRef obj, int skill) => 0;
+    }
+
+    [TestMethod]
+    public void A_called_script_s_story_requests_and_raise_join_the_caller_s()
+    {
+        var host = new TypeHostForStory(new FakeHost());
+        host.Inner.Attach(Chest, ScrPoint.Use, 2793, Program(Do(C(7, N(640), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(50, N(1100), (Triggerer, 0))), Do(C(1))));
+        host.Inner.Scripts[640] = ScrScriptLookup.Of(Program(Do(C(ScrCatalogue.Action.SetStoryState, N(8))), Do(C(49, N(44), (Triggerer, 0))), Do(C(1))));
+        var run = ScrDispatcher.RunObject(new(ScrPoint.Use, Chest, Pc, null), host, new() { Admission = ScrAdmissionSet.S13 });
+        Assert.AreEqual(8, run.Effects.StoryState);
+        CollectionAssert.AreEqual(new[] { ScrStateKind.KnownArea, ScrStateKind.Rumor }, run.Effects.States.Select(s => s.Kind).ToArray());
+        Assert.IsFalse(run.Effects.IsEmpty);
     }
 }

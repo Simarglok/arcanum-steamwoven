@@ -37,7 +37,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
     public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-story", ScrAdmissionSet.S3.Conditions,
         ScrAdmissionSet.S3.Actions
             .Concat([ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
-                ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
+                ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
                 ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
                 ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]),
         ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
@@ -190,7 +190,6 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
         return read.Status == GlobalFlagReadStatus.Known && read.Value is { } value ? value : throw new InvalidOperationException("AREA_SCRIPT_FLAG_UNREADABLE");
     }
 
-    /// <summary>Never asked: <see cref="Admission"/> leaves out the story-state actions.</summary>
     /// <summary>ARC-SCRIPT-019: the session's story-state number.</summary>
     public int StoryState() => _session.QueryStoryState();
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
@@ -230,7 +229,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
             if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange)) return false;
         }
         // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
-        if (!AreaScriptStory.Apply(_session, effects, IsPc)) return false;
+        if (!AreaScriptStory.Apply(_session, effects, IsPc, _state.AddAward)) return false;
         // ARC-SCRIPT-040: scheme pairs are the session's request, in action order; one the session drops (sound locked, as the
         // original drops it) or refuses (a negative id, a project guard) changes nothing and stops nothing. Effect sounds wait
         // for the viewer. Like the flags, they stay applied when a later step is refused (the original applies as it goes).

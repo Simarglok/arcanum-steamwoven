@@ -433,8 +433,10 @@ remove reputation (73), as the original runs them (ledger [SS1–SS5](../researc
 - **Hosts** (`AreaScriptStory.Apply`): the viewer's use, tile and sector set and its dialog set take them and apply each
   request for the PC through the session (`SetQuestState`, `DiscoverArea`, `LearnRumor`, `AddReputation`,
   `RemoveReputation`); a request for any other object is ignored, as the original's functions store nothing for it. A request
-  the session refuses (a number outside its ranges, where the original stores it unchecked) stops the later ones. Not
-  applied: the quest giver's reaction change (to 41 at state 2, 10 more at state 4) and the alignment and sound of a
+  the session refuses (a number outside its ranges, a quest state outside 0..6, where the original stores it unchecked)
+  stops the later ones. A completed quest's experience award goes on as a dialog command's does: the dialog host queues it
+  with its talk's awards, the use host hands it to the viewer, which levels the followers and shows the level-up messages.
+  Not applied: the quest giver's reaction change (to 41 at state 2, 10 more at state 4) and the alignment and sound of a
   completion (owned by the reaction and quest domains).
 - **Registry**: `QueryStoryState` marks 0x445090 (full) and `RaiseStoryState` 0x4450A0 (partial: single player).
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, a new game's state): map mode's tile scripts that run grow

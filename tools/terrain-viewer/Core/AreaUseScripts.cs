@@ -75,6 +75,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     private readonly IReadOnlyCollection<AreaInventoryMap> _maps;
     private readonly ScriptContent? _content;
     private readonly int _shownMap;
+    private readonly List<SessionExperienceAward> _awards = [];
+
+    /// <summary>ARC-SCRIPT-019: the experience awards the runs' completed quests gave since the last call, in order; the viewer passes
+    /// their follower steps and level-up messages on.</summary>
+    public IReadOnlyList<SessionExperienceAward> TakeAwards()
+    {
+        var awards = _awards.ToArray();
+        _awards.Clear();
+        return awards;
+    }
     private readonly Dictionary<string, AreaObjectRecord> _shown = new(StringComparer.Ordinal);
     private (string Entity, AreaObjectRecord Row)? _clicked;
 
@@ -151,7 +161,6 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         return read.Status == GlobalFlagReadStatus.Known && read.Value is { } value ? value : throw new InvalidOperationException("AREA_USE_SCRIPT_FLAG_UNREADABLE");
     }
 
-    /// <summary>Never asked: <see cref="Admission"/> leaves out the story-state actions.</summary>
     /// <summary>ARC-SCRIPT-019: the session's story-state number.</summary>
     public int StoryState() => _session.QueryStoryState();
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
@@ -311,7 +320,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
 
     private bool Apply(ScrEffects effects, Func<ScrWriteback, bool> writeSlot)
     {
-        if (effects.DestroyTrapObject is not null || effects.SkillUses.Count > 0) return false;
+        if (effects.DestroyTrapObject is not null) return false;
         foreach (var write in effects.GlobalFlags)
         {
             var flags = _session.Flags;
@@ -319,7 +328,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
             if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange)) return false;
         }
         // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
-        if (!AreaScriptStory.Apply(_session, effects, IsPc)) return false;
+        if (!AreaScriptStory.Apply(_session, effects, IsPc, _awards.Add)) return false;
         // As for a dialog script (AreaScriptHost.Apply): scheme pairs go to the session, applied steps stay applied when a later
         // one is refused (the original applies as it goes); effect sounds are not played by a use click.
         foreach (var sound in effects.Sounds)
