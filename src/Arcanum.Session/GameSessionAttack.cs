@@ -302,6 +302,9 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? TargetWorn { get; init; }
     /// <summary>The target's cell now, where a critical drops its items (ARC-COMBAT-009); null: its drops are not applied.</summary>
     public Arcanum.Simulation.Movement.CellCoord? TargetCell { get; init; }
+    /// <summary>The actor's map as the original's drop reads it (ARC-COMBAT-010): with it a drop draws its distance and directions and
+    /// lands where the original's placement puts it; null: on the holder's cell, without draws.</summary>
+    public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
 }
 
 /// <summary>
@@ -488,7 +491,7 @@ public sealed partial class GameSessionOwner
         var criticals = new List<SessionCriticalStep>();
         if (stepFailure == GameSessionFailure.None)
             (wear, stepFailure) = CriticalAndWearSteps(resolution, outcome, heroSide, targetSide, recipient == DamageRecipient.Target ? target : null,
-                attack.TargetCell, criticals);
+                attack.TargetCell, attack.DropMap, criticals);
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, outcome, hitAward, killAward, stepFailure, Version)
         {
             Wear = wear,
@@ -505,14 +508,14 @@ public sealed partial class GameSessionOwner
     /// </summary>
     private (SessionAttackWearResult? Wear, GameSessionFailure StepFailure) CriticalAndWearSteps(AttackResolution resolution, LifeOutcome life,
         SessionWearSide attacker, SessionWearSide target, SessionCritterCombat? npc, Arcanum.Simulation.Movement.CellCoord? recipientCell,
-        List<SessionCriticalStep> criticals)
+        Arcanum.Simulation.Items.IDropMap? dropMap, List<SessionCriticalStep> criticals)
     {
         var damage = resolution.Damage!;
         var whose = damage.Recipient;
         var recipient = whose == DamageRecipient.Target ? target : attacker;
         var failure = GameSessionFailure.None;
         if (life.Events.HasFlag(LifeEvents.ArmHitDropsItems))
-            recipient = ArmHitDrops(whose, recipient, npc, recipientCell, criticals, ref failure);
+            recipient = ArmHitDrops(whose, recipient, npc, recipientCell, dropMap, criticals, ref failure);
         if (failure != GameSessionFailure.None) return (null, failure);
         SessionAttackWearResult? wear = null;
         if (resolution.Wear is { Any: true })
@@ -527,10 +530,10 @@ public sealed partial class GameSessionOwner
             if (failure != GameSessionFailure.None) return (wear, failure);
         }
         if (damage.HitEffects.HasFlag(CriticalHitEffects.DropHelmet))
-            recipient = CriticalDrop(SessionCriticalStepKind.DropHelmet, whose, recipient, EquipmentSlot.Helmet, recipientCell, criticals, ref failure);
+            recipient = CriticalDrop(SessionCriticalStepKind.DropHelmet, whose, recipient, EquipmentSlot.Helmet, recipientCell, dropMap, criticals, ref failure);
         AmmunitionSteps(damage, recipient, criticals);
         if (damage.HitEffects.HasFlag(CriticalHitEffects.DropWeapon))
-            CriticalDrop(SessionCriticalStepKind.DropWeapon, whose, recipient, EquipmentSlot.Weapon, recipientCell, criticals, ref failure);
+            CriticalDrop(SessionCriticalStepKind.DropWeapon, whose, recipient, EquipmentSlot.Weapon, recipientCell, dropMap, criticals, ref failure);
         return (wear, failure);
     }
 

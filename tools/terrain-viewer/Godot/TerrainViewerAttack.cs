@@ -171,7 +171,7 @@ public partial class TerrainViewerApp
     /// when the press belongs to combat.</summary>
     private bool TryAreaObjectAttack(Vector2 screen)
     {
-        if (!AttackMapActive || !HeroInCombatMode || AreaObjectAtScreen(screen) is not { } key || ObjectTargets()?.Target(_areaSession!, key) is not { } target
+        if (!AttackMapActive || !HeroInCombatMode || AreaObjectAtScreen(screen) is not { } key || ObjectTargets()?.Target(_areaSession!, key, AreaTrapped) is not { } target
             || target.Kind is Arcanum.Simulation.Combat.DamageableObjectKind.Item or Arcanum.Simulation.Combat.DamageableObjectKind.Trap)
             return false;
         if (_areaSession!.QueryHeroLife() is not { Status.IsActive: true })
@@ -200,7 +200,13 @@ public partial class TerrainViewerApp
     private void RunObjectAttackHit(AttackGoal goal, AreaObjectAttackTarget target, int distance)
     {
         var owner = _areaSession!;
-        var result = owner.AttackObject(owner.Version, target.Attack(distance, goal.Aim, AreaCombatHost.HeroWorn(owner, _areaKitDurability)));
+        // ARC-COMBAT-011: the object as it is now, its use script's trap included (a use may have changed the script).
+        if (ObjectTargets()?.Target(owner, goal.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
+        PlaceHeroForDrop();
+        var result = owner.AttackObject(owner.Version, target.Attack(distance, goal.Aim, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with
+        {
+            DropMap = AreaDropMapNow(),
+        });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
         goal.Broke = result.Object?.Broken == true || result.Item?.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted;
@@ -213,6 +219,37 @@ public partial class TerrainViewerApp
         SyncAreaInventory();
         RefreshAreaStatus();
     }
+
+    /// <summary>ARC-COMBAT-010: the session's actor placement follows the walking actor only at a save or a map change; a drop of the
+    /// hero's item starts from it, so the attack places it on the committed cell first (as F7 does).</summary>
+    private void PlaceHeroForDrop()
+    {
+        if (_worldActor.Session is not AreaGridSession grid || _areaSession is not { } owner) return;
+        var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
+        var placed = owner.PlaceActor(owner.Version, new(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing));
+        if (placed.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-COMBAT-010 hero-placement refused failure={placed.Failure}");
+    }
+
+    /// <summary>ARC-COMBAT-010: the shown map as a drop reads it now: the step evidence with the doors' runtime passage, the map's
+    /// rows less what the session destroyed or switched off, the dead as the session and the map data know them, and the hero's and
+    /// the companions' live cells. Null without the actor.</summary>
+    private AreaDropMap? AreaDropMapNow()
+    {
+        if (_worldActor.Session is not AreaGridSession session || _readyArea is not { } area || _areaSession is not { } owner) return null;
+        var occupancy = _areaCompanions?.OccupancyForPc() ?? AreaOccupancy.None;
+        static CellCoord World(AreaGridSession s, CellCoord chart) { var w = s.Chart.ToWorld(chart); return new(checked((int)w.X), checked((int)w.Y)); }
+        var live = occupancy.Occupied.Select(c => World(session, c)).Append(World(session, session.State.CommittedCell)).ToHashSet();
+        var gone = ObjectTargets()?.Gone(owner) ?? new HashSet<AreaObjectKey>();
+        var map = CurrentAreaMap;
+        return new(session.Snapshot, area.Snapshot.Objects, occupancy.Moved, live, row => gone.Contains(row.Key),
+            row => _combatHost?.Target(owner, map, row.Key) is { } target &&
+                (target.Dead || target.Build.Combat is { } combat && owner.QueryLife(combat.Target).View?.Status.IsDead == true),
+            session.Portals);
+    }
+
+    /// <summary>ARC-COMBAT-011: whether a row's use script is a trap (OD6), through the shown map's use-script host; false without
+    /// script content (the status line then cannot say that a trap would fire).</summary>
+    private bool AreaTrapped(AreaObjectRecord row) => _readyArea is { } area && UseScriptHost(area.Snapshot)?.IsTrap(row) == true;
 
     // ARC-COMBAT-009: the original keeps a critter stunned while its stun animation (goal 57) runs; the viewer plays none, so it ends
     // the stun at once, as the session's contract has it for an animation that could not start (the duration is NOT READY).
@@ -345,6 +382,7 @@ public partial class TerrainViewerApp
             return;
         }
         if (goal.Object is { } struck) { RunObjectAttackHit(goal, struck, (int)distance); return; }
+        PlaceHeroForDrop();
         // ARC-COMBAT-008: the two sides' worn items with their durability values, so the attack wears them (ARC-COMBAT-007).
         var result = owner.AttackCritter(owner.Version, new(goal.Combat!)
         {
@@ -353,6 +391,8 @@ public partial class TerrainViewerApp
             TargetWorn = _combatHost!.WornItems(owner, CurrentAreaMap, goal.Entity),
             // ARC-COMBAT-009: a critical drops the NPC's items where it stands (its map data's cell; NPCs do not move here).
             TargetCell = goal.Row.WorldX is { } x && goal.Row.WorldY is { } y ? new(checked((int)x), checked((int)y)) : null,
+            // ARC-COMBAT-010: the original's draws choose the cell a dropped item lands on, over the shown map.
+            DropMap = AreaDropMapNow(),
         });
         goal.Attacks++;
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
@@ -378,8 +418,8 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-WORLD-036: passes an award's follower step to the hero's followers and the NPCs waiting for it on this map, with their
-    /// stored fields and effects (<see cref="AreaAdvancement.LevelFollowers"/>).
+    /// ARC-WORLD-036: passes an award's follower step to the hero's followers and, by the rule setting (ARC-WORLD-047, owner decision
+    /// D7), to its waiting followers, with their stored fields and effects (<see cref="AreaAdvancement.LevelFollowers"/>).
     /// </summary>
     private void SyncAreaAwards()
     {
@@ -394,16 +434,39 @@ public partial class TerrainViewerApp
     {
         // ARC-UI-046: the hero's level-up messages come first, as the source posts them before passing the step on.
         ShowLevelUps(award);
-        if (award?.Followers is null || _areaSession is null || _combatHost is null || _areaEffectRules is not { } effects) return;
-        var map = CurrentAreaMap;
-        // Fields come from the NPC's home map; a waiting NPC counts only while it stands on this map.
+        if (award?.Followers is null || _areaSession is null || _combatHost is null || _areaEffectRules is null) return;
         var session = _areaSession;
-        var raised = AreaAdvancement.LevelFollowers(session, award, entity =>
-            _combatHost.HomeMap(entity) is { } home && AreaAdvancement.Nearby(session, entity, home, map) &&
-            _combatHost.Fields(home, entity) is { } fields ? AreaAdvancement.Npc(entity, fields, effects) : null);
-        foreach (var follower in raised)
-            GD.Print($"ARC-WORLD-036 follower-level entity={follower.Record!.Entity} level={follower.Level!.Value.Level}"
-                + $" points={follower.Level.Value.PointsGained} purchases={follower.Scheme?.Purchases.Length ?? 0} completed={follower.Scheme?.Completed}");
+        var report = AreaAdvancement.LevelFollowers(session, award, AreaFollowerSheet, AreaWaitingPlace);
+        foreach (var follower in report.Raised)
+            GD.Print($"ARC-WORLD-036 follower-level entity={follower.Record!.Entity} level={follower.Record.Sheet.Level}"
+                + $" points={follower.Level?.PointsGained} purchases={follower.Scheme?.Purchases.Length ?? 0} completed={follower.Scheme?.Completed}");
+        foreach (var entity in report.Deferred) GD.Print($"ARC-WORLD-047 level step kept for entity={entity} (sheet not readable here)");
+        foreach (var missed in report.MissedApplied)
+            GD.Print($"ARC-WORLD-047 missed level steps applied entity={missed.Record!.Entity} level={missed.Record.Sheet.Level}");
+    }
+
+    /// <summary>ARC-WORLD-047: a waiting follower's missed level steps, applied when its map data can be read (companions bind).</summary>
+    private void ApplyMissedAreaLevels()
+    {
+        if (_areaSession is not { } session || _combatHost is null || _areaEffectRules is null) return;
+        foreach (var applied in AreaAdvancement.ApplyMissed(session, AreaFollowerSheet))
+            GD.Print($"ARC-WORLD-047 missed level steps applied entity={applied.Record!.Entity} level={applied.Record.Sheet.Level}");
+    }
+
+    // An NPC's loaded sheet and effects from the map whose objects hold it, or null when no covered map does.
+    private (SessionNpcAdvancement Loaded, Arcanum.Simulation.Character.AdvancementModifiers Modifiers)? AreaFollowerSheet(string entity) =>
+        _combatHost is { } host && _areaEffectRules is { } effects && host.HomeMap(entity) is { } home && host.Fields(home, entity) is { } fields
+            ? AreaAdvancement.Npc(entity, fields, effects) : null;
+
+    // Where a waiting follower stands: dead by the session (its life record or any map's seed, wherever it waits); among the loaded
+    // objects when it is a companion drawn on the current map, with its tile offset from the PC.
+    private AreaWaitingPlace AreaWaitingPlace(string entity)
+    {
+        var dead = _areaSession?.QueryNpcDead(entity) == true;
+        if (_areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is not { } companion || _worldActor.Session is not AreaGridSession pc)
+            return new(dead, null);
+        var (at, from) = (companion.Grid.State.CommittedCell, pc.State.CommittedCell);
+        return new(dead, (at.X - from.X, at.Y - from.Y));
     }
 
     /// <summary>ARC-SCRIPT-016: an NPC's advancement as its home map stores it, for a script's scheme change; null without the combat
