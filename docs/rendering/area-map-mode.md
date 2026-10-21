@@ -375,7 +375,8 @@ With a session, F7 and F8 work on any map as on the exterior
 ([quick save](terrain-viewer.md#quick-save-and-quick-load-arc-world-011): keys on
 release, the same guards, atomic slot, every check before anything changes),
 with their own slot, `user://saves/map/quicksave.json`, so the Crash Site slot
-is never touched. A save records the actor on the map's runtime number. While
+is never touched (an automated run keeps both slots in its own folder,
+[ARC-DEV-032](terrain-viewer.md#automated-runs-and-the-players-settings-arc-dev-032)). A save records the actor on the map's runtime number. While
 another map loads there is no session, so F7/F8 do nothing; a load drops a
 queued transfer.
 
