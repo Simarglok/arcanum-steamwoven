@@ -40,12 +40,12 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
 
     /// <summary>ARC-SKILLS-009: <see cref="Admission"/> plus get skill (47) of <see cref="ScrAdmissionSet.S11"/>, the set a run uses while
     /// the session has a hero (the PC's levels are the hero's; without one a script that reads a skill is refused, not run on a made-up
-    /// level). Use item with skill (79) stays out: no live script of the installed data uses it.</summary>
+    /// level). Use item with skill (79) stays out: no live script of the installed data uses it (census ARC-RES-045: 2 lines, none live).</summary>
     public static ScrAdmissionSet SkillAdmission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-skill", Admission.Conditions,
         Admission.Actions.Append(ScrCatalogue.Action.GetSkill), Admission.ValueKinds, Admission.FocusKinds);
 
     /// <summary>The set a run of this host uses: <see cref="SkillAdmission"/> with a session hero, else <see cref="Admission"/>.</summary>
-    public ScrAdmissionSet RunAdmission => _session.QueryHeroSkills() is null ? Admission : SkillAdmission;
+    public ScrAdmissionSet RunAdmission => _session.QueryHero() is null ? Admission : SkillAdmission;
 
     private readonly List<ScrSound> _sounds = [];
     private readonly List<AreaSchematicScriptOpen> _schematics = [];
@@ -198,7 +198,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
     public bool IsPc(ScrObjectRef critter) => critter == Pc;
 
     /// <summary>ARC-SKILLS-009 (SX1, SX2): the PC's effective level from the session hero (0 without one; the run's set then has no get
-    /// skill); an NPC's from the sheet the session saved for it, else its map data with its effects; 0 for any other object.</summary>
+    /// skill); an NPC of this host's map whose map data the viewer reads: from the sheet the session saved for it, else that map data,
+    /// with the map data's effects; 0 for any other object (an NPC whose map data is not read, a saved sheet included, or an object that
+    /// names another map, as a deferred call's role can).</summary>
     public int SkillLevel(ScrObjectRef obj, int skill)
     {
         if (skill is < 0 or >= SkillRules.BasicCount + SkillRules.TechCount) return 0;

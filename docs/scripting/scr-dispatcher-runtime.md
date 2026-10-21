@@ -283,10 +283,13 @@ conversation is not run).
   as the invocation modifier (counted twice, SC12 and the A2 switch) and the skill's handler (SX4).
 - **The AREA viewer** admits get skill in its dialog set while the session has a hero (`AreaScriptHost.SkillAdmission`,
   "S3-area-sound-calls-scheme-schematic-reading-skill", through `RunAdmission`; without a hero a script that reads a skill is refused,
-  not run on a made-up level). The PC's level is the session hero's; an NPC's comes from the sheet the session saved for it (a levelled
-  follower) or else its map data with its effects (`GameSessionOwner.QueryNpcSkills(SessionNpcAdvancement, AdvancementModifiers)`); any
-  other object is 0. Use item with skill is not admitted there: no live installed script uses it, and `Apply` refuses a request.
-- Installed scripts (opt-in census): 17 use action 47, 2 action 79 (none live), 1 action 115; S11 admits 683 scripts whole, 2 more
+  not run on a made-up level). The PC's level is the session hero's. An NPC of the host's map whose map data the viewer reads (the
+  combat host's fields, with `--hero`) takes the sheet the session saved for it (a levelled follower) or else that map data, with the map
+  data's effects (`GameSessionOwner.QueryNpcSkills(SessionNpcAdvancement, AdvancementModifiers)`); any other object is 0, including an
+  NPC whose map data is not read (even with a saved sheet) and an object naming another map, as a deferred call's role can. Use item with
+  skill is not admitted there: the [census](../research/scr-census.md) counts its 2 installed lines, none live, and `Apply` refuses a
+  request.
+- Installed scripts (opt-in census test): 17 use action 47, 2 action 79 (none live by the ARC-RES-045 census), 1 action 115; S11 admits 683 scripts whole, 2 more
   than S10. Action 115 (try to steal 100 coins, SX5) belongs to pick pocket (task S15) and is not admitted.
 
 ## Reading actions (ARC-UI-049, set S10)

@@ -76,6 +76,27 @@ public sealed class ScrSkillTests
         Assert.IsTrue(ScrAdmission.Admit(Program(Do(C(ScrCatalogue.Action.GetSkill, (Local, 3), (Triggerer, 0), (Local, 0)))), ScrAdmissionSet.S11).IsAdmitted,
             "a computed skill number is admitted");
         Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(Program(Do(GetSkill(3, Triggerer, 0))), ScrAdmissionSet.S10).Refusal!.Code);
+        var counter4 = ScrAdmission.Admit(Program(Do(GetSkill(3, Triggerer, 4))), ScrAdmissionSet.S11);
+        Assert.AreEqual((ScrRefusalCode.IndexOutOfRange, 2), (counter4.Refusal!.Code, counter4.Refusal.Slot), "the store's index is checked as any other");
+    }
+
+    [TestMethod]
+    public void Get_skill_stores_into_a_local_variable_and_a_global_flag_as_any_store_does()
+    {
+        var host = new SkillHost(new FakeHost());
+        host.Levels[(Pc, 1)] = 3;
+        host.Inner.Attach(Npc, Use, 2023, Program(
+            Do(C(ScrCatalogue.Action.GetSkill, N(1), (Triggerer, 0), (Local, 0))),
+            // The level read back from the local into counter 0.
+            Do(C(ScrCatalogue.Action.Assign, (Counter, 0), (Local, 0))),
+            Do(C(ScrCatalogue.Action.GetSkill, N(1), (Triggerer, 0), (GlobalFlag, 64))),
+            Do(C(ScrCatalogue.Action.ReturnSkipDefault))));
+        var steamwoven = ScrDispatcher.RunObject(new(Use, Npc, Pc, null), host, S11);
+        Assert.AreEqual(3u, steamwoven.Effects.Writeback!.Slot.Counters);
+        CollectionAssert.AreEqual(new[] { new ScrFlagWrite(64, true) }, steamwoven.Effects.GlobalFlags.ToArray(), "Steamwoven keeps bit 0 of 3");
+        var original = ScrDispatcher.RunObject(new(Use, Npc, Pc, null), host, S11 with { Rules = ScrRuleProfile.Original });
+        CollectionAssert.AreEqual(new[] { new ScrFlagWrite(64, true), new ScrFlagWrite(65, true) }, original.Effects.GlobalFlags.ToArray(),
+            "the original's write spills bit 1 into the next flag (X10)");
     }
 
     [TestMethod]

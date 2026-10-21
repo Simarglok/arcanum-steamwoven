@@ -359,6 +359,8 @@ public sealed class AreaScriptHostTests
             (139, [(0, 0), (3, 60)]), (139, [(1, 0), (3, 101)]), (139, [(12, 0), (3, 70)]), (139, [(1, 0), (3, 200)]), (1, []));
 
         // ARC-TECHNOLOGY-005: start schematic UI (129) on the triggerer (the PC), the attachee, and the absent extra object (kind 12).
+        // ARC-SKILLS-009: get skill 6 of the triggerer into counter 0, then return skip default.
+        internal static ScrProgram GetSkill() => Lines((47, [(3, 6), (0, 0), (0, 0)]), (1, []));
         internal static ScrProgram Readings() => Lines((64, [(3, 1020), (0, 0)]), (65, [(3, 900), (1, 0)]), (114, [(3, 1500), (12, 0)]), (1, []));
 
         internal static ScrProgram Schematics() => Lines((129, [(0, 0)]), (129, [(1, 0)]), (129, [(12, 0)]), (1, []));
@@ -400,7 +402,6 @@ public sealed class AreaScriptHostTests
         }
     }
 
-    /// <summary>Wraps the fixture host so a run uses a given program and slot.</summary>
     // ARC-SKILLS-009 (SX1, SX2): get skill runs only with a session hero, whose levels the PC's are; an NPC's level comes from the
     // sheet the session saved for it, else its map data; any other object, or the NPC's id on another map, is 0.
     [TestMethod]
@@ -426,17 +427,22 @@ public sealed class AreaScriptHostTests
             npcSheet: entity => entity == "oid:npc" ? (loaded, modifiers) : null);
         Assert.AreSame(AreaScriptHost.SkillAdmission, host.RunAdmission);
         Assert.IsTrue(AreaScriptHost.SkillAdmission.IsSubsetOf(ScrAdmissionSet.S11) && AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.GetSkill));
-        Assert.IsFalse(AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.UseItemWithSkill), "no live script uses it");
+        Assert.IsFalse(AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.UseItemWithSkill), "no live script uses it (census)");
+        var reads = Program.GetSkill();
+        Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(reads, AreaScriptHost.Admission).Refusal!.Code, "refused without a hero");
+        Assert.IsTrue(ScrAdmission.Admit(reads, AreaScriptHost.SkillAdmission).IsAdmitted);
         var hero = session.QueryHeroSkills()!;
         for (var skill = 0; skill < 16; skill++) Assert.AreEqual(hero[(Arcanum.Simulation.Skills.Skill)skill].Level, host.SkillLevel(host.Pc, skill));
         Assert.IsTrue(host.SkillLevel(host.Pc, (int)Arcanum.Simulation.Skills.Skill.Prowling) > 0);
         var npc = new ScrObjectRef(1, "oid:npc");
         var melee = (int)Arcanum.Simulation.Skills.Skill.Melee;
-        Assert.AreEqual(session.QueryNpcSkills(loaded, modifiers)[Arcanum.Simulation.Skills.Skill.Melee].Level, host.SkillLevel(npc, melee));
+        // 3 points: base 12, under dexterity 8's cap.
+        Assert.AreEqual(Arcanum.Simulation.Skills.SkillRules.Level(Arcanum.Simulation.Skills.Skill.Melee, 3, 8, false), host.SkillLevel(npc, melee));
         Assert.IsTrue(host.SkillLevel(npc, melee) > 0);
         Assert.AreEqual((0, 0, 0), (host.SkillLevel(new(1, "oid:chest"), melee), host.SkillLevel(new(2, "oid:npc"), melee), host.SkillLevel(host.Pc, 16)));
     }
 
+    /// <summary>Wraps the fixture host so a run uses a given program and slot.</summary>
     private sealed class FakeEffectsRun(AreaScriptHost inner, ScrObjectRef npc, int? story = null)
     {
         internal ScrRunResult Run(ScrProgram program, ScrSlot slot, ScrAdmissionSet? admission = null) =>
