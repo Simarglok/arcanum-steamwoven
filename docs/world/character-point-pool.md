@@ -1,11 +1,11 @@
 # Character point pool (ARC-WORLD-052)
 
-Status: **Implemented bounded component, not wired.** Work item ARC-WORLD-052 (2026-10-21), task S5 of the
+Status: **Implemented bounded component**, wired for the skills by the AREA viewer's skills page (ARC-UI-009). Work item ARC-WORLD-052 (2026-10-21), task S5 of the
 [skills plan](../research/skills-plan.md) (rest of K1). The one spend-a-point / refund-a-point path over the hero's unspent
 character points that the character editor uses, for primary stats, hit and fatigue points, basic and tech skills, and,
 through a lane each, spell ranks (the magic lane's MT3) and tech degrees (the technology lane's TECH-2). Godot-free: pure
-rules in `Arcanum.Simulation.Character` and the editor's floor in `Arcanum.Session`. No snapshot schema change. The sheet's
-+ and − buttons are task S6.
+rules in `Arcanum.Simulation.Character` and the editor's floor in `Arcanum.Session`. No snapshot schema change. The AREA viewer's
+skills page (ARC-UI-009) has the skills' + and − buttons.
 
 Requirements: [FR-CHAR-015](../requirements/characters-skills.md#fr-char-015) (stats bought and refunded),
 [FR-CHAR-016](../requirements/characters-skills.md#fr-char-016) (basic skill points),
@@ -83,10 +83,10 @@ strict in both modes.
 | Spends and refunds read the **effective** unspent points (stat 21 through the effect system). | The stored value; no effect changes stat 21 in the modelled effects. | both |
 | The snapshot lives in the editor window's globals while it is open. | The floor is session state that is not saved; a restored session starts with the editor closed. | — |
 | A network client sends each click to the host. | Single player only. | — |
-| The editor shows a message for each refusal and refreshes its window. | The typed status; the messages are task S6's. | — |
+| The editor shows a message for each refusal and refreshes its window. | The typed status; the AREA viewer's skills page shows project texts for it (ARC-UI-009). | — |
 
 ## Not ready
 
-- No caller: task S6 puts the + and − buttons on the AREA viewer's character sheet; the viewer has no editor yet.
+- Callers: the AREA viewer's skills page (ARC-UI-009, task S6) opens the editor with the sheet and spends and refunds skill points with the original's − click; stats, pools, spell ranks and tech degrees have no buttons yet.
 - Both lanes are plugged in: spell ranks since ARC-MAGIC-004, tech degrees since ARC-TECHNOLOGY-002.
 - The character editor's other modes (creation, the level-up of followers, multiplayer) are not modelled.
