@@ -185,6 +185,8 @@ public partial class TerrainViewerApp
                 _portalUseWhenSettled = null;
                 if (!PortalUseAdmitted(out var why)) { _portalNotice = "door use dropped: " + why; _portalPickWith = null; RefreshAreaStatus(); }
                 else if (portals.TryGet(waiting, out var door) && PortalInReach(settled, area.Snapshot.Objects.Single(o => o.Key == waiting), PendingPortalRange)) UsePortal(door);
+                else { _portalNotice = "door use dropped: out of reach"; RefreshAreaStatus(); }
+                _portalPickWith = null;
             }
             if (_portalUseAfterRoute is { } key && ReferenceEquals(_worldRouteSession, settled) && _worldRoute is { } route && route.Status != RouteFollowStatus.Following)
             {

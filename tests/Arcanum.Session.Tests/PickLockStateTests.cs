@@ -170,6 +170,7 @@ public sealed class PickLockStateTests
         Assert.AreEqual(GameSessionFailure.None, owner.StartCombatRound(owner.Version, world).Failure);
         for (var i = 0; i < 4 && owner.QueryCombatRound()!.Actor != SessionCombatant.Hero; i++)
             owner.EndCombatTurn(owner.Version, owner.QueryCombatRound()!.Actor, world);
+        Assert.AreEqual(SessionCombatant.Hero, owner.QueryCombatRound()!.Actor, "the precheck runs only in the hero's subturn");
         var (points, revision, draws) = (owner.QueryCombatRound()!.ActionPoints, owner.Version.Revision, owner.QueryRandom().Draws);
         var refused = owner.PickLock(owner.Version, Target(), Lockpick(), world);
         Assert.AreEqual((GameSessionFailure.EventBudgetExceeded, (SessionCombatResult?)null), (refused.Failure, refused.Charge));

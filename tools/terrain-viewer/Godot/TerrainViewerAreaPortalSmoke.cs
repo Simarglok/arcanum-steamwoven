@@ -116,9 +116,10 @@ public partial class TerrainViewerApp
         { GD.Print($"ARC-SKILLS-006 native-smoke pick NONE map={_readyMapName} (no lockpicks in the PC's list)"); return; }
         InventoryKey(Key.I);
         Require(InventoryOpen && _inventoryPanel!.PickButtonsForSelfTest.Count > 0, "the window lists a Pick a lock button");
-        _inventoryPanel!.PickButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
+        var listed = _inventoryPanel!.ViewForSelfTest!.Pc.First(line => line.Lockpick).Entity;
+        _inventoryPanel.PickButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Require(!InventoryOpen && _lockpickArmed is not null, "the button closed the window and armed the lockpicks: " + _portalNotice);
+        Require(!InventoryOpen && _lockpickArmed == listed, "the button closed the window and armed the listed lockpicks: " + _portalNotice);
         // The closed window quarantined the world: neutral frames reopen the gate, as after any window.
         for (var i = 0; i < 3; i++) AreaSmokeFrame();
         Require(_worldGate.IsOpen && _lockpickArmed is not null, "the gate reopened with the lockpicks armed");

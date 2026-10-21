@@ -47,7 +47,7 @@ answer carries the check, the outcome, the object's state after it and whether t
 The AREA inventory window lists **Pick a lock with:** for each lockpicks item in the PC's list (the kit's from the hero load's
 prototype fields, a taken item's from its object row). The button closes the window and arms the lockpicks; the next left press on
 a door or window in map mode picks its lock, walking within range 1 first (the use-item-with-skill goal's range); a press anywhere
-else cancels it. The HUD reports "the lock opens", "locked it", "the lock jams" or "the pick failed". The viewer passes full light
+else, a key press, the window's focus loss, a follower walk order, a map change or a reload cancels it. The HUD reports "the lock opens", "locked it", "the lock jams" or "the pick failed". The viewer passes full light
 and no turn-based round, so no action points are charged.
 
 ## Boundaries (NOT READY)

@@ -229,6 +229,7 @@ public partial class TerrainViewerApp
             return;
         }
         EndInventory();
+        CancelPendingWalkOrder("lockpicks armed");
         _lockpickArmed = item;
         _portalNotice = "pick a lock: press a door or window";
         GD.Print($"ARC-SKILLS-006 lockpicks armed item={item}");

@@ -654,7 +654,12 @@ public partial class TerrainViewerApp
         if (_lockpickArmed is not null)
         {
             CancelAreaAttack("armed lockpicks took the press");
-            if (TryAreaPortalUse(screen)) SetObjectApproachGait(); else RefreshReadyStatus();
+            if (TryAreaPortalUse(screen)) SetObjectApproachGait();
+            else
+            {
+                CancelTalkApproach("a press cancelled the pick"); CancelAreaUseApproach("a press cancelled the pick"); CancelInventoryApproach("a press cancelled the pick");
+                RefreshReadyStatus();
+            }
             return;
         }
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.

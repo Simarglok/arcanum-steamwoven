@@ -588,7 +588,7 @@ the executable as read in
   script is not run).
 - **Pick a lock (ARC-SKILLS-006).** The inventory window's *Pick a lock with:* button on lockpicks closes it and arms
   them; the next left press on a door or window picks its lock ([pick locks](../world/pick-locks-runtime.md)), walking within
-  range 1 first; a press anywhere else cancels. The HUD names the outcome (the lock opens, locked it, the lock jams, the pick
+  range 1 first; a press anywhere else, a key press, focus loss, a follower walk order, a map change or a reload cancels it. The HUD names the outcome (the lock opens, locked it, the lock jams, the pick
   failed); nothing opens by itself. Full light and no turn-based round are passed.
 - **Saves.** F7/F8 and map changes carry the state, because it is part of the
   session's map changes. A Lock event that comes due locks, unjams and closes
@@ -605,7 +605,8 @@ Native smoke (`ARC-WORLD-051 native-smoke portal PASS`, after the talk smoke):
    refused and that door stays closed.
 4. Since ARC-SKILLS-006, when the PC holds lockpicks (the halfling-male hero's kit), the inventory's *Pick a lock* button arms
    them and a press on that door picks its lock; the session's lock state follows the outcome
-   (`ARC-SKILLS-006 native-smoke pick PASS`, otherwise `NONE`).
+   (`ARC-SKILLS-006 native-smoke pick PASS`; `NONE` without lockpicks or when the refused door is jammed or held but not
+   locked).
 
 The smoke prints `NONE` on a map without a door that opens. An opt-in test
 (`AreaPortalsOriginalTests`) checks every installed interior: the frames of
