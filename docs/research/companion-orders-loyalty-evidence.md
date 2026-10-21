@@ -161,6 +161,17 @@ and stays with stage A7.
 | OL27 | For each level written in the normal branch of the recalculation, and only when the PC is the local player's: one entry (type 0) in the in-game message window, a history of ten. It is drawn as message 21 of `mes\intgame.mes` (the "Level Up" title), message 11 with the new level, then either message 12 with the unspent points or, for a PC with an auto-level scheme, the scheme's text: message 2 of `mes\level.mes` followed by what was bought or message 3 when nothing, message 4 for a scheme without a rule, and a space plus message 1 when the rule completed. Drawing it plays sound 3005 (audio SN31). Three more interface callbacks follow (button state and two refreshes, not traced). The last-level branch (the step that would reach level 51, which writes level 50's threshold instead, XP5) shows nothing; a follower's level step (0x4A6CB0) runs its scheme with no text. | 0x4A69C0, 0x460630 → 0x550750 → 0x552770, draw 0x5529C0, sound 0x41B780, scheme text 0x4A7030 | Original (XP5) |
 | OL28 | The points shown are the stored unspent points plus this level's points, computed before the setter clamps unspent points to 56 (XP2): when the sum passes 56 (more than 55 unspent points before a 1-point level, more than 54 before a 2-point one) the line names points the PC does not have. | 0x4A6A90–0x4A6AC4 | Original bug (cosmetic) |
 
+Read again for ARC-UI-046 (same executable, `llvm-objdump`): the entry is a type-0 record holding the scheme text, the level and the
+points, or −1 for the points when a scheme number is set (then the scheme text is drawn instead). The draw (0x5529C0) prints message 21
+as it is and messages 11 and 12 as `printf` formats with the level and the points, and plays 3005 when asked to. The scheme text
+(0x4A7030) copies `level.mes` 2, appends message 4 when the scheme number has no rule, and otherwise runs the rule with a purchase log
+(0x4A7B90) that keys entries by name text: a name already logged only takes the new value, a new one is added while fewer than ten are
+logged. After the run the text gets message 3 when nothing was logged, or each entry's name, then ` %d` for a positive value or a
+space and the degree name (0x4AFE30, `tech.mes` 8 + degree) for a negative one, then `, `; the second-to-last character becomes `.`.
+The recalculation then appends a space and message 1 when the rule completed. Names: `stat.mes` by stat (0x4B0F80), `skill.mes` by
+skill, tech skills from 12 (0x4C62B0, 0x4C69A0), the bought spell's `spell.mes` message (0x4B1600 → 0x44FDE0), `tech.mes` by
+discipline with the degree logged negative (0x4AFE10), `level.mes` 5 or 6 for the hit-point or fatigue pool.
+
 ## 5. Waiting followers and the level step (Q5, XP5, XP7)
 
 | ID | Fact | Address | Verdict |

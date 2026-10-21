@@ -1054,6 +1054,42 @@ and refusal); native smoke with `--hero` after the hero stage: `ARC-UI-009 nativ
 texts describe all sixteen rows; a `+` the pool accepts, its `−` and a refused second `−`, or with no unspent points a refused
 `+`) and `ARC-UI-007 native-smoke character sheet PASS`.
 
+### Level-up messages (ARC-UI-046)
+
+Each level the hero's recalculation writes in its normal branch posts one entry to the viewer's message window, as the
+original posts one per level for the local PC (checked in the 1.0.7.4 executable, rows
+[OL27–OL28](../research/companion-orders-loyalty-evidence.md#4-level-up-message-q4-xp5)); the last-level branch and a
+follower's level update post none. Every award passes the same hook (hits, kills and the dialogs' queued awards), before the
+step goes to the followers. The entry is drawn as the original draws it:
+
+- the title (`mes\intgame.mes` 21), message 11 formatted with the new level;
+- for a hero without an auto-level scheme, message 12 formatted with the points: under the Original rules the stored unspent
+  points plus the level's points before the cap of 56 (OL28, it can name points the hero does not have), under Steamwoven the
+  capped value it holds (decision D6, recommended option, owner decision pending; rule switch
+  `ExperienceRuleProfile.LevelMessagePointsBeforeCap`);
+- for a hero with a scheme number, the scheme's text (0x4A7030): `mes\level.mes` 2, then message 4 when the number has no
+  rule (or the session has no scheme data), message 3 when the level bought nothing, or each purchase as its name, a space and
+  its value (a stat's effective value, a skill's points, the bought spell's name with the college's level, a tech
+  discipline with its degree's name, the hit-point or fatigue maximum with `level.mes` 5 or 6), joined by ", " with the last
+  separator turned into ". "; a space and message 1 follow when the rule completed. Purchases are logged by their name text:
+  a repeated name keeps its place with its last value, and at most ten names are kept (0x4A7B90). Names come from
+  `mes\stat.mes`, `mes\skill.mes` (tech skills from 12), `mes\tech.mes` (degree names from 8) and `mes\spell.mes`.
+
+Drawing each entry plays sound 3005 through the interface sound path (the per-revision level-up sound of ARC-UI-044 is gone).
+The texts are read from the player's installation at run time (in the background when the area binds, through the module's
+game folder like the skill texts); a file that is missing falls back to the project's labels for its lines. The two
+formats take their one number at the first `%d` or `%i` (`%%` is a percent sign; another conversion stays as text).
+
+The message window (`AreaMessageWindow`, bottom centre) is the smallest bounded stand-in for the original's: the newest entry
+with its title and lines, a history of the last ten browsed with ‹ and ›, and × hiding it until the next entry; its buttons take
+no focus. No other original message uses it yet.
+
+Self-test inside `ARC-UI-007 self-test PASS` (synthetic hero: an award to level 3 posts two entries with the project's labels,
+eleven more keep the last ten); native smoke `ARC-UI-046 native-smoke level message PASS` on the original installation (all six
+files load; an award built in the smoke, without changing the session, posts a points entry and a scheme entry that read the
+player's title, formats and names, each with the level-up sound; no text is printed). Not ready: the original's message
+window art, its other messages and its three interface callbacks after the entry (button state, two refreshes, not traced).
+
 ### Logbook (ARC-UI-008)
 
 The original Logbook key `L` (logical key down; the original's in-game key handler toggles the logbook for the local PC on
