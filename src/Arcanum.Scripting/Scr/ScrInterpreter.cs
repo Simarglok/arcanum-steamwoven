@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S11"/>.
+/// <see cref="ScrAdmissionSet.S12"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -15,33 +15,69 @@ internal sealed class ScrInterpreter
     private readonly ScrSlot _slot;
     private readonly uint _ownFileFlags;
     private readonly IScrHost _host;
-    private readonly ScrDispatcher.ScrRoles _roles;
-    private ScrDialogStart? _dialog;
-    private readonly List<ScrCallRequest> _calls = new();
-    private readonly List<ScrPrintLine> _lines = new();
-    private readonly List<ScrSound> _sounds = new();
-    private readonly List<ScrTeleport> _teleports = new();
-    private readonly List<ScrSchemeRequest> _schemes = new();
-    private readonly List<ScrSchematicRequest> _schematics = new();
-    private readonly List<ScrReadingRequest> _readings = new();
-    private readonly List<ScrSkillUse> _skillUses = new();
+    // OV2: assign object can write the run's triggerer, attachee and extra object, so the roles are the run's own copy.
+    private ScrDispatcher.ScrRoles _roles;
+    // OV2: the run's ten object variables (focus kind 11), empty at the start of every run.
+    private readonly ScrObjectRef?[] _objects = new ScrObjectRef?[ScrCatalogue.LocalSlots];
+    // The effects and the global overlay of one dispatch; a called script (OV1) adds to its caller's, as the original's
+    // called run changes the same game.
+    private sealed class Shared
+    {
+        public ScrDialogStart? Dialog;
+        public readonly List<ScrCallRequest> Calls = new();
+        public readonly List<ScrPrintLine> Lines = new();
+        public readonly List<ScrSound> Sounds = new();
+        public readonly List<ScrTeleport> Teleports = new();
+        public readonly List<ScrSchemeRequest> Schemes = new();
+        public readonly List<ScrSchematicRequest> Schematics = new();
+        public readonly List<ScrReadingRequest> Readings = new();
+        public readonly List<ScrSkillUse> SkillUses = new();
+        public readonly SortedDictionary<int, bool> Flags = new();
+        public int? Story, StoryBefore;
+        // Lines executed by every run of the dispatch (a project bound across nested calls).
+        public int Executed;
+    }
+
+    private readonly Shared _shared;
+    private readonly int _depth;
+    private ScrDialogStart? _dialog { get => _shared.Dialog; set => _shared.Dialog = value; }
+    private List<ScrCallRequest> _calls => _shared.Calls;
+    private List<ScrPrintLine> _lines => _shared.Lines;
+    private List<ScrSound> _sounds => _shared.Sounds;
+    private List<ScrTeleport> _teleports => _shared.Teleports;
+    private List<ScrSchemeRequest> _schemes => _shared.Schemes;
+    private List<ScrSchematicRequest> _schematics => _shared.Schematics;
+    private List<ScrReadingRequest> _readings => _shared.Readings;
+    private List<ScrSkillUse> _skillUses => _shared.SkillUses;
+    private SortedDictionary<int, bool> _flags => _shared.Flags;
+    private int? _story { get => _shared.Story; set => _shared.Story = value; }
+    private int? _storyBefore { get => _shared.StoryBefore; set => _shared.StoryBefore = value; }
     private readonly ScrRunOptions _options;
     private readonly int[] _locals = new int[ScrCatalogue.LocalSlots];
-    private readonly SortedDictionary<int, bool> _flags = new();
     private readonly List<ScrTraceStep> _trace = new();
     private uint _localFlags, _counters;
-    private int? _story, _storyBefore;
     // The original's "no change" sentinel for remove/change this script.
     private int _changedNumber = -1;
 
     internal ScrInterpreter(ScrAdmittedProgram admitted, int number, ScrSlot slot, uint ownFileFlags, ScrDispatcher.ScrRoles roles, IScrHost host, ScrRunOptions options)
+        : this(admitted, number, slot, ownFileFlags, roles, host, options, new Shared(), 0) { }
+
+    private ScrInterpreter(ScrAdmittedProgram admitted, int number, ScrSlot slot, uint ownFileFlags, ScrDispatcher.ScrRoles roles, IScrHost host, ScrRunOptions options,
+        Shared shared, int depth)
     {
         _admitted = admitted; _number = number; _slot = slot; _ownFileFlags = ownFileFlags; _roles = roles; _host = host; _options = options;
-        _localFlags = slot.LocalFlags; _counters = slot.Counters;
+        _localFlags = slot.LocalFlags; _counters = slot.Counters; _shared = shared; _depth = depth;
     }
 
     private class IndexStop(int line) : Exception { internal int Line { get; } = line; }
     private sealed class MissingObjectStop(int line) : IndexStop(line);
+    // A called script outside the set, or unreadable, refuses the whole dispatch; a nesting deeper than the bound ends it.
+    private sealed class CallRefusedStop(ScrRefusal? refusal, int script, ScrStop stop) : Exception
+    {
+        internal ScrRefusal? Refusal { get; } = refusal;
+        internal int Script { get; } = script;
+        internal ScrStop Stop { get; } = stop;
+    }
 
     private enum Step { Next, Jump, ReturnSkip, ReturnRun, Dialog }
 
@@ -64,6 +100,8 @@ internal sealed class ScrInterpreter
                 var action = held ? row.OnTrue : row.OnFalse;
                 var (step, target) = Action(action, line);
                 executed++;
+                // The original bounds each run, not a chain of calls; the project bounds the dispatch as well.
+                if (++_shared.Executed > _options.MaxCallDepth * _options.MaxExecutedLines) throw new CallRefusedStop(null, _number, ScrStop.CallDepth);
                 if (step == Step.Next)
                 {
                     if (line < count - 1) { _trace.Add(new(line, row.Condition.Type, held, action.Type, line + 1)); line++; continue; }
@@ -78,6 +116,13 @@ internal sealed class ScrInterpreter
         }
         catch (MissingObjectStop s) { stop = ScrStop.MissingObject; stopLine = s.Line; }
         catch (IndexStop s) { stop = ScrStop.IndexOutOfRange; stopLine = s.Line; }
+        catch (CallRefusedStop s) when (_depth == 0)
+        {
+            // Nothing of the dispatch applies: a refused callee as a refusal of the run, a too deep nesting as a project stop.
+            if (s.Stop == ScrStop.Refused)
+                return new(new(ScrOutcome.Refused, ScrStop.Refused, s.Script, null, s.Refusal, Array.Empty<ScrTraceStep>(), ScrEffects.None), _slot, s.Refusal);
+            return new(new(ScrOutcome.SkipDefault, s.Stop, _number, null, null, Array.AsReadOnly(_trace.ToArray()), ScrEffects.None), _slot, null);
+        }
 
         var number = _slot.Script;
         // A return, or running past the last line, clears an auto-removing script (E8); a budget, a bad line or a
@@ -208,6 +253,38 @@ internal sealed class ScrInterpreter
                 if (OptionalObject(a, 0) is { } who) _schematics.Add(new(who));
                 return (Step.Next, 0);
             }
+            case ScrCatalogue.Action.CallScript:
+            {
+                // OV1: the script of operand 0 from the line of operand 1, with operand 2 the triggerer and operand 3 the attachee,
+                // no extra object, the callee's own header flags and counters and fresh variables; nothing it changes about
+                // itself is kept and its return code is ignored, so the caller goes on.
+                Call(Get(a, 0), Get(a, 1), OptionalObject(a, 2), OptionalObject(a, 3));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.AssignObject:
+            {
+                // OV2: the first object operand 1 names (none for an absent one) goes into the store operand 0 names: the
+                // triggerer, the attachee, the extra object or an object variable; any other focus kind is not written.
+                var value = OptionalObject(a, 1);
+                var index = a.Value(0);
+                switch ((ScrFocusKind)a.Kind(0))
+                {
+                    case ScrFocusKind.Triggerer: _roles = _roles with { Triggerer = value }; break;
+                    case ScrFocusKind.Attachee: _roles = _roles with { Attachee = value }; break;
+                    case ScrFocusKind.ExtraObject: _roles = _roles with { Extra = value }; break;
+                    case ScrFocusKind.LocalObject: _objects[index] = value; break;
+                }
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.GetObjectType:
+            {
+                // OV3: the object's type field into the number store operand 1 names; an absent object, or one the host does not
+                // know, stops the run (the project rule of the single-object commands).
+                var obj = Object(a, 0, line);
+                var type = Queries.ObjectType(obj) ?? throw new MissingObjectStop(line);
+                Set(a, 1, type, line);
+                return (Step.Next, 0);
+            }
             case ScrCatalogue.Action.GetSkill:
             {
                 // SX1, SX2: the skill number, the object, then the store; the effective level (basic below 12, tech index skill − 12
@@ -263,6 +340,36 @@ internal sealed class ScrInterpreter
         }
     }
 
+    [OriginalFunction(0x44B030, OriginalFunctionScope.Partial)]
+    private void Call(int script, int line, ScrObjectRef? triggerer, ScrObjectRef? attachee)
+    {
+        if (_depth + 1 > _options.MaxCallDepth) throw new CallRefusedStop(null, script, ScrStop.CallDepth);
+        var lookup = _host.Script(script);
+        // A missing script runs nothing (the original's runner returns); an unreadable one is not the original's missing file.
+        if (ScrDispatcher.Unavailable(lookup) is { } unavailable)
+        {
+            if (unavailable == ScrStop.MissingScript) return;
+            throw new CallRefusedStop(null, script, ScrStop.UnreadableScript);
+        }
+        var program = lookup.Program!;
+        // The runner's gates (E4, E5): a trap script and a monster generator attachee run nothing.
+        if (ScrDispatcher.IsTrapScript(script, program)) return;
+        if (attachee is { } generator && _host.IsMonsterGenerator(generator)) return;
+        var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
+        if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, script, ScrStop.Refused);
+        // A dialog action inside a called script is not modelled (the original's dialog store would write the callee's flags
+        // into its attachee's slot, not read in the executable): the dispatch is refused at that line.
+        foreach (var at in admission.Admitted!.Region)
+        {
+            var row = program.Lines[at];
+            var side = row.OnTrue.Type == ScrCatalogue.Action.Dialog ? ScrClauseSide.OnTrue
+                : row.Condition.Type != ScrCatalogue.Condition.True && row.OnFalse.Type == ScrCatalogue.Action.Dialog ? ScrClauseSide.OnFalse : (ScrClauseSide?)null;
+            if (side is { } dialog) throw new CallRefusedStop(new(at, dialog, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.Dialog), script, ScrStop.Refused);
+        }
+        new ScrInterpreter(admission.Admitted!, script, new(script, program.InitialLocalFlags, program.InitialCounters), program.FileFlags,
+            new(triggerer, attachee, null), _host, _options, _shared, _depth + 1).Run(line);
+    }
+
     private int Get(ScrClause c, int slot)
     {
         var index = c.Value(slot);
@@ -276,7 +383,8 @@ internal sealed class ScrInterpreter
         };
     }
 
-    // Operand 0 is the store of every writing action in the set but get skill (operand 2); admission refuses a number literal there.
+    // Operand 0 is the store of every writing action in the set but get object type (operand 1) and get skill (operand 2);
+    // admission refuses a number literal there.
     private void Set(ScrClause c, int value, int line) => Set(c, 0, value, line);
 
     private void Set(ScrClause c, int slot, int value, int line)
@@ -304,14 +412,7 @@ internal sealed class ScrInterpreter
         for (var j = bit + 1; j < 32; j++) if (((bits >> j) & 1) != 0) _flags[word + j] = true;
     }
 
-    private ScrObjectRef Object(ScrClause c, int slot, int line) => (ScrFocusKind)c.Kind(slot) switch
-    {
-        ScrFocusKind.Triggerer => _roles.Triggerer,
-        ScrFocusKind.Attachee => _roles.Attachee,
-        ScrFocusKind.ExtraObject => _roles.Extra,
-        ScrFocusKind.Player => _host.Player(),
-        _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
-    } ?? throw new MissingObjectStop(line);
+    private ScrObjectRef Object(ScrClause c, int slot, int line) => OptionalObject(c, slot) ?? throw new MissingObjectStop(line);
 
     // The original turns the seconds into a 32-bit millisecond count, raises 0 to 1 (sub_45A950) and multiplies by 8, so
     // 0 seconds is 8 game ms. TE1: Original keeps the 32-bit wrap; Steamwoven computes without wrapping and reads a
@@ -332,6 +433,8 @@ internal sealed class ScrInterpreter
         ScrFocusKind.Attachee => _roles.Attachee,
         ScrFocusKind.ExtraObject => _roles.Extra,
         ScrFocusKind.Player => _host.Player(),
+        // OV4: an object variable never assigned in this run names no object.
+        ScrFocusKind.LocalObject => _objects[c.Value(slot)],
         _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
     };
 

@@ -812,6 +812,21 @@ lookup (TS3).
 | TS2 | object location change (0x444270), move (0x43E770) | After a move: for a PC (type 15) the jump point of the new tile (0x4101D0); then for a PC or NPC (type 15 or 16) the tile script; then, only when the move enters another sector (the move passes mode 2 for a new sector, 1 for the same one) and only for the local player, the sector notification (0x4F2330). Placing an object on the map (0x4416E5, 0x4423A5) passes mode 2 as well; which placement a teleport arrival uses is not read here. | Original |
 | TS3 | sector notification (0x4F2330), sector script copy (0x4C0440), store (0x4C0490) | The sector's music scheme is switched first; then the sector script runs when its number is not 0, from line 0 as a use with the player as the triggerer and no attachee, and a changed copy is stored back (X3 sector). | Original |
 
+## Object variables and calls (ARC-SCRIPT-018)
+
+Source: the [dispatcher's object variables and calls](../scripting/scr-dispatcher-runtime.md#object-variables-and-calls-arc-script-018-set-s12).
+Question: what call script (7), assign object (15) and get object type (34) do, and what an object variable (focus kind
+11) names. Read on 2026-10-21 by a first reader and, independently, a second reader that saw only the questions and the
+addresses (method step 6); they agree on every row. The second reader added the group behaviour of call script, the
+writable number kinds and the undefined results for an empty group or a null object.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| OV1 | script action (0x447220, jump table 0x44ADBC, entry 6), call script (0x44B030), script run (0x4449B0) | Operand 0 is the script number, operand 1 the start line, operands 2 and 3 the triggerer and attachee groups; the script runs once for every triggerer and attachee pair, with no extra object, the caller's attachment point, and the callee's own header flags and counters (read from its file) in one copy shared by the pairs; the callee has fresh variables, nothing it changes about itself is written back, its return code is ignored and the caller goes on. No depth bound but the stack; each run keeps the 1,000-line budget. | Original |
+| OV2 | the same, entry 14 (0x44750A), object read (0x44B960), object write (0x44B9B0) | The first object operand 1 names is written into operand 0: the run's triggerer, attachee or extra object, an object variable (ten, zeroed at the start of each run), or the current looped object; any other focus kind is not written. For an empty group the value read is undefined. | Original. The project reads an absent single object as none. |
+| OV3 | the same, entry 33 (0x447C71), field read (0x406CA0), number write (0x44BB50) | The type field of the first object operand 0 names is written into the number store of operand 1 (a counter, global or local variable, global flag, PC variable or PC flag; a literal is not written). A null object reads undefined data. | Original. The project stops the run on an absent object, and admission refuses a literal store (project strictness). |
+| OV4 | object list (0x44B4E0, entry 11) | An object variable is a one-object list of whatever it holds, a null object when it was never assigned. | Original. The project reads an unassigned variable as no object. |
+
 ## Item insert script (ARC-RES-055)
 
 Source: [item insert script](item-insert-script.md). Question: what the `print_line` action (type 24) of a script does,

@@ -40,6 +40,7 @@ public sealed class ScrSkillTests
         public bool IsMindControlled(ScrObjectRef obj) => throw new AssertFailedException("not asked");
         public int? WieldedItemName(ScrObjectRef obj, int location) => throw new AssertFailedException("not asked");
         public bool HasReputation(ScrObjectRef obj, int reputation) => throw new AssertFailedException("not asked");
+        public int? ObjectType(ScrObjectRef obj) => throw new AssertFailedException("not asked");
     }
 
     private static Clause GetSkill(int skill, byte focus, int counter) => C(ScrCatalogue.Action.GetSkill, N(skill), (focus, 0), (Counter, counter));
