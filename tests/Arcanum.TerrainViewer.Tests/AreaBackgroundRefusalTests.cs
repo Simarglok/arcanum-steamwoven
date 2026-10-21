@@ -31,5 +31,6 @@ public sealed class AreaBackgroundRefusalTests
         Assert.AreEqual(" — the PC cannot take it: the product lies on the ground", AreaSchematics.OnGroundText(Done(SessionInsertVerdict.NoRoom, "made:1")));
         Assert.AreEqual(" — the hero's Technophobia refuses technological items: 2 products lie on the ground",
             AreaSchematics.OnGroundText(Done(SessionInsertVerdict.TechnologyRefused, "made:1", "made:2")));
+        Assert.AreEqual(" — the NPC cannot take it: the product lies on the ground", AreaSchematics.OnGroundText(Done(SessionInsertVerdict.NoRoom, "made:1"), npc: true));
     }
 }

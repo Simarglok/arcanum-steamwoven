@@ -67,7 +67,8 @@ the hero's expertise in the discipline, and the button state.
 - In state "can assemble" it calls `GameSessionOwner.AssembleSchematic` with the window's facts and the inventory window's
   insert check; on success it shows `schematic_text.mes` 2 and plays **3018 + the current discipline** (3018..3025, SW6; the
   first reading of ARC-RES-062 said "current tab", corrected in the ledger). A session refusal is named on the message line
-  (no room, an item type the session does not hold, the inventory limit).
+  (no tile to leave a refused product on, an item type the session does not hold, the inventory limit); a completion whose
+  inventory refused some products adds the refusal and how many lie on the ground (ARC-WORLD-070).
 - The hover of Assemble is `schematic_text.mes` 3.
 - The viewer keeps no inventory locations: every held item counts as in the bag; the session knows the worn and broken ones.
 

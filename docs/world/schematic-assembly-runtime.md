@@ -111,11 +111,12 @@ an NPC (ledger [NC4–NC7](../research/original-verification-ledger.md#npc-schem
 is the NPC's map data (sheet and scheme, read only while the session keeps no advancement record of it) and its effects' stat
 changes. The components are searched in the NPC's current list (seed items still there on every attached seed that lists it, then
 its added made items), with its expertise; on success both components leave the NPC with the durability deletion and the products
-enter its list as `made:n` ([NPC inventory changes](inventory-runtime.md#npc-inventory-changes-arc-world-055)), one revision.
-Refusals, before any effect: an invalid crafter (`InvalidAdvancement`), the version, an NPC the session does not know
-(`UnknownHolder`), a dead NPC (`InvalidLifeTarget`: the original's open refuses a dead crafter), then the hero's: the gate, the
-record, the product kind, the budgets (the NPC's list bound, the store, the made numbers, the durability records), the revision and
-the insert check for the NPC (a call back into the owner, a seed attach included, is `StaleVersion`). The original leaves a product
+enter its list as `made:n` ([NPC inventory changes](inventory-runtime.md#npc-inventory-changes-arc-world-055)) or lie on
+`crafterCell` (below), one revision. Refusals, before any effect: an invalid crafter (`InvalidAdvancement`), the version, an NPC the
+session does not know (`UnknownHolder`), a dead NPC (`InvalidLifeTarget`: the original's open refuses a dead crafter), then the
+hero's: the gate, the record, the product kind, the insert check for the NPC asked for every unit (a call back into the owner, a
+seed attach included, is `StaleVersion`), a refused unit that can go nowhere (`InsertRefused`), the budgets (the NPC's list bound,
+the store, the ground store, the made numbers, the durability records) and the revision. The original leaves a product
 the NPC cannot take on the ground at the crafter and still completes (NC7); so does the session since ARC-WORLD-070: a refused unit
 lies on `crafterCell` (the NPC's tile on the hero's map, the host's to give) in the ground store, which the hero can pick up. The
 ground store is the hero's: without a hero or without the crafter's tile a refused unit refuses the assembly (`InsertRefused`,

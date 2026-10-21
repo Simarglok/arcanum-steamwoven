@@ -266,8 +266,8 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 - The PC's re-wield after losing a weapon (PI5): with the "auto switch" setting on, the original wields the best weapon; the session
   leaves the slot empty.
 - NPC made items (ARC-WORLD-055) and the junk pile of OD13 can use this store later. The viewer draws placed items and picks
-  them up since ARC-RENDER-033 ([ground items](#ground-items-in-the-viewer-arc-render-033)); a placed made item has no known ground
-  ART there and is not drawn.
+  them up since ARC-RENDER-033 ([ground items](#ground-items-in-the-viewer-arc-render-033)); a placed made item (an assembly
+  product left on the tile) is drawn from its product prototype's art since ARC-WORLD-070.
 
 ## Drop cell (ARC-COMBAT-010)
 
@@ -305,7 +305,9 @@ The AREA viewer draws what the session holds on the ground but no T0 body drew, 
 - **Items.** Every item in `QueryMapInventory(map).Ground` that does not lie on its own T0 body's cell: spilled from a container
   (ARC-COMBAT-008), dropped by an NPC (ARC-COMBAT-009/010) or placed by the hero (ARC-WORLD-059). Its ground ART is its map row's
   current art (field 0; for a placed world item, the row of the map whose seed lists it) or, for a kit item, its prototype's
-  (`AreaStartingHero.KitArt`). It is placed on its cell as the plan places a body there with no object offset and scale 100
+  (`AreaStartingHero.KitArt`), or, for a made item (ARC-WORLD-070), its product prototype's current art from the schematic data
+  (`AreaSchematicData.ArtOf`). The viewer's own insert check accepts every item, so in play a product reaches the ground only with a
+  refusing host; the native smoke checks the store and that the product's art reads. It is placed on its cell as the plan places a body there with no object offset and scale 100
   (`AreaScenePlan.Place`; whether the original keeps a dropped item's offsets and scale was not read in the executable: NOT
   VERIFIED), flat when its object flags carry OF_FLAT (0x4), and joins the moved bodies: an upright one the upright order,
   a flat one the flat commands in plan order (`AreaScenePlan.WithMovingFlat`). It is lit where it lies by its own art's channel.
@@ -321,7 +323,7 @@ The AREA viewer draws what the session holds on the ground but no T0 body drew, 
   ARTs, 2,449 held items, 328 distinct art ids, none failing). An art id that does not resolve or read leaves the
   body as it was and is logged once (`ARC-RENDER-033 extra-art`).
 
-**Not ready.** A placed made item (its ground ART would come from its schematic's product prototype); the junk pile of OD13
+**Not ready.** The junk pile of OD13
 (ARC-WORLD-063) and the items' decay (ARC-WORLD-062); a busted window's busted ART.
 
 ## Evidence
@@ -386,7 +388,8 @@ rings stay out. Code: [`GameSessionAmmo`](../../src/Arcanum.Session/GameSessionA
   (`ItemRuleProfile.ContainerStackLookupFails`). A container's spent units are kept as the session's record of that seed stack.
 - **Assembly (TECH-4).** An ammunition component loses one unit (0x4658E0) and its stack goes at its last unit; an ammunition product
   (the product prototype's type and units, `productAmmo`) merges each unit into the crafter's stack of its prototype, one new
-  `made:n` stack only when it holds none. The installed recipes use it: four make ammunition (cells ×5 and ×1, bullets ×2, the fourth
+  `made:n` stack only when it holds none; a unit the insert check refuses is a stack of its own on the crafter's tile
+  (ARC-WORLD-070). The installed recipes use it: four make ammunition (cells ×5 and ×1, bullets ×2, the fourth
   type ×5) and three take one unit of ammunition as a component. The NPC crafter does the same in its list.
 - **Not modelled.** Gold (the AMA5 fix will apply to its container lookup too); transfers of units between holders (AM4's destination); the critter field and its
   clearing (AM5: the session finds a holder's stack by type); the weight of a stack (the host's insert check). A shot's ammunition

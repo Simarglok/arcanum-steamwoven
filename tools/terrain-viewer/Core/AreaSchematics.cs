@@ -204,11 +204,11 @@ public static class AreaSchematics
 
     /// <summary>ARC-WORLD-070: the note after a completed assembly whose inventory refused some product units: they lie on the crafter's
     /// tile (the original shows the insert check's refusal for a PC, ledger SA5); empty when every unit entered.</summary>
-    public static string OnGroundText(SessionAssemblyResult result)
+    public static string OnGroundText(SessionAssemblyResult result, bool npc = false)
     {
         ArgumentNullException.ThrowIfNull(result);
         if (result.OnGround.Count == 0) return string.Empty;
-        var why = AreaInventoryHost.Refusal(GameSessionFailure.InsertRefused, result.Verdict);
+        var why = npc ? "the NPC cannot take it" : AreaInventoryHost.Refusal(GameSessionFailure.InsertRefused, result.Verdict);
         return $" — {why}: {(result.OnGround.Count == 1 ? "the product lies" : $"{result.OnGround.Count} products lie")} on the ground";
     }
 

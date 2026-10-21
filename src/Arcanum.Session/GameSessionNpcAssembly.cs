@@ -75,10 +75,10 @@ public sealed partial class GameSessionOwner
     /// session does not know (<see cref="GameSessionFailure.UnknownHolder"/>), a dead NPC (<see cref="GameSessionFailure.InvalidLifeTarget"/>:
     /// the original's open refuses a dead crafter), the gate (<see cref="GameSessionFailure.AssemblyRefused"/> with the plan), a record
     /// without a product or with a quantity below 1 (<see cref="GameSessionFailure.InvalidSchematics"/>), a product the lists do not
-    /// admit (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), the NPC's list bound, the store, the ground store (the hero's item
-    /// bound), the made numbers or the durability records (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, a refused unit
-    /// that can go nowhere (<see cref="GameSessionFailure.InsertRefused"/>; a call back into the owner from a host callback, a seed attach
-    /// included, is <see cref="GameSessionFailure.StaleVersion"/>).
+    /// admit (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), the insert check asked for every unit (a call back into the owner
+    /// from a host callback, a seed attach included, is <see cref="GameSessionFailure.StaleVersion"/>), a refused unit that can go nowhere
+    /// (<see cref="GameSessionFailure.InsertRefused"/>), the NPC's list bound, the store, the ground store (the hero's item bound), the
+    /// made numbers or the durability records (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision.
     /// ARC-WORLD-066: as for the hero, an ammunition component loses one unit and an ammunition product (<paramref name="productAmmo"/>)
     /// merges into the NPC's stack of its prototype, a new <c>made:n</c> stack only when it holds none; a refused unit is a stack of its
     /// own on the ground.

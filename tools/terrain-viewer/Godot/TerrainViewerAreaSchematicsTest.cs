@@ -284,7 +284,9 @@ public partial class TerrainViewerApp
                     made = $"record {record.Number}: {result.Made.Count} made";
                     // ARC-WORLD-070: with a full inventory the products lie on the hero's tile in the ground store, whose items on an attached
                     // map the drawing reads (RENDER-033; this detached copy has no map seed, so the store itself is checked).
-                    using var full = Copy()!;
+                    var fullCopy = Copy();
+                    Require(fullCopy is not null, "a second detached hero for the full-inventory assembly");
+                    using var full = fullCopy!;
                     var ground = full.AssembleSchematic(full.Version, record, SchematicItems, data.Facts, data.Kind, _ => SessionInsertVerdict.NoRoom, data.AmmoOf);
                     var lying = full.QueryPlacedItems().Where(p => ground.OnGround.Contains(p.Entity)).ToArray();
                     Require(ground.Disposition == GameSessionDisposition.Changed && ground.OnGround.Count == record.Quantity && full.QueryHeroKit().Count == 0 &&
