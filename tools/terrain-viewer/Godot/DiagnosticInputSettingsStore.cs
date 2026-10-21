@@ -4,12 +4,13 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-/// <summary>Host-local preferences; never reads the lab or original game's settings.</summary>
+/// <summary>Host-local preferences; never reads the lab or original game's settings. An automated run without the test path uses
+/// its own isolated file (ARC-DEV-032, <see cref="ViewerAutomatedStorage"/>), never the player's.</summary>
 public sealed class DiagnosticInputSettingsStore
 {
-    private const string DefaultPath = "user://world_diagnostic_input_v1.json";
+    public const string DefaultPath = "user://world_diagnostic_input_v1.json";
     private const string TestVariable = "WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH";
-    private static string StoragePath => string.IsNullOrWhiteSpace(OS.GetEnvironment(TestVariable)) ? DefaultPath : OS.GetEnvironment(TestVariable);
+    internal static string StoragePath => ViewerAutomatedStorage.Path(OS.GetEnvironment(TestVariable), DefaultPath);
     public bool UsesIsolatedTestStorage => !string.IsNullOrWhiteSpace(OS.GetEnvironment(TestVariable));
     public InputSettings Load()
     {
