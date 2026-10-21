@@ -1018,7 +1018,8 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(world);
-        if (_passWorld is not null || budget < 1 || budget > _events.Limits.MaxPerPass)
+        // A pass inside the spell-run rules (a host port) is refused: it would consume their events without running them.
+        if (_passWorld is not null || _spellRunsBusy || budget < 1 || budget > _events.Limits.MaxPerPass)
             return new(GameSessionFailure.InvalidEventPass, null, Array.Empty<SessionLifeFiring>(), new(_identity, _revision));
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         var firings = new List<SessionLifeFiring>();
@@ -1027,7 +1028,9 @@ public sealed partial class GameSessionOwner : IDisposable
         var locks = new List<SessionLockFiring>();
         var waits = new List<SessionWaitFiring>();
         var respawns = new List<SessionRespawnFiring>();
+        var spellRuns = new List<SessionSpellRunFiring>();
         _passRespawns = respawns;
+        _passSpellRuns = spellRuns;
         _passWorld = world;
         _passFirings = firings;
         _passCalls = calls;
@@ -1058,10 +1061,11 @@ public sealed partial class GameSessionOwner : IDisposable
             _passLocks = null;
             _passWaits = null;
             _passRespawns = null;
+            _passSpellRuns = null;
         }
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
-            Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly() };
+            Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly() };
     }
 
     /// <summary>

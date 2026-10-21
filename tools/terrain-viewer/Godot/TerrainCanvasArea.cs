@@ -257,7 +257,9 @@ public partial class TerrainCanvas
             command.Destination.Width, command.Destination.Height).Intersects(world);
         var upright = _areaUpright!.With(_areaActorPlacement, _actorPlan.Current, ActorSentinel, _areaMoving);
         var flat = _areaIndex!.Candidates(world.Position.X, world.Position.Y, world.End.X, world.End.Y);
-        var ordered = flat.Select(index => _areaFlat[index]).Concat(upright);
+        // ARC-RENDER-033: flat moved bodies (an item lying where no T0 body stood) join the flat commands in plan order.
+        var flatCommands = flat.Select(index => _areaFlat[index]);
+        var ordered = (_areaMoving is { Count: > 0 } ? AreaScenePlan.WithMovingFlat(flatCommands, _areaMoving, _areaMovingKeys) : flatCommands).Concat(upright);
         var visible = ordered.Where(command => Intersects(command) && (command.Identity == ActorSentinel ? _showActor : command.Identity is null || (_showStatics && !AreaHiddenOf(command)))).ToArray();
         if (visible.Length > _area.Commands.Count + 1 + (_areaMoving?.Count ?? 0)) throw new InvalidOperationException("AREA_SUBMISSION_BUDGET");
         // Index rows used by this submission stay resident; rows from earlier views are
