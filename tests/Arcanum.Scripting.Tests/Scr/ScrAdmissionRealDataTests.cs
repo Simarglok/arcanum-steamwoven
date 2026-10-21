@@ -45,4 +45,27 @@ public sealed class ScrAdmissionRealDataTests
         foreach (var code in new[] { ScrRefusalCode.UnknownCondition, ScrRefusalCode.UnknownAction, ScrRefusalCode.UnknownValueKind, ScrRefusalCode.UnknownFocusKind, ScrRefusalCode.IndexOutOfRange, ScrRefusalCode.WriteToNumber })
             Assert.IsFalse(codes.ContainsKey(code), code.ToString());
     }
+
+    [TestMethod, TestCategory("RealData")]
+    public void The_reading_actions_of_the_installed_scripts_are_counted()
+    {
+        // ARC-UI-049: how many installed scripts use the reading actions (64 book, 65 picture, 114 plaque) and the set-start-line
+        // action 94, and how many more scripts S10 admits whole than S9.
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in SCR reading census; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var uses = new Dictionary<int, int> { [ScrCatalogue.Action.ShowBook] = 0, [ScrCatalogue.Action.ShowPicture] = 0, [ScrCatalogue.Action.ShowPlaque] = 0, [94] = 0 };
+        int s9 = 0, s10 = 0;
+        foreach (var key in stack.Keys("scr/").Where(k => k.EndsWith(".scr", StringComparison.Ordinal) && k.Count(c => c == '/') == 1))
+        {
+            var program = ScrProgram.Read(stack.Read(stack.Resolve(key).Winner!).Bytes!).Program!;
+            foreach (var action in uses.Keys.ToArray())
+                if (program.Lines.Any(l => l.OnTrue.Type == action || l.OnFalse.Type == action)) uses[action]++;
+            if (ScrAdmission.Admit(program, ScrAdmissionSet.S9).IsAdmitted) s9++;
+            if (ScrAdmission.Admit(program, ScrAdmissionSet.S10).IsAdmitted) s10++;
+        }
+        Console.WriteLine($"scripts with 64 {uses[64]}, 65 {uses[65]}, 114 {uses[114]}, 94 {uses[94]}; S9 admits {s9}, S10 {s10}");
+        Assert.AreEqual((10, 3, 13, 2), (uses[64], uses[65], uses[114], uses[94]));
+        Assert.AreEqual((657, 681), (s9, s10), "the reading actions admit 24 more installed scripts whole");
+    }
 }

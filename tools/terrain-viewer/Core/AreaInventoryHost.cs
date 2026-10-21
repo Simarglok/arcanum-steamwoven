@@ -128,6 +128,8 @@ public sealed record AreaInventoryLine(string Entity, string Text)
 {
     /// <summary>ARC-SKILLS-005: the PC can use this item to heal (a healing item it holds).</summary>
     public bool Healing { get; init; }
+    /// <summary>ARC-UI-049: a written item the PC holds; its use opens the reading window (or registers a schematic).</summary>
+    public bool Written { get; init; }
     /// <summary>ARC-SKILLS-006: the PC can pick a lock with this item (lockpicks it holds).</summary>
     public bool Lockpick { get; init; }
 }
@@ -249,11 +251,12 @@ public sealed class AreaInventoryHost
         var worn = session.QueryEquipment().Worn.Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
         string Worn(string entity) => worn.Contains(entity) ? " (worn)" : string.Empty;
         var pc = session.QueryHeroKit().Select(item => new AreaInventoryLine(item.Entity, Line(KitName(item, catalog), item.Kind.Type, null) + " (starting kit)" + Worn(item.Entity))
-            { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null })
+            { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written })
             .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)) + Worn(item.Entity))
-            { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null }))
+            { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written }))
             // ARC-WORLD-055: the items the hero made or took from an NPC that held made items follow, named by their kind.
-            .Concat(session.QueryMadeItems().Select(item => new AreaInventoryLine(item.Entity, Line(KindName(item.Kind, catalog), item.Kind.Type, null) + " (made)" + Worn(item.Entity))))
+            .Concat(session.QueryMadeItems().Select(item => new AreaInventoryLine(item.Entity, Line(KindName(item.Kind, catalog), item.Kind.Type, null) + " (made)" + Worn(item.Entity))
+            { Written = item.Kind.Type == SessionItemType.Written }))
             .ToArray();
         var gold = session.QueryGold();
         if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>()) { Gold = gold };
@@ -280,6 +283,24 @@ public sealed class AreaInventoryHost
         if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;
         foreach (var map in _maps.Values)
             if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return AreaHealingItems.From(entity, fields);
+        return null;
+    }
+
+    /// <summary>
+    /// ARC-UI-049: the written facts of an item the PC holds: a taken item's from its object row's fields (instance over prototype), a
+    /// kit or made item's from its prototype in <paramref name="data"/>; null for anything else or an item the session no longer has.
+    /// </summary>
+    public SessionWrittenFacts? WrittenFacts(GameSessionOwner session, string entity, AreaReadingData? data)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.IsItemDestroyed(entity)) return null;
+        var kit = session.QueryHeroKit().FirstOrDefault(item => item.Entity == entity);
+        if (kit.Entity is not null) return data is not null && data.Prototypes.TryGetValue(kit.Kind.Prototype, out var fromKit) ? fromKit : null;
+        var made = session.QueryMadeItems().FirstOrDefault(item => item.Entity == entity);
+        if (made.Entity is not null) return data is not null && data.Prototypes.TryGetValue(made.Kind.Prototype, out var fromMade) ? fromMade : null;
+        if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;
+        foreach (var map in _maps.Values)
+            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return SessionWrittenFacts.FromCombatFields(fields);
         return null;
     }
 

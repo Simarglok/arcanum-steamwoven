@@ -181,6 +181,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.TakeRequested += TakeFromBody;
             _inventoryPanel.TakeAllRequested += TakeAllFromBody;
             _inventoryPanel.UseRequested += HealSelf;
+            _inventoryPanel.ReadRequested += ReadItem;
             _inventoryPanel.PickRequested += ArmLockpick;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).

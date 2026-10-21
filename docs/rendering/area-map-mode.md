@@ -272,8 +272,9 @@ object of another kind, an object off or not clickable at T0, a teleport of anot
 with an unconditional exit stays that exit.
 
 - **Run.** The click goes through the same use rule and walk-to-use as an unconditional exit. Within range,
-  `AreaUseScriptHost` runs the object's use script once, with the PC as the triggerer, under the set "S4-area-use": S4
-  without the story-state actions (the session has no story-state number) and without the dialog action. The use slot is
+  `AreaUseScriptHost` runs the object's use script once, with the PC as the triggerer, under the set "S4-area-use-reading": S4
+  without the story-state actions (the session has no story-state number) and without the dialog action, plus the reading actions
+  64, 65 and 114 (ARC-UI-049: a PC viewer's request opens the [reading window](../world/reading-window-runtime.md)). The use slot is
   the row's script attachment, overridden by the session's map changes `use.lf`, `use.counters` and `use.script` of the
   object (a mobile by its own id; a sector object, whose id is null, by its sector and window ordinal,
   `AreaUseScriptHost.EntityId`), and a changed slot is written back there (a value equal to the loaded one clears its key), so a door that
@@ -310,7 +311,7 @@ the start map), one per tile.
   steps; the original also runs a tile script for an NPC entering the tile). A load, a reset, a transfer arrival and an F8
   restore fire nothing; the original places an object on the map with the same notifications (TS2), which arrival path
   a teleport takes is not read.
-- **Run** (ledger TS1, TS3): from line 0 as a use, the player the triggerer, no attachee, under "S4-area-use". The slot
+- **Run** (ledger TS1, TS3): from line 0 as a use, the player the triggerer, no attachee, under "S4-area-use-reading". The slot
   is the sector file's attachment overridden by the session's map changes on the sector: `tile.N.script`, `tile.N.lf`,
   `tile.N.counters` for tile index N, `sector.script`, `sector.lf`, `sector.counters`. A changed slot is written back
   there; under the Original rules a tile script's change is discarded (ledger X3, the original stores the unchanged
