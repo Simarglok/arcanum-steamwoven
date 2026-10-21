@@ -133,10 +133,25 @@ followed along a `RouteCorridor` instead:
   waypoint) builds the corridor once more from the actor's cell; a second failure stops with the leg's reason. At the
   end of a partial corridor it stops with `ROUTE_PARTIAL`; a corridor that reaches no cell stops with its own reason. A goal outside the source is still refused (`ROUTE_TARGET_OUTSIDE_AREA`, no step): a host heads for
   one through its own partial corridor, as the streamed main map does ([map mode](../rendering/area-map-mode.md#the-main-world-map-arc-render-024)).
+- The far click is a rule-mode switch (ARC-WORLD-072, ledger LR4/LR7, owner decision 2026-10-21): a follower may take
+  `corridorAllowed`, asked once when a goal is set. The viewer's click route answers from the session's
+  `Rules.Navigation.FarClickDoesNotMove`: under Original no corridor is built for a goal beyond the 32-tile reach; it stops with
+  `ROUTE_TARGET_OUT_OF_RANGE` and the PC does not move, as in the original. The switch names the far click only: a goal
+  within 32 tiles walks as before in both modes, along a corridor too when the local window or expansion limit stops it
+  (the original's no-route retry, LR4, is ARC-WORLD-073's port). A corridor walk already started goes on after a switch;
+  the next goal set reads the new value, the same goal clicked again included (a changed answer makes it a new goal), and
+  a goal carried across a main-map window move is set again and so reads it too. The hover's ground action follows it
+  (*no route* beyond 32 tiles under Original).
 - Tests: `tests/Arcanum.Simulation.Tests/Navigation/RouteCorridorTests.cs` (a maze longer than the local reach cut into
   waypoints, partial and refused corridors and the limits, the follower walking the maze through its gaps, a walled-in
   goal beyond reach stopping `ROUTE_PARTIAL`, a goal outside the source refused, an occupant on a waypoint rebuilding the
-  corridor once, a follower without corridor limits refusing as before).
+  corridor once, a follower without corridor limits refusing as before, the far-click switch in both modes and a switch
+  change applied at the next goal, a near goal that keeps its corridor under Original, the same goal clicked again after a
+  switch). The map-mode native smoke's map stage (`ARC-WORLD-072 native-smoke far click`) takes the
+  first cell 40 tiles from the start reachable over the shown chart (over no exit tile) and clicks it under Original (refused with
+  `ROUTE_TARGET_OUT_OF_RANGE`, the PC does not move) and under Steamwoven (walked along a corridor to the goal). It then puts
+  the PC back and restores the session's mode. A map without such a cell reports NONE (the Crash Site cave). On the main map
+  at the Crash Site, 2026-10-21: 40 tiles, a corridor of 2 waypoints, 11 smoke frames.
 - The corridor runs on the caller's thread when a leg is planned (the viewer's main thread). The native walk smoke
   reports its slowest frame, corridors included ([walk smoke](../rendering/area-map-mode.md#the-main-world-map-arc-render-024)).
 
@@ -268,7 +283,7 @@ DC2–DC8 and the freed cells FC1–FC3). Each part of this runtime against it:
 | Search bound and costs | the budget `min(4 × distance + 5, 200)`, 5 more on each later plan, drops long detours; 10 a step, 1 a turn, 50 a window, 90 a spotted trap, 80 fire with flag 0x400, light with flag 0x200 (LR2, LR9, DC4) | at most 4,096 expansions; 10, 1 and 50 as the original; no budget, traps, fire or light | Differs (proposal: the original's search for the click route, one search with the drop's, ARC-COMBAT-010) |
 | Critters | ignored by the plan outside combat mode, checked only before a segment's last step; a hit ends the run, no re-route (LR2, LR5, LRA1) | living T0 critters (the step evidence) and the live companions and PC (the overlay) block in every plan; a denied step stops the route (`ROUTE_STEP_DENIED`) | Differs (question to the owner: LRA1 is a D8 candidate) |
 | No route | a PC tries once more in a straight line with every step accepted, tested as it walks (LR4) | refused (`ROUTE_NOT_FOUND`), no step | Differs (proposal: follow) |
-| A goal beyond 32 tiles (the corridor, ARC-WORLD-042) | refused: the PC does not move (LR4, LR7); at the original's fixed view such a click does not occur | followed along a corridor over the shown window, rebuilt once around an occupant | Steamwoven (question to the owner: a rule-mode switch or a viewer feature) |
+| A goal beyond 32 tiles (the corridor, ARC-WORLD-042) | refused: the PC does not move (LR4, LR7); at the original's fixed view such a click does not occur | followed along a corridor over the shown window, rebuilt once around an occupant | Switch (owner decision 2026-10-21, ARC-WORLD-072): Steamwoven walks the corridor, Original does not move (`NavigationRuleProfile.FarClickDoesNotMove`) |
 | Sector borders, the main map's windows | tiles locked on demand through the 16-sector cache, no border (LR6) | a window of 3 × 3 core sectors, moved as the actor walks; the far-goal hand-off carries a goal across a move | Host limit (no rule) |
 | Long walks (`AreaWindowRoute`) | none: far travel is the world map's (LR7) | a planning aid for the walk smoke, not a player rule | Tooling (no rule) |
 | Destroyed and switched-off objects | never listed, so they never block a step (FC2) | the PC's live overlay moves them (ARC-WORLD-065); the click route, its corridor and the far-goal hand-off read that overlay; since ARC-WORLD-060 `AreaWindowRoute` takes the host's step verdict (`stepOpen`) and the walk smoke passes the overlay's removed objects (not door state or live actors, which the walk's own route applies); the hover cursor's route source does not read the overlay yet (ARC-WORLD-068's) | Follows (the hover: open) |

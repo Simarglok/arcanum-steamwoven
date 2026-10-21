@@ -58,7 +58,7 @@ public partial class TerrainViewerApp
             return true;
         }
         // The inventory host (its attached seeds), the kit's art and the object targets change without a session revision.
-        var stamp = (area, session, session.Version.Revision, _inventoryHost, _areaKitArt, ObjectTargets());
+        var stamp = (area, session, session.Version.Revision, _inventoryHost, _areaKitArt, ObjectTargets(), _schematicData?.Data);
         if (Equals(stamp, _groundStamp)) return false;
         var frames = (AreaFrameOverlay)AreaFrames();
         var overlay = _areaOverlay!.Value;
@@ -96,7 +96,9 @@ public partial class TerrainViewerApp
                 // A T0 body standing on the item's own cell already draws it.
                 if (row is not null && row.Key.RuntimeMap == area.Snapshot.RuntimeMap && overlay.Bodies.ContainsKey(row.Key)
                     && row.WorldX == ground.Cell.X && row.WorldY == ground.Cell.Y) continue;
-                uint? aid = row is not null ? Number(row, CurrentArtSlot) : KitArt(entity);
+                // ARC-WORLD-070: a made item (an assembly product left on the tile) takes its prototype's art from the schematic data.
+                uint? aid = row is not null ? Number(row, CurrentArtSlot) : KitArt(entity)
+                    ?? (placedItems.FirstOrDefault(p => p.Entity == entity) is { Source: SessionPlacedSource.Made } made ? _schematicData?.Data?.ArtOf(made.Kind.Prototype) : null);
                 if (aid is not { } art)
                 {
                     if (_groundReported.Add("noart:" + entity)) GD.Print($"ARC-RENDER-033 ground-item entity={entity} not drawn: no ground art known");

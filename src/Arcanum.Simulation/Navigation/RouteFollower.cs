@@ -24,7 +24,10 @@ public sealed record RouteDrive(MovementState State, IReadOnlyList<MovementResul
 /// planner; a leg that fails on the way (an occupant on a waypoint) builds the corridor again once from where the actor
 /// stands; a corridor that only nears the goal (no route reaches it) stops at its end with <c>ROUTE_PARTIAL</c>, and one
 /// that reaches nothing stops with its own reason. A goal outside the source stays refused; a host heads for one through
-/// the end of its own partial corridor (a streamed window, ARC-RENDER-024).
+/// the end of its own partial corridor (a streamed window, ARC-RENDER-024). ARC-WORLD-072: a host may also say, per goal,
+/// whether a goal beyond the 32-cell reach may follow a corridor (<c>corridorAllowed</c>, asked when a goal is set: the
+/// Original rule mode's far click does not move, <see cref="NavigationRuleProfile.FarClickDoesNotMove"/>); a goal within the
+/// reach that the local window or expansion limit stops still follows one. Without it, the corridor limits decide alone.
 /// </summary>
 public sealed class RouteFollower
 {
@@ -37,13 +40,17 @@ public sealed class RouteFollower
     private SimulationTime? _requestedAt;
     private InputKey? _issued;
 
-    public RouteFollower(IRouteStepSource source, RouteLimits? limits = null, RouteCorridorLimits? corridorLimits = null)
+    public RouteFollower(IRouteStepSource source, RouteLimits? limits = null, RouteCorridorLimits? corridorLimits = null, Func<bool>? corridorAllowed = null)
     {
         _source = source ?? throw new ArgumentNullException(nameof(source));
         _limits = limits ?? new RouteLimits();
         _corridorLimits = corridorLimits;
+        _corridorAllowed = corridorAllowed;
     }
     private readonly RouteCorridorLimits? _corridorLimits;
+    private readonly Func<bool>? _corridorAllowed;
+    // Whether the current goal, beyond the local reach, may follow a corridor: the host's answer when the goal was set.
+    private bool _farCorridorForGoal;
     private int _waypointNext;
     private bool _corridorRebuilt;
     /// <summary>The corridor followed toward the current goal (ARC-WORLD-042), null while the local planner reaches it.</summary>
@@ -66,9 +73,12 @@ public sealed class RouteFollower
     {
         if (!observedAt.IsValid) throw new ArgumentException("ROUTE_TIME_INVALID", nameof(observedAt));
         if (range is < 0 or > RouteLimits.AxisDistanceMaximum) throw new ArgumentOutOfRangeException(nameof(range));
-        if (Status == RouteFollowStatus.Following && Target == target && Range == range) return false;
+        var farCorridor = _corridorAllowed?.Invoke() ?? true;
+        // The goal followed is kept, unless the host's answer changed (a rule-mode switch since): then it is a new goal.
+        if (Status == RouteFollowStatus.Following && Target == target && Range == range && farCorridor == _farCorridorForGoal) return false;
         Target = target; Range = range; Status = RouteFollowStatus.Following; StopReason = null; LastPlan = null; PlannedSegments = 0;
         _requestedAt = observedAt; ResetSegment(); Corridor = null; _waypointNext = 0; _corridorRebuilt = false;
+        _farCorridorForGoal = farCorridor;
         return true;
     }
 
@@ -169,7 +179,7 @@ public sealed class RouteFollower
             // Beyond the local reach: a corridor over the whole source, once per goal; a leg along it that fails (an occupant
             // on its waypoint) builds it once more from here.
             if (plan.Outcome != RouteOutcome.Found && _corridorLimits is { } corridorLimits
-                && (Corridor is null ? CorridorReasons.Contains(plan.ReasonCode) : !_corridorRebuilt))
+                && (Corridor is null ? CorridorReasons.Contains(plan.ReasonCode) && (_farCorridorForGoal || plan.ReasonCode != OutOfRange) : !_corridorRebuilt))
             {
                 _corridorRebuilt = Corridor is not null;
                 Corridor = RouteCorridor.Plan(_source, cell, goal, corridorLimits); _waypointNext = 0;
@@ -186,8 +196,9 @@ public sealed class RouteFollower
     }
 
     // The local planner's refusals a longer corridor may get past (a route outside its window).
+    private const string OutOfRange = "ROUTE_TARGET_OUT_OF_RANGE";
     private static readonly HashSet<string> CorridorReasons = new(StringComparer.Ordinal)
-        { "ROUTE_TARGET_OUT_OF_RANGE", "ROUTE_WINDOW_EXHAUSTED", "ROUTE_EXPANSION_LIMIT" };
+        { OutOfRange, "ROUTE_WINDOW_EXHAUSTED", "ROUTE_EXPANSION_LIMIT" };
 
     /// <summary>The cell the local planner heads for: the goal, or along a corridor its next waypoint not yet reached; null
     /// at the end of a corridor that only nears the goal.</summary>

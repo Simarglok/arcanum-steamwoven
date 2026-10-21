@@ -169,12 +169,15 @@ public sealed class BackgroundStateTests
             MissingLines = Array.AsReadOnly(new bool[7]),
         };
         Arcanum.Simulation.Technology.ComponentFacts? Facts(int prototype) => prototype == 2320 ? new(-5, 3) : new(0, 3);
-        foreach (var (background, expected) in new[] { (SessionBackgrounds.Technophobia, GameSessionFailure.InsertRefused), (SessionBackgrounds.None, GameSessionFailure.None) })
+        foreach (var (background, refused) in new[] { (SessionBackgrounds.Technophobia, true), (SessionBackgrounds.None, false) })
         {
             using var owner = CreateWith(HalfElf() with { Background = background, Kit = [new(part), new(part)] });
             var made = owner.AssembleSchematic(owner.Version, schematic, _ => new SessionCraftFacts(10), Facts, _ => product, Accept);
-            Assert.AreEqual(expected, made.Failure, $"background {background}");
-            Assert.AreEqual(expected == GameSessionFailure.None ? null : SessionInsertVerdict.TechnologyRefused, made.Verdict);
+            // ARC-WORLD-070: a refused product lies on the hero's tile (the original leaves it there) and the assembly succeeds.
+            Assert.AreEqual(GameSessionDisposition.Changed, made.Disposition, $"background {background}");
+            Assert.AreEqual(refused ? SessionInsertVerdict.TechnologyRefused : null, made.Verdict);
+            Assert.AreEqual(refused ? 1 : 0, made.OnGround.Count);
+            Assert.AreEqual(refused ? 0 : 1, made.Made.Count);
         }
     }
 }
