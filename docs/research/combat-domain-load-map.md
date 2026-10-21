@@ -93,7 +93,7 @@ not repeated here.
    its sector's objects are listed (reschedule (0x4AD730, 0x4AD790), sector (0x4F1CD0)).
    Combat-focus wipes and NPC "wait here" timers are saved.
 8. **The parsers are strict in the wrong way.** A missing `.mes` line yields a
-   shared "Error! Missing line" string rather than a failure
+   shared missing-line message rather than a failure
    (mes (0x4D43A0)); an unknown flag or list token in a named-key line ends the
    process; named keys are case-sensitive and must appear
    in the expected order, or they are skipped silently.
@@ -239,7 +239,7 @@ means a missing file fails that phase.
 
 - **Message files.** A loaded file is sorted by entry number and searched by
   binary search. A missing number does not fail: it returns one shared static
-  "Error! Missing line N in <path>" string (mes (0x4D43A0)). A missing or
+  missing-line message naming the number and the path (mes (0x4D43A0)). A missing or
   empty file fails `mes_load`. "Next entry" walks by position, whatever the
   numbers (next (0x4D4460)).
 - **Named keys** (`Key:` value lines, used by `spelllist.mes` and the eye
