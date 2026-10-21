@@ -168,8 +168,9 @@ The registry version stays 1, as when the Lock event was added.
 
 ## Not ready
 
-- **Viewer.** It draws a busted window on frame 0 of its T0 ART (the busted ART is not loaded), a busted scenery or trap on
-  its T0 ART (not the destroyed ART), and no spilled items: they lie in the session and the inventory but have no draw command.
+- **Viewer.** It draws a busted window on frame 0 of its T0 ART (the busted ART is not loaded). Since ARC-RENDER-033 a busted
+  scenery or trap is drawn from its destroyed ART (field 24) at its T0 anchor and spilled items at the container's cell
+  ([ground items](inventory-runtime.md#ground-items-in-the-viewer-arc-render-033)).
   The viewer passes the trap flag (ARC-COMBAT-011) but runs no trap: the trap script with its built-in spells and attacks (30000..30006) is the SCR lane's.
 - **Host steps.** The trap and BUST scripts, sounds, eye candy, the witnesses' reaction and the taking-damage script are reported
   to the host, not run here.
