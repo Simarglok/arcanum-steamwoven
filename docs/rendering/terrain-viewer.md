@@ -1061,6 +1061,34 @@ low-intelligence texts, rebuild on change, dead-hero close and refusal); native 
 map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`
 on the live session; on a detached copy every quest and rumor that has a text is listed with it).
 
+### Schematic window (ARC-TECHNOLOGY-005)
+
+The original Technical schematics key `T` (logical key down; the original's in-game key handler opens the window for the local
+PC as crafter and viewer, ledger [SW1](../research/original-verification-ledger.md#schematic-window-arc-technology-005)) toggles
+a diagnostic schematic window of the session's hero in crash-site-area (exterior, cave and `--area-map`), with the learned and
+found tabs, the eight discipline tabs, Previous and Next, the record's name and description, the two components (found or
+missing, the expertise they need), the product and quantity, and the Assemble button with its state. Contract:
+[schematic window runtime](../world/schematic-window-runtime.md).
+
+It opens from the world only (no palette, dialog, other window or UI focus), only with a hero and never for a dead one. Open
+plays 3008, the player's close 3009, a discipline or page 3010, a tab 3011 (only from the other tab), a successful assembly
+3018 + the current discipline with `schematic_text.mes` 2; a refused button shows `schematic_text.mes` 0 or 1. Like the
+character sheet it is modal (gate closed, clock paused, a walk stopped) and owns every key while open: `T`, `Escape` or a
+controller cancel closes it, `Tab` or a controller confirm assembles. Each tab keeps its discipline and page across close and
+open; a new session (a quick load) starts at the learned tab. Script action 129 of a dialog script opens the window for the PC
+once nothing else owns input; for an NPC with a PC leader it is refused by name (the NPC crafter is a later slice). The data
+(`schematic.mes`, `schematic_text.mes`, `tech.mes` and the prototypes the records name) load once per module in the background.
+The HUD adds `T schematics` and the last refusal.
+
+**Not implemented:** the original window art, slot pictures and overlays, the interface button, the slot item description box,
+the tab and discipline hover texts, the NPC crafter (dialog `su`). Self-test `ARC-TECHNOLOGY-005 self-test PASS` (observed with
+the stage moved first: the full run stops earlier at a conversation-routing check that also fails on main; synthetic
+records and hero: refusal without a hero, `T`, controls and their sounds and bounds, keys owned, refused texts, an assembly
+through the session, `Escape`, position kept, controller cancel, script 129 for the PC and the NPC refusal, dead-hero close);
+native smoke after the logbook stage: `ARC-TECHNOLOGY-005 native-smoke schematics PASS` (the module's schematic data load; with
+`--hero`, `T` opens over the live session, the controls move, `Escape` closes, nothing changes; on a detached synthetic hero
+holding a learned record's components one assembly makes its product).
+
 ### Reserved-key hint (ARC-INPUT-003)
 
 An original key that is reserved, not implemented ([keyboard routing](../input/diagnostic-palette.md#keyboard-routing)),

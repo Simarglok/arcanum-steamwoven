@@ -51,7 +51,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] LightingFields = ["schemeId", "hour"];
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
-    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors"];
+    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea"];
     private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
     private static readonly string[] RumorFields = ["rumor", "timestampMs"];
@@ -67,7 +67,8 @@ public static class GameSessionSnapshotCodec
         "Gambling", "Haggle", "Heal", "Persuasion", "Repair", "Firearms", "PickLocks", "DisarmTraps"];
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
-    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made"];
+    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs"];
+    private static readonly string[] NpcInventoryFields = ["npc", "items"];
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
     private static readonly string[] WornFields = ["slot", "entity", "item"];
@@ -219,6 +220,10 @@ public static class GameSessionSnapshotCodec
             w.WriteStartArray("quelledRumors");
             foreach (var rumor in story.QuelledRumors) w.WriteNumberValue(rumor);
             w.WriteEndArray();
+            w.WriteStartArray("knownAreas");
+            foreach (var area in story.KnownAreas) w.WriteNumberValue(area);
+            w.WriteEndArray();
+            w.WriteNumber("lastArea", story.LastArea);
             w.WriteEndObject();
 
             w.WriteStartObject("party");
@@ -317,14 +322,17 @@ public static class GameSessionSnapshotCodec
             }
             w.WriteEndArray();
             w.WriteStartArray("made");
-            foreach (var item in snapshot.Inventory.Made)
+            foreach (var item in snapshot.Inventory.Made) WriteMade(w, item);
+            w.WriteEndArray();
+            // ARC-WORLD-055: by NPC entity in ordinal order, each list in its order.
+            w.WriteStartArray("npcs");
+            foreach (var npc in snapshot.Inventory.Npcs)
             {
                 w.WriteStartObject();
-                w.WriteString("entity", item.Entity);
-                w.WriteString("type", ItemTypeName(item.Kind.Type));
-                w.WriteNumber("prototype", item.Kind.Prototype);
-                w.WriteNumber("name", item.Kind.Name);
-                w.WriteNumber("description", item.Kind.Description);
+                w.WriteString("npc", npc.Npc);
+                w.WriteStartArray("items");
+                foreach (var item in npc.Items) WriteMade(w, item);
+                w.WriteEndArray();
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -953,7 +961,16 @@ public static class GameSessionSnapshotCodec
             quelled[i] = Int(items[i], path, SessionStoryLimits.FirstRumor, SessionStoryLimits.LastRumor);
             if (i > 0 && quelled[i] <= quelled[i - 1]) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
-        return new(quests, globals, rumors, quelled);
+        items = Array(f["knownAreas"], p + ".knownAreas", SessionStoryLimits.LastArea);
+        var areas = new int[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.knownAreas[{i}]";
+            areas[i] = Int(items[i], path, 1, SessionStoryLimits.LastArea);
+            if (i > 0 && areas[i] <= areas[i - 1]) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+        }
+        var last = Int(f["lastArea"], p + ".lastArea", 0, SessionStoryLimits.LastArea);
+        return new(quests, globals, rumors, quelled, areas, last);
     }
 
     private static SessionPartyState Party(JsonElement element)
@@ -1153,7 +1170,46 @@ public static class GameSessionSnapshotCodec
             if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             made[i] = new(entity, Kind(item, path));
         }
-        return new(gold, kit, pc, made);
+        // ARC-WORLD-055: the NPCs in strictly ascending ordinal order, none with an empty list; an item listed once in the whole
+        // inventory.
+        var npcRows = Array(f["npcs"], p + ".npcs", GameSessionLimits.PolicyMaxNpcItems);
+        var npcs = new SessionNpcInventory[npcRows.Length];
+        var held = 0;
+        string? previous = null;
+        for (var i = 0; i < npcRows.Length; i++)
+        {
+            var path = $"{p}.npcs[{i}]";
+            var row = Fields(npcRows[i], path, NpcInventoryFields);
+            var npc = Entity(row["npc"], path + ".npc");
+            if (previous is not null && string.CompareOrdinal(previous, npc) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".npc");
+            previous = npc;
+            var rows = Array(row["items"], path + ".items", SessionMapInventorySeed.MaxListLength);
+            if (rows.Length == 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".items");
+            held += rows.Length;
+            if (held > GameSessionLimits.PolicyMaxNpcItems) throw new DecodeException(SnapshotDecodeFailure.BudgetExceeded, path + ".items");
+            var list = new SessionMadeItem[rows.Length];
+            for (var j = 0; j < rows.Length; j++)
+            {
+                var itemPath = $"{path}.items[{j}]";
+                var item = Fields(rows[j], itemPath, KitItemFields);
+                var entity = Entity(item["entity"], itemPath + ".entity");
+                if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, itemPath + ".entity");
+                list[j] = new(entity, Kind(item, itemPath));
+            }
+            npcs[i] = new(npc, System.Array.AsReadOnly(list));
+        }
+        return new(gold, kit, pc, made, npcs);
+    }
+
+    private static void WriteMade(Utf8JsonWriter w, SessionMadeItem item)
+    {
+        w.WriteStartObject();
+        w.WriteString("entity", item.Entity);
+        w.WriteString("type", ItemTypeName(item.Kind.Type));
+        w.WriteNumber("prototype", item.Kind.Prototype);
+        w.WriteNumber("name", item.Kind.Name);
+        w.WriteNumber("description", item.Kind.Description);
+        w.WriteEndObject();
     }
 
     private static void WriteWorn(Utf8JsonWriter w, SessionWornItem worn)

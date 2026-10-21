@@ -1,10 +1,10 @@
 # Schematic assembly runtime
 
-Status: **Implemented bounded component, not wired.** Work item ARC-TECHNOLOGY-004 (2026-10-21), slice TECH-4 of the
+Status: **Implemented bounded component, wired for the hero.** Work item ARC-TECHNOLOGY-004 (2026-10-21), slice TECH-4 of the
 [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted). The
 schematic component gate, the assemble button and the assembly plan as pure rules in `Arcanum.Simulation.Technology`, and the
-hero's assembly as one session change that makes items into its inventory (snapshot schema 24: the made items). No viewer or
-schematic window calls them yet.
+hero's assembly as one session change that makes items into its inventory (snapshot schema 24: the made items). The viewer's
+[schematic window](schematic-window-runtime.md) (ARC-TECHNOLOGY-005) calls them for the hero.
 
 Requirements: [FR-ITEM-018](../requirements/items-economy.md#fr-item-018) (assembly).
 
@@ -69,15 +69,17 @@ a creation fails):
   session's own: a seed or a taken item may not carry it). No roll, skill, action points, time or experience.
 
 The result names the plan, the made and the consumed items. The host shows `schematic_text.mes` 2 and plays sound 3018 + the
-current tab (the window's, TECH-5) on success, or the refusal message of the plan's button.
+current discipline (3018..3025, the window's, ARC-TECHNOLOGY-005) on success, or the refusal message of the plan's button.
 
 `QueryHeroAssembly(schematic, items, facts)` gives the plan without changing anything (the page the window draws).
 
 ## Made items (snapshot schema 24)
 
 `SessionInventoryState.Made` / `QueryMadeItems()`: `"inventory":{…,"made":[{"entity","type","prototype","name","description"}]}`,
-in the order they were made. Restore refuses a made item without a hero or of a type the lists do not admit (`InvalidItem`), and
-an entity that is not `made:n` with strictly ascending n or that was deleted (`InvalidSnapshot`). Made items count toward
+in the order they entered the list. Restore refuses a made item of a type the lists do not admit (`InvalidItem`), and an entity
+that is not `made:n`, that was deleted or that is held twice (`InvalidSnapshot`). Since ARC-WORLD-055 (schema 29) an NPC can hold
+made items too ([NPC inventory changes](inventory-runtime.md#npc-inventory-changes-arc-world-055)): the numbers are shared, and a made
+item the PC takes from an NPC joins this list in entry order (so the numbers need not ascend, and a heroless session can hold one). Made items count toward
 `GameSessionLimits.MaxPcItems`, can be worn and broken like any held item, and no seed may list them. Schemas 1..23 are refused.
 
 ## Differences from the original
@@ -94,7 +96,6 @@ an entity that is not `made:n` with strictly ascending n or that was deleted (`I
 
 ## Not ready
 
-- No caller: the schematic window (TECH-5) and its tabs, pages, sounds and messages.
 - NPC crafters (the dialog's `su`): the rules take any crafter's item view and expertise, but the session wiring for an NPC's
   inventory and degrees is not done.
 - Ammunition and stack products and components in the hero's lists (ARC-WORLD-014 refuses stacks).

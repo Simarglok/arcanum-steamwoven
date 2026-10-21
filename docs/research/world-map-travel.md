@@ -1,6 +1,7 @@
 # World-map travel: areas, routes, time and arrival (ARC-RES-068)
 
-Status: **Research** (whole-world plan M4, step R7; the travel slice W3 builds on it). The
+Status: **Research** (whole-world plan M4, step R7; the travel slice W3 builds on it, rules since
+ARC-WORLD-056). The
 behaviour below is read in the retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…8d52`).
 Two readers checked it, and the rows are in
 [ledger WT1–WT13](original-verification-ledger.md#world-map-travel-arc-res-068). Data facts are
@@ -70,8 +71,8 @@ travel step.
   opens on its keyed map, else 2000. Tile x maps back to pixel W − x/64, and tile y to y/64.
 - **Steps.** The route is a list of the 8 directions between sector centres. From the
   current sector the next step points straight at the target (the sector direction 0x4CFCD0:
-  the signs of the deltas, the minor axis dropped when |minor|/2 − |major|/4 < 0 in integer
-  halves).
+  the signs of the deltas, the minor axis dropped when 2 |minor| < |major|, computed from
+  doubled deltas).
   That sector is taken when it passes:
   - a sector the scripts blocked (the blocked-sector list, 0x4D0EE0) never passes;
   - a sector with its own sector file passes;
@@ -138,6 +139,9 @@ decision for the W3 task (rule modes, [D8](npc-combat-ai-plan.md#owner-decisions
 | A4 | Cancelling travel lands on the sector centre without the area snap (WT12). | A cancelled journey lands differently from an arrival at the same place. |
 
 ## Steamwoven: slice W3 (proposed)
+
+The Data, Simulation and Session parts are implemented as ARC-WORLD-056
+([world-map travel rules](../world/world-map-travel-runtime.md)); the viewer panel is still to do.
 
 **ARC-WORLD-05x world-map travel**, Godot-free rules plus a viewer path. It needs no new
 original data reader beyond `mes/gamearea.mes`. Its parts:

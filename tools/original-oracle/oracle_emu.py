@@ -7,7 +7,7 @@ caller with the stack balanced and the callee-saved registers kept, and it fails
 - "stub": a stub that rejects its arguments;
 - "read": a data read outside the stack frame of the call (return address and arguments included) and the allowed
   ranges (image globals or world-model data on the heap that the call names), i.e. state the model does not define;
-- "write": a write anywhere but the stack;
+- "write": a write anywhere but the stack and the ranges the call names writable (world-model outputs);
 - "fault": an unmapped or invalid access, or an invalid instruction;
 - "no-return": the instruction limit is reached first;
 - "abi": the stack or a callee-saved register is not restored.
@@ -98,12 +98,20 @@ class Emulator:
             raise ValueError(f"global {address:#x} outside the image")
         self.mu.mem_write(address, struct.pack("<I", value & 0xFFFFFFFF))
 
+    def read_u32(self, address: int) -> int:
+        """Read a 32-bit value the oracle placed or the function wrote (a world-model output), unsigned."""
+        if not (address in self.image_range or address in self.heap) or address + 4 > (self.image_range.end if address in self.image_range else self.heap.end):
+            raise ValueError(f"read {address:#x} outside the image and the heap")
+        return struct.unpack("<I", self.mu.mem_read(address, 4))[0]
+
     def call(self, function: int, arguments: Sequence[int], *, code: Iterable[Range], stubs: dict[int, Stub] | None = None,
-             readable: Iterable[Range] = ()) -> int:
+             readable: Iterable[Range] = (), writable: Iterable[Range] = ()) -> int:
         """Call `function` (cdecl) with 32-bit `arguments`; returns EAX as a signed 32-bit value. `readable` names the image
-        globals and heap data the function may read; stack reads above its arguments fail too."""
+        globals and heap data the function may read; `writable` the ones it may write (and read), its outputs in the world model;
+        stack reads above its arguments fail too."""
         code = tuple(code)
-        readable = tuple(readable)
+        writable = tuple(writable)
+        readable = tuple(readable) + writable
         stubs = dict(stubs or {})
         if not any(function in allowed for allowed in code):
             raise ValueError(f"function {function:#x} is outside its own allowed code ranges")
@@ -168,7 +176,9 @@ class Emulator:
         def on_write(uc: Uc, access: int, address: int, size: int, value: int, _: object) -> None:
             if failure or (address in self.stack and address + size <= self.stack.end):
                 return
-            fail("write", f"write of {size} bytes at {address:#x} outside the stack")
+            if any(address in r and address + size <= r.end for r in writable):
+                return
+            fail("write", f"write of {size} bytes at {address:#x} outside the stack and the writable ranges")
 
         hooks = [mu.hook_add(UC_HOOK_CODE, on_code), mu.hook_add(UC_HOOK_MEM_READ, on_read),
                  mu.hook_add(UC_HOOK_MEM_WRITE, on_write)]

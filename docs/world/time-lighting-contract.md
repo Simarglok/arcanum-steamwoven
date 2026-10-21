@@ -258,8 +258,8 @@ remain separate dependencies, not implemented by this inspector.
 **Proven source dispositions:** OFF (1) excludes contribution; DARK (2) selects
 subtraction otherwise addition. INDOOR (8) / OUTDOOR (16) choose **emitter tint
 sources**, not spatial indoor-only/outdoor-only exclusion; the tint helper (0x4DE390)
-prioritizes INDOOR if both are set. With neither flag set it retains custom color. Unknown bits
-remain Unknown. Synthetic literal words test these branches even when the actual
+prioritizes INDOOR if both are set. With neither flag set it retains custom color. The other bits
+(0x4, 0x20, 0x40, 0x80) are read in [LT6, LT8 and LT14](../research/original-verification-ledger.md#lights-on-all-maps-arc-res-069). Synthetic literal words test these branches even when the actual
 supplement has none.
 
 Sector load/fold (0x4F7940) refuses inventory world insertion and applies nocturnal
@@ -269,10 +269,13 @@ respawning scenery, updates only a changed state and has **no equivalent invento
 refusal in that function**. These seams must not be flattened into one rule or a
 universal time-sensitive-object policy. The helper's load/refresh decision tables
 are bounded source worksheets, not object-state mutation.
-Primary/overlay creation/update (0x4D9590) also differ: primary creation adds
-an extra runtime flag; overlay creation uses primary light flags plus overlay bit,
-while overlay update uses its overlay flag array. That provenance difference is
-recorded; absent original overlay/mask/state inputs stay NOT_READY.
+Primary/overlay creation/update (0x4D9590): primary creation adds an extra runtime
+flag (0x8000000); overlay creation uses the overlay flag array plus the slot bit, and
+overlay update ORs the overlay flags without it. The executable reading of ARC-RES-069
+([LT1](../research/original-verification-ledger.md#lights-on-all-maps-arc-res-069))
+corrects the earlier source reading, which had overlay creation take the primary flags.
+Object lights, nocturnal switching, carried and animated lights are read there
+([lights on all maps](../research/lights-on-all-maps.md)).
 
 ## Renderer boundary, layers and neighbours
 
