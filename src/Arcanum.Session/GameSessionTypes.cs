@@ -81,12 +81,16 @@ public sealed class GameSessionLimits
     /// <summary>Made items the session added to NPCs (ARC-WORLD-055), all NPCs together; one NPC's list holds at most
     /// <see cref="SessionMapInventorySeed.MaxListLength"/> items with its seed items. Far more than NPC crafting adds in a playthrough.</summary>
     public const int PolicyMaxNpcItems = 4096;
+    /// <summary>Ammunition stacks the session tracks (ARC-WORLD-066): the hero's (at most one a prototype, four installed) and every
+    /// other stack whose units it changed; far more than a playthrough's ammunition.</summary>
+    public const int PolicyMaxAmmoRecords = 4096;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
         int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
         int maxLifeRecords = PolicyMaxLifeRecords, int maxReactionRecords = PolicyMaxReactionRecords,
         int maxExperienceRecords = PolicyMaxExperienceRecords, int maxAdvancementRecords = PolicyMaxAdvancementRecords,
-        int maxDurabilityRecords = PolicyMaxDurabilityRecords, int maxFoundSchematics = PolicyMaxFoundSchematics, int maxNpcItems = PolicyMaxNpcItems)
+        int maxDurabilityRecords = PolicyMaxDurabilityRecords, int maxFoundSchematics = PolicyMaxFoundSchematics, int maxNpcItems = PolicyMaxNpcItems,
+        int maxAmmoRecords = PolicyMaxAmmoRecords)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
@@ -100,11 +104,12 @@ public sealed class GameSessionLimits
         if (maxDurabilityRecords is < 1 or > PolicyMaxDurabilityRecords) throw new ArgumentOutOfRangeException(nameof(maxDurabilityRecords));
         if (maxFoundSchematics is < 1 or > PolicyMaxFoundSchematics) throw new ArgumentOutOfRangeException(nameof(maxFoundSchematics));
         if (maxNpcItems is < 1 or > PolicyMaxNpcItems) throw new ArgumentOutOfRangeException(nameof(maxNpcItems));
+        if (maxAmmoRecords is < 1 or > PolicyMaxAmmoRecords) throw new ArgumentOutOfRangeException(nameof(maxAmmoRecords));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
         MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
         MaxReactionRecords = maxReactionRecords; MaxExperienceRecords = maxExperienceRecords;
         MaxAdvancementRecords = maxAdvancementRecords; MaxDurabilityRecords = maxDurabilityRecords; MaxFoundSchematics = maxFoundSchematics;
-        MaxNpcItems = maxNpcItems;
+        MaxNpcItems = maxNpcItems; MaxAmmoRecords = maxAmmoRecords;
     }
 
     public int MaxMaps { get; }
@@ -119,6 +124,7 @@ public sealed class GameSessionLimits
     public int MaxDurabilityRecords { get; }
     public int MaxFoundSchematics { get; }
     public int MaxNpcItems { get; }
+    public int MaxAmmoRecords { get; }
 }
 
 /// <summary>
@@ -218,6 +224,8 @@ public enum GameSessionFailure
     PickLockUnavailable, InvalidLockpick,
     // Repair (ARC-SKILLS-007).
     RepairUnavailable,
+    // Ammunition (ARC-WORLD-066).
+    InvalidAmmo, AmmoShort,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -374,8 +382,9 @@ public sealed class GameSessionSnapshot
     /// Schema 29 adds the made items added to NPCs to <see cref="Inventory"/> (ARC-WORLD-055); schema 30 adds the PC's reputations to
     /// the story (ARC-WORLD-044); schema 31 adds the items' remaining uses to <see cref="Durability"/> (ARC-SKILLS-005); schema 32 adds
     /// the hero's items placed on the ground to <see cref="Inventory"/> (ARC-WORLD-059); schema 33 adds the waiting followers' missed
-    /// level steps to <see cref="Advancement"/> (ARC-WORLD-047). Schemas 1..32 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 33;
+    /// level steps to <see cref="Advancement"/> (ARC-WORLD-047); schema 34 adds the ammunition stacks to <see cref="Inventory"/>
+    /// (ARC-WORLD-066). Schemas 1..33 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 34;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

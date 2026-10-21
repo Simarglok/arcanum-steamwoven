@@ -58,7 +58,8 @@ a creation fails):
   item's state the session's durability record);
 - a record without a product at the found index or with a quantity below 1 is `InvalidSchematics`;
 - the product kind (`productKind`, the product prototype's type, name and description) must be a type the hero's lists admit
-  (gold, ammunition, keys and key rings are not: `ItemTypeUnsupported`);
+  (gold, keys and key rings are not: `ItemTypeUnsupported`; an ammunition product needs its type and units, `productAmmo`, and
+  merges into the hero's stack of its prototype since ARC-WORLD-066, [ammunition](inventory-runtime.md#ammunition-arc-world-066));
 - each of the "quantity" products must pass the insert check; the host answers each unit as if both components were already
   gone and the earlier units already inserted (the session asks before it changes anything); The original creates each product on the crafter's tile
   (0x4ED8B0) and moves it into the inventory (0x4617F0), which leaves it on the tile when the inventory refuses it; the
@@ -92,7 +93,7 @@ item the PC takes from an NPC joins this list in entry order (so the numbers nee
 | A product the inventory refuses stays on the crafter's tile. | The assembly is refused (the session keeps no new ground items). |
 | Each product enters the inventory after the components left and the earlier products entered. | The insert check is asked first for every unit; the host answers each as if that had happened. |
 | — | The reservation is greedy: component 1 takes its first alternative present even when another would leave component 2 an item (latent: no installed record lists one prototype in both lists). |
-| An ammunition component loses one unit. | The rule does (`UseUnits`); the hero's lists hold no ammunition, so the session never meets one. |
+| An ammunition component loses one unit. | The rule does (`UseUnits`), and since ARC-WORLD-066 the session spends one unit of the held stack (the stack goes at its last unit). |
 
 ## NPC crafter (ARC-TECHNOLOGY-006)
 
@@ -112,5 +113,5 @@ the NPC cannot take on the ground at the crafter and still completes (NC7); the 
 ## Not ready
 
 - NPC crafters are done by ARC-TECHNOLOGY-006 (above); the "expertise in discipline" effects of an NPC are not modelled.
-- Ammunition and stack products and components in the hero's lists (ARC-WORLD-014 refuses stacks).
+- Gold and key products and components (the hero's lists hold neither); ammunition is done by ARC-WORLD-066.
 - Dropping a product on the ground when the inventory cannot take it.
