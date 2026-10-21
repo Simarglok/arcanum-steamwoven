@@ -9,6 +9,8 @@ public enum SpellRollPurpose
     SaveD20,
     /// <summary>The fail-chance predictor's own d20 (0x453B20, MG14): asking the question moves the random stream.</summary>
     FailChanceD20,
+    /// <summary>The invocation check's d100 against a technologist target (0x4564E0, MG5): rolled although it never refuses.</summary>
+    InvocationAptitudeD100,
 }
 
 /// <summary>

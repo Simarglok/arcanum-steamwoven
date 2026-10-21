@@ -26,6 +26,8 @@ internal sealed record ConversationExpertTeacher(DialogOperationSource Source, i
 /// <summary>ARC-TECHNOLOGY-006: SU, the schematic window with the NPC as crafter (ledger NC1).</summary>
 internal sealed record ConversationSchematics(DialogOperationSource Source) : ConversationOperation(Source);
 internal sealed record ConversationMetBefore(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
+/// <summary>RP n (ARC-WORLD-044): as a condition n > 0 holds n, n ≤ 0 lacks −n; as an action n > 0 adds n, n ≤ 0 removes −n.</summary>
+internal sealed record ConversationReputation(DialogOperationSource Source, int Value) : ConversationOperation(Source);
 internal sealed record ConversationFatePoint(DialogOperationSource Source) : ConversationOperation(Source);
 
 internal enum ConversationField
@@ -48,6 +50,7 @@ internal enum ConversationField
 /// with a fate port FP (one fate point for the PC, ARC-WORLD-054) in NPC and Player actions, without an operand, as every installed
 /// one is written (the source reads an operand it does not use; one is outside this subset).</item>
 /// </list>
+/// With a reputation port (ARC-WORLD-044) RP n is admitted as a condition and as an action of either side.
 /// SK, TR and ET read their second operand as the source does (0x4167C0, ledger DS3): spaces before it are optional
 /// ("tr4-1") and a missing one is 0; a negative first operand is refused (the source would read it as the second too).
 /// Without a party port WA and UW stay unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>), as before
@@ -62,7 +65,7 @@ internal static class DialogConversationGrammar
     private const int HaggleSkill = 9, PersuasionSkill = 11;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool schematics = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -88,7 +91,8 @@ internal static class DialogConversationGrammar
             index += 2;
             var admitted = role == ConversationField.PlayerCondition
                 ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
-                : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR"
+                    || reputations && opcode == "RP"
+                : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
                         || schematics && opcode == "SU");
@@ -188,6 +192,7 @@ internal static class DialogConversationGrammar
                 "AL" when sign == '\0' => new ConversationAlignment(source, DialogReactionMode.Target, first),
                 "AL" => new ConversationAlignment(source, DialogReactionMode.Adjust, first),
                 "RA" when first != int.MinValue => new ConversationRaceGate(source, first),
+                "RP" when first != int.MinValue => new ConversationReputation(source, first),
                 "IN" when first < 0 && first != int.MinValue => new ConversationGiveItem(source, -first),
                 "IN" => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "MM" when first >= 0 => new ConversationMarkArea(source, first),
