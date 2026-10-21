@@ -5,7 +5,7 @@ the concealment toggle of the hero and its followers (saved), the prowling margi
 the stealth gait. The AI's use of the margin is slice I2 (not built). Rules: `StealthRules` in
 [`Arcanum.Simulation.Skills`](../../src/Arcanum.Simulation/Skills/StealthRules.cs); session:
 [`GameSessionStealth.cs`](../../src/Arcanum.Session/GameSessionStealth.cs); viewer: the palette's **Prowl (stealth) on/off**.
-Snapshot schema 34. Requirements: [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) (perception and stealth),
+Snapshot schema 35. Requirements: [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) (perception and stealth),
 [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019) (a skill used).
 
 ## Evidence
@@ -25,12 +25,12 @@ Snapshot schema 34. Requirements: [FR-AI-002](../requirements/story-social-ai.md
 | Gait (ST3) | Below expert the stealth walk and no run; an expert the ordinary walk and no run; a master runs while it has fatigue. | `StealthRules.Gait` |
 | Margin (AW4, ST5) | Per observer at each check: `clamp(E − D, 0, 100)` of the shared check's prowling effectiveness (opposed by the observer's perception) and difficulty (sight or hearing); the observer's perception falls by `P × M / 100`. 0 while the hero is not concealed. | `HeroProwlingMargin`, `StealthRules.Margin`, `PerceptionAfterMargin` |
 
-## Snapshot schema 34
+## Snapshot schema 35
 
 `"concealment":{"hero":bool,"npcs":[entity]}`: the hero's flag (false without a hero) and its concealed followers in strictly
 ascending ordinal order. The decoder refuses a missing or unknown field, a repeated or unordered entity (`NotCanonical`); Restore
 refuses the hero's flag without a hero, a concealed NPC without a hero, and an entity the hero does not lead (following or waiting: a waiting NPC keeps the state it had when it began waiting) (`InvalidConcealment`). Schema
-33 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-34)).
+34 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-35)).
 
 ## Viewer
 
