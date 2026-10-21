@@ -24,7 +24,7 @@ public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport
 /// <c>use.script</c>. It answers the S4 guards (<see cref="IScrObjectQueries"/>) from the session: the PC's quest log and the
 /// quests' global states, the hero's kit, carried and worn items, the holders' current lists, and from the rows the T0 name and
 /// spell flags.
-/// Reputations are not modelled: no object has one (the new-game state of the PC). Everything else the viewer does not model
+/// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
 public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
@@ -152,8 +152,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     // SG4: the item in that inventory location (the hero's worn slots; a holder's items by their location).
     public int? WieldedItemName(ScrObjectRef obj, int location) => Items(obj).FirstOrDefault(item => item.Location == location)?.Name;
 
-    /// <summary>SG5: only a PC has reputations, and the session holds none yet (a new game's PC has none).</summary>
-    public bool HasReputation(ScrObjectRef obj, int reputation) => false;
+    /// <summary>SG5: only a PC has reputations; the session PC's (ARC-WORLD-044).</summary>
+    public bool HasReputation(ScrObjectRef obj, int reputation) => IsPc(obj) && _session.HeroHasReputation(reputation);
 
     private sealed record HeldItem(int Name, int? Location);
 

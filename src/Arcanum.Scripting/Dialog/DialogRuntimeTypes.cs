@@ -150,6 +150,8 @@ public enum DialogCommandAttemptOutcome
     Applied,
     Rejected,
     Indeterminate,
+    /// <summary>ARC-WORLD-044: the owner skipped the command (a reputation number it does not admit); the dialog went on.</summary>
+    Skipped,
 }
 
 public enum DialogFailureKind

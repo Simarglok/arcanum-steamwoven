@@ -150,9 +150,13 @@ for several PCs (R3).
 - **A5 Unvalidated numbers.** Reputation numbers are not range-checked
   (R11); 20 `RP` actions in 3 original DLG files use operands with magnitude 1
   or 2 (L5). As read they would index outside the table (ledger row
-  Reputation A5: the original has no range check either). Proposal: the reputation
-  owner admits 1000..1999 only and a dialog `RP` outside it is a typed
-  refusal, like the existing quest and rumor domains.
+  Reputation A5: the original has no range check either). **Owner decision
+  (2026-10-21, ARC-WORLD-044)**: the reputation owner admits 1000..1999 only;
+  a dialog `RP` action outside it is skipped and the dialog goes on (the
+  original shows no effect of such a number), in both settings, no switch.
+- **RM1 Reputation removal** (ARC-WORLD-044, ledger RM1): the original's
+  remove copies entry 2·i into i, an original bug. **Owner decision
+  (2026-10-21)**: a correct shift in both settings, no switch.
 - **A6 Script set-reaction operand.** The SCR set-to action reads its value
   with the third operand's type but the **second** operand's value
   (script 0x447220).
@@ -167,7 +171,8 @@ for several PCs (R3).
   text that still starts with `>` or `<`, which yields 0, so as read `RE >v`
   raises a negative reaction to 0 and `RE <v` lowers a positive one to 0,
   whatever *v* is. Intent and original behaviour are open.
-- **A9 Greeting reputation number.** The greeting pick remembers the list
+- **A9 Greeting reputation number** (a slip of the earlier reading, ARC-WORLD-044: the original returns the
+  reputation's own number). The greeting pick remembers the list
   position of each qualifying reputation and returns 1000 + that position, so
   the greeting line belongs to whichever reputation has that number, not
   necessarily the one that qualified (unless the PC's list happens to be
@@ -195,8 +200,12 @@ the rules in `Arcanum.Simulation.Reaction`, the reaction memory in the session (
 [DR1–DR7](original-verification-ledger.md#dialog-reaction-binding-arc-world-043)): `ME` reads "met before" through a port,
 an exact `i:` reply is the insult (−10 after the reply's action; at 20 or below the NPC ends the talk without a script
 continuation), and every AREA talk opens and closes the NPC's conversation slot. O4 is answered (fate 1, armed by spending a
-fate point, consumed only by a talk start below 100); fate points are not built. The notes below describe the state before
-ARC-WORLD-026.
+fate point, consumed only by a talk start below 100); fate points are not built. **Since ARC-WORLD-044** slice 4 is implemented
+([reputation runtime](../world/reputation-runtime.md), ledger [RP1–RP8, RM1, A9](original-verification-ledger.md#reputations-arc-world-044)):
+the module's table with the original's parse rules (every effect in its written scope, D1), the PC's list in the session
+(schema 30), the reaction sum, faction membership and faction-same, the dialog `RP` and the script condition 33. A9 is a slip
+of the earlier reading (the original's greeting pick returns the reputation's own number); the remove shifts wrongly in the
+original (RM1, an original bug); the owner decided A5 (skip) and RM1 (correct shift) on 2026-10-21. The notes below describe the state before ARC-WORLD-026.
 
 - The conversation runtime's `reaction.pc` is a single stored value seeded with
   the diagnostic 50. Per R1 it is the **stored** value only. The
@@ -257,7 +266,7 @@ Godot.
    documented, not built.
 3. **Dialog binding** (done, ARC-WORLD-043): `ME`, `RE` actions as deltas, the insult rule, and the
    quest rule through the owner, with the conversation slot opened and closed by every AREA talk.
-4. **Reputation data and owner**: a Data reader for the four file kinds with
+4. **Reputation data and owner** (done, ARC-WORLD-044, without the greeting pick): a Data reader for the four file kinds with
    every effect in its written scope (D1), a PC reputation list with game time, add/remove/has,
    `RP` condition and action with the A5 domain, faction membership and the
    reaction sum. The greeting pick needs a random port and speech text and can

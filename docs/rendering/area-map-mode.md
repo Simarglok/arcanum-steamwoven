@@ -276,7 +276,7 @@ with an unconditional exit stays that exit.
 - **Guards** (ledger SG1–SG6) are answered from the session: the PC's quest log (botched reads 6) and, for any other
   object, the quest's global state; the hero's kit and carried items and their worn slots; a holder's current list and
   its items' inventory locations; any object's name number and spell flags from its row (the PC has no row: name 0, no
-  spell flags); no reputations (only a PC has them and the session holds none yet).
+  spell flags); the PC's reputations from the session (ARC-WORLD-044, [reputation runtime](../world/reputation-runtime.md); only a PC has them).
 - **Effects**, applied as the run goes, as for a dialog script: global flags, sound-scheme requests, deferred calls to the
   session's queue, the use slot; a step the session refuses leaves the earlier ones applied and the use is reported
   refused. Printed lines show on the status line; effect sounds are not played. The first teleport of the player is the
@@ -375,7 +375,8 @@ With a session, F7 and F8 work on any map as on the exterior
 ([quick save](terrain-viewer.md#quick-save-and-quick-load-arc-world-011): keys on
 release, the same guards, atomic slot, every check before anything changes),
 with their own slot, `user://saves/map/quicksave.json`, so the Crash Site slot
-is never touched. A save records the actor on the map's runtime number. While
+is never touched (an automated run keeps both slots in its own folder,
+[ARC-DEV-032](terrain-viewer.md#automated-runs-and-the-players-settings-arc-dev-032)). A save records the actor on the map's runtime number. While
 another map loads there is no session, so F7/F8 do nothing; a load drops a
 queued transfer.
 
