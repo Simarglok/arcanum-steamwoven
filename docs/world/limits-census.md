@@ -38,6 +38,7 @@ Largest installed value against each cap; "interiors" are the 80 maps a whole-ma
 | `ObjectLightReader.MaxLights` | 8,192 | 5,083 | k'na tha | 1.6× |
 | `MapPatchFile.MaxBytes` (`Rules\map.patch`) | 1 MiB | 5,779 | — | 181× |
 | `AreaMapLoadOperation.MaxChartSectors` | 32 | 14 | k'na tha | 2.3× |
+| `AreaTerrainOverview.Radius` (ARC-RENDER-034: the overview beyond a window's core, one flat diamond per sector; a fixed size, not a cap) | 6 (13 × 13 sectors) | 160 diamonds (13 × 13 less the core) | arcanum1-024-fixed | — |
 | `AreaRepositoryPolicy.MaxMapFrames` (CPU, and GPU visible since ARC-DATA-029) | 16,384 | 4,557 drawn frames (4,562 owner frame requests; void has no door, so the portal frames of ARC-WORLD-051 add none there) | void | 3.6× |
 | `AreaRepositoryPolicy.MaxMapCpuBytes` (CPU, and GPU visible) | 160 MiB | 58,892,780 (56.2 MiB) | void | 2.8× |
 | `GameSessionLimits.PolicyMaxMaps` (was 64) | 200 | 81 maps | — | 2.5× |
