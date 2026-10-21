@@ -1915,7 +1915,7 @@ Anomalies (classification for D8):
 - GD-A1 (RG6, RG9): a pick that lands in a block's gap shows the missing-line text, and the block's later entries are never
   said. Installed: the class group 8000 for social class 2 in all four gender pairs, and group 17000 (slot 8, not modelled).
   Steamwoven picks among the stored entries, Original keeps the original's pick (switch `GeneratedLinePickSpansGaps`;
-  proposed by the coordinator, owner card pending).
+  owner decision 2026-10-21, option a: the switch, Original showing a project-worded missing-line text).
 - RG2: an index of 10 or more corrupts the stack: both fixed (ignored), no installed slot text has one.
 - RG11: a stale line from an earlier conversation: not reproduced (both settings), no installed node uses it.
 - Slot 5 is never read; slot 6 and slots 7–8 neither end the talk nor read the class file like slots 1–4: the original's

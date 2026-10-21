@@ -15,7 +15,7 @@ public sealed record DialogRuleProfile
     /// its range plus a random offset below the count of entries stored from it, so in a block with a gap it can be a missing
     /// number, shown as the original's missing-line message (here a project-worded text with the number and file), and the block's last entries are never said; without the
     /// first entry the count is 0. Steamwoven picks uniformly among the entries stored in the range and says nothing when there
-    /// is none.
+    /// is none (owner decision 2026-10-21).
     /// </summary>
     public bool GeneratedLinePickSpansGaps { get; init; }
 

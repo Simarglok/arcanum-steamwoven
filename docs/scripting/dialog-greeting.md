@@ -68,7 +68,7 @@ race + 1), a dumb NPC `gd_rce_dumb_*`; an NPC line `gd_npc_*` in its range. The 
 11999 + first / 100) in the DLG of the script at the NPC's point 31; an override line is raw (no name substitution) and has
 its record's voice. A generated line has `@pcname@` and `@npcname@` substituted and any other `@…@` token dropped, and no voice.
 
-**Line pick** (GD5, GD-A1; `DialogRuleProfile.GeneratedLinePickSpansGaps`, D8 switch):
+**Line pick** (GD5, GD-A1; `DialogRuleProfile.GeneratedLinePickSpansGaps`, D8 switch, owner decision 2026-10-21, option a):
 
 | Setting | Pick |
 | --- | --- |
