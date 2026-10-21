@@ -822,10 +822,26 @@ writable number kinds and the undefined results for an empty group or a null obj
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
-| OV1 | script action (0x447220, jump table 0x44ADBC, entry 6), call script (0x44B030), script run (0x4449B0) | Operand 0 is the script number, operand 1 the start line, operands 2 and 3 the triggerer and attachee groups; the script runs once for every triggerer and attachee pair, with no extra object, the caller's attachment point, and the callee's own header flags and counters (read from its file) in one copy shared by the pairs; the callee has fresh variables, nothing it changes about itself is written back, its return code is ignored and the caller goes on. No depth bound but the stack; each run keeps the 1,000-line budget. | Original |
+| OV1 | script action (0x447220, jump table 0x44ADBC, entry 6), call script (0x44B030), script run (0x4449B0) | Operand 0 is the script number, operand 1 the start line, operands 2 and 3 the triggerer and attachee groups; the script runs once for every triggerer and attachee pair, with no extra object, the caller's attachment point, and the callee's own header flags and counters (read from its file) in one copy shared by the pairs; the callee has fresh variables, nothing it changes about itself is written back, its return code is ignored and the caller goes on. No depth bound but the stack; each run keeps the 1,000-line budget. | Original. The project bounds the nesting at 16 and a dispatch at 16 × 1,000 lines in both modes (owner decision 2026-10-21, [rule modes](../world/rule-modes.md)). |
 | OV2 | the same, entry 14 (0x44750A), object read (0x44B960), object write (0x44B9B0) | The first object operand 1 names is written into operand 0: the run's triggerer, attachee or extra object, an object variable (ten, zeroed at the start of each run), or the current looped object; any other focus kind is not written. For an empty group the value read is undefined. | Original. The project reads an absent single object as none. |
 | OV3 | the same, entry 33 (0x447C71), field read (0x406CA0), number write (0x44BB50) | The type field of the first object operand 0 names is written into the number store of operand 1 (a counter, global or local variable, global flag, PC variable or PC flag; a literal is not written). A null object reads undefined data. | Original. The project stops the run on an absent object, and admission refuses a literal store (project strictness). |
 | OV4 | object list (0x44B4E0, entry 11) | An object variable is a one-object list of whatever it holds, a null object when it was never assigned. | Original. The project reads an unassigned variable as no object. |
+
+## Story state and story actions (ARC-SCRIPT-019)
+
+Source: the [dispatcher's story actions](../scripting/scr-dispatcher-runtime.md#story-state-and-story-actions-arc-script-019-set-s13).
+Question: where the story-state number lives and how actions 42 and 43 use it, and what set PC quest state (16), mark map
+location (49), set rumor (50) and add or remove reputation (72, 73) pass to the original's functions. Read on 2026-10-21 by a
+first reader (the action cases) and, independently, a second reader that saw only the questions and the addresses (method
+step 6); they agree on every row. The second reader added the callees, read before by their own tasks (XP8, WT2, RP4, RM1).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SS1 | script action (0x447220, jump table 0x44ADBC, entries 41, 42), story state get (0x445090), set (0x4450A0), script state init, reset and save (0x444740, 0x4447D0, 0x4448D0, 0x444930) | One game-wide number: 0 at a new game, saved with the script state; get story state (42) writes it into a number store, set story state (43) stores its value only when it is larger (a signed compare). In a network game a client changes nothing and a host sends a message first. | Original |
+| SS2 | the same, entry 15 (0x447543), quest state set (0x4C4D20) | For every object operand 0 names: the quest (operand 1) and the state (operand 2), with the run's attachee as the quest's giver. The function changes a PC's quest only, by its own rules (XP8: it only rises, an ended quest stays, the shared state); for any other object nothing is stored. The giver's reaction to the PC rises to 41 at state 2 and by 10 at state 4. | Original |
+| SS3 | the same, entry 48 (0x448456), area known (0x4CAFD0) | The area (operand 0) for the first object operand 1 names: known for the local PC only (WT2); no range check. | Original |
+| SS4 | the same, entry 49 (0x448497), rumor learn (0x4C57E0) | The rumor (operand 0) for the first object operand 1 names: a PC that does not know it stores the current game time, a known one keeps its first time; quelled rumors are a separate set it never reads; no range check. | Original |
+| SS5 | the same, entries 71, 72 (0x448E85, 0x448EF6), reputation add and remove (0x4C1D20, 0x4C1E10) | For every object operand 0 names, the reputation (operand 1) is added or removed (RP4, RM1: a PC only). | Original |
 
 ## Item insert script (ARC-RES-055)
 

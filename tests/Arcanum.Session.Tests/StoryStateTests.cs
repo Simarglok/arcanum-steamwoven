@@ -61,7 +61,7 @@ public sealed class StoryStateTests
     public void AQuestAlreadyEndedForEveryoneEndsTheSameWayForThePc()
     {
         var text = GoldenJson.Replace(EmptyStory,
-            ",\"story\":{\"quests\":[],\"globalQuests\":[{\"quest\":1003,\"state\":\"Completed\"},{\"quest\":1004,\"state\":\"Botched\"}],\"rumors\":[],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0" + NoReputations + "}");
+            ",\"story\":{\"quests\":[],\"globalQuests\":[{\"quest\":1003,\"state\":\"Completed\"},{\"quest\":1004,\"state\":\"Botched\"}],\"rumors\":[],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + "}");
         using var owner = Restore(Decode(text));
         Changed(owner.SetQuestState(owner.Version, 1003, SessionQuestState.Mentioned), owner, 3);
         Assert.AreEqual(new SessionQuest(1003, SessionQuestState.OtherCompleted, false, StartMs), owner.QueryQuest(1003));
@@ -80,7 +80,7 @@ public sealed class StoryStateTests
             Assert.AreEqual(failure, result.Failure, story);
         }
         string Story(string quests, string globals = "", string rumors = "", string quelled = "") =>
-            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}],\"quelledRumors\":[{quelled}],\"knownAreas\":[],\"lastArea\":0" + NoReputations + "}";
+            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}],\"quelledRumors\":[{quelled}],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + "}";
 
         Refused(Story("{\"quest\":1001,\"state\":\"Completed\",\"botched\":true,\"timestampMs\":1}"), GameSessionFailure.InvalidQuestState);
         Refused(Story("{\"quest\":1001,\"state\":\"Completed\",\"botched\":false,\"timestampMs\":1}"), GameSessionFailure.InvalidQuestState);
@@ -136,6 +136,24 @@ public sealed class StoryStateTests
         Assert.ThrowsExactly<ObjectDisposedException>(() => owner.LearnRumor(stale, 1001));
     }
 
+    // ARC-SCRIPT-019: the story-state number only rises (SS1) and survives the snapshot.
+    [TestMethod]
+    public void TheStoryStateOnlyRisesAndSurvivesTheSnapshot()
+    {
+        using var owner = Create();
+        Assert.AreEqual(0, owner.QueryStoryState());
+        Changed(owner.RaiseStoryState(owner.Version, 15), owner, 1);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.RaiseStoryState(owner.Version, 15).Disposition);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.RaiseStoryState(owner.Version, 3).Disposition, "never lowered");
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.RaiseStoryState(owner.Version with { Revision = 0 }, 20).Failure);
+        Assert.AreEqual(15, owner.QueryStoryState());
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        StringAssert.Contains(text, ",\"storyState\":15}");
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual(15, restored.QueryStoryState());
+        Assert.AreNotEqual(SnapshotDecodeFailure.None, GameSessionSnapshotCodec.TryDecode(text.Replace("\"storyState\":15", "\"storyState\":-1")).Failure);
+    }
+
     [TestMethod]
     public void StorySurvivesAMapRoundTripAndTheSnapshot()
     {
@@ -149,7 +167,7 @@ public sealed class StoryStateTests
 
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"story\":{\"quests\":[{\"quest\":1001,\"state\":\"Accepted\",\"botched\":false,\"timestampMs\":54000000}]," +
-            "\"globalQuests\":[],\"rumors\":[{\"rumor\":1200,\"timestampMs\":54000000}],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0" + NoReputations + "}" + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoSound + NoEvents + ",\"lighting\":null}");
+            "\"globalQuests\":[],\"rumors\":[{\"rumor\":1200,\"timestampMs\":54000000}],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + "}" + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoSound + NoEvents + ",\"lighting\":null}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(owner.QueryQuest(1001), restored.QueryQuest(1001));
         Assert.AreEqual(StartMs, restored.QueryRumor(1200));
@@ -171,7 +189,7 @@ public sealed class StoryStateTests
         }
 
         string Story(string quests = "", string globals = "", string rumors = "", string quelled = "") =>
-            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}],\"quelledRumors\":[{quelled}],\"knownAreas\":[],\"lastArea\":0" + NoReputations + "}";
+            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}],\"quelledRumors\":[{quelled}],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + "}";
         string Quest(int quest, string state = "Accepted", string botched = "false", string time = "1") =>
             $"{{\"quest\":{quest},\"state\":\"{state}\",\"botched\":{botched},\"timestampMs\":{time}}}";
 
