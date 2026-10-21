@@ -3,7 +3,7 @@ namespace Arcanum.Simulation.Magic;
 /// <summary>
 /// ARC-MAGIC-007: the invocation check's world (<see cref="ISpellInvocationWorld"/>, MT7) with its BEGIN-area questions answered
 /// by the target rules (<see cref="SpellTargetRules"/>) as the check (0x4564E0) asks them: the context has the parent as self,
-/// the invocation's source, the parent's location as origin, the target object and tile as both the candidate and the
+/// the invocation's source, the source's location as origin (the invocation's +0x38, filled from the source by 0x455A20), the target object and tile as both the candidate and the
 /// action's target, the record's BEGIN target mask alone (no spell flags) with radius 2 and no count. The fallback marks the
 /// target's location as candidate and target tile, adds the tile-radius and indoor/outdoor bits (high 0x1200000), gathers the
 /// list and answers the first tile of it that passes the same test. The line of fire is the caller's (the AI awareness stage
@@ -44,7 +44,7 @@ public sealed class SpellInvocationAreas(ISpellTargetWorld targets, Func<int, ul
         ArgumentNullException.ThrowIfNull(invocation);
         var target = Resolve(invocation.TargetObject);
         return new(new SpellTargetArea(beginTargets(invocation.Spell), 0, 0, radius, 0), Resolve(invocation.Parent), Resolve(invocation.Source),
-            invocation.Parent?.Location ?? SpellLocation.None, target, invocation.TargetTile, target, invocation.TargetTile);
+            invocation.Source?.Location ?? SpellLocation.None, target, invocation.TargetTile, target, invocation.TargetTile);
     }
 
     private SpellTargetObject? Resolve(SpellObjectFacts? facts) => facts is null ? null

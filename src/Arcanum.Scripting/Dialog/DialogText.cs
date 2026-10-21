@@ -130,6 +130,33 @@ internal static class DialogText
         }
     }
 
+    /// <summary>
+    /// ARC-WORLD-058: the original's name substitution of a generated line (0x416B00): <c>@pcname@</c> and <c>@npcname@</c> (ASCII
+    /// case-insensitive) become the names and any other <c>@…@</c> token is dropped. An <c>@</c> without its closing one is
+    /// kept with the rest of the text (not in the installed files).
+    /// </summary>
+    [OriginalFunction(0x416B00, OriginalFunctionScope.Partial)]
+    internal static string SubstituteGenerated(string text, DialogSpeakerNames names)
+    {
+        var builder = new StringBuilder(text.Length);
+        var index = 0;
+        while (true)
+        {
+            var start = text.IndexOf('@', index);
+            var end = start < 0 ? -1 : text.IndexOf('@', start + 1);
+            if (end < 0)
+            {
+                builder.Append(text, index, text.Length - index);
+                return builder.ToString();
+            }
+            builder.Append(text, index, start - index);
+            var token = text.AsSpan(start + 1, end - start - 1);
+            if (token.Equals("pcname", StringComparison.OrdinalIgnoreCase)) builder.Append(names.PcName);
+            else if (token.Equals("npcname", StringComparison.OrdinalIgnoreCase)) builder.Append(names.NpcName);
+            index = end + 1;
+        }
+    }
+
     internal static string Substitute(string text, DialogSpeakerNames names)
     {
         var builder = new StringBuilder(text.Length);

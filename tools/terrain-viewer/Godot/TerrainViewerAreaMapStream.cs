@@ -399,5 +399,5 @@ public partial class TerrainViewerApp
     private sealed record RoundTripLeg(string To, int Script, AreaStepCell Arrival);
 
     private string MapStreamStatus() => _mapWindowCentre is { } centre
-        ? $" | window centre ({centre.X},{centre.Y}), moves {_mapWindowMoves}{(_mapStreamStatus is { } s ? ": " + s : string.Empty)}" : string.Empty;
+        ? $" | window centre ({centre.X},{centre.Y}), moves {_mapWindowMoves}, zoom floor {FormatZoom(_camera?.ZoomFloor(WorldViewport) ?? CameraPolicy.MinimumZoom)}{(_mapStreamStatus is { } s ? ": " + s : string.Empty)}" : string.Empty;
 }
