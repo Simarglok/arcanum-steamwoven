@@ -178,6 +178,11 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual(70, host.WieldedItemName(npc, 1004));
             Assert.IsNull(host.WieldedItemName(npc, 1005));
             Assert.IsFalse(host.HasReputation(host.Pc, 4));
+            // ARC-WORLD-044: the PC's reputations are the session's; no other object has one (SG5).
+            Assert.AreEqual(GameSessionDisposition.Changed, session.AddReputation(session.Version, 1004).Disposition);
+            Assert.IsTrue(host.HasReputation(host.Pc, 1004));
+            Assert.IsFalse(host.HasReputation(npc, 1004));
+            Assert.IsFalse(host.HasReputation(host.Pc, 1005));
 
             Assert.AreEqual(AreaScriptedUseOutcome.Teleport, host.Run(Gate(702), session.Rules.Scripts).Outcome);
             var controlled = Gate(702, AreaUseScriptHost.MindControlledFlag);

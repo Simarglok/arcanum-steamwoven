@@ -41,8 +41,12 @@ public sealed class StationaryLightLattice
 public sealed class StationaryLightField
 {
     public const int NodeWidth = 40, NodeHeight = 20;
-    public const int MaxLatticeNodes = 1 << 20;
+    /// <summary>ARC-RENDER-030 raised it from 2^20 for the object lights of a whole map (k'na tha spans the most).</summary>
+    public const int MaxLatticeNodes = 1 << 22;
+    // Point queries look only at the lights whose rectangle meets the query's bucket (source order kept).
+    private const int BucketSide = 256;
     private readonly (StationaryLight Light, StationaryLightFrame Frame, TerrainRect Rect)[] _placements;
+    private readonly Dictionary<(long, long), int[]> _buckets = new();
 
     public StationaryLightField(AreaStationaryLightSource source, long chartOriginX, long chartOriginY)
     {
@@ -50,12 +54,29 @@ public sealed class StationaryLightField
         Source = source;
         _placements = source.Lights.Select(light =>
         {
-            var frame = source.Frames[light.ArtNumber];
+            // ARC-RENDER-030: an object light shows its saved frame of the ART (frame 0 for a stationary light).
+            var art = source.Frames[light.ArtNumber];
+            if (light.Frame >= art.Frames.Count) throw new InvalidOperationException("LIGHT_FRAME_OUT_OF_RANGE");
+            var frame = art.Frames[light.Frame];
             var tile = TerrainGeometry.Project(checked((int)(light.X - chartOriginX)), checked((int)(light.Y - chartOriginY)));
             return (light, frame, new TerrainRect(checked(tile.X + light.OffsetX + 40 - frame.HotX), checked(tile.Y + light.OffsetY + 20 - frame.HotY), frame.Width, frame.Height));
         }).ToArray();
         Placements = new ReadOnlyCollection<(StationaryLight, TerrainRect)>(_placements.Select(p => (p.Light, p.Rect)).ToArray());
+        var buckets = new Dictionary<(long, long), List<int>>();
+        for (var index = 0; index < _placements.Length; index++)
+        {
+            var rect = _placements[index].Rect;
+            for (var by = Floor(rect.Y); by <= Floor((long)rect.Y + rect.Height - 1); by++)
+                for (var bx = Floor(rect.X); bx <= Floor((long)rect.X + rect.Width - 1); bx++)
+                {
+                    if (!buckets.TryGetValue((bx, by), out var list)) buckets[(bx, by)] = list = new();
+                    list.Add(index);
+                }
+        }
+        foreach (var (key, list) in buckets) _buckets[key] = list.ToArray();
     }
+
+    private static long Floor(long value) => (long)Math.Floor(value / (double)BucketSide);
 
     public AreaStationaryLightSource Source { get; }
     /// <summary>Every light with its chart screen rectangle, in source order.</summary>
@@ -94,8 +115,10 @@ public sealed class StationaryLightField
     public AmbientColor Point(long x, long y, AmbientColor baseColor, AmbientPair pair, Func<StationaryLight, bool>? admit = null)
     {
         var color = baseColor;
-        foreach (var placement in _placements)
+        if (!_buckets.TryGetValue((Floor(x), Floor(y)), out var near)) return color;
+        foreach (var index in near)
         {
+            var placement = _placements[index];
             if (admit is not null && !admit(placement.Light)) continue;
             if (!TryContribution(placement, x, y, pair, out var contribution)) continue;
             color = (placement.Light.Flags & StationaryLightFlags.Dark) != 0 ? Subtract(color, contribution) : Add(color, contribution);
@@ -117,20 +140,28 @@ public sealed class StationaryLightField
         if (columns == 0 || rows == 0) return null;
         if ((long)columns * rows > MaxLatticeNodes) throw new InvalidOperationException("LIGHT_LATTICE_LIMIT");
         var lighter = new byte[columns * rows * 4]; var darker = new byte[columns * rows * 4];
-        for (var r = 0; r < rows; r++)
-            for (var c = 0; c < columns; c++)
-            {
-                AmbientColor plus = default, minus = default;
-                long x = (long)(firstColumn + c) * NodeWidth, y = (long)(firstRow + r) * NodeHeight;
-                foreach (var placement in active)
+        for (var at = 3; at < lighter.Length; at += 4) { lighter[at] = 255; darker[at] = 255; }
+        // ARC-RENDER-030: each light adds into the nodes its rectangle covers; saturating sums of non-negative contributions
+        // do not depend on the order, so this equals the node-by-node sum.
+        foreach (var placement in active)
+        {
+            var rect = placement.Rect;
+            var c0 = (int)Math.Max(firstColumn, Math.Ceiling(rect.X / (double)NodeWidth)) - firstColumn;
+            var c1 = (int)Math.Min(lastColumn, Math.Floor(((long)rect.X + rect.Width - 1) / (double)NodeWidth)) - firstColumn;
+            var r0 = (int)Math.Max(firstRow, Math.Ceiling(rect.Y / (double)NodeHeight)) - firstRow;
+            var r1 = (int)Math.Min(lastRow, Math.Floor(((long)rect.Y + rect.Height - 1) / (double)NodeHeight)) - firstRow;
+            var target = (placement.Light.Flags & StationaryLightFlags.Dark) != 0 ? darker : lighter;
+            for (var r = r0; r <= r1; r++)
+                for (var c = c0; c <= c1; c++)
                 {
+                    long x = (long)(firstColumn + c) * NodeWidth, y = (long)(firstRow + r) * NodeHeight;
                     if (!TryContribution(placement, x, y, pair, out var contribution)) continue;
-                    if ((placement.Light.Flags & StationaryLightFlags.Dark) != 0) minus = Add(minus, contribution); else plus = Add(plus, contribution);
+                    var at = (r * columns + c) * 4;
+                    target[at] = (byte)Math.Min(target[at] + contribution.R, 255);
+                    target[at + 1] = (byte)Math.Min(target[at + 1] + contribution.G, 255);
+                    target[at + 2] = (byte)Math.Min(target[at + 2] + contribution.B, 255);
                 }
-                var at = (r * columns + c) * 4;
-                lighter[at] = plus.R; lighter[at + 1] = plus.G; lighter[at + 2] = plus.B; lighter[at + 3] = 255;
-                darker[at] = minus.R; darker[at + 1] = minus.G; darker[at + 2] = minus.B; darker[at + 3] = 255;
-            }
+        }
         return new(firstColumn, firstRow, columns, rows, lighter, darker);
     }
 

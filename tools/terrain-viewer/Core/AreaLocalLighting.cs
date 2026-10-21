@@ -37,6 +37,10 @@ public sealed class AreaLocalLighting
     private readonly bool _hourIndependent;
     private readonly StationaryLightLattice? _lattice;
 
+    // ARC-RENDER-030: with object lights the night and the day differ (nocturnal scenery, ledger LT4/LT5); the night form
+    // keeps the day form here. Without them both are this one.
+    private AreaLocalLighting? _day;
+
     private AreaLocalLighting(StationaryLightField field, AreaChart chart, Dictionary<(long, long), AreaAmbientChannel> tiles,
         Dictionary<AreaVisualKey, AreaVisualRecord> visuals)
     {
@@ -50,11 +54,43 @@ public sealed class AreaLocalLighting
     public StationaryLightField Field { get; }
     public AreaChart Chart { get; }
     public int LightCount => Field.Source.Lights.Count;
+    /// <summary>ARC-RENDER-030: the object lights among <see cref="LightCount"/>.</summary>
+    public int ObjectLightCount => Field.Source.Lights.Count(light => light.Owner is not null);
+
+    /// <summary>The lighting of a game hour: the day form (hours 6..17) when object lights differ by day, else this.</summary>
+    public AreaLocalLighting AtHour(int hour)
+    {
+        if (hour is < 0 or > 23) throw new ArgumentOutOfRangeException(nameof(hour));
+        return _day is { } day && hour is >= 6 and <= 17 ? day : this;
+    }
 
     public static AreaLocalLighting Create(AreaSnapshot snapshot, AreaChart chart, AreaStationaryLightSource lights)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         return Create(snapshot.Terrain, snapshot.Visuals, chart, lights);
+    }
+
+    /// <summary>ARC-RENDER-030: the stationary lights with the snapshot's object lights, as the original builds them by night
+    /// and by day (<see cref="AreaStationaryLightSource.WithObjectLights"/>).</summary>
+    public static AreaLocalLighting Create(AreaSnapshot snapshot, AreaChart chart, AreaStationaryLightSource lights, AreaObjectLightSource objects)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return Create(snapshot.Terrain, snapshot.Visuals, chart, lights, objects);
+    }
+
+    // Value-input seam shared with synthetic tests.
+    public static AreaLocalLighting Create(IEnumerable<AreaTerrainRecord> terrain, IEnumerable<AreaVisualRecord> visuals, AreaChart chart,
+        AreaStationaryLightSource lights, AreaObjectLightSource objects)
+    {
+        ArgumentNullException.ThrowIfNull(terrain); ArgumentNullException.ThrowIfNull(visuals);
+        ArgumentNullException.ThrowIfNull(lights); ArgumentNullException.ThrowIfNull(objects);
+        var tiles = terrain as IReadOnlyCollection<AreaTerrainRecord> ?? terrain.ToArray();
+        var bodies = visuals as IReadOnlyCollection<AreaVisualRecord> ?? visuals.ToArray();
+        var night = Create(tiles, bodies, chart, lights.WithObjectLights(objects, 0));
+        // Only nocturnal scenery on an outdoor tile differs: it is not built by day.
+        if (objects.Lights.Any(light => !ObjectLightReader.BuiltAtLoad(light, 12)))
+            night._day = Create(tiles, bodies, chart, lights.WithObjectLights(objects, 12));
+        return night;
     }
 
     // Value-input seam shared with synthetic tests.

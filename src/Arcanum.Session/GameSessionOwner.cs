@@ -9,6 +9,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Randomness;
+using Arcanum.Simulation.Reputation;
 
 namespace Arcanum.Session;
 
@@ -125,7 +126,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
             new(), new(), new(descriptor.Experience), new(descriptor.AutoLevel), new(descriptor.RandomSeed), life, new(), new(), null, sink,
             new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits))
-        { _rules = GameRules.For(descriptor.Rules), _difficulty = descriptor.Difficulty };
+        { _rules = GameRules.For(descriptor.Rules), _difficulty = descriptor.Difficulty, _reputationCatalog = descriptor.Reputations ?? ReputationCatalog.Empty };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -208,7 +209,8 @@ public sealed partial class GameSessionOwner : IDisposable
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party,
             hero, inventory, equipment, effects, experience, advancement, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat,
             snapshot.Lighting, sink, events!)
-        { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _durability = durability, _foundSchematics = found };
+        { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _durability = durability, _foundSchematics = found,
+          _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -1295,6 +1297,8 @@ public sealed partial class GameSessionOwner : IDisposable
             if (!SessionStoryLimits.IsArea(area) || !story.KnownAreas.Add(area)) return GameSessionFailure.InvalidSnapshot;
         if (saved.LastArea != 0 && !story.KnownAreas.Contains(saved.LastArea)) return GameSessionFailure.InvalidSnapshot;
         story.LastArea = saved.LastArea;
+        var reputations = ImportReputations(saved.Reputations, clockMs, story.Reputations);
+        if (reputations != GameSessionFailure.None) return reputations;
         foreach (var quest in story.Quests.Values)
         {
             var shared = quest.Effective switch
@@ -1852,10 +1856,13 @@ internal sealed class Story
     internal HashSet<int> QuelledRumors { get; } = [];
     internal HashSet<int> KnownAreas { get; } = [];
     internal int LastArea { get; set; }
+    /// <summary>ARC-WORLD-044: the PC's reputations in acquisition order.</summary>
+    internal List<SessionReputation> Reputations { get; } = [];
 
     internal SessionStoryState Capture() => new(
         Quests.Values.OrderBy(quest => quest.Quest).ToArray(),
         GlobalQuests.OrderBy(pair => pair.Key).Select(pair => new SessionGlobalQuest(pair.Key, pair.Value)).ToArray(),
         Rumors.OrderBy(pair => pair.Key).Select(pair => new SessionRumor(pair.Key, pair.Value)).ToArray(),
-        QuelledRumors.Order().ToArray(), KnownAreas.Order().ToArray(), LastArea);
+        QuelledRumors.Order().ToArray(), KnownAreas.Order().ToArray(), LastArea,
+        Reputations.ToArray());
 }

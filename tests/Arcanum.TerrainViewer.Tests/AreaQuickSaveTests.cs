@@ -56,6 +56,21 @@ public sealed class AreaQuickSaveTests
         Assert.IsFalse(new AreaConversationState(second, new(1), [npc], 50).Follows(0), "the running session is untouched");
     }
 
+    // ARC-WORLD-044: the PC's reputations are saved; the module's table is data and comes from the running session.
+    [TestMethod]
+    public void ReputationsComeBackWithAQuickLoadUnderTheRunningSessionsTable()
+    {
+        var catalog = Arcanum.Simulation.Reputation.ReputationCatalog.Create([new(1001, [5, 0, 0], [new(-7, 0, 0)])])!;
+        using var first = AreaTransitionCoordinator.CreateSession(Clock(), Guid.NewGuid(), Module, new AreaStepCell(92928, 82560), 1, reputations: catalog).Owner!;
+        Assert.AreEqual(GameSessionDisposition.Changed, first.AddReputation(first.Version, 1001).Disposition);
+        Assert.IsTrue(AreaQuickSave.Save(first, Outside, Slot()).Saved);
+        using var second = AreaTransitionCoordinator.CreateSession(Clock(), Guid.NewGuid(), Module, new AreaStepCell(92928, 82560), 1, reputations: catalog).Owner!;
+        using var owner = AreaQuickSave.Load(Slot(), second, _ => null).Owner ?? throw new AssertFailedException("load");
+        Assert.IsTrue(owner.HeroHasReputation(1001));
+        Assert.AreSame(catalog, owner.Reputations);
+        Assert.AreEqual(-7, owner.QueryReputationReaction(0, 0));
+    }
+
     [TestMethod]
     public void ASaveRecordsTheActorAndALaterRunLoadsItIntoANewSession()
     {

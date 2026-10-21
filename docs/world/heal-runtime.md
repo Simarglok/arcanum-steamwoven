@@ -5,7 +5,7 @@ the first use of the [shared skill check](skill-check-runtime.md). The hero uses
 the heal check, the healed amount, the master's and the critical success's cure, the item's uses and its destruction, and the
 4 action points in a turn-based round. Pure rules: `HealRules` in [`Arcanum.Simulation.Skills`](../../src/Arcanum.Simulation/Skills/HealRules.cs)
 and `LifeRules.SkillHeal`; session: `HealWithItem` in [`GameSessionHeal.cs`](../../src/Arcanum.Session/GameSessionHeal.cs);
-viewer: "Use on self" in the AREA inventory window. Snapshot schema 30 (the items' remaining uses).
+viewer: "Use on self" in the AREA inventory window. Snapshot schema 31 (the items' remaining uses).
 Requirements: [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019) (a skill used),
 [FR-ITEM-009](../requirements/items-economy.md#fr-item-009) (item use and charges),
 [FR-CHAR-026](../requirements/characters-skills.md#fr-char-026) (healing the life state).
@@ -51,11 +51,11 @@ an event pass when its timers are on another map; both worst-case checks also re
 critical, amount) come from the session generator. The answer carries the check, the outcome, the life outcome, the uses left or
 the destruction, and whether the heal fate was used.
 
-## Snapshot schema 30
+## Snapshot schema 31
 
 The `durability` section gains `uses`: the remaining uses of every item whose uses the session spent (entity and count 1..1,000,000,
 ordinal order; a used-up item is in `destroyed`). The decoder refuses a count outside the range (`OutOfRange`), an out-of-order or
-repeated entity (`NotCanonical`) and a missing or unknown field; Restore refuses a uses record of a destroyed item (`InvalidDurability`). Schema 29 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-30)).
+repeated entity (`NotCanonical`) and a missing or unknown field; Restore refuses a uses record of a destroyed item (`InvalidDurability`). Schema 30 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-31)).
 
 ## Viewer
 

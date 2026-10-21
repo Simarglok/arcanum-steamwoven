@@ -4,6 +4,7 @@ using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Reputation;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -177,16 +178,17 @@ public sealed class AreaTransitionCoordinator
     /// domain and the actor at the given exterior cell. The cave's story scripts are out of scope
     /// (docs/research/cave-transition-evidence.md T9). ARC-WORLD-027: with a ready pre-made <paramref name="hero"/> the
     /// session's player character is that hero and its main-menu flag starts true. ARC-UI-007: the hero's load also brings the
-    /// experience data, so the session awards experience (ARC-WORLD-030) and knows the next level.</summary>
+    /// experience data, so the session awards experience (ARC-WORLD-030) and knows the next level. ARC-WORLD-044: the module's
+/// <paramref name="reputations"/> table, when the host read one (<see cref="AreaReputations.Load"/>).</summary>
     public static GameSessionCreationResult CreateSession(ProfileBinding clock, Guid world, Guid module, AreaStepCell actor, int runtimeMap,
-        AreaHeroLoad? hero = null)
+        AreaHeroLoad? hero = null, ReputationCatalog? reputations = null)
     {
         if (hero is not null && (hero.Status != AreaHeroStatus.Ready || hero.Definition is null || hero.Flag is null))
             throw new ArgumentException("AREA_HERO_NOT_READY", nameof(hero));
         var identity = new GlobalFlagIdentity(new WorldId(world), new ModuleId(module));
         var flags = AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), hero?.Flag);
         var created = GameSessionOwner.Create(new(clock, flags, new(new(runtimeMap), new(checked((int)actor.X), checked((int)actor.Y)), NeighborDirection.XPlus),
-            Hero: hero?.Definition, Experience: hero?.Experience, AutoLevel: hero?.AutoLevel));
+            Hero: hero?.Definition, Experience: hero?.Experience, AutoLevel: hero?.AutoLevel, Reputations: reputations));
         if (hero?.KitWear is not { } wear || created.Owner is not { } owner) return created;
         // ARC-WORLD-034: the pre-made start wields the hero's best items before the game begins (the original's best-items call,
         // 0x4654F0, from the pre-made menu step 0x545B60). The viewer has one diagnostic body art and no inventory grid, so it answers
