@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Reaction;
+
 namespace Arcanum.Simulation.Reputation;
 
 /// <summary>One effect of a reputation: <see cref="Adjustment"/> for an NPC whose origin and faction match (0 = any).</summary>
@@ -78,6 +80,37 @@ public static class ReputationRules
                 if ((effect.Origin == 0 || effect.Origin == npcOrigin) && (effect.Faction == 0 || effect.Faction == npcFaction)) sum += effect.Adjustment;
         }
         return sum;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-058: the reputations an NPC may greet the PC by (0x4C1F80): in held order, each held reputation whose effects
+    /// hold, before any other, one whose origin is 0 or the NPC's, whose faction is 0 or the NPC's and whose adjustment fits the
+    /// NPC's reaction category: negative for suspicious, dislike and hatred, positive for love, amiable and courteous. Neutral
+    /// and an adjustment of 0 never fit, and each reputation counts once. A number the catalogue does not hold has no effect.
+    /// The original then picks one uniformly and returns its own number (A9 settled); the pick is the caller's.
+    /// </summary>
+    [OriginalFunction(0x4C1F80, OriginalFunctionScope.Partial)]
+    public static IReadOnlyList<int> GreetingCandidates(IReadOnlyList<int> held, ReputationCatalog catalog, int npcOrigin, int npcFaction,
+        ReactionCategory category)
+    {
+        ArgumentNullException.ThrowIfNull(held);
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (!Enum.IsDefined(category)) throw new ArgumentOutOfRangeException(nameof(category));
+        var candidates = new List<int>();
+        foreach (var number in held)
+        {
+            if (catalog.Find(number) is not { } definition) continue;
+            foreach (var effect in definition.Effects)
+            {
+                if ((effect.Origin != 0 && effect.Origin != npcOrigin) || (effect.Faction != 0 && effect.Faction != npcFaction)) continue;
+                if (effect.Adjustment < 0 ? category > ReactionCategory.Neutral : effect.Adjustment > 0 && category < ReactionCategory.Neutral)
+                {
+                    candidates.Add(number);
+                    break;
+                }
+            }
+        }
+        return candidates.AsReadOnly();
     }
 
     /// <summary>Whether the held reputations make the PC a member of <paramref name="faction"/> (0x4C21E0): never for faction 0,

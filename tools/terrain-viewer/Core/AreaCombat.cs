@@ -200,7 +200,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
             text += step.Outcome switch
             {
                 SessionCriticalStepOutcome.Dropped => $", drops its {step.Slot?.ToString().ToLowerInvariant()}",
-                SessionCriticalStepOutcome.HeroDropNotReady => $", would drop the {step.Slot?.ToString().ToLowerInvariant()} (not applied yet)",
+                SessionCriticalStepOutcome.HeroCellUnfit => $", would drop the {step.Slot?.ToString().ToLowerInvariant()} (no cell for it)",
                 _ => string.Empty,
             };
         var experience = (result.HitAward?.Award ?? 0) + (result.KillAward?.Award ?? 0);

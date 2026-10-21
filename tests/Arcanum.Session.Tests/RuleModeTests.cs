@@ -53,6 +53,8 @@ public sealed class RuleModeTests
             Assert.AreSame(rules.Travel, Arcanum.Simulation.Travel.TravelRuleProfile.FromName(rules.Name));
             Assert.AreEqual(rules.Name, rules.Orders.Name);
             Assert.AreSame(rules.Orders, Arcanum.Simulation.Party.CompanionOrderRuleProfile.FromName(rules.Name));
+            Assert.AreEqual(rules.Name, rules.Dialog.Name);
+            Assert.AreSame(rules.Dialog, Arcanum.Scripting.Dialog.DialogRuleProfile.FromName(rules.Name));
         }
         Assert.AreSame(Arcanum.Simulation.Items.ItemRuleProfile.Steamwoven, GameRules.Steamwoven.Items);
         Assert.AreSame(Arcanum.Simulation.Items.ItemRuleProfile.Original, GameRules.Original.Items);
@@ -64,6 +66,10 @@ public sealed class RuleModeTests
         Assert.AreSame(Arcanum.Simulation.Travel.TravelRuleProfile.Original, GameRules.Original.Travel);
         Assert.AreSame(Arcanum.Simulation.Party.CompanionOrderRuleProfile.Steamwoven, GameRules.Steamwoven.Orders);
         Assert.AreSame(Arcanum.Simulation.Party.CompanionOrderRuleProfile.Original, GameRules.Original.Orders);
+        Assert.AreSame(Arcanum.Scripting.Dialog.DialogRuleProfile.Steamwoven, GameRules.Steamwoven.Dialog);
+        Assert.AreSame(Arcanum.Scripting.Dialog.DialogRuleProfile.Original, GameRules.Original.Dialog);
+        Assert.IsTrue(GameRules.Original.Dialog.GeneratedLinePickSpansGaps);
+        Assert.IsFalse(GameRules.Steamwoven.Dialog.GeneratedLinePickSpansGaps);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
 

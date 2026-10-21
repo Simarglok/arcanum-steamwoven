@@ -215,6 +215,7 @@ public sealed partial class GameSessionOwner
         _inventory.Kit.RemoveAll(item => item.Entity == entity);
         _inventory.Pc.RemoveAll(item => item.Entity == entity);
         _inventory.Made.RemoveAll(item => item.Entity == entity);
+        _inventory.Placed.RemoveAll(item => item.Entity == entity);
         _inventory.RemoveFromNpc(entity);
         // Taken hides an item from every seed view and from pickup and loot.
         _inventory.Taken.Add(entity);
@@ -227,7 +228,7 @@ public sealed partial class GameSessionOwner
     /// lists, and not deleted.</summary>
     private bool TracksItem(string entity) =>
         !_durability.Destroyed.Contains(entity) && (_inventory.Kit.Any(item => item.Entity == entity) || _inventory.Pc.Any(item => item.Entity == entity) ||
-            _inventory.Made.Any(item => item.Entity == entity) || _inventory.NpcOf(entity) is not null ||
+            _inventory.Made.Any(item => item.Entity == entity) || _inventory.PlacedItem(entity) is not null || _inventory.NpcOf(entity) is not null ||
             _inventory.Seeds.Values.Any(seed => seed.Items.ContainsKey(entity)));
 
     private ItemDurabilityResult RejectDurability(GameSessionFailure failure) =>
