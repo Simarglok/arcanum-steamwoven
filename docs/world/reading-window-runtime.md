@@ -92,8 +92,11 @@ only for a player viewer (no dead check). Action 94 (set a written item's first 
 - The inventory window shows a `Read:` button for each written item the hero holds (kit, taken or made). An item with a use script
   (ARC-SCRIPT-020, WR13, IU rows) first runs it through the use script host (`AreaUseScriptHost.RunItemUse`, attachment point 1, the
   PC as the user and no target, on the inventory row of the map the item came from): its effects apply (story, quests, rumors,
-  areas, flags, awards); skip default stops the reading with a status line; a run the host refuses (an action outside its set, an
-  unreadable script, a teleport, which an item's use does not model) or an item whose row is not loaded is not read. A schematic document
+  areas, flags, awards); skip default stops the reading with a status line naming any floating line the script printed (a line
+  printed before run default is only logged); a run the host refuses (an action outside its set, an unreadable script, a teleport,
+  which an item's use does not model; effects applied before the refused step stay, IU rows), a kit or made item with a use script
+  (no map row) or an item whose row is not loaded is not read. As in the original (IU4, WR2), the script runs before the session's
+  dead-reader and item-spell checks, so its effects stay when those then refuse the reading. A schematic document
   registers and the window shows `mes\tech.mes` 89 with the schematic's name (88 when it was known; the Steamwoven refusal of a
   document numbered 0 has its own text); the document leaves the list when new. Any other kind replaces the inventory window with
   the reading window, as the original's mode change pops the inventory's mode.

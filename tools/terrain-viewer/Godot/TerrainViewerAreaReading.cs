@@ -100,8 +100,8 @@ public partial class TerrainViewerApp
             return "not read: its use script runs only for an item taken from a map";
         var ran = Awarded(host, host.RunItemUse(held.Origin.RuntimeMap, item, _areaSession.Rules.Scripts));
         var lines = ran.Lines.Count > 0 ? " — \"" + string.Join(" / ", ran.Lines) + "\"" : "";
-        GD.Print($"ARC-SCRIPT-020 item use script outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} detail={ran.Detail}");
-        if (ran.Outcome is not (AreaScriptedUseOutcome.NoTeleport)) return "not read: its use script was not run (" + ran.Detail + ")";
+        GD.Print($"ARC-SCRIPT-020 item use script outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} detail={ran.Detail}{lines}");
+        if (ran.Outcome is not AreaScriptedUseOutcome.NoTeleport) return "not read: its use script was refused (" + ran.Detail + ")";
         return ran.Run?.Outcome == ScrOutcome.SkipDefault ? "its use script stopped the reading" + lines : null;
     }
 

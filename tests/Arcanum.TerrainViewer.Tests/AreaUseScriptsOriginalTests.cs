@@ -1,9 +1,9 @@
-using Arcanum.Simulation.Movement;
-using Arcanum.Session;
-using Arcanum.Scripting.Scr;
 using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Scripting.Scr;
+using Arcanum.Session;
+using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 

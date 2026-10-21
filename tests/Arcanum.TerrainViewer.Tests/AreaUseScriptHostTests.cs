@@ -405,7 +405,8 @@ public sealed class AreaUseScriptHostTests
             using var session = ConversationSessionFixture.Create();
             var items = new AreaInventoryMap(1, new([], [new SessionSeedItem(Entity(6), Facts(60), new CellCoord(16, 20)), new SessionSeedItem(Entity(7), Facts(61), new CellCoord(17, 20))]),
                 new[] { Row(6, 13, 721, 60), Row(7, 13, 722, 61) }.ToDictionary(row => Entity(row.Key.SourceIndex)));
-            var host = new AreaUseScriptHost(session, 1, [], [items], content);
+            // Map 2 is shown: the item taken on map 1 runs on map 1's inventory row.
+            var host = new AreaUseScriptHost(session, 2, [], [items], content);
             var go = host.RunItemUse(1, Entity(6), session.Rules.Scripts);
             Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.RunDefault), (go.Outcome, go.Run!.Outcome), go.Detail);
             Assert.IsTrue(host.GlobalFlag(31));
