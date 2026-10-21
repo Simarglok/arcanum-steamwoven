@@ -66,29 +66,35 @@ starved, and an export gets a quiet Mac in its turn instead of waiting for one. 
   starts within that of the previous one ending. An export has no priority: it waits for its turn like any run, and
   its turn always comes. Other commands (git, Python self-tests, reading logs) are not queued.
 - **Start check.** The wrapper prints `ARCANUM_QUEUE queued ticket=N kind=K ahead=A waiting-for=#M ...` while it waits
-  (again when its position changes), `ARCANUM_QUEUE start ticket=N waited=S` when the command starts, and
-  `ARCANUM_QUEUE end ticket=N exit=E ran=S` at the end, on stderr. Within the first minute after starting, check that
+  (again when its position changes), `ARCANUM_QUEUE start ticket=N kind=K waited=Ss` when the command starts, and
+  `ARCANUM_QUEUE end ticket=N exit=E ran=Ss` at the end, on stderr. Within the first minute after starting, check that
   one of the first two lines is there; after `start`, check the command itself as [above](#checking-that-a-run-started-arc-dev-029).
   A queued run is not stuck: `./arcanum queue` shows what it waits for.
 - **Limits.** A run that exceeds its limit has its whole process group stopped (SIGTERM, then SIGKILL after 10 s) and
   exits 124 with `ARCANUM_QUEUE timeout`. `--timeout MIN` changes the limit, `--timeout 0` removes it. Stopping the
-  wrapper (Ctrl-C, SIGTERM, a stopped background task) stops its command and gives up its place; the wrapper exits
-  with the command's exit code, or 128+N when stopped by signal N.
+  wrapper (Ctrl-C, SIGTERM, SIGHUP, a stopped background task) stops its command and gives up its place; the wrapper
+  exits with the command's exit code, or 128+N when stopped by signal N. A wrapper killed with SIGKILL cannot stop its
+  command: a Godot command then keeps the place until it ends or its limit plus 10 s passes, when the next waiter
+  stops its process group; a `dotnet` command keeps running outside the queue.
 - **Crashes.** Each place is a ticket file in `~/Library/Application Support/Arcanum Steamwoven/run-queue/` (or
   `$ARCANUM_LOCAL_HOME/run-queue`) whose lock the wrapper holds; for Godot kinds the command holds it too, so a run
-  whose wrapper was killed keeps its place until its command ends. The kernel drops the lock of a dead process, and a
+  whose wrapper was killed keeps its place until its command ends or runs out of time. The kernel drops the lock of a dead process, and a
   lock held only by a leftover descendant (a build server that inherited it) does not count, so a crashed run never
-  blocks the queue. Never delete ticket files by hand; `history.jsonl` there records every run.
+  blocks the queue. Process start times are compared in the C locale and UTC, so lanes with different locales agree;
+  when `ps` cannot answer, the run counts as alive. Never delete ticket files by hand; `history.jsonl` there records every run.
 - **Nesting.** A queued command that calls `./arcanum run` again (or `./arcanum area|world|map`) runs inside its
-  parent's place instead of queueing behind itself.
+  parent's place when that place covers it: an export covers every kind, a `window` or `headless` run covers Godot
+  and `dotnet` runs, a `dotnet` run covers `dotnet` runs. Any other nesting (an export inside a Godot run, a Godot
+  run inside a `dotnet` run) would wait for its own parent and is refused: queue it on its own.
 - **The owner's viewer.** `./arcanum area`, `world` and `map` take the Godot slot first in line (after the run holding
-  it), with no time limit, and keep it until the viewer window closes; `--no-queue` starts at once, and `--dry-run`
-  never queues.
+  it), with no time limit, and keep it until the viewer window closes; the command stays in the terminal until then.
+  Ctrl-C there, or closing the terminal, gives the place up while the viewer stays open. `--no-queue` starts at
+  once, and `--dry-run` never queues.
 - **Lanes still on lockf.** While some threads still use the lockf rule, a run holding the Godot slot also takes
   `/tmp/arcanum-godot-window.lock`, so the two never overlap (a queued run then prints that it waits for a lockf user).
 
 Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (order, gaps, export quiet, crashed and killed runs,
-limits, lockf, nesting); they use their own `ARCANUM_LOCAL_HOME` and lock file.
+limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
 
 ## Root solution synthetic checks
 

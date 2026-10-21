@@ -80,18 +80,25 @@ def _read_json(path: Path) -> dict[str, Any] | None:
 
 
 _START_CACHE: dict[int, tuple[float, str | None]] = {}
+UNKNOWN = "?"  # ps could not answer: never read as "gone"
+# The same start-time text in every lane, whatever the caller's locale or time zone.
+_PS_ENVIRONMENT = {"LC_ALL": "C", "TZ": "UTC", "PATH": "/bin:/usr/bin"}
 
 
 def _process_start(pid: int) -> str | None:
-    """The process's start time (`ps -o lstart`), cached for 5 s; None when it is gone."""
+    """The process's start time (`ps -o lstart` in the C locale and UTC), cached for 5 s; None when ps says it is
+    gone, UNKNOWN when ps failed."""
     cached = _START_CACHE.get(pid)
     if cached and time.monotonic() - cached[0] < 5:
         return cached[1]
     try:
-        value = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=5).stdout.strip() or None
+        completed = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=5,
+                                   env=_PS_ENVIRONMENT)
     except (OSError, subprocess.SubprocessError):
-        value = None
-    _START_CACHE[pid] = (time.monotonic(), value)
+        return UNKNOWN
+    value = completed.stdout.strip() or (None if completed.returncode == 1 else UNKNOWN)
+    if value is not UNKNOWN:
+        _START_CACHE[pid] = (time.monotonic(), value)
     return value
 
 
@@ -104,12 +111,14 @@ def _alive(pid: Any, start: Any) -> bool:
         return False
     except PermissionError:
         pass
-    return start is None or _process_start(pid) == start
+    if start is None or start == UNKNOWN:
+        return True
+    now = _process_start(pid)
+    return now == UNKNOWN or now == start
 
 
-def _live(path: Path, ticket: dict[str, Any]) -> bool:
-    """A ticket is live while its flock is held by its wrapper or its command. A lock held only by some descendant
-    that outlived both (a build server that inherited the descriptor) does not keep a place."""
+def _locked(path: Path) -> bool:
+    """True while someone holds the flock on path."""
     try:
         fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
     except OSError:
@@ -120,23 +129,66 @@ def _live(path: Path, ticket: dict[str, Any]) -> bool:
     except OSError as error:
         if error.errno not in (errno.EWOULDBLOCK, errno.EAGAIN):
             raise
+        return True
     finally:
         os.close(fd)
+
+
+def _live(path: Path, ticket: dict[str, Any]) -> bool:
+    """A ticket is live while its flock is held by its wrapper or its command. A lock held only by some descendant
+    that outlived both (a build server that inherited the descriptor) does not keep a place."""
+    if not _locked(path):
+        return False
     return _alive(ticket.get("pid"), ticket.get("pidStart")) or _alive(ticket.get("childPid"), ticket.get("childStart"))
 
 
+def _expired(ticket: dict[str, Any], now: float) -> bool:
+    """A run whose wrapper was killed has nobody to enforce its limit: once the limit and the grace have passed, a
+    waiter stops its command's process group (SIGTERM, then SIGKILL after KILL_GRACE_SECONDS) and drops it."""
+    minutes, started, child = ticket.get("timeoutMinutes"), ticket.get("startedAt"), ticket.get("childPid")
+    if not started or not isinstance(minutes, (int, float)) or minutes <= 0 or not isinstance(child, int) or child <= 0:
+        return False
+    if _alive(ticket.get("pid"), ticket.get("pidStart")):
+        return False
+    late = now - (started + minutes * 60)
+    if late < 0:
+        return False
+    if _alive(child, ticket.get("childStart")):
+        _signal_group(child, signal.SIGKILL if late >= KILL_GRACE_SECONDS else signal.SIGTERM)
+    return late >= KILL_GRACE_SECONDS
+
+
+def _unlink(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
 def tickets(prune: bool = True) -> list[tuple[Path, dict[str, Any]]]:
-    """Live tickets in queue order (priority, then arrival). Call under the queue lock when deciding admission."""
+    """Live tickets in queue order (priority, then arrival). Call under the queue lock. A locked ticket this version
+    cannot read (another version's format) is never removed and counts as a running export, which blocks everything."""
     result = []
-    for path in sorted(_open_folder().glob("t-*.json")):
+    now = time.time()
+    base = _open_folder()
+    for path in sorted(base.glob("t-*.json")):
         ticket = _read_json(path)
-        if ticket is not None and _live(path, ticket):
+        if ticket is None:
+            if _locked(path):
+                seq = path.stem[2:]
+                result.append((path, {"schema": SCHEMA, "seq": int(seq) if seq.isascii() and seq.isdigit() else 0,
+                                      "kind": "export", "label": "unreadable ticket", "startedAt": now, "enqueuedAt": now,
+                                      "priority": FRONT}))
+            elif prune:
+                _unlink(path)
+        elif _live(path, ticket) and not (prune and _expired(ticket, now)):
             result.append((path, ticket))
-        elif prune:
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                pass
+        elif prune and not (_locked(path) and _alive(ticket.get("pid"), ticket.get("pidStart"))):
+            _unlink(path)
+    if prune:
+        for path in base.glob(".new-*"):
+            if not _locked(path):
+                _unlink(path)
     result.sort(key=lambda item: (item[1].get("priority", NORMAL), item[1]["seq"]))
     return result
 
@@ -180,12 +232,23 @@ def _write(fd: int, ticket: dict[str, Any]) -> None:
     os.write(fd, data)
 
 
+HISTORY_BYTES, HISTORY_KEEP = 2_000_000, 5000
+
+
 def _history(entry: dict[str, Any]) -> None:
-    fd = os.open(_open_folder() / "history.jsonl", os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
-    try:
-        os.write(fd, (json.dumps(entry, sort_keys=True) + "\n").encode())
-    finally:
-        os.close(fd)
+    path = _open_folder() / "history.jsonl"
+    with _QueueLock():
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+        try:
+            os.write(fd, (json.dumps(entry, sort_keys=True) + "\n").encode())
+        finally:
+            os.close(fd)
+        if path.stat().st_size > HISTORY_BYTES:  # keep the newest runs only
+            kept = path.read_text(errors="replace").splitlines()[-HISTORY_KEEP:]
+            hidden = path.parent / f".history-{os.getpid()}"
+            hidden.write_text("\n".join(kept) + "\n")
+            os.chmod(hidden, 0o600)
+            os.replace(hidden, path)
 
 
 def _enqueue(kind: str, label: str, command: Sequence[str], priority: int, timeout: float) -> tuple[int, Path, dict[str, Any]]:
@@ -193,10 +256,14 @@ def _enqueue(kind: str, label: str, command: Sequence[str], priority: int, timeo
         base = _open_folder()
         counter = base / "counter"
         try:
-            seq = int(counter.read_text().strip() or "0") + 1
+            last = int(counter.read_text().strip() or "0")
         except (FileNotFoundError, ValueError):
-            seq = 1
-        counter.write_text(f"{seq}\n")
+            last = 0
+        existing = [int(path.stem[2:]) for path in base.glob("t-*.json") if path.stem[2:].isascii() and path.stem[2:].isdigit()]
+        seq = max([last, *existing]) + 1
+        hidden_counter = base / f".counter-{os.getpid()}"
+        hidden_counter.write_text(f"{seq}\n")
+        os.replace(hidden_counter, counter)
         ticket = {"schema": SCHEMA, "seq": seq, "kind": kind, "label": label[:MAX_LABEL], "priority": priority,
                   "command": " ".join(command)[:MAX_COMMAND], "cwd": os.getcwd(), "pid": os.getpid(),
                   "pidStart": _process_start(os.getpid()), "timeoutMinutes": timeout, "enqueuedAt": time.time(),
@@ -254,13 +321,26 @@ def _legacy_hold() -> int:
         os.close(fd)
 
 
-def nested() -> bool:
-    """True inside a run that already holds its place (./arcanum run -- ./arcanum map ...): run directly, no new ticket."""
+# Which nested kinds a running parent's place already covers: an export covers everything, a Godot run covers Godot
+# runs and dotnet runs (no export can drain while it holds the slot), a dotnet run covers dotnet runs.
+COVERS = {"export": frozenset(KINDS), "window": frozenset({"window", "headless", "dotnet"}),
+          "headless": frozenset({"window", "headless", "dotnet"}), "dotnet": frozenset({"dotnet"})}
+
+
+def nested(kind: str) -> bool:
+    """True inside a run whose place covers this kind (./arcanum run -- ./arcanum map ...): run directly, no new
+    ticket. A kind the parent does not cover would wait for its own parent, so it is refused."""
     value = os.environ.get(TICKET_ENV, "")
-    if not value.isdigit():
+    if not (value.isascii() and value.isdigit()):
         return False
     with _QueueLock():
-        return any(item["seq"] == int(value) and item.get("startedAt") for _, item in tickets(prune=False))
+        parent = next((item for _, item in tickets(prune=False) if item["seq"] == int(value) and item.get("startedAt")), None)
+    if parent is None:
+        return False
+    if kind not in COVERS.get(parent["kind"], frozenset()):
+        raise ValueError(f"a {kind} run inside a {parent['kind']} run (ticket {value}) would wait for its own parent; "
+                         f"queue it on its own instead")
+    return True
 
 
 def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | None = None, priority: int = NORMAL,
@@ -275,7 +355,7 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
     minutes = DEFAULT_TIMEOUT_MINUTES[kind] if timeout is None else timeout
     if minutes < 0:
         raise ValueError("--timeout must be 0 (no limit) or a positive number of minutes")
-    if nested():
+    if nested(kind):
         say(f"nested ticket={os.environ[TICKET_ENV]} (runs inside its place)")
         code = subprocess.call(list(command))
         if code == 0 and hold is not None:
@@ -285,12 +365,14 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
     child: subprocess.Popen[bytes] | None = None
     legacy = None
     stopped: list[int] = []
+    critical = [False]  # while starting or stopping the command a signal is only recorded, never raised
 
     def stop(number: int, _frame: object) -> None:
         stopped.append(number)
         if child is not None and child.poll() is None:
             _signal_group(child.pid, signal.SIGTERM)
-        raise KeyboardInterrupt
+        if not critical[0]:
+            raise KeyboardInterrupt
 
     previous = {number: signal.signal(number, stop) for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
     exit_code = 1
@@ -301,10 +383,16 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         waited = ticket["startedAt"] - ticket["enqueuedAt"]
         say(f"start ticket={ticket['seq']} kind={kind} waited={waited:.0f}s")
         environment = dict(os.environ, **{TICKET_ENV: str(ticket["seq"]), KIND_ENV: kind})
-        # Godot kinds hand the ticket's lock to the command, so a run whose wrapper was killed keeps its place
-        # while its command still runs; dotnet runs do not (their build servers would inherit it).
+        # Godot kinds hand the ticket's lock to the command, so a run whose wrapper was killed keeps its place while
+        # its command still runs (until its limit, see _expired); dotnet runs do not (their build servers would
+        # inherit it). The lockf lock stays with the wrapper: a leftover descendant holding it would block lockf
+        # lanes and the next Godot run with no way to tell it from a live run.
+        critical[0] = True
         child = subprocess.Popen(list(command), env=environment, start_new_session=True,
                                  pass_fds=(fd,) if kind in GODOT_KINDS else ())
+        critical[0] = False
+        if stopped:
+            raise KeyboardInterrupt
         with _QueueLock():
             ticket["childPid"], ticket["childStart"] = child.pid, _process_start(child.pid)
             _write(fd, ticket)
@@ -314,10 +402,12 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         if exit_code == TIMEOUT_EXIT:
             say(f"timeout ticket={ticket['seq']} after {minutes:g} min; stopped its process group")
     except KeyboardInterrupt:
+        critical[0] = True
         if child is not None and child.poll() is None:
             _stop_group(child)
         exit_code = 128 + (stopped[0] if stopped else signal.SIGINT)
     finally:
+        critical[0] = True
         for number, handler in previous.items():
             signal.signal(number, handler)
         ended = time.time()

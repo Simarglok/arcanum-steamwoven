@@ -24,8 +24,8 @@ ARC-WORLD-009 (cave and return), ARC-WORLD-007 (the same AREA build plus [LMB cl
 ARC-INPUT-001 (plus the [diagnostic palette](../input/diagnostic-palette.md)), then ARC-RENDER-007; a real run leaves the terrain
 launch selection on that build, a `--dry-run` restores the previous selection.
 A real `area`, `world` or `map` launch takes the [launch queue](toolchain.md#launch-queue-arc-dev-033)'s Godot slot
-first in line and keeps it until the viewer window closes, so it does not open over a thread's smoke; `--no-queue`
-starts at once.
+first in line and keeps it until the viewer window closes (the command waits in the terminal until then; Ctrl-C
+gives the place up and leaves the viewer open), so it does not open over a thread's smoke; `--no-queue` starts at once.
 Role paths follow the installed game layout used by the area research
 (`docs/research/area-passability-closure.md`): `areaMobile` is the Crash Site map's
 normal-game mobile file `modules/Arcanum/maps/qrmvs-420-1zjcnpgn` (the game's

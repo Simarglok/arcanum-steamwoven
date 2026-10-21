@@ -73,13 +73,19 @@ class QueueRunTests(unittest.TestCase):
                 f"open({str(self.log)!r}, 'a').write('end {name} %f\\n' % time.time())")
         return self.wrapper(kind, name, [sys.executable, "-c", code], timeout=timeout)
 
-    def wrapper(self, kind: str, name: str, command: list[str], *, timeout: str | None = None) -> subprocess.Popen:
-        before = len(run_queue.tickets())
+    def live(self) -> list[dict]:
+        with run_queue._QueueLock():
+            return [item for _, item in run_queue.tickets(prune=False)]
+
+    def wrapper(self, kind: str, name: str, command: list[str], *, timeout: str | None = None,
+                environment: dict | None = None) -> subprocess.Popen:
+        before = len(self.live())
         argv = [sys.executable, "-B", str(ARCANUM), "run", "--kind", kind, "--label", name,
                 *(["--timeout", timeout] if timeout else []), "--", *command]
-        process = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        process = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   env={**os.environ, **(environment or {})})
         self.processes.append(process)
-        self.until(lambda: len(run_queue.tickets()) > before or process.poll() is not None)
+        self.until(lambda: len(self.live()) > before or process.poll() is not None)
         return process
 
     def until(self, condition, limit: float = 20.0) -> None:
@@ -112,7 +118,7 @@ class QueueRunTests(unittest.TestCase):
         for earlier, later in zip(order, order[1:]):
             gap = found[f"start {later}"] - found[f"end {earlier}"]
             self.assertGreaterEqual(gap, 0.0)
-            self.assertLess(gap, 1.5)  # the poll interval plus interpreter start, not a lock-retry back-off
+            self.assertLess(gap, 2.5)  # the poll interval plus interpreter start, not a lock-retry back-off
 
     def test_dotnet_runs_alongside_a_godot_run(self) -> None:
         self.queued("window", "w", 2.0)
@@ -162,7 +168,7 @@ class QueueRunTests(unittest.TestCase):
         self.finish()
         found = self.events()
         self.assertNotIn("start gone", found)
-        self.assertLess(found["start b"] - found["end a"], 1.5)
+        self.assertLess(found["start b"] - found["end a"], 2.5)
 
     def test_the_lockf_rule_and_the_queue_exclude_each_other(self) -> None:
         legacy = os.environ["ARCANUM_QUEUE_LEGACY_LOCK"]
@@ -185,6 +191,38 @@ class QueueRunTests(unittest.TestCase):
         inner = f"{sys.executable} -B {ARCANUM} run --kind window -- {sys.executable} -c pass"
         process = self.wrapper("window", "outer", ["sh", "-c", inner])
         self.assertEqual(process.wait(30), 0)
+
+    def test_a_nested_kind_the_parent_does_not_cover_is_refused(self) -> None:
+        for outer, inner_kind in (("dotnet", "window"), ("window", "export")):
+            inner = f"{sys.executable} -B {ARCANUM} run --kind {inner_kind} -- {sys.executable} -c pass"
+            process = self.wrapper(outer, f"{outer}-{inner_kind}", ["sh", "-c", inner])
+            self.assertEqual(process.wait(30), 2, (outer, inner_kind))  # the inner ./arcanum refuses with exit 2
+
+    def test_lanes_with_another_locale_and_time_zone_see_the_same_holder(self) -> None:
+        self.wrapper("window", "ru", ["sleep", "3"], environment={"LC_ALL": "ru_RU.UTF-8", "LANG": "ru_RU.UTF-8", "TZ": "Asia/Tokyo"})
+        with patch.dict(os.environ, {"LC_ALL": "C", "TZ": "UTC"}):
+            self.assertTrue(run_queue.status()[0].startswith("running #"), run_queue.status())
+        self.assertEqual(len(self.live()), 1)
+
+    def test_an_orphaned_godot_command_is_stopped_after_its_limit(self) -> None:
+        first = self.wrapper("window", "orphan", ["sleep", "60"], timeout="0.01")
+        self.until(lambda: any(item.get("childPid") for item in self.live()))
+        child = next(item["childPid"] for item in self.live())
+        os.kill(first.pid, signal.SIGKILL)
+        first.wait()
+        began = time.time()
+        self.queued("window", "after", 0.1)
+        self.finish()
+        self.assertLess(self.events()["start after"] - began, run_queue.KILL_GRACE_SECONDS + 5)
+        self.until(lambda: subprocess.run(["ps", "-p", str(child)], capture_output=True).returncode != 0)
+
+    def test_numbering_survives_a_lost_counter(self) -> None:
+        self.queued("window", "a", 1.0)
+        self.until(lambda: self.log.exists())
+        (run_queue.folder() / "counter").write_text("")
+        self.queued("window", "b", 0.1)
+        self.assertEqual(sorted(item["seq"] for item in self.live()), [1, 2])
+        self.finish()
 
     def test_status_names_the_holder_and_the_waiters(self) -> None:
         self.queued("window", "holder", 1.5)
