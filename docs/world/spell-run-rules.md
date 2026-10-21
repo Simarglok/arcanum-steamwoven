@@ -154,11 +154,12 @@ Owner decisions 2026-10-20: every difference is documented.
 | A non-critter's aptitude and a missing target's type keep the slot's previous values. | No aptitude, no target. | — |
 | The run reads its objects, the record and the globals directly; the presentation (facing, eye candy, casting goal) and the multiplayer packets are part of creation. | The caller passes the facts and starts the run; multiplayer is not modelled. | — |
 
-MG6 (the aptitude scaling of durations never applies) follows the original in both modes, as decided. Three more are recorded for the owner by ARC-MAGIC-010, each following the
-original in both modes until decided: MG30 (the cancels' interrupts are refused by the guard and leave runs without a tick or an
+MG6 (the aptitude scaling of durations never applies) follows the original in both modes, as decided. Three more were recorded by ARC-MAGIC-010 and decided by the owner on
+2026-10-21: MG30 (the cancels' interrupts are refused by the guard and leave runs without a tick or an
 END), MG31 (interrupting a timed run with CALLBACK but no END_CALLBACK components does not end it; one technology record), MG32 (an
-interrupt or process event outlives the free and can hit a new run in the reused slot). ARC-MAGIC-011 built the recommended fixes
-of MG30 and MG32 as switches (`ReEntryDropsRuns`, `FreeKeepsOtherEvents`; still pending the owner); MG31 keeps the original. The session keeps the runs unchanged when
+interrupt or process event outlives the free and can hit a new run in the reused slot). MG30 and MG32 are fixed
+in Steamwoven with Original switches (`ReEntryDropsRuns`, `FreeKeepsOtherEvents`, ARC-MAGIC-011); MG31 follows the original in both
+modes, no switch. The session keeps the runs unchanged when
 an action's or event's queued events do not fit; what the host's ports already did (a component's effect) is the host's.
 
 ## Not ready

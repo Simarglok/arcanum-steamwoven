@@ -430,7 +430,7 @@ without components or with an empty target list counts as applied; every target 
 run ends after BEGIN because of the shared bit (MG19); a sourceless maintained run ends inside its last counted tick; a callback
 whose animation cannot start runs once and frees the run; the interrupt picks END over END_CALLBACK from MAINTAIN; a refused
 BEGIN still runs its END components (through its interrupt event); detaching a source marks the run's final END unless it is
-being processed; three bugs are recorded for the owner (MG30–MG32). The implementation is the run system of the same contract.
+being processed; three bugs were recorded for the owner (MG30–MG32; decided 2026-10-21: MG30 and MG32 fixed with switches, MG31 follows the original). The implementation is the run system of the same contract.
 
 After each action the scheduler decides what comes next
 (schedule (0x453FA0), timers (0x454790, 0x4547F0, 0x4548D0), time (0x455250)):

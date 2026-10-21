@@ -48,13 +48,13 @@ public sealed record MagicAnomalyProfile
     public bool ReflectionPaysLastCost { get; init; }
 
     /// <summary>
-    /// MG30 (ARC-MAGIC-011; pending the owner, recommended fix): the runs a starting run's cancels interrupt are refused by the
+    /// MG30 (ARC-MAGIC-011, owner decision 2026-10-21: fix): the runs a starting run's cancels interrupt are refused by the
     /// processing's re-entrancy guard and left without a tick or an END. Steamwoven processes them right after the current pass.
     /// </summary>
     public bool ReEntryDropsRuns { get; init; }
 
     /// <summary>
-    /// MG32 (ARC-MAGIC-011; pending the owner, recommended fix): a run's free removes only its tick events, so an interrupt or
+    /// MG32 (ARC-MAGIC-011, owner decision 2026-10-21: fix): a run's free removes only its tick events, so an interrupt or
     /// process event outlives it and can hit a new run in the reused slot. Steamwoven removes every event of the run.
     /// </summary>
     public bool FreeKeepsOtherEvents { get; init; }
@@ -73,28 +73,35 @@ public sealed record MagicAnomalyProfile
     public bool UnresistableIsFinalEnd { get; init; }
 
     /// <summary>
-    /// MG35 (ARC-MAGIC-012; pending the owner, recommended fix): the damage step takes a full or death hit's amount — the target's
+    /// MG34 (ARC-MAGIC-013, owner decision 2026-10-21: fix): a target the reflection swapped onto the caster and the resistance
+    /// skipped leaves the run's source swapped — the processing jumps past the source's restore — so later targets swap with it
+    /// and the next pass takes it as the run's source. Steamwoven restores the source for a resisted target too.
+    /// </summary>
+    public bool ResistedReflectionKeepsSwap { get; init; }
+
+    /// <summary>
+    /// MG35 (ARC-MAGIC-012, owner decision 2026-10-21: fix): the damage step takes a full or death hit's amount — the target's
     /// current hit points — and only then applies a PC attacker's difficulty share, so on hard a PC's death spell deals three
     /// quarters of the hit points and the target lives (and on easy one and a half). Steamwoven leaves that amount alone.
     /// </summary>
     public bool DifficultyScalesKillDamage { get; init; }
 
     /// <summary>
-    /// MG36 (ARC-MAGIC-012; pending the owner, recommended fix): the spell Damage component's combat context carries the caster's
+    /// MG36 (ARC-MAGIC-012, owner decision 2026-10-21: fix): the spell Damage component's combat context carries the caster's
     /// wielded weapon, so its ignore-resistance flag makes the spell ignore resistances, its "uber" flag lets the spell hurt a
     /// nigh-invulnerable critter, and its damage-armour flag wears the target's armour. Steamwoven gives the spell no weapon.
     /// </summary>
     public bool SpellDamageUsesCastersWeapon { get; init; }
 
     /// <summary>
-    /// MG37 (ARC-MAGIC-012; pending the owner, recommended fix): a resistance margin takes at least 1 from a Damage component's
+    /// MG37 (ARC-MAGIC-012, owner decision 2026-10-21: fix): a resistance margin takes at least 1 from a Damage component's
     /// amount even when the amount is 0, so a resisted stun-only spell (0–0 damage) deals −1: it heals a hit point (or lowers the
     /// poison level by 1). Steamwoven takes nothing from an amount of 0 or less.
     /// </summary>
     public bool MarginTakesFromNoDamage { get; init; }
 
     /// <summary>
-    /// MG38 (ARC-MAGIC-012; pending the owner, recommended fix): the acid damage's body-armour test compares the slot loop's index
+    /// MG38 (ARC-MAGIC-012, owner decision 2026-10-21: fix): the acid damage's body-armour test compares the slot loop's index
     /// (0..8) with the body-armour slot 1006, so it never holds and the wearer always takes a third of the acid after its worn
     /// items. Steamwoven spares a wearer who wears body armour.
     /// </summary>
@@ -109,7 +116,7 @@ public sealed record MagicAnomalyProfile
         Name = "original", SaveSubtractsResistance = true, SummonedTestReadsLastFlags = true, MaintenancePaysBoth = true,
         SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true, ReflectionPaysLastCost = true, ReEntryDropsRuns = true,
         FreeKeepsOtherEvents = true, DifficultyScalesKillDamage = true, SpellDamageUsesCastersWeapon = true, MarginTakesFromNoDamage = true,
-        AcidIgnoresBodyArmour = true,
+        AcidIgnoresBodyArmour = true, ResistedReflectionKeepsSwap = true,
     };
 
     /// <summary>Both settings, default first.</summary>
