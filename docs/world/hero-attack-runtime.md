@@ -104,8 +104,8 @@ No snapshot change: deaths, damage and experience are already saved by the life 
 - The turn-based round in the viewer (an attack there costs AP and passes turns; the session supports the round but the viewer
   has no turn-based setting).
 - NPC stored effects (race, items, spells) in its effective stats; skill and resistance effects of the hero.
-- The viewer passes no item baselines yet (`HeroWorn`/`TargetWorn` null), so in the viewer only the bare-handed hero's own wear
-  happens; item wear needs the hero's kit and the NPC's worn items' fields at the attack, and no viewer shows item condition.
+- Since ARC-COMBAT-008 part 2 the viewer passes the hero's kit and the NPC's worn items with their durability values, so wear
+  happens in play; it shows no item condition. Attacking objects is in the [object damage runtime](object-damage-runtime.md#viewer-arc-combat-008-part-2).
 - Original-runtime parity: NOT_VERIFIED (static reading only).
 
 ## Tests

@@ -75,6 +75,47 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return null;
     }
 
+    /// <summary>
+    /// ARC-COMBAT-008: the items in the NPC's wear slots with their durability values, for the attack's wear: the items of its list as
+    /// the session shows it now whose stored inventory location is a wear slot (1000..1008) and that are not broken (the original takes
+    /// an item off at its first break; for an NPC that is the host's, so a broken item is no longer worn), each through
+    /// <see cref="SessionWearItem.FromCombatFields"/>. Null when the map is not covered, a worn item does not read or two share a slot
+    /// (the attack then wears none of the NPC's items).
+    /// </summary>
+    public IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? WornItems(GameSessionOwner session, int runtimeMap, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!_maps.TryGetValue(runtimeMap, out var map) || !Holders(session, runtimeMap).TryGetValue(entity, out var holder)) return null;
+        var worn = new Dictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>();
+        foreach (var item in holder.Items)
+        {
+            var slot = (Arcanum.Simulation.Equipment.EquipmentSlot)item.Facts.InventoryLocation;
+            if (!Enum.IsDefined(slot) || !map.TryGetRow(item.Entity, out var row)) continue;
+            if (CombatFieldReader.Read(row).Fields is not { Item: not null } fields || SessionWearItem.FromCombatFields(item.Entity, fields) is not { } wear)
+                return null;
+            if (session.QueryItemCondition(item.Entity, wear.Baseline) is not { Broken: false }) continue;
+            if (!worn.TryAdd(slot, wear)) return null;
+        }
+        return worn;
+    }
+
+    /// <summary>ARC-COMBAT-008: the hero's worn items with their durability values (each kit item's from
+    /// <paramref name="kit"/>, by kit index), or null when one has none (the attack then wears none of the hero's items).</summary>
+    public static IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? HeroWorn(GameSessionOwner session,
+        IReadOnlyList<SessionWearItem?>? kit)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var worn = new Dictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>();
+        foreach (var item in session.QueryEquipment().Worn)
+        {
+            if (!item.Entity.StartsWith("kit:", StringComparison.Ordinal) ||
+                !int.TryParse(item.Entity.AsSpan(4), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number) ||
+                kit is null || number < 1 || number > kit.Count || kit[number - 1] is not { } wear || wear.Entity != item.Entity) return null;
+            worn[item.Slot] = wear;
+        }
+        return worn;
+    }
+
     /// <summary>ARC-WORLD-036: the map whose stored objects hold the NPC (its home map, wherever it stands now), or null when
     /// no covered map does.</summary>
     public int? HomeMap(string entity) =>
