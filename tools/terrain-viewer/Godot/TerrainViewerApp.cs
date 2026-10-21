@@ -120,9 +120,9 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
-                        // walk run.
+                        // walk and census run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
@@ -144,6 +144,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("walk") == true) await RunAreaMapWalkSmokeAsync();
                         // ARC-UI-048: after the stream, as the landing loads the start map around another place.
                         if (_readyMapName is not null && Stage("worldmap")) await RunAreaWorldMapSmokeAsync();
+                        // ARC-RENDER-027: only when named, every map of the catalogue in turn (last: it leaves the last map shown).
+                        if (_readyMapName is not null && only?.Contains("census") == true) await RunAreaMapCensusAsync();
                         GetTree().Quit(0);
                     }
                     else await RunNativeSmokeAsync(result);

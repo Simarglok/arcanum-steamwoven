@@ -271,3 +271,26 @@ public static class AreaMapWalk
     internal static readonly IReadOnlyDictionary<CardinalTraversalDirection, NeighborDirection> Neighbor =
         Enum.GetValues<NeighborDirection>().ToDictionary(GridReplay.MapDirection);
 }
+
+/// <summary>ARC-RENDER-027: the maps of a game folder's content stack the map census opens, in catalogue order: every
+/// catalogued map with its listing (<c>rules/maplist.mes</c>) and its sector file count; map mode opens a listed map with at
+/// least one sector file (the main world map as a window).</summary>
+public static class AreaMapCensus
+{
+    public sealed record Entry(string Name, bool Listed, int SectorFiles)
+    {
+        public bool Openable => Listed && SectorFiles > 0;
+    }
+
+    public static IReadOnlyList<Entry> Maps(TerrainViewerArguments arguments)
+    {
+        var discovery = ContentMountPlan.Discover(arguments.GameRoot ?? throw new InvalidOperationException("AREA_MAP_GAME_ROOT_REQUIRED"));
+        if (discovery.Status != ContentMountStatus.Ready) throw new InvalidOperationException("AREA_MAP_MOUNT_" + discovery.Status.ToString().ToUpperInvariant());
+        var opened = ContentStack.Open(discovery.Plan!);
+        if (opened.Status != ContentStackStatus.Ready) throw new InvalidOperationException("AREA_MAP_STACK_" + opened.Status.ToString().ToUpperInvariant());
+        using var stack = opened.Stack!;
+        var catalog = WorldCatalog.Open(stack);
+        var list = MapList.Read(stack);
+        return catalog.Maps.Select(m => new Entry(m.Name, list.Status == MapListStatus.Read && list.Find(m.Name) is not null, m.SectorFiles.Count)).ToArray();
+    }
+}

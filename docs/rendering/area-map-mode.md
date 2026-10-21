@@ -769,6 +769,32 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   hours and discoveries kept.
 - Original parity NOT_VERIFIED.
 
+## Map census (ARC-RENDER-027)
+
+The native census opens every map of the game folder's catalogue in turn through the ordinary map load (the main world map
+as a window around its map-list start) and checks each one. It is the map-smoke stage `census`, run only when named
+(`ARC_AREA_MAP_SMOKE_ONLY=census` on any start map; it ends on the last map). Per map:
+
+- the load publishes the map, and a frame is drawn with something visible;
+- the spawn is admitted, and the step evidence leaves no terrain cell and no object Unknown;
+- the load time, the slowest of eight drawn frames after the first (which carries the upload), the managed heap after a
+  full collection and the process working set stay within the census budgets: 60 s, 250 ms, 2 GB and 3 GB, about two to
+  three times the largest values observed.
+
+A catalogued map that map mode does not open (no map-list row, or no sector file) is reported with its reason and not
+loaded. `AreaMapCensus.Maps` lists them; `AreaMapWindowOriginalTests` pins the list on the installed original.
+
+`ARC-RENDER-027 native-smoke census PASS` on the owner's Mac (2026-10-21, Debug source run from the Crash Site cave):
+
+- 81 catalogued maps; 79 opened, the main world map among them. The two scienticians underground levels have sector files
+  but no map-list row, so they were not opened.
+- Median load 4.0 s and median heap 202 MB.
+- The largest values all come from K'na Tha: 20.6 s, a 1.04 GB heap and a 1.48 GB working set. The slowest drawn frame
+  was bmc's, 127 ms.
+- The heap returns to about 200 MB on the maps after the largest ones, so it does not grow from map to map.
+
+Original parity does not apply (a viewer census).
+
 ## Not yet
 
 - Roofs are drawn, hidden and faded since ARC-RENDER-022 ([roofs](roofs.md)).
