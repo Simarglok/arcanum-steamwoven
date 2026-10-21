@@ -83,5 +83,7 @@ public sealed class AreaLineOfFireTests
         Assert.IsNull(Blocker(Map([new(1, Portal, 4, 2, Opaque, Art(5, 0))], open: _ => true)), "a door the session opened");
         Assert.AreEqual(Key(1), Blocker(Map([new(1, Portal, 4, 2, Opaque, Art(5, 3))], open: _ => false))?.Key, "a door the session closed");
         Assert.IsNull(Blocker(Map([new(1, Portal, 4, 2, Opaque, Art(5, 0))], gone: [Key(1)])), "a door an attack destroyed");
+        // A closed door on the target tile's near edge stops the line before the target (RA8).
+        Assert.AreEqual(Key(1), Blocker(Map([new(1, Portal, 8, 2, Opaque, Art(1, 0)), new(2, Npc, 8, 2, Opaque)]))?.Key);
     }
 }

@@ -134,6 +134,8 @@ public sealed class LineOfFireRulesTests
         Assert.AreEqual(0, Trace(new Map().WithPiece(4, 2, 5, "ghost", LineOfFirePieceKind.PassWalled, Glass), (2, 2), (8, 2)).Cost);
         // Walls on the target tile still count: only its other objects are skipped.
         Assert.AreEqual("wall", Trace(new Map().WithPiece(8, 2, 1, "wall", LineOfFirePieceKind.Solid), (2, 2), (8, 2)).Blocker);
+        // So do doors and windows (RA8: flag 0x10 skips only objects that are neither walls nor portals).
+        Assert.AreEqual("door", Trace(new Map().WithPiece(8, 2, 1, "door", LineOfFirePieceKind.ClosedPortal, Opaque), (2, 2), (8, 2)).Blocker);
     }
 
     [TestMethod]

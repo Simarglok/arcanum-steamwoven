@@ -303,7 +303,8 @@ public sealed record AttackRequest
     public bool AmmunitionShort { get; init; }
 }
 
-/// <summary>Why the resolver refused the attack before any roll (ARC-RES-030 C11, C16).</summary>
+/// <summary>Why the resolver refused the attack: before any roll (ARC-RES-030 C11, C16), or after the hit location's roll for want of
+/// ammunition (ARC-COMBAT-012).</summary>
 public enum AttackRefusal
 {
     None,

@@ -81,10 +81,9 @@ public static class LineOfFireRules
     {
         ArgumentNullException.ThrowIfNull(contains);
         long a = screenX >> 1, b = screenY, u = b - a, v = b + a;
+        // The original's two range tests (its subtraction below and its addition above the 32-bit range); a quotient by 40 fits.
         if (u < int.MinValue || v > int.MaxValue) return null;
-        long x = u / HalfWidth - (u < 0 ? 1 : 0), y = v / HalfWidth - (v < 0 ? 1 : 0);
-        if (x is < int.MinValue or > int.MaxValue || y is < int.MinValue or > int.MaxValue) return null;
-        var tile = new CellCoord((int)x, (int)y);
+        var tile = new CellCoord((int)(u / HalfWidth - (u < 0 ? 1 : 0)), (int)(v / HalfWidth - (v < 0 ? 1 : 0)));
         return contains(tile) ? tile : null;
     }
 

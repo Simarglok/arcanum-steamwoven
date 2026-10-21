@@ -19,7 +19,7 @@ public sealed class WeaponReachCensusTests
             .Where(p => p.fields?.Weapon is not null).ToArray();
         var reach = weapons.Where(p => p.fields!.Weapon!.Range > 1).ToArray();
         foreach (var group in reach.GroupBy(p => p.fields!.Weapon!.Skill).OrderBy(g => g.Key))
-            Console.WriteLine($"ARC-COMBAT-012 reach skill={group.Key} weapons={group.Count()} ammo-none={group.Count(p => p.fields!.Weapon!.AmmoType == 10000 || p.fields.Weapon.AmmoType < 0)}"
+            Console.WriteLine($"ARC-COMBAT-012 reach skill={group.Key} weapons={group.Count()} ammo-none={group.Count(p => p.fields!.Weapon!.AmmoType == CombatFieldReader.NoAmmo || p.fields.Weapon.AmmoType < 0)}"
                 + $" ranges={string.Join(",", group.Select(p => p.fields!.Weapon!.Range).Distinct().Order())} prototypes={string.Join(",", group.Take(12).Select(p => p.number))}");
         Console.WriteLine($"ARC-COMBAT-012 weapons={weapons.Length} reach>1={reach.Length}");
         // The melee ones by their description (OBJ_F_DESCRIPTION through mes/description.mes).

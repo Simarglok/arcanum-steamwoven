@@ -117,7 +117,7 @@ retail 1.0.7.4 executable by two readers ([ledger RA1–RA10](../research/origin
 | --- | --- |
 | Ranged path (RA1) | A weapon whose range is above 1 takes the original's ranged path even when its skill is melee; the installed data have two such weapons (prototypes 6063 and 6072, range 15, the throwing dagger among them; opt-in census `WeaponReachCensusTests`). The hit still wears the weapon (CW10 closed). |
 | Range terms (RA2) | A melee-skill hit at reach has no range limit, range penalty or line-of-fire difficulty: those belong to the bow, throwing and firearms skills (the shared check's distance flag). |
-| Ammunition per shot (RA3) | A weapon with an ammunition type spends its per-shot count from the hero's stack of that type after the hit-location roll and before every other roll, all or nothing: too few units refuse the attack (`AttackRefusal.OutOfAmmunition`, no later roll); a miss has spent its units. |
+| Ammunition per shot (RA3) | A weapon with an ammunition type spends its per-shot count from the hero's stack of that type after the hit-location roll and before every other roll, all or nothing: too few units refuse the attack (`AttackRefusal.OutOfAmmunition`, no later roll); a miss has spent its units. The refusal's other effects in the original (sound 3, flag 0x400, the PC's auto-switch re-wield) are not ready. |
 | Line of fire (RA4–RA10) | `LineOfFireRules.Trace` (0x4ADE00): the pixel line between the two tiles' screen centres in 10-pixel samples from the attacker's tile and pixel offset; each tile change priced by `StepCost` (0x43FE00 with the projectile flags) over an injected `ILineOfFireMap`: walls by their piece (a window piece passes an edge step and blocks a corner step, a doorway piece passes, any other blocks, a pass-walled one takes the cover test), doors and windows open or busted pass and closed ones take the cover test, dead critters pass, other objects take the cover test (not shoot-through stops the line, shoot-through and opaque +50, see-through cover +20); the target tile's own objects are skipped. More than 1,000 pixels: cost 100, no blocker. |
 | Corner step (AW13, AW14) | `CombatAnomalyProfile.CornerStepCountsBothRoutes` (Original): both routes around the corner count the corner tile's objects and the last step skips the side tiles' objects; Steamwoven counts the corner tile's objects on the first route only and skips only the target tile's objects. |
 | Redirect (RA4) | A blocker other than the target becomes the struck object: an NPC takes the normal attack, a door, window, container, scenery or trap the object attack (no skill roll). |
@@ -138,9 +138,9 @@ nearer one; on `arcanum1-024-fixed` a scenery five cells short of the target too
 
 Limits:
 
-- The redirect is decided before the session's attack runs, so the hit-location draw the original makes for the clicked target
-  is made for the struck object as its own attack makes it (an object attack draws none); the original keeps the clicked target's
-  location field and aim. The draws differ when one of the two is a critter and the other is not.
+- The redirect is decided before the session's attack runs, so the hit-location and technology-failure draws the original makes
+  before its line of fire (RA4) are made in the struck one's attack: the same draws in the same order (every attack rolls its
+  location unless aimed), now belonging to the struck one; an aim is kept, as the original keeps the location.
 - Within one tile the host gives walls and portals before the other objects; the original takes the tile's one list in its order
   (it matters only for which of two blockers on the same tile is reported).
 - The host reads a wall's pass-wall bit from its map data; the session does not track the pass-wall spell, so a wall it marks in
