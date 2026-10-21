@@ -62,10 +62,12 @@ public partial class TerrainViewerApp
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-009 skills smoke: " + why); }
         _skillTextsTask?.Wait(TimeSpan.FromSeconds(60));
-        AdoptSkillTexts(); SyncAreaSheet();
+        AdoptSkillTexts();
         Require(_skillTexts is { Status: AreaSkillTextsStatus.Ready }, "skill texts " + _skillTexts?.Status + " " + _skillTexts?.Detail);
-        if (_sheetPanel!.SkillsForSelfTest is null) _sheetPanel.Render(_sheetPanel.ViewForSelfTest!, BuildSkillsPage());
+        // Texts that finished loading after C opened the sheet: render the page with them now.
+        _sheetPanel!.Render(_sheetPanel.ViewForSelfTest!, BuildSkillsPage());
         var page = _sheetPanel.SkillsForSelfTest!;
+        Require(session.HeroEditorOpen, "the open sheet opened the hero's editor");
         var described = page.Rows.Count(row => row.Description is not null);
         var original = page.Rows.Count(row => row.Name != AreaSkillsPage.Label(row.Skill));
         Require(page.EditorOpen && page.Rows.Count == 16 && described == 16, $"page rows described {described}");
@@ -84,13 +86,19 @@ public partial class TerrainViewerApp
             _sheetPanel.SkillMinusForSelfTest(spent).EmitSignal(BaseButton.SignalName.Pressed);
             Require(_sheetPanel.SkillsForSelfTest!.UnspentPoints == unspent, "− gave them back");
             _sheetPanel.SkillMinusForSelfTest(spent).EmitSignal(BaseButton.SignalName.Pressed);
-            refusedAtFloor = _sheetPanel.SkillMessageForSelfTest.StartsWith("refused:", StringComparison.Ordinal);
+            refusedAtFloor = _sheetPanel.SkillMessageForSelfTest == "refused: nothing bought since the sheet opened to refund";
             Require(refusedAtFloor, "a second − at the floor: " + _sheetPanel.SkillMessageForSelfTest);
         }
         else
         {
+            var revision = session.Version.Revision;
             _sheetPanel.SkillPlusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
-            Require(_sheetPanel.SkillMessageForSelfTest.StartsWith("refused:", StringComparison.Ordinal), "+ without unspent points is refused");
+            Require(_sheetPanel.SkillMessageForSelfTest == "refused: not enough unspent points" && session.Version.Revision == revision,
+                "+ without unspent points: " + _sheetPanel.SkillMessageForSelfTest);
+            // The points of every row equal the editor's floor: − is refused there.
+            _sheetPanel.SkillMinusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            refusedAtFloor = _sheetPanel.SkillMessageForSelfTest is "refused: nothing bought since the sheet opened to refund" or "refused: no points to refund";
+            Require(refusedAtFloor && session.Version.Revision == revision, "− at the floor: " + _sheetPanel.SkillMessageForSelfTest);
         }
         GD.Print("ARC-UI-009 native-smoke skills page PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Rows = page.Rows.Count, OriginalNames = original, Described = described, Unspent = unspent, SpentRow = spentRow, RefusedAtFloor = refusedAtFloor }));

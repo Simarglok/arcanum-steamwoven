@@ -43,8 +43,8 @@ public static class AreaSkillsPage
     /// <summary>The page's refund click: the original's (the owner has not chosen the alternative, skills plan S5).</summary>
     public const SkillRefundClick RefundClick = SkillRefundClick.UntilLevelChanges;
 
-    /// <summary>The project's names of the four groups (the original's tabs carry art, no text).</summary>
-    public static readonly IReadOnlyList<string> GroupLabels = ["Combat", "Thieves", "Social", "Technological"];
+    /// <summary>The project's names of the four groups (the original's tabs are art; their hover texts are not used).</summary>
+    public static readonly IReadOnlyList<string> GroupLabels = ["Group 1: combat", "Group 2: stealth", "Group 3: social", "Group 4: technology"];
 
     private static readonly string[] TrainingLabels = ["", "Apprentice", "Expert", "Master"];
 

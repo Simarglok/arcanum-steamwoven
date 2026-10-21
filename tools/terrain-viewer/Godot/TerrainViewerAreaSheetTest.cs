@@ -114,7 +114,7 @@ public partial class TerrainViewerApp
             // Reopened: the tech point bought before is the new floor.
             InventoryKey(Key.C);
             _sheetPanel.SkillMinusForSelfTest(12).EmitSignal(BaseButton.SignalName.Pressed);
-            Require(_sheetPanel.SkillsForSelfTest!.Rows[12] is { Points: 1, FloorPoints: 1 } && _sheetPanel.SkillMessageForSelfTest.StartsWith("refused:", StringComparison.Ordinal),
+            Require(_sheetPanel.SkillsForSelfTest!.Rows[12] is { Points: 1, FloorPoints: 1 } && _sheetPanel.SkillMessageForSelfTest == "refused: nothing bought since the sheet opened to refund",
                 "the reopened editor's floor holds the bought point");
             InventoryKey(Key.C);
             // Controller pulses through the production pulse route: confirm presses the close button, cancel closes.
@@ -131,7 +131,7 @@ public partial class TerrainViewerApp
             InventoryKey(Key.C);
             Require(_areaSession.Kill(_areaSession.Version, SessionLifeTarget.Hero).Disposition == GameSessionDisposition.Changed, "kill the hero");
             SyncAreaSheet();
-            Require(!SheetOpen, "the dead hero's sheet closed");
+            Require(!SheetOpen && !_areaSession.HeroEditorOpen, "the dead hero's sheet closed and so did its editor");
             InventoryKey(Key.C);
             Require(!SheetOpen && _sheetStatus == "refused: the hero is dead", "C for a dead hero: " + _sheetStatus);
             return "no-hero refusal, C/controller confirm and cancel/Escape, keys owned while open, rebuild on change, skills page + and − with the editor floor, dead-hero close and refusal";

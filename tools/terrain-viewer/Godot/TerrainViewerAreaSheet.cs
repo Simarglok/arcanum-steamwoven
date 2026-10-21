@@ -75,7 +75,8 @@ public partial class TerrainViewerApp
         _sheetStamp = stamp;
         if (AreaCharacterSheet.Build(_areaSession!).View is { } view)
         {
-            // A replaced session (a quick load, a map change) has its own editor: the open sheet opens it there too.
+            // Defensive: the open sheet owns every key, so no quick load or map change replaces the session under it; should a
+            // session's editor be closed anyway, the open sheet opens it again.
             if (!_areaSession!.HeroEditorOpen) _areaSession.OpenHeroEditor();
             _sheetPanel!.Render(view, BuildSkillsPage());
         }
@@ -102,8 +103,8 @@ public partial class TerrainViewerApp
 
     private AreaSkillsPageView? BuildSkillsPage() => AreaSkillsPage.Build(_areaSession!, _skillTexts?.Texts, AreaHoverIndex.TextProfile);
 
-    /// <summary>A + or − press on the skills page: one call of the session's point pool, its message on the page; the session's
-    /// new revision rebuilds the sheet on the next frame.</summary>
+    /// <summary>A + or − press on the skills page: one call of the session's point pool, its message on the page, and the sheet
+    /// rebuilt at once.</summary>
     private void PressSkill(int row, bool spend)
     {
         if (!SheetOpen || !SheetActive) return;

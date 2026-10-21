@@ -4,8 +4,8 @@ Status: **Implemented bounded component**, wired for the skills by the AREA view
 [skills plan](../research/skills-plan.md) (rest of K1). The one spend-a-point / refund-a-point path over the hero's unspent
 character points that the character editor uses, for primary stats, hit and fatigue points, basic and tech skills, and,
 through a lane each, spell ranks (the magic lane's MT3) and tech degrees (the technology lane's TECH-2). Godot-free: pure
-rules in `Arcanum.Simulation.Character` and the editor's floor in `Arcanum.Session`. No snapshot schema change. The sheet's
-+ and − buttons are task S6.
+rules in `Arcanum.Simulation.Character` and the editor's floor in `Arcanum.Session`. No snapshot schema change. The AREA viewer's
+skills page (ARC-UI-009) has the skills' + and − buttons.
 
 Requirements: [FR-CHAR-015](../requirements/characters-skills.md#fr-char-015) (stats bought and refunded),
 [FR-CHAR-016](../requirements/characters-skills.md#fr-char-016) (basic skill points),

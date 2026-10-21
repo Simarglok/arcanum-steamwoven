@@ -1022,8 +1022,9 @@ in the original executable (ledger rows [SP1–SP8](../research/original-verific
 
 - the sixteen skills in the original's four groups of four (three of basic skills, the fourth the tech skills), all four
   groups at once instead of the original's tabs;
-- each row the skill's name with its training name in brackets (none untrained), from the player's `mes\skill.mes` loaded
-  through the module's game folder at the sheet's first open (the project's labels without it, for example a module outside
+- each row the skill's name with its training name in brackets (none untrained), from the player's `mes\skill.mes`, loaded
+  in the background through the module's game folder when the area binds and adopted at the first open after it finished (texts
+  that arrive while the sheet is open appear at the next open) (the project's labels without it, for example a module outside
   `<game>/modules/`), then, as project text, the effective level out of 20 (the original draws a bar of level / 20 and
   prints no number), the stored points and the key stat the next point needs (`MinimumKeyStat(4 × points + 4)`, "no
   further point" when no stat value allows it);
@@ -1039,7 +1040,9 @@ in the original executable (ledger rows [SP1–SP8](../research/original-verific
 
 Differences from the original, all of the page's presentation: no tabs (all groups shown), the level as a number instead
 of a bar, the hint's lines also always visible on the row, project refusal texts and no refusal sound, and names and
-training texts redrawn on every change (the original redraws them only at the open and on a tab press, SP2). The view-only
+training texts redrawn on every change (the original redraws them only at the open and on a tab press, SP2), the hint only over
+the row text (the original also over its + and −, whose tooltips here are the project's), a success reported as the points
+spent or refunded (the original clears the text bar, SP7) and no 3 s hint delay after a refusal (SP5). The view-only
 mode of the original (mode 2, + and − hidden) has no caller in the viewer.
 
 **Not implemented:** spending unspent points on stats, hit points or fatigue (the original's +/− buttons and their

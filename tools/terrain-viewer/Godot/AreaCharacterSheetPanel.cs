@@ -112,7 +112,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     /// <summary>The message of the last + or − press (empty clears it).</summary>
     public void ShowSkillMessage(string message) => _skillMessage.Text = message;
 
-    /// <summary>The close button is the only control: confirm presses it.</summary>
+    /// <summary>Confirm presses the close button (the skills page's buttons take the mouse or focus).</summary>
     public void Confirm() => _close.EmitSignal(BaseButton.SignalName.Pressed);
 
     private void ResizePanel()
