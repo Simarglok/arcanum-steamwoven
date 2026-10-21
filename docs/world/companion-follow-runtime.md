@@ -12,7 +12,7 @@ through the cave entrance and exit with the PC ([map change](#map-change-arc-wor
 
 **NOT READY:** no walk cycle or turning for Virgil (his T0 body frame moves with him), running uses the human gait timing
 (ARC-WORLD-020, [gait runtime](gait-runtime.md); his own ART stride is not read), only the two cave endpoints carry him (no other map, no
-follower of a follower, no unconscious-follower rule, no carried inventory payload), no orders, combat or turn-based cost, no
+follower of a follower, no unconscious-follower rule, no carried inventory payload), no combat orders, combat or turn-based cost, no
 refusal or warning line text (the loyalty step and the wait timer of ARC-WORLD-045 name their line ranges, [below](#loyalty-and-the-wait-timer-arc-world-045)), and the PC side of the follow check is still the AREA diagnostic profile (charisma 8, level 1), not
 the session hero. Distances and order are a reading of the original's functions, evidence level F0 (not checked
 in the executable) unless the [verification ledger](../research/original-verification-ledger.md) lists them;
@@ -160,9 +160,10 @@ viewer (exterior, cave and map mode):
   before the companion first moves after the PC, and after a talk with it.
 - **Alignment.** The conversation state's `AL` arms the followers through `RecordPcAlignmentChange` before it changes the
   diagnostic alignment (a refusal leaves both).
-- **Wait timer.** `AreaEventWorld` gives a wait timeout the shown area's conversation state's facts. Nothing in play makes a
-  companion wait yet (no wait order or dialog `WA` action); the native smoke waits Virgil with his facts (`AreaCompanionRoster.WaitFacts`):
-  his wait index 6 sets no timer.
+- **Wait timer.** `AreaEventWorld` gives a wait timeout the shown area's conversation state's facts. Since ARC-WORLD-046 the wait
+  order (portrait menu) waits a companion with its facts (`AreaCompanionRoster.WaitFacts`); Virgil's wait index 6 sets no timer. The
+  dialog `WA` action is not admitted.
+- **Orders.** F1–F6 and the follower portrait menu: [companion orders](companion-orders-runtime.md#area-viewer) (ARC-WORLD-046).
 - **Log and HUD.** A step that changed the session or was refused prints `ARC-WORLD-045 loyalty script=<id> disposition=… step=…
   consent=… leaveRefused=… warning=… marks=…` with `shown="left, refusal lines 1800-1899 (Dislike)"` or `shown="warning lines
   5400-5499 (LowReaction)"`; a timeout prints `ARC-WORLD-045 wait expired entity=… map=… charisma=… reaction=<skip>:<delta>
@@ -225,6 +226,7 @@ measured roster.
 
 ## Next
 
-Orders (the rest of slice 5; the loyalty step and wait timer are ARC-WORLD-045), a walk cycle for NPC bodies, the session hero as the PC side of the
+The combat orders (stage A7; the out-of-combat orders are ARC-WORLD-046, [companion orders](companion-orders-runtime.md), the
+loyalty step and wait timer ARC-WORLD-045), a walk cycle for NPC bodies, the session hero as the PC side of the
 check, and the rest of the general map-change carry (followers of followers, unconscious followers, carried
 inventory).
