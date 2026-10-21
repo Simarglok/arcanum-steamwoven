@@ -44,11 +44,14 @@ public sealed class AreaWorldMapTests
         Assert.AreEqual(AreaWorldMapRefusal.None, map.Start());
         Assert.AreEqual(AreaWorldMapRefusal.Travelling, map.AddArea(2));
         long advanced = 0; var discovered = new List<int>();
-        while (map.Travelling)
-        {
-            var step = map.Step(ms => advanced += ms);
-            if (step.Discovered > 0) discovered.Add(step.Discovered);
-        }
+        void Step() { var step = map.Step(ms => advanced += ms); if (step.Discovered > 0) discovered.Add(step.Discovered); }
+        // Mid-journey the route drawn starts where the journey stands: after two steps, two centres and the area remain.
+        Step(); Step();
+        var ahead = map.RoutePixels();
+        Assert.AreEqual(map.Position, ahead[0]);
+        CollectionAssert.AreEqual(new[] { 8L, 9L, 10L }, ahead.Skip(1).Take(3).Select(p => WorldTravelGeometry.Sector(WorldTravelGeometry.Location(p, Width)).X).ToArray());
+        Assert.AreEqual(4, ahead.Count);
+        while (map.Travelling) Step();
         Assert.AreEqual(5 * WorldJourney.MsPerSector, advanced);
         Assert.AreEqual(5, map.Steps);
         CollectionAssert.AreEqual(new[] { 1 }, discovered);
@@ -71,7 +74,8 @@ public sealed class AreaWorldMapTests
         Assert.AreEqual(AreaWorldMapRefusal.None, map.AddWaypoint(WorldTravelGeometry.Pixel(Sector(18, 34), Width)));
         Assert.AreEqual(AreaWorldMapRefusal.None, map.AddArea(2));
         Assert.AreEqual(2, map.Waypoints.Count);
-        Assert.IsTrue(map.RoutePixels().All(p => Data().Passes(WorldTravelGeometry.Sector(WorldTravelGeometry.Location(p, Width)))));
+        var data = Data();
+        Assert.IsTrue(map.RoutePixels().All(p => data.Passes(WorldTravelGeometry.Sector(WorldTravelGeometry.Location(p, Width)))));
         Assert.AreEqual(AreaWorldMapRefusal.OffMap, map.AddWaypoint(new(0, 5)));
         Assert.IsTrue(map.Clear());
         Assert.AreEqual(0, map.Waypoints.Count);

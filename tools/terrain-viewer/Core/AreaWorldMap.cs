@@ -77,6 +77,8 @@ public sealed class AreaWorldMap
     }
 
     public AreaWorldMapData Data => _data;
+    /// <summary>The session the journey writes to.</summary>
+    public GameSessionOwner Session => _session;
     public WorldMapPixel Position => _journey.Pixel;
     public IReadOnlyList<TravelWaypoint> Waypoints => _journey.Waypoints;
     public bool Travelling { get; private set; }
@@ -130,7 +132,7 @@ public sealed class AreaWorldMap
     /// <summary>
     /// One travel step: the journey moves, <paramref name="advance"/> applies the game time (the host's clock and event passes),
     /// a newly discovered area becomes known and the last discovered record is cleared, and a finished journey sets
-    /// <see cref="Landing"/>. A session refusal stops the journey where it stands.
+    /// <see cref="Landing"/>.
     /// </summary>
     public AreaWorldMapStep Step(Action<long> advance)
     {
@@ -154,14 +156,18 @@ public sealed class AreaWorldMap
         return landing;
     }
 
-    /// <summary>The planned route as world-map pixels, from the map position through every waypoint's steps (for drawing).</summary>
+    /// <summary>The route still ahead as world-map pixels, from the map position through every waypoint's remaining steps (for
+    /// drawing); during a journey the first segment starts at the step the journey has reached.</summary>
     public IReadOnlyList<WorldMapPixel> RoutePixels()
     {
         var pixels = new List<WorldMapPixel> { _journey.Pixel };
         var sector = WorldTravelGeometry.Sector(WorldTravelGeometry.Location(_journey.Pixel, _data.Width));
+        var first = true;
         foreach (var waypoint in _journey.Waypoints)
         {
-            for (var i = waypoint.Start; i < waypoint.Start + waypoint.Steps - 1; i++)
+            var from = first ? Math.Max(waypoint.Start, _journey.CurrentStep) : waypoint.Start;
+            first = false;
+            for (var i = from; i < waypoint.Start + waypoint.Steps - 1; i++)
             {
                 var direction = _journey.Route.Step(i);
                 if (direction is < 0 or > 7) break;
@@ -174,8 +180,8 @@ public sealed class AreaWorldMap
         return pixels;
     }
 
-    /// <summary>The steps the waypoints hold, and the game hours they would take under the setting (the original's segment end
-    /// takes none, A3).</summary>
+    /// <summary>The steps the waypoints hold, and about the game hours they take under the setting (the original's segment end
+    /// takes none, A3; a last step that ends short of a sector, at a snapped area, takes 1 ms instead of an hour).</summary>
     public (int Steps, long Hours) Estimate()
     {
         var steps = _journey.Waypoints.Sum(w => w.Steps);

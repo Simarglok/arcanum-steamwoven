@@ -19,6 +19,8 @@ public partial class TerrainViewerApp
             throw new InvalidOperationException("ARC-UI-048 world-map smoke: " + why);
         }
         if (_areaSession is null) { GD.Print("ARC-UI-048 native-smoke worldmap SKIP (no area session)"); return; }
+        // Only the start map (runtime map 1) opens it; an interior skips without waiting for the data.
+        if (_readyArea!.Snapshot.RuntimeMap != 1) { GD.Print($"ARC-UI-048 native-smoke worldmap SKIP (map {_readyMapName} is not the start map)"); return; }
         for (var i = 0; i < 1200 && _worldMapData is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptWorldMapData(); }
         Require(_worldMapData is { Status: AreaWorldMapDataStatus.Ready, Data: not null }, "data " + _worldMapData?.Status + " " + _worldMapData?.Detail);
         var data = _worldMapData!.Data!;
@@ -41,7 +43,8 @@ public partial class TerrainViewerApp
             Require(map.Waypoints.Count == 0 && _worldMapPanel!.MessageForSelfTest.Contains("601", StringComparison.Ordinal), $"far area {far} refused: {_worldMapPanel!.MessageForSelfTest}");
             var target = 0;
             // An area of negative radius is never discovered by travel (WT3): the target is one that can be.
-            foreach (var area in byDistance.Where(a => data.TravelAreas[a].Radius > 0))
+            // An unknown target: a known one snaps the end onto its location, where the last step may take no hour.
+            foreach (var area in byDistance.Where(a => data.TravelAreas[a].Radius > 0 && !session.IsAreaKnown(a)))
             {
                 if (map.AddArea(area) != AreaWorldMapRefusal.None) continue;
                 target = area; break;

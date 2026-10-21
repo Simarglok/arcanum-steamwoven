@@ -13,8 +13,9 @@ namespace Arcanum.TerrainViewer;
 // session's rule setting; Travel runs one travel step per 62 real ms (WT10): the step's game time jumps the session clock
 // through the event pump, a discovered area becomes known. The journey ends by its landing (WT12), or by W, Escape or cancel,
 // which lands where it stands; the panel closes and the start map loads around the landing as a transfer does, the session and
-// following companions carried. The panel refuses on another map, in combat mode and without the data. Not modelled: travel
-// music, hiding the party, encounters, town maps (whose sectors the original keeps off the walkable world map).
+// following companions carried. The panel refuses on another map, in combat mode, with a transfer pending and without the data.
+// When the landing load fails, the start map reloads where the PC stood, with the journey's hours and discoveries kept. Not
+// modelled: travel music, hiding the party, encounters, town maps (whose sectors the original keeps off the walkable world map).
 public partial class TerrainViewerApp
 {
     private AreaWorldMapPanel? _worldMapPanel;
@@ -33,7 +34,7 @@ public partial class TerrainViewerApp
     /// <summary>Starts loading the world-map data for this module once; a reload or a map transfer reuses them.</summary>
     private void BindAreaWorldMap(TerrainViewerArguments arguments)
     {
-        if (_worldMapDataModule == arguments.ModulePath) return;
+        if (arguments.AreaMapName is null || _worldMapDataModule == arguments.ModulePath) return;
         _worldMapDataModule = arguments.ModulePath; _worldMapData = null;
         var module = arguments.ModulePath;
         _worldMapDataTask = Task.Run(() => AreaWorldMap.LoadData(module));
@@ -55,6 +56,7 @@ public partial class TerrainViewerApp
         string? refused = _worldMapData is not { Data: { } data } ? $"world-map data {(_worldMapData is null ? "loading" : _worldMapData.Status.ToString())}"
             : _readyArea!.Snapshot.RuntimeMap != data.StartRuntime ? $"only on the start map ({data.StartMap})"
             : HeroInCombatMode ? "leave combat mode first"
+            : AreaTransferPending ? "a transfer is pending"
             : _worldActor.Session is not AreaGridSession { State.Phase: Arcanum.Simulation.Movement.MovementPhase.Settled } ? "the actor is moving"
             : null;
         if (refused is not null)
@@ -123,7 +125,7 @@ public partial class TerrainViewerApp
     private void SyncAreaWorldMap(double delta)
     {
         if (!WorldMapOpen) { AdoptWorldMapData(); return; }
-        if (!WorldMapActive || _worldMap is null) { EndWorldMap(); return; }
+        if (!WorldMapActive || _worldMap is null || !ReferenceEquals(_worldMap.Session, _areaSession)) { EndWorldMap(); return; }
         if (!_worldMap.Travelling) return;
         _worldMapStepMs += delta * 1000;
         for (var i = 0; i < WorldMapStepsPerFrame && _worldMap.Travelling && _worldMapStepMs >= WorldJourney.StepRealMs; i++)
@@ -132,6 +134,8 @@ public partial class TerrainViewerApp
             var step = _worldMap.Step(AdvanceWorldMapClock);
             if (step.Discovered > 0) GD.Print($"ARC-UI-048 discovered area={step.Discovered} step={_worldMap.Steps}");
         }
+        // After a stall the journey goes on at its pace instead of catching up at four steps a frame.
+        _worldMapStepMs = Math.Min(_worldMapStepMs, WorldJourney.StepRealMs);
         if (_worldMap.Travelling) { _worldMapPanel!.Render(_worldMapMessage); return; }
         if (_worldMap.Landing is { } landing) LandWorldMap(landing, "arrived");
     }

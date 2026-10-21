@@ -683,16 +683,17 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   - A refused segment shows "no route there (the original's message 601)". Clear drops the waypoints.
 - **Travel.** Travel, Enter or confirm starts the journey. It runs one travel step per 62 real ms, at most four per frame.
   - Each step's game time jumps the session clock through the event pump, as an explicit wait does. Events that came due
-    fire once, late.
+    fire once, late. On a map without lighting the clock jumps without event passes.
   - An area the step discovers becomes known in the session, and the last discovered record is cleared again.
 - **Landing.** At the end the panel closes and the start map loads around the landing location, as a transfer does:
   the session is carried and following companions arrive with the PC. W, Escape or cancel during the journey lands
   where it stands, by the setting's cancel rule (A4).
-- **Native smoke** (stage `worldmap`, last; `ARC_AREA_MAP_SMOKE_ONLY=worldmap`) at the new-game start:
+- **Native smoke** (stage `worldmap`, last; skipped off the start map). It starts wherever the earlier stages left the
+  actor; the figures below are those of `ARC_AREA_MAP_SMOKE_ONLY=worldmap` at the new-game start:
   1. W opens the panel.
   2. The farthest area refuses its one-waypoint route.
-  3. The nearest area that travel can discover and whose route plans is chosen; from the Crash Site that is Shrouded
-     Hills, 43 steps.
+  3. The nearest unknown area that travel can discover and whose route plans is chosen; from the Crash Site that is
+     Shrouded Hills, 43 steps.
   4. Enter travels. The run checks one step per 62 ms, the clock gained exactly 43 h, Crash Site and Shrouded Hills
      known, the start map loaded around the landing with the session carried, and the actor on the area's location:
      `ARC-UI-048 native-smoke worldmap PASS`.
@@ -701,7 +702,8 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
 - The original's world-map screen is not drawn: no map art, zoom, notes or town maps.
 - The original keeps the world map unwalkable in a sector with a town map; that check is not made.
 - Travel music, hiding the party, random encounters and the script-blocked list's writers are missing.
-- The journey is not saved.
+- The journey is not saved. When the landing load fails, the start map reloads where the PC stood, with the journey's
+  hours and discoveries kept.
 - Original parity NOT_VERIFIED.
 
 ## Not yet

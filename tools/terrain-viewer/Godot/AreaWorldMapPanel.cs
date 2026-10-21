@@ -130,7 +130,8 @@ public partial class AreaWorldMapPanel : CanvasLayer
 
     private void PictureInput(InputEvent input)
     {
-        if (_map is null || input is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } click) return;
+        // A double-click's second press would add a waypoint in the same sector again.
+        if (_map is null || input is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left, DoubleClick: false } click) return;
         var size = _picture.Size;
         if (size.X <= 0 || size.Y <= 0) return;
         var x = (int)(click.Position.X / size.X * _map.Data.PictureSize);

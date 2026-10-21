@@ -43,6 +43,8 @@ public sealed class WorldJourney
     public WorldMapPixel Pixel { get; private set; }
     public IReadOnlyList<TravelWaypoint> Waypoints => _waypoints.AsReadOnly();
     public long Width => _width;
+    /// <summary>The route position the next travel step reads (0 before a journey).</summary>
+    public int CurrentStep => _step;
 
     /// <summary>
     /// Adds a waypoint at a clicked pixel (0x5643E0, world-map mode): at most <see cref="WorldRoute.MaxWaypoints"/>; the segment
