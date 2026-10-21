@@ -281,6 +281,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     {
         if (run.Outcome == ScrOutcome.Refused)
             return new(AreaScriptedUseOutcome.Refused, null, [], run, $"script {run.Script} SCR line {run.Refusal!.Line}: {run.Refusal.Code} type {run.Refusal.Type}");
+        // ARC-SCRIPT-018: a call that ended the dispatch (an unreadable callee, the call bound) applied nothing: not a run.
+        if (run.Stop is ScrStop.UnreadableScript or ScrStop.CallDepth)
+            return new(AreaScriptedUseOutcome.Refused, null, [], run, $"script {run.Script}: {run.Stop}");
         if (_content!.Changed) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], run, $"script {run.Script}: a script file changed since it was first read");
         var effects = run.Effects;
         if (effects.Teleports.FirstOrDefault(t => !IsPc(t.Object)) is { } other)

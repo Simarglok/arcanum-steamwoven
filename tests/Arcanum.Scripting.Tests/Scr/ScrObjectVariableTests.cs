@@ -128,6 +128,8 @@ public sealed class ScrObjectVariableTests
         var types = new ScrAdmissionSet("types", ScrAdmissionSet.S5.Conditions, ScrAdmissionSet.S5.Actions.Append(34), ScrAdmissionSet.S5.ValueKinds, ScrAdmissionSet.S5.FocusKinds);
         Assert.ThrowsExactly<ArgumentException>(() => Use(plain, new() { Admission = types }));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Use(With(Program(Do(C(1)))), S11 with { MaxCallDepth = 0 }));
+        // A dialog-point event never runs call script (the callee's dialog gates E6 are not modelled).
+        Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Dialog, Chest, Pc, null), With(Program(Do(C(1)))), S11));
     }
 
     [TestMethod]
@@ -173,7 +175,7 @@ public sealed class ScrObjectVariableTests
         var contained = Use(host);
         CollectionAssert.AreEqual(new[] { 9, 40 }, contained.Effects.GlobalFlags.Select(f => f.Index).ToArray());
 
-        // A trap callee (30000..30006 with a trap flag) and a monster-generator attachee run nothing.
+        // A trap callee (30000..30007 with a trap flag) and a monster-generator attachee run nothing.
         var generator = With(Program(Do(C(7, N(610), N(0), (Attachee, 0), (Triggerer, 0))), Do(C(100, N(9))), Do(C(1))));
         generator.Inner.Scripts[610] = ScrScriptLookup.Of(Program(Do(C(100, N(40)))));
         generator.Generators.Add(Pc);

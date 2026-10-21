@@ -72,6 +72,8 @@ public interface IScrHost
 {
     /// <summary>The attachee's slot for the point, or null when it has none.</summary>
     ScrSlot? Slot(ScrObjectRef attachee, int point);
+    /// <summary>The script with this number; any number may be asked (a call script's operand is a value), and one with no file
+    /// is <see cref="ScrScriptLookup.Missing"/>.</summary>
     ScrScriptLookup Script(int number);
     /// <summary>Global flag 0..3199.</summary>
     bool GlobalFlag(int index);
@@ -184,8 +186,9 @@ public enum ScrStop
     Refused,
     /// <summary>The event itself is not valid (a point outside 0..35, the dialog-override slot, a negative line).</summary>
     InvalidEvent,
-    /// <summary>ARC-SCRIPT-018: a call script would nest deeper than <see cref="ScrRunOptions.MaxCallDepth"/> (the original has
-    /// no bound but its stack; project bound); the run stops with skip default.</summary>
+    /// <summary>ARC-SCRIPT-018: a call script would nest deeper than <see cref="ScrRunOptions.MaxCallDepth"/>, or the dispatch's
+    /// runs together executed more than <see cref="ScrRunOptions.MaxCallDepth"/> × <see cref="ScrRunOptions.MaxExecutedLines"/>
+    /// lines (the original has no bound but its stack; project bounds); the dispatch ends with skip default and applies nothing.</summary>
     CallDepth,
 }
 
@@ -351,7 +354,7 @@ public sealed record ScrRunOptions
     /// <summary>1..1000; lower values are for tests and tools.</summary>
     public int MaxExecutedLines { get; init; } = OriginalLineBudget;
     /// <summary>ARC-SCRIPT-018: how deep call script (7) may nest, 1..64 (the original's recursion is bounded only by its
-    /// stack, ledger OV1). Each called run has its own line budget.</summary>
+    /// stack, ledger OV1). Each called run has its own line budget, and the whole dispatch at most this many budgets.</summary>
     public int MaxCallDepth { get; init; } = 16;
 
     internal void Validate()

@@ -27,18 +27,17 @@ public sealed class AreaScriptHost : IScrHost
     /// sound actions of <see cref="ScrAdmissionSet.S7"/> (ARC-SCRIPT-040), plus call script in and remove script call of
     /// <see cref="ScrAdmissionSet.S5"/> since the viewer pumps the session's event queue (ARC-WORLD-039), plus set auto-level
     /// scheme of <see cref="ScrAdmissionSet.S8"/> (ARC-SCRIPT-016), plus start schematic UI of <see cref="ScrAdmissionSet.S9"/>
-    /// (ARC-TECHNOLOGY-005), plus the reading actions of <see cref="ScrAdmissionSet.S10"/> (ARC-UI-049), plus assign object and the
-    /// object variables of <see cref="ScrAdmissionSet.S11"/> (ARC-SCRIPT-018). Call script is left out: a call from a dialog-point
-    /// run would need the runner's dialog gates (E6) for its callee, which are not modelled; get object type needs object
-    /// queries this host does not answer.
+    /// (ARC-TECHNOLOGY-005), plus the reading actions of <see cref="ScrAdmissionSet.S10"/> (ARC-UI-049). The actions of
+    /// <see cref="ScrAdmissionSet.S11"/> (ARC-SCRIPT-018) are left out: a call from a dialog-point run would need the runner's dialog
+    /// gates (E6) for its callee, assign object could change the dialog's NPC, which the conversation host takes from the click,
+    /// and get object type needs object queries this host does not answer.
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-objects", ScrAdmissionSet.S3.Conditions,
+    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading", ScrAdmissionSet.S3.Conditions,
         ScrAdmissionSet.S3.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState)
             .Concat([ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
                 ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
-                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque,
-                ScrCatalogue.Action.AssignObject]),
-        ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds.Append(ScrFocusKind.LocalObject));
+                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]),
+        ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
 
     private readonly List<ScrSound> _sounds = [];
     private readonly List<AreaSchematicScriptOpen> _schematics = [];

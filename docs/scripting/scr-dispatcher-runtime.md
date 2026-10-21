@@ -273,7 +273,7 @@ conversation is not run).
   `ScrReadingRequest(Kind, Number, Viewer)` per action in `ScrEffects.Readings`, in action order, and goes on to the next line; an
   absent viewer shows nothing. The
   original opens the reading window only for a player viewer, with no dead check; the host decides.
-- **The AREA viewer** admits them in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound-calls-scheme-schematic-reading-objects") and
+- **The AREA viewer** admits them in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound-calls-scheme-schematic-reading") and
   in its use, tile and sector set (`AreaUseScriptHost.Admission`, "S4-area-use-reading-objects"); both keep the requests whose viewer is the
   PC and the viewer opens the [reading window](../world/reading-window-runtime.md#script-openers-scripting-wr15).
 - Installed scripts (opt-in census): 10 use action 64, 3 action 65, 13 action 114; S10 admits 681 scripts whole, 24 more than S9.
@@ -377,16 +377,19 @@ variables as a focus kind (11), as the original runs them (ledger [OV1–OV4](..
   `ActionNotAdmitted`). An unreadable callee ends the dispatch with `UnreadableScript`, and a nesting deeper than
   `ScrRunOptions.MaxCallDepth` (default 16, the original's bound is its stack) or more than `MaxCallDepth` ×
   `MaxExecutedLines` lines in the whole dispatch end it with `CallDepth`; both apply nothing. The result's trace is the
-  top run's. The runner's dialog-point gates (E6) are not applied to a callee, so no host admits call script in a
-  dialog-point run. Only single objects are admitted, so a call runs once; the original runs one call per triggerer and
+  top run's (empty for a refused callee, whose number the result names). The runner's dialog-point gates (E6) are not
+  applied to a callee, so a dialog-point event never runs call script. Only single objects are admitted, so a call runs once; the original runs one call per triggerer and
   attachee pair of two groups.
 - **Registry**: `ScrInterpreter.Call` marks 0x44B030 (partial); the 15 and 34 cases are in the 0x447220 row.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, a new game's state): map mode's tile scripts that run grow
   from 254 to 644 of 3,012, and a tile of `void-kerghans castle` (script 3070) teleports through a call; the 21 guarded use
   sites keep 9 running and 12 refused (they need loops, call-ex or other conditions).
-- **Hosts**: the viewer's dialog set gains assign object and the object variables
-  ("S3-area-sound-calls-scheme-schematic-reading-objects"; no call script, see above, and no get object type: that host
-  answers no object queries); its use, tile and sector set gains all three ("S4-area-use-reading-objects").
+- **Hosts**: the viewer's use, tile and sector set gains all three and the object variables ("S4-area-use-reading-objects");
+  a call that ends the dispatch (an unreadable callee, the call bounds) counts there as a run refused before it started, so
+  a tile's unconditional teleport still fires. Its dialog set stays without them ("S3-area-sound-calls-scheme-schematic-reading"):
+  a callee there would need the dialog gates, assign object could change the dialog's NPC, which the conversation takes
+  from the click, and the host answers no object queries. A dialog-point event with call script in its set is refused
+  before it runs (`ArgumentException`).
 
 ## Checks
 
@@ -458,13 +461,13 @@ variables as a focus kind (11), as the original runs them (ledger [OV1–OV4](..
   the story-state actions and no admitted set reads global variables.
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
-- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading-objects": S3 without
-  story state, plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI, the reading actions, assign object and the object variables); since ARC-SCRIPT-015 map mode's use
+- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading": S3 without
+  story state, plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI, the reading actions); since ARC-SCRIPT-015 map mode's use
   clicks on guarded use sites run it under "S4-area-use-reading-objects", and since ARC-SCRIPT-017 the tile and sector scripts the player
   enters; heartbeat and combat are later slices.
-- Not in any admitted set yet: focus groups, loops and call-ex, and the world actions other than teleport and
-  fade-and-teleport (set S4), set auto-level scheme (set S8), start schematic UI (set S9), the reading actions (set S10),
-  call script, assign object and get object type (set S11); float line, quests, reactions... are not admitted.
+- Not in any admitted set yet: focus groups, loops, call-ex, float line, quests, reactions and most other world actions.
+  Admitted since S4: teleport and fade-and-teleport (S4), set auto-level scheme (S8), start schematic UI (S9), the reading
+  actions (S10), call script, assign object and get object type (S11).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any
