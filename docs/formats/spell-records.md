@@ -161,13 +161,13 @@ uses); the original resolves it to a prototype at load, which the summon slice (
 ### MG18: the not-dead-critter target
 
 The target name `Tgt_Obj_No_ST_Critter_Dead` has the value 0x80000004: it lacks the critter bit 0x40 that every other
-`Tgt_Obj_No_ST_Critter_*` name carries (ledger MG18). The data keeps the original's values and both rule modes behave as
-the original. 105 installed records name it (100 line +0 areas, 15 components), but almost all of their masks already carry the critter bit through another target name, so adding it would change only two records: record 33 (Bolt of Lightning, all five line +0 areas, a mask of any object other than the caster and dead critters) and record 168 (two Maintain components, Heal and EyeCandy). With the bit the target functions gather critters only, so Bolt of Lightning would narrow to critters. Whether that is a bug or the intent depends on how the target functions (0x4F40B0) test the kind bits, so MG18 is
-classified in the target slice (MT8) with MG21–MG23 and gets a switch only if it proves a bug (owner's decision row, "MT2
-or MT8"). Three further target values look inconsistent with their siblings —
-`Tgt_Non_Party_Critters` without the critter bit (20 records), `Tgt_Obj_Radius` without the object bit (24 records),
-`Tgt_Tile_Self` without the tile bit (unused) — and are recorded as MG21–MG23 (ledger SC10) for the target slice (MT8),
-which reads how the bits are tested; the data keeps their values.
+`Tgt_Obj_No_ST_Critter_*` name carries (ledger MG18). The target functions show it is the intent (ARC-MAGIC-007,
+[target areas](../world/spell-target-areas.md)): the area test runs the not-dead test for any object when the area has no
+critter bit, so the name means "any object but dead ones", and record 33 (Bolt of Lightning: any object other than the caster
+and dead ones) keeps hitting doors and chests; with the bit only critters would pass. The data keeps the original's value and
+both rule modes behave as the original. The three further values without a kind bit — `Tgt_Non_Party_Critters` (20 records),
+`Tgt_Obj_Radius` (24) and `Tgt_Tile_Self` (unused), MG21–MG23 — are intent too: non-party is tested for PCs and NPCs without
+the critter bit, the radius bit is an object kind of its own and the tile-self bit gathers the source's tile.
 
 ## Value grammar
 

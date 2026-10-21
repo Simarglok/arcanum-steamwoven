@@ -134,7 +134,7 @@ exterior and cave keep their stationary lights only.
   object (its saved OFF cleared, `FlagsAtLoad`); every other object light keeps its saved flags, so a saved OFF stays off.
 - **Each hour** `AreaLocalLighting.AtHour` picks the form (day = hours 6..17), so the nocturnal lights go on at 18:00
   and off at 6:00 with the lattice the hour change rebuilds. The original's refresh slips A1 and A2 are not emulated:
-  every nocturnal light switches (proposed, [rule modes](../world/rule-modes.md)). Nor is the refresh's skip of scenery
+  every nocturnal light switches (owner decision 2026-10-21, [rule modes](../world/rule-modes.md)). Nor is the refresh's skip of scenery
   with scenery flag 0x400 (LT5): such scenery switches with the hour too.
 - **Drawing** is the stationary lights' composition: OFF gives nothing, DARK (the shade under trees and buildings, most
   object lights) subtracts. An object light shows its saved ART frame. Object lights that cannot be read, or whose
