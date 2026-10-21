@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Technology;
 
@@ -36,5 +37,17 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(payer);
         return new ChargeCellSource(payer, _rules.Technology);
+    }
+
+    /// <summary>
+    /// ARC-TECHNOLOGY-008: how a device of this magick/tech complexity works for the hero (<see cref="TechDeviceRules.Use"/> with
+    /// the hero's effective aptitude): usable outside combat, the power the hero draws and, for a weapon, the combat failure
+    /// chance. Null without a hero or for a complexity outside the equipment limits.
+    /// </summary>
+    public TechDeviceUse? QueryHeroDeviceUse(int complexity, bool weapon)
+    {
+        ThrowIfDisposed();
+        if (_hero is null || complexity is < -EquipmentLimits.MaxMagnitude or > EquipmentLimits.MaxMagnitude) return null;
+        return TechDeviceRules.Use(complexity, HeroAptitude(), weapon);
     }
 }
