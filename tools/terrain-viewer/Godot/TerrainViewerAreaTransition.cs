@@ -106,7 +106,12 @@ public partial class TerrainViewerApp
         UnbindAreaInventory();
         UnbindAreaCompanions();
         // A session a map transfer carries outlives the scene it leaves (ARC-WORLD-031).
-        if (!ReferenceEquals(_areaSession, _mapHandoff?.Session) && !ReferenceEquals(_areaSession, _mapHandoff?.Previous)) _areaSession?.Dispose();
+        if (!ReferenceEquals(_areaSession, _mapHandoff?.Session) && !ReferenceEquals(_areaSession, _mapHandoff?.Previous))
+        {
+            // ARC-UI-046: a session that ends takes its level-up messages with it.
+            EndLevelMessages(_areaSession);
+            _areaSession?.Dispose();
+        }
         _areaTransitions = null; _areaSession = null; _areaUseAfterRoute = null; _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
         _audio?.StopAll(); _schemePlayer = null; _schemeVoices.Clear(); _combatStinger = _combatLoop = null; _soundSector = null;
