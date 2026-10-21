@@ -516,7 +516,9 @@ back to lev 2 with the companion) and on a `tulla interior` jump point
   window) is talked to where it stands: a click, the hover action and the
   walk-to-talk reach it as any speaker, and the conversation runs through its
   own host (`AreaConversationHost.ForVisitor`) over its home map's dialog
-  state: its dialog slot, local flags and follow keys are its home map's, its
+  state (`AreaTalkRouting.HostOf`: a speaker goes only to the host that lists
+  it, since its index means something only there; the viewer self-test routes
+  its stand-in row itself): its dialog slot, local flags and follow keys are its home map's, its
   party commands (`JO`, `WA`, `UW`, `LV`) go to the session party with its
   facts, so the talk is the same wherever it stands and one identity keeps one
   state, as the original keeps one object
