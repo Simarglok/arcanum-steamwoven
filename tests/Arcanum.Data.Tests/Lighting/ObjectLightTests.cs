@@ -85,6 +85,9 @@ public sealed class ObjectLightTests
         static LightingFailure One(params AreaFieldValue[] fields) => ObjectLightReader.Describe(Snapshot([Object(0, 3, 2060, 2000, AreaScope.Core, fields)]), out _);
         Assert.AreEqual(LightingFailure.LightFlagsUnsupported, One(Value(13, Art5), Value(12, 0x100)));
         Assert.AreEqual(LightingFailure.None, One(Value(13, Art5), Value(12, 0x20)), "no animation is data");
+        // LT6: a light saved while animating (0x4) does not animate again.
+        ObjectLightReader.Describe(Snapshot([Object(0, 3, 2060, 2000, AreaScope.Core, Value(13, Art5), Value(12, 0x4 | 0x10))]), out var saved);
+        Assert.AreEqual(StationaryLightFlags.Outdoor | StationaryLightFlags.NoAnimation, saved[0].Flags);
         Assert.AreEqual(LightingFailure.LightArtUnsupported, One(Value(13, 0x80280000)), "not a light ART");
         Assert.AreEqual(LightingFailure.LightArtUnsupported, One(Value(13, Art5 | 0x200)), "rotation");
         Assert.AreEqual(LightingFailure.LightRecordMalformed, One(Value(13, Art5), Value(2, 16385)));

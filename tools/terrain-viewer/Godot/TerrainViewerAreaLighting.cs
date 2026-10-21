@@ -26,6 +26,7 @@ public partial class TerrainViewerApp
         StopAreaAmbient();
         if (area.Lighting is not { } lighting || _areaSession is null) return;
         _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents);
+        ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
     }
@@ -40,6 +41,7 @@ public partial class TerrainViewerApp
         // loaded actor is bound once it is placed (RebindAreaMapAmbient).
         _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents);
         _areaAmbient.Enabled = previous.Enabled;
+        ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-WORLD-010 clock-rebound " + AreaAmbientReceipt());
     }
@@ -60,6 +62,34 @@ public partial class TerrainViewerApp
         var cell = _worldActor.Session is AreaGridSession session ? session.Chart.ToWorld(session.State.CommittedCell)
             : _readyArea is { } area ? area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn) : AreaGridSession.Cell(AreaGridSession.Spawn);
         return AreaAmbientDriver.SectorOf(cell.X, cell.Y);
+    }
+
+    // ARC-RENDER-031: animation time of the lights since the map's lighting bound (ledger LT3, LT6: the original starts a
+    // light's animation when the light enters its sector list at load); it stands still while the game pauses.
+    private double _lightAnimationMs;
+    private string? _lightAnimationKey;
+
+    private void ResetLightAnimation() { _lightAnimationMs = 0; _lightAnimationKey = null; }
+
+    // The hour's form posed at the animation time (AtHour first: a posed view keeps no day form). Pure: the draw-time
+    // companion delegate calls it too.
+    private AreaLocalLighting? LightsNow(AreaLocalLighting? local, AreaAmbientDriver driver) =>
+        local?.AtHour(driver.Selection.Hour).AtAnimation((long)_lightAnimationMs);
+
+    /// <summary>Per frame: the animation time runs unless the clock pauses; a light that changed its frame or offsets pushes
+    /// a new view.</summary>
+    private void TickLightAnimation(double delta)
+    {
+        // Automated runs drive the animation time themselves, as they drive the clock (TickAreaClock).
+        if (SelfTestBootstrap || _nativeSmoke) return;
+        if (_areaAmbient is not { } driver || _readyArea?.Lighting?.Local is not { } local || local.Field.Animated.Count == 0) return;
+        if (!driver.Clock.PauseDisposition.Paused) _lightAnimationMs += delta * 1000;
+        // With the lighting toggled off nothing is drawn lit; the time still runs.
+        if (!driver.Enabled) return;
+        var key = local.AtHour(driver.Selection.Hour).AnimationKey((long)_lightAnimationMs);
+        if (key == _lightAnimationKey) return;
+        _lightAnimationKey = key;
+        PushAreaAmbient();
     }
 
     private void TickAreaClock()
@@ -98,6 +128,7 @@ public partial class TerrainViewerApp
         // A map without lighting inputs is drawn unlit; the driver never stays bound to the other map.
         if (_readyArea?.Lighting is not { } lighting) { StopAreaAmbient(); GD.Print("ARC-RENDER-012 lighting-map none (unlit)"); return; }
         _areaAmbient.Rebind(lighting.Source, ActiveAreaSector());
+        ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-012 lighting-map " + AreaAmbientReceipt());
     }
@@ -107,12 +138,13 @@ public partial class TerrainViewerApp
     private void PushAreaAmbient() => _canvas?.SetAreaAmbient(_areaAmbient is { Enabled: true } driver && _readyArea?.Lighting is { } lighting
         ? new AreaAmbientView(driver.Effective, lighting.Channels)
         {
-            // ARC-RENDER-030: the hour picks the night or the day form of the object lights.
-            Local = lighting.Local?.AtHour(driver.Selection.Hour).View(_readyArea.Plan, lighting.Channels, driver.Effective),
+            // ARC-RENDER-030: the hour picks the night or the day form of the object lights; ARC-RENDER-031: the animated
+            // lights stand where the animation time puts them.
+            Local = LightsNow(lighting.Local, driver)?.View(_readyArea.Plan, lighting.Channels, driver.Effective),
             // ARC-WORLD-017: companion bodies are lit where they stand on the shown map, by their own visual. One
             // delegate reads the current pair and map at draw time, so equal views stay equal.
             Moving = _companionLight ??= command => _areaAmbient is { Enabled: true } current && _readyArea?.Lighting is { } shown
-                ? _areaCompanions?.Light(command, current.Effective, shown.Local?.AtHour(current.Selection.Hour)) : null,
+                ? _areaCompanions?.Light(command, current.Effective, LightsNow(shown.Local, current)) : null,
         } : null);
     private Func<AreaDrawCommand, AreaLitColors?>? _companionLight;
 

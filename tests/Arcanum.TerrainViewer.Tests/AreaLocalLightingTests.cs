@@ -66,6 +66,30 @@ public sealed class AreaLocalLightingTests
     }
 
     [TestMethod]
+    public void An_animated_light_poses_the_view_and_names_its_state()
+    {
+        // ARC-RENDER-031: two frames at 10 per second; the key changes with the frame, the view stays the same object without
+        // animation.
+        var body = AreaCompositionFixture.Body(0);
+        var visual = AreaCompositionFixture.Visual(body, 160, 160, 40, 80);
+        var still = Local([visual], Light(92928, 82560, 0, 0, 8));
+        Assert.AreSame(still, still.AtAnimation(1000));
+        Assert.AreEqual("", still.AnimationKey(1000));
+        var mask = Uniform(8, 400, 400, 200, 200, 100).Item6;
+        var later = new StationaryLightFrame(8, "a", "h", 400, 400, 200, 200, mask, stepX: 1000);
+        var first = new StationaryLightFrame(8, "a", "h", 400, 400, 200, 200, mask, stepX: -1000, later: [later], framesPerSecond: 10);
+        var objects = new AreaObjectLightSource(5000, null, [new ObjectLight(new(Digest, 5000, AreaSourceKind.Static, 100, 0, 0, Digest, 1), 3, -1,
+            92928, 82560, 0, 0, 0, 8u << 19 | 9u << 28, AmbientColor.Neutral, false, false, false)], new Dictionary<int, StationaryLightFrame> { [8] = first });
+        var animated = AreaLocalLighting.Create(Tiles, [visual], AreaChart.Exterior, AreaStationaryLightSource.Create(5000, [], []), objects);
+        Assert.AreNotEqual(animated.AnimationKey(0), animated.AnimationKey(100));
+        Assert.AreEqual(animated.AnimationKey(0), animated.AnimationKey(200), "two steps make a cycle");
+        var command = AreaScenePlan.Create([], [body], [visual]).Commands.Single();
+        Assert.AreEqual(new AmbientColor(150, 60, 70), animated.AtAnimation(0).Body(command, AreaAmbientChannel.Outdoor, Pair).Left);
+        // At frame 1 the light stands 1000 pixels away: the body keeps its tile's ambient.
+        Assert.AreEqual(new AmbientColor(50, 60, 70), animated.AtAnimation(100).Body(command, AreaAmbientChannel.Outdoor, Pair).Left);
+    }
+
+    [TestMethod]
     public void Body_takes_the_tile_class_ambient_plus_the_lights_at_its_anchor()
     {
         var body = AreaCompositionFixture.Body(0);
