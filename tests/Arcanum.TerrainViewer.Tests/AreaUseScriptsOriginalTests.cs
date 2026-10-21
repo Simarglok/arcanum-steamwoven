@@ -1,3 +1,6 @@
+using Arcanum.Simulation.Movement;
+using Arcanum.Session;
+using Arcanum.Scripting.Scr;
 using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.Scripting.GlobalFlags;
@@ -74,6 +77,35 @@ public sealed class AreaUseScriptsOriginalTests
             Assert.AreEqual((AreaScriptedUseOutcome.Refused, AreaUseOutcome.Accepted), (transfers.LastScripted!.Outcome, entered.Outcome), entered.Reason);
             Assert.IsTrue(transfers.Clear()!.SameMap);
         }
+    }
+
+    // ARC-SCRIPT-020: the use scripts of the two readable prototypes with one (note 14086: script 1146, book 14090: script 1891) run
+    // in a new game's state and let the reading go on, with their story effects in the session. The item rows are synthetic.
+    [TestMethod, TestCategory("RealData")]
+    public void The_use_scripts_of_the_readable_note_and_book_let_the_reading_go_on()
+    {
+        var root = Root();
+        using var content = ConversationSessionFixture.Scripts(root);
+        using var session = ConversationSessionFixture.Create();
+        static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
+        static AreaObjectRecord Item(int index, int script) => new(Key(index), 0, 13, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20,
+            Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [new AreaFieldValue(31, AreaPresence.Array, AreaValueOrigin.Instance, null,
+                [new AreaSparseElement(1, [0, 0, script])], null)], true, true, true);
+        var note = "oid:" + Key(1).ObjectIdSha256; var book = "oid:" + Key(2).ObjectIdSha256;
+        static SessionItemFacts Facts(int prototype) => new(new(SessionItemType.Written, prototype, 0, 0), 1, 0, 0, null, [1]);
+        var items = new AreaInventoryMap(1, new([], [new(note, Facts(14086), new CellCoord(11, 20)), new(book, Facts(14090), new CellCoord(12, 20))]),
+            new Dictionary<string, AreaObjectRecord> { [note] = Item(1, 1146), [book] = Item(2, 1891) });
+        var host = new AreaUseScriptHost(session, 1, [], [items], content);
+
+        var read = host.RunItemUse(1, note, session.Rules.Scripts);
+        Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.RunDefault), (read.Outcome, read.Run!.Outcome), read.Detail);
+        Assert.AreEqual((15, SessionQuestState.Completed), (session.QueryStoryState(), session.QueryQuest(1016)!.Value.State));
+        Assert.IsNotNull(session.QueryRumor(2107));
+
+        var opened = host.RunItemUse(1, book, session.Rules.Scripts);
+        Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.RunDefault), (opened.Outcome, opened.Run!.Outcome), opened.Detail);
+        CollectionAssert.Contains(session.QueryKnownAreas().ToArray(), 44);
+        Assert.AreEqual(SessionQuestState.Accepted, session.QueryQuest(1103)!.Value.State, "the PC does not hold item 2021");
     }
 
     [TestMethod, TestCategory("RealData")]

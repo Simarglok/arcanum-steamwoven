@@ -62,9 +62,10 @@ public partial class TerrainViewerApp
         string message;
         if (_readingData?.Data is not { } data) message = "not read: the written texts are " + (_readingData is null ? "still loading" : $"unavailable ({_readingData.Status})");
         else if (_inventoryHost!.WrittenFacts(_areaSession!, item, data) is not { } facts) message = "not read: not a written item the hero holds";
+        else if (facts.UseScript && ItemUseScript(item) is { } stopped) message = stopped;
         else
         {
-            var result = _areaSession!.UseWrittenItem(_areaSession.Version, item, facts, data.Texts);
+            var result = _areaSession!.UseWrittenItem(_areaSession.Version, item, facts, data.Texts, useScriptRan: facts.UseScript);
             GD.Print($"ARC-UI-049 read disposition={result.Disposition} failure={result.Failure} subtype={facts.Subtype} start={facts.TextStartLine} prototype={facts.Prototype} " +
                 $"reading={result.Reading?.ToString() ?? "-"} schematic={result.Schematic?.ToString() ?? "-"} destroyed={result.DocumentDestroyed} document={result.Document?.Status.ToString() ?? "-"}");
             if (result.Disposition == GameSessionDisposition.Rejected) message = "not read: " + AreaReading.UseRefused(result.Failure);
@@ -85,6 +86,23 @@ public partial class TerrainViewerApp
         _readingStatus = message; _inventoryStatus = message;
         _inventoryPanel.Render(InventoryView(holder), message);
         SyncAreaInventory(); RefreshReadyStatus();
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-020: the written item's use script runs before the reading (item use 0x462CC0, ledger IU rows), with the hero as the
+    /// user; null when it let the use go on (run default), otherwise why the use stopped. Its effects (flags, story, quests, areas, rumors,
+    /// reputations, its own slot) are the session's either way the run ended; a completed quest's award levels the followers.
+    /// </summary>
+    private string? ItemUseScript(string item)
+    {
+        if (_readyArea?.Snapshot is not { } snapshot || UseScriptHost(snapshot) is not { } host) return "not read: its use script needs a game session";
+        if (_areaSession!.QueryPcInventory().FirstOrDefault(held => held.Entity == item) is not { Entity: not null } held)
+            return "not read: its use script runs only for an item taken from a map";
+        var ran = Awarded(host, host.RunItemUse(held.Origin.RuntimeMap, item, _areaSession.Rules.Scripts));
+        var lines = ran.Lines.Count > 0 ? " — \"" + string.Join(" / ", ran.Lines) + "\"" : "";
+        GD.Print($"ARC-SCRIPT-020 item use script outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} detail={ran.Detail}");
+        if (ran.Outcome is not (AreaScriptedUseOutcome.NoTeleport)) return "not read: its use script was not run (" + ran.Detail + ")";
+        return ran.Run?.Outcome == ScrOutcome.SkipDefault ? "its use script stopped the reading" + lines : null;
     }
 
     private void OpenReading(WrittenDocument document, string title)

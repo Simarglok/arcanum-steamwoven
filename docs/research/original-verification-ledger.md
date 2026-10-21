@@ -2349,9 +2349,9 @@ Data oddities (not crash class; both settings follow the original until the owne
   (owner, 2026-10-21): a switch, `WrittenRuleProfile.UnprefixedMessageLosesFirstCharacter` (ARC-TECHNOLOGY-009): Steamwoven reads a
   message whose first character is not a digit as having no markup (its whole text, font 0, not centred); Original keeps the drop.
 
-Not modelled (named in the runtime): the use script before a reading (two readable prototypes, 14086 and 14090, have one; their
-scripts use actions outside every admitted set, so their use is refused), the item-spell path, the 4 action points in a round,
-action 94, the original's pixel paging and fonts.
+Not modelled (named in the runtime): the item-spell path, the 4 action points in a round, action 94, the original's pixel paging
+and fonts. The use script before a reading runs since ARC-SCRIPT-020 (IU rows below); the two readable prototypes with one (14086,
+14090) are read.
 
 ## Freed cells (ARC-WORLD-065)
 

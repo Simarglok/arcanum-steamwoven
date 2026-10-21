@@ -521,7 +521,9 @@ remove reputation (73), as the original runs them (ledger [SS1–SS5](../researc
   plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI, the reading actions and the story
   actions; with a session hero also get skill, ARC-SKILLS-009); since ARC-SCRIPT-015 map mode's use
   clicks on guarded use sites run it under "S4-area-use-reading-objects-story", and since ARC-SCRIPT-017 the tile and sector scripts the player
-  enters; heartbeat and combat are later slices.
+  enters, and since ARC-SCRIPT-020 the use script of a written item the PC reads (`AreaUseScriptHost.RunItemUse`: attachment point 1,
+  the PC as the user, no target, the item's inventory row; skip default stops the reading, a teleport is refused); heartbeat and
+  combat are later slices.
 - Not in any admitted set yet: focus groups, loops, call-ex, float line, reactions and most other world actions.
   Admitted since S4: teleport and fade-and-teleport (S4), set auto-level scheme (S8), start schematic UI (S9), the reading
   actions (S10), the skill commands (S11), call script, assign object and get object type (S12), set PC quest state, mark map
