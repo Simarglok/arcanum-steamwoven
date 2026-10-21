@@ -2580,11 +2580,37 @@ Data notes (not anomalies; both settings follow the original):
   0x4, so their use never takes the spell path and "has a usable spell" refuses them: the devices never fire on use (their records
   cost nothing, so the payment would not have spent a charge). The owner chose unlimited charges in Steamwoven on 2026-10-21;
   ARC-TECHNOLOGY-009 then found in the installed data that both records sit in slot 1 (slot 0 is 10000) and have `ItemTriggers:`
-  0, so by DV1 and DV3 unlimited charges alone would not make them fire (the use's spell path reads slot 0, "has a usable spell"
-  needs a spell in slot 0 and a trigger mask, and no trigger matches). The decision is back with the owner (keep the charges fix,
-  research the use path first, or no fix); both settings follow the data until then.
+  0; the owner chose to read further (option B). **Settled** by ARC-TECHNOLOGY-010 ([Trap devices](#trap-devices-arc-technology-010)):
+  both carry generic flag 0x4 and fire in the original as timed trap devices through slot 1 (TP2–TP3), so no data fix is needed;
+  the trap-device path is not implemented yet.
 - Nine items that are not technological carry technology records (six food, three scrolls); they reach the engine like any device.
 - Record 187 is on no item; of the six maintained technology records only 168 is carried (three armours).
+
+## Trap devices (ARC-TECHNOLOGY-010)
+
+Source: ledger [DVD1](#tech-devices-arc-technology-008) and the [tech devices runtime](../world/tech-devices-runtime.md).
+Question: what the item use does with a technological generic item whose slot 0 is empty and whose technology record sits in slot 1
+(15154 with record 176, 15193 with record 220: charges 0, no magical flag, item flags 0x180), whether any path ever casts slot 1, and
+what records 176 and 220 do. Read on 2026-10-21 by two fresh agents that saw only the questions (method step 6), independently;
+they agree on every row, so the rows are F2. The installed data was read locally: both items carry generic flag 0x4, as do 15100 and
+15120 (slot 1 empty, a use script); records 176 and 220 have cost 0, no maintenance or duration, `ItemTriggers:` 0, info aggressive,
+and BEGIN components Damage (fire 5–20, normal 100–200) over a radius-2 area, EyeCandy, AGoal 43, Summon 4050, Destroy (Tgt_Self) and a
+CALLBACK Destroy. 15154 is the product of the learned explosives schematic 2660 and a component of the found schematics 4650 (whose
+product is 15193) and 4690.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| TP1 | item use (0x462CC0, on a tile 0x462FC0), field names | Item field 0x60 is the magick/tech complexity, 0x64..0x68 the five spells, 0x69 the spell charges, 0x57 the item flags; generic flags (field 0xD3) 0x1 uses the torch/shield location, 0x2 lockpick, 0x4 trap device (OGF_IS_TRAP_DEVICE); item flags 0x80 OIF_CAN_USE_BOX (the inventory use check 0x462C30 needs it), 0x100 OIF_NEEDS_TARGET. The use, in order: a null item or user returns; a scroll checks its level; with no target and OIF_NEEDS_TARGET the targeting cursor opens (0x4EE060, a fixed object-or-tile mask for a trap device, 0x5719F0) and the use returns; a generic item with generic flag 0x4 (0x4BCA60) goes to the trap-device branch (TP2) before the use script, the action points and the charges; otherwise the use script (point 1) may stop it; then charges not 0 or the magical flag cast slot 0 only (an empty slot 0 passes spell −1, read past the record table) and send Item_Used (0x4CBF70); otherwise 4 action points and the generic flags 0x2 (pick locks) or 0x8 (heal), else nothing. | Original |
+| TP2 | trap device on an object (0x4BC2E0) and on a tile or wall (0x4BC480) | The only path that reads slot 1 (field 0x65). With a spell there the device is destroyed; record 176 alone alerts every eligible critter within 10 tiles that is not the user's follower against the user (0x4AA0D0, 0x4A9650); on a tile a marker object is created there from prototype 4047 (record 176) or 4049 (record 220; none for another record) with OF_TRAP_PC, and for the PC also spotted with a message (0x4BC090); then the delayed spell is scheduled (TP3) at the tile, on an object at its location. With slot 1 empty the device arms an ordinary script trap on a portal or container instead. | Original |
+| TP3 | trap timer (0x4BC690, handler 0x4BC780) | A delay above 0 queues a time event of type 28 ("Traps") `delay × 1000` ms ahead, the device branch passing 88; when it fires, the handler calls the same function with delay 0, which creates a run with no source and no caster (0x455A20), sets its target tile to the saved tile, starts it (0x455AC0) and destroys the marker. | Original |
+| TP4 | item trigger executors (0x4CB830 through 0x4CB800, 0x4CBFF0), events | They loop over the five slots, leave at the first slot holding 10000 (so an empty slot 0 ends them) and skip a record whose trigger mask shares no bit with the event; a mask of 0 never fires. Wear, unwear, pickup, drop, parent hit and the other parent events and Item_Used reach them; a thrown item (an item as the attacker) gets Target_Hit only. No path casts slot 1 of these items through them. | Original |
+| TP5 | "has a usable spell" (0x4CC160), AI item scan (0x4CC930) | Only the AI action picker asks 0x4CC160: false with charges 0; otherwise true when slot 0 is empty, when slot 0's record has a trigger mask, or with OIF_VALID_AI_ACTION. The scan lists spell slots only with charges not 0. Neither reaches these items. | Original |
+| TP6 | script actions (0x447220) | The cast actions take the spell number from the script's operands and never read an item's spell fields; the built-in trap scripts (30000+) take it from the script. | Original |
+| TP7 | the run of records 176 and 220 | The trap run has only a target tile: the radius-2 area is centred on it; Damage hits each object in it with no attacker; AGoal 43 is knockback (no caster or source location: nothing); Summon creates prototype 4050 there as the run's summoned object; EyeCandy plays and its callback flag runs the CALLBACK action when the art ends; Destroy with Tgt_Self redirects to the caster (none: nothing). Held through the use UI (charges not 0, slot 0) the same record would have the holder as caster and Destroy would remove the holder. In play: a timed bomb placed on a tile. | Original |
+| TP8 | prototypes 4047, 4049, 4050 | The executable names 4047 and 4049 only as the markers and never names 4050 (it comes from the Summon data). | Original |
+
+Verdict on DVD1: both devices carry generic flag 0x4, so the original fires them as trap devices (TP2–TP3); their charges, slot 0 and
+trigger mask never matter. DVD1 is no data fix: the trap-device path is to be built the same in both modes (not implemented).
 
 ## Ammunition (ARC-WORLD-066)
 
