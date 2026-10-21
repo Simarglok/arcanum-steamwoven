@@ -11,11 +11,16 @@ internal readonly record struct AreaMappingKey(AreaNearestRowKey X, AreaNearestR
 /// current submission are never evicted; unused rows are evicted least recently used
 /// first. Live row payload stays within <see cref="AreaDrawItem.MaxMappingBytes"/> and the
 /// row count within <see cref="MaxRows"/>; eviction then frees down to three quarters
-/// of both so that a zoom change does not evict once per miss.</summary>
+/// of both so that a zoom change does not evict once per miss. ARC-RENDER-032: the row count
+/// allows every command of a main-map window at once (at most about 42,000: 36,864 tiles, the
+/// bodies, masks and roofs). At a zoom that is not a power of two the terrain has no reduced
+/// chunks and is drawn one item per tile, so far out on a large display nearly every visible item
+/// has its own row of 100 to 200 bytes (2560 × 1440 at 0.1875 needed more than 8,192 with 1.1 MB):
+/// the row count binds there, not the payload, and each row is a texture.</summary>
 internal sealed class AreaMappingCache : IDisposable
 {
     internal const int MaxRowLength = 8192;
-    internal const int MaxRows = 8192;
+    internal const int MaxRows = 65536;
     private sealed class Entry(ImageTexture texture, long bytes)
     {
         public ImageTexture Texture { get; } = texture;
