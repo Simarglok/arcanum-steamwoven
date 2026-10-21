@@ -68,7 +68,7 @@ public sealed class WorldJourney
     /// <summary>
     /// One travel step (0x564C20): the map position moves one route direction to the next sector centre, the segment's last
     /// step to its end; the new sector centre discovers an area (WT3); a finished segment drops its waypoint and, with none
-    /// left, lands (WT12); unless the original's segment end (A3) applies, the step adds ⌊distance / 64⌋ hours (1 ms for no
+    /// left, lands (WT12) and the map position takes the landing; unless the original's segment end (A3) applies, the step adds ⌊distance / 64⌋ hours (1 ms for no
     /// sector). <paramref name="continueJourney"/> is the original's check before the next segment (0x565140): when it
     /// refuses, every waypoint is dropped and the PC lands.
     /// </summary>
@@ -93,7 +93,7 @@ public sealed class WorldJourney
         {
             _waypoints.RemoveAt(0);
             if (_waypoints.Count > 0 && continueJourney?.Invoke() == false) _waypoints.Clear();
-            if (_waypoints.Count == 0) { _step = 0; landing = Landing(location, rules, cancel: false); }
+            if (_waypoints.Count == 0) { _step = 0; landing = Landing(location, rules, cancel: false); Pixel = WorldTravelGeometry.Pixel(landing.Value, _width); }
         }
         var sectors = WorldTravelGeometry.Distance(WorldTravelGeometry.Location(old, _width), location) / 64;
         var ms = ended && rules.SegmentEndAddsNoTime ? 0 : Math.Max(1, sectors * MsPerSector);
@@ -101,12 +101,14 @@ public sealed class WorldJourney
     }
 
     /// <summary>Ends the journey where it stands (leaving travel, 0x5615D0): the landing of the map position, without the area
-    /// snap under the original's cancel (A4).</summary>
+    /// snap under the original's cancel (A4). The map position takes the landing (WT12).</summary>
     public TravelLocation Cancel(TravelRuleProfile rules)
     {
         ArgumentNullException.ThrowIfNull(rules);
         _waypoints.Clear(); _step = 0;
-        return Landing(WorldTravelGeometry.Location(Pixel, _width), rules, cancel: true);
+        var landing = Landing(WorldTravelGeometry.Location(Pixel, _width), rules, cancel: true);
+        Pixel = WorldTravelGeometry.Pixel(landing, _width);
+        return landing;
     }
 
     /// <summary>The landing location (0x5649F0): an area whose radius (64 tiles for 0 or below) covers the location, else the

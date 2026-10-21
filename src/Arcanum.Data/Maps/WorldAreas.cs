@@ -8,7 +8,7 @@ namespace Arcanum.Data.Maps;
 /// <summary>
 /// One area of <c>mes/gamearea.mes</c> (ledger WT1): its index (the entry's position in the file), its location on the start
 /// map, the offsets of its name on the world map, its name and description, and its discovery radius in tiles (320 by default,
-/// <c>Radius:</c> n × 64, 0 for area 0). An entry the original reads only in part (no <c>/</c> name or description) keeps
+/// <c>Radius:</c> n × 64; area 0 gets 0 from a <c>Radius:</c> key). An entry the original reads only in part (no <c>/</c> name or description) keeps
 /// what it read: <see cref="Complete"/> is false and its radius is 0.
 /// </summary>
 public sealed record WorldArea(int Index, WorldLocation Location, int NameOffsetX, int NameOffsetY, string Name, string Description,
@@ -58,12 +58,15 @@ public sealed class WorldAreaTable
         return new(Array.AsReadOnly(areas));
     }
 
+    // The C locale's isspace: space, tab, line feed, vertical tab, form feed, carriage return.
+    private static readonly char[] CSpace = [' ', '\t', '\n', '\v', '\f', '\r'];
+
     private static WorldArea Parse(int index, string text)
     {
         // Four comma-separated numbers: x and y (64-bit), then the name offsets.
         var fields = text.Split(',', 4);
         long Long(int i) => i < fields.Length ? WorldCatalog.StrToLong(fields[i]) : 0;
-        int Int(int i) => i < fields.Length ? SoundSchemeParser.Atoi(fields[i].TrimStart()) : 0;
+        int Int(int i) => i < fields.Length ? SoundSchemeParser.Atoi(fields[i].TrimStart(CSpace)) : 0;
         var location = new WorldLocation(Long(0), Long(1));
         var first = text.IndexOf('/');
         if (first < 0) return new(index, location, Int(2), Int(3), "", "", 0, false);
@@ -73,7 +76,8 @@ public sealed class WorldAreaTable
         var name = text[(first + 1)..second];
         var description = third < 0 ? text[(second + 1)..] : text[(second + 1)..third];
         var radius = DefaultRadius;
-        if (third >= 0 && text[(third + 1)..].TrimStart() is var key && key.StartsWith("Radius:", StringComparison.Ordinal))
+        // The key reader skips C white space and needs the key at the start; area 0 takes 0 from any value.
+        if (third >= 0 && text[(third + 1)..].TrimStart(CSpace) is var key && key.StartsWith("Radius:", StringComparison.Ordinal))
             radius = index == 0 ? 0 : SoundSchemeParser.Atoi(key.AsSpan("Radius:".Length)) * 64L;
         return new(index, location, Int(2), Int(3), name, description, radius, true);
     }

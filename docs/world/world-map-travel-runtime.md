@@ -10,7 +10,8 @@ caller yet: the viewer's world-map panel is a later task. The rules follow the r
 - **`WorldAreaTable`** reads `mes/gamearea.mes` from the content stack's winner at the module-loaded phase, as the
   area module's init does (0x4CA9B0). Areas are numbered by their position in the file; area 0 is the unknown area.
   - An entry is `x, y, name x-offset, name y-offset /Name /Description`, with an optional `/Radius:<n>`.
-  - The radius is 320 tiles by default and n × 64 with `Radius:`; area 0 always gets 0.
+  - The radius is 320 tiles by default and n × 64 with `Radius:` (C white space before the key is skipped); area 0
+    gets 0 from a `Radius:` key. Searches start at area 1, so area 0's radius is never read.
   - An entry without a `/` name or description keeps what was read, with radius 0 and `Complete` false.
   - A missing file is no failure (no areas). A file the MES grammar does not admit is refused (project policy).
   - Installed: 82 areas; 16 have radius −64 (`Radius: -1`).
@@ -43,7 +44,10 @@ The direction codes are 0 (−1,−1), 1 (−1,0), 2 (−1,+1), 3 (0,+1), 4 (+1,
   (0x4209C0) joins the two when they are fewer than 8 sectors apart on both axes. The search uses a 16 × 16 window,
   costs 10 per step plus 1 per turn, and estimates 10 × the Chebyshev distance.
 - The same sector, a blocked destination, a detour too far or no path refuses the segment.
-- The buffer outlives a route, as the original's does.
+- The buffer outlives a route, as the original's does. Under the original's detour step (A2) the stale byte can walk
+  the map position into a blocked sector for one step; the segment's last step still ends on its waypoint.
+- A segment whose step count would pass the buffer's end is refused (project policy; only the original's extra
+  detour step can cause it).
 
 `WorldJourney` is one journey over the route:
 
@@ -53,11 +57,12 @@ The direction codes are 0 (−1,−1), 1 (−1,0), 2 (−1,+1), 3 (0,+1), 4 (+1,
 - **`Step`** (0x564C20) is one WorldMap event; the host calls it every 62 real milliseconds (`StepRealMs`):
   1. The map position moves one direction; the segment's last step goes to its end.
   2. The new position discovers an area (`Discovered`, 0 for none or a known one).
-  3. A finished segment drops its waypoint. With none left the journey lands (`Landing`); with more it goes on
+  3. A finished segment drops its waypoint. With none left the journey lands (`Landing`) and the map position takes
+     the landing (WT12); with more it goes on
      unless the host's `continueJourney` refuses (0x565140), which drops every waypoint and lands.
   4. The step adds ⌊distance / 64⌋ game hours (`GameMs`), 1 ms for a step inside one sector.
 - **`Landing`** (0x5649F0) snaps the location to an area whose arrival radius covers it, else keeps it.
-- **`Cancel`** drops every waypoint and lands where the map position stands.
+- **`Cancel`** drops every waypoint and lands where the map position stands; the map position takes the landing.
 
 The host applies a step: it advances the session clock by `GameMs`, calls `DiscoverArea` and then
 `ClearLastDiscoveredArea`, and on a landing teleports the party with flag 0x20 to runtime map 1.

@@ -12,7 +12,7 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class WorldTravelOriginalTests
 {
     [TestMethod, TestCategory("RealData")]
-    public void Routes_from_the_crash_site_reach_the_areas_and_take_an_hour_per_sector()
+    public void One_waypoint_routes_from_the_crash_site_reach_the_near_areas_and_land_on_them()
     {
         var root = Environment.GetEnvironmentVariable("DAT_ROOT");
         if (string.IsNullOrWhiteSpace(root)) { Assert.Inconclusive("DAT_ROOT is required for the opt-in travel check."); return; }
@@ -53,5 +53,6 @@ public sealed class WorldTravelOriginalTests
         // mountains or water is refused and needs waypoints. Shrouded Hills (area 1, 43 sectors) plans under both settings.
         Assert.IsTrue(reached.Contains(1), $"planned {planned}, refused {refused}");
         Assert.AreEqual(2 * reached.Count, planned, "both settings plan the same one-segment routes");
+        Assert.IsTrue(hours > 0, "a journey takes game time");
     }
 }

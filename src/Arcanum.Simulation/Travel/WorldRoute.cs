@@ -40,8 +40,10 @@ public sealed class WorldRoute
             var next = WorldTravelGeometry.Neighbor(current, direction);
             if (passes(next)) { current = next; count++; continue; }
             if (Detour(current, to, start + count, max - count, passes) is not { } detour) return new(false, start, count);
-            // The original's loop also counts its own step after a detour, leaving one byte unwritten (A2).
+            // The original's loop also counts its own step after a detour, leaving one byte unwritten (A2). A count past the
+            // buffer's end refuses the segment (project policy: the original would read past its buffer).
             count += detour.Steps + (rules.DetourKeepsStaleStep ? 1 : 0);
+            if (count > max) return new(false, start, max);
             current = detour.End;
         }
         return current == to && count > 0 ? new(true, start, count) : new(false, start, count);

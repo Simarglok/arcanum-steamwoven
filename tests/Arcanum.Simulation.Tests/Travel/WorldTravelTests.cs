@@ -4,7 +4,8 @@ using static Arcanum.Simulation.Travel.WorldTravelGeometry;
 
 namespace Arcanum.Simulation.Tests.Travel;
 
-// ARC-WORLD-056: world-map travel rules (ledger WT3–WT12). Maps, areas and blocks are invented.
+// ARC-WORLD-056: world-map travel rules (ledger WT3–WT12). Maps, areas and blocks are invented; one pixel check uses the
+// location of an installed area as a number.
 [TestClass]
 public sealed class WorldTravelTests
 {
@@ -36,6 +37,11 @@ public sealed class WorldTravelTests
         Assert.AreEqual(2, Direction(O, new(0, 20)));
         Assert.AreEqual(6, Direction(O, new(20, 0)));
         Assert.AreEqual(3, Direction(O, new(11, 20)));
+        // Odd majors: 2 × 1 < 3 drops the minor axis, 2 × 2 ≥ 3 keeps it (the original doubles the deltas first).
+        Assert.AreEqual(3, Direction(O, new(11, 13)));
+        Assert.AreEqual(4, Direction(O, new(12, 13)));
+        Assert.AreEqual(3, Direction(O, new(12, 15))); // 2 × 2 < 5
+        Assert.AreEqual(4, Direction(O, new(13, 15))); // 2 × 3 ≥ 5
         Assert.AreEqual(5, Direction(O, O));
     }
 
@@ -81,6 +87,12 @@ public sealed class WorldTravelTests
         Assert.IsFalse(route.Plan(new(10, 10), new(10, 10), 0, Open, Steamwoven).Planned);
         bool LongWall(TravelSector s) => Open(s) && !(s.X is >= 12 and <= 20 && s.Y is >= 0 and <= 30);
         Assert.IsFalse(route.Plan(new(10, 10), new(25, 10), 0, LongWall, Steamwoven).Planned);
+        // At the buffer's end the original's extra step would pass it: the segment is refused, not written past the end.
+        var tight = WorldRoute.BufferSteps - detour.Steps - 2;
+        Assert.IsTrue(new WorldRoute().Plan(new(10, 10), new(15, 10), tight, Wall, Steamwoven).Planned);
+        var end = WorldRoute.BufferSteps - detour.Steps;
+        Assert.IsTrue(new WorldRoute().Plan(new(10, 10), new(15, 10), end, Wall, Steamwoven).Planned);
+        Assert.IsFalse(new WorldRoute().Plan(new(10, 10), new(15, 10), end, Wall, Original).Planned);
     }
 
     [TestMethod]
@@ -102,6 +114,8 @@ public sealed class WorldTravelTests
         // Discovered when the sector centre comes within 320 tiles: 4 sectors out, on the sixth step.
         Assert.AreEqual(5, results.FindIndex(r => r.Discovered == 1));
         Assert.AreEqual(areas[1].Location, results[^1].Landing);
+        // The map position takes the landing, so a next waypoint starts there.
+        Assert.AreEqual(Pixel(areas[1].Location, Width), journey.Pixel);
         // The original adds no time on the segment's last step.
         var original = new WorldJourney(new WorldRoute(), areas, Width, Pixel(Tile(10, 10), Width));
         original.AddWaypoint(Pixel(Tile(20, 10), Width), a => false, Open, Original);
@@ -133,6 +147,7 @@ public sealed class WorldTravelTests
         var here = Location(journey.Pixel, Width);
         Assert.AreEqual(here, new WorldJourney(new WorldRoute(), areas, Width, journey.Pixel).Cancel(Original));
         Assert.AreEqual(areas[1].Location, journey.Cancel(Steamwoven));
+        Assert.AreEqual(Pixel(areas[1].Location, Width), journey.Pixel);
         Assert.AreEqual(0, journey.Waypoints.Count);
     }
 }

@@ -71,8 +71,8 @@ travel step.
   opens on its keyed map, else 2000. Tile x maps back to pixel W − x/64, and tile y to y/64.
 - **Steps.** The route is a list of the 8 directions between sector centres. From the
   current sector the next step points straight at the target (the sector direction 0x4CFCD0:
-  the signs of the deltas, the minor axis dropped when |minor|/2 − |major|/4 < 0 in integer
-  halves).
+  the signs of the deltas, the minor axis dropped when 2 |minor| < |major|, computed from
+  doubled deltas).
   That sector is taken when it passes:
   - a sector the scripts blocked (the blocked-sector list, 0x4D0EE0) never passes;
   - a sector with its own sector file passes;
