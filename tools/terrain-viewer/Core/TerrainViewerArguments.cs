@@ -27,6 +27,9 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
     /// main world map) opens as a window around it, the actor near its centre; a whole map stands the actor near it. Absent,
     /// a large map opens around the transfer arrival or the map-list start tile.</summary>
     public Arcanum.Data.Area.AreaSectorCoordinate? AreaMapSector { get; init; }
+    /// <summary>ARC-DATA-037: the data-fix rules a map opens under (the session's; the map patch's MP7 switch); null is the
+    /// default mode, Steamwoven. Not a command-line argument.</summary>
+    public Arcanum.Data.Fixes.DataFixProfile? DataRules { get; init; }
     /// <summary>ARC-WORLD-027: start the AREA session as this original pre-made hero (<see cref="AreaStartingHero.Premade"/>);
     /// absent, the session has no hero and dialogs use the diagnostic PC profile.</summary>
     public AreaPremadeHero? Hero { get; init; }

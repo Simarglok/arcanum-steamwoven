@@ -77,6 +77,7 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Game data | `DataFixProfile` | `StoneExamineTextLost` | DF1 | four stone-examination DLGs lack their record's effects field, so the game opens none and examining the stones shows nothing ([data fixes](../formats/data-fixes.md), ARC-DATA-022) |
 | Game data | `DataFixProfile` | `NpcLineEffectsInResponseLost` | DF2 | an NPC line's effects written in its response field are never applied (ARC-DATA-022) |
 | Game data | `DataFixProfile` | `ReplyFinalLineInResponseLost` | DF3 | a reply's final-line action written in its response field reads as 0 and ends the talk without the final line (ARC-DATA-022) |
+| Game data | `DataFixProfile` | `MapPatchScriptZeroIgnored` | MP7 | a `map.patch` line `script N 0` attaches nothing, so the five installed lines that evidently clear an NPC's dialog slot (four in Iron Clan HQ, one in the Ashbury underground) leave the dialog in place; Steamwoven empties the slot. Read when a map or main-map window opens, so a switch takes effect at the next open ([map patch](map-patch.md), ARC-DATA-037) |
 | Music and ambient | `SoundRuleProfile` | `CombatSaveLosesSchemes` | SN18 | a save made while combat music plays stores empty scheme slots; on load they replace the saved pre-combat pair, so the loaded map's default (or silence, without one) plays through combat and leaving it restores silence ([audio study](../research/audio-evidence.md), ARC-WORLD-040) |
 | Music and ambient | `SoundRuleProfile` | `EmptyHitRecordSilent` | SN23 | a weapon hit falls back to the material sound only when its id is in no sound table; an empty record counts as held and plays nothing, so 128 installed weapons hit silently; Steamwoven lets an empty record fall back to the material sound (the cue player of ARC-UI-042) |
 | Music and ambient | `SoundRuleProfile` | `HourWindowsNeverWrap` | SN14 | a scheme sound's hour window never wraps, so a reversed window (20 installed night entries such as `19-0`) never plays; Steamwoven runs it past midnight (the scheme player of ARC-UI-041) |
@@ -146,7 +147,9 @@ The list covers every ledger row whose verdict is a bug of the original or a D2 
 - The SCR dispatcher (ARC-SCRIPT-008) takes `GameRules.Scripts` through its run options; no session code calls it yet.
 - The reaction domain (ARC-WORLD-026) reads `Rules.Reaction` in `GameSessionOwner.ReactToPcHit`; no host calls it yet.
 - The game data fixes (ARC-DATA-022) are read by `ScriptContent.Dialog` with `Rules.Data`; the AREA conversation
-  passes the session's rules at each dialog read.
+  passes the session's rules at each dialog read. MP7 (ARC-DATA-037) is read by `AreaMapPlans.Create`/`CreateWindow`
+  when a map plan is made: the viewer's map loads and main-map window moves pass the `Rules.Data` of the session the
+  load carries (the default rules for a load that starts a new session).
 - The experience domain (ARC-WORLD-033) reads `Rules.Experience` in `GameSessionOwner.QueryHeroExperience`.
 - The sound domain (ARC-WORLD-040) reads `Rules.Sound` when a session is restored (a load of a save made during combat
   music); the viewer's scheme player (ARC-UI-041) reads it when a map opens or a quick load replaces the session.

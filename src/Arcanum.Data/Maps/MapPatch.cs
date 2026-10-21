@@ -183,11 +183,21 @@ internal static class MapPatchApplier
 
     private static readonly string[] TrainingTiers = ["st_untrained", "st_beginner", "st_expert", "st_master"];
 
+    // A value written as zero: an optional sign and one or more zero digits.
+    private static bool LiteralZero(string value)
+    {
+        var digits = value.AsSpan(value.Length > 0 && value[0] is '+' or '-' ? 1 : 0);
+        return digits.Length > 0 && !digits.ContainsAnyExcept('0');
+    }
+
     private static string[] Names(string list, string prefix) => list.Split(' ').Select(n => prefix + n).ToArray();
 
     internal sealed record Result(ObjectWireRecord Record, MapPatchApplication Application);
 
-    internal static Result Apply(ObjectWireRecord record, ObjectWireRecord prototype, IReadOnlyList<MapPatchLine> lines, Func<int, MapPatchScriptHeader?> scriptHeader)
+    /// <param name="scriptZeroClears">ARC-DATA-037 (ledger MP7): <c>script N 0</c> clears attachment N (an empty attachment: no
+    /// flags, no counters, script 0) instead of attaching nothing as the original does.</param>
+    internal static Result Apply(ObjectWireRecord record, ObjectWireRecord prototype, IReadOnlyList<MapPatchLine> lines, Func<int, MapPatchScriptHeader?> scriptHeader,
+        bool scriptZeroClears = false)
     {
         ArgumentNullException.ThrowIfNull(record); ArgumentNullException.ThrowIfNull(prototype); ArgumentNullException.ThrowIfNull(lines); ArgumentNullException.ThrowIfNull(scriptHeader);
         var fields = new SortedDictionary<int, ObjectWireValue>(record.Fields.ToDictionary(p => p.Key, p => p.Value));
@@ -261,8 +271,17 @@ internal static class MapPatchApplier
                         break;
                     case "SCRIPT":
                         {
-                            var sap = Atoi(Value()); var number = Atoi(Value());
-                            if (scriptHeader(number) is { } header)
+                            var sap = Atoi(Value()); var numberText = Value(); var number = Atoi(numberText);
+                            if (number == 0)
+                            {
+                                // MP7: only a written zero clears (an absent or non-numeric value attaches nothing in both modes).
+                                if (scriptZeroClears && LiteralZero(numberText))
+                                {
+                                    if (sap < 0) unmodelled.Add($"line {line.Line}: script attachment {sap}");
+                                    else SetElement(ScriptsSlot, sap, [0, 0, 0]);
+                                }
+                            }
+                            else if (scriptHeader(number) is { } header)
                             {
                                 if (sap < 0) unmodelled.Add($"line {line.Line}: script attachment {sap}");
                                 else SetElement(ScriptsSlot, sap, [header.Flags, header.Counters, unchecked((uint)number)]);

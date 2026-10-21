@@ -47,6 +47,11 @@ public partial class TerrainViewerApp
         if (_mapWindowCentre is null) { _mapStreamStatus = null; _mapWindowMoves = 0; _mapStreamFailedAt = null; _mapFarGoal = null; }
     }
 
+    /// <summary>ARC-DATA-037: the arguments with the data rules of the session a load carries (a transfer, a window move, a quick
+    /// load), so a map opens under the session's mode; without one the default rules (no rules kept from an earlier load).</summary>
+    private static TerrainViewerArguments WithSessionDataRules(TerrainViewerArguments arguments, Arcanum.Session.GameSessionOwner? session) =>
+        arguments with { DataRules = session?.Rules.Data };
+
     private bool MapStreamInFlight => _mapHandoff is { Kind: MapHandoffKind.Stream };
 
     /// <summary>How many cells the tile lies beyond the sector's square (the larger of the two axes; 0 inside it).</summary>
@@ -107,6 +112,7 @@ public partial class TerrainViewerApp
         _generation = _coordinator.BeginGeneration();
         var generation = _generation;
         TerrainLoadResult result;
+        next = WithSessionDataRules(next, handoff.Session);
         try { result = await _coordinator.LoadAsync(generation, next, token); }
         catch (OperationCanceledException) { EndMapStream(handoff); return; }
         catch (Exception exception)
