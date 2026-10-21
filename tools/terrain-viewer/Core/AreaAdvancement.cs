@@ -98,38 +98,72 @@ public static class AreaAdvancement
     }
 
     /// <summary>
-    /// Passes an award's follower step to every follower of the hero and every NPC waiting for it, as the source does after the
-    /// hero's level step (the waiting ones near the hero: here the ones on the current map, whose fields <paramref name="npc"/> gives).
-    /// Returns the followers whose level rose; an NPC without fields or an admissible sheet is skipped.
+    /// Passes an award's follower step on as the source does after the hero's level step: to every follower in the array, then to the
+    /// waiting followers <see cref="ExperienceRules.WaitingFollowerGetsStep"/> admits under the session's rules (ARC-WORLD-047, ledger
+    /// OL29, owner decision D7): the Original setting only one on the loaded map within the window's rectangle around the PC, Steamwoven
+    /// every one wherever it waits. <paramref name="npc"/> gives an NPC's loaded sheet and effects (null when its map data cannot be
+    /// read now); <paramref name="place"/> where a waiting one stands. A waiting follower whose sheet can be read gets its missed steps
+    /// first; one whose sheet cannot be read keeps the step as missed (Steamwoven; the Original setting never reaches it). An NPC
+    /// without an admissible sheet is skipped. Returns the followers whose level rose and the waiting ones whose step was deferred.
     /// </summary>
-    public static IReadOnlyList<SessionFollowerLevelResult> LevelFollowers(GameSessionOwner session, SessionExperienceAward? award,
+    public static AreaFollowerLevelReport LevelFollowers(GameSessionOwner session, SessionExperienceAward? award,
+        Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?> npc, Func<string, AreaWaitingPlace> place)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(npc);
+        ArgumentNullException.ThrowIfNull(place);
+        var raised = new List<SessionFollowerLevelResult>();
+        var deferred = new List<string>();
+        var applied = new List<SessionFollowerLevelResult>();
+        if (award?.Followers is not { } step || session.AutoLevel is null) return new(raised.AsReadOnly(), deferred.AsReadOnly(), applied.AsReadOnly());
+        var party = session.QueryParty();
+        var rules = session.Rules.Experience;
+        // An NPC's missed steps come before this one, as they came before it; when they cannot be applied the new step is not applied
+        // out of order: a waiting follower keeps it with them (Steamwoven), a follower in the array skips it.
+        bool Missed((SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers) input)
+        {
+            var before = Level(session, input.Loaded.Entity, input.Loaded.Sheet.Level);
+            var result = session.ApplyMissedFollowerLevels(session.Version, input.Loaded, input.Modifiers);
+            if (result.Disposition == GameSessionDisposition.Changed && result.Record!.Sheet.Level != before) applied.Add(result);
+            return result.Disposition != GameSessionDisposition.Rejected;
+        }
+        void Step((SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers) input)
+        {
+            var result = session.LevelFollower(session.Version, input.Loaded, input.Modifiers, step);
+            if (result.Disposition == GameSessionDisposition.Changed) raised.Add(result);
+        }
+        // The original's array loop has no death test (A5): a follower gets the step; a dead one never gets its missed steps.
+        foreach (var entity in party.Followers.Select(f => f.Entity))
+            if (npc(entity) is { } input && (session.QueryNpcDead(entity) || Missed(input))) Step(input);
+        foreach (var entity in party.Others.Where(o => o.Standing == CompanionStanding.Waiting).Select(o => o.Entity))
+        {
+            var where = place(entity);
+            if (!ExperienceRules.WaitingFollowerGetsStep(where.Offset, where.Dead, rules)) continue;
+            if (npc(entity) is { } input && Missed(input)) Step(input);
+            else if (!rules.WaitingFollowersStepOnlyNearPc
+                && session.DeferFollowerLevel(session.Version, entity, step).Disposition == GameSessionDisposition.Changed) deferred.Add(entity);
+        }
+        return new(raised.AsReadOnly(), deferred.AsReadOnly(), applied.AsReadOnly());
+    }
+
+    /// <summary>
+    /// ARC-WORLD-047: applies the missed level steps of every NPC the session holds them for whose sheet can be read now (its map
+    /// loaded) and that is not dead, in ordinal entity order. Returns the results that changed the session.
+    /// </summary>
+    public static IReadOnlyList<SessionFollowerLevelResult> ApplyMissed(GameSessionOwner session,
         Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?> npc)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(npc);
-        var raised = new List<SessionFollowerLevelResult>();
-        if (award?.Followers is not { } step || session.AutoLevel is null) return raised;
-        var party = session.QueryParty();
-        var entities = party.Followers.Select(f => f.Entity).Concat(party.Others.Where(o => o.Standing == CompanionStanding.Waiting).Select(o => o.Entity));
-        foreach (var entity in entities)
+        var applied = new List<SessionFollowerLevelResult>();
+        if (session.AutoLevel is null) return applied.AsReadOnly();
+        foreach (var entity in session.QueryMissedLevelEntities())
         {
-            if (npc(entity) is not { } input) continue;
-            var result = session.LevelFollower(session.Version, input.Loaded, input.Modifiers, step);
-            if (result.Disposition == GameSessionDisposition.Changed) raised.Add(result);
+            if (session.QueryNpcDead(entity) || npc(entity) is not { } input) continue;
+            var result = session.ApplyMissedFollowerLevels(session.Version, input.Loaded, input.Modifiers);
+            if (result.Disposition == GameSessionDisposition.Changed) applied.Add(result);
         }
-        return raised.AsReadOnly();
-    }
-
-    /// <summary>
-    /// Whether an NPC follows the hero's level step from where it stands: a follower always (it is with the hero), a waiting
-    /// one when it stands on <paramref name="currentMap"/> (<see cref="AreaCompanionPlacement.Where"/> from its home map).
-    /// </summary>
-    public static bool Nearby(GameSessionOwner session, string entity, int homeMap, int currentMap)
-    {
-        ArgumentNullException.ThrowIfNull(session);
-        if (session.QueryParty().Followers.Any(f => f.Entity == entity)) return true;
-        var where = AreaCompanionPlacement.Where(session, new(homeMap), entity);
-        return where.Error is null && where.Map.RuntimeMap == currentMap;
+        return applied.AsReadOnly();
     }
 
     /// <summary>The follower's level now: the session's record when it levelled it, else its stored level.</summary>
@@ -161,3 +195,12 @@ public static class AreaAdvancement
         _ => null,
     };
 }
+
+/// <summary>Where a waiting follower stands for the level step (ARC-WORLD-047): whether it is dead, and its tile offset from the PC when it
+/// stands among the loaded objects (drawn on the current map), else null.</summary>
+public readonly record struct AreaWaitingPlace(bool Dead, (int X, int Y)? Offset);
+
+/// <summary>An award's follower step: the followers whose level rose by it, the waiting followers whose step was kept as missed, and
+/// the missed steps applied first that raised a level.</summary>
+public sealed record AreaFollowerLevelReport(IReadOnlyList<SessionFollowerLevelResult> Raised, IReadOnlyList<string> Deferred,
+    IReadOnlyList<SessionFollowerLevelResult> MissedApplied);
