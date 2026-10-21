@@ -691,7 +691,9 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   `ARC-RENDER-032 native-smoke zoom floor PASS` (in the smoke's window and in a 2560 × 1440 one: a window zoomed out to
   1/8 is raised to its floor by the resize, a zoom asked below the floor stops at it, the view lies inside the window's
   bounds with the terrain chunked, and the window size is restored; a whole map reaches 1/8). The JSON reports the texture
-  memory, the resident index rows and the first far frame; driver memory per row texture is not measured otherwise.
+  memory, the resident index rows and the first far frame; driver memory per row texture is not measured otherwise. On
+  the owner's Mac (2026-10-21) at the Crash Site: 1280 × 800 floor 1/8 (view 10,240 × 6,400, 228 level-3 chunks, 326
+  rows, first far frame 13 ms); 2560 × 1440 floor 1/4 (view 10,240 × 5,760, 214 level-2 chunks, 503 rows, 15 ms).
   Between a floor and the next power of two a continuous trigger zoom can still leave the chunks for one item per tile;
   on a large view that needs more nearest-index rows than the renderer allowed (8,192) and made the viewer drop the scene
   (`AREA_NEAREST_MAPPING_BUDGET`), so the row cap is now 65,536, more than a window's commands
