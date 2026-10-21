@@ -67,8 +67,9 @@ transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`, at most 512), `Revi
 last the item's insert-item script (below).
 
 **Insert check.** The original's insert check (0x466510) depends on the created character (carry weight against its strength, the
-Technophobia background against technology items, free grid room around its own items), none of which the session owns.
-The host answers it per item with a `SessionInsertCheck` delegate (`Accepted`, `TooHeavy`, `TechnologyRefused`,
+Technophobia background against technology items, free grid room around its own items). The session applies the Technophobia
+part for the hero after the host's weight answer ([backgrounds](equipment-runtime.md#backgrounds-arc-world-069)); the weight and the
+room are the host's. The host answers it per item with a `SessionInsertCheck` delegate (`Accepted`, `TooHeavy`, `TechnologyRefused`,
 `NoRoom`; any other value refuses). It runs only after every other refusal. If the host calls back into the owner from it and anything the transfer read
 changed (revision, actor map, the attached seed, the item already taken), the transfer is `StaleVersion` with no effect.
 A refusal changes nothing: for pickup and
