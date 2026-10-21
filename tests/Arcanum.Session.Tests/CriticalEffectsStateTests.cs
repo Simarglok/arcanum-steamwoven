@@ -302,13 +302,13 @@ public sealed class CriticalEffectsStateTests
     {
         // ARC-COMBAT-013 (CR15, AM4): a blade that uses bullets (type 1), three a shot, with a magic critical-miss effect of 30 (a
         // critical self-hit takes all at d100 ≤ 31, else five shots at a second d100 ≤ 41), and 25 bullets the hero picked up. "Lose
-        // ammunition" takes 15 (25, then 10) and is refused with 10 left, the stack unchanged; "destroy ammunition" takes the whole
-        // stack, which is then deleted, and nothing after. Sessions with several seeds run until every outcome was seen.
+        // ammunition" takes 15 and is refused with fewer left, the stack unchanged; "destroy ammunition" takes the whole stack, which is
+        // then deleted. Each attack first spends its shot (3, ARC-COMBAT-012); with fewer than 3 left the attack is refused before any
+        // critical, so an empty stack never meets one. Sessions with several seeds run until every outcome was seen.
         var seen = new HashSet<(SessionCriticalStepKind, SessionCriticalStepOutcome)>();
         var refusedWithUnits = false;
         bool Done() => seen.Contains((SessionCriticalStepKind.DestroyAmmo, SessionCriticalStepOutcome.AmmunitionSpent))
-            && seen.Contains((SessionCriticalStepKind.LoseAmmo, SessionCriticalStepOutcome.AmmunitionSpent)) && refusedWithUnits
-            && seen.Contains((SessionCriticalStepKind.DestroyAmmo, SessionCriticalStepOutcome.NoAmmunition));
+            && seen.Contains((SessionCriticalStepKind.LoseAmmo, SessionCriticalStepOutcome.AmmunitionSpent)) && refusedWithUnits;
         for (ulong randomSeed = 0; randomSeed < 64 && !Done(); randomSeed++)
         {
             using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf(), RandomSeed = randomSeed }).Owner!;
@@ -333,7 +333,10 @@ public sealed class CriticalEffectsStateTests
                     TargetWorn = Worn(owner), TargetCell = GolemCell,
                 });
                 Assert.AreEqual((GameSessionFailure.None, GameSessionFailure.None), (result.Failure, result.StepFailure));
-                var spent = 0;
+                if (result.Resolution!.Refusal == AttackRefusal.OutOfAmmunition) { Assert.IsTrue(before < 3); break; }
+                // The shot's 3 go first (ARC-COMBAT-012).
+                Assert.AreEqual((GameSessionDisposition.Changed, before - 3), (result.Ammunition!.Value.Disposition, result.Ammunition.Value.UnitsAfter));
+                var spent = 3;
                 foreach (var step in result.Criticals.Where(step => step.Kind is SessionCriticalStepKind.DestroyAmmo or SessionCriticalStepKind.LoseAmmo))
                 {
                     seen.Add((step.Kind, step.Outcome));
@@ -357,25 +360,39 @@ public sealed class CriticalEffectsStateTests
                 Assert.AreEqual(before - spent, owner.QueryHeroAmmo().SingleOrDefault().Units, "the stack lost exactly the spent units");
             }
             if (owner.QueryHeroAmmo().Count == 0) Assert.IsTrue(owner.IsItemDestroyed("bullets"), "a stack spent to 0 is deleted");
-            // With the stack gone, a further "destroy" finds nothing.
-            for (var attempt = 0; attempt < 400 && owner.IsItemDestroyed("bullets") && !seen.Contains((SessionCriticalStepKind.DestroyAmmo, SessionCriticalStepOutcome.NoAmmunition)); attempt++)
-            {
-                owner.ClearStun(owner.Version, SessionLifeTarget.Hero);
-                owner.Heal(owner.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true });
-                if (owner.IsItemDestroyed("kit:1") || owner.QueryEquipment().Worn.Count == 0) break;
-                var result = owner.AttackCritter(owner.Version, new(golem)
-                {
-                    HeroWorn = new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Weapon] = new("kit:1", Sturdy) { Invulnerable = true, NoDrop = true } },
-                    TargetWorn = Worn(owner), TargetCell = GolemCell,
-                });
-                foreach (var step in result.Criticals.Where(step => step.Kind is SessionCriticalStepKind.DestroyAmmo or SessionCriticalStepKind.LoseAmmo))
-                {
-                    Assert.AreEqual(SessionCriticalStepOutcome.NoAmmunition, step.Outcome);
-                    seen.Add((step.Kind, step.Outcome));
-                }
-            }
         }
         Assert.IsTrue(Done(), $"{string.Join(",", seen)} refused with units {refusedWithUnits}");
+    }
+
+    [TestMethod]
+    public void AShotSpendsItsAmmunitionHitOrMissAndTooFewRefusesAfterTheHitLocation()
+    {
+        // ARC-COMBAT-012 (A): a blade that uses bullets, two a shot, and 5 bullets: every attack the resolver runs takes 2 (a hit or a
+        // miss); with 1 left the attack is refused after the hit location's roll and nothing is spent.
+        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        var seed = Seed();
+        seed = new(seed.Holders, [.. seed.Items, new SessionSeedItem("bullets", new(new(SessionItemType.Ammo, 7059, 100, 200), 1, 0, 0, 5, []) { AmmoType = 1 },
+            new CellCoord(105, 200))]);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "bullets", Accept).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon,
+            new(Kit[0].Kind, [], false, Blade(ammoType: 1, ammoConsumption: 2)), (_, _) => true, Accept).Failure);
+        var golem = GolemCombat();
+        foreach (var left in new[] { 3, 1 })
+        {
+            var result = owner.AttackCritter(owner.Version, new(golem) { HeroWorn = HeroWorn(), TargetWorn = Worn(owner), TargetCell = GolemCell });
+            Assert.AreEqual((GameSessionFailure.None, AttackRefusal.None), (result.Failure, result.Resolution!.Refusal));
+            Assert.AreEqual((GameSessionDisposition.Changed, "bullets", left), (result.Ammunition!.Value.Disposition, result.Ammunition.Value.Stack, result.Ammunition.Value.UnitsAfter));
+            Assert.AreEqual(left, owner.QueryHeroAmmo().Single().Units);
+        }
+        var draws = owner.QueryRandom().Draws;
+        var refused = owner.AttackCritter(owner.Version, new(golem) { HeroWorn = HeroWorn(), TargetWorn = Worn(owner), TargetCell = GolemCell });
+        Assert.AreEqual((AttackRefusal.OutOfAmmunition, 1, (SessionAmmoUse?)null), (refused.Resolution!.Refusal, refused.Resolution.Rolls.Count, refused.Ammunition));
+        Assert.AreEqual(draws + 1, owner.QueryRandom().Draws, "the hit location's roll was made");
+        Assert.AreEqual(1, owner.QueryHeroAmmo().Single().Units, "nothing spent");
+        // An aimed shot rolls nothing before the check.
+        var aimed = owner.AttackCritter(owner.Version, new(golem) { Aim = HitLocation.Head, HeroWorn = HeroWorn(), TargetWorn = Worn(owner), TargetCell = GolemCell });
+        Assert.AreEqual((AttackRefusal.OutOfAmmunition, 0), (aimed.Resolution!.Refusal, aimed.Resolution.Rolls.Count));
     }
 
     [TestMethod]
