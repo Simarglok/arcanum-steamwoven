@@ -3,19 +3,19 @@ using Arcanum.Simulation.Movement;
 namespace Arcanum.Simulation.Navigation;
 
 /// <summary>
-/// Bounded local route to a clicked cell (project policy after the source's route structure, docs/world/click-route-runtime.md, parity NOT_VERIFIED):
-/// a straight attempt first, then an eight-direction cost search inside a fixed window around source and target.
-/// No global search, navmesh, smoothing or promotion of Blocked/Unknown/Unsupported evidence to Open.
+/// The click route's plan (ARC-WORLD-073): the original's path request (<see cref="OriginalPathRequest"/>, ledger DC2–DC8, LR1) over the
+/// caller's step evidence: the goal's gate (some admitted neighbour enters it by an Open step), the direct attempt up to 32 cells on the
+/// larger axis, else the search over a 64 × 64 window when both axes are under 32 apart, which drops a tile whose estimate over 10
+/// exceeds the budget (<see cref="RouteLimits.Budget"/>). No partial route. Only Open steps are taken; Blocked, Unknown and Unsupported
+/// evidence is never promoted. The whole route found is returned (<see cref="RoutePlan.Steps"/>); a walker takes the first segment and
+/// plans again (LR3).
 /// </summary>
 public static class RoutePlanner
 {
-    // Search costs: an ordinary step, an extra point for a change of direction; estimate is the Chebyshev distance.
-    private const int StepCost = 10, TurnCost = 1;
-    // A source's extra step cost is at most this (a window jump costs 50); 4096 expansions keep every sum in range.
     private const int MaximumExtraCost = 1000;
-    private static readonly NeighborDirection[] Directions = Enum.GetValues<NeighborDirection>();
 
-    public static RoutePlan Plan(IRouteStepSource source, CellCoord from, CellCoord target, RouteLimits? limits = null)
+    /// <param name="avoid">Cells no step may enter in this plan (the follower's cells where a step was refused, ARC-WORLD-073).</param>
+    public static RoutePlan Plan(IRouteStepSource source, CellCoord from, CellCoord target, RouteLimits? limits = null, IReadOnlySet<CellCoord>? avoid = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         limits ??= new RouteLimits();
@@ -24,51 +24,148 @@ public static class RoutePlanner
         if (from == target) return new(from, target, RouteOutcome.AlreadyAtTarget, null, "ROUTE_ALREADY_AT_TARGET", [], 0, 0, 0, 0, 0, 0);
         if (Math.Abs((long)target.X - from.X) > limits.AxisDistance || Math.Abs((long)target.Y - from.Y) > limits.AxisDistance)
             return Refused(from, target, "ROUTE_TARGET_OUT_OF_RANGE");
-        try { return new Search(source, from, target, limits).Run(); }
+        var map = new SourceMap(source, target, avoid);
+        OriginalPath path;
+        try { path = OriginalPathRequest.Request(map, from, target, limits.Budget); }
         catch (OverflowException) { return Refused(from, target, "ROUTE_COORDINATE_OVERFLOW"); }
+        if (path.End is OriginalPathEnd.Direct or OriginalPathEnd.Search)
+        {
+            var steps = path.Rotations.Take(path.Length).Select(r => (NeighborDirection)r).ToArray();
+            return map.Done(from, limits, RouteOutcome.Found, path.End == OriginalPathEnd.Direct ? RouteMethod.Direct : RouteMethod.LocalSearch, steps,
+                path.End == OriginalPathEnd.Direct ? "ROUTE_DIRECT" : "ROUTE_LOCAL_SEARCH", path.Expansions);
+        }
+        // Unknown evidence or the window's edge may hide a route; say so instead of reporting a proven blockage.
+        var reason = path.End switch
+        {
+            OriginalPathEnd.Gate => map.Unknown ? "ROUTE_EVIDENCE_INCOMPLETE" : "ROUTE_NOT_FOUND",
+            OriginalPathEnd.SearchOutOfRange => "ROUTE_SEARCH_OUT_OF_RANGE",
+            // The budget dropped a cell: a corridor may pass it, whatever evidence was Unknown.
+            OriginalPathEnd.SearchPruned => "ROUTE_BUDGET_EXHAUSTED",
+            _ when map.Unknown => "ROUTE_EVIDENCE_INCOMPLETE",
+            _ when path.WindowEdge => "ROUTE_WINDOW_EXHAUSTED",
+            _ => "ROUTE_NOT_FOUND",
+        };
+        return map.Done(from, limits, RouteOutcome.NoRoute, null, [], reason, path.Expansions);
     }
 
-    /// <summary>The straight-line rule: diagonal unless the minor remaining delta is under half the major one.</summary>
+    /// <summary>
+    /// The attack's approach (ARC-WORLD-073, ledger AP1–AP4, 0x4280D0): a route to the target's own tile with the request's flag 0x1 (the
+    /// goal's gate skipped, the step onto it untested) and the walk's first budget toward it, ending one step short of it; the cell it
+    /// ends on is <see cref="RoutePlan.Target"/>. No route, or one of no step (the target next to the walker and no step onto it), is
+    /// <see cref="RouteOutcome.NoRoute"/>: the attack ends (the original after about a second outside a round). No straight-line retry.
+    /// </summary>
+    [OriginalFunction(0x4280D0, OriginalFunctionScope.Partial)]
+    public static RoutePlan PlanApproach(IRouteStepSource source, CellCoord from, CellCoord target, RouteLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        limits ??= new RouteLimits();
+        if (!source.Contains(from)) return Refused(from, target, "ROUTE_SOURCE_OUTSIDE_AREA");
+        if (!source.Contains(target)) return Refused(from, target, "ROUTE_TARGET_OUTSIDE_AREA");
+        if (from == target) return Refused(from, target, "ROUTE_APPROACH_ON_TARGET");
+        if (Math.Abs((long)target.X - from.X) > limits.AxisDistance || Math.Abs((long)target.Y - from.Y) > limits.AxisDistance)
+            return Refused(from, target, "ROUTE_TARGET_OUT_OF_RANGE");
+        var map = new SourceMap(source, target);
+        OriginalPath path;
+        try { path = OriginalPathRequest.Request(map, from, target, Math.Min(RouteLimits.WalkBudget(from, target), limits.Budget), intoGoal: true); }
+        catch (OverflowException) { return Refused(from, target, "ROUTE_COORDINATE_OVERFLOW"); }
+        if (path.End is OriginalPathEnd.Direct or OriginalPathEnd.Search && path.Length > 0)
+        {
+            var steps = path.Rotations.Take(path.Length).Select(r => (NeighborDirection)r).ToArray();
+            var end = from;
+            foreach (var step in steps) end = Neighbor(end, step);
+            return map.Done(from, limits, RouteOutcome.Found, path.End == OriginalPathEnd.Direct ? RouteMethod.Direct : RouteMethod.LocalSearch,
+                steps, "ROUTE_APPROACH", path.Expansions, end);
+        }
+        var reason = path.End switch
+        {
+            OriginalPathEnd.Direct or OriginalPathEnd.Search => "ROUTE_APPROACH_ADJACENT",
+            OriginalPathEnd.SearchOutOfRange => "ROUTE_SEARCH_OUT_OF_RANGE",
+            // The budget dropped a cell: a corridor may pass it, whatever evidence was Unknown.
+            OriginalPathEnd.SearchPruned => "ROUTE_BUDGET_EXHAUSTED",
+            _ when map.Unknown => "ROUTE_EVIDENCE_INCOMPLETE",
+            _ when path.WindowEdge => "ROUTE_WINDOW_EXHAUSTED",
+            _ => "ROUTE_NOT_FOUND",
+        };
+        return map.Done(from, limits, RouteOutcome.NoRoute, null, [], reason, path.Expansions);
+    }
+
+    /// <summary>
+    /// The PC's retry after no path (ARC-WORLD-073, ledger LR4, 0x426040 with flags 0x78): a straight line toward the goal, one
+    /// <see cref="Toward"/> step at a time, every step accepted and none tested when planned (the walk tests each as it goes and stops
+    /// at the first refused one); nothing beyond 32 cells on the larger axis (the direct attempt's limit).
+    /// </summary>
+    [OriginalFunction(0x426040, OriginalFunctionScope.Partial)]
+    public static RoutePlan StraightRetry(IRouteStepSource source, CellCoord from, CellCoord target, RouteLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        limits ??= new RouteLimits();
+        if (!source.Contains(from)) return Refused(from, target, "ROUTE_SOURCE_OUTSIDE_AREA");
+        if (!source.Contains(target)) return Refused(from, target, "ROUTE_TARGET_OUTSIDE_AREA");
+        if (from == target) return new(from, target, RouteOutcome.AlreadyAtTarget, null, "ROUTE_ALREADY_AT_TARGET", [], 0, 0, 0, 0, 0, 0);
+        if (Math.Max(Math.Abs((long)target.X - from.X), Math.Abs((long)target.Y - from.Y)) > Math.Min(limits.AxisDistance, OriginalPathRequest.DirectLimit))
+            return Refused(from, target, "ROUTE_TARGET_OUT_OF_RANGE");
+        var steps = new List<NeighborDirection>();
+        for (var cell = from; cell != target; cell = Neighbor(cell, steps[^1])) steps.Add(Toward(cell, target));
+        return new(from, target, RouteOutcome.Found, RouteMethod.StraightRetry, "ROUTE_STRAIGHT_RETRY", steps.ToArray(), limits.SegmentSteps, 0, 0, 0, 0, 0);
+    }
+
+    /// <summary>The straight-line rule (0x4B8D50): diagonal unless the minor remaining delta is under half the major one.</summary>
     public static NeighborDirection Toward(CellCoord from, CellCoord target)
     {
         if (from == target) throw new ArgumentException("ROUTE_SAME_CELL");
-        long dx = (long)target.X - from.X, dy = (long)target.Y - from.Y;
-        int sx = Math.Sign(dx), sy = Math.Sign(dy);
-        if (Math.Abs(dx) > Math.Abs(dy)) { if (2 * Math.Abs(dy) < Math.Abs(dx)) sy = 0; }
-        else if (2 * Math.Abs(dx) < Math.Abs(dy)) sx = 0;
-        return Direction(sx, sy);
+        return (NeighborDirection)OriginalPathRequest.Rotation(from, target);
     }
 
     /// <summary>The adjacent cell in <paramref name="direction"/> (checked arithmetic).</summary>
     public static CellCoord Neighbor(CellCoord cell, NeighborDirection direction) => MovementGeometry.Neighbor(cell, direction);
 
-    private static NeighborDirection Direction(int dx, int dy)
-    {
-        foreach (var direction in Directions)
-            if (MovementGeometry.Delta(direction) == (dx, dy)) return direction;
-        throw new ArgumentException("ROUTE_DIRECTION_INVALID");
-    }
-
     private static RoutePlan Refused(CellCoord from, CellCoord target, string reason) =>
         new(from, target, RouteOutcome.Refused, null, reason, [], 0, 0, 0, 0, 0, 0);
 
-    private sealed class Search(IRouteStepSource source, CellCoord from, CellCoord target, RouteLimits limits)
+    /// <summary>
+    /// The caller's step evidence as the request's map: a step leaves the area outside it; no tile is blocked by itself (the step's
+    /// verdict decides); an Open step passes, across a window piece when it has extra cost; a refused cardinal step the source says an
+    /// object refused drops its tile; every step costs 10; the goal's gate is an admitted neighbour entering it by an Open step. Each
+    /// directed step is asked at most once per plan.
+    /// </summary>
+    internal sealed class SourceMap(IRouteStepSource source, CellCoord target, IReadOnlySet<CellCoord>? avoid = null) : IOriginalPathMap
     {
         private readonly Dictionary<(CellCoord, NeighborDirection), RouteStepVerdict> _verdicts = [];
         private readonly Dictionary<(CellCoord, NeighborDirection), int> _extras = [];
-        private int _blocked, _unknown, _unsupported, _expansions;
+        private int _blocked, _unknown, _unsupported;
+        internal bool Unknown => _unknown > 0;
 
-        internal RoutePlan Run()
+        public CellCoord? Step(CellCoord from, int rotation)
         {
-            if (Unenterable() is { } closed) return Done(RouteOutcome.NoRoute, null, [], closed);
-            if (Direct() is { } direct) return Found(RouteMethod.Direct, direct, "ROUTE_DIRECT");
-            var (local, reason) = Local();
-            return local is null ? Done(RouteOutcome.NoRoute, null, [], reason) : Found(RouteMethod.LocalSearch, local, "ROUTE_LOCAL_SEARCH");
+            var next = OriginalPathRequest.Neighbor(from, rotation);
+            return source.Contains(next) ? next : null;
         }
 
-        private RoutePlan Found(RouteMethod method, NeighborDirection[] steps, string reason) => Done(RouteOutcome.Found, method, steps, reason);
-        private RoutePlan Done(RouteOutcome outcome, RouteMethod? method, NeighborDirection[] steps, string reason) =>
-            new(from, target, outcome, method, reason, steps, limits.SegmentSteps, _verdicts.Count, _expansions, _blocked, _unknown, _unsupported);
+        public bool TileBlocked(CellCoord cell) => false;
+
+        public OriginalPathTraversal Traverse(CellCoord from, int rotation)
+        {
+            var direction = (NeighborDirection)rotation;
+            if (avoid is { Count: > 0 } && avoid.Contains(OriginalPathRequest.Neighbor(from, rotation))) return new(true, false, null);
+            if (Verdict(from, direction) != RouteStepVerdict.Open)
+                return new(true, false, (rotation & 1) == 1 && source.StepRefusedByObject(from, direction) ? 2 : null);
+            return new(false, Extra(from, direction) > 0, null);
+        }
+
+        public int EnterCost(CellCoord to) => OriginalPathRequest.BaseCost;
+
+        public bool DestinationOpen(CellCoord to)
+        {
+            if (avoid?.Contains(to) == true || source.GoalHoldsCritter(to)) return false;
+            foreach (var direction in Enum.GetValues<NeighborDirection>())
+            {
+                var (dx, dy) = MovementGeometry.Delta(direction);
+                if ((long)to.X - dx is < int.MinValue or > int.MaxValue || (long)to.Y - dy is < int.MinValue or > int.MaxValue) continue;
+                var neighbor = new CellCoord(to.X - dx, to.Y - dy);
+                if (source.Contains(neighbor) && Verdict(neighbor, direction) == RouteStepVerdict.Open) return true;
+            }
+            return false;
+        }
 
         private RouteStepVerdict Verdict(CellCoord cell, NeighborDirection direction)
         {
@@ -82,7 +179,7 @@ public static class RoutePlanner
             return verdict;
         }
 
-        // Extra cost of an Open step, asked once per step and bounded so a sum of window steps cannot overflow.
+        // Extra cost of an Open step, asked once per step and bounded.
         private int Extra(CellCoord cell, NeighborDirection direction)
         {
             if (_extras.TryGetValue((cell, direction), out var known)) return known;
@@ -92,93 +189,8 @@ public static class RoutePlanner
             return extra;
         }
 
-        // A goal no adjacent step can enter is answered from its eight entries, without a search.
-        private string? Unenterable()
-        {
-            var unknown = false;
-            foreach (var direction in Directions)
-            {
-                var (dx, dy) = MovementGeometry.Delta(direction);
-                if ((long)target.X - dx is < int.MinValue or > int.MaxValue || (long)target.Y - dy is < int.MinValue or > int.MaxValue) continue;
-                var neighbor = new CellCoord(target.X - dx, target.Y - dy);
-                if (!source.Contains(neighbor)) continue;
-                var verdict = Verdict(neighbor, direction);
-                if (verdict == RouteStepVerdict.Open) return null;
-                unknown |= verdict == RouteStepVerdict.Unknown;
-            }
-            return unknown ? "ROUTE_EVIDENCE_INCOMPLETE" : "ROUTE_NOT_FOUND";
-        }
-
-        // Every straight step must be Open; the first other verdict ends the attempt without a partial route.
-        private NeighborDirection[]? Direct()
-        {
-            var steps = new List<NeighborDirection>();
-            for (var cell = from; cell != target;)
-            {
-                var direction = Toward(cell, target);
-                // A step with extra cost (a window jump) ends the straight attempt, as in the source's straight path.
-                if (Verdict(cell, direction) != RouteStepVerdict.Open || Extra(cell, direction) != 0) return null;
-                steps.Add(direction); cell = MovementGeometry.Neighbor(cell, direction);
-            }
-            return steps.ToArray();
-        }
-
-        // A window of 2*reach cells per axis around the source/target box; cells outside it are never searched.
-        private (NeighborDirection[]? Steps, string Reason) Local()
-        {
-            var size = limits.WindowSize;
-            long ox = Math.Min(from.X, target.X) - (size - Math.Abs((long)target.X - from.X)) / 2;
-            long oy = Math.Min(from.Y, target.Y) - (size - Math.Abs((long)target.Y - from.Y)) / 2;
-            int Index(CellCoord c) => (int)(c.X - ox) + (int)(c.Y - oy) * size;
-            CellCoord At(int index) => new(checked((int)(ox + index % size)), checked((int)(oy + index / size)));
-            bool Inside(long x, long y) => x >= ox && x < ox + size && y >= oy && y < oy + size &&
-                x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue;
-            int Estimate(int index)
-            {
-                var c = At(index);
-                return StepCost * (int)Math.Max(Math.Abs((long)target.X - c.X), Math.Abs((long)target.Y - c.Y));
-            }
-
-            var cost = new int[size * size]; var parent = new int[size * size]; var entered = new sbyte[size * size];
-            var closed = new bool[size * size];
-            Array.Fill(cost, int.MaxValue);
-            var open = new PriorityQueue<int, (int Total, int Index)>();
-            int start = Index(from), goal = Index(target);
-            cost[start] = 0; parent[start] = -1; entered[start] = -1;
-            open.Enqueue(start, (Estimate(start), start));
-            bool unknownFrontier = false, windowEdge = false;
-            while (open.TryDequeue(out var current, out var priority))
-            {
-                if (closed[current] || priority.Total != cost[current] + Estimate(current)) continue;
-                if (current == goal) return (Backtrack(parent, entered, goal), "ROUTE_LOCAL_SEARCH");
-                if (_expansions == limits.Expansions) return (null, "ROUTE_EXPANSION_LIMIT");
-                _expansions++; closed[current] = true;
-                var cell = At(current);
-                foreach (var direction in Directions)
-                {
-                    var (dx, dy) = MovementGeometry.Delta(direction);
-                    if (!Inside((long)cell.X + dx, (long)cell.Y + dy)) { windowEdge = true; continue; }
-                    var next = Index(MovementGeometry.Neighbor(cell, direction));
-                    if (closed[next]) continue;
-                    var verdict = Verdict(cell, direction);
-                    if (verdict == RouteStepVerdict.Unknown) unknownFrontier = true;
-                    if (verdict != RouteStepVerdict.Open) continue;
-                    var total = cost[current] + StepCost + Extra(cell, direction) + (entered[current] >= 0 && entered[current] != (sbyte)direction ? TurnCost : 0);
-                    if (total >= cost[next]) continue;
-                    cost[next] = total; parent[next] = current; entered[next] = (sbyte)direction;
-                    open.Enqueue(next, (total + Estimate(next), next));
-                }
-            }
-            // Unknown evidence or the window edge may hide a route; say so instead of reporting a proven blockage.
-            return (null, unknownFrontier ? "ROUTE_EVIDENCE_INCOMPLETE" : windowEdge ? "ROUTE_WINDOW_EXHAUSTED" : "ROUTE_NOT_FOUND");
-        }
-
-        private static NeighborDirection[] Backtrack(int[] parent, sbyte[] entered, int goal)
-        {
-            var steps = new List<NeighborDirection>();
-            for (var index = goal; parent[index] >= 0; index = parent[index]) steps.Add((NeighborDirection)entered[index]);
-            steps.Reverse();
-            return steps.ToArray();
-        }
+        internal RoutePlan Done(CellCoord from, RouteLimits limits, RouteOutcome outcome, RouteMethod? method, NeighborDirection[] steps, string reason, int expansions,
+            CellCoord? end = null) =>
+            new(from, end ?? target, outcome, method, reason, steps, limits.SegmentSteps, _verdicts.Count, expansions, _blocked, _unknown, _unsupported);
     }
 }

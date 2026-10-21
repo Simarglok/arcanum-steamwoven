@@ -63,8 +63,8 @@ public partial class TerrainViewerApp
                 // (ApproachCell); an object without one cannot be reached.
                 try { AreaSmokeStandable(map, cell, reach); }
                 catch (InvalidOperationException) { skipped.Add($"{candidate.Target.Entity}:no standable cell within reach"); continue; }
-                // A start a few cells away from which the planner finds a route to the cell the attack's approach will walk to (a
-                // start across a fence or wall from the object would leave the walk without a route).
+                // A start a few cells away from which the attack's approach finds a route (ARC-WORLD-073: the original's approach, one
+                // step short of the object; a start across a fence or wall from the object would leave the walk without a route).
                 CellCoord? start = null;
                 foreach (var (dx, dy) in new[] { (3, 0), (-3, 0), (0, 3), (0, -3), (2, 0), (-2, 0), (0, 2), (0, -2), (1, 0), (-1, 0), (0, 1), (0, -1) })
                 {
@@ -74,7 +74,7 @@ public partial class TerrainViewerApp
                     try { standable = AreaSmokeStandable(map, near, 1); } catch (InvalidOperationException) { continue; }
                     AreaSmokePlace(map, standable);
                     if (_worldActor.Session is not AreaGridSession live
-                        || ApproachCell(live, candidate.Target.Row.WorldX!.Value, candidate.Target.Row.WorldY!.Value, reach) is not { } approach) continue;
+                        || AttackApproachCell(live, candidate.Target.Row.WorldX!.Value, candidate.Target.Row.WorldY!.Value) is not { } approach) continue;
                     var routes = new AreaRouteSource(live.Snapshot, live.Chart, live.Occupancy, () => live.Portals?.Invoke());
                     if (approach != standable && Arcanum.Simulation.Navigation.RoutePlanner.Plan(routes, standable, approach).Outcome
                         != Arcanum.Simulation.Navigation.RouteOutcome.Found) continue;
