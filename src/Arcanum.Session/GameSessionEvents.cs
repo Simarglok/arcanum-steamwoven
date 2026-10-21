@@ -62,6 +62,8 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionWaitFiring> Waits { get; init; } = Array.Empty<SessionWaitFiring>();
     /// <summary>The respawning scenery switched on again (ARC-COMBAT-008), in firing order.</summary>
     public IReadOnlyList<SessionRespawnFiring> Respawns { get; init; } = Array.Empty<SessionRespawnFiring>();
+    /// <summary>The magic-tech events that came due (ARC-MAGIC-010), in firing order.</summary>
+    public IReadOnlyList<SessionSpellRunFiring> SpellRuns { get; init; } = Array.Empty<SessionSpellRunFiring>();
 }
 
 /// <summary>A respawn event that came due (ARC-COMBAT-008, ledger OD10): the scenery switched on again.</summary>
@@ -98,7 +100,8 @@ public static class SessionEventKinds
 {
     /// <summary>
     /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/>, ARC-WORLD-029 <see cref="HeroEffectEnd"/>, ARC-WORLD-050
-    /// <see cref="LockReset"/>, ARC-WORLD-045 <see cref="PartyWait"/> and ARC-COMBAT-008 <see cref="ObjectRespawn"/> without a new version:
+    /// <see cref="LockReset"/>, ARC-WORLD-045 <see cref="PartyWait"/>, ARC-COMBAT-008 <see cref="ObjectRespawn"/> and ARC-MAGIC-010
+    /// <see cref="SpellRun"/> (not saved) without a new version:
     /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
     /// </summary>
     public const int RegistryVersion = 1;
@@ -161,7 +164,7 @@ public static class SessionEventKinds
     /// <summary>Pending events a session holds: four timers for each NPC life record and three for the hero, so a life step
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events and the wait timers.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents;
     /// <summary>Pending Lock events a session holds (project policy; the original has no bound).</summary>
     public const int MaxLockResets = 1024;
 
@@ -173,6 +176,16 @@ public static class SessionEventKinds
     public const string ObjectRespawn = "object.respawn";
     /// <summary>Pending respawn events a session holds (project policy; the original has no bound).</summary>
     public const int MaxObjectRespawns = 1024;
+    /// <summary>
+    /// The original's magic-tech event (kind 5; ARC-MAGIC-010, ledger RP): a run's tick, interrupt or process
+    /// (<see cref="Arcanum.Simulation.Magic.SpellRunEventCode"/>). Global, any number. No entities; values: the game time it was
+    /// scheduled at, the run (0..511) and the code. Not saved: the session's runs are not saved either until MT9b, so a restored
+    /// session has neither.
+    /// </summary>
+    public const string SpellRun = "magic.run";
+    /// <summary>Pending magic-tech events a session holds (a budget: about a tick and an interrupt for each of the 512 runs; the
+    /// interrupts and process events are not deduplicated).</summary>
+    public const int MaxSpellRunEvents = 2 * Arcanum.Simulation.Magic.SpellRunTable.Slots;
     /// <summary>The longest respawn delay: the most negative respawn field in game minutes.</summary>
     public const long MaxRespawnDelayMs = 2_147_483_648L * 60_000L;
 
@@ -203,6 +216,10 @@ public static class SessionEventKinds
             new(ObjectRespawn, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
                 new ObjectRespawnHandler(owner),
                 Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= MaxRespawnDelayMs && payload.Entities[0].Code != AbsentRole),
+            new(SpellRun, GameEventDomain.Game, GameEventPersistence.NotSaved, GameEventUniqueness.Many, GameEventScopeRule.Global, 0, 3, 0, 0,
+                new SpellRunHandler(owner),
+                Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 0 and < Arcanum.Simulation.Magic.SpellRunTable.Slots
+                    && payload.Values[2] is >= 1 and <= 3),
         ]);
     }
 
@@ -302,6 +319,12 @@ internal sealed class ObjectRespawnHandler(SessionEventSink sink) : IGameEventHa
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireObjectRespawn(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class SpellRunHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireSpellRun(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class LockResetHandler(SessionEventSink sink) : IGameEventHandler

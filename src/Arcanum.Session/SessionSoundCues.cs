@@ -21,7 +21,9 @@ public static class SessionSoundCues
     /// adds it only for a held item. Null for an object that is not an item, or a held one whose adjustment or complexity is
     /// beyond the bound the equipment rules admit.</summary>
     /// <param name="holderAptitude">The holder's magick/tech aptitude, null for an item nobody holds.</param>
-    public static SoundItem? Item(ObjectSoundFields fields, int? holderAptitude = null)
+    /// <param name="ammoUnits">ARC-WORLD-066: an ammunition stack's units in the session (<see cref="GameSessionOwner.QueryAmmo"/>), which
+    /// a spend or a merge changed; null takes the data's quantity.</param>
+    public static SoundItem? Item(ObjectSoundFields fields, int? holderAptitude = null, int? ammoUnits = null)
     {
         ArgumentNullException.ThrowIfNull(fields);
         if (fields.Item is not { } item) return null;
@@ -32,7 +34,7 @@ public static class SessionSoundCues
                 return null;
             magic = EquipmentRules.AdjustMagic(item.MagicWeightAdjustment, item.MagickTechComplexity, aptitude);
         }
-        return new(fields.SoundEffect, fields.Material, SoundCueRules.ItemWeight(fields.Type, item.Weight, item.AmmoQuantity ?? 0, magic), item.UnknownDescription);
+        return new(fields.SoundEffect, fields.Material, SoundCueRules.ItemWeight(fields.Type, item.Weight, ammoUnits ?? item.AmmoQuantity ?? 0, magic), item.UnknownDescription);
     }
 
     /// <summary>A critter's sound facts; <paramref name="tileSound"/> is the class of the ground tile under it

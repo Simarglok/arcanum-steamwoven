@@ -161,9 +161,10 @@ public partial class TerrainViewerApp
         if (view.Button != AssemblyButton.CanAssemble) { _schematicMessage = view.ButtonText; Render(); return; }
         if (data.Catalog.Read(view.Record).Record is not { } record) return;
         var result = _schematicCrafter is { } crafter
-            ? _areaSession!.AssembleSchematicForNpc(_areaSession.Version, crafter, record, SchematicItems, data.Facts, data.Kind, AreaInventoryHost.DiagnosticInsertCheck)
+            ? _areaSession!.AssembleSchematicForNpc(_areaSession.Version, crafter, record, SchematicItems, data.Facts, data.Kind, AreaInventoryHost.DiagnosticInsertCheck,
+                data.AmmoOf)
             : _areaSession!.AssembleSchematic(_areaSession.Version, record, SchematicItems, data.Facts, data.Kind,
-                _inventoryHost?.InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck);
+                _inventoryHost?.InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck, data.AmmoOf);
         if (result.Disposition == GameSessionDisposition.Changed)
         {
             _schematicMessage = AreaSchematics.CompletedText(data, AreaHoverIndex.TextProfile);
