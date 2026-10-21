@@ -71,4 +71,4 @@ the port under the session's technology rules. None of them changes the session.
 - Writing a plan into session state (ARC-WORLD-066, ammunition in the session; it also takes the critical misses' "destroy" and
   "lose ammunition" outcomes).
 - An NPC payer's aptitude and stack (the host can build a `CellPayer` itself); the multiplayer client forward.
-- Which tech records reach the engine and the maintain test (ARC-TECHNOLOGY-008).
+- Which tech records reach the engine and the maintain test: done by ARC-TECHNOLOGY-008 ([tech devices](tech-devices-runtime.md)).
