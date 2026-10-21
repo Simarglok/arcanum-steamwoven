@@ -46,6 +46,20 @@ public sealed class AreaHoverTests
     }
 
     [TestMethod]
+    public void AnAdmittedRowIsPickedOnlyWhereAMovingCommandDrawsIt()
+    {
+        // ARC-RENDER-033: a placed item without a row of the map is admitted; it is picked where its moving command is drawn.
+        var index = new AreaHoverIndex([Row(0, 2)], [Body(0)], Catalog);
+        bool All(AreaDrawCommand command) => true;
+        Assert.AreEqual(Key(0), index.Pick(All, [Body(5)]), "an unknown key is not picked");
+        Assert.IsFalse(index.Contains(Key(5)));
+        index.Admit(Row(5, 5));
+        Assert.AreEqual(Key(5), index.Pick(All, [Body(5)]));
+        Assert.AreEqual(Key(0), index.Pick(All), "not from the plan");
+        Assert.IsNotNull(index.Name(Key(5)));
+    }
+
+    [TestMethod]
     public void NamesFollowTheExamineChainAndWallsShowNothing()
     {
         var rows = new[]
