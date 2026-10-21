@@ -218,6 +218,8 @@ public enum GameSessionFailure
     PickLockUnavailable, InvalidLockpick,
     // Repair (ARC-SKILLS-007).
     RepairUnavailable,
+    // Stealth (ARC-SKILLS-008).
+    ConcealmentUnavailable, InvalidConcealment,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -374,19 +376,20 @@ public sealed class GameSessionSnapshot
     /// Schema 29 adds the made items added to NPCs to <see cref="Inventory"/> (ARC-WORLD-055); schema 30 adds the PC's reputations to
     /// the story (ARC-WORLD-044); schema 31 adds the items' remaining uses to <see cref="Durability"/> (ARC-SKILLS-005); schema 32 adds
     /// the hero's items placed on the ground to <see cref="Inventory"/> (ARC-WORLD-059); schema 33 adds the waiting followers' missed
-    /// level steps to <see cref="Advancement"/> (ARC-WORLD-047). Schemas 1..32 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 33;
+    /// level steps to <see cref="Advancement"/> (ARC-WORLD-047); schema 34 adds the hero's and its followers' concealment
+    /// (<see cref="Concealment"/>, ARC-SKILLS-008). Schemas 1..33 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 34;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
         SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionEquipmentState equipment, SessionDurabilityState durability, SessionSchematicState schematics,
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
-        SessionEventState events, SessionLightingState? lighting, SessionSoundState sound)
+        SessionConcealmentState concealment, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Equipment = equipment; Durability = durability; Schematics = schematics; Effects = effects; Experience = experience; Advancement = advancement; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Events = events; Lighting = lighting; Sound = sound;
+        Hero = hero; Inventory = inventory; Equipment = equipment; Durability = durability; Schematics = schematics; Effects = effects; Experience = experience; Advancement = advancement; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Concealment = concealment; Events = events; Lighting = lighting; Sound = sound;
     }
 
     public int SchemaVersion { get; }
@@ -424,6 +427,8 @@ public sealed class GameSessionSnapshot
     public SessionCombatRound? Combat { get; }
     /// <summary>The hero's and the NPCs' combat-mode flags (ARC-COMBAT-004).</summary>
     public SessionCombatModeState CombatMode { get; }
+    /// <summary>The hero's and its followers' concealment (ARC-SKILLS-008).</summary>
+    public SessionConcealmentState Concealment { get; }
     /// <summary>The pending game events (ARC-WORLD-024).</summary>
     public SessionEventState Events { get; }
     /// <summary>Applied ambient lighting, or null when none was recorded (an unlit session).</summary>

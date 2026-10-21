@@ -82,7 +82,7 @@ public partial class TerrainViewerApp
 
     private string GaitSummary() => $"Always Run {(_alwaysRunOption ? "on" : "off")}, Num Lock run {(_numLockRun ? "on" : "off")}; "
         + $"next ground click {(EffectiveAlwaysRun(false) ? "runs" : "walks")} (Ctrl {(EffectiveAlwaysRun(true) ? "runs" : "walks")}), object clicks run; "
-        + $"current gait {_worldGait} ({_gaitOrigin})";
+        + $"current gait {_worldGait} ({_gaitOrigin}){StealthSummary()}{(_prowlNotice is null ? "" : " | " + _prowlNotice)}";
 
     private string GaitHudStatus() => $"Gait: {GaitSummary()}";
 }

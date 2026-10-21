@@ -81,8 +81,9 @@ public partial class TerrainViewerApp
     /// <summary>A new move starts its run counter at 0 (the source counts per move goal).</summary>
     private void ResetCombatRunSteps() => _combatRunSteps = 0;
 
-    /// <summary>The gait a step starts with: a hero out of fatigue walks (the source's step cost).</summary>
-    private MovementGait StepGait() => _worldGait == MovementGait.Run && HeroFatigue() is <= 0 ? MovementGait.Walk : _worldGait;
+    /// <summary>The gait a step starts with: a hero out of fatigue walks (the source's step cost), and a concealed hero runs only
+    /// as a master of prowling (ARC-SKILLS-008).</summary>
+    private MovementGait StepGait() => _worldGait == MovementGait.Run && (HeroFatigue() is <= 0 || !StealthAllowsRun()) ? MovementGait.Walk : _worldGait;
 
     private int? HeroFatigue() => _areaSession?.QueryHeroLife()?.Status.Fatigue;
 

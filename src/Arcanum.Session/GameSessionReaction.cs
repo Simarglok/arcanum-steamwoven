@@ -169,6 +169,8 @@ public sealed partial class GameSessionOwner
     public SessionReactionResult BeginReactionConversation(GameSessionVersion expected, string entity, ReactionNpcFacts npc)
     {
         ThrowIfDisposed();
+        // The concealment's end may need a revision of its own after an unchanged slot.
+        if (_revision == long.MaxValue && (_combat.HeroConcealed || _combat.Concealed.Contains(entity))) return RejectReaction(GameSessionFailure.RevisionExhausted);
         var force = _hero is { } hero && FateRules.IsArmed(hero.State.Fate, FateKind.ForceGoodReaction);
         var used = false;
         var result = StepReaction(expected, entity, npc, record =>
@@ -180,6 +182,13 @@ public sealed partial class GameSessionOwner
         // The raised start always changes the slot, so a used fate commits with it.
         if (used && result.Disposition == GameSessionDisposition.Changed)
             _hero!.Apply(_hero.State.WithFate(FateRules.Use(_hero.State.Fate, FateKind.ForceGoodReaction).After));
+        // ARC-SKILLS-008 (ST4): a dialog's start ends the concealment of the hero and of the NPC it talks to.
+        if (result.Disposition != GameSessionDisposition.Rejected && EndConcealmentForDialog(entity) && result.Disposition == GameSessionDisposition.NoChange)
+        {
+            if (_revision == long.MaxValue) throw new InvalidOperationException("No revision left for the concealment's end.");
+            _revision++;
+            result = result with { Disposition = GameSessionDisposition.Changed, Version = Version };
+        }
         return result;
     }
 

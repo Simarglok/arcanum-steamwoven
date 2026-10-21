@@ -500,5 +500,5 @@ public sealed class CompanionLoyaltyStateTests
         long? revision = null) => new(
         saved.SchemaVersion, saved.Identity, revision ?? saved.Revision, saved.Clock, saved.Flags, saved.Actor, saved.Maps.ToArray(), saved.Story, party,
         saved.Hero, saved.Inventory, saved.Equipment, saved.Durability, saved.Schematics, saved.Effects, saved.Experience, saved.Advancement,
-        saved.Random, saved.Life, saved.Reactions, saved.Combat, saved.CombatMode, events ?? saved.Events, saved.Lighting, saved.Sound);
+        saved.Random, saved.Life, saved.Reactions, saved.Combat, saved.CombatMode, saved.Concealment, events ?? saved.Events, saved.Lighting, saved.Sound);
 }

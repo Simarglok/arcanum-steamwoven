@@ -141,6 +141,7 @@ public partial class TerrainViewerApp
         _worldPanel.LightingToggleRequested += PaletteLightingToggle;
         _worldPanel.VisualToggleRequested += PaletteVisualToggle;
         _worldPanel.AlwaysRunToggleRequested += PaletteAlwaysRunToggle;
+        _worldPanel.ProwlToggleRequested += PaletteProwlToggle;
         _worldPanel.SoundTestRequested += PaletteSoundTest;
         _worldPanel.VolumeChanged += PaletteVolumeChanged;
         _worldPanel.OverlayToggled += SetPassabilityOverlay; _overlayPanelState = null;

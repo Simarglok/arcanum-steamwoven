@@ -460,6 +460,11 @@ public sealed partial class GameSessionOwner
             ClearUsedAttackFate(resolution.Fate);
             _revision++;
         }
+        // ARC-SKILLS-008 (ST4): the attack event on one of the hero's followers ends the concealment of the hero and all its
+        // followers, in the same revision as the fate's or one of its own.
+        if (resolution.Refusal == AttackRefusal.None && target.Target.Entity is { } victim && EndConcealmentForAttackOn(SessionCombatant.Critter(victim))
+            && resolution.Fate == FateUse.None)
+            _revision++;
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)
             return new(resolution.Fate != FateUse.None ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None,
                 resolution, null, null, null, null, GameSessionFailure.None, Version);
