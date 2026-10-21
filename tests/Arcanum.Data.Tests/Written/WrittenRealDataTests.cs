@@ -6,7 +6,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Arcanum.Data.Tests.Written;
 
 /// <summary>ARC-UI-049 opt-in check of the installed original (DAT_ROOT = the game folder): every written prototype's document
-/// resolves or is refused with a typed status. Counts only; no game text.</summary>
+/// is read or is a schematic document, with the census the ledger WR anomaly rows cite. Counts only; no game text.</summary>
 [TestClass]
 public sealed class WrittenRealDataTests
 {
@@ -19,8 +19,16 @@ public sealed class WrittenRealDataTests
         var texts = WrittenTexts.Open(stack);
         var prototypes = ContentPrototypes.Open(stack);
         var rows = new List<(int Prototype, CombatWrittenFields Written)>();
+        int useScripts = 0, otherScripts = 0, magical = 0;
         foreach (var number in prototypes.Numbers)
-            if (CombatFieldReader.ReadPrototype(prototypes.Read, number).Fields is { Written: { } written }) rows.Add((number, written));
+            if (CombatFieldReader.ReadPrototype(prototypes.Read, number).Fields is { Written: { } written } fields)
+            {
+                rows.Add((number, written));
+                if (fields.Object.ScriptPoints.Contains(1)) useScripts++;
+                else if (fields.Object.ScriptPoints.Count > 0) otherScripts++;
+                if (fields.Item is { SpellManaStore: not 0 } || (fields.Item?.Flags & 0x4) != 0) magical++;
+            }
+        Console.WriteLine($"with a use script {useScripts}, with other scripts only {otherScripts}, magical {magical}");
         var bySubtype = rows.GroupBy(r => r.Written.Subtype).OrderBy(g => g.Key).Select(g => $"{g.Key}:{g.Count()}");
         var statuses = rows.Select(r => texts.Read(r.Written.Subtype, r.Written.TextStartLine, r.Prototype == WrittenTexts.NewspaperAlternatePrototype))
             .ToArray();
@@ -35,8 +43,11 @@ public sealed class WrittenRealDataTests
         Console.WriteLine($"statuses {string.Join(" ", statuses.GroupBy(s => s.Status).Select(g => $"{g.Key}:{g.Count()}"))}; empty bodies {empty}");
         Console.WriteLine($"end-start spans min {spans.DefaultIfEmpty().Min()} max {spans.DefaultIfEmpty().Max()}; documents whose end line lies past what is shown {cut}; parsed documents with a font-0 message {noPrefix}");
         Console.WriteLine($"flags {string.Join(",", rows.Select(r => r.Written.Flags).Distinct())}; picture arts {string.Join(",", rows.Where(r => r.Written.Subtype == 4).Select(r => r.Written.TextStartLine))}");
-        foreach (var (row, doc) in rows.Zip(statuses).Where(p => p.First.Written.Subtype != 5))
-            Console.WriteLine($"ROW {row.Prototype} st{row.Written.Subtype} {row.Written.TextStartLine}..{row.Written.TextEndLine} body {doc.Body.Count} fonts {string.Join("/", doc.Body.Select(m => m.Font))} header {doc.Header.Count(h => h.Text.Length > 0)}/{doc.Header.Count}");
-        Assert.IsTrue(statuses.All(s => Enum.IsDefined(s.Status)));
+        Assert.AreEqual(0, texts.Refusals.Count, "every written text file loads");
+        Assert.IsTrue(rows.Count > 0, "the installation has written prototypes");
+        // No installed written prototype is crash class: every one is a document the window shows or a schematic document.
+        Assert.IsTrue(statuses.All(s => s.Status is WrittenReadStatus.Read or WrittenReadStatus.Schematic), "only read and schematic statuses");
+        Assert.IsTrue(statuses.All(s => s.Body.Count <= WrittenTexts.MessagesPerDocument), "at most ten messages a document");
+        Assert.IsTrue(statuses.Where(s => s.Subtype == WrittenSubtype.Newspaper).All(s => s.Header.Count == 6), "a newspaper's masthead has six entries");
     }
 }

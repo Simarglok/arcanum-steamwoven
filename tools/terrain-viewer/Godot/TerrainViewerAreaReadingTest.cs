@@ -163,3 +163,77 @@ public partial class TerrainViewerApp
         }
     }
 }
+
+public partial class TerrainViewerApp
+{
+    /// <summary>
+    /// ARC-UI-049 native observation on the original data: the module's written texts and written prototypes load through the content
+    /// stack; every readable written prototype's document builds a view; on a detached session whose synthetic hero holds the first
+    /// readable written prototype without a use script (one with text, a book first) and the first schematic document with a number (a template numbered 0
+    /// is refused under TC8 Steamwoven), the session uses both through the
+    /// inventory host's facts: the document registers (and is destroyed), the readable item gives its document; that document opens in
+    /// the production window over the live app (3008), a book turns a spread (3010), the window owns the keys and Escape closes it
+    /// (3009); the live session is untouched. Prints counts and outcomes only, no text of the original data.
+    /// </summary>
+    private async Task RunAreaReadingSmokeAsync()
+    {
+        static void Require(bool value, string why) { if (value) return; GD.Print("ARC-UI-049 native-smoke reading FAIL " + why); throw new InvalidOperationException("ARC-UI-049 reading smoke: " + why); }
+        if (_areaSession is not { } session || _inventoryHost is not { } inventory) { GD.Print("ARC-UI-049 native-smoke reading SKIP (no area session or inventory)"); return; }
+        for (var i = 0; i < 600 && _readingData is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptReadingData(); }
+        Require(_readingData is { Status: AreaReadingDataStatus.Ready, Data: not null }, "data " + _readingData?.Status + " " + _readingData?.Detail);
+        var data = _readingData!.Data!;
+        Require(data.Texts.Refusals.Count == 0, "text files refused: " + string.Join(",", data.Texts.Refusals.Select(r => $"{r.Path}:{r.Status}")));
+        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
+        _worldFocusSimulationForSelfTest = true; _worldFocused = true;
+        try
+        {
+            var revision = session.Version.Revision;
+            var readable = data.Prototypes.OrderBy(p => p.Key)
+                .Where(p => session.QueryWrittenDocument(p.Value, data.Texts) is { Readable: true }).ToArray();
+            var views = readable.Count(p => AreaReading.View(session.QueryWrittenDocument(p.Value, data.Texts), data.Texts, 0, AreaHoverIndex.TextProfile) is not null);
+            Require(readable.Length > 0 && views == readable.Length, $"readable {readable.Length}, views {views}");
+            // A use script or the item-spell path is refused here (not run): the first readable item without either, a book when there is one.
+            var plain = readable.Where(p => !p.Value.UseScript && !p.Value.ItemSpell).ToArray();
+            Require(plain.Length > 0, "no readable written prototype without a use script");
+            // A document with text first (template prototypes at start line 0 read empty), a book before the other kinds.
+            var chosen = plain.OrderBy(p => session.QueryWrittenDocument(p.Value, data.Texts).Body.Count == 0)
+                .ThenBy(p => p.Value.Subtype != (int)WrittenSubtype.Book).First();
+            var scripted = readable.Length - plain.Length;
+            var schematic = data.Prototypes.OrderBy(p => p.Key).First(p => p.Value.Subtype == (int)WrittenSubtype.Schematic && p.Value.TextStartLine > 0);
+
+            // The detached hero's kit: the readable item and the schematic document (kit items use their prototype's facts).
+            var actor = session.QueryActor();
+            var definition = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0,
+                null, null, 0, [new(new SessionItemKind(SessionItemType.Written, chosen.Key, 0, 0)), new(new SessionItemKind(SessionItemType.Written, schematic.Key, 0, 0))]);
+            var created = AreaTransitionCoordinator.CreateSession(session.QueryClockSnapshot().ProfileBinding, Guid.NewGuid(), Guid.NewGuid(),
+                new(actor.Cell.X, actor.Cell.Y), actor.Map.RuntimeMap,
+                new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, definition, 2352, 0, null, "synthetic"));
+            using var copy = created.Owner ?? throw new InvalidOperationException("ARC-UI-049 reading smoke: session " + created.Failure);
+            var itemEntity = copy.QueryHeroKit()[0].Entity; var documentEntity = copy.QueryHeroKit()[1].Entity;
+            var registered = copy.UseWrittenItem(copy.Version, documentEntity, inventory.WrittenFacts(copy, documentEntity, data)!.Value, data.Texts);
+            Require(registered is { Disposition: GameSessionDisposition.Changed, Reading: Arcanum.Simulation.Technology.SchematicReading.Registered, DocumentDestroyed: true }
+                && copy.QueryHeroFoundSchematics()!.Value.SequenceEqual([schematic.Value.TextStartLine]), $"the schematic document: {registered.Disposition} {registered.Failure} {registered.Reading}");
+            var used = copy.UseWrittenItem(copy.Version, itemEntity, inventory.WrittenFacts(copy, itemEntity, data)!.Value, data.Texts);
+            Require(used is { Disposition: GameSessionDisposition.NoChange, Document.Readable: true }, $"the readable item: {used.Disposition} {used.Failure} {used.Document?.Status}");
+
+            _readingSounds.Clear();
+            OpenReading(used.Document!, "smoke");
+            var view = _readingPanel?.ViewForSelfTest;
+            Require(ReadingOpen && WorldModal && view is not null && _readingSounds.Last() == BookOpenSound, "the window opened (3008)");
+            if (view!.HasNext) { InventoryKey(Key.Right); Require(_readingPanel!.ViewForSelfTest!.Spread == 1 && _readingSounds.Last() == BookPageSound, "Right turned a spread (3010)"); }
+            InventoryKey(Key.I);
+            Require(ReadingOpen && !InventoryOpen, "the open window owns the I key");
+            InventoryKey(Key.Escape);
+            Require(!ReadingOpen && _readingSounds.Last() == BookCloseSound, "Escape closed it (3009)");
+            Require(session.Version.Revision == revision, "the live session is untouched");
+            GD.Print("ARC-UI-049 native-smoke reading PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Data = _readingData.Detail, Readable = readable.Length, Views = views, WithUseScript = scripted, Item = chosen.Key, Subtype = view.Subtype.ToString(),
+                Spreads = view.Spreads, Body = used.Document!.Body.Count, Schematic = schematic.Key, Registered = registered.Schematic }));
+        }
+        finally
+        {
+            if (ReadingOpen) EndReading();
+            _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
+        }
+    }
+}
