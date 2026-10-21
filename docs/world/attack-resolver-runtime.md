@@ -150,7 +150,10 @@ target, or the attacker of a critical self-hit, which keeps the attack's locatio
 | The wearer's weapon (`WeaponDamage`, `DestroyWeapon`, `ExplodeWeapon`) | "Damage weapon" 10, then "destroy weapon" or "explode weapon" deletes it without a break; the session passes an invulnerable weapon by. A critter wearer only. These come from the critical-effect tables (FR-COMBAT-009, ARC-COMBAT-009), so they stay unreachable until those exist. |
 | The attacker's side (`AttackerWear`, `AttackerWearAmount`) | A melee attack (armed or bare-handed; never a throw, bow or firearm) that dealt damage (hit points above 0, or for a critter fatigue above 0): `CombatWearRules.WeaponWear` (0x4B5580) by the struck one's material, stone 4, brick 3, wood 2, plant 1, metal 5, fire 5, glass 5 bare-handed only, others 0; a weapon's wear then falls by `trunc(wear × min(|complexity|, 100) / 100)` and by 2 for art subtype 4 or 1 for subtypes 5 and 13 (`CombatWeapon.ArtSubtype`); bare hands hurt the attacker itself, never its last hit point (`HandsWear`). On an object target only while the hit left it whole (`AttackerWearNeedsWholeTarget`). No roll. |
 
-The material is `Combatant.Material`, now read for critters too (a stone golem wears a sword). The
+The material is `Combatant.Material`, now read for critters too (a stone golem wears a sword; an NPC whose
+stored material is outside the fourteen defends as flesh, which wears nothing, as in the original). The art
+subtype is item data the caller passes with the weapon (`CombatWeapon.ArtSubtype`; the session takes it from
+the host's `SessionWearItem` and saves none of it). The
 original applies the armour and critical weapon steps before the hit-point damage and the attacker's
 wear last, after death and experience; the session step keeps that order within the wear.
 

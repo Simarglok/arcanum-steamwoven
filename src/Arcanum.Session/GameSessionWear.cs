@@ -6,12 +6,31 @@ namespace Arcanum.Session;
 
 /// <summary>
 /// One item in a wear slot, for the wear step (ARC-COMBAT-007): its entity, its durability baseline
-/// (<see cref="SessionItemConditions.FromCombatFields"/>) and whether the object is invulnerable (object flag 0x400000), which only
-/// the critical weapon effects test: armour wear and the attacker's weapon wear do not.
+/// (<see cref="SessionItemConditions.FromCombatFields"/>), whether the object is invulnerable (object flag 0x400000), which only
+/// the critical weapon effects test (armour wear and the attacker's weapon wear do not), and a weapon's art subtype (bits 6..9 of
+/// its use-art fragment, 0..15), which the attacker's weapon wear reads (<see cref="CombatWeapon.ArtSubtype"/>). Like the baseline,
+/// these are the item's data, which the host passes at each attack; the session saves none of them. <see cref="FromCombatFields"/>
+/// builds one from an item's stored fields.
 /// </summary>
 public sealed record SessionWearItem(string Entity, ItemCondition Baseline)
 {
+    private const uint InvulnerableObject = 0x400000;
+
     public bool Invulnerable { get; init; }
+    public int ArtSubtype { get; init; }
+
+    /// <summary>The wear values of an item from its stored fields (ARC-DATA-021); null for an object that is not an item or a
+    /// condition outside the durability rules' bounds.</summary>
+    public static SessionWearItem? FromCombatFields(string entity, Arcanum.Data.Combat.CombatFields fields)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        if (fields.Item is not { } item || SessionItemConditions.FromCombatFields(fields) is not { } baseline) return null;
+        return new(entity, baseline)
+        {
+            Invulnerable = (fields.Object.Flags & InvulnerableObject) != 0,
+            ArtSubtype = fields.Weapon is null ? 0 : Arcanum.Data.Combat.CombatItemArt.Subtype(item.UseArtFragment),
+        };
+    }
 }
 
 /// <summary>
@@ -83,8 +102,9 @@ public sealed record SessionWearStep(SessionWearStepKind Kind, DamageRecipient W
 
 /// <summary>
 /// The result of <see cref="GameSessionOwner.ApplyAttackWear"/>: every step the resolution asked for, in order. A step that was
-/// refused (an item the session does not track, a full record budget, the revision) ends the wear with <see cref="StepFailure"/>;
-/// the steps before it stay applied, each being its own revision.
+/// refused (a full record budget, the revision) ends the wear: when steps before it changed something, they stay applied (each is its
+/// own revision), the wear is Changed and the refusal is <see cref="StepFailure"/>; when nothing changed, the wear is Rejected with
+/// that refusal as <see cref="Failure"/>.
 /// </summary>
 public sealed record SessionAttackWearResult(GameSessionDisposition Disposition, GameSessionFailure Failure, IReadOnlyList<SessionWearStep> Steps,
     GameSessionFailure StepFailure, GameSessionVersion Version);
@@ -101,10 +121,11 @@ public sealed partial class GameSessionOwner
     /// (<see cref="CombatWearRules.WearHands"/>, never the last one). The original applies the armour and critical weapon steps
     /// before the hit-point damage and the attacker's side after the damage, experience and death; the item and life domains do
     /// not read each other, so a caller that applies the damage first (as <see cref="AttackCritter"/> does) reaches the same state.
-    /// Refused before any change: an invalid side (no attacker critter, a hero side whose items are not exactly the hero's worn
-    /// items, an invalid entity or baseline, an entity in two slots, a weapon wear without the attacker's weapon, a broken critter
-    /// target, a life target the session cannot resolve: <see cref="GameSessionFailure.InvalidWear"/>), the version. No wear at all
-    /// is NoChange.
+    /// Refused before any change: an invalid side (no attacker critter, the same critter on both sides, a hero side whose items are
+    /// not exactly the hero's worn items, an NPC or object side naming an item of the hero's, items on a side that is no critter, an
+    /// invalid entity, baseline or art subtype, an entity in two slots, an item the session does not track or deleted, a weapon wear
+    /// without the attacker's weapon, armour or weapon steps on a wearer that is no critter, a broken critter target, a life target
+    /// the session cannot resolve: <see cref="GameSessionFailure.InvalidWear"/>), the version. No wear at all is NoChange.
     /// </summary>
     public SessionAttackWearResult ApplyAttackWear(GameSessionVersion expected, SessionAttackWear wear)
     {
@@ -122,20 +143,31 @@ public sealed partial class GameSessionOwner
     {
         if (attacker?.Life is null || target is null) return false;
         if (targetBroken && target.Life is not null) return false;
+        if (target.Life is null && target.Worn is not null) return false;
         if (Resolve(attacker.Life, out _, out _, out _) != GameSessionFailure.None ||
             (target.Life is not null && Resolve(target.Life, out _, out _, out _) != GameSessionFailure.None)) return false;
-        if (attacker.Life.IsHero && target.Life?.IsHero == true) return false;
-        if (wear is not null && wear.Wearer == DamageRecipient.Target && wear.WearerIsCritter != target.Life is not null) return false;
+        if (target.Life is not null && attacker.Life.IsHero == target.Life.IsHero &&
+            (attacker.Life.IsHero || string.Equals(attacker.Life.Entity, target.Life.Entity, StringComparison.Ordinal))) return false;
+        if (wear is not null)
+        {
+            var wearerIsCritter = wear.Wearer == DamageRecipient.Attacker || target.Life is not null;
+            if (wear.WearerIsCritter != wearerIsCritter) return false;
+            if (!wear.WearerIsCritter && (wear.ArmorDamage > 0 || wear.WeaponDamage > 0 || wear.DestroyWeapon)) return false;
+        }
         var entities = new HashSet<string>(StringComparer.Ordinal);
         foreach (var side in new[] { attacker, target })
         {
             if (side.Worn is not { } worn) continue;
+            var hero = side.Life!.IsHero;
             foreach (var (slot, item) in worn)
             {
                 if (!Enum.IsDefined(slot) || item is null || !SessionValidation.Entity(item.Entity) || !ItemDurabilityRules.IsValid(item.Baseline) ||
-                    !entities.Add(item.Entity)) return false;
+                    item.ArtSubtype is < 0 or > CombatWearRules.MaxArtSubtype || !entities.Add(item.Entity) || !TracksItem(item.Entity)) return false;
+                // An NPC never wears an item of the hero's.
+                if (!hero && (_equipment.SlotOf(item.Entity) is not null || _inventory.Kit.Any(held => held.Entity == item.Entity) ||
+                        _inventory.Pc.Any(held => held.Entity == item.Entity) || _inventory.Made.Any(held => held.Entity == item.Entity))) return false;
             }
-            if (side.Life?.IsHero == true && (_hero is null || worn.Count != _equipment.Worn.Count ||
+            if (hero && (_hero is null || worn.Count != _equipment.Worn.Count ||
                     _equipment.Worn.Any(pair => !worn.TryGetValue(pair.Key, out var item) || item.Entity != pair.Value.Entity))) return false;
         }
         return wear?.AttackerWear != AttackerWearKind.Weapon || attacker.Worn is null || attacker.Worn.ContainsKey(EquipmentSlot.Weapon);
@@ -203,6 +235,7 @@ public sealed partial class GameSessionOwner
                 changed |= life.Disposition == GameSessionDisposition.Changed;
             }
         }
+        if (!changed && failure != GameSessionFailure.None) return new(GameSessionDisposition.Rejected, failure, steps, GameSessionFailure.None, Version);
         return new(changed ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, steps, failure, Version);
     }
 

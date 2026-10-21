@@ -1,3 +1,4 @@
+using Arcanum.Data.Combat;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
@@ -41,9 +42,9 @@ public sealed class AttackWearStateTests
     private static SessionCritterCombat GolemCombat() =>
         SessionCritterCombat.From(Golem, AttackStateTests.Npc(material: 0, hpAdjustment: 5000, critterFlags: 0)).Combat!;
 
-    private static GameSessionOwner Owner()
+    private static GameSessionOwner Owner(GameSessionLimits? limits = null)
     {
-        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        var owner = GameSessionOwner.Create(Descriptor(limits) with { Hero = HalfElf() }).Owner!;
         var seed = new SessionMapInventorySeed(
             [new(Golem, SessionHolderKind.Npc, false, false, [], [.. GolemItems.Values.Select(item => item.Entity)])],
             [.. GolemItems.Select(pair => new SessionSeedItem(pair.Value.Entity,
@@ -100,12 +101,13 @@ public sealed class AttackWearStateTests
         Assert.AreEqual(ItemBreakStep.None, Single(Apply(owner, wear)).Item!.Value.Break, "a broken item reads as healthy again");
         Assert.AreEqual(ItemBreakStep.Deleted, Single(Apply(owner, wear)).Item!.Value.Break);
         Assert.IsTrue(owner.IsItemDestroyed("golem-vest"));
-        Assert.AreEqual(SessionWearSkip.ItemDeleted, Single(Apply(owner, wear), GameSessionDisposition.NoChange).Skip);
+        Assert.AreEqual(GameSessionFailure.InvalidWear, Apply(owner, wear).Failure, "a deleted item is no longer worn");
+        var left = GolemItems.Where(pair => pair.Key != EquipmentSlot.Armor).ToDictionary(pair => pair.Key, pair => pair.Value);
 
         // Every location strikes its own piece; an empty slot wears nothing.
         foreach (var (slot, entity) in new[] { (EquipmentSlot.Helmet, "golem-helmet"), (EquipmentSlot.Gauntlets, "golem-gloves"), (EquipmentSlot.Boots, "golem-boots") })
-            Assert.AreEqual(entity, Single(Apply(owner, Wear(slot: slot, armor: 10))).Entity);
-        var bare = Single(Apply(owner, wear, target: GolemSide(new Dictionary<EquipmentSlot, SessionWearItem>())), GameSessionDisposition.NoChange);
+            Assert.AreEqual(entity, Single(Apply(owner, Wear(slot: slot, armor: 10), target: GolemSide(left))).Entity);
+        var bare = Single(Apply(owner, wear, target: GolemSide(left)), GameSessionDisposition.NoChange);
         Assert.AreEqual((SessionWearSkip.NoItem, (string?)null), (bare.Skip, bare.Entity));
     }
 
@@ -132,7 +134,57 @@ public sealed class AttackWearStateTests
         Assert.AreEqual(ItemBreakStep.Broken, both.Steps[0].Item!.Value.Break);
         Assert.AreEqual(ItemBreakStep.Deleted, both.Steps[1].Item!.Value.Break);
         Assert.IsTrue(owner.IsItemDestroyed("golem-sword"));
-        Assert.AreEqual(SessionWearSkip.ItemDeleted, Single(Apply(owner, Wear(destroy: true)), GameSessionDisposition.NoChange).Skip);
+        Assert.AreEqual(GameSessionFailure.InvalidWear, Apply(owner, Wear(destroy: true)).Failure, "a deleted weapon is no longer wielded");
+    }
+
+    [TestMethod]
+    public void ACriticalSelfHitWearsTheAttackersOwnArmourAndWeapon()
+    {
+        using var owner = Owner();
+        var mail = new EquipmentItem { Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor { Coverage = ArmorCoverage.Torso, Sizes = ArmorSizes.Medium } };
+        Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, Blade),
+            (_, _) => true, Accept).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:2", EquipmentSlot.Armor, new(Kit[1].Kind, [], false, mail),
+            (_, _) => true, Accept).Failure);
+        var self = Wear(DamageRecipient.Attacker, slot: EquipmentSlot.Armor, armor: 10, weapon: 10, destroy: true, kind: AttackerWearKind.Weapon, amount: 4);
+        var result = Apply(owner, self);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.StepFailure));
+        CollectionAssert.AreEqual(new[] { SessionWearStepKind.Armor, SessionWearStepKind.WeaponDamage, SessionWearStepKind.WeaponDestroy, SessionWearStepKind.AttackerWeapon },
+            result.Steps.Select(step => step.Kind).ToArray());
+        CollectionAssert.AreEqual(new[] { "kit:2", "kit:1", "kit:1", "kit:1" }, result.Steps.Select(step => step.Entity).ToArray(), "the hero's own items");
+        Assert.IsTrue(result.Steps.Take(3).All(step => step.Wearer == DamageRecipient.Attacker && step.Skip == SessionWearSkip.None));
+        Assert.AreEqual(SessionWearSkip.ItemDeleted, result.Steps[3].Skip, "the destroyed weapon wears no more (no-crash rule)");
+        Assert.AreEqual(new ItemCondition(20, 0, 10, false), owner.QueryItemCondition("kit:2", new(20, 0, 0, false)));
+        Assert.IsTrue(owner.IsItemDestroyed("kit:1"));
+        CollectionAssert.AreEqual(new[] { EquipmentSlot.Armor }, owner.QueryEquipment().Worn.Select(worn => worn.Slot).ToArray());
+        // The golem's items were not touched.
+        Assert.AreEqual(0, owner.QueryDurability().Items.Count(item => item.Entity.StartsWith("golem", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void AnNpcAttackerWearsItsOwnWeapon()
+    {
+        using var owner = Owner();
+        var step = Single(Apply(owner, Wear(kind: AttackerWearKind.Weapon, amount: 3), attacker: GolemSide(), target: HeroSide(owner)));
+        Assert.AreEqual((SessionWearStepKind.AttackerWeapon, DamageRecipient.Attacker, "golem-sword", 3), (step.Kind, step.Wearer, step.Entity, step.Amount));
+        Assert.AreEqual(Fifteen with { Damage = 3 }, owner.QueryItemCondition("golem-sword", Fifteen));
+        Assert.AreEqual(GameSessionFailure.InvalidWear, Apply(owner, Wear(kind: AttackerWearKind.Weapon, amount: 3),
+            attacker: GolemSide(new Dictionary<EquipmentSlot, SessionWearItem>()), target: HeroSide(owner)).Failure, "no weapon to wear");
+    }
+
+    [TestMethod]
+    public void WearValuesComeFromAnItemsStoredFields()
+    {
+        var weapon = new CombatWeaponFields(CombatWeaponFlags.None, CombatWeaponSkill.Melee, 0, 0, [new(1, 4), new(0, 0), new(0, 0), new(0, 0), new(0, 0)],
+            [0, 0, 0, 0, 0], 11, 0, 1, 0, 7, 0, CombatFieldReader.NoAmmo, 0, 0, 0, 0, 0, 0, 0);
+        CombatFields Stored(uint objectFlags, uint useArt, CombatWeaponFields? w) => new(CombatFieldOrigin.Prototype,
+            new(5, 6000, objectFlags, 0, 1, 2, 0, 30, 5, 7, 0, [0, 0, 0, 0, 0], 0x60000000),
+            new(0, 10, 50, 0, 40, 0, -1, [10000, 10000, 10000, 10000, 10000], 0, 0, 0x60000000, useArt), w, null, null, w is null ? new(0, 0, 0) : null, null, null);
+        var sword = SessionWearItem.FromCombatFields("s", Stored(0x400000, 0x60000000 | 4 << 6, weapon))!;
+        Assert.AreEqual(("s", new ItemCondition(30, 5, 7, false), true, 4), (sword.Entity, sword.Baseline, sword.Invulnerable, sword.ArtSubtype));
+        var torch = SessionWearItem.FromCombatFields("t", Stored(0, 0x60000000 | 4 << 6, null))!;
+        Assert.AreEqual((false, 0), (torch.Invulnerable, torch.ArtSubtype), "only a weapon's subtype is read");
+        Assert.IsNull(SessionWearItem.FromCombatFields("g", AttackStateTests.Npc()), "a critter is no item");
     }
 
     [TestMethod]
@@ -212,14 +264,20 @@ public sealed class AttackWearStateTests
     [TestMethod]
     public void AStepTheDurabilityOwnerRefusesEndsTheWearAndKeepsTheStepsBefore()
     {
-        using var owner = Owner();
-        var stray = new Dictionary<EquipmentSlot, SessionWearItem>(GolemItems) { [EquipmentSlot.Weapon] = new("elsewhere", Fifteen) };
-        var result = Apply(owner, Wear(armor: 10, weapon: 10, kind: AttackerWearKind.Hands, amount: 3), target: GolemSide(stray));
-        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, GameSessionFailure.ItemNotAvailable),
+        // One durability record at most: the armour takes it, the weapon step is refused.
+        using var owner = Owner(new GameSessionLimits(maxDurabilityRecords: 1));
+        var result = Apply(owner, Wear(armor: 10, weapon: 10, kind: AttackerWearKind.Hands, amount: 3));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, GameSessionFailure.BudgetExceeded),
             (result.Disposition, result.Failure, result.StepFailure));
         CollectionAssert.AreEqual(new[] { SessionWearStepKind.Armor, SessionWearStepKind.WeaponDamage }, result.Steps.Select(step => step.Kind).ToArray());
         Assert.AreEqual(Fifteen with { Damage = 10 }, owner.QueryItemCondition("golem-vest", Fifteen));
         Assert.AreEqual(0, owner.QueryHeroLife()!.Record.State.HitPointDamage, "the hands step did not run");
+
+        // A refusal of the first step changes nothing: the wear is Rejected with it.
+        var first = Apply(owner, Wear(weapon: 10));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, GameSessionFailure.None),
+            (first.Disposition, first.Failure, first.StepFailure));
+        Assert.AreEqual(1, first.Steps.Count);
     }
 
     [TestMethod]
@@ -255,6 +313,22 @@ public sealed class AttackWearStateTests
         Refused(GameSessionFailure.InvalidWear, target: GolemSide(new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Helmet] = new("kit:1", Fifteen) }));
         Refused(GameSessionFailure.InvalidWear, target: GolemSide(new Dictionary<EquipmentSlot, SessionWearItem> { [(EquipmentSlot)999] = new("x", Fifteen) }));
         Refused(GameSessionFailure.InvalidWear, target: GolemSide(new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Helmet] = new("bad id!", Fifteen) }));
+        Refused(GameSessionFailure.InvalidWear, target: GolemSide(new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Helmet] = new("elsewhere", Fifteen) }));
+        Refused(GameSessionFailure.InvalidWear, target: GolemSide(new Dictionary<EquipmentSlot, SessionWearItem>(GolemItems)
+        {
+            [EquipmentSlot.Weapon] = GolemItems[EquipmentSlot.Weapon] with { ArtSubtype = 16 },
+        }));
+        // An NPC never wears the hero's items, even when the hero's side passes none.
+        Refused(GameSessionFailure.InvalidWear, attacker: new SessionWearSide { Life = SessionLifeTarget.Hero },
+            target: GolemSide(new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Helmet] = new("kit:2", Fifteen) }), with: Wear(armor: 10));
+        // An object carries no worn items, and only a critter wearer takes armour or weapon steps.
+        Refused(GameSessionFailure.InvalidWear, target: new SessionWearSide { Worn = new Dictionary<EquipmentSlot, SessionWearItem>() },
+            with: Wear(critter: false));
+        Refused(GameSessionFailure.InvalidWear, target: new SessionWearSide(), with: Wear(critter: false, armor: 10));
+        Refused(GameSessionFailure.InvalidWear, target: new SessionWearSide(), with: Wear(critter: false, destroy: true));
+        // The same critter on both sides.
+        Refused(GameSessionFailure.InvalidWear, attacker: GolemSide(new Dictionary<EquipmentSlot, SessionWearItem>()),
+            target: GolemSide(new Dictionary<EquipmentSlot, SessionWearItem>()), with: Wear(armor: 10));
         Refused(GameSessionFailure.InvalidWear, target: new SessionWearSide { Worn = GolemItems }, with: wear);
         Refused(GameSessionFailure.InvalidWear, target: HeroSide(owner), with: Wear(kind: AttackerWearKind.Hands, amount: 1));
         Refused(GameSessionFailure.InvalidWear, attacker: GolemSide(new Dictionary<EquipmentSlot, SessionWearItem>()), target: HeroSide(owner));
@@ -274,7 +348,8 @@ public sealed class AttackWearStateTests
             (_, _) => true, Accept).Failure);
         var golem = GolemCombat();
         var blade = new ItemCondition(1000, 0, 0, false);
-        var heroWorn = new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Weapon] = new("kit:1", blade) };
+        // Art subtype 4 wears 2 less: stone 4 − 2.
+        var heroWorn = new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Weapon] = new("kit:1", blade) { ArtSubtype = 4 } };
         var big = GolemItems.ToDictionary(pair => pair.Key, pair => pair.Value with { Baseline = new(1000, 0, 0, false) });
         SessionAttackResult? hit = null;
         for (var attempt = 0; attempt < 400 && hit is null; attempt++)
@@ -282,15 +357,15 @@ public sealed class AttackWearStateTests
             var result = owner.AttackCritter(owner.Version, new(golem) { HeroWorn = heroWorn, TargetWorn = big });
             Assert.AreEqual((GameSessionFailure.None, GameSessionFailure.None), (result.Failure, result.StepFailure));
             if (result.Recipient == DamageRecipient.Target && result.Life!.HitPointDamage > 0) hit = result;
-            else if (result.Resolution!.Damage is null) Assert.IsNull(result.Wear?.Steps.FirstOrDefault(), "a miss wears nothing");
+            else if (result.Resolution!.Damage is null) Assert.IsNull(result.Wear, "a miss wears nothing");
         }
         Assert.IsNotNull(hit, "a hit within the bounded run");
         var slot = CombatWearRules.ArmorSlot(hit!.Resolution!.HitLocation);
         var steps = hit.Wear!.Steps;
         Assert.AreEqual((SessionWearStepKind.Armor, (EquipmentSlot?)slot, big[slot].Entity, 10), (steps[0].Kind, steps[0].Slot, steps[0].Entity, steps[0].Amount),
             "the damage-armour blade wears the golem's armour at the hit location");
-        Assert.AreEqual((SessionWearStepKind.AttackerWeapon, "kit:1", 4), (steps[^1].Kind, steps[^1].Entity, steps[^1].Amount), "stone wears the blade by 4");
-        Assert.IsTrue(owner.QueryItemCondition("kit:1", blade)!.Value.Damage >= 4);
+        Assert.AreEqual((SessionWearStepKind.AttackerWeapon, "kit:1", 2), (steps[^1].Kind, steps[^1].Entity, steps[^1].Amount), "stone wears the blade by 4 − 2");
+        Assert.IsTrue(owner.QueryItemCondition("kit:1", blade)!.Value.Damage >= 2);
 
         // A refusal comes before any roll.
         var draws = owner.QueryRandom().Draws;

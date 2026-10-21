@@ -63,6 +63,9 @@ public sealed class AttackStateTests
         var status = new LifeStatus(10, 10, 10, 10, false, false, true);
         Assert.AreEqual(ObjectMaterial.Flesh, human.Combatant(status, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven).Material);
         Assert.AreEqual(ObjectMaterial.Stone, Combat(Npc(material: 0)).Combatant(status, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven).Material);
+        // A material outside the fourteen wears nothing in the original, as flesh does.
+        foreach (var odd in new[] { 14, -1, 255 })
+            Assert.AreEqual(ObjectMaterial.Flesh, Combat(Npc(material: odd)).Combatant(status, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven).Material);
     }
 
     [TestMethod]
@@ -108,8 +111,6 @@ public sealed class AttackStateTests
         var skills = new int[12]; skills[1] = int.MinValue;
         Assert.AreEqual(SessionCritterCombatFailure.InvalidCombatValues, SessionCritterCombat.From(Rat, Npc(skills: skills)).Failure);
         Assert.AreEqual(SessionCritterCombatFailure.InvalidCombatValues, SessionCritterCombat.From(Rat, Npc(ac: -2_000_000)).Failure);
-        Assert.AreEqual(SessionCritterCombatFailure.InvalidCombatValues, SessionCritterCombat.From(Rat, Npc(material: 14)).Failure, "ARC-COMBAT-007");
-        Assert.AreEqual(SessionCritterCombatFailure.InvalidCombatValues, SessionCritterCombat.From(Rat, Npc(material: -1)).Failure);
         // An item in the weapon slot that is no wearable weapon.
         var odd = new CombatFields(CombatFieldOrigin.AreaObject, new CombatObjectFields(14, 5000, 0, 0, 0, 0, 0, 10, 0, 0, 4, [0, 0, 0, 0, 0], 0),
             new CombatItemFields(0, 1, 1, 0, 0, 0, 1004, [10000, 10000, 10000, 10000, 10000], 0, 0, 0, 0), null, null, null,
