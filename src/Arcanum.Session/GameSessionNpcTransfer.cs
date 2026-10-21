@@ -1,7 +1,7 @@
 namespace Arcanum.Session;
 
 /// <summary>
-/// ARC-WORLD-071: NPC gold as counted piles and the moves between the hero and a living NPC that the pick-pocket skill (task S15) and the
+/// ARC-WORLD-071: NPC gold as counted piles and the moves between the hero and an NPC that the pick-pocket skill (task S15) and the
 /// barter window (ARC-UI-050) share, read in the executable (ledger NT1–NT4): gold coins in part (0x464830), an item of the hero's into an
 /// NPC's list and back (0x4617F0 → 0x461CA0), and ammunition units in part (0x4658E0, AM4). No prices and no skill: the caller decides how
 /// many coins or units move. Each call is one revision or refused before any effect. Contract: docs/world/inventory-runtime.md.
@@ -10,7 +10,8 @@ public sealed partial class GameSessionOwner
 {
     /// <summary>The coins of the NPC's gold pile (its first pile in list order, the pile the original's field 0xE8 names after an
     /// insertion, AM2): its seed pile's coins or the tracked ones, or a pile the session created; 0 without a pile. Null for an NPC the
-    /// session does not know. Throws for an invalid entity id.</summary>
+    /// session does not know. A second pile (a made pile added while a seed with its own pile was not attached) is not counted until the
+    /// first is gone. Throws for an invalid entity id.</summary>
     public int? QueryNpcGold(string npc)
     {
         ThrowIfDisposed();
@@ -160,7 +161,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// Moves an item of a living NPC's current list on the actor's map to the hero (0x4617F0 with the hero as the new parent, NT2, NT3), as
+    /// Moves an item of an NPC's current list in the actor's map seed (alive or not: life is the caller's concern) to the hero (0x4617F0 with the hero as the new parent, NT2, NT3), as
     /// a steal or a purchase does: a seed item, a made item the session added to it, or an item the hero gave it (which returns to the list
     /// it came from). The item rules and the commit are <see cref="LootItem"/>'s (the insert check, the Technophobia refusal, the
     /// insert-item script, the ammunition merge), without its dead-holder and use-script conditions. Refused before any effect: an invalid
@@ -209,6 +210,8 @@ public sealed partial class GameSessionOwner
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
+        // A stack that goes at its last unit leaves the NPC's list: a seed stack with a remove-item script is refused, as a take of it is.
+        if (source.Units == count && SeedListing(npc, stack)?.Facts.HasScript(SessionScriptPoint.RemoveItem) == true) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         var into = HeroStackOfType(source.AmmoType);
         return MoveUnits(source, count, into, into is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null);
     }
@@ -246,9 +249,10 @@ public sealed partial class GameSessionOwner
     {
         var emptied = source.Units == count;
         if (into is { } target && (long)target.Units + count > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
-        if (emptied ? !_durability.Records.ContainsKey(source.Entity) && _durability.Count >= _limits.MaxDurabilityRecords
-            : !_inventory.Ammo.ContainsKey(source.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
-        if (into is { } grown && !_inventory.Ammo.ContainsKey(grown.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (emptied && !_durability.Records.ContainsKey(source.Entity) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        // The records this move adds: the source's rest when untracked, the destination's (a new stack, or an untracked one that grows).
+        var added = (emptied || _inventory.Ammo.ContainsKey(source.Entity) ? 0 : 1) + (into is { } grown ? _inventory.Ammo.ContainsKey(grown.Entity) ? 0 : 1 : 1);
+        if (_inventory.Ammo.Count + added > _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         string destination;
         SessionInsertVerdict? verdict = null;
@@ -274,7 +278,7 @@ public sealed partial class GameSessionOwner
     // complexity), its units recorded.
     private (SessionMadeItem? Created, InventoryMutationResult? Refusal) NewHeroStack(SessionItemKind kind, int ammoType, int units, SessionInsertCheck insertCheck)
     {
-        if (_inventory.Held >= _limits.MaxPcItems || _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return (null, RejectItem(GameSessionFailure.BudgetExceeded));
+        if (_inventory.Held >= _limits.MaxPcItems) return (null, RejectItem(GameSessionFailure.BudgetExceeded));
         var number = NextMadeNumber();
         if (number > int.MaxValue) return (null, RejectItem(GameSessionFailure.BudgetExceeded));
         var item = new SessionMadeItem(SessionMadeItem.EntityOf((int)number), kind);
@@ -290,7 +294,6 @@ public sealed partial class GameSessionOwner
 
     private (SessionMadeItem? Created, InventoryMutationResult? Refusal) NewNpcStack(string npc, SessionItemKind kind, int ammoType, int units, SessionInsertCheck insertCheck)
     {
-        if (_inventory.Ammo.Count >= _limits.MaxAmmoRecords) return (null, RejectItem(GameSessionFailure.BudgetExceeded));
         var created = NewNpcEntry(npc, kind, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units }, insertCheck, out var refusal);
         if (created is null) return (null, refusal);
         _inventory.Ammo[created.Value.Entity] = new(created.Value.Entity, ammoType, units);
@@ -302,6 +305,8 @@ public sealed partial class GameSessionOwner
     private SessionMadeItem? NewNpcEntry(string npc, SessionItemKind kind, SessionItemFacts facts, SessionInsertCheck insertCheck, out InventoryMutationResult? refusal)
     {
         refusal = null;
+        // The new object moves in through 0x4617F0, whose first step is the NPC's transfer script (NT2): not run here.
+        if (NpcHasScript(npc, SessionScriptPoint.Transfer)) { refusal = RejectItem(GameSessionFailure.HolderScriptUnsupported); return null; }
         if (_inventory.AddedTo(npc).Count + SeedItemCount(npc) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
         {
             refusal = RejectItem(GameSessionFailure.BudgetExceeded);

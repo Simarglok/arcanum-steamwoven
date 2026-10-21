@@ -2511,8 +2511,11 @@ Anomalies:
   **Decided** (owner, 2026-10-21): a switch, `ItemRuleProfile.ContainerStackLookupFails` (ARC-TECHNOLOGY-009): Steamwoven finds the
   container's first stack of the type (a device in a container pays from its cells through `ContainerCellSource`, a spend from a
   container through `SpendAmmo`); Original keeps the failed lookup. Gold is not modelled; the same fix will apply to it.
-- AMA6 (AM4): a source without a stack still credits the destination. The session's spend has no destination (transfers of units
-  between holders are not modelled), so it does not arise.
+- AMA6 (AM4, NT1): a source without a stack (or, for gold, a pile) still credits the destination. Since ARC-WORLD-071 the session
+  moves units and coins between the hero and an NPC from a named ammunition stack or the NPC's first gold pile, and a source without one
+  is refused in both settings (`ItemNotAvailable` for ammunition, `GoldShort` for gold): nothing is credited from nothing. Unreachable
+  from the planned callers (a steal moves from the dragged pile or stack, PP3; a sale's price is capped at the merchant's gold, NT4).
+  **Proposed** (ARC-WORLD-071): no switch while no caller reaches it; to be decided by the owner if one does.
 
 ## NPC gold and transfers (ARC-WORLD-071)
 

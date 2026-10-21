@@ -734,8 +734,11 @@ public sealed partial class GameSessionOwner : IDisposable
         ThrowIfDisposed();
         if (!SessionValidation.Map(map)) return Reject(GameSessionFailure.InvalidMap);
         if (InventoryDomain.Validate(seed) is not { } admitted) return Reject(GameSessionFailure.InvalidInventorySeed);
+        // ARC-WORLD-071: a taken item the hero gave an NPC keeps its origin map, with the kind its NPC entry holds.
         foreach (var item in _inventory.Pc.Select(pc => (pc.Entity, pc.Origin, pc.Kind))
-                     .Concat(_inventory.Placed.Where(p => p.Origin is not null).Select(p => (p.Entity, Origin: p.Origin!.Value, p.Kind))))
+                     .Concat(_inventory.Placed.Where(p => p.Origin is not null).Select(p => (p.Entity, Origin: p.Origin!.Value, p.Kind)))
+                     .Concat(_inventory.Given.Values.Where(g => g.Origin is not null)
+                         .Select(g => (g.Entity, Origin: g.Origin!.Value, _inventory.AddedTo(_inventory.NpcOf(g.Entity)!).First(e => e.Entity == g.Entity).Kind))))
         {
             var listed = admitted.Items.TryGetValue(item.Entity, out var row);
             if (item.Origin == map ? !listed || row!.Facts.Kind != item.Kind : listed) return Reject(GameSessionFailure.InventoryMismatch);
@@ -743,6 +746,9 @@ public sealed partial class GameSessionOwner : IDisposable
         // Kit and made items came from no map, so no seed may list them; the made: prefix is the session's own.
         if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity)) ||
             _inventory.Placed.Any(item => item.Origin is null && admitted.Items.ContainsKey(item.Entity)) ||
+            _inventory.Given.Values.Any(item => item.Origin is null && admitted.Items.ContainsKey(item.Entity)) ||
+            // ARC-WORLD-071: a tracked pile the seed lists is a gold pile.
+            _inventory.Piles.Keys.Any(entity => admitted.Items.TryGetValue(entity, out var listed) && listed.Facts.Kind.Type != SessionItemType.Gold) ||
             admitted.Items.Keys.Any(entity => entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)))
             return Reject(GameSessionFailure.InventoryMismatch);
         // ARC-WORLD-055: a holder that holds added items is an NPC, not a container, and its seed items and added items fit one list.
@@ -1669,7 +1675,8 @@ public sealed partial class GameSessionOwner : IDisposable
         string? lastPile = null;
         foreach (var pile in saved.Piles)
         {
-            if (!SessionValidation.Entity(pile.Entity) || lastPile is not null && string.CompareOrdinal(lastPile, pile.Entity) >= 0 || pile.Quantity < 0 ||
+            // A move that empties a pile destroys it, so a tracked pile holds a coin or more.
+            if (!SessionValidation.Entity(pile.Entity) || lastPile is not null && string.CompareOrdinal(lastPile, pile.Entity) >= 0 || pile.Quantity < 1 ||
                 destroyed.Contains(pile.Entity)) return GameSessionFailure.InvalidSnapshot;
             lastPile = pile.Entity;
             inventory.Piles[pile.Entity] = pile.Quantity;
@@ -1726,7 +1733,7 @@ public sealed partial class GameSessionOwner : IDisposable
         foreach (var item in inventory.Given.Values)
             if (inventory.NpcOf(item.Entity) is null || item.Origin is null && HeroDomain.KitNumber(item.Entity) > kitNumbers) return GameSessionFailure.InvalidSnapshot;
         foreach (var entity in inventory.Piles.Keys)
-            if (inventory.Kit.Exists(item => item.Entity == entity) || inventory.Pc.Exists(item => item.Entity == entity) || inventory.Made.Exists(item => item.Entity == entity) ||
+            if (SessionMadeItem.Number(entity) is not null && inventory.NpcOf(entity) is null || inventory.Kit.Exists(item => item.Entity == entity) || inventory.Pc.Exists(item => item.Entity == entity) || inventory.Made.Exists(item => item.Entity == entity) ||
                 inventory.PlacedItem(entity) is not null || inventory.NpcOf(entity) is { } holder && inventory.AddedTo(holder).First(item => item.Entity == entity).Kind.Type != SessionItemType.Gold)
                 return GameSessionFailure.InvalidSnapshot;
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.

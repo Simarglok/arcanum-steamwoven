@@ -110,8 +110,12 @@ public sealed class NpcTransferStateTests
         StringAssert.Contains(text, "\"given\":[{\"entity\":\"kit:1\",\"origin\":0}]");
         using (var restored = Restore(Decode(text), RestoreOptions()))
             CollectionAssert.AreEqual(new[] { "kit:2", "kit:3" }, restored.QueryHeroKit().Select(item => item.Entity).ToArray());
+        // A given record whose item is in no NPC's list (kit:2 is still in the hero's kit).
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(text.Replace("\"given\":[{\"entity\":\"kit:1\",\"origin\":0}]",
-            "\"given\":[{\"entity\":\"kit:1\",\"origin\":0},{\"entity\":\"kit:9\",\"origin\":0}]")), RestoreOptions()).Failure);
+            "\"given\":[{\"entity\":\"kit:1\",\"origin\":0},{\"entity\":\"kit:2\",\"origin\":0}]")), RestoreOptions()).Failure);
+        // A given kit item past the kit's numbers, though in an NPC's list.
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(text.Replace("\"entity\":\"kit:1\",\"origin\":0}]", "\"entity\":\"kit:9\",\"origin\":0}]")
+            .Replace("{\"entity\":\"kit:1\",\"type\"", "{\"entity\":\"kit:9\",\"type\"")), RestoreOptions()).Failure);
 
         // Taking it back from the living NPC returns it to the kit at its number's place.
         Changed(owner.TakeItemFromNpc(owner.Version, "virgil", "kit:1", Accept), "kit:1");
@@ -141,6 +145,65 @@ public sealed class NpcTransferStateTests
     }
 
     [TestMethod]
+    public void Reduced_and_made_piles_and_a_given_taken_item_survive_a_save_and_restore_checks_them()
+    {
+        using var owner = Hero();
+        Changed(owner.TakeGoldFromNpc(owner.Version, "merchant", 2));
+        Changed(owner.GiveGoldToNpc(owner.Version, "virgil", 7, GoldPile, Accept), "made:1");
+        Changed(owner.TakeItemFromNpc(owner.Version, "virgil", "sword", Accept));
+        Changed(owner.GiveItemToNpc(owner.Version, "merchant", "sword", Accept));
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        StringAssert.Contains(text, "\"given\":[{\"entity\":\"sword\",\"origin\":79}],\"piles\":[{\"entity\":\"coins\",\"coins\":3},{\"entity\":\"made:1\",\"coins\":7}]");
+        using (var restored = Restore(Decode(text), RestoreOptions()))
+        {
+            Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, Seed()).Failure);
+            Assert.AreEqual((3, 7, 380), (restored.QueryNpcGold("merchant"), restored.QueryNpcGold("virgil"), restored.QueryGold()));
+            CollectionAssert.AreEqual(new[] { "coins", "sword" }, List(restored, "merchant"));
+            // A seed of the sword's origin map that no longer lists it, or lists it with another kind, does not fit.
+            var seed = Seed();
+            var without = seed with { Holders = [.. seed.Holders.Select(h => h.Entity == "virgil" ? h with { Items = ["ring", "vest", "ring-copy"] } : h)],
+                Items = [.. seed.Items.Where(item => item.Entity != "sword")] };
+            Assert.AreEqual(GameSessionFailure.InventoryMismatch, restored.AttachMapInventory(Exterior, without).Failure);
+            // A seed that lists the merchant's tracked pile as no gold does not fit either.
+            var notGold = seed with { Items = [.. seed.Items.Select(item => item.Entity == "coins" ? item with { Facts = Facts(SessionItemType.Generic, 3200) } : item)] };
+            Assert.AreEqual(GameSessionFailure.InventoryMismatch, restored.AttachMapInventory(Exterior, notGold).Failure);
+        }
+        GameSessionFailure Restored(string changed) => GameSessionOwner.Restore(Decode(changed), RestoreOptions()).Failure;
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restored(text.Replace("{\"entity\":\"coins\",\"coins\":3}", "{\"entity\":\"coins\",\"coins\":0}")), "no coins");
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restored(text.Replace("{\"entity\":\"coins\",\"coins\":3}", "{\"entity\":\"kit:2\",\"coins\":3}")), "a hero's item");
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restored(text.Replace("{\"entity\":\"made:1\",\"coins\":7}", "{\"entity\":\"made:1\",\"coins\":7},{\"entity\":\"made:9\",\"coins\":2}")),
+            "a made pile in no NPC's list");
+        Assert.AreEqual(GameSessionFailure.InvalidItem, Restored(text.Replace(",{\"entity\":\"made:1\",\"coins\":7}", "")), "a made gold pile without its record");
+        Assert.AreEqual(SnapshotDecodeFailure.NotCanonical, GameSessionSnapshotCodec.TryDecode(text.Replace("{\"entity\":\"coins\",\"coins\":3},{\"entity\":\"made:1\",\"coins\":7}",
+            "{\"entity\":\"made:1\",\"coins\":7},{\"entity\":\"coins\",\"coins\":3}")).Failure);
+        Assert.AreEqual(SnapshotDecodeFailure.OutOfRange, GameSessionSnapshotCodec.TryDecode(text.Replace("\"coins\":3}", "\"coins\":-3}")).Failure);
+    }
+
+    [TestMethod]
+    public void A_transfer_script_refuses_a_new_pile_and_the_ammunition_budget_counts_both_records()
+    {
+        // The merchant gets a transfer script (point 32); an archer holds an untracked seed stack of 30 arrows.
+        var seed = Seed();
+        var arrows = new SessionSeedItem("arrows", Facts(SessionItemType.Ammo, 3300, quantity: 30) with { AmmoType = 0 }, null);
+        var custom = seed with
+        {
+            Holders = [.. seed.Holders.Select(h => h.Entity == "virgil" ? h with { ScriptPoints = [SessionScriptPoint.Transfer] } : h),
+                new("archer", SessionHolderKind.Npc, false, false, [], ["arrows"])],
+            Items = [.. seed.Items, arrows],
+        };
+        using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf(), new GameSessionLimits(maxAmmoRecords: 1));
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, custom).Failure);
+        Assert.AreEqual(GameSessionFailure.HolderScriptUnsupported, owner.GiveGoldToNpc(owner.Version, "virgil", 1, GoldPile, Accept).Failure, "a new pile moves in through the transfer");
+        // Part of the stack: its rest and the hero's new stack would be two records, one over the budget.
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.TakeAmmoFromNpc(owner.Version, "archer", "arrows", 10, Bullets with { Prototype = 7058 }, Accept).Failure);
+        Assert.AreEqual(0L, owner.Version.Revision);
+        // The whole stack: the source goes, one new record.
+        Changed(owner.TakeAmmoFromNpc(owner.Version, "archer", "arrows", 30, Bullets with { Prototype = 7058 }, Accept), "made:1");
+        Assert.AreEqual(30, owner.QueryAmmo("made:1")!.Value.Units);
+        Assert.IsTrue(owner.IsItemDestroyed("arrows"));
+    }
+
+    [TestMethod]
     public void Ammunition_units_move_in_part_into_the_first_stack_of_their_type_or_a_new_one()
     {
         using var owner = Hero();
@@ -160,7 +223,7 @@ public sealed class NpcTransferStateTests
         Assert.AreEqual(GameSessionFailure.InvalidAmmo, owner.GiveAmmoToNpc(owner.Version, "merchant", "made:3", 1, GoldPile, Accept).Failure);
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.GiveAmmoToNpc(owner.Version, "merchant", "made:3", 1, Bullets, Accept).Failure, "not the hero's stack");
 
-        // The piles and given items survive a save; the store's records come back.
+        // The ammunition records come back after a save.
         var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions());
         Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, Seed()).Failure);
         Assert.AreEqual((5, 30), (restored.QueryNpcGold("merchant"), restored.QueryAmmo("made:3")!.Value.Units));
