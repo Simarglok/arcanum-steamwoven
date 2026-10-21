@@ -230,6 +230,16 @@ public static class AutoLevelRules
     /// <summary>The character level a spell rank needs (<see cref="SpellBookRules.MinimumLevel"/>, 0x4B1770): 1, 1, 5, 10, 15.</summary>
     public static int SpellMinimumLevel(int spell) => SpellBookRules.MinimumLevel(spell);
 
+    /// <summary>A critter's effective value of a base stat (0..7) or its magick or tech points from its sheet and the changes of its
+    /// effects (<paramref name="modifiers"/>), as a purchase reads it: the base, the situational change, the effect changes, clamped
+    /// to the race's range (ARC-TECHNOLOGY-006: an NPC crafter's effective intelligence).</summary>
+    public static int Effective(AdvancementSheet sheet, AdvancementModifiers modifiers, CharacterStat stat)
+    {
+        if (!IsValid(sheet)) throw new ArgumentException("Invalid sheet.", nameof(sheet));
+        if (!IsValid(modifiers)) throw new ArgumentException("Invalid modifiers.", nameof(modifiers));
+        return new Work(sheet, modifiers, [.. Enumerable.Repeat(0, Spells)]).Effective(stat);
+    }
+
     /// <summary>The intelligence a tech degree needs (0x4B0110): 0, 5, 8, 11, 13, 15, 17, 19.</summary>
     [OriginalFunction(0x4B0110, OriginalFunctionScope.Full)]
     public static int DegreeMinimumIntelligence(int degree) => degree is >= 0 and <= MaxDegree ? DegreeIntelligence[degree]
