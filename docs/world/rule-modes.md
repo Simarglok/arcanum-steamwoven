@@ -89,6 +89,10 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | World-map travel | `TravelRuleProfile` | `DetourKeepsStaleStep` | WT7 | after a detour the route counts one direction more than it wrote, so the walker takes a stale byte of an earlier route; Steamwoven holds only the steps it wrote (A2, proposed, owner decision pending; ARC-WORLD-056) |
 | World-map travel | `TravelRuleProfile` | `SegmentEndAddsNoTime` | WT11 | the step that ends a segment adds no game time, so n sectors over k waypoints take n − k hours; Steamwoven counts every step (A3, proposed, owner decision pending; ARC-WORLD-056) |
 | World-map travel | `TravelRuleProfile` | `CancelSkipsAreaSnap` | WT12 | cancelling travel lands on the sector centre without the area snap; Steamwoven lands as an arrival does (A4, proposed, owner decision pending; ARC-WORLD-056) |
+| Follower orders | `CompanionOrderRuleProfile` | `FollowOrderNeverUnwaits` | OL6 (D1) | the follow order reaches only followers in the array and its unwait never acts, so it changes no state; Steamwoven also brings back the waiting followers within 10 tiles that pass the follow check (owner decision 2026-10-21, D1; ARC-WORLD-046) |
+| Follower orders | `CompanionOrderRuleProfile` | `PresetSixAddressesNobody` | OL14 (D2) | F6's preset has no `#` and names no follower, so it does nothing; Steamwoven sends "follow" to every follower in reach (owner decision 2026-10-21, D2) |
+| Follower orders | `CompanionOrderRuleProfile` | `FarewellRangesSwapped` | OL13 (D3) | the leave farewell takes the range labelled friendly at reaction 40 or less and the hostile one above; Steamwoven the other way round (owner decision 2026-10-21, D3) |
+| Follower orders | `CompanionOrderRuleProfile` | `PortraitAddressesByNamePrefix` | OL15 (D4) | the portrait menu's order goes to the first follower in reach whose known name prefixes "name label", not necessarily the clicked one; Steamwoven gives it to the clicked follower in reach (owner decision 2026-10-21, D4) |
 
 Reserved and candidate differences, added by the slice that implements the rule (the slice records the D2 decision;
 until then both modes behave as the original):
