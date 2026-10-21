@@ -82,11 +82,13 @@ public sealed class AreaScriptHostTests
         Assert.IsTrue(f.Host.GlobalFlag(2593));
         var flags = f.Session.Flags;
         Assert.AreEqual(true, flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(2593))).Value);
-        Assert.IsFalse(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GetStoryState) || AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.SetStoryState));
-        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S10), "ARC-SCRIPT-018: the S12 actions stay out of the dialog set");
+        // ARC-SCRIPT-019: story state is the session's number now; the S12 actions stay out of the dialog set (ARC-SCRIPT-018).
+        Assert.IsTrue(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GetStoryState) && AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.SetStoryState));
+        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S13));
+        Assert.IsFalse(new[] { ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType }.Any(AreaScriptHost.Admission.Actions.Contains));
         Assert.IsTrue(new[] { ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme }.All(AreaScriptHost.Admission.Actions.Contains),
             "ARC-SCRIPT-040: the sound actions run in the viewer");
-        Assert.ThrowsExactly<InvalidOperationException>(() => f.Host.StoryState());
+        Assert.AreEqual(f.Session.QueryStoryState(), f.Host.StoryState());
     }
 
     [TestMethod]
@@ -227,9 +229,9 @@ public sealed class AreaScriptHostTests
     {
         using var f = Create();
         var npc = f.Host.Object(f.Speaker);
-        // Story state is not bound; a writeback for another object is not this host's.
-        Assert.IsFalse(f.Host.Apply(new FakeEffectsRun(f.Host, npc, story: 3).Run(Program.SetStory(5), new(777, 4, 0x0201)).Effects));
-        Assert.IsNull(f.Change(AreaConversationState.LocalFlagsProperty));
+        // ARC-SCRIPT-019: the story state goes to the session; a writeback for another object is not this host's.
+        Assert.IsTrue(f.Host.Apply(new FakeEffectsRun(f.Host, npc, story: 3).Run(Program.SetStory(5), new(777, 4, 0x0201)).Effects));
+        Assert.AreEqual(5, f.Session.QueryStoryState());
         var other = new ScrObjectRef(f.Map.RuntimeMap, "oid:other");
         var foreign = new FakeEffectsRun(f.Host, other).Run(Program.SetFlag(1), new(777, 4, 0x0201));
         Assert.IsNotNull(foreign.Effects.Writeback);
@@ -426,7 +428,7 @@ public sealed class AreaScriptHostTests
         var host = new AreaScriptHost(session, map, [], new AreaConversationState(session, map, [], 50), null,
             npcSheet: entity => entity == "oid:npc" ? (loaded, modifiers) : null);
         Assert.AreSame(AreaScriptHost.SkillAdmission, host.RunAdmission);
-        Assert.IsTrue(AreaScriptHost.SkillAdmission.IsSubsetOf(ScrAdmissionSet.S11) && AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.GetSkill));
+        Assert.IsTrue(AreaScriptHost.SkillAdmission.IsSubsetOf(ScrAdmissionSet.S13) && AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.GetSkill));
         Assert.IsFalse(AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.UseItemWithSkill), "no live script uses it (census)");
         var reads = Program.GetSkill();
         Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(reads, AreaScriptHost.Admission).Refusal!.Code, "refused without a hero");

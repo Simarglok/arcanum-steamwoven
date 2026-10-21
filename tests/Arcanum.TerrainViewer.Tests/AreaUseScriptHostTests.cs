@@ -101,6 +101,11 @@ public sealed class AreaUseScriptHostTests
             // 706: a tile script that keeps a local flag and teleports the player; 707: a sector script that sets a flag.
             Write("scr/00706tile.scr", Program(Do(new(ScrCatalogue.Action.SetLocalFlag, N(2))), Do(TeleportPc(5076)), Do(Skip)));
             Write("scr/00707sector.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(9))), Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(Skip)));
+            // 720: raises the story state, sets a quest (for the PC and for the gate, which is ignored), marks an area, learns a rumor
+            // and adds a reputation (ARC-SCRIPT-019).
+            Write("scr/00720story.scr", Program(Do(new(ScrCatalogue.Action.SetStoryState, N(5))), Do(new(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(1016), N(2))),
+                Do(new(ScrCatalogue.Action.SetPcQuestState, (Attachee, 0), N(1017), N(2))), Do(new(ScrCatalogue.Action.MarkMapLocation, N(44), (Triggerer, 0))),
+                Do(new(ScrCatalogue.Action.SetRumor, N(1100), (Triggerer, 0))), Do(new(ScrCatalogue.Action.AddReputation, (Triggerer, 0), N(1005))), Do(Skip)));
             // 708 (ARC-UI-049): a book for the PC (the triggerer) and a plaque for the gate (not a PC).
             Write("scr/00708read.scr", Program(Do(new(ScrCatalogue.Action.ShowBook, N(1020), (Triggerer, 0))),
                 Do(new(ScrCatalogue.Action.ShowPlaque, N(1500), (Attachee, 0))), Do(Skip)));
@@ -366,6 +371,25 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunPlaced(once, session.Rules.Scripts).Outcome);
             Assert.AreEqual(0, host.PlacedSlot(once).Script);
             Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrStop.NoScript), (host.RunPlaced(once, session.Rules.Scripts).Outcome, host.RunPlaced(once, session.Rules.Scripts).Run!.Stop));
+        });
+    }
+
+    [TestMethod]
+    public void Story_actions_change_the_pc_s_story_in_the_session()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var gate = Gate(720);
+            var host = Host(session, content, gate);
+            var ran = host.Run(gate, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual((5, SessionQuestState.Accepted), (session.QueryStoryState(), session.QueryQuest(1016)!.Value.State));
+            Assert.IsNull(session.QueryQuest(1017), "a request for the gate (not a PC) changes nothing");
+            CollectionAssert.AreEqual(new[] { 44 }, session.QueryKnownAreas().ToArray());
+            Assert.IsNotNull(session.QueryRumor(1100));
+            Assert.IsTrue(session.HeroHasReputation(1005));
+            Assert.AreEqual(5, host.StoryState());
         });
     }
 }

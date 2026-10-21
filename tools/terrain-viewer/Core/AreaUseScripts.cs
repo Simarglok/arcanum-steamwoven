@@ -35,15 +35,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     public const uint MindControlledFlag = 0x0800_0000;
 
     /// <summary>
-    /// The set a use click runs: <see cref="ScrAdmissionSet.S4"/> without the story-state actions (the session has no
-    /// story-state number) and without the dialog action (a use click does not open a conversation here), plus the reading actions of
+    /// The set a use click runs: <see cref="ScrAdmissionSet.S4"/> (with the session's story-state number since ARC-SCRIPT-019)
+    /// without the dialog action (a use click does not open a conversation here), plus the reading actions of
     /// <see cref="ScrAdmissionSet.S10"/> (ARC-UI-049: a plaque, book or picture a use, tile or sector script shows), plus call script,
-    /// assign object, get object type and the object variables of <see cref="ScrAdmissionSet.S12"/> (ARC-SCRIPT-018).
+    /// assign object, get object type and the object variables of <see cref="ScrAdmissionSet.S12"/> (ARC-SCRIPT-018), plus the quest,
+    /// area, rumor and reputation actions of <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019).
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects", ScrAdmissionSet.S4.Conditions,
-        ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState and not ScrCatalogue.Action.Dialog)
+    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story", ScrAdmissionSet.S4.Conditions,
+        ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.Dialog)
             .Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque,
-                ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType]),
+                ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType,
+                ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
+                ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation]),
         ScrAdmissionSet.S4.ValueKinds, ScrAdmissionSet.S4.FocusKinds.Append(ScrFocusKind.LocalObject));
 
     private readonly List<ScrReadingRequest> _readings = [];
@@ -149,7 +152,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     }
 
     /// <summary>Never asked: <see cref="Admission"/> leaves out the story-state actions.</summary>
-    public int StoryState() => throw new InvalidOperationException("AREA_USE_SCRIPT_STORY_STATE_NOT_BOUND");
+    /// <summary>ARC-SCRIPT-019: the session's story-state number.</summary>
+    public int StoryState() => _session.QueryStoryState();
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
     public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
@@ -307,13 +311,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
 
     private bool Apply(ScrEffects effects, Func<ScrWriteback, bool> writeSlot)
     {
-        if (effects.StoryState is not null || effects.DestroyTrapObject is not null) return false;
+        if (effects.DestroyTrapObject is not null || effects.SkillUses.Count > 0) return false;
         foreach (var write in effects.GlobalFlags)
         {
             var flags = _session.Flags;
             var receipt = flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(write.Index), write.Value));
             if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange)) return false;
         }
+        // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
+        if (!AreaScriptStory.Apply(_session, effects, IsPc)) return false;
         // As for a dialog script (AreaScriptHost.Apply): scheme pairs go to the session, applied steps stay applied when a later
         // one is refused (the original applies as it goes); effect sounds are not played by a use click.
         foreach (var sound in effects.Sounds)

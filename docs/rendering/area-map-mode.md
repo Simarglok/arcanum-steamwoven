@@ -328,9 +328,9 @@ the start map), one per tile.
   is pending. One host serves every run of the shown map and session.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`, a new game's state for each script):
   6 tile scripts teleport (the exit tiles of `iron clan hq`, script 2203, to the start map at (96948,75722), and since
-  ARC-SCRIPT-018 a tile of `void-kerghans castle`, script 3070), 638 tile scripts and 1 sector script run without one,
-  2,368 tile and 19 sector scripts are refused because they need actions or conditions outside the set (before
-  ARC-SCRIPT-018: 5, 249 and 2,758).
+  ARC-SCRIPT-018 a tile of `void-kerghans castle`, script 3070), 678 tile scripts and 1 sector script run without one,
+  2,328 tile and 19 sector scripts are refused because they need actions or conditions outside the set (before
+  ARC-SCRIPT-018: 5, 249 and 2,758; before ARC-SCRIPT-019: 6, 638 and 2,368).
 - **Not covered.** Tile scripts for NPCs; the actions and conditions outside the set (most tile scripts); tile and
   sector scripts of generated main-map sectors (only the map's own sector files are read); the arrival tile of a
   transfer; a fade-and-teleport's fade, sound and movie.

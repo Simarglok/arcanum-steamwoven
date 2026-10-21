@@ -161,9 +161,8 @@ request and the resumption through the dispatcher with `AreaScriptHost`
 attachment overridden by the session's entity map changes `dialog.lf`,
 `dialog.counters` and `dialog.script` (no schema change; a value equal to the
 loaded one clears its key); global flags are the session's; the PC leads a
-following speaker. It runs `S3` without the story-state actions (the session has
-no story-state number yet, so such a script is refused instead of run on a
-made-up value). Run default is the original's generic greeting (shown as a
+following speaker. It runs `S3` (until ARC-SCRIPT-019 without the story-state actions, which
+now read and raise the session's story-state number). Run default is the original's generic greeting (shown as a
 status, not modelled); a skip default without a dialog action ends the talk; a
 refusal is `EntryNotAdmitted` with the line, code and type. The session applies
 global flags and the slot as separate steps (it has no transaction across its
@@ -419,6 +418,28 @@ type (34) and the run's ten object variables as a focus kind (11), as the origin
   from the click, and the host answers no object queries. A dialog-point event with call script in its set is refused
   before it runs (`ArgumentException`).
 
+## Story state and story actions (ARC-SCRIPT-019, set S13)
+
+`ScrAdmissionSet.S13` is S12 plus set PC quest state (16), mark map location (49), set rumor (50), add reputation (72) and
+remove reputation (73), as the original runs them (ledger [SS1–SS5](../research/original-verification-ledger.md#story-state-and-story-actions-arc-script-019)).
+
+- **Story state** is the session's number (`GameSessionOwner.QueryStoryState`, `RaiseStoryState`; snapshot schema 37): 0 at a
+  new game, only ever raised. Get story state (42) reads it through the host, set story state (43) asks to raise it; the
+  viewer's hosts apply the raise after the run.
+- **Requests**: each action hands one `ScrStateRequest` per object to the host in action order (`ScrEffects.States`): the
+  quest and state with the run's attachee as the giver (16, every object of operand 0), the area (49) and the rumor (50) for
+  the first object of operand 1 (none for an absent one), the reputation (72, 73, every object of operand 0). Only single
+  objects are admitted.
+- **Hosts** (`AreaScriptStory.Apply`): the viewer's use, tile and sector set and its dialog set take them and apply each
+  request for the PC through the session (`SetQuestState`, `DiscoverArea`, `LearnRumor`, `AddReputation`,
+  `RemoveReputation`); a request for any other object is ignored, as the original's functions store nothing for it. A request
+  the session refuses (a number outside its ranges, where the original stores it unchecked) stops the later ones. Not
+  applied: the quest giver's reaction change (to 41 at state 2, 10 more at state 4) and the alignment and sound of a
+  completion (owned by the reaction and quest domains).
+- **Registry**: `QueryStoryState` marks 0x445090 (full) and `RaiseStoryState` 0x4450A0 (partial: single player).
+- **Installed original** (opt-in `AreaUseScriptsOriginalTests`, a new game's state): map mode's tile scripts that run grow
+  from 644 to 684 of 3,012; the 21 guarded use sites keep 9 running and 12 refused.
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the
@@ -490,19 +511,19 @@ type (34) and the run's ten object variables as a focus kind (11), as the origin
 
 ## Not ready
 
-- The session has no story-state number and no global variables (a snapshot
-  schema change, coordinated with other schema work); the viewer binding refuses
-  the story-state actions and no admitted set reads global variables.
+- The session has no global variables (a snapshot schema change, coordinated with other schema work); no admitted set reads
+  them. The story-state number is the session's since ARC-SCRIPT-019.
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
-- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading": S3 without
-  story state, plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI and the reading actions;
-  with a session hero also get skill, ARC-SKILLS-009); since ARC-SCRIPT-015 map mode's use
-  clicks on guarded use sites run it under "S4-area-use-reading-objects", and since ARC-SCRIPT-017 the tile and sector scripts the player
+- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading-story": S3,
+  plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI, the reading actions and the story
+  actions; with a session hero also get skill, ARC-SKILLS-009); since ARC-SCRIPT-015 map mode's use
+  clicks on guarded use sites run it under "S4-area-use-reading-objects-story", and since ARC-SCRIPT-017 the tile and sector scripts the player
   enters; heartbeat and combat are later slices.
-- Not in any admitted set yet: focus groups, loops, call-ex, float line, quests, reactions and most other world actions.
+- Not in any admitted set yet: focus groups, loops, call-ex, float line, reactions and most other world actions.
   Admitted since S4: teleport and fade-and-teleport (S4), set auto-level scheme (S8), start schematic UI (S9), the reading
-  actions (S10), the skill commands (S11), call script, assign object and get object type (S12).
+  actions (S10), the skill commands (S11), call script, assign object and get object type (S12), set PC quest state, mark map
+  location, set rumor and add or remove reputation (S13).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any

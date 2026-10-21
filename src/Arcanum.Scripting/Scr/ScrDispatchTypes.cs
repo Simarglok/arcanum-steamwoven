@@ -298,13 +298,25 @@ public readonly record struct ScrFlagWrite(int Index, bool Value);
 /// Every change of one dispatch, for the caller to apply together: the slot writeback (or the trap object to destroy
 /// instead), the global flags in ascending order and the new story state. Empty when nothing changed.
 /// </summary>
+/// <summary>ARC-SCRIPT-019: which game state a state request changes (actions 16, 49, 50, 72, 73).</summary>
+public enum ScrStateKind { QuestState, KnownArea, Rumor, AddReputation, RemoveReputation }
+
+/// <summary>
+/// ARC-SCRIPT-019: a change of the PC's story the run asks for (ledger SS2–SS5): set quest state (16: the quest number and the
+/// state, with the run's attachee as the quest's giver), mark a world-map area known (49), learn a rumor (50), add or remove a
+/// reputation (72, 73). <paramref name="Object"/> is the object it is asked for; the host applies it to a PC and ignores any
+/// other object, as the original's functions do.
+/// </summary>
+public sealed record ScrStateRequest(ScrStateKind Kind, ScrObjectRef Object, int Number, int Value = 0, ScrObjectRef? Giver = null);
+
 public sealed class ScrEffects
 {
     internal ScrEffects(ScrWriteback? writeback, ScrObjectRef? destroyTrapObject, IReadOnlyList<ScrFlagWrite> globalFlags, int? storyState, ScrDialogStart? dialog = null,
         IReadOnlyList<ScrCallRequest>? calls = null, IReadOnlyList<ScrPrintLine>? lines = null, IReadOnlyList<ScrSound>? sounds = null,
         IReadOnlyList<ScrTeleport>? teleports = null, IReadOnlyList<ScrSchemeRequest>? schemes = null, IReadOnlyList<ScrSchematicRequest>? schematics = null,
-        IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null)
+        IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null, IReadOnlyList<ScrStateRequest>? states = null)
     {
+        States = states ?? Array.Empty<ScrStateRequest>();
         Writeback = writeback; DestroyTrapObject = destroyTrapObject; GlobalFlags = globalFlags; StoryState = storyState; Dialog = dialog;
         Calls = calls ?? Array.Empty<ScrCallRequest>();
         Lines = lines ?? Array.Empty<ScrPrintLine>();
@@ -339,6 +351,8 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrReadingRequest> Readings { get; }
     /// <summary>ARC-SKILLS-009: the use-item-with-skill requests in action order.</summary>
     public IReadOnlyList<ScrSkillUse> SkillUses { get; }
+    /// <summary>ARC-SCRIPT-019: the quest, area, rumor and reputation requests in action order.</summary>
+    public IReadOnlyList<ScrStateRequest> States { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0;
 }
@@ -367,7 +381,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S12"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S13"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -388,7 +402,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S12)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S12.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S13)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S13.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

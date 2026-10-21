@@ -160,6 +160,14 @@ public sealed class ScrAdmissionSet
         S11.Actions.Concat([ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType]), S11.ValueKinds,
         S11.FocusKinds.Append(ScrFocusKind.LocalObject));
 
+    /// <summary>
+    /// The story set (ARC-SCRIPT-019): <see cref="S12"/> plus set PC quest state (16), mark map location (49), set rumor (50), add
+    /// reputation (72) and remove reputation (73), which hand <see cref="ScrStateRequest"/> effects to the host (ledger SS2–SS5).
+    /// </summary>
+    public static ScrAdmissionSet S13 { get; } = new("S13", S12.Conditions,
+        S12.Actions.Concat([ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
+            ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation]), S12.ValueKinds, S12.FocusKinds);
+
     /// <summary>The conditions of <see cref="S4"/> a host answers through <see cref="IScrObjectQueries"/>.</summary>
     public static IReadOnlySet<int> ObjectQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed,
         ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation };
