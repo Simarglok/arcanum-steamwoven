@@ -240,8 +240,11 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-SKILLS-007: the hero repairs one of its items with the Repair skill (the original's skill-bar repair, which
     /// charges no action points and makes the hero the repairer).</summary>
+    private SessionRepairResult? _lastRepair;
+
     private void RepairItem(string item)
     {
+        _lastRepair = null;
         if (!InventoryOpen || !InventoryActive) return;
         var holder = _inventoryPanel!.Holder;
         string message;
@@ -249,6 +252,7 @@ public partial class TerrainViewerApp
         else
         {
             var result = _areaSession!.RepairWithSkill(_areaSession.Version, item, baseline);
+            _lastRepair = result;
             message = result.Disposition == GameSessionDisposition.Rejected ? $"not repaired: {result.Failure}"
                 : (result.Repair == Arcanum.Simulation.Items.ItemRepairStatus.NothingToRepair ? "nothing to repair"
                     : result.Amount > 0 ? $"repaired {result.Amount} hit point(s)" : "the repair restored nothing")

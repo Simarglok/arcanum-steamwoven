@@ -120,6 +120,10 @@ public sealed class ItemDurabilityRulesTests
         // The skill's own run is not forced: effectiveness 0 restores nothing, anything above restores at least 1.
         Assert.AreEqual((25, 50, 0, 1), (SkillRepairAmount(damaged, 50, false), SkillRepairAmount(damaged, 0, true), SkillRepairAmount(damaged, 0, false),
             SkillRepairAmount(damaged, 1, false)));
+        Assert.AreEqual((0, 1), (SkillRepairAmount(new ItemCondition(-10, 0, 5, false), 0, true), SkillRepairAmount(new ItemCondition(-10, 0, 5, false), 30, true)),
+            "the floor follows the fated branch too");
+        Assert.AreEqual((1, 0, 0, 5), (SkillRepairAdjustmentPercent(RepairTraining.Master, false, 0, true), SkillRepairAdjustmentPercent(RepairTraining.Master, false, 0, false),
+            SkillRepairAdjustmentPercent(RepairTraining.Master, false, 3, true), SkillRepairAdjustmentPercent(RepairTraining.Master, true, 0, true)));
 
         var repaired = Repair(damaged, 25, 10, RepairTraining.None);
         Assert.AreEqual(ItemRepairStatus.Repaired, repaired.Status);

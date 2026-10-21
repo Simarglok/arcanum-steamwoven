@@ -379,7 +379,8 @@ check, action-point or time cost and no experience.
 
 Re-read for ARC-WORLD-053 by a second reader (F2, [ledger DU1–DU8](original-verification-ledger.md#item-durability-arc-world-053)): every row
 below agrees; the second reader added the price's final bounds (negative 0, exactly 1 is 2), that the unwield moves only items in wear
-slots and the item is dropped when it fails, and the repair table (training none 10, apprentice 5, expert 1, master 0; 5 for a broken item).
+slots and the item is dropped when it fails, and the repair table (training none 10, apprentice 5, expert 1, master 0; 5 for a broken item,
+corrected by [RP2](original-verification-ledger.md#repair-arc-skills-007) to a master's broken item only).
 
 - **Fields and formulas**: hp_pts (0x1B), hp_adj (0x1C) and hp_damage (0x1D)
   are ordinary saved object fields (an instance stores overrides). A

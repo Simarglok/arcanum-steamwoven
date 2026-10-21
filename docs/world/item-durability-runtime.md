@@ -3,7 +3,8 @@
 Status: **Implemented bounded component**, work item ARC-WORLD-053 (2026-10-20), the item durability slice of the
 [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted).
 Godot-free durability rules in `Arcanum.Simulation.Items` and the session's item condition state in `Arcanum.Session`
-(snapshot schema 22). Combat calls them since ARC-COMBAT-007 (attack wear); no viewer or trade caller uses them yet.
+(snapshot schema 22). Combat calls them since ARC-COMBAT-007 (attack wear) and the hero's Repair skill since ARC-SKILLS-007, which
+the AREA viewer's inventory window runs with the kit's and the object rows' baselines; no trade caller uses them yet.
 
 Requirements: [FR-ITEM-011](../requirements/items-economy.md#fr-item-011) (durability, break and the item side of repair).
 The Repair skill's own run is ARC-SKILLS-007 ([repair](repair-runtime.md)), which calls the item side below.
@@ -117,8 +118,7 @@ attacker's weapon wear by the struck material, and `DestroyItem` for the "destro
 ([attack wear](attack-resolver-runtime.md#wear-arc-combat-007), ledger CW1–CW10). The hero's attack on an item on the ground
 (`AttackObject`, ARC-COMBAT-008, [object damage](object-damage-runtime.md)) damages it through `DamageItem`. Trade
 (sale price, quote and payment) and the schematic gate (TECH-4) call the rules when they exist; the Repair skill's run calls
-`SkillRepairAmount`, `RepairAdjustmentPercent` and `Repair` since ARC-SKILLS-007 ([repair](repair-runtime.md)); the schematic gate (TECH-4) call the rules when they
-exist.
+`SkillRepairAmount`, `SkillRepairAdjustmentPercent` and `Repair` since ARC-SKILLS-007 ([repair](repair-runtime.md)).
 
 ## Differences from the original
 

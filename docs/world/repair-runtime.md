@@ -4,7 +4,7 @@ Status: **Implemented bounded component**, ARC-SKILLS-007 (2026-10-21), task S11
 on the session's [item durability](item-durability-runtime.md) (ARC-WORLD-053), the [shared skill check](skill-check-runtime.md)
 and the [fate points](fate-points-runtime.md). The hero repairs one of its items with the Repair skill: the check (whose roll
 changes nothing), the amount, the loss of hp_adj, a master's mending of a broken item and the fate full repair. Rules:
-`ItemDurabilityRules.SkillRepairAmount`, `RepairAdjustmentPercent` and `Repair` in
+`ItemDurabilityRules.SkillRepairAmount`, `SkillRepairAdjustmentPercent`, `RepairAdjustmentPercent` and `Repair` in
 [`Arcanum.Simulation.Items`](../../src/Arcanum.Simulation/Items/ItemDurabilityRules.cs); session: `RepairWithSkill` in
 [`GameSessionRepair.cs`](../../src/Arcanum.Session/GameSessionRepair.cs); viewer: **Repair** in the AREA inventory window. No
 snapshot schema change (the condition is the durability section's record).
@@ -28,7 +28,7 @@ Requirements: [FR-ITEM-011](../requirements/items-economy.md#fr-item-011) (durab
 | Roll (RP1) | Every roll counts as a success: the roll and the critical change nothing. | `RepairWithSkill` |
 | Nothing to repair (RP2) | An item without damage, unless broken and the repairer a master, is not touched. | `ItemRepairStatus.NothingToRepair` |
 | Amount (RP2, RP3) | The whole maximum with the fate full repair, else `trunc(maximum × effectiveness / 100)`, at least 1 only above an effectiveness of 0. | `ItemDurabilityRules.SkillRepairAmount` |
-| Loss (RP2) | hp_adj falls by 10 / 5 / 1 / 0 % of the maximum by training; 5 % when a master mends a broken item, which clears the current art's broken bit only. | `RepairAdjustmentPercent`, `Repair` |
+| Loss (RP2) | hp_adj falls by 10 / 5 / 1 / 0 % of the maximum by training; 5 % when a master mends a broken item, which clears the current art's broken bit only; 1 % for a master who restores nothing (effectiveness 0) on an item that is not broken when the check's critical flag is set. | `SkillRepairAdjustmentPercent`, `Repair` |
 | Fate (RP3) | The armed repair fate is used after the rolls, also when there is nothing to repair. | `SessionRepairResult.FateUsed` |
 | Start (RP4) | The hero is always the repairer (no follower); any item it holds (grid or wear slot); no action points; nothing refused before the check. | `RepairWithSkill` |
 
@@ -42,11 +42,12 @@ the fate and the item's record are one revision, also when nothing is repaired; 
 The AREA inventory window lists **Repair:** for each item in the PC's list that is damaged or broken (its condition is the session's
 record over the hero load's or the object row's baseline) and runs `RepairWithSkill`. The window reports the hit points repaired,
 "nothing to repair" or "the repair restored nothing". The original's skill bar accepts any item and answers "nothing to repair"
-for an undamaged one; the viewer lists only items that need it.
+for an undamaged one; the viewer lists only items that need it. A made item (ARC-TECHNOLOGY-004) gets no button: the viewer has no
+condition for it, although `RepairWithSkill` accepts one the hero holds.
 
 ## Boundaries (NOT READY)
 
-- **Not modelled:** the paid repair service of a merchant (the trade window, its quote and payment, ARC-UI-050), the dialog, AI
+- **Not modelled:** the paid repair service of a merchant (the trade window, its quote and payment: the barter window task planned next in the skills lane), the dialog, AI
   and script uses of the skill, repairing an item an NPC holds or one in a container, the floating text and its messages, the
   multiplayer records.
 - The broken bit of the inventory art stays set after a master's mending, as in the original; the viewer draws no item art.

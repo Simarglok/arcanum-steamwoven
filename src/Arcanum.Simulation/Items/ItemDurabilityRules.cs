@@ -205,10 +205,18 @@ public static class ItemDurabilityRules
     public static int SkillRepairAmount(ItemCondition item, int effectiveness, bool fullRepair)
     {
         var maximum = MaximumHitPoints(item);
-        if (fullRepair) return maximum;
-        var amount = (int)((long)maximum * effectiveness / 100);
-        return amount <= 0 ? (effectiveness > 0 ? 1 : 0) : amount;
+        // The floor follows both branches, as in the case: a fated repair of an item whose maximum is 0 or less is 1 or 0 too.
+        var amount = fullRepair ? maximum : (int)((long)maximum * effectiveness / 100);
+        return amount > 0 ? amount : effectiveness > 0 ? 1 : 0;
     }
+
+    /// <summary>
+    /// ARC-SKILLS-007: the hp_adj share of the Repair skill's own run (ledger RP2): <see cref="RepairAdjustmentPercent"/>, except that
+    /// a master who restores nothing (an effectiveness of 0, which clears the case's success) on an item that is not broken takes 1 %
+    /// when the check's critical flag is set.
+    /// </summary>
+    public static int SkillRepairAdjustmentPercent(RepairTraining repairer, bool broken, int amount, bool critical) =>
+        repairer == RepairTraining.Master && !broken && amount == 0 && critical ? 1 : RepairAdjustmentPercent(repairer, broken);
 
     /// <summary>The share of the maximum a repair takes from hp_adj, by the repairer's training: none 10, apprentice 5, expert 1,
     /// master 0, and 5 when a master repairs a broken item (ledger RP2: a repairer who is not a master keeps the table for a broken

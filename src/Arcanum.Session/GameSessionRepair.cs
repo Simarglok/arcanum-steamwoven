@@ -22,7 +22,7 @@ public sealed partial class GameSessionOwner
     /// always taken, its armed repair fate used); the case then treats every roll as a success: it restores
     /// <see cref="ItemDurabilityRules.SkillRepairAmount"/> (the whole maximum with the fate, else maximum × effectiveness / 100, at
     /// least 1 above an effectiveness of 0) and lowers the adjustment by the training's share
-    /// (<see cref="ItemDurabilityRules.RepairAdjustmentPercent"/>); an item without damage, unless broken and the hero a master, is not
+    /// (<see cref="ItemDurabilityRules.SkillRepairAdjustmentPercent"/>); an item without damage, unless broken and the hero a master, is not
     /// touched (<see cref="ItemRepairStatus.NothingToRepair"/>). No action points, no experience. The check, the fate and the
     /// item are one revision. Refused before anything is rolled: no hero, or a dead or unconscious one
     /// (<see cref="GameSessionFailure.RepairUnavailable"/>), an invalid item or baseline (<see cref="GameSessionFailure.InvalidItem"/>),
@@ -49,7 +49,8 @@ public sealed partial class GameSessionOwner
         var training = (RepairTraining)(int)request.Training;
         var current = _durability.Records.TryGetValue(entity, out var recorded) ? recorded : baseline;
         var amount = ItemDurabilityRules.SkillRepairAmount(current, check.Check.Effectiveness, check.Fated);
-        var outcome = ItemDurabilityRules.Repair(current, amount, ItemDurabilityRules.RepairAdjustmentPercent(training, current.Broken), training);
+        var outcome = ItemDurabilityRules.Repair(current, amount,
+            ItemDurabilityRules.SkillRepairAdjustmentPercent(training, current.Broken, amount, check.Critical), training);
         var changed = outcome.Condition != current;
         if (changed && !ItemDurabilityRules.IsValid(outcome.Condition)) return RejectRepair(GameSessionFailure.InvalidItem);
         if (changed && !_durability.Records.ContainsKey(entity) && _durability.Count >= _limits.MaxDurabilityRecords)

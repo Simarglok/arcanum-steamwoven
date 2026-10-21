@@ -59,7 +59,8 @@ public partial class TerrainViewerApp
 
     // ARC-SKILLS-007 native observation with the original hero: one of its kit items with a condition takes 12 damage (the
     // session's damage write, as combat wear does), the inventory window then lists a Repair button for it, and a press repairs it
-    // through the hero's Repair skill. Outcomes and counts only.
+    // through the hero's Repair skill. Outcomes and counts only. The kit item stays damaged and repaired afterwards on purpose: no
+    // later stage reads its condition.
     private void RunAreaRepairSmoke()
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-SKILLS-007 repair smoke: " + why); }
@@ -75,11 +76,16 @@ public partial class TerrainViewerApp
         {
             InventoryKey(Key.I);
             Require(InventoryOpen && _inventoryPanel!.RepairButtonsForSelfTest.Count == 1, "one Repair button: " + _inventoryPanel?.RepairButtonsForSelfTest.Count);
+            // The button's handler, called at once (its signal is deferred to the next frame, which this synchronous stage does not wait for).
             RepairItem(item.Entity);
             var repaired = session.QueryItemCondition(item.Entity, baseline)!.Value;
+            Require(_lastRepair is { Disposition: Arcanum.Session.GameSessionDisposition.Changed } result && result.Condition == repaired,
+                $"the session holds the repair's condition: {_lastRepair?.Failure} {repaired}");
             Require(_inventoryStatus.StartsWith("repaired", StringComparison.Ordinal) || _inventoryStatus == "the repair restored nothing", "the repair ran: " + _inventoryStatus);
-            Require(repaired.Damage < damaged.Damage || repaired.Adjustment < damaged.Adjustment || repaired == damaged with { Adjustment = repaired.Adjustment },
-                $"the condition followed the repair: {damaged} -> {repaired}");
+            var training = session.QueryHeroSkills()![Arcanum.Simulation.Skills.Skill.Repair].Training;
+            Require(repaired.Damage == Math.Max(0, damaged.Damage - _lastRepair!.Amount)
+                && (training == Arcanum.Simulation.Combat.SkillTraining.Master || repaired.Adjustment < damaged.Adjustment),
+                $"the condition followed the repair ({training}, amount {_lastRepair.Amount}): {damaged} -> {repaired}");
             InventoryKey(Key.Escape);
             GD.Print("ARC-SKILLS-007 native-smoke repair PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 item.Entity, Maximum = baseline.MaximumHitPoints, DamageBefore = damaged.Damage, DamageAfter = repaired.Damage,

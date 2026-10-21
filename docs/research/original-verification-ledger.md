@@ -1147,7 +1147,7 @@ listing, and the row was F2 before. The rows are F2.
 | DU5 | price (0x461F80) | When the first party (the seller) is a PC: worth (300 unidentified, else at least 2), the buyer's multiplier, the haggle share, then, when current < maximum, `current × price / maximum`; a negative price is 0 and exactly 1 is 2 (these bounds belong to this branch; the buy branch has its own). Signed 32 bits, truncating. The buy branch does not read damage. | Original |
 | DU6 | sale check (0x462170) | Refuses a worth of 0, a broken item (current art bit 0x400), an item the buyer does not deal in or whose buy script refuses below expert haggle, and an item with item flag 0x8000 that the buyer's NPC flags do not admit; a refused item's price is 0. | Original |
 | DU7 | repair quote (0x578760) | A broken item: only a repairer with master training in Repair, with the damage taken as the maximum, else a refusal line; damage 0: a "nothing to repair" line; otherwise `trunc(P / 2) × damage / maximum`, at least 2, where P is the PC's damage-scaled sale price to the repairer (TC7). | Original (TC7: a switch, owner decision 2026-10-20) |
-| DU8 | repair service, item part (0x4C8E60) | The skill run is forced to succeed and the payment follows unconditionally. Nothing changes for an item without damage unless it is broken and the repairer a master. The amount is the maximum with the PC's fate full repair, else `maximum × effectiveness / 100`, at least 1; damage `max(0, damage − amount)`; hp_adj `− trunc(maximum × pct / 100)` with the maximum before the repair and no clamp; pct by the repairer's training 10, 5, 1, 0 (none, apprentice, expert, master) and 5 for a broken item. A master clears bit 0x400 of the current art only; the inventory art keeps it. | Original |
+| DU8 | repair service, item part (0x4C8E60) | The skill run is forced to succeed and the payment follows unconditionally. Nothing changes for an item without damage unless it is broken and the repairer a master. The amount is the maximum with the PC's fate full repair, else `maximum × effectiveness / 100`, at least 1; damage `max(0, damage − amount)`; hp_adj `− trunc(maximum × pct / 100)` with the maximum before the repair and no clamp; pct by the repairer's training 10, 5, 1, 0 (none, apprentice, expert, master) and 5 for a broken item. A master clears bit 0x400 of the current art only; the inventory art keeps it. | Original (corrected by RP2: the 5 % is a master's only; the item part is the run's case) |
 
 ## Tech degrees (ARC-TECHNOLOGY-002)
 
@@ -1689,8 +1689,10 @@ and the armed test were also run in the function oracle (F3, receipts `4F5090.js
 Source: [repair runtime](../world/repair-runtime.md), [item durability](../world/item-durability-runtime.md), task S11 of the
 [skills plan](skills-plan.md). Read on 2026-10-21 by two independent readers that saw only the questions (method step 6); they
 agree on every row below. The check is SC1–SC17 (repair is tech skill 12, effectiveness 4L, SC3), the item rules DU1–DU8, the fate
-FT6. RP2 corrects where DU8 placed the item part: it is the run's own case, which the service (0x4C8E60) reaches through a forced
-run; the rule itself is unchanged.
+FT6. RP2 corrects DU8 in three points: the item part is the run's own case, which the service (0x4C8E60) reaches through a forced
+run; the 5 % loss for a broken item is a master's only (anyone else keeps the training table); and the skill's own run is not
+forced, so an effectiveness of 0 restores nothing (where a master who restores nothing on an item that is not broken takes 1 % with
+the critical flag set).
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
