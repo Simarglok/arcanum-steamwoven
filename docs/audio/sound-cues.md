@@ -19,13 +19,14 @@ viewer plays the cues positionally ([ARC-UI-042](positional-sound.md)).
   ([audio study](../research/audio-evidence.md) SN34): four categories (records 0–99 outdoor
   flippable, 100–199 outdoor, 200–299 indoor flippable, 300–399 indoor), each its records in order;
   a tile names its record by bits 22–27 of its art id, the category by bits 8 (outdoor) and 7
-  (flippable). Since ARC-DATA-043 a facade in a tile slot (art type 11, as on void) names its record by bits 11–16 and
-  its category by bits 25 (outdoor) and 26 (flippable), as the original's art helpers read it; any other art type reads
-  as indoor, not flippable, record 0. Before, a hero standing on a facade got no footstep class. A record with `/` has flag letters up to the first space and the class after them
+  (flippable). Since ARC-DATA-043 a facade in a tile slot (art type 11, as on void) names
+  its record by bits 11–16 and its category by bits 25 (outdoor) and 26 (flippable), as the
+  original's art helpers read it; any other art type reads as position 0 of the indoor
+  category (record 300's class). A record with `/` has flag letters up to the first space and the class after them
   (C `atoi`, 0 when there is none); a record without one is the number after its first three
   characters. A table without record 0, 100, 200 or 300 (the original fails only when such a
   category has records), a bare record shorter than three characters or a record holding NUL is
-  refused; a tile beyond its category gives no class.
+  refused; a tile or facade beyond its category gives no class.
   Classes: 0 dirt, 1 sand, 2 snow, 3 stone, 4 water, 5 wood.
 
 ## Rules (Arcanum.Simulation.Sound)

@@ -93,6 +93,8 @@ public sealed class ObjectSoundTests
         Assert.AreEqual(1, table.SoundClass(Facade(true, true, 1)));
         Assert.AreEqual(7, table.SoundClass(Facade(true, false, 1)));
         Assert.AreEqual(-2, table.SoundClass(Facade(false, false, 2)));
+        Assert.AreEqual(5, table.SoundClass(Facade(false, true, 0)));
+        Assert.AreEqual(1, table.SoundClass(Facade(true, true, 1) | 0x180), "a facade ignores the tile bits 7 and 8");
         Assert.IsNull(table.SoundClass(Facade(true, true, 3)), "a facade position beyond its category");
         // Any other art type reads as indoor, not flippable, position 0 (the original's helpers give 0 for every field).
         Assert.AreEqual(3, table.SoundClass(Tile(true, true, 2) | 0x10000000), "a wall art id");
