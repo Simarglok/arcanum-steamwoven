@@ -56,6 +56,7 @@ public sealed class CompanionFollower
     private readonly IRouteStepSource _source;
     private (CellCoord Follower, CellCoord Leader)? _unreachable;
     private bool _stopSeen = true;
+    private bool _ordered;
 
     public CompanionFollower(IRouteStepSource source, RouteLimits? limits = null)
     {
@@ -70,6 +71,23 @@ public sealed class CompanionFollower
     /// <summary>The follower and leader cells at which the last goal ended without arriving (no route, step denied).</summary>
     public (CellCoord Follower, CellCoord Leader)? Unreachable => _unreachable;
 
+    /// <summary>Whether an ordered goal (<see cref="WalkTo"/>) is running.</summary>
+    public bool Ordered => _ordered;
+
+    /// <summary>
+    /// ARC-WORLD-046: an ordered goal to <paramref name="tile"/> (the walk-here order's run-to-tile goal, or the host's spread-out step):
+    /// while it runs, the follow decisions do not replace it; once it arrives or stops, the follower follows again from where it
+    /// stands (beyond the start distance it approaches, OL9). False when the target is not in the step source.
+    /// </summary>
+    public bool WalkTo(CellCoord tile, SimulationTime at)
+    {
+        if (!at.IsValid) throw new ArgumentException("FOLLOW_TIME_INVALID", nameof(at));
+        if (!_source.Contains(tile)) return false;
+        _ordered = true; _unreachable = null;
+        Retarget(tile, at, 0);
+        return true;
+    }
+
     /// <summary>
     /// Decides at <paramref name="observedAt"/> (the frame boundary the host drives to next). <paramref name="following"/>
     /// is the session standing: a waiting or free NPC drops its goal (a started step still ends at its cell centre).
@@ -81,10 +99,17 @@ public sealed class CompanionFollower
         if (!following)
         {
             Route.Stop(observedAt, NotFollowingReason);
-            Leader = null; _unreachable = null; _stopSeen = true;
+            Leader = null; _unreachable = null; _stopSeen = true; _ordered = false;
             return Done(FollowAction.Hold);
         }
         Leader = leader;
+        if (_ordered)
+        {
+            // An ordered goal is not replaced by the follow decisions; when it ends the follower decides again from where it stands.
+            if (Route.Status == RouteFollowStatus.Following) return Done(FollowAction.Run);
+            _ordered = false; _stopSeen = true;
+            if (state.Phase != MovementPhase.Settled) return Done(FollowAction.Hold);
+        }
         var settled = state.Phase == MovementPhase.Settled;
         var cell = state.CommittedCell;
         // A goal that ended without arriving is remembered for the cells it ended at.

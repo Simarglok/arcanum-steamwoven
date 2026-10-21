@@ -70,7 +70,7 @@ The host applies a step: it advances the session clock by `GameMs`, calls `Disco
 ## Rule settings (`TravelRuleProfile`, `GameRules.Travel`)
 
 The four anomalies of the research are switches; Steamwoven has them off and Original on (registry rows in
-[rule modes](rule-modes.md)). The Steamwoven values are proposed and the owner's decision is pending.
+[rule modes](rule-modes.md)). The Steamwoven values fix all four (owner decision 2026-10-21).
 
 | Switch | Ledger | Original | Steamwoven |
 | --- | --- | --- | --- |

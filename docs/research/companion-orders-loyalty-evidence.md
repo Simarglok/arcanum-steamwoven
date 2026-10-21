@@ -169,7 +169,7 @@ and stays with stage A7.
 
 Steamwoven today levels every waiting NPC of the current map
 ([advancement runtime](../world/advancement-runtime.md#not-ready)), which is wider
-than the original's rectangle; see [decision candidate](#owner-decision-candidates) D7.
+than the original's rectangle; see [owner decision](#owner-decisions-2026-10-21) D7.
 
 ## 6. SCR action 139: set auto-level scheme (Q6)
 
@@ -192,21 +192,21 @@ XP5's follower step hold; C13's floated line on leaving is the refusal line
 (OL20), C14's "back off" is "stop attacking" (OL10), and O4 and O7 are answered
 (OL19, OL31–OL33).
 
-### Owner-decision candidates
+### Owner decisions (2026-10-21)
 
-None is decided here. Under D8 an original bug keeps the original behaviour in
-the Original setting; the Steamwoven setting changes it only when the owner says
-so.
+The owner decided all seven on 2026-10-21, accepting the recommended options: D1–D4, D6 and D7 option (b), a rule-mode switch
+where the Steamwoven setting fixes the behaviour and the Original setting keeps the original's; D5 option (a), both settings as
+the original. Under D8 the Original setting always keeps the original behaviour.
 
-| ID | Rows | Question | Options |
-| --- | --- | --- | --- |
-| D1 | OL6, OL16 | The follow order never brings a follower back. | (a) Both settings as the original: follow only acknowledges or says "cannot". (b) Steamwoven: follow also unwaits waiting followers within 10 tiles (the follow check decides); Original keeps the no-op (switch). |
-| D2 | OL14 | F6 does nothing. | (a) Both as the original (F6 reserved, no effect). (b) Steamwoven sends F6 to every follower in reach as "follow" (useful only with D1 (b)); Original keeps it inert (switch). |
-| D3 | OL13 | The leave farewell is chosen against the line files' labels. | (a) Both as the original. (b) Steamwoven picks the friendly range for reaction above 40; Original keeps the swap (switch). |
-| D4 | OL15 | The portrait menu addresses its follower by name prefix. | (a) Both as the original (first follower in reach with that name). (b) Steamwoven addresses the clicked follower itself, still within 10 tiles; Original keeps the name match (switch). |
-| D5 | OL19 | The loyalty step is skipped while a follow goal lives. | (a) Both as the original: the step runs only when the follower has no action goal (needs the host to report that). (b) Steamwoven runs the step on every non-combat AI pass of a non-waiting follower; Original keeps the goal gate (switch). An observation in the running game (F4) would show how much (a) suppresses. |
-| D6 | OL28 | The level message can show more than 56 points. | (a) Both as the original. (b) Steamwoven shows the stored (clamped) value; Original keeps the sum (switch). |
-| D7 | OL29 | Which waiting followers get the PC's level step. | (a) Both as the original: only those in the screen-sized rectangle around the PC; the current wider rule (every waiting NPC of the current map) is narrowed. (b) Steamwoven keeps or widens it (current map, or every waiting follower wherever it waits); Original uses the rectangle (switch). |
+| ID | Rows | Question | Options | Decision |
+| --- | --- | --- | --- | --- |
+| D1 | OL6, OL16 | The follow order never brings a follower back. | (a) Both settings as the original: follow only acknowledges or says "cannot". (b) Steamwoven: follow also unwaits waiting followers within 10 tiles (the follow check decides); Original keeps the no-op (switch). | **Decided (b)** 2026-10-21: switch `FollowOrderNeverUnwaits`; ARC-WORLD-046 |
+| D2 | OL14 | F6 does nothing. | (a) Both as the original (F6 reserved, no effect). (b) Steamwoven sends F6 to every follower in reach as "follow" (useful only with D1 (b)); Original keeps it inert (switch). | **Decided (b)** 2026-10-21: switch `PresetSixAddressesNobody`; ARC-WORLD-046 |
+| D3 | OL13 | The leave farewell is chosen against the line files' labels. | (a) Both as the original. (b) Steamwoven picks the friendly range for reaction above 40; Original keeps the swap (switch). | **Decided (b)** 2026-10-21: switch `FarewellRangesSwapped`; ARC-WORLD-046 |
+| D4 | OL15 | The portrait menu addresses its follower by name prefix. | (a) Both as the original (first follower in reach with that name). (b) Steamwoven addresses the clicked follower itself, still within 10 tiles; Original keeps the name match (switch). | **Decided (b)** 2026-10-21: switch `PortraitAddressesByNamePrefix`; ARC-WORLD-046 |
+| D5 | OL19 | The loyalty step is skipped while a follow goal lives. | (a) Both as the original: the step runs only when the follower has no action goal (needs the host to report that). (b) Steamwoven runs the step on every non-combat AI pass of a non-waiting follower; Original keeps the goal gate (switch). An observation in the running game (F4) would show how much (a) suppresses. | **Decided (a)** 2026-10-21: both settings as the original, no switch; ARC-WORLD-045 |
+| D6 | OL28 | The level message can show more than 56 points. | (a) Both as the original. (b) Steamwoven shows the stored (clamped) value; Original keeps the sum (switch). | **Decided (b)** 2026-10-21: switch `ExperienceRuleProfile.LevelMessagePointsBeforeCap`; ARC-UI-046 |
+| D7 | OL29 | Which waiting followers get the PC's level step. | (a) Both as the original: only those in the screen-sized rectangle around the PC; the current wider rule (every waiting NPC of the current map) is narrowed. (b) Steamwoven keeps or widens it (current map, or every waiting follower wherever it waits); Original uses the rectangle (switch). | **Decided (b)** 2026-10-21: Steamwoven every waiting follower wherever it waits, Original the rectangle (switch); ARC-WORLD-047 |
 
 OL22 (one stale warning test) and OL30's missing-scheme case are recorded as the
 original's and need no decision.

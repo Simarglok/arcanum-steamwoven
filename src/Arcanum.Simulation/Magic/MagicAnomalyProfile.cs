@@ -18,11 +18,19 @@ public sealed record MagicAnomalyProfile
     /// </summary>
     public bool SaveSubtractsResistance { get; init; }
 
+    /// <summary>
+    /// MG25 (ARC-MAGIC-007): the area test's summoned bit (<c>Tgt_Summoned</c>) checks bit 0x4000 of the flags word the test read
+    /// last — the critter flags (0x4000 "surrendered") when the area has the critter bit, a door's or chest's flags after a lock
+    /// test — instead of the spell flag "summoned". Steamwoven always checks the spell flag. No installed record reaches it: the
+    /// two areas that join the bits (records 183 and 217) are action areas the collection does not test.
+    /// </summary>
+    public bool SummonedTestReadsLastFlags { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly MagicAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly MagicAnomalyProfile Original = new() { Name = "original", SaveSubtractsResistance = true };
+    public static readonly MagicAnomalyProfile Original = new() { Name = "original", SaveSubtractsResistance = true, SummonedTestReadsLastFlags = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<MagicAnomalyProfile> All { get; } = new[] { Steamwoven, Original };

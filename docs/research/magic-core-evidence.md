@@ -228,6 +228,12 @@ The invocation check runs before any slot or payment (check (0x4564E0)):
 9. **Intelligence** ≥ 5 for a critter casting its own spell, and Teleportation
    is refused in anti-teleport areas.
 
+Read in the executable by two readers (ARC-MAGIC-007, [ledger "Spell target areas"](original-verification-ledger.md#spell-target-areas-arc-magic-007),
+TA1–TA16; the area test, the collection, the re-aim and the AI notice F3), with these precisions: the "cone" is a square of the
+radius (objects with the self bit, else tiles); the count limits only the radius, wall and cone branches and counts duplicates;
+party critter, non-party and attacker gather nothing (they only filter); the run's object list is built in reverse; the list has
+256 entries (MG24). The implementation is the [spell target areas](../world/spell-target-areas.md).
+
 Area selection at each action builds a target list from the action's area:
 self, source, the object, objects or tiles in a square radius, a wall line,
 the "cone" (a square around the origin in the earlier reading), party and non-party
@@ -526,12 +532,12 @@ deliberate changes are listed after the table.
 | MG15 | reflection cost (reflect (0x455550)) | the reflection caster pays "the last cost charged" from a global, stale for free or item casts | the reflected spell's cost |
 | MG16 | no-stack refusal (stage (0x452F20)) | the BEGIN cost is paid before the no-stack test, so a refused recast is paid | test before paying; low confidence that it is a slip |
 | MG17 | fate maximisation (process (0x4510F0)) | evaluated on every action with components, so an END can be maximised when its BEGIN was not and then removes more scaled effect entries than were added | capture once at BEGIN |
-| MG18 | target names (target table 0x596140) | `Tgt_Obj_No_ST_Critter_Dead` lacks the critter type bit that its siblings carry (flagged in the earlier reading) | add the bit |
+| MG18 | target names (target table 0x596140) | `Tgt_Obj_No_ST_Critter_Dead` lacks the critter type bit that its siblings carry (flagged in the earlier reading) | the original (intent): the not-dead test runs without the critter bit (ARC-MAGIC-007, ledger TA6) |
 | MG19 | unresistable runs (flags (0x455C30), schedule (0x453FA0)) | one run flag means both "unresistable" (`No_Resist:`, script unresistable casts) and "final END scheduled"; the scheduler tests it before maintenance and duration, so an unresistable spell ends right after BEGIN whatever its `Duration:` or `Maintain:` | separate flags; an unresistable spell keeps its duration (the census sizes which records combine them) |
 | MG20 | mana stores (pay (0x450420)) | worn mana stores are drained and their recharge scheduled before the fatigue refusal (≤ −15), so a refused cast still costs the stored mana | test fatigue before draining; low confidence that it is a slip |
-| MG21 | target names (target table 0x596140; ARC-MAGIC-002, ledger SC10) | `Tgt_Non_Party_Critters` lacks the critter bit its party siblings carry (20 installed records) | add the bit, or intended; the target slice (MT8) decides |
-| MG22 | target names (same) | `Tgt_Obj_Radius` lacks the object bit every other `Tgt_Obj_*` carries (24 installed records) | add the bit, or intended (a radius modifier); MT8 decides |
-| MG23 | target names (same) | `Tgt_Tile_Self` lacks the tile bit every other `Tgt_Tile_*` carries (no installed record) | add the bit, or intended; MT8 decides |
+| MG21 | target names (target table 0x596140; ARC-MAGIC-002, ledger SC10) | `Tgt_Non_Party_Critters` lacks the critter bit its party siblings carry (20 installed records) | the original (intent; ARC-MAGIC-007, ledger TA6) |
+| MG22 | target names (same) | `Tgt_Obj_Radius` lacks the object bit every other `Tgt_Obj_*` carries (24 installed records) | the original (intent; ARC-MAGIC-007, ledger TA11) |
+| MG23 | target names (same) | `Tgt_Tile_Self` lacks the tile bit every other `Tgt_Tile_*` carries (no installed record) | the original (intent; ARC-MAGIC-007, ledger TA10) |
 
 **Reconstruction changes in these paths** (marked as deliberate in the
 earlier reading; the original may differ here, see O10): the shell and reflection check moves
@@ -554,8 +560,8 @@ remove an identical effect that an item or background added
   `Resurrect`, `DurationStatInfo:`, `DurationTriggerCount:`, `Resist:` stats,
   `ChargesFromCells:`, `ChargeBeginCost:` and `Disabled:`: a data census
   question (below).
-- **O3** The target module was read only along the magic paths; cone, count
-  and radius doubts flagged in the earlier reading stay open for FR-MAGIC-003 acceptance.
+- **O3** Closed by ARC-MAGIC-007 (ledger TA11–TA13): the cone is a square of the radius around the target tile or the source,
+  the count limits the radius, wall and cone branches (a duplicate counts), the radius gather and its test use two centres.
 - **O4** How spell timers behave in turn-based mode (the game clock advances
   one second per round per ARC-RES-030) was not traced.
 - **O5** Technology records: charge-cell use, tech degrees and the

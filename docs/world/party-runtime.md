@@ -11,9 +11,9 @@ and consent part of [FR-SOCIAL-003](../requirements/story-social-ai.md#fr-social
 **NOT READY:** since ARC-WORLD-016 the AREA viewer passes `SessionDialogPartyPort` for Virgil and he
 follows the PC ([companion follow runtime](companion-follow-runtime.md)); other speakers keep the
 diagnostic `follow.pc` key. Since ARC-WORLD-045 the session has the original's wait timer and follower loyalty
-([below](#wait-timer-and-loyalty-arc-world-045)); there are no orders (so nothing in play makes a companion wait yet: the
-dialog `WA` action and the wait order are not admitted), no NPC leaders other than the PC, and no generated line text (lines
-are named by their message range). Since ARC-DATA-033 the follow check and the max-followers stat
+([below](#wait-timer-and-loyalty-arc-world-045)) and since ARC-WORLD-046 the out-of-combat orders
+([companion orders](companion-orders-runtime.md)), whose wait order schedules the timer; the dialog `WA` action is not admitted,
+there are no NPC leaders other than the PC, and no generated line text (lines are named by their message range). Since ARC-DATA-033 the follow check and the max-followers stat
 are checked in the retail executable ([ledger AP3, AP4](../research/original-verification-ledger.md#ai-parameters-and-follow-consent-arc-data-033));
 the rest of the party state's numbers and order are earlier source claims, **NOT_VERIFIED** in the executable.
 
@@ -216,5 +216,5 @@ ARC_AREA_CONVERSATION_GAME_ROOT=<installation> "$DOTNET" test tests/Arcanum.Terr
 
 The viewer wiring and follower movement (slice 3) are ARC-WORLD-016
 ([companion follow runtime](companion-follow-runtime.md)); the cross-map group (slice 4) is ARC-WORLD-017
-([map change](companion-follow-runtime.md#map-change-arc-world-017)); the wait timer and loyalty are ARC-WORLD-045 (above). Next:
-orders ([companion orders](../research/companion-orders-loyalty-evidence.md#implementation-slices)) and the dialog `WA` action.
+([map change](companion-follow-runtime.md#map-change-arc-world-017)); the wait timer and loyalty are ARC-WORLD-045 (above); the orders are ARC-WORLD-046
+([companion orders](companion-orders-runtime.md)). Next: the dialog `WA` action and the combat orders (NPC AI stage A7).
