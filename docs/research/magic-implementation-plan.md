@@ -240,7 +240,7 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG24 | original bug (ARC-MAGIC-007) | fixed in both modes (no-crash rule): the target list stops at its 256 entries; no installed record reaches it | MT8 |
 | MG25 | original bug (ARC-MAGIC-007) | fix (the summoned test reads the spell flag), switch `SummonedTestReadsLastFlags`; no installed cast reaches it (records 183 and 217 join the bits only in untested action areas) | MT8 |
 | MG26 | original bug (ARC-MAGIC-007) | fixed in both modes (no-crash rule): a missing object has no location where the original reads through handle 0 | MT8 |
-| MG27 | original bug (ARC-MAGIC-007) | keep the original in both modes, as MG5: the tile-radius test measures a tile against itself and the intended comparison is unknown; no installed cast would change | MT8 |
+| MG27 | original bug (ARC-MAGIC-007; **not yet accepted**: this slice's verdict by analogy with MG5, for the owner to confirm) | recommendation: keep the original in both modes, as MG5 — the tile-radius test measures a tile against itself and the intended comparison is unknown; no installed cast would change; until the owner answers both modes keep the original | MT8 |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |
 | O10 shell and reflection order | reconstruction change | the original in both modes | MT10 |
 | Charm asymmetry | reconstruction change confirmed | the original (+30 and −30 both through the reaction effects) | MT14 |

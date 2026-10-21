@@ -121,7 +121,7 @@ bit on its own (the not-dead and non-party tests run without the critter bit, th
 bit gathers the source's tile), so the values follow the original in both modes. MG27: the tile-radius test measures the target
 tile's distance to itself, so it never refuses a radius ≥ 0; the comparison it was meant to make is unknown, and with the
 installed records (tile-radius components of records 11, 27, 180 and 200 have their action's radius, and their entries come from
-the same square) any likely fix changes nothing, so it follows the original in both modes, as MG5 does.
+the same square) any likely fix changes nothing, so it follows the original in both modes, as MG5 does (this slice's recommendation, pending the owner's confirmation).
 
 ## Not ready
 
