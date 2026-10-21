@@ -2353,6 +2353,25 @@ Not modelled (named in the runtime): the item-spell path, the 4 action points in
 and fonts. The use script before a reading runs since ARC-SCRIPT-020 (IU rows below); the two readable prototypes with one (14086,
 14090) are read.
 
+## Item use script (ARC-SCRIPT-020)
+
+Source: the [reading window runtime](../world/reading-window-runtime.md) and WR13. Question: what runs between a click on a written
+item and its reading, and what decides whether the reading goes on? Read on 2026-10-21 by this task and, independently, by a fresh
+agent that saw only the questions (method step 6). Both agree on every row; the rows are F2 unless marked.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| IU1 | item use (0x462CC0), before the script | A null item returns; a multiplayer client forwards the use to its host. A scroll whose user lacks the required stat stops with a message (a PC only); an item with item flag 0x100 and no target starts target picking instead; a generic device with generic flag 0x4 takes its own handler. None of these applies to a written item: no installed written prototype has flag 0x100 (`WrittenRealDataTests`). | Original (the target-picking flag's name is inferred) |
+| IU2 | item use (0x462CC0) → script call (0x441980) | The use calls the script runner with the user as the triggerer, the item as the attachee, the target as the extra object, attachment point 1 and start line 0. | Original |
+| IU3 | script call (0x441980) | In the editor it returns 1 without running. At attachment point 1 a trap the user does not yet know and spots now (Spot Trap roll or a player flag) is revealed and the call returns 0. Script 0 returns 1; otherwise the run's answer: return-run-default 1, return-skip-default, falling off the last line, an unreadable line or the line cap 0. A run-once script clears its own number after the run. | Original (the trap check not modelled: no written item has a trap script) |
+| IU4 | item use (0x462CC0), after the script | An answer of 0 charges 4 action points in a turn-based round (0x4B7CD0) and ends the use. Otherwise an item with a spell mana store or the magical item flag casts its spells (food and scrolls are then destroyed), and any other charges 4 points with the result ignored and goes on by type; a written item (type 13) starts the reading (0x4606F0 → WR2). | Original |
+| IU5 | item use (0x462CC0) | Nothing between the script and the reading checks the item again: the reading uses the same handle, and a written item is never destroyed on this path. | Original |
+
+The runtime runs the use script in the viewer's use script host (the PC as the user, no target, the item's inventory row; the
+host's admission set) and reads only on a run-default answer; a run the host refuses is not read (PROJECT: the original has no
+refusal). Not modelled: the action points (the viewer reads outside rounds), the trap check, the item-spell path (no written item
+takes it), a teleport from an item's use script.
+
 ## Freed cells (ARC-WORLD-065)
 
 Source: the [object damage runtime](../world/object-damage-runtime.md) and DC5/DC7. Question: does a container or scenery the
