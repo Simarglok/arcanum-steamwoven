@@ -2064,7 +2064,7 @@ Source: the [attack resolver](../world/attack-resolver-runtime.md#critical-effec
 [combat core](combat-core-evidence.md) C20/C24. Question: what do the original's critical-hit and critical-miss procedures roll,
 in which order, and how does the damage step apply the result? Read on 2026-10-21 by this task and, independently, by a fresh
 agent that saw only the questions and the project's records of the callees (method step 6). Both agree on every row except where
-a row says otherwise; CR1–CR14 are F2, CR15 has one reading (F1). Every direct branch stays inside `.text`. The thresholds are in
+a row says otherwise; CR1–CR15 are F2 (CR15 since ARC-COMBAT-013, see its row). Every direct branch stays inside `.text`. The thresholds are in
 the code; the data are the weapon's charts (fields 129 hit, 132 miss) and the critter's critical-hit body type (field 227). The
 census mode `--critical-census` of the Crash Site probe counted them in the owner's installation through the module content
 stack (prototypes): every one of the 13 PC prototypes has body type 0; NPC prototypes 391 type 0, 41 type 1, 28 type 2, 23
@@ -2089,7 +2089,7 @@ gives the weapon part 0, CR2).
 | CR12 | damage step (0x4B4390), stun and knockdown | With context flag 0x4 the scripts of the target's worn armour (type 7, slots 1000..1008) run with the attacker: point 34 (critical hit) when flag 0x2 is set, else 35. Stun (0x40) when not already stunned and no knockdown or knockout bit: critter flag 0x20, then the stun animation (0x4357B0, goal 57 with (20 − constitution) / 2) starts only on a critter that can act (0x45D790: not destroyed or off, not dead, not unconscious, not stunned or paralysed, not stoned), else the flag is cleared. Knockdown or knockout (0x80, 0x100): the knockdown animation; a knockout of a critter still conscious draws 10..20 (on a network client the stored value) and sets fatigue damage to maximum fatigue + that. | Original (the stoned test of 0x45D790, spell flag 0x10000, was read by one reader) |
 | CR13 | the same, injuries and drops | In order: scar (effect 50, cause 7), blinding (unless blinded), arm (the first arm, else the second at d100 ≤ 50; then, whatever happened, the item in slot 1004 and the item in slot 1005 are each dropped when the wear check 0x464D20 refuses it now), legs (unless crippled); later, after the armour wear, a helmet drop (slot 1000, no wear check). Each injury of a PC is written to its injury record (0x4F5690: the first free pair from index 64 of field 268, the cause and the kind 0 blind, 1 arm, 2 legs, 3 scar). | Original |
 | CR14 | drop (0x461A90, 0x461AB0, 0x4F4E40) | 0x461A90 draws a distance 2..4 first, then 0x461AB0: the item's drop script (point 5, the owner as triggerer) or the remove check 0x466DA0 (the no-drop flag) refuses it; the item starts at the owner's tile and up to 10 tries of 0x4F4E40 move it: one direction draw per try, a walk of the distance from the owner (a try fails only when a step leaves the map), a path back (0x41F3C0, limit 200); no path or one of the distance + 2 or longer keeps the owner's tile, else the path is walked and, for a critter owner, ends at the first tile with no critter on it. An NPC owner then gets NPC flag 0x2000000 (look for a weapon) for a weapon, 0x4000000 (look for armour) for armour. | Original; the direction draw's bounds are 0 and 8 (0x4CEF00 is inclusive). The second reader of ARC-COMBAT-009 read 0..7; the second reader of ARC-WORLD-059 read 0..8 and that direction 8 is a step in place (0x4B8FF0 leaves the tile), so the bound is F2 |
-| CR15 | ammunition loss (0x4B65D0) | Nothing for an NPC holder without a leader (0x45DDA0); otherwise all the holder's ammunition of the weapon's type, or five times the weapon's consumption (field 126) when it holds at least that. | Original (one reader; confirmed by [AM4](#ammunition-arc-world-066), not applied yet: the combat lane calls `SpendAmmo`) |
+| CR15 | ammunition loss (0x4B65D0) | Nothing for an NPC holder without a leader (0x45DDA0); otherwise all the holder's ammunition of the weapon's type, or five times the weapon's consumption (field 126) when it holds at least that. The damage step calls it with "lose all" for 0x40000 and with five shots for 0x20000, in that order, after the weapon's destruction (none when it was destroyed); a weapon without an ammunition type (10000) spends nothing. | Original; confirmed by [AM4](#ammunition-arc-world-066) and, in ARC-COMBAT-013, by two independent readers of the ranged path (F2). Applied to the hero since ARC-COMBAT-013 (`SpendAmmo`); an NPC's NOT READY (no NPC attacks) |
 
 Anomalies (none needs a switch):
 
@@ -2105,8 +2105,8 @@ Anomalies (none needs a switch):
 - CRA4 (CR13, CR14): NOT READY, not a difference: since ARC-COMBAT-010 the session makes the drop's draws (2..4, one direction
   per try) and chooses the tile through the host's map ([drop cell](#drop-cell-arc-combat-010)); a host that passes no map
   still gets the owner's cell without draws. The hero's drops lie in its placed items
-  ([placed items](../world/inventory-runtime.md#placed-items-arc-world-059)). The NPC flags of CR14 and the PC's injury record of CR13 are not session state, the drop and armour scripts are
-  not run, and no ammunition is modelled (CR15).
+  ([placed items](../world/inventory-runtime.md#placed-items-arc-world-059)). The NPC flags of CR14 and the PC's injury record of CR13 are not session state and the drop and armour scripts are
+  not run. Since ARC-COMBAT-013 the hero's critical-miss ammunition effects spend its stack (CR15); an NPC's are not reached yet.
 
 ## Generated dialog files (ARC-DATA-042)
 
