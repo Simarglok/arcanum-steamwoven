@@ -138,11 +138,13 @@ public sealed class CriticalEffectsStateTests
     }
 
     [TestMethod]
-    public void TheHerosOwnDropsAreNotAppliedYet()
+    public void TheHerosDroppedWeaponLiesAtItsCellUntilItIsPickedUp()
     {
-        // A blade that fails critically whenever it misses: half of those turn on the hero critically, and its own table disarms it.
+        // ARC-WORLD-059. A blade that fails critically whenever it misses: half of those turn on the hero critically, and its own
+        // table disarms it.
         using var owner = Owner(missChance: 100);
         var golem = GolemCombat();
+        var kit = owner.QueryHeroKit().Select(item => item.Entity).ToArray();
         for (var attempt = 0; attempt < 400; attempt++)
         {
             var result = owner.AttackCritter(owner.Version, new(golem) { HeroWorn = HeroWorn(), TargetWorn = Worn(owner), TargetCell = GolemCell });
@@ -150,8 +152,21 @@ public sealed class CriticalEffectsStateTests
             if (result.Recipient != DamageRecipient.Attacker || !result.Resolution!.CriticalSelfHit) continue;
             if (owner.IsItemDestroyed("kit:1")) Assert.Inconclusive("the critical miss destroyed the blade first");
             var drop = result.Criticals.Single(step => step.Kind == SessionCriticalStepKind.DropWeapon);
-            Assert.AreEqual((DamageRecipient.Attacker, "kit:1", SessionCriticalStepOutcome.HeroDropNotReady), (drop.Whose, drop.Entity, drop.Outcome));
-            Assert.AreEqual(EquipmentSlot.Weapon, owner.QueryEquipment().Worn.Single().Slot, "the hero still wields it");
+            Assert.AreEqual((DamageRecipient.Attacker, "kit:1", SessionCriticalStepOutcome.Dropped, (CellCoord?)Start.Cell),
+                (drop.Whose, drop.Entity, drop.Outcome, drop.Cell), "at the hero's cell");
+            Assert.AreEqual(0, owner.QueryEquipment().Worn.Count, "no longer wielded");
+            Assert.IsFalse(owner.QueryHeroKit().Any(item => item.Entity == "kit:1"));
+            var placed = owner.QueryPlacedItems().Single();
+            Assert.AreEqual(("kit:1", SessionPlacedSource.Kit, Exterior, Start.Cell), (placed.Entity, placed.Source, placed.Map, placed.Cell));
+            Assert.AreEqual(Start.Cell, owner.QueryMapInventory(Exterior)!.Ground.Single(g => g.Item.Entity == "kit:1").Cell);
+
+            // Saved and restored with the session; picked up, it is back in the kit at its number's place.
+            using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+            Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, Seed()).Failure);
+            Assert.AreEqual(placed, restored.QueryPlacedItems().Single());
+            Assert.AreEqual(GameSessionDisposition.Changed, restored.PickUpItem(restored.Version, "kit:1", Accept).Disposition);
+            CollectionAssert.AreEqual(kit, restored.QueryHeroKit().Select(item => item.Entity).ToArray());
+            Assert.AreEqual(0, restored.QueryPlacedItems().Count);
             return;
         }
         Assert.Fail("no critical self-hit within the bounded run");

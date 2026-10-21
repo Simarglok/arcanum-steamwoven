@@ -92,8 +92,9 @@ A drop (`SessionCriticalStep`, `SessionCriticalStepOutcome`): an NPC's item that
 ground at `SessionAttack.TargetCell` as a map change (`ItemDroppedProperty` = `item.dropped`, the cell packed with 24 bits per
 coordinate, + 1), so no schema changes; it then lies on the ground in `QueryMapInventory` (after the spilled containers' items),
 leaves the NPC's list (loot, negative `IN`, the NPC crafter and the NPC inventory store no longer see it) and `PickUpItem` takes
-it. Not applied: the hero's item (`HeroDropNotReady`: the session has no store of ground items it placed, ARC-WORLD-059), an item
-the session added to the NPC (`NotSeedItem`), an item with a drop script (`ScriptUnsupported`), no cell or no item data
+it. The hero's item goes to the ground at the hero's cell among its placed items (ARC-WORLD-059,
+[placed items](inventory-runtime.md#placed-items-arc-world-059)): it leaves its slot and list until it is picked up (`HeroCellUnfit` when
+the hero's cell does not fit the packing). Not applied: an item the session added to the NPC (`NotSeedItem`), an item with a drop script (`ScriptUnsupported`), no cell or no item data
 (`Unknown`); an item with the no-drop flag is `Refused`, as in the original (`SessionWearItem.NoDrop`). A dropped item is no
 longer worn: a `TargetWorn` that still lists it is refused (`InvalidWear`), and `SessionAttack.TargetCell` outside 0 .. 2^24 − 1
 is `InvalidAttack`, both before any roll.

@@ -213,7 +213,55 @@ not migrated.
 Not modelled: moving a seed item from one NPC to another (no caller yet), giving an NPC an item from the PC (barter, drop on a
 follower), NPC worn slots, stacks, and a visiting companion's items in the map-bound calls of a map whose seed does not list it.
 
+## Placed items (ARC-WORLD-059)
+
+The hero's items the session placed on the ground (`GameSessionOwner.QueryPlacedItems`, `SessionPlacedItem`), read in the
+executable first ([ledger "Placed items"](../research/original-verification-ledger.md#placed-items-arc-world-059), PI1–PI6). In the
+original an item is an object anywhere: dropping it removes it from the owner (unwielding a worn one) and moves it to a tile,
+where it stays until something picks it up or its 48-hour decay destroys it; a pickup is the ordinary transfer.
+
+**Store.** One saved list of the hero's items on the ground, in placing order: entity, kind, the hero's list it came from
+(`SessionPlacedSource`: the kit, a world item the PC took, with the map whose seed lists it, or a made item), and the map and cell
+it lies on. A placed item stays taken, so its seed never shows it at its seed position, and it counts in the hero's item budget
+(`MaxPcItems`), so it can always come back. `QueryMapInventory` lists the map's placed items after the NPC drops.
+
+- **Placing** (internal, the hero's critical drops of [ARC-COMBAT-009](hero-attack-runtime.md#critical-effects-arc-combat-009):
+  `DropHelmet`, `DropWeapon` and the arm-hit drops): the item leaves its wear slot and its list and lies at the hero's cell
+  (`SessionCriticalStepOutcome.Dropped`). One revision. A no-drop item is refused, as in the original (PI1).
+- **Pickup**: `PickUpItem` of a placed item on the actor's map returns it to its list, a kit item at its kit number's place (the
+  kit stays in number order), a taken or made item at the end of its list. The host's insert check runs first (a call back into the
+  owner from it is `StaleVersion`); one revision. On another map the item is not available.
+- **Deletion**: a placed item the durability rules delete leaves the store.
+- **Seeds**: an attached seed must still list a placed world item of its map with its saved kind and no seed may list a placed kit
+  or made item (`InventoryMismatch`), as for the hero's lists.
+
+**Snapshot schema 32.** `"inventory":{…,"npcs":[…],"placed":[{"entity","source":"kit"|"pc"|"made","origin","map","x","y","type",
+"prototype","name","description"}]}`, `origin` the seed map of a `pc` item and 0 otherwise, the cell 0..2^24 − 1 per coordinate.
+Decoding refuses an unknown source or out-of-range value (`OutOfRange`), an origin that does not fit the source or an item held twice
+in the whole inventory (`NotCanonical`) and more than the policy's hero items (`BudgetExceeded`); restore refuses a kit item without a
+hero or with no kit number, a made item without a made number, a world item with a kit or made id, a deleted item (`InvalidSnapshot`)
+and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its placed items as they skip its deleted ones. Schemas
+1..31 are refused, not migrated.
+
+**Not ready (the original's behaviour, PI1–PI6).**
+
+- The placement 2..4 cells away with its draws (ARC-COMBAT-010): the item lies on the hero's cell and the generator does not draw.
+- The 48-hour Item Decay (PI4): the original destroys an item lying on the ground or in a junk pile 48 game hours after it was
+  dropped (unless its item flag 0x20000 is set; a container open in the loot window delays it by a minute); placed items, NPC drops
+  and spilled containers' items stay. A follow-up task.
+- Junk piles (PI3): a dropped item joins a junk pile on its tile, or makes one with the loose items there; placed items lie loose.
+- The scripts and side effects of the removal (PI2): item spells, the wield-off and remove-item scripts and the drop script, which
+  the session cannot know for a kit item; the light and armour of the hero follow its equipment at once.
+- The PC's re-wield after losing a weapon (PI5): with the "auto switch" setting on, the original wields the best weapon; the session
+  leaves the slot empty.
+- The viewer draws no placed item and cannot click one (ARC-RENDER-033); NPC made items (ARC-WORLD-055) and the junk pile of OD13
+  can use this store later.
+
 ## Evidence
+
+- Synthetic (ARC-WORLD-059): [PlacedItemsStateTests](../../tests/Arcanum.Session.Tests/PlacedItemsStateTests.cs) (placing a kit and a
+  taken item, the view, another map, the insert check, the kit's order on return, save and restore, the attach check, deletion, codec and
+  restore refusals) and the hero's critical drop in [CriticalEffectsStateTests](../../tests/Arcanum.Session.Tests/CriticalEffectsStateTests.cs).
 
 - Synthetic (ARC-WORLD-055): [NpcInventoryStateTests](../../tests/Arcanum.Session.Tests/NpcInventoryStateTests.cs) (addition and numbering,
   every refusal, a party record without a seed, loot and `IN` of added items, deletion with the durability rules, round trip, the

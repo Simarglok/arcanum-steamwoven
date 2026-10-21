@@ -24,7 +24,8 @@ public enum SessionCriticalStepKind
 /// <summary>How a critical item step ended.</summary>
 public enum SessionCriticalStepOutcome
 {
-    /// <summary>The item now lies on the ground at <see cref="SessionCriticalStep.Cell"/> (an NPC's item of a map seed).</summary>
+    /// <summary>The item now lies on the ground at <see cref="SessionCriticalStep.Cell"/>: an NPC's item of a map seed (a map change), or
+    /// since ARC-WORLD-059 the hero's (its placed items, <see cref="GameSessionOwner.QueryPlacedItems"/>).</summary>
     Dropped,
     /// <summary>The wear check still admits the item: an arm hit does not drop it.</summary>
     Kept,
@@ -32,9 +33,8 @@ public enum SessionCriticalStepOutcome
     NoItem,
     /// <summary>The item has the no-drop flag: the original's drop refuses it (0x466DA0).</summary>
     Refused,
-    /// <summary>Not applied, NOT READY: the hero's item would go to the ground, which needs a session store of ground items the
-    /// session placed (ARC-WORLD-059).</summary>
-    HeroDropNotReady,
+    /// <summary>Not applied: the hero's item cannot lie on its cell (outside the drop's 24-bit packing).</summary>
+    HeroCellUnfit,
     /// <summary>Not applied, NOT READY: an item the session added to an NPC (ARC-WORLD-055) lies in no map seed, so it cannot go to
     /// the ground before that store exists.</summary>
     NotSeedItem,
@@ -140,8 +140,8 @@ public sealed partial class GameSessionOwner
         List<SessionCriticalStep> steps, ref GameSessionFailure failure)
     {
         var item = side.Worn![slot];
-        SessionCriticalStepOutcome? outcome = side.Life!.IsHero ? SessionCriticalStepOutcome.HeroDropNotReady
-            : item.NoDrop ? SessionCriticalStepOutcome.Refused
+        if (side.Life!.IsHero) return HeroDrop(kind, whose, side, slot, item, steps, ref failure);
+        SessionCriticalStepOutcome? outcome = item.NoDrop ? SessionCriticalStepOutcome.Refused
             : cell is null ? SessionCriticalStepOutcome.Unknown
             : null;
         InventoryDomain.Seed? seed = null;
@@ -167,6 +167,28 @@ public sealed partial class GameSessionOwner
         }
         steps.Add(new(kind, whose, slot, item.Entity, SessionCriticalStepOutcome.Dropped, cell));
         var left = new Dictionary<EquipmentSlot, SessionWearItem>(side.Worn);
+        left.Remove(slot);
+        return side with { Worn = left };
+    }
+
+    // ARC-WORLD-059: the hero's item goes to the ground at the hero's cell among its placed items, as an NPC's does at its cell.
+    private SessionWearSide HeroDrop(SessionCriticalStepKind kind, DamageRecipient whose, SessionWearSide side, EquipmentSlot slot,
+        SessionWearItem item, List<SessionCriticalStep> steps, ref GameSessionFailure failure)
+    {
+        var cell = _actor.Cell;
+        SessionCriticalStepOutcome? skipped = item.NoDrop ? SessionCriticalStepOutcome.Refused
+            : !DropCellFits(cell) ? SessionCriticalStepOutcome.HeroCellUnfit
+            : _revision == long.MaxValue ? SessionCriticalStepOutcome.Unknown
+            : null;
+        if (skipped is { } outcome)
+        {
+            if (outcome == SessionCriticalStepOutcome.Unknown) failure = GameSessionFailure.RevisionExhausted;
+            steps.Add(new(kind, whose, slot, item.Entity, outcome, null));
+            return side;
+        }
+        PlaceHeroItem(item.Entity, cell);
+        steps.Add(new(kind, whose, slot, item.Entity, SessionCriticalStepOutcome.Dropped, cell));
+        var left = new Dictionary<EquipmentSlot, SessionWearItem>(side.Worn!);
         left.Remove(slot);
         return side with { Worn = left };
     }
