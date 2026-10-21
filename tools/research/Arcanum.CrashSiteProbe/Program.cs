@@ -58,6 +58,8 @@ internal static partial class Program
             if (args.SequenceEqual(["--light-census-self-test"])) { LightCensusSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--combat-census") return ProbeCombatCensus(args[1..]);
             if (args.SequenceEqual(["--combat-census-self-test"])) { CombatCensusSelfTest(); return 0; }
+            if (args.FirstOrDefault() == "--critical-census") return ProbeCriticalCensus(args[1..]);
+            if (args.SequenceEqual(["--critical-census-self-test"])) { CriticalCensusSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--time-lighting") return TimeLightingProbe.Run(args[1..]);
             if (args.SequenceEqual(["--time-lighting-self-test"])) { TimeLightingProbe.SelfTest(); return 0; }
             if (args.FirstOrDefault() == "--area-passability-closure") return ProbeAreaPassabilityClosure(args[1..]);

@@ -81,4 +81,22 @@ public static class CombatantRules
         Set(flags.HasFlag(CombatantFlags.MagneticInversion), CombatantConditions.MagneticInversion);
         return result;
     }
+
+    /// <summary>The worn items the critical-hit procedure looks at, from the slots a critter wears something in (ARC-COMBAT-009).</summary>
+    public static CombatWornItems WornItems(IEnumerable<EquipmentSlot> slots)
+    {
+        ArgumentNullException.ThrowIfNull(slots);
+        var worn = CombatWornItems.None;
+        foreach (var slot in slots)
+            worn |= slot switch
+            {
+                EquipmentSlot.Helmet => CombatWornItems.Helmet,
+                EquipmentSlot.Weapon => CombatWornItems.Weapon,
+                EquipmentSlot.Gauntlets => CombatWornItems.Gauntlets,
+                EquipmentSlot.Boots => CombatWornItems.Boots,
+                EquipmentSlot.Armor => CombatWornItems.BodyArmor,
+                _ => CombatWornItems.None,
+            };
+        return worn;
+    }
 }

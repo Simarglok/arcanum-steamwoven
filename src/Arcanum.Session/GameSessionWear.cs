@@ -14,10 +14,12 @@ namespace Arcanum.Session;
 /// </summary>
 public sealed record SessionWearItem(string Entity, ItemCondition Baseline)
 {
-    private const uint InvulnerableObject = 0x400000;
+    private const uint InvulnerableObject = 0x400000, NoDropFlag = 0x20;
 
     public bool Invulnerable { get; init; }
     public int ArtSubtype { get; init; }
+    /// <summary>The item's no-drop flag (item flag 0x20): the original's drop refuses it, also a critical's (ARC-COMBAT-009).</summary>
+    public bool NoDrop { get; init; }
 
     /// <summary>The wear values of an item from its stored fields (ARC-DATA-021); null for an object that is not an item or a
     /// condition outside the durability rules' bounds.</summary>
@@ -29,6 +31,7 @@ public sealed record SessionWearItem(string Entity, ItemCondition Baseline)
         {
             Invulnerable = (fields.Object.Flags & InvulnerableObject) != 0,
             ArtSubtype = fields.Weapon is null ? 0 : Arcanum.Data.Combat.CombatItemArt.Subtype(item.UseArtFragment),
+            NoDrop = (item.Flags & NoDropFlag) != 0,
         };
     }
 }
@@ -164,6 +167,8 @@ public sealed partial class GameSessionOwner
             {
                 if (!Enum.IsDefined(slot) || item is null || !SessionValidation.Entity(item.Entity) || !ItemDurabilityRules.IsValid(item.Baseline) ||
                     item.ArtSubtype is < 0 or > CombatWearRules.MaxArtSubtype || !entities.Add(item.Entity) || !TracksItem(item.Entity)) return false;
+                // A critical dropped it (ARC-COMBAT-009): it lies on the ground.
+                if (!hero && Dropped(item.Entity)) return false;
                 // An NPC never wears an item of the hero's.
                 if (!hero && (_equipment.SlotOf(item.Entity) is not null || _inventory.Kit.Any(held => held.Entity == item.Entity) ||
                         _inventory.Pc.Any(held => held.Entity == item.Entity) || _inventory.Made.Any(held => held.Entity == item.Entity))) return false;
