@@ -72,8 +72,9 @@ public static class AreaReading
             $"written prototypes {facts.Count}, text files refused {texts.Refusals.Count}");
     }
 
-    /// <summary>The spread of a document: its decoded header and pages. A refused document gives null.</summary>
-    public static AreaReadingView? View(WrittenDocument document, WrittenTexts texts, int spread, MesTextProfile profile)
+    /// <summary>The spread of a document: its decoded header and pages; the newspaper's filler under the session's reading rules
+    /// (<paramref name="rules"/>, WRD3; null reads as the original). A refused document gives null.</summary>
+    public static AreaReadingView? View(WrittenDocument document, WrittenTexts texts, int spread, MesTextProfile profile, WrittenRuleProfile? rules = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(texts);
@@ -83,7 +84,7 @@ public static class AreaReading
             return new(subtype, document.BackgroundArt, header, "", "", 0, 1, document.PictureArt, "the picture is interface art " + document.PictureArt + " (not drawn here)");
         var body = document.Body.Select(m => (m.Centered ? "[centred] " : "") + Decode(m.Text, profile)).ToList();
         if (subtype == WrittenSubtype.Newspaper)
-            body.AddRange(texts.NewspaperFiller(document.StartLine, NewspaperFillerShown).Select(m => "[filler] " + Decode(m.Text, profile)));
+            body.AddRange(texts.NewspaperFiller(document.StartLine, NewspaperFillerShown, rules).Select(m => "[filler] " + Decode(m.Text, profile)));
         var text = string.Join(subtype is WrittenSubtype.Note or WrittenSubtype.Telegram ? "" : "\n", body);
         if (subtype != WrittenSubtype.Book)
             return new(subtype, document.BackgroundArt, header, text, "", 0, 1, null, body.Count == 0 ? "no text at the start line" : null);
