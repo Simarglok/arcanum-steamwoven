@@ -32,7 +32,10 @@ Largest installed value against each cap; "interiors" are the 80 maps a whole-ma
 | `AreaLightingReader.MaxSectors` | 256 | 79 | caladon-castle main floor | 3.2× |
 | `AreaLightingReader.MaxSchemes` | 32 | 3 | k'na tha | 10.7× |
 | `StationaryLightReader.MaxLights` (was 256) | 512 | 207 | tarant sewers-02 | 2.5× |
-| `StationaryLightReader.MaxFrames` | 16 | 9 | tulla interior | 1.8× |
+| `StationaryLightReader.MaxFrames` (was 16) | 32 | 9 stationary, 11 with object lights | tulla interior | 2.9× |
+| `StationaryLightReader.MaxArtFrames` (frames of one light ART) | 32 | 15 | — | 2.1× |
+| `StationaryLightReader.MaxLightRgbaBytes` (all frames of a snapshot's light ART) | 64 MiB | — | — | — |
+| `ObjectLightReader.MaxLights` | 8,192 | 5,083 | k'na tha | 1.6× |
 | `MapPatchFile.MaxBytes` (`Rules\map.patch`) | 1 MiB | 5,779 | — | 181× |
 | `AreaMapLoadOperation.MaxChartSectors` | 32 | 14 | k'na tha | 2.3× |
 | `AreaRepositoryPolicy.MaxMapFrames` (CPU, and GPU visible since ARC-DATA-029) | 16,384 | 4,557 drawn frames (4,562 owner frame requests; void has no door, so the portal frames of ARC-WORLD-051 add none there) | void | 3.6× |
@@ -102,7 +105,7 @@ Four interiors have no stationary lights for a data reason, never a cap (the cen
 that no lighting read stops at `LimitExceeded`): two are not in the map list and two have sectors
 without the metadata section. The two that were unlit for an animated light ART (void) and for the
 no-shadow bit 0x40 (bates mansion lev 1) are read since ARC-DATA-039. Object lights (ARC-DATA-039):
-at most 5,083 in one interior, under the cap of 8,192.
+at most 5,083 in one interior (k'na tha), under the cap of 8,192.
 
 | Map | Sectors | Objects | NPCs | Prototypes | Lights | Frames | RGBA MiB | Aggregate bytes | Largest sector bytes |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

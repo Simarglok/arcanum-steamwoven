@@ -25,7 +25,7 @@ public sealed record ObjectLight(AreaObjectKey Object, int Type, int Slot, long 
 /// <summary>The object lights of the core sectors of one strict area snapshot, with their light ART frames.</summary>
 public sealed class AreaObjectLightSource
 {
-    internal AreaObjectLightSource(int catalogueMap, string? namesSha256, IList<ObjectLight> lights, IDictionary<int, StationaryLightFrame> frames)
+    internal AreaObjectLightSource(int catalogueMap, string? namesSha256, IReadOnlyList<ObjectLight> lights, IDictionary<int, StationaryLightFrame> frames)
     {
         CatalogueMap = catalogueMap; NamesSha256 = namesSha256;
         Lights = new ReadOnlyCollection<ObjectLight>(lights.ToArray());
@@ -53,7 +53,8 @@ public sealed record ObjectLightReadResult(LightingFailure Failure, AreaObjectLi
 /// </summary>
 public static class ObjectLightReader
 {
-    /// <summary>Project policy: the largest installed interior has about 5,200 lights; 1.5 times headroom.</summary>
+    /// <summary>Project policy: the largest snapshot the census read (the interiors and two main-map windows) has 5,083
+    /// object lights; 1.6 times headroom.</summary>
     public const int MaxLights = 8192;
     // Project slots: offsets, light flags, ART, colour, the overlay arrays, object flags, the first type-specific slot.
     internal const int OffsetXSlot = 2, OffsetYSlot = 3, FlagsSlot = 12, ArtSlot = 13, ColorSlot = 14, OverlayFlagsSlot = 15,
@@ -90,11 +91,18 @@ public static class ObjectLightReader
 
     /// <summary>The object lights of the snapshot's core objects, without their ART (the frames are the caller's).</summary>
     [OriginalFunction(0x4D9590, OriginalFunctionScope.Partial)]
-    public static LightingFailure Describe(AreaSnapshot snapshot, out List<ObjectLight> lights, CancellationToken token = default)
+    public static LightingFailure Describe(AreaSnapshot snapshot, out IReadOnlyList<ObjectLight> lights, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         var found = new List<ObjectLight>();
-        lights = found;
+        lights = [];
+        var failure = Collect(snapshot, found, token);
+        if (failure == LightingFailure.None) lights = found.AsReadOnly();
+        return failure;
+    }
+
+    private static LightingFailure Collect(AreaSnapshot snapshot, List<ObjectLight> found, CancellationToken token)
+    {
         var tiles = new Dictionary<(long, long), uint>();
         foreach (var tile in snapshot.Terrain) tiles[(tile.WorldX, tile.WorldY)] = tile.RawArt;
         foreach (var o in snapshot.Objects)
@@ -104,13 +112,17 @@ public static class ObjectLightReader
             var fields = new Dictionary<int, AreaFieldValue>();
             foreach (var field in o.EffectiveFields) fields[field.Slot] = field;
             long? Number(int slot) => fields.TryGetValue(slot, out var v) && v.Presence == AreaPresence.Value ? v.Number : null;
+            // An overlay array holds one word per slot 0..3; any other key or word count is refused below.
             long? Element(int slot, int index) => fields.TryGetValue(slot, out var v) && v.Presence == AreaPresence.Array
-                ? v.Elements.FirstOrDefault(e => e.Key == index)?.Words.FirstOrDefault() : null;
+                ? v.Elements.FirstOrDefault(e => e.Key == index)?.Words[0] : null;
+            foreach (var slot in new[] { OverlayFlagsSlot, OverlayArtSlot, OverlayColorSlot })
+                if (fields.TryGetValue(slot, out var array) && array.Presence == AreaPresence.Array
+                    && array.Elements.Any(e => e.Key is < 0 or >= OverlaySlots || e.Words.Count != 1)) return LightingFailure.LightRecordMalformed;
             var objectFlags = (uint)(Number(ObjectFlagsSlot) ?? 0);
             if ((objectFlags & InventoryFlag) != 0) continue;
             var nocturnal = o.Type == SceneryType && ((uint)(Number(TypeFlagsSlot) ?? 0) & NocturnalFlag) != 0;
-            // LT4: the tile ART's bit 8 under the object (an outdoor tile).
-            var outdoor = tiles.TryGetValue((x, y), out var tileArt) && (tileArt >> 8 & 1) != 0;
+            // LT4: the ART flag of the tile under the object (0x5038C0: bit 8 of a tile ART, bit 25 of a facade), an outdoor tile.
+            var outdoor = tiles.TryGetValue((x, y), out var tileArt) && OutdoorArt(tileArt);
             var offsetX = (int)(Number(OffsetXSlot) ?? 0); var offsetY = (int)(Number(OffsetYSlot) ?? 0);
             if (offsetX is < -StationaryLightReader.MaxOffset or > StationaryLightReader.MaxOffset || offsetY is < -StationaryLightReader.MaxOffset or > StationaryLightReader.MaxOffset)
                 return LightingFailure.LightRecordMalformed;
@@ -136,6 +148,20 @@ public static class ObjectLightReader
             }
         }
         return LightingFailure.None;
+    }
+
+    // 0x5038C0: the indoor/outdoor flag of a tile (type 0: bit 8) or facade (type 11: bit 25) ART; 0 for any other type.
+    private static bool OutdoorArt(uint art) => (art >> 28) switch { 0 => (art >> 8 & 1) != 0, 11 => (art >> 25 & 1) != 0, _ => false };
+
+    /// <summary>The light's flags as the original's load leaves them (LT4, LT13): a nocturnal light that is built (at night,
+    /// or on an indoor tile at any hour) has its object switched on, which clears the light's OFF bit; every other light keeps
+    /// its saved flags.</summary>
+    [OriginalFunction(0x43D280, OriginalFunctionScope.Partial)]
+    public static StationaryLightFlags FlagsAtLoad(ObjectLight light, int hour)
+    {
+        ArgumentNullException.ThrowIfNull(light);
+        if (!BuiltAtLoad(light, hour)) throw new ArgumentException("The light is not built at this hour.", nameof(light));
+        return light.Nocturnal ? light.Flags & ~StationaryLightFlags.Off : light.Flags;
     }
 
     /// <summary>Whether the original builds the light at sector load at <paramref name="hour"/> (LT4): nocturnal scenery on an

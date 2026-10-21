@@ -103,7 +103,8 @@ A light whose ART has more than one frame animates (LT6):
 - The event is of the animation domain and is not saved ([event queue](game-event-queue.md#3-event-kinds-and-consumers-s)).
 
 `art/light/light.mes` names 28 light ARTs; 7 have more than one frame (5, 6, 8 or 15 frames, at 5 or 8 frames per
-second). The viewer refuses an animated light ART today, which leaves one interior unlit.
+second). The viewer refused an animated light ART, which left one interior unlit; since ARC-DATA-039 it is read with all
+its frames and its frame 0 is drawn.
 
 ## Flags the original reads
 
@@ -117,8 +118,8 @@ The other bits:
 - **Animation:** 0x4 and 0x20 only gate it (LT6).
 - **Bookkeeping:** 0x80 marks a changed light, 0x8000000 a primary light, and 0x10000000 << slot an overlay slot.
 - **0x40: casts no shadow.** It is read only by the object shadow builder (0x4D9B20), which skips lights that are
-  off, dark or carry 0x40 (LT14). The light itself draws normally. The viewer refuses the bit today, which leaves the
-  one interior that has it unlit; V7a admits it.
+  off, dark or carry 0x40 (LT14). The light itself draws normally. The viewer refused the bit, which left the
+  one interior that has it unlit; V7a (ARC-DATA-039) admits it.
 
 ## Steamwoven: slice V7 (proposed)
 

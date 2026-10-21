@@ -110,15 +110,18 @@ builds them at sector load ([ledger LT1, LT4](../research/original-verification-
 - The saved flag words may carry the original's runtime bits (animating 0x4, changed 0x80, the primary and
   overlay-slot markers), which are dropped. 0x20 (no animation) and 0x40 (no shadow) are kept as data.
 - Each light records whether its object is switched off, whether it is nocturnal scenery and whether the tile under it
-  is an outdoor tile (tile ART bit 8). `BuiltAtLoad(light, hour)` is the original's load rule: nocturnal scenery on an
-  outdoor tile only at night (hours 18..5).
+  is an outdoor tile (the ART flag of 0x5038C0: bit 8 of a tile, bit 25 of a facade). `BuiltAtLoad(light, hour)` is the
+  original's load rule: nocturnal scenery on an outdoor tile only at night (hours 18..5). `FlagsAtLoad(light, hour)`
+  gives a built light's flags: a nocturnal light is switched on with its object, which clears its saved OFF bit (LT13).
 - The light ART frames come from the same table and phases as the stationary lights. An object light's frame is its
   saved animation frame.
 - Fail-closed: an unknown flag bit, an ART that is not a light (type 9, rotation and low bits 0), a frame past the ART's
-  last and more than 8,192 lights per snapshot (project policy) are typed failures.
+  last, an overlay array element outside slots 0..3 or of other than one word, and more than 8,192 lights per snapshot
+  (project policy) are typed failures. All light ART frames of one read are capped at 64 MiB of RGBA.
 
 On the installed original (opt-in `ObjectLightRealDataTests`), all 80 interiors and two main-map windows (the Crash Site,
-Shrouded Hills) read without a failure: 6,809 object lights, at most 5,083 in one map, 109 of them nocturnal. No viewer
+Shrouded Hills) read without a failure: 6,809 object lights, at most 5,083 in one map (k'na tha), 109 of them nocturnal. The cap was checked on windows of
+radius 1 only. No viewer
 draws them yet (slice V7b).
 
 ## Viewer controls

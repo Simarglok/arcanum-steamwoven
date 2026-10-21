@@ -36,26 +36,24 @@ public sealed record StationaryLight(long Sector, int Index, long X, long Y, int
 /// by which the original moves a light when it steps to that frame (ledger LT7).</summary>
 public sealed class StationaryLightFrame
 {
+    /// <param name="later">Frames 1.. of an animated ART (frame 0 is this one); null for a static light.</param>
     internal StationaryLightFrame(int number, string name, string payloadSha256, int width, int height, int hotX, int hotY, byte[] mask,
-        int stepX = 0, int stepY = 0)
+        int stepX = 0, int stepY = 0, IReadOnlyList<StationaryLightFrame>? later = null, int framesPerSecond = 0)
     {
         Number = number; Name = name; PayloadSha256 = payloadSha256; Width = width; Height = height; HotX = hotX; HotY = hotY;
         Mask = Array.AsReadOnly(mask); StepX = stepX; StepY = stepY;
-        Frames = Array.AsReadOnly(new[] { this });
+        Frames = Array.AsReadOnly(new[] { this }.Concat(later ?? []).ToArray());
+        FramesPerSecond = Frames.Count > 1 ? framesPerSecond : 0;
     }
     public int Number { get; }
-    /// <summary>Every frame of the ART, frame 0 (this) first; one for a static light.</summary>
-    public IReadOnlyList<StationaryLightFrame> Frames { get; private set; }
-    /// <summary>The ART's frame rate; 0 for a static light.</summary>
-    public int FramesPerSecond { get; private set; }
+    /// <summary>Every frame of the ART, frame 0 (this) first; one for a static light. Described on frame 0 only: a later
+    /// frame lists itself alone.</summary>
+    public IReadOnlyList<StationaryLightFrame> Frames { get; }
+    /// <summary>The ART's frame rate (on frame 0); 0 for a static light.</summary>
+    public int FramesPerSecond { get; }
     public int StepX { get; }
     public int StepY { get; }
     public bool Animated => Frames.Count > 1;
-
-    internal void Animate(IReadOnlyList<StationaryLightFrame> frames, int framesPerSecond)
-    {
-        Frames = frames; FramesPerSecond = framesPerSecond;
-    }
     public string Name { get; }
     public string PayloadSha256 { get; }
     public int Width { get; }
@@ -137,6 +135,9 @@ public static class StationaryLightReader
     public const int MaxFrames = 32;
     /// <summary>ARC-DATA-039: frames of one animated light ART; the installed module's longest has 15.</summary>
     public const int MaxArtFrames = 32;
+    /// <summary>ARC-DATA-039: the RGBA bytes of every light ART frame one read keeps (project policy, the old bound of 16
+    /// one-frame ARTs at the largest side).</summary>
+    public const long MaxLightRgbaBytes = 64L * 1024 * 1024;
     public const int MaxFrameSide = 1024;
     public const int MaxOffset = 16384;
     public const StationaryLightFlags KnownFlags = StationaryLightFlags.Off | StationaryLightFlags.Dark | StationaryLightFlags.Indoor | StationaryLightFlags.Outdoor
@@ -221,6 +222,7 @@ public static class StationaryLightReader
         failure = LightingMes.TryParse(namesBytes, out var names);
         if (failure != LightingFailure.None) return failure;
         namesSha256 = LightingMes.Hash(namesBytes);
+        long rgba = 0;
         foreach (var number in wanted)
         {
             token.ThrowIfCancellationRequested();
@@ -233,7 +235,9 @@ public static class StationaryLightReader
             if (failure != LightingFailure.None) return failure;
             failure = DecodeFrame(number, name, artBytes, out var frame);
             if (failure != LightingFailure.None) return failure;
-            frames.Add(number, frame!);
+            rgba += frame!.Frames.Sum(f => (long)f.Mask.Count);
+            if (rgba > MaxLightRgbaBytes) return LightingFailure.LimitExceeded;
+            frames.Add(number, frame);
         }
         return LightingFailure.None;
     }
@@ -243,13 +247,14 @@ public static class StationaryLightReader
     {
         frame = null;
         var hash = LightingMes.Hash(bytes);
-        var decodedFrames = new List<StationaryLightFrame>();
+        var decodedFrames = new List<(int W, int H, int X, int Y, byte[] Mask, int Sx, int Sy)>();
         int fps;
         try
         {
             var metadata = ArtDecoder.Inspect(bytes);
             var count = metadata.Header.FramesPerGroup;
-            if (metadata.Header.PhysicalGroupCount != 1 || count is < 1 or > MaxArtFrames) return LightingFailure.LightArtUnsupported;
+            if (metadata.Header.PhysicalGroupCount != 1 || count < 1) return LightingFailure.LightArtUnsupported;
+            if (count > MaxArtFrames) return LightingFailure.LimitExceeded;
             fps = count > 1 ? metadata.Header.FramesPerSecond : 0;
             if (count > 1 && fps <= 0) return LightingFailure.LightArtUnsupported;
             for (var index = 0; index < count; index++)
@@ -264,14 +269,14 @@ public static class StationaryLightReader
                 var mask = decoded.Rgba.ToArray();
                 for (var at = 0; at < mask.Length; at += 4)
                     if (mask[at + 3] != 0 && mask[at] == keyR && mask[at + 1] == keyG && mask[at + 2] == keyB) mask[at + 3] = 0;
-                decodedFrames.Add(new(number, name, hash, decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY, mask,
-                    meta.OffsetX, meta.OffsetY));
+                decodedFrames.Add((decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY, mask, meta.OffsetX, meta.OffsetY));
             }
         }
         catch (ArtException) { return LightingFailure.LightArtUnsupported; }
         catch (ArgumentOutOfRangeException) { return LightingFailure.LightArtUnsupported; }
-        frame = decodedFrames[0];
-        if (decodedFrames.Count > 1) frame.Animate(Array.AsReadOnly(decodedFrames.ToArray()), fps);
+        StationaryLightFrame Make((int W, int H, int X, int Y, byte[] Mask, int Sx, int Sy) f, IReadOnlyList<StationaryLightFrame>? later = null) =>
+            new(number, name, hash, f.W, f.H, f.X, f.Y, f.Mask, f.Sx, f.Sy, later, fps);
+        frame = Make(decodedFrames[0], Array.AsReadOnly(decodedFrames.Skip(1).Select(f => Make(f)).ToArray()));
         return LightingFailure.None;
     }
 }

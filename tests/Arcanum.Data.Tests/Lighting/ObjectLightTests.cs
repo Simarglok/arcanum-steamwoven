@@ -54,6 +54,11 @@ public sealed class ObjectLightTests
         Assert.AreEqual((1, StationaryLightFlags.Dark, new AmbientColor(0x44, 0x55, 0x66)), (lights[1].Slot, lights[1].Flags, lights[1].Color));
         Assert.AreEqual((3, StationaryLightFlags.NoShadow, false), (lights[2].Slot, lights[2].Flags, lights[2].Nocturnal));
         Assert.IsFalse(lights[2].OutdoorTile, "no tile record: not an outdoor tile");
+        // A facade's outdoor bit is bit 25 (0x5038C0); another ART type has none.
+        Assert.AreEqual(LightingFailure.None, ObjectLightReader.Describe(Snapshot([lamp], [Tile(2060, 2000, 0xB2000000)]), out var facade));
+        Assert.IsTrue(facade[0].OutdoorTile);
+        Assert.AreEqual(LightingFailure.None, ObjectLightReader.Describe(Snapshot([lamp], [Tile(2060, 2000, 0x30000100)]), out var other));
+        Assert.IsFalse(other[0].OutdoorTile);
     }
 
     [TestMethod]
@@ -66,6 +71,12 @@ public sealed class ObjectLightTests
         Assert.IsTrue(ObjectLightReader.BuiltAtLoad(at, 5));
         Assert.IsTrue(ObjectLightReader.BuiltAtLoad(at with { OutdoorTile = false }, 12), "an indoor tile keeps it on");
         Assert.IsTrue(ObjectLightReader.BuiltAtLoad(at with { Nocturnal = false }, 12));
+        // A built nocturnal light is switched on with its object (LT4, LT13); another keeps its saved flags.
+        var saved = at with { Flags = StationaryLightFlags.Off | StationaryLightFlags.Outdoor };
+        Assert.AreEqual(StationaryLightFlags.Outdoor, ObjectLightReader.FlagsAtLoad(saved, 20));
+        Assert.AreEqual(StationaryLightFlags.Outdoor, ObjectLightReader.FlagsAtLoad(saved with { OutdoorTile = false }, 12));
+        Assert.AreEqual(saved.Flags, ObjectLightReader.FlagsAtLoad(saved with { Nocturnal = false }, 12));
+        Assert.ThrowsExactly<ArgumentException>(() => ObjectLightReader.FlagsAtLoad(saved, 12));
     }
 
     [TestMethod]
@@ -77,6 +88,8 @@ public sealed class ObjectLightTests
         Assert.AreEqual(LightingFailure.LightArtUnsupported, One(Value(13, 0x80280000)), "not a light ART");
         Assert.AreEqual(LightingFailure.LightArtUnsupported, One(Value(13, Art5 | 0x200)), "rotation");
         Assert.AreEqual(LightingFailure.LightRecordMalformed, One(Value(13, Art5), Value(2, 16385)));
+        Assert.AreEqual(LightingFailure.LightRecordMalformed, One(Array(16, (4, Art5))), "overlay slot 4");
+        Assert.AreEqual(LightingFailure.LightRecordMalformed, One(new AreaFieldValue(16, AreaPresence.Array, AreaValueOrigin.Instance, 1, [new(0, [])], null)), "no word");
         var many = Enumerable.Range(0, ObjectLightReader.MaxLights + 1).Select(i => Object(i % 1000, 3, 2060, 2000, AreaScope.Core, Value(13, Art5))).ToArray();
         Assert.AreEqual(LightingFailure.LimitExceeded, ObjectLightReader.Describe(Snapshot(many), out _));
         Assert.AreEqual(LightingFailure.None, ObjectLightReader.Describe(Snapshot([Object(0, 3, 2060, 2000)]), out var none));

@@ -26,7 +26,7 @@ public sealed class ObjectLightRealDataTests
         using var stack = opened.Stack!;
         var catalog = WorldCatalog.Open(stack);
         var outcomes = new SortedDictionary<string, int>(StringComparer.Ordinal);
-        int maxObject = 0, maxStationary = 0, maxFrames = 0, animated = 0, nocturnal = 0, total = 0;
+        var maxObjectAt = ""; int maxObject = 0, maxStationary = 0, maxFrames = 0, animated = 0, nocturnal = 0, total = 0;
         void Count(string what, AreaSnapshot snapshot)
         {
             var objects = ObjectLightReader.Read(stack, snapshot);
@@ -34,9 +34,10 @@ public sealed class ObjectLightRealDataTests
             var key = $"objects {objects.Failure} / stationary {stationary.Failure}";
             outcomes[key] = outcomes.GetValueOrDefault(key) + 1;
             Assert.AreEqual(LightingFailure.None, objects.Failure, what);
+            Assert.AreEqual(LightingFailure.None, stationary.Failure, what);
             var source = objects.Source!;
             total += source.Lights.Count;
-            maxObject = Math.Max(maxObject, source.Lights.Count);
+            if (source.Lights.Count > maxObject) (maxObject, maxObjectAt) = (source.Lights.Count, what);
             maxFrames = Math.Max(maxFrames, source.Frames.Count);
             nocturnal += source.Lights.Count(l => l.Nocturnal);
             if (stationary.Source is { } s)
@@ -63,7 +64,7 @@ public sealed class ObjectLightRealDataTests
             Count(centre.ToString(), owner.LoadStrict());
         }
         foreach (var (outcome, count) in outcomes) Console.WriteLine($"ARC-DATA-039 lights {outcome}: {count}");
-        Console.WriteLine($"ARC-DATA-039 object lights total={total} max={maxObject}/{ObjectLightReader.MaxLights} nocturnal={nocturnal} " +
+        Console.WriteLine($"ARC-DATA-039 object lights total={total} max={maxObject}/{ObjectLightReader.MaxLights} ({maxObjectAt}) nocturnal={nocturnal} " +
             $"frames={maxFrames}/{StationaryLightReader.MaxFrames} stationary max={maxStationary}/{StationaryLightReader.MaxLights} animated={animated}");
         Assert.IsTrue(total > 0);
     }

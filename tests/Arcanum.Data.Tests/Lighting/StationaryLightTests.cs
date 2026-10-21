@@ -237,7 +237,7 @@ public sealed class StationaryLightTests
         Assert.AreEqual(LightingFailure.LightArtNotCatalogued, Read(Snapshot([Wire(art: 0x90300000)]), names).Failure, "number 6 is absent");
         Assert.AreEqual(LightingFailure.UnsafeResourceName, Read(Snapshot([Wire(art: 0x90380000)]), names).Failure, "number 7 traverses");
         Assert.AreEqual(LightingFailure.LightArtUnsupported, Read(Snapshot([Wire()]), names, ("art/light/disk5x5.art", Art(framesPerGroup: 2))).Failure, "animated without a rate");
-        Assert.AreEqual(LightingFailure.LightArtUnsupported, Read(Snapshot([Wire()]), names, ("art/light/disk5x5.art", Art(framesPerGroup: StationaryLightReader.MaxArtFrames + 1, framesPerSecond: 8))).Failure, "too many frames");
+        Assert.AreEqual(LightingFailure.LimitExceeded, Read(Snapshot([Wire()]), names, ("art/light/disk5x5.art", Art(framesPerGroup: StationaryLightReader.MaxArtFrames + 1, framesPerSecond: 8))).Failure, "too many frames");
         Assert.AreEqual(LightingFailure.LightArtUnsupported, Read(Snapshot([Wire()]), names, ("art/light/disk5x5.art", new byte[40])).Failure);
         Assert.AreEqual(LightingFailure.LightOutsideSector, Read(Snapshot([Wire(x: 1)]), names, ("art/light/disk5x5.art", Art())).Failure);
         // Context sectors are not read; no lights means no resource is needed at all.
