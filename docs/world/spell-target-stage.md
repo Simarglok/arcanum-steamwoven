@@ -78,7 +78,8 @@ turns on the caster. When the run turns:
    - A source that itself reflects makes the spell fizzle on the target (602 to the local player).
    - Otherwise the run's source and the target swap: the components act on the caster.
    - After that target's components the run puts its source back (RP6).
-   - When the resistance skips the swapped target, the original leaves the source swapped (MG34).
+   - When the resistance skips the swapped target, the original leaves the source swapped (MG34); Steamwoven restores it
+     (`ResistedReflectionKeepsSwap`, ARC-MAGIC-013).
 
 **Resistance.** The resistance (`SpellResistanceRules.Resist`, MT6) runs after the stage, with the run's BEGIN, unresistable
 and fate-maximised facts. It writes the run's resistance margin (read by MAINTAIN's surcharge), reports the displayed margin
@@ -116,17 +117,16 @@ Owner decisions 2026-10-20 and 2026-10-21: every difference is documented.
 | Original 1.0.7.4 | Steamwoven | Mode |
 | --- | --- | --- |
 | A reflection charges its caster the global "last cost" of any payment (MG15). | What the reflected run's own stage asked in that pass. | `MagicAnomalyProfile.ReflectionPaysLastCost` (Original) |
-| The cancels' interrupted runs are refused by the guard and left without a tick or an END (MG30). | Processed right after the pass (pending the owner, recommended). | `MagicAnomalyProfile.ReEntryDropsRuns` (Original) |
-| A free removes only the run's ticks; its interrupt or process event can hit a new run in the reused slot (MG32). | Every event of the run goes (pending the owner, recommended). | `MagicAnomalyProfile.FreeKeepsOtherEvents` (Original) |
+| The cancels' interrupted runs are refused by the guard and left without a tick or an END (MG30). | Processed right after the pass (owner decision 2026-10-21). | `MagicAnomalyProfile.ReEntryDropsRuns` (Original) |
+| A free removes only the run's ticks; its interrupt or process event can hit a new run in the reused slot (MG32). | Every event of the run goes (owner decision 2026-10-21). | `MagicAnomalyProfile.FreeKeepsOtherEvents` (Original) |
+| A target the reflection swapped onto the caster and the resistance skipped leaves the run's source swapped for the rest of the run (MG34). | The source is restored for a resisted target too (owner decision 2026-10-21, ARC-MAGIC-013). | `MagicAnomalyProfile.ResistedReflectionKeepsSwap` (Original) |
 | The reflection's caster is also searched in the runs' object lists (+0x130, +0x134). | The target object only (the lists are not modelled yet). | — |
 | The last-cost global also counts cost checks and component payments. | The rules count the stage's, the reflection's and a charged free's payments; the cost checks and a component's own payments are the host's. The session keeps the last cost between calls (not saved). | — |
 
-Pending the owner, both modes following the original for now:
+Both modes follow the original, no switch (owner decision 2026-10-21):
 
-- MG31 (an interrupt of a timed run with CALLBACK but no END_CALLBACK components does not end it; recommended keep);
-- MG33 (the cancels' environment loop compares its own record; latent, recommended keep);
-- MG34 (a resisted target after the reflection swap leaves the run's source swapped for the rest of the run; recommended
-  Steamwoven fix with an Original switch: restore the source for a skipped target too).
+- MG31 (an interrupt of a timed run with CALLBACK but no END_CALLBACK components does not end it);
+- MG33 (the cancels' environment loop compares its own record; latent).
 
 ## Not ready
 

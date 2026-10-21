@@ -22,6 +22,7 @@ public sealed class SpellRunSystemTests
         public List<SpellRunTarget> Targets { get; set; } = [new(Orc, new(5, 5))];
         public bool Fate { get; set; }
         public bool Takes { get; set; } = true;
+        /// <summary>Objects that resist the next time the resistance asks about them (once each).</summary>
         public HashSet<string> Resisting { get; } = [];
         public bool Passes { get; set; } = true;
         public bool BarFree { get; set; } = true;
@@ -41,7 +42,7 @@ public sealed class SpellRunSystemTests
         public SpellPayer? Payer(SpellRunObject who) => new(SpellPayerKind.Critter, CurrentFatigue: 50);
         public SpellResistRecord ResistRecord(int spell) => new(spell, false, false, false, 0, SpellResistanceRules.NoSave, 0);
         public SpellResistTarget ResistTarget(SpellRun run, SpellRunTarget target) =>
-            new(false, SpellTargetKind.Npc, false, Takes && !Resisting.Contains(target.Object?.Id ?? "") ? 0 : 100, 0, 0, false);
+            new(false, SpellTargetKind.Npc, false, Takes && !Resisting.Remove(target.Object?.Id ?? "") ? 0 : 100, 0, 0, false);
         public ISpellRollSource Rolls { get; } = new FixedRolls();
         public ISpellFateSave FateSave => SpellFateSave.None;
         public bool IsLocalPlayer(SpellRunObject? who) => who?.Id is { } id && id == LocalPlayer;
@@ -338,6 +339,25 @@ public sealed class SpellRunSystemTests
     }
 
     [TestMethod]
+    public void Mg34AResistedReflectionLeavesTheSourceSwappedInTheOriginalAndRestoresItInSteamwoven()
+    {
+        string Later(MagicAnomalyProfile profile)
+        {
+            var host = new Host { Targets = [new(Orc, new(5, 5)), new(Wand, new(6, 6))] };
+            host.Flags["orc"] = SpellTargetStage.FullReflection;
+            host.Resisting.Add("hero"); // the caster the orc turned the spell on resists it
+            host.Records[7] = Record() with { Duration = new(30) };
+            var system = new SpellRunSystem(SpellRunTable.Empty.With(Run(flags: SpellRunFlags.Active)), host, profile);
+            system.Begin(0);
+            return string.Join(",", host.Applied.Select(a => a.Target)) + "/" + system.Table[0]!.Source!.Id;
+        }
+        // The wand is turned too (the run stays reflected): in the original the swapped-in orc is the "caster" it turns on, and the
+        // orc stays the run's source; Steamwoven restored the hero first.
+        Assert.AreEqual("orc/orc", Later(MagicAnomalyProfile.Original));
+        Assert.AreEqual("hero/hero", Later(MagicAnomalyProfile.Steamwoven));
+    }
+
+    [TestMethod]
     public void TheResistanceWritesTheRunsMarginAndSkipsAResistingTarget()
     {
         var host = new Host { Targets = [new(Wand, new(6, 6)), new(Orc, new(5, 5))] };
@@ -347,7 +367,7 @@ public sealed class SpellRunSystemTests
         system.Begin(0);
         Assert.AreEqual("wand", string.Join(",", host.Applied.Select(a => a.Target)), "the orc resisted; the wand took the spell, so the run lives on");
         Assert.IsTrue(system.Notes.Any(n => n is { Kind: SpellRunNoteKind.Resistance, Value: 99 }) && system.Notes.Any(n => n.Kind == SpellRunNoteKind.Resisted));
-        var expected = SpellResistanceRules.Resist(host.ResistRecord(7), host.ResistTarget(Run(), new(Orc, new(5, 5))), new(true, false, false), host.Rolls,
+        var expected = SpellResistanceRules.Resist(host.ResistRecord(7), new SpellResistTarget(false, SpellTargetKind.Npc, false, 100, 0, 0, false), new(true, false, false), host.Rolls,
             SpellFateSave.None, MagicAnomalyProfile.Steamwoven).Margin;
         Assert.IsNotNull(expected);
         Assert.AreEqual(expected.Value, system.Table[0]!.Margin, "the last target's margin is the run's");
