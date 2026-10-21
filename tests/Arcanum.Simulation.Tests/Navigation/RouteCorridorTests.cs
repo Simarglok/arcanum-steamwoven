@@ -134,4 +134,33 @@ public sealed class RouteCorridorTests
         host.Frames(follower, 4);
         Assert.AreEqual((RouteFollowStatus.Stopped, "ROUTE_TARGET_OUT_OF_RANGE", (RouteCorridor?)null), (follower.Status, follower.StopReason, follower.Corridor));
     }
+
+    [TestMethod]
+    public void A_second_failed_leg_stops_with_its_reason_and_a_corridor_reaching_nothing_with_its_own()
+    {
+        var source = GridSource.Open(100, 9);
+        var host = new RouteHost(source, new(0, 4), Step);
+        var follower = new RouteFollower(source, corridorLimits: new());
+        follower.SetTarget(new(90, 4), host.State.Time);
+        host.Frames(follower, 4);
+        // An occupant on the corridor's next waypoint, then another on the rebuilt corridor's: the second leg fails.
+        var occupied = new HashSet<CellCoord> { follower.Corridor!.Waypoints[1] };
+        source.Override = (from, direction) => occupied.Contains(RoutePlanner.Neighbor(from, direction)) ? RouteStepVerdict.Blocked : null;
+        var first = follower.Corridor;
+        for (var frame = 0; frame < 4 * 120 && ReferenceEquals(follower.Corridor, first); frame++) host.Frames(follower, 1);
+        Assert.AreNotSame(first, follower.Corridor);
+        var rebuilt = follower.Corridor!;
+        occupied.Add(rebuilt.Waypoints.First(w => !host.Committed().Contains(w) && w != host.State.CommittedCell));
+        host.Frames(follower, 4 * 120);
+        Assert.AreEqual((RouteFollowStatus.Stopped, "ROUTE_NOT_FOUND"), (follower.Status, follower.StopReason));
+        Assert.AreSame(rebuilt, follower.Corridor);
+
+        // An actor walled in on its own cell: the corridor reaches no cell and the follower stops with its reason.
+        var pocket = new GridSource("##" + new string('.', 98), ".#" + new string('.', 98), "##" + new string('.', 98));
+        var stuck = new RouteHost(pocket, new(0, 1), Step);
+        var walled = new RouteFollower(pocket, corridorLimits: new());
+        walled.SetTarget(new(90, 1), stuck.State.Time);
+        stuck.Frames(walled, 4);
+        Assert.AreEqual((RouteFollowStatus.Stopped, "ROUTE_NOT_FOUND", RouteCorridorOutcome.NoRoute), (walled.Status, walled.StopReason, walled.Corridor!.Outcome));
+    }
 }

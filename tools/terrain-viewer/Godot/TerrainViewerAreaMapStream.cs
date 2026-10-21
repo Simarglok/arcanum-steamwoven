@@ -33,7 +33,7 @@ public partial class TerrainViewerApp
     private int _mapWindowMoves;
     // A route goal beyond the shown window and the cell of it the walk heads for (ARC-WORLD-042).
     private (AreaStepCell Goal, AreaStepCell Toward)? _mapFarGoal;
-    // Window moves given up (the actor walked off the new core) or superseded before they published; the walk smoke needs 0.
+    // Window moves given up (the actor walked off the new core) or loaded but not published; the walk smoke needs 0.
     private int _mapStreamGivenUp;
     /// <summary>Cells beyond the centre sector's edge (either axis) the actor stands before the window moves.</summary>
     internal const int StreamMargin = 16;
@@ -176,7 +176,7 @@ public partial class TerrainViewerApp
         // The walk goes on to its goal when the new window holds it, else toward it through the cell of the window nearest it.
         var resumed = false; _mapFarGoal = null;
         if (goal is { } wanted && _worldActor.Session is AreaGridSession placed && WorldRoute(placed) is { } follower
-            && AreaMapGoalHandOff.Resume(new AreaRouteSource(placed.Snapshot, placed.Chart, placed.Occupancy), placed.Chart, placed.State.CommittedCell, wanted) is { } resume)
+            && AreaMapGoalHandOff.Resume(new AreaRouteSource(placed.Snapshot, placed.Chart, placed.Occupancy, () => placed.Portals?.Invoke()), placed.Chart, placed.State.CommittedCell, wanted) is { } resume)
         {
             follower.SetTarget(resume.Target, WorldTime); resumed = true;
             if (resume.FarGoal is { } far) _mapFarGoal = (far, placed.Chart.ToWorld(resume.Target));

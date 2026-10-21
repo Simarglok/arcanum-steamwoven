@@ -1023,6 +1023,7 @@ public partial class TerrainViewerApp : Node
     {
         if (_exiting) return;
         _exiting = true;
+        _walkPlanCancellation?.Cancel(); // ARC-WORLD-042: the walk smoke's background route plan
         ExitWorld();
         GetViewport().SizeChanged -= HandleViewportSizeChanged;
         _generation = _coordinator.BeginGeneration();

@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer;
 // ARC-WORLD-042 native observation (the "walk" map-smoke stage, run only when named): from the new-game start on the main
 // map, the walk to the middle of the Shrouded Hills town sector (1409, 1314) through the generated wilderness. The route is
 // planned over the map's windows in the background (AreaWindowRoute); the walk is the production one: the route follower,
-// given the farthest route cell of the shown window each time it stops or the window moves (its corridor carries it
+// given the farthest route cell of the shown window each time it arrives or the window moves (its corridor carries it
 // beyond its own 32-cell reach), and the window streaming as the actor goes. A smoke frame is one second of walk; while a
 // window loads, one frame a second of wall time, so the actor walks at its own speed meanwhile, as in play. No seam: the
 // follower never stops short (a denied step, no route or a partial corridor fails the smoke at once), the actor's cell
@@ -19,6 +19,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     private const string WalkMap = "Arcanum1-024-fixed";
+    private CancellationTokenSource? _walkPlanCancellation;
     private static readonly AreaStepCell WalkGoal = new(1409 * 64 + 32, 1314 * 64 + 32);
     // A second's walk is at most 6 steps: the run takes 9 steps in 1.578 s (ARC-WORLD-020 native smoke).
     private const int WalkFrameLimit = 20000, WalkStallFrames = 300, WalkStepsPerFrame = 6;
@@ -45,15 +46,12 @@ public partial class TerrainViewerApp
             var from = placed.Chart.ToWorld(placed.State.CommittedCell);
             var clock = System.Diagnostics.Stopwatch.StartNew();
             var arguments = _arguments!;
-            // The plan runs in the background for minutes; a viewer that exits meanwhile cancels it.
+            // The plan runs in the background for minutes; a viewer that exits meanwhile cancels it (_ExitTree).
             using var cancel = new CancellationTokenSource();
-            var planning = Task.Run(() => AreaMapWalk.Plan(arguments, from, WalkGoal, cancel.Token), cancel.Token);
-            while (!planning.IsCompleted)
-            {
-                if (_exiting) cancel.Cancel();
-                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            }
-            var route = await planning;
+            _walkPlanCancellation = cancel;
+            AreaWindowRouteResult route;
+            try { route = await Task.Run(() => AreaMapWalk.Plan(arguments, from, WalkGoal, cancel.Token), cancel.Token); }
+            finally { _walkPlanCancellation = null; }
             var planSeconds = clock.Elapsed.TotalSeconds;
             GD.Print($"ARC-WORLD-042 walk route {route.Status} {route.Detail} cells={route.Cells.Count} windows={route.WindowLoads} expansions={route.Expansions} seconds={planSeconds:F0}");
             Require(route.Status == AreaWindowRouteStatus.Found, "NO_ROUTE " + route.Detail);
@@ -65,7 +63,7 @@ public partial class TerrainViewerApp
             var managedBefore = GC.GetTotalMemory(true);
             var reached = 0; AreaGridSession? steered = null; var retargets = 0; var lastProgress = 0; var frames = 0;
             var previous = from; var drawnMoves = 0; var minVisible = int.MaxValue; var maxLoad = 0L; var maxSteps = 0L; var maxFrameMs = 0.0;
-            // Each frame: on a new window or a stopped walk, the follower heads for the farthest route cell of the window that
+            // Each frame: on a new window or an arrived walk, the follower heads for the farthest route cell of the window that
             // the route reaches without leaving it.
             void Steer()
             {

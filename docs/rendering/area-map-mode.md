@@ -665,7 +665,7 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   map from the new-game start): plans the walk to the middle of the Shrouded Hills town sector (90208, 84128) over the
   map's windows in the background ([window route](../world/click-route-runtime.md#world-routes-across-windows-arc-world-042)),
   then walks it with the production route follower, which it gives the farthest route cell of the shown window each time
-  the follower stops or the window moves, while the window streams. A smoke frame is one second of walk; while a window
+  the follower arrives or the window moves, while the window streams. A smoke frame is one second of walk; while a window
   loads, one frame a second of wall time. It requires no seam: the follower never stops short (a denied step, no route
   or a partial corridor fails the smoke at once), the actor's cell changes by no more than a second's run a frame
   (6 steps), every window move publishes the actor on the cell it stood on, inside the new core and drawn, with the

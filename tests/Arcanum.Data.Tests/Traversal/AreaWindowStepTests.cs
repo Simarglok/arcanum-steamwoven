@@ -129,7 +129,7 @@ public sealed class AreaWindowStepTests
     }
 
     [TestMethod]
-    public void A_window_route_refuses_a_start_off_the_map_and_finds_no_route_to_a_goal_off_it()
+    public void A_window_route_refuses_a_start_or_a_goal_off_the_map()
     {
         Install(Sector());
         using var stack = Stack();
