@@ -72,7 +72,9 @@ public sealed class ChargeCellRulesTests
         Assert.IsFalse(ChargeCellRules.Plan(critter with { Cells = new("cells", -5) }, 1, true, Original).Paid, "a negative count");
         Assert.IsFalse(ChargeCellRules.Plan(Item(0, 0, CellOwnerKind.None), 1, true, Original).Paid, "an item without a parent counts 0");
         Assert.IsFalse(ChargeCellRules.Plan(Item(0, 0, CellOwnerKind.Other), 1, true, Original).Paid, "another parent counts 0");
-        Assert.IsFalse(ChargeCellRules.Plan(Item(0, 0, CellOwnerKind.Container, units: 5), 5, true, Original).Paid, "a container's lookup never matches (AM6)");
+        // A container pays from the stack the host's lookup found (AMA5: Steamwoven's lookup finds it, the original's finds none).
+        Assert.IsTrue(ChargeCellRules.Plan(Item(0, 0, CellOwnerKind.Container, units: 5), 5, true, Original).Paid, "a found container stack pays");
+        Assert.IsFalse(ChargeCellRules.Plan(Item(0, 0, CellOwnerKind.Container) with { Cells = null }, 5, true, Original).Paid, "the original's lookup found none (AM6)");
         Assert.IsTrue(ChargeCellRules.Plan(critter with { Cells = null }, 0, true, Original).Paid, "a cost of 0 takes nothing");
     }
 
@@ -101,10 +103,10 @@ public sealed class ChargeCellRulesTests
         // An item payer: the payment's payer kind reaches the source, which uses the item's facts.
         var device = new ChargeCellSource(Item(-50, -100), Steamwoven);
         Assert.AreEqual(7, SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Item, ItemCharges: 0), 7, true, 147, record, device).Cells!.Cells);
-        // A container paying from its own first cell item; an out-of-range plan and a payer the source was not built for refuse with 0 cells.
-        var container = new ChargeCellSource(new(SpellPayerKind.Other, CellOwnerKind.Container, new("cells", 7)), Original);
+        // A container whose lookup found no stack (the original's, AM6); an out-of-range plan and a payer the source was not built for refuse with 0 cells.
+        var container = new ChargeCellSource(new(SpellPayerKind.Other, CellOwnerKind.Container, null), Original);
         Assert.AreEqual(SpellPaymentStatus.CellsRefused, SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Other), 7, true, 187, record, container).Status,
-            "the original's container lookup never finds its cells (AM6)");
+            "the original's container lookup never finds its cells (AM6): the host gives no stack");
         var huge = SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Item), int.MaxValue, true, 147, record, new ChargeCellSource(Item(50, -100), Original));
         Assert.AreEqual((SpellPaymentStatus.CellsRefused, 0), (huge.Status, huge.Cells!.Cells));
         var mismatch = new ChargeCellSource(new(SpellPayerKind.Critter, CellOwnerKind.Critter, new("cells", 10)), Original);

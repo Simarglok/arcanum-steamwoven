@@ -60,6 +60,52 @@ public sealed class TechMaintainCellsTests
         }
     }
 
+    // ARC-TECHNOLOGY-009: the MG29 switch (SurchargeAlways, ARC-MAGIC-010) with a resistance margin still pays through
+    // ARC-TECHNOLOGY-007's cell source: Steamwoven one surcharged payment (3 + trunc(3 × 50 / 100) = 4), Original the plain one and
+    // then the surcharged one (MG3); a free run pays nothing in Steamwoven and the surcharge from the cells in Original.
+    [TestMethod]
+    public void The_surcharge_switch_pays_through_the_cell_source_in_both_settings()
+    {
+        SpellStageResult Tick(MagicAnomalyProfile magic, SpellRunFlags flags, out List<int> needs)
+        {
+            var asked = new List<int>();
+            var cells = new RecordingSource(new ChargeCellSource(new CellPayer(SpellPayerKind.Item, CellOwnerKind.Critter, new CellStack("cells", 12), -80, -60),
+                TechnologyRuleProfile.Steamwoven), asked);
+            var result = SpellRunRules.Stage(Run(SpellRunAction.Maintain) with { Margin = 50, Flags = flags }, Device, Facts, cells, new NoStacking(), magic);
+            needs = asked;
+            return result;
+        }
+        int Need(int cost) => ChargeCellRules.Need(new CellPayer(SpellPayerKind.Item, CellOwnerKind.Critter, null, -80, -60), cost, TechnologyRuleProfile.Steamwoven)!.Value;
+
+        var steamwoven = Tick(MagicAnomalyProfile.Steamwoven, SpellRunFlags.Active, out var paid);
+        Assert.IsTrue(steamwoven.Proceeds);
+        CollectionAssert.AreEqual(new[] { 4 }, steamwoven.Costs.ToArray());
+        CollectionAssert.AreEqual(new[] { Need(4) }, paid.ToArray(), "the surcharged cost in cells");
+        Assert.IsTrue(steamwoven.Payments.All(p => p.Status == SpellPaymentStatus.Paid && p.Cells is not null));
+
+        var original = Tick(MagicAnomalyProfile.Original, SpellRunFlags.Active, out paid);
+        Assert.IsTrue(original.Proceeds);
+        CollectionAssert.AreEqual(new[] { 3, 4 }, original.Costs.ToArray(), "MG3: the plain maintenance and then the surcharge");
+        CollectionAssert.AreEqual(new[] { Need(3), Need(4) }, paid.ToArray());
+
+        var free = SpellRunFlags.Active | SpellRunFlags.Free;
+        Assert.AreEqual(0, Tick(MagicAnomalyProfile.Steamwoven, free, out paid).Payments.Count, "MG29 fixed: no surcharge for a free run");
+        Assert.AreEqual(0, paid.Count);
+        var freeOriginal = Tick(MagicAnomalyProfile.Original, free, out paid);
+        CollectionAssert.AreEqual(new[] { 4 }, freeOriginal.Costs.ToArray(), "the original's surcharge for a free run");
+        CollectionAssert.AreEqual(new[] { Need(4) }, paid.ToArray(), "taken from the cells");
+    }
+
+    private sealed class RecordingSource(ChargeCellSource inner, List<int> asked) : ISpellCellSource
+    {
+        public SpellCellPayment Pay(SpellCellRequest request)
+        {
+            var payment = inner.Pay(request);
+            if (payment.Paid) asked.Add(payment.Cells);
+            return payment;
+        }
+    }
+
     // ARC-MAGIC-010: the run system over game time — its host holds the cells, writes each applied plan and fires each tick.
     private sealed class DeviceHost(TechnologyRuleProfile profile) : ISpellRunHost
     {

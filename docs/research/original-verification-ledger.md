@@ -2294,7 +2294,7 @@ numbers below are the project's (the executable's basic number + 20: its 14072 i
 | WR8 | newspaper masthead (0x56C050) | Six header entries: messages 0, 1, 0, 2, 3, 2 with fonts 485, 484, 485, 482, 482, 482; with the prototype-14092 flag messages 0, 4, 0, 2, 5, 2 and the second font 815. The headline is the start line; the next nine fill four columns. | Original |
 | WR9 | newspaper filler (0x56C050) | After the body the columns are filled from message 10 + start / 10 (10 when that is at least 10 + the filler count), each next message one higher, wrapping to 10 at 10 + the count; a missing message stops the fill. | Original |
 | WR10 | plaque | The markup applies; one text rectangle; white text. | Original |
-| WR11 | markup (0x56C9F0) | The font is `atoi` of the message (leading whitespace and a sign skipped); a loop then skips the digits only; the next character is tested for `c`/`C` (centred) and is dropped whatever it is; then one whitespace character more is dropped. A font outside the art range is not checked. | Original (WRD3) |
+| WR11 | markup (0x56C9F0) | The font is `atoi` of the message (leading whitespace and a sign skipped); a loop then skips the digits only; the next character is tested for `c`/`C` (centred) and is dropped whatever it is; then one whitespace character more is dropped. A font outside the art range is not checked. | Original; Steamwoven switch (WRD3, ARC-TECHNOLOGY-009) |
 | WR12 | sounds and close (0x56BC00, 0x56BC90, the window handler) | Open plays 3008, a book's page turn 3010, close 3009. The window closes by an 89 × 89 hotspot at (25, 24) of the frame, by any interface mode change or by a second open; its handler takes no key. | Original |
 | WR13 | item use (0x462CC0, variant 0x462FC0) | The item's use script (attachment point 1) runs first and can cancel the use; an item with a spell mana store or the magical item flag (0x4) takes the item-spell path instead; in a turn-based round the use costs 4 action points, whose result is not tested; then the reading start (WR2). | Original |
 | WR14 | state | Reading sets no read flag and changes nothing besides the schematic registration (SK2). | Original |
@@ -2308,14 +2308,15 @@ Anomalies. Crash class (the no-crash rule; both settings fixed):
 - WRA3 (WR6, WR7): the note and telegram buffer is appended without a bound. Both settings stop at 19,999 bytes. No installed document comes near it.
 - WRA4 (WR5): a book of more than 100 pages writes past the page tables. Both settings stop at 100 pages.
 
-Data oddities (not crash class; both settings follow the original until the owner decides; a proposal each):
+Data oddities (not crash class; both settings follow the original until the owner decides; a proposal each; WRD3 decided below):
 
 - WRD1 (WR4): four template prototypes (14082, 14083, 14085, 14089) start at line 0, where no message exists: their window is empty. 14089
   gets its line from its insert-item script (action 94, not implemented); the newspapers 14084 and 14092 at line 0 show the masthead
   messages as their body. Proposal: keep (the items as placed on maps or given by scripts carry their own lines).
 - WRD2 (WR4): the last text line is 0 in every written prototype (spans −1050..0) and the original never reads it. Proposal: keep.
-- WRD3 (WR11): a message without a font prefix loses its first character (two installed documents have a font-0 message). Proposal: keep
-  in Original; a Steamwoven switch could keep the first character of a message that starts with no digit, if the owner wants it.
+- WRD3 (WR11): a message without a font prefix loses its first character (two installed documents have a font-0 message). **Decided**
+  (owner, 2026-10-21): a switch, `WrittenRuleProfile.UnprefixedMessageLosesFirstCharacter` (ARC-TECHNOLOGY-009): Steamwoven reads a
+  message whose first character is not a digit as having no markup (its whole text, font 0, not centred); Original keeps the drop.
 
 Not modelled (named in the runtime): the use script before a reading (two readable prototypes, 14086 and 14090, have one; their
 scripts use actions outside every admitted set, so their use is refused), the item-spell path, the 4 action points in a round,
@@ -2383,18 +2384,19 @@ the project's (the executable's prototype 7040 is our 7060).
 | --- | --- | --- | --- |
 | CC1 | payment (0x450420), order; record parser (0x4578F0) | The record flag 0x20 comes from a non-zero `ChargesFromCells:` (`Is_Tech:` sets 0x4, `ChargeBeginCost: 0` sets 0x100); it counts only for spells 0..222. After the zero-cost exit (cost ≤ 0 pays) and the no-payer exit, and after storing the cost for reflection, a cell record goes straight to the cell branch: before the critter branch (so the fatigue-limiting halving never applies) and the item-charge branch. | Original |
 | CC2 | 0x450420, the owner | An item payer (types 5..14) uses its parent (field 0x58, read without a null check); any other payer, critters included, is its own owner. | Original (CCA3) |
-| CC3 | ammunition count (0x465820 → 0x465870), insert (0x466510, 0x462410) | Cells are ammunition of type 2. An ammunition owner counts its own quantity; a critter the quantity (field 0x8E) of its one stack of that type, whose handle is critter field 0xE9 + type (0xEB, power cells), since insertion merges ammunition into that one stack; a container the first item of its inventory with prototype 7060 (a lookup that never matches in the original, [AM6](#ammunition-arc-world-066)); any other object 0. No sum over stacks, no worn items. | Original |
+| CC3 | ammunition count (0x465820 → 0x465870), insert (0x466510, 0x462410) | Cells are ammunition of type 2. An ammunition owner counts its own quantity; a critter the quantity (field 0x8E) of its one stack of that type, whose handle is critter field 0xE9 + type (0xEB, power cells), since insertion merges ammunition into that one stack; a container the first item of its inventory with prototype 7060 (a lookup that never matches in the original, [AM6](#ammunition-arc-world-066)); any other object 0. No sum over stacks, no worn items. | Original (AMA5: Steamwoven switch, ARC-TECHNOLOGY-009) |
 | CC4 | 0x450420 with 0x461590, 0x4614A0, 0x461520 | The need is the cost for any payer but an item; an item needs `2 × cost − adjust(item, parent, cost)`. The adjustment of a value v with complexity c (field 0x60) and power p: `trunc(p × v / c)` for c > 0, `v − trunc(p × v / c)` for c < 0, v for c = 0. A critter parent gives `p = trunc((aptitude + c) / 2)` clamped into `[0, c]` or `[c, 0]` (aptitude: stat 16), any other parent `p = c`. So a neutral item needs the cost; a magickal one `2 × cost − trunc(cost × p / c)`; a technological one `cost + trunc(cost × p / c)` (TC1). All 32-bit, truncated toward zero. | Original (TC1 switch; CCA2) |
 | CC5 | 0x450420, unit use (0x4658E0, no destination) | Fewer cells than the need: the payment fails and nothing is taken. Otherwise the same one stack is found again: equal to the need, it is destroyed (0x43CCA0); otherwise it keeps the rest (0x4EFDD0). One stack only; the branch returns the unit use's result. | Original |
-| CC6 | 0x450420, "apply" | The cell branch never reads the "apply" argument. The affordability checks that pass 0 take the cells for real: the interface check 0x4508A0 (called by 0x57C110 before a cast) and the animation goal's check 0x450940 (from 0x429B50, the base cost in the first state, else the maintenance cost). | Original bug (CCA1) |
+| CC6 | 0x450420, "apply" | The cell branch never reads the "apply" argument. The affordability checks that pass 0 take the cells for real: the interface check 0x4508A0 (called by 0x57C110 before a cast) and the animation goal's check 0x450940 (from 0x429B50, the base cost in the first state, else the maintenance cost). | Original bug (CCA1; decided: no spending in both modes) |
 | CC7 | callers reaching the branch | BEGIN (state 0 of 0x452F20) pays only for a critter caster, a record without `Is_Tech` and without flag 0x100, a run without flag 0x2, after the intelligence and willpower checks: a tech record pays nothing at BEGIN. MAINTAIN (state 1 of 0x452F20, from 0x453168; no separate function at 0x453170) has no `Is_Tech` test: it pays the maintenance cost (doubled for race 1) and, with a margin set, the surcharge (0x453370). ChargeNBranch (0x451850) pays its component's cost; a run's release (0x456FA0) and a target handler (0x5618B0) pay with "apply"; a redirected payer (0x455550) passes spell 10000 and never reaches it. | Original (the stage is the magic slices') |
 | CC8 | holder gate (0x456A10) | Allowed for no holder, an item of complexity ≤ 0, a holder of aptitude ≥ 0, or a power above 0 (aptitude + complexity ≥ 2); the other object's aptitude is read and dropped. Confirms the receipt of ARC-MAGIC-006. | Original |
 
 Anomalies:
 
 - CCA1 (CC6): an affordability check takes the cells of a cell-powered record. Both settings answer an unapplied request as the
-  original does and write nothing (`CellPlan.Applied`), as the task contract of ARC-TECHNOLOGY-007 sets; an Original switch that
-  spends on the check can be added if the owner asks for it.
+  original does and write nothing (`CellPlan.Applied`), as the task contract of ARC-TECHNOLOGY-007 sets. **Decided** (owner,
+  2026-10-21): no spending on a check in both modes, no switch (tested for the hero, an item and a container in both modes,
+  ARC-TECHNOLOGY-009).
 - CCA2 (CC4): `2 × cost` and `p × cost` wrap past about 2³⁰; a negative need then adds cells to the stack, and complexity −1
   with a product of −2³¹ faults on the division. Crash class: both settings compute the need exactly and refuse a need or a
   product `p × cost` that does not fit 32 bits, or a complexity or aptitude out of range (`CellRefusal.OutOfRange`).
@@ -2450,8 +2452,11 @@ Data notes (not anomalies; both settings follow the original):
 
 - DVD1 (DV1): two technological generic items (15154, record 176; 15193, record 220) carry no charges (0) and lack the magical flag
   0x4, so their use never takes the spell path and "has a usable spell" refuses them: the devices never fire on use (their records
-  cost nothing, so the payment would not have spent a charge). Proposal: keep in both settings (record only); a Steamwoven data fix
-  that gives them unlimited charges is a candidate if the owner wants the devices to work.
+  cost nothing, so the payment would not have spent a charge). The owner chose unlimited charges in Steamwoven on 2026-10-21;
+  ARC-TECHNOLOGY-009 then found in the installed data that both records sit in slot 1 (slot 0 is 10000) and have `ItemTriggers:`
+  0, so by DV1 and DV3 unlimited charges alone would not make them fire (the use's spell path reads slot 0, "has a usable spell"
+  needs a spell in slot 0 and a trigger mask, and no trigger matches). The decision is back with the owner (keep the charges fix,
+  research the use path first, or no fix); both settings follow the data until then.
 - Nine items that are not technological carry technology records (six food, three scrolls); they reach the engine like any device.
 - Record 187 is on no item; of the six maintained technology records only 168 is carried (three armours).
 
@@ -2470,7 +2475,7 @@ are F2. Every direct branch stays inside `.text`. Prototype numbers below are th
 | AM3 | fields, tables (0x5B32A0, 0x5B32B0) | The unit count is field 0x8E (gold 0xA5) and the ammunition type field 0x8F, signed 32-bit, set without clamping (0x4EFDD0). Types 0..3 index a four-entry table of critter fields and one of base prototypes (7058..7061; each holds 10 units); no bounds check. A count of 0 still merges and inserts; a use of 0 succeeds at once. | Original (AMA2, AMA3) |
 | AM4 | unit use (0x4658E0), stack lookup (0x465870) | Arguments: source, destination (or none), count, type, an optional explicit stack. The source stack is the explicit one, else a critter's stack field (unvalidated) or a container's lookup (AM6). Fewer units than the count: nothing changes, 0 returned. Exactly the count: the stack is destroyed; more: it keeps the rest. A destination's stack grows by the count, or a new object of the type's base prototype carries it in (0x465A40, 0x4617F0). A source without any stack credits the destination all the same. Callers: the attack (0x4B65D0: the weapon's ammunition type, field 0x7D, and per-shot count 0x7E; a normal shot, a critical miss taking the whole stack or five shots' worth; an NPC whose leader chain reaches no PC never spends), the cell payment (CC5), script action 135 (cells), assembly (one unit a component), a steal (at most 20 units, gold 100) and the quantity interface. | Original (AMA6) |
 | AM5 | removal (0x467860, from 0x466E00, 0x43CCA0, the drop and loot) | Every removal of gold or ammunition from a critter writes a null handle into its stack field of that kind, whether or not the field named the removed item, and never re-points it to another stack of the type. | Original (AMA4) |
-| AM6 | container lookups (0x465870, 0x4647D0) | A container's stack of a type is looked up by passing the raw base prototype number where a prototype handle is compared (every other caller converts the number first), so it never matches: a container's ammunition or gold is never counted or spent this way. | Original bug (AMA5) |
+| AM6 | container lookups (0x465870, 0x4647D0) | A container's stack of a type is looked up by passing the raw base prototype number where a prototype handle is compared (every other caller converts the number first), so it never matches: a container's ammunition or gold is never counted or spent this way. | Original bug (AMA5; Steamwoven switch, ARC-TECHNOLOGY-009) |
 | AM7 | gold (0x4647D0, 0x464780, 0x464830, 0x464970) | The same mechanism: critter field 0xE8, quantity 0xA5, base prototype 9076, merge by prototype. | Original (gold not modelled) |
 
 Anomalies:
@@ -2485,9 +2490,10 @@ Anomalies:
   later new stack sets the field again. Latent: each installed ammunition type has one prototype, so a holder never has two
   stacks of a type. The session spends from the holder's first stack of the type in both settings. **Decided** (owner, 2026-10-21):
   no switch, as for TC4 and TC6 (latent, unreachable in the installed data).
-- AMA5 (AM6): a container's ammunition (and gold) is never found by the type lookups, so a device in a container has no cells
-  (ARC-TECHNOLOGY-007's container case follows it in both settings until the owner decides; a Steamwoven fix would find the
-  container's stack).
+- AMA5 (AM6): a container's ammunition (and gold) is never found by the type lookups, so a device in a container has no cells.
+  **Decided** (owner, 2026-10-21): a switch, `ItemRuleProfile.ContainerStackLookupFails` (ARC-TECHNOLOGY-009): Steamwoven finds the
+  container's first stack of the type (a device in a container pays from its cells through `ContainerCellSource`, a spend from a
+  container through `SpendAmmo`); Original keeps the failed lookup. Gold is not modelled; the same fix will apply to it.
 - AMA6 (AM4): a source without a stack still credits the destination. The session's spend has no destination (transfers of units
   between holders are not modelled), so it does not arise.
 
