@@ -160,7 +160,7 @@ Software only (synthetic Godot InputEvents and simulated controller levels):
   ARC-RENDER-007 gate (see [toolchain](../workflow/toolchain.md) and
   [local development](../workflow/local-development.md)); the synthetic gates require the
   ARC-INPUT-001 markers. Its ordinary mode is `crash-site-area`; `./arcanum area`
-  prefers the current ARC-INPUT-001 build over ARC-RENDER-007.
+  then preferred the current ARC-INPUT-001 build over ARC-RENDER-007 (since ARC-RENDER-028 it is map mode on the main world map).
 
 **Owner-verified (L3, ARC-INPUT-002, 2026-10-17):** native macOS delivery of
 Ctrl+Shift+F9, a physical Mac keyboard and a physical controller (see the result below).

@@ -806,6 +806,17 @@ map-mode start; named elsewhere it fails, and it ends on the last map). Per map:
 The census found that the two unlisted maps failed to open in map mode (`AREA_SESSION_InvalidActor`): see
 [dialogs](#dialogs-arc-world-032). Original parity does not apply (a viewer census).
 
+## The Crash Site through map mode (ARC-RENDER-028)
+
+`./arcanum area` is map mode on the main world map: `--area-map Arcanum1-024-fixed`, a window around the map-list start (the
+Crash Site), with `--hero NAME` and `--sector X,Y` passed on as for `./arcanum map`. It needs the same universal ARC-DEV-015
+build (else ARC-RENDER-008, exported after ARC-RENDER-024 so it opens the main map by window) and the same four inputs as map
+mode, on any installation. The pinned Crash Site exterior profile
+(`crash-site-area` without `--area-map`, its pinned mobile, effects and patch inputs) is no launcher mode any more: the viewer
+keeps it for its regression smokes, which start it with explicit arguments. `./arcanum status` reports `area` with map mode's
+inputs. Tests: `tools/local_dev/test_launcher_sync.py` (`area` is map mode on the main map, the arguments it passes) and
+`test_universal_dev.py` (status).
+
 ## Not yet
 
 - Roofs are drawn, hidden and faded since ARC-RENDER-022 ([roofs](roofs.md)).

@@ -170,12 +170,14 @@ class UniversalDevTests(unittest.TestCase):
                 project["status"](None)
             return [" ".join(str(part) for part in call.args) for call in printed.call_args_list]
 
-        area = next(line for line in lines() if line.startswith("area"))
-        self.assertIn("pinned identity differs: " + ", ".join(launch.pinned_roles("crash-site-area")), area)
+        world = next(line for line in lines() if line.startswith("world"))
+        self.assertIn("pinned identity differs: " + ", ".join(launch.pinned_roles("world-diagnostic")), world)
         self.assertTrue(any(line.startswith("map: ready") for line in lines()))
+        # ARC-RENDER-028: `area` is map mode, ready on any installation.
+        self.assertTrue(any(line.startswith("area: ready") for line in lines()))
         # No record (an older configuration): the pinned modes are ready as before.
         conf = config.load_config(); conf.pop("installation"); config.save_config(conf)
-        self.assertTrue(next(line for line in lines() if line.startswith("area")).endswith(": ready"))
+        self.assertTrue(next(line for line in lines() if line.startswith("world")).endswith(": ready"))
         # `configure inputs` replaces the inputs and drops a record setup wrote.
         conf = config.load_config(); conf["installation"] = {"pinnedVerified": []}; config.save_config(conf)
         inputs = self.inputs()
