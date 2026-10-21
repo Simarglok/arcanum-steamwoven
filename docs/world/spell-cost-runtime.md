@@ -101,7 +101,8 @@ rule modes; this slice adds no rule-mode switch.
 
 ## Not ready
 
-- No caller: the run (MT9a) charges BEGIN and MAINTAIN through these rules; the spell UI (MT19, MT20a) and the AI (I8)
-  will show and weigh `CastCost`.
+- The run (MT9a) charges BEGIN and MAINTAIN through these rules. The character sheet's spells page (ARC-MAGIC-008) shows
+  `CastCost` and `MaintainCost` in its hints, as the original's text bar does. The casting UI (MT20a) and the AI (I8) will show
+  and weigh `CastCost`.
 - The charge-cell amounts and refusals are the technology lane's (TC1); this slice defines only the port and its place.
 - The recharge event (scheduling, merging, saving) is MT11's; reflection's use of the last cost is MT10's (MG15).

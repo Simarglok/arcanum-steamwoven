@@ -30,6 +30,28 @@ public sealed class SpellTexts
     public IReadOnlyList<string?> CollegeDescriptions { get; }
     public IReadOnlyList<string?> MasteryDescriptions { get; }
 
+    /// <summary>A record's name (0x4B1600, message <paramref name="spell"/>, 0..222); null when missing (the original's −1 and 10000
+    /// give its shared missing-line text, which the host formats).</summary>
+    [OriginalFunction(0x4B1600, OriginalFunctionScope.Partial)]
+    public string? Name(int spell) => Names[Check(spell, SpellRecord.Count, nameof(spell))];
+
+    /// <summary>A college spell's description (0x4B1620, message 700 + <paramref name="spell"/>, 0..79).</summary>
+    [OriginalFunction(0x4B1620, OriginalFunctionScope.Partial)]
+    public string? Description(int spell) => SpellDescriptions[Check(spell, SpellRecord.CollegeSpells, nameof(spell))];
+
+    /// <summary>A college's name (0x4B1A40, message 500 + <paramref name="college"/>, 0..15).</summary>
+    [OriginalFunction(0x4B1A40, OriginalFunctionScope.Partial)]
+    public string? CollegeName(int college) => CollegeNames[Check(college, SpellRecord.Colleges, nameof(college))];
+
+    /// <summary>A college's description as the sheet's hint shows it (0x4B1A50): the mastery description (9000 + college) when
+    /// <paramref name="masteredCollege"/> is that college, else the college description (8000 + college). The original tests the
+    /// local player's mastered college; the caller passes it.</summary>
+    [OriginalFunction(0x4B1A50, OriginalFunctionScope.Partial)]
+    public string? CollegeDescription(int college, int masteredCollege) =>
+        masteredCollege == Check(college, SpellRecord.Colleges, nameof(college)) ? MasteryDescriptions[college] : CollegeDescriptions[college];
+
+    private static int Check(int value, int count, string name) => value >= 0 && value < count ? value : throw new ArgumentOutOfRangeException(name);
+
     /// <summary>Reads the texts; strict mode refuses a missing one.</summary>
     public static SpellTextsRead Read(MesFile file, SpellRecordMode mode)
     {

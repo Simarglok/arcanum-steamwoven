@@ -7,7 +7,10 @@ namespace Arcanum.TerrainViewer;
 /// ARC-UI-007 diagnostic character sheet: the session hero's values as the original sheet shows them
 /// (<see cref="AreaCharacterSheet.Lines"/>), with a close button. ARC-UI-009 adds the skills page: the sixteen skills in the
 /// original's four groups, each row with − and + buttons (<see cref="SkillRefundRequested"/>, <see cref="SkillSpendRequested"/>)
-/// and a hover hint (the description and the key stat the next point needs). The app rebuilds it whenever the session changes.
+/// and a hover hint (the description and the key stat the next point needs). ARC-MAGIC-008 adds the spells page: the sixteen
+/// college tabs, the shown college's five spells (name, state and minimum level, the original's hover hint) and the college's − and
+/// + (<see cref="SpellUnlearnRequested"/>, <see cref="SpellLearnRequested"/>). The two pages are tabs. The app rebuilds it whenever
+/// the session changes.
 /// </summary>
 public partial class AreaCharacterSheetPanel : CanvasLayer
 {
@@ -19,9 +22,20 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     private AreaSkillsPageView? _skillsView;
     private Label _skillMessage = null!;
     private readonly List<(Button Minus, Label Text, Button Plus)> _skillRows = [];
+    private AreaSpellsPageView? _spellsView;
+    private TabContainer _pages = null!;
+    private readonly List<Button> _collegeTabs = [];
+    private Label _collegeLine = null!;
+    private readonly List<Label> _spellRows = [];
+    private Button _spellMinus = null!, _spellPlus = null!;
     public event Action? CloseRequested;
     public event Action<int>? SkillSpendRequested;
     public event Action<int>? SkillRefundRequested;
+    /// <summary>A college tab was pressed (0..15).</summary>
+    public event Action<int>? CollegeSelected;
+    /// <summary>+ or − of the shown college (its number).</summary>
+    public event Action<int>? SpellLearnRequested;
+    public event Action<int>? SpellUnlearnRequested;
     public bool IsOpen => Visible;
     internal AreaCharacterSheetView? ViewForSelfTest => _view;
     internal string TextForSelfTest => _body.Text;
@@ -31,6 +45,13 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     internal string SkillTextForSelfTest(int row) => _skillRows[row].Text.Text;
     internal string SkillHintForSelfTest(int row) => _skillRows[row].Text.TooltipText;
     internal string SkillMessageForSelfTest => _skillMessage.Text;
+    internal AreaSpellsPageView? SpellsForSelfTest => _spellsView;
+    internal Button CollegeTabForSelfTest(int college) => _collegeTabs[college];
+    internal Button SpellPlusForSelfTest => _spellPlus;
+    internal Button SpellMinusForSelfTest => _spellMinus;
+    internal string SpellTextForSelfTest(int rank) => _spellRows[rank].Text;
+    internal string SpellHintForSelfTest(int rank) => _spellRows[rank].TooltipText;
+    internal string CollegeHintForSelfTest(int college) => _collegeTabs[college].TooltipText;
 
     public override void _Ready()
     {
@@ -45,6 +66,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         var contents = new VBoxContainer(); _panel.AddChild(contents);
         var header = new Label { Text = "Character sheet", Modulate = new Color(1f, .85f, .55f) };
         _body = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _pages = new TabContainer { Name = "Pages", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         var skills = new GridContainer { Name = "Skills", Columns = 2, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         for (var group = 0; group < AreaSkillsPage.Rows / AreaSkillsPage.RowsPerGroup; group++)
         {
@@ -66,35 +88,68 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
             }
             skills.AddChild(column);
         }
+        _pages.AddChild(skills);
+        _pages.AddChild(BuildSpellsPage());
         _skillMessage = new Label { Modulate = new Color(.85f, .9f, .95f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _close = new Button { Name = "Close", Text = "Close", Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.All };
         _close.Pressed += () => CloseRequested?.Invoke();
         _hint = new Label
         {
             Modulate = new Color(.55f, .6f, .65f), AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            Text = "C, Escape or cancel closes | PROJECT diagnostic window: skill points only (no stat, tech discipline or spell buttons); original UI parity NOT_VERIFIED",
+            Text = "C, Escape or cancel closes | PROJECT diagnostic window: skill and spell points (no stat or tech discipline buttons); original UI parity NOT_VERIFIED",
         };
-        foreach (var control in new Control[] { header, _body, skills, _skillMessage, _close, _hint }) contents.AddChild(control);
+        foreach (var control in new Control[] { header, _body, _pages, _skillMessage, _close, _hint }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
 
-    public void Open(AreaCharacterSheetView view, AreaSkillsPageView? skills = null)
+    private VBoxContainer BuildSpellsPage()
     {
-        Show(); Render(view, skills);
+        var page = new VBoxContainer { Name = "Spells", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        // The sixteen college tabs, one shown at a time (the original's radio group).
+        var tabs = new GridContainer { Columns = 8 };
+        var group = new ButtonGroup();
+        for (var college = 0; college < AreaSpellsPage.Colleges; college++)
+        {
+            var c = college;
+            var tab = new Button { ToggleMode = true, ButtonGroup = group, FocusMode = Control.FocusModeEnum.All, Text = $"{college + 1}" };
+            tab.Pressed += () => CollegeSelected?.Invoke(c);
+            tabs.AddChild(tab); _collegeTabs.Add(tab);
+        }
+        page.AddChild(tabs);
+        _collegeLine = new Label { Modulate = new Color(1f, .85f, .55f), MouseFilter = Control.MouseFilterEnum.Pass };
+        page.AddChild(_collegeLine);
+        for (var rank = 0; rank < AreaSpellsPage.Ranks; rank++)
+        {
+            var row = new Label { MouseFilter = Control.MouseFilterEnum.Pass, AutowrapMode = TextServer.AutowrapMode.WordSmart };
+            page.AddChild(row); _spellRows.Add(row);
+        }
+        var buttons = new HBoxContainer();
+        _spellMinus = new Button { Text = "− unlearn", FocusMode = Control.FocusModeEnum.All };
+        _spellPlus = new Button { Text = "+ learn", FocusMode = Control.FocusModeEnum.All };
+        _spellMinus.Pressed += () => { if (_spellsView is { } view) SpellUnlearnRequested?.Invoke(view.College); };
+        _spellPlus.Pressed += () => { if (_spellsView is { } view) SpellLearnRequested?.Invoke(view.College); };
+        buttons.AddChild(_spellMinus); buttons.AddChild(_spellPlus);
+        page.AddChild(buttons);
+        return page;
+    }
+
+    public void Open(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null)
+    {
+        Show(); Render(view, skills, spells);
         _close.GrabFocus();
     }
 
     public void CloseView()
     {
-        _view = null; _skillsView = null; _skillMessage.Text = string.Empty; Hide();
+        _view = null; _skillsView = null; _spellsView = null; _skillMessage.Text = string.Empty; Hide();
         GetViewport().GuiReleaseFocus();
     }
 
-    public void Render(AreaCharacterSheetView view, AreaSkillsPageView? skills = null)
+    public void Render(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null)
     {
         ArgumentNullException.ThrowIfNull(view);
-        _view = view; _skillsView = skills;
+        _view = view; _skillsView = skills; _spellsView = spells;
         _body.Text = string.Join("\n", AreaCharacterSheet.Lines(view));
         for (var row = 0; row < _skillRows.Count; row++)
         {
@@ -106,13 +161,44 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
                 skill.NextPointKeyStat == 0 ? null : $"{skill.KeyStat}: {skill.NextPointKeyStat}" }.Where(part => !string.IsNullOrEmpty(part)));
             minus.Disabled = plus.Disabled = skills is not { EditorOpen: true };
         }
+        RenderSpells(spells);
         ResizePanel();
+    }
+
+    private void RenderSpells(AreaSpellsPageView? spells)
+    {
+        for (var college = 0; college < _collegeTabs.Count; college++)
+        {
+            var tab = spells?.Colleges[college];
+            _collegeTabs[college].Text = tab?.Name ?? $"{college + 1}";
+            _collegeTabs[college].TooltipText = tab is null ? "" : AreaSpellsPage.Hint(tab);
+            _collegeTabs[college].SetPressedNoSignal(spells?.College == college);
+        }
+        var shown = spells?.Colleges[spells.College];
+        _collegeLine.Text = shown is null ? "" : $"{shown.Name}: {shown.Rank} of {AreaSpellsPage.Ranks} known" + (shown.Mastered ? " (mastered)" : "");
+        _collegeLine.TooltipText = shown is null ? "" : AreaSpellsPage.Hint(shown);
+        for (var rank = 0; rank < _spellRows.Count; rank++)
+        {
+            var row = spells?.Spells[rank];
+            _spellRows[rank].Text = row is null ? "" : AreaSpellsPage.Line(row);
+            _spellRows[rank].TooltipText = row is null ? "" : AreaSpellsPage.Hint(row);
+            // The original's look (SG4): the known ranks white, the next one gold, the ranks above it grey.
+            _spellRows[rank].Modulate = row?.State switch
+            {
+                AreaSpellState.Known => new Color(1f, 1f, 1f), AreaSpellState.Next => new Color(1f, 210 / 255f, 0f), _ => new Color(.5f, .5f, .5f),
+            };
+        }
+        // + over the next rank and − over the highest known show those spells' hints, as the original's buttons do.
+        _spellPlus.Disabled = spells is not { CanLearn: true };
+        _spellMinus.Disabled = spells is not { CanUnlearn: true };
+        _spellPlus.TooltipText = spells?.NextSpell is { } next ? AreaSpellsPage.Hint(next) : "";
+        _spellMinus.TooltipText = spells?.HighestSpell is { } highest ? AreaSpellsPage.Hint(highest) : "";
     }
 
     /// <summary>The message of the last + or − press (empty clears it).</summary>
     public void ShowSkillMessage(string message) => _skillMessage.Text = message;
 
-    /// <summary>Confirm presses the close button (the skills page's buttons take the mouse or focus).</summary>
+    /// <summary>Confirm presses the close button (the pages' buttons take the mouse or focus).</summary>
     public void Confirm() => _close.EmitSignal(BaseButton.SignalName.Pressed);
 
     private void ResizePanel()
