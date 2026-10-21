@@ -59,8 +59,8 @@ by synthetic files.
 
 ## Not ready
 
-- No line is built: the greeting generators (ranges, social-class and race offsets, the NPC's override lines), the dialog
-  markers `g:`, `i:`, `m:`, `r:` and name substitution of generated lines are the greeting slice or later slices.
+- The NPC greeting (`g:`) reads these files since ARC-WORLD-058 ([dialog greeting](../scripting/dialog-greeting.md)); the
+  markers `i:`, `m:` and `r:` and the PC's generated options do not yet.
 - The PC option files (`gd_pc*`, `gd_cls_pc*` and their dumb variants) and the story files (`gd_sto_*`) are loaded but have
   no consumer.
 - Text decoding and localisations other than the declared MES byte profiles.

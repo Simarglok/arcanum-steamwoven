@@ -225,11 +225,96 @@ public sealed class DialogConversation
     {
         Turn++;
         _step = plan;
+        var previous = NpcLine?.Text ?? string.Empty;
         CurrentNode = new DialogNodeId(plan.Npc.Id);
         NpcLine = new DialogNpcLine(CurrentNode, plan.NpcText);
-        if (Execute(plan.Action))
+        if (!Execute(plan.Action))
         {
-            BuildOffers(plan);
+            return;
+        }
+        // The original runs the node's actions before it tests the node's text for a marker (0x416840).
+        if (plan.Greeting is { } greeting)
+        {
+            Greet(plan, greeting, previous);
+            return;
+        }
+        BuildOffers(plan);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-058: the greeting of a <c>g:</c> node (0x416840 → 0x419260). A line keeps the node's replies, or ends the talk
+    /// (slots 1–4 unless the NPC's social class is 2); a jump slot continues at its node as an ordinary entry; a floating slot
+    /// says its node's line and ends the talk.
+    /// </summary>
+    [OriginalFunction(0x416840, OriginalFunctionScope.Partial)]
+    private void Greet(StepPlan plan, GreetingPlan greeting, string previous)
+    {
+        var query = new DialogReactionQuery(_request.Participants.Npc, _request.Participants.PlayerCharacter);
+        var port = _ports.Greeting!;
+        GreetingOutcome outcome;
+        try
+        {
+            var facts = port.Facts(query);
+            if (facts is null)
+            {
+                Stop(new DialogConversationFrontier(DialogFrontierKind.GreetingFactsUnknown, CurrentNode), null);
+                return;
+            }
+            var sources = port.Sources(query);
+            if (!Enum.IsDefined(facts.Category) || sources?.Files is null || sources.ReputationLines is null || port.Rules is null)
+            {
+                Fail(new DialogConversationFailure(DialogConversationFailureKind.InvalidQueryResult, CurrentNode));
+                return;
+            }
+            outcome = DialogGreeting.Resolve(greeting.Slots, facts, sources, port, query, _request.Names, _request.Encoding, _options.MaxTextBytes);
+        }
+        catch (DialogGreeting.InvalidGreetingRoll)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.InvalidQueryResult, CurrentNode));
+            return;
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode));
+            return;
+        }
+        switch (outcome.Kind)
+        {
+            case GreetingOutcomeKind.Line:
+                NpcLine = new DialogNpcLine(CurrentNode, outcome.KeepsLine ? previous : outcome.Text, outcome.Origin);
+                if (outcome.Ends)
+                {
+                    Finish(new DialogConversationEnd(DialogEndKind.NpcFinalLine, null));
+                }
+                else
+                {
+                    BuildOffers(plan);
+                }
+                return;
+            case GreetingOutcomeKind.Jump:
+                var jump = greeting.Jumps[outcome.Node];
+                if (Admit(jump, 0))
+                {
+                    Enter(jump);
+                }
+                return;
+            case GreetingOutcomeKind.Float:
+                var floating = greeting.Floats[outcome.Node];
+                if (!Admit(floating, 0))
+                {
+                    return;
+                }
+                Turn++;
+                CurrentNode = new DialogNodeId(floating.Npc.Id);
+                NpcLine = new DialogNpcLine(CurrentNode, floating.NpcText);
+                if (Execute(floating.Action))
+                {
+                    Finish(new DialogConversationEnd(DialogEndKind.NpcFinalLine, null));
+                }
+                return;
+            default:
+                Fail(new DialogConversationFailure(outcome.Failure, CurrentNode, TextFailure: outcome.TextFailure));
+                return;
         }
     }
 
@@ -679,7 +764,8 @@ public sealed class DialogConversation
 
     // ---- Static planning: pure, no port calls, run before any effect of the step it admits. ----
 
-    private StepPlan? PlanStep(DlgRecord npc, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure, bool withReplies = true)
+    private StepPlan? PlanStep(DlgRecord npc, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure, bool withReplies = true,
+        bool nested = false)
     {
         frontier = null;
         failure = null;
@@ -706,12 +792,23 @@ public sealed class DialogConversation
             var markerText = raw.Count >= 2 && raw[0] < 0x80 && raw[1] == (byte)':'
                 ? $"{(char)raw[0]}:{(raw.Count > 2 ? "+" : string.Empty)}" : string.Empty;
             var marker = DialogText.Marker(markerText, out var exact);
-            if (marker is { Letter: 'g' or 'm' or 'r' } || marker is { Letter: 'i' } && exact)
+            GreetingPlan? greeting = null;
+            if (marker is { Letter: 'g' } && _ports.Greeting is not null && withReplies && !nested)
+            {
+                // ARC-WORLD-058: the greeting's slot targets are planned now, so a slot never half-runs a node.
+                greeting = PlanGreeting(npc, raw, node, out frontier, out failure);
+                if (greeting is null)
+                {
+                    return null;
+                }
+                text = string.Empty;
+            }
+            else if (marker is { Letter: 'g' or 'm' or 'r' } || marker is { Letter: 'i' } && exact)
             {
                 frontier = new DialogConversationFrontier(DialogFrontierKind.UnsupportedGeneratedText, node);
                 return null;
             }
-            if (!CheckTokens(text, node, null, out frontier, out failure))
+            else if (!CheckTokens(text, node, null, out frontier, out failure))
             {
                 return null;
             }
@@ -741,7 +838,7 @@ public sealed class DialogConversation
                 }
                 replies.Add(reply);
             }
-            return new StepPlan(npc, action, DialogText.Substitute(text, _request.Names), replies.AsReadOnly());
+            return new StepPlan(npc, action, DialogText.Substitute(text, _request.Names), replies.AsReadOnly(), greeting);
         }
         catch (DialogOperationParseException exception)
         {
@@ -995,7 +1092,49 @@ public sealed class DialogConversation
         return sorted;
     }
 
-    private sealed record StepPlan(DlgRecord Npc, IReadOnlyList<ConversationOperation> Action, string NpcText, IReadOnlyList<ReplyPlan> Replies);
+    private sealed record StepPlan(DlgRecord Npc, IReadOnlyList<ConversationOperation> Action, string NpcText, IReadOnlyList<ReplyPlan> Replies,
+        GreetingPlan? Greeting = null);
+
+    /// <summary>A greeting's slots and the planned nodes of its jump and floating slots.</summary>
+    private sealed record GreetingPlan(DialogGreetingSlot[] Slots, IReadOnlyDictionary<int, StepPlan> Jumps, IReadOnlyDictionary<int, StepPlan> Floats);
+
+    /// <summary>
+    /// The slots of a <c>g:</c> node (its record text after the marker) and the plans of the nodes they name: a jump node with its
+    /// replies, a floating node without. A named node that is missing, no NPC node, itself a greeting or not plannable makes the
+    /// greeting node fail or stop like a reply target.
+    /// </summary>
+    private GreetingPlan? PlanGreeting(DlgRecord npc, IReadOnlyList<byte> raw, DialogNodeId node, out DialogConversationFrontier? frontier,
+        out DialogConversationFailure? failure)
+    {
+        frontier = null;
+        failure = null;
+        var slots = DialogGreeting.ParseSlots(System.Text.Encoding.Latin1.GetString(raw.Skip(2).ToArray()));
+        var jumps = new Dictionary<int, StepPlan>();
+        var floats = new Dictionary<int, StepPlan>();
+        foreach (var slot in slots)
+        {
+            if (slot.Kind is not (DialogGreetingSlotKind.Jump or DialogGreetingSlotKind.Float)) continue;
+            var into = slot.Kind == DialogGreetingSlotKind.Jump ? jumps : floats;
+            if (into.ContainsKey(slot.Node)) continue;
+            if (!_document.TryGetRecord(slot.Node, out var target) || target is null)
+            {
+                failure = new DialogConversationFailure(DialogConversationFailureKind.MissingTarget, node);
+                return null;
+            }
+            if (target.Role != DlgRecordRole.Npc)
+            {
+                failure = new DialogConversationFailure(DialogConversationFailureKind.WrongTargetRole, node);
+                return null;
+            }
+            var plan = PlanStep(target, out frontier, out failure, slot.Kind == DialogGreetingSlotKind.Jump, nested: true);
+            if (plan is null)
+            {
+                return null;
+            }
+            into.Add(slot.Node, plan);
+        }
+        return new GreetingPlan(slots, jumps, floats);
+    }
 
     private sealed record ReplyPlan(
         DlgRecord Record,

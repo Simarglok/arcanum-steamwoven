@@ -6,8 +6,9 @@ Status: **Implemented bounded component**, ARC-WORLD-044 (2026-10-21). Slice 4 o
 [game session](game-session-runtime.md) (snapshot schema 30), the dialog `RP` condition and action, the script condition
 "has reputation" and the reputation term of the [NPC reaction](npc-reaction-runtime.md). Requirements:
 [FR-SOCIAL-002](../requirements/story-social-ai.md#fr-social-002) and
-[FR-SOCIAL-001](../requirements/story-social-ai.md#fr-social-001). Greetings, the logbook's reputation tab and the AI
-consumers are not part of it ([Not ready](#not-ready)).
+[FR-SOCIAL-001](../requirements/story-social-ai.md#fr-social-001). The reputation greeting is ARC-WORLD-058
+([dialog greeting](../scripting/dialog-greeting.md)); the logbook's reputation tab and the AI consumers are not part of it
+([Not ready](#not-ready)).
 
 ## Evidence
 
@@ -29,6 +30,7 @@ on every row. Local data: the opt-in census below (counts only).
    faction it is written with, signed or not (decision D1).
 2. `mes\gamereplog.mes`, the logbook names (`Name(number)`, numbers ≥ 1000), only when the table did not stop.
 3. `mes\game_rp_npc_{m2m,m2f,f2f,f2m}.mes`, the greeting files, only when the names file exists; a missing one is skipped.
+   The [dialog greeting](../scripting/dialog-greeting.md) reads them (ARC-WORLD-058).
 
 No `gamerep.mes` gives an empty table without names and greetings. A file that cannot be read or parsed as MES refuses the
 whole load (`ReadFailed`, `ParseFailed`), and so does a number beyond 32 bits (`OutOfRange`; the original would wrap):
@@ -46,6 +48,7 @@ membership faction, all 76 named, all four greeting files (ARC-RES-028 L1, L2).
 | `ReputationRules.GrantsFaction(held, catalog, faction)` | 0x4C21E0: never for faction 0; else when one of a held reputation's three factions is it. |
 | `ReputationRules.FactionSame(a, b, pcReputations, catalog)` | 0x45D110 over `FactionMember(Id, IsPc, Faction, Leader, PcLeader)`: two PCs never; a PC and a non-PC when the non-PC's PC leader is that PC or its non-zero faction is granted by the PC's reputations; two non-PCs when they share a non-null PC leader, one leads the other, they share a non-null leader, or they have the same non-zero faction. Single PC: the PC side reads the session PC's list. The AI slices consume this one function. |
 | `ReputationRules.OriginSame(a, b)` | 0x45D320: equal and non-zero. |
+| `ReputationRules.GreetingCandidates(held, catalog, origin, faction, category)` | 0x4C1F80 (ARC-WORLD-058): in held order, each held reputation with an effect in the NPC's scope (origin and faction 0 or the NPC's) whose adjustment is negative for a category above neutral or positive for one below; once each. The [greeting](../scripting/dialog-greeting.md) picks one uniformly. |
 
 ## Session domain (`Arcanum.Session`)
 
@@ -71,7 +74,7 @@ the revision capacity. One revision per change. No record budget beyond the rang
 | --- | --- | --- | --- |
 | A5 | any number is stored (and read outside the table) | only 1000..1999 are admitted; a dialog `RP` action outside is skipped (`ReputationRangePolicy.Skip`, recorded as `Skipped`, the dialog goes on), a condition on it is "not held" | none: owner decision 2026-10-21 (option b), skip in both settings; `ReputationRangePolicy.Refuse` remains a host option, unused |
 | RM1 | removal copies entry 2·i into i (original bug) | a correct shift in both settings | none: owner decision 2026-10-21 (option a) |
-| A9 | the greeting pick returns the reputation's own number | not built | reconstruction slip of the earlier reading |
+| A9 | the greeting pick returns the reputation's own number | the same (ARC-WORLD-058, ledger RG8) | reconstruction slip of the earlier reading |
 
 ## Snapshot schema 30
 
@@ -107,8 +110,7 @@ refused, so a quick save of schema 29 loads as written by an incompatible versio
 
 ## Not ready
 
-- Greetings (R12; the files are loaded, the pick and the line are not built), the logbook's reputation tab
-  (FR-SOCIAL-008), the logbook button flash and network messages.
+- The logbook's reputation tab (FR-SOCIAL-008), the logbook button flash and network messages. (Greetings: ARC-WORLD-058.)
 - The AI consumers of `FactionSame`, `GrantsFaction` and `OriginSame` (kill-on-sight, protect, upset, last hitter): their
   slices call these functions.
 - NPC origins set by the dialog `OR` action and factions by scripts or summons (the viewer reads the loaded fields only).

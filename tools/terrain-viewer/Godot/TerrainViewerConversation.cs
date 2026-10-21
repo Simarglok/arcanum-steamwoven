@@ -244,6 +244,9 @@ public partial class TerrainViewerApp
         }
         OpenConversation(speaker, start);
         GD.Print($"ARC-SCRIPT-005 conversation status={start.Status} detail={start.Detail} phase={start.Conversation?.Phase}");
+        // ARC-WORLD-058: the greeting texts (read at the host's first conversation) and where the first NPC line came from.
+        if (host.GreetingTexts is { } texts)
+            GD.Print($"ARC-WORLD-058 greeting texts status={texts.Status} detail={texts.Detail} line={start.Conversation?.NpcLine?.Origin?.Kind.ToString() ?? "record"}");
         RefreshReadyStatus();
     }
 
