@@ -108,12 +108,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         return new((int)element.Words[2], (uint)element.Words[0], (uint)element.Words[1]);
     }
 
-    public ScrSlot? Slot(ScrObjectRef attachee, int point) => Row(attachee) is { } row ? Slot(row, attachee, point) : null;
-
-    // The row's loaded slot for the point; the use slot as the session last wrote it back for the attachee.
-    private ScrSlot? Slot(AreaObjectRecord row, ScrObjectRef attachee, int point)
+    public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
-        if (LoadedSlot(row, point) is not { } loaded) return null;
+        if (Row(attachee) is not { } row || LoadedSlot(row, point) is not { } loaded) return null;
         if (point != ScrPoint.Use) return loaded;
         long? Read(string property) => _session.QueryMapChange(new SessionMapId(attachee.Map), MapChangeKey.ForEntity(attachee.Code, property));
         return new(Read(ScriptProperty) is { } script ? checked((int)script) : loaded.Script,
@@ -130,8 +127,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     {
         ArgumentNullException.ThrowIfNull(row);
         if (_content is null) return null;
-        if (Slot(row, new(row.Key.RuntimeMap, EntityId(row)), ScrPoint.Use) is not { Script: not 0 } slot) return false;
-        return Script(slot.Script) is { Status: ScrScriptStatus.Found, Program: { } program } &&
+        if (LoadedSlot(row, ScrPoint.Use) is not { } loaded) return false;
+        // Only the script number is read (a use writes it back under the row's entity); a stored number outside the catalogue's
+        // range names no script the content holds, so it is no trap, like a script the original cannot load.
+        var written = _session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), MapChangeKey.ForEntity(EntityId(row), ScriptProperty));
+        var script = written is { } number ? (number is >= 0 and <= ScrCatalogue.MaxScriptNumber ? (int)number : 0) : loaded.Script;
+        if (script == 0) return false;
+        return Script(script) is { Status: ScrScriptStatus.Found, Program: { } program } &&
             (program.FileFlags & (ScrCatalogue.FileFlag.NonmagicalTrap | ScrCatalogue.FileFlag.MagicalTrap)) != 0;
     }
 

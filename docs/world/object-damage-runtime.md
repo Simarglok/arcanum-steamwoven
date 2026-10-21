@@ -118,8 +118,9 @@ The registry version stays 1, as when the Lock event was added.
   Whether an object's use script is a trap is the caller's answer (`Target(session, key, trapped)`); the viewer passes
   `AreaUseScriptHost.IsTrap` (ARC-COMBAT-011, 0x4BBDD0, ledger OD6): the object's point-1 script as the session holds it (a
   script a use wrote back replaces the loaded one), when it is not 0 and its file's header flags carry 0x1 (non-magical) or 0x2
-  (magical). A script the content does not hold or cannot read is no trap, as the original's header read fails; without script
-  content the answer is unknown and the viewer passes no trap. The flag is read again at each hit.
+  (magical). A script the content does not hold or cannot read is no trap, as the original's header read fails (a stored number
+  outside 0..99999 included); without script content the answer is unknown and the viewer passes no trap. The flag is read again
+  at each hit.
 
   It also names the objects the session destroyed or switched off. The view no longer draws or picks those, and a destroyed
   door's passage is open.
@@ -134,8 +135,8 @@ The registry version stays 1, as when the Lock event was added.
   This is the original's click (ledger OD14). Without Alt, the object is used as out of combat. An item on the ground is
   picked up and a trap walked to, as the original does, so neither is attacked by a click. The status line names the hit and
   the break (and a trap that would fire, ARC-COMBAT-011), and the log prints `ARC-COMBAT-008 object-attack-hit`. The object-attack smoke
-  stage first logs `ARC-COMBAT-011 native-smoke trap-flags` with the count of the shown map's attackable objects whose use script is a
-  trap (NONE without script content).
+  stage first logs `ARC-COMBAT-011 native-smoke trap-flags`, a census (it checks nothing): the count of the shown map's attackable
+  objects whose use script is a trap (NONE without script content; the Crash Site cave has 17 objects and no trap).
 - **Wear in play.** The hero's attack on an NPC (`AttackCritter`) now passes both sides' worn items with their durability
   values, so armour and weapon wear happen in play:
   - the hero's kit, from `AreaHeroLoad.KitDurability`;

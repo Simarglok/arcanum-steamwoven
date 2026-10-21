@@ -104,8 +104,8 @@ public sealed class AreaUseScriptHostTests
             // 708 (ARC-UI-049): a book for the PC (the triggerer) and a plaque for the gate (not a PC).
             Write("scr/00708read.scr", Program(Do(new(ScrCatalogue.Action.ShowBook, N(1020), (Triggerer, 0))),
                 Do(new(ScrCatalogue.Action.ShowPlaque, N(1500), (Attachee, 0))), Do(Skip)));
-            // 709..711 (ARC-COMBAT-011): header flags 0x1 (non-magical trap), 0x2 (magical trap), 0x4 (removes itself, no trap).
-            foreach (var (number, flags) in new[] { (709, 0x1u), (710, 0x2u), (711, 0x4u) })
+            // 709..712 (ARC-COMBAT-011): header flags 0x1 (non-magical trap), 0x2 (magical trap), 0x4 (removes itself, no trap), both trap bits.
+            foreach (var (number, flags) in new[] { (709, 0x1u), (710, 0x2u), (711, 0x4u), (712, 0x3u) })
             {
                 var trap = Program(Do(Skip));
                 BinaryPrimitives.WriteUInt32LittleEndian(trap.AsSpan(48), flags);
@@ -135,6 +135,10 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual(false, host.IsTrap(Row(3, 3, 0, 3003)), "no use script");
             Assert.AreEqual(false, host.IsTrap(Row(6, 3, 799, 3006)), "a script the content does not hold");
             Assert.AreEqual(false, host.IsTrap(Gate(700)), "a use script without trap flags");
+            Assert.AreEqual(true, host.IsTrap(Row(7, 3, 712, 3007)), "both trap bits");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new SessionMapId(1),
+                MapChangeKey.ForEntity(Entity(1), AreaUseScriptHost.ScriptProperty), 1L << 40).Disposition);
+            Assert.AreEqual(false, host.IsTrap(Row(1, 3, 710, 3001)), "a stored number no script can have");
             // The session's script replaces the loaded one (a use script that removed itself, or another written back).
             Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new SessionMapId(1),
                 MapChangeKey.ForEntity(Entity(0), AreaUseScriptHost.ScriptProperty), 0).Disposition);
