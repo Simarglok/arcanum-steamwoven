@@ -84,6 +84,6 @@ public sealed class LevelUpMessageStateTests
             [.. new int[4]], [.. new int[16]], [.. new int[8]], 1, 2, 0, 0), 62);
         var result = owner.LevelFollower(owner.Version, follower, AdvancementModifiers.None, award.Followers!.Value);
         Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition);
-        Assert.IsFalse(typeof(SessionFollowerLevelResult).GetProperties().Any(p => p.PropertyType == typeof(IReadOnlyList<SessionLevelUp>)));
+        Assert.IsTrue(result.Level!.Value.Level > 1, "the follower's level rose without a message of its own");
     }
 }

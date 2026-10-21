@@ -117,7 +117,9 @@ public static class ExperienceRules
     /// The source's level recalculation after the experience changed (0x4A69C0), for a PC with no
     /// effects on its level. Its auto-level scheme runs through <paramref name="spend"/> (ARC-WORLD-036): after each level is
     /// written with its points, the callback gets the new level and unspent points and returns the unspent points the scheme
-    /// left (the caller keeps what the scheme bought); without it the points stay unspent. Nothing changes at or above the maximum level or while the next level
+    /// left (the caller keeps what the scheme bought); without it the points stay unspent. <paramref name="written"/> reports each
+    /// level written, with the unspent points before it and its points, before they are added and spent (ARC-UI-046: the source
+    /// posts the level-up message there). Nothing changes at or above the maximum level or while the next level
     /// is not reached. Otherwise each reached level is written with its points (the unspent total capped at
     /// <see cref="MaxUnspentPoints"/>), until a level is not reached or the next one would be <see cref="MaxLevel"/>: then the
     /// original writes the threshold of the PC's current level (<c>MaxLevel − 1</c>) as its experience, keeps the level and

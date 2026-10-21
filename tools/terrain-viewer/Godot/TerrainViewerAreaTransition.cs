@@ -73,6 +73,7 @@ public partial class TerrainViewerApp
             var created = AreaTransitionCoordinator.CreateSession(clock!.Value, Guid.NewGuid(), new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap,
                 result.Hero, reputations.Catalog);
             _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
+            ClearLevelMessages();
         }
         BindAreaInventory(arguments, result);
         // ARC-UI-041: the map opens: its default music and ambient pair plays. ARC-WORLD-038: a session a quick load (or its
@@ -106,6 +107,7 @@ public partial class TerrainViewerApp
         UnbindAreaCompanions();
         // A session a map transfer carries outlives the scene it leaves (ARC-WORLD-031).
         if (!ReferenceEquals(_areaSession, _mapHandoff?.Session) && !ReferenceEquals(_areaSession, _mapHandoff?.Previous)) _areaSession?.Dispose();
+        ClearLevelMessages();
         _areaTransitions = null; _areaSession = null; _areaUseAfterRoute = null; _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
         _audio?.StopAll(); _schemePlayer = null; _schemeVoices.Clear(); _combatStinger = _combatLoop = null; _soundSector = null;

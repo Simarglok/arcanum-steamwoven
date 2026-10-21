@@ -23,16 +23,17 @@ public partial class AreaMessageWindow : CanvasLayer
     public override void _Ready()
     {
         Layer = 2;
-        _panel = new PanelContainer { Name = "MessageWindow", MouseFilter = Control.MouseFilterEnum.Stop, Visible = false };
+        // The panel lets the world have clicks on it; only its buttons take theirs.
+        _panel = new PanelContainer { Name = "MessageWindow", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(14 / 255f, 16 / 255f, 22 / 255f, .88f),
             ContentMarginLeft = 10, ContentMarginRight = 10, ContentMarginTop = 6, ContentMarginBottom = 6,
         });
         AddChild(_panel);
-        var column = new VBoxContainer(); _panel.AddChild(column);
-        var bar = new HBoxContainer(); column.AddChild(bar);
-        _title = new Label { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill }; bar.AddChild(_title);
+        var column = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore }; _panel.AddChild(column);
+        var bar = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore }; column.AddChild(bar);
+        _title = new Label { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Ignore }; bar.AddChild(_title);
         _older = Small("‹", () => Browse(-1)); bar.AddChild(_older);
         _position = new Label(); bar.AddChild(_position);
         _newer = Small("›", () => Browse(1)); bar.AddChild(_newer);

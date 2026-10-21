@@ -15,6 +15,7 @@ public partial class TerrainViewerApp
     private Task<(AreaLevelTextsStatus Status, AreaLevelTexts Texts, string Detail)>? _levelTextsTask;
     private AreaLevelTexts? _levelTexts;
     private int _levelMessagesPosted;
+    private readonly List<SessionLevelUp> _pendingLevelUps = [];
 
     /// <summary>Starts loading the level-up texts for this module once; a reload, the cave or a map transfer reuses them.</summary>
     private void BindAreaLevelTexts(TerrainViewerArguments arguments)
@@ -25,12 +26,14 @@ public partial class TerrainViewerApp
         _levelTextsTask = Task.Run(() => AreaLevelTexts.Load(module));
     }
 
-    /// <summary>The loaded texts, waiting briefly for a load still running (a level-up is rare); none when the load failed.</summary>
-    private AreaLevelTexts LevelTexts()
+    /// <summary>The loaded texts, waiting at most <paramref name="wait"/> for a load still running; null while it runs (the entries wait
+    /// in the queue), none when the load failed or threw.</summary>
+    private AreaLevelTexts? LevelTexts(TimeSpan wait)
     {
         if (_levelTexts is not null) return _levelTexts;
         if (_levelTextsTask is not { } task) return AreaLevelTexts.None;
-        if (!task.IsCompleted && !task.Wait(TimeSpan.FromSeconds(5))) return AreaLevelTexts.None;
+        // A wait on the handle never throws for a faulted task (Task.Wait would).
+        if (!task.IsCompleted && !((IAsyncResult)task).AsyncWaitHandle.WaitOne(wait)) return null;
         var (status, texts, detail) = task.IsCompletedSuccessfully ? task.Result
             : (AreaLevelTextsStatus.StackFailed, AreaLevelTexts.None, "load threw " + (task.Exception?.GetBaseException().GetType().Name ?? "cancelled"));
         _levelTexts = texts; _levelTextsTask = null;
@@ -38,13 +41,21 @@ public partial class TerrainViewerApp
         return texts;
     }
 
-    /// <summary>Posts one message-window entry per level the award wrote, each with the level-up sound.</summary>
+    /// <summary>Queues one message-window entry per level the award wrote and posts them (waiting up to a second for the texts; while
+    /// they still load the entries wait and the next frame posts them).</summary>
     private void ShowLevelUps(SessionExperienceAward? award)
     {
         if (award?.LevelUps is not { Count: > 0 } levels) return;
+        _pendingLevelUps.AddRange(levels);
+        FlushLevelUps(TimeSpan.FromSeconds(1));
+    }
+
+    /// <summary>Posts the queued level-up entries once the texts are there, each with the level-up sound.</summary>
+    private void FlushLevelUps(TimeSpan wait)
+    {
+        if (_pendingLevelUps.Count == 0 || LevelTexts(wait) is not { } texts) return;
         if (_messageWindow is null) { _messageWindow = new AreaMessageWindow(); AddChild(_messageWindow); }
-        var texts = LevelTexts();
-        foreach (var level in levels)
+        foreach (var level in _pendingLevelUps)
         {
             _messageWindow.Post(AreaLevelMessages.Compose(level, texts));
             _levelMessagesPosted++;
@@ -52,6 +63,14 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-046 level-up level={level.Level} points={level.Points} scheme={(level.Scheme is not { } s ? "none" : !s.HasRule ? "no-rule"
                 : $"purchases={s.Purchases.Count} completed={s.Completed}")}");
         }
+        _pendingLevelUps.Clear();
+    }
+
+    /// <summary>A new session (quick load, a new game, teardown) starts a new history: the window empties and queued entries drop.</summary>
+    private void ClearLevelMessages()
+    {
+        _pendingLevelUps.Clear();
+        _messageWindow?.Clear();
     }
 }
 
@@ -64,7 +83,7 @@ public partial class TerrainViewerApp
     private Task RunAreaLevelMessageSmokeAsync()
     {
         static void Require(bool value, string why) { if (value) return; GD.Print("ARC-UI-046 level message smoke FAIL: " + why); throw new InvalidOperationException("ARC-UI-046 level message smoke: " + why); }
-        var texts = LevelTexts();
+        var texts = LevelTexts(TimeSpan.FromSeconds(60)) ?? AreaLevelTexts.None;
         Require(texts.Missing.Count == 0, "level texts missing: " + string.Join(", ", texts.Missing));
         var scheme = new SessionLevelUpScheme(true, [new(Arcanum.Simulation.Character.AdvancementTrack.Stat, 0, 9),
             new(Arcanum.Simulation.Character.AdvancementTrack.TechDiscipline, 0, 1)], Completed: true);
@@ -85,8 +104,11 @@ public partial class TerrainViewerApp
             && schemed.Detail.EndsWith(" " + Text(AreaLevelTexts.LevelPath, AreaLevelMessages.CompletedMessage), StringComparison.Ordinal)
             && _messageWindow.ShownForSelfTest == schemed, "the scheme entry names the player's texts and is shown");
         Require(_audio is null || _interfaceSoundsPlayed == played + 2, "each entry played the level-up sound: " + _cueNotice);
+        // The entries were built here: the window empties so later stages see none of them.
+        var shownHistory = history.Count;
+        ClearLevelMessages();
         GD.Print("ARC-UI-046 native-smoke level message PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-            Entries = 2, Missing = texts.Missing.Count, Sounds = _interfaceSoundsPlayed - played, History = history.Count, Parity = "NOT_VERIFIED" }));
+            Entries = 2, Missing = texts.Missing.Count, Sounds = _interfaceSoundsPlayed - played, History = shownHistory, Parity = "NOT_VERIFIED" }));
         return Task.CompletedTask;
     }
 }

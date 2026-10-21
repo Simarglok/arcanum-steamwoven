@@ -45,7 +45,8 @@ public sealed class AreaLevelMessagesTests
         // A repeated name keeps its first place with the last value; a degree shows its name; a value of 0 shows no number; the last
         // separator becomes ". "; the completion follows a space.
         Assert.AreEqual("Bought: WP 11, Melee 1, Repair 2, Flame 3, Smithy Journeyman, HP 44, FT.  DONE", AreaLevelMessages.SchemeText(scheme, Texts()));
-        Assert.AreEqual("Lvl 2!", AreaLevelMessages.Compose(new(2, 0, scheme), Texts()).Line);
+        // A hero with a scheme number gets the scheme's text, never the points line.
+        Assert.AreEqual(new AreaMessageEntry("TITLE", "Lvl 2!", AreaLevelMessages.SchemeText(scheme, Texts())), AreaLevelMessages.Compose(new(2, 99, scheme), Texts()));
     }
 
     [TestMethod]

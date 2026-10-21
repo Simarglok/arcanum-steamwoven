@@ -1077,12 +1077,14 @@ step goes to the followers. The entry is drawn as the original draws it:
 
 Drawing each entry plays sound 3005 through the interface sound path (the per-revision level-up sound of ARC-UI-044 is gone).
 The texts are read from the player's installation at run time (in the background when the area binds, through the module's
-game folder like the skill texts); a file that is missing falls back to the project's labels for its lines. The two
+game folder like the skill texts); a file that is missing falls back to the project's labels for its lines. An award waits at most
+a second for a load still running; then its entries wait in a queue that the next frames post once the texts arrive. The two
 formats take their one number at the first `%d` or `%i` (`%%` is a percent sign; another conversion stays as text).
 
 The message window (`AreaMessageWindow`, bottom centre) is the smallest bounded stand-in for the original's: the newest entry
 with its title and lines, a history of the last ten browsed with ‹ and ›, and × hiding it until the next entry; its buttons take
-no focus. No other original message uses it yet.
+no focus, and a click elsewhere on it reaches the world. A new session (quick load, a new game) empties it. No other original
+message uses it yet.
 
 Self-test inside `ARC-UI-007 self-test PASS` (synthetic hero: an award to level 3 posts two entries with the project's labels,
 eleven more keep the last ten); native smoke `ARC-UI-046 native-smoke level message PASS` on the original installation (all six
