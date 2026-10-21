@@ -14,6 +14,8 @@ every identity, artifact-authority and ordinary-launch check stays there.
     ./arcanum oracle [--function ADDR|--all] [--exe PATH] # function oracle on the installed Arcanum.exe, then the OriginalExe tests (ARC-DEV-007)
     ./arcanum status                                      # which modes have every input configured
     ./arcanum clean [--apply] [--json]                    # which builds are protected and which disposable (dry run); --apply removes only disposable payloads (ARC-DEV-028)
+    ./arcanum run --kind KIND [--timeout MIN] [--label TEXT] -- COMMAND  # run COMMAND through the launch queue (ARC-DEV-033)
+    ./arcanum queue [--history N]                         # the launch queue: runs holding a place and the waiters in order
 
 `area` and `world` select the build named by that task's `current.json` pointer
 (never timestamps or directory order) and launch it; `area` tries its tasks in the
@@ -21,6 +23,9 @@ fixed order ARC-RENDER-008 (adds the [passability overlay](../rendering/passabil
 ARC-WORLD-009 (cave and return), ARC-WORLD-007 (the same AREA build plus [LMB click-to-move](../world/click-route-runtime.md)),
 ARC-INPUT-001 (plus the [diagnostic palette](../input/diagnostic-palette.md)), then ARC-RENDER-007; a real run leaves the terrain
 launch selection on that build, a `--dry-run` restores the previous selection.
+A real `area`, `world` or `map` launch takes the [launch queue](toolchain.md#launch-queue-arc-dev-033)'s Godot slot
+first in line and keeps it until the viewer window closes, so it does not open over a thread's smoke; `--no-queue`
+starts at once.
 Role paths follow the installed game layout used by the area research
 (`docs/research/area-passability-closure.md`): `areaMobile` is the Crash Site map's
 normal-game mobile file `modules/Arcanum/maps/qrmvs-420-1zjcnpgn` (the game's
