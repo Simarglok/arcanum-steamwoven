@@ -115,6 +115,9 @@ public interface IScrObjectQueries
     int? WieldedItemName(ScrObjectRef obj, int location);
     /// <summary>Whether the object has the reputation (SG5: only a PC has reputations).</summary>
     bool HasReputation(ScrObjectRef obj, int reputation);
+    /// <summary>ARC-SCRIPT-018: the object's type (its type field, OV3: 15 for a PC, 16 for an NPC), or null when the host
+    /// does not know the object (the run then stops as for an absent object).</summary>
+    int? ObjectType(ScrObjectRef obj);
 }
 
 /// <summary>A fade-and-teleport's extras (action 102, ledger TR2): the game seconds the move takes, the sound and the movie
@@ -181,6 +184,9 @@ public enum ScrStop
     Refused,
     /// <summary>The event itself is not valid (a point outside 0..35, the dialog-override slot, a negative line).</summary>
     InvalidEvent,
+    /// <summary>ARC-SCRIPT-018: a call script would nest deeper than <see cref="ScrRunOptions.MaxCallDepth"/> (the original has
+    /// no bound but its stack; project bound); the run stops with skip default.</summary>
+    CallDepth,
 }
 
 /// <summary>A slot to store after the run: the object's slot for the point, or the tile's or sector's attachment.</summary>
@@ -333,8 +339,8 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S10"/>, admitted for the lines reachable from the event's line) and the executed-line
-/// budget.</summary>
+/// at most <see cref="ScrAdmissionSet.S11"/>, admitted for the lines reachable from the event's line), the executed-line
+/// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
     /// <summary>The original stops a run after 1,000 executed lines.</summary>
@@ -344,20 +350,24 @@ public sealed record ScrRunOptions
     public ScrAdmissionSet Admission { get; init; } = ScrAdmissionSet.S5;
     /// <summary>1..1000; lower values are for tests and tools.</summary>
     public int MaxExecutedLines { get; init; } = OriginalLineBudget;
+    /// <summary>ARC-SCRIPT-018: how deep call script (7) may nest, 1..64 (the original's recursion is bounded only by its
+    /// stack, ledger OV1). Each called run has its own line budget.</summary>
+    public int MaxCallDepth { get; init; } = 16;
 
     internal void Validate()
     {
         ArgumentNullException.ThrowIfNull(Rules);
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S10)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S10.", nameof(Admission));
+        if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S11)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S11.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
     internal void Validate(IScrHost host)
     {
         Validate();
-        if (host is not IScrObjectQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectQueryConditions.Contains))
-            throw new ArgumentException("A set with a guard condition needs a host that implements IScrObjectQueries.", nameof(Admission));
+        if (host is not IScrObjectQueries && (Admission.Conditions.Any(ScrAdmissionSet.ObjectQueryConditions.Contains) || Admission.Actions.Any(ScrAdmissionSet.ObjectQueryActions.Contains)))
+            throw new ArgumentException("A set with a guard condition or get object type needs a host that implements IScrObjectQueries.", nameof(Admission));
     }
 }

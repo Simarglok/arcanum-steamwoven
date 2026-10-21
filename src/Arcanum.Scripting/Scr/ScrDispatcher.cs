@@ -145,10 +145,10 @@ public static class ScrDispatcher
         return run.With(!discard && run.Slot != slot ? new ScrWriteback(source, null, ScrPoint.Use, run.Slot) : null, null);
     }
 
-    private static bool IsTrapScript(int number, ScrProgram program) => number is >= FirstTrapScript and <= LastTrapScript &&
+    internal static bool IsTrapScript(int number, ScrProgram program) => number is >= FirstTrapScript and <= LastTrapScript &&
         (program.FileFlags & (ScrCatalogue.FileFlag.NonmagicalTrap | ScrCatalogue.FileFlag.MagicalTrap)) != 0;
 
-    private static ScrStop? Unavailable(ScrScriptLookup lookup) => lookup?.Status switch
+    internal static ScrStop? Unavailable(ScrScriptLookup lookup) => lookup?.Status switch
     {
         ScrScriptStatus.Found when lookup.Program is not null => null,
         ScrScriptStatus.Unreadable => ScrStop.UnreadableScript,

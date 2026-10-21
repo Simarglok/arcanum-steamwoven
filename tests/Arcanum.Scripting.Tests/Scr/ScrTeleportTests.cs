@@ -45,6 +45,8 @@ public sealed class ScrTeleportTests
         public bool IsMindControlled(ScrObjectRef obj) => MindControlled.Contains(obj);
         public int? WieldedItemName(ScrObjectRef obj, int location) { WieldAsks.Add(location); return Wielded.TryGetValue((obj, location), out var name) ? name : null; }
         public bool HasReputation(ScrObjectRef obj, int reputation) => Reputations.Contains((obj, reputation));
+        public Dictionary<ScrObjectRef, int> Types { get; } = new();
+        public int? ObjectType(ScrObjectRef obj) => Types.TryGetValue(obj, out var type) ? type : null;
     }
 
     private static QueryHost With(ScrProgram program)

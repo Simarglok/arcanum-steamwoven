@@ -37,12 +37,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     /// <summary>
     /// The set a use click runs: <see cref="ScrAdmissionSet.S4"/> without the story-state actions (the session has no
     /// story-state number) and without the dialog action (a use click does not open a conversation here), plus the reading actions of
-    /// <see cref="ScrAdmissionSet.S10"/> (ARC-UI-049: a plaque, book or picture a use, tile or sector script shows).
+    /// <see cref="ScrAdmissionSet.S10"/> (ARC-UI-049: a plaque, book or picture a use, tile or sector script shows), plus call script,
+    /// assign object, get object type and the object variables of <see cref="ScrAdmissionSet.S11"/> (ARC-SCRIPT-018).
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading", ScrAdmissionSet.S4.Conditions,
+    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects", ScrAdmissionSet.S4.Conditions,
         ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState and not ScrCatalogue.Action.Dialog)
-            .Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]),
-        ScrAdmissionSet.S4.ValueKinds, ScrAdmissionSet.S4.FocusKinds);
+            .Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque,
+                ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType]),
+        ScrAdmissionSet.S4.ValueKinds, ScrAdmissionSet.S4.FocusKinds.Append(ScrFocusKind.LocalObject));
 
     private readonly List<ScrReadingRequest> _readings = [];
 
@@ -185,6 +187,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
 
     /// <summary>SG5: only a PC has reputations; the session PC's (ARC-WORLD-044).</summary>
     public bool HasReputation(ScrObjectRef obj, int reputation) => IsPc(obj) && _session.HeroHasReputation(reputation);
+
+    /// <summary>OV3: a row's type field; the PC (no row) is type 15.</summary>
+    public int? ObjectType(ScrObjectRef obj) => IsPc(obj) ? PcType : Row(obj)?.Type;
+
+    private const int PcType = 15;
 
     private sealed record HeldItem(int Name, int? Location);
 

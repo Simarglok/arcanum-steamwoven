@@ -273,8 +273,8 @@ conversation is not run).
   `ScrReadingRequest(Kind, Number, Viewer)` per action in `ScrEffects.Readings`, in action order, and goes on to the next line; an
   absent viewer shows nothing. The
   original opens the reading window only for a player viewer, with no dead check; the host decides.
-- **The AREA viewer** admits them in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound-calls-scheme-schematic-reading") and
-  in its use, tile and sector set (`AreaUseScriptHost.Admission`, "S4-area-use-reading"); both keep the requests whose viewer is the
+- **The AREA viewer** admits them in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound-calls-scheme-schematic-reading-objects") and
+  in its use, tile and sector set (`AreaUseScriptHost.Admission`, "S4-area-use-reading-objects"); both keep the requests whose viewer is the
   PC and the viewer opens the [reading window](../world/reading-window-runtime.md#script-openers-scripting-wr15).
 - Installed scripts (opt-in census): 10 use action 64, 3 action 65, 13 action 114; S10 admits 681 scripts whole, 24 more than S9.
   Action 94 (set a written item's first text line, 2 scripts) is not admitted.
@@ -354,6 +354,34 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
   357 scripts with a teleport action, S7 admits 22 (none of their teleports is reached from line 0) and S4 294; with a host
   with no quests, items, names, wielded items, reputations or flags, those runs ask for 257 teleports.
 
+## Object variables and calls (ARC-SCRIPT-018, set S11)
+
+`ScrAdmissionSet.S11` is S10 plus call script (7), assign object (15), get object type (34) and the run's ten object
+variables as a focus kind (11), as the original runs them (ledger [OV1–OV4](../research/original-verification-ledger.md#object-variables-and-calls-arc-script-018)).
+
+- **Object variables** start empty in every run. Assign object writes the object operand 1 names (none for an absent one)
+  into the triggerer, the attachee, the extra object or an object variable; any other focus kind is not written. The run's
+  roles are its own copy, so a later action sees the new triggerer.
+- **Get object type** writes the object's type into the number store of operand 1 through
+  `IScrObjectQueries.ObjectType` (15 for a PC, 16 for an NPC, the type field of any other object); a set with it needs a
+  host with the queries, checked before any event runs. An absent object, or one the host does not know, stops the run
+  (`MissingObject`); a literal store is refused at admission.
+- **Call script** runs the script of operand 0 at once from the line of operand 1, with operands 2 and 3 as triggerer and
+  attachee, no extra object, the callee's own header flags and counters and fresh variables. It is admitted from that line
+  with the caller's set when the call happens. Its effects join the caller's (one global-flag overlay, one list of
+  requests), nothing it changes about itself is kept, its return code is ignored and the caller goes on. A missing callee
+  runs nothing; a trap script is not run; a callee outside the set, or unreadable, refuses the whole dispatch
+  (`Refused`, the callee's refusal); a nesting deeper than `ScrRunOptions.MaxCallDepth` (default 16, the original's
+  bound is its stack) ends it with `CallDepth`, nothing applied. Only single objects are admitted, so a call runs once;
+  the original runs one call per triggerer and attachee pair of two groups.
+- **Registry**: `ScrInterpreter.Call` marks 0x44B030 (partial); the 15 and 34 cases are in the 0x447220 row.
+- **Installed original** (opt-in `AreaUseScriptsOriginalTests`, a new game's state): map mode's tile scripts that run grow
+  from 254 to 644 of 3,012, and a tile of `void-kerghans castle` (script 3070) teleports through a call; the 21 guarded use
+  sites keep 9 running and 12 refused (they need loops, call-ex or other conditions).
+- **Hosts**: the viewer's dialog set gains call script, assign object and the object variables
+  ("S3-area-sound-calls-scheme-schematic-reading-objects", no get object type: that host answers no object queries); its
+  use, tile and sector set gains all three ("S4-area-use-reading-objects").
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the
@@ -410,6 +438,9 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
   mind-controlled object, the use slot written back and a self-removing script, refusals that change nothing.
   `AreaMapTransfersTests`: which guarded use sites are scripted, the script's outcomes and teleport as the transfer.
   Opt-in `AreaUseScriptsOriginalTests`: the guarded door of `tulla interior` and the census of 21 guarded use sites.
+- `tests/Arcanum.Scripting.Tests/Scr/ScrObjectVariableTests.cs` (ARC-SCRIPT-018): object variables, types and role writes,
+  unset variables, admission of stores and indexes, the host check, and call script (header, start line, shared flags,
+  effects, no writeback, the caller going on, a missing, a refused and a too deep callee).
   ARC-SCRIPT-017: tile and sector scripts run for the PC with their slot on the sector, per rule mode; the transfers run
   them on entry (tile, then sector) and drop a teleport while one is pending; opt-in: the exit tiles of `iron clan hq` and
   the census of 3,012 tile and 20 sector scripts.
@@ -421,13 +452,13 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
   the story-state actions and no admitted set reads global variables.
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
-- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading": S3 without
-  story state, plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI and the reading actions); since ARC-SCRIPT-015 map mode's use
-  clicks on guarded use sites run it under "S4-area-use-reading", and since ARC-SCRIPT-017 the tile and sector scripts the player
+- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading-objects": S3 without
+  story state, plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI, the reading actions, call script, assign object and the object variables); since ARC-SCRIPT-015 map mode's use
+  clicks on guarded use sites run it under "S4-area-use-reading-objects", and since ARC-SCRIPT-017 the tile and sector scripts the player
   enters; heartbeat and combat are later slices.
-- Not in any admitted set yet: focus groups and local objects, loops, immediate calls and
-  call-ex, and the world actions other than teleport and fade-and-teleport (set S4), set auto-level scheme (set S8), start schematic UI (set S9) and the reading actions (set S10); float line, quests,
-  reactions... are not admitted.
+- Not in any admitted set yet: focus groups, loops and call-ex, and the world actions other than teleport and
+  fade-and-teleport (set S4), set auto-level scheme (set S8), start schematic UI (set S9), the reading actions (set S10),
+  call script, assign object and get object type (set S11); float line, quests, reactions... are not admitted.
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any

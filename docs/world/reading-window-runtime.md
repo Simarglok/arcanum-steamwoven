@@ -76,7 +76,7 @@ or, for a kit or made item, from its prototype.
 
 The SCR actions 64 (show a book: number, viewer), 65 (a picture: art, viewer) and 114 (a plaque: number, viewer) are recorded as
 `ScrReadingRequest`s in the run's effects; admission set S10 (S9 + 64, 65, 114). The viewer's dialog script host and its use, tile and
-sector script host (`S4-area-use-reading`) admit them and keep the requests whose viewer is the PC, as the original opens the window
+sector script host (`S4-area-use-reading-objects`) admit them and keep the requests whose viewer is the PC, as the original opens the window
 only for a player viewer (no dead check). Action 94 (set a written item's first text line) is not implemented.
 
 ## Viewer (AREA, `crash-site-area`: exterior, cave and `--area-map`)

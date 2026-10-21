@@ -141,9 +141,23 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S10 { get; } = new("S10", S9.Conditions,
         S9.Actions.Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]), S9.ValueKinds, S9.FocusKinds);
 
+    /// <summary>
+    /// The object-variable set (ARC-SCRIPT-018): <see cref="S10"/> plus call script (7), assign object (15) and get object type
+    /// (34), and the run's ten object variables as a focus kind (11). Call script runs another script at once with the same
+    /// set (ledger OV1); assign object writes an object into the run's triggerer, attachee, extra object or an object variable
+    /// (OV2); get object type writes an object's type into a number store, which the host answers through
+    /// <see cref="IScrObjectQueries.ObjectType"/> (OV3).
+    /// </summary>
+    public static ScrAdmissionSet S11 { get; } = new("S11", S10.Conditions,
+        S10.Actions.Concat([ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType]), S10.ValueKinds,
+        S10.FocusKinds.Append(ScrFocusKind.LocalObject));
+
     /// <summary>The conditions of <see cref="S4"/> a host answers through <see cref="IScrObjectQueries"/>.</summary>
     public static IReadOnlySet<int> ObjectQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed,
         ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation };
+
+    /// <summary>The actions of <see cref="S11"/> a host answers through <see cref="IScrObjectQueries"/>.</summary>
+    public static IReadOnlySet<int> ObjectQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.GetObjectType };
 
     /// <summary>Whether every type and kind of this set is also in <paramref name="other"/>.</summary>
     public bool IsSubsetOf(ScrAdmissionSet other)
@@ -271,6 +285,8 @@ public static class ScrAdmission
                     if ((ScrFocusKind)kind == ScrFocusKind.LocalObject && value is < 0 or >= ScrCatalogue.LocalSlots) return Refuse(ScrRefusalCode.IndexOutOfRange, true);
                     break;
             }
+            // Get object type stores into its number operand 1 (ARC-SCRIPT-018).
+            if (!condition && type == ScrCatalogue.Action.GetObjectType && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.
             if (slot != 0) continue;
             var literal = (ScrValueKind)kind == ScrValueKind.Number;
