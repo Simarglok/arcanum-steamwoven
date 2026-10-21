@@ -51,7 +51,8 @@ effects (every cause; counted on the installed data with the repository's effect
 change, all adds, none a race or the female effect, whose discipline changes the session therefore does not carry). These
 changes were inert until now ([durable effects](durable-effects-runtime.md)); the schematic component gate (TECH-4) and the
 character sheet will read the expertise. A bought degree moves the tech points and so the aptitude
-([character stats](character-stats-runtime.md)). NPC degrees stay in their advancement records; no NPC query is added yet.
+([character stats](character-stats-runtime.md)). NPC degrees stay in their advancement records or their map data; `QueryNpcTechnology` (ARC-TECHNOLOGY-006, [NPC crafter](schematic-assembly-runtime.md#npc-crafter-arc-technology-006))
+reads them for the NPC schematic crafter.
 
 ## Differences from the original
 

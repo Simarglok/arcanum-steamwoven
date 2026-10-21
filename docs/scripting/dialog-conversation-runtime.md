@@ -172,6 +172,19 @@ operand, so `FP` takes none here; a number after it is an `UnsupportedOperation`
 Without the port `FP` stays unadmitted. The session's port is `SessionDialogFatePort` over the hero
 ([fate points](../world/fate-points-runtime.md)); the AREA viewer passes it when the session has a hero.
 
+## Schematic window action (ARC-TECHNOLOGY-006)
+
+With the optional `IDialogSchematicPort` (`DialogConversationPorts.Schematics`) a Player reply's action admits `SU` (the source's
+dialog action `su`, code 30 of its action table, [NC1–NC2](../research/original-verification-ledger.md#npc-schematic-crafter-arc-technology-006)):
+an operand is read and ignored; the receipt is an `OpenSchematicsCommand` (the NPC as crafter, the PC as viewer) recorded in field
+order, so the field's other actions run before and after it; the reply's transition is `DialogOptionTransition.Schematics` with no
+target node (no look-ahead; a missing or non-NPC response target does not fail the step, since the reply never enters it), and picking it ends the conversation with `DialogEndKind.SchematicWindow`: no further NPC line, no SCR
+continuation, and the talk does not resume when the window closes (the original's interface mode change ends the dialog). A
+rejected command (the AREA port refuses a dead NPC or PC) fails the conversation. Outside the subset: `SU` with JO, UW, FL, ET or an
+insult in the same reply (offered blocked, `UnsupportedInteraction`) and `SU` in an NPC line's own action (an unsupported-operation
+frontier; the source also sets its window code there, NC8, one reader). The AREA viewer's port records the speaker for the window
+([schematic window](../world/schematic-window-runtime.md#npc-crafter-arc-technology-006)).
+
 ## Bounds and failure accounting
 
 Caller options may only lower the hard caps: 64 structural replies, 1024 turns (default 256),

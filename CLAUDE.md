@@ -78,7 +78,7 @@ under `docs/research`. Details: `docs/project/status.md`.
   `Arcanum.Input.Godot` adapter source), `Arcanum.Session` (one game-session
   owner: clock, GF, actor placement, map changes, story, party, inventory,
   starting hero, randomness, life state, event queue with life timers, NPC reaction, turn-based round, equipment,
-  durable effects with blessings and curses, experience and levels, auto-level schemes, combat mode, music and ambient scheme state, quelled rumors, the hero's skills, item durability, found schematics, made items, the spell book, fate points, the wait timer and follower loyalty, the PC's known world-map areas, NPC inventory changes, the PC's reputations, snapshot schema 30), `Arcanum.Godot` (ART viewer and HD
+  durable effects with blessings and curses, experience and levels, auto-level schemes, combat mode, music and ambient scheme state, quelled rumors, the hero's skills, item durability, found schematics, made items, the spell book, fate points, the wait timer and follower loyalty, the PC's known world-map areas, NPC inventory changes, the NPC schematic crafter, the PC's reputations, snapshot schema 30), `Arcanum.Godot` (ART viewer and HD
   before/after review). Data/Simulation/Scripting/Session must stay
   Godot-independent.
 - Tools: `tools/terrain-viewer` (Core + Godot; ordinary modes `crash-site-area`
