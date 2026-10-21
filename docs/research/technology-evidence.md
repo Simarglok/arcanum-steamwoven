@@ -346,9 +346,10 @@ check, action-point or time cost and no experience.
   the sheet and the schematic gate; degrees act on devices only through tech
   points → aptitude → item power. The four tech skills work in their own
   domains and do not modify device spells.
-- **Wear**: the weapon wear on a hit (0x4B5580, [combat core](combat-core-evidence.md) C21) grows with
-  `|complexity|`, up to × 2 at 100, for magickal and technological weapons
-  alike.
+- **Wear**: the weapon wear on a hit (0x4B5580, [combat core](combat-core-evidence.md) C21) **falls** with
+  `|complexity|`, to nothing at 100, for magickal and technological weapons
+  alike (ARC-COMBAT-007 corrected the earlier "up to × 2",
+  [ledger CW6](original-verification-ledger.md#combat-wear-arc-combat-007)).
 
 ### Scripts and dialogs
 
@@ -394,16 +395,17 @@ slots and the item is dropped when it fails, and the repair table (training none
     Spell and explosion areas reach objects in the area this way, and so does
     script action 60 (damage);
   - armour at the hit location (head 1000, arms 1007, legs 1008, else 1006):
-    +10 on fire damage or with weapon flag 0x100 ([combat core](combat-core-evidence.md) C20); at 0 it breaks
-    (message 24, else 7);
-  - the target's weapon on critical flags: "damage weapon" +10, breaking it at
-    0 (messages 23, 8); "destroy weapon" deletes it at once without a break
+    +10 on fire damage after resistance, with weapon flag 0x100 or on the "damage armour" critical, once
+    ([combat core](combat-core-evidence.md) C20); at 0 it breaks (message 24, else 7); the invulnerable flag is not tested;
+  - the weapon of the critter that took the damage (the target, or the attacker of a critical self-hit) on critical
+    flags, unless it is invulnerable: "damage weapon" +10, breaking it at
+    0 (messages 23, 8); "destroy weapon" (and "explode weapon") deletes it at once without a break
     (message 22);
-  - the attacker's own weapon on a hit (0x4B5580, combat core C21) by the target's
+  - the attacker's own weapon on a melee hit that dealt damage (0x4B5580, combat core C21) by the target's
     material: stone 4, brick 3, wood 2, plant 1, metal 5, fire 5, glass 5 only for
-    an unarmed attacker, others 0; plus the `|complexity|` share up to × 2; minus 2 for
-    subtype 4 and minus 1 for subtypes 5 and 13. Unarmed it hurts the attacker
-    but does not kill;
+    an unarmed attacker, others 0; **minus** `trunc(wear × min(|complexity|, 100) / 100)`; minus 2 for
+    art subtype 4 and minus 1 for subtypes 5 and 13. Unarmed it hurts the attacker
+    but never takes its last hit point (ARC-COMBAT-007, [ledger CW5–CW7](original-verification-ledger.md#combat-wear-arc-combat-007));
   - script action 40 (transform) keeps the health percentage. Items inside an
     inventory, other than worn ones, are not reached by areas.
 - **Break** (0x43F1C0, item types 5..14, F2): the first time sets the destroyed

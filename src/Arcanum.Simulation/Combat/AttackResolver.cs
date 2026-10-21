@@ -11,7 +11,9 @@ namespace Arcanum.Simulation.Combat;
 /// source (docs/world/attack-resolver-runtime.md, F0), except where a recorded D2 fix removes one; the source also draws
 /// from the same generator outside combat (AI reaction, sounds, the effect tables' stat checks), so a seeded run matches
 /// the source's sequence only once those draws are modelled too. Ammunition, approach and
-/// line of fire, projectile flight, scripts and applying the damage to vital state stay with the caller.
+/// line of fire, projectile flight, scripts and applying the damage to vital state stay with the caller. The resolution also
+/// names the armour and weapon wear of the damage step (<see cref="AttackResolution.Wear"/>, ARC-COMBAT-007), which the
+/// session applies.
 /// </summary>
 public static class AttackResolver
 {
@@ -147,7 +149,10 @@ public static class AttackResolver
                 magicCancelled, crit, criticalEffects, rolls, profile);
             return new AttackResolution(AttackRefusal.None, critical ? AttackOutcome.CriticalHit : AttackOutcome.Hit,
                 AttackMissCause.None, location, aimed, magicCancelled, difficulty, attackCheck, dodgeCheck, fate,
-                CriticalSelfHit: false, damage, rolls.Rolls.ToArray());
+                CriticalSelfHit: false, damage, rolls.Rolls.ToArray())
+            {
+                Wear = CombatWearRules.Of(request, damage, location, target.Material, targetIsCritter),
+            };
         }
 
         if (!critical)
@@ -173,8 +178,12 @@ public static class AttackResolver
         }
         var selfDamage = Damage(request, DamageRecipient.Attacker, attacker, AttackTargetKind.Critter, selfCritical, location,
             aimed: false, magicCancelled, accumulator, criticalEffects, rolls, profile);
+        // The self-hit keeps the attack's location (rolled or aimed), so the attacker's own armour there takes the wear.
         return new AttackResolution(AttackRefusal.None, AttackOutcome.CriticalMiss, missCause, location, Aimed: false,
-            magicCancelled, difficulty, attackCheck, dodgeCheck, fate, selfCritical, selfDamage, rolls.Rolls.ToArray());
+            magicCancelled, difficulty, attackCheck, dodgeCheck, fate, selfCritical, selfDamage, rolls.Rolls.ToArray())
+        {
+            Wear = CombatWearRules.Of(request, selfDamage, location, attacker.Material, recipientIsCritter: true),
+        };
     }
 
     private static AttackResolution Refused(AttackRefusal refusal, CombatRollLog rolls) =>
@@ -525,6 +534,7 @@ public static class AttackResolver
             weapon.MagicCriticalHitChance, weapon.MagicCriticalMissChance, weapon.MagicCriticalEffectChance,
             weapon.MagicCriticalMissEffectChance), "Weapon values");
         Check(weapon.MaxHp is >= 0 and <= MaxMagnitude && weapon.Hp >= 0 && weapon.Hp <= weapon.MaxHp, "Weapon condition (0 ≤ Hp ≤ MaxHp)");
+        Check(weapon.ArtSubtype is >= 0 and <= CombatWearRules.MaxArtSubtype, "Weapon.ArtSubtype");
 
         ValidateCombatant(request.Attacker, "Attacker");
         ValidateCombatant(request.Target, "Target");

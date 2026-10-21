@@ -179,7 +179,8 @@ public sealed record Combatant
     public bool CriticalHitFateArmed { get; init; }
     /// <summary>PC fate "critical miss" is armed; consumed when a non-PC attacks this PC.</summary>
     public bool CriticalMissFateArmed { get; init; }
-    /// <summary>Material of a non-critter target; only portals and containers use it.</summary>
+    /// <summary>The object's material: a portal or container subtracts its reduction from hit-point damage, and a melee hit
+    /// wears the attacker's weapon or hands by the material of whatever it struck, critter or object (ARC-COMBAT-007).</summary>
     public ObjectMaterial Material { get; init; } = ObjectMaterial.Flesh;
 }
 
@@ -214,6 +215,9 @@ public sealed record CombatWeapon
     public bool DamagesArmor { get; init; }
     /// <summary>The item's "uber" flag: only such a weapon damages a nigh-invulnerable critter.</summary>
     public bool Uber { get; init; }
+    /// <summary>The weapon's art subtype: bits 6..9 of its use-art fragment, 0..15 (0 without an item art). Subtype 4 wears 2 less
+    /// and subtypes 5 and 13 wear 1 less on a melee hit (<see cref="CombatWearRules.WeaponWear"/>).</summary>
+    public int ArtSubtype { get; init; }
 
     /// <summary>
     /// Bare hands with a gauntlet's unarmed bonus: normal and fatigue <c>max(1, bonus − 25) .. bonus + 5</c>, nothing
@@ -349,8 +353,10 @@ public sealed record AttackDamage(
     DamagePrevention Prevented);
 
 /// <summary>
-/// The resolved attack. <see cref="HitLocation"/> is the aimed or rolled location; <see cref="Aimed"/> is cleared when a
-/// critical miss turns the attack on the attacker. <see cref="Rolls"/> lists every roll in the order it was made.
+/// The resolved attack. <see cref="HitLocation"/> is the aimed or rolled location (a critical self-hit strikes the attacker
+/// there); <see cref="Aimed"/> is cleared when a critical miss turns the attack on the attacker. <see cref="Rolls"/> lists every
+/// roll in the order it was made. <see cref="Wear"/> is the damage step's armour and weapon wear (ARC-COMBAT-007), null without a
+/// damage packet or when the damage was prevented.
 /// </summary>
 public sealed record AttackResolution(
     AttackRefusal Refusal,
@@ -365,4 +371,7 @@ public sealed record AttackResolution(
     FateUse Fate,
     bool CriticalSelfHit,
     AttackDamage? Damage,
-    IReadOnlyList<CombatRoll> Rolls);
+    IReadOnlyList<CombatRoll> Rolls)
+{
+    public AttackWear? Wear { get; init; }
+}
