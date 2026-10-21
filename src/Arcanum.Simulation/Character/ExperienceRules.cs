@@ -169,16 +169,17 @@ public static class ExperienceRules
         return new(level, experience, unspentPoints, gained, points, new(old, current));
     }
 
-    /// <summary>The game window a waiting follower's rectangle is measured with (ARC-WORLD-047): the original's 800 × 600 screen.
-    /// The view window's own size is set by its caller (0x43A570) and is not traced; the viewer's window size never decides it.</summary>
-    public const int ReferenceWindowWidth = 800, ReferenceWindowHeight = 600;
+    /// <summary>The game window a waiting follower's rectangle is measured with (ARC-WORLD-047): the original's play view, 800 × 400
+    /// at y 41 below the top bar (the window 0x557230 creates; a visible-tile scan passes the same 800 × 400 rectangle to the tile
+    /// conversion at 0x430137). The handle the rectangle is read from reaches 0x440FF0 through the view callback 0x43A570, whose caller
+    /// is not traced; the viewer's window size never decides it.</summary>
+    public const int ReferenceWindowWidth = 800, ReferenceWindowHeight = 400;
 
     /// <summary>
     /// The tile reach of the waiting followers' rectangle (ledger OL29; 0x440FF0 → 0x4B9130): the window's screen rectangle, centred
     /// on the PC, has its four corners converted to tiles (a tile is 80 × 40 pixels, so a screen offset (x, y) is the tile offset
     /// (y / 40 − x / 80, y / 40 + x / 80)) and the objects of the bounding box are found. The corners reach
-    /// <c>height / 80 + width / 160</c> tiles on both axes: 12.5 for 800 × 600, so 12 whole tiles. The box edge (the half tile and
-    /// the conversion's rounding) is NOT_VERIFIED.
+    /// <c>height / 80 + width / 160</c> tiles on both axes: exactly 10 for the 800 × 400 view (the corners convert with truncation).
     /// </summary>
     public static int WaitingStepReach(int width = ReferenceWindowWidth, int height = ReferenceWindowHeight) =>
         width is > 0 and <= 100_000 && height is > 0 and <= 100_000 ? (2 * height + width) / 160 : throw new ArgumentOutOfRangeException(nameof(width));

@@ -82,8 +82,8 @@ monstrous flag, stats, magick and tech points, level, unspent points, skills, co
 scheme, in ordinal entity order. Restore checks every range, the order and the budget. Schemas 1..19 are refused, not
 migrated. Since schema 25 (ARC-MAGIC-004) both the hero's advancement and each NPC record also carry `mastery` (the mastered
 college, −1 none) after `colleges`, and the spell purchases learn through the [spell book](spell-book-runtime.md)'s one rule.
-Since schema 32 (ARC-WORLD-047) `"advancement"` also has `"missed":[{"entity","steps":[{"oldPcLevel","newPcLevel","times"}]}]`
-after `"npcs"`, in ordinal entity order: levels 0..51, a count 1..51, 1..8 steps that each rise; schema 31 is refused, not
+Since schema 33 (ARC-WORLD-047) `"advancement"` also has `"missed":[{"entity","steps":[{"oldPcLevel","newPcLevel","times"}]}]`
+after `"npcs"`, in ordinal entity order: levels 0..51, a count 1..51, 1..8 steps that each rise; schema 32 is refused, not
 migrated.
 
 ## Viewer host
@@ -98,13 +98,18 @@ effects, and so do the waiting followers by the rule setting (ARC-WORLD-047, led
 - **Original** (`ExperienceRuleProfile.WaitingFollowersStepOnlyNearPc`): only one drawn on the current map (among the loaded
   objects, so on the main map one outside the loaded window never counts) whose tile offset from the PC is within
   `ExperienceRules.WaitingStepReach` on both axes and that is not dead. The original finds the objects of the bounding box, in
-  tiles, of a game-window-sized screen rectangle centred on the PC (0x440FF0, 0x4B9130, 0x440B40); measured with the original's
-  800 × 600 screen (the view window's own size is set by its caller, 0x43A570, not traced; the viewer's window never decides it),
-  the box reaches 12.5 tiles, so 12 whole tiles; its edge is NOT_VERIFIED. Every other waiting follower gets nothing, then or
-  later, as in the original.
+  tiles, of a game-window-sized screen rectangle centred on the PC (0x440FF0, 0x4B9130, 0x440B40; a tile is 80 × 40 pixels,
+  0x4B8680, and the corners convert with truncation, 0x4B98B0). The window is the original's play view, 800 × 400 at y 41 below
+  the top bar (the window 0x557230 creates; a visible-tile scan passes the same rectangle to the conversion at 0x430137), so the
+  box reaches exactly 10 tiles on both axes. The handle the rectangle is read from reaches 0x440FF0 through the view callback
+  0x43A570, whose caller is not traced; the viewer's window size never decides it. Every other waiting follower gets nothing,
+  then or later, as in the original.
 - **Steamwoven:** every waiting follower that is not dead, wherever it waits: at once when its stored fields can be read from a
   map this run covers, else its step is kept as missed in the session and applied when the companions bind on a map that
-  covers it (a map load, a transfer, the main map's window), and before its next step.
+  covers it (a map load, a transfer, the main map's window), and before any later step it gets, in the array or waiting (when
+  they cannot be applied, the new step is kept with them, or skipped for a follower in the array, never applied out of order).
+  Death is the session's (`QueryNpcDead`: its life record or a seed that marks it dead, wherever it waits). Missed steps belong
+  to the NPC, not to its standing: one that leaves the party keeps them until its sheet can be read; a dead one never gets them.
 
 The conversation reads a levelled follower's level from the session. The smoke log prints `ARC-WORLD-036 follower-level`,
 `ARC-WORLD-047 level step kept` and `ARC-WORLD-047 missed level steps applied`.
@@ -130,9 +135,9 @@ skill target.
 
 - The scheme choice (the character screen's auto-level selection) and point purchases by the player; the Educator
   background.
-- The waiting followers' rectangle is measured with the original's 800 × 600 screen; the view window's own size and the box
-  edge (the half tile) are NOT_VERIFIED. No native smoke reaches a level step (without `--hero` the session has no scheme data);
-  the rules are covered by synthetic and opt-in tests.
+- The waiting followers' rectangle uses the original's 800 × 400 play view; that this view's handle is the one 0x43A570 receives
+  is NOT_VERIFIED (its caller is not traced). No native smoke reaches a level step (without `--hero` the session has no scheme
+  data); the rules are covered by synthetic and opt-in tests.
 - Viewer: an award reached while the viewer has no combat host or effect rules (no `--hero`) levels no follower.
 - Script changes of a scheme run in the viewer's dialog scripts since ARC-SCRIPT-016 ([set S8](../scripting/scr-dispatcher-runtime.md#set-auto-level-scheme-arc-script-016-set-s8));
   Virgil's script 2023, the one installed action, is not run yet (its other lines use actions no set admits), and an NPC's

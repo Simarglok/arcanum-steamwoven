@@ -416,11 +416,11 @@ public partial class TerrainViewerApp
         _combatHost is { } host && _areaEffectRules is { } effects && host.HomeMap(entity) is { } home && host.Fields(home, entity) is { } fields
             ? AreaAdvancement.Npc(entity, fields, effects) : null;
 
-    // Where a waiting follower stands: dead by the session's holder record; among the loaded objects when it is a companion drawn on
-    // the current map, with its tile offset from the PC.
+    // Where a waiting follower stands: dead by the session (its life record or any map's seed, wherever it waits); among the loaded
+    // objects when it is a companion drawn on the current map, with its tile offset from the PC.
     private AreaWaitingPlace AreaWaitingPlace(string entity)
     {
-        var dead = _combatHost is { } host && _areaSession is { } session && host.HomeMap(entity) is { } home && host.Dead(session, home, entity);
+        var dead = _areaSession?.QueryNpcDead(entity) == true;
         if (_areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is not { } companion || _worldActor.Session is not AreaGridSession pc)
             return new(dead, null);
         var (at, from) = (companion.Grid.State.CommittedCell, pc.State.CommittedCell);

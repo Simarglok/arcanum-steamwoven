@@ -160,4 +160,20 @@ public sealed class AreaAdvancementTests
         Assert.AreEqual(3, applied.Single().Record!.Sheet.Level);
         Assert.AreEqual(0, steamwoven.QueryMissedLevelEntities().Count);
     }
+
+    [TestMethod]
+    public void MissedStepsComeBeforeTheNextStepAlsoAfterRejoining()
+    {
+        // A waiting follower keeps a step (1 → 3) it missed, then rejoins the array; the next step (3 → 5) applies the missed one
+        // first: level 1 → 3 → 5 in turn.
+        using var session = Session();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, "virgil").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, "virgil").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.DeferFollowerLevel(session.Version, "virgil", new(1, 3)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, "virgil").Disposition);
+        var report = AreaAdvancement.LevelFollowers(session, new SessionExperienceAward(2100, 2, 2, new(3, 5)), Sheet, _ => new(false, null));
+        Assert.AreEqual(5, session.QueryNpcAdvancement("virgil")!.Sheet.Level);
+        Assert.AreEqual(2, report.Raised.Count, "the missed steps and the new one each raised the level");
+        Assert.AreEqual(0, session.QueryMissedLevelEntities().Count);
+    }
 }

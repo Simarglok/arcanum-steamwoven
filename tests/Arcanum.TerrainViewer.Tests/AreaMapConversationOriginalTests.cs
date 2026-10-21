@@ -63,14 +63,14 @@ public sealed class AreaMapConversationOriginalTests
         Console.WriteLine("sounds " + string.Join("; ", sounds.Select(d => $"{d.Key}={d.Value}")));
         Assert.AreEqual(0, sounds.Count, "ARC-SCRIPT-040: no dialog script these talks run reaches a sound action yet");
         // Every speaker gets a typed start; the counts move only when the SCR admission set or the dialog runtime grows
-        // (then this census is updated with them): 131 entries stop at an SCR action, condition, goto or value kind not admitted yet, and
-        // 35 of the 50 started conversations stop at a generated NPC line, which is not loaded yet.
+        // (then this census is updated with them): 131 entries stop at an SCR action, condition, goto or value kind not admitted yet.
         Assert.AreEqual((34, 182), (maps, speakers));
         Assert.AreEqual("EntryNotAdmitted=131, ScriptEnded=1, Started=50", string.Join(", ", statuses.Select(s => $"{s.Key}={s.Value}")));
         // ARC-WORLD-043: the ME condition is admitted, so two conversations that stopped at it offer replies (one of them ends);
-        // the walk takes no insult, and with it the counts are the same.
-        Assert.AreEqual((35, 6), (stops.GetValueOrDefault("frontier UnsupportedGeneratedText"), stops.GetValueOrDefault("frontier UnsupportedOperation")));
-        Assert.AreEqual((9, 7), (offered, ended));
+        // the walk takes no insult, and with it the counts are the same. ARC-WORLD-058: the 35 conversations that stopped at their
+        // NPC's g: greeting now greet; 10 more offer replies and end, the other 25 stop later at an operation not admitted yet.
+        Assert.AreEqual((0, 31), (stops.GetValueOrDefault("frontier UnsupportedGeneratedText"), stops.GetValueOrDefault("frontier UnsupportedOperation")));
+        Assert.AreEqual((19, 17), (offered, ended));
         CollectionAssert.AreEqual(new[] { "scienticians underground lev 2" }, unlisted);
     }
 }

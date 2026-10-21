@@ -116,24 +116,28 @@ public static class AreaAdvancement
         var deferred = new List<string>();
         if (award?.Followers is not { } step || session.AutoLevel is null) return new(raised.AsReadOnly(), deferred.AsReadOnly());
         var party = session.QueryParty();
-        foreach (var entity in party.Followers.Select(f => f.Entity))
+        var rules = session.Rules.Experience;
+        // An NPC's missed steps come before this one, as they came before it; when they cannot be applied the new step is not applied
+        // out of order: a waiting follower keeps it with them (Steamwoven), a follower in the array skips it.
+        bool Missed((SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers) input)
         {
-            if (npc(entity) is not { } input) continue;
+            var before = Level(session, input.Loaded.Entity, input.Loaded.Sheet.Level);
+            var result = session.ApplyMissedFollowerLevels(session.Version, input.Loaded, input.Modifiers);
+            if (result.Disposition == GameSessionDisposition.Changed && result.Record!.Sheet.Level != before) raised.Add(result);
+            return result.Disposition != GameSessionDisposition.Rejected;
+        }
+        void Step((SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers) input)
+        {
             var result = session.LevelFollower(session.Version, input.Loaded, input.Modifiers, step);
             if (result.Disposition == GameSessionDisposition.Changed) raised.Add(result);
         }
-        var rules = session.Rules.Experience;
+        foreach (var entity in party.Followers.Select(f => f.Entity))
+            if (npc(entity) is { } input && Missed(input)) Step(input);
         foreach (var entity in party.Others.Where(o => o.Standing == CompanionStanding.Waiting).Select(o => o.Entity))
         {
             var where = place(entity);
             if (!ExperienceRules.WaitingFollowerGetsStep(where.Offset, where.Dead, rules)) continue;
-            if (npc(entity) is { } input)
-            {
-                var missed = session.ApplyMissedFollowerLevels(session.Version, input.Loaded, input.Modifiers);
-                if (missed.Disposition == GameSessionDisposition.Changed) raised.Add(missed);
-                var result = session.LevelFollower(session.Version, input.Loaded, input.Modifiers, step);
-                if (result.Disposition == GameSessionDisposition.Changed) raised.Add(result);
-            }
+            if (npc(entity) is { } input && Missed(input)) Step(input);
             else if (!rules.WaitingFollowersStepOnlyNearPc
                 && session.DeferFollowerLevel(session.Version, entity, step).Disposition == GameSessionDisposition.Changed) deferred.Add(entity);
         }
@@ -142,7 +146,7 @@ public static class AreaAdvancement
 
     /// <summary>
     /// ARC-WORLD-047: applies the missed level steps of every NPC the session holds them for whose sheet can be read now (its map
-    /// loaded), in ordinal entity order. Returns the results that changed the session.
+    /// loaded) and that is not dead, in ordinal entity order. Returns the results that changed the session.
     /// </summary>
     public static IReadOnlyList<SessionFollowerLevelResult> ApplyMissed(GameSessionOwner session,
         Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?> npc)
@@ -153,7 +157,7 @@ public static class AreaAdvancement
         if (session.AutoLevel is null) return applied.AsReadOnly();
         foreach (var entity in session.QueryMissedLevelEntities())
         {
-            if (npc(entity) is not { } input) continue;
+            if (session.QueryNpcDead(entity) || npc(entity) is not { } input) continue;
             var result = session.ApplyMissedFollowerLevels(session.Version, input.Loaded, input.Modifiers);
             if (result.Disposition == GameSessionDisposition.Changed) applied.Add(result);
         }

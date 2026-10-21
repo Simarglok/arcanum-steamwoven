@@ -68,8 +68,11 @@ public sealed class MissedLevelStepTests
         var record = Follower(level: 40);
         foreach (var step in new FollowerLevelStep[] { new(45, 51), new(50, 51), new(50, 51) })
             record = inTurn.LevelFollower(inTurn.Version, record, AdvancementModifiers.None, step).Record!;
-        Assert.AreEqual(record.Sheet.Level, applied.Record!.Sheet.Level);
-        Assert.AreEqual(48, applied.Record.Sheet.Level, "40 + 51 − 45 = 46, then 47 and 48");
+        Assert.AreEqual(record, applied.Record!, "the same sheet, scheme purchases included");
+        Assert.AreEqual(48, applied.Record!.Sheet.Level, "40 + 51 − 45 = 46, then 47 and 48");
+        // At the repeat cap one more step changes nothing.
+        for (var i = 0; i < ExperienceRules.MaxLevel; i++) later.DeferFollowerLevel(later.Version, "virgil", new(50, 51));
+        Assert.AreEqual(GameSessionDisposition.NoChange, later.DeferFollowerLevel(later.Version, "virgil", new(50, 51)).Disposition);
     }
 
     [TestMethod]
@@ -97,8 +100,11 @@ public sealed class MissedLevelStepTests
         using var restored = Restore(Decode(text), RestoreOptions() with { AutoLevel = AdvancementStateTests.Rules(), Experience = ExperienceStateTests.Rules() });
         CollectionAssert.AreEqual(owner.QueryMissedLevelSteps("virgil")!.ToArray(), restored.QueryMissedLevelSteps("virgil")!.ToArray());
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
-        // A count outside 1..51 is refused when decoding.
+        // A count outside 1..51 is refused when decoding; a step that does not rise decodes but is refused by Restore.
         var bad = GameSessionSnapshotCodec.TryDecode(text.Replace("\"times\":1}]", "\"times\":0}]"));
         Assert.AreEqual(SnapshotDecodeFailure.OutOfRange, bad.Failure);
+        var flat = Decode(text.Replace("\"newPcLevel\":9", "\"newPcLevel\":7"));
+        Assert.AreEqual(GameSessionFailure.InvalidAdvancement,
+            GameSessionOwner.Restore(flat, RestoreOptions() with { AutoLevel = AdvancementStateTests.Rules(), Experience = ExperienceStateTests.Rules() }).Failure);
     }
 }

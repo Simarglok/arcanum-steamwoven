@@ -68,7 +68,8 @@ public static class GameSessionSnapshotCodec
         "Gambling", "Haggle", "Heal", "Persuasion", "Repair", "Firearms", "PickLocks", "DisarmTraps"];
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
-    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs"];
+    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed"];
+    private static readonly string[] PlacedItemFields = ["entity", "source", "origin", "map", "x", "y", "type", "prototype", "name", "description"];
     private static readonly string[] NpcInventoryFields = ["npc", "items"];
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
@@ -346,6 +347,24 @@ public static class GameSessionSnapshotCodec
                 w.WriteStartArray("items");
                 foreach (var item in npc.Items) WriteMade(w, item);
                 w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-WORLD-059: in placing order; the origin map only for an item the PC took from the world (else 0).
+            w.WriteStartArray("placed");
+            foreach (var item in snapshot.Inventory.Placed)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", item.Entity);
+                w.WriteString("source", PlacedSourceName(item.Source));
+                w.WriteNumber("origin", item.Origin?.RuntimeMap ?? 0);
+                w.WriteNumber("map", item.Map.RuntimeMap);
+                w.WriteNumber("x", item.Cell.X);
+                w.WriteNumber("y", item.Cell.Y);
+                w.WriteString("type", ItemTypeName(item.Kind.Type));
+                w.WriteNumber("prototype", item.Kind.Prototype);
+                w.WriteNumber("name", item.Kind.Name);
+                w.WriteNumber("description", item.Kind.Description);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1274,8 +1293,45 @@ public static class GameSessionSnapshotCodec
             }
             npcs[i] = new(npc, System.Array.AsReadOnly(list));
         }
-        return new(gold, kit, pc, made, npcs);
+        // ARC-WORLD-059: the hero's items placed on the ground share the hero's budget and its once-only rule.
+        var placedRows = Array(f["placed"], p + ".placed", GameSessionLimits.PolicyMaxPcItems);
+        if (kit.Length + items.Length + madeItems.Length + placedRows.Length > GameSessionLimits.PolicyMaxPcItems)
+            throw new DecodeException(SnapshotDecodeFailure.BudgetExceeded, p + ".placed");
+        var placed = new SessionPlacedItem[placedRows.Length];
+        for (var i = 0; i < placedRows.Length; i++)
+        {
+            var path = $"{p}.placed[{i}]";
+            var item = Fields(placedRows[i], path, PlacedItemFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            var source = PlacedSource(item["source"], path + ".source");
+            var origin = Int(item["origin"], path + ".origin", 0, int.MaxValue);
+            if ((origin == 0) != (source != SessionPlacedSource.Pc)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".origin");
+            placed[i] = new(entity, Kind(item, path), source, origin == 0 ? null : new SessionMapId(origin),
+                new(Int(item["map"], path + ".map", 1, int.MaxValue)),
+                new(Int(item["x"], path + ".x", 0, MaxPlacedCoordinate), Int(item["y"], path + ".y", 0, MaxPlacedCoordinate)));
+        }
+        return new(gold, kit, pc, made, npcs, placed);
     }
+
+    // A placed item's cell coordinates fit 24 bits (the drop's packing, ARC-COMBAT-009).
+    private const int MaxPlacedCoordinate = (1 << 24) - 1;
+
+    private static string PlacedSourceName(SessionPlacedSource source) => source switch
+    {
+        SessionPlacedSource.Kit => "kit",
+        SessionPlacedSource.Pc => "pc",
+        SessionPlacedSource.Made => "made",
+        _ => throw new ArgumentOutOfRangeException(nameof(source)),
+    };
+
+    private static SessionPlacedSource PlacedSource(JsonElement element, string path) => String(element, path) switch
+    {
+        "kit" => SessionPlacedSource.Kit,
+        "pc" => SessionPlacedSource.Pc,
+        "made" => SessionPlacedSource.Made,
+        _ => throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path),
+    };
 
     private static void WriteMade(Utf8JsonWriter w, SessionMadeItem item)
     {

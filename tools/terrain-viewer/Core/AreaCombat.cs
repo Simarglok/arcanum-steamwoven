@@ -60,13 +60,6 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return holders;
     }
 
-    /// <summary>ARC-WORLD-047: whether the session counts the NPC of this map's T0 data as dead (false for one it holds nothing for).</summary>
-    public bool Dead(GameSessionOwner session, int runtimeMap, string entity)
-    {
-        ArgumentNullException.ThrowIfNull(session);
-        return _maps.ContainsKey(runtimeMap) && Holders(session, runtimeMap).TryGetValue(entity, out var holder) && holder.Dead;
-    }
-
     /// <summary>ARC-WORLD-036: an NPC's stored fields on a map this host covers (a follower's loaded sheet), or null.</summary>
     public CombatFields? Fields(int runtimeMap, string entity) =>
         _maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(entity, out var row) ? CombatFieldReader.Read(row).Fields : null;
@@ -207,7 +200,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
             text += step.Outcome switch
             {
                 SessionCriticalStepOutcome.Dropped => $", drops its {step.Slot?.ToString().ToLowerInvariant()}",
-                SessionCriticalStepOutcome.HeroDropNotReady => $", would drop the {step.Slot?.ToString().ToLowerInvariant()} (not applied yet)",
+                SessionCriticalStepOutcome.HeroCellUnfit => $", would drop the {step.Slot?.ToString().ToLowerInvariant()} (no cell for it)",
                 _ => string.Empty,
             };
         var experience = (result.HitAward?.Award ?? 0) + (result.KillAward?.Award ?? 0);

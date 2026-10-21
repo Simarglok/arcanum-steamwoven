@@ -209,15 +209,16 @@ public sealed class ExperienceRulesTests
     }
 
     [TestMethod]
-    public void TheWaitingFollowersRectangleReachesTwelveTilesInTheOriginalSetting()
+    public void TheWaitingFollowersRectangleReachesTenTilesInTheOriginalSetting()
     {
-        // ARC-WORLD-047 (OL29, D7): an 800 × 600 window reaches 12.5 tiles from the PC on both axes, so 12 whole tiles.
-        Assert.AreEqual(12, ExperienceRules.WaitingStepReach());
+        // ARC-WORLD-047 (OL29, D7): the original's 800 × 400 play view reaches 10 tiles from the PC on both axes.
+        Assert.AreEqual(10, ExperienceRules.WaitingStepReach());
+        Assert.AreEqual(12, ExperienceRules.WaitingStepReach(800, 600));
         Assert.AreEqual(16, ExperienceRules.WaitingStepReach(1024, 768));
         var original = ExperienceRuleProfile.Original;
-        Assert.IsTrue(ExperienceRules.WaitingFollowerGetsStep((12, -12), false, original));
-        Assert.IsFalse(ExperienceRules.WaitingFollowerGetsStep((13, 0), false, original));
-        Assert.IsFalse(ExperienceRules.WaitingFollowerGetsStep((0, -13), false, original));
+        Assert.IsTrue(ExperienceRules.WaitingFollowerGetsStep((10, -10), false, original));
+        Assert.IsFalse(ExperienceRules.WaitingFollowerGetsStep((11, 0), false, original));
+        Assert.IsFalse(ExperienceRules.WaitingFollowerGetsStep((0, -11), false, original));
         Assert.IsFalse(ExperienceRules.WaitingFollowerGetsStep(null, false, original), "not on the loaded map");
         Assert.IsFalse(ExperienceRules.WaitingFollowerGetsStep((0, 0), true, original), "dead");
         // Steamwoven: every waiting follower wherever it waits, never a dead one.

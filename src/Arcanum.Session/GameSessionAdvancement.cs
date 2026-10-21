@@ -306,6 +306,8 @@ public sealed partial class GameSessionOwner
         var before = _advancement.Missed.GetValueOrDefault(entity);
         if (ExperienceRules.AppendMissedStep(before ?? [], step) is not { } steps
             || (before is null && _advancement.Missed.Count >= _limits.MaxAdvancementRecords)) return RejectDefer(GameSessionFailure.BudgetExceeded);
+        // The repeat count at its cap: one more step changes nothing.
+        if (before is not null && before.SequenceEqual(steps)) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, before, Version);
         if (_revision == long.MaxValue) return RejectDefer(GameSessionFailure.RevisionExhausted);
         _advancement.Missed[entity] = steps;
         _revision++;
@@ -427,7 +429,7 @@ public sealed partial class GameSessionOwner
             if (missed is null || !SessionValidation.Entity(missed.Entity) || !AdvancementDomain.ValidMissed(missed.Steps)) return GameSessionFailure.InvalidAdvancement;
             if (previous is not null && string.CompareOrdinal(previous, missed.Entity) >= 0) return GameSessionFailure.InvalidSnapshot;
             previous = missed.Entity;
-            advancement.Missed.Add(missed.Entity, missed.Steps.ToArray());
+            advancement.Missed.Add(missed.Entity, Array.AsReadOnly(missed.Steps.ToArray()));
         }
         return GameSessionFailure.None;
     }

@@ -92,8 +92,9 @@ A drop (`SessionCriticalStep`, `SessionCriticalStepOutcome`): an NPC's item that
 ground at `SessionAttack.TargetCell` as a map change (`ItemDroppedProperty` = `item.dropped`, the cell packed with 24 bits per
 coordinate, + 1), so no schema changes; it then lies on the ground in `QueryMapInventory` (after the spilled containers' items),
 leaves the NPC's list (loot, negative `IN`, the NPC crafter and the NPC inventory store no longer see it) and `PickUpItem` takes
-it. Not applied: the hero's item (`HeroDropNotReady`: the session has no store of ground items it placed, ARC-WORLD-059), an item
-the session added to the NPC (`NotSeedItem`), an item with a drop script (`ScriptUnsupported`), no cell or no item data
+it. The hero's item goes to the ground at the hero's cell among its placed items (ARC-WORLD-059,
+[placed items](inventory-runtime.md#placed-items-arc-world-059)): it leaves its slot and list until it is picked up (`HeroCellUnfit` when
+the hero's cell does not fit the packing). Not applied: an item the session added to the NPC (`NotSeedItem`), an item with a drop script (`ScriptUnsupported`), no cell or no item data
 (`Unknown`); an item with the no-drop flag is `Refused`, as in the original (`SessionWearItem.NoDrop`). A dropped item is no
 longer worn: a `TargetWorn` that still lists it is refused (`InvalidWear`), and `SessionAttack.TargetCell` outside 0 .. 2^24 − 1
 is `InvalidAttack`, both before any roll.
@@ -165,7 +166,7 @@ there (the critical tables read the host's `TargetWorn`).
 resistances, conditions), `tests/Arcanum.Session.Tests/AttackStateTests.cs` (NPC values from fields, failures, the hero's attack
 until the kill with the experience, loot of a session kill, refusals before any roll, the aimed attack, the ranged refusal,
 experience-free sessions), `tests/Arcanum.Session.Tests/CriticalEffectsStateTests.cs` (ARC-COMBAT-009: a critical hit disarms
-an NPC and the weapon lies at its cell after a restore, items without a cell stay, the hero's drop is not applied, a crippled
+an NPC and the weapon lies at its cell after a restore, items without a cell stay, the hero's dropped weapon lies at its cell until it is picked up (ARC-WORLD-059), a crippled
 arm drops a torch it can no longer hold), `tests/Arcanum.Session.Tests/AttackWearStateTests.cs` (armour wear to the second break, the critical
 weapon effects and invulnerability, the hero's weapon to its break, bare hands never killing, an NPC attacker, object targets,
 missing item data, a refused step, refusals, and the wear of the hero's attack on a stone golem), `tests/Arcanum.TerrainViewer.Tests/AreaCombatTests.cs` (facing, the attack player, the status text,
