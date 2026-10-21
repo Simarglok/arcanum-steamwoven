@@ -8,12 +8,14 @@ namespace Arcanum.TerrainViewer;
 /// ARC-WORLD-046 follower portraits: one button per follower in the PC's array (the original's portrait list; waiting NPCs have none,
 /// OL16), each opening the order menu of the original's portrait (walk, attack, stay close, spread out, back off, wait, inventory,
 /// character sheet; wait is left out for a mind-controlled follower). Inventory and character sheet are shown disabled (not
-/// modelled for followers). A diagnostic strip: no portrait art.
+/// modelled for followers). A diagnostic strip: no portrait art. The menu is an inline panel of buttons that take no focus, not a
+/// popup window: an embedded popup takes the world window's focus, which quarantines the world and refuses the choice.
 /// </summary>
 public partial class AreaFollowerPortraits : CanvasLayer
 {
     private VBoxContainer _list = null!;
-    private PopupMenu _menu = null!;
+    private PanelContainer _menu = null!;
+    private VBoxContainer _menuItems = null!;
     private string? _menuEntity;
     private string _signature = "";
 
@@ -21,6 +23,28 @@ public partial class AreaFollowerPortraits : CanvasLayer
     public event Action<string, FollowerMenuItem>? ItemChosen;
 
     internal IReadOnlyList<string> EntitiesForSelfTest { get; private set; } = [];
+    private const string EntityMeta = "follower_entity";
+
+    /// <summary>The native smoke's entry: presses a follower's portrait button (the production handler opens its menu); false when
+    /// it has none.</summary>
+    internal bool PressPortraitForSelfTest(string entity)
+    {
+        var button = _list.GetChildren().OfType<Button>().FirstOrDefault(b => b.HasMeta(EntityMeta) && (string)b.GetMeta(EntityMeta) == entity);
+        button?.EmitSignal(BaseButton.SignalName.Pressed);
+        return button is not null;
+    }
+
+    /// <summary>Whether the order menu is shown.</summary>
+    public bool MenuShown => _menu.Visible;
+
+    /// <summary>The native smoke's entry: presses an enabled item of the open menu (its production handler); false when there is none.</summary>
+    internal bool PressMenuItemForSelfTest(FollowerMenuItem item)
+    {
+        var button = _menuItems.GetChildren().OfType<Button>().FirstOrDefault(b => b.HasMeta(ItemMeta) && (int)b.GetMeta(ItemMeta) == (int)item && !b.Disabled);
+        button?.EmitSignal(BaseButton.SignalName.Pressed);
+        return button is not null;
+    }
+    private const string ItemMeta = "follower_menu_item";
 
     public override void _Ready()
     {
@@ -33,9 +57,14 @@ public partial class AreaFollowerPortraits : CanvasLayer
         });
         AddChild(panel);
         _list = new VBoxContainer(); panel.AddChild(_list);
-        _menu = new PopupMenu { Name = "FollowerOrders" };
+        _menu = new PanelContainer { Name = "FollowerOrders", MouseFilter = Control.MouseFilterEnum.Stop, Visible = false };
+        _menu.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color(22 / 255f, 25 / 255f, 34 / 255f, .95f),
+            ContentMarginLeft = 4, ContentMarginRight = 4, ContentMarginTop = 4, ContentMarginBottom = 4,
+        });
         AddChild(_menu);
-        _menu.IdPressed += id => { if (_menuEntity is { } entity) ItemChosen?.Invoke(entity, (FollowerMenuItem)(int)id); };
+        _menuItems = new VBoxContainer(); _menu.AddChild(_menuItems);
         GetViewport().SizeChanged += Place;
         Hide();
     }
@@ -46,31 +75,52 @@ public partial class AreaFollowerPortraits : CanvasLayer
         var signature = string.Join("\n", followers.Select(f => f.Entity + "\t" + f.Label));
         if (signature == _signature) return;
         _signature = signature;
-        foreach (var child in _list.GetChildren()) child.QueueFree();
+        // Removed at once so the panel's minimum size no longer counts them when it is placed below.
+        foreach (var child in _list.GetChildren()) { _list.RemoveChild(child); child.QueueFree(); }
         EntitiesForSelfTest = followers.Select(f => f.Entity).ToArray();
+        if (_menuEntity is { } open && !EntitiesForSelfTest.Contains(open)) CloseMenu();
         foreach (var (entity, label) in followers)
         {
             var button = new Button { Text = label + " ▸", Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.None };
             button.Pressed += () => OpenMenu(entity, button);
+            button.SetMeta(EntityMeta, entity);
             _list.AddChild(button);
         }
         Visible = followers.Count > 0;
         Place();
     }
 
-    /// <summary>Opens the order menu of a follower (also the self-test's entry).</summary>
+    /// <summary>Opens the order menu of a follower next to its portrait button (a second press of the same portrait closes it).</summary>
     public void OpenMenu(string entity, Control? anchor = null, bool mindControlled = false)
     {
+        if (_menu.Visible && _menuEntity == entity) { CloseMenu(); return; }
         _menuEntity = entity;
-        _menu.Clear();
+        foreach (var child in _menuItems.GetChildren()) { _menuItems.RemoveChild(child); child.QueueFree(); }
         foreach (var item in Enum.GetValues<FollowerMenuItem>())
         {
             if (item == FollowerMenuItem.Wait && CompanionOrderRules.PortraitOrder(item, mindControlled) is null) continue;
-            _menu.AddItem(AreaCompanionOrders.Label(item), (int)item);
-            if (item is FollowerMenuItem.Inventory or FollowerMenuItem.CharacterSheet) _menu.SetItemDisabled(_menu.ItemCount - 1, true);
+            var button = new Button
+            {
+                Text = AreaCompanionOrders.Label(item), Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.None,
+                Disabled = item is FollowerMenuItem.Inventory or FollowerMenuItem.CharacterSheet,
+            };
+            button.SetMeta(ItemMeta, (int)item);
+            button.Pressed += () => Choose(item);
+            _menuItems.AddChild(button);
         }
-        var at = anchor is null ? new Vector2I(24, 24) : (Vector2I)(anchor.GetScreenPosition() + new Vector2(anchor.Size.X, 0));
-        _menu.Popup(new Rect2I(at, Vector2I.Zero));
+        _menu.ResetSize();
+        var size = GetViewport().GetVisibleRect().Size;
+        var wanted = anchor is null ? new Vector2(24, 24) : anchor.GetGlobalRect().Position + new Vector2(anchor.Size.X + 4, 0);
+        var menuSize = _menu.GetCombinedMinimumSize();
+        _menu.Position = new(Math.Min(wanted.X, Math.Max(0, size.X - menuSize.X)), Math.Clamp(wanted.Y, 0, Math.Max(0, size.Y - menuSize.Y)));
+        _menu.Show();
+    }
+
+    private void Choose(FollowerMenuItem item)
+    {
+        var entity = _menuEntity;
+        CloseMenu();
+        if (entity is not null) ItemChosen?.Invoke(entity, item);
     }
 
     public void CloseMenu() { _menu.Hide(); _menuEntity = null; }

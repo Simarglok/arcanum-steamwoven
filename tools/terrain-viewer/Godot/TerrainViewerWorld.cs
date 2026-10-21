@@ -309,7 +309,10 @@ public partial class TerrainViewerApp
             ObserveWorldFocus(what == NotificationApplicationFocusIn && GetWindow().HasFocus());
     }
     private void WorldWindowFocusEntered() => ObserveWorldFocus(true);
-    private void WorldWindowFocusExited() => ObserveWorldFocus(false);
+    // Raw focus-exit signals of the world window, also under simulated focus: the native smoke checks that opening the follower
+    // order menu (an embedded popup) does not take the window's focus (ARC-WORLD-046).
+    private int _worldFocusExitSignals;
+    private void WorldWindowFocusExited() { _worldFocusExitSignals++; ObserveWorldFocus(false); }
     private void ObserveWorldFocus(bool focused)
     {
         if (_exiting || !IsWorld || !_worldInitialized) return;
@@ -321,6 +324,7 @@ public partial class TerrainViewerApp
         WorldObservation(() =>
         {
             _worldFocused = focused;
+            if (!focused) CancelPendingWalkOrder("the window lost focus");
             _worldReducer.FocusChanged(focused); QuarantineWorld(); RefreshReadyStatus();
             TraceWorldInput("NativeFocus:transition");
         });
@@ -633,7 +637,9 @@ public partial class TerrainViewerApp
             _worldRouteClick = "ignored (map transfer pending)";
             RefreshReadyStatus(); return;
         }
-        // ARC-WORLD-046: after a portrait's walk order the press picks its tile.
+        // ARC-WORLD-046: a press outside the open follower order menu only closes it; after a portrait's walk order the press picks
+        // its tile.
+        if (_followerPortraits is { MenuShown: true } portraits) { portraits.CloseMenu(); RefreshReadyStatus(); return; }
         if (TryPendingWalkOrder(screen)) return;
         // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
         CancelPortalApproach("another click replaced it");
@@ -667,7 +673,16 @@ public partial class TerrainViewerApp
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         if (input is InputEventKey modifierKey) TrackAttackModifiers(modifierKey);
         // ARC-INPUT-003: the reserved-key notice in the sticky HUD header lasts until the next key press.
-        if (input is InputEventKey { Pressed: true, Echo: false }) { _hud?.SetNotice(null); CancelPendingWalkOrder("a key was pressed"); }
+        if (input is InputEventKey { Pressed: true, Echo: false } pressedKey)
+        {
+            _hud?.SetNotice(null);
+            // A bare modifier is not a key press that cancels a pending walk order (ARC-WORLD-046).
+            if (pressedKey.Keycode is not (Key.Shift or Key.Ctrl or Key.Alt or Key.Meta or Key.Capslock))
+            {
+                CancelPendingWalkOrder("a key was pressed");
+                _followerPortraits?.CloseMenu();
+            }
+        }
         if (ConversationOpen && input is InputEventKey conversationKey && HandleConversationKey(conversationKey))
         {
             GetViewport().SetInputAsHandled();

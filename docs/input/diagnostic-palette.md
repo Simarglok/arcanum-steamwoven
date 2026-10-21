@@ -118,7 +118,8 @@ WORLD host (`TerrainViewerWorld.cs`).
    wired F1–F6 send the original's follower order presets on key down
    ([ARC-WORLD-046](../world/companion-orders-runtime.md#area-viewer)). So in `crash-site-area` with a
    session, its inventory and its party the keys still reserved are Escape, F10, F12, Enter, Space, Home, 1–0, A, E,
-   F, K, M, O, S, V, W and held `,` `.` `/` (I too when the inventory seed was refused); without a session
+   F, K, M, O, S, V, W and held `,` `.` `/` (I too when the inventory seed was refused, F1–F6 too while the session party is
+   not wired); without a session
    (`world-diagnostic`, or a map or exterior drawn without a session clock) F1–F8, I, C, L, R and T are reserved
    too, and Num Lock in `world-diagnostic`. Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
 3. **Palette route (palette open).** Up/Down navigate, Enter/Space activate,

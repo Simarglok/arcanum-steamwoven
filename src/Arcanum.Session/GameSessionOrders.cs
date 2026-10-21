@@ -97,7 +97,9 @@ public sealed partial class GameSessionOwner
         var facts = new Dictionary<string, CompanionOrderFacts>(StringComparer.Ordinal);
         foreach (var follower in request.Followers)
         {
-            if (follower is null || !SessionValidation.Entity(follower.Entity) || follower.KnownName is null || !facts.TryAdd(follower.Entity, follower))
+            // An empty name would be a prefix of every portrait text (OL15), and a negative distance has no meaning.
+            if (follower is null || !SessionValidation.Entity(follower.Entity) || string.IsNullOrEmpty(follower.KnownName) || follower.Distance < 0
+                || !facts.TryAdd(follower.Entity, follower))
                 return RejectOrder(GameSessionFailure.InvalidCompanion);
             if (follower.Consent is null || !ValidFacts(follower.Consent) || follower.Consent.OtherLeaderCharisma is not null ||
                 (follower.Wait is { } wait && !Enum.IsDefined(wait.LeaderPersuasion))) return RejectOrder(GameSessionFailure.InvalidConsentFacts);

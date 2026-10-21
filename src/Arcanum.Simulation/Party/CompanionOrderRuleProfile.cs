@@ -3,8 +3,8 @@ namespace Arcanum.Simulation.Party;
 /// <summary>
 /// The two follower-order rule settings of owner decision D8 (contract docs/world/rule-modes.md): <see cref="Steamwoven"/> (the
 /// original with the recorded fixes, the default) and <see cref="Original"/> (the retail 1.0.7.4 behaviour). Decisions D1–D4 of the
-/// companion orders study are open with the owner; the Steamwoven setting carries the coordinator's recommended fixes until he
-/// answers, each a separate switch so another answer changes one value. The profile holds no state.
+/// companion orders study are open with the owner; the Steamwoven setting carries the coordinator's recommended fixes until the
+/// owner answers, each a separate switch so another answer changes one value. The profile holds no state.
 /// </summary>
 public sealed record CompanionOrderRuleProfile
 {

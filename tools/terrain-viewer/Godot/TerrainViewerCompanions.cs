@@ -343,14 +343,26 @@ public partial class TerrainViewerApp
             Require(spread > FollowDistanceRules.StartDistance ? close <= FollowDistanceRules.Range : close == spread,
                 $"staying close he came back from {spread} to {close}: {group()}");
             Require(_followerPortraits?.EntitiesForSelfTest.Contains(companion.Entity) == true, "his portrait is shown");
-            FollowerMenuChosen(companion.Entity, FollowerMenuItem.Wait);
+            // The production path: his portrait button opens the order menu, which must not take the world window's focus (an
+            // embedded popup did: that stops the PC's route and refuses the choice); its wait button chooses it.
+            var focusExits = _worldFocusExitSignals; var windowFocused = GetWindow().HasFocus();
+            Require(_followerPortraits!.PressPortraitForSelfTest(companion.Entity), "his portrait button is pressed");
+            for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(_followerPortraits.MenuShown, "his portrait opened the order menu");
+            Require(_worldFocusExitSignals == focusExits && GetWindow().HasFocus() == windowFocused,
+                $"the order menu kept the world window's focus (exits {focusExits}->{_worldFocusExitSignals}, focused {windowFocused}->{GetWindow().HasFocus()})");
+            Require(_followerPortraits.PressMenuItemForSelfTest(FollowerMenuItem.Wait), "the menu offers wait");
+            for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(!_followerPortraits.MenuShown && _worldFocusExitSignals == focusExits, "choosing closed the menu, still without a focus change");
             Require(_areaSession.QueryCompanion(companion.Entity).Standing == CompanionStanding.Waiting && _areaSession.QueryWaitTimer(companion.Entity) is null,
                 "the portrait's wait made him wait, with no wait timer: " + _companionNotice);
             Require(_followerPortraits?.EntitiesForSelfTest.Contains(companion.Entity) == false, "a waiting follower has no portrait (OL16)");
             cell = companion.Grid.State.CommittedCell;
             Require(RecordAreaCompanions("smoke orders"), "placement recorded after the orders");
             GD.Print("ARC-WORLD-046 native-smoke orders PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Script = speaker.ScriptId, SpreadDistance = spread, CloseDistance = close, Waited = true, WaitTimer = "none (index 6)", Parity = "NOT_VERIFIED" }));
+                Script = speaker.ScriptId, SpreadDistance = spread, CloseDistance = close, Waited = true, WaitTimer = "none (index 6)",
+                Menu = new { Path = "portrait button, inline menu, wait button", WindowFocused = windowFocused, FocusExits = _worldFocusExitSignals - focusExits },
+                Parity = "NOT_VERIFIED" }));
 
             // Waiting: the PC goes back to where Virgil started; he stays on his recorded cell.
             AreaSmokePlace(map, AreaSmokeStandable(map, origin, 2));

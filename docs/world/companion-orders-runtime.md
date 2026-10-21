@@ -54,9 +54,9 @@ fails does not stop the others.
 | attack, back off, curse | `CombatOrder`: stage A7's frontier, nothing here (A7 adds back off's acknowledgement before "stop attacking", FO5) | none | OL10, OL11 |
 | none, join, disband, follow other | `NoOrder` (the AI pass only; join and disband act in the multiplayer phase) | none | OL3 |
 
-Whole-order refusals (nothing applied): an undefined type or addressing, an invalid or repeated entity, a missing name or a portrait
-order without a valid clicked follower (`InvalidCompanion`), follow facts naming another leader or undefined trainings
-(`InvalidConsentFacts`), a portrait for an NPC that does not follow (`NotInParty`), a stale version. Mind control is the host's
+Whole-order refusals (nothing applied): an undefined type or addressing, an invalid or repeated entity, a missing or empty name
+(it would prefix every portrait text), a negative distance or a portrait order without a valid clicked follower
+(`InvalidCompanion`), follow facts naming another leader or undefined trainings (`InvalidConsentFacts`), a portrait for an NPC that does not follow (`NotInParty`), a stale version. Mind control is the host's
 answer in three places (`CompanionOrderFacts.MindControlled` for leave and wait, the follow facts' `MindControlledByPc`, the wait
 facts' `MindControlled`); the host keeps them consistent. No new saved state: no snapshot change.
 
@@ -64,12 +64,19 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
 
 - **F1–F6** (the original's preset keys, until now reserved and not implemented) without modifiers send the presets with the chart
   cell under the pointer as the walk tile, while the session party is wired and the world owns input (focused, no modal window or
-  control focus, no map change pending; `RouteOrderKey`). F6 under the Original rules shows "no order (the original's preset names
-  nobody)". Without a party they stay reserved keys.
+  control focus, no map change pending; `RouteOrderKey`); otherwise the key shows "ignored". F6 under the Original rules shows "no
+  order (the original's preset names nobody)". Without a party they stay reserved keys. Requiring no modifier is the viewer's own:
+  the original's F1–F6 handlers mostly ignore Ctrl and Shift (KM-09 in
+  [original keyboard and mouse](../requirements/original-keyboard-mouse.md)), and the viewer keeps those combinations for its
+  diagnostic layer.
 - **Follower portraits** (`AreaFollowerPortraits`, bottom left): one button per follower in the array (in its order; none for a waiting
   one), each opening the portrait menu: walk, attack, stay close, spread out, back off, wait, and inventory and character sheet
-  shown disabled. Walk asks for a tile with the next left press on the ground (the original's target cursor; not while the hero is
-  dead or unconscious, OL1); the HUD shows the pending walk order, and any key, a modal window or a rebuilt group cancels it. Attack
+  shown disabled. The menu is an inline panel of buttons that take no focus, not a popup window (an embedded popup takes the world
+  window's focus, which stops the PC's route and refuses the choice); a second press of the portrait, any key other than a bare
+  modifier, or a press on the ground closes it (that press does nothing else). Walk asks for a tile with the next left press on the ground (the original's target cursor; not while the hero is
+  dead or unconscious, OL1); the HUD shows the pending walk order, and any key other than a bare modifier, a modal window, focus
+  loss, another menu choice or a rebuilt group cancels it; the press itself is refused while the world does not own input or the hero
+  is dead or unconscious. Attack
   is sent at once, with no target cursor (it reaches A7's frontier and does nothing yet). The strip is hidden and its menu closed
   while a modal window is open, and a menu choice is refused unless the world owns input (as for F1–F6). The menu's labels are
   the viewer's own words (the original reads `mes\follower_ui.mes`); the Original name addressing compares them as the label.
@@ -94,8 +101,9 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   walk, move, combat and no-order outcomes, portrait addressing under both settings, whole-order refusals.
 - `tests/Arcanum.TerrainViewer.Tests/AreaCompanionOrderTests.cs`: the viewer's facts, the walk and spread goals, wait.
 - Native smoke (`--native-smoke --mode crash-site-area` with the original roles): `ARC-WORLD-046 native-smoke orders PASS` inside the
-  follow stage: F4 through the keyboard path spreads Virgil out and steps him away, F3 calls him close again, the portrait menu's wait
-  makes him wait (no timer, wait index 6) and removes his portrait. The reserved-key smoke now uses F10.
+  follow stage: F4 through the keyboard path spreads Virgil out and steps him away, F3 calls him close again; his portrait button
+  opens the order menu without a focus change of the world window (no focus-exit signal; the check failed with a popup) and its wait
+  button makes him wait (no timer, wait index 6) and removes his portrait. The reserved-key smoke now uses F10.
 
 ```sh
 "$DOTNET" test tests/Arcanum.Simulation.Tests --no-build --filter "FullyQualifiedName~CompanionOrder|FullyQualifiedName~CompanionFollow"

@@ -173,6 +173,9 @@ public sealed class CompanionOrderStateTests
         Assert.AreEqual(GameSessionFailure.InvalidCompanion, Failure(new(CompanionOrderType.Wait, CompanionOrderAddressing.All, [F("oid:a"), F("oid:a")])));
         Assert.AreEqual(GameSessionFailure.InvalidCompanion, Failure(new(CompanionOrderType.Wait, CompanionOrderAddressing.All, [F("")])));
         Assert.AreEqual(GameSessionFailure.InvalidCompanion, Failure(new((CompanionOrderType)99, CompanionOrderAddressing.All, [F("oid:a")])));
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, Failure(new(CompanionOrderType.Wait, CompanionOrderAddressing.All, [F("oid:a") with { KnownName = "" }])),
+            "an empty name would match every portrait text");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, Failure(new(CompanionOrderType.Wait, CompanionOrderAddressing.All, [F("oid:a", distance: -1)])));
         Assert.AreEqual(GameSessionFailure.InvalidConsentFacts, Failure(new(CompanionOrderType.Wait, CompanionOrderAddressing.All,
             [F("oid:a") with { Consent = PartyStateTests.Facts() with { OtherLeaderCharisma = 4 } }])));
         Assert.AreEqual(GameSessionFailure.InvalidConsentFacts, Failure(new(CompanionOrderType.Wait, CompanionOrderAddressing.All,
