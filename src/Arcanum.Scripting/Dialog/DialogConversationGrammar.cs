@@ -23,6 +23,8 @@ internal sealed record ConversationUnwait(DialogOperationSource Source, int Node
 internal sealed record ConversationSkillGate(DialogOperationSource Source, int Skill, int Threshold, bool Training) : ConversationOperation(Source);
 internal sealed record ConversationSkillTraining(DialogOperationSource Source, int Skill, int Training) : ConversationOperation(Source);
 internal sealed record ConversationExpertTeacher(DialogOperationSource Source, int Skill, int Node) : ConversationOperation(Source);
+/// <summary>ARC-TECHNOLOGY-006: SU, the schematic window with the NPC as crafter (ledger NC1).</summary>
+internal sealed record ConversationSchematics(DialogOperationSource Source) : ConversationOperation(Source);
 internal sealed record ConversationMetBefore(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
 /// <summary>RP n (ARC-WORLD-044): as a condition n > 0 holds n, n ≤ 0 lacks −n; as an action n > 0 adds n, n ≤ 0 removes −n.</summary>
 internal sealed record ConversationReputation(DialogOperationSource Source, int Value) : ConversationOperation(Source);
@@ -63,7 +65,7 @@ internal static class DialogConversationGrammar
     private const int HaggleSkill = 9, PersuasionSkill = 11;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -92,7 +94,8 @@ internal static class DialogConversationGrammar
                     || reputations && opcode == "RP"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP"
-                    || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET");
+                    || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
+                        || schematics && opcode == "SU");
             if (!admitted)
             {
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
@@ -102,6 +105,27 @@ internal static class DialogConversationGrammar
                 // The source keeps reading operations after JO/UW/FL, but JO/UW enter their node mid-field;
                 // operations after them are outside this conservative subset.
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
+            }
+            if (opcode == "SU")
+            {
+                // The source's scanner reads a number after every code and the SU case ignores it (0x415BA0).
+                var afterCode = index;
+                while (index < bytes.Count && bytes[index] is (byte)' ' or (byte)'\t') index++;
+                // atoi: an optional sign and any digits (none reads 0, an overflow is ignored like every value); nothing is checked.
+                if (index < bytes.Count && bytes[index] is (byte)'-' or (byte)'+' or (>= (byte)'0' and <= (byte)'9'))
+                {
+                    if (bytes[index] is (byte)'-' or (byte)'+') index++;
+                    while (index < bytes.Count && bytes[index] is >= (byte)'0' and <= (byte)'9') index++;
+                }
+                else
+                    index = afterCode;
+                if (index < bytes.Count && !IsSeparator(bytes[index]))
+                    throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
+                operations.Add(new ConversationSchematics(Source(record, field, start, index - start, operations.Count)));
+                if (operations.Count > options.MaxOperationsPerField)
+                    throw new DialogOperationParseException(DialogFailureKind.OperationLimitExceeded, operations[^1].Source);
+                SkipSeparators(bytes, ref index);
+                continue;
             }
             if (opcode == "FP")
             {

@@ -39,6 +39,7 @@ public partial class TerrainViewerApp
         BindAreaCompanions();
         BindAreaHover(arguments);
         BindAreaLogbook(arguments);
+        BindAreaSkillTexts(arguments);
         BindAreaSchematics(arguments);
         BindAreaWorldMap(arguments);
         StartAreaAmbient(area);
@@ -182,7 +183,7 @@ public partial class TerrainViewerApp
         }
         await RunAreaHdSmokeAsync(area, result);
         await RunAreaLightingSmokeAsync(area);
-        if (_areaTransitions is not null) { await RunAreaHoverSmokeAsync(); await RunAreaInventorySmokeAsync(); await RunAreaHeroSmokeAsync(result); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaTransitionSmokeAsync(); await RunAreaQuickSaveSmokeAsync(); await RunAreaGaitSmokeAsync(); await RunAreaCombatModeSmokeAsync(); await RunAreaAudioSmokeAsync(); await RunAreaAttackSmokeAsync(); await RunAreaFollowSmokeAsync(); await RunAreaCompanionCaveSmokeAsync(); await RunAreaVisualToggleSmokeAsync(result); }
+        if (_areaTransitions is not null) { await RunAreaHoverSmokeAsync(); await RunAreaInventorySmokeAsync(); await RunAreaHeroSmokeAsync(result); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaTransitionSmokeAsync(); await RunAreaQuickSaveSmokeAsync(); await RunAreaGaitSmokeAsync(); await RunAreaCombatModeSmokeAsync(); await RunAreaAudioSmokeAsync(); await RunAreaAttackSmokeAsync(); await RunAreaFollowSmokeAsync(); await RunAreaCompanionCaveSmokeAsync(); await RunAreaVisualToggleSmokeAsync(result); }
         RunAreaClockSmoke();
         // The caller releases its load result, then runs S5 and quits.
     }

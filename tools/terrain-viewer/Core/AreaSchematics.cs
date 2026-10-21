@@ -11,8 +11,9 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>The two tabs of the schematic window, in the original's order: learned (with the degrees) and found (documents).</summary>
 public enum AreaSchematicTab { Learned, Found }
 
-/// <summary>Why the schematic window does not open: no hero, or a dead crafter.</summary>
-public enum AreaSchematicRefusal { None, NoHero, Dead }
+/// <summary>Why the window does not open: no hero (a hero crafter), the crafter or the hero is dead, or (ARC-TECHNOLOGY-006) the NPC
+/// crafter's data are invalid or the session does not know the NPC.</summary>
+public enum AreaSchematicRefusal { None, NoHero, Dead, NoCrafter }
 
 /// <summary>One component or product slot: the prototype shown, its description number (the viewer names it), whether it was
 /// found and whether the crafter's expertise reaches it (components only), and its complexity and discipline.</summary>
@@ -21,11 +22,12 @@ public sealed record AreaSchematicSlot(int Prototype, int Description, bool Foun
 /// <summary>
 /// One page of the schematic window: the tab, the discipline (0..7), the page and the pages of that tab and discipline, the
 /// record shown (a placeholder for an empty tab), its name and description, the two components, the product and quantity, the
-/// button state (TECH-4) and the texts it shows, the hero's expertise in the discipline, and a note on what is missing.
+/// button state (TECH-4) and the texts it shows, the crafter's expertise in the discipline, a note on what is missing, and
+/// (ARC-TECHNOLOGY-006) the NPC crafter's entity, null for the hero.
 /// </summary>
 public sealed record AreaSchematicsView(AreaSchematicTab Tab, int Discipline, string DisciplineName, int Page, int Pages, int Record,
     bool Placeholder, string Name, string Description, AreaSchematicSlot? Component1, AreaSchematicSlot? Component2, AreaSchematicSlot? Product,
-    int Quantity, AssemblyButton Button, string? ButtonText, string HoverText, int Expertise, string? Note);
+    int Quantity, AssemblyButton Button, string? ButtonText, string HoverText, int Expertise, string? Note, string? Crafter = null);
 
 public sealed record AreaSchematicsBuild(AreaSchematicRefusal Refusal, AreaSchematicsView? View);
 
@@ -100,37 +102,49 @@ public static class AreaSchematics
             $"records {catalog.Catalog.Records.Count}, prototypes {facts.Count}");
     }
 
-    /// <summary>Whether the window opens for this session: a hero that is alive.</summary>
-    public static AreaSchematicRefusal Refusal(GameSessionOwner session)
+    /// <summary>Whether the window opens for this session: a hero that is alive; for an NPC crafter (ARC-TECHNOLOGY-006) an NPC the
+    /// session knows with valid data, alive, and a viewer (the hero, when there is one) alive, as the original's open refuses a dead
+    /// crafter or viewer (ledger SW3).</summary>
+    public static AreaSchematicRefusal Refusal(GameSessionOwner session, SessionNpcCrafter? crafter = null)
     {
         ArgumentNullException.ThrowIfNull(session);
+        if (crafter is not null)
+        {
+            if (session.QueryNpcTechnology(crafter) is null || !session.QueryNpcKnown(crafter.Npc)) return AreaSchematicRefusal.NoCrafter;
+            if (session.QueryNpcDead(crafter.Npc) || session.QueryHeroLife() is { Status.IsDead: true }) return AreaSchematicRefusal.Dead;
+            return AreaSchematicRefusal.None;
+        }
         if (session.QueryHero() is null) return AreaSchematicRefusal.NoHero;
         return session.QueryHeroLife() is { Status.IsDead: true } ? AreaSchematicRefusal.Dead : AreaSchematicRefusal.None;
     }
 
-    /// <summary>The records of a tab and discipline for the hero: the learned records up to the stored degree, or the found
-    /// records of the discipline, in the window's order.</summary>
-    public static IReadOnlyList<int> Records(GameSessionOwner session, AreaSchematicData data, AreaSchematicTab tab, int discipline)
+    /// <summary>The records of a tab and discipline for the crafter: the learned records up to its stored degree, or the found
+    /// records of the discipline, in the window's order. An NPC crafter's found tab is empty (the original builds it for a PC crafter
+    /// only, ledger SK4, NC5).</summary>
+    public static IReadOnlyList<int> Records(GameSessionOwner session, AreaSchematicData data, AreaSchematicTab tab, int discipline,
+        SessionNpcCrafter? crafter = null)
     {
-        var degrees = session.QueryHeroTechnology() is { } technology ? technology.Select(d => d.Degree).ToArray() : new int[Disciplines];
-        var found = session.QueryHeroFoundSchematics() is { } list ? list.ToArray() : [];
-        var tabs = data.Catalog.Tabs(degrees, found, crafterIsPc: true, data.Discipline);
+        var technology = crafter is null ? session.QueryHeroTechnology() : session.QueryNpcTechnology(crafter);
+        var degrees = technology is { } known ? known.Select(d => d.Degree).ToArray() : new int[Disciplines];
+        var found = crafter is null && session.QueryHeroFoundSchematics() is { } list ? list.ToArray() : [];
+        var tabs = data.Catalog.Tabs(degrees, found, crafterIsPc: crafter is null, data.Discipline);
         return (tab == AreaSchematicTab.Learned ? tabs.Learned : tabs.Found)[discipline];
     }
 
     /// <summary>The page of the window, or the refusal. The page wraps into the tab's count; an empty tab shows the placeholder.</summary>
     public static AreaSchematicsBuild Build(GameSessionOwner session, AreaSchematicData? data, AreaSchematicTab tab, int discipline, int page,
-        SessionCraftLookup items, MesTextProfile profile)
+        SessionCraftLookup items, MesTextProfile profile, SessionNpcCrafter? crafter = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(items);
         if (discipline is < 0 or >= Disciplines) throw new ArgumentOutOfRangeException(nameof(discipline));
-        if (Refusal(session) is var refusal and not AreaSchematicRefusal.None) return new(refusal, null);
-        var technology = session.QueryHeroTechnology()!.Value;
+        if (Refusal(session, crafter) is var refusal and not AreaSchematicRefusal.None) return new(refusal, null);
+        var technology = crafter is null ? session.QueryHeroTechnology()!.Value : session.QueryNpcTechnology(crafter)!.Value;
+        var who = crafter?.Npc;
         if (data is null)
             return new(AreaSchematicRefusal.None, new(tab, discipline, $"Discipline {discipline}", 0, 0, 0, true, "", "", null, null, null, 0,
-                AssemblyButton.ItemMissing, null, "", technology[discipline].Expertise, "schematic data not loaded"));
-        var records = Records(session, data, tab, discipline);
+                AssemblyButton.ItemMissing, null, "", technology[discipline].Expertise, "schematic data not loaded", who));
+        var records = Records(session, data, tab, discipline, crafter);
         var pages = records.Count;
         var shown = pages == 0 ? 0 : ((page % pages) + pages) % pages;
         var number = pages == 0 ? SchematicCatalog.PlaceholderNumber(discipline) : records[shown];
@@ -140,14 +154,16 @@ public static class AreaSchematics
         var disciplineName = Text(data.Texts.DisciplineNames[discipline], profile) is { Length: > 0 } n ? n : $"Discipline {discipline}";
         if (record is null || pages == 0)
             return new(AreaSchematicRefusal.None, new(tab, discipline, disciplineName, shown, pages, number, true, name, description, null, null, null, 0,
-                AssemblyButton.ItemMissing, null, Hover(data), technology[discipline].Expertise, pages == 0 ? "no schematic in this tab" : "record unreadable"));
-        var plan = session.QueryHeroAssembly(record, items, data.Facts)!;
+                AssemblyButton.ItemMissing, null, Hover(data), technology[discipline].Expertise, pages == 0 ? "no schematic in this tab" : "record unreadable", who));
+        // An NPC the session does not know (no attached seed, party record or added items) has no list to search.
+        if ((crafter is null ? session.QueryHeroAssembly(record, items, data.Facts) : session.QueryNpcAssembly(crafter, record, items, data.Facts)) is not { } plan)
+            return new(AreaSchematicRefusal.NoCrafter, null);
         var product = plan.ProductBase is { } p ? p + SchematicAlternatives.PrototypeOffset
             : record.Product.Bases.Count > 0 ? record.Product.Bases[0] + SchematicAlternatives.PrototypeOffset : 0;
         return new(AreaSchematicRefusal.None, new(tab, discipline, disciplineName, shown, pages, number, false, name, description,
             Slot(plan.First, data), Slot(plan.Second, data), Slot(new(true, product, 0, null, true), data), record.Quantity, plan.Button,
             SchematicAssemblyRules.RefusalMessage(plan.Button) is { } message ? Text(data.Catalog.Text(message), profile) : null, Hover(data),
-            technology[discipline].Expertise, null));
+            technology[discipline].Expertise, null, who));
 
         string Hover(AreaSchematicData d) => Text(d.Catalog.Text(SchematicAssemblyRules.AssembleHoverMessage), profile);
     }
@@ -173,13 +189,15 @@ public static class AreaSchematics
     public static int CompletedSound(int discipline) => SchematicAssemblyRules.CompletedSoundBase + discipline;
 
     /// <summary>The text of a session refusal of an assembly for the status line.</summary>
-    public static string Refused(SessionAssemblyResult result) => result.Failure switch
+    public static string Refused(SessionAssemblyResult result, bool npc = false) => result.Failure switch
     {
         GameSessionFailure.AssemblyRefused => result.Plan?.Button == AssemblyButton.ExpertiseLacking ? "expertise lacking" : "an item is missing",
         GameSessionFailure.InsertRefused => "no room for the product (the original would leave it on the ground)",
         GameSessionFailure.ItemTypeUnsupported => "the product is not an item the session holds (stack or key)",
         GameSessionFailure.BudgetExceeded => "inventory limit",
-        GameSessionFailure.InvalidLifeTarget => "the hero is dead",
+        GameSessionFailure.InvalidLifeTarget => npc ? "the NPC crafter is dead" : "the hero is dead",
+        GameSessionFailure.UnknownHolder => "the session does not know the NPC crafter",
+        GameSessionFailure.InvalidAdvancement => "the NPC crafter's data are invalid",
         GameSessionFailure.StaleVersion => "the session changed",
         _ => result.Failure.ToString(),
     };

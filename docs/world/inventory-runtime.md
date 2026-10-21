@@ -180,7 +180,8 @@ or taken there (as before this task for its seed items). The changes are:
 
 `QueryMapInventory`, `LootItem` and `GiveItemToPc` see the added items after the seed items; a corpse's added items are loot (life
 from the session's life records), a living NPC's are not. The AREA viewer's loot window reads `QueryMapInventory`, so it shows
-them; no viewer path adds or deletes items yet.
+them. The NPC schematic crafter (ARC-TECHNOLOGY-006, [assembly](schematic-assembly-runtime.md#npc-crafter-arc-technology-006)) deletes its
+components and adds its products through the same rules.
 
 The NPC must be known to the session: an NPC holder of an attached seed, a party record, or an NPC that already holds added items
 (else `UnknownHolder`). Refusals, before any effect: `InvalidItem` (an invalid id, a `made:` id as the NPC, an undefined type),
