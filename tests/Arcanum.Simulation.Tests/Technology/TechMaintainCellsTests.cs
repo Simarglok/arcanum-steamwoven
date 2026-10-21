@@ -1,0 +1,66 @@
+using Arcanum.Simulation.Magic;
+using Arcanum.Simulation.Technology;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Arcanum.Simulation.Tests.Technology;
+
+/// <summary>ARC-TECHNOLOGY-008: the engine's MAINTAIN (ARC-MAGIC-009, 0x452F20 from 0x453168) charges a maintained technology
+/// record through the charge-cell source of ARC-TECHNOLOGY-007 (ledger CC7, TD rows): each tick pays the cells in both TC1
+/// settings, an emptied source ends the run, and BEGIN pays nothing for a technology record. A worn device (invented numbers:
+/// complexity −80, maintenance 3 every 5 seconds) whose holder is a technologist (aptitude −60) paying from 12 cells; the host
+/// writes each applied plan (the session holds no ammunition yet).</summary>
+[TestClass]
+public sealed class TechMaintainCellsTests
+{
+    private static readonly SpellRunRecord Device = new(Technology: true, Cost: 9, MaintainCost: 3, MaintainPeriod: 5, ChargesFromCells: true);
+    private static readonly SpellStageFacts Facts = new(SourcePayer: new SpellPayer(SpellPayerKind.Item, ItemCharges: 1));
+
+    private sealed class NoStacking : ISpellRunStacking
+    {
+        public int? Blocking(SpellRun run, SpellRunObject target) => null;
+        public void Cancel(SpellRun run) { }
+    }
+
+    private static SpellRun Run(SpellRunAction action) =>
+        new(0, 168, action, new("armour", 7), new("hero", SpellObjectFacts.NpcType, -60), SpellLocation.None, null, SpellLocation.None, null, SpellRunFlags.Active);
+
+    private static List<int> Ticks(TechnologyRuleProfile profile, out SpellStageResult last)
+    {
+        var units = 12;
+        var paid = new List<int>();
+        while (true)
+        {
+            var cells = new ChargeCellSource(new CellPayer(SpellPayerKind.Item, CellOwnerKind.Critter, units > 0 ? new CellStack("cells", units) : null, -80, -60), profile);
+            last = SpellRunRules.Stage(Run(SpellRunAction.Maintain), Device, Facts, cells, new NoStacking(), MagicAnomalyProfile.Steamwoven);
+            if (!last.Proceeds) return paid;
+            Assert.AreEqual(3, last.Costs.Single(), "the maintenance asks its cost");
+            var plan = cells.LastPlan!;
+            Assert.IsTrue(plan.Writes);
+            paid.Add(plan.Need);
+            units = plan.StackRemoved ? 0 : plan.UnitsAfter;
+            if (paid.Count > 10) Assert.Fail("the cells never ran out");
+        }
+    }
+
+    [TestMethod]
+    public void Each_maintain_tick_pays_cells_in_both_settings_and_an_empty_source_ends_the_run()
+    {
+        // Power trunc((−80 − 60) / 2) = −70; share trunc(3 × −70 / −80) = 2. Original 3 + 2 = 5 cells a tick, Steamwoven 2 × 3 − 2 = 4.
+        CollectionAssert.AreEqual(new[] { 5, 5 }, Ticks(TechnologyRuleProfile.Original, out var original));
+        CollectionAssert.AreEqual(new[] { 4, 4, 4 }, Ticks(TechnologyRuleProfile.Steamwoven, out var steamwoven));
+        foreach (var end in new[] { original, steamwoven })
+        {
+            Assert.AreEqual((false, SpellStageStatus.MaintainCost, true), (end.Proceeds, end.Status, end.Ends), "too few cells: the run turns to END");
+            Assert.AreEqual(SpellPaymentStatus.CellsRefused, end.Payments.Single().Status);
+        }
+    }
+
+    [TestMethod]
+    public void Begin_pays_nothing_for_a_technology_record()
+    {
+        var cells = new ChargeCellSource(new CellPayer(SpellPayerKind.Item, CellOwnerKind.Critter, new CellStack("cells", 12), -80, -60), TechnologyRuleProfile.Original);
+        var begin = SpellRunRules.Stage(Run(SpellRunAction.Begin), Device, Facts, cells, new NoStacking(), MagicAnomalyProfile.Steamwoven);
+        Assert.AreEqual((true, 0), (begin.Proceeds, begin.Payments.Count), "the technology flag skips the checks and the BEGIN cost");
+        Assert.IsNull(cells.LastPlan, "no cell was asked");
+    }
+}
