@@ -87,4 +87,24 @@ public sealed class AreaRemovedObjectsTests
         Assert.AreEqual((Arcanum.Simulation.Navigation.RouteCorridorOutcome.Found, (CellCoord?)goal), (freed.Outcome, freed.End));
         Assert.AreEqual(40, freed.Cells); // straight through the chest's tile
     }
+
+    [TestMethod]
+    public void TheWalkRouteVerdictMovesRemovedObjectsOnly()
+    {
+        // ARC-WORLD-060: the window route's verdict over the PC's overlay: a removed blocker opens, a standing one and terrain stay
+        // blocked; an overlay that moves nothing gives the T0 disposition (null); the direction map inverts GridReplay.MapDirection.
+        foreach (var direction in Enum.GetValues<NeighborDirection>())
+            Assert.AreEqual(direction, AreaMapWalk.Neighbor[GridReplay.MapDirection(direction)]);
+        Assert.IsNull(AreaMapWalk.StepOpen(null));
+        Assert.IsNull(AreaMapWalk.StepOpen(new AreaOccupancy([], [new CellCoord(11, 10)])));
+        var steps = Steps();
+        var onto = steps.Assess(steps.Request(new(10, 10), new(11, 10), CardinalTraversalDirection.XPlus));
+        var open = AreaMapWalk.StepOpen(AreaOccupancy.None.WithRemoved(new HashSet<AreaObjectKey> { Chest }))!;
+        Assert.IsTrue(open(onto, new(10, 10), CardinalTraversalDirection.XPlus));
+        var other = AreaMapWalk.StepOpen(AreaOccupancy.None.WithRemoved(new HashSet<AreaObjectKey> { Companion }))!;
+        Assert.IsFalse(other(onto, new(10, 10), CardinalTraversalDirection.XPlus));
+        // A step off the admitted sector stays refused whatever the overlay moves.
+        var off = steps.Assess(steps.Request(new(63, 10), new(64, 10), CardinalTraversalDirection.XPlus));
+        Assert.IsFalse(open(off, new(63, 10), CardinalTraversalDirection.XPlus));
+    }
 }

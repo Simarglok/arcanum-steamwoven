@@ -254,12 +254,20 @@ public static class AreaMapWalk
         var opened = ContentStack.Open(discovery.Plan!);
         if (opened.Status != ContentStackStatus.Ready) throw new InvalidOperationException("AREA_MAP_STACK_" + opened.Status.ToString().ToUpperInvariant());
         using var stack = opened.Stack!;
-        var removed = overlay is { Moved.Count: > 0 } live ? AreaOccupancy.None.WithRemoved(live.Moved) : null;
-        return AreaWindowRoute.Plan(stack, WorldCatalog.Open(stack), mapName, from, to, token: token, stepOpen: removed is null ? null
-            : (assessment, cell, direction) => AreaOccupancyRules.Apply(assessment, default, Neighbor[direction], removed).Disposition == CardinalTraversalDisposition.Open);
+        return AreaWindowRoute.Plan(stack, WorldCatalog.Open(stack), mapName, from, to, token: token, stepOpen: StepOpen(overlay));
+    }
+
+    /// <summary>The window route's step verdict over an overlay's moved T0 records (<see cref="AreaOccupancyRules.Apply"/>, the
+    /// query the PC's steps use); null (the T0 disposition) when the overlay moves none. Live actors' cells are chart cells of the
+    /// shown window and are not applied.</summary>
+    internal static Func<AreaStepAssessment, AreaStepCell, CardinalTraversalDirection, bool>? StepOpen(AreaOccupancy? overlay)
+    {
+        if (overlay is not { Moved.Count: > 0 } live) return null;
+        var removed = AreaOccupancy.None.WithRemoved(live.Moved);
+        return (assessment, _, direction) => AreaOccupancyRules.Apply(assessment, default, Neighbor[direction], removed).Disposition == CardinalTraversalDisposition.Open;
     }
 
     // The movement direction of each traversal direction (the inverse of GridReplay.MapDirection).
-    private static readonly IReadOnlyDictionary<CardinalTraversalDirection, NeighborDirection> Neighbor =
+    internal static readonly IReadOnlyDictionary<CardinalTraversalDirection, NeighborDirection> Neighbor =
         Enum.GetValues<NeighborDirection>().ToDictionary(GridReplay.MapDirection);
 }

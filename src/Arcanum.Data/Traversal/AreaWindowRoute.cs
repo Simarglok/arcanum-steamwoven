@@ -46,7 +46,8 @@ public sealed class AreaWindowRouteResult
 /// planning aid (a long walk's waypoints), not the original's path search (parity NOT_VERIFIED); routes within one window
 /// are the route follower's (<c>RouteCorridor</c>). ARC-WORLD-060: a host whose steps differ from the T0 evidence (objects the
 /// session destroyed or switched off, which the original's object lists skip, ledger FC2) passes the verdict it walks by
-/// (<c>stepOpen</c>, over the window's assessment), so the route reads the same state as the walk.
+/// (<c>stepOpen</c>, over the window's assessment), so the route reads the same removed-object state as the walk (door state and
+/// live actors are the walk's own route's).
 /// </summary>
 public static class AreaWindowRoute
 {
@@ -58,8 +59,8 @@ public static class AreaWindowRoute
         AreaWindowRouteLimits? limits = null, CancellationToken token = default,
         Func<AreaStepAssessment, AreaStepCell, CardinalTraversalDirection, bool>? stepOpen = null)
     {
-        stepOpen ??= static (assessment, _, _) => assessment.Disposition == CardinalTraversalDisposition.Open;
         ArgumentNullException.ThrowIfNull(stack); ArgumentNullException.ThrowIfNull(catalog); ArgumentNullException.ThrowIfNull(mapName);
+        stepOpen ??= static (assessment, _, _) => assessment.Disposition == CardinalTraversalDisposition.Open;
         limits ??= new();
         var windows = new Windows(stack, catalog, mapName, limits);
         if (from == to) return new(AreaWindowRouteStatus.Found, "ROUTE_ALREADY_AT_TARGET", Array.AsReadOnly(new[] { from }), 0, 0);
