@@ -461,6 +461,8 @@ public partial class TerrainViewerApp
             FollowAreaAmbient(); FollowAreaWalls(); FollowAreaRoofs();
             // ARC-COMBAT-005: fallen bodies move like companions, from the frame repository with their poses.
             SyncAreaCombatBodies();
+            // ARC-RENDER-033: destroyed ART and items lying away from a T0 body.
+            SyncAreaGroundBodies();
             // ARC-WORLD-051: portals off their T0 frame are drawn like moved bodies.
             FollowAreaPortals();
             _canvas!.SetAreaMovingBodies(AreaMovingCommands()); _canvas.SetAreaAbsent(_areaCompanions?.Absent);

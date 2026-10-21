@@ -84,6 +84,8 @@ public partial class TerrainViewerApp
         {
             // ARC-WORLD-017: a companion from another map is named and picked where it is drawn here.
             _hoverIndex = new(area.Snapshot.Objects, area.Plan.Commands, _hoverNames?.Catalog, _companionTemplates.Select(t => t.Speaker.Row));
+            // ARC-RENDER-033: the placed items drawn under keys of their own.
+            foreach (var row in _groundOnly.Values) _hoverIndex.Admit(row.Row);
             _hoverIndexArea = area; _hoverStamp = null;
         }
         return _hoverIndex;
@@ -164,7 +166,7 @@ public partial class TerrainViewerApp
                 var distance = Math.Max(Math.Abs(row.WorldX!.Value - actor.X), Math.Abs(row.WorldY!.Value - actor.Y));
                 return distance <= AreaTransitionCoordinator.UseRange ? AreaHoverAction.Use : AreaHoverAction.WalkToUse;
             }
-            if (InventoryActive && _inventoryHost!.Target(_areaSession!, CurrentAreaMap, hit) is { } target)
+            if (InventoryActive && AreaInventoryTargetOf(hit) is { } target)
             {
                 var near = Chebyshev(target.Row, (actor.X, actor.Y)) <= AreaInventoryHost.Reach;
                 return target.Kind == AreaInventoryTargetKind.GroundItem
