@@ -49,6 +49,9 @@ its Close button. Contents:
 - **Always Run on/off** (ARC-WORLD-020): the original's Always Run option, saved; the line under
   it shows the option, the Num Lock state, what the next ground click does and the current gait
   ([walking and running](../world/gait-runtime.md)).
+- **Prowl (stealth) on/off** (ARC-SKILLS-008): the original's skill-bar prowling button; toggles the
+  session hero's concealment and its followers'. While concealed, a run is a walk unless the hero is
+  a master of prowling with fatigue left ([stealth](../world/stealth-runtime.md)).
 - **Sound test: next interface sound** (ARC-UI-040): plays the next of the original's fixed interface
   sounds by id from the area module's sound catalogue; the line under it shows the output device,
   the three channel settings, the catalogue and the last result ([viewer audio](../audio/viewer-audio.md)).
