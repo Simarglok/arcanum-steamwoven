@@ -181,6 +181,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportCombatMode(snapshot.CombatMode, hero is not null, combat);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportConcealment(snapshot.Concealment, hero is not null, party, combat);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSound(snapshot.Sound, GameRules.For(options.Rules).Sound, options.SoundMapDefault, out var sound);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         var sink = new SessionEventSink();
@@ -697,6 +699,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The NPC already has a record, so a flagged free record needs no new budget.
         _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, Jilted = leave.Jilt }, false);
+        // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
+        _combat.Concealed.Remove(entity);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(entity);
         return Changed();
     }
@@ -1250,7 +1254,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureEvents(), _lighting, _sound.Capture());
+            _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureConcealment(), CaptureEvents(), _lighting, _sound.Capture());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -1375,6 +1379,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_revision == long.MaxValue) return RejectParty(GameSessionFailure.RevisionExhausted, consent);
         _party.Put(next, true);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(current.Entity);
+        // ARC-SKILLS-008 (ST2): a new follower takes its leader's concealment.
+        if (_combat.HeroConcealed) _combat.Concealed.Add(current.Entity); else _combat.Concealed.Remove(current.Entity);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, consent, new(_identity, _revision));
     }

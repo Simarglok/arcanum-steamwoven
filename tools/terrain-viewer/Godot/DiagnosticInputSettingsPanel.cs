@@ -30,6 +30,8 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public event Action? LightingToggleRequested;
     public event Action? VisualToggleRequested;
     public event Action? AlwaysRunToggleRequested;
+    /// <summary>ARC-SKILLS-008: the original's skill-bar prowling button.</summary>
+    public event Action? ProwlToggleRequested;
     public event Action? SoundTestRequested;
     /// <summary>ARC-UI-044: a volume setting (0–10) the player changed: the channel and its new value.</summary>
     public event Action<Arcanum.Presentation.Audio.AudioChannel, int>? VolumeChanged;
@@ -99,6 +101,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         _visual = new Label { Name = "PaletteVisual", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_visual);
         // ARC-WORLD-020: the original's Always Run option (Num Lock and Ctrl act on top of it).
         AddAction("Always Run on/off", () => AlwaysRunToggleRequested?.Invoke());
+        AddAction("Prowl (stealth) on/off", () => ProwlToggleRequested?.Invoke());
         _gait = new Label { Name = "PaletteGait", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_gait);
         // ARC-UI-040: sound output and the original's fixed interface sounds, played by id from the module's catalogue.
         AddAction("Sound test: next interface sound", () => SoundTestRequested?.Invoke());

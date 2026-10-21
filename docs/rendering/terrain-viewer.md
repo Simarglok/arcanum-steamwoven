@@ -915,8 +915,10 @@ human ART's average time for its gait (walk 547/773 ms, run 168/235 ms per axis/
 draws the run ART (animation 6, loaded only in this mode). A ground click walks; Ctrl+click runs once (walks once
 with Always Run on); Num Lock flips the always-run lock; the palette's **Always Run on/off** is the original option
 (`user://always_run_v1.json`, `ALWAYS_RUN_TEST_PATH`); clicking an object always runs the approach. A following
-Virgil runs while he is farther than range + 2. HUD: `Gait: Always Run …, Num Lock run …; next ground click …;
-current gait …` (in `world-diagnostic` the palette row says it is unavailable and Num Lock stays a reserved key). On macOS a physical
+Virgil runs while he is farther than range + 2. Since ARC-SKILLS-008 the palette's **Prowl (stealth) on/off** toggles the
+hero's and its followers' concealment ([stealth](../world/stealth-runtime.md)); while concealed, a run becomes a walk unless the
+hero is a master of prowling with fatigue left (the crouch and the stealth walk animations are not drawn). HUD: `Gait: Always Run …, Num Lock run …; next ground click …;
+current gait …` (with `prowling: walks only` or `prowling: a master, runs allowed` while concealed) (in `world-diagnostic` the palette row says it is unavailable and Num Lock stays a reserved key). On macOS a physical
 Ctrl+click arrives as a right press with Ctrl held and counts as Ctrl+LMB. Native smoke `ARC-WORLD-020 native-smoke run PASS` (after the quick-save phase, before the follow
 stage; `ARC_AREA_RUN_CAPTURE=PATH.png`). ARC-WORLD-021 adds the window vault (a window step takes 1.125 s and draws the
 vault ART); the Crash Site maps have no jumpable window, so the map-mode smoke observes it (`ARC-WORLD-021 native-smoke vault PASS`,
