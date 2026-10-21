@@ -103,6 +103,8 @@ ORACLE_FUNCTIONS: dict[str, str] = {
     "0x455250": "TimeMatchesTheOriginal",
     "0x452F20": "StageMatchesTheOriginal",
     "0x4545E0": "CapMatchesTheOriginal",
+    "0x453FA0": "ScheduleMatchesTheOriginal",
+    "0x457110": "InterruptMatchesTheOriginal",
 }
 
 FORBIDDEN = ("--self-test", "--native-smoke", "--smoke", "--matrix", "--capture", "--screenshot", "--headless", "--fullscreen", "--automated", "--resize", "--input")

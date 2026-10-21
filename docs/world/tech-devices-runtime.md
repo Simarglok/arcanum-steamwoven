@@ -50,8 +50,10 @@ the maintenance through `SpellPaymentRules.Pay` with the run's `ISpellCellSource
 too few cells refuses: the run turns to END with message 601 for the local player. `TechMaintainCellsTests` runs the stage tick
 after tick over a worn device whose host writes each applied plan.
 
-**Not yet tested end to end:** the same over game time (the run owner, the scheduler and the maintenance timer are MT9a-2,
-ARC-MAGIC-010, not merged), and the ChargeNBranch components (the component runner is a later magic slice).
+The same over game time with the run system (ARC-MAGIC-010): `TechMaintainCellsTests` begins the run, fires each tick the run
+system queues (40,000 game ms for a 5-second maintenance) and writes each plan: the cells are paid tick after tick in both TC1
+settings until a tick finds too few, which ends the run and frees it. **Not yet tested:** the ChargeNBranch components (the
+component runner is a later magic slice).
 
 ## A device for its holder (DV2–DV6)
 
@@ -79,4 +81,4 @@ slice runs item spells (DV3; the magic plan's "Item spells").
 - Running a device's spells: the item trigger executor (DV3), the use's spell path, item spell charges spent by the payment's
   item branch in session state, and the lift of the equipment's refusal (the shared item trigger slice).
 - The background refusals of DV6 (backgrounds are not modelled).
-- The end-to-end MAINTAIN over game time (after MT9a-2) and the ChargeNBranch components.
+- The ChargeNBranch components (the end-to-end MAINTAIN over game time is tested since ARC-MAGIC-010).

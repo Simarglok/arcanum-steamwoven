@@ -226,6 +226,8 @@ public enum GameSessionFailure
     RepairUnavailable,
     // Ammunition (ARC-WORLD-066).
     InvalidAmmo, AmmoShort,
+    // Spell runs (ARC-MAGIC-010).
+    InvalidSpellRun, SpellRunRefused,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
