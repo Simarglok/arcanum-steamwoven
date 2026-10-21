@@ -75,7 +75,7 @@ starved, and an export gets a quiet Mac in its turn instead of waiting for one. 
   wrapper (Ctrl-C, SIGTERM, SIGHUP, a stopped background task) stops its command and gives up its place; the wrapper
   exits with the command's exit code, or 128+N when stopped by signal N. A wrapper killed with SIGKILL cannot stop its
   command: a Godot command then keeps the place until it ends or its limit plus 10 s passes, when the next waiter
-  stops its process group; a `dotnet` command keeps running outside the queue.
+  (or `./arcanum queue`) stops its process group; a `dotnet` command keeps running outside the queue.
 - **Crashes.** Each place is a ticket file in `~/Library/Application Support/Arcanum Steamwoven/run-queue/` (or
   `$ARCANUM_LOCAL_HOME/run-queue`) whose lock the wrapper holds; for Godot kinds the command holds it too, so a run
   whose wrapper was killed keeps its place until its command ends or runs out of time. The kernel drops the lock of a dead process, and a

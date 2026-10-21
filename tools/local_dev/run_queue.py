@@ -189,6 +189,13 @@ def tickets(prune: bool = True) -> list[tuple[Path, dict[str, Any]]]:
         for path in base.glob(".new-*"):
             if not _locked(path):
                 _unlink(path)
+        for pattern in (".counter-*", ".history-*"):  # left by a process interrupted mid-replace
+            for path in base.glob(pattern):
+                try:
+                    if now - path.stat().st_mtime > 60:
+                        _unlink(path)
+                except FileNotFoundError:
+                    pass
     result.sort(key=lambda item: (item[1].get("priority", NORMAL), item[1]["seq"]))
     return result
 
@@ -226,10 +233,11 @@ def _describe(ticket: dict[str, Any]) -> str:
 
 
 def _write(fd: int, ticket: dict[str, Any]) -> None:
+    # Write over the old text first and cut it after: a ticket only grows (null becomes a number), so the file holds
+    # complete JSON at every moment, even if this process is killed between the two calls.
     data = json.dumps(ticket, sort_keys=True).encode()
-    os.lseek(fd, 0, os.SEEK_SET)
-    os.ftruncate(fd, 0)
-    os.write(fd, data)
+    os.pwrite(fd, data, 0)
+    os.ftruncate(fd, len(data))
 
 
 HISTORY_BYTES, HISTORY_KEEP = 2_000_000, 5000
