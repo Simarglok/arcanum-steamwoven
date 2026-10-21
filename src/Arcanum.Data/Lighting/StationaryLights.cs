@@ -26,6 +26,12 @@ public sealed record StationaryLight(long Sector, int Index, long X, long Y, int
 {
     /// <summary>Light ART number (bits 19..27), the key of <c>art/light/light.mes</c>.</summary>
     public int ArtNumber => (int)((ArtId >> 19) & 511);
+    /// <summary>The ART frame the light shows (bits 12..18); 0 for a stationary light.</summary>
+    public int Frame => (int)((ArtId >> 12) & 127);
+    /// <summary>ARC-RENDER-030: the object an object light belongs to (null for a stationary light) and its slot (−1 primary,
+    /// 0..3 overlay).</summary>
+    public AreaObjectKey? Owner { get; init; }
+    public int Slot { get; init; } = -1;
 }
 
 /// <summary>Detached frame of one light ART: size, hotspot and an RGB contribution mask.
@@ -106,6 +112,29 @@ public sealed class AreaStationaryLightSource
     public string? NamesSha256 { get; }
     public IReadOnlyList<StationaryLight> Lights { get; }
     public IReadOnlyDictionary<int, StationaryLightFrame> Frames { get; }
+
+    /// <summary>
+    /// ARC-RENDER-030: the stationary lights with the object lights the original has built at <paramref name="hour"/> (ledger
+    /// LT4, LT5): every object light except nocturnal scenery on an outdoor tile by day, with the flags of
+    /// <see cref="ObjectLightReader.FlagsAtLoad"/>. The object lights follow the stationary ones in object order; drawing
+    /// order between the two kinds is not read (NOT_VERIFIED).
+    /// </summary>
+    public AreaStationaryLightSource WithObjectLights(AreaObjectLightSource objects, int hour)
+    {
+        ArgumentNullException.ThrowIfNull(objects);
+        if (objects.CatalogueMap != CatalogueMap) throw new ArgumentException("The object lights belong to another map.", nameof(objects));
+        var lights = Lights.ToList();
+        foreach (var light in objects.Lights)
+        {
+            if (!ObjectLightReader.BuiltAtLoad(light, hour)) continue;
+            var sector = new AreaSectorCoordinate(light.X >> 6, light.Y >> 6).Packed;
+            lights.Add(new StationaryLight(sector, -1, light.X, light.Y, light.OffsetX, light.OffsetY, ObjectLightReader.FlagsAtLoad(light, hour),
+                light.ArtId, light.Color, light.Object.ObjectIdSha256) { Owner = light.Object, Slot = light.Slot });
+        }
+        var frames = new Dictionary<int, StationaryLightFrame>(Frames);
+        foreach (var (number, frame) in objects.Frames) frames.TryAdd(number, frame);
+        return new(CatalogueMap, NamesSha256 ?? objects.NamesSha256, lights, frames);
+    }
 }
 
 public sealed record StationaryLightReadResult(LightingFailure Failure, AreaStationaryLightSource? Source);

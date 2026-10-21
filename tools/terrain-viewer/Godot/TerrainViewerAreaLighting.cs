@@ -107,11 +107,12 @@ public partial class TerrainViewerApp
     private void PushAreaAmbient() => _canvas?.SetAreaAmbient(_areaAmbient is { Enabled: true } driver && _readyArea?.Lighting is { } lighting
         ? new AreaAmbientView(driver.Effective, lighting.Channels)
         {
-            Local = lighting.Local?.View(_readyArea.Plan, lighting.Channels, driver.Effective),
+            // ARC-RENDER-030: the hour picks the night or the day form of the object lights.
+            Local = lighting.Local?.AtHour(driver.Clock.Hour).View(_readyArea.Plan, lighting.Channels, driver.Effective),
             // ARC-WORLD-017: companion bodies are lit where they stand on the shown map, by their own visual. One
             // delegate reads the current pair and map at draw time, so equal views stay equal.
             Moving = _companionLight ??= command => _areaAmbient is { Enabled: true } current && _readyArea?.Lighting is { } shown
-                ? _areaCompanions?.Light(command, current.Effective, shown.Local) : null,
+                ? _areaCompanions?.Light(command, current.Effective, shown.Local?.AtHour(current.Clock.Hour)) : null,
         } : null);
     private Func<AreaDrawCommand, AreaLitColors?>? _companionLight;
 
@@ -148,7 +149,7 @@ public partial class TerrainViewerApp
             : $"time flows {GameTimeFlow.GameMillisecondsPerHostMillisecond}x";
         return $" | {clock.Hour:00}:{clock.Minute:00} day {clock.DayIndex + 1} {(clock.IsDay ? "DAY" : "NIGHT")} {flow} | ambient scheme {selection.SchemeId}"
             + $"{(selection.FromMapDefault ? " (map default)" : " (sector)")} hour {selection.Hour} {(driver.Enabled ? "ON" : "OFF (unlit source)")}"
-            + $" | stationary lights {_readyArea?.Lighting?.Local?.LightCount ?? 0}"
+            + $" | lights {_readyArea?.Lighting?.Local?.LightCount ?? 0} (object {_readyArea?.Lighting?.Local?.ObjectLightCount ?? 0})"
             + " | palette: Game time +1 hour (wait), Ambient lighting on/off | hourly discrete, 8x rate and original night/visual parity NOT_VERIFIED"
             + (driver.Events is { } events ? " | " + events.Last.Status(clock.GameTimestampMs) : "");
     }
@@ -175,7 +176,7 @@ public partial class TerrainViewerApp
             driver.Clock.GameTimestampMs, driver.Clock.Hour, driver.Clock.IsDay, ClockRevision = driver.Clock.Revision,
             Paused = driver.Clock.PauseDisposition.Paused, PauseReason = driver.Clock.PauseDisposition.Reason.ToString(),
             selection.SchemeId, selection.FromMapDefault, selection.Sector, AmbientRevision = driver.Revision, driver.Enabled,
-            Map = _readyArea?.Snapshot.CatalogueMap, StationaryLights = _readyArea?.Lighting?.Local?.LightCount ?? 0,
+            Map = _readyArea?.Snapshot.CatalogueMap, StationaryLights = _readyArea?.Lighting?.Local?.LightCount ?? 0, ObjectLights = _readyArea?.Lighting?.Local?.ObjectLightCount ?? 0,
             TerrainChunks = _canvas?.AreaChunkCount ?? 0 });
     }
 

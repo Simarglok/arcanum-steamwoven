@@ -78,15 +78,25 @@ internal static class AreaMapLoadOperation
         // them. The three viewer archives read outside the owner are re-verified against the snapshot's identities
         // below; the step evidence's rule payloads from other stack sources are not (it is labelled structural).
         var lighting = AreaLightingReader.Read(stack, snapshot, token);
-        AreaLightingPlan? lit = null; var lightsFailure = LightingFailure.None;
+        AreaLightingPlan? lit = null; var lightsFailure = LightingFailure.None; var objectsFailure = LightingFailure.None; var objectLights = 0;
+        var lightingStarted = Environment.TickCount64;
         if (lighting.Failure == LightingFailure.None)
         {
             var lights = StationaryLightReader.Read(stack, snapshot, token);
             lightsFailure = lights.Failure;
-            lit = new(lighting.Source!, AreaAmbientPolicy.Channels(snapshot, plan))
-            { Local = lights.Failure == LightingFailure.None ? AreaLocalLighting.Create(snapshot, plan.Chart, lights.Source!) : null };
+            // ARC-RENDER-030: the object lights join the stationary ones; when they cannot be read the map keeps the
+            // stationary lights alone and says why.
+            var objects = lights.Failure == LightingFailure.None ? ObjectLightReader.Read(stack, snapshot, token) : null;
+            objectsFailure = objects?.Failure ?? LightingFailure.None;
+            AreaLocalLighting? local = null;
+            if (lights.Failure == LightingFailure.None)
+                local = objects?.Source is { } source ? AreaLocalLighting.Create(snapshot, plan.Chart, lights.Source!, source)
+                    : AreaLocalLighting.Create(snapshot, plan.Chart, lights.Source!);
+            objectLights = local?.ObjectLightCount ?? 0;
+            lit = new(lighting.Source!, AreaAmbientPolicy.Channels(snapshot, plan)) { Local = local };
         }
-        Console.WriteLine($"ARC-RENDER-017 load stage=lighting result={lighting.Failure} stationary={lightsFailure}");
+        Console.WriteLine($"ARC-RENDER-017 load stage=lighting result={lighting.Failure} stationary={lightsFailure} objects={objectsFailure} " +
+            $"object-lights={objectLights} ms={Environment.TickCount64 - lightingStarted}");
         AreaLoadOperation.VerifyFiles([(arguments.ModulePath, moduleIdentity), (arguments.ResourcePath, resourceIdentity),
             (arguments.ActorResourcePath!, actorIdentity)], token);
 

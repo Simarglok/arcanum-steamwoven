@@ -121,7 +121,30 @@ builds them at sector load ([ledger LT1, LT4](../research/original-verification-
 
 On the installed original (opt-in `ObjectLightRealDataTests`), all 80 interiors and two main-map windows (the Crash Site,
 Shrouded Hills) read without a failure: 6,809 object lights, at most 5,083 in one map (k'na tha), 109 of them nocturnal. The cap was checked on windows of
-radius 1 only. No viewer
+radius 1 only.
+
+### Object lights in map mode (ARC-RENDER-030)
+
+Map mode (whole maps and main-map windows) draws the object lights with the stationary lights; the pinned Crash Site
+exterior and cave keep their stationary lights only.
+
+- **At load** the viewer reads the object lights and builds two lightings: the night form (every object light) and,
+  when a map has nocturnal scenery on outdoor tiles, the day form without it
+  (`AreaStationaryLightSource.WithObjectLights`, ledger LT4/LT5). A built nocturnal light is switched on with its
+  object (its saved OFF cleared, `FlagsAtLoad`); every other object light keeps its saved flags, so a saved OFF stays off.
+- **Each hour** `AreaLocalLighting.AtHour` picks the form (day = hours 6..17), so the nocturnal lights go on at 18:00
+  and off at 6:00 with the lattice the hour change rebuilds. The original's refresh slips A1 and A2 are not emulated:
+  every nocturnal light switches (proposed, [rule modes](../world/rule-modes.md)).
+- **Drawing** is the stationary lights' composition: OFF gives nothing, DARK (the shade under trees and buildings, most
+  object lights) subtracts. An object light shows its saved ART frame. A light that cannot be read leaves the map lit
+  by its stationary lights alone (`objects=` on the load line).
+- **Scale.** Point samples look only at the lights whose rectangle meets a 256-pixel bucket, and each light adds into
+  the lattice nodes its rectangle covers (the same sums as node by node, tested); the lattice cap is 2^22 nodes.
+  K'na tha (5,083 object lights) builds its lighting in about 1 s at load; the Crash Site window holds 42.
+- **Native smoke** (map stage): `ARC-RENDER-030 native-smoke object lights PASS` observes terrain pixels near object
+  lights that are on (k'na tha and the Crash Site window: 3 of 3, all shade lights); it skips a map without object lights.
+
+Not drawn: moving and carried lights (V7d), animation (V7c), shadows. No viewer
 draws them yet (slice V7b).
 
 ## Viewer controls
