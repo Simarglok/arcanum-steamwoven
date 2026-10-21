@@ -728,14 +728,18 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity)) ||
             admitted.Items.Keys.Any(entity => entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)))
             return Reject(GameSessionFailure.InventoryMismatch);
-        // ARC-WORLD-055: a holder that holds added items is an NPC, not a container.
+        // ARC-WORLD-055: a holder that holds added items is an NPC, not a container, and its seed items and added items fit one list.
         if (admitted.Holders.Values.Any(holder => holder.Kind != SessionHolderKind.Npc && _inventory.Npcs.ContainsKey(holder.Entity)))
             return Reject(GameSessionFailure.InventoryMismatch);
+        if (admitted.Holders.Values.Any(holder => _inventory.AddedTo(holder.Entity).Count +
+                holder.Items.Count(entity => !_inventory.Taken.Contains(entity)) > SessionMapInventorySeed.MaxListLength))
+            return Reject(GameSessionFailure.BudgetExceeded);
         // An object lies on one map: an item another attached map lists would be hidden there too once taken.
         foreach (var (other, attached) in _inventory.Seeds)
             if (other != map && admitted.Items.Keys.Any(attached.Items.ContainsKey)) return Reject(GameSessionFailure.InventoryMismatch);
         if (!_inventory.Seeds.ContainsKey(map) && _inventory.Seeds.Count >= _limits.MaxMaps) return Reject(GameSessionFailure.BudgetExceeded);
         _inventory.Seeds[map] = admitted;
+        _inventory.SeedGeneration++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, new(_identity, _revision));
     }
 
@@ -751,7 +755,8 @@ public sealed partial class GameSessionOwner : IDisposable
     /// starting kit, which precedes them, is <see cref="QueryHeroKit"/>.</summary>
     public IReadOnlyList<SessionPcItem> QueryPcInventory() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Pc.ToArray()); }
 
-    /// <summary>Detached copy of the items the hero made from schematics (ARC-TECHNOLOGY-004), in the order they were made.</summary>
+    /// <summary>Detached copy of the PC's made items (ARC-TECHNOLOGY-004): made from schematics or taken from an NPC that held them
+    /// (ARC-WORLD-055), in the order they entered the list.</summary>
     public IReadOnlyList<SessionMadeItem> QueryMadeItems() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Made.ToArray()); }
 
     /// <summary>

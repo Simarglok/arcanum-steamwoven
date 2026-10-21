@@ -163,8 +163,10 @@ A follower carried to another map takes its whole inventory with it, parentage k
 **Steamwoven.** The session keys the changes by the NPC's entity identity (the `oid:` entity of its home map), not by the map:
 the NPC's list is its seed list on whatever attached seed lists it, minus the items the PC took or the session deleted, followed by
 the made items the session added to it. Because an object stands on one map at a time and carries its items (NI4), keying by the
-NPC gives the same visible result: the changes are there after the PC leaves and returns, and they follow a companion that
-visits another map. The changes are:
+NPC gives the same visible result: the changes are there after the PC leaves and returns, and they stay the NPC's when it
+visits another map (`QueryNpcInventory`). The map-bound calls (`QueryMapInventory`, `LootItem`, `GiveItemToPc`) still read the
+holders of the actor's map seed, so on a map whose seed does not list a visiting companion its seed and added items are not shown
+or taken there (as before this task for its seed items). The changes are:
 
 - **Added made items** (`SessionInventoryState.Npcs`: `SessionNpcInventory(npc, items)`; `QueryNpcInventory(npc)`): `made:n`
   items with their saved kind, numbered with the hero's made items (one past every made number held by the hero or an NPC, deleted
@@ -184,10 +186,11 @@ The NPC must be known to the session: an NPC holder of an attached seed, a party
 (else `UnknownHolder`). Refusals, before any effect: `InvalidItem` (an invalid id, a `made:` id as the NPC, an undefined type),
 `StaleVersion`, `UnknownHolder`, then for an addition `ItemTypeUnsupported` (gold, ammunition, keys and key rings, as for the PC),
 `BudgetExceeded` (the NPC's list at 512 with its seed items, the store at `GameSessionLimits.MaxNpcItems` = 4,096, or no free made
-number), `RevisionExhausted` and last `InsertRefused` (the host's insert check for the NPC; a call back into the owner from it is
-`StaleVersion`); for a deletion `ItemNotAvailable` (not in the NPC's current list), `WornItemUnsupported` (unequipping an NPC is not
+number), `RevisionExhausted` and last `InsertRefused` (the host's insert check for the NPC; a call back into the owner from it, a seed
+attach included, is `StaleVersion`); for a deletion `ItemNotAvailable` (not in the NPC's current list), `WornItemUnsupported` (unequipping an NPC is not
 modelled), `BudgetExceeded` (the durability records) and `RevisionExhausted`. Each change is one revision. A seed that lists an NPC
-holding added items as a container is `InventoryMismatch`.
+holding added items as a container is `InventoryMismatch`, and one whose holder's current seed items and added items would exceed
+512 is `BudgetExceeded` (a restore followed by an attach).
 
 **Snapshot schema 29.** `"inventory":{…,"made":[…],"npcs":[{"npc":"oid:…","items":[{"entity","type","prototype","name","description"}]}]}`,
 the NPCs in ordinal order. Decoding refuses an unordered NPC list or an empty item list, and an item held twice in the whole
@@ -207,7 +210,7 @@ not migrated.
 | Any object type can enter an NPC's list. | Gold, ammunition, keys and key rings are refused, as for the PC's lists. |
 
 Not modelled: moving a seed item from one NPC to another (no caller yet), giving an NPC an item from the PC (barter, drop on a
-follower), NPC worn slots, stacks.
+follower), NPC worn slots, stacks, and a visiting companion's items in the map-bound calls of a map whose seed does not list it.
 
 ## Evidence
 

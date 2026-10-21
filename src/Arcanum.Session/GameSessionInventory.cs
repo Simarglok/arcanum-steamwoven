@@ -75,8 +75,9 @@ public readonly record struct SessionPcItem(string Entity, SessionMapId Origin, 
 /// no map; in the PC's inventory they precede every item it took from the world.</summary>
 public readonly record struct SessionKitItem(string Entity, SessionItemKind Kind);
 
-/// <summary>An item the hero made from a schematic (ARC-TECHNOLOGY-004): entity <c>made:n</c> and its saved kind. Made items came
-/// from no map; in the hero's inventory they follow the items it took from the world.</summary>
+/// <summary>A made item (ARC-TECHNOLOGY-004): entity <c>made:n</c> and its saved kind. Made items came from no map: the hero makes
+/// them from schematics, and since ARC-WORLD-055 the session adds them to NPCs (one numbering); in the hero's inventory they follow
+/// the items it took from the world.</summary>
 public readonly record struct SessionMadeItem(string Entity, SessionItemKind Kind)
 {
     internal const string Prefix = "made:";
@@ -226,6 +227,9 @@ internal sealed class InventoryDomain
     }
 
     internal Dictionary<SessionMapId, Seed> Seeds { get; } = [];
+    /// <summary>Moves on every seed attach; a seed is not state, so it moves no revision, but a transfer that called the host must
+    /// see that the seeds it read are still the same.</summary>
+    internal long SeedGeneration { get; set; }
     internal int Gold { get; set; }
     internal List<SessionKitItem> Kit { get; } = [];
     internal List<SessionPcItem> Pc { get; } = [];

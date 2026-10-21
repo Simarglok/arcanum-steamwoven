@@ -79,6 +79,39 @@ public sealed class NpcInventoryStateTests
     }
 
     [TestMethod]
+    public void A_seed_attached_from_the_insert_check_makes_the_addition_stale()
+    {
+        using var owner = Attached();
+        var swapped = Seed() with { Holders = [.. Seed().Holders.Select(h => h.Entity == "virgil" ? h with { Kind = SessionHolderKind.Container } : h)] };
+        var result = owner.AddItemToNpc(owner.Version, "virgil", Gear, _ =>
+        {
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, swapped).Disposition);
+            return SessionInsertVerdict.Accepted;
+        });
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion), (result.Disposition, result.Failure));
+        Assert.AreEqual(0, owner.QueryNpcInventory("virgil").Count);
+    }
+
+    [TestMethod]
+    public void One_npc_list_holds_at_most_512_items_with_its_seed_items()
+    {
+        using var owner = Create();
+        var items = Enumerable.Range(0, SessionMapInventorySeed.MaxListLength - 1)
+            .Select(i => new SessionSeedItem($"item-{i}", Facts(SessionItemType.Generic, 100 + i), null)).ToArray();
+        var seed = new SessionMapInventorySeed([new("npc", SessionHolderKind.Npc, false, false, [], [.. items.Select(i => i.Entity)])], items);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, seed).Disposition);
+        Assert.AreEqual("made:1", Added(owner, "npc"));
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.AddItemToNpc(owner.Version, "npc", Gear, Accept).Failure);
+        // Deleting a seed item frees a place.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RemoveItemFromNpc(owner.Version, "npc", "item-0").Disposition);
+        Assert.AreEqual("made:2", Added(owner, "npc"));
+        // A restored store whose NPC no longer fits with a seed's items is refused at attach.
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text.Replace("\"destroyed\":[\"item-0\"]", "\"destroyed\":[]")));
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, restored.AttachMapInventory(Exterior, seed).Failure);
+    }
+
+    [TestMethod]
     public void A_party_record_is_known_without_a_seed()
     {
         using var owner = Create();
@@ -111,6 +144,17 @@ public sealed class NpcInventoryStateTests
         CollectionAssert.AreEqual(new[] { made, given }, owner.QueryMadeItems().Select(item => item.Entity).ToArray());
         Assert.AreEqual(0, owner.QueryNpcInventory("virgil").Count);
         Assert.AreEqual(0, owner.QueryPcInventory().Count, "made items never become taken world items");
+        // A heroless PC may hold made items, in entry order rather than number order; the list round-trips.
+        var third = Added(owner, "corpse");
+        var later = Added(owner, "corpse");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LootItem(owner.Version, "corpse", later, Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LootItem(owner.Version, "corpse", third, Accept).Disposition);
+        Assert.AreEqual(("made:3", "made:4"), (third, later));
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        CollectionAssert.AreEqual(new[] { made, given, later, third }, restored.QueryMadeItems().Select(item => item.Entity).ToArray());
+        Assert.IsNull(restored.QueryHero());
     }
 
     [TestMethod]
@@ -120,6 +164,7 @@ public sealed class NpcInventoryStateTests
         var made = Added(owner, "virgil");
         var revision = owner.Version.Revision;
         Assert.AreEqual(GameSessionFailure.InvalidItem, owner.RemoveItemFromNpc(owner.Version, "virgil", "bad id").Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidItem, owner.RemoveItemFromNpc(owner.Version, "made:1", "sword").Failure);
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.RemoveItemFromNpc(new GameSessionVersion(owner.Identity, 0), "virgil", "sword").Failure);
         Assert.AreEqual(GameSessionFailure.UnknownHolder, owner.RemoveItemFromNpc(owner.Version, "chest", "sword").Failure);
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.RemoveItemFromNpc(owner.Version, "corpse", "sword").Failure, "another NPC's item");

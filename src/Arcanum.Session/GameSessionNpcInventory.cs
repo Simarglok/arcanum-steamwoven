@@ -29,7 +29,7 @@ public sealed partial class GameSessionOwner
     /// (<see cref="SessionMapInventorySeed.MaxListLength"/> with the NPC's current seed items) or store
     /// (<see cref="GameSessionLimits.MaxNpcItems"/>) or no free made number (<see cref="GameSessionFailure.BudgetExceeded"/>), the
     /// revision, then the host's insert check for the NPC (<see cref="GameSessionFailure.InsertRefused"/>; a call back into the
-    /// owner from it is <see cref="GameSessionFailure.StaleVersion"/>). One revision.
+    /// owner from it, a seed attach included, is <see cref="GameSessionFailure.StaleVersion"/>). One revision.
     /// </summary>
     public InventoryMutationResult AddItemToNpc(GameSessionVersion expected, string npc, SessionItemKind kind, SessionInsertCheck insertCheck)
     {
@@ -47,10 +47,11 @@ public sealed partial class GameSessionOwner
         if (number > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var item = new SessionMadeItem(SessionMadeItem.EntityOf((int)number), kind);
-        var revision = _revision;
+        var (revision, seeds) = (_revision, _inventory.SeedGeneration);
         var verdict = insertCheck(new SessionInventoryItem(item.Entity, InventoryDomain.MadeFacts(kind)));
         ThrowIfDisposed();
-        if (_revision != revision) return RejectItem(GameSessionFailure.StaleVersion, verdict);
+        // A seed attached from the callback moves no revision but may change what the NPC is or how long its list is.
+        if (_revision != revision || _inventory.SeedGeneration != seeds) return RejectItem(GameSessionFailure.StaleVersion, verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
         _inventory.AddToNpc(npc, item);
         _inventory.Taken.Add(item.Entity);
@@ -71,7 +72,8 @@ public sealed partial class GameSessionOwner
     public InventoryMutationResult RemoveItemFromNpc(GameSessionVersion expected, string npc, string item)
     {
         ThrowIfDisposed();
-        if (!SessionValidation.Entity(npc) || !SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
+        if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || !SessionValidation.Entity(item))
+            return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
         if (_inventory.NpcOf(item) != npc)

@@ -249,8 +249,9 @@ public sealed class AreaInventoryHost
         if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>()) { Gold = gold };
         var list = session.QueryMapInventory(new(runtimeMap))?.Holders.FirstOrDefault(h => h.Entity == holder)?.Items ?? [];
         // ARC-WORLD-055: a made item the session added to the NPC has no area row; its kind names it.
-        var loot = list.Select(item => new AreaInventoryLine(item.Entity, Line(item.Entity.StartsWith("made:", StringComparison.Ordinal)
-                ? KindName(item.Facts.Kind, catalog) + " (made)" : Name(item.Entity, catalog), item.Facts.Kind.Type, item.Facts.Weight)
+        static bool Made(string entity) => entity.StartsWith("made:", StringComparison.Ordinal);
+        var loot = list.Select(item => new AreaInventoryLine(item.Entity, Line(Made(item.Entity)
+                ? KindName(item.Facts.Kind, catalog) + " (made)" : Name(item.Entity, catalog), item.Facts.Kind.Type, Made(item.Entity) ? null : item.Facts.Weight)
             + (item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
         return new(Array.AsReadOnly(pc), holder, Name(holder, catalog), Array.AsReadOnly(loot)) { Gold = gold };
     }
