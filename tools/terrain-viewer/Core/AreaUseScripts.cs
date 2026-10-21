@@ -118,6 +118,25 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
             Read(CountersProperty) is { } counters ? checked((uint)counters) : loaded.Counters);
     }
 
+    /// <summary>
+    /// ARC-COMBAT-011: whether the object's use script is a trap (0x4BBDD0, ledger OD6): the script of its point-1 slot as the
+    /// session holds it, when it is not 0 and its file's header flags carry 0x1 (non-magical) or 0x2 (magical); a script the
+    /// content does not hold or cannot read is none, as the original's header read fails. Null without script content (unknown).
+    /// </summary>
+    public bool? IsTrap(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (_content is null) return null;
+        if (LoadedSlot(row, ScrPoint.Use) is not { } loaded) return false;
+        // Only the script number is read (a use writes it back under the row's entity); a stored number outside the catalogue's
+        // range names no script the content holds, so it is no trap, like a script the original cannot load.
+        var written = _session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), MapChangeKey.ForEntity(EntityId(row), ScriptProperty));
+        var script = written is { } number ? (number is >= 0 and <= ScrCatalogue.MaxScriptNumber ? (int)number : 0) : loaded.Script;
+        if (script == 0) return false;
+        return Script(script) is { Status: ScrScriptStatus.Found, Program: { } program } &&
+            (program.FileFlags & (ScrCatalogue.FileFlag.NonmagicalTrap | ScrCatalogue.FileFlag.MagicalTrap)) != 0;
+    }
+
     public ScrScriptLookup Script(int number) => AreaScriptHost.Lookup(_content, number);
 
     public bool GlobalFlag(int index)
