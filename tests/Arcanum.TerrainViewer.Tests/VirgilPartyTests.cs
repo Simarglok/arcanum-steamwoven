@@ -51,13 +51,21 @@ public sealed class VirgilPartyTests
         Assert.AreEqual(new DialogConversationEnd(DialogEndKind.ReturnToScript, new DialogScriptLine(5)), first.End);
         var join = first.Effects.Single(effect => effect.Command is JoinCommand);
         Assert.AreEqual(DialogCommandAttemptOutcome.Applied, join.Outcome);
-        Assert.AreEqual(new SessionCompanion(entity, CompanionStanding.Following, false, false, false), session.QueryCompanion(entity));
+        // The walk's last effect raises the PC's alignment (AL +5) after the join, so the session arms Virgil's check-leader
+        // and "too good" loyalty marks (ARC-WORLD-045, OL17: a PC alignment rise arms every follower in its array).
+        var effects = first.Effects.Select(effect => effect.Command).ToList();
+        var alignment = effects.FindLastIndex(command => command is AlignmentCommand { Mode: DialogReactionMode.Adjust, Value: > 0 });
+        Assert.IsTrue(alignment > effects.FindIndex(command => command is JoinCommand), "the alignment rise follows the join");
+        Assert.AreEqual(new SessionCompanion(entity, CompanionStanding.Following, false, false, false,
+            CompanionLoyalty.CheckLeader | CompanionLoyalty.TestTooGood), session.QueryCompanion(entity));
         Assert.IsFalse(host.State.Follows(0), "the diagnostic follow.pc key is not written through the party port");
 
         // Waiting: node 385 (the follower entry) now passes its WA conditions and offers only the UW replies.
         Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, entity).Disposition);
         using var loaded = ConversationSessionFixture.SaveAndLoad(session);
         Assert.AreEqual(CompanionStanding.Waiting, loaded.QueryCompanion(entity).Standing, "the party survives save and load");
+        Assert.AreEqual(CompanionLoyalty.CheckLeader | CompanionLoyalty.TestTooGood, loaded.QueryCompanion(entity).Loyalty,
+            "waiting keeps the marks and they survive save and load");
         var rebound = host.Rebind(loaded);
         party = Port(loaded, rebound, entity);
         var waiting = Start(document, rebound, loaded, party, 385, 6);

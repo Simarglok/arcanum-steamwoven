@@ -200,8 +200,10 @@ uses the hero's persuasion, charisma, level and max followers instead (ARC-SKILL
   expiry through the event pump and `AL` arming.
 - `tests/Arcanum.TerrainViewer.Tests/VirgilPartyTests.cs` (opt-in `RealData`,
   `ARC_AREA_CONVERSATION_GAME_ROOT`): Virgil's original DLG with the session party port. The
-  first talk walks the same 13 nodes and joins him through the session; waiting, a save/load
-  round trip and node 385 then offer only the `WA 1` / `UW 0 518` replies, which bring him back;
+  first talk walks the same 13 nodes and joins him through the session; its last effect, `AL`
+  +5 after the join, arms his check-leader and "too good" loyalty marks (OL17; the expectation
+  was updated in the ARC-WORLD-045 follow-up, the marks stay through waiting and save/load);
+  waiting, a save/load round trip and node 385 then offer only the `WA 1` / `UW 0 518` replies, which bring him back;
   following, node 385 offers its `WA 0` replies. A PC already leading two followers is refused
   at node 210 with `LimitReached`.
 
