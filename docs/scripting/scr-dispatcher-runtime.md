@@ -264,16 +264,31 @@ conversation is not run).
 - Set numbers no longer follow the slice plan of the [event dispatcher research](../research/scr-event-dispatcher.md):
   S6 is print line and S7 the sound actions, not heartbeat and combat.
 
+## Reading actions (ARC-UI-049, set S10)
+
+- **`ScrAdmissionSet.S10`** is S9 plus show book (64), show picture (65) and show plaque (114); `ScrRunOptions` accepts any subset
+  of S10 (now the interpreter's widest set; the default stays S5).
+- **The actions** (ledger [WR15](../research/original-verification-ledger.md#reading-window-arc-ui-049)): a value operand (the
+  book's or plaque's first text line, the picture's art) and an object operand (the viewer). The run returns one
+  `ScrReadingRequest(Kind, Number, Viewer)` per action in `ScrEffects.Readings`, in action order, and goes on to the next line; an
+  absent viewer shows nothing. The
+  original opens the reading window only for a player viewer, with no dead check; the host decides.
+- **The AREA viewer** admits them in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound-calls-scheme-schematic-reading") and
+  in its use, tile and sector set (`AreaUseScriptHost.Admission`, "S4-area-use-reading"); both keep the requests whose viewer is the
+  PC and the viewer opens the [reading window](../world/reading-window-runtime.md#script-openers-scripting-wr15).
+- Installed scripts (opt-in census): 10 use action 64, 3 action 65, 13 action 114; S10 admits 681 scripts whole, 24 more than S9.
+  Action 94 (set a written item's first text line, 2 scripts) is not admitted.
+
 ## Start schematic UI (ARC-TECHNOLOGY-005, set S9)
 
-- **`ScrAdmissionSet.S9`** is S8 plus start schematic UI (129); `ScrRunOptions` accepts any subset of S9 (now the interpreter's
-  widest set; the default stays S5).
+- **`ScrAdmissionSet.S9`** is S8 plus start schematic UI (129); `ScrRunOptions` accepted any subset of S9 until ARC-UI-049 widened
+  it to S10 (the default stays S5).
 - **The action** (ledger [SW8](../research/original-verification-ledger.md#schematic-window-arc-technology-005)): its object
   operand names one object; the original opens the window with (PC, PC) for a PC, (NPC, its PC leader) for an NPC that has one,
   and nothing otherwise, but calls it through a callback slot the game never fills (TC2). The run returns one
   `ScrSchematicRequest(Object)` in `ScrEffects.Schematics` and goes on to the next line; an absent object names none. The host
   resolves it (TC2, both fixed).
-- **The AREA viewer** admits 129 in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound-calls-scheme-schematic"); `Apply`
+- **The AREA viewer** admits 129 in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound-calls-scheme-schematic", since ARC-UI-049 "…-reading"); `Apply`
   resolves each request (`AreaScriptHost.ResolveSchematic`): the PC opens the hero's window once nothing else owns input; an NPC
   with a PC leader (the original walks its leader chain to the first PC; the viewer's leader is the direct follow, the same while no
   NPC leads another) opens it with the NPC as crafter (ARC-TECHNOLOGY-006, ledger NC3); any other
@@ -308,7 +323,8 @@ conversation is not run).
 The dispatcher part of plan slice S4: what a use, tile or sector script asks for when it moves an object to a map, and the
 conditions that guard the conditional map transitions of the [transition research](../research/world-transitions.md#conditions).
 The viewer's use wiring is ARC-SCRIPT-015 ([guarded use transitions](../rendering/area-map-mode.md#guarded-use-transitions-arc-script-015):
-map mode runs the use script of a guarded use site under "S4-area-use", S4 without story state and the dialog action, and
+map mode runs the use script of a guarded use site under "S4-area-use" (since ARC-UI-049 "S4-area-use-reading", plus the reading
+actions), S4 without story state and the dialog action, and
 the player's teleport becomes the transfer); tile and sector events since ARC-SCRIPT-017
 ([tile and sector scripts](../rendering/area-map-mode.md#tile-and-sector-scripts-arc-script-017)).
 
@@ -371,6 +387,9 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
 - `tests/Arcanum.Scripting.Tests/Scr/ScrSoundTests.cs` (ARC-SCRIPT-040): the sound actions refused below S7, returned in
   action order with value operands read, an absent object playing nothing, a run with only sounds not empty. Opt-in
   `ScrAdmissionRealDataTests`: S6 admits 336 installed scripts whole, S7 342; the six more each have a sound action.
+- `tests/Arcanum.Scripting.Tests/Scr/ScrReadingTests.cs` (ARC-UI-049): the reading actions refused below S10, one request per action in
+  order with the number and the viewer, an absent viewer showing nothing, the run going on, a run with only a request not empty; opt-in
+  `ScrAdmissionRealDataTests`: the installed uses of 64, 65, 114 and 94 and the S10 count.
 - `tests/Arcanum.Scripting.Tests/Scr/ScrSchematicTests.cs` (ARC-TECHNOLOGY-005): start schematic UI refused below S9 (without
   the S4 guards), one request per object, an absent object naming none, the run going on, a run with only a request not empty.
 - `tests/Arcanum.Scripting.Tests/Scr/ScrSchemeTests.cs` (ARC-SCRIPT-016): set scheme refused below S8, one request per object in
@@ -402,12 +421,12 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
   the story-state actions and no admitted set reads global variables.
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
-- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic": S3 without
-  story state, plus the sound actions, call script in / remove script call, set auto-level scheme and start schematic UI); since ARC-SCRIPT-015 map mode's use
-  clicks on guarded use sites run it under "S4-area-use", and since ARC-SCRIPT-017 the tile and sector scripts the player
+- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading": S3 without
+  story state, plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI and the reading actions); since ARC-SCRIPT-015 map mode's use
+  clicks on guarded use sites run it under "S4-area-use-reading", and since ARC-SCRIPT-017 the tile and sector scripts the player
   enters; heartbeat and combat are later slices.
 - Not in any admitted set yet: focus groups and local objects, loops, immediate calls and
-  call-ex, and the world actions other than teleport and fade-and-teleport (set S4), set auto-level scheme (set S8) and start schematic UI (set S9); float line, quests,
+  call-ex, and the world actions other than teleport and fade-and-teleport (set S4), set auto-level scheme (set S8), start schematic UI (set S9) and the reading actions (set S10); float line, quests,
   reactions... are not admitted.
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer

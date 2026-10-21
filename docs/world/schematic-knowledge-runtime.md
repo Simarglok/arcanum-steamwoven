@@ -76,5 +76,6 @@ project improvement; [rule modes](rule-modes.md#registry)). One installed docume
 
 ## Not ready
 
-- No caller of the registration: the reading window (FR-ITEM-010) comes later; the host shows messages 88 and 89.
+- The caller is the item use of the [reading window](reading-window-runtime.md) (ARC-UI-049): the viewer's inventory Read button; the
+  viewer shows message 89 with the schematic's name or 88. An item with a use script is refused there (its script is not run).
 - Five found records have no document (O3: placed on maps or given by scripts); no script path registers schematics.
