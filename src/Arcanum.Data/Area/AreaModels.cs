@@ -180,14 +180,17 @@ public sealed record AreaResourceSource(AreaInputKey Key, string? Path = null);
 /// The script headers are resolved from the stack when the plan is made and are not authenticated inputs of the owner.</summary>
 public sealed record AreaMapPatchBinding
 {
-    public AreaMapPatchBinding(IReadOnlyDictionary<int, Maps.MapPatchScriptHeader?> scriptHeaders, bool hasUnmodelledLines)
+    public AreaMapPatchBinding(IReadOnlyDictionary<int, Maps.MapPatchScriptHeader?> scriptHeaders, bool hasUnmodelledLines, bool scriptZeroClears = false)
     {
         ArgumentNullException.ThrowIfNull(scriptHeaders);
         ScriptHeaders = new System.Collections.ObjectModel.ReadOnlyDictionary<int, Maps.MapPatchScriptHeader?>(new Dictionary<int, Maps.MapPatchScriptHeader?>(scriptHeaders));
-        HasUnmodelledLines = hasUnmodelledLines;
+        HasUnmodelledLines = hasUnmodelledLines; ScriptZeroClears = scriptZeroClears;
     }
     public IReadOnlyDictionary<int, Maps.MapPatchScriptHeader?> ScriptHeaders { get; }
     public bool HasUnmodelledLines { get; }
+    /// <summary>ARC-DATA-037 (ledger MP7): whether <c>script N 0</c> clears attachment N (Steamwoven) or attaches nothing (the
+    /// original, <see cref="Fixes.DataFixProfile.MapPatchScriptZeroIgnored"/>).</summary>
+    public bool ScriptZeroClears { get; }
 }
 
 /// <summary>Version-one explicit FILE-effective source plan. Constructor plans are structural,

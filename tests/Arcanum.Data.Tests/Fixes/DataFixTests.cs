@@ -21,16 +21,17 @@ public sealed class DataFixTests
     [TestMethod]
     public void Profiles_enable_every_fix_in_Steamwoven_and_none_in_Original()
     {
-        foreach (var id in new[] { "DF1", "DF2", "DF3" })
+        foreach (var id in new[] { "DF1", "DF2", "DF3", "MP7" })
         {
             Assert.IsTrue(DataFixProfile.Steamwoven.Applies(id), id);
             Assert.IsFalse(DataFixProfile.Original.Applies(id), id);
         }
         Assert.IsFalse(DataFixProfile.Steamwoven.Applies("DF9"));
-        CollectionAssert.AreEquivalent(new[] { "DF1", "DF2", "DF3" }, DataFixProfile.Rows.ToArray(), "every switch row, and only those");
+        CollectionAssert.AreEquivalent(new[] { "DF1", "DF2", "DF3", "MP7" }, DataFixProfile.Rows.ToArray(), "every switch row, and only those");
         Assert.AreSame(DataFixProfile.Original, DataFixProfile.FromName("original"));
         Assert.IsNull(DataFixProfile.FromName("Original"));
         Assert.IsFalse((DataFixProfile.Steamwoven with { Name = "mix", NpcLineEffectsInResponseLost = true }).Applies("DF2"));
+        Assert.IsFalse((DataFixProfile.Steamwoven with { Name = "mix", MapPatchScriptZeroIgnored = true }).Applies("MP7"));
     }
 
     [TestMethod]

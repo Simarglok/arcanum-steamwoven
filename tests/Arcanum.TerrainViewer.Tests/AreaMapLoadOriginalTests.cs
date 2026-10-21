@@ -90,6 +90,21 @@ public sealed class AreaMapLoadOriginalTests
         Assert.AreEqual(0, bodies.Count(command => command.Additive && !command.Unlit));
     }
 
+    [TestMethod, TestCategory("RealData")]
+    public void A_map_opens_under_the_data_rules_its_arguments_carry()
+    {
+        // ARC-DATA-037 (MP7): the viewer's map load applies the map patch under DataRules, Steamwoven without any.
+        long[]?[] Dialogs(Arcanum.Data.Fixes.DataFixProfile? rules) =>
+            AreaLoadOperation.Execute(1, Arguments(Root(), "iron clan hq") with { DataRules = rules }, default).Area!.Snapshot.Objects
+                .Where(o => o.MapPatch is not null && o.Type == 16).OrderBy(o => o.Key.ObjectIdSha256, StringComparer.Ordinal)
+                .Select(o => o.EffectiveFields.SingleOrDefault(f => f.Slot == 31)?.Elements.SingleOrDefault(e => e.Key == 9)?.Words.ToArray()).ToArray();
+        var original = Dialogs(Arcanum.Data.Fixes.DataFixProfile.Original);
+        Assert.AreEqual(4, original.Length);
+        Assert.IsTrue(original.All(d => d is { Length: 3 } && d[2] != 0), "Original keeps every dialog script");
+        foreach (var rules in new[] { null, Arcanum.Data.Fixes.DataFixProfile.Steamwoven })
+            Assert.IsTrue(Dialogs(rules).All(d => d is [0, 0, 0]), "Steamwoven empties the slot");
+    }
+
     private static string Root()
     {
         if (Environment.GetEnvironmentVariable("DAT_ROOT") is { Length: > 0 } root)

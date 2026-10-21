@@ -187,7 +187,10 @@ internal static class MapPatchApplier
 
     internal sealed record Result(ObjectWireRecord Record, MapPatchApplication Application);
 
-    internal static Result Apply(ObjectWireRecord record, ObjectWireRecord prototype, IReadOnlyList<MapPatchLine> lines, Func<int, MapPatchScriptHeader?> scriptHeader)
+    /// <param name="scriptZeroClears">ARC-DATA-037 (ledger MP7): <c>script N 0</c> clears attachment N (an empty attachment: no
+    /// flags, no counters, script 0) instead of attaching nothing as the original does.</param>
+    internal static Result Apply(ObjectWireRecord record, ObjectWireRecord prototype, IReadOnlyList<MapPatchLine> lines, Func<int, MapPatchScriptHeader?> scriptHeader,
+        bool scriptZeroClears = false)
     {
         ArgumentNullException.ThrowIfNull(record); ArgumentNullException.ThrowIfNull(prototype); ArgumentNullException.ThrowIfNull(lines); ArgumentNullException.ThrowIfNull(scriptHeader);
         var fields = new SortedDictionary<int, ObjectWireValue>(record.Fields.ToDictionary(p => p.Key, p => p.Value));
@@ -266,6 +269,11 @@ internal static class MapPatchApplier
                             {
                                 if (sap < 0) unmodelled.Add($"line {line.Line}: script attachment {sap}");
                                 else SetElement(ScriptsSlot, sap, [header.Flags, header.Counters, unchecked((uint)number)]);
+                            }
+                            else if (number == 0 && scriptZeroClears)
+                            {
+                                if (sap < 0) unmodelled.Add($"line {line.Line}: script attachment {sap}");
+                                else SetElement(ScriptsSlot, sap, [0, 0, 0]);
                             }
                             break;
                         }

@@ -95,4 +95,37 @@ public sealed class MapPatchRealDataTests
         }
         Assert.AreEqual(Interiors.Length, patchedObjects, "lines applied to interior objects");
     }
+
+    [TestMethod, TestCategory("RealData")]
+    public void Under_Steamwoven_the_script_zero_lines_empty_the_dialog_slot()
+    {
+        // ARC-DATA-037 (MP7): the five script-0 lines empty attachment 9 of the object they name, which held a script before.
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required.");
+        var opened = ContentStack.Open(ContentMountPlan.Discover(root).Plan!);
+        Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
+        using var stack = opened.Stack!;
+        var catalog = WorldCatalog.Open(stack);
+        var emptied = 0;
+        foreach (var name in Interiors.Where(i => NoEffect.Contains(i.Line)).Select(i => i.Map).Distinct())
+        {
+            long[]? Dialog(Arcanum.Data.Fixes.DataFixProfile data, int line)
+            {
+                var plan = AreaMapPlans.Create(stack, catalog, name, data);
+                Assert.AreEqual(AreaMapPlanStatus.Ready, plan.Status, name);
+                using var owner = plan.Plan!.Open();
+                var o = owner.LoadStrict().Objects.Single(o => o.MapPatch is { } p && p.Lines.Contains(line));
+                return o.EffectiveFields.SingleOrDefault(f => f.Slot == 31)?.Elements.SingleOrDefault(e => e.Key == 9)?.Words.ToArray();
+            }
+            foreach (var line in Interiors.Where(i => i.Map == name && NoEffect.Contains(i.Line)).Select(i => i.Line))
+            {
+                var before = Dialog(Arcanum.Data.Fixes.DataFixProfile.Original, line);
+                Assert.IsTrue(before is { Length: 3 } && before[2] != 0, $"{name} line {line}: Original keeps a dialog script");
+                CollectionAssert.AreEqual(new long[] { 0, 0, 0 }, Dialog(Arcanum.Data.Fixes.DataFixProfile.Steamwoven, line), $"{name} line {line}");
+                Console.WriteLine($"ARC-DATA-037 map={name} line={line} dialog {before![2]} -> 0");
+                emptied++;
+            }
+        }
+        Assert.AreEqual(NoEffect.Length, emptied);
+    }
 }

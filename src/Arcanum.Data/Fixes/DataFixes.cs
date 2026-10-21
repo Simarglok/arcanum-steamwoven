@@ -26,6 +26,11 @@ public sealed record DataFixProfile
     /// <c>atoi</c> reads as 0, so the reply ends the talk without the final line. Steamwoven appends it to the effects.</summary>
     public bool ReplyFinalLineInResponseLost { get; init; }
 
+    /// <summary>MP7 (ARC-DATA-037, owner decision 2026-10-20): a <c>map.patch</c> line <c>script N 0</c> attaches nothing, since
+    /// script 0 names no file, so it cannot clear the attachment it evidently means to clear (five installed lines: the dialog
+    /// slot of four Iron Clan HQ NPCs and one in the Ashbury underground). Steamwoven clears the slot.</summary>
+    public bool MapPatchScriptZeroIgnored { get; init; }
+
     /// <summary>Recorded fixes; the default setting.</summary>
     public static readonly DataFixProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -33,6 +38,7 @@ public sealed record DataFixProfile
     public static readonly DataFixProfile Original = new()
     {
         Name = "original", StoneExamineTextLost = true, NpcLineEffectsInResponseLost = true, ReplyFinalLineInResponseLost = true,
+        MapPatchScriptZeroIgnored = true,
     };
 
     /// <summary>Both settings, default first.</summary>
@@ -42,7 +48,7 @@ public sealed record DataFixProfile
     public static DataFixProfile? FromName(string? name) => All.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
 
     /// <summary>The ledger rows this profile has a switch for; a catalogue refuses a fix for any other row.</summary>
-    public static IReadOnlySet<string> Rows { get; } = new HashSet<string>(StringComparer.Ordinal) { "DF1", "DF2", "DF3" };
+    public static IReadOnlySet<string> Rows { get; } = new HashSet<string>(StringComparer.Ordinal) { "DF1", "DF2", "DF3", "MP7" };
 
     /// <summary>Whether the fixes of a ledger row apply under this profile; an unknown row never does.</summary>
     public bool Applies(string ledgerId) => ledgerId switch
@@ -50,6 +56,7 @@ public sealed record DataFixProfile
         "DF1" => !StoneExamineTextLost,
         "DF2" => !NpcLineEffectsInResponseLost,
         "DF3" => !ReplyFinalLineInResponseLost,
+        "MP7" => !MapPatchScriptZeroIgnored,
         _ => false,
     };
 }

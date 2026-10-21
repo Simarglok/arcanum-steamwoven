@@ -70,7 +70,7 @@ stops the line. A field the object's type lacks is not written.
 | `level_scheme` | critter slot 63 | PC, NPC |
 | `daystand`, `nightstand` | NPC stand points (slots 78, 79): x low, y high | NPC |
 | `obj_flag`, `portal_flag`, `item_flag`, `critter_flag`, `npc_flag` | set the named bit, or clear it after `!`, over the effective value; an unknown name writes the value back (an unknown npc flag name fails in the original: not modelled) | all, portal, items, PC/NPC, NPC |
-| `script` | slot, number: the script file's header and the number at that attachment slot; nothing when the number names no script file (so number 0 never clears a slot) | all |
+| `script` | slot, number: the script file's header and the number at that attachment slot; nothing when the number names no script file, so in the original number 0 never clears a slot (Steamwoven: number 0 empties the slot, below) | all |
 | `training` | tier and skill: not modelled (the tier rule needs the computed skill level) | PC, NPC |
 
 Writing one element of an array the object does not hold first copies its prototype's whole
@@ -84,5 +84,19 @@ the interiors (opt-in `MapPatchRealDataTests`, which prints every change as slot
 values): an NPC moves its day and night stand points; an NPC is switched off, flagged and
 given a script; a weapon gains item flags (twice); an NPC gains an npc flag and changes
 faction; five NPC lines attach script 0 to the dialog slot and, as in the original, change
-nothing (a switch candidate: the lines' evident intent is to clear the dialog). No patched
+nothing under Original (the lines' evident intent is to clear the dialog). No patched
 object is Unknown in step evidence; all 80 interiors still plan, load and step.
+
+## Script 0 (ARC-DATA-037)
+
+Ledger MP7, owner decision 2026-10-20: under Steamwoven (default) `script N 0` empties
+attachment N (no flags, no counters, script 0; the prototype's other attachments are copied
+as for any element write); under Original it attaches nothing, as the executable does. The
+switch is `DataFixProfile.MapPatchScriptZeroIgnored` in `GameRules.Data`
+([rule modes](rule-modes.md)). `AreaMapPlans.Create`/`CreateWindow` take the profile
+(`data`, null reads Original) and record the choice in `AreaMapPatchBinding.ScriptZeroClears`;
+the viewer's map loads pass the session's rules (Steamwoven without a session), so a switch
+takes effect when the next map or main-map window opens. On the installed data the five lines
+empty the dialog slot of four Iron Clan HQ NPCs and one Ashbury-underground NPC, each of
+which held a dialog script (`MapPatchRealDataTests`, `RealData`). A negative slot stays
+unmodelled in both modes.

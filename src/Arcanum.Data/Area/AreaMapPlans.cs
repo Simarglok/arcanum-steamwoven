@@ -99,14 +99,16 @@ public static class AreaMapPlans
         (AreaMappingRole.RoofShade, "art/roof/roofshade.mes"),
     ];
 
-    public static AreaMapPlanResult Create(ContentStack stack, WorldCatalog catalog, string mapName)
+    /// <param name="data">The data-fix rules the map opens under (ARC-DATA-037: the <c>map.patch</c> switch MP7); null reads the
+    /// retail data (<see cref="Fixes.DataFixProfile.Original"/>).</param>
+    public static AreaMapPlanResult Create(ContentStack stack, WorldCatalog catalog, string mapName, Fixes.DataFixProfile? data = null)
     {
         ArgumentNullException.ThrowIfNull(stack); ArgumentNullException.ThrowIfNull(catalog); ArgumentNullException.ThrowIfNull(mapName);
         var map = catalog.Find(mapName);
         if (map is null) return new(AreaMapPlanStatus.UnknownMap, null);
         if (map.SectorFiles.Count == 0) return new(AreaMapPlanStatus.NoSectors, null);
         if (map.SectorFiles.Count > MaxSectorFiles) return new(AreaMapPlanStatus.TooLarge, null, $"{map.SectorFiles.Count} sector files");
-        try { return CreateChecked(stack, catalog, map); }
+        try { return CreateChecked(stack, catalog, map, data); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or DatException or InvalidOperationException)
         { return new(AreaMapPlanStatus.Unreadable, null, error.GetType().Name); }
     }
@@ -124,7 +126,8 @@ public static class AreaMapPlans
     /// count where they stand; map.patch, prototypes, names and resources are bound as for a whole map; the limits follow
     /// the window.
     /// </summary>
-    public static AreaMapPlanResult CreateWindow(ContentStack stack, WorldCatalog catalog, string mapName, WorldSectorCoordinate centre, int radius = 1)
+    public static AreaMapPlanResult CreateWindow(ContentStack stack, WorldCatalog catalog, string mapName, WorldSectorCoordinate centre, int radius = 1,
+        Fixes.DataFixProfile? data = null)
     {
         ArgumentNullException.ThrowIfNull(stack); ArgumentNullException.ThrowIfNull(catalog); ArgumentNullException.ThrowIfNull(mapName);
         if (radius is < 0 or > MaxWindowRadius) throw new ArgumentOutOfRangeException(nameof(radius));
@@ -144,12 +147,12 @@ public static class AreaMapPlans
                     return new(AreaMapPlanStatus.UnsupportedSource, null, $"sector ({source.Coordinate.X}, {source.Coordinate.Y}) is {source.Kind}");
                 window.Add((source, Math.Max(Math.Abs(dx), Math.Abs(dy)) <= radius ? AreaScope.Core : AreaScope.Context));
             }
-        try { return CreateChecked(stack, catalog, map, window, centre); }
+        try { return CreateChecked(stack, catalog, map, data, window, centre); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or DatException or InvalidOperationException)
         { return new(AreaMapPlanStatus.Unreadable, null, error.GetType().Name); }
     }
 
-    private static AreaMapPlanResult CreateChecked(ContentStack stack, WorldCatalog catalog, WorldMap map,
+    private static AreaMapPlanResult CreateChecked(ContentStack stack, WorldCatalog catalog, WorldMap map, Fixes.DataFixProfile? data,
         IReadOnlyList<(WorldSectorSource Source, AreaScope Scope)>? window = null, WorldSectorCoordinate? centre = null)
     {
         var module = stack.Plan.SearchOrder.SingleOrDefault(s => s.Role == ContentSourceRole.ModuleArchive);
@@ -253,7 +256,7 @@ public static class AreaMapPlans
             if (Member(stack, new(AreaSourceRole.MapPatch), patchWinner, files, identities, MapPatchFile.MaxBytes, MapPatchPath) is { } failure) return failure;
             var names = ScriptNameIndex.Build(stack);
             patchBinding = new(new ReadOnlyDictionary<int, MapPatchScriptHeader?>(patch.ScriptNumbers().ToDictionary(n => n, n => ScriptHeader(stack, names, n))),
-                patch.HasUnmodelledLines);
+                patch.HasUnmodelledLines, (data ?? Fixes.DataFixProfile.Original).Applies("MP7"));
         }
 
         // ARC-DATA-027: the name tables and the mask file are read by the original's Name init, before the module is

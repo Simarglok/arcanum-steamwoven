@@ -9,6 +9,9 @@ Owner decision (2026-10-17, option B of the
 [analysis of the 38 strict DLG refusals](dlg-reader.md#the-38-strict-refusals-arc-script-012)):
 the Steamwoven [rule mode](../world/rule-modes.md) fixes these data defects (D2),
 the Original mode keeps them, and the fix mechanism serves later data fixes too.
+`DataFixProfile` also holds MP7 (a `map.patch` line `script N 0`, ARC-DATA-037), which the
+map patch applies when a map opens ([map patch](../world/map-patch.md#script-0-arc-data-037))
+rather than a catalogue entry.
 
 ## Mechanism
 
