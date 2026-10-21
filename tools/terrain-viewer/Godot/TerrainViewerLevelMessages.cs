@@ -81,6 +81,14 @@ public partial class TerrainViewerApp
         _levelMessagesSession = session;
     }
 
+    /// <summary>A session that ends (not carried by a map transfer) empties the window when the entries are its own.</summary>
+    private void EndLevelMessages(GameSessionOwner? session)
+    {
+        if (session is null || !ReferenceEquals(session, _levelMessagesSession)) return;
+        ClearLevelMessages();
+        _levelMessagesSession = null;
+    }
+
     /// <summary>Empties the window and drops the queued entries (another session, or the native smoke's own entries).</summary>
     private void ClearLevelMessages()
     {
