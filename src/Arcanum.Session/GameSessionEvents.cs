@@ -68,8 +68,13 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionDecayFiring> Decays { get; init; } = Array.Empty<SessionDecayFiring>();
 }
 
-/// <summary>An Item Decay event that came due (ARC-WORLD-062, ledger ID3): the item, its map and what the event did.</summary>
-public sealed record SessionDecayFiring(GameEvent Event, SessionMapId Map, string Entity, Arcanum.Simulation.Items.ItemDecayStep Step);
+/// <summary>An Item Decay event that came due (ARC-WORLD-062, ledger ID3): the item, its map and what the rules say the event does.
+/// <see cref="Postponed"/>: a deletion the session could not make yet (the item's map seed not attached, or the deleted-item budget
+/// full) was scheduled again a minute on instead.</summary>
+public sealed record SessionDecayFiring(GameEvent Event, SessionMapId Map, string Entity, Arcanum.Simulation.Items.ItemDecayStep Step)
+{
+    public bool Postponed { get; init; }
+}
 
 /// <summary>
 /// ARC-WORLD-062: a host that knows whether the loot window shows a container (the original's counter 0x5E8800, lowered when the

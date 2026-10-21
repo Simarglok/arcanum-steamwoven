@@ -18,8 +18,10 @@ public sealed partial class GameSessionOwner
         CancelDecay(entity);
         if (!ItemDecayRules.Decays(false, NoDecay(entity) ? ItemDecayRules.NoDecayFlag : 0, ItemDecayPlace.Loose)) return;
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
-        if (_events.QueryPending().Count(e => e.Kind == SessionEventKinds.ItemDecay) >= SessionEventKinds.MaxItemDecays ||
-            _events.Count >= _events.Limits.MaxPending || _events.NextSequence == long.MaxValue || now > long.MaxValue - delayMs) return;
+        if (_events.Count >= _events.Limits.MaxPending || _events.NextSequence == long.MaxValue || now > long.MaxValue - delayMs) return;
+        // The decay share is counted only when the whole queue could hold that many (a spill schedules one per item).
+        if (_events.Count >= SessionEventKinds.MaxItemDecays &&
+            _events.QueryPending().Count(e => e.Kind == SessionEventKinds.ItemDecay) >= SessionEventKinds.MaxItemDecays) return;
         var scheduled = _events.ScheduleAfter(SessionEventKinds.ItemDecay, GameEventPayload.Of([new(map.RuntimeMap, entity)], now, delayMs),
             delayMs, new(0, now, 0));
         if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("An admitted decay event could not be scheduled.");
@@ -47,40 +49,39 @@ public sealed partial class GameSessionOwner
     // installed item prototype has it, opt-in census ItemDecayFlagCensusTests).
     private bool NoDecay(string entity) => _inventory.Seeds.Values.Any(seed => seed.Items.TryGetValue(entity, out var row) && row.Facts.NoDecay);
 
-    // An item the session can answer for in an event pass: placed by the session or listed by an attached seed, and not deleted.
-    private bool DecayItemKnown(string entity) =>
-        !_durability.Destroyed.Contains(entity) && (_inventory.PlacedItem(entity) is not null || _inventory.Seeds.Values.Any(seed => seed.Items.ContainsKey(entity)));
-
     // Whether the item still lies loose on the map: placed there, or a seed item of that map on the ground (its own cell, its spilled
-    // container's, or where a critical dropped it) that nobody took.
-    private bool LiesLoose(SessionMapId map, string entity)
+    // container's, or where a critical dropped it) that nobody took. Null when the map's seed is not attached, so a seed item's place is
+    // unknown.
+    private bool? LiesLoose(SessionMapId map, string entity)
     {
         if (_durability.Destroyed.Contains(entity)) return false;
         if (_inventory.PlacedItem(entity) is { } placed) return placed.Map == map;
-        return _inventory.Seeds.TryGetValue(map, out var seed) && !_inventory.Taken.Contains(entity) && LooseCell(map, seed, entity) is not null;
+        if (!_inventory.Seeds.TryGetValue(map, out var seed)) return _inventory.Taken.Contains(entity) ? false : null;
+        return !_inventory.Taken.Contains(entity) && LooseCell(map, seed, entity) is not null;
     }
 
     // The Item Decay event (kind 25; 0x467FC0): while the host's loot window shows a container it waits a minute; otherwise an item
-    // still lying loose is deleted (0x43CCA0), in a revision of its own.
+    // still lying loose is deleted (0x43CCA0), in a revision of its own. Two session limits postpone it instead (a minute, reported as
+    // Postponed): a seed item whose map's seed is not attached yet (its place is unknown), and a deletion the saved deleted-item budget
+    // (MaxDurabilityRecords) cannot hold.
     internal GameEventHandlerOutcome FireItemDecay(GameEventFiring firing)
     {
         var entity = firing.Event.Payload.Entities[0];
         var map = new SessionMapId(entity.Map);
         var shows = _passWorld is ISessionLootWindowWorld loot && loot.LootWindowShowsContainer;
-        var decays = LiesLoose(map, entity.Code) && ItemDecayRules.Decays(false, NoDecay(entity.Code) ? ItemDecayRules.NoDecayFlag : 0, ItemDecayPlace.Loose);
+        var loose = LiesLoose(map, entity.Code);
+        var decays = loose != false && ItemDecayRules.Decays(false, NoDecay(entity.Code) ? ItemDecayRules.NoDecayFlag : 0, ItemDecayPlace.Loose);
         var step = ItemDecayRules.Fire(shows, decays);
-        switch (step)
+        var postponed = step == ItemDecayStep.Destroy && (loose is null ||
+            !_durability.Records.ContainsKey(entity.Code) && _durability.Count >= _limits.MaxDurabilityRecords);
+        if (step == ItemDecayStep.Retry || postponed) ScheduleDecay(entity.Code, map, ItemDecayRules.RetryDelayMs);
+        else if (step == ItemDecayStep.Destroy)
         {
-            case ItemDecayStep.Retry:
-                ScheduleDecay(entity.Code, map, ItemDecayRules.RetryDelayMs);
-                break;
-            case ItemDecayStep.Destroy:
-                if (_revision == long.MaxValue) return GameEventHandlerOutcome.Refused;
-                Delete(entity.Code);
-                _revision++;
-                break;
+            if (_revision == long.MaxValue) return GameEventHandlerOutcome.Refused;
+            Delete(entity.Code);
+            _revision++;
         }
-        _passDecays?.Add(new(firing.Event, map, entity.Code, step));
+        _passDecays?.Add(new(firing.Event, map, entity.Code, step) { Postponed = postponed });
         return GameEventHandlerOutcome.Completed;
     }
 }

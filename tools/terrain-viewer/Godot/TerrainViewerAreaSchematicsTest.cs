@@ -297,7 +297,7 @@ public partial class TerrainViewerApp
                     made += $", full inventory: {lying.Length} on the ground ({AreaSchematics.OnGroundText(ground).Trim()}), ground art {productArt}";
                     // ARC-WORLD-062: the products on the ground decay; the viewer's event pump, two game days on, destroys them.
                     Require(ground.OnGround.All(entity => full.QueryItemDecays().Any(d => d.Entity == entity)), "every product on the ground has its decay event");
-                    var decayed = new AreaEventPump(full, new NoDecayHostWorld()).Jump(Arcanum.Simulation.Items.ItemDecayRules.DelayMs);
+                    var decayed = new AreaEventPump(full, new PlainEventWorld()).Jump(Arcanum.Simulation.Items.ItemDecayRules.DelayMs);
                     Require(decayed.Decays.Count(d => d.Step == Arcanum.Simulation.Items.ItemDecayStep.Destroy) == record.Quantity &&
                         ground.OnGround.All(full.IsItemDestroyed) && !full.QueryPlacedItems().Any(p => ground.OnGround.Contains(p.Entity)),
                         $"two game days on the products decayed ({decayed.Decays.Count} fired)");
@@ -320,7 +320,7 @@ public partial class TerrainViewerApp
 }
 
 // ARC-WORLD-062: a pass world for a detached session in a smoke (no NPC, no loot window).
-internal sealed class NoDecayHostWorld : ISessionEventWorld
+internal sealed class PlainEventWorld : ISessionEventWorld
 {
     public Arcanum.Simulation.Combat.LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
 }

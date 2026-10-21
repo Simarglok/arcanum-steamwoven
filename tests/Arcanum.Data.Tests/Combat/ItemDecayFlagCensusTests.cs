@@ -20,5 +20,6 @@ public sealed class ItemDecayFlagCensusTests
         var flagged = items.Where(p => (p.fields!.Item!.Flags & 0x20000) != 0).Select(p => p.number).ToArray();
         Console.WriteLine($"ARC-WORLD-062 items={items.Length} no-decay={flagged.Length} prototypes={string.Join(",", flagged.Take(40))}");
         Assert.IsTrue(items.Length > 0);
+        Assert.AreEqual(0, flagged.Length, "the documented census: no installed item prototype carries the no-decay flag");
     }
 }

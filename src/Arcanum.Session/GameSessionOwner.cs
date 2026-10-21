@@ -1037,6 +1037,11 @@ public sealed partial class GameSessionOwner : IDisposable
         var spellRuns = new List<SessionSpellRunFiring>();
         var decays = new List<SessionDecayFiring>();
         _passDecays = decays;
+        // ARC-WORLD-062: the items the pending decay events name are the session's to answer for (the hero's kit and made items are
+        // no map object of the host's, and a seed item's map may not be attached yet: its handler postpones).
+        var decaying = _events.Any(SessionEventKinds.ItemDecay)
+            ? _events.QueryPending().Where(e => e.Kind == SessionEventKinds.ItemDecay).Select(e => e.Payload.Entities[0].Code).ToHashSet(StringComparer.Ordinal)
+            : null;
         _passRespawns = respawns;
         _passSpellRuns = spellRuns;
         _passWorld = world;
@@ -1052,9 +1057,7 @@ public sealed partial class GameSessionOwner : IDisposable
             // absent role always does).
             pass = _events.ProcessDue(new(new(0, now, 0), _actor.Map.RuntimeMap, budget, entity =>
                 entity.Code == SessionEventKinds.AbsentRole
-                // ARC-WORLD-062: an item the session knows (placed, or listed by an attached seed) is the session's to answer: the hero's
-                // kit and made items are no map object of the host's.
-                || DecayItemKnown(entity.Code)
+                || decaying?.Contains(entity.Code) == true && !_durability.Destroyed.Contains(entity.Code)
                 || (_life.Critters.ContainsKey(entity.Code)
                     ? world.CritterFacts(new(entity.Map), entity.Code) is not null
                     // A host that knows objects answers for every kind; otherwise a Lock event's object exists while the
@@ -1862,6 +1865,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var registry = SessionEventKinds.Build(sink);
         var converted = ImmutableArray.CreateBuilder<GameEvent>(saved.Pending.Count);
         var maps = new Dictionary<string, int>(StringComparer.Ordinal);
+        var decaying = new HashSet<string>(StringComparer.Ordinal);
         foreach (var pending in saved.Pending)
         {
             if (pending is null || !registry.TryGet(pending.Kind, out var kind) || pending.Entities.IsDefault || pending.Values.IsDefault ||
@@ -1905,8 +1909,7 @@ public sealed partial class GameSessionOwner : IDisposable
                 // data the restore does not have).
                 if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || !SessionValidation.Entity(pending.Entities[0].Code) ||
                     !SessionEventKinds.DecayPayload(new(pending.Entities, pending.Values)) || pending.Values[0] > clockMs ||
-                    pending.DeadlineMs != pending.Values[0] + pending.Values[1] ||
-                    converted.Any(e => e.Kind == SessionEventKinds.ItemDecay && e.Payload.Entities[0].Code == pending.Entities[0].Code))
+                    pending.DeadlineMs != pending.Values[0] + pending.Values[1] || !decaying.Add(pending.Entities[0].Code))
                     return GameSessionFailure.InvalidEvents;
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;

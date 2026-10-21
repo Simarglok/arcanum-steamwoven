@@ -115,16 +115,21 @@ public sealed class ItemDecayStateTests
     {
         using var owner = Owner();
         owner.PlaceHeroItem("kit:2", There);
+        var now = owner.QueryClockSnapshot().GameTimestampMs;
+        var deadline = $"\"kind\":\"item.decay\",\"deadlineMs\":{now + ItemDecayRules.DelayMs},";
+        var values = $"\"values\":[{now},{ItemDecayRules.DelayMs}]";
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "\"item.decay\"");
+        StringAssert.Contains(text, deadline);
+        StringAssert.Contains(text, values);
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryItemDecays().ToArray(), restored.QueryItemDecays().ToArray());
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()), "canonical");
-        // A delay that is neither the decay's nor the retry's is refused.
-        var wrong = text.Replace(ItemDecayRules.DelayMs.ToString(System.Globalization.CultureInfo.InvariantCulture), "1000");
-        Assert.AreNotEqual(text, wrong);
-        var refused = GameSessionOwner.Restore(Decode(wrong), RestoreOptions());
-        Assert.AreNotEqual(GameSessionFailure.None, refused.Failure);
+        // A delay that is neither the decay's nor the retry's is refused, even with a deadline that matches it.
+        var wrong = text.Replace(deadline, $"\"kind\":\"item.decay\",\"deadlineMs\":{now + 1000},").Replace(values, $"\"values\":[{now},1000]");
+        Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(Decode(wrong), RestoreOptions()).Failure);
+        // So is a deadline that is not its time plus its delay.
+        var late = text.Replace(deadline, $"\"kind\":\"item.decay\",\"deadlineMs\":{now + ItemDecayRules.DelayMs + 1},");
+        Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(Decode(late), RestoreOptions()).Failure);
     }
 
     [TestMethod]

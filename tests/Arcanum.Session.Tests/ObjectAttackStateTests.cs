@@ -119,6 +119,13 @@ public sealed class ObjectAttackStateTests
         Assert.AreEqual(GameSessionFailure.None, owner.PickUpItem(owner.Version, "cup", Accept).Failure, "a spilled item is picked up from the ground");
         Assert.IsFalse(owner.QueryMapInventory(Exterior)!.Ground.Any(g => g.Item.Entity == "cup"));
         Assert.AreEqual("knife", owner.QueryItemDecays().Single().Entity, "the pickup ended the cup's decay");
+        // Two game days on, the knife still on the ground is deleted.
+        Assert.AreEqual(ClockMutationDisposition.Changed,
+            owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, ItemDecayRules.DelayMs, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        var decayed = owner.ProcessEvents(new NoWorld()).Decays.Single();
+        Assert.AreEqual(("knife", ItemDecayStep.Destroy, false), (decayed.Entity, decayed.Step, decayed.Postponed));
+        Assert.IsTrue(owner.IsItemDestroyed("knife"));
+        Assert.IsFalse(owner.QueryMapInventory(Exterior)!.Ground.Any(g => g.Item.Entity == "knife"));
 
         var pile = Target("pile", DamageableObjectKind.Container, points: 0, with: b => b with { JunkPile = true, Openable = new(OpenableKind.Container, 0, 0, 0, true) });
         var spared = owner.AttackObject(owner.Version, new() { Target = pile });
@@ -345,6 +352,36 @@ public sealed class ObjectAttackStateTests
         var fired = owner.ProcessEvents(new NoWorld()).Respawns.Single();
         Assert.AreEqual((Exterior, "barrel"), (fired.Map, fired.Entity));
         Assert.AreEqual(SessionObjectCondition.Whole, owner.QueryObject(barrel).Condition);
+    }
+
+    [TestMethod]
+    public void ASpilledItemBackInItsContainerOrWithoutItsSeedIsNotDeleted()
+    {
+        // ARC-WORLD-062: the chest made whole again holds its items, so their events find nothing on the ground (Keep).
+        using var owner = Owner();
+        var chest = Target("chest", DamageableObjectKind.Container);
+        BreakIt(owner, new() { Target = chest });
+        var key = MapChangeKey.ForEntity("chest", GameSessionOwner.ObjectConditionProperty);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, null, [new MapChangeEdit(Exterior, key, null)]).Disposition);
+        Assert.AreEqual(ClockMutationDisposition.Changed,
+            owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, ItemDecayRules.DelayMs, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        var kept = owner.ProcessEvents(new NoWorld()).Decays;
+        CollectionAssert.AreEqual(new[] { ("cup", ItemDecayStep.Keep), ("knife", ItemDecayStep.Keep) }, kept.Select(d => (d.Entity, d.Step)).OrderBy(d => d.Entity).ToArray());
+        Assert.IsFalse(owner.IsItemDestroyed("cup") || owner.IsItemDestroyed("knife"));
+
+        // A restored session without the map's seed cannot place a spilled item: the decay waits a minute until the seed is back.
+        using var spilled = Owner();
+        BreakIt(spilled, new() { Target = chest });
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(spilled.Capture())));
+        Assert.AreEqual(ClockMutationDisposition.Changed,
+            restored.AdvanceGameTime(restored.QueryClockSnapshot().Token, ItemDecayRules.DelayMs, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        var waiting = restored.ProcessEvents(new NoWorld()).Decays;
+        Assert.IsTrue(waiting.Count == 2 && waiting.All(d => d.Step == ItemDecayStep.Destroy && d.Postponed), "postponed without the seed");
+        Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, Seed()).Failure);
+        Assert.AreEqual(ClockMutationDisposition.Changed,
+            restored.AdvanceGameTime(restored.QueryClockSnapshot().Token, ItemDecayRules.RetryDelayMs, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        Assert.IsTrue(restored.ProcessEvents(new NoWorld()).Decays.All(d => !d.Postponed));
+        Assert.IsTrue(restored.IsItemDestroyed("cup") && restored.IsItemDestroyed("knife"));
     }
 
     private sealed class NoWorld : ISessionEventWorld
