@@ -1175,10 +1175,11 @@ holding a learned record's components one assembly makes its product).
 ### Reserved-key hint (ARC-INPUT-003)
 
 An original key that is reserved, not implemented ([keyboard routing](../input/diagnostic-palette.md#keyboard-routing)),
-is named in the HUD's sticky header ("Reserved: F1 = Followers: go to point (NOT IMPLEMENTED)") until the
+is named in the HUD's sticky header ("Reserved: F10 = Compact interface (source reading only) (NOT IMPLEMENTED)") until the
 next key press, so it is visible without scrolling; the detail text keeps its "last reserved key" entry. Native smoke
-after the logbook stage (exterior and map mode): `ARC-INPUT-003 native-smoke reserved-key hint PASS` (F1 pushed through
-the viewport's input path; the notice is in the sticky header, every header line shown inside the panel and the window;
+after the logbook stage (exterior and map mode): `ARC-INPUT-003 native-smoke reserved-key hint PASS` (F10, F1 before
+ARC-WORLD-046 made F1–F6 [follower orders](../world/companion-orders-runtime.md#area-viewer), pushed through the viewport's input
+path; the notice is in the sticky header, every header line shown inside the panel and the window;
 Z, an unmapped key, removes it).
 
 ### Sound output (ARC-UI-040)
