@@ -10,19 +10,19 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class MissedLevelStepTests
 {
-    private static GameSessionOwner Owner(bool autoLevel = true)
+    private static GameSessionOwner Owner(bool autoLevel = true, SessionAutoLevelRules? rules = null)
     {
         var result = GameSessionOwner.Create(Descriptor() with
         {
-            Hero = HalfElf(), Experience = ExperienceStateTests.Rules(), AutoLevel = autoLevel ? AdvancementStateTests.Rules() : null,
+            Hero = HalfElf(), Experience = ExperienceStateTests.Rules(), AutoLevel = autoLevel ? rules ?? AdvancementStateTests.Rules() : null,
         });
         Assert.AreEqual(GameSessionFailure.None, result.Failure);
         return result.Owner!;
     }
 
-    private static GameSessionOwner Waiting(string entity = "virgil")
+    private static GameSessionOwner Waiting(string entity = "virgil", SessionAutoLevelRules? rules = null)
     {
-        var owner = Owner();
+        var owner = Owner(rules: rules);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.JoinParty(owner.Version, entity, PartyStateTests.Facts(), false).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, entity).Disposition);
         return owner;
@@ -33,7 +33,7 @@ public sealed class MissedLevelStepTests
         [.. Enumerable.Repeat(8, 8)], 0, 0, level, 0, [.. new int[12]], [.. new int[4]], [.. new int[16]], [.. new int[8]], 1, 2, 0, 0), 62);
 
     [TestMethod]
-    public void Missed_steps_merge_and_apply_in_one_revision()
+    public void Missed_steps_are_kept_and_apply_in_one_revision()
     {
         using var owner = Waiting();
         var revision = owner.Version.Revision;
@@ -78,18 +78,25 @@ public sealed class MissedLevelStepTests
     [TestMethod]
     public void Steps_in_a_row_run_the_scheme_at_each_level_as_in_turn()
     {
-        // Scheme 61 ("fire 3"): rank 3 needs level 5, so at level 4 the step fails and is skipped. Missed steps 3 → 4 and 4 → 5 must
-        // buy what the two updates in turn buy, scheme runs included.
-        var follower = Follower(level: 3) with { AutoLevelScheme = 61 };
-        using var later = Waiting();
+        // A scheme target that depends on the level: maximum hit points include 2 × level, so "maxhps 47" needs fewer bought points
+        // at a higher level. Missed steps 3 → 4 and 4 → 5 must buy what the two updates in turn buy (three hit-point points, one
+        // left); one merged step 3 → 5 would buy at level 5 only (two points, two left).
+        var rules = SessionAutoLevelRules.Create(new Dictionary<int, AutoLevelScheme>
+        {
+            [63] = AutoLevelRules.Parse(System.Text.Encoding.ASCII.GetBytes("maxhps 47")).Scheme!,
+            [70] = AutoLevelRules.Parse(System.Text.Encoding.ASCII.GetBytes("cn 9")).Scheme!,
+        }, AutoLevelRules.DefaultSpellWillpower)!;
+        var follower = Follower(level: 3) with { AutoLevelScheme = 63 };
+        follower = follower with { Sheet = follower.Sheet with { UnspentPoints = 1 } };
+        using var later = Waiting(rules: rules);
         later.DeferFollowerLevel(later.Version, "virgil", new(3, 4));
         later.DeferFollowerLevel(later.Version, "virgil", new(4, 5));
         var applied = later.ApplyMissedFollowerLevels(later.Version, follower, AdvancementModifiers.None).Record!;
-        using var inTurn = Waiting();
+        using var inTurn = Waiting(rules: rules);
         var record = inTurn.LevelFollower(inTurn.Version, follower, AdvancementModifiers.None, new(3, 4)).Record!;
         record = inTurn.LevelFollower(inTurn.Version, record, AdvancementModifiers.None, new(4, 5)).Record!;
         Assert.AreEqual(record, applied);
-        Assert.AreEqual(5, applied.Sheet.Level);
+        Assert.AreEqual((5, 3, 1), (applied.Sheet.Level, applied.Sheet.HitPointPoints, applied.Sheet.UnspentPoints));
     }
 
     [TestMethod]

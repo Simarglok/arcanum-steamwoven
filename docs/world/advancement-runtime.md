@@ -83,7 +83,7 @@ scheme, in ordinal entity order. Restore checks every range, the order and the b
 migrated. Since schema 25 (ARC-MAGIC-004) both the hero's advancement and each NPC record also carry `mastery` (the mastered
 college, −1 none) after `colleges`, and the spell purchases learn through the [spell book](spell-book-runtime.md)'s one rule.
 Since schema 33 (ARC-WORLD-047) `"advancement"` also has `"missed":[{"entity","steps":[{"oldPcLevel","newPcLevel","times"}]}]`
-after `"npcs"`, in ordinal entity order: levels 0..51, a count 1..51, 1..8 steps that each rise; schema 32 is refused, not
+after `"npcs"`, in ordinal entity order: levels 0..51, a count 1..51, 1..52 steps (`ExperienceRules.MaxMissedStepEntries`) that each rise; schema 32 is refused, not
 migrated.
 
 ## Viewer host
@@ -110,7 +110,8 @@ effects, and so do the waiting followers by the rule setting (ARC-WORLD-047, led
   they cannot be applied, the new step is kept with them, or skipped for a follower in the array, never applied out of order).
   Death is the session's (`QueryNpcDead`: its life record or a seed that marks it dead, wherever it waits). Missed steps belong
   to the NPC, not to its standing: one that leaves the party keeps them until its sheet can be read; a dead one never gets them
-  (a dead follower in the array still gets the new step, as the original's array loop has no death test, A5).
+  (a dead follower in the array still gets the new step, as the original's array loop has no death test, A5, and its missed
+  steps stay stored: no revival is modelled; were one added, they would have to be dropped or applied first).
 
 The conversation reads a levelled follower's level from the session. The smoke log prints `ARC-WORLD-036 follower-level`,
 `ARC-WORLD-047 level step kept` and `ARC-WORLD-047 missed level steps applied`.
@@ -129,7 +130,7 @@ The conversation reads a levelled follower's level from the session. The smoke l
 - `tests/Arcanum.Simulation.Tests/Character/ExperienceRulesTests.cs` (ARC-WORLD-047): the rectangle's reach, the rule under both
   settings, missed steps applied later equal to the steps in turn over every PC level history, the bound.
 - `tests/Arcanum.Session.Tests/MissedLevelStepTests.cs` (ARC-WORLD-047): defer and apply in one revision, the same sheet as the
-  steps in turn (a scheme step refused at the earlier level included), the repeat cap, refusals, save and load, decode and
+  steps in turn (a target that depends on the level, `maxhps`, included), the repeat cap, refusals, save and load, decode and
   restore refusals.
 - Opt-in `tests/Arcanum.TerrainViewer.Tests/AreaAdvancementOriginalTests.cs` (`DAT_ROOT`): the twelve pre-made heroes spend
   their starting points and level to 50 with their schemes; Virgil's sheet levels from 1 to 50 with scheme 91. Only counts

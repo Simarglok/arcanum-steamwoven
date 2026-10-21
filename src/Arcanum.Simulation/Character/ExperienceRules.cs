@@ -199,15 +199,16 @@ public static class ExperienceRules
         return offset is { } d && Math.Abs((long)d.X) <= reach && Math.Abs((long)d.Y) <= reach;
     }
 
-    /// <summary>The most entries a waiting follower's missed steps can hold: one per rising PC level step (levels 1..50, the last one
-    /// into the last-level branch) and that branch's repeated step (project bound with room to spare).</summary>
+    /// <summary>The most entries a waiting follower's missed steps can hold: one per rising PC level step (old levels 0..49, the last
+    /// one into the last-level branch) and that branch's repeated step (project bound with room to spare).</summary>
     public const int MaxMissedStepEntries = 52;
 
     /// <summary>
     /// The PC level steps a waiting follower missed with one more appended (ARC-WORLD-047), applied later in order, each
     /// <see cref="MissedLevelStep.Times"/> times, so it gets every step as it would have in turn: its scheme runs at each level as it
     /// would have (a merged step would give the same level and points but one scheme run at the last level, which can buy
-    /// differently: a spell rank the earlier level refused is skipped, not waited for). The same step again counts once more (the
+    /// differently: a target that depends on the level, such as the hit-point or fatigue maximum, which includes the level, needs
+    /// fewer bought points at a higher level). The same step again counts once more (the
     /// last-level branch repeats 50 → 51 on every award), up to <see cref="MaxLevel"/> times, after which another changes no level.
     /// Null when the list would pass <see cref="MaxMissedStepEntries"/>.
     /// </summary>

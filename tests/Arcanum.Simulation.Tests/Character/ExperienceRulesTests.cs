@@ -269,10 +269,14 @@ public sealed class ExperienceRulesTests
                 Assert.AreEqual((inTurn, inTurnPoints), (later, laterPoints), $"level {level}, history {string.Join(", ", history)}");
             }
         }
-        // The repeat count stops at the maximum level; an unrelated step past the bound is refused.
+        // The repeat count stops at the maximum level and loses nothing: 60 repeats in turn raise a level-0 follower as the capped 51 do.
         IReadOnlyList<MissedLevelStep> many = [];
-        for (var i = 0; i < 80; i++) many = ExperienceRules.AppendMissedStep(many, new(50, 51))!;
+        for (var i = 0; i < 60; i++) many = ExperienceRules.AppendMissedStep(many, new(50, 51))!;
         Assert.AreEqual(new MissedLevelStep(new(50, 51), ExperienceRules.MaxLevel), many.Single());
+        var (sixty, capped) = (0, 0);
+        for (var i = 0; i < 60; i++) sixty = ExperienceRules.FollowerLevel(sixty, new(50, 51)).Level;
+        for (var i = 0; i < many.Single().Times; i++) capped = ExperienceRules.FollowerLevel(capped, new(50, 51)).Level;
+        Assert.AreEqual(sixty, capped);
         IReadOnlyList<MissedLevelStep> full = Enumerable.Range(0, ExperienceRules.MaxMissedStepEntries).Select(i => new MissedLevelStep(new(i % 50, i % 50 + 1), 1)).ToArray();
         Assert.IsNull(ExperienceRules.AppendMissedStep(full, new(7, 9)));
         // Every rising history from level 1 to the last-level branch with repeats fits.

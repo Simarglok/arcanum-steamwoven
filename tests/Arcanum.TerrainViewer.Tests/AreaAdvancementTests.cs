@@ -176,4 +176,23 @@ public sealed class AreaAdvancementTests
         Assert.AreEqual((1, 1), (report.MissedApplied.Count, report.Raised.Count), "the missed steps and the new one each raised the level");
         Assert.AreEqual(0, session.QueryMissedLevelEntities().Count);
     }
+
+    [TestMethod]
+    public void ADeadFollowerInTheArrayGetsTheStepButNotItsMissedSteps()
+    {
+        // The original's array loop has no death test (A5): a dead follower gets the new step; its missed steps are never applied.
+        using var session = Session();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, "virgil").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, "virgil").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.DeferFollowerLevel(session.Version, "virgil", new(1, 3)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, "virgil").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            session.Kill(session.Version, SessionLifeTarget.Critter("virgil", new Arcanum.Simulation.Combat.LifeFacts(), default)).Disposition);
+        Assert.IsTrue(session.QueryNpcDead("virgil"));
+        var report = AreaAdvancement.LevelFollowers(session, new SessionExperienceAward(2100, 1, 1, new(3, 4)), Sheet, _ => new(false, null));
+        Assert.AreEqual((0, 1), (report.MissedApplied.Count, report.Raised.Count));
+        Assert.AreEqual(2, session.QueryNpcAdvancement("virgil")!.Sheet.Level, "level 1 keeps its gap below 3: 4 + 1 − 3 = 2");
+        CollectionAssert.AreEqual(new[] { "virgil" }, session.QueryMissedLevelEntities().ToArray());
+        Assert.AreEqual(0, AreaAdvancement.ApplyMissed(session, Sheet).Count, "a dead NPC never gets its missed steps");
+    }
 }
