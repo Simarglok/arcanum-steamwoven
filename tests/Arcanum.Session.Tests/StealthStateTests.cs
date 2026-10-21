@@ -48,23 +48,40 @@ public sealed class StealthStateTests
     public void ADialogEndsTheConcealmentOfTheHeroAndOfThatNpcOnly()
     {
         using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Stranger).Disposition);
         owner.ToggleHeroConcealment(owner.Version);
         var revision = owner.Version.Revision;
         var talk = owner.BeginReactionConversation(owner.Version, Pal, new ReactionNpcFacts(50, Arcanum.Simulation.Character.CharacterRace.Human, false, false));
-        Assert.AreNotEqual(GameSessionDisposition.Rejected, talk.Disposition);
-        Assert.AreEqual((false, false), (owner.IsConcealed(SessionCombatant.Hero), owner.IsConcealed(SessionCombatant.Critter(Pal))));
-        Assert.IsTrue(owner.Version.Revision > revision);
+        Assert.AreEqual(GameSessionDisposition.Changed, talk.Disposition);
+        Assert.AreEqual((false, false, true), (owner.IsConcealed(SessionCombatant.Hero), owner.IsConcealed(SessionCombatant.Critter(Pal)),
+            owner.IsConcealed(SessionCombatant.Critter(Stranger))), "the other follower stays concealed");
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
     }
 
     [TestMethod]
-    public void AnAttackOnAFollowerEndsTheWholePartysConcealment()
+    public void AnAttackOnAFollowerEndsTheWholePartysConcealmentEvenOnAMissAndOnAStrangerNothing()
     {
         using var owner = Owner();
         owner.ToggleHeroConcealment(owner.Version);
+        var stranger = SessionCritterCombat.From(Stranger, AttackStateTests.Npc(material: 0, hpAdjustment: 5000, critterFlags: 0)).Combat!;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttackCritter(owner.Version, new(stranger)).Failure);
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Hero) && owner.IsConcealed(SessionCombatant.Critter(Pal)), "a stranger's attack event is not the party's");
         var pal = SessionCritterCombat.From(Pal, AttackStateTests.Npc(material: 0, hpAdjustment: 5000, critterFlags: 0)).Combat!;
-        var result = owner.AttackCritter(owner.Version, new(pal));
-        Assert.AreEqual(GameSessionFailure.None, result.Failure);
-        Assert.AreEqual((false, 0), (owner.QueryConcealment().Hero, owner.QueryConcealment().Npcs.Count), "the attacker's party is the victim's");
+        var missed = false;
+        for (var attempt = 0; attempt < 200 && !missed; attempt++)
+        {
+            if (!owner.IsConcealed(SessionCombatant.Hero)) owner.ToggleHeroConcealment(owner.Version);
+            var revision = owner.Version.Revision;
+            var result = owner.AttackCritter(owner.Version, new(pal));
+            Assert.AreEqual((GameSessionFailure.None, GameSessionDisposition.Changed), (result.Failure, result.Disposition));
+            Assert.AreEqual((false, 0), (owner.QueryConcealment().Hero, owner.QueryConcealment().Npcs.Count), "the attacker's party is the victim's");
+            if (result.Recipient is null && result.Resolution!.Fate == FateUse.None)
+            {
+                missed = true;
+                Assert.AreEqual(revision + 1, owner.Version.Revision, "a miss changes only the concealment, in one revision");
+            }
+        }
+        Assert.IsTrue(missed, "a miss in 200 attacks");
     }
 
     [TestMethod]
@@ -83,16 +100,41 @@ public sealed class StealthStateTests
     }
 
     [TestMethod]
-    public void TheMarginIsZeroUntilTheHeroIsConcealedThenTheChecksEffectivenessLessDifficulty()
+    public void TheMarginIsZeroUntilTheHeroIsConcealedAndFollowsTheObserversPerceptionAndTheCheckKind()
     {
-        using var owner = Owner();
+        // Dexterity 20 and 5 points of prowling, untrained.
+        var stats = Defaults(); stats[2] = 20;
+        int[] basic = new int[12]; basic[(int)Skill.Prowling] = 5;
+        using var owner = CreateWith(HalfElf(stats) with { Advancement = SessionHeroAdvancement.None with { BasicSkills = [.. basic] } });
         var observer = new SkillDifficultyFacts { Light = 255 };
         Assert.AreEqual(new SessionProwlingMargin(0, null, null), owner.HeroProwlingMargin(8, observer, seeing: true));
         owner.ToggleHeroConcealment(owner.Version);
         var sight = owner.HeroProwlingMargin(8, observer, seeing: true);
-        Assert.AreEqual(StealthRules.Margin(sight.Effectiveness!.Value, sight.Difficulty!.Total), sight.Margin);
-        var hidden = owner.HeroProwlingMargin(8, observer with { ProwlerHidden = true }, seeing: true);
-        Assert.AreEqual(Math.Clamp(hidden.Effectiveness!.Value + 100, 0, 100), hidden.Margin, "a blocker between them: difficulty −100");
+        var request = new SkillEffectivenessFacts { OpponentValue = 8, LocalPc = true };
+        var level = owner.QueryHeroSkills()![Skill.Prowling].Level;
+        Assert.IsTrue(level > 0);
+        Assert.AreEqual(SkillCheckRules.Effectiveness(Skill.Prowling, level, request), sight.Effectiveness, "opposed by the observer's perception");
+        Assert.IsTrue(owner.HeroProwlingMargin(1, observer, seeing: true).Effectiveness > owner.HeroProwlingMargin(10, observer, seeing: true).Effectiveness);
+        // An untrained prowler without cover: the sight check's prowling term is +50, the hearing check's (no armour) 0; full light
+        // still costs an untrained prowler 30 against an observer without dark sight in the sight check only.
+        var hearing = owner.HeroProwlingMargin(8, observer, seeing: false);
+        Assert.AreEqual((50, 30, 0, 0), (sight.Difficulty!.Skill, sight.Difficulty.Light, hearing.Difficulty!.Skill, hearing.Difficulty.Light));
+        Assert.AreEqual(StealthRules.Margin(sight.Effectiveness!.Value, sight.Difficulty.Total), sight.Margin);
+        Assert.AreEqual(100, owner.HeroProwlingMargin(8, observer with { ProwlerHidden = true }, seeing: true).Margin, "a blocker between them: difficulty −100");
+        // A sleeping observer (the check's target critter) lowers the difficulty by 50.
+        var asleep = owner.HeroProwlingMargin(8, observer with { TargetConditions = SkillTargetConditions.Sleeping }, seeing: false);
+        Assert.AreEqual((-50, -50), (asleep.Difficulty!.Awareness, asleep.Difficulty.Total - hearing.Difficulty.Total));
+    }
+
+    [TestMethod]
+    public void AWaitingFollowerKeepsItsOwnStateAndUnwaitingCopiesTheHerosAgain()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Pal).Disposition);
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.IsFalse(owner.IsConcealed(SessionCombatant.Critter(Pal)), "a waiting NPC is not in the follower list");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.UnwaitParty(owner.Version, Pal, PartyStateTests.Facts(), true).Disposition);
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Pal)), "following again takes the hero's state");
     }
 
     [TestMethod]

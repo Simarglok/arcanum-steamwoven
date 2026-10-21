@@ -43,7 +43,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// The skill bar's prowling button (0x579FA0 → 0x57A0A0 → 0x45EE30, ledger ST1): the hero's concealment turns to the opposite
-    /// and every follower (following or waiting) takes the hero's new state. No check, no action points, no fate, no experience.
+    /// and every follower in the follower list takes the hero's new state; a waiting NPC has left that list (HK2) and keeps its own. No check, no action points, no fate, no experience.
     /// Refused without a hero or for a dead or unconscious one (<see cref="GameSessionFailure.ConcealmentUnavailable"/>). The
     /// crouch animation and its art are the host's: the source sets no flags on a critter whose crouch art is missing, which the
     /// session does not see. One revision.
@@ -57,8 +57,8 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         var on = !_combat.HeroConcealed;
         _combat.HeroConcealed = on;
-        foreach (var follower in _party.Records.Values.Where(record => record.Standing is CompanionStanding.Following or CompanionStanding.Waiting))
-            if (on) _combat.Concealed.Add(follower.Entity); else _combat.Concealed.Remove(follower.Entity);
+        foreach (var follower in _party.Order)
+            if (on) _combat.Concealed.Add(follower); else _combat.Concealed.Remove(follower);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
@@ -79,6 +79,9 @@ public sealed partial class GameSessionOwner
         var effectiveness = SkillCheckRules.Effectiveness(Skill.Prowling, request.Level, request.Effectiveness with { OpponentValue = observerPerception });
         var difficulty = SkillCheckRules.Difficulty(Skill.Prowling, request.Training, effectiveness, observer with
         {
+            // The observer is the check's target critter, so its paralysed, unconscious, stunned and sleeping terms count (AW4).
+            Target = true,
+            TargetCritter = true,
             SeeingCheck = seeing,
             HearingCheck = !seeing,
             SourceInjuries = request.Difficulty.SourceInjuries,
@@ -95,16 +98,17 @@ public sealed partial class GameSessionOwner
         return changed;
     }
 
-    // The attack event (0x4A9650, ST4): when the victim is the hero or one of its followers, the hero and all its followers are no
-    // longer concealed; the attacker keeps its state. True when that changed anything.
+    // The attack event (0x4A9650, ST4): when the victim is the hero or an NPC the hero leads (following or waiting), the hero and
+    // the followers in its follower list are no longer concealed; a waiting victim is not in that list and keeps its state, as
+    // the attacker does. True when that changed anything.
     private bool EndConcealmentForAttackOn(SessionCombatant victim)
     {
         if (!victim.IsHero && (victim.Entity is not { } entity || !_party.Records.TryGetValue(entity, out var record) ||
             record.Standing is not (CompanionStanding.Following or CompanionStanding.Waiting)))
             return false;
-        var changed = _combat.HeroConcealed || _combat.Concealed.Count > 0;
+        var changed = _combat.HeroConcealed || _party.Order.Any(_combat.Concealed.Contains);
         _combat.HeroConcealed = false;
-        _combat.Concealed.Clear();
+        foreach (var follower in _party.Order) _combat.Concealed.Remove(follower);
         return changed;
     }
 
@@ -115,7 +119,7 @@ public sealed partial class GameSessionOwner
     private static GameSessionFailure ImportConcealment(SessionConcealmentState? saved, bool hero, PartyDomain party, CombatDomain combat)
     {
         if (saved?.Npcs is not { } npcs) return GameSessionFailure.InvalidSnapshot;
-        if (saved.Hero && !hero) return GameSessionFailure.InvalidConcealment;
+        if ((saved.Hero || npcs.Count > 0) && !hero) return GameSessionFailure.InvalidConcealment;
         if (npcs.Count > SessionConcealmentState.MaxNpcs) return GameSessionFailure.BudgetExceeded;
         for (var i = 0; i < npcs.Count; i++)
             if (!SessionValidation.Entity(npcs[i]) || i > 0 && string.CompareOrdinal(npcs[i - 1], npcs[i]) >= 0 ||

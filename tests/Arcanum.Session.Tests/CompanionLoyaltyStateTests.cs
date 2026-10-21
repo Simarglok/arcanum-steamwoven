@@ -127,6 +127,30 @@ public sealed class CompanionLoyaltyStateTests
     }
 
     [TestMethod]
+    public void A_concealed_follower_that_leaves_by_wait_expiry_or_loyalty_is_no_longer_concealed_and_the_save_loads()
+    {
+        // ARC-SKILLS-008 (ST2): every leave clears the follower's concealment, so the session's own save restores.
+        using var waiter = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        Assert.AreEqual(GameSessionDisposition.Changed, waiter.ForceJoinParty(waiter.Version, Npc).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, waiter.ToggleHeroConcealment(waiter.Version).Disposition);
+        var before = waiter.Version.Revision;
+        Changed(waiter.WaitParty(waiter.Version, Npc, Wait(0)), waiter, before + 1);
+        Assert.IsTrue(waiter.IsConcealed(SessionCombatant.Critter(Npc)), "waiting keeps it");
+        Advance(waiter, 1);
+        Assert.AreEqual(Npc, waiter.ProcessEvents(new World()).Waits.Single().Entity);
+        Assert.IsFalse(waiter.IsConcealed(SessionCombatant.Critter(Npc)));
+        Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(Decode(GameSessionSnapshotCodec.Encode(waiter.Capture())), RestoreOptions()).Failure);
+
+        using var leaver = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        Assert.AreEqual(GameSessionDisposition.Changed, leaver.JoinParty(leaver.Version, Npc, Facts(), false).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, leaver.ToggleHeroConcealment(leaver.Version).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, leaver.AdjustReaction(leaver.Version, Npc, Human50, Pc, -5).Disposition);
+        Assert.AreEqual(LoyaltyStepKind.Left, leaver.RunLoyaltyStep(leaver.Version, Npc, Facts(pcAlignment: 301), false).Step!.Value.Kind);
+        Assert.IsFalse(leaver.IsConcealed(SessionCombatant.Critter(Npc)));
+        Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(Decode(GameSessionSnapshotCodec.Encode(leaver.Capture())), RestoreOptions()).Failure);
+    }
+
+    [TestMethod]
     public void A_zero_index_timer_jilts_at_the_next_pass()
     {
         using var owner = Waiting(Wait(0), out _);

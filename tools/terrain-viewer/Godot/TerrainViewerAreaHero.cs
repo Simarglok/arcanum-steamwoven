@@ -68,13 +68,14 @@ public partial class TerrainViewerApp
         PaletteProwlToggle();
         Require(session.IsConcealed(Arcanum.Session.SessionCombatant.Hero) && session.Version.Revision == revision + 1, "prowl on: " + _prowlNotice);
         var training = session.QueryHeroSkills()![Arcanum.Simulation.Skills.Skill.Prowling].Training;
-        var gait = _worldGait; SetObjectApproachGait();
+        var (gait, origin) = (_worldGait, _gaitOrigin); SetObjectApproachGait();
         var stepped = StepGait();
         Require(stepped == (StealthAllowsRun() ? MovementGait.Run : MovementGait.Walk), $"the stealth gait: {training} {stepped}");
+        Require(training == Arcanum.Simulation.Skills.SkillTraining.Master || stepped == MovementGait.Walk, $"below master a run is a walk: {training} {stepped}");
         var followers = session.QueryConcealment().Npcs.Count;
         PaletteProwlToggle();
         Require(!session.IsConcealed(Arcanum.Session.SessionCombatant.Hero) && session.QueryConcealment().Npcs.Count == 0, "prowl off");
-        _worldGait = gait;
+        (_worldGait, _gaitOrigin) = (gait, origin);
         GD.Print("ARC-SKILLS-008 native-smoke prowl PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Training = training.ToString(), Step = stepped.ToString(), Followers = followers }));
     }
