@@ -968,7 +968,7 @@ def gate_stubs(case: GateCase, recorder: GateRecorder) -> dict:
 @dataclass
 class AreaTestCase:
     """The area test's one context: the mask (low, high), the required and forbidden spell flags and the radius; the candidate
-    (0 none, 1 its own object, 2 the self, 3 the source); whether self, source and the other object exist; the candidate's
+    (0 none, 1 its own object, 2 the self, 3 the source, 4 the other object); whether self, source and the other object exist; the candidate's
     facts (type, object flags, spell flags, critter flags and flags 2, hit points, hit-point damage, alignment, poison,
     material, weight, portal and container flags, PC leader code); the self's and the other object's PC leader codes (0 none,
     1 self, 2 other, 3 and 4 two PCs, 5 the candidate); the candidate's, the source's, the origin's, the candidate tile's and
@@ -1018,6 +1018,8 @@ def draw_area_test_case(rng: random.Random, values: list[int]) -> AreaTestCase:
         mask |= 1 << rng.randrange(64)
     if rng.random() < 0.5:
         mask |= 0x2000 << 32
+    if rng.random() < 0.15:
+        mask |= (0x4000 << 32) | rng.choice((0x44, 0x40004, 0x80 << 32, 0x100 << 32))   # MG25: summoned with another flags word
     flag_pool = (0x1, 0x1000, 0x4000, 0x400000)
     facts = (rng.choice((0, 1, 2, 3, 5, 8, 14, 15, 16, 16, 17)),
              _subset(rng, (0x1, 0x2, 0x100, 0x400, 0x800, 0x1000, 0x400000), 0.12),
@@ -1037,9 +1039,9 @@ def draw_area_test_case(rng: random.Random, values: list[int]) -> AreaTestCase:
     def maybe(p: float) -> tuple[int, int]:
         return (0, 0) if rng.random() < p else near()
     return AreaTestCase(lo=mask & 0xFFFFFFFF, hi=mask >> 32, required=_subset(rng, flag_pool, 0.1), forbidden=_subset(rng, flag_pool, 0.1),
-                        radius=radius, candidate=rng.choice((0, 1, 1, 1, 1, 1, 2, 3)), self_present=int(rng.random() < 0.85),
+                        radius=radius, candidate=rng.choice((0, 1, 1, 1, 1, 1, 2, 3, 4)), self_present=int(rng.random() < 0.85),
                         source_present=int(rng.random() < 0.85), other_present=int(rng.random() < 0.4), facts=facts,
-                        leader=rng.choice((0, 0, 1, 2, 3, 4)), self_leader=rng.choice((0, 0, 3, 4)), other_leader=rng.choice((0, 3, 4)),
+                        leader=rng.choice((0, 0, 1, 2, 3, 4)), self_leader=rng.choice((0, 0, 3, 4, 5)), other_leader=rng.choice((0, 3, 4, 5)),
                         candidate_location=near(), source_location=near(), origin=maybe(0.15), tile=maybe(0.2), target_tile=maybe(0.3),
                         tile_objects=tuple((rng.choice((0, 1, 2, 3, 5, 9, 15, 16, 17)), _subset(rng, (0x400, 0x1), 0.4))
                                            for _ in range(rng.choice((0, 0, 1, 2, 3)))),
@@ -1056,8 +1058,9 @@ def area_handles(case: AreaTestCase) -> dict:
     """Which world-model handle each role has: the candidate, self, source, other (or null)."""
     self_h = AREA_SELF if case.self_present else (0, 0)
     source_h = AREA_SOURCE if case.source_present else (0, 0)
-    candidate = {0: (0, 0), 1: AREA_CANDIDATE, 2: self_h, 3: source_h}[case.candidate]
-    return {"candidate": candidate, "self": self_h, "source": source_h, "other": AREA_OTHER if case.other_present else (0, 0)}
+    other_h = AREA_OTHER if case.other_present else (0, 0)
+    candidate = {0: (0, 0), 1: AREA_CANDIDATE, 2: self_h, 3: source_h, 4: other_h}[case.candidate]
+    return {"candidate": candidate, "self": self_h, "source": source_h, "other": other_h}
 
 
 def area_test_stubs(case: AreaTestCase, emulator, nodes: int) -> dict:
@@ -1209,6 +1212,10 @@ def draw_collect_case(rng: random.Random, values: list[int]) -> CollectCase:
         mask |= rng.choice(values)
     if rng.random() < 0.5:
         mask |= 0x2000 << 32
+    if rng.random() < 0.1:
+        mask = (mask | (0x2000000 << 32) | 0x11) & ~0x4   # the cone with the radius bit and no object bit
+    if rng.random() < 0.1:
+        mask |= (0x4000 << 32) | rng.choice((0x44, 0x40004, 0x80 << 32)) | 0x10   # MG25 through the radius gather's tests
     base = (rng.randint(100, 4000), rng.randint(100, 4000))
 
     def near(reach: int = 3) -> tuple[int, int]:

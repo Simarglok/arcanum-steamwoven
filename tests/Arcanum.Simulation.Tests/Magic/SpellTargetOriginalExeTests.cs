@@ -208,7 +208,7 @@ public sealed class SpellTargetOriginalExeTests
     {
         "self" => c["self"] == 0 ? null : c["candidate"] == 2 ? Candidate(c, "self") : new("self", 16, SpellLocation.None, PcLeader: Leader(c, c["selfLeader"])),
         "source" => c["source"] == 0 ? null : c["candidate"] == 3 ? Candidate(c, "source") : new("source", 16, At(c, "sourceX", "sourceY")),
-        "other" => c["other"] == 0 ? null : new("other", 16, SpellLocation.None, PcLeader: Leader(c, c["otherLeader"])),
+        "other" => c["other"] == 0 ? null : c["candidate"] == 4 ? Candidate(c, "other") : new("other", 16, SpellLocation.None, PcLeader: Leader(c, c["otherLeader"])),
         _ => throw new ArgumentOutOfRangeException(nameof(role)),
     };
 
@@ -230,6 +230,7 @@ public sealed class SpellTargetOriginalExeTests
         1 => "candidate",
         2 => c["self"] != 0 ? "self" : null,
         3 => c["source"] != 0 ? "source" : null,
+        4 => c["other"] != 0 ? "other" : null,
         _ => null,
     };
 
@@ -242,11 +243,12 @@ public sealed class SpellTargetOriginalExeTests
     {
         var self = Role(c, "self");
         var source = Role(c, "source");
-        var candidate = c["candidate"] switch { 1 => Candidate(c, "candidate"), 2 => self, 3 => source, _ => null };
+        var other = Role(c, "other");
+        var candidate = c["candidate"] switch { 1 => Candidate(c, "candidate"), 2 => self, 3 => source, 4 => other, _ => null };
         var area = new SpellTargetArea(unchecked((uint)c["lo"]) | (ulong)unchecked((uint)c["hi"]) << 32, unchecked((uint)c["required"]),
             unchecked((uint)c["forbidden"]), c["radius"]);
         return new(area, c["candidate"] == 2 && self is not null ? candidate : self, c["candidate"] == 3 && source is not null ? candidate : source,
-            At(c, "originX", "originY"), candidate, At(c, "tileX", "tileY"), null, At(c, "targetTileX", "targetTileY"), Role(c, "other"));
+            At(c, "originX", "originY"), candidate, At(c, "tileX", "tileY"), null, At(c, "targetTileX", "targetTileY"), other);
     }
 
     private sealed class World(Row c) : ISpellTargetWorld

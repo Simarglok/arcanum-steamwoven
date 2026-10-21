@@ -282,18 +282,21 @@ public static class SpellTargetRules
         return new(list, built);
     }
 
-    // 0x4F2C60: a scenery object with an occupant stands for the occupant (as an NPC); otherwise the object's own type.
-    [OriginalFunction(0x4F2C60, OriginalFunctionScope.Full)]
+    // 0x4F2C60: a scenery object with an occupant stands for the occupant (as an NPC); otherwise the object's own type. An occupant
+    // the world does not know leaves the scenery object (the original takes the occupant's handle whatever it is).
+    [OriginalFunction(0x4F2C60, OriginalFunctionScope.Partial)]
     private static (SpellTargetObject Object, int Kind) Visible(SpellTargetObject o, ISpellTargetWorld world) =>
         o.Type == SpellTargetObject.Scenery && o.Occupant is { } id && world.Object(id) is { } occupant ? (occupant, SpellTargetObject.Npc) : (o, o.Type);
 
-    private static (int Mask, bool AllTypes) TypeMask(uint lo)
+    // The types a radius or cone gather asks for; every type but projectiles when no type bit is named and one of the given
+    // object bits is set (the radius branch tests the object and radius bits, 0x14; the cone only the object bit, 0x4).
+    private static (int Mask, bool AllTypes) TypeMask(uint lo, uint objectBits)
     {
         var mask = (lo & 0x40) != 0 ? 0x18008 : 0x8;
         if ((lo & 0x10000) != 0) mask |= 0x2;
         if ((lo & 0x20000) != 0) mask |= 0x4;
         if ((lo & 0x80000) != 0) mask |= 0x1;
-        return mask == 0x8 && (lo & 0x14) != 0 ? (0x3FFEF, true) : (mask, false);
+        return mask == 0x8 && (lo & objectBits) != 0 ? (0x3FFEF, true) : (mask, false);
     }
 
     private static void GatherObjectsInRadius(List<SpellTargetEntry> list, SpellTargetContext c, SpellTargetContext gather, ISpellTargetWorld world, MagicAnomalyProfile profile)
@@ -301,7 +304,7 @@ public static class SpellTargetRules
         var area = c.Area;
         var test = gather with { Area = gather.Area with { Targets = area.Targets & ~(0x8000UL << 32) }, TargetTile = c.TargetTile, Other = c.Other };
         var centre = c.Target is not null ? c.Target.Location : c.TargetTile;
-        var (mask, all) = TypeMask((uint)area.Targets);
+        var (mask, all) = TypeMask((uint)area.Targets, 0x14);
         var count = area.Count;
         foreach (var found in world.ObjectsInSquare(centre, area.Radius, mask))
         {
@@ -313,6 +316,8 @@ public static class SpellTargetRules
         }
     }
 
+    // The tile radius's and the wall's centre: the target tile, else the target object's location; with neither the original
+    // reads a location through handle 0 and here the branch gathers nothing (MG26, both modes).
     private static SpellLocation Centre(SpellTargetContext c) => !c.TargetTile.IsNone ? c.TargetTile : c.Target?.Location ?? SpellLocation.None;
 
     // The original packs a tile from a 64-bit x and the low 32 bits of a 64-bit y: an x below 0 or past 2^32 spills into y.
@@ -325,6 +330,7 @@ public static class SpellTargetRules
     private static void GatherTiles(List<SpellTargetEntry> list, SpellTargetContext c, SpellTargetContext test, ISpellTargetWorld world, MagicAnomalyProfile profile)
     {
         var centre = Centre(c);
+        if (centre.IsNone) return;
         var r = c.Area.Radius;
         var count = c.Area.Count;
         for (var y = -r; y <= r; y++)
@@ -345,6 +351,7 @@ public static class SpellTargetRules
     private static void GatherWall(List<SpellTargetEntry> list, SpellTargetContext c, SpellTargetContext test, ISpellTargetWorld world, MagicAnomalyProfile profile)
     {
         var centre = Centre(c);
+        if (centre.IsNone) return;
         var direction = !c.Origin.IsNone && !c.TargetTile.IsNone ? world.Direction(c.Origin, c.TargetTile) : 0;
         var (dx, dy) = direction is >= 0 and <= 7 ? Steps[direction] : Steps[0];
         var count = c.Area.Count;
@@ -374,7 +381,7 @@ public static class SpellTargetRules
                 }
             return;
         }
-        var (mask, all) = TypeMask(lo);
+        var (mask, all) = TypeMask(lo, 0x4);
         var count = c.Area.Count;
         for (var y = -r; y <= r; y++)
         {
@@ -426,22 +433,24 @@ public static class SpellTargetRules
     }
 
     /// <summary>
-    /// Whether a component applies to the current target in the run's per-target stage (0x4510F0): its own area must pass
-    /// <see cref="Test"/> against the target and its tile; then, when the record has item triggers and the component names
-    /// some, they must meet the run's (a component with trigger 0x100 needs the run's 0x100).
+    /// The item-trigger gate of a component in the run's per-target stage (0x4510F0). The stage runs, per target and component:
+    /// the component's own area test (<see cref="Test"/> against the target and its tile; a failed component is skipped); the
+    /// re-aim (<see cref="ReAim"/>, which therefore happens even when this gate then refuses, and stays for the later
+    /// components); this gate — when the record has item triggers and the component names some, they must meet the run's (a
+    /// component with trigger 0x100 needs the run's 0x100); then the AI notice (<see cref="AiNotices"/>) and the component itself.
     /// </summary>
     [OriginalFunction(0x4510F0, OriginalFunctionScope.Partial)]
-    public static bool ComponentApplies(SpellTargetTest areaTest, bool recordHasTriggers, int componentTriggers, int runTriggers) =>
-        areaTest.Passes && (!recordHasTriggers || componentTriggers == 0
-            || ((componentTriggers & runTriggers) != 0 && ((componentTriggers & 0x100) == 0 || (runTriggers & 0x100) != 0)));
+    public static bool TriggersAllow(bool recordHasTriggers, int componentTriggers, int runTriggers) =>
+        !recordHasTriggers || componentTriggers == 0 || ((componentTriggers & runTriggers) != 0 && ((componentTriggers & 0x100) == 0 || (runTriggers & 0x100) != 0));
 
     /// <summary>
     /// A component's re-aim (0x453D40, its <c>Apply_AoE</c> mask): self makes the run's parent the target, source the run's source,
     /// summoned the last summoned object (each even when absent); then the tile bit sets the target tile — with the candidate
     /// tile bit ("offscreen", high 0x800000) to the current target's location when there is a target, otherwise to the run's
-    /// target tile, or else its target object's location. Without a mask nothing changes.
+    /// target tile, or else its target object's location. Without a mask nothing changes. The original also caches the new target's
+    /// type (0x5E75AC); the caller reads it from the target.
     /// </summary>
-    [OriginalFunction(0x453D40, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x453D40, OriginalFunctionScope.Partial)]
     public static (SpellTargetObject? Target, SpellLocation Tile) ReAim(ulong apply, SpellTargetObject? target, SpellLocation tile, SpellTargetObject? parent,
         SpellTargetObject? source, SpellTargetObject? lastSummoned, SpellLocation runTile, SpellTargetObject? runTarget)
     {

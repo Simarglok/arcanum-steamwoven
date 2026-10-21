@@ -11,8 +11,8 @@
   "otherMode": {
     "mode": "steamwoven",
     "ledger": "MG25",
-    "ledgerInputs": 207,
-    "differ": 2,
+    "ledgerInputs": 1467,
+    "differ": 13,
     "outsideLedger": 0
   },
   "result": "pass",

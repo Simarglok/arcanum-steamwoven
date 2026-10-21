@@ -76,20 +76,21 @@ objects skipped); the target object; the last summoned and the run's summoned li
 portal, container and wall bits ask (scenery always, standing for its occupant; every type but projectiles when none is asked),
 each passing the area test from the source's view; tiles in the radius (a square, rows first from the top left); the wall
 line (both ways from the centre, perpendicular to the direction from the origin to the target tile); the candidate's tile; the
-"cone" (O3: a square of the radius around the target tile or the source — its objects with the self bit, else its tiles; the
-original reads the source's art rotation and does not use it); the run's object list (built from the gathered objects, in
+"cone" (O3: a square of the radius around the target tile or the source — its objects with the self bit, of the types TA11 names but every type only with the object bit, else its
+tiles; the original reads the source's art rotation and does not use it); the run's object list (built from the gathered objects, in
 reverse order, by the first action that names it; reused after); the source's party and followers; an item source's owner.
 The count limits the radius, wall and cone branches (a duplicate counts). Duplicates are skipped; at most 256 entries (MG24).
 The original's `Tgt_Party_Critter`, `Tgt_Non_Party_Critters` and `Tgt_Attacker_Obj` gather nothing.
 
-## Components (`ComponentApplies`, `ReAim`, `AiNotices`)
+## Components (`ReAim`, `TriggersAllow`, `AiNotices`)
 
-In the run's per-target stage (0x4510F0) a component applies to the current target when its own area passes the area test
-against the target and its tile, and, when the record has item triggers and the component names some, they meet the run's.
-Its `Apply_AoE` mask then re-aims (0x453D40): self, source or the last summoned object becomes the target (in that order, each
-even when absent); the tile bit sets the tile to the current target's location ("offscreen") or else the run's target tile or
-its target object's location. The re-aimed target stays for the following components. For an aggressive record, a target and
-an action other than END the target's AI is told that the parent attacked it, and the run's other object when it is not the
+In the run's per-target stage (0x4510F0), for each target and each component of the action, in this order: the component's
+own area test against the target and its tile (a failed component is skipped); the re-aim by its `Apply_AoE` mask (0x453D40):
+self, source or the last summoned object becomes the target (in that order, each even when absent); the tile bit sets the tile
+to the current target's location ("offscreen") or else the run's target tile or its target object's location; the re-aimed
+target stays for the following components, **also when the next gate refuses this one**; the item-trigger gate
+(`TriggersAllow`): when the record has item triggers and the component names some, they must meet the run's. For an aggressive record, a target and
+an action other than END (after the gate) the target's AI is told that the parent attacked it, and the run's other object when it is not the
 parent, once per target in a row (0x453EE0, 0x453F20).
 
 ## Invocation check (`SpellInvocationAreas`)
@@ -108,15 +109,19 @@ Owner decisions 2026-10-20: every difference is documented.
 | --- | --- | --- |
 | The summoned test reads the flags word the test read last: the critter flags ("surrendered") with the critter bit, a door's or chest's flags after a lock test (MG25). No installed record reaches it. | The spell flag "summoned". | `MagicAnomalyProfile.SummonedTestReadsLastFlags` (Original) |
 | The list has room for 256 entries and its helpers write past it: a tile radius of 8 or more, a tile cone or a crowded radius overwrites the context (MG24). No installed record reaches it. | Further entries are dropped. | both (no-crash) |
-| A missing object's location is read through handle 0 (tile-self test without a candidate, the radius and wall centre without a target tile or object, the re-aim's tile); a sub-context without a source keeps an unset origin (MG26). | No location. | both (no-crash) |
+| A missing object's location is read through handle 0 (tile-self test without a candidate, the radius and wall centre without a target tile or object, the re-aim's tile); a sub-context without a source keeps an unset origin (MG26). | No location: the tile-self test fails, the tile radius and the wall gather nothing, the re-aim's tile is none, the indoor/outdoor test is skipped. | both (no-crash) |
+| A scenery object's occupant is used by handle, whatever it is. | An occupant the world port does not know leaves the scenery object. | — |
+| The re-aim caches the new target's type in a global the resistance reads. | The caller reads the type from the target. | — |
 | The multiplayer party list (0x441310) joins the party and non-party tests and the party gather. | Not modelled (single player). | — |
 | The world queries, the objects' fields and the run's globals are read directly. | The caller passes the facts; the world port answers the queries. | — |
 
 MG18 (`Tgt_Obj_No_ST_Critter_Dead` without the critter bit), MG21 (`Tgt_Non_Party_Critters`), MG22 (`Tgt_Obj_Radius` without the
 object bit) and MG23 (`Tgt_Tile_Self` without the tile bit) are the original's intent: the test and the collection handle each
 bit on its own (the not-dead and non-party tests run without the critter bit, the radius bit is an object kind, the tile-self
-bit gathers the source's tile), so the values follow the original in both modes. The tile-radius test's distance of a tile to
-itself never refuses; no caller gives it another origin, so it follows the original.
+bit gathers the source's tile), so the values follow the original in both modes. MG27: the tile-radius test measures the target
+tile's distance to itself, so it never refuses a radius ≥ 0; the comparison it was meant to make is unknown, and with the
+installed records (tile-radius components of records 11, 27, 180 and 200 have their action's radius, and their entries come from
+the same square) any likely fix changes nothing, so it follows the original in both modes, as MG5 does.
 
 ## Not ready
 

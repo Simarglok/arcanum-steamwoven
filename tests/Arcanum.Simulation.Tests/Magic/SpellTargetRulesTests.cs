@@ -192,11 +192,11 @@ public sealed class SpellTargetRulesTests
     [TestMethod]
     public void ComponentsFilterReAimAndTellTheAi()
     {
-        Assert.IsTrue(SpellTargetRules.ComponentApplies(new(true), recordHasTriggers: false, 0x4, 0));
-        Assert.IsFalse(SpellTargetRules.ComponentApplies(new(false), false, 0, 0));
-        Assert.IsFalse(SpellTargetRules.ComponentApplies(new(true), true, 0x4, 0x2));
-        Assert.IsFalse(SpellTargetRules.ComponentApplies(new(true), true, 0x104, 0x4));
-        Assert.IsTrue(SpellTargetRules.ComponentApplies(new(true), true, 0x104, 0x104));
+        Assert.IsTrue(SpellTargetRules.TriggersAllow(recordHasTriggers: false, 0x4, 0));
+        Assert.IsTrue(SpellTargetRules.TriggersAllow(true, 0, 0x2), "a component without triggers");
+        Assert.IsFalse(SpellTargetRules.TriggersAllow(true, 0x4, 0x2));
+        Assert.IsFalse(SpellTargetRules.TriggersAllow(true, 0x104, 0x4));
+        Assert.IsTrue(SpellTargetRules.TriggersAllow(true, 0x104, 0x104));
 
         var orc = new SpellTargetObject("orc", 16, new(5, 5));
         var imp = new SpellTargetObject("imp", 16, new(7, 7));
@@ -233,6 +233,30 @@ public sealed class SpellTargetRulesTests
         Assert.IsTrue(areas.TargetMatchesBeginArea(atHero with { Spell = 2 }));
         var result = SpellInvocationRules.Check(atHero, new(false, 10, 0, 0, 0), areas, new NoRolls());
         Assert.AreEqual((SpellInvocationRefusal.None, new SpellLocation(12, 8)), (result.Refusal, result.ReplacedTile));
+    }
+
+    [TestMethod]
+    public void ReviewEdgesConeTypesMissingCentresAndTheLeaderClause()
+    {
+        var world = new World();
+        world.Objects.Add(new("wolf", 16, new(101, 100)));
+        world.Objects.Add(new("rock", 3, new(100, 101)));
+        // The cone asks every type only with the object bit; the radius bit alone keeps the scenery-only query (no target tile:
+        // the cone centres on the source, the radius gather on nothing near).
+        var cone = new SpellTargetContext(new(Cone | Self | 0x10000000 | ObjRadius, Radius: 1), Mage, Mage, Here);
+        Assert.AreEqual(0, SpellTargetRules.Collect(cone, world, MagicAnomalyProfile.Steamwoven).Entries.Count(e => e.Object?.Id == "wolf"));
+        Assert.AreEqual(1, SpellTargetRules.Collect(cone with { Area = cone.Area with { Targets = cone.Area.Targets | Object } }, world,
+            MagicAnomalyProfile.Steamwoven).Entries.Count(e => e.Object?.Id == "wolf"));
+        // MG26: a tile radius or wall with neither target tile nor target object gathers nothing.
+        var nowhere = new SpellTargetContext(new((TileRadius | Wall) & ~Tile, Radius: 1), Mage, Mage, Here);
+        Assert.AreEqual(0, SpellTargetRules.Collect(nowhere, world, MagicAnomalyProfile.Original).Entries.Count);
+        Assert.IsFalse(SpellTargetRules.Test(new(new(Tile | TileSelf), Mage, Mage, Here, CandidateTile: Here), world, MagicAnomalyProfile.Original).Passes,
+            "tile-self without a candidate object has no location to match");
+        Assert.AreEqual(SpellLocation.None, SpellTargetRules.ReAim(Tile, null, Here, Mage, null, null, SpellLocation.None, null).Tile);
+        // Non-party: a follower casting spares its own PC leader.
+        var hero = new SpellTargetObject("hero", 15, Here);
+        var virgil = new SpellTargetObject("virgil", 16, Here, PcLeader: "hero");
+        Assert.IsFalse(Passes(NonParty, hero, self: virgil), "the candidate is the caster's PC leader");
     }
 
     private sealed class NoRolls : ISpellRollSource

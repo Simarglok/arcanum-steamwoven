@@ -11,12 +11,12 @@
   "otherMode": {
     "mode": "steamwoven",
     "ledger": "MG25",
-    "ledgerInputs": 559,
-    "differ": 0,
+    "ledgerInputs": 1549,
+    "differ": 13,
     "outsideLedger": 0
   },
   "result": "pass",
   "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
-  "ilSha256": "102ce639271aa77d9e3330d8546d8eab88a915fc2210a9ac94e8bff9f2d61e35",
+  "ilSha256": "3d598732be0bbd65bb6086d44f7e607c20751523a856a83d0803fa493ca71483",
   "configuration": "Debug"
 }
