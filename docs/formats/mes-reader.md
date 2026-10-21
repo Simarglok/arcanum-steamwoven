@@ -28,7 +28,8 @@ if (name.Status == ObjectNameStatus.Resolved)
 
 - `MesFile.Parse(bytes, MesReaderOptions?)` → `MesParseResult(Status, File, Line, Number)`.
   `MesFile` is immutable, owns a copy of the payload, orders messages by number
-  and offers `Find(number)`, `Count` and `LastNumber`. `MesMessage.Bytes` is the
+  and offers `Find(number)`, `Count`, `LastNumber` and `RunLength(first, last)`, the original's run count
+  (0x4D4550, ARC-DATA-042: 0 without an entry numbered exactly `first`, else the stored entries from it numbered ≤ `last`). `MesMessage.Bytes` is the
   text field as the original reads it: the stored bytes with each CR LF read as LF,
   nothing else changed (no decoding or trimming). `MesMessage` equality compares
   number, line and bytes.

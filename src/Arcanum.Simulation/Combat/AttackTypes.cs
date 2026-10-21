@@ -46,6 +46,22 @@ public enum CriticalHitChart { Cutting, Crushing, Impaling, Electrical, Fire }
 /// <summary>A weapon's critical-miss chart; bare hands count as <see cref="Hands"/>, a non-weapon item as <see cref="Bludgeon"/>.</summary>
 public enum CriticalMissChart { Bladed, Bludgeon, Handled, Guns, Bows, Hands, Explosive, Fire, Electrical }
 
+/// <summary>
+/// The items a critter holds in the wear slots the critical-hit procedure looks at (ARC-COMBAT-009): the helmet (1000, stun and head
+/// effects), the wielded weapon (1004, "damage weapon" and "drop weapon") and the armour a hit location strikes
+/// (<see cref="CombatWearRules.ArmorSlot"/>: helmet, gauntlets 1007, boots 1008, body armour 1006; "damage armour").
+/// </summary>
+[Flags]
+public enum CombatWornItems
+{
+    None = 0,
+    Helmet = 1 << 0,
+    Weapon = 1 << 1,
+    Gauntlets = 1 << 2,
+    Boots = 1 << 3,
+    BodyArmor = 1 << 4,
+}
+
 /// <summary>Unarmed damage spells on the attacker; the source applies the first that is active, in this order.</summary>
 public enum UnarmedBodySpell { None, BodyOfEarth, BodyOfFire, BodyOfWater, HardenedHands }
 
@@ -182,6 +198,20 @@ public sealed record Combatant
     /// <summary>The object's material: a portal or container subtracts its reduction from hit-point damage, and a melee hit
     /// wears the attacker's weapon or hands by the material of whatever it struck, critter or object (ARC-COMBAT-007).</summary>
     public ObjectMaterial Material { get; init; } = ObjectMaterial.Flesh;
+    /// <summary>The critter's critical-hit body type (critter field 227, ARC-COMBAT-009; <see cref="OriginalCriticalEffects"/>): 0
+    /// can be knocked down, 2 takes no stun, injury or knockdown, 4 only head effects, 5 no arm crippling (the installed data hold 0..5;
+    /// the resolver admits 0..100,000). Every pre-made PC has 0.</summary>
+    public int CriticalBody { get; init; }
+    /// <summary>Effective constitution, which the critical effects' constitution checks roll against.</summary>
+    public int Constitution { get; init; } = 8;
+    /// <summary>The constitution maximum of the critter's race (<see cref="Character.CharacterStatRules.Range"/>), the upper bound of
+    /// a constitution check's roll (the source's 0x4B0FD0).</summary>
+    public int ConstitutionMaximum { get; init; } = 20;
+    /// <summary>The items in the wear slots the critical-hit procedure looks at.</summary>
+    public CombatWornItems Worn { get; init; }
+    /// <summary>The critter has at least one scar (the source's count of effect 50): a PC that hit itself critically is not scarred
+    /// again.</summary>
+    public bool Scarred { get; init; }
 }
 
 /// <summary>
@@ -218,6 +248,9 @@ public sealed record CombatWeapon
     /// <summary>The weapon's art subtype: bits 6..9 of its use-art fragment, 0..15 (0 without an item art). Subtype 4 wears 2 less
     /// and subtypes 5 and 13 wear 1 less on a melee hit (<see cref="CombatWearRules.WeaponWear"/>).</summary>
     public int ArtSubtype { get; init; }
+    /// <summary>The weapon has an ammunition type (field 125 other than 10 000, the source's 0x465CA0): a critical self-hit then rolls
+    /// the ammunition effects (ARC-COMBAT-009).</summary>
+    public bool UsesAmmunition { get; init; }
 
     /// <summary>
     /// Bare hands with a gauntlet's unarmed bonus: normal and fatigue <c>max(1, bonus − 25) .. bonus + 5</c>, nothing

@@ -607,11 +607,10 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   a dialog NPC is *talk* within the 3-tile reach, else *walk to talk*; the cave
   entrance or exit is *use* within use range 2, else *walk to use*; anything else is a
   ground goal: *no route* when the route planner refuses it without a search (the cell or
-  the actor outside the area, the goal more than 32 cells from the actor on an axis, or no
-  neighbour step entering the cell), else *walk here*. The bounded search itself is not run
-  on hover, so a *walk here* goal can still end without a route; the reach is measured from
-  the committed cell, while during a step the route plans from the step's target cell, so a
-  goal exactly at the 32-cell edge can differ by one. Since ARC-UI-004 an item on the ground
+  the actor outside the area, or no neighbour step entering the cell), else *walk here*;
+  since ARC-WORLD-042 a goal more than 32 cells from the actor on an axis is *walk here*
+  too (the follower walks it along a corridor). The search itself is not run on hover, so
+  a *walk here* goal can still end without a route, or short of it (`ROUTE_PARTIAL`). Since ARC-UI-004 an item on the ground
   is *pick up* within reach 1, else *walk to pick up*, and a dead NPC is *loot* or *walk to
   loot* (checked after talk and use, before the ground). System cursor shapes: cross for walk,
   forbidden for no route, help (question arrow) for talk, pointing hand for use, pickup and
@@ -1135,10 +1134,11 @@ holding a learned record's components one assembly makes its product).
 ### Reserved-key hint (ARC-INPUT-003)
 
 An original key that is reserved, not implemented ([keyboard routing](../input/diagnostic-palette.md#keyboard-routing)),
-is named in the HUD's sticky header ("Reserved: F1 = Followers: go to point (NOT IMPLEMENTED)") until the
+is named in the HUD's sticky header ("Reserved: F10 = Compact interface (source reading only) (NOT IMPLEMENTED)") until the
 next key press, so it is visible without scrolling; the detail text keeps its "last reserved key" entry. Native smoke
-after the logbook stage (exterior and map mode): `ARC-INPUT-003 native-smoke reserved-key hint PASS` (F1 pushed through
-the viewport's input path; the notice is in the sticky header, every header line shown inside the panel and the window;
+after the logbook stage (exterior and map mode): `ARC-INPUT-003 native-smoke reserved-key hint PASS` (F10, F1 before
+ARC-WORLD-046 made F1–F6 [follower orders](../world/companion-orders-runtime.md#area-viewer), pushed through the viewport's input
+path; the notice is in the sticky header, every header line shown inside the panel and the window;
 Z, an unmapped key, removes it).
 
 ### Sound output (ARC-UI-040)

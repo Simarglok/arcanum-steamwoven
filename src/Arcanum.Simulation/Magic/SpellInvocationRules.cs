@@ -56,8 +56,8 @@ public readonly record struct SpellLineOfFire(int Score, SpellObjectFacts? Block
 /// <summary>
 /// What the check asks of the world: the line of fire from the parent to a tile (0x4ADE00; filled by the NPC AI awareness stage I2,
 /// which owns the line of fire, or a later line-of-sight slice; tests use a double), and the NPC fallback's area questions — whether
-/// the target matches the spell's BEGIN area and the first matching tile in radius 2 around the target object (filled by the target
-/// functions, MT8).
+/// the target matches the spell's BEGIN area and the first matching tile in radius 2 around the target object (answered by the target
+/// functions through <see cref="SpellInvocationAreas"/>, ARC-MAGIC-007).
 /// </summary>
 public interface ISpellInvocationWorld
 {

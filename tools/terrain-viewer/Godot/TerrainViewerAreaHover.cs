@@ -175,7 +175,7 @@ public partial class TerrainViewerApp
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return AreaHoverAction.None;
         if (!ReferenceEquals(_hoverRoutesSession, session)) { _hoverRoutes = new AreaRouteSource(session.Snapshot, session.Chart); _hoverRoutesSession = session; }
-        // WorldRoute's follower uses the default limits.
+        // As WorldRoute's follower: a goal beyond the local reach is a walk (its corridor, ARC-WORLD-042).
         return AreaHover.Ground(_hoverRoutes!, session.State.CommittedCell, cell);
     }
 

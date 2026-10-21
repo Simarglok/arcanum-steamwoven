@@ -129,7 +129,8 @@ travel step.
 ## Anomalies (switch candidates)
 
 Each one is the original's behaviour; whether the Steamwoven setting changes it is an owner
-decision for the W3 task (rule modes, [D8](npc-combat-ai-plan.md#owner-decisions-2026-10-16)).
+decision for the W3 task (rule modes, [D8](npc-combat-ai-plan.md#owner-decisions-2026-10-16)). The owner
+decided on 2026-10-21 that Steamwoven fixes all four; Original keeps them (ARC-WORLD-056).
 
 | ID | What the original does | Effect |
 | --- | --- | --- |
@@ -138,10 +139,11 @@ decision for the W3 task (rule modes, [D8](npc-combat-ai-plan.md#owner-decisions
 | A3 | The step that ends a segment adds no game time (WT11). | A journey of n sectors over k waypoints takes n − k hours. |
 | A4 | Cancelling travel lands on the sector centre without the area snap (WT12). | A cancelled journey lands differently from an arrival at the same place. |
 
-## Steamwoven: slice W3 (proposed)
+## Steamwoven: slice W3 (done)
 
 The Data, Simulation and Session parts are implemented as ARC-WORLD-056
-([world-map travel rules](../world/world-map-travel-runtime.md)); the viewer panel is still to do.
+([world-map travel rules](../world/world-map-travel-runtime.md)); the viewer panel is ARC-UI-048
+([world map in map mode](../rendering/area-map-mode.md#world-map-arc-ui-048)).
 
 **ARC-WORLD-05x world-map travel**, Godot-free rules plus a viewer path. It needs no new
 original data reader beyond `mes/gamearea.mes`. Its parts:

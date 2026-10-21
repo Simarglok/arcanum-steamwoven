@@ -758,7 +758,8 @@ public sealed partial class GameSessionOwner : IDisposable
     public SessionMapInventory? QueryMapInventory(SessionMapId map)
     {
         ThrowIfDisposed();
-        return _inventory.Seeds.TryGetValue(map, out var seed) ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder)) : null;
+        return _inventory.Seeds.TryGetValue(map, out var seed)
+            ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item)) : null;
     }
 
     /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
@@ -785,8 +786,9 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
-        // ARC-COMBAT-008: an item of a container an attack broke lies on the ground at the container's cell.
-        if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item) || row.Cell is null && SpilledCell(_actor.Map, seed, item) is null)
+        // ARC-COMBAT-008: an item of a container an attack broke lies on the ground at the container's cell; ARC-COMBAT-009: an NPC's
+        // item a critical dropped lies at the cell it was dropped on.
+        if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item) || LooseCell(_actor.Map, seed, item) is null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         return Take(seed, new(item, row.Facts), false, insertCheck, scripts);
     }
@@ -813,7 +815,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-WORLD-055: a made item the session added to this NPC is in its list too.
         if (_inventory.AddedTo(holder).FirstOrDefault(added => added.Entity == item) is { Entity: not null } made)
             return Take(seed, new(item, InventoryDomain.MadeFacts(made.Kind)), true, insertCheck, scripts);
-        if (!seed.HolderOf.TryGetValue(item, out var of) || of != holder || _inventory.Taken.Contains(item))
+        if (!seed.HolderOf.TryGetValue(item, out var of) || of != holder || _inventory.Taken.Contains(item) || DroppedCell(_actor.Map, seed, item) is not null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         return Take(seed, new(item, seed.Items[item].Facts), true, insertCheck, scripts);
     }
@@ -835,7 +837,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         if (!seed.Holders.TryGetValue(npc, out var row) || row.Kind != SessionHolderKind.Npc) return RejectItem(GameSessionFailure.UnknownHolder);
-        if (_inventory.Current(seed, row).FirstOrDefault(entry => entry.Facts.Kind.Name == name) is not { } found)
+        var map = _actor.Map;
+        if (_inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).FirstOrDefault(entry => entry.Facts.Kind.Name == name) is not { } found)
             return row.HasSubstituteInventory ? RejectItem(GameSessionFailure.SubstituteInventoryUnsupported)
                 : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision));
         return Take(seed, found, true, insertCheck, scripts);
