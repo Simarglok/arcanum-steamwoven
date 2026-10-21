@@ -374,9 +374,11 @@ public sealed class AreaInventoryHost
     public static string Printed(InventoryMutationResult result) =>
         result.Messages.Count == 0 ? string.Empty : " — " + string.Join(" ", result.Messages.Select(message => message.Text.Trim()));
 
-    /// <summary>Plain text for a transfer refusal shown in the window and the status line.</summary>
-    public static string Refusal(GameSessionFailure failure) => failure switch
+    /// <summary>Plain text for a transfer refusal shown in the window and the status line; an insert check's Technophobia answer (ARC-WORLD-069) names the background's refusal
+    /// (<c>mes\item.mes</c> 115 in the original).</summary>
+    public static string Refusal(GameSessionFailure failure, SessionInsertVerdict? verdict = null) => failure switch
     {
+        GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.TechnologyRefused => "the hero's Technophobia refuses technological items",
         GameSessionFailure.ItemScriptUnsupported => "the item runs a script on this transfer that is not supported here",
         GameSessionFailure.HolderScriptUnsupported => "the body runs a use script (not supported here)",
         GameSessionFailure.ItemTypeUnsupported => "gold and keys are not modelled",
