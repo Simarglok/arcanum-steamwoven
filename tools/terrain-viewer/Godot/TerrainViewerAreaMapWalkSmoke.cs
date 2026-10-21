@@ -46,11 +46,13 @@ public partial class TerrainViewerApp
             var from = placed.Chart.ToWorld(placed.State.CommittedCell);
             var clock = System.Diagnostics.Stopwatch.StartNew();
             var arguments = _arguments!;
+            // ARC-WORLD-060: the route reads the steps the PC walks by (removed objects free their tiles).
+            var overlay = AreaPcOccupancy();
             // The plan runs in the background for minutes; a viewer that exits meanwhile cancels it (_ExitTree).
             using var cancel = new CancellationTokenSource();
             _walkPlanCancellation = cancel;
             AreaWindowRouteResult route;
-            try { route = await Task.Run(() => AreaMapWalk.Plan(arguments, from, WalkGoal, cancel.Token), cancel.Token); }
+            try { route = await Task.Run(() => AreaMapWalk.Plan(arguments, from, WalkGoal, cancel.Token, overlay), cancel.Token); }
             finally { _walkPlanCancellation = null; }
             var planSeconds = clock.Elapsed.TotalSeconds;
             GD.Print($"ARC-WORLD-042 walk route {route.Status} {route.Detail} cells={route.Cells.Count} windows={route.WindowLoads} expansions={route.Expansions} seconds={planSeconds:F0}");
