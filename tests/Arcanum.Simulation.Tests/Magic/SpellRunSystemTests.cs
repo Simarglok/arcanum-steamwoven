@@ -22,6 +22,7 @@ public sealed class SpellRunSystemTests
         public List<SpellRunTarget> Targets { get; set; } = [new(Orc, new(5, 5))];
         public bool Fate { get; set; }
         public bool Takes { get; set; } = true;
+        public HashSet<string> Resisting { get; } = [];
         public bool Passes { get; set; } = true;
         public bool BarFree { get; set; } = true;
         public int Intelligence { get; set; } = 12;
@@ -40,7 +41,7 @@ public sealed class SpellRunSystemTests
         public SpellPayer? Payer(SpellRunObject who) => new(SpellPayerKind.Critter, CurrentFatigue: 50);
         public SpellResistRecord ResistRecord(int spell) => new(spell, false, false, false, 0, SpellResistanceRules.NoSave, 0);
         public SpellResistTarget ResistTarget(SpellRun run, SpellRunTarget target) =>
-            new(false, SpellTargetKind.Npc, false, Takes ? 0 : 100, 0, 0, false);
+            new(false, SpellTargetKind.Npc, false, Takes && !Resisting.Contains(target.Object?.Id ?? "") ? 0 : 100, 0, 0, false);
         public ISpellRollSource Rolls { get; } = new FixedRolls();
         public ISpellFateSave FateSave => SpellFateSave.None;
         public bool IsLocalPlayer(SpellRunObject? who) => who?.Id is { } id && id == LocalPlayer;
@@ -339,10 +340,44 @@ public sealed class SpellRunSystemTests
     [TestMethod]
     public void TheResistanceWritesTheRunsMarginAndSkipsAResistingTarget()
     {
-        var host = new Host { Takes = false };
+        var host = new Host { Targets = [new(Wand, new(6, 6)), new(Orc, new(5, 5))] };
+        host.Resisting.Add("orc");
         host.Records[7] = Record() with { Duration = new(30) };
         var system = System(host, Run());
         system.Begin(0);
+        Assert.AreEqual("wand", string.Join(",", host.Applied.Select(a => a.Target)), "the orc resisted; the wand took the spell, so the run lives on");
         Assert.IsTrue(system.Notes.Any(n => n is { Kind: SpellRunNoteKind.Resistance, Value: 99 }) && system.Notes.Any(n => n.Kind == SpellRunNoteKind.Resisted));
+        var expected = SpellResistanceRules.Resist(host.ResistRecord(7), host.ResistTarget(Run(), new(Orc, new(5, 5))), new(true, false, false), host.Rolls,
+            SpellFateSave.None, MagicAnomalyProfile.Steamwoven).Margin;
+        Assert.IsNotNull(expected);
+        Assert.AreEqual(expected.Value, system.Table[0]!.Margin, "the last target's margin is the run's");
+    }
+
+    [TestMethod]
+    public void TheReflectionsCasterPaysTheLastCostInTheOriginalAndTheRunsOwnStageCostInSteamwovenMg15()
+    {
+        var mage = new SpellRunObject("mage", SpellObjectFacts.NpcType, 0);
+        var host = new Host();
+        host.Flags["orc"] = SpellTargetStage.FullReflection;
+        host.Records[7] = Record() with { Cost = 3, Duration = new(30) };
+        // The mage's run set the reflection on the orc: the mage is the reflection's caster (0x459040).
+        var shield = new SpellRun(1, 8, SpellRunAction.Maintain, mage, mage, SpellLocation.None, Orc, SpellLocation.None, null, SpellRunFlags.Active)
+            { SetSpellFlags = SpellTargetStage.FullReflection };
+        (int? Stage, int? Reflection, string? Payer, int Last) Cast(MagicAnomalyProfile profile, SpellRunFlags flags)
+        {
+            var system = new SpellRunSystem(SpellRunTable.Empty.With(Run(flags: flags)).With(shield), host, profile, lastCostCharged: 13);
+            system.Begin(0);
+            var reflection = system.Notes.Single(n => n.Kind == SpellRunNoteKind.ReflectionPayment);
+            return (system.Notes.FirstOrDefault(n => n.Kind == SpellRunNoteKind.Payments)?.Payments![0].LastCost, reflection.Payments!.Single().LastCost,
+                reflection.Target!.Object!.Id, system.LastCostCharged);
+        }
+        var paid = Cast(MagicAnomalyProfile.Original, SpellRunFlags.Active);
+        Assert.IsNotNull(paid.Stage);
+        Assert.AreEqual((paid.Stage, "mage", paid.Stage!.Value), (paid.Reflection, paid.Payer, paid.Last), "the stage's BEGIN cost is the last cost the mage pays");
+        Assert.AreEqual((paid.Stage, paid.Stage, "mage"), Cast(MagicAnomalyProfile.Steamwoven, SpellRunFlags.Active) is var own ? (own.Stage, own.Reflection, own.Payer) : default);
+        Assert.AreEqual(((int?)null, (int?)13, "mage", 13), Cast(MagicAnomalyProfile.Original, SpellRunFlags.Active | SpellRunFlags.Free),
+            "a free cast: the original charges the last cost of an earlier payment");
+        Assert.AreEqual(((int?)null, (int?)null, "mage", 13), Cast(MagicAnomalyProfile.Steamwoven, SpellRunFlags.Active | SpellRunFlags.Free),
+            "a free cast paid nothing, so its reflection costs nothing");
     }
 }

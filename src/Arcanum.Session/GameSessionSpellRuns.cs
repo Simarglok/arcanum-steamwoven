@@ -101,7 +101,11 @@ public sealed partial class GameSessionOwner
         try { Act(system, action); }
         finally { _spellRunsBusy = false; }
         if (!system.Changed(_spellRuns))
+        {
+            // Its payments come back for the host to apply, so their last cost follows (not saved, no revision).
+            _spellLastCost = system.LastCostCharged;
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, system.Notes, Version);
+        }
         if (!SpellEventsFit(system.Queued.Count)) return RejectRun(GameSessionFailure.EventBudgetExceeded);
         if (_revision == long.MaxValue) return RejectRun(GameSessionFailure.RevisionExhausted);
         CommitSpellSystem(system);
@@ -144,6 +148,7 @@ public sealed partial class GameSessionOwner
         finally { _spellRunsBusy = false; }
         if (!system.Changed(_spellRuns))
         {
+            _spellLastCost = system.LastCostCharged;
             _passSpellRuns?.Add(new(firing.Event, run, code, true, system.Notes));
             return GameEventHandlerOutcome.Completed;
         }

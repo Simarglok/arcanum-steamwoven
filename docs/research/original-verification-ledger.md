@@ -1597,7 +1597,8 @@ mutant "the other run's `Cancels_EnvSF:`" is caught (PT6). The second reader add
 target's skipped restore (MG34) and the writers of the last-cost global. The per-target stage (0x455550), the no-stack test
 (0x453410) and the cancels (0x4534E0) were run in the function oracle on 10,000 inputs each (F3, receipts `455550.json`,
 `453410.json`, `4534E0.json`): the Original setting matches on every input, Steamwoven differs only on MG15's inputs, every planted
-mutant is caught.
+mutant is caught. The oracle's inputs always give the run a source; a sourceless run's reflection and cancels rest on the two
+readings.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |

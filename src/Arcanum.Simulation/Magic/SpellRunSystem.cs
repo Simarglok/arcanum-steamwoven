@@ -38,7 +38,7 @@ public sealed record SpellComponentOutcome(int SetSpellFlags = 0, int? JumpTo = 
 /// <summary>What the host must do or show after the run rules acted.</summary>
 public enum SpellRunNoteKind
 {
-    /// <summary>Apply the stage's payments (<see cref="SpellRunNote.Payments"/>).</summary>
+    /// <summary>Apply the stage's payments (<see cref="SpellRunNote.Payments"/>), the run source's (or its parent's).</summary>
     Payments,
     /// <summary>Show the local player spell.mes <see cref="SpellRunNote.Value"/> (601 the maintenance, 602 the checks, the shell).</summary>
     Message,
@@ -63,6 +63,9 @@ public enum SpellRunNoteKind
     Resistance,
     /// <summary>The processing of a run another run's pass interrupted was deferred until after that pass (MG30, Steamwoven).</summary>
     Deferred,
+    /// <summary>Apply the reflection's payment (<see cref="SpellRunNote.Payments"/>, one): the payer is
+    /// <see cref="SpellRunNote.Target"/>'s object, the caster of the target's full reflection (MT10, MG15).</summary>
+    ReflectionPayment,
 }
 
 /// <summary>A host note: its kind, the run, a value (a message number, a component) and the target or payments it concerns.</summary>
@@ -184,8 +187,8 @@ public sealed class SpellRunSystem
         LastCostCharged = lastCostCharged;
     }
 
-    /// <summary>The last positive cost any payment the rules made charged (the stage's, the reflection's); a component's own
-    /// payments are the host's (<see cref="SpellComponentOutcome"/>' cost).</summary>
+    /// <summary>The last positive cost any payment the rules made charged (the stage's, the reflection's, a charged free's); a
+    /// component's own payments and the cost checks are the host's.</summary>
     public int LastCostCharged { get; private set; }
 
     /// <summary>The runs whose every event to remove (a free in the Steamwoven setting, MG32), in order.</summary>
@@ -207,6 +210,7 @@ public sealed class SpellRunSystem
         public bool Applied;          // 0x5E75DC: a component applied, the list was empty, or the action has no components
         public bool CallbackPending;  // 0x5E75CC: an eye candy's animation will call back
         public bool CallbackNow;      // 0x5E75D4: the callback runs at once
+        public int StageCost;         // the positive costs the run's own stage asked this pass (MG15's Steamwoven reflected cost)
     }
 
     /// <summary>
@@ -248,7 +252,7 @@ public sealed class SpellRunSystem
         _sourceFlags = 0;
         if (run.Action == SpellRunAction.Begin && !_host.FlagsAllow(run)) { Refuse(id); return; }
         var stage = SpellRunRules.Stage(run, record, _host.StageFacts(run), _host.Cells, new Stacking(this), _profile);
-        foreach (var cost in stage.Costs) if (cost > 0) LastCostCharged = cost;
+        foreach (var cost in stage.Costs) if (cost > 0) { LastCostCharged = cost; pass.StageCost += cost; }
         if (stage.Payments.Count > 0) _notes.Add(new(SpellRunNoteKind.Payments, id, Payments: stage.Payments));
         if (stage.Message is { } stageMessage) _notes.Add(new(SpellRunNoteKind.Message, id, stageMessage));
         if (!stage.Proceeds)
@@ -316,7 +320,7 @@ public sealed class SpellRunSystem
         {
             if (Table[id] is not { } current) return;
             var target = entry;
-            if (!PerTarget(id, record, ref target)) continue;
+            if (!PerTarget(id, record, ref target, pass)) continue;
             if (!TakesEffect(id, record, target, maximized)) { _notes.Add(new(SpellRunNoteKind.Resisted, id, Target: target)); continue; }
             for (var component = 0; component < count; component++)
             {
@@ -348,14 +352,14 @@ public sealed class SpellRunSystem
 
     // The per-target stage (0x455550, MT10): its pure decision, the run and target it leaves, its messages and the reflecting
     // caster's payment.
-    private bool PerTarget(int id, SpellRunRecord record, ref SpellRunTarget target)
+    private bool PerTarget(int id, SpellRunRecord record, ref SpellRunTarget target, Pass pass)
     {
         var run = Table[id]!;
         if (target.Object is not { } obj || obj.Id == run.Parent?.Id) return true;
         var flags = _host.SpellFlags(obj);
         var caster = (flags & SpellTargetStage.FullReflection) != 0 ? SpellTargetStage.FlagCaster(Table, obj, flags, SpellTargetStage.FullReflection) : null;
         var decision = SpellTargetStage.Decide(run, record, target, new(flags, _sourceFlags, _host.IsLocalPlayer(run.Parent), caster, LastCostCharged,
-            ReflectedCost(run, record)), _profile);
+            pass.StageCost), _profile);
         Set(decision.Run);
         target = decision.Target;
         if (decision.Message is { } message) _notes.Add(new(SpellRunNoteKind.Message, id, message));
@@ -364,21 +368,9 @@ public sealed class SpellRunSystem
         {
             if (payment.Cost > 0) LastCostCharged = payment.Cost;
             var paid = SpellPaymentRules.Pay(_host.Payer(payment.Payer) ?? new(SpellPayerKind.None), payment.Cost, true, SpellPaymentRules.NoSpell, default, _host.Cells);
-            _notes.Add(new(SpellRunNoteKind.Payments, id, Payments: [paid]));
+            _notes.Add(new(SpellRunNoteKind.ReflectionPayment, id, Target: new(payment.Payer, SpellLocation.None), Payments: [paid]));
         }
         return decision.Passes;
-    }
-
-    // MG15, Steamwoven: the reflected run's own cost of this action — its BEGIN cost at BEGIN, its maintenance at MAINTAIN.
-    private int ReflectedCost(SpellRun run, SpellRunRecord record)
-    {
-        var facts = _host.StageFacts(run);
-        return run.Action switch
-        {
-            SpellRunAction.Begin => SpellCostRules.RunCost(record.Cost, run.Spell, facts.SourceCaster, facts.Cheat),
-            SpellRunAction.Maintain => SpellRunRules.MaintainCost(record.MaintainCost, facts.SourceCaster),
-            _ => 0,
-        };
     }
 
     // The resistance of one target (0x4537B0, MT6): the run's margin and the displayed margin, the AI's notice of a shrugged
@@ -511,7 +503,11 @@ public sealed class SpellRunSystem
     public void Free(int id, bool chargeBegin)
     {
         if (Table[id] is not { } run) return;
-        if (chargeBegin && _host.ChargeBegin(run) is { Count: > 0 } payments) _notes.Add(new(SpellRunNoteKind.Payments, id, Payments: payments));
+        if (chargeBegin && _host.ChargeBegin(run) is { Count: > 0 } payments)
+        {
+            foreach (var payment in payments) if (payment.LastCost is > 0 and var cost) LastCostCharged = cost;
+            _notes.Add(new(SpellRunNoteKind.Payments, id, Payments: payments));
+        }
         FreeRun(id);
     }
 

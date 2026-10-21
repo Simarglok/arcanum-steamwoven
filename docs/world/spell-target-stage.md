@@ -30,7 +30,8 @@ The function oracle compared three functions with the original on 10,000 seeded 
 | no-stack test | 0x453410 | [`453410.json`](../verification/receipts/453410.json) |
 | cancels | 0x4534E0 | [`4534E0.json`](../verification/receipts/4534E0.json) |
 
-The Original setting matches on every input. The Steamwoven setting differs only on MG15's inputs.
+The Original setting matches on every input. The Steamwoven setting differs only on MG15's inputs. The oracle's inputs always
+give the run a source; a sourceless run's reflection and cancels rest on the two readings.
 
 Code:
 - [`SpellTargetStage`](../../src/Arcanum.Simulation/Magic/SpellTargetStage.cs);
@@ -55,7 +56,7 @@ The order follows the original in both modes:
 
 ## Per-target stage (`SpellTargetStage.Decide`, 0x455550)
 
-**Skipped targets.** A tile entry and the run's parent pass at once.
+**Targets the stage lets through.** A tile entry and the run's parent pass at once.
 
 **Anti-magic shell.** A target under an anti-magic shell (spell flag 0x800) is skipped, unless the run itself set the shell.
 The local player is told with spell.mes 603, and its maintain bar is refreshed.
@@ -69,9 +70,10 @@ turns on the caster. When the run turns:
    - Who pays: the caster of the target's reflection, which is the parent of the run whose components set it on the target
      (`FlagCaster`, 0x459040).
    - Original setting: the reflecting caster pays the last positive cost any payment charged (MG15).
-   - Steamwoven setting: it pays the reflected run's own cost — its BEGIN cost at BEGIN, its maintenance at MAINTAIN,
-     nothing otherwise.
-   - The payment uses spell 10000 and is applied.
+   - Steamwoven setting: it pays what the reflected run's own stage asked in that pass — its BEGIN cost at BEGIN, its
+     maintenance at MAINTAIN, nothing for a free, item or technology cast or any other action.
+   - The payment uses spell 10000 and is applied. The host gets it as a `ReflectionPayment` note naming the payer, apart from
+     the stage's `Payments` (the source's).
 3. **Swap.** This happens unless the target is the run's source or the run set the reflection.
    - A source that itself reflects makes the spell fizzle on the target (602 to the local player).
    - Otherwise the run's source and the target swap: the components act on the caster.
@@ -113,11 +115,11 @@ Owner decisions 2026-10-20 and 2026-10-21: every difference is documented.
 
 | Original 1.0.7.4 | Steamwoven | Mode |
 | --- | --- | --- |
-| A reflection charges its caster the global "last cost" of any payment (MG15). | The reflected run's own cost of the action. | `MagicAnomalyProfile.ReflectionPaysLastCost` (Original) |
+| A reflection charges its caster the global "last cost" of any payment (MG15). | What the reflected run's own stage asked in that pass. | `MagicAnomalyProfile.ReflectionPaysLastCost` (Original) |
 | The cancels' interrupted runs are refused by the guard and left without a tick or an END (MG30). | Processed right after the pass (pending the owner, recommended). | `MagicAnomalyProfile.ReEntryDropsRuns` (Original) |
 | A free removes only the run's ticks; its interrupt or process event can hit a new run in the reused slot (MG32). | Every event of the run goes (pending the owner, recommended). | `MagicAnomalyProfile.FreeKeepsOtherEvents` (Original) |
 | The reflection's caster is also searched in the runs' object lists (+0x130, +0x134). | The target object only (the lists are not modelled yet). | — |
-| The last-cost global also counts cost checks and component payments. | The rules count the stage's and the reflection's payments; a component's own payments are the host's. | — |
+| The last-cost global also counts cost checks and component payments. | The rules count the stage's, the reflection's and a charged free's payments; the cost checks and a component's own payments are the host's. The session keeps the last cost between calls (not saved). | — |
 
 Pending the owner, both modes following the original for now:
 
