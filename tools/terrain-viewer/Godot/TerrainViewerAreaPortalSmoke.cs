@@ -11,7 +11,8 @@ namespace Arcanum.TerrainViewer;
 // walks one step across its edge: the step opens the door in the session and the door is drawn on its open frame once the
 // animation has run; a left press on the door then closes it (frame 0, drawn on its T0 command). When the map has a door
 // the player cannot open (locked, jammed or held), a press next to it is refused and the door stays closed. NONE on a map
-// without a door that opens.
+// without a door that opens. An open frame that a body drawn in front hides at every pixel cannot be pressed (ashbury
+// haunted castle: a tall wall two tiles south of a door); such a door is closed again by a use and the next door is tried.
 public partial class TerrainViewerApp
 {
     private async Task RunAreaPortalSmokeAsync()
@@ -27,6 +28,8 @@ public partial class TerrainViewerApp
         var map = new AreaMapRuntime(area.Snapshot, grid.Snapshot, grid.Chart);
         var passages = portals.Passages(session);
         (AreaPortal Portal, CellCoord From, CellCoord To)? Crossing(Func<AreaPortal, bool> accept, bool open)
+            => Crossings(accept, open).Select(c => ((AreaPortal Portal, CellCoord From, CellCoord To)?)c).FirstOrDefault();
+        IEnumerable<(AreaPortal Portal, CellCoord From, CellCoord To)> Crossings(Func<AreaPortal, bool> accept, bool open)
         {
             foreach (var portal in portals.All.Where(p => p.Art.Door && p.Frames.Count > 1 && !p.UnlockScript && accept(p)).OrderBy(p => p.Entity, StringComparer.Ordinal))
             {
@@ -38,35 +41,47 @@ public partial class TerrainViewerApp
                     if (!map.Chart.Contains(to)) continue;
                     var step = grid.Assess(from, to, direction);
                     if (step.Portals.Contains(portal.Key) && step.Disposition == (open ? CardinalTraversalDisposition.Open : CardinalTraversalDisposition.Blocked)
-                        && map.Steps.IsAdmitted(map.Chart.ToWorld(to))) return (portal, from, to);
+                        && map.Steps.IsAdmitted(map.Chart.ToWorld(to))) { yield return (portal, from, to); break; }
                 }
             }
-            return null;
         }
-        var target = Crossing(p => portals.Frame(session, p) == 0 && passages[p.Key] == AreaPortalPassage.Open, open: true);
-        if (target is not { } door) { GD.Print($"ARC-WORLD-051 native-smoke portal NONE map={_readyMapName} portals={portals.All.Count}"); return; }
+        var targets = Crossings(p => portals.Frame(session, p) == 0 && passages[p.Key] == AreaPortalPassage.Open, open: true).Take(MaxPortalSmokeDoors).ToArray();
+        if (targets.Length == 0) { GD.Print($"ARC-WORLD-051 native-smoke portal NONE map={_readyMapName} portals={portals.All.Count}"); return; }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
-            // A step through the closed door opens it.
-            AreaSmokePlace(map, door.From);
-            var route = WorldRoute((AreaGridSession)_worldActor.Session!) ?? throw new InvalidOperationException("AREA_ROUTE_REQUIRED");
-            route.SetTarget(door.To, WorldTime);
-            var frames = 0;
-            for (; frames < 200 && ((AreaGridSession)_worldActor.Session!).State is var state
-                && (state.Phase != MovementPhase.Settled || state.CommittedCell != door.To); frames++) AreaSmokeFrame();
-            var walked = ((AreaGridSession)_worldActor.Session!).State.CommittedCell == door.To;
-            Require(walked, $"the PC stepped through the door {door.Portal.Entity} to {map.Chart.ToWorld(door.To)} in {frames} frames: {_worldRouteDiagnostic}");
-            var openFrame = door.Portal.OpenFrame;
-            Require(portals.Frame(session, door.Portal) == openFrame, $"the step opened the door: frame {portals.Frame(session, door.Portal)}, want {openFrame}");
-            // The animation runs on host time: (frames in the range) × 1000 / fps ms.
-            await ToSignal(GetTree().CreateTimer((3 * door.Portal.StepMs + 200) / 1000.0), SceneTreeTimer.SignalName.Timeout);
-            var openCommand = await PortalDrawnAsync(door.Portal, openFrame);
-            Require(openCommand is not null, $"the open door is drawn on frame {openFrame}: drawn {DrawnFrames(door.Portal)}");
+            var door = targets[0]; var frames = 0; var openFrame = 0; Vector2? openPoint = null; var hidden = new List<object>();
+            foreach (var candidate in targets)
+            {
+                door = candidate;
+                // A step through the closed door opens it.
+                AreaSmokePlace(map, door.From);
+                var route = WorldRoute((AreaGridSession)_worldActor.Session!) ?? throw new InvalidOperationException("AREA_ROUTE_REQUIRED");
+                route.SetTarget(door.To, WorldTime);
+                frames = 0;
+                for (; frames < 200 && ((AreaGridSession)_worldActor.Session!).State is var state
+                    && (state.Phase != MovementPhase.Settled || state.CommittedCell != door.To); frames++) AreaSmokeFrame();
+                var walked = ((AreaGridSession)_worldActor.Session!).State.CommittedCell == door.To;
+                Require(walked, $"the PC stepped through the door {door.Portal.Entity} to {map.Chart.ToWorld(door.To)} in {frames} frames: {_worldRouteDiagnostic}");
+                openFrame = door.Portal.OpenFrame;
+                Require(portals.Frame(session, door.Portal) == openFrame, $"the step opened the door: frame {portals.Frame(session, door.Portal)}, want {openFrame}");
+                // The animation runs on host time: (frames in the range) × 1000 / fps ms.
+                await ToSignal(GetTree().CreateTimer((3 * door.Portal.StepMs + 200) / 1000.0), SceneTreeTimer.SignalName.Timeout);
+                var openCommand = await PortalDrawnAsync(door.Portal, openFrame);
+                Require(openCommand is not null, $"the open door is drawn on frame {openFrame}: drawn {DrawnFrames(door.Portal)}");
+                if ((openPoint = await TryPortalPointAsync(openCommand!)) is not null) break;
+                // Hidden at every pixel by bodies drawn in front: close it again by a use and try the next door.
+                hidden.Add(new { door.Portal.Entity, By = HidingBodies(openCommand!) });
+                GD.Print($"ARC-WORLD-051 portal hidden entity={door.Portal.Entity} pc={map.Chart.ToWorld(door.To)} by={HidingBodies(openCommand!)}");
+                UsePortal(door.Portal);
+                Require(portals.Frame(session, door.Portal) == 0, $"a use closed the hidden door {door.Portal.Entity}: {_portalNotice}");
+                await ToSignal(GetTree().CreateTimer((3 * door.Portal.StepMs + 200) / 1000.0), SceneTreeTimer.SignalName.Timeout);
+            }
+            Require(openPoint is not null, $"one of {targets.Length} doors shows a pixel of its open frame: hidden {System.Text.Json.JsonSerializer.Serialize(hidden)}");
             // A press on the open door closes it.
-            AreaSmokeClick(await PortalPointAsync(openCommand!));
+            AreaSmokeClick(openPoint!.Value);
             Require(portals.Frame(session, door.Portal) == 0, $"a press closed the door: {_portalNotice}");
             await ToSignal(GetTree().CreateTimer((3 * door.Portal.StepMs + 200) / 1000.0), SceneTreeTimer.SignalName.Timeout);
             var closed = await PortalDrawnAsync(door.Portal, door.Portal.Baseline.Frame);
@@ -88,7 +103,7 @@ public partial class TerrainViewerApp
             else GD.Print($"ARC-SKILLS-006 native-smoke pick NONE map={_readyMapName} (no door the player cannot open)");
             GD.Print("ARC-WORLD-051 native-smoke portal PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, door.Portal.Entity, From = map.Chart.ToWorld(door.From), To = map.Chart.ToWorld(door.To), door.Portal.Art.Rotation,
-                OpenFrame = openFrame, door.Portal.StepMs, Frames = frames, Portals = portals.All.Count, Refused = refused, Parity = "NOT_VERIFIED" }));
+                OpenFrame = openFrame, door.Portal.StepMs, Frames = frames, Portals = portals.All.Count, Hidden = hidden, Refused = refused, Parity = "NOT_VERIFIED" }));
         }
         finally
         {
@@ -165,8 +180,31 @@ public partial class TerrainViewerApp
         return null;
     }
 
-    // Frames the portal, then returns an opaque pixel of its drawn frame that the shared pick resolves to it, outside the HUD.
+    // The doors the portal smoke opens at most before it gives up on finding one whose open frame shows.
+    private const int MaxPortalSmokeDoors = 8;
+
     private async Task<Vector2> PortalPointAsync(AreaDrawCommand command)
+        => await TryPortalPointAsync(command) ?? throw new InvalidOperationException("AREA_PORTAL_NOT_VISIBLE");
+
+    // The bodies the shared pick resolves to on the command's opaque pixels outside the HUD, with their pixel counts.
+    private string HidingBodies(AreaDrawCommand command)
+    {
+        var transform = AreaDrawItem.RasterTransform(GetViewport()); var size = GetViewport().GetVisibleRect().Size; var hud = _hud!.Rect;
+        var hits = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        for (var y = 0; y < (int)size.Y; y += 2)
+        for (var x = 0; x < (int)size.X; x += 2)
+            if (!hud.HasPoint(new(x + .5f, y + .5f)) && AreaAlphaAt(command, AreaFrames(), transform, x, y) != 0)
+            {
+                var picked = AreaObjectAtScreen(new(x + .5f, y + .5f)) is { } key
+                    ? $"{key.Sector}:{key.SourceIndex}/class {_readyArea!.Plan.Commands.FirstOrDefault(c => c.Identity == key)?.ArtClass}" : "nothing";
+                hits[picked] = hits.GetValueOrDefault(picked) + 1;
+            }
+        return string.Join(",", hits.Select(hit => $"{hit.Key}×{hit.Value}"));
+    }
+
+    // Frames the portal, then returns an opaque pixel of its drawn frame that the shared pick resolves to it, outside the HUD,
+    // or null when none does.
+    private async Task<Vector2?> TryPortalPointAsync(AreaDrawCommand command)
     {
         PublishWorldSelection();
         _camera!.ResetWorld(new GamepadLab.Core.Vec2(command.Destination.X + command.Destination.Width / 2d,
@@ -178,7 +216,7 @@ public partial class TerrainViewerApp
         for (var x = 0; x < (int)size.X; x += 2)
             if (!hud.HasPoint(new(x + .5f, y + .5f)) && AreaAlphaAt(command, AreaFrames(), transform, x, y) != 0 && AreaObjectAtScreen(new(x + .5f, y + .5f)) == command.Identity)
                 return new Vector2(x + .5f, y + .5f);
-        throw new InvalidOperationException("AREA_PORTAL_NOT_VISIBLE");
+        return null;
     }
 
     private string DrawnFrames(AreaPortal portal) => string.Join(",", _canvas!.AreaVisibleCommands.Where(c => c.Identity == portal.Key)
