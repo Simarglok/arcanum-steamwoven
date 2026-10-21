@@ -29,6 +29,13 @@ public partial class TerrainViewerApp
     private bool _leftAltHeld;
     // Tests set the held aim key and Shift that a native click would read from the keyboard.
     private HitLocation? _attackAimForSelfTest;
+    // ARC-COMBAT-012: the line-of-fire smoke lends the hero a reach beyond 1 (no kit holds a reach weapon); the struck object is in
+    // the hero's real reach.
+    private int? _attackReachForSelfTest;
+    // ARC-COMBAT-012: the entity the last line of fire struck instead of the goal's target.
+    private string? _lineOfFireStruck;
+
+    private int HeroReach(SessionHeroAttack? hero) => _attackReachForSelfTest ?? hero?.Range ?? 1;
 
     /// <summary>One attack goal: its target, the aim, and either the walk to reach it or the attack animation playing (or the
     /// 5 ms pause before the auto-attack repeat).</summary>
@@ -201,7 +208,7 @@ public partial class TerrainViewerApp
     {
         var owner = _areaSession!;
         // ARC-COMBAT-011: the object as it is now, its use script's trap included (a use may have changed the script).
-        if (ObjectTargets()?.Target(owner, goal.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
+        if (ObjectTargets()?.Target(owner, target.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
         PlaceHeroForDrop();
         var result = owner.AttackObject(owner.Version, target.Attack(distance, goal.Aim, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with
         {
@@ -209,9 +216,11 @@ public partial class TerrainViewerApp
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
-        goal.Broke = result.Object?.Broken == true || result.Item?.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted;
+        // A blocker the line of fire struck instead (ARC-COMBAT-012) does not end the goal on the clicked target when it breaks.
+        if (target.Row.Key == goal.Row.Key)
+            goal.Broke = result.Object?.Broken == true || result.Item?.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted;
         _attackNotice = AreaObjectTargets.Describe(result);
-        GD.Print($"ARC-COMBAT-008 object-attack-hit target={goal.Entity} disposition={result.Disposition} failure={result.Failure}"
+        GD.Print($"ARC-COMBAT-008 object-attack-hit target={target.Entity} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} damage={result.Object?.Damage}/{result.Item?.Condition?.Damage} break={result.Object?.Break}/{result.Item?.Break}"
             + $" host={result.Host} step={result.StepFailure} wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}"
             + $" crit={AreaCombatHost.Criticals(result.Resolution, result.Criticals)}");
@@ -242,10 +251,13 @@ public partial class TerrainViewerApp
         var gone = ObjectTargets()?.Gone(owner) ?? new HashSet<AreaObjectKey>();
         var map = CurrentAreaMap;
         return new(session.Snapshot, area.Snapshot.Objects, occupancy.Moved, live, row => gone.Contains(row.Key),
-            row => _combatHost?.Target(owner, map, row.Key) is { } target &&
-                (target.Dead || target.Build.Combat is { } combat && owner.QueryLife(combat.Target).View?.Status.IsDead == true),
-            session.Portals);
+            row => AreaCritterDead(owner, map, row), session.Portals);
     }
+
+    // Whether a critter row is dead in the session or its map data (a drop's and a line of fire's dead test).
+    private bool AreaCritterDead(GameSessionOwner owner, int map, AreaObjectRecord row) =>
+        _combatHost?.Target(owner, map, row.Key) is { } target &&
+            (target.Dead || target.Build.Combat is { } combat && owner.QueryLife(combat.Target).View?.Status.IsDead == true);
 
     /// <summary>ARC-WORLD-065: the shown map's objects the session destroyed or switched off (the same set while nothing changed);
     /// the original's object lists skip them, so they block no step (ledger FC1–FC3).</summary>
@@ -291,7 +303,7 @@ public partial class TerrainViewerApp
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         var row = goal.Row;
         var distance = Chebyshev(row, (cell.X, cell.Y));
-        if (distance <= hero.Range)
+        if (distance <= HeroReach(hero))
         {
             StopWorldRoute("ROUTE_REPLACED_BY_ATTACK");
             goal.Approaching = false;
@@ -300,7 +312,7 @@ public partial class TerrainViewerApp
         }
         // A walk that arrived and still left the target out of reach is not tried again and again.
         if (goal.Approaches >= 3) { CancelAreaAttack($"the target stays {distance} cells away"); return; }
-        if (WorldRoute(session) is { } route && ApproachCell(session, row.WorldX!.Value, row.WorldY!.Value, hero.Range) is { } approach)
+        if (WorldRoute(session) is { } route && ApproachCell(session, row.WorldX!.Value, row.WorldY!.Value, HeroReach(hero)) is { } approach)
         {
             goal.Approaches++;
             StopWorldRoute("ROUTE_REPLACED_BY_ATTACK");
@@ -396,43 +408,119 @@ public partial class TerrainViewerApp
         var owner = _areaSession!;
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         var distance = Chebyshev(goal.Row, (cell.X, cell.Y));
-        if (distance > (owner.QueryHeroAttack()?.Range ?? 1))
+        if (distance > HeroReach(owner.QueryHeroAttack()))
         {
             goal.Player!.Abort();
             _attackNotice = "the target is out of reach";
             return;
         }
+        // ARC-COMBAT-012: a reach above 1 takes the original's ranged path, whose line of fire may strike something else first.
+        if (LineOfFireBlocker(session, goal.Row) is { } blocker) { StrikeBlocker(goal, blocker, session); return; }
         if (goal.Object is { } struck) { RunObjectAttackHit(goal, struck, (int)distance); return; }
+        HitCritter(goal, goal, (int)distance);
+    }
+
+    /// <summary>ARC-COMBAT-012: the line of fire from the hero's tile to the target's (0x4ADE00) when the hero's weapon reaches beyond 1
+    /// (the original's ranged path, 0x4B3170 with flag 0x200): the first object that stops it, when that is not the target; the original
+    /// then strikes that object instead (ledger RA rows).</summary>
+    private AreaObjectRecord? LineOfFireBlocker(AreaGridSession session, AreaObjectRecord target)
+    {
+        var owner = _areaSession!;
+        if (HeroReach(owner.QueryHeroAttack()) <= 1 || target.WorldX is not { } x || target.WorldY is not { } y || AreaLineOfFireNow() is not { } map)
+            return null;
+        var hero = session.Chart.ToWorld(session.State.CommittedCell);
+        var trace = LineOfFireRules.Trace(new(checked((int)hero.X), checked((int)hero.Y)), 0, 0, new(checked((int)x), checked((int)y)), map, owner.Rules.Combat);
+        GD.Print($"ARC-COMBAT-012 line-of-fire target={target.Key.Kind}:{target.Key.SourceIndex} cost={trace.Cost} failed={trace.LineFailed}"
+            + $" tiles={trace.Tiles.Count} blocker={(trace.Blocker is { } b ? $"{b.Key.Kind}:{b.Key.SourceIndex} type={b.Type}" : "none")}");
+        return trace.Blocker is { } blocker && blocker.Key != target.Key ? blocker : null;
+    }
+
+    /// <summary>ARC-COMBAT-012: the shown map as the line of fire reads it now: the step evidence's tiles, the map's rows less what the
+    /// session destroyed or switched off, the dead as the session and the map data know them, the doors' and windows' session state,
+    /// and the companions on their live cells.</summary>
+    private AreaLineOfFire? AreaLineOfFireNow()
+    {
+        if (_worldActor.Session is not AreaGridSession session || _readyArea is not { } area || _areaSession is not { } owner) return null;
+        var occupancy = AreaPcOccupancy() ?? AreaOccupancy.None;
+        var live = new Dictionary<CellCoord, AreaObjectRecord>();
+        if (_areaCompanions is { } group)
+            foreach (var companion in group.Companions)
+            {
+                var (x, y) = group.WorldCell(companion.Speaker);
+                live.TryAdd(new(checked((int)x), checked((int)y)), companion.Speaker.Row);
+            }
+        var gone = ObjectTargets()?.Gone(owner) ?? new HashSet<AreaObjectKey>();
+        var map = CurrentAreaMap;
+        var portals = _areaPortals;
+        return new(session.Snapshot, area.Snapshot.Objects, occupancy.Moved, live, row => gone.Contains(row.Key), row => AreaCritterDead(owner, map, row),
+            row => portals is not null && portals.TryGet(row.Key, out var portal) && owner.QueryOpenable(portals.Openable(portal), portal.Baseline) is var state
+                ? state.Open || (state.Flags & Arcanum.Simulation.Locks.LockRules.BustedBit) != 0 : null);
+    }
+
+    /// <summary>ARC-COMBAT-012: the shot strikes the object that stopped the line of fire: an NPC through the critter attack (its own
+    /// rolls), a door, window, container, scenery or trap through the object attack; striking a wall, a companion or an NPC without
+    /// combat values is not ready, and the goal ends without a hit.</summary>
+    private void StrikeBlocker(AttackGoal goal, AreaObjectRecord blocker, AreaGridSession session)
+    {
+        var owner = _areaSession!;
+        var cell = session.Chart.ToWorld(session.State.CommittedCell);
+        var distance = (int)Chebyshev(blocker, (cell.X, cell.Y));
+        if (!IsAreaCompanion(blocker.Key) && _combatHost!.Target(owner, CurrentAreaMap, blocker.Key) is { Dead: false, Build.Combat: { } combat } npc)
+        {
+            GD.Print($"ARC-COMBAT-012 line-of-fire strikes npc={npc.Entity} instead of {goal.Entity}");
+            _lineOfFireStruck = npc.Entity;
+            HitCritter(goal, new AttackGoal(npc, combat, goal.Aim), distance);
+            return;
+        }
+        if (ObjectTargets()?.Target(owner, blocker.Key, AreaTrapped) is { Refusal: null } struck
+            && struck.Kind is not Arcanum.Simulation.Combat.DamageableObjectKind.Item)
+        {
+            GD.Print($"ARC-COMBAT-012 line-of-fire strikes object={struck.Entity} instead of {goal.Entity}");
+            _lineOfFireStruck = struck.Entity;
+            RunObjectAttackHit(goal, struck, distance);
+            return;
+        }
+        goal.Stop = true;
+        _attackNotice = $"the line of fire stops at {(blocker.Type == 0 ? "a wall" : IsAreaCompanion(blocker.Key) ? "a companion" : $"an object of type {blocker.Type}")}: striking it is not ready";
+        GD.Print($"ARC-COMBAT-012 line-of-fire stopped type={blocker.Type} (not ready)");
+        RefreshAreaStatus();
+    }
+
+    /// <summary>The hit on an NPC through the session: <paramref name="struck"/> is the NPC hit (the goal's own target, or the one the
+    /// line of fire struck instead), <paramref name="goal"/> the goal whose count and end it sets.</summary>
+    private void HitCritter(AttackGoal goal, AttackGoal struck, int distance)
+    {
+        var owner = _areaSession!;
         PlaceHeroForDrop();
         // ARC-COMBAT-008: the two sides' worn items with their durability values, so the attack wears them (ARC-COMBAT-007).
-        var result = owner.AttackCritter(owner.Version, new(goal.Combat!)
+        var result = owner.AttackCritter(owner.Version, new(struck.Combat!)
         {
-            Aim = goal.Aim, Distance = (int)distance,
+            Aim = struck.Aim, Distance = distance,
             HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability),
-            TargetWorn = _combatHost!.WornItems(owner, CurrentAreaMap, goal.Entity),
+            TargetWorn = _combatHost!.WornItems(owner, CurrentAreaMap, struck.Entity),
             // ARC-COMBAT-009: a critical drops the NPC's items where it stands (its map data's cell; NPCs do not move here).
-            TargetCell = goal.Row.WorldX is { } x && goal.Row.WorldY is { } y ? new(checked((int)x), checked((int)y)) : null,
+            TargetCell = struck.Row.WorldX is { } x && struck.Row.WorldY is { } y ? new(checked((int)x), checked((int)y)) : null,
             // ARC-COMBAT-010: the original's draws choose the cell a dropped item lands on, over the shown map.
             DropMap = AreaDropMapNow(),
         });
         goal.Attacks++;
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
-        PlayAttackResultSounds(result, goal.Row, goal.Entity);
-        var life = owner.QueryLife(goal.Combat!.Target).View;
+        PlayAttackResultSounds(result, struck.Row, struck.Entity);
+        var life = owner.QueryLife(struck.Combat!.Target).View;
         _attackNotice = AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
-        GD.Print($"ARC-COMBAT-005 attack-hit target={goal.Entity} disposition={result.Disposition} failure={result.Failure}"
+        GD.Print($"ARC-COMBAT-005 attack-hit target={struck.Entity} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} cause={result.Resolution?.MissCause} damage={result.Life?.HitPointDamage} events={result.Life?.Events}"
             + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} xp={result.HitAward?.Award}/{result.KillAward?.Award} step={result.StepFailure}"
             + $" wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}"
             + $" crit={AreaCombatHost.Criticals(result.Resolution, result.Criticals)}");
         if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned))
-            EndStun(owner, result.Recipient == DamageRecipient.Target ? goal.Combat!.Target : SessionLifeTarget.Hero,
-                result.Recipient == DamageRecipient.Target ? goal.Entity : "hero");
+            EndStun(owner, result.Recipient == DamageRecipient.Target ? struck.Combat!.Target : SessionLifeTarget.Hero,
+                result.Recipient == DamageRecipient.Target ? struck.Entity : "hero");
         LevelAreaFollowers(result.HitAward);
         LevelAreaFollowers(result.KillAward);
         if (result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))
-            _deathAnimations[(CurrentAreaMap, goal.Entity)] = AreaFallenPoses.Animation(dealt.Death);
+            _deathAnimations[(CurrentAreaMap, struck.Entity)] = AreaFallenPoses.Animation(dealt.Death);
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();

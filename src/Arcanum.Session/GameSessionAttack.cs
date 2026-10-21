@@ -320,6 +320,8 @@ public sealed record SessionAttackResult(GameSessionDisposition Disposition, Gam
     GameSessionFailure StepFailure, GameSessionVersion Version)
 {
     public SessionAttackWearResult? Wear { get; init; }
+    /// <summary>ARC-COMBAT-012: the shot's ammunition the hero spent (a hit or a miss alike); null when its weapon takes none.</summary>
+    public SessionAmmoUse? Ammunition { get; init; }
     private readonly IReadOnlyList<SessionCriticalStep>? _criticals;
 
     /// <summary>The critical item steps (ARC-COMBAT-009) of whoever took the damage, in the original's order: the arm-hit drops, the
@@ -447,6 +449,7 @@ public sealed partial class GameSessionOwner
             AimedLocation = attack.Aim,
             Distance = attack.Distance,
             Difficulty = _difficulty,
+            AmmunitionShort = ShotAmmunition() is { Short: true },
         };
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
         AttackResolution resolution;
@@ -465,14 +468,19 @@ public sealed partial class GameSessionOwner
         var concealmentEnded = resolution.Refusal == AttackRefusal.None && target.Target.Entity is { } victim
             && EndConcealmentForAttackOn(SessionCombatant.Critter(victim));
         if (concealmentEnded && resolution.Fate == FateUse.None) _revision++;
+        // ARC-COMBAT-012: the shot's ammunition goes for a hit or a miss (the original takes it before every roll).
+        var ammunition = resolution.Refusal == AttackRefusal.None ? SpendShot() : null;
+        if (ammunition is { Disposition: GameSessionDisposition.Rejected } refusedSpend)
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, refusedSpend.Failure, Version) { Ammunition = refusedSpend };
+        var spent = ammunition is { Disposition: GameSessionDisposition.Changed };
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)
-            return new(resolution.Fate != FateUse.None || concealmentEnded ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None,
-                resolution, null, null, null, null, GameSessionFailure.None, Version);
+            return new(resolution.Fate != FateUse.None || concealmentEnded || spent ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange,
+                GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version) { Ammunition = ammunition };
 
         var recipient = resolution.Damage!.Recipient;
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage);
         if (applied.Disposition == GameSessionDisposition.Rejected)
-            return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version);
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version) { Ammunition = ammunition };
         var outcome = applied.Outcome!;
         SessionExperienceAward? hitAward = null, killAward = null;
         var stepFailure = GameSessionFailure.None;
@@ -501,8 +509,24 @@ public sealed partial class GameSessionOwner
         {
             Wear = wear,
             Criticals = criticals,
+            Ammunition = ammunition,
         };
     }
+
+    /// <summary>ARC-COMBAT-012 (A): the shot's ammunition of the hero's wielded weapon (the dispatcher's 0x4B65D0, ledger RA1–RA3): its
+    /// ammunition type and per-shot consumption (fields 125 and 126), and whether the hero carries fewer units of that type; null for
+    /// a weapon without an ammunition type (the hero is a PC, so it always needs it). A type outside 0..3 names no stack (AMA3).</summary>
+    private (int Type, int Count, bool Short)? ShotAmmunition()
+    {
+        if (!_equipment.Worn.TryGetValue(EquipmentSlot.Weapon, out var wielded) || wielded.Item.Weapon is not { AmmoType: { } type } weapon) return null;
+        var units = type is >= 0 and < SessionAmmoRecord.AmmoTypes && HeroStackOfType(type) is { } stack ? stack.Units : 0;
+        return (type, weapon.AmmoConsumption, units < weapon.AmmoConsumption);
+    }
+
+    /// <summary>ARC-COMBAT-012 (A): spends the shot's ammunition after an attack the resolver did not refuse (a hit or a miss): the
+    /// weapon's consumption from the hero's stack of its type, all or nothing; null for a weapon without one or a consumption of 0.</summary>
+    private SessionAmmoUse? SpendShot() =>
+        ShotAmmunition() is { Count: > 0 } shot ? SpendAmmo(Version, SessionAmmoHolder.Hero, shot.Type, shot.Count) : null;
 
     /// <summary>
     /// The item steps after the life step of an attack on a critter or a critical self-hit (ARC-COMBAT-007, ARC-COMBAT-009), in the
