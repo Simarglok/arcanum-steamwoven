@@ -48,4 +48,18 @@ public sealed class CellSourceStateTests
         owner.SelectRules(RuleMode.Steamwoven);
         Assert.AreEqual(21, original + ChargeCellRules.Need(payer, 7, owner.Rules.Technology), "TC1 mirrors the share: cost + s and 2 × cost − s");
     }
+
+    [TestMethod]
+    public void A_device_query_uses_the_heros_aptitude_and_never_refuses_a_technological_item()
+    {
+        using var owner = CreateWith(HalfElf());
+        var aptitude = owner.QueryHeroItemCellPayer(-80, null)!.HolderAptitude;
+        var before = owner.Version;
+        Assert.AreEqual(TechDeviceRules.Use(-80, aptitude, weapon: true), owner.QueryHeroDeviceUse(-80, weapon: true));
+        Assert.IsTrue(owner.QueryHeroDeviceUse(-80, weapon: false)!.Value.Usable, "outside combat a technological device always works");
+        Assert.IsNull(owner.QueryHeroDeviceUse(5000, weapon: false), "a complexity out of range");
+        Assert.AreEqual(before, owner.Version);
+        using var heroless = Create();
+        Assert.IsNull(heroless.QueryHeroDeviceUse(-80, weapon: true));
+    }
 }

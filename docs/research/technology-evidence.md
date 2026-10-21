@@ -341,7 +341,8 @@ check, action-point or time cost and no experience.
   parent it checks the record's intelligence and willpower and charges the
   maintenance cost through 0x450420 (dwarves × 2) unless the run is free, so a
   maintained tech record pays each period (fatigue per the magic study, cells
-  for the cell-powered records 168 and 187).
+  for a cell-powered record; the installed 168 and 187 have maintenance 0, so their
+  cells come from a ChargeNBranch component instead, ledger [DV7](original-verification-ledger.md#tech-devices-arc-technology-008)).
 - **Degrees do not change devices.** Effective expertise has no caller outside
   the sheet and the schematic gate; degrees act on devices only through tech
   points → aptitude → item power. The four tech skills work in their own
@@ -652,8 +653,9 @@ this document start at F1 or F2.
    (critter `cost`, item source TC1 decided, ammunition type 2; **done** as rules and a
    session port by ARC-TECHNOLOGY-007, [runtime](../world/charge-cell-runtime.md); the
    consumption in session state waits for session ammunition, ARC-WORLD-066), the list of
-   tech items and records that reach the engine (70 item spell slots, records
-   147, 168 and 187), a test that the engine's MAINTAIN charges maintained
+   tech items and records that reach the engine (70 item spell slots; cell records
+   147, 168 and 187; maintained 146, 149, 168, 187, 209 and 216; **done** with the MAINTAIN test and the device rule by ARC-TECHNOLOGY-008,
+   [runtime](../world/tech-devices-runtime.md)), a test that the engine's MAINTAIN charges maintained
    tech records (the stage itself stays with the magic slices), and the rule that
    tech items are not refused to mages outside combat (the wear refusal of
    item-spell items is lifted with the shared item trigger slice, which the

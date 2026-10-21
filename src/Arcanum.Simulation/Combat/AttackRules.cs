@@ -118,8 +118,10 @@ public static class AttackRules
 
     /// <summary>
     /// Chance that a technological weapon fails critically in magickal hands: <c>−complexity × aptitude / 100</c> when
-    /// the weapon is technological (complexity &lt; 0) and the wielder magickal (aptitude &gt; 0), else 0.
+    /// the weapon is technological (complexity &lt; 0) and the wielder magickal (aptitude &gt; 0), else 0 (0x461700, read to F2 by
+    /// ARC-TECHNOLOGY-008, ledger DV4).
     /// </summary>
+    [OriginalFunction(0x461700, OriginalFunctionScope.Partial)]
     public static int TechnologyFailureChance(int complexity, int attackerAptitude) =>
         complexity < 0 && attackerAptitude > 0 ? -complexity * attackerAptitude / 100 : 0;
 
@@ -127,8 +129,10 @@ public static class AttackRules
     /// Chance that the target's opposing aptitude cancels the weapon. A magickal weapon against a technological target
     /// (aptitude &lt; 0): the target's <c>−aptitude</c>, scaled by <c>(100 − attacker aptitude) / 100</c> unless the
     /// attacker is technological too. A technological weapon against a magickal target: the target's aptitude, scaled
-    /// by <c>(100 + attacker aptitude) / 100</c> unless the attacker is magickal too. Otherwise 0.
+    /// by <c>(100 + attacker aptitude) / 100</c> unless the attacker is magickal too. Otherwise 0 (0x461620, read to F2 by
+    /// ARC-TECHNOLOGY-008, ledger DV5).
     /// </summary>
+    [OriginalFunction(0x461620, OriginalFunctionScope.Partial)]
     public static int MagickCancelChance(int complexity, int attackerAptitude, int targetAptitude)
     {
         if (complexity > 0 && targetAptitude < 0)
