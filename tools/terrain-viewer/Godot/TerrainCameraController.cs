@@ -26,21 +26,21 @@ public sealed class TerrainCameraController
 
     public void SetPlan(TerrainScenePlan plan, Vector2 viewport)
     {
-        _plan = plan;
+        _plan = plan; WindowFloored = false;
         _bounds = plan.WorldBounds;
         Fit(viewport);
     }
 
     public void SetPlan(DiagnosticScenePlan plan, Vector2 viewport)
     {
-        _world = plan.IsWorldDiagnostic;
+        _world = plan.IsWorldDiagnostic; WindowFloored = false;
         _plan = plan.Terrain;
         _bounds = plan.WorldBounds;
         Fit(viewport);
     }
 
     /// <summary>An AREA plan; <paramref name="window"/>: a map loaded as a window, whose zoom has a floor (ARC-RENDER-032).</summary>
-    public void SetAreaPlan(AreaScenePlan plan, Vector2 viewport, bool window = false)
+    public void SetAreaPlan(AreaScenePlan plan, Vector2 viewport, bool window)
     {
         _world = true; _plan = null; _bounds = plan.WorldBounds; WindowFloored = window; Fit(viewport);
     }

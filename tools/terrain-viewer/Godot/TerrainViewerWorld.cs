@@ -258,8 +258,11 @@ public partial class TerrainViewerApp
     private void ApplyPreferredWorldZoom(double value, bool continuous)
     {
         if (!double.IsFinite(value) || _camera is null) return;
+        var shown = _camera.State.Zoom;
         _camera.SetWorldZoom(value, WorldAnchor, WorldViewport); _worldFitView = false;
-        // ARC-RENDER-032: a window's floor limits the shown zoom, not the preference other maps open at.
+        // ARC-RENDER-032: a window's floor limits the shown zoom, not the preference other maps open at; a held trigger at the
+        // floor (the shown zoom unchanged) leaves the preference as it is.
+        if (continuous && _camera.WindowFloored && _camera.State.Zoom == shown) return;
         _worldPreferredZoom = _camera.WindowFloored ? WorldZoomPolicy.Absolute(_worldPreferredZoom, value) : _camera.State.Zoom;
         _worldZoomPending = true; _worldZoomSaveFailed = false; _worldZoomSettled = 0;
         if (!continuous) FlushWorldZoom();
