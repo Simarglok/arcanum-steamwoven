@@ -122,7 +122,10 @@ public sealed class AreaPortals
     private AreaPortalPassage Passage(GameSessionOwner session, AreaPortal portal)
     {
         var state = session.QueryOpenable(Openable(portal), portal.Baseline);
-        if (state.Open || (state.Flags & LockRules.BustedBit) != 0) return AreaPortalPassage.Open;
+        // ARC-COMBAT-008: a door an attack destroyed is gone.
+        if (state.Open || (state.Flags & LockRules.BustedBit) != 0 ||
+            session.QueryObjectCondition(Map, portal.Entity, Arcanum.Simulation.Combat.DamageableObjectKind.Portal) == SessionObjectCondition.Destroyed)
+            return AreaPortalPassage.Open;
         if (portal.UnlockScript) return AreaPortalPassage.Unresolved;
         return session.AttemptOpen(Openable(portal), portal.Baseline, scriptRefused: false) switch
         {
