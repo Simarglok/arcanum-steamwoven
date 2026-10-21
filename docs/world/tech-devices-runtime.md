@@ -36,10 +36,10 @@ complexity, slot, record, spell charges); a spell outside 0..222 is a `TechDevic
 | MAINTAIN components | a ChargeNBranch on the Maintain action pays its cost each tick |
 
 The installed data (opt-in census): 70 item spell slots name technology records, 65 distinct records, on 70 items (61
-technological; nine others: six food and three scrolls); charges −1 ×21, 0 ×2, 1 ×47; no slot out of range. The two devices without charges also lack the magical flag, so they never fire on
-use (ledger DVD1). ARC-TECHNOLOGY-010 read why ([trap devices](../research/original-verification-ledger.md#trap-devices-arc-technology-010),
+technological; nine others: six food and three scrolls); charges −1 ×21, 0 ×2, 1 ×47; no slot out of range. The two devices without charges also lack the magical flag, so their use never takes
+the slot-0 spell path (ledger DVD1). ARC-TECHNOLOGY-010 read why ([trap devices](../research/original-verification-ledger.md#trap-devices-arc-technology-010),
 TP1–TP8): both carry generic flag 0x4 (trap device), and the original's use plants them as timed bombs through slot 1 (a marker on
-the tile, an 88-second "Traps" event, then a source-less run of the record there); the trap-device path is not implemented. Maintained
+the tile, a "Traps" event 88,000 game ms later, then a source-less run of the record there); the trap-device path is not implemented. Maintained
 technology records: 146, 149 (maintenance 1 every 10 s, the source's payment), 168, 187 (maintenance 0: cells come from their
 ChargeNBranch, 168 one cell a MAINTAIN tick, 187 one at BEGIN), 209, 216 (maintenance 0). Cell records 147 (one weapon, BEGIN
 branch), 168 (three armours, Maintain branch), 187 (no item). Only 168 is both maintained and carried.
