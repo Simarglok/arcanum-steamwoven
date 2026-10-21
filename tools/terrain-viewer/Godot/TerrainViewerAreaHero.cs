@@ -53,7 +53,43 @@ public partial class TerrainViewerApp
             hero.Hero.Name, definition.Prototype, Flag = flag, definition.Gold, Kit = definition.Kit.Count, hero.DroppedChanges,
             Facts = facts!.ToString(), Conversation = _conversationHost is not null }));
         RunAreaSheetSmoke(hero);
+        RunAreaRepairSmoke();
         return Task.CompletedTask;
+    }
+
+    // ARC-SKILLS-007 native observation with the original hero: one of its kit items with a condition takes 12 damage (the
+    // session's damage write, as combat wear does), the inventory window then lists a Repair button for it, and a press repairs it
+    // through the hero's Repair skill. Outcomes and counts only.
+    private void RunAreaRepairSmoke()
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-SKILLS-007 repair smoke: " + why); }
+        var session = _areaSession!;
+        var item = session.QueryHeroKit().Select(kit => (kit.Entity, Baseline: _inventoryHost?.RepairBaseline(session, kit.Entity, _areaKitDurability)))
+            .FirstOrDefault(kit => kit.Baseline is { } b && b.MaximumHitPoints > 12);
+        if (item.Baseline is not { } baseline) { GD.Print("ARC-SKILLS-007 native-smoke repair NONE (no kit item with a condition)"); return; }
+        Require(session.DamageItem(session.Version, item.Entity, baseline, 12).Disposition == Arcanum.Session.GameSessionDisposition.Changed, "damage the kit item");
+        var damaged = session.QueryItemCondition(item.Entity, baseline)!.Value;
+        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
+        _worldFocusSimulationForSelfTest = true; _worldFocused = true;
+        try
+        {
+            InventoryKey(Key.I);
+            Require(InventoryOpen && _inventoryPanel!.RepairButtonsForSelfTest.Count == 1, "one Repair button: " + _inventoryPanel?.RepairButtonsForSelfTest.Count);
+            RepairItem(item.Entity);
+            var repaired = session.QueryItemCondition(item.Entity, baseline)!.Value;
+            Require(_inventoryStatus.StartsWith("repaired", StringComparison.Ordinal) || _inventoryStatus == "the repair restored nothing", "the repair ran: " + _inventoryStatus);
+            Require(repaired.Damage < damaged.Damage || repaired.Adjustment < damaged.Adjustment || repaired == damaged with { Adjustment = repaired.Adjustment },
+                $"the condition followed the repair: {damaged} -> {repaired}");
+            InventoryKey(Key.Escape);
+            GD.Print("ARC-SKILLS-007 native-smoke repair PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                item.Entity, Maximum = baseline.MaximumHitPoints, DamageBefore = damaged.Damage, DamageAfter = repaired.Damage,
+                AdjustmentBefore = damaged.Adjustment, AdjustmentAfter = repaired.Adjustment, Notice = _inventoryStatus }));
+        }
+        finally
+        {
+            if (InventoryOpen) EndInventory();
+            _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
+        }
     }
 
     // ARC-UI-009 native observation on the open sheet: the original skill texts name all sixteen rows, a + press on the first

@@ -42,7 +42,7 @@ Agreed through the coordinator on 2026-10-20:
   rule ([SK7](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)),
   fate points (built as ARC-WORLD-054) and the shared character-point spend and refund
   path (built as ARC-WORLD-052). Item durability (item hit points and the broken
-  state) is owned here and is the input of the Repair slice ARC-SKILLS-011.
+  state) is owned here and is the input of the Repair slice (built as ARC-SKILLS-007, [repair](../world/repair-runtime.md)).
 
 ## Vocabulary and evidence
 
@@ -656,7 +656,7 @@ this document start at F1 or F2.
    magic research owns).
 
 **Item durability** (FR-ITEM-011; done: ARC-WORLD-053, [runtime](../world/item-durability-runtime.md), ledger DU1–DU8) is one more slice, owned by this research and
-needed by ARC-SKILLS-011 (Repair). Its type is `WORLD` (item state in the
+needed by the Repair slice (built as ARC-SKILLS-007). Its type is `WORLD` (item state in the
 session runtime; the next free `WORLD` number at task creation): hp fields per item in the session (prototype values with
 instance overrides), maximum and current, the damage setter, the two-step
 break (destroyed bit, damage reset, unwield or drop, BUST hook, deletion),

@@ -670,6 +670,10 @@ the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
   item's from its object row) gets a *Use on self* button under the list: the hero heals itself through the session's heal
   check ([heal runtime](../world/heal-runtime.md)), and the message line names the amount, the cure and the uses left or the item
   used up. No pre-made kit and nothing on the Crash Site exterior is a healing item; the synthetic self-test covers the button.
+- **Repair (ARC-SKILLS-007).** A damaged or broken item in the PC's list (its condition: the session's record over the hero
+  load's or the object row's baseline) gets a *Repair* button: the hero repairs it with its Repair skill
+  ([repair runtime](../world/repair-runtime.md)), and the message line names the hit points repaired, "nothing to repair" or
+  "the repair restored nothing". The native smoke damages an original hero's kit item and repairs it through the button.
 - **Taken items.** An item the PC took is neither drawn nor picked any more (the canvas
   skips its body; the hover pick passes over it), also after a quick load. The resource
   sweep of the native smoke counts those bodies as taken.
