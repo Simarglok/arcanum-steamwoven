@@ -52,6 +52,9 @@ public sealed class AreaLocalLightingTests
         Assert.AreEqual(1, local.AtHour(22).ObjectLightCount);
         Assert.AreEqual(0, local.AtHour(12).ObjectLightCount);
         Assert.AreSame(local, local.AtHour(5));
+        Assert.AreNotSame(local, local.AtHour(6));
+        Assert.AreNotSame(local, local.AtHour(17));
+        Assert.AreSame(local, local.AtHour(18));
         Assert.AreEqual(new AmbientColor(150, 60, 70), local.AtHour(22).Body(command, AreaAmbientChannel.Outdoor, Pair).Left, "switched on: OFF cleared");
         Assert.AreEqual(new AmbientColor(50, 60, 70), local.AtHour(12).Body(command, AreaAmbientChannel.Outdoor, Pair).Left);
         // Without a light that differs by day both hours are the same lighting; a saved OFF on another object light stays off.

@@ -97,10 +97,17 @@ public sealed class ObjectLightFieldTests
             return true;
         }
 
+        int hits = 0, overlaps = 0, negative = 0;
         for (var probe = 0; probe < 400; probe++)
         {
-            long x = random.Next(-700, 900), y = random.Next(-500, 700);
+            // Half the probes inside a light's rectangle, half anywhere over the region.
+            var inside = placements[random.Next(placements.Length)].Rect;
+            long x = probe % 2 == 0 ? inside.X + random.Next(inside.Width) : random.Next(-700, 900);
+            long y = probe % 2 == 0 ? inside.Y + random.Next(inside.Height) : random.Next(-500, 700);
             var expected = new AmbientColor(60, 70, 80);
+            var here = placements.Count(p => Contribution(p, x, y, out _));
+            if (here > 0) { hits++; if (x < 0 || y < 0) negative++; }
+            if (here > 1) overlaps++;
             foreach (var p in placements)
                 if (Contribution(p, x, y, out var c))
                     expected = (p.Light.Flags & StationaryLightFlags.Dark) != 0
@@ -109,6 +116,8 @@ public sealed class ObjectLightFieldTests
             Assert.AreEqual(expected, field.Point(x, y, new(60, 70, 80), pair), $"point ({x},{y})");
         }
 
+        // The probes are not vacuous: lit points, overlapping lights and lit points left of or above the origin.
+        Assert.IsTrue(hits > 40 && overlaps > 10 && negative > 5, $"hits {hits}, overlaps {overlaps}, negative {negative}");
         var lattice = field.Lattice(pair)!;
         for (var r = 0; r < lattice.Rows; r++)
             for (var col = 0; col < lattice.Columns; col++)

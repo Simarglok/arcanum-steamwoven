@@ -108,11 +108,11 @@ public partial class TerrainViewerApp
         ? new AreaAmbientView(driver.Effective, lighting.Channels)
         {
             // ARC-RENDER-030: the hour picks the night or the day form of the object lights.
-            Local = lighting.Local?.AtHour(driver.Clock.Hour).View(_readyArea.Plan, lighting.Channels, driver.Effective),
+            Local = lighting.Local?.AtHour(driver.Selection.Hour).View(_readyArea.Plan, lighting.Channels, driver.Effective),
             // ARC-WORLD-017: companion bodies are lit where they stand on the shown map, by their own visual. One
             // delegate reads the current pair and map at draw time, so equal views stay equal.
             Moving = _companionLight ??= command => _areaAmbient is { Enabled: true } current && _readyArea?.Lighting is { } shown
-                ? _areaCompanions?.Light(command, current.Effective, shown.Local?.AtHour(current.Clock.Hour)) : null,
+                ? _areaCompanions?.Light(command, current.Effective, shown.Local?.AtHour(current.Selection.Hour)) : null,
         } : null);
     private Func<AreaDrawCommand, AreaLitColors?>? _companionLight;
 
@@ -176,7 +176,7 @@ public partial class TerrainViewerApp
             driver.Clock.GameTimestampMs, driver.Clock.Hour, driver.Clock.IsDay, ClockRevision = driver.Clock.Revision,
             Paused = driver.Clock.PauseDisposition.Paused, PauseReason = driver.Clock.PauseDisposition.Reason.ToString(),
             selection.SchemeId, selection.FromMapDefault, selection.Sector, AmbientRevision = driver.Revision, driver.Enabled,
-            Map = _readyArea?.Snapshot.CatalogueMap, StationaryLights = _readyArea?.Lighting?.Local?.LightCount ?? 0, ObjectLights = _readyArea?.Lighting?.Local?.ObjectLightCount ?? 0,
+            Map = _readyArea?.Snapshot.CatalogueMap, StationaryLights = (_readyArea?.Lighting?.Local?.LightCount ?? 0) - (_readyArea?.Lighting?.Local?.ObjectLightCount ?? 0), ObjectLights = _readyArea?.Lighting?.Local?.ObjectLightCount ?? 0,
             TerrainChunks = _canvas?.AreaChunkCount ?? 0 });
     }
 
