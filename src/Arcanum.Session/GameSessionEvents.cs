@@ -73,7 +73,7 @@ public sealed record SessionDecayFiring(GameEvent Event, SessionMapId Map, strin
 
 /// <summary>
 /// ARC-WORLD-062: a host that knows whether the loot window shows a container (the original's counter 0x5E8800, lowered when the
-/// inventory window opens on a container to loot or steal from, raised when it closes). An Item Decay event that fires meanwhile
+/// inventory window opens on a container in its loot mode or its second container mode, raised when it closes). An Item Decay event that fires meanwhile
 /// waits a minute (ledger ID3, ID6). A pass whose host does not implement it runs as if no container were shown.
 /// </summary>
 public interface ISessionLootWindowWorld : ISessionEventWorld

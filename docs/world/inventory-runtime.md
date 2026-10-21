@@ -287,7 +287,8 @@ event pump fires them like the other kinds (`AreaEventReport.Decays`, log `ARC-W
 Not ready: junk piles (ARC-WORLD-063; an item in a pile decays as a loose one, and a move into a pile restarts the two days, ID4);
 the player's own drop command (ARC-WORLD-064); the viewer opens no container in the loot window (it loots dead NPCs only, which
 the original's counter does not count), so it never delays a decay; the item flag of the hero's kit and made items is not known (no
-installed prototype sets it).
+installed prototype sets it); a dead body's decay (kind 24, a day after death) and the destruction of a holder, which drop their items
+with decay in the original (ID8), are not modelled.
 
 ## Drop cell (ARC-COMBAT-010)
 
