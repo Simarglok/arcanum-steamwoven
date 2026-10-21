@@ -67,8 +67,9 @@ transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`, at most 512), `Revi
 last the item's insert-item script (below).
 
 **Insert check.** The original's insert check (0x466510) depends on the created character (carry weight against its strength, the
-Technophobia background against technology items, free grid room around its own items), none of which the session owns.
-The host answers it per item with a `SessionInsertCheck` delegate (`Accepted`, `TooHeavy`, `TechnologyRefused`,
+Technophobia background against technology items, free grid room around its own items). The session applies the Technophobia
+part for the hero after the host's weight answer ([backgrounds](equipment-runtime.md#backgrounds-arc-world-069)); the weight and the
+room are the host's. The host answers it per item with a `SessionInsertCheck` delegate (`Accepted`, `TooHeavy`, `TechnologyRefused`,
 `NoRoom`; any other value refuses). It runs only after every other refusal. If the host calls back into the owner from it and anything the transfer read
 changed (revision, actor map, the attached seed, the item already taken), the transfer is `StaleVersion` with no effect.
 A refusal changes nothing: for pickup and
@@ -380,9 +381,9 @@ rings stay out. Code: [`GameSessionAmmo`](../../src/Arcanum.Session/GameSessionA
   `made:n` stack only when it holds none. The installed recipes use it: four make ammunition (cells ×5 and ×1, bullets ×2, the fourth
   type ×5) and three take one unit of ammunition as a component. The NPC crafter does the same in its list.
 - **Not modelled.** Gold; a container's stacks (AM6); transfers of units between holders (AM4's destination); the critter field and its
-  clearing (AM5: the session finds a holder's stack by type); the weight of a stack (the host's insert check). The combat's ammunition
-  (a shot, and the critical misses that take the whole stack or five shots' worth) should call `SpendAmmo` with the weapon's
-  ammunition type and per-shot count; that wiring is the combat lane's.
+  clearing (AM5: the session finds a holder's stack by type); the weight of a stack (the host's insert check). A shot's ammunition
+  should call `SpendAmmo` with the weapon's ammunition type and per-shot count (ARC-COMBAT-012); the critical misses that take the
+  whole stack or five shots' worth do since ARC-COMBAT-013 ([hero attack](hero-attack-runtime.md#critical-effects-arc-combat-009)).
 
 ## Next steps
 

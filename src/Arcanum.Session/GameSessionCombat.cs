@@ -158,6 +158,10 @@ internal sealed class CombatDomain
     internal TurnBasedStall<SessionCombatant> Stall { get; set; }
     internal bool HeroCombatMode { get; set; }
     internal SortedSet<string> Critters { get; } = new(StringComparer.Ordinal);
+    // ARC-SKILLS-008: the concealment flags (the source's critter flags 0x1 and 0x2, set and cleared together) of the hero and of
+    // its followers.
+    internal bool HeroConcealed { get; set; }
+    internal SortedSet<string> Concealed { get; } = new(StringComparer.Ordinal);
 }
 
 internal sealed class CombatRound(int turn, List<SessionCombatant> participants, int current, int actionPoints)

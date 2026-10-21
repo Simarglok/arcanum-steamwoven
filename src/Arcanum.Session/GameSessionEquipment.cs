@@ -208,9 +208,10 @@ public sealed partial class GameSessionOwner
     /// with the hero's race, gender, aptitude and crippled arms and then the host's <paramref name="artCheck"/>
     /// (<see cref="GameSessionFailure.WearRefused"/>); the item's and the current occupant's no-drop flag (WearRefused,
     /// <see cref="EquipmentRefusal.NotDroppable"/>); last the insert check of the occupant going back to the inventory
-    /// (<see cref="GameSessionFailure.InsertRefused"/>). The host answers that check as the source asks it: with both the item and
-    /// the occupant already out of the grid (the room the item leaves counts, the occupant's weight once). The facts it gets are the
-    /// occupant's saved kind only; weight and grid size are the host's to look up. An item worn in another slot (a ring) leaves it.
+    /// (<see cref="GameSessionFailure.InsertRefused"/>; for a Technophobia hero a technological occupant is
+    /// <see cref="SessionInsertVerdict.TechnologyRefused"/>, ARC-WORLD-069). The host answers that check as the source asks it: with
+    /// both the item and the occupant already out of the grid (the room the item leaves counts, the occupant's weight once). The facts
+    /// it gets are the occupant's saved kind and its complexity; weight and grid size are the host's to look up. An item worn in another slot (a ring) leaves it.
     /// One revision.
     /// </summary>
     [OriginalFunction(0x464AE0, OriginalFunctionScope.Partial)]
@@ -250,7 +251,8 @@ public sealed partial class GameSessionOwner
         SessionInsertVerdict? verdict = null;
         if (current is not null)
         {
-            verdict = insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity)));
+            verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity, current.Item.MagickTechComplexity))),
+                current.Item.MagickTechComplexity);
             ThrowIfDisposed();
             if (_revision != revision) return RejectWear(GameSessionFailure.StaleVersion, verdict: verdict);
             if (verdict != SessionInsertVerdict.Accepted) return RejectWear(GameSessionFailure.InsertRefused, verdict: verdict);
@@ -264,7 +266,8 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// Takes the item in <paramref name="slot"/> off into the hero's inventory (the source's 0x464C80): NoChange for an
     /// empty slot; refused for an item with the no-drop flag (<see cref="GameSessionFailure.WearRefused"/>,
-    /// <see cref="EquipmentRefusal.NotDroppable"/>), then by the insert check (<see cref="GameSessionFailure.InsertRefused"/>), which
+    /// <see cref="EquipmentRefusal.NotDroppable"/>), then by the insert check (<see cref="GameSessionFailure.InsertRefused"/>; a
+    /// technological item for a Technophobia hero is <see cref="SessionInsertVerdict.TechnologyRefused"/>, ARC-WORLD-069), which
     /// the source asks with the item still worn (its weight counts twice near the carry limit). One revision.
     /// </summary>
     [OriginalFunction(0x464C80, OriginalFunctionScope.Partial)]
@@ -281,7 +284,8 @@ public sealed partial class GameSessionOwner
         if (refusal != EquipmentRefusal.None) return RejectWear(GameSessionFailure.WearRefused, refusal);
         if (_revision == long.MaxValue) return RejectWear(GameSessionFailure.RevisionExhausted);
         var revision = _revision;
-        var verdict = insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity)));
+        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity, current.Item.MagickTechComplexity))),
+            current.Item.MagickTechComplexity);
         ThrowIfDisposed();
         if (_revision != revision) return RejectWear(GameSessionFailure.StaleVersion, verdict: verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectWear(GameSessionFailure.InsertRefused, verdict: verdict);
@@ -307,13 +311,13 @@ public sealed partial class GameSessionOwner
 
     /// <summary>What the insert check is told about an item going back to the hero's grid: its saved kind; weight, complexity and
     /// scripts are the host's to look up (the session keeps only kinds for the PC's items).</summary>
-    private SessionItemFacts CarriedFacts(string entity) => new(HeldKind(entity)!.Value, 0, 0, -1, null, []);
+    private SessionItemFacts CarriedFacts(string entity, int complexity = 0) => new(HeldKind(entity)!.Value, 0, complexity, -1, null, []);
 
     private int HeroAptitude() =>
         Math.Clamp(_hero!.Stats.Query(new(0)).Snapshot!.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
 
-    /// <summary>The hero as a wearer: race, gender, aptitude and the crippled arms of its life state. No spell, background or unique
-    /// art is session state, so the hero is never transformed, magick-allergic or unique.</summary>
+    /// <summary>The hero as a wearer: race, gender, aptitude, the crippled arms of its life state and (ARC-WORLD-069) the Magick Allergy
+    /// background. No spell or unique art is session state, so the hero is never transformed or unique.</summary>
     private EquipmentWearer HeroWearer()
     {
         var conditions = _life.Hero?.State.Conditions ?? LifeConditions.None;
@@ -324,6 +328,7 @@ public sealed partial class GameSessionOwner
             MagickTechAptitude = HeroAptitude(),
             CrippledArmOne = conditions.HasFlag(LifeConditions.CrippledArmOne),
             CrippledArmsBoth = conditions.HasFlag(LifeConditions.CrippledArmsBoth),
+            MagickAllergy = _hero.State.Background == SessionBackgrounds.MagickAllergy,
         };
     }
 

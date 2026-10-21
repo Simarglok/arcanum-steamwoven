@@ -120,9 +120,9 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
-                        // walk run.
+                        // walk and census run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
@@ -144,6 +144,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("walk") == true) await RunAreaMapWalkSmokeAsync();
                         // ARC-UI-048: after the stream, as the landing loads the start map around another place.
                         if (_readyMapName is not null && Stage("worldmap")) await RunAreaWorldMapSmokeAsync();
+                        // ARC-RENDER-027: only when named, every map of the catalogue in turn (last: it leaves the last map shown).
+                        if (only?.Contains("census") == true) await RunAreaMapCensusAsync();
                         GetTree().Quit(0);
                     }
                     else await RunNativeSmokeAsync(result);
@@ -174,6 +176,7 @@ public partial class TerrainViewerApp : Node
             GD.Print($"ARC-RENDER-007 failure stage={exception.Issue.Stage} code={exception.Issue.Code} ready=False");
             var error = new TerrainViewerError(TerrainViewerErrorCode.RenderFailure,
                 Stage: TerrainViewerFailureStage.Upload, Progress: TerrainViewerProgress.Empty);
+            if (CensusLoadFailed($"{exception.Issue.Stage}/{exception.Issue.Code}")) return;
             if (_nativeSmoke) { GetTree().Quit(1); return; }
             _coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, error));
         }
@@ -188,12 +191,14 @@ public partial class TerrainViewerApp : Node
                     _ => TerrainViewerErrorCode.FingerprintMismatch
                 },
                 Stage: TerrainViewerFailureStage.Fingerprint, Progress: TerrainViewerProgress.Empty);
+            if (CensusLoadFailed($"AreaSteps.{exception.Stage}/{exception.Code}")) return;
             if (_nativeSmoke) { GetTree().Quit(1); return; }
             _coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, error));
         }
         catch (TerrainViewerException exception)
         {
             if (_exiting) return;
+            if (CensusLoadFailed($"{exception.Error.Stage}/{exception.Error.Code}")) return;
             if (_nativeSmoke) { GD.Print(FormatFailure(arguments.Mode, exception.Error)); GetTree().Quit(1); return; }
             if (!_coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, exception.Error))) return;
         }
@@ -210,6 +215,8 @@ public partial class TerrainViewerApp : Node
             var error = new TerrainViewerError(TerrainViewerErrorCode.RenderFailure,
                 Stage: TerrainViewerFailureStage.Upload,
                 Progress: result is null ? TerrainViewerProgress.Empty : ProgressFromResult(result));
+            if (CensusLoadFailed(exception.Message.StartsWith("AREA_", StringComparison.Ordinal) && exception.Message.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')
+                ? exception.Message : exception.GetType().Name)) return;
             if (_nativeSmoke) { GD.Print(FormatFailure(arguments.Mode, error)); GetTree().Quit(1); return; }
             if (!_coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, error))) return;
         }
