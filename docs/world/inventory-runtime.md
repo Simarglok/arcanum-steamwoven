@@ -381,8 +381,10 @@ rings stay out. Code: [`GameSessionAmmo`](../../src/Arcanum.Session/GameSessionA
   `made:n` stack only when it holds none. The installed recipes use it: four make ammunition (cells ×5 and ×1, bullets ×2, the fourth
   type ×5) and three take one unit of ammunition as a component. The NPC crafter does the same in its list.
 - **Not modelled.** Gold; a container's stacks (AM6); transfers of units between holders (AM4's destination); the critter field and its
-  clearing (AM5: the session finds a holder's stack by type); the weight of a stack (the host's insert check). A shot's ammunition
-  should call `SpendAmmo` with the weapon's ammunition type and per-shot count (ARC-COMBAT-012); the critical misses that take the
+  clearing (AM5: the session finds a holder's stack by type); the weight of a stack (the host's insert check). Since ARC-COMBAT-012 the hero's
+  attacks spend a shot's ammunition through `SpendAmmo` with the weapon's ammunition type and per-shot count, hit or miss, and a
+  short stack refuses the attack after the hit location ([hero attack](hero-attack-runtime.md#reach-and-line-of-fire-arc-combat-012));
+  the critical misses that take the
   whole stack or five shots' worth do since ARC-COMBAT-013 ([hero attack](hero-attack-runtime.md#critical-effects-arc-combat-009)).
 
 ## Next steps
