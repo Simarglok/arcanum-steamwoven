@@ -5,6 +5,7 @@ using Arcanum.Data.Lighting;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
+using Arcanum.Simulation.Movement;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -241,7 +242,11 @@ public static class AreaMapWalk
 {
     /// <summary>The route (<see cref="AreaWindowRoute"/>) on the module content stack of the arguments' game folder; the native
     /// walk smoke steers by it.</summary>
-    public static AreaWindowRouteResult Plan(TerrainViewerArguments arguments, AreaStepCell from, AreaStepCell to, CancellationToken token)
+    /// <param name="overlay">The live overlay the walk steps by (ARC-WORLD-060: the objects the session destroyed or switched off
+    /// free their tiles as for the PC's steps, through the same <see cref="AreaOccupancyRules.Apply"/>); null for the T0 evidence.
+    /// Its occupied cells are chart cells of the shown window and are not read here.</param>
+    public static AreaWindowRouteResult Plan(TerrainViewerArguments arguments, AreaStepCell from, AreaStepCell to, CancellationToken token,
+        AreaOccupancy? overlay = null)
     {
         var mapName = arguments.AreaMapName ?? throw new InvalidOperationException("AREA_MAP_REQUIRED");
         var discovery = ContentMountPlan.Discover(arguments.GameRoot ?? throw new InvalidOperationException("AREA_MAP_GAME_ROOT_REQUIRED"));
@@ -249,6 +254,20 @@ public static class AreaMapWalk
         var opened = ContentStack.Open(discovery.Plan!);
         if (opened.Status != ContentStackStatus.Ready) throw new InvalidOperationException("AREA_MAP_STACK_" + opened.Status.ToString().ToUpperInvariant());
         using var stack = opened.Stack!;
-        return AreaWindowRoute.Plan(stack, WorldCatalog.Open(stack), mapName, from, to, token: token);
+        return AreaWindowRoute.Plan(stack, WorldCatalog.Open(stack), mapName, from, to, token: token, stepOpen: StepOpen(overlay));
     }
+
+    /// <summary>The window route's step verdict over an overlay's moved T0 records (<see cref="AreaOccupancyRules.Apply"/>, the
+    /// query the PC's steps use); null (the T0 disposition) when the overlay moves none. Live actors' cells are chart cells of the
+    /// shown window and are not applied.</summary>
+    internal static Func<AreaStepAssessment, AreaStepCell, CardinalTraversalDirection, bool>? StepOpen(AreaOccupancy? overlay)
+    {
+        if (overlay is not { Moved.Count: > 0 } live) return null;
+        var removed = AreaOccupancy.None.WithRemoved(live.Moved);
+        return (assessment, _, direction) => AreaOccupancyRules.Apply(assessment, default, Neighbor[direction], removed).Disposition == CardinalTraversalDisposition.Open;
+    }
+
+    // The movement direction of each traversal direction (the inverse of GridReplay.MapDirection).
+    internal static readonly IReadOnlyDictionary<CardinalTraversalDirection, NeighborDirection> Neighbor =
+        Enum.GetValues<NeighborDirection>().ToDictionary(GridReplay.MapDirection);
 }

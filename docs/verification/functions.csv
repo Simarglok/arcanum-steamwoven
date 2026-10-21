@@ -45,6 +45,9 @@ address,name,domain,status,reason,level,evidence,method
 0x4207D0,world-map route,travel,full,,F2,docs/research/original-verification-ledger.md#world-map-travel-arc-res-068,Arcanum.Simulation.Travel.WorldRoute.Plan
 0x420900,route detour,travel,full,,F2,docs/research/original-verification-ledger.md#world-map-travel-arc-res-068,Arcanum.Simulation.Travel.WorldRoute.Detour
 0x4209C0,route window search,travel,full,,F2,docs/research/original-verification-ledger.md#world-map-travel-arc-res-068,Arcanum.Simulation.Travel.WorldRoute.Search
+0x426040,walk path step,navigation,not implemented,"the move goal's plan and the PC's straight-line retry with flags 0x78 (LR3, LR4); the click route keeps the project planner until the owner decides",F2,docs/research/original-verification-ledger.md#long-and-far-routes-arc-world-060,
+0x426320,walk path budget,navigation,not implemented,"min(4 x distance + 5, 200) on the first plan, 5 more on each later one (LR2); the click route bounds its search by expansions instead",F2,docs/research/original-verification-ledger.md#long-and-far-routes-arc-world-060,
+0x427110,walk step check,navigation,not implemented,"a living PC or NPC checked only before a segment's last step, the run ending on a hit (LR5, LRA1); the click route stops on a denied step",F2,docs/research/original-verification-ledger.md#long-and-far-routes-arc-world-060,
 0x438720,wall check roof fade on,rendering,full,,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.AddWallFade
 0x438A50,wall check roof fade clear,rendering,full,,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.ReleaseWallFade
 0x439140,roof draw,rendering,partial,only the corner alphas of a faded piece; the drawing itself (outdoor colour and blit) is the renderer's,F2,docs/research/original-verification-ledger.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.FadeCorners
