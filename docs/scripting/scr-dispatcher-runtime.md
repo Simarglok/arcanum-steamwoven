@@ -402,7 +402,7 @@ type (34) and the run's ten object variables as a focus kind (11), as the origin
   A callee outside the set refuses the whole dispatch (`Refused`, the callee's refusal), and so does a dialog action in
   its admitted lines (the original's dialog store for a called run is not read; refused at that line as
   `ActionNotAdmitted`). An unreadable callee ends the dispatch with `UnreadableScript`, and a nesting deeper than
-  `ScrRunOptions.MaxCallDepth` (default 16, the original's bound is its stack) or more than `MaxCallDepth` ×
+  `ScrRunOptions.MaxCallDepth` (default 16, the original's bound is its stack; the deepest literal call chain in the installed scripts is 8, and four scripts are on call cycles) or more than `MaxCallDepth` ×
   `MaxExecutedLines` lines in the whole dispatch end it with `CallDepth`; both apply nothing. The result's trace is the
   top run's (empty for a refused callee, whose number the result names). The runner's dialog-point gates (E6) are not
   applied to a callee, so a dialog-point event never runs call script. Only single objects are admitted, so a call runs once; the original runs one call per triggerer and
