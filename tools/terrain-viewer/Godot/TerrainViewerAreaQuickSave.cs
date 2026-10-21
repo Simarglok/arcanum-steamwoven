@@ -217,7 +217,6 @@ public partial class TerrainViewerApp
         RebindAreaAmbient(session);
         var previous = _areaSession;
         _areaSession = session;
-        ClearLevelMessages();
         // The dialog host borrows the session (ARC-SCRIPT-006): it is swapped with it, before the old one is disposed.
         if (_conversationHost is not null) _conversationHost = talk!;
         // ARC-WORLD-048: visitor hosts borrow the old session too; they are built again over the new one when asked.

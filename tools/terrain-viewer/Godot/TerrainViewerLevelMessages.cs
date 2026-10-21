@@ -16,6 +16,8 @@ public partial class TerrainViewerApp
     private AreaLevelTexts? _levelTexts;
     private int _levelMessagesPosted;
     private readonly List<SessionLevelUp> _pendingLevelUps = [];
+    // The session the window's entries and the queue belong to: a map transfer carries it, a quick load or a new game replaces it.
+    private GameSessionOwner? _levelMessagesSession;
 
     /// <summary>Starts loading the level-up texts for this module once; a reload, the cave or a map transfer reuses them.</summary>
     private void BindAreaLevelTexts(TerrainViewerArguments arguments)
@@ -46,6 +48,7 @@ public partial class TerrainViewerApp
     private void ShowLevelUps(SessionExperienceAward? award)
     {
         if (award?.LevelUps is not { Count: > 0 } levels) return;
+        SyncLevelMessageSession();
         _pendingLevelUps.AddRange(levels);
         FlushLevelUps(TimeSpan.FromSeconds(1));
     }
@@ -53,9 +56,13 @@ public partial class TerrainViewerApp
     /// <summary>Posts the queued level-up entries once the texts are there, each with the level-up sound.</summary>
     private void FlushLevelUps(TimeSpan wait)
     {
+        SyncLevelMessageSession();
         if (_pendingLevelUps.Count == 0 || LevelTexts(wait) is not { } texts) return;
         if (_messageWindow is null) { _messageWindow = new AreaMessageWindow(); AddChild(_messageWindow); }
-        foreach (var level in _pendingLevelUps)
+        // Taken off the queue first: an entry is posted at most once.
+        var batch = _pendingLevelUps.ToArray();
+        _pendingLevelUps.Clear();
+        foreach (var level in batch)
         {
             _messageWindow.Post(AreaLevelMessages.Compose(level, texts));
             _levelMessagesPosted++;
@@ -63,10 +70,18 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-046 level-up level={level.Level} points={level.Points} scheme={(level.Scheme is not { } s ? "none" : !s.HasRule ? "no-rule"
                 : $"purchases={s.Purchases.Count} completed={s.Completed}")}");
         }
-        _pendingLevelUps.Clear();
     }
 
-    /// <summary>A new session (quick load, a new game, teardown) starts a new history: the window empties and queued entries drop.</summary>
+    /// <summary>A different session than the one the entries belong to (a quick load, a new game) empties the window and the queue;
+    /// a session a map transfer carries keeps them, and none (between loads) changes nothing.</summary>
+    private void SyncLevelMessageSession()
+    {
+        if (_areaSession is not { } session || ReferenceEquals(session, _levelMessagesSession)) return;
+        if (_levelMessagesSession is not null) ClearLevelMessages();
+        _levelMessagesSession = session;
+    }
+
+    /// <summary>Empties the window and drops the queued entries (another session, or the native smoke's own entries).</summary>
     private void ClearLevelMessages()
     {
         _pendingLevelUps.Clear();

@@ -1083,7 +1083,8 @@ formats take their one number at the first `%d` or `%i` (`%%` is a percent sign;
 
 The message window (`AreaMessageWindow`, bottom centre) is the smallest bounded stand-in for the original's: the newest entry
 with its title and lines, a history of the last ten browsed with ‹ and ›, and × hiding it until the next entry; its buttons take
-no focus, and a click elsewhere on it reaches the world. A new session (quick load, a new game) empties it. No other original
+no focus, and a click elsewhere on it reaches the world. A different session (a quick load, a new game) empties it and its
+queue; a map transfer, the main map's window move or world-map travel carries the session and keeps them. No other original
 message uses it yet.
 
 Self-test inside `ARC-UI-007 self-test PASS` (synthetic hero: an award to level 3 posts two entries with the project's labels,
