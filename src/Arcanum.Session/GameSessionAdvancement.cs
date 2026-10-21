@@ -122,15 +122,28 @@ public sealed class SessionSchemeTarget
 /// <summary>A scheme change: the scheme the target holds after the call (null for a refusal).</summary>
 public sealed record SessionSchemeResult(GameSessionDisposition Disposition, GameSessionFailure Failure, int? Scheme, GameSessionVersion Version);
 
-/// <summary>Saved advancement records of the NPCs the session levelled, in ordinal entity order (snapshot schema 20).</summary>
+/// <summary>The PC level steps a waiting follower missed while its sheet could not be read (ARC-WORLD-047), in order.</summary>
+public sealed record SessionMissedLevelSteps(string Entity, IReadOnlyList<MissedLevelStep> Steps);
+
+/// <summary>Saved advancement records of the NPCs the session levelled, in ordinal entity order (snapshot schema 20), and the waiting
+/// followers' missed level steps, in ordinal entity order (snapshot schema 32).</summary>
 public sealed class SessionAdvancementState
 {
-    internal SessionAdvancementState(SessionNpcAdvancement[] npcs) => Npcs = Array.AsReadOnly(npcs);
+    internal SessionAdvancementState(SessionNpcAdvancement[] npcs, SessionMissedLevelSteps[] missed)
+    {
+        Npcs = Array.AsReadOnly(npcs);
+        Missed = Array.AsReadOnly(missed);
+    }
 
-    public static SessionAdvancementState Empty { get; } = new([]);
+    public static SessionAdvancementState Empty { get; } = new([], []);
 
     public IReadOnlyList<SessionNpcAdvancement> Npcs { get; }
+    public IReadOnlyList<SessionMissedLevelSteps> Missed { get; }
 }
+
+/// <summary>A deferred level step: the follower's missed steps after the call (null for a refusal).</summary>
+public sealed record SessionDeferLevelResult(GameSessionDisposition Disposition, GameSessionFailure Failure, IReadOnlyList<MissedLevelStep>? Steps,
+    GameSessionVersion Version);
 
 /// <summary>
 /// A follower's level update: its level after the step and the points it gained, the scheme run (null when the level stayed:
@@ -144,9 +157,19 @@ internal sealed class AdvancementDomain(SessionAutoLevelRules? rules)
 {
     internal SessionAutoLevelRules? Rules { get; } = rules;
     internal Dictionary<string, SessionNpcAdvancement> Npcs { get; } = new(StringComparer.Ordinal);
+    internal Dictionary<string, IReadOnlyList<MissedLevelStep>> Missed { get; } = new(StringComparer.Ordinal);
 
     internal SessionAdvancementState Capture() =>
-        new(Npcs.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Value).ToArray());
+        new(Npcs.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Value).ToArray(),
+            Missed.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => new SessionMissedLevelSteps(pair.Key, pair.Value)).ToArray());
+
+    /// <summary>A missed-step list a session may hold: 1..<see cref="ExperienceRules.MaxMissedStepEntries"/> entries, each a step
+    /// between levels 0..51 that rises, counted 1..51 times.</summary>
+    internal static bool ValidMissed(IReadOnlyList<MissedLevelStep>? steps) => steps is { Count: > 0 and <= ExperienceRules.MaxMissedStepEntries } &&
+        steps.All(s => ValidStep(s.Step) && s.Step.NewPcLevel > s.Step.OldPcLevel && s.Times is >= 1 and <= ExperienceRules.MaxLevel);
+
+    internal static bool ValidStep(FollowerLevelStep step) =>
+        step.OldPcLevel is >= 0 and <= ExperienceRules.MaxLevel && step.NewPcLevel is >= 0 and <= ExperienceRules.MaxLevel;
 
     /// <summary>A scheme run's sheet the hero may hold: its bought pools within <see cref="SessionAdvancementLimits.MaxHeroPoolPoints"/>.</summary>
     internal static bool HeroBounded(AdvancementSheet sheet) =>
@@ -220,19 +243,12 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         if (_advancement.Rules is not { } rules) return RejectFollower(GameSessionFailure.AdvancementUnavailable);
-        if (!AdvancementDomain.Valid(loaded) || !AutoLevelRules.IsValid(modifiers) || step.OldPcLevel is < 0 or > ExperienceRules.MaxLevel ||
-            step.NewPcLevel is < 0 or > ExperienceRules.MaxLevel) return RejectFollower(GameSessionFailure.InvalidAdvancement);
+        if (!AdvancementDomain.Valid(loaded) || !AutoLevelRules.IsValid(modifiers) || !AdvancementDomain.ValidStep(step))
+            return RejectFollower(GameSessionFailure.InvalidAdvancement);
         if (!IsCurrent(expected)) return RejectFollower(GameSessionFailure.StaleVersion);
         var record = _advancement.Npcs.TryGetValue(loaded.Entity, out var saved) ? saved : loaded;
-        var up = ExperienceRules.FollowerLevel(record.Sheet.Level, step);
+        var (up, outcome, next) = StepFollower(rules, record, modifiers, step);
         if (up.Level == record.Sheet.Level) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, up, null, record, Version);
-        var sheet = record.Sheet with
-        {
-            Level = up.Level, UnspentPoints = Math.Min(ExperienceRules.MaxUnspentPoints, record.Sheet.UnspentPoints + up.PointsGained),
-        };
-        var outcome = AutoLevelRules.Apply(sheet, modifiers, rules.Scheme(record.AutoLevelScheme), rules.Scheme(AutoLevelRules.StandardNpcScheme),
-            npc: true, rules.SpellWillpower);
-        var next = record with { Sheet = outcome.Sheet };
         if (!_advancement.Npcs.ContainsKey(next.Entity) && _advancement.Npcs.Count >= _limits.MaxAdvancementRecords)
             return RejectFollower(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectFollower(GameSessionFailure.RevisionExhausted);
@@ -240,6 +256,90 @@ public sealed partial class GameSessionOwner
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, up, outcome, next, Version);
     }
+
+    // One follower update (0x4A6CB0): the new level and points, then the NPC's scheme after a rise (rule 70 after it completes).
+    private static (FollowerLevelUp Up, AutoLevelOutcome? Outcome, SessionNpcAdvancement Next) StepFollower(SessionAutoLevelRules rules,
+        SessionNpcAdvancement record, AdvancementModifiers modifiers, FollowerLevelStep step)
+    {
+        var up = ExperienceRules.FollowerLevel(record.Sheet.Level, step);
+        if (up.Level == record.Sheet.Level) return (up, null, record);
+        var sheet = record.Sheet with
+        {
+            Level = up.Level, UnspentPoints = Math.Min(ExperienceRules.MaxUnspentPoints, record.Sheet.UnspentPoints + up.PointsGained),
+        };
+        var outcome = AutoLevelRules.Apply(sheet, modifiers, rules.Scheme(record.AutoLevelScheme), rules.Scheme(AutoLevelRules.StandardNpcScheme),
+            npc: true, rules.SpellWillpower);
+        return (up, outcome, record with { Sheet = outcome.Sheet });
+    }
+
+    /// <summary>A waiting follower's missed level steps, or null when it has none (ARC-WORLD-047). An invalid entity id throws.</summary>
+    public IReadOnlyList<MissedLevelStep>? QueryMissedLevelSteps(string entity)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) throw new ArgumentException("Invalid entity id.", nameof(entity));
+        return _advancement.Missed.GetValueOrDefault(entity);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-047 (Steamwoven, owner decision D7): records a PC level step a waiting follower missed because the host cannot read its
+    /// sheet now (its map is not loaded); <see cref="ApplyMissedFollowerLevels"/> applies the steps when it can
+    /// (<see cref="ExperienceRules.AppendMissedStep"/>). Refused, in order: no scheme data
+    /// (<see cref="GameSessionFailure.AdvancementUnavailable"/>); an invalid entity or step (<see cref="GameSessionFailure.InvalidAdvancement"/>);
+    /// an NPC that is not waiting for the PC (<see cref="GameSessionFailure.NotInParty"/>); the version; a list past its bound or a new
+    /// one beyond the advancement records' budget (<see cref="GameSessionFailure.BudgetExceeded"/>); the revision.
+    /// </summary>
+    public SessionDeferLevelResult DeferFollowerLevel(GameSessionVersion expected, string entity, FollowerLevelStep step)
+    {
+        ThrowIfDisposed();
+        if (_advancement.Rules is null) return RejectDefer(GameSessionFailure.AdvancementUnavailable);
+        if (!SessionValidation.Entity(entity) || !AdvancementDomain.ValidStep(step) || step.NewPcLevel <= step.OldPcLevel)
+            return RejectDefer(GameSessionFailure.InvalidAdvancement);
+        if (_party.Get(entity).Standing != CompanionStanding.Waiting) return RejectDefer(GameSessionFailure.NotInParty);
+        if (!IsCurrent(expected)) return RejectDefer(GameSessionFailure.StaleVersion);
+        var before = _advancement.Missed.GetValueOrDefault(entity);
+        if (ExperienceRules.AppendMissedStep(before ?? [], step) is not { } steps
+            || (before is null && _advancement.Missed.Count >= _limits.MaxAdvancementRecords)) return RejectDefer(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectDefer(GameSessionFailure.RevisionExhausted);
+        _advancement.Missed[entity] = steps;
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, steps, Version);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-047: applies a waiting follower's missed level steps in order (each as often as it came, through the follower update
+    /// of <see cref="LevelFollower"/>) and forgets them, in one revision. <see cref="GameSessionDisposition.NoChange"/> when it has none.
+    /// The result names the last step's level and scheme run and the record after all of them. Refused as <see cref="LevelFollower"/>.
+    /// </summary>
+    public SessionFollowerLevelResult ApplyMissedFollowerLevels(GameSessionVersion expected, SessionNpcAdvancement loaded, AdvancementModifiers modifiers)
+    {
+        ThrowIfDisposed();
+        if (_advancement.Rules is not { } rules) return RejectFollower(GameSessionFailure.AdvancementUnavailable);
+        if (!AdvancementDomain.Valid(loaded) || !AutoLevelRules.IsValid(modifiers)) return RejectFollower(GameSessionFailure.InvalidAdvancement);
+        if (!IsCurrent(expected)) return RejectFollower(GameSessionFailure.StaleVersion);
+        var record = _advancement.Npcs.TryGetValue(loaded.Entity, out var saved) ? saved : loaded;
+        if (!_advancement.Missed.TryGetValue(loaded.Entity, out var steps)) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, record, Version);
+        FollowerLevelUp? last = null;
+        AutoLevelOutcome? lastOutcome = null;
+        var now = record;
+        foreach (var entry in steps)
+            for (var i = 0; i < entry.Times; i++)
+            {
+                var (up, outcome, next) = StepFollower(rules, now, modifiers, entry.Step);
+                last = up;
+                if (outcome is not null) lastOutcome = outcome;
+                now = next;
+            }
+        var levelled = !ReferenceEquals(now, record);
+        if (levelled && !_advancement.Npcs.ContainsKey(now.Entity) && _advancement.Npcs.Count >= _limits.MaxAdvancementRecords)
+            return RejectFollower(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectFollower(GameSessionFailure.RevisionExhausted);
+        if (levelled) _advancement.Npcs[now.Entity] = now;
+        _advancement.Missed.Remove(loaded.Entity);
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, last, lastOutcome, now, Version);
+    }
+
+    private SessionDeferLevelResult RejectDefer(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, new(_identity, _revision));
 
     /// <summary>
     /// SCR action 139 (ARC-SCRIPT-016, ledger OL30): the target's auto-level scheme becomes <paramref name="scheme"/> (0x4A6D90 writes
@@ -312,6 +412,15 @@ public sealed partial class GameSessionOwner
             if (previous is not null && string.CompareOrdinal(previous, npc.Entity) >= 0) return GameSessionFailure.InvalidSnapshot;
             previous = npc.Entity;
             advancement.Npcs.Add(npc.Entity, npc);
+        }
+        if (saved.Missed.Count > limits.MaxAdvancementRecords) return GameSessionFailure.BudgetExceeded;
+        previous = null;
+        foreach (var missed in saved.Missed)
+        {
+            if (missed is null || !SessionValidation.Entity(missed.Entity) || !AdvancementDomain.ValidMissed(missed.Steps)) return GameSessionFailure.InvalidAdvancement;
+            if (previous is not null && string.CompareOrdinal(previous, missed.Entity) >= 0) return GameSessionFailure.InvalidSnapshot;
+            previous = missed.Entity;
+            advancement.Missed.Add(missed.Entity, missed.Steps.ToArray());
         }
         return GameSessionFailure.None;
     }

@@ -94,7 +94,9 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] NpcExperienceFields = ["entity", "worth", "pool"];
     private static readonly string[] HeroAdvancementFields = ["basicSkills", "techSkills", "colleges", "mastery", "techDegrees",
         "hitPointPoints", "fatiguePoints", "scheme"];
-    private static readonly string[] AdvancementFields = ["npcs"];
+    private static readonly string[] AdvancementFields = ["npcs", "missed"];
+    private static readonly string[] MissedFields = ["entity", "steps"];
+    private static readonly string[] MissedStepFields = ["oldPcLevel", "newPcLevel", "times"];
     private static readonly string[] NpcAdvancementFields = ["entity", "race", "monstrous", "stats", "magickPoints", "techPoints", "level",
         "unspentPoints", "basicSkills", "techSkills", "colleges", "mastery", "techDegrees", "hitPointPoints", "hitPointAdjustment",
         "fatiguePoints", "fatigueAdjustment", "scheme"];
@@ -468,6 +470,24 @@ public static class GameSessionSnapshotCodec
                 w.WriteNumber("fatiguePoints", sheet.FatiguePoints);
                 w.WriteNumber("fatigueAdjustment", sheet.FatigueAdjustment);
                 w.WriteNumber("scheme", npc.AutoLevelScheme);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("missed");
+            foreach (var missed in snapshot.Advancement.Missed)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", missed.Entity);
+                w.WriteStartArray("steps");
+                foreach (var step in missed.Steps)
+                {
+                    w.WriteStartObject();
+                    w.WriteNumber("oldPcLevel", step.Step.OldPcLevel);
+                    w.WriteNumber("newPcLevel", step.Step.NewPcLevel);
+                    w.WriteNumber("times", step.Times);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1127,7 +1147,28 @@ public static class GameSessionSnapshotCodec
                 Value("hitPointAdjustment"), Value("fatiguePoints"), Value("fatigueAdjustment"), Value("mastery"));
             npcs[i] = new(entity, sheet, Value("scheme"));
         }
-        return new(npcs);
+        var missedItems = Array(f["missed"], p + ".missed", GameSessionLimits.PolicyMaxAdvancementRecords);
+        var missed = new SessionMissedLevelSteps[missedItems.Length];
+        for (var i = 0; i < missedItems.Length; i++)
+        {
+            var path = $"{p}.missed[{i}]";
+            var m = Fields(missedItems[i], path, MissedFields);
+            var entity = Entity(m["entity"], path + ".entity");
+            if (i > 0 && string.CompareOrdinal(missed[i - 1].Entity, entity) >= 0)
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            var stepItems = Array(m["steps"], path + ".steps", Arcanum.Simulation.Character.ExperienceRules.MaxMissedStepEntries);
+            var steps = new Arcanum.Simulation.Character.MissedLevelStep[stepItems.Length];
+            for (var j = 0; j < stepItems.Length; j++)
+            {
+                var stepPath = $"{path}.steps[{j}]";
+                var s = Fields(stepItems[j], stepPath, MissedStepFields);
+                int Level(string name) => Int(s[name], $"{stepPath}.{name}", 0, Arcanum.Simulation.Character.ExperienceRules.MaxLevel);
+                steps[j] = new(new(Level("oldPcLevel"), Level("newPcLevel")),
+                    Int(s["times"], stepPath + ".times", 1, Arcanum.Simulation.Character.ExperienceRules.MaxLevel));
+            }
+            missed[i] = new(entity, steps);
+        }
+        return new(npcs, missed);
     }
 
     private static ImmutableArray<int> Ints(JsonElement element, string path)
