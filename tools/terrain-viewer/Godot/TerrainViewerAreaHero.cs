@@ -74,7 +74,9 @@ public partial class TerrainViewerApp
         Require(training == Arcanum.Simulation.Combat.SkillTraining.Master || stepped == MovementGait.Walk, $"below master a run is a walk: {training} {stepped}");
         var followers = session.QueryConcealment().Npcs.Count;
         PaletteProwlToggle();
-        Require(!session.IsConcealed(Arcanum.Session.SessionCombatant.Hero) && session.QueryConcealment().Npcs.Count == 0, "prowl off");
+        // A waiting NPC keeps its own state (HK2), so only the following ones are checked.
+        Require(!session.IsConcealed(Arcanum.Session.SessionCombatant.Hero) && session.QueryParty().Followers
+            .All(member => !session.IsConcealed(Arcanum.Session.SessionCombatant.Critter(member.Entity))), "prowl off");
         (_worldGait, _gaitOrigin) = (gait, origin);
         GD.Print("ARC-SKILLS-008 native-smoke prowl PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Training = training.ToString(), Step = stepped.ToString(), Followers = followers }));

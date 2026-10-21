@@ -99,8 +99,9 @@ public sealed partial class GameSessionOwner
     }
 
     // The attack event (0x4A9650, ST4): when the victim is the hero or an NPC the hero leads (following or waiting), the hero and
-    // the followers in its follower list are no longer concealed; a waiting victim is not in that list and keeps its state, as
-    // the attacker does. True when that changed anything.
+    // the followers in its follower list are no longer concealed; a waiting victim is not in that list and keeps its state. The
+    // attacker is not touched as the attacker: the hero attacking its own follower is in the victim's party and loses it too. True
+    // when that changed anything.
     private bool EndConcealmentForAttackOn(SessionCombatant victim)
     {
         if (!victim.IsHero && (victim.Entity is not { } entity || !_party.Records.TryGetValue(entity, out var record) ||

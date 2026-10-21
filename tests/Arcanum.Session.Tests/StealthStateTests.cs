@@ -59,6 +59,21 @@ public sealed class StealthStateTests
     }
 
     [TestMethod]
+    public void ADialogStartThatLeavesTheReactionSlotUnchangedStillTakesARevisionForTheConcealment()
+    {
+        using var owner = Owner();
+        var npc = new ReactionNpcFacts(50, Arcanum.Simulation.Character.CharacterRace.Human, false, false);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.BeginReactionConversation(owner.Version, Pal, npc).Disposition);
+        var unchanged = owner.BeginReactionConversation(owner.Version, Pal, npc);
+        Assert.AreEqual(GameSessionDisposition.NoChange, unchanged.Disposition, "the second start finds the slot as it is");
+        owner.ToggleHeroConcealment(owner.Version);
+        var revision = owner.Version.Revision;
+        var again = owner.BeginReactionConversation(owner.Version, Pal, npc);
+        Assert.AreEqual((GameSessionDisposition.Changed, revision + 1, revision + 1), (again.Disposition, again.Version.Revision, owner.Version.Revision));
+        Assert.IsFalse(owner.IsConcealed(SessionCombatant.Hero) || owner.IsConcealed(SessionCombatant.Critter(Pal)));
+    }
+
+    [TestMethod]
     public void AnAttackOnAFollowerEndsTheWholePartysConcealmentEvenOnAMissAndOnAStrangerNothing()
     {
         using var owner = Owner();
