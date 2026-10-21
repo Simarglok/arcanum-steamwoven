@@ -91,12 +91,35 @@ snapshot's module identity and each sector is bound by member identity and paylo
 stack's own. The map viewer ([map mode](area-map-mode.md)) builds both from one stack and uses these readers; the pinned Crash Site
 exterior and cave keep the module-archive and `arcanum2.dat` reads. On the installed
 original both give the same result on all 80 interiors (opt-in
-`LightingStackRealDataTests`): 74 lit with stationary lights, 2 not in the map list
+`LightingStackRealDataTests`): 76 lit with stationary lights, 2 not in the map list
 (`MapNotCatalogued`), 2 with sectors older than the metadata section
-(`SectorMetadataAbsent`), one with an animated light ART and one with an unsupported
-light flag. Largest values against the caps: 79/256 core sectors, 3/32 schemes,
-207/512 stationary lights, 9/16 light frames (ARC-DATA-029 raised the lights from 256 for 1.5 times
-headroom; [limits census](../world/limits-census.md)).
+(`SectorMetadataAbsent`). Since ARC-DATA-039 the two interiors that were unlit for an animated light ART and for
+the no-shadow bit 0x40 are lit too (an animated ART draws its frame 0 until its animation is implemented, V7c of
+[lights on all maps](../research/lights-on-all-maps.md)). Largest values against the caps: 79/256 core sectors, 3/32 schemes,
+207/512 stationary lights, 9/32 light frames (ARC-DATA-029 raised the lights from 256 for 1.5 times
+headroom, ARC-DATA-039 the frames from 16 for the object lights; [limits census](../world/limits-census.md)).
+
+### Object lights (ARC-DATA-039)
+
+`ObjectLightReader` (Godot-free, `Arcanum.Data.Lighting`) reads the object lights of a strict snapshot as the original
+builds them at sector load ([ledger LT1, LT4](../research/original-verification-ledger.md#lights-on-all-maps-arc-res-069)):
+
+- For every core object with a location that is not in an inventory: the primary light of slots 12–14 (flags, ART,
+  colour packed r << 16 | g << 8 | b) when its ART is not −1, and each overlay slot 0..3 of the arrays 15–17 whose
+  ART is not −1, at the object's tile and offsets.
+- The saved flag words may carry the original's runtime bits (animating 0x4, changed 0x80, the primary and
+  overlay-slot markers), which are dropped. 0x20 (no animation) and 0x40 (no shadow) are kept as data.
+- Each light records whether its object is switched off, whether it is nocturnal scenery and whether the tile under it
+  is an outdoor tile (tile ART bit 8). `BuiltAtLoad(light, hour)` is the original's load rule: nocturnal scenery on an
+  outdoor tile only at night (hours 18..5).
+- The light ART frames come from the same table and phases as the stationary lights. An object light's frame is its
+  saved animation frame.
+- Fail-closed: an unknown flag bit, an ART that is not a light (type 9, rotation and low bits 0), a frame past the ART's
+  last and more than 8,192 lights per snapshot (project policy) are typed failures.
+
+On the installed original (opt-in `ObjectLightRealDataTests`), all 80 interiors and two main-map windows (the Crash Site,
+Shrouded Hills) read without a failure: 6,809 object lights, at most 5,083 in one map, 109 of them nocturnal. No viewer
+draws them yet (slice V7b).
 
 ## Viewer controls
 
@@ -166,7 +189,7 @@ ART code); independently written.
 | Requirement | Implemented subset | Not implemented / NOT_VERIFIED |
 | --- | --- | --- |
 | FR-LIGHT-007 per map | The cave reads its own map default (`maps/<cave dir>/mapinfo.txt`) and sector word through the ARC-RENDER-010 reader. A transfer, or a quick load onto the other map, rebinds the ambient driver to that map's source on the **same** session clock (the source must share the clock profile), so time is shared, the scheme follows the map and the session records the cave's scheme. | No fade; the hour is whatever the clock says on arrival. |
-| FR-LIGHT-008 stationary lights | `StationaryLightReader` decodes the 12 raw words the strict snapshot retained per core sector: owner word 0 only (object lights refused), the raw location as the absolute world cell **inside its own sector** (an adopted project policy, NOT_VERIFIED: the decompiled sector-relative rebuild is marked TODO in the source and is not taken literally; a location outside the record's own sector is refused), signed screen offset, flags OFF/DARK/INDOOR/OUTDOOR only (other bits refused), a plain light ART id (type 9, frame/rotation/flags 0) and the colour stored **r,b,g**. Tint, palette and padding words are bound through a record digest, not interpreted. The ART number resolves through `art/light/light.mes` in the terrain resource (Resource2); only a one-group one-frame (static) light ART is admitted. Pixels equal to palette index 0's colour (the ART colour key) contribute nothing. | Animated lights, object/overlay/carried lights (FR-LIGHT-009), DIF/save overrides, neighbour-sector emitters of other maps. |
+| FR-LIGHT-008 stationary lights | `StationaryLightReader` decodes the 12 raw words the strict snapshot retained per core sector: owner word 0 only (object lights refused), the raw location as the absolute world cell **inside its own sector** (an adopted project policy, NOT_VERIFIED: the decompiled sector-relative rebuild is marked TODO in the source and is not taken literally; a location outside the record's own sector is refused), signed screen offset, flags OFF/DARK/INDOOR/OUTDOOR and NO_SHADOW 0x40 (ARC-DATA-039; other bits refused), a plain light ART id (type 9, frame/rotation/flags 0) and the colour stored **r,b,g**. Tint, palette and padding words are bound through a record digest, not interpreted. The ART number resolves through `art/light/light.mes` in the terrain resource (Resource2); a one-group light ART of up to 32 frames is admitted (ARC-DATA-039; frame 0 is drawn, the others are kept with the ART's rate and per-frame offset steps). Pixels equal to palette index 0's colour (the ART colour key) contribute nothing. | Animating lights (V7c), drawing object/overlay/carried lights (FR-LIGHT-009; read since ARC-DATA-039, drawn from V7b), DIF/save overrides, neighbour-sector emitters of other maps. |
 | Composition | `StationaryLightField`: a light covers its frame rectangle anchored like a body (tile + offset + (40,20) − hotspot). A contribution is the frame pixel, multiplied by the tint (`c·t/255`, truncated) unless the tint is white; INDOOR/OUTDOOR take the tint from the hour's pair (INDOOR first); OFF contributes nothing. **Terrain:** lighter and darker sums at the 40×20 screen lattice, each node composed as `max(min(ambient + lighter, 255) − darker, 0)` over the tile's own channel, interpolated bilinearly between the four surrounding nodes in the area shader (the source LERPs each 40×20 tile quadrant between its corner nodes). **Bodies:** the source's object colour, the ambient of the tile class under the body's cell plus the lights at its anchor, added or (DARK) subtracted in source order. **Walls:** the base line sampled at the sprite's two ends from lights on the wall's front side only (by tile coordinate), tile-class ambient for rotations 0/6 and outdoor for 2/4, drawn as a horizontal two-colour gradient (the source's hardware path). The actor is coloured like a body at its current placement. ART channels that ARC-RENDER-010 leaves unlit stay unlit. | TIG integer LERP and rounding (the shader interpolates floats), the software per-column wall array, the decompiled wall base-line shift (followed literally, NOT_VERIFIED), roof modes, shadows, light animation, original visual parity. |
 | FR-LIGHT-010 stationary lights and time | Stationary sector lights are not time-gated in the source (the renderer checks only OFF). The lattice and body colours are recomposed at every hour change over the new ambient; INDOOR/OUTDOOR-flagged lights change colour with the hour (synthetic only: the four cave lights have flags 0). | Nocturnal scenery gating and object-light refresh (they belong to object lights, FR-LIGHT-009). |
 

@@ -98,10 +98,11 @@ prototypes are distinct prototype numbers; lights, frames and RGBA are from the 
 the stationary-light reader (— where the map has no plan or no light source). Bytes are the
 mobile aggregate and the largest sector file.
 
-Six interiors have no stationary lights for a data reason, never a cap (the census test asserts
-that no lighting read stops at `LimitExceeded`): two are not in the map list, two have sectors
-without the metadata section, one uses an animated light ART (void) and one an unsupported
-light flag (bates mansion lev 1).
+Four interiors have no stationary lights for a data reason, never a cap (the census test asserts
+that no lighting read stops at `LimitExceeded`): two are not in the map list and two have sectors
+without the metadata section. The two that were unlit for an animated light ART (void) and for the
+no-shadow bit 0x40 (bates mansion lev 1) are read since ARC-DATA-039. Object lights (ARC-DATA-039):
+at most 5,083 in one interior, under the cap of 8,192.
 
 | Map | Sectors | Objects | NPCs | Prototypes | Lights | Frames | RGBA MiB | Aggregate bytes | Largest sector bytes |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
