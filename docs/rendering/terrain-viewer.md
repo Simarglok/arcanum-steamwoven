@@ -1065,7 +1065,7 @@ step goes to the followers. The entry is drawn as the original draws it:
 - the title (`mes\intgame.mes` 21), message 11 formatted with the new level;
 - for a hero without an auto-level scheme, message 12 formatted with the points: under the Original rules the stored unspent
   points plus the level's points before the cap of 56 (OL28, it can name points the hero does not have), under Steamwoven the
-  capped value it holds (decision D6, recommended option, owner decision pending; rule switch
+  capped value it holds (owner decision D6, 2026-10-21; rule switch
   `ExperienceRuleProfile.LevelMessagePointsBeforeCap`);
 - for a hero with a scheme number, the scheme's text (0x4A7030): `mes\level.mes` 2, then message 4 when the number has no
   rule (or the session has no scheme data), message 3 when the level bought nothing, or each purchase as its name, a space and

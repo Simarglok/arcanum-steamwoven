@@ -63,7 +63,7 @@ admission: an equal step would divide by zero in the progress formula; the insta
 level, experience, unspent points, levels and points gained, and the step for the followers or null when it stopped early;
 an optional callback spends each level's points as it is written, ARC-WORLD-036, and another reports each level written, with
 the unspent points before it and its points, ARC-UI-046), `LevelMessagePoints` (the points a level-up message names: the sum
-before the cap of 56 under the Original rules, ledger OL28, the capped value under Steamwoven, decision D6 pending),
+before the cap of 56 under the Original rules, ledger OL28, the capped value under Steamwoven, owner decision D6 2026-10-21),
 `FollowerLevel`, `AdjustForDifficulty`, `KillAward` and `DamageShare`. `DamageShare` computes without the original's
 32-bit wrap of worth × percentage, which installed worths (a few thousand) reach only with a hit thousands of times larger
 than the maximum hit points.

@@ -23,8 +23,7 @@ public sealed record ExperienceRuleProfile
     /// <summary>
     /// Ledger OL28 (decision D6, ARC-UI-046): the level-up message of a PC without an auto-level scheme names the stored unspent
     /// points plus the level's points, summed before the cap of 56 (0x4A6A90–0x4A6AC4), so past the cap it names points the PC
-    /// does not have (a cosmetic bug). Steamwoven names the capped value the PC holds (the recommended option; the owner's answer
-    /// to D6 is pending).
+    /// does not have (a cosmetic bug). Steamwoven names the capped value the PC holds (owner decision D6, 2026-10-21).
     /// </summary>
     public bool LevelMessagePointsBeforeCap { get; init; }
 
