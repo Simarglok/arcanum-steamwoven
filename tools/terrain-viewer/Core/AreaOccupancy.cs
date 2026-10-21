@@ -75,6 +75,25 @@ public static class AreaOccupancyRules
             assessment.WindowJump is not null ? "WINDOW_JUMP" : "COMPLETE_NONBLOCKING_EVIDENCE");
     }
 
+    internal const int PcType = 15, NpcType = 16;
+
+    /// <summary>
+    /// ARC-WORLD-073/074: the overlay of a mover that passes living critters (a walk outside combat mode, the request's flag 0x10 and the
+    /// traversal mode 4 of the original, ledger LR2 and DC5; the owner's decision of 2026-10-21 that outside combat NPCs do not block
+    /// the way): the step's T0 PC and NPC records count as moved, and no live actor holds a cell; removed objects stay moved. The
+    /// click route plans with it and the PC's steps are admitted with it.
+    /// </summary>
+    public static AreaOccupancy PassingCritters(AreaStepAssessment assessment, AreaOccupancy? occupancy)
+    {
+        ArgumentNullException.ThrowIfNull(assessment);
+        var critters = assessment.Objects.Where(o => o.ObjectType is PcType or NpcType).Select(o => o.Key);
+        return new AreaOccupancy((occupancy?.Moved ?? (IEnumerable<AreaObjectKey>)[]).Concat(critters), []);
+    }
+
+    /// <summary><see cref="Apply"/> for a mover that passes living critters (<see cref="PassingCritters"/>).</summary>
+    public static AreaStepVerdict ApplyPassingCritters(AreaStepAssessment assessment, CellCoord from, NeighborDirection direction, AreaOccupancy? occupancy) =>
+        Apply(assessment, from, direction, PassingCritters(assessment, occupancy));
+
     /// <summary>The route verdict of an overlaid step: only Supported Open is Open.</summary>
     public static RouteStepVerdict Route(AreaStepVerdict verdict) => verdict.Coverage switch
     {

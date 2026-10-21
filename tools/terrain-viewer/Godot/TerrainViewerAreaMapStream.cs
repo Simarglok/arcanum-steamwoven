@@ -182,7 +182,7 @@ public partial class TerrainViewerApp
         // The walk goes on to its goal when the new window holds it, else toward it through the cell of the window nearest it.
         var resumed = false; _mapFarGoal = null;
         if (goal is { } wanted && _worldActor.Session is AreaGridSession placed && WorldRoute(placed) is { } follower
-            && AreaMapGoalHandOff.Resume(new AreaRouteSource(placed.Snapshot, placed.Chart, placed.Occupancy, () => placed.Portals?.Invoke()), placed.Chart, placed.State.CommittedCell, wanted) is { } resume)
+            && AreaMapGoalHandOff.Resume(new AreaRouteSource(placed.Snapshot, placed.Chart, placed.Occupancy, () => placed.Portals?.Invoke(), () => !HeroInCombatMode), placed.Chart, placed.State.CommittedCell, wanted) is { } resume)
         {
             follower.SetTarget(resume.Target, WorldTime); resumed = true;
             if (resume.FarGoal is { } far) _mapFarGoal = (far, placed.Chart.ToWorld(resume.Target));
