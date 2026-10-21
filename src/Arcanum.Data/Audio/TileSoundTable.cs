@@ -70,16 +70,23 @@ public sealed class TileSoundTable
         return new(TileSoundTableStatus.Ready, new TileSoundTable([.. categories.Select(c => c.ToArray())]));
     }
 
-    /// <summary>The sound number of the ground tile <paramref name="tileArt"/> (an art id of type 0), or null when it is not a
-    /// tile or its position is beyond its category, where the original reads past its table.</summary>
+    /// <summary>
+    /// The sound number of the ground under a location, from the art id its sector's tile slot holds (0x4EBBE0), or null when
+    /// its position is beyond its category, where the original reads past its table. A tile (type 0) is outdoor by bit 8,
+    /// flippable by bit 7 and has its position in bits 22–27; ARC-DATA-043: a facade (type 11), which a tile slot can hold, is
+    /// outdoor by bit 25, flippable by bit 26 and has its position in bits 11–16 (0x5038C0, 0x503950, 0x503900, 0x5036B0); any
+    /// other art type reads as indoor, not flippable, position 0.
+    /// </summary>
     [OriginalFunction(0x4EBBE0, OriginalFunctionScope.Partial)]
     public int? SoundClass(uint tileArt)
     {
-        if (tileArt >> 28 != 0) return null;
-        var outdoor = (tileArt & 0x100) != 0;
-        var flippable = (tileArt & 0x80) != 0;
+        var (outdoor, flippable, position) = (tileArt >> 28) switch
+        {
+            0 => ((tileArt & 0x100) != 0, (tileArt & 0x80) != 0, (int)((tileArt >> 22) & 0x3F)),
+            11 => ((tileArt >> 25 & 1) != 0, (tileArt >> 26 & 1) != 0, (int)((tileArt >> 11) & 0x3F)),
+            _ => (false, false, 0),
+        };
         var category = _classes[outdoor ? (flippable ? 0 : 1) : (flippable ? 2 : 3)];
-        var position = (int)((tileArt >> 22) & 0x3F);
         return position < category.Length ? category[position] : null;
     }
 
