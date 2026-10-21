@@ -29,5 +29,9 @@ public sealed class ViewerStoragePathsTests
         Assert.AreEqual("world_diagnostic_zoom_v1.json", ViewerStoragePaths.FileName(User));
         Assert.AreEqual("world_diagnostic_input_v1.json", ViewerStoragePaths.FileName("user://world_diagnostic_input_v1.json"));
         Assert.ThrowsExactly<ArgumentException>(() => ViewerStoragePaths.FileName("user://saves/"));
+        Assert.AreEqual("saves/map", ViewerStoragePaths.RelativeUserPath("user://saves/map"));
+        Assert.AreEqual("saves", ViewerStoragePaths.RelativeUserPath("user://saves"));
+        Assert.ThrowsExactly<ArgumentException>(() => ViewerStoragePaths.RelativeUserPath("res://saves"));
+        Assert.ThrowsExactly<ArgumentException>(() => ViewerStoragePaths.RelativeUserPath("user://"));
     }
 }

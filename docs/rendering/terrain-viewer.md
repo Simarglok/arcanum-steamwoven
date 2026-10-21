@@ -1281,13 +1281,14 @@ and complete payload integrity are still mandatory outside the sealed bundle.
 
 ## Automated runs and the player's settings (ARC-DEV-032)
 
-A self-test (`--self-test`) or a native smoke (`--native-smoke`) never reads, writes or deletes the player's saved
+A self-test (`--self-test`), a native smoke (`--native-smoke`) or the WORLD settings validation (`--world-settings-test`)
+never reads, writes or deletes the player's saved
 viewer files: the app marks the process automated before it reads any setting (`ViewerAutomatedStorage`). Each store
 then picks its path by `ViewerStoragePaths.Choose` (Core): an explicit test path wins
 (`WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH`, `WORLD_DIAGNOSTIC_ZOOM_TEST_PATH`, and as before `ALWAYS_RUN_TEST_PATH`,
 `VISUAL_PROFILE_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `ARC_HD_BUDGET_PATH`); otherwise an automated run uses a fresh
-temporary folder of its own process (`arcanum-viewer-automated-<pid>-<id>` under the system temporary folder, left to the
-system's cleanup); only an ordinary run uses the `user://` file. Per setting:
+temporary folder of its own process (`arcanum-viewer-automated-<pid>-<id>` under the system temporary folder, deleted when
+the viewer app exits); only an ordinary run uses the `user://` file. Per setting:
 
 | Setting | Ordinary run | Automated run without a test path |
 | --- | --- | --- |
@@ -1300,7 +1301,7 @@ system's cleanup); only an ordinary run uses the `user://` file. Per setting:
 
 So a zoom the player saved (for example 1.70) no longer changes a self-test, and a self-test's own zoom steps no longer
 land in the player's file. The self-test checks it first and fails with `SELF_TEST_SETTINGS_NOT_ISOLATED` when the zoom or
-input store would use a `user://` path; the log prints `ARC-DEV-032 self-test PASS settings isolated` and
+input store would use a `user://` path; the log prints `ARC-DEV-032 self-test PASS settings isolated (the zoom and input stores use no user:// file)` and
 `ARC-DEV-032 automated run: settings and saves are isolated from the player's files` when the folder is first used. The
 WORLD settings validation launch still requires both explicit test paths. Checks: `ViewerStoragePathsTests`.
 

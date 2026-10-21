@@ -17,6 +17,17 @@ public static class ViewerStoragePaths
         return automated ? isolated() : userPath;
     }
 
+    /// <summary>The part of a <c>user://</c> path after the scheme (<c>user://saves/map</c> → <c>saves/map</c>), for the isolated
+    /// folder; another path throws.</summary>
+    public static string RelativeUserPath(string userPath)
+    {
+        ArgumentNullException.ThrowIfNull(userPath);
+        const string scheme = "user://";
+        if (!userPath.StartsWith(scheme, StringComparison.Ordinal) || userPath.Length == scheme.Length)
+            throw new ArgumentException("A user:// path is required.", nameof(userPath));
+        return userPath[scheme.Length..];
+    }
+
     /// <summary>The file name of a <c>user://</c> path (its last segment), for the isolated folder.</summary>
     public static string FileName(string userPath)
     {

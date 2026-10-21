@@ -22,8 +22,8 @@ namespace Arcanum.TerrainViewer;
 /// <item>Automated runs (self-test, native smoke) neither read nor write the owner's file or packs:
 /// they start Legacy unless an override or <c>VISUAL_PROFILE_TEST_PATH</c> says otherwise.</item>
 /// </list>
-/// <c>ARC_HD_BUDGET_PATH=FILE</c> selects the device budget file (default
-/// <c>user://hd_budget_v1.json</c>; missing or invalid means the contract ceilings).</summary>
+/// <c>ARC_HD_BUDGET_PATH=FILE</c> selects the device budget file (default <c>user://hd_budget_v1.json</c>, which an automated
+/// run does not read, ARC-DEV-032; missing or invalid means the contract ceilings).</summary>
 public partial class TerrainViewerApp
 {
     private HdFrameSource? _hdSource;
@@ -35,7 +35,7 @@ public partial class TerrainViewerApp
     private string? _visualNotice;
     private string? _visualKeyNotice;
 
-    private bool AutomatedVisualRun => _automatedHost || _nativeSmoke || SelfTestBootstrap;
+    private bool AutomatedVisualRun => _automatedHost || _nativeSmoke || SelfTestBootstrap || ViewerAutomatedStorage.Automated;
 
     private void ConfigureVisualProfile()
     {
