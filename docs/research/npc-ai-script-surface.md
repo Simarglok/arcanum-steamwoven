@@ -110,8 +110,8 @@ Conventions: the danger states are NONE 0, COMBAT_FOCUS 1, FLEE 2, SURRENDER 3
 6. **Anomalies.** Two bugs of the original: a single-object operand of an
    empty object set reads an uninitialised slot (SU8, both fixed), and the spell
    object-flag component handles only its first special bit, so FLEEING after the
-   undead bit bypasses the setter (SU17, latent pending MT13's census; proposed
-   Original switch `ObjFlagHandlesFirstSpecialBitOnly`). The fate point spent before
+   undead bit bypasses the setter (SU17, latent pending MT13's census; Original
+   switch `ObjFlagHandlesFirstSpecialBitOnly`, owner decision 2026-10-21). The fate point spent before
    a hostile dialog refusal (SU16) and the dead cheat toggle (SU1) are the
    original's and kept. Script actions 57 and 21 are real script routes into MR9's
    latent branch ([section 7](#7-anomalies-and-decisions)).
@@ -355,14 +355,15 @@ Consolidating A4 and the readings above:
 ## 7. Anomalies and decisions
 
 Verdicts and rows: [ledger](original-verification-ledger.md#npc-ai-script-and-dialog-surface-arc-res-070).
-Decisions follow D2 and D8.
+Decisions follow D2 and D8. The owner accepted the proposed Original switch of this
+table (SU17) on 2026-10-21 (ARC-RES-071).
 
 | ID | Original 1.0.7.4 | Verdict | Proposed decision |
 | --- | --- | --- | --- |
 | SU1 | The "NPC fighting" toggle exists but is unreachable: the cheat level is fixed at 0, so the switch stays on. | Original | Steamwoven models the switch as always on, with no rule-mode switch; plan phase 2 M5 may expose it as a player option. |
 | SU8 | A single-object operand (actions 21, 22, 67, 109 and others using 0x44B960) of an empty focus set returns an uninitialised stack slot as the object. | Original bug (latent: which installed clauses use a focus kind that can resolve to an empty set is not counted, [open question 6](#open-questions-handed-forward)) | Both fixed: an empty set gives no object and the action does nothing (owner rule: never reproduce an undefined read). No switch. Belongs to the SCRIPT interpreter slices. |
 | SU16 | The dialog start opens the reaction conversation, which spends an armed "force good reaction" fate point, before the hostile check; a talk refused for a faction kill-on-sight still uses it up. | Original | Kept in both settings: the owner kept the same pattern in MG20 (a resource spent before a refusal, 2026-10-20), and whether the order is intended is unknown **(inference)**. No switch. An alternative the owner could pick: run the kill-on-sight test with the boosted reaction before committing the fate point, which would keep the point for a faction refusal and still let it save a talk refused for low reaction. |
-| SU17 | The spell object-flag component handles only the first special bit of its mask: after the undead bit, FLEEING (and blind or paralysed) is written or cleared directly in the critter flags, past the setter; with FLEEING or blind first, the other bits of the mask are not written. | Original bug (latent: no installed record is known to combine them; MT13's census) | Steamwoven handles every special bit of the mask (FLEEING always through flee or stop fleeing) and writes the remaining bits; the Original setting keeps the first-bit-only handling (`ObjFlagHandlesFirstSpecialBitOnly`, proposed). A bypass of the setter that leaves a fleeing NPC without a source, still FIGHTING (inference: unintended). Visible only if an installed record combines the bits. Lands with MT13 and slice I3. |
+| SU17 | The spell object-flag component handles only the first special bit of its mask: after the undead bit, FLEEING (and blind or paralysed) is written or cleared directly in the critter flags, past the setter; with FLEEING or blind first, the other bits of the mask are not written. | Original bug (latent: no installed record is known to combine them; MT13's census) | Steamwoven handles every special bit of the mask (FLEEING always through flee or stop fleeing) and writes the remaining bits; the Original setting keeps the first-bit-only handling (`ObjFlagHandlesFirstSpecialBitOnly`, owner decision 2026-10-21). A bypass of the setter that leaves a fleeing NPC without a source, still FIGHTING (inference: unintended). Visible only if an installed record combines the bits. Lands with MT13 and slice I3. |
 | MR9 (note) | Script actions 57 (invulnerability during a flight) and 21 (a new leader of extraordinary charisma) reach MR9's latent branch; no script action writes FLEEING; a spell component with undead and FLEEING would (SU17, MT13). | Original bug (latent), unchanged | The decided switch `FleeGoalAfterRefusedSurrender` covers these routes. |
 
 The other rows (SU2–SU7, SU9–SU15) are the original's behaviour and are kept in
@@ -384,8 +385,8 @@ both settings.
    AI slices own: the attack event (36 with flags 2, `co` with flags 0), stop
    attacking, the setter-free flag toggles (invulnerable, off), the follow, leave and
    wait operations of the companions thread, and the reaction owner.
-5. **Switches.** One proposed: SU17 `ObjFlagHandlesFirstSpecialBitOnly`. SU8 is fixed
-   in both settings.
+5. **Switches.** One Original switch, SU17 `ObjFlagHandlesFirstSpecialBitOnly`
+   (owner decision 2026-10-21). SU8 is fixed in both settings.
 
 ## Open questions handed forward
 
