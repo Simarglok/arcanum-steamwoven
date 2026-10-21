@@ -109,7 +109,8 @@ deleted or a kit numbering that only an unlisted deletion would explain (`Invali
 Combat (ARC-COMBAT-007): `GameSessionOwner.ApplyAttackWear`, which the hero's attack (`AttackCritter`) runs and NPC AI
 will run, calls `DamageItem` for armour wear (+ 10 at the hit location), the critical "damage weapon" (+ 10) and the
 attacker's weapon wear by the struck material, and `DestroyItem` for the "destroy/explode weapon" critical
-([attack wear](attack-resolver-runtime.md#wear-arc-combat-007), ledger CW1–CW10). Trade
+([attack wear](attack-resolver-runtime.md#wear-arc-combat-007), ledger CW1–CW10). The hero's attack on an item on the ground
+(`AttackObject`, ARC-COMBAT-008, [object damage](object-damage-runtime.md)) damages it through `DamageItem`. Trade
 (sale price, quote and payment), the Repair skill (ARC-SKILLS-011) and the schematic gate (TECH-4) call the rules when they
 exist.
 
@@ -124,8 +125,8 @@ exist.
 
 ## Not ready
 
-- Combat damage on objects (a hit on a door, a container or an item on the ground), area damage and script action 60 do not
-  reach the session yet; armour and weapon wear do (ARC-COMBAT-007), but the viewer passes no item baselines yet.
+- Area damage and script action 60 do not reach the session yet; armour and weapon wear (ARC-COMBAT-007) and the hero's hit on
+  an item on the ground (ARC-COMBAT-008) do, but the viewer passes no item baselines yet.
 - No trade, price function, repair window or payment; no Repair skill run (ARC-SKILLS-011).
 - The bust and destroy sounds and the BUST script are reported to the host, not played or run here.
 - Breaking walls, portals, containers, scenery and traps (other branches of 0x43F1C0) is not implemented.

@@ -1770,6 +1770,40 @@ Anomalies (none needs a switch; the owner may still ask for one under D8):
 - CWA3 (CW8, CW9): weapon wear runs after a critter target died but not after an object target broke. In the original; kept.
 - CWA4 (CW3): after "damage weapon" deletes an already broken weapon (its second break), the destroy, explode and drop bits still act on the deleted handle. The no-crash rule applies: Steamwoven skips an item that a step of the same wear deleted, in both settings.
 
+## Object damage (ARC-COMBAT-008)
+
+Source: the [object damage runtime](../world/object-damage-runtime.md). Question: what does the original's attack do to a
+non-critter object (the object branch of the damage step 0x4B4390, the break 0x43F1C0 and its callees)? Read on 2026-10-21
+by this task and, independently, by a fresh agent that saw only the questions and the project's records of the callees (method
+step 6). Both agree on every row; the rows are F2. Every direct branch stays inside `.text`. The second reader saw one summary
+line of the new `ObjectDamageRules` while searching for the door/window meaning of portal ART bit 10 (which comes from the
+project's portal naming, not this reading); its reading of 0x4F06E0 rests on the listing and agrees with LK12, already F2.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| OD1 | damage step (0x4B4390), gates | The taking-damage script (point 0x17) runs for every target, objects included (skipped while a nested damage step runs); then a destroyed or invulnerable object (object flags 0x400001) and a wall (type 0) take nothing. The "off" flag 0x2 is not tested. Every other type continues: portals, containers, scenery, projectiles, items, traps. | Original |
+| OD2 | 0x4B4390, the amount | The critical procedure does nothing unless both sides are critters. Resistance (0x4B6860) uses, for an object, its stored resistance array (field 31) clamped 0..95 (0x43D6D0's non-critter path, 0x43D810), per type as for critters. The amount is normal + electrical + fire (the current HP for the full-damage flags), a PC attacker's ×1.5 easy / −¼ hard, then the multiplier bits (absent for objects). | Original |
+| OD3 | 0x4B4390, material and write | Portals and containers only subtract their material's value (table 0x5B57BC: stone, brick, metal, force 10; wood 5; others 0); a negative amount is 0; a positive one marks the step as damaging; the damage grows by it through the setter. With the floating-text setting at 2, message 1 shows the amount, 0 included, over the object. | Original |
+| OD4 | 0x4B4390, at 0 HP | In order: when the trap test (0x4BBDD0) finds a trap, the trap trigger (0x4BCB00) runs with the attacker as triggerer, none for a ranged attack (context flag 0x200); then the break (0x43F1C0) with the attacker as breaker; then the witnesses of the attack's PC hear of a broken object (0x4AEE50 with 0). | Original |
+| OD5 | 0x4B4390, still whole | The witnesses hear of the attack (0x4AEE50 with 1: reaction −20, then possible hostility; NPCs within 10 tiles that guard the container's or portal's faction field), then the attacker's weapon wear (0x4B5580, CW5–CW9). | Original |
+| OD6 | trap test and trigger (0x4BBDD0, 0x4BCB00) | A trap is the object's script at attachment point 1 whose header carries flag 0x1 or 0x2. The trigger runs that script with the given triggerer and the object as attachee; built-in trap scripts 30000..30006 cast a spell or build attacks in a radius from the header flags; a header flag 0x4 clears the script only in a local copy. | Original |
+| OD7 | break (0x43F1C0), start and dispatch | Returns for a destroyed object (flag 0x1); stops the object's animation goals (0x424070, priority 5); dispatches by type (tables 0x43F5D4, 0x43F5B8): wall 0x4E1490 (not reached from the damage step), portal 0x4F06E0, container, scenery, items 5..14, trap; projectiles and critters return at once. Scenery, traps and items end with the sound (0x41B930) and clear render bits 0x0B000000. | Original |
+| OD8 | 0x43F1C0, portal (0x4F06E0) | As LK12: a door (portal ART bit 10 set) has no busted ART and is destroyed; a window takes its busted ART (bit 0x200, frame 0), the busted bit 0x80 and its BUST script (point 30) with the breaker. The damage is kept, so a busted window breaks again on every later hit. The misc sound of a portal is none. | Original |
+| OD9 | 0x43F1C0, container | A junk pile (prototype 3023) has its damage set to 0, nothing else. Another container first generates its inventory from its inventory source when it has the source flag (container flag 0x200) and generation is on, then drops every item at its location (last first, 0x463730 with 1), is destroyed, and eye candy 1203 plays on the first container or item at that location (object list 0x4407C0 with mask 0x7FE4). No sound. | Original |
+| OD10 | 0x43F1C0, scenery; respawn (0x43F5F0) | Respawning scenery (scenery flag 0x20): BUST script, scenery flag 0x400, object flag 0x2 (off), damage 0, and a Scenery Respawn event (kind 33) after field 71 × 8,000 ms when positive, its magnitude × 60,000 ms when negative, 1 day + 1 ms at 0; the event clears 0x400 and the off flag. Other scenery: already busted (flag 0x2) is destroyed (sound 1); otherwise it takes the ART of field 25 when not −1, its damage becomes its maximum, flag 0x2, object flag 0x400000 (invulnerable), sound 0 and its BUST script. | Original |
+| OD11 | 0x43F1C0, trap | Field 25 = −1 or trap flag 0x2 already set: destroyed (sound 1). Otherwise the ART of field 25, damage 0, trap flag 0x2, sound 0, BUST script. | Original |
+| OD12 | 0x43F1C0, items | As DU4: an item whose art carries the destroyed bit is deleted (sound 1); otherwise both arts take the bit, damage 0, the item leaves a wear slot (or drops), sound 0 and its BUST script. | Original (confirms DU4) |
+
+Anomalies (none needs a switch):
+
+- ODA1 (OD1): a respawning scenery while off is still damaged in the original. The player cannot click an object that is off, so
+  the session refuses the hero's attack on it (`ObjectUnavailable`); area damage, which could reach it, is not modelled.
+- ODA2 (OD10): a busted scenery is invulnerable, so its "already busted" destroy branch is unreachable from an attack; kept.
+- ODA3 (OD8): a busted window is never destroyed and breaks again (BUST script, trap, witnesses) on every later hit; kept in both
+  settings (the original's behaviour; reported to the host each time).
+- ODA4 (OD4, OD6): a ranged break fires a trap with no triggerer; the session's attack is melee only, so it does not arise.
+- ODA5 (OD3): the full-damage flags lose to the material reduction and the difficulty; no caller of the session sets them.
+
 ## Decisions to revisit
 
 These owner decisions or accepted proposals rest on a fact of the earlier reading that the original does not share.

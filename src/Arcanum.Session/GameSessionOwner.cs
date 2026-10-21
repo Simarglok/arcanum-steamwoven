@@ -750,7 +750,7 @@ public sealed partial class GameSessionOwner : IDisposable
     public SessionMapInventory? QueryMapInventory(SessionMapId map)
     {
         ThrowIfDisposed();
-        return _inventory.Seeds.TryGetValue(map, out var seed) ? _inventory.View(map, seed, KilledNpc) : null;
+        return _inventory.Seeds.TryGetValue(map, out var seed) ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, holder)) : null;
     }
 
     /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
@@ -777,7 +777,9 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
-        if (!seed.Items.TryGetValue(item, out var row) || row.Cell is null || _inventory.Taken.Contains(item))
+        // ARC-COMBAT-008: an item of a container an attack broke lies on the ground at the container's cell.
+        if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item) ||
+            row.Cell is null && !(seed.HolderOf.TryGetValue(item, out var holder) && SpillCell(_actor.Map, holder) is not null))
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         return Take(seed, new(item, row.Facts), false, insertCheck, scripts);
     }
@@ -1026,7 +1028,7 @@ public sealed partial class GameSessionOwner : IDisposable
                     // session records its lock state (ARC-WORLD-050), and a waiting NPC while the session records it waiting
                     // (ARC-WORLD-045).
                     : world is ISessionScriptWorld scripts ? scripts.ObjectExists(new(entity.Map), entity.Code)
-                    : LockObjectExists(entity) || _party.Get(entity.Code).Standing == CompanionStanding.Waiting)));
+                    : LockObjectExists(entity) || RespawnObjectExists(entity) || _party.Get(entity.Code).Standing == CompanionStanding.Waiting)));
         }
         finally
         {
@@ -1722,6 +1724,18 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.ObjectRespawn)
+            {
+                // A respawn event (ARC-COMBAT-008): one scenery the saved map changes record switched off, set no later than the
+                // saved clock, its delay before its deadline.
+                if (pending.Entities.Length != 1 || pending.Entities[0].Code == SessionEventKinds.AbsentRole ||
+                    RecordedObject(mapChanges, new(pending.Entities[0].Map), pending.Entities[0].Code) is not { Condition: SessionObjectCondition.Off } ||
+                    pending.Values[0] < 0 || pending.Values[0] > clockMs || pending.Values[1] is < 1 or > SessionEventKinds.MaxRespawnDelayMs ||
+                    pending.DeadlineMs != pending.Values[0] + pending.Values[1])
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
             if (pending.Kind == SessionEventKinds.PartyWait)
             {
                 // A wait timer (ARC-WORLD-045): one NPC the saved party records waiting, set no later than the saved clock, its
@@ -1750,7 +1764,8 @@ public sealed partial class GameSessionOwner : IDisposable
         // No session kind is SavedUnlessRebuilt yet, so Rebuild is always empty; the AI tick (slice I6) reschedules it here.
         if (converted.Count(e => e.Kind == SessionEventKinds.ScriptCall) > SessionEventKinds.MaxScriptCalls ||
             converted.Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) > SessionEffectLimits.MaxTimedEffects ||
-            converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets) return GameSessionFailure.EventBudgetExceeded;
+            converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets ||
+            converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns) return GameSessionFailure.EventBudgetExceeded;
         var result = GameEventQueue.Restore(registry, new(saved.Registry, saved.NextSequence, converted.ToImmutable()), profile,
             SessionEventKinds.Limits);
         if (result.Queue is null)
