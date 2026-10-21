@@ -206,6 +206,8 @@ public sealed partial class GameSessionOwner
     {
         _inventory.Placed.Add(new(entity, kind, SessionPlacedSource.Made, null, map, cell));
         _inventory.Taken.Add(entity);
+        // ARC-WORLD-062: an item left on the ground decays (ledger ID4).
+        ScheduleDecay(entity, map);
     }
 
     /// <summary>An ammunition product unit's units into its stack (a new stack starts at 0).</summary>

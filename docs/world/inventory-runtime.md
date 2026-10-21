@@ -255,9 +255,6 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 
 **Not ready (the original's behaviour, PI1–PI6).**
 
-- The 48-hour Item Decay (PI4): the original destroys an item lying on the ground or in a junk pile 48 game hours after it was
-  dropped (unless its item flag 0x20000 is set; a container open in the loot window delays it by a minute); placed items, NPC drops
-  and spilled containers' items stay. A follow-up task.
 - Junk piles (PI3): a dropped item joins a junk pile on its tile, or makes one with the loose items there; placed items lie loose.
 - The scripts and side effects of the removal (PI2) and of the pickup (PI6): item spells, the wield-off, remove-item and drop scripts,
   and the get and insert-item scripts of a pickup, none of which runs. A world item whose attached origin seed shows a drop script
@@ -268,6 +265,29 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 - NPC made items (ARC-WORLD-055) and the junk pile of OD13 can use this store later. The viewer draws placed items and picks
   them up since ARC-RENDER-033 ([ground items](#ground-items-in-the-viewer-arc-render-033)); a placed made item (an assembly
   product left on the tile) is drawn from its product prototype's art since ARC-WORLD-070.
+
+## Item decay (ARC-WORLD-062)
+
+Requirement: [FR-ITEM-012](../requirements/items-economy.md#fr-item-012). Read in the retail 1.0.7.4 executable by two readers
+([ledger "Item decay"](../research/original-verification-ledger.md#item-decay-arc-world-062), ID1–ID8; it settles PI4).
+
+| Rule | Value |
+| --- | --- |
+| Event (ID1) | The original's Item Decay (kind 25): saved, on the game clock (the column Poison, Resting and Lock use). `SessionEventKinds.ItemDecay` (`item.decay`): scoped to the item's map, so it fires while that map is the actor's (late, on return, as the Lock event); entity the item; values the game time it was scheduled at and its delay. |
+| Which items (ID2, ID4, ID7) | Every drop on the ground schedules it two game days (172,800,000 ms) on, replacing the item's earlier one: the hero's placed items (critical drops, assembly products the inventory refused, ARC-WORLD-070, ammunition stacks among them), an NPC's items a critical dropped, and the items a broken container spilled. An item a map's data lays on the ground gets none (nothing dropped it). |
+| No decay (ID2, ID5) | An item with item flag 0x20000 (`SessionItemFacts.NoDecay`, from the map data) gets no event; no installed item prototype carries it (opt-in census `ItemDecayFlagCensusTests`: 0 of 798). The switch that turns decay off is the world editor's; the game never sets it. |
+| Pickup (ID4) | A pickup of the item ends its event (`PickUpItem`); a deleted item loses it too. |
+| Firing (ID3, ID6) | An item that still lies loose on its map is deleted (one revision; it leaves the placed items or its seed's ground). While the host's loot window shows a container (`ISessionLootWindowWorld.LootWindowShowsContainer`) the event waits a minute more each time. An item no longer on the ground: nothing. The pass reports each firing (`SessionEventPassResult.Decays`: map, item, `ItemDecayStep`). |
+| Budget | At most 8,192 pending decay events (`MaxItemDecays`, project bound; the original has none): a drop beyond it does not decay. |
+
+`QueryItemDecays` lists the pending events. No snapshot change: the event queue is already saved (schema 9 form); a restore checks
+each decay event (one item on a map, set no later than the saved clock, the decay delay or the retry's, one per item). The viewer's
+event pump fires them like the other kinds (`AreaEventReport.Decays`, log `ARC-WORLD-062 item-decay`) and redraws the ground.
+
+Not ready: junk piles (ARC-WORLD-063; an item in a pile decays as a loose one, and a move into a pile restarts the two days, ID4);
+the player's own drop command (ARC-WORLD-064); the viewer opens no container in the loot window (it loots dead NPCs only, which
+the original's counter does not count), so it never delays a decay; the item flag of the hero's kit and made items is not known (no
+installed prototype sets it).
 
 ## Drop cell (ARC-COMBAT-010)
 

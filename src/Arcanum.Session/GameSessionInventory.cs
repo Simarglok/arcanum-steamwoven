@@ -45,6 +45,9 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
     /// <summary>ARC-WORLD-066: the ammunition type (field 0x8F) of an ammunition item; null for any other item.</summary>
     public int? AmmoType { get; init; }
 
+    /// <summary>ARC-WORLD-062: the item flag 0x20000 (field 0x57) that keeps a dropped item from decaying.</summary>
+    public bool NoDecay { get; init; }
+
     public bool HasScript(int point) => ScriptPoints.Contains(point);
 
     /// <summary>Worn slots, helmet 1000 to boots 1008 (the source's wear locations).</summary>

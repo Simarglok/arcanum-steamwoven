@@ -136,6 +136,15 @@ records the scenery off; a host whose `ISessionScriptWorld.ObjectExists` answers
 the scenery stays off. A restore refuses one whose scenery is not recorded off, set after the saved clock, with a delay below
 1 ms or above `MaxRespawnDelayMs`, or whose deadline is not its time plus its delay. See [object damage](object-damage-runtime.md).
 
+**Item Decay events (ARC-WORLD-062).** The kind `item.decay` (also added to registry version 1 without a new version) is the
+original's Item Decay event (kind 25, ledger ID1–ID8): game time, saved, scoped to the item's map, one per item (a new drop replaces
+the item's earlier one), at most `SessionEventKinds.MaxItemDecays` (8,192) on top of the others. One entity, the item; values: the
+game time it was set at and its delay (two game days, or a minute for the loot window's retry). Every drop on the ground sets it; a
+pickup or a deletion removes it; when due an item still on the ground is deleted (one revision), and
+`SessionEventPassResult.Decays` reports it. The session answers whether the item exists (it knows the placed and seed items), so a
+host's object check does not drop the event of a kit or made item. A restore refuses one with another delay, set after the saved
+clock, whose deadline is not its time plus its delay, or a second one of the same item. See [item decay](inventory-runtime.md#item-decay-arc-world-062).
+
 **Magic-tech events (ARC-MAGIC-010).** The kind `magic.run` (also added to registry version 1 without a new version) is the
 original's magic-tech event (kind 5, ledger RP11–RP14): game time, **not saved** (`NotSaved`: the session's spell runs are not
 saved either until MT9b, so a restored session has neither), global, any number, at most `SessionEventKinds.MaxSpellRunEvents`

@@ -195,6 +195,13 @@ public partial class TerrainViewerApp
     {
         if (driver.Events?.Last is not { } last || last.Fired + last.Dropped + last.ScriptCalls == 0) return;
         ReportCompanionWaits(last.Waits);
+        // ARC-WORLD-062: a decayed item leaves the ground (the map's inventory and its drawn body).
+        if (last.Decays.Count > 0)
+        {
+            GD.Print($"ARC-WORLD-062 item-decay fired={last.Decays.Count} destroyed={last.Decays.Count(d => d.Step == Arcanum.Simulation.Items.ItemDecayStep.Destroy)}"
+                + $" retried={last.Decays.Count(d => d.Step == Arcanum.Simulation.Items.ItemDecayStep.Retry)}");
+            SyncAreaInventory();
+        }
         var refused = (_areaEventWorld?.CallRefusals ?? 0) > _loggedCallRefusals;
         _loggedCallRefusals = _areaEventWorld?.CallRefusals ?? 0;
         GD.Print($"ARC-WORLD-039 events steps={last.Steps} passes={last.Passes} fired={last.Fired} dropped={last.Dropped} calls={last.ScriptCallsRun}/{last.ScriptCalls}"

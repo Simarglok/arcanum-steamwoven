@@ -93,6 +93,8 @@ public sealed class CriticalEffectsStateTests
         var view = owner.QueryMapInventory(Exterior)!;
         Assert.IsFalse(view.Holders.Single(h => h.Entity == Golem).Items.Any(i => i.Entity == "golem-sword"), "it left the golem's list");
         Assert.AreEqual(GolemCell, view.Ground.Single(g => g.Item.Entity == "golem-sword").Cell);
+        // ARC-WORLD-062: the dropped sword decays two game days on.
+        Assert.AreEqual(("golem-sword", Exterior), owner.QueryItemDecays().Select(d => (d.Entity, d.Map)).Single());
 
         // The drop is a map change: a restore keeps it.
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
@@ -160,6 +162,7 @@ public sealed class CriticalEffectsStateTests
             var placed = owner.QueryPlacedItems().Single();
             Assert.AreEqual(("kit:1", SessionPlacedSource.Kit, Exterior, Start.Cell), (placed.Entity, placed.Source, placed.Map, placed.Cell));
             Assert.AreEqual(Start.Cell, owner.QueryMapInventory(Exterior)!.Ground.Single(g => g.Item.Entity == "kit:1").Cell);
+            Assert.AreEqual("kit:1", owner.QueryItemDecays().Single().Entity, "the hero's dropped blade decays (ARC-WORLD-062)");
 
             // Saved and restored with the session; picked up, it is back in the kit at its number's place.
             using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));

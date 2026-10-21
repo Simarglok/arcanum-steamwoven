@@ -34,6 +34,9 @@ public sealed record AreaEventReport(int Steps, int Passes, int Fired, int Dropp
     /// <summary>ARC-WORLD-045: the wait timers that came due, in firing order.</summary>
     public IReadOnlyList<SessionWaitFiring> Waits { get; init; } = [];
 
+    /// <summary>ARC-WORLD-062: the Item Decay events that came due, in firing order.</summary>
+    public IReadOnlyList<SessionDecayFiring> Decays { get; init; } = [];
+
     /// <summary>The diagnostic status line (FR-RUNTIME-001 trace).</summary>
     public string Status(long nowMs) =>
         $"events pending {Pending}, next {(NextDeadlineMs is { } next ? $"in {(next - nowMs) / 1000.0:0.###} s" : "none")}, last pass fired {Fired} dropped {Dropped}"
@@ -139,6 +142,7 @@ public sealed class AreaEventPump
             tally.Fired += outcome.Fired; tally.Dropped += outcome.Dropped;
             tally.Calls += result.ScriptCalls.Count; tally.CallsRun += result.ScriptCalls.Count(c => c.Ran);
             tally.Waits.AddRange(result.Waits);
+            tally.Decays.AddRange(result.Decays);
             tally.BudgetLeft = outcome.BudgetExhausted;
             if (!outcome.BudgetExhausted) return;
         }
@@ -149,9 +153,10 @@ public sealed class AreaEventPump
         public int Steps, Passes, Fired, Dropped, Calls, CallsRun;
         public bool Coalesced, BudgetLeft;
         public List<SessionWaitFiring> Waits { get; } = [];
+        public List<SessionDecayFiring> Decays { get; } = [];
 
         public AreaEventReport Report(AreaEventPump pump) => new(Steps, Passes, Fired, Dropped, Calls, CallsRun, Coalesced, BudgetLeft,
-            pump._session.QueryEvents().Count, pump.NextDeadline(pump._session.QueryClockSnapshot().GameTimestampMs)) { Waits = Waits.ToArray() };
+            pump._session.QueryEvents().Count, pump.NextDeadline(pump._session.QueryClockSnapshot().GameTimestampMs)) { Waits = Waits.ToArray(), Decays = Decays.ToArray() };
     }
 }
 

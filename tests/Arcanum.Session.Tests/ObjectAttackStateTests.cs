@@ -114,8 +114,11 @@ public sealed class ObjectAttackStateTests
         Assert.AreEqual(0, inventory.Holders.Single(h => h.Entity == "chest").Items.Count);
         CollectionAssert.AreEqual(new[] { ("vase", new CellCoord(101, 200)), ("cup", ChestCell), ("knife", ChestCell) },
             inventory.Ground.Select(g => (g.Item.Entity, g.Cell)).ToArray());
+        // ARC-WORLD-062: the spilled items decay; the vase, which lay there at T0, does not.
+        CollectionAssert.AreEqual(new[] { "cup", "knife" }, owner.QueryItemDecays().Select(d => d.Entity).ToArray());
         Assert.AreEqual(GameSessionFailure.None, owner.PickUpItem(owner.Version, "cup", Accept).Failure, "a spilled item is picked up from the ground");
         Assert.IsFalse(owner.QueryMapInventory(Exterior)!.Ground.Any(g => g.Item.Entity == "cup"));
+        Assert.AreEqual("knife", owner.QueryItemDecays().Single().Entity, "the pickup ended the cup's decay");
 
         var pile = Target("pile", DamageableObjectKind.Container, points: 0, with: b => b with { JunkPile = true, Openable = new(OpenableKind.Container, 0, 0, 0, true) });
         var spared = owner.AttackObject(owner.Version, new() { Target = pile });

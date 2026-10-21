@@ -295,6 +295,13 @@ public partial class TerrainViewerApp
                     var productArt = data.ArtOf(lying[0].Kind.Prototype) is { } art ? ExtraArt()?.Load(art).Status.ToString() ?? "no extra art" : "no art";
                     Require(productArt == nameof(AreaExtraArtStatus.Ready), "the product's ground art reads: " + productArt);
                     made += $", full inventory: {lying.Length} on the ground ({AreaSchematics.OnGroundText(ground).Trim()}), ground art {productArt}";
+                    // ARC-WORLD-062: the products on the ground decay; the viewer's event pump, two game days on, destroys them.
+                    Require(ground.OnGround.All(entity => full.QueryItemDecays().Any(d => d.Entity == entity)), "every product on the ground has its decay event");
+                    var decayed = new AreaEventPump(full, new NoDecayHostWorld()).Jump(Arcanum.Simulation.Items.ItemDecayRules.DelayMs);
+                    Require(decayed.Decays.Count(d => d.Step == Arcanum.Simulation.Items.ItemDecayStep.Destroy) == record.Quantity &&
+                        ground.OnGround.All(full.IsItemDestroyed) && !full.QueryPlacedItems().Any(p => ground.OnGround.Contains(p.Entity)),
+                        $"two game days on the products decayed ({decayed.Decays.Count} fired)");
+                    made += $", decayed {decayed.Decays.Count} after 48 game hours";
                     break;
                 }
             }
@@ -310,6 +317,12 @@ public partial class TerrainViewerApp
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
     }
+}
+
+// ARC-WORLD-062: a pass world for a detached session in a smoke (no NPC, no loot window).
+internal sealed class NoDecayHostWorld : ISessionEventWorld
+{
+    public Arcanum.Simulation.Combat.LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
 }
 
 public partial class TerrainViewerApp
