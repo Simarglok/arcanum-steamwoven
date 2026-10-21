@@ -14,7 +14,8 @@ public sealed record AreaExtraFrame(AreaVisualRecord Visual, AreaFrameKey Key, D
 
 public sealed record AreaExtraArtLoad(AreaExtraArtStatus Status, AreaExtraFrame? Frame, string Detail);
 
-/// <summary>Explicit limits of the extra art one shown map reads.</summary>
+/// <summary>Explicit limits of the extra art one viewer run reads from one module (every map it shows): distinct art ids, their
+/// pixels and one file's size. An art id past them is refused and kept refused.</summary>
 public sealed record AreaExtraArtLimits(int MaxArts = 4096, long MaxRgbaBytes = 64L * 1048576, int MaxFileBytes = 16 * 1048576);
 
 /// <summary>

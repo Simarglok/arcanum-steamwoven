@@ -20,10 +20,10 @@ public partial class TerrainViewerApp
     private IReadOnlyList<uint?>? _areaKitArt;
     private Dictionary<AreaObjectKey, AreaDrawCommand> _groundBodies = [];
     private Dictionary<AreaVisualKey, AreaVisualRecord> _extraVisuals = [];
-    private Dictionary<AreaObjectKey, (string Entity, CellCoord Cell)> _groundOnly = [];
+    private Dictionary<AreaObjectKey, (string Entity, CellCoord Cell, AreaObjectRecord Row)> _groundOnly = [];
     private object? _groundStamp;
     private readonly HashSet<string> _groundReported = new(StringComparer.Ordinal);
-    private const int SceneryType = 3, TrapType = 17, DestroyedArtSlot = 24, FlagsSlot = 18, CurrentArtSlot = 0;
+    private const int ItemType = 14, SceneryType = 3, TrapType = 17, DestroyedArtSlot = 24, FlagsSlot = 18, CurrentArtSlot = 0;
 
     /// <summary>The extra art of the module the area was read from, opened on first use; null when its content stack does not open
     /// (said once).</summary>
@@ -47,20 +47,24 @@ public partial class TerrainViewerApp
     /// (spilled from a container, dropped by an NPC, placed by the hero) is drawn at its cell from its ground ART. An art id that does
     /// not read leaves the body as it was (T0, or not drawn) and is said once.
     /// </summary>
-    private void SyncAreaGroundBodies()
+    /// <returns>Whether the bodies were recomputed.</returns>
+    private bool SyncAreaGroundBodies()
     {
         if (_readyArea is not { } area || _areaSession is not { } session || !AttackMapActive && !InventoryActive)
         {
-            if (_groundBodies.Count > 0) { _groundBodies = []; _groundOnly = []; }
-            return;
+            _groundStamp = null;
+            if (_groundBodies.Count == 0) return false;
+            _groundBodies = []; _groundOnly = [];
+            return true;
         }
-        var stamp = (area, session, session.Version.Revision);
-        if (Equals(stamp, _groundStamp)) return;
-        _groundStamp = stamp;
+        // The inventory host (its attached seeds), the kit's art and the object targets change without a session revision.
+        var stamp = (area, session, session.Version.Revision, _inventoryHost, _areaKitArt, ObjectTargets());
+        if (Equals(stamp, _groundStamp)) return false;
         var frames = (AreaFrameOverlay)AreaFrames();
         var overlay = _areaOverlay!.Value;
         var bodies = new Dictionary<AreaObjectKey, AreaDrawCommand>();
-        var only = new Dictionary<AreaObjectKey, (string, CellCoord)>();
+        var only = new Dictionary<AreaObjectKey, (string, CellCoord, AreaObjectRecord)>();
+        var placedItems = session.QueryPlacedItems();
         AreaExtraFrame? Frame(uint aid, string what)
         {
             if (ExtraArt() is not { } art) return null;
@@ -87,7 +91,7 @@ public partial class TerrainViewerApp
                 var entity = ground.Item.Entity;
                 AreaObjectRecord? row = null;
                 if (map?.TryGetRow(entity, out var own) == true) row = own;
-                else if (session.QueryPlacedItems().FirstOrDefault(p => p.Entity == entity) is { Origin: { } origin }
+                else if (placedItems.FirstOrDefault(p => p.Entity == entity) is { Origin: { } origin }
                     && _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == origin.RuntimeMap) is { } home && home.TryGetRow(entity, out var taken)) row = taken;
                 // A T0 body standing on the item's own cell already draws it.
                 if (row is not null && row.Key.RuntimeMap == area.Snapshot.RuntimeMap && overlay.Bodies.ContainsKey(row.Key)
@@ -103,9 +107,16 @@ public partial class TerrainViewerApp
                 // An item lies flat when its flags say so (OF_FLAT); the hero's kit items carry no map flags and stand upright.
                 var flat = row is not null && Number(row, FlagsSlot) is { } flags && (flags & 0x4) != 0;
                 bodies[key] = AreaScenePlan.Place(area.Plan.Chart, key, frame.Visual, ground.Cell.X, ground.Cell.Y, flat);
-                if (row is null || row.Key != key) only[key] = (entity, ground.Cell);
+                if (row is null || row.Key != key)
+                    only[key] = (entity, ground.Cell, new AreaObjectRecord(key, 0, row?.Type ?? ItemType, row?.PrototypeNumber ?? 0, "", "", "", "",
+                        AreaScope.Core, null, ground.Cell.X, ground.Cell.Y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
+                        row?.EffectiveFields ?? [], true, true, true));
             }
         _groundBodies = bodies; _groundOnly = only;
+        // A placed item without a row of this map is named and picked under its own key.
+        if (_hoverIndex is { } index && ReferenceEquals(_hoverIndexArea, area)) foreach (var placed in only.Values) index.Admit(placed.Item3);
+        _groundStamp = stamp;
+        return true;
     }
 
     private uint? KitArt(string entity) =>
@@ -136,9 +147,6 @@ public partial class TerrainViewerApp
         if (_inventoryHost!.Target(_areaSession!, CurrentAreaMap, key) is { } target)
             return target.Kind == AreaInventoryTargetKind.GroundItem && _groundBodies.TryGetValue(key, out var drawn)
                 ? target with { Row = target.Row with { WorldX = drawn.MapX, WorldY = drawn.MapY } } : target;
-        if (!_groundOnly.TryGetValue(key, out var placed)) return null;
-        var row = new AreaObjectRecord(key, 0, 5, 0, "", "", "", "", AreaScope.Core, null, placed.Cell.X, placed.Cell.Y,
-            Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
-        return new(AreaInventoryTargetKind.GroundItem, placed.Entity, row);
+        return _groundOnly.TryGetValue(key, out var placed) ? new(AreaInventoryTargetKind.GroundItem, placed.Entity, placed.Row) : null;
     }
 }

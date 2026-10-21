@@ -77,6 +77,14 @@ public sealed class AreaHoverIndex
     /// <summary>The pickable drawn bodies in draw order.</summary>
     public IReadOnlyList<AreaDrawCommand> Bodies { get; }
     public AreaObjectRecord Row(AreaObjectKey key) => _rows[key];
+
+    /// <summary>ARC-RENDER-033: a row the map's snapshot does not hold (a placed item without a row of this map), named and picked
+    /// only where a moving command draws it, like a visitor.</summary>
+    public void Admit(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        _rows[row.Key] = row; _names.Remove(row.Key);
+    }
     public bool Contains(AreaObjectKey key) => _rows.ContainsKey(key);
 
     public static bool ClickThrough(AreaObjectRecord row)

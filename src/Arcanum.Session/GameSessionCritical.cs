@@ -83,7 +83,8 @@ public sealed partial class GameSessionOwner
 
     /// <summary>The <see cref="ItemDroppedProperty"/> value of a cell (each coordinate 0 .. 2^24 − 1, packed in 24 bits, + 1), for a
     /// host that observes the drop's map change (ARC-RENDER-033).</summary>
-    public static long ItemDroppedValue(CellCoord cell) => ((long)cell.Y << 24 | (uint)cell.X) + 1;
+    public static long ItemDroppedValue(CellCoord cell) => cell.X is >= 0 and < 1 << 24 && cell.Y is >= 0 and < 1 << 24
+        ? ((long)cell.Y << 24 | (uint)cell.X) + 1 : throw new ArgumentOutOfRangeException(nameof(cell));
 
     /// <summary>A cell the drop's packing holds: each coordinate 0 .. 2^24 − 1.</summary>
     internal static bool DropCellFits(CellCoord cell) => cell.X is >= 0 and < 1 << 24 && cell.Y is >= 0 and < 1 << 24;

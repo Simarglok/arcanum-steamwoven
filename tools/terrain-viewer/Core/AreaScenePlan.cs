@@ -288,7 +288,6 @@ public sealed class AreaScenePlan
             checked((int)(chart.OriginX + placement.MapX!.Value)), checked((int)(chart.OriginY + placement.MapY!.Value)), ranks.First, ranks.Second, 255, false);
     }
 
-    /// <summary>The seven <see cref="UprightOrder"/> keys, in order.</summary>
     /// <summary>ARC-RENDER-033: the plan's order of two commands (phase first, then the upright order and the visual's index), as
     /// <see cref="Create"/> sorts them.</summary>
     public static int ComparePlan(AreaDrawCommand a, AreaDrawCommand b)
@@ -319,6 +318,7 @@ public sealed class AreaScenePlan
         return list;
     }
 
+    /// <summary>The seven <see cref="UprightOrder"/> keys, in order.</summary>
     internal static int CompareUpright(AreaDrawCommand a, AreaDrawCommand b)
     {
         var c = a.MapY.CompareTo(b.MapY); if (c != 0) return c;

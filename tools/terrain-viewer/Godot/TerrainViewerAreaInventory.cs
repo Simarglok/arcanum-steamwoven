@@ -89,6 +89,8 @@ public partial class TerrainViewerApp
             if (ObjectTargets()?.Gone(_areaSession) is { Count: > 0 } gone) _inventoryHidden = _inventoryHidden.Concat(gone).ToHashSet();
         }
         if (!ReferenceEquals(_canvas.AreaHidden, _inventoryHidden)) _canvas.SetAreaHidden(_inventoryHidden);
+        // ARC-RENDER-033: an item picked up or dropped leaves or joins the drawn ground at once.
+        if (SyncAreaGroundBodies()) _canvas.SetAreaMovingBodies(AreaMovingCommands());
     }
 
     private bool AreaTakenByPc(AreaDrawCommand command) => command.Identity is { } key && _inventoryHidden?.Contains(key) == true;

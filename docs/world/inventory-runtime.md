@@ -299,17 +299,20 @@ The AREA viewer draws what the session holds on the ground but no T0 body drew, 
 - **Items.** Every item in `QueryMapInventory(map).Ground` that does not lie on its own T0 body's cell: spilled from a container
   (ARC-COMBAT-008), dropped by an NPC (ARC-COMBAT-009/010) or placed by the hero (ARC-WORLD-059). Its ground ART is its map row's
   current art (field 0; for a placed world item, the row of the map whose seed lists it) or, for a kit item, its prototype's
-  (`AreaStartingHero.KitArt`). It is placed on its cell by the rule the plan places a body with (`AreaScenePlan.Place`: no object
-  offset, scale 100), flat when its object flags carry OF_FLAT (0x4), and joins the moved bodies: an upright one the upright order,
+  (`AreaStartingHero.KitArt`). It is placed on its cell as the plan places a body there with no object offset and scale 100
+  (`AreaScenePlan.Place`; whether the original keeps a dropped item's offsets and scale was not read in the executable: NOT
+  VERIFIED), flat when its object flags carry OF_FLAT (0x4), and joins the moved bodies: an upright one the upright order,
   a flat one the flat commands in plan order (`AreaScenePlan.WithMovingFlat`). It is lit where it lies by its own art's channel.
-  A click picks it up as any ground item, walking to its cell; a placed item without a row of the shown map is picked under a key
-  of its own.
+  A click picks it up as any ground item, walking to its cell; a placed item without a row of the shown map (a kit item, a world
+  item from another map) is named and picked under a key of its own, with its origin row's fields when there is one.
 - **Destroyed ART.** A scenery or trap the session busted is drawn from its destroyed ART (field 24) at its T0 anchor
   (`AreaScenePlan.Repose`, as a fallen pose).
 - **Art.** `AreaExtraArt` reads an art id the T0 snapshot did not decode from the game's content stack in its search order
   (ARC-DATA-018), named by the area owner's rules for classes 4, 6 and 7 (`AreaObjectArt`, shared with the owner) and decoded by
   its frame rules (the selected frame, group 0 of a single-rotation ART, the ART's own extent); explicit limits
-  (`AreaExtraArtLimits`: 4,096 art ids, 64 MiB of pixels, 16 MiB per file). An art id that does not resolve or read leaves the
+  (`AreaExtraArtLimits`, for the whole viewer run of one module: 4,096 art ids, 64 MiB of pixels, 16 MiB per file; the opt-in
+  census `AreaExtraArtOriginalTests` reads every destroyed ART and every held item's ground ART of the 80 interiors: 4 destroyed
+  ARTs, 2,449 held items, 328 distinct art ids, none failing). An art id that does not resolve or read leaves the
   body as it was and is logged once (`ARC-RENDER-033 extra-art`).
 
 **Not ready.** A placed made item (its ground ART would come from its schematic's product prototype); the junk pile of OD13
