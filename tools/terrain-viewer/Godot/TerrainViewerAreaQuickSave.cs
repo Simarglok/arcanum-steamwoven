@@ -192,7 +192,7 @@ public partial class TerrainViewerApp
         var runtime = maps[actor.Map.RuntimeMap];
         _readyArea = _caveLoad is { } cave && runtime.RuntimeMap == cave.Area.Snapshot.RuntimeMap ? cave.Area : _exteriorArea ?? _readyArea;
         ConfigureAreaActor(runtime, runtime.Chart.ToChart(new AreaStepCell(actor.Cell.X, actor.Cell.Y)), actor.Facing);
-        _camera!.SetAreaPlan(_readyArea!.Plan, WorldViewport, window: _mapWindowCentre is not null, _mapOverview?.Bounds);
+        _camera!.SetAreaPlan(_readyArea!.Plan, WorldViewport, window: _mapWindowCentre is not null, _mapOverview);
         StopAreaWalls(); // a loaded game starts the wall check afresh (ARC-RENDER-011)
         ResetAreaRoofs(); // and the roofs from the map's stored state (ARC-RENDER-022)
         _mapEntered.Clear(); // tiles the replaced actor stepped into fire nothing (ARC-WORLD-038)

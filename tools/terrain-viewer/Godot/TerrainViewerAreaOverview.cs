@@ -10,6 +10,13 @@ public partial class TerrainViewerApp
     private AreaTerrainOverview? _mapOverview;
     private string? _mapOverviewFailure;
 
+    // A cleared scene (a load starting, a failure) shows no overview of the map it left.
+    private void RetireAreaOverview()
+    {
+        _mapOverview = null; _mapOverviewFailure = null;
+        if (_overviewLayer is not null && GodotObject.IsInstanceValid(_overviewLayer)) _overviewLayer.Bind(null);
+    }
+
     private void BindAreaOverview(TerrainLoadResult result)
     {
         _mapOverview = _mapWindowCentre is null ? null : result.AreaOverview;

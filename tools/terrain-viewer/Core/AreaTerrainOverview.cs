@@ -22,13 +22,34 @@ public sealed class AreaTerrainOverview
     /// <summary>Sectors drawn on each side of the window's centre: at the ordinary 1/8 a 2560 × 1440 view (20,480 × 11,520 px)
     /// around a cell of the core stays inside the diamond of 13 × 13 sectors (one sector is 5,120 × 2,560 px).</summary>
     public const int Radius = 6;
-    /// <summary>Most sectors an overview holds (a 13 × 13 square less the core).</summary>
+    /// <summary>The 13 × 13 square of sectors around the centre (an overview holds this less the core: 160 for a core of 3 × 3).</summary>
     public const int MaxSectors = (2 * Radius + 1) * (2 * Radius + 1);
+    private const double SectorHalfWidth = 2560, SectorHalfHeight = 1280;
     public static readonly TerrainColour FallbackColour = new(96, 96, 96);
     private const int SectorTiles = 64;
 
-    private AreaTerrainOverview(IReadOnlyList<AreaOverviewSector> sectors, TerrainRect bounds, int missingColours)
-    { Sectors = sectors; Bounds = bounds; MissingColours = missingColours; }
+    private AreaTerrainOverview(IReadOnlyList<AreaOverviewSector> sectors, TerrainRect bounds, int missingColours, int coreRadius)
+    { Sectors = sectors; Bounds = bounds; MissingColours = missingColours; CoreRadius = coreRadius; }
+
+    /// <summary>The window's drawn core radius the overview surrounds.</summary>
+    public int CoreRadius { get; }
+
+    /// <summary>
+    /// The smallest zoom at which a view of <paramref name="viewportWidth"/> × <paramref name="viewportHeight"/> centred anywhere
+    /// in the core stays inside the diamond of the core and the overview (half-extents (2R+1)·2,560 × (2R+1)·1,280): a power of two,
+    /// at least the ordinary 1/8 (2560 × 1440 reaches 1/8; 3840 × 2160 stops at 1/4). Near the map's edge, where the overview is
+    /// cut, a corner of the view can still fall outside it.
+    /// </summary>
+    public double Floor(double viewportWidth, double viewportHeight)
+    {
+        if (!(viewportWidth > 0) || !(viewportHeight > 0) || !double.IsFinite(viewportWidth) || !double.IsFinite(viewportHeight))
+            throw new ArgumentOutOfRangeException(nameof(viewportWidth));
+        double a = (2 * Radius + 1) * SectorHalfWidth, b = (2 * Radius + 1) * SectorHalfHeight;
+        // The view's centre in the core diamond: the farthest it reaches is from a core corner.
+        var core = (2 * CoreRadius + 1) * SectorHalfWidth / a;
+        var exact = (viewportWidth / (2 * a) + viewportHeight / (2 * b)) / (1 - core);
+        return Math.Clamp(Math.Pow(2, Math.Ceiling(Math.Log2(Math.Max(exact, .125)))), .125, 8);
+    }
 
     public IReadOnlyList<AreaOverviewSector> Sectors { get; }
     /// <summary>The window's drawn bounds grown to hold every overview diamond.</summary>
@@ -67,7 +88,7 @@ public sealed class AreaTerrainOverview
                 }
             }
         var bounds = new TerrainRect(checked((int)left), checked((int)top), checked((int)(right - left)), checked((int)(bottom - top)));
-        return new(sectors.AsReadOnly(), bounds, missing);
+        return new(sectors.AsReadOnly(), bounds, missing, coreRadius);
     }
 
     /// <summary>A sector's diamond in the plan's chart space: the outer corners of its corner tiles, a tile at chart cell (x,y)

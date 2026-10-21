@@ -695,18 +695,23 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   6 of the window's centre (`AreaTerrainOverview.Radius`; 160 sectors at most) is one flat diamond (5,120 × 2,560 px) in the
   colour of its base terrain type, read from the map's terrain grid (`terrain.tdf`) and the type's editor colour in
   `terrain\terrain.mes` (message 100 + type, `R,G,B`, `TerrainEditorColours`; a type without one is grey). It is drawn behind
-  everything (`AreaOverviewLayer`, one polygon per sector, redrawn only when a window publishes). Objects, critters and tiles
-  appear only inside the loaded window. The overview's bounds become the camera's, so the window's zoom floor is the viewer's
-  ordinary 1/8 again: at 1/8 a 2560 × 1440 view (20,480 × 11,520 px) reaches past the window onto the overview, and every
-  corner and edge midpoint of the view falls on the core or an overview sector. The editor colours are data the original's
+  everything (`AreaOverviewLayer`, one polygon per sector, redrawn only when a window publishes, unbound when a scene is
+  cleared), at full colour whatever the hour (the map's light is not applied to it). Objects, critters and tiles appear only
+  inside the loaded window. The overview's bounds become the camera's, and the window's zoom floor is the smallest power of two
+  (at least the ordinary 1/8) at which a view centred anywhere in the core stays inside the diamond of the core and the overview
+  (`AreaTerrainOverview.Floor`): 1/8 up to 2560 × 1440 (a 20,480 × 11,520 px view reaches past the window onto the overview),
+  1/4 at 3840 × 2160. A manual pan can still move the view into the corners of the overview's bounding box outside that diamond,
+  which stay empty, as do the parts of the overview cut by the map's edge. The editor colours are data the original's
   terrain initialisation does not read; the overview is a Steamwoven viewer feature (the original has no zoom), so no parity
   applies. A window whose terrain grid or types cannot be read has no overview and keeps the floor below (the load log says
   why: `ARC-RENDER-034 overview unavailable`). Load cost on the owner's Mac (2026-10-21): the grid and colours read in 40 ms
   per window load; the farthest frame at 2560 × 1440 took 15 ms with 269 level-3 chunks and 37,363 visible commands. Native
-  check in the map battery: `ARC-RENDER-034 native-smoke overview PASS` (at the smoke's window size and at 2560 × 1440 the
-  zoom reaches 1/8, the view stays inside the overview's bounds, past the window on the large display, with no empty ground,
-  the overview drawn, the first far frame within the census frame budget). Tests: `AreaTerrainOverviewTests` (sectors,
-  colours, diamonds, bounds), `TerrainEditorColourTests` (the colour messages).
+  check in the map battery: `ARC-RENDER-034 native-smoke overview PASS` (a window must have its overview, whole away from the
+  map's edge; at the smoke's window size and at 2560 × 1440 the zoom reaches its floor, the view stays inside the overview's
+  bounds, past the window on the large display, every corner and edge midpoint of the view falls on the core or an overview
+  sector, a pixel near the view's lower left corner shows its sector's colour, the overview is drawn, and the far frame keeps
+  within the census frame budget). Tests: `AreaTerrainOverviewTests` (sectors, colours and the fallback, diamonds, bounds, the
+  floor), `TerrainEditorColourTests` (the colour messages).
 - **Zoom floor (ARC-RENDER-032).** Without a terrain overview (ARC-RENDER-034, above), on a map loaded as a window the smallest zoom is not the viewer's ordinary 1/8 but
   the smallest power of two (1/2^k), at least 1/8, at which the view is no wider and no taller than the window's drawn
   bounds (`WorldZoomPolicy.WindowFloor`: the viewport over the bounds of the 3×3 core on the tighter axis, rounded up).

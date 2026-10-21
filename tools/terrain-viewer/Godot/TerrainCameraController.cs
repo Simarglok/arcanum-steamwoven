@@ -42,15 +42,18 @@ public sealed class TerrainCameraController
     /// <summary>An AREA plan; <paramref name="window"/>: a map loaded as a window, whose zoom has a floor (ARC-RENDER-032) unless
     /// <paramref name="overview"/> (ARC-RENDER-034, the terrain overview's bounds) widens the bounds: then the view may reach the
     /// overview and the floor is the ordinary 1/8.</summary>
-    public void SetAreaPlan(AreaScenePlan plan, Vector2 viewport, bool window, Arcanum.Data.Terrain.TerrainRect? overview = null)
+    public void SetAreaPlan(AreaScenePlan plan, Vector2 viewport, bool window, AreaTerrainOverview? overview = null)
     {
-        _world = true; _plan = null; _bounds = overview ?? plan.WorldBounds; WindowFloored = window && overview is null; Fit(viewport);
+        _world = true; _plan = null; _overview = overview; _bounds = overview?.Bounds ?? plan.WorldBounds; WindowFloored = window && overview is null;
+        Fit(viewport);
     }
+    private AreaTerrainOverview? _overview;
     /// <summary>Whether the shown plan is a window whose zoom has a floor (ARC-RENDER-032).</summary>
     public bool WindowFloored { get; private set; }
     /// <summary>The smallest zoom for the viewport: the window floor of a window plan, else the ordinary 1/8.</summary>
-    public double ZoomFloor(Vector2 viewport) => WindowFloored && _bounds is { } b && viewport.X > 0 && viewport.Y > 0
-        ? WorldZoomPolicy.WindowFloor(viewport.X, viewport.Y, b.Width, b.Height) : CameraPolicy.MinimumZoom;
+    public double ZoomFloor(Vector2 viewport) => viewport.X <= 0 || viewport.Y <= 0 ? CameraPolicy.MinimumZoom
+        : WindowFloored && _bounds is { } b ? WorldZoomPolicy.WindowFloor(viewport.X, viewport.Y, b.Width, b.Height)
+        : _overview is { } overview ? overview.Floor(viewport.X, viewport.Y) : CameraPolicy.MinimumZoom;
     private double Floored(double zoom, Vector2 viewport) => Math.Max(zoom, ZoomFloor(viewport));
 
     public void Fit(Vector2 viewport)

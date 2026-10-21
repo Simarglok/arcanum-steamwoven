@@ -19,11 +19,13 @@ public partial class TerrainViewerApp
         var camera = _camera!; var before = camera.State.Zoom; var window = _mapWindowCentre is not null;
         var gameViewport = GetViewport(); var original = gameViewport is SubViewport held ? held.Size : DisplayServer.WindowGetSize();
         var overview = window ? _mapOverview : null;
+        // ARC-RENDER-034: a window always has its overview (the window plan already needs the grid and the types).
+        Require(!window || overview is not null, $"NO_OVERVIEW {_mapOverviewFailure}");
         Require(camera.WindowFloored == (window && overview is null), $"FLAG window={window} overview={overview is not null}");
         var windowBounds = _readyArea!.Plan.WorldBounds;
         var bounds = overview?.Bounds ?? windowBounds;
         var floored = window && overview is null;
-        var covered = new List<object>();
+        var covered = new List<object>(); var sampledPixels = 0;
         var observed = new List<object>();
         async Task Resize(Vector2I size)
         {
@@ -40,11 +42,13 @@ public partial class TerrainViewerApp
                 var viewport = WorldViewport;
                 Require(viewport == new Vector2(size.X, size.Y), $"VIEWPORT {viewport} asked {size}");
                 var floor = camera.ZoomFloor(viewport);
-                var expected = floored ? WorldZoomPolicy.WindowFloor(viewport.X, viewport.Y, bounds.Width, bounds.Height) : CameraPolicy.MinimumZoom;
+                var expected = floored ? WorldZoomPolicy.WindowFloor(viewport.X, viewport.Y, bounds.Width, bounds.Height)
+                    : overview?.Floor(viewport.X, viewport.Y) ?? CameraPolicy.MinimumZoom;
                 Require(floor == expected, $"FLOOR {floor} expected {expected}");
                 if (floored && size.X >= 2560) Require(floor > CameraPolicy.MinimumZoom, $"NOT_RAISED {floor}");
                 Require(camera.State.Zoom == floor, $"RESIZE_NOT_FLOORED {camera.State.Zoom} floor {floor}");
-                // Asked below the floor: it stops there. The first far frame after the resize is timed with its upload.
+                // Asked below the floor: it stops there. The far frame after the resize is timed (with an overview the zoom may already
+                // have been at the floor, so it can be a steady frame rather than the first one).
                 var clock = System.Diagnostics.Stopwatch.StartNew();
                 camera.SetWorldZoom(CameraPolicy.MinimumZoom / 2, WorldAnchor, viewport);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -73,6 +77,19 @@ public partial class TerrainViewerApp
                     var past = left < windowBounds.X || top < windowBounds.Y || left + width > windowBounds.X + windowBounds.Width || top + height > windowBounds.Y + windowBounds.Height;
                     if (size.X >= 2560) Require(past, $"NOT_PAST_WINDOW view {width:0}x{height:0} window {windowBounds.Width}x{windowBounds.Height}");
                     Require(_overviewLayer is { Visible: true, Redraws: > 0 } && ReferenceEquals(_overviewLayer.Overview, overview), "OVERVIEW_NOT_DRAWN");
+                    // Away from the map's edge the overview is whole (13 × 13 less the core), so the probes prove a convex cover.
+                                        Require(overview.Sectors.Count == AreaTerrainOverview.MaxSectors - 9, $"OVERVIEW_PARTIAL {overview.Sectors.Count}");
+                    // A pixel near the view's lower left corner, on an overview sector, shows that sector's colour.
+                    var pixelAt = (left + width * 0.04, top + height * 0.96);
+                    if (!InDiamond(core, pixelAt) && overview.Sectors.FirstOrDefault(sector => InDiamond(sector.Corners, pixelAt)) is { } under)
+                    {
+                        var image = GetViewport().GetTexture().GetImage();
+                        var pixel = image.GetPixel((int)((pixelAt.Item1 - left) * zoom), (int)((pixelAt.Item2 - top) * zoom));
+                        var want = new Color(under.Colour.R / 255f, under.Colour.G / 255f, under.Colour.B / 255f);
+                        Require(Math.Abs(pixel.R - want.R) < .04 && Math.Abs(pixel.G - want.G) < .04 && Math.Abs(pixel.B - want.B) < .04,
+                            $"OVERVIEW_PIXEL {pixel} want {want} sector {under.Sector.X},{under.Sector.Y}");
+                        sampledPixels++;
+                    }
                     Require(frameMs < CensusFrameBudgetMs, $"FRAME_BUDGET {frameMs:0}");
                     covered.Add(new { Viewport = new { viewport.X, viewport.Y }, PastWindow = past, Probes = probes.Length });
                 }
@@ -89,10 +106,10 @@ public partial class TerrainViewerApp
                 Parity = "NOT_APPLICABLE (the original has no zoom)" }));
             if (overview is not null)
                 GD.Print("ARC-RENDER-034 native-smoke overview PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                    Map = _readyMapName, Sectors = overview.Sectors.Count, Fallback = overview.MissingColours,
+                    Map = _readyMapName, Sectors = overview.Sectors.Count, Fallback = overview.MissingColours, SampledPixels = sampledPixels,
                     Window = new { windowBounds.Width, windowBounds.Height }, Bounds = new { bounds.Width, bounds.Height }, Covered = covered,
                     Parity = "NOT_APPLICABLE (the original has no zoom)" }));
-            else if (window) GD.Print("ARC-RENDER-034 native-smoke overview NONE " + (_mapOverviewFailure ?? "no overview"));
+
         }
         finally
         {

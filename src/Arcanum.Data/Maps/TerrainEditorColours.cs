@@ -11,7 +11,7 @@ public sealed record TerrainColourLoad(IReadOnlyList<TerrainColour?>? Colours, s
 
 /// <summary>
 /// ARC-RENDER-034: the terrain types' editor colours of <c>terrain\terrain.mes</c>: message 100 + type is <c>R,G,B</c> (each
-/// 0..255, white space around the numbers allowed). The original's terrain initialisation names them editor data and the game
+/// 0..255, spaces and tabs around the numbers allowed). The original's terrain initialisation names them editor data and the game
 /// does not read them (the generated-wilderness study); the viewer draws its terrain overview beyond the loaded window with
 /// them, a Steamwoven viewer feature with no original counterpart. A message that is missing or not three such numbers gives
 /// no colour for its type.
@@ -54,8 +54,8 @@ public static class TerrainEditorColours
         for (var i = 0; i < 3; i++)
         {
             var part = parts[i].Trim(' ', '\t');
-            if (part.Length is 0 or > 3 || !part.All(char.IsAsciiDigit) || int.Parse(part) is var value && value > 255) return null;
-            values[i] = (byte)int.Parse(part);
+            if (part.Length is 0 or > 3 || !part.All(char.IsAsciiDigit)
+                || !byte.TryParse(part, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out values[i])) return null;
         }
         return new(values[0], values[1], values[2]);
     }

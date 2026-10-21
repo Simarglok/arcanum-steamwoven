@@ -144,8 +144,7 @@ internal static class AreaMapLoadOperation
         var started = Environment.TickCount64;
         var terrain = catalog.ReadTerrain(map);
         if (terrain.Grid is not { } grid) return (null, "TERRAIN_" + (terrain.Issue?.Code.ToString() ?? "NONE").ToUpperInvariant());
-        var types = TerrainTypeTable.Open(stack);
-        if (types.Table is not { } table) return (null, "TYPES_" + types.Status.ToString().ToUpperInvariant());
+        if (catalog.TerrainTypes.Table is not { } table) return (null, "TYPES_" + catalog.TerrainTypes.Status.ToString().ToUpperInvariant());
         var colours = TerrainEditorColours.Open(stack, table);
         var overview = AreaTerrainOverview.Create(grid, colours.Colours ?? [], centre, 1, plan.Chart, plan.WorldBounds);
         Console.WriteLine($"ARC-RENDER-034 load stage=overview sectors={overview.Sectors.Count} fallback={overview.MissingColours} colours={colours.Failure ?? "read"} " +
