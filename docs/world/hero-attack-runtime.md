@@ -85,7 +85,7 @@ damage and death; no state or draw depends on that difference today:
 | Arm-hit drops | After a crippling arm hit (`LifeEvents.ArmHitDropsItems`, also when nothing new was crippled): the wielded weapon, then the shield, each dropped when the wear check (`EquipmentRules.CheckWear`, 0x464D20) refuses it under the injuries now. An NPC's check reads its map data's item (an item it lists none for is `Unknown`). |
 | Wear | `ApplyAttackWear` without the items that left: the armour's damage, the weapon's critical damage and destruction, the attacker's side. |
 | Helmet drop | `DropHelmet` (an item a step of this attack deleted or dropped is `NoItem`). |
-| Ammunition | ARC-COMBAT-013 (CR15, AM4): unless the weapon was destroyed (CW3), `DestroyAmmo` (0x40000) spends every unit of the hero's stack of its wielded weapon's ammunition type and `LoseAmmo` (0x20000) five times the weapon's consumption, all or nothing, through `SpendAmmo` (a stack spent to 0 is deleted): `AmmunitionSpent` with the stack and `Units`, or `NoAmmunition` when the hero holds none of the type or too few; a weapon without an ammunition type never rolls them. An NPC's are `AmmunitionNotReady` (no NPC attacks; an NPC without a PC leader would lose nothing). A refused spend (a budget, the revision) is the attack's `StepFailure`. |
+| Ammunition | ARC-COMBAT-013 (CR15, AM4): unless the weapon was destroyed (CW3), `DestroyAmmo` (0x40000) spends every unit of the hero's stack of its wielded weapon's ammunition type and `LoseAmmo` (0x20000) five times the weapon's consumption, all or nothing, through `SpendAmmo` (a stack spent to 0 is deleted): `AmmunitionSpent` with the stack and `Units`, or `NoAmmunition` when the hero holds none of the type, too few, or the count is 0 (a consumption of 0); a weapon without an ammunition type never rolls them, and a type outside 0..3 names no stack (AMA3). The weapon is the attack's, taken before a step of the same attack broke or dropped it. An NPC's are `AmmunitionNotReady` (no NPC attacks; an NPC without a PC leader would lose nothing). A refused spend (a budget, the revision) is the attack's `StepFailure`. |
 | Weapon drop | `DropWeapon` (`NoItem` as above). |
 
 A drop (`SessionCriticalStep`, `SessionCriticalStepOutcome`): an NPC's item that its map seed lists in the NPC's list goes to the
@@ -103,7 +103,7 @@ longer worn: a `TargetWorn` that still lists it is refused (`InvalidWear`), and 
 is `InvalidAttack`, both before any roll.
 
 **Not ready**: the NPC search budget per real second of the drop's path (DCA2). Also not modelled: the NPC's look-for-weapon/armour flags after a drop, the PC's injury record (0x4F5690), the worn armour's
-critical scripts (points 34, 35), the drop script, the stun animation and its duration (goal 57) and the ammunition. An NPC's
+critical scripts (points 34, 35), the drop script, the stun animation and its duration (goal 57) and an NPC's ammunition. An NPC's
 armour class, resistances and light still come from its map data's worn items, so a dropped or destroyed piece keeps counting
 there (the critical tables read the host's `TargetWorn`).
 

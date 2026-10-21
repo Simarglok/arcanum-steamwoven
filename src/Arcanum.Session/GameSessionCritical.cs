@@ -223,23 +223,27 @@ public sealed partial class GameSessionOwner
     // CR15, AM4): the damage step's 0x4B65D0 takes, for "destroy ammunition" (0x40000), every unit of the weapon's ammunition type the
     // holder carries, and for "lose ammunition" (0x20000) five times the weapon's per-shot consumption, all or nothing. None when the
     // weapon was destroyed. The hero's ammunition goes through SpendAmmo; an NPC's is NOT READY (no NPC attacks yet).
-    private void AmmunitionSteps(AttackDamage damage, SessionWearSide side, List<SessionCriticalStep> steps, ref GameSessionFailure failure)
+    // The weapon's facts are the attack's (captured before the steps of this attack broke or dropped it). A count of 0 (no units, or a
+    // consumption of 0) spends nothing; a type outside 0..3 names no stack the session holds (AMA3).
+    private void AmmunitionSteps(AttackDamage damage, SessionWearSide side, EquipmentWeapon? attackWeapon, List<SessionCriticalStep> steps,
+        ref GameSessionFailure failure)
     {
         if (side.Worn?.GetValueOrDefault(EquipmentSlot.Weapon) is { } weapon && _durability.Destroyed.Contains(weapon.Entity)) return;
         foreach (var (effect, kind) in new[] { (CriticalMissEffects.DestroyAmmo, SessionCriticalStepKind.DestroyAmmo), (CriticalMissEffects.LoseAmmo, SessionCriticalStepKind.LoseAmmo) })
         {
             if (!damage.MissEffects.HasFlag(effect)) continue;
-            if (failure != GameSessionFailure.None || side.Life is not { IsHero: true })
+            // After a refused step, as the other steps, nothing more is applied or reported.
+            if (failure != GameSessionFailure.None) return;
+            if (side.Life is not { IsHero: true })
             {
-                steps.Add(new(kind, damage.Recipient, EquipmentSlot.Weapon, null, failure != GameSessionFailure.None ? SessionCriticalStepOutcome.Unknown
-                    : SessionCriticalStepOutcome.AmmunitionNotReady, null));
+                steps.Add(new(kind, damage.Recipient, EquipmentSlot.Weapon, null, SessionCriticalStepOutcome.AmmunitionNotReady, null));
                 continue;
             }
-            // The hero's wielded weapon gives the type and the consumption (fields 125 and 126 through its equipment facts).
-            var held = _equipment.Worn.TryGetValue(EquipmentSlot.Weapon, out var worn) ? worn.Item.Weapon : null;
+            // The attack's weapon gives the type and the consumption (fields 125 and 126 through its equipment facts).
+            var held = attackWeapon;
             var stack = held?.AmmoType is { } type and >= 0 and < SessionAmmoRecord.AmmoTypes ? HeroStackOfType(type) : null;
             var count = stack is { } carried ? effect == CriticalMissEffects.DestroyAmmo ? carried.Units : checked(5 * held!.AmmoConsumption) : 0;
-            if (stack is not { } found || found.Units < count)
+            if (stack is not { } found || found.Units < count || count == 0)
             {
                 steps.Add(new(kind, damage.Recipient, EquipmentSlot.Weapon, stack?.Entity, SessionCriticalStepOutcome.NoAmmunition, null));
                 continue;
