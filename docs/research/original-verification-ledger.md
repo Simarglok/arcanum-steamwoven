@@ -2172,8 +2172,8 @@ Anomalies:
   original does and write nothing (`CellPlan.Applied`), as the task contract of ARC-TECHNOLOGY-007 sets; an Original switch that
   spends on the check can be added if the owner asks for it.
 - CCA2 (CC4): `2 × cost` and `p × cost` wrap past about 2³⁰; a negative need then adds cells to the stack, and complexity −1
-  with a product of −2³¹ faults on the division. Crash class: both settings compute the need exactly and refuse one that does
-  not fit 32 bits, or a complexity or aptitude out of range (`CellRefusal.OutOfRange`).
+  with a product of −2³¹ faults on the division. Crash class: both settings compute the need exactly and refuse a need or a
+  product `p × cost` that does not fit 32 bits, or a complexity or aptitude out of range (`CellRefusal.OutOfRange`).
 - CCA3 (CC2): an item without a parent reads the object of pool slot 0. Both settings count no cells and refuse.
 - CCA4 (CC3, CC5): an ammunition object as owner counts its own quantity but the take finds no stack and pays for free. No
   installed path makes an ammunition object the parent of a cell device; both settings count 0 for it.

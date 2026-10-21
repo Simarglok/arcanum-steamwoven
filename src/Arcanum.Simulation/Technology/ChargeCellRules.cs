@@ -24,9 +24,11 @@ public enum CellRefusal
     None,
     /// <summary>The owner has no cell stack, or fewer units than the need (nothing is taken).</summary>
     TooFewCells,
-    /// <summary>The need does not fit 32 bits or the item's complexity or the holder's aptitude is out of range: the original
-    /// overflows (and can add cells, or fault on a division); both settings refuse (ledger CCA2).</summary>
+    /// <summary>The need or the product <c>power × cost</c> does not fit 32 bits, or the item's complexity or the holder's aptitude
+    /// is out of range: the original wraps (and can add cells, or fault on a division); both settings refuse (ledger CCA2).</summary>
     OutOfRange,
+    /// <summary>The payment's payer kind differs from the payer the source was built for (a wiring error of the host).</summary>
+    PayerMismatch,
 }
 
 /// <summary>
@@ -82,7 +84,9 @@ public static class ChargeCellRules
             power = EquipmentRules.EffectivePower(c, payer.HolderAptitude);
         }
         else power = c;
-        var share = (long)cost * power / c;
+        var product = (long)cost * power;
+        if (product is < int.MinValue or > int.MaxValue) return null;
+        var share = product / c;
         long need = c > 0 || !profile.ItemCellsFavourMagick ? 2L * cost - share : cost + share;
         return need is > 0 and <= int.MaxValue ? (int)need : null;
     }
@@ -90,7 +94,9 @@ public static class ChargeCellRules
     /// <summary>
     /// The cell payment (CC2–CC5): the owner's one stack must hold at least the need, else nothing is taken; the stack keeps the
     /// rest and is removed when its last units go (0x4658E0). The original takes the cells whether or not the payment is applied
-    /// (CCA1); here an unapplied request answers the same and the plan is not <see cref="CellPlan.Applied"/>.
+    /// (CCA1); here an unapplied request answers the same and the plan is not <see cref="CellPlan.Applied"/>. An item without a
+    /// parent or another owner counts no cells (CCA3, CCA4). The mark is the count's (0x465820): the plan reads the one stack the host
+    /// found; the need's arithmetic is the payment's (0x450420, marked on <see cref="SpellPaymentRules.Pay"/>).
     /// </summary>
     [OriginalFunction(0x465820, OriginalFunctionScope.Partial)]
     public static CellPlan Plan(CellPayer payer, int cost, bool apply, TechnologyRuleProfile profile)
@@ -127,8 +133,9 @@ public sealed class ChargeCellSource : ISpellCellSource
     public SpellCellPayment Pay(SpellCellRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        // The payment's payer kind decides the need; the source's facts say where the cells are.
-        var plan = ChargeCellRules.Plan(_payer with { Payer = request.Payer }, request.Cost, request.Apply, _profile);
+        var plan = request.Payer != _payer.Payer
+            ? new CellPlan(false, CellRefusal.PayerMismatch, 0, null, 0, false, request.Apply)
+            : ChargeCellRules.Plan(_payer, request.Cost, request.Apply, _profile);
         LastPlan = plan;
         return new(plan.Paid, plan.Need);
     }

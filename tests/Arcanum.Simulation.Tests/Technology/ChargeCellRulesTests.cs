@@ -53,6 +53,7 @@ public sealed class ChargeCellRulesTests
             Assert.IsNull(ChargeCellRules.Need(Item(50, -100), int.MaxValue, profile), "2 × cost does not fit 32 bits");
             Assert.IsNull(ChargeCellRules.Need(Item(5000, 0), 7, profile), "a complexity out of range");
             Assert.IsNull(ChargeCellRules.Need(Item(-50, 500), 7, profile), "an aptitude out of range");
+            Assert.IsNull(ChargeCellRules.Need(Item(1000, 100), 10_000_000, profile), "power × cost wraps in 32 bits although the need would fit");
             Assert.AreEqual(CellRefusal.OutOfRange, ChargeCellRules.Plan(Item(50, -100), int.MaxValue, true, profile).Refusal);
         }
         Assert.AreEqual(int.MaxValue, ChargeCellRules.Need(Item(0, 0), int.MaxValue, Original), "a neutral item's need is the cost");
@@ -100,6 +101,15 @@ public sealed class ChargeCellRulesTests
         // An item payer: the payment's payer kind reaches the source, which uses the item's facts.
         var device = new ChargeCellSource(Item(-50, -100), Steamwoven);
         Assert.AreEqual(7, SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Item, ItemCharges: 0), 7, true, 147, record, device).Cells!.Cells);
+        // A container paying from its own first cell item; an out-of-range plan and a payer the source was not built for refuse with 0 cells.
+        var container = new ChargeCellSource(new(SpellPayerKind.Other, CellOwnerKind.Container, new("cells", 7)), Original);
+        Assert.AreEqual(SpellPaymentStatus.Paid, SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Other), 7, true, 187, record, container).Status);
+        Assert.IsTrue(container.LastPlan!.StackRemoved);
+        var huge = SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Item), int.MaxValue, true, 147, record, new ChargeCellSource(Item(50, -100), Original));
+        Assert.AreEqual((SpellPaymentStatus.CellsRefused, 0), (huge.Status, huge.Cells!.Cells));
+        var mismatch = new ChargeCellSource(new(SpellPayerKind.Critter, CellOwnerKind.Critter, new("cells", 10)), Original);
+        Assert.AreEqual(SpellPaymentStatus.CellsRefused, SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Item), 7, true, 147, record, mismatch).Status);
+        Assert.AreEqual(CellRefusal.PayerMismatch, mismatch.LastPlan!.Refusal);
         Assert.IsTrue(TechnologyRuleProfile.Original.ItemCellsFavourMagick);
         Assert.IsFalse(TechnologyRuleProfile.Steamwoven.ItemCellsFavourMagick);
     }

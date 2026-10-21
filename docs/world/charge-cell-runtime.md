@@ -55,8 +55,10 @@ The original takes the cells even for an affordability check that does not apply
 a cast and the animation goal's check). Both settings answer such a request exactly as the original does and write nothing
 (`CellPlan.Applied` false, `Writes` false).
 
-Crash class, fixed in both settings (CCA2, CCA3): a need that does not fit 32 bits (the original wraps and can add cells or fault
-on a division), a complexity or aptitude out of range, and an item without a parent are refused.
+Crash class, fixed in both settings (CCA2): a need or a product `power × cost` that does not fit 32 bits (the original wraps
+and can add cells or fault on a division), and a complexity or aptitude out of range, are refused (`OutOfRange`). An item
+without a parent (CCA3, the original reads an undefined object) or another owner counts no cells (`TooFewCells`). A payment whose
+payer kind differs from the source's payer is a host wiring error (`PayerMismatch`).
 
 ## Session
 
