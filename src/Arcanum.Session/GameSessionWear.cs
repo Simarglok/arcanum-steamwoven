@@ -171,7 +171,8 @@ public sealed partial class GameSessionOwner
                 if (!hero && Dropped(item.Entity)) return false;
                 // An NPC never wears an item of the hero's.
                 if (!hero && (_equipment.SlotOf(item.Entity) is not null || _inventory.Kit.Any(held => held.Entity == item.Entity) ||
-                        _inventory.Pc.Any(held => held.Entity == item.Entity) || _inventory.Made.Any(held => held.Entity == item.Entity))) return false;
+                        _inventory.Pc.Any(held => held.Entity == item.Entity) || _inventory.Made.Any(held => held.Entity == item.Entity) ||
+                        _inventory.PlacedItem(item.Entity) is not null)) return false;
             }
             if (hero && (_hero is null || worn.Count != _equipment.Worn.Count ||
                     _equipment.Worn.Any(pair => !worn.TryGetValue(pair.Key, out var item) || item.Entity != pair.Value.Entity))) return false;

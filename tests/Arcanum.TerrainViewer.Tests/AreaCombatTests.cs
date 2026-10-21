@@ -101,12 +101,12 @@ public sealed class AreaCombatTests
         var steps = new[]
         {
             new SessionCriticalStep(SessionCriticalStepKind.DropWeapon, DamageRecipient.Target, EquipmentSlot.Weapon, "sword", SessionCriticalStepOutcome.Dropped, new(1, 2)),
-            new SessionCriticalStep(SessionCriticalStepKind.DropHelmet, DamageRecipient.Target, EquipmentSlot.Helmet, "cap", SessionCriticalStepOutcome.HeroDropNotReady, null),
+            new SessionCriticalStep(SessionCriticalStepKind.DropHelmet, DamageRecipient.Target, EquipmentSlot.Helmet, "cap", SessionCriticalStepOutcome.HeroCellUnfit, null),
             new SessionCriticalStep(SessionCriticalStepKind.ArmHitShield, DamageRecipient.Target, EquipmentSlot.Shield, "torch", SessionCriticalStepOutcome.Kept, null),
         };
-        Assert.AreEqual("critical hit: 4 damage, HP 6/10, blinded, crippled, scarred, drops its weapon, would drop the helmet (not applied yet)",
+        Assert.AreEqual("critical hit: 4 damage, HP 6/10, blinded, crippled, scarred, drops its weapon, would drop the helmet (no cell for it)",
             AreaCombatHost.Describe(Result(Resolution(AttackOutcome.CriticalHit), crippled) with { Criticals = steps }, 6, 10));
-        Assert.AreEqual("None|None,DropWeapon:sword:Dropped,DropHelmet:cap:HeroDropNotReady,ArmHitShield:torch:Kept",
+        Assert.AreEqual("None|None,DropWeapon:sword:Dropped,DropHelmet:cap:HeroCellUnfit,ArmHitShield:torch:Kept",
             AreaCombatHost.Criticals(Resolution(AttackOutcome.CriticalHit), steps));
     }
 
