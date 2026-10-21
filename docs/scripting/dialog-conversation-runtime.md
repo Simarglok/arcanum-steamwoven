@@ -14,7 +14,7 @@ data side of FR-UI-003/005. The AREA viewer adds the first real use: talking to 
 Site NPC whose effective SAP_DIALOG attachment names a script (only Virgil in the core).
 
 It is **not** a SCR VM, generic expression evaluator, generated-dialog (`gd_*`) text
-loader, inventory/party/map/AI simulation, save service, voice/media, or original-runtime
+loader (the [greeting](dialog-greeting.md) reads the loaded files through its port), inventory/party/map/AI simulation, save service, voice/media, or original-runtime
 parity claim. The older [one-edge transition runtime](dialog-transition-runtime.md) is
 unchanged and still rejects GF; the two runtimes do not share admission tables.
 
@@ -106,7 +106,8 @@ continuation (the NPC's generated reply is not loaded), above 20 its transition 
 with an action ending in `JO`/`UW`/`FL`/`ET` (the original then skips the insult, read for FL), it is offered blocked. `b h l p` (exact) and
 `c r t z` (prefix) are offered blocked as
 `UnsupportedInteraction`; `d q u x` have state-dependent visibility and make the step a
-frontier. NPC `g:`/`m:`/`r:` (prefix) and exact `i:` are frontiers. Other text is literal.
+frontier. NPC `g:` (prefix) is the original's greeting when the conversation has a greeting port (ARC-WORLD-058,
+[dialog greeting](dialog-greeting.md)), else a frontier; `m:`/`r:` (prefix) and exact `i:` are frontiers. Other text is literal.
 
 ## conversation-grammar-v1
 

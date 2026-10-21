@@ -63,9 +63,10 @@ public sealed class AreaDialogVoiceOriginalTests
         }
         TestContext.WriteLine($"lines {lines} voiced {voiced} found {found} femaleFound {female} maps {string.Join(", ", maps.Select(m => $"{m.Key}={m.Value}"))}");
         // Moves only when the SCR admission set or the dialog runtime grows (with AreaMapConversationOriginalTests): 124 lines shown
-        // (57 before ARC-WORLD-043 admitted ME: the two conversations that stopped at it walk on), 27 with a voice identity, every
-        // one of them installed (the Caladon underground and the Derian Ka temple).
-        Assert.AreEqual((124, 27, 27), (lines, voiced, found));
+        // (57 before ARC-WORLD-043 admitted ME: the two conversations that stopped at it walk on; 155 since ARC-WORLD-058 says the
+        // g: greetings, whose generated lines have no voice), 27 with a voice identity, every one of them installed (the Caladon
+        // underground and the Derian Ka temple).
+        Assert.AreEqual((155, 27, 27), (lines, voiced, found));
         Assert.AreEqual(found, female, "a female PC hears every voice a male PC hears (female falls back to male)");
     }
 }
