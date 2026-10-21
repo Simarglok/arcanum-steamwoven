@@ -260,8 +260,9 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
   seed not attached, and for a kit or made item, the session does not know the scripts and the item goes unchecked. The light and armour of the hero follow its equipment at once.
 - The PC's re-wield after losing a weapon (PI5): with the "auto switch" setting on, the original wields the best weapon; the session
   leaves the slot empty.
-- The viewer draws no placed item and cannot click one (ARC-RENDER-033); NPC made items (ARC-WORLD-055) and the junk pile of OD13
-  can use this store later.
+- NPC made items (ARC-WORLD-055) and the junk pile of OD13 can use this store later. The viewer draws placed items and picks
+  them up since ARC-RENDER-033 ([ground items](#ground-items-in-the-viewer-arc-render-033)); a placed made item has no known ground
+  ART there and is not drawn.
 
 ## Drop cell (ARC-COMBAT-010)
 
@@ -291,7 +292,32 @@ plus the hero's and the companions' live cells.
   cannot settle is treated as blocked (DCA3).
 - A generator that runs out during the tries (after about 2^63 draws) leaves the distance draw made and the item where it was
   (`RandomExhausted`); the drop's draws are not taken on trial.
-- The viewer still draws no dropped item (ARC-RENDER-033).
+
+## Ground items in the viewer (ARC-RENDER-033)
+
+The AREA viewer draws what the session holds on the ground but no T0 body drew, and the art a T0 body changes to:
+
+- **Items.** Every item in `QueryMapInventory(map).Ground` that does not lie on its own T0 body's cell: spilled from a container
+  (ARC-COMBAT-008), dropped by an NPC (ARC-COMBAT-009/010) or placed by the hero (ARC-WORLD-059). Its ground ART is its map row's
+  current art (field 0; for a placed world item, the row of the map whose seed lists it) or, for a kit item, its prototype's
+  (`AreaStartingHero.KitArt`). It is placed on its cell as the plan places a body there with no object offset and scale 100
+  (`AreaScenePlan.Place`; whether the original keeps a dropped item's offsets and scale was not read in the executable: NOT
+  VERIFIED), flat when its object flags carry OF_FLAT (0x4), and joins the moved bodies: an upright one the upright order,
+  a flat one the flat commands in plan order (`AreaScenePlan.WithMovingFlat`). It is lit where it lies by its own art's channel.
+  A click picks it up as any ground item, walking to its cell; a placed item without a row of the shown map (a kit item, a world
+  item from another map) is named and picked under a key of its own, with its origin row's fields when there is one.
+- **Destroyed ART.** A scenery or trap the session busted is drawn from its destroyed ART (field 24) at its T0 anchor
+  (`AreaScenePlan.Repose`, as a fallen pose).
+- **Art.** `AreaExtraArt` reads an art id the T0 snapshot did not decode from the game's content stack in its search order
+  (ARC-DATA-018), named by the area owner's rules for classes 4, 6 and 7 (`AreaObjectArt`, shared with the owner) and decoded by
+  its frame rules (the selected frame, group 0 of a single-rotation ART, the ART's own extent); explicit limits
+  (`AreaExtraArtLimits`, for the whole viewer run of one module: 4,096 art ids, 64 MiB of pixels, 16 MiB per file; the opt-in
+  census `AreaExtraArtOriginalTests` reads every destroyed ART and every held item's ground ART of the 80 interiors: 4 destroyed
+  ARTs, 2,449 held items, 328 distinct art ids, none failing). An art id that does not resolve or read leaves the
+  body as it was and is logged once (`ARC-RENDER-033 extra-art`).
+
+**Not ready.** A placed made item (its ground ART would come from its schematic's product prototype); the junk pile of OD13
+(ARC-WORLD-063) and the items' decay (ARC-WORLD-062); a busted window's busted ART.
 
 ## Evidence
 

@@ -133,6 +133,14 @@ public sealed class AreaObjectTargets
         return result;
     }
 
+    /// <summary>ARC-RENDER-033: the scenery and traps the session busted (they take their destroyed ART).</summary>
+    public IReadOnlyList<AreaObjectKey> Busted(GameSessionOwner session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return _objects.Where(pair => pair.Value.Kind is DamageableObjectKind.Scenery or DamageableObjectKind.Trap
+            && session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) == SessionObjectCondition.Busted).Select(pair => pair.Key).ToArray();
+    }
+
     /// <summary>One line for the status bar about an object attack (no original text).</summary>
     public static string Describe(SessionObjectAttackResult result)
     {

@@ -144,7 +144,9 @@ public partial class TerrainViewerApp
             // ARC-WORLD-017: companion bodies are lit where they stand on the shown map, by their own visual. One
             // delegate reads the current pair and map at draw time, so equal views stay equal.
             Moving = _companionLight ??= command => _areaAmbient is { Enabled: true } current && _readyArea?.Lighting is { } shown
-                ? _areaCompanions?.Light(command, current.Effective, LightsNow(shown.Local, current)) : null,
+                ? _areaCompanions?.Light(command, current.Effective, LightsNow(shown.Local, current))
+                    // ARC-RENDER-033: a body drawn from extra art is lit where it lies, by its own art.
+                    ?? GroundLight(command, current.Effective, LightsNow(shown.Local, current)) : null,
         } : null);
     private Func<AreaDrawCommand, AreaLitColors?>? _companionLight;
 

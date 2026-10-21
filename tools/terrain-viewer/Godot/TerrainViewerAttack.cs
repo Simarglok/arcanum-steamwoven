@@ -521,6 +521,7 @@ public partial class TerrainViewerApp
         var area = _readyArea ?? throw new InvalidOperationException("AREA_NOT_PUBLISHED");
         if (_areaOverlay is not { } overlay || !ReferenceEquals(overlay.Area, area))
         {
+            _groundBodies = []; _groundOnly = []; _groundStamp = null; _extraVisuals = [];
             _areaOverlay = overlay = (area, new AreaFrameOverlay(area.Frames),
                 area.Plan.Commands.Where(c => c.Identity is not null).GroupBy(c => c.Identity!.Value).ToDictionary(g => g.Key, g => g.First()),
                 area.Snapshot.Visuals.ToDictionary(v => v.Key));
@@ -538,12 +539,14 @@ public partial class TerrainViewerApp
     private IReadOnlyList<AreaDrawCommand>? AreaMovingCommands()
     {
         var companions = AreaCompanionCommands();
-        if ((_fallenBodies.Count == 0 && _portalBodies.Count == 0) || _readyArea is null || _areaOverlay?.Area != _readyArea) return companions;
+        if ((_fallenBodies.Count == 0 && _portalBodies.Count == 0 && _groundBodies.Count == 0) || _readyArea is null || _areaOverlay?.Area != _readyArea) return companions;
         var moving = companions?.ToList() ?? [];
         var taken = moving.Select(c => c.Identity).ToHashSet();
         moving.AddRange(_fallenBodies.Values.Where(c => !taken.Contains(c.Identity)));
         // ARC-WORLD-051: doors and windows off their T0 frame.
         moving.AddRange(_portalBodies.Values);
+        // ARC-RENDER-033: busted scenery and traps, and the items lying away from a T0 body.
+        moving.AddRange(_groundBodies.Values.Where(c => !taken.Contains(c.Identity)));
         return moving;
     }
 
