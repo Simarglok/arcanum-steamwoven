@@ -204,6 +204,93 @@ public sealed class CriticalEffectsStateTests
         }
     }
 
+    // ARC-COMBAT-010: an open map without bounds; a path is the straight line of DropPlacementRules' target, critters stand on the
+    // listed cells.
+    private sealed class OpenMap(params CellCoord[] critters) : IDropMap
+    {
+        private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
+        public List<(CellCoord From, CellCoord To, DropOwner Who)> Asked { get; } = [];
+        public CellCoord? Step(CellCoord from, int rotation) => rotation == 8 ? from : new(from.X + Offsets[rotation].X, from.Y + Offsets[rotation].Y);
+        public DropPath Path(CellCoord from, CellCoord to, DropOwner who)
+        {
+            Asked.Add((from, to, who));
+            var rotations = new List<int>();
+            for (var cell = from; cell != to; cell = Step(cell, rotations[^1])!.Value)
+                rotations.Add(Array.IndexOf(Offsets, (Math.Sign(to.X - cell.X), Math.Sign(to.Y - cell.Y))));
+            return new(rotations.Count, 0, rotations);
+        }
+        public bool HasCritter(CellCoord cell) => critters.Contains(cell);
+    }
+
+    [TestMethod]
+    public void WithTheHostsMapAnItemLandsWhereTheOriginalsTriesLead()
+    {
+        // The golem's sword: its draws give a direction; the first tile off the golem's has no critter, so the walk stops there.
+        using var owner = Owner(missChance: 100);
+        var golem = GolemCombat();
+        var map = new OpenMap(GolemCell, Start.Cell);
+        bool npcDropped = false, heroDropped = false;
+        for (var attempt = 0; attempt < 600 && !(npcDropped && heroDropped); attempt++)
+        {
+            owner.ClearStun(owner.Version, SessionLifeTarget.Hero);
+            owner.Heal(owner.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true });
+            if (owner.IsItemDestroyed("kit:1") || owner.QueryEquipment().Worn.Count == 0) break;
+            map.Asked.Clear();
+            var result = owner.AttackCritter(owner.Version, new(golem) { HeroWorn = HeroWorn(), TargetWorn = Worn(owner), TargetCell = GolemCell, DropMap = map });
+            Assert.AreEqual((GameSessionFailure.None, GameSessionFailure.None), (result.Failure, result.StepFailure));
+            foreach (var drop in result.Criticals.Where(step => step.Outcome == SessionCriticalStepOutcome.Dropped))
+            {
+                var hero = drop.Whose == DamageRecipient.Attacker;
+                var from = hero ? Start.Cell : GolemCell;
+                var asked = map.Asked.Where(a => a.From == from).ToArray();
+                Assert.IsTrue(asked.Length >= 1 && asked.All(a => a.Who == (hero ? DropOwner.PcSide : DropOwner.Npc)), "the owner's kind goes to the path");
+                var to = asked[^1].To;
+                // The walk stops on the first tile without a critter (the hero stands next to the golem), else at the path's end.
+                var expected = from;
+                while (expected != to && map.HasCritter(expected)) expected = map.Step(expected, AreaRotation(expected, to))!.Value;
+                Assert.AreEqual(expected, drop.Cell, $"{hero} {from} {to}");
+                if (hero)
+                {
+                    Assert.AreEqual(drop.Cell, owner.QueryPlacedItems().Single().Cell);
+                    heroDropped = true;
+                    Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "kit:1", Accept).Disposition);
+                    Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon,
+                        new(Kit[0].Kind, [], false, Blade(100)), (_, _) => true, Accept).Failure);
+                }
+                else
+                {
+                    Assert.AreEqual(drop.Cell, owner.QueryMapInventory(Exterior)!.Ground.Single(g => g.Item.Entity == drop.Entity).Cell);
+                    npcDropped |= drop.Entity == "golem-sword";
+                }
+            }
+        }
+        if (!heroDropped || !npcDropped) Assert.Inconclusive($"drops seen: hero {heroDropped}, golem {npcDropped}");
+
+        // A no-drop item draws the distance (the drop's first draw) and is refused before any try.
+        using var kept = Owner(missChance: 100);
+        var noDrop = new OpenMap();
+        for (var attempt = 0; attempt < 600; attempt++)
+        {
+            kept.ClearStun(kept.Version, SessionLifeTarget.Hero);
+            var result = kept.AttackCritter(kept.Version, new(golem)
+            {
+                HeroWorn = new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Weapon] = new("kit:1", Sturdy) { NoDrop = true } },
+                TargetWorn = Worn(kept), TargetCell = GolemCell, DropMap = noDrop,
+            });
+            if (result.Criticals.FirstOrDefault(step => step.Whose == DamageRecipient.Attacker && step.Kind == SessionCriticalStepKind.DropWeapon) is not { } refused)
+                continue;
+            Assert.AreEqual(SessionCriticalStepOutcome.Refused, refused.Outcome);
+            Assert.IsFalse(noDrop.Asked.Any(a => a.From == Start.Cell), "no try for the hero's item");
+            return;
+        }
+        Assert.Inconclusive("no critical self-hit with a drop within the bounded run");
+    }
+
+    private static int AreaRotation(CellCoord from, CellCoord to) => (Math.Sign(to.X - from.X), Math.Sign(to.Y - from.Y)) switch
+    {
+        (-1, -1) => 0, (-1, 0) => 1, (-1, 1) => 2, (0, 1) => 3, (1, 1) => 4, (1, 0) => 5, (1, -1) => 6, _ => 7,
+    };
+
     [TestMethod]
     public void ACrippledArmDropsWhatItCanNoLongerHold()
     {

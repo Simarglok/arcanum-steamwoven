@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
@@ -48,12 +49,29 @@ public partial class TerrainViewerApp
         Require(session.ArmHeroFate(session.Version, FateKind.CriticalHit).Disposition == GameSessionDisposition.Changed, "the critical-hit fate armed");
         var row = _inventoryHost!.Maps.Single(m => m.RuntimeMap == CurrentAreaMap).Row(entity);
         var draws = session.QueryRandom().Draws;
+        // ARC-COMBAT-010: the drop's map over the real map: the path from the NPC's tile to the tile two steps away in each
+        // direction draw 0..8 (8 stays: no path).
+        CellCoord? npcCell = row.WorldX is { } nx && row.WorldY is { } ny ? new(checked((int)nx), checked((int)ny)) : null;
+        var dropMap = AreaDropMapNow();
+        Require(dropMap is not null && npcCell is not null, "the drop's map and the NPC's cell");
+        var paths = new List<string>();
+        for (var direction = 0; direction <= Arcanum.Simulation.Items.DropPlacementRules.MaxDirection; direction++)
+        {
+            var target = npcCell!.Value;
+            for (var step = 0; step < 2; step++) target = dropMap!.Step(target, direction) ?? target;
+            var path = dropMap!.Path(npcCell.Value, target, Arcanum.Simulation.Items.DropOwner.Npc);
+            Require(path.Result is >= 0 and <= AreaDropMap.ResultCap && path.Partial >= 0, $"path {direction} in range");
+            paths.Add($"{direction}:{path.Result}/{path.Partial}");
+        }
+        Require(paths.Take(8).Any(p => !p.EndsWith(":0/0", StringComparison.Ordinal)),
+            "a free NPC reaches a tile two steps away in some direction");
         var targetWorn = _combatHost.WornItems(session, CurrentAreaMap, entity);
         var result = session.AttackCritter(session.Version, new(combat!)
         {
             HeroWorn = AreaCombatHost.HeroWorn(session, _areaKitDurability),
             TargetWorn = targetWorn,
-            TargetCell = row.WorldX is { } x && row.WorldY is { } y ? new(checked((int)x), checked((int)y)) : null,
+            TargetCell = npcCell,
+            DropMap = dropMap,
         });
         Require(result.Disposition == GameSessionDisposition.Changed && result.Resolution?.Outcome == AttackOutcome.CriticalHit,
             $"the fate made a critical hit ({result.Disposition} {result.Failure} {result.Resolution?.Outcome})");
@@ -66,8 +84,13 @@ public partial class TerrainViewerApp
             || undead && defender.CriticalBody != OriginalCriticalEffects.KnockdownBody, "the critical-effect tables drew");
         if (result.Life is { } life && life.Events.HasFlag(LifeEvents.Stunned))
             EndStun(session, result.Recipient == DamageRecipient.Target ? combat.Target : SessionLifeTarget.Hero, entity);
+        var ground = session.QueryMapInventory(mapId)!.Ground;
+        foreach (var drop in result.Criticals.Where(step => step.Outcome == SessionCriticalStepOutcome.Dropped && step.Whose == DamageRecipient.Target))
+            Require(ground.Any(g => g.Item.Entity == drop.Entity && g.Cell == drop.Cell), $"the dropped {drop.Entity} lies on {drop.Cell}");
         SyncAreaCombatBodies();
         SyncAreaInventory();
+        GD.Print($"ARC-COMBAT-010 native-smoke drop-paths PASS map={_readyMapName} from={npcCell} paths={string.Join(",", paths)}"
+            + $" drops={string.Join(",", result.Criticals.Where(step => step.Outcome == SessionCriticalStepOutcome.Dropped).Select(step => $"{step.Entity}@{step.Cell}"))}");
         GD.Print("ARC-COMBAT-009 native-smoke critical PASS " + System.Text.Json.JsonSerializer.Serialize(new
         {
             Map = _readyMapName, Entity = entity, defender.CriticalBody, defender.Constitution, defender.ConstitutionMaximum,

@@ -200,7 +200,10 @@ public partial class TerrainViewerApp
     private void RunObjectAttackHit(AttackGoal goal, AreaObjectAttackTarget target, int distance)
     {
         var owner = _areaSession!;
-        var result = owner.AttackObject(owner.Version, target.Attack(distance, goal.Aim, AreaCombatHost.HeroWorn(owner, _areaKitDurability)));
+        var result = owner.AttackObject(owner.Version, target.Attack(distance, goal.Aim, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with
+        {
+            DropMap = AreaDropMapNow(),
+        });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
         goal.Broke = result.Object?.Broken == true || result.Item?.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted;
@@ -212,6 +215,23 @@ public partial class TerrainViewerApp
         if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) EndStun(owner, SessionLifeTarget.Hero, "hero");
         SyncAreaInventory();
         RefreshAreaStatus();
+    }
+
+    /// <summary>ARC-COMBAT-010: the shown map as a drop reads it now: the step evidence with the doors' runtime passage, the map's
+    /// rows less what the session destroyed or switched off, the dead as the session and the map data know them, and the hero's and
+    /// the companions' live cells. Null without the actor.</summary>
+    private AreaDropMap? AreaDropMapNow()
+    {
+        if (_worldActor.Session is not AreaGridSession session || _readyArea is not { } area || _areaSession is not { } owner) return null;
+        var occupancy = _areaCompanions?.OccupancyForPc() ?? AreaOccupancy.None;
+        static CellCoord World(AreaGridSession s, CellCoord chart) { var w = s.Chart.ToWorld(chart); return new(checked((int)w.X), checked((int)w.Y)); }
+        var live = occupancy.Occupied.Select(c => World(session, c)).Append(World(session, session.State.CommittedCell)).ToHashSet();
+        var gone = ObjectTargets()?.Gone(owner) ?? new HashSet<AreaObjectKey>();
+        var map = CurrentAreaMap;
+        return new(session.Snapshot, area.Snapshot.Objects, occupancy.Moved, live, row => gone.Contains(row.Key),
+            row => _combatHost?.Target(owner, map, row.Key) is { } target &&
+                (target.Dead || target.Build.Combat is { } combat && owner.QueryLife(combat.Target).View?.Status.IsDead == true),
+            session.Portals);
     }
 
     // ARC-COMBAT-009: the original keeps a critter stunned while its stun animation (goal 57) runs; the viewer plays none, so it ends
@@ -353,6 +373,8 @@ public partial class TerrainViewerApp
             TargetWorn = _combatHost!.WornItems(owner, CurrentAreaMap, goal.Entity),
             // ARC-COMBAT-009: a critical drops the NPC's items where it stands (its map data's cell; NPCs do not move here).
             TargetCell = goal.Row.WorldX is { } x && goal.Row.WorldY is { } y ? new(checked((int)x), checked((int)y)) : null,
+            // ARC-COMBAT-010: the original's draws choose the cell a dropped item lands on, over the shown map.
+            DropMap = AreaDropMapNow(),
         });
         goal.Attacks++;
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.

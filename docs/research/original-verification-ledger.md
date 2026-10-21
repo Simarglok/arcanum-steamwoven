@@ -1956,10 +1956,11 @@ Anomalies (none needs a switch):
 - CRA3 (CR5, CR4, CR8): C24 said the knockout roll was strict and that bipeds alone are knocked down "+5 crushing, +10 leg" with
   undead and amorphous never stunned; the reading here (≤, the knockout only after a stun, body type 2 with no knockdown either,
   undead body type 0 knocked down) corrects it. A slip of the earlier reading; both settings follow the original.
-- CRA4 (CR13, CR14): NOT READY, not a difference: the session drops an NPC's item at the NPC's cell without the drop's draws
-  (2..4 and one direction per try) or its path, the hero's drops were not applied until ARC-WORLD-059 placed them at the hero's cell
-  ([placed items](../world/inventory-runtime.md#placed-items-arc-world-059)), the NPC flags of CR14 and the PC's injury record of CR13 are not session state, the drop and armour scripts are
-  not run, and no ammunition is modelled (CR15). A seeded run stops matching the original's generator after a drop.
+- CRA4 (CR13, CR14): NOT READY, not a difference: since ARC-COMBAT-010 the session makes the drop's draws (2..4, one direction
+  per try) and chooses the tile through the host's map ([drop cell](#drop-cell-arc-combat-010)); a host that passes no map
+  still gets the owner's cell without draws. The hero's drops lie in its placed items
+  ([placed items](../world/inventory-runtime.md#placed-items-arc-world-059)). The NPC flags of CR14 and the PC's injury record of CR13 are not session state, the drop and armour scripts are
+  not run, and no ammunition is modelled (CR15).
 
 ## Generated dialog files (ARC-DATA-042)
 
@@ -2000,7 +2001,38 @@ except where a row says otherwise. Every direct branch stays inside `.text`.
 | PI6 | pickup (0x4617F0, 0x461810) | A loose item: the item's get script (point 4) may refuse, the insert check 0x466510 may refuse (a PC sees the reason), then the item leaves the tile, enters the inventory and its decay event is cancelled. A dropped item keeps no mark of having been dropped. | Original |
 
 No anomaly: the session's differences are NOT READY in the [inventory runtime](../world/inventory-runtime.md#placed-items-arc-world-059)
-(placement and its draws, decay, junk piles, the removal's scripts and spells, the PC's re-wield).
+(decay, junk piles, the removal's scripts and spells, the PC's re-wield); the tile and its draws are ARC-COMBAT-010's
+([drop cell](#drop-cell-arc-combat-010)).
+
+## Drop cell (ARC-COMBAT-010)
+
+Source: the [inventory runtime](../world/inventory-runtime.md#drop-cell-arc-combat-010) and CR14. Question: how does one try of
+the drop (0x4F4E40) choose the tile, and what does the path it asks for (0x41F3C0 with the drop's flags) test? Read on 2026-10-21
+by two fresh agents that saw only the questions and the project's records of the callees (method step 6); this task compared
+their answers. Both agree on every row; the rows are F2. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| DC1 | drop tile try (0x4F4E40) | One direction draw 0..8, then the target: the distance's steps from the owner's tile (0x4B8FF0; a step off the map fails the try). The path request has the owner as the mover, from its tile to the target, at most 200 rotations, flags 0x10. With the result R and the direct attempt's completed steps P (the request's field 0x24): the owner's tile when R ≤ 0 and P ≤ 0, or when R ≥ distance + 2 (signed); otherwise the walk reads P steps when P ≠ 0, else R. A critter owner (type 15 or 16) first tests the tile it stands on for a PC or NPC (DC7, mask 0x18000, the dead included) and stops on the first without one; each step follows the next rotation (a step off the map fails the try). The tile the walk ends on is not tested. | Original |
+| DC2 | path request (0x41F3C0), the drop's gates | Equal tiles: 0. Without flags 0x41: the target's tile blocked (DC5) gives 0, and so does a container, scenery, PC or NPC on it (DC7, mask 0x1800C) unless the object has flag 0x400 or is a dead critter. Then the direct attempt (DC3); when it gives 0 the search (DC4) (flags 0x20 would stop instead, 0x1000 take another routine). The result is capped at 8 (unsigned). | Original |
+| DC3 | direct attempt (0x41F840) | 0 without a step when the tiles are more than 32 apart (the larger axis). The traversal mode follows the flags (0x41F570): flag 0x10 gives mode 4. Each step takes the rotation toward the target (DC6), records it, and stops at a blocked tile, a step the object traversal refuses or that crosses a window piece (DC5), or a trap the mover avoids (DC8). Reaching the target returns the steps; otherwise field 0x24 keeps the completed steps and the result is 0. | Original |
+| DC4 | search (0x41F9F0) | Both axes under 32 apart, else 0. A 64 × 64 window centred on both tiles (the smaller coordinate less half of 64 minus the axis distance, truncated). Each round takes, over the window in index order (row by row), the open tile of the smallest estimate 10 × (larger axis distance to the target) + its cost, the first one on a tie; a tile whose estimate over 10 exceeds 200 is dropped; none left gives 0, the target ends it. Its eight neighbours in rotation order are scored: off the map, out of the window or dropped: skipped; a blocked tile is dropped; a step the object traversal refuses is skipped, and a cardinal one refused by an object other than a wall or portal drops the tile. A step costs 10, 90 onto a trap the mover avoids, + 50 across a window piece, + 1 when it turns from the step before. A cheaper cost opens or reopens a tile. The rotations are written from the start; more than 200 gives 0. An NPC mover is limited to 11 searches and 250 ms of searching per second (globals defaulting to 10 and 250); a PC is not. Field 0x24 is not written. | Original |
+| DC5 | step tests (0x4D7110, 0x43FD70) | The tile: the sector's block mask, a facade tile's own bit, else the tile name's blocking flag. The object traversal splits a diagonal into its four cardinal edges; on each, walls and portals of both tiles facing the edge decide: window pieces pass with the window output in a cardinal step and block in a diagonal one, opening pieces pass, other walls block; a portal passes when busted or open, else blocks when the mover cannot open it. Objects on the tile stepped onto: containers, scenery, traps and portals block unless flag 0x400; in mode 4 PCs and NPCs never block. | Original; the [step evidence](../world/crash-site-area-traversal-contract.md) is built on the same two functions, so the viewer's port reads it (with the doors' runtime passage) |
+| DC6 | rotation and step (0x4B8D50, 0x4B8FF0) | Toward a tile: diagonal when twice the smaller axis distance reaches the larger, else straight along the larger axis; no distance gives 5. Rotations 0..7 step by the movement's neighbour table; any value above 7 (8 included) leaves the tile. A tile outside the map's bounds fails the step. | Original |
+| DC7 | objects on a tile (0x4407C0) | The objects of the given types on the tile, skipping destroyed and switched-off ones (flags 0x1, 0x2); dead critters are listed. Mask 0x18000 is PC and NPC; 0x1800C adds containers and scenery. | Original |
+| DC8 | trap avoided (0x4BCAB0, 0x4BBFE0) | The first trap (type 17) on the tile. A mover that is no critter avoids none; an NPC without a PC leader avoids it unless the trap has flag 0x1000000; a PC or an NPC led by one avoids it when the trap has either flag 0x3000000 (spotted). | Original |
+
+Anomalies:
+
+- DCA1 (DC1, DC3, DC4): when the direct attempt stops after some steps and the search then finds a path, the walk reads the
+  direct attempt's step count over the search's rotations, so the item can land on a tile of neither path. In the original;
+  both settings follow it. The owner may still ask for a switch under D8.
+- DCA2 (DC4): NOT READY, not a difference: the NPC search budget per real second is wall-clock state; the session never runs out
+  of it, where the original's search for an NPC can fail when other NPCs have just searched (the item then stays on the
+  NPC's tile).
+- DCA3 (DC5, DC6): the AREA viewer's port knows only the step evidence of the shown map (the exterior's nine sectors, the
+  cave's chart): a tile outside it is off the map, a tile or step the evidence cannot settle is blocked. A host limit, not a rule
+  difference.
 
 ## Decisions to revisit
 

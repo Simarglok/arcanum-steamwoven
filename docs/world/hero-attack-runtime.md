@@ -89,20 +89,20 @@ damage and death; no state or draw depends on that difference today:
 | Weapon drop | `DropWeapon` (`NoItem` as above). |
 
 A drop (`SessionCriticalStep`, `SessionCriticalStepOutcome`): an NPC's item that its map seed lists in the NPC's list goes to the
-ground at `SessionAttack.TargetCell` as a map change (`ItemDroppedProperty` = `item.dropped`, the cell packed with 24 bits per
+ground as a map change (`ItemDroppedProperty` = `item.dropped`, the cell packed with 24 bits per
 coordinate, + 1), so no schema changes; it then lies on the ground in `QueryMapInventory` (after the spilled containers' items),
 leaves the NPC's list (loot, negative `IN`, the NPC crafter and the NPC inventory store no longer see it) and `PickUpItem` takes
-it. The hero's item goes to the ground at the hero's cell among its placed items (ARC-WORLD-059,
-[placed items](inventory-runtime.md#placed-items-arc-world-059)): it leaves its slot and list until it is picked up (`HeroCellUnfit` when
-the hero's cell does not fit the packing). Not applied: an item the session added to the NPC (`NotSeedItem`), an item with a drop script (`ScriptUnsupported`), no cell or no item data
+it. The hero's item goes to the ground among its placed items (ARC-WORLD-059,
+[placed items](inventory-runtime.md#placed-items-arc-world-059)): it leaves its slot and list until it is picked up. The tile is
+the [drop cell](inventory-runtime.md#drop-cell-arc-combat-010)'s (ARC-COMBAT-010): with the host's `SessionAttack.DropMap` the
+session draws the distance 2..4 before the drop's refusals and one direction per try after them, and the item lands where the
+original's tries lead from its holder's cell (the hero's, or `SessionAttack.TargetCell` for an NPC); without a map it lands on the
+holder's cell and nothing is drawn (`HeroCellUnfit` when the landing cell does not fit the packing). Not applied: an item the session added to the NPC (`NotSeedItem`), an item with a drop script (`ScriptUnsupported`), no cell or no item data
 (`Unknown`); an item with the no-drop flag is `Refused`, as in the original (`SessionWearItem.NoDrop`). A dropped item is no
 longer worn: a `TargetWorn` that still lists it is refused (`InvalidWear`), and `SessionAttack.TargetCell` outside 0 .. 2^24 − 1
 is `InvalidAttack`, both before any roll.
 
-**Not ready**: the original drops the item 2..4 cells away with draws of its own (a distance, then a direction per try, and a
-path, CR14); the session drops it on the holder's cell and makes none of those draws, so the generator stops matching the
-original after a drop. The porting needs a host port for the original's step, path (0x41F3C0) and blocking (0x4407C0) tests.
-Also not modelled: the NPC's look-for-weapon/armour flags after a drop, the PC's injury record (0x4F5690), the worn armour's
+**Not ready**: the NPC search budget per real second of the drop's path (DCA2). Also not modelled: the NPC's look-for-weapon/armour flags after a drop, the PC's injury record (0x4F5690), the worn armour's
 critical scripts (points 34, 35), the drop script, the stun animation and its duration (goal 57) and the ammunition. An NPC's
 armour class, resistances and light still come from its map data's worn items, so a dropped or destroyed piece keeps counting
 there (the critical tables read the host's `TargetWorn`).
@@ -125,8 +125,9 @@ there (the critical tables read the host's `TargetWorn`).
 - The status line names a critical's injuries and drops; the log line `ARC-COMBAT-005 attack-hit` adds the table's effects and
   each critical item step (`crit=`). The viewer plays no stun animation, so a stun of the hero or the NPC ends at once
   (`ClearStun`, the contract for an animation that could not start; `ARC-COMBAT-009 stun-ended`); a critical knockout is drawn in
-  the fallen pose like any knockout. `TargetCell` is the NPC's map-data cell (NPCs do not move in the viewer). A dropped item is
-  hidden from the NPC but not drawn on the ground (as a spilled container's items).
+  the fallen pose like any knockout. `TargetCell` is the NPC's map-data cell (NPCs do not move in the viewer); the drop's map is
+  `AreaDropMap` over the shown map (ARC-COMBAT-010). A dropped item is hidden from the NPC but not drawn on the ground (as a
+  spilled container's items).
 - Native smoke `ARC-COMBAT-009 native-smoke critical PASS` (map mode, last stage): a granted fate point arms the hero's critical
   hit, the hero attacks the living NPC with the most hit points through the session as the viewer does (worn items, cell), and
   the stage checks the critical hit and that the tables drew; in the Crash Site cave a rat (body type 1) took a doubled torso hit.
