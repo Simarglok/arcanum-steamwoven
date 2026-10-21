@@ -979,7 +979,7 @@ living NPC with combat values.
 
 ### Character sheet (ARC-UI-007)
 
-The original Character sheet key `C` (logical key down) toggles a read-only diagnostic sheet of the session's hero in
+The original Character sheet key `C` (logical key down) toggles a diagnostic sheet of the session's hero in
 crash-site-area (exterior, cave and `--area-map`). It shows what the original sheet of the PC shows
 (`charedit` in active mode, checked in the original executable, ledger rows
 [CS1–CS7](../research/original-verification-ledger.md#character-sheet-arc-ui-007)), every value a session query:
@@ -1015,12 +1015,44 @@ dialog that completes a quest now gives the quest's experience as the original d
 wired). A table that is missing or
 not admitted fails the load (`AREA_HERO_TableUnavailable`, `AREA_HERO_ExperienceInvalid`).
 
+#### Skills page (ARC-UI-009)
+
+Since ARC-UI-009 (task S6 of the [skills plan](../research/skills-plan.md)) the sheet has the original's skills page, checked
+in the original executable (ledger rows [SP1–SP8](../research/original-verification-ledger.md#skills-page-arc-ui-009)):
+
+- the sixteen skills in the original's four groups of four (three of basic skills, the fourth the tech skills), all four
+  groups at once instead of the original's tabs;
+- each row the skill's name with its training name in brackets (none untrained), from the player's `mes\skill.mes`, loaded
+  in the background through the module's game folder when the area binds and adopted at the first open after it finished (texts
+  that arrive while the sheet is open appear at the next open) (the project's labels without it, for example a module outside
+  `<game>/modules/`), then, as project text, the effective level out of 20 (the original draws a bar of level / 20 and
+  prints no number), the stored points and the key stat the next point needs (`MinimumKeyStat(4 × points + 4)`, "no
+  further point" when no stat value allows it);
+- on hover the original's hint: the name, the description and the key stat with its minimum;
+- `−` and `+` buttons on each row. Opening the sheet opens the hero's character editor in the session
+  (`OpenHeroEditor`, its floor is the hero's sheet at that moment, as the original's snapshot), closing it closes the editor:
+  points bought while the sheet was open can be refunded until it closes, never below the floor. `+` spends one point
+  (`SpendHeroPoint`); `−` uses the original's click (`RefundHeroPoint` with `UntilLevelChanges`: points come back one at a
+  time until the skill's level changes, stopping at the floor). The owner has not chosen the alternative "one point per
+  click" (skills plan S5), so the page uses the original's default. Every press reports its outcome on the page: the points
+  spent or refunded, or the refusal in project words (not enough unspent points, at the maximum, the key stat too low,
+  nothing to refund since the sheet opened, no points); the original shows its `charedit.mes` texts with sound 3004 instead.
+
+Differences from the original, all of the page's presentation: no tabs (all groups shown), the level as a number instead
+of a bar, the hint's lines also always visible on the row, project refusal texts and no refusal sound, and names and
+training texts redrawn on every change (the original redraws them only at the open and on a tab press, SP2), the hint only over
+the row text (the original also over its + and −, whose tooltips here are the project's), a success reported as the points
+spent or refunded (the original clears the text bar, SP7) and no 3 s hint delay after a refusal (SP5). The view-only
+mode of the original (mode 2, + and − hidden) has no caller in the viewer.
+
 **Not implemented:** spending unspent points on stats, hit points or fatigue (the original's +/− buttons and their
-errors), skills, tech disciplines, spells and schematics panels, age (not session state), the portrait and PC lens,
+errors), tech disciplines, spells and schematics panels, age (not session state), the portrait and PC lens,
 followers' sheets (passive mode from dialog or the follower menu), switching straight from one window to another by
 key. Self-test `ARC-UI-007 self-test PASS` (synthetic hero session: no-hero refusal, `C`/close/`Escape`, keys owned
-while open, rebuild on change, dead-hero close and refusal); native smoke with `--hero` after the hero stage:
-`ARC-UI-007 native-smoke character sheet PASS`.
+while open, rebuild on change, the skills page's `+` and `−` with the editor's floor over a close and reopen, dead-hero close
+and refusal); native smoke with `--hero` after the hero stage: `ARC-UI-009 native-smoke skills page PASS` (the original skill
+texts describe all sixteen rows; a `+` the pool accepts, its `−` and a refused second `−`, or with no unspent points a refused
+`+`) and `ARC-UI-007 native-smoke character sheet PASS`.
 
 ### Logbook (ARC-UI-008)
 

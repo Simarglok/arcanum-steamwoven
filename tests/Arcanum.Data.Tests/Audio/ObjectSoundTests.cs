@@ -88,7 +88,16 @@ public sealed class ObjectSoundTests
         Assert.AreEqual(5, table.SoundClass(Tile(false, true, 0)));
         Assert.AreEqual(-2, table.SoundClass(Tile(false, false, 2)));
         Assert.IsNull(table.SoundClass(Tile(false, true, 1)), "a position beyond its category");
-        Assert.IsNull(table.SoundClass(Tile(true, true, 0) | 0x10000000), "not a tile art id");
+        // ARC-DATA-043: a facade in the tile slot (type 11): outdoor bit 25, flippable bit 26, position bits 11..16.
+        uint Facade(bool outdoor, bool flippable, int position) => 0xB0000000u | (uint)(position << 11) | (outdoor ? 1u << 25 : 0) | (flippable ? 1u << 26 : 0);
+        Assert.AreEqual(1, table.SoundClass(Facade(true, true, 1)));
+        Assert.AreEqual(7, table.SoundClass(Facade(true, false, 1)));
+        Assert.AreEqual(-2, table.SoundClass(Facade(false, false, 2)));
+        Assert.AreEqual(5, table.SoundClass(Facade(false, true, 0)));
+        Assert.AreEqual(1, table.SoundClass(Facade(true, true, 1) | 0x180), "a facade ignores the tile bits 7 and 8");
+        Assert.IsNull(table.SoundClass(Facade(true, true, 3)), "a facade position beyond its category");
+        // Any other art type reads as indoor, not flippable, position 0 (the original's helpers give 0 for every field).
+        Assert.AreEqual(3, table.SoundClass(Tile(true, true, 2) | 0x10000000), "a wall art id");
         var sparse = Table(new() { [0] = "aaa1", [100] = "bbb2", [150] = "ccc3", [200] = "ddd4", [300] = "eee5", [350] = "fff0" });
         Assert.AreEqual(3, sparse.SoundClass(Tile(true, false, 1)), "record 150 is position 1: gaps do not count");
         Assert.AreEqual(0, sparse.SoundClass(Tile(false, false, 1)));

@@ -23,6 +23,8 @@ public partial class TerrainViewerApp
     private AreaInventoryPanel? _inventoryPanel;
     // ARC-SKILLS-005: the hero's kit healing items from its load (null without --hero).
     private IReadOnlyList<SessionHealingItem?>? _areaKitHealing;
+    // ARC-COMBAT-008: the kit's durability values for the attack's wear.
+    private IReadOnlyList<SessionWearItem?>? _areaKitDurability;
     // A pickup or loot clicked from too far: the click route walks within reach first, then the same action runs once.
     private (AreaObjectKey Key, AreaInventoryTargetKind Kind)? _inventoryAfterRoute;
     private (GameSessionOwner Session, long Revision, int Map)? _inventoryHiddenStamp;
@@ -82,6 +84,8 @@ public partial class TerrainViewerApp
         {
             _inventoryHiddenStamp = stamp;
             _inventoryHidden = _inventoryHost!.Taken(_areaSession, CurrentAreaMap);
+            // ARC-COMBAT-008: the objects an attack destroyed or switched off are not drawn either.
+            if (ObjectTargets()?.Gone(_areaSession) is { Count: > 0 } gone) _inventoryHidden = _inventoryHidden.Concat(gone).ToHashSet();
         }
         if (!ReferenceEquals(_canvas.AreaHidden, _inventoryHidden)) _canvas.SetAreaHidden(_inventoryHidden);
     }

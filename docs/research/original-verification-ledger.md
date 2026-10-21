@@ -1617,6 +1617,24 @@ difficulty switch (0x4C8E38) and UI hooks (0x5FC1EC, 0x5E86F4).
 | HL4 | record heal applier (0x4B58C0) | Critters only. Bit 0x1000 without 0x1 first removes five cause-7 effects. A dead critter is healed only with the raise bit 0x2 (reanimation with 0x400000), refused by the critter flags 0x1000000 or 0x800000 or its raise script; a raise clears the stun, sets fatigue damage to 10 and lifts a PC healer's reaction below 70 to 70. Then a full heal (0x1) takes all hit-point damage (and all fatigue damage when a fatigue amount is given), five cause-7 effects and every injury flag; otherwise bit 0x200 clears blinded, 0x400 both arm flags, 0x800 crippled legs. The hit-point, fatigue (with the wake-up when it crosses 0) and poison amounts fall to at least 0. A heal record from the skill sets only the hit-point amount. | Original (agrees with `LifeRules.Heal`; network, raise script, art reset, AI and reaction side effects are the host's) |
 | HL5 | refusals of a heal | None for a target at full hit points (the use and its item still go), an undead or mechanical target, or the user itself. The heal check's difficulty reads only the healer's blindness and crippled arms and the healing item's bonus (impossible without one). | Original |
 
+## Skills page (ARC-UI-009)
+
+Source: the character sheet's [skills page](../rendering/terrain-viewer.md#skills-page-arc-ui-009), task S6 of the
+[skills plan](skills-plan.md). Read on 2026-10-21 by two independent readers that saw only the questions (method step 6) and a
+first outline of 0x55BD10/0x55BF20; they agree on every row. The + and − rules themselves are CP2–CP7 (ARC-WORLD-052), the key
+stat and its cap SR7, the skill module's texts SR12.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SP1 | skills page (0x55BD10), editor open (0x5597C0) | The page shows one of four groups of four skills, chosen by four tabs: groups 0..2 the basic skills 0..3, 4..7 and 8..11, group 3 the tech skills 0..3 (row table 0x5C82F0, 16 bytes a row). The group last shown is kept and shown at the next open (initially 0). All 32 + and − buttons are hidden, then the current group's are shown unless the editor opened in mode 2 (the view-only sheet the other callers open; it also hides the stat buttons). | Original |
+| SP2 | skills page (0x55BD10) | Each row draws the skill's name and, right after it, its training name in brackets (string table 0x64CA74 indexed by the training 0..3, format with a leading space); nothing for no training. Names and training texts are drawn only at the open and on a tab press, not on a refresh. The level is never printed as a number. | Original |
+| SP3 | skill bars (0x55BF20), editor refresh (0x55B150) | Each row's bar is the bar art's width × effective level / 20 (truncated), none at level 0; the refresh redraws the bars after every change. The point cost (0x4C64B0, 0x4C6AF0) is computed for each row and not used. No colour changes with the skill. | Original (the unused cost call has no effect) |
+| SP4 | skill buttons (0x55D3A0 basic, 0x55D6F0 tech) | + calls the skill + (0x57ACD0) with the skill (tech + 12); − first compares the points with the editor's snapshot and at it shows the floor message (charedit.mes 23), otherwise calls the skill − (0x57AEB0). A network client sends a packet instead. | Original |
+| SP5 | hover hint (0x55D3A0, 0x55D6F0, 0x55AE70, text bar case 7 at 0x552DBD) | Over a row, its + or its −, the text bar shows the skill's name, its description and, unless 0, the key stat's name (intgame.mes 28 + stat) with the minimum key stat for the next point, `MinimumKeyStat(4 × points + 4)` of the raw points. Over a tab it shows charedit.mes 135..138. A hint waits 3 s after a refusal message. | Original |
+| SP6 | skill module init (0x4C5BD0), text getters (0x4C62B0, 0x4C69A0, 0x4C69D0, 0x4C62C0, 0x4C69B0) | `mes\skill.mes` loads at the skill module's init (SR12, before a module mounts): names 0..11 and 12..15, training names 16..19, descriptions 20..31 and 32..35; each getter returns the stored text of its number. | Original |
+| SP7 | refusal messages (0x57ACD0, 0x57AEB0 and the editor's message helpers 0x55F160..0x55F340) | Shown only for the player while the editor is open: + without enough points charedit.mes 18, at level 20 message 21, a key stat too low one message per stat (22 by default); − without points 24, another failure 25; the page's floor refusal 23. Each refusal message plays sound 3004; a successful + or − plays none and clears the text bar. | Original |
+| SP8 | tech hover exit (0x55D6F0) | The pointer-leave test of the tech buttons loops over 12 entries instead of 4, past the tech entries. A match only clears the hint. | Original (a harmless bug of the game; no switch) |
+
 ## Companion orders and loyalty (ARC-RES-064)
 
 Source: [companion orders and loyalty](companion-orders-loyalty-evidence.md) (questions Q1–Q7), re-reading the F0 rows C11–C14
@@ -1807,6 +1825,45 @@ Anomalies (none needs a switch; the owner may still ask for one under D8):
 - CWA2 (CW2, CW7): an invulnerable item is spared only by the critical weapon effects; armour wear and weapon wear ignore the flag. In the original; kept in both settings (a consistent rule, not a defect).
 - CWA3 (CW8, CW9): weapon wear runs after a critter target died but not after an object target broke. In the original; kept.
 - CWA4 (CW3): after "damage weapon" deletes an already broken weapon (its second break), the destroy, explode and drop bits still act on the deleted handle. The no-crash rule applies: Steamwoven skips an item that a step of the same wear deleted, in both settings.
+
+## Object damage (ARC-COMBAT-008)
+
+Source: the [object damage runtime](../world/object-damage-runtime.md). Question: what does the original's attack do to a
+non-critter object (the object branch of the damage step 0x4B4390, the break 0x43F1C0 and its callees)? Read on 2026-10-21
+by this task and, independently, by a fresh agent that saw only the questions and the project's records of the callees (method
+step 6). Both agree on every row; OD1–OD12 are F2; OD13 (found while answering the review) and OD14 (read for the viewer, part 2) have one reading each (F1). Every direct branch stays inside `.text`. The second reader saw one summary
+line of the new `ObjectDamageRules` while searching for the door/window meaning of portal ART bit 10 (which comes from the
+project's portal naming, not this reading); its reading of 0x4F06E0 rests on the listing and agrees with LK12, already F2.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| OD1 | damage step (0x4B4390), gates | The taking-damage script (point 0x17) runs for every target, objects included (skipped while a nested damage step runs); then a destroyed or invulnerable object (object flags 0x400001) and a wall (type 0) take nothing. The "off" flag 0x2 is not tested. Every other type continues: portals, containers, scenery, projectiles, items, traps. | Original |
+| OD2 | 0x4B4390, the amount | The critical procedure does nothing unless both sides are critters. Resistance (0x4B6860) uses, for an object, its stored resistance array (field 31) clamped 0..95 (0x43D6D0's non-critter path, 0x43D810), per type as for critters. The amount is normal + electrical + fire (the current HP for the full-damage flags), a PC attacker's ×1.5 easy / −¼ hard, then the multiplier bits (absent for objects). | Original |
+| OD3 | 0x4B4390, material and write | Portals and containers only subtract their material's value (table 0x5B57BC: stone, brick, metal, force 10; wood 5; others 0); a negative amount is 0; a positive one marks the step as damaging; the damage grows by it through the setter. With the floating-text setting at 2, message 1 shows the amount, 0 included, over the object. | Original |
+| OD4 | 0x4B4390, at 0 HP | In order: when the trap test (0x4BBDD0) finds a trap, the trap trigger (0x4BCB00) runs with the attacker as triggerer, none for a ranged attack (context flag 0x200); then the break (0x43F1C0) with the attacker as breaker; then the witnesses of the attack's PC hear of a broken object (0x4AEE50 with 0). | Original |
+| OD5 | 0x4B4390, still whole | The witnesses hear of the attack (0x4AEE50 with 1: reaction −20, then possible hostility; NPCs within 10 tiles that guard the container's or portal's faction field), then the attacker's weapon wear (0x4B5580, CW5–CW9). | Original |
+| OD6 | trap test and trigger (0x4BBDD0, 0x4BCB00) | A trap is the object's script at attachment point 1 whose header carries flag 0x1 or 0x2. The trigger runs that script with the given triggerer and the object as attachee; built-in trap scripts 30000..30006 cast a spell or build attacks in a radius from the header flags; a header flag 0x4 clears the script only in a local copy. | Original |
+| OD7 | break (0x43F1C0), start and dispatch | Returns for a destroyed object (flag 0x1); stops the object's animation goals (0x424070, priority 5); dispatches by type (tables 0x43F5D4, 0x43F5B8): wall 0x4E1490 (not reached from the damage step), portal 0x4F06E0, container, scenery, items 5..14, trap; projectiles and critters return at once. Scenery, traps and items end with the sound (0x41B930) and clear render bits 0x0B000000. | Original |
+| OD8 | 0x43F1C0, portal (0x4F06E0) | As LK12: a door (portal ART bit 10 set) has no busted ART and is destroyed; a window takes its busted ART (bit 0x200, frame 0), the busted bit 0x80 and its BUST script (point 30) with the breaker. The damage is kept, so a busted window breaks again on every later hit. The misc sound of a portal is none. | Original |
+| OD9 | 0x43F1C0, container | A junk pile (prototype 3023) has its damage set to 0, nothing else. Another container first generates its inventory from its inventory source when it has the source flag (container flag 0x200) and generation is on, then drops every item at its location (last first, 0x463730 with 1), is destroyed, and eye candy 1203 plays on the first container or item at that location (object list 0x4407C0 with mask 0x7FE4). No sound. | Original |
+| OD10 | 0x43F1C0, scenery; respawn (0x43F5F0) | Respawning scenery (scenery flag 0x20): BUST script, scenery flag 0x400, object flag 0x2 (off), damage 0, and a Scenery Respawn event (kind 33) after field 71 × 8,000 ms when positive, its magnitude × 60,000 ms when negative, 1 day + 1 ms at 0; the event clears 0x400 and the off flag. Other scenery: already busted (flag 0x2) is destroyed (sound 1); otherwise it takes the ART of field 25 when not −1, its damage becomes its maximum, flag 0x2, object flag 0x400000 (invulnerable), sound 0 and its BUST script. | Original |
+| OD11 | 0x43F1C0, trap | Field 25 = −1 or trap flag 0x2 already set: destroyed (sound 1). Otherwise the ART of field 25, damage 0, trap flag 0x2, sound 0, BUST script. | Original |
+| OD12 | 0x43F1C0, items | As DU4: an item whose art carries the destroyed bit is deleted (sound 1); otherwise both arts take the bit, damage 0, the item leaves a wear slot (or drops), sound 0 and its BUST script. | Original (confirms DU4) |
+| OD13 | drop (0x466E50, 0x466EF0), read by this task only (F1) | A dropped item joins a junk pile (prototype 3023) already at the location; else, when items lie there, a new junk pile is created and those items and the dropped one go into it; else it lies loose. Each drop schedules the item's decay two game days later (0x468090). So a container spilling two or more items leaves them in a junk pile. | Original; the session lays spilled items loose (a recorded difference in the [object damage runtime](../world/object-damage-runtime.md#differences-from-the-original)) |
+| OD14 | object click (0x54ED30), combat mode, read by this task only (F1) | In combat mode the click's goal follows the target's type (byte table 0x54FCA0): a wall, portal or scenery gets the attack goal (Shift: attempt attack) only with left or right Alt held, else the use goal; a container with Alt the attack goal, else the use-container goal; an item the pick-up goal; a trap a walk to its location; critters as FA1–FA3. | Original; the viewer attacks objects only with Alt (ARC-COMBAT-008 part 2) |
+
+Anomalies (none needs a switch):
+
+- ODA1 (OD1): a respawning scenery while off is still damaged in the original. The player cannot click an object that is off, so
+  the session refuses the hero's attack on it (`ObjectUnavailable`); area damage, which could reach it, is not modelled.
+- ODA2 (OD10): a busted scenery is invulnerable, so its "already busted" destroy branch is unreachable from an attack; kept.
+- ODA3 (OD8): a busted window is never destroyed and breaks again (BUST script, trap, witnesses) on every later hit; kept in both
+  settings (the original's behaviour; reported to the host each time).
+- ODA4 (OD4, OD6): a ranged break fires a trap with no triggerer; the session's attack is melee only, so it does not arise.
+- ODA5 (OD3): the full-damage flags lose to the material reduction and the difficulty; no caller of the session sets them.
+- ODA6 (OD13): the session lays a spilled container's items loose instead of in a junk pile and models no item decay; a
+  difference of the inventory owner, not a switch (the pile and decay come with dropping items, which the inventory does not
+  model yet).
 
 ## Reading window (ARC-UI-049)
 

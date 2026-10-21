@@ -126,6 +126,16 @@ object check (`ISessionScriptWorld`) lets it run while the session records the o
 as a call (set no later than the saved clock, exactly an hour or a day before its deadline) and refuses one whose object
 has no recorded lock state. See [lock state](lock-state-runtime.md).
 
+**Respawn events (ARC-COMBAT-008).** The kind `object.respawn` (also added to registry version 1 without a new version) is
+the original's Scenery Respawn event (kind 33, ledger OD10): game time, saved, scoped to the scenery's map, any number, at
+most `SessionEventKinds.MaxObjectRespawns` (1,024) on top of the others. One entity, the scenery; values: the game time it was
+set at and its delay (from the scenery's respawn field: seconds × 8,000 ms, game minutes, or 1 day + 1 ms). An attack that
+breaks a respawning scenery sets it; when due it switches the scenery on again (its `object.condition` change removed), one
+revision, and `SessionEventPassResult.Respawns` reports it. A host without an object check lets it run while the session
+records the scenery off; a host whose `ISessionScriptWorld.ObjectExists` answers false for an object that is off drops it, and
+the scenery stays off. A restore refuses one whose scenery is not recorded off, set after the saved clock, with a delay below
+1 ms or above `MaxRespawnDelayMs`, or whose deadline is not its time plus its delay. See [object damage](object-damage-runtime.md).
+
 **Wait timers (ARC-WORLD-045).** The kind `party.wait` (also added to registry version 1 without a new version) is the
 original's wait event (kind 17, OL23–OL26): game time, saved, scoped to the waiting NPC's map, one per NPC, at most
 `SessionEventKinds.MaxWaitTimers` (64, one per recorded companion) on top of the others. One entity, the NPC; values: the game
