@@ -216,6 +216,8 @@ public enum GameSessionFailure
     InvalidObject, ObjectUnavailable,
     // Pick locks (ARC-SKILLS-006).
     PickLockUnavailable, InvalidLockpick,
+    // Repair (ARC-SKILLS-007).
+    RepairUnavailable,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -371,8 +373,9 @@ public sealed class GameSessionSnapshot
     /// (ARC-WORLD-045); schema 28 adds the PC's known world-map areas and last discovered area to the story (ARC-WORLD-056).
     /// Schema 29 adds the made items added to NPCs to <see cref="Inventory"/> (ARC-WORLD-055); schema 30 adds the PC's reputations to
     /// the story (ARC-WORLD-044); schema 31 adds the items' remaining uses to <see cref="Durability"/> (ARC-SKILLS-005); schema 32 adds
-    /// the hero's items placed on the ground to <see cref="Inventory"/> (ARC-WORLD-059). Schemas 1..31 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 32;
+    /// the hero's items placed on the ground to <see cref="Inventory"/> (ARC-WORLD-059); schema 33 adds the waiting followers' missed
+    /// level steps to <see cref="Advancement"/> (ARC-WORLD-047). Schemas 1..32 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 33;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

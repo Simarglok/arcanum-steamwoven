@@ -27,7 +27,7 @@ public sealed record AreaObjectAttackTarget(string Entity, AreaObjectRecord Row,
 /// and <see cref="SessionObjectFacts"/>), and the items lying on its ground (<see cref="SessionWearItem"/>,
 /// <see cref="SessionObjectFacts.ItemFacts"/>). A container's entity is its inventory holder's, so its spill reaches the
 /// holder's items; a portal's is the lock domain's; any other static object's is <see cref="AreaUseScriptHost.EntityId"/>. Whether
-/// an object's use script is a trap is not read (the viewer runs no trap). It also names the objects the session destroyed or
+/// an object's use script is a trap is the caller's (<see cref="AreaUseScriptHost.IsTrap"/>, ARC-COMBAT-011). It also names the objects the session destroyed or
 /// switched off, which the view no longer draws.
 /// </summary>
 public sealed class AreaObjectTargets
@@ -83,8 +83,9 @@ public sealed class AreaObjectTargets
     public int Count => _objects.Count;
 
     /// <summary>The attackable object drawn as <paramref name="key"/>, or null for anything else (an NPC, a wall, an object the session
-    /// destroyed or switched off, an item no longer on the ground).</summary>
-    public AreaObjectAttackTarget? Target(GameSessionOwner session, AreaObjectKey key)
+    /// destroyed or switched off, an item no longer on the ground). <paramref name="trapped"/> says whether a row's use script is a
+    /// trap (ARC-COMBAT-011); without it none is.</summary>
+    public AreaObjectAttackTarget? Target(GameSessionOwner session, AreaObjectKey key, Func<AreaObjectRecord, bool>? trapped = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         if (_objects.TryGetValue(key, out var found))
@@ -101,7 +102,7 @@ public sealed class AreaObjectTargets
                     fields.Object.Prototype == SessionObjectFacts.JunkPilePrototypeFile),
                 _ => null,
             };
-            return SessionObjectFacts.FromCombatFields(fields, cell, openable) is { } baseline
+            return SessionObjectFacts.FromCombatFields(fields, cell, openable, trapped?.Invoke(found.Row) == true) is { } baseline
                 ? new(found.Entity, found.Row, found.Kind, new(_map, found.Entity, baseline), null, null, null)
                 : new(found.Entity, found.Row, found.Kind, null, null, null, "values outside the damage rules' bounds");
         }
@@ -109,7 +110,7 @@ public sealed class AreaObjectTargets
         if (_inventory is null || !_inventory.TryGetEntity(key, out var item) || !_inventory.TryGetRow(item, out var row)) return null;
         if (session.QueryMapInventory(_map)?.Ground.Any(g => g.Item.Entity == item) != true) return null;
         if (CombatFieldReader.Read(row).Fields is not { } itemFields) return new(item, row, DamageableObjectKind.Item, null, null, null, "item fields do not read");
-        return SessionWearItem.FromCombatFields(item, itemFields) is { } wear && SessionObjectFacts.ItemFacts(itemFields) is { } facts
+        return SessionWearItem.FromCombatFields(item, itemFields) is { } wear && SessionObjectFacts.ItemFacts(itemFields, trapped?.Invoke(row) == true) is { } facts
             ? new(item, row, DamageableObjectKind.Item, null, wear, facts, null)
             : new(item, row, DamageableObjectKind.Item, null, null, null, "values outside the durability bounds");
     }
@@ -131,14 +132,15 @@ public sealed class AreaObjectTargets
         if (resolution.Refusal != AttackRefusal.None) return $"attack: {resolution.Refusal}";
         if (resolution.Damage is { Prevented: not DamagePrevention.None } prevented) return $"hit: no damage ({prevented.Prevented})";
         if (result.Life is { } life) return $"critical miss: the hero takes {life.HitPointDamage} damage";
+        var trap = result.Host.HasFlag(SessionObjectHostSteps.TrapFires) ? " — its trap would fire (traps do not run in the viewer)" : "";
         if (result.Object is { } hit)
-            return hit.Broken ? $"hit: {hit.Damage - hit.DamageBefore} damage, {Broke(hit.Break)}" : $"hit: {hit.Damage - hit.DamageBefore} damage";
+            return (hit.Broken ? $"hit: {hit.Damage - hit.DamageBefore} damage, {Broke(hit.Break)}" : $"hit: {hit.Damage - hit.DamageBefore} damage") + trap;
         if (result.Item is { } item) return item.Break switch
         {
             Arcanum.Simulation.Items.ItemBreakStep.Broken => "hit: the item breaks",
             Arcanum.Simulation.Items.ItemBreakStep.Deleted => "hit: the item is destroyed",
             _ => $"hit: the item has {item.Condition?.HitPoints} hit points left",
-        };
+        } + trap;
         return "attack: no damage";
     }
 

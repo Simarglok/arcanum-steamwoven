@@ -227,7 +227,8 @@ command). A placed item stays taken, so its seed never shows it at its seed posi
 (`MaxPcItems`), so it can always come back. `QueryMapInventory` lists the map's placed items after the NPC drops.
 
 - **Placing** (internal, the hero's critical drops of [ARC-COMBAT-009](hero-attack-runtime.md#critical-effects-arc-combat-009):
-  `DropHelmet`, `DropWeapon` and the arm-hit drops): the item leaves its wear slot and its list and lies at the hero's cell
+  `DropHelmet`, `DropWeapon` and the arm-hit drops): the item leaves its wear slot and its list and lies on the tile the
+  [drop cell](#drop-cell-arc-combat-010) chooses, or at the hero's cell when the host passes no map
   (`SessionCriticalStepOutcome.Dropped`). One revision. A no-drop item is refused, as in the original (PI1); an item an earlier
   step of the same attack broke has already left its slot (`NoItem`); a made item's number is never handed out again while it lies
   on the ground.
@@ -248,7 +249,6 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 
 **Not ready (the original's behaviour, PI1–PI6).**
 
-- The placement 2..4 cells away with its draws (ARC-COMBAT-010): the item lies on the hero's cell and the generator does not draw.
 - The 48-hour Item Decay (PI4): the original destroys an item lying on the ground or in a junk pile 48 game hours after it was
   dropped (unless its item flag 0x20000 is set; a container open in the loot window delays it by a minute); placed items, NPC drops
   and spilled containers' items stay. A follow-up task.
@@ -262,7 +262,43 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 - The viewer draws no placed item and cannot click one (ARC-RENDER-033); NPC made items (ARC-WORLD-055) and the junk pile of OD13
   can use this store later.
 
+## Drop cell (ARC-COMBAT-010)
+
+Where a dropped item lands, read in the executable first ([ledger "Drop cell"](../research/original-verification-ledger.md#drop-cell-arc-combat-010),
+DC1–DC8, with CR14). `DropPlacementRules` (Simulation) is the drop's draws and tries: `Distance` draws 2..4 (0x461A90), `Place` makes
+up to ten tries of 0x4F4E40, each with a direction draw 0..8 (8 stays), over an injected `IDropMap`: the original's step
+(0x4B8FF0), its path request with the drop's flags (0x41F3C0, flags 0x10) for a `DropOwner` (an object, the PC side, or an NPC on
+its own; the trap rule tells them apart) and its PC-or-NPC test on a tile (0x4407C0, the dead included).
+
+**Session.** A critical drop (`SessionAttack.DropMap`, `SessionObjectAttack.DropMap`) with a map draws the distance from the
+session generator before the drop's refusals (the drop script, the no-drop flag), then the tries after them; the generator's
+exhaustion is `RandomExhausted`. The hero, and an NPC following it, are the PC side; any other NPC is an NPC on its own. The hero's
+item joins its placed items on that tile; an NPC's seed item is the `item.dropped` map change at that tile. Without a map the item
+lands on its holder's cell and nothing is drawn (a host without one).
+
+**Viewer port.** `AreaDropMap` (viewer Core) is the AREA viewer's map for the hero's attacks on NPCs and objects
+(`AreaDropMapNow`): the path's gate on the target's tile, the direct attempt and the 64 × 64 search exactly as read, with the
+step tests of the shown map's T0 step evidence (built on the same tile and traversal functions) and the doors' runtime passage;
+critters never block a step (mode 4), and an object with flag 0x400 does not close the target's tile; containers and scenery the session destroyed or switched off no longer block; a trap's
+flags come from its map data (slot 36). PCs and NPCs on a tile are the map's critter records that have not moved, dead or alive,
+plus the hero's and the companions' live cells.
+
+**Not ready.**
+
+- The NPC search budget per real second (DCA2): the session never runs out of it.
+- The map's bounds are the step evidence the viewer holds (the exterior's nine sectors, the cave); a tile or step the evidence
+  cannot settle is treated as blocked (DCA3).
+- A generator that runs out during the tries (after about 2^63 draws) leaves the distance draw made and the item where it was
+  (`RandomExhausted`); the drop's draws are not taken on trial.
+- The viewer still draws no dropped item (ARC-RENDER-033).
+
 ## Evidence
+
+- Synthetic (ARC-COMBAT-010): [DropPlacementRulesTests](../../tests/Arcanum.Simulation.Tests/Items/DropPlacementRulesTests.cs)
+  (the distance, the critter test of the walk, no path, a long path, the direct attempt's partial count, tries off the map,
+  direction 8), [AreaDropMapTests](../../tests/Arcanum.TerrainViewer.Tests/AreaDropMapTests.cs) (rotation and step tables,
+  the direct attempt, the target's gate, the search round a container, traps by owner, a window, critters on a tile) and the
+  session's drops through a map in [CriticalEffectsStateTests](../../tests/Arcanum.Session.Tests/CriticalEffectsStateTests.cs).
 
 - Synthetic (ARC-WORLD-059): [PlacedItemsStateTests](../../tests/Arcanum.Session.Tests/PlacedItemsStateTests.cs) (placing a kit and a
   taken item, the view, another map, the insert check, the kit's order on return, save and restore, the attach check, deletion, codec and

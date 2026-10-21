@@ -91,6 +91,7 @@ Owner decision 2026-10-20: every difference is documented. This slice adds no ru
 
 ## Not ready
 
-- No caller in the viewer: the character sheet's spell page and its learn and unlearn buttons are MT19; the script actions
-  (`knows_spell`, give mastery) are MT21; the AI's use of the book is slice I8.
+- The viewer's caller is the character sheet's spells page (ARC-MAGIC-008, MT19,
+  [viewer](../rendering/terrain-viewer.md#spells-page-arc-magic-008)): its + and − learn and unlearn through the pool, and a
+  refusal names the failing check. The script actions (`knows_spell`, give mastery) are MT21; the AI's use of the book is slice I8.
 - The spell bar and the maintained spells of an unlearned rank are MT20.
