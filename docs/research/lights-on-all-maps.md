@@ -104,7 +104,7 @@ A light whose ART has more than one frame animates (LT6):
 
 `art/light/light.mes` names 28 light ARTs; 7 have more than one frame (5, 6, 8 or 15 frames, at 5 or 8 frames per
 second). The viewer refused an animated light ART, which left one interior unlit; since ARC-DATA-039 it is read with all
-its frames and its frame 0 is drawn.
+its frames, and since ARC-RENDER-031 it animates.
 
 ## Flags the original reads
 

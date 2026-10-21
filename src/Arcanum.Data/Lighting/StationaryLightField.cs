@@ -103,10 +103,12 @@ public sealed class StationaryLightField
             var light = _placements[index].Light;
             var art = Source.Frames[light.ArtNumber];
             var frames = art.Frames;
+            // A rate above 1,000 frames per second steps every 1 ms (the original's delay would be 0; none is installed).
+            if (art.FramesPerSecond <= 0) throw new InvalidOperationException("LIGHT_ANIMATION_RATE");
             var steps = animationMs / Math.Max(1, 1000 / art.FramesPerSecond);
             long cycleX = frames.Sum(f => (long)f.StepX), cycleY = frames.Sum(f => (long)f.StepY);
             var cycles = steps / frames.Count; var rest = (int)(steps % frames.Count);
-            long x = light.OffsetX + cycles * cycleX, y = light.OffsetY + cycles * cycleY;
+            long x = checked(light.OffsetX + cycles * cycleX), y = checked(light.OffsetY + cycles * cycleY);
             for (var j = 1; j <= rest; j++) { var f = frames[(light.Frame + j) % frames.Count]; x += f.StepX; y += f.StepY; }
             poses[index] = new((int)((light.Frame + steps) % frames.Count), checked((int)x), checked((int)y));
         }

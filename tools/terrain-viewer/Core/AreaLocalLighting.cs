@@ -61,7 +61,8 @@ public sealed class AreaLocalLighting
     }
 
     /// <summary>ARC-RENDER-031: this lighting with its animated lights where they stand after <paramref name="animationMs"/>
-    /// (<see cref="StationaryLightField.PosesAt"/>); this one when nothing animates.</summary>
+    /// (<see cref="StationaryLightField.PosesAt"/>); this one when nothing animates. Take <see cref="AtHour"/> first: a posed
+    /// view keeps no day form.</summary>
     public AreaLocalLighting AtAnimation(long animationMs) => Field.Animated.Count == 0 ? this : new(this, Field.PosesAt(animationMs));
 
     /// <summary>The animated lights' poses as a comparable key (empty when nothing animates).</summary>
