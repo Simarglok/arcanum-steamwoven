@@ -3,11 +3,12 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-/// <summary>Separate WORLD camera preference, never shared input/lab settings.</summary>
+/// <summary>Separate WORLD camera preference, never shared input/lab settings. An automated run without the test path uses its own
+/// isolated file (ARC-DEV-032, <see cref="ViewerAutomatedStorage"/>), never the player's.</summary>
 public sealed class DiagnosticZoomSettingsStore
 {
-    private static string StoragePath => string.IsNullOrWhiteSpace(OS.GetEnvironment("WORLD_DIAGNOSTIC_ZOOM_TEST_PATH"))
-        ? "user://world_diagnostic_zoom_v1.json" : OS.GetEnvironment("WORLD_DIAGNOSTIC_ZOOM_TEST_PATH");
+    public const string UserPath = "user://world_diagnostic_zoom_v1.json";
+    internal static string StoragePath => ViewerAutomatedStorage.Path(OS.GetEnvironment("WORLD_DIAGNOSTIC_ZOOM_TEST_PATH"), UserPath);
     public bool UsesIsolatedTestStorage => !string.IsNullOrWhiteSpace(OS.GetEnvironment("WORLD_DIAGNOSTIC_ZOOM_TEST_PATH"));
     public double Load()
     {

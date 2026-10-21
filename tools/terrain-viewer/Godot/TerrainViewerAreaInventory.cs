@@ -215,7 +215,7 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-004 loot-all-item disposition={result.Disposition} failure={result.Failure}{InsertScriptLog(result)}");
             // One pickup sound for the whole take (the first item's), not one voice per item in the same frame.
             if (result.Disposition == GameSessionDisposition.Changed) { if (taken++ == 0) PlayTakenItemSound(line.Entity); printed.Append(AreaInventoryHost.Printed(result)); }
-            else refused.Add($"{_inventoryHost.Name(line.Entity, _hoverNames?.Catalog)}: {AreaInventoryHost.Refusal(result.Failure)}");
+            else refused.Add($"{line.Text}: {AreaInventoryHost.Refusal(result.Failure)}");
         }
         var message = $"took {taken} item(s){printed}" + (refused.Count == 0 ? string.Empty : "; not taken: " + string.Join("; ", refused));
         GD.Print($"ARC-UI-004 loot-all taken={taken} refused={refused.Count} pc={_areaSession!.QueryPcInventory().Count}");
