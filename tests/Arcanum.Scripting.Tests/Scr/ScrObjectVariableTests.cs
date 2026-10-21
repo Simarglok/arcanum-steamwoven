@@ -25,7 +25,8 @@ public sealed class ScrObjectVariableTests
         public ScrScriptLookup Script(int number) => Inner.Script(number);
         public bool GlobalFlag(int index) => Inner.GlobalFlag(index);
         public int StoryState() => Inner.StoryState();
-        public bool IsMonsterGenerator(ScrObjectRef attachee) => Inner.IsMonsterGenerator(attachee);
+        public HashSet<ScrObjectRef> Generators { get; } = new();
+        public bool IsMonsterGenerator(ScrObjectRef attachee) => Generators.Contains(attachee) || Inner.IsMonsterGenerator(attachee);
         public ScrDialogState DialogState(ScrObjectRef attachee) => Inner.DialogState(attachee);
         public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => Inner.CheckTrapBeforeUse(triggerer, attachee);
         public bool IsTrapObject(ScrObjectRef attachee) => Inner.IsTrapObject(attachee);
@@ -157,10 +158,62 @@ public sealed class ScrObjectVariableTests
         Assert.AreEqual((ScrOutcome.Refused, 601, ScrRefusalCode.ActionNotAdmitted), (refused.Outcome, refused.Script, refused.Refusal!.Code));
         Assert.AreSame(ScrEffects.None, refused.Effects);
 
-        // 602 sets a flag and calls itself: the bound ends the whole dispatch with nothing applied.
+        // 601 sets a flag and calls itself: the bound ends the whole dispatch with nothing applied.
         host.Inner.Scripts[601] = ScrScriptLookup.Of(Program(Do(C(100, N(30))), Do(C(7, N(601), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(1))));
         var deep = Use(host, S11 with { MaxCallDepth = 4 });
         Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.CallDepth), (deep.Outcome, deep.Stop));
         Assert.AreSame(ScrEffects.None, deep.Effects);
+    }
+    [TestMethod]
+    public void Callee_gates_stops_and_refusals_cross_the_levels_as_specified()
+    {
+        var host = With(Program(Do(C(7, N(610), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(100, N(9))), Do(C(1))));
+        // A callee that stops on an absent object ends only itself; its earlier flag write stays, the caller goes on.
+        host.Inner.Scripts[610] = ScrScriptLookup.Of(Program(Do(C(100, N(40))), Do(C(83, N(1), (Extra, 0))), Do(C(34, (Extra, 0), Var(0))), Do(C(100, N(41)))));
+        var contained = Use(host);
+        CollectionAssert.AreEqual(new[] { 9, 40 }, contained.Effects.GlobalFlags.Select(f => f.Index).ToArray());
+
+        // A trap callee (30000..30006 with a trap flag) and a monster-generator attachee run nothing.
+        var generator = With(Program(Do(C(7, N(610), N(0), (Attachee, 0), (Triggerer, 0))), Do(C(100, N(9))), Do(C(1))));
+        generator.Inner.Scripts[610] = ScrScriptLookup.Of(Program(Do(C(100, N(40)))));
+        generator.Generators.Add(Pc);
+        Assert.AreEqual(9, Use(generator).Effects.GlobalFlags.Single().Index);
+        var trap = With(Program(Do(C(7, N(30001), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(100, N(9))), Do(C(1))));
+        trap.Inner.Scripts[30001] = ScrScriptLookup.Of(Program(ScrCatalogue.FileFlag.NonmagicalTrap, Do(C(100, N(40)))));
+        Assert.AreEqual(9, Use(trap).Effects.GlobalFlags.Single().Index);
+
+        // An unreadable callee ends the dispatch, nothing applied, no refusal.
+        host.Inner.Scripts[610] = ScrScriptLookup.Unreadable;
+        var unreadable = Use(host);
+        Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.UnreadableScript, (ScrRefusal?)null), (unreadable.Outcome, unreadable.Stop, unreadable.Refusal));
+        Assert.AreSame(ScrEffects.None, unreadable.Effects);
+
+        // A refusal two levels down crosses the middle level; a dialog action in a callee is refused at its line.
+        host.Inner.Scripts[610] = ScrScriptLookup.Of(Program(Do(C(100, N(40))), Do(C(7, N(611), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(1))));
+        host.Inner.Scripts[611] = ScrScriptLookup.Of(Program(Do(C(100, N(41))), Do(C(FloatLine))));
+        var deep = Use(host);
+        Assert.AreEqual((ScrOutcome.Refused, 611, ScrRefusalCode.ActionNotAdmitted, 1), (deep.Outcome, deep.Script, deep.Refusal!.Code, deep.Refusal.Line));
+        host.Inner.Scripts[611] = ScrScriptLookup.Of(Program(Do(C(100, N(41))), Do(C(ScrCatalogue.Action.Dialog, (Attachee, 0), N(5)))));
+        var talk = Use(host);
+        Assert.AreEqual((ScrOutcome.Refused, ScrCatalogue.Action.Dialog, 1), (talk.Outcome, talk.Refusal!.Type, talk.Refusal.Line));
+    }
+
+    [TestMethod]
+    public void A_callee_shares_story_state_and_keeps_nothing_of_itself_and_loops_are_bounded()
+    {
+        // The callee raises the story state and removes itself; the caller reads the raised state into a variable.
+        var host = With(Program(Do(C(7, N(620), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(42, Var(0))), L(C(ScrCatalogue.Condition.Equal, Var(0), N(7)), C(100, N(9)), C(0)), Do(C(1))));
+        host.Inner.Scripts[620] = ScrScriptLookup.Of(Program(Do(C(43, N(7))), Do(C(5)), Do(C(1))));
+        var run = Use(host);
+        Assert.AreEqual((7, 9), (run.Effects.StoryState, run.Effects.GlobalFlags.Single().Index));
+        Assert.IsNull(run.Effects.Writeback, "the callee's remove this script is not kept");
+
+        // A chain of callees that loop back to their calls is bounded for the whole dispatch.
+        var loop = With(Program(Do(C(7, N(630), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(3, N(0)))));
+        loop.Inner.Scripts[630] = ScrScriptLookup.Of(Program(Do(C(7, N(631), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(3, N(0)))));
+        loop.Inner.Scripts[631] = ScrScriptLookup.Of(Program(Do(C(100, N(50))), Do(C(3, N(0)))));
+        var bounded = Use(loop, S11 with { MaxCallDepth = 3, MaxExecutedLines = 50 });
+        Assert.AreEqual(ScrStop.CallDepth, bounded.Stop);
+        Assert.AreSame(ScrEffects.None, bounded.Effects);
     }
 }

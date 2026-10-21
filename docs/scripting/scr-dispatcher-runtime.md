@@ -369,18 +369,24 @@ variables as a focus kind (11), as the original runs them (ledger [OV1–OV4](..
 - **Call script** runs the script of operand 0 at once from the line of operand 1, with operands 2 and 3 as triggerer and
   attachee, no extra object, the callee's own header flags and counters and fresh variables. It is admitted from that line
   with the caller's set when the call happens. Its effects join the caller's (one global-flag overlay, one list of
-  requests), nothing it changes about itself is kept, its return code is ignored and the caller goes on. A missing callee
-  runs nothing; a trap script is not run; a callee outside the set, or unreadable, refuses the whole dispatch
-  (`Refused`, the callee's refusal); a nesting deeper than `ScrRunOptions.MaxCallDepth` (default 16, the original's
-  bound is its stack) ends it with `CallDepth`, nothing applied. Only single objects are admitted, so a call runs once;
-  the original runs one call per triggerer and attachee pair of two groups.
+  requests), nothing it changes about itself is kept (its remove or change this script included), its return code is
+  ignored and the caller goes on; a callee that stops on an absent object, an index or its line budget ends only itself.
+  A missing callee runs nothing, and so do a trap script and a monster-generator attachee (the runner's gates E4, E5).
+  A callee outside the set refuses the whole dispatch (`Refused`, the callee's refusal), and so does a dialog action in
+  its admitted lines (the original's dialog store for a called run is not read; refused at that line as
+  `ActionNotAdmitted`). An unreadable callee ends the dispatch with `UnreadableScript`, and a nesting deeper than
+  `ScrRunOptions.MaxCallDepth` (default 16, the original's bound is its stack) or more than `MaxCallDepth` ×
+  `MaxExecutedLines` lines in the whole dispatch end it with `CallDepth`; both apply nothing. The result's trace is the
+  top run's. The runner's dialog-point gates (E6) are not applied to a callee, so no host admits call script in a
+  dialog-point run. Only single objects are admitted, so a call runs once; the original runs one call per triggerer and
+  attachee pair of two groups.
 - **Registry**: `ScrInterpreter.Call` marks 0x44B030 (partial); the 15 and 34 cases are in the 0x447220 row.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, a new game's state): map mode's tile scripts that run grow
   from 254 to 644 of 3,012, and a tile of `void-kerghans castle` (script 3070) teleports through a call; the 21 guarded use
   sites keep 9 running and 12 refused (they need loops, call-ex or other conditions).
-- **Hosts**: the viewer's dialog set gains call script, assign object and the object variables
-  ("S3-area-sound-calls-scheme-schematic-reading-objects", no get object type: that host answers no object queries); its
-  use, tile and sector set gains all three ("S4-area-use-reading-objects").
+- **Hosts**: the viewer's dialog set gains assign object and the object variables
+  ("S3-area-sound-calls-scheme-schematic-reading-objects"; no call script, see above, and no get object type: that host
+  answers no object queries); its use, tile and sector set gains all three ("S4-area-use-reading-objects").
 
 ## Checks
 
@@ -453,7 +459,7 @@ variables as a focus kind (11), as the original runs them (ledger [OV1–OV4](..
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
 - The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading-objects": S3 without
-  story state, plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI, the reading actions, call script, assign object and the object variables); since ARC-SCRIPT-015 map mode's use
+  story state, plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI, the reading actions, assign object and the object variables); since ARC-SCRIPT-015 map mode's use
   clicks on guarded use sites run it under "S4-area-use-reading-objects", and since ARC-SCRIPT-017 the tile and sector scripts the player
   enters; heartbeat and combat are later slices.
 - Not in any admitted set yet: focus groups, loops and call-ex, and the world actions other than teleport and

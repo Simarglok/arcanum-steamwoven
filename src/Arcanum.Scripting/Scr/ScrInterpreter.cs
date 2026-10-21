@@ -33,6 +33,8 @@ internal sealed class ScrInterpreter
         public readonly List<ScrReadingRequest> Readings = new();
         public readonly SortedDictionary<int, bool> Flags = new();
         public int? Story, StoryBefore;
+        // Lines executed by every run of the dispatch (a project bound across nested calls).
+        public int Executed;
     }
 
     private readonly Shared _shared;
@@ -96,6 +98,8 @@ internal sealed class ScrInterpreter
                 var action = held ? row.OnTrue : row.OnFalse;
                 var (step, target) = Action(action, line);
                 executed++;
+                // The original bounds each run, not a chain of calls; the project bounds the dispatch as well.
+                if (++_shared.Executed > _options.MaxCallDepth * _options.MaxExecutedLines) throw new CallRefusedStop(null, _number, ScrStop.CallDepth);
                 if (step == Step.Next)
                 {
                     if (line < count - 1) { _trace.Add(new(line, row.Condition.Type, held, action.Type, line + 1)); line++; continue; }
@@ -323,12 +327,23 @@ internal sealed class ScrInterpreter
         if (ScrDispatcher.Unavailable(lookup) is { } unavailable)
         {
             if (unavailable == ScrStop.MissingScript) return;
-            throw new CallRefusedStop(null, script, ScrStop.Refused);
+            throw new CallRefusedStop(null, script, ScrStop.UnreadableScript);
         }
         var program = lookup.Program!;
+        // The runner's gates (E4, E5): a trap script and a monster generator attachee run nothing.
         if (ScrDispatcher.IsTrapScript(script, program)) return;
+        if (attachee is { } generator && _host.IsMonsterGenerator(generator)) return;
         var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
         if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, script, ScrStop.Refused);
+        // A dialog action inside a called script is not modelled (the original's dialog store would write the callee's flags
+        // into its attachee's slot, not read in the executable): the dispatch is refused at that line.
+        foreach (var at in admission.Admitted!.Region)
+        {
+            var row = program.Lines[at];
+            var side = row.OnTrue.Type == ScrCatalogue.Action.Dialog ? ScrClauseSide.OnTrue
+                : row.Condition.Type != ScrCatalogue.Condition.True && row.OnFalse.Type == ScrCatalogue.Action.Dialog ? ScrClauseSide.OnFalse : (ScrClauseSide?)null;
+            if (side is { } dialog) throw new CallRefusedStop(new(at, dialog, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.Dialog), script, ScrStop.Refused);
+        }
         new ScrInterpreter(admission.Admitted!, script, new(script, program.InitialLocalFlags, program.InitialCounters), program.FileFlags,
             new(triggerer, attachee, null), _host, _options, _shared, _depth + 1).Run(line);
     }
