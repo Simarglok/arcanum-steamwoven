@@ -243,6 +243,9 @@ callers in 0x4C7160 and the attack), read them by two readers; the fated repair
 Depends on: S3.
 
 **S8 Heal with bandages and healing items** (first K4 use).
+**Built by ARC-SKILLS-005** (2026-10-21, [contract](../world/heal-runtime.md), ledger
+[HL1–HL5](original-verification-ledger.md#heal-arc-skills-005)): the hero heals any critter with a healing item; the best-follower
+substitution and target choice in the viewer are left out. Snapshot schema 31 (the items' uses).
 Result: the hero (or the best follower) uses a healing item on any living
 critter: the check, healed amount, Master and critical cures, item charges and
 destruction, 4 action points in a round.

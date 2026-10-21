@@ -380,6 +380,10 @@ a follower without them still tries (lockpicks (0x571CB0)).
 
 ### Heal
 
+**Original check (ARC-SKILLS-005):** read in the retail executable by two readers, rows
+[HL1–HL5](original-verification-ledger.md#heal-arc-skills-005); they agree with this reading and add that the cure also
+applies to a dead target, that nothing refuses a full-health, undead or self target, and that the item use charges 4 action points.
+
 (handler (0x4C7160)) Healing = heal level, ×1.5 when trained, at least 1. A
 critical success, or any success by a master, heals the maximum and cures one
 injury effect and the first of blinded, both arms, one arm, both legs crippled;
