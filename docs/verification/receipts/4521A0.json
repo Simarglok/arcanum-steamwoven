@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4521A0",
+  "name": "spell-heal",
+  "method": "Arcanum.Simulation.Magic.SpellDamageRules.Heal",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "976c399bdcb41fa8d19bf7f11d4f35e9cbce143fd75db43237e8b826026b4d69",
+  "configuration": "Debug"
+}

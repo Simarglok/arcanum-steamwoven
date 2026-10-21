@@ -533,6 +533,25 @@ public sealed partial class GameSessionOwner : IDisposable
         return Changed();
     }
 
+    /// <summary>ARC-SCRIPT-019: the game's story-state number (get story state, 0x445090; ledger SS1), 0 at a new game.</summary>
+    [OriginalFunction(0x445090, OriginalFunctionScope.Full)]
+    public int QueryStoryState() { ThrowIfDisposed(); return _story.StoryState; }
+
+    /// <summary>
+    /// ARC-SCRIPT-019: set story state (0x4450A0; ledger SS1): the number only ever rises, so a value at or below the current one
+    /// is NoChange; single player (the network message is not sent).
+    /// </summary>
+    [OriginalFunction(0x4450A0, OriginalFunctionScope.Partial)]
+    public GameSessionMutationResult RaiseStoryState(GameSessionVersion expected, int value)
+    {
+        ThrowIfDisposed();
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        if (value <= _story.StoryState) return NoChange();
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        _story.StoryState = value;
+        return Changed();
+    }
+
     /// <summary>Marks a rumor known at the current session game time; an already known rumor keeps its time.</summary>
     public GameSessionMutationResult LearnRumor(GameSessionVersion expected, int rumor)
     {
@@ -933,14 +952,17 @@ public sealed partial class GameSessionOwner : IDisposable
         return Life(expected, target, true, (state, facts, _) => LifeRules.Kill(state, facts));
     }
 
-    /// <summary>One healing (<see cref="LifeRules.Heal"/>), resurrection included; amounts are 0..1,000,000.</summary>
-    public SessionLifeResult Heal(GameSessionVersion expected, SessionLifeTarget target, LifeHeal heal)
+    /// <summary>One healing (<see cref="LifeRules.Heal"/>), resurrection included; amounts are 0..1,000,000. A raise asks
+    /// <paramref name="raiseScript"/> (the target's raise script, ARC-MAGIC-012's veto port; none allows it). The port is asked while
+    /// the step is computed, before the call's later refusals, so it must answer without side effects and without calling the
+    /// session.</summary>
+    public SessionLifeResult Heal(GameSessionVersion expected, SessionLifeTarget target, LifeHeal heal, Func<bool>? raiseScript = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(heal);
         var valid = heal.HitPoints is >= 0 and <= LifeLimits.MaxAmount && heal.Fatigue is >= 0 and <= LifeLimits.MaxAmount &&
             heal.Poison is >= 0 and <= LifeLimits.MaxAmount;
-        return Life(expected, target, valid, (state, facts, _) => LifeRules.Heal(state, facts, heal));
+        return Life(expected, target, valid, (state, facts, _) => LifeRules.Heal(state, facts, heal, raiseScript));
     }
 
     /// <summary>
@@ -1339,6 +1361,8 @@ public sealed partial class GameSessionOwner : IDisposable
             if (!SessionStoryLimits.IsArea(area) || !story.KnownAreas.Add(area)) return GameSessionFailure.InvalidSnapshot;
         if (saved.LastArea != 0 && !story.KnownAreas.Contains(saved.LastArea)) return GameSessionFailure.InvalidSnapshot;
         story.LastArea = saved.LastArea;
+        if (saved.StoryState < 0) return GameSessionFailure.InvalidSnapshot;
+        story.StoryState = saved.StoryState;
         var reputations = ImportReputations(saved.Reputations, clockMs, story.Reputations);
         if (reputations != GameSessionFailure.None) return reputations;
         foreach (var quest in story.Quests.Values)
@@ -2064,11 +2088,13 @@ internal sealed class Story
     internal int LastArea { get; set; }
     /// <summary>ARC-WORLD-044: the PC's reputations in acquisition order.</summary>
     internal List<SessionReputation> Reputations { get; } = [];
+    /// <summary>ARC-SCRIPT-019: the story-state number (SS1).</summary>
+    internal int StoryState { get; set; }
 
     internal SessionStoryState Capture() => new(
         Quests.Values.OrderBy(quest => quest.Quest).ToArray(),
         GlobalQuests.OrderBy(pair => pair.Key).Select(pair => new SessionGlobalQuest(pair.Key, pair.Value)).ToArray(),
         Rumors.OrderBy(pair => pair.Key).Select(pair => new SessionRumor(pair.Key, pair.Value)).ToArray(),
         QuelledRumors.Order().ToArray(), KnownAreas.Order().ToArray(), LastArea,
-        Reputations.ToArray());
+        Reputations.ToArray(), StoryState);
 }

@@ -35,15 +35,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     public const uint MindControlledFlag = 0x0800_0000;
 
     /// <summary>
-    /// The set a use click runs: <see cref="ScrAdmissionSet.S4"/> without the story-state actions (the session has no
-    /// story-state number) and without the dialog action (a use click does not open a conversation here), plus the reading actions of
+    /// The set a use click runs: <see cref="ScrAdmissionSet.S4"/> (with the session's story-state number since ARC-SCRIPT-019)
+    /// without the dialog action (a use click does not open a conversation here), plus the reading actions of
     /// <see cref="ScrAdmissionSet.S10"/> (ARC-UI-049: a plaque, book or picture a use, tile or sector script shows), plus call script,
-    /// assign object, get object type and the object variables of <see cref="ScrAdmissionSet.S12"/> (ARC-SCRIPT-018).
+    /// assign object, get object type and the object variables of <see cref="ScrAdmissionSet.S12"/> (ARC-SCRIPT-018), plus the quest,
+    /// area, rumor and reputation actions of <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019).
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects", ScrAdmissionSet.S4.Conditions,
-        ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState and not ScrCatalogue.Action.Dialog)
+    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story", ScrAdmissionSet.S4.Conditions,
+        ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.Dialog)
             .Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque,
-                ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType]),
+                ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType,
+                ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
+                ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation]),
         ScrAdmissionSet.S4.ValueKinds, ScrAdmissionSet.S4.FocusKinds.Append(ScrFocusKind.LocalObject));
 
     private readonly List<ScrReadingRequest> _readings = [];
@@ -72,6 +75,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     private readonly IReadOnlyCollection<AreaInventoryMap> _maps;
     private readonly ScriptContent? _content;
     private readonly int _shownMap;
+    private readonly List<SessionExperienceAward> _awards = [];
+
+    /// <summary>ARC-SCRIPT-019: the experience awards the runs' completed quests gave since the last call, in order; the viewer passes
+    /// their follower steps and level-up messages on.</summary>
+    public IReadOnlyList<SessionExperienceAward> TakeAwards()
+    {
+        var awards = _awards.ToArray();
+        _awards.Clear();
+        return awards;
+    }
     private readonly Dictionary<string, AreaObjectRecord> _shown = new(StringComparer.Ordinal);
     private (string Entity, AreaObjectRecord Row)? _clicked;
 
@@ -148,8 +161,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         return read.Status == GlobalFlagReadStatus.Known && read.Value is { } value ? value : throw new InvalidOperationException("AREA_USE_SCRIPT_FLAG_UNREADABLE");
     }
 
-    /// <summary>Never asked: <see cref="Admission"/> leaves out the story-state actions.</summary>
-    public int StoryState() => throw new InvalidOperationException("AREA_USE_SCRIPT_STORY_STATE_NOT_BOUND");
+    /// <summary>ARC-SCRIPT-019: the session's story-state number.</summary>
+    public int StoryState() => _session.QueryStoryState();
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
     public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
@@ -234,6 +247,23 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         finally { _clicked = null; }
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-020: an item's use script (point 1, item use 0x462CC0; ledger IU rows) with the PC as the user and no target, before
+    /// the use goes on: the run's outcome decides (run default lets the use go on, skip default stops it). The item is a row of a
+    /// loaded map's inventory (<see cref="AreaInventoryMap"/>), named by its origin map and entity; its use slot is kept as map
+    /// changes there. A teleport is not modelled from an item's use and leaves the run unapplied.
+    /// </summary>
+    public AreaScriptedUse RunItemUse(int originMap, string entity, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(entity); ArgumentNullException.ThrowIfNull(rules);
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        var item = new ScrObjectRef(originMap, entity);
+        if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
+        var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, null), this, new() { Rules = rules, Admission = Admission });
+        return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
+    }
+
     /// <summary>Map-change keys of a tile or sector script's slot, on its sector: <c>tile.N.script</c>, <c>tile.N.lf</c>,
     /// <c>tile.N.counters</c> for the tile index N, <c>sector.script</c>, <c>sector.lf</c>, <c>sector.counters</c>.</summary>
     public static string PlacedProperty(MapPlacedScript placed, string part)
@@ -307,13 +337,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
 
     private bool Apply(ScrEffects effects, Func<ScrWriteback, bool> writeSlot)
     {
-        if (effects.StoryState is not null || effects.DestroyTrapObject is not null) return false;
+        if (effects.DestroyTrapObject is not null) return false;
         foreach (var write in effects.GlobalFlags)
         {
             var flags = _session.Flags;
             var receipt = flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(write.Index), write.Value));
             if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange)) return false;
         }
+        // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
+        if (!AreaScriptStory.Apply(_session, effects, IsPc, _awards.Add)) return false;
         // As for a dialog script (AreaScriptHost.Apply): scheme pairs go to the session, applied steps stay applied when a later
         // one is refused (the original applies as it goes); effect sounds are not played by a use click.
         foreach (var sound in effects.Sounds)

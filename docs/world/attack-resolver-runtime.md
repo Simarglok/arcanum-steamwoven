@@ -200,6 +200,21 @@ act, CRA2), knockdown, knockout, scars, blinding and crippling (`LifeRules.Apply
 the wear takes the weapon's and the armour's damage and the weapon's destruction ([wear](#wear-arc-combat-007)); the session takes
 the drops ([hero attack](hero-attack-runtime.md#critical-effects-arc-combat-009)).
 
+## Damage step without an attack (ARC-MAGIC-012)
+
+`AttackResolver.DamageStep(DamageStepRequest)` is the damage step of an attack after its rolls, as a call of its own: the same code
+(`Step`) runs for an attack and for a spell's Damage component ([spell damage and heal](spell-damage-heal.md), ledger DH5–DH7).
+The request gives:
+- the attacker (a PC gets the difficulty share);
+- the target and its kind;
+- the context's weapon (the "uber", ignore-resistance and damage-armour tests read it);
+- the damage per type;
+- the life effects of the damage flags;
+- the target's current hit points for a full or death hit (the amount instead of the sum).
+
+There is no roll and no critical procedure. `DifficultyScalesFullAmount` false leaves that amount unscaled (MG35's Steamwoven
+fix). `LifeDamage.FromStep` turns the result into the life state's packet, with the plain dying animation for a death flag.
+
 ## Rule settings and anomaly switches
 
 Owner decision D8 gives combat two settings: **Original**, the retail 1.0.7.4

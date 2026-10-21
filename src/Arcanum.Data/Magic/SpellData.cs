@@ -1,5 +1,6 @@
 using System.Text;
 using Arcanum.Data.Content;
+using Arcanum.Data.Fixes;
 using Arcanum.Data.Messages;
 
 namespace Arcanum.Data.Magic;
@@ -112,9 +113,10 @@ public sealed class SpellData
     public SpellRecordTable Records { get; }
 
     /// <summary>Reads the three files from the first base source holding each, in the original's order (the component type
-    /// file, the text file, the component type names, the record file).</summary>
+    /// file, the text file, the component type names, the record file). <paramref name="fixes"/> names the rule mode's data fixes
+    /// (DF4, a repeated <c>Dmg_Flags:</c>); none reads the data as the original does.</summary>
     [OriginalFunction(0x44EF50, OriginalFunctionScope.Partial)]
-    public static SpellDataLoad Open(ContentStack stack, SpellRecordMode mode, MesReaderOptions? options = null)
+    public static SpellDataLoad Open(ContentStack stack, SpellRecordMode mode, MesReaderOptions? options = null, DataFixProfile? fixes = null)
     {
         ArgumentNullException.ThrowIfNull(stack);
         ValidateMode(mode);
@@ -124,24 +126,24 @@ public sealed class SpellData
         if (Load(stack, SpellTexts.Path, options, out var textFile) is { } textRefusal) return Refused(textRefusal);
         if (ReadComponentTypes(componentFile!, out var names) is { } missing) return Refused(missing);
         if (Load(stack, SpellRecordTable.Path, options, out var listFile) is { } listRefusal) return Refused(listRefusal);
-        return Create(names, textFile!, listFile!, mode);
+        return Create(names, textFile!, listFile!, mode, fixes);
     }
 
     /// <summary>The data of the three parsed files (synthetic data or another loader).</summary>
-    public static SpellDataLoad Create(MesFile componentTypes, MesFile spellTexts, MesFile spellList, SpellRecordMode mode)
+    public static SpellDataLoad Create(MesFile componentTypes, MesFile spellTexts, MesFile spellList, SpellRecordMode mode, DataFixProfile? fixes = null)
     {
         ArgumentNullException.ThrowIfNull(componentTypes);
         ArgumentNullException.ThrowIfNull(spellTexts);
         ArgumentNullException.ThrowIfNull(spellList);
         ValidateMode(mode);
-        return ReadComponentTypes(componentTypes, out var names) is { } missing ? Refused(missing) : Create(names, spellTexts, spellList, mode);
+        return ReadComponentTypes(componentTypes, out var names) is { } missing ? Refused(missing) : Create(names, spellTexts, spellList, mode, fixes);
     }
 
-    private static SpellDataLoad Create(string[] names, MesFile spellTexts, MesFile spellList, SpellRecordMode mode)
+    private static SpellDataLoad Create(string[] names, MesFile spellTexts, MesFile spellList, SpellRecordMode mode, DataFixProfile? fixes)
     {
         ArgumentNullException.ThrowIfNull(spellTexts);
         ArgumentNullException.ThrowIfNull(spellList);
-        var records = SpellRecordTable.Read(spellList, names, mode);
+        var records = SpellRecordTable.Read(spellList, names, mode, fixes);
         if (records.Refusal is { } recordRefusal) return Refused(recordRefusal);
         var texts = SpellTexts.Read(spellTexts, mode);
         if (texts.Refusal is { } textRefusal) return Refused(textRefusal);

@@ -108,6 +108,9 @@ ORACLE_FUNCTIONS: dict[str, str] = {
     "0x455550": "TargetStageMatchesTheOriginal",
     "0x453410": "NoStackMatchesTheOriginal",
     "0x4534E0": "CancelsMatchTheOriginal",
+    "0x4518D0": "DamageComponentMatchesTheOriginal",
+    "0x4521A0": "HealComponentMatchesTheOriginal",
+    "0x4B5810": "AcidMatchesTheOriginal",
 }
 
 FORBIDDEN = ("--self-test", "--native-smoke", "--smoke", "--matrix", "--capture", "--screenshot", "--headless", "--fullscreen", "--automated", "--resize", "--input")

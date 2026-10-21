@@ -115,14 +115,16 @@ public static class LifeRules
     /// <summary>
     /// Heals (the source's heal step). In order: scar removal without <see cref="LifeHeal.Full"/>; a dead critter stops
     /// here unless <see cref="LifeHeal.Resurrect"/>, and a resurrection is refused for an unrevivifiable critter that is
-    /// reanimated or an unresurrectable one that is not (the resurrect script is not run); a resurrection clears the stun
+    /// reanimated or an unresurrectable one that is not, or by the target's raise script (<paramref name="raiseScript"/>, the
+    /// caller's port, ARC-MAGIC-012: the original runs it, point 0x12, before it tests the refusal, so it runs either way;
+    /// none: allowed); a resurrection clears the stun
     /// and sets fatigue damage to 10. Then the full heal or the single cures (crippled legs heal crippled legs, as in the
     /// original game, anomaly A5), and the hit-point, fatigue and poison amounts, each only
     /// while there is damage to remove. Re-read in the retail executable by two readers (ARC-SKILLS-005, ledger HL4): the record
     /// applier 0x4B58C0, without its network, script, art, AI and reaction side effects.
     /// </summary>
     [OriginalFunction(0x4B58C0, OriginalFunctionScope.Partial)]
-    public static LifeOutcome Heal(LifeState state, LifeFacts facts, LifeHeal heal)
+    public static LifeOutcome Heal(LifeState state, LifeFacts facts, LifeHeal heal, Func<bool>? raiseScript = null)
     {
         ArgumentNullException.ThrowIfNull(heal);
         Check(state, facts);
@@ -136,6 +138,7 @@ public static class LifeRules
             if (!heal.Resurrect) return new(state, s, events | LifeEvents.AlreadyDead, 0, DeathAnimation.None);
             var refused = facts.Traits.HasFlag(LifeTraits.Unrevivifiable) && heal.Reanimate ||
                 facts.Traits.HasFlag(LifeTraits.Unresurrectable) && !heal.Reanimate;
+            if (raiseScript is not null && !raiseScript()) refused = true;
             if (refused) return new(state, s, events | LifeEvents.ResurrectionRefused, 0, DeathAnimation.None);
             s = s with { Conditions = s.Conditions & ~LifeConditions.Stunned, FatigueDamage = 10 };
             events |= LifeEvents.Resurrected;
@@ -408,7 +411,7 @@ public static class LifeRules
         var death = DeathAnimation.None;
         if (IsDead(s, facts))
         {
-            death = hitPoints <= 20 ? DeathAnimation.Plain : damage.Location switch
+            death = hitPoints <= 20 || damage.PlainDeath ? DeathAnimation.Plain : damage.Location switch
             {
                 HitLocation.Head => DeathAnimation.Head,
                 HitLocation.Leg => DeathAnimation.Leg,

@@ -116,6 +116,33 @@ public sealed class SpellRecordRealDataTests
         Assert.AreEqual((SpellDataStatus.UnknownKey, (int?)table.Unread[0].Entry), (strict.Status, strict.Refusal!.Entry), "strict mode refuses the first");
     }
 
+    /// <summary>ARC-MAGIC-012: the installed Damage and Heal components (types and flags the components read) and data fix DF4: the
+    /// Steamwoven read differs from the original's only in record 221's Damage component, which gets <c>Scaled</c> back.</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_damage_and_heal_components_match_the_census_and_DF4_restores_one_flag()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in spell record check; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var original = SpellData.Open(stack, SpellRecordMode.LikeOriginal, fixes: Arcanum.Data.Fixes.DataFixProfile.Original).Data!.Records.Records;
+        var steamwoven = SpellData.Open(stack, SpellRecordMode.LikeOriginal, fixes: Arcanum.Data.Fixes.DataFixProfile.Steamwoven).Data!.Records.Records;
+        var life = original.SelectMany(r => r.Components).Where(c => c.Type is SpellComponentType.Damage or SpellComponentType.Heal).ToList();
+        string Types(SpellComponentType type) => string.Join(" ", life.Where(c => c.Type == type).GroupBy(c => ((DamageData)c.Data!).DamageType)
+            .OrderBy(g => g.Key).Select(g => $"{g.Key}:{g.Count()}"));
+        string Flags(SpellComponentType type) => string.Join(" ", new uint[] { 0x1, 0x2, 0x4, 0x40, 0x200, 0x400, 0x800, 0x1000, 0x2000, 0x400000, 0x800000 }
+            .Select(bit => $"{bit:X}:{life.Count(c => c.Type == type && (((DamageData)c.Data!).Flags & bit) == bit)}"));
+        Assert.AreEqual("0:32 1:10 2:9 3:6 4:10 5:1", Types(SpellComponentType.Damage));
+        Assert.AreEqual("0:32 1:8 4:5", Types(SpellComponentType.Heal));
+        Assert.AreEqual("1:7 2:0 4:4 40:3 200:0 400:0 800:0 1000:0 2000:1 400000:0 800000:13", Flags(SpellComponentType.Damage));
+        Assert.AreEqual("1:9 2:7 4:0 40:0 200:2 400:2 800:2 1000:2 2000:0 400000:2 800000:3", Flags(SpellComponentType.Heal));
+        var changed = Enumerable.Range(0, SpellRecord.Count).Where(r => !original[r].Components.SequenceEqual(steamwoven[r].Components)).ToArray();
+        CollectionAssert.AreEqual(new[] { 221 }, changed, "DF4 changes one record");
+        var before = (DamageData)original[221].Components.Single(c => c.Type == SpellComponentType.Damage).Data!;
+        var after = (DamageData)steamwoven[221].Components.Single(c => c.Type == SpellComponentType.Damage).Data!;
+        Assert.AreEqual((0x5u, 0x800005u, 0, 0), (before.Flags, after.Flags, after.Minimum, after.Maximum),
+            "a full death hit with a 0-0 range: the restored Scaled changes no amount");
+    }
+
     private static SpellComponent Owner(IReadOnlyList<SpellRecord> records, int entry)
     {
         var record = records.Last(r => SpellRecordTable.FirstMessage(r.Number) <= entry && entry < SpellRecordTable.FirstMessage(r.Number) + 50);

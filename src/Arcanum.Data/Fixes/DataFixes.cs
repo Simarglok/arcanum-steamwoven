@@ -31,6 +31,12 @@ public sealed record DataFixProfile
     /// slot of four Iron Clan HQ NPCs and one in the Ashbury underground). Steamwoven clears the slot.</summary>
     public bool MapPatchScriptZeroIgnored { get; init; }
 
+    /// <summary>DF4 (ARC-MAGIC-012, decided 2026-10-21): a spell component line that repeats <c>Dmg_Flags:</c> (record 221's Damage
+    /// component in the installed data) loses the repeated value, since the original reads each key once. Steamwoven reads the
+    /// repeated values and ORs them in. Under the original's damage rules the restored <c>Scaled</c> changes nothing for record 221
+    /// (a full death hit with a 0–0 range).</summary>
+    public bool RepeatedDamageFlagsLost { get; init; }
+
     /// <summary>Recorded fixes; the default setting.</summary>
     public static readonly DataFixProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -38,7 +44,7 @@ public sealed record DataFixProfile
     public static readonly DataFixProfile Original = new()
     {
         Name = "original", StoneExamineTextLost = true, NpcLineEffectsInResponseLost = true, ReplyFinalLineInResponseLost = true,
-        MapPatchScriptZeroIgnored = true,
+        MapPatchScriptZeroIgnored = true, RepeatedDamageFlagsLost = true,
     };
 
     /// <summary>Both settings, default first.</summary>
@@ -48,7 +54,7 @@ public sealed record DataFixProfile
     public static DataFixProfile? FromName(string? name) => All.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
 
     /// <summary>The ledger rows this profile has a switch for; a catalogue refuses a fix for any other row.</summary>
-    public static IReadOnlySet<string> Rows { get; } = new HashSet<string>(StringComparer.Ordinal) { "DF1", "DF2", "DF3", "MP7" };
+    public static IReadOnlySet<string> Rows { get; } = new HashSet<string>(StringComparer.Ordinal) { "DF1", "DF2", "DF3", "DF4", "MP7" };
 
     /// <summary>The rows whose fixes are DLG catalogue entries (MP7 is applied by the map patch, not by a catalogue entry).</summary>
     public static IReadOnlySet<string> DialogRows { get; } = new HashSet<string>(StringComparer.Ordinal) { "DF1", "DF2", "DF3" };
@@ -60,6 +66,7 @@ public sealed record DataFixProfile
         "DF2" => !NpcLineEffectsInResponseLost,
         "DF3" => !ReplyFinalLineInResponseLost,
         "MP7" => !MapPatchScriptZeroIgnored,
+        "DF4" => !RepeatedDamageFlagsLost,
         _ => false,
     };
 }
