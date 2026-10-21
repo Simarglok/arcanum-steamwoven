@@ -39,6 +39,7 @@ public partial class TerrainViewerApp
         BindAreaCompanions();
         BindAreaHover(arguments);
         BindAreaLogbook(arguments);
+        BindAreaSkillTexts(arguments);
         BindAreaSchematics(arguments);
         BindAreaWorldMap(arguments);
         StartAreaAmbient(area);

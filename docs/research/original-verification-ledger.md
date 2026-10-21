@@ -1596,6 +1596,24 @@ difficulty switch (0x4C8E38) and UI hooks (0x5FC1EC, 0x5E86F4).
 | HL4 | record heal applier (0x4B58C0) | Critters only. Bit 0x1000 without 0x1 first removes five cause-7 effects. A dead critter is healed only with the raise bit 0x2 (reanimation with 0x400000), refused by the critter flags 0x1000000 or 0x800000 or its raise script; a raise clears the stun, sets fatigue damage to 10 and lifts a PC healer's reaction below 70 to 70. Then a full heal (0x1) takes all hit-point damage (and all fatigue damage when a fatigue amount is given), five cause-7 effects and every injury flag; otherwise bit 0x200 clears blinded, 0x400 both arm flags, 0x800 crippled legs. The hit-point, fatigue (with the wake-up when it crosses 0) and poison amounts fall to at least 0. A heal record from the skill sets only the hit-point amount. | Original (agrees with `LifeRules.Heal`; network, raise script, art reset, AI and reaction side effects are the host's) |
 | HL5 | refusals of a heal | None for a target at full hit points (the use and its item still go), an undead or mechanical target, or the user itself. The heal check's difficulty reads only the healer's blindness and crippled arms and the healing item's bonus (impossible without one). | Original |
 
+## Skills page (ARC-UI-009)
+
+Source: the character sheet's [skills page](../rendering/terrain-viewer.md#character-sheet-arc-ui-007), task S6 of the
+[skills plan](skills-plan.md). Read on 2026-10-21 by two independent readers that saw only the questions (method step 6) and a
+first outline of 0x55BD10/0x55BF20; they agree on every row. The + and − rules themselves are CP2–CP7 (ARC-WORLD-052), the key
+stat and its cap SR7, the skill module's texts SR12.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SP1 | skills page (0x55BD10), editor open (0x5597C0) | The page shows one of four groups of four skills, chosen by four tabs: groups 0..2 the basic skills 0..3, 4..7 and 8..11, group 3 the tech skills 0..3 (row table 0x5C82F0, 16 bytes a row). The group last shown is kept and shown at the next open (initially 0). All 32 + and − buttons are hidden, then the current group's are shown unless the editor opened in mode 2 (the view-only sheet the other callers open; it also hides the stat buttons). | Original |
+| SP2 | skills page (0x55BD10) | Each row draws the skill's name and, right after it, its training name in brackets (string table 0x64CA74 indexed by the training 0..3, format with a leading space); nothing for no training. Names and training texts are drawn only at the open and on a tab press, not on a refresh. The level is never printed as a number. | Original |
+| SP3 | skill bars (0x55BF20), editor refresh (0x55B150) | Each row's bar is the bar art's width × effective level / 20 (truncated), none at level 0; the refresh redraws the bars after every change. The point cost (0x4C64B0, 0x4C6AF0) is computed for each row and not used. No colour changes with the skill. | Original (the unused cost call has no effect) |
+| SP4 | skill buttons (0x55D3A0 basic, 0x55D6F0 tech) | + calls the skill + (0x57ACD0) with the skill (tech + 12); − first compares the points with the editor's snapshot and at it shows the "nothing to refund" message, otherwise calls the skill − (0x57AEB0). A network client sends a packet instead. | Original |
+| SP5 | hover hint (0x55D3A0, 0x55D6F0, 0x55AE70, text bar case 7 at 0x552DBD) | Over a row, its + or its −, the text bar shows the skill's name, its description and, unless 0, the key stat's name (intgame.mes 28 + stat) with the minimum key stat for the next point, `MinimumKeyStat(4 × points + 4)` of the raw points. Over a tab it shows charedit.mes 135..138. A hint waits 3 s after a refusal message. | Original |
+| SP6 | skill module init (0x4C5BD0), text getters (0x4C62B0, 0x4C69A0, 0x4C69D0, 0x4C62C0, 0x4C69B0) | `mes\skill.mes` loads at the skill module's init (SR12, before a module mounts): names 0..11 and 12..15, training names 16..19, descriptions 20..31 and 32..35; each getter returns the stored text of its number. | Original |
+| SP7 | refusal messages (0x57ACD0, 0x57AEB0 and the editor's message helpers 0x55F160..0x55F340) | Shown only for the player while the editor is open: + without enough points charedit.mes 18, at level 20 message 21, a key stat too low one message per stat (22 by default); − without points 24, another failure 25; the page's floor refusal 23. Each refusal message plays sound 3004; a successful + or − plays none and clears the text bar. | Original |
+| SP8 | tech hover exit (0x55D6F0) | The pointer-leave test of the tech buttons loops over 12 entries instead of 4, past the tech entries. A match only clears the hint. | Original (a harmless bug of the game; no switch) |
+
 ## Companion orders and loyalty (ARC-RES-064)
 
 Source: [companion orders and loyalty](companion-orders-loyalty-evidence.md) (questions Q1–Q7), re-reading the F0 rows C11–C14

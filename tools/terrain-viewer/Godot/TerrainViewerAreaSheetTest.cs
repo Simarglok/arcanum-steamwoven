@@ -85,6 +85,21 @@ public partial class TerrainViewerApp
             Require(text.StartsWith("half-elf-male | half-elf, male\nLevel 1 | experience 0, 1000 to the next level | unspent points 5", StringComparison.Ordinal)
                 && text.Contains("Dexterity 9 |", StringComparison.Ordinal), "sheet text: " + text);
             Require(GetSelfTestSnapshot().Hud.Contains(" | character sheet open: C or Escape closes", StringComparison.Ordinal), "HUD open status");
+            // ARC-UI-009: the open sheet opened the hero's editor; + and − on the skills page go through the session's pool.
+            Require(_areaSession.HeroEditorOpen && _sheetPanel.SkillsForSelfTest is { EditorOpen: true, UnspentPoints: 5, Rows.Count: 16 }, "skills page with the editor open");
+            Require(_sheetPanel.SkillTextForSelfTest(0) == "Bow: level 0/20, 0 point(s); next point needs Dexterity 6"
+                && _sheetPanel.SkillHintForSelfTest(0) == "Bow\nDexterity: 6", "bow row and hint: " + _sheetPanel.SkillTextForSelfTest(0));
+            var before = _areaSession.Version.Revision;
+            _sheetPanel.SkillPlusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_areaSession.Version.Revision == before + 1 && _sheetPanel.SkillsForSelfTest is { UnspentPoints: 4 } page && page.Rows[0].Points == 1
+                && _sheetPanel.SkillMessageForSelfTest == "spent 1 point(s)" && _sheetPanel.TextForSelfTest.Contains("unspent points 4", StringComparison.Ordinal),
+                "+ spent a point and rebuilt the sheet: " + _sheetPanel.SkillMessageForSelfTest);
+            _sheetPanel.SkillMinusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_sheetPanel.SkillsForSelfTest is { UnspentPoints: 5 } back && back.Rows[0].Points == 0, "− refunded it");
+            _sheetPanel.SkillMinusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_sheetPanel.SkillMessageForSelfTest == "refused: nothing bought since the sheet opened to refund", "− at the floor: " + _sheetPanel.SkillMessageForSelfTest);
+            _sheetPanel.SkillPlusForSelfTest(12).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_sheetPanel.SkillsForSelfTest!.Rows[12].Points == 1, "+ on a tech row");
             // The open sheet owns the keys: the Inventory key neither opens the inventory nor closes the sheet.
             InventoryKey(Key.I);
             Require(SheetOpen && !InventoryOpen, "I under the sheet");
@@ -95,6 +110,13 @@ public partial class TerrainViewerApp
             Require(_sheetPanel.TextForSelfTest.Contains("Strength 10 (raised by effects)", StringComparison.Ordinal), "rebuilt sheet: " + _sheetPanel.TextForSelfTest);
             InventoryKey(Key.C);
             Require(!SheetOpen && !WorldModal && !_worldGate.IsOpen, "C closed the sheet and quarantined the click guards");
+            Require(!_areaSession.HeroEditorOpen, "closing the sheet closed the editor");
+            // Reopened: the tech point bought before is the new floor.
+            InventoryKey(Key.C);
+            _sheetPanel.SkillMinusForSelfTest(12).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_sheetPanel.SkillsForSelfTest!.Rows[12] is { Points: 1, FloorPoints: 1 } && _sheetPanel.SkillMessageForSelfTest.StartsWith("refused:", StringComparison.Ordinal),
+                "the reopened editor's floor holds the bought point");
+            InventoryKey(Key.C);
             // Controller pulses through the production pulse route: confirm presses the close button, cancel closes.
             static GamepadLab.Core.IntentFrame Pulse(bool confirm, bool cancel) =>
                 new(default, default, confirm, cancel, false, false, false, false, false, 0, 0, GamepadLab.Core.InputMethod.Gamepad, true, "ARC-UI-007 self-test");
@@ -112,7 +134,7 @@ public partial class TerrainViewerApp
             Require(!SheetOpen, "the dead hero's sheet closed");
             InventoryKey(Key.C);
             Require(!SheetOpen && _sheetStatus == "refused: the hero is dead", "C for a dead hero: " + _sheetStatus);
-            return "no-hero refusal, C/controller confirm and cancel/Escape, keys owned while open, rebuild on change, dead-hero close and refusal";
+            return "no-hero refusal, C/controller confirm and cancel/Escape, keys owned while open, rebuild on change, skills page + and − with the editor floor, dead-hero close and refusal";
         }
         finally
         {
