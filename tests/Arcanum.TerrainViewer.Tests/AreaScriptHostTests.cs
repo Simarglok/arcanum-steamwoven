@@ -83,7 +83,7 @@ public sealed class AreaScriptHostTests
         var flags = f.Session.Flags;
         Assert.AreEqual(true, flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(2593))).Value);
         Assert.IsFalse(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GetStoryState) || AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.SetStoryState));
-        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S10));
+        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S10), "ARC-SCRIPT-018: the S12 actions stay out of the dialog set");
         Assert.IsTrue(new[] { ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme }.All(AreaScriptHost.Admission.Actions.Contains),
             "ARC-SCRIPT-040: the sound actions run in the viewer");
         Assert.ThrowsExactly<InvalidOperationException>(() => f.Host.StoryState());
@@ -359,6 +359,8 @@ public sealed class AreaScriptHostTests
             (139, [(0, 0), (3, 60)]), (139, [(1, 0), (3, 101)]), (139, [(12, 0), (3, 70)]), (139, [(1, 0), (3, 200)]), (1, []));
 
         // ARC-TECHNOLOGY-005: start schematic UI (129) on the triggerer (the PC), the attachee, and the absent extra object (kind 12).
+        // ARC-SKILLS-009: get skill 6 of the triggerer into counter 0, then return skip default.
+        internal static ScrProgram GetSkill() => Lines((47, [(3, 6), (0, 0), (0, 0)]), (1, []));
         internal static ScrProgram Readings() => Lines((64, [(3, 1020), (0, 0)]), (65, [(3, 900), (1, 0)]), (114, [(3, 1500), (12, 0)]), (1, []));
 
         internal static ScrProgram Schematics() => Lines((129, [(0, 0)]), (129, [(1, 0)]), (129, [(12, 0)]), (1, []));
@@ -398,6 +400,46 @@ public sealed class AreaScriptHostTests
             }
             return ScrProgram.Read(bytes).Program!;
         }
+    }
+
+    // ARC-SKILLS-009 (SX1, SX2): get skill runs only with a session hero, whose levels the PC's are; an NPC's level comes from the
+    // sheet the session saved for it, else its map data; any other object, or the NPC's id on another map, is 0.
+    [TestMethod]
+    public void Get_skill_reads_the_heros_and_an_npcs_effective_levels()
+    {
+        using var heroless = ConversationSessionFixture.Create();
+        var map = new SessionMapId(1);
+        var none = new AreaScriptHost(heroless, map, [], new AreaConversationState(heroless, map, [], 50), null);
+        Assert.AreSame(AreaScriptHost.Admission, none.RunAdmission, "without a hero a script that reads a skill is refused");
+        Assert.AreEqual(0, none.SkillLevel(none.Pc, (int)Arcanum.Simulation.Skills.Skill.Prowling));
+
+        int[] basic = new int[12]; basic[(int)Arcanum.Simulation.Skills.Skill.Prowling] = 2;
+        var definition = new SessionHeroDefinition(16089, Arcanum.Simulation.Character.CharacterRace.HalfElf, Arcanum.Simulation.Character.CharacterGender.Male,
+            [8, 12, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 385, [], Advancement: SessionHeroAdvancement.None with { BasicSkills = [.. basic] });
+        var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, definition, 2352, 0, null, "synthetic");
+        using var session = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, load).Owner!;
+        int[] npcBasic = new int[12]; npcBasic[(int)Arcanum.Simulation.Skills.Skill.Melee] = 3;
+        var loaded = new SessionNpcAdvancement("oid:npc", new(Arcanum.Simulation.Character.CharacterRace.Human, false, [.. Enumerable.Repeat(8, 8)], 0, 0, 1, 0,
+            [.. npcBasic], [.. new int[4]], [.. new int[16]], [.. new int[8]], 1, 2, 0, 0), 62);
+        var modifiers = Arcanum.Simulation.Character.AdvancementModifiers.None;
+        var host = new AreaScriptHost(session, map, [], new AreaConversationState(session, map, [], 50), null,
+            npcSheet: entity => entity == "oid:npc" ? (loaded, modifiers) : null);
+        Assert.AreSame(AreaScriptHost.SkillAdmission, host.RunAdmission);
+        Assert.IsTrue(AreaScriptHost.SkillAdmission.IsSubsetOf(ScrAdmissionSet.S11) && AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.GetSkill));
+        Assert.IsFalse(AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.UseItemWithSkill), "no live script uses it (census)");
+        var reads = Program.GetSkill();
+        Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(reads, AreaScriptHost.Admission).Refusal!.Code, "refused without a hero");
+        Assert.IsTrue(ScrAdmission.Admit(reads, AreaScriptHost.SkillAdmission).IsAdmitted);
+        var hero = session.QueryHeroSkills()!;
+        for (var skill = 0; skill < 16; skill++) Assert.AreEqual(hero[(Arcanum.Simulation.Skills.Skill)skill].Level, host.SkillLevel(host.Pc, skill));
+        Assert.IsTrue(host.SkillLevel(host.Pc, (int)Arcanum.Simulation.Skills.Skill.Prowling) > 0);
+        var npc = new ScrObjectRef(1, "oid:npc");
+        var melee = (int)Arcanum.Simulation.Skills.Skill.Melee;
+        // 3 points: base 12, under dexterity 8's cap.
+        Assert.AreEqual(Arcanum.Simulation.Skills.SkillRules.Level(Arcanum.Simulation.Skills.Skill.Melee, 3, 8, false), host.SkillLevel(npc, melee));
+        Assert.IsTrue(host.SkillLevel(npc, melee) > 0);
+        Assert.AreEqual((0, 0, 0), (host.SkillLevel(new(1, "oid:chest"), melee), host.SkillLevel(new(2, "oid:npc"), melee), host.SkillLevel(host.Pc, 16)));
     }
 
     /// <summary>Wraps the fixture host so a run uses a given program and slot.</summary>

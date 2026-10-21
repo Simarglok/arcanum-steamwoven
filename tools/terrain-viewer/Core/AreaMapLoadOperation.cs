@@ -32,8 +32,10 @@ internal static class AreaMapLoadOperation
         RequireSame(stack.Plan.SearchOrder.Where(s => s.Role == ContentSourceRole.ModuleArchive).Select(s => s.Path), arguments.ModulePath);
         var catalog = WorldCatalog.Open(stack);
         var centre = WindowCentre(stack, catalog, mapName, arguments);
-        var created = centre is { } around ? AreaMapPlans.CreateWindow(stack, catalog, mapName, new(checked((int)around.X), checked((int)around.Y)))
-            : AreaMapPlans.Create(stack, catalog, mapName);
+        // ARC-DATA-037: the map patch is applied under the session's data rules (Steamwoven by default).
+        var data = arguments.DataRules ?? Arcanum.Data.Fixes.DataFixProfile.Steamwoven;
+        var created = centre is { } around ? AreaMapPlans.CreateWindow(stack, catalog, mapName, new(checked((int)around.X), checked((int)around.Y)), data: data)
+            : AreaMapPlans.Create(stack, catalog, mapName, data);
         if (created.Status != AreaMapPlanStatus.Ready) throw new InvalidOperationException("AREA_MAP_PLAN_" + created.Status.ToString().ToUpperInvariant());
         var mapPlan = created.Plan!;
         RequireSame(mapPlan.Files.Where(f => f.Key.Role == AreaSourceRole.Resource2).Select(f => f.Path), arguments.ResourcePath);

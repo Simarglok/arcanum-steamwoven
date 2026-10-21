@@ -68,4 +68,27 @@ public sealed class ScrAdmissionRealDataTests
         Assert.AreEqual((10, 3, 13, 2), (uses[64], uses[65], uses[114], uses[94]));
         Assert.AreEqual((657, 681), (s9, s10), "the reading actions admit 24 more installed scripts whole");
     }
+
+    [TestMethod, TestCategory("RealData")]
+    public void The_skill_actions_of_the_installed_scripts_are_counted()
+    {
+        // ARC-SKILLS-009: how many installed scripts use get skill (47), use item with skill (79) and try to steal 100 coins (115), and
+        // how many more scripts S11 admits whole than S10.
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in SCR skill census; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var uses = new Dictionary<int, int> { [ScrCatalogue.Action.GetSkill] = 0, [ScrCatalogue.Action.UseItemWithSkill] = 0, [115] = 0 };
+        int s10 = 0, s11 = 0;
+        foreach (var key in stack.Keys("scr/").Where(k => k.EndsWith(".scr", StringComparison.Ordinal) && k.Count(c => c == '/') == 1))
+        {
+            var program = ScrProgram.Read(stack.Read(stack.Resolve(key).Winner!).Bytes!).Program!;
+            foreach (var action in uses.Keys.ToArray())
+                if (program.Lines.Any(l => l.OnTrue.Type == action || l.OnFalse.Type == action)) uses[action]++;
+            if (ScrAdmission.Admit(program, ScrAdmissionSet.S10).IsAdmitted) s10++;
+            if (ScrAdmission.Admit(program, ScrAdmissionSet.S11).IsAdmitted) s11++;
+        }
+        Console.WriteLine($"scripts with 47 {uses[47]}, 79 {uses[79]}, 115 {uses[115]}; S10 admits {s10}, S11 {s11}");
+        Assert.AreEqual((17, 2, 1), (uses[47], uses[79], uses[115]));
+        Assert.AreEqual((681, 683), (s10, s11), "the skill actions admit 2 more installed scripts whole");
+    }
 }

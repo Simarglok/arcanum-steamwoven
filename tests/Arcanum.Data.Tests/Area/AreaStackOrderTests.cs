@@ -179,15 +179,16 @@ public sealed class AreaStackOrderTests
         Loose("modules/Mod/maps/" + WorldCatalog.AggregateName("test"), aggregate);
         var line = "G_" + guid.ToString("D").ToUpperInvariant().Replace('-', '_');
         var unknownObjects = 0;
-        AreaSnapshot Load(string? patch)
+        AreaSnapshot Load(string? patch, Arcanum.Data.Fixes.DataFixProfile? data = null)
         {
             var path = Path.Combine(_root, "modules", "Mod", "rules", "map.patch");
             if (patch is null) { if (File.Exists(path)) File.Delete(path); }
             else Loose("modules/Mod/rules/map.patch", Encoding.ASCII.GetBytes(patch));
             using var stack = Stack();
-            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test", data);
             Assert.AreEqual(AreaMapPlanStatus.Ready, result.Status, result.Detail);
             Assert.AreEqual(patch is not null, result.Plan!.Plan.MapPatch is not null);
+            if (patch is not null) Assert.AreEqual(data?.Applies("MP7") ?? false, result.Plan.Plan.MapPatch!.ScriptZeroClears, "the MP7 switch, read when the plan is made");
             using var owner = result.Plan.Open();
             var snapshot = owner.LoadStrict();
             unknownObjects = Arcanum.Data.Traversal.AreaStepInspector.InspectWholeMap(snapshot, stack, result.Plan.Map.AggregatePath, 1).UnknownObjects;
@@ -222,6 +223,15 @@ public sealed class AreaStackOrderTests
         var scripts = scripted.EffectiveFields.Single(f => f.Slot == 31);
         CollectionAssert.AreEqual(new long[] { 7, 9, 42 }, scripts.Elements.Single(e => e.Key == 9).Words.ToArray());
         Assert.IsFalse(scripts.Elements.Any(e => e.Key == 10), "script 43 names no file: nothing is attached");
+
+        // ARC-DATA-037 (MP7): script 0 empties the slot under Steamwoven and attaches nothing under Original (and by default).
+        var zero = line + ":script 9 42\n" + line + ":script 9 0\n";
+        CollectionAssert.AreEqual(new long[] { 7, 9, 42 }, Mobile(Load(zero)).EffectiveFields.Single(f => f.Slot == 31).Elements.Single(e => e.Key == 9).Words.ToArray());
+        CollectionAssert.AreEqual(new long[] { 7, 9, 42 },
+            Mobile(Load(zero, Arcanum.Data.Fixes.DataFixProfile.Original)).EffectiveFields.Single(f => f.Slot == 31).Elements.Single(e => e.Key == 9).Words.ToArray());
+        var emptied = Mobile(Load(zero, Arcanum.Data.Fixes.DataFixProfile.Steamwoven));
+        CollectionAssert.AreEqual(new long[] { 0, 0, 0 }, emptied.EffectiveFields.Single(f => f.Slot == 31).Elements.Single(e => e.Key == 9).Words.ToArray());
+        CollectionAssert.AreEqual(new[] { 1, 2 }, emptied.MapPatch!.Lines.ToArray());
     }
 
     [TestMethod]

@@ -84,6 +84,7 @@ public sealed class AreaUseScriptsOriginalTests
         var first = AreaLoadOperation.Execute(1, Arguments(root, "crematorium-lev 1"), default);
         var outcomes = new Dictionary<AreaScriptedUseOutcome, int>();
         var placedOutcomes = new Dictionary<(Arcanum.Data.Maps.MapTransitionTrigger, AreaScriptedUseOutcome), int>();
+        var teleports = new List<string>();
         foreach (var destination in first.MapDestinations!.Values)
         {
             var result = AreaLoadOperation.Execute(1, Arguments(root, destination.Name), default);
@@ -102,20 +103,23 @@ public sealed class AreaUseScriptsOriginalTests
                 using var session = ConversationSessionFixture.Create(map.RuntimeMap);
                 var ran = new AreaUseScriptHost(session, map.RuntimeMap, map.Snapshot.Objects, [], content).RunPlaced(placed, session.Rules.Scripts);
                 placedOutcomes[(placed.Trigger, ran.Outcome)] = placedOutcomes.GetValueOrDefault((placed.Trigger, ran.Outcome)) + 1;
+                if (ran.Outcome == AreaScriptedUseOutcome.Teleport) teleports.Add($"{destination.Name}:{placed.Script}");
             }
         }
         // 21 guarded use sites on 6 maps: 9 run and their guards hold the teleport back; 12 need conditions or actions
         // outside the set (immediate calls, loops, other conditions) and are refused.
         CollectionAssert.AreEquivalent(new[] { (AreaScriptedUseOutcome.NoTeleport, 9), (AreaScriptedUseOutcome.Refused, 12) },
-            outcomes.Select(p => (p.Key, p.Value)).ToArray());
-        // 3,012 tile and 20 sector scripts on the 79 maps map mode opens (the start map holds 2,439 tile scripts): most need
-        // actions outside the set; the five that teleport are the exit tiles of `iron clan hq` to the start map.
+            outcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", outcomes.Select(p => $"{p.Key}={p.Value}")));
+        // 3,012 tile and 20 sector scripts on the 79 maps map mode opens (the start map holds 2,439 tile scripts): since
+        // ARC-SCRIPT-018 (call script, assign object, get object type) 644 tile scripts run; the 6 that teleport are the exit tiles
+        // of `iron clan hq` to the start map and one tile of `void-kerghans castle` (script 3070, through a call).
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
+        CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports, string.Join(", ", teleports));
         CollectionAssert.AreEquivalent(new[]
         {
-            ((tile, AreaScriptedUseOutcome.Teleport), 5), ((tile, AreaScriptedUseOutcome.NoTeleport), 249), ((tile, AreaScriptedUseOutcome.Refused), 2758),
+            ((tile, AreaScriptedUseOutcome.Teleport), 6), ((tile, AreaScriptedUseOutcome.NoTeleport), 638), ((tile, AreaScriptedUseOutcome.Refused), 2368),
             ((sector, AreaScriptedUseOutcome.NoTeleport), 1), ((sector, AreaScriptedUseOutcome.Refused), 19),
-        }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray());
+        }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", placedOutcomes.Select(p => $"{p.Key}={p.Value}")));
     }
 
     private static string Root()

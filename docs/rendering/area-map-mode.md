@@ -272,7 +272,7 @@ object of another kind, an object off or not clickable at T0, a teleport of anot
 with an unconditional exit stays that exit.
 
 - **Run.** The click goes through the same use rule and walk-to-use as an unconditional exit. Within range,
-  `AreaUseScriptHost` runs the object's use script once, with the PC as the triggerer, under the set "S4-area-use-reading": S4
+  `AreaUseScriptHost` runs the object's use script once, with the PC as the triggerer, under the set "S4-area-use-reading-objects": S4
   without the story-state actions (the session has no story-state number) and without the dialog action, plus the reading actions
   64, 65 and 114 (ARC-UI-049: a PC viewer's request opens the [reading window](../world/reading-window-runtime.md)). The use slot is
   the row's script attachment, overridden by the session's map changes `use.lf`, `use.counters` and `use.script` of the
@@ -311,7 +311,7 @@ the start map), one per tile.
   steps; the original also runs a tile script for an NPC entering the tile). A load, a reset, a transfer arrival and an F8
   restore fire nothing; the original places an object on the map with the same notifications (TS2), which arrival path
   a teleport takes is not read.
-- **Run** (ledger TS1, TS3): from line 0 as a use, the player the triggerer, no attachee, under "S4-area-use-reading". The slot
+- **Run** (ledger TS1, TS3): from line 0 as a use, the player the triggerer, no attachee, under "S4-area-use-reading-objects". The slot
   is the sector file's attachment overridden by the session's map changes on the sector: `tile.N.script`, `tile.N.lf`,
   `tile.N.counters` for tile index N, `sector.script`, `sector.lf`, `sector.counters`. A changed slot is written back
   there; under the Original rules a tile script's change is discarded (ledger X3, the original stores the unchanged
@@ -327,9 +327,10 @@ the start map), one per tile.
   refused and silent runs are only logged (`ARC-WORLD-031 enter`), and nothing replaces an accepted transfer while it
   is pending. One host serves every run of the shown map and session.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`, a new game's state for each script):
-  5 tile scripts teleport (the exit tiles of `iron clan hq`, script 2203, to the start map at (96948,75722)), 249 tile
-  scripts and 1 sector script run without one, 2,758 tile and 19 sector scripts are refused because they need actions or
-  conditions outside the set.
+  6 tile scripts teleport (the exit tiles of `iron clan hq`, script 2203, to the start map at (96948,75722), and since
+  ARC-SCRIPT-018 a tile of `void-kerghans castle`, script 3070), 638 tile scripts and 1 sector script run without one,
+  2,368 tile and 19 sector scripts are refused because they need actions or conditions outside the set (before
+  ARC-SCRIPT-018: 5, 249 and 2,758).
 - **Not covered.** Tile scripts for NPCs; the actions and conditions outside the set (most tile scripts); tile and
   sector scripts of generated main-map sectors (only the map's own sector files are read); the arrival tile of a
   transfer; a fade-and-teleport's fade, sound and movie.

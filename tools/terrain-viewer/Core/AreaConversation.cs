@@ -99,6 +99,7 @@ public sealed class AreaConversationHost
     private readonly AreaConversationProfile _baseProfile;
     private readonly Func<AreaSpeaker, AreaCompanionFacts?> _companions;
     private readonly Func<string, SessionNpcAdvancement?>? _npcAdvancement;
+    private readonly Func<string, (SessionNpcAdvancement Loaded, Arcanum.Simulation.Character.AdvancementModifiers Modifiers)?>? _npcSheet;
     // ARC-WORLD-048: a visitor host refuses negative IN when its home map's inventory seed is not attached.
     private readonly bool _refuseUncoveredInventory;
     // The inventory host as given (Rebind filters it again for the map).
@@ -118,11 +119,14 @@ public sealed class AreaConversationHost
     /// default the measured roster (<see cref="AreaCompanionRoster.For"/>).</param>
     /// <param name="npcAdvancement">ARC-SCRIPT-016: an NPC's stored advancement for a script's scheme change
     /// (<see cref="AreaScriptHost"/>); null: only the PC's scheme changes.</param>
+    /// <param name="npcSheet">ARC-SKILLS-009: an NPC's sheet and effects from its map data, for a script's get skill
+    /// (<see cref="AreaScriptHost.SkillLevel"/>); null: an NPC's level is 0.</param>
     public AreaConversationHost(AreaSnapshot snapshot, ScriptContent? content, GameSessionOwner session,
         AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, bool party = false, string contentDetail = "no script content",
-        Func<AreaSpeaker, AreaCompanionFacts?>? companions = null, Func<string, SessionNpcAdvancement?>? npcAdvancement = null)
+        Func<AreaSpeaker, AreaCompanionFacts?>? companions = null, Func<string, SessionNpcAdvancement?>? npcAdvancement = null,
+        Func<string, (SessionNpcAdvancement Loaded, Arcanum.Simulation.Character.AdvancementModifiers Modifiers)?>? npcSheet = null)
         : this(snapshot ?? throw new ArgumentNullException(nameof(snapshot)), new SessionMapId(snapshot.RuntimeMap), FindSpeakers(snapshot), content, session,
-            profile, inventory, party, contentDetail, companions, npcAdvancement, refuseUncoveredInventory: false)
+            profile, inventory, party, contentDetail, companions, npcAdvancement, refuseUncoveredInventory: false, npcSheet)
     {
     }
 
@@ -136,12 +140,12 @@ public sealed class AreaConversationHost
     /// </summary>
     public static AreaConversationHost ForVisitor(AreaCompanionTemplate template, ScriptContent? content, GameSessionOwner session,
         AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, string contentDetail = "no script content",
-        Func<string, SessionNpcAdvancement?>? npcAdvancement = null)
+        Func<string, SessionNpcAdvancement?>? npcAdvancement = null, Func<string, (SessionNpcAdvancement Loaded, Arcanum.Simulation.Character.AdvancementModifiers Modifiers)?>? npcSheet = null)
     {
         ArgumentNullException.ThrowIfNull(template);
         var facts = template.Facts;
         return new(null, template.Home, [template.Speaker with { Index = 0 }], content, session, profile, inventory, party: true, contentDetail,
-            speaker => speaker.Row.Key == template.Key ? facts : null, npcAdvancement, refuseUncoveredInventory: true);
+            speaker => speaker.Row.Key == template.Key ? facts : null, npcAdvancement, refuseUncoveredInventory: true, npcSheet);
     }
 
     /// <summary>Test seam: the given speakers instead of the snapshot's dialog NPCs.</summary>
@@ -154,9 +158,11 @@ public sealed class AreaConversationHost
 
     private AreaConversationHost(AreaSnapshot? snapshot, SessionMapId map, IReadOnlyList<AreaSpeaker> speakers, ScriptContent? content, GameSessionOwner session,
         AreaConversationProfile? profile, AreaInventoryHost? inventory, bool party, string contentDetail,
-        Func<AreaSpeaker, AreaCompanionFacts?>? companions, Func<string, SessionNpcAdvancement?>? npcAdvancement, bool refuseUncoveredInventory)
+        Func<AreaSpeaker, AreaCompanionFacts?>? companions, Func<string, SessionNpcAdvancement?>? npcAdvancement, bool refuseUncoveredInventory,
+        Func<string, (SessionNpcAdvancement Loaded, Arcanum.Simulation.Character.AdvancementModifiers Modifiers)?>? npcSheet = null)
     {
         _npcAdvancement = npcAdvancement;
+        _npcSheet = npcSheet;
         _companions = companions ?? AreaCompanionRoster.For;
         _snapshot = snapshot;
         _map = map;
@@ -176,7 +182,7 @@ public sealed class AreaConversationHost
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
             party ? Speakers.Where(speaker => _companions(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null,
             Speakers.Select(speaker => Scope(speaker.Row)).ToArray());
-        Scripts = new AreaScriptHost(session, map, Speakers, State, content, npcAdvancement);
+        Scripts = new AreaScriptHost(session, map, Speakers, State, content, npcAdvancement, npcSheet);
     }
 
     /// <summary>The map whose dialog state this host reads and writes (ARC-WORLD-048: a visitor's home map).</summary>
@@ -192,7 +198,7 @@ public sealed class AreaConversationHost
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
     public AreaConversationHost Rebind(GameSessionOwner session) => new AreaConversationHost(_snapshot, _map, Speakers, _content, session, _baseProfile, _givenInventory, _party,
-        _contentDetail, _companions, _npcAdvancement, _refuseUncoveredInventory).KeepingGreetingTexts(_greetingTexts);
+        _contentDetail, _companions, _npcAdvancement, _refuseUncoveredInventory, _npcSheet).KeepingGreetingTexts(_greetingTexts);
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;
@@ -291,7 +297,7 @@ public sealed class AreaConversationHost
         if (_content is null) { detail = _contentDetail; return false; }
         if (!_content.VerifySeen()) { detail = "a script or dialog file changed since it was first read"; return false; }
         var result = ScrDispatcher.RunCall(new(call.Script, call.Line, Scripts.Local(call.Triggerer), Scripts.Local(call.Attachee)), Scripts,
-            new() { Rules = _session.Rules.Scripts, Admission = AreaScriptHost.Admission });
+            new() { Rules = _session.Rules.Scripts, Admission = Scripts.RunAdmission });
         LastCall = result;
         if (_content.Changed) { detail = $"script {call.Script}: a script file changed since it was first read"; return false; }
         if (result.Outcome == ScrOutcome.Refused)
@@ -350,7 +356,7 @@ public sealed class AreaConversationHost
         if (!_content.VerifySeen()) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "a script or dialog file changed since it was first read");
         State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0);
         var result = ScrDispatcher.RunObject(new(ScrPoint.Dialog, Scripts.Object(speaker), Scripts.Pc, null, line), Scripts,
-            new() { Rules = _session.Rules.Scripts, Admission = AreaScriptHost.Admission });
+            new() { Rules = _session.Rules.Scripts, Admission = Scripts.RunAdmission });
         LastRun = result;
         if (_content.Changed) return new(AreaConversationStartStatus.SourceChanged, null, speaker, $"script {result.Script}: a script file changed since it was first read");
         if (result.Outcome == ScrOutcome.Refused)

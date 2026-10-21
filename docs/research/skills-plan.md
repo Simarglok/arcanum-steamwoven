@@ -277,7 +277,7 @@ All of S9..S15 also need S3; S11 needs S7 for the fated repair.
 | S14 Gambling | Gamble an item, PC limit table, the saved pre-drawn roll (snapshot: next free schema number) | FR-ITEM-019, FR-CHAR-019 | 0x579840, 0x579B60, 0x4C6520, 0x4C6560, the skill module save; SK5 as the original | a barter window |
 | S15 Pick pocket | Steal and plant one item, gold and ammunition limits, detection, the theft as an attack | FR-ITEM-015, FR-CHAR-019 | 0x575100, 0x575180, pick-pocket case of 0x4C7160 | NPC inventories in the session; AI hostility slice for the consequence |
 | S16 Trainers and skill services | Dialog trainers (`t:`, Apprentice for 100 gold), NPC skill services (`u:`, SK8), `map.patch` `training`, Educator | FR-CHAR-018, FR-DIALOG-004, FR-CHAR-006 | 0x418CA0, 0x418DE0, 0x418F30, 0x416C10, 0x4C62D0, 0x419B50..0x419CB0, 0x411940, 0x4C2950 | S4; Educator also waits for backgrounds (FR-CHAR-005); SK8 switch decided by the owner when it starts |
-| S17 Script skill commands | SCR "get skill" (SK1 as the original: no fall-through) and "use item with skill" with a modifier (A2) | FR-SCRIPT-002 | the two cases of 0x447220 | S3 and the SCR dispatcher |
+| S17 Script skill commands (**built by ARC-SKILLS-009**, [contract](../scripting/scr-dispatcher-runtime.md#skill-commands-arc-skills-009-set-s11), ledger [SX1–SX6](original-verification-ledger.md#script-skill-commands-arc-skills-009); use item with skill is a request only, no live installed use) | SCR "get skill" (SK1 as the original: no fall-through) and "use item with skill" with a modifier (A2) | FR-SCRIPT-002 | the two cases of 0x447220 | S3 and the SCR dispatcher |
 
 ### Order and the first visible results
 

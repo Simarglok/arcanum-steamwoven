@@ -72,6 +72,8 @@ public interface IScrHost
 {
     /// <summary>The attachee's slot for the point, or null when it has none.</summary>
     ScrSlot? Slot(ScrObjectRef attachee, int point);
+    /// <summary>The script with this number; any number may be asked (a call script's operand is a value), and one with no file
+    /// is <see cref="ScrScriptLookup.Missing"/>.</summary>
     ScrScriptLookup Script(int number);
     /// <summary>Global flag 0..3199.</summary>
     bool GlobalFlag(int index);
@@ -115,7 +117,32 @@ public interface IScrObjectQueries
     int? WieldedItemName(ScrObjectRef obj, int location);
     /// <summary>Whether the object has the reputation (SG5: only a PC has reputations).</summary>
     bool HasReputation(ScrObjectRef obj, int reputation);
+    /// <summary>ARC-SCRIPT-018: the object's type (its type field, OV3: 15 for a PC, 16 for an NPC), or null when the host
+    /// does not know the object (the run then stops as for an absent object).</summary>
+    int? ObjectType(ScrObjectRef obj);
 }
+
+/// <summary>
+/// ARC-SKILLS-009: the skill question of get skill (action 47, ledger SX1, SX2). A host whose admission set holds the action implements
+/// this interface; the interpreter asks only for skill numbers 0..15 and stores 0 for any other without asking.
+/// </summary>
+public interface IScrSkillQueries
+{
+    /// <summary>The object's effective skill level, as the original's level functions give it (0x4C5EB0 for a basic skill 0..11,
+    /// 0x4C65E0 for a tech skill 12..15 as tech index <paramref name="skill"/> − 12): the base level from the points (a monstrous
+    /// critter's melee 20) plus the effects' changes, clamped to 0..20 and capped by the key stat; never the points or the training.
+    /// 0 for an object that is not a PC or an NPC.</summary>
+    int SkillLevel(ScrObjectRef obj, int skill);
+}
+
+/// <summary>
+/// ARC-SKILLS-009: a use-item-with-skill action (79, ledger SX3, SX4) as the run asks for it: the source, the item (absent for a use
+/// without one), the target, the skill number and the modifier, as read. The original only queues the source's use-item-with-skill goal
+/// (0x4352C0), which runs the shared skill check later with the modifier as the invocation modifier (counted twice, SC12) and no flags;
+/// the script never sees the result. The run asks for nothing without a source or a target. Everything else (the gate, holding the item,
+/// the check, the skill's handler) is the host's.
+/// </summary>
+public readonly record struct ScrSkillUse(ScrObjectRef Source, ScrObjectRef? Item, ScrObjectRef Target, int Skill, int Modifier);
 
 /// <summary>A fade-and-teleport's extras (action 102, ledger TR2): the game seconds the move takes, the sound and the movie
 /// numbers, as the action reads them. The original uses the seconds and the sound only when positive and the movie when it
@@ -181,6 +208,10 @@ public enum ScrStop
     Refused,
     /// <summary>The event itself is not valid (a point outside 0..35, the dialog-override slot, a negative line).</summary>
     InvalidEvent,
+    /// <summary>ARC-SCRIPT-018: a call script would nest deeper than <see cref="ScrRunOptions.MaxCallDepth"/>, or the dispatch's
+    /// runs together executed more than <see cref="ScrRunOptions.MaxCallDepth"/> × <see cref="ScrRunOptions.MaxExecutedLines"/>
+    /// lines (the original has no bound but its stack; project bounds); the dispatch ends with skip default and applies nothing.</summary>
+    CallDepth,
 }
 
 /// <summary>A slot to store after the run: the object's slot for the point, or the tile's or sector's attachment.</summary>
@@ -272,7 +303,7 @@ public sealed class ScrEffects
     internal ScrEffects(ScrWriteback? writeback, ScrObjectRef? destroyTrapObject, IReadOnlyList<ScrFlagWrite> globalFlags, int? storyState, ScrDialogStart? dialog = null,
         IReadOnlyList<ScrCallRequest>? calls = null, IReadOnlyList<ScrPrintLine>? lines = null, IReadOnlyList<ScrSound>? sounds = null,
         IReadOnlyList<ScrTeleport>? teleports = null, IReadOnlyList<ScrSchemeRequest>? schemes = null, IReadOnlyList<ScrSchematicRequest>? schematics = null,
-        IReadOnlyList<ScrReadingRequest>? readings = null)
+        IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null)
     {
         Writeback = writeback; DestroyTrapObject = destroyTrapObject; GlobalFlags = globalFlags; StoryState = storyState; Dialog = dialog;
         Calls = calls ?? Array.Empty<ScrCallRequest>();
@@ -282,6 +313,7 @@ public sealed class ScrEffects
         Schemes = schemes ?? Array.Empty<ScrSchemeRequest>();
         Schematics = schematics ?? Array.Empty<ScrSchematicRequest>();
         Readings = readings ?? Array.Empty<ScrReadingRequest>();
+        SkillUses = skillUses ?? Array.Empty<ScrSkillUse>();
     }
 
     public static ScrEffects None { get; } = new(null, null, Array.Empty<ScrFlagWrite>(), null);
@@ -305,8 +337,10 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrSchematicRequest> Schematics { get; }
     /// <summary>ARC-UI-049: the reading actions in action order.</summary>
     public IReadOnlyList<ScrReadingRequest> Readings { get; }
+    /// <summary>ARC-SKILLS-009: the use-item-with-skill requests in action order.</summary>
+    public IReadOnlyList<ScrSkillUse> SkillUses { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
-        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0;
+        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -333,8 +367,8 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S10"/>, admitted for the lines reachable from the event's line) and the executed-line
-/// budget.</summary>
+/// at most <see cref="ScrAdmissionSet.S12"/>, admitted for the lines reachable from the event's line), the executed-line
+/// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
     /// <summary>The original stops a run after 1,000 executed lines.</summary>
@@ -344,20 +378,26 @@ public sealed record ScrRunOptions
     public ScrAdmissionSet Admission { get; init; } = ScrAdmissionSet.S5;
     /// <summary>1..1000; lower values are for tests and tools.</summary>
     public int MaxExecutedLines { get; init; } = OriginalLineBudget;
+    /// <summary>ARC-SCRIPT-018: how deep call script (7) may nest, 1..64 (the original's recursion is bounded only by its
+    /// stack, ledger OV1). Each called run has its own line budget, and the whole dispatch at most this many budgets.</summary>
+    public int MaxCallDepth { get; init; } = 16;
 
     internal void Validate()
     {
         ArgumentNullException.ThrowIfNull(Rules);
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S10)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S10.", nameof(Admission));
+        if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S12)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S12.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
     internal void Validate(IScrHost host)
     {
         Validate();
-        if (host is not IScrObjectQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectQueryConditions.Contains))
-            throw new ArgumentException("A set with a guard condition needs a host that implements IScrObjectQueries.", nameof(Admission));
+        if (host is not IScrObjectQueries && (Admission.Conditions.Any(ScrAdmissionSet.ObjectQueryConditions.Contains) || Admission.Actions.Any(ScrAdmissionSet.ObjectQueryActions.Contains)))
+            throw new ArgumentException("A set with a guard condition or get object type needs a host that implements IScrObjectQueries.", nameof(Admission));
+        if (host is not IScrSkillQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetSkill))
+            throw new ArgumentException("A set with get skill needs a host that implements IScrSkillQueries.", nameof(Admission));
     }
 }

@@ -43,6 +43,34 @@ public sealed class WrittenTextsTests
         Assert.AreEqual(new WrittenMessage(1, "", 0, false), WrittenTexts.Markup(1, ""));
     }
 
+    // ARC-TECHNOLOGY-009, WRD3 (owner decision 2026-10-21): Steamwoven keeps a message without a font prefix whole; Original (and no
+    // rules, the tool's view) drops its first character as the executable does.
+    [TestMethod]
+    public void A_message_without_a_font_prefix_keeps_its_first_character_in_steamwoven()
+    {
+        var (steamwoven, original) = (WrittenRuleProfile.Steamwoven, WrittenRuleProfile.Original);
+        Assert.AreEqual(new WrittenMessage(1, "Text", 0, false), WrittenTexts.Markup(1, "Text", steamwoven));
+        Assert.AreEqual(new WrittenMessage(1, "ext", 0, false), WrittenTexts.Markup(1, "Text", original));
+        Assert.AreEqual(WrittenTexts.Markup(1, "Text", original), WrittenTexts.Markup(1, "Text"), "no rules read as the original");
+        Assert.AreEqual(new WrittenMessage(1, "cTitle", 0, false), WrittenTexts.Markup(1, "cTitle", steamwoven), "no markup: the c stays and does not centre");
+        Assert.AreEqual(new WrittenMessage(1, "-5 A", 0, false), WrittenTexts.Markup(1, "-5 A", steamwoven), "a sign is no prefix");
+        Assert.AreEqual(new WrittenMessage(1, " 7 B", 0, false), WrittenTexts.Markup(1, " 7 B", steamwoven), "nor is leading white space");
+        Assert.AreEqual(new WrittenMessage(1, "", 0, false), WrittenTexts.Markup(1, "", steamwoven));
+        foreach (var rules in WrittenRuleProfile.All)
+        {
+            Assert.AreEqual(new WrittenMessage(1, "x", 5, true), WrittenTexts.Markup(1, "5Cx", rules), "a prefixed message is the same in both");
+            Assert.AreEqual(new WrittenMessage(1, "Z", 0, false), WrittenTexts.Markup(1, "5000 Z", rules));
+        }
+        var texts = WrittenTexts.Create(Mes("{100}{Plain start}{101}{12 Page}"), null, Mes("{10}{Filler}{1300}{30 Headline}"), null, Mes("{500}{Plaque}"));
+        Assert.AreEqual("Plain start|Page", string.Join("|", texts.Read(0, 100, rules: steamwoven).Body.Select(m => m.Text)));
+        Assert.AreEqual("lain start|Page", string.Join("|", texts.Read(0, 100, rules: original).Body.Select(m => m.Text)));
+        Assert.AreEqual("Plaque", texts.Read(6, 500, rules: steamwoven).Body.Single().Text);
+        Assert.AreEqual("laque", texts.Read(6, 500, rules: original).Body.Single().Text);
+        Assert.AreEqual(("Filler", "iller"), (texts.NewspaperFiller(1300, 1, steamwoven).Single().Text, texts.NewspaperFiller(1300, 1, original).Single().Text));
+        Assert.AreEqual(("steamwoven", "original"), (WrittenRuleProfile.FromName("steamwoven")!.Name, WrittenRuleProfile.FromName("original")!.Name));
+        Assert.IsNull(WrittenRuleProfile.FromName("Original"));
+    }
+
     [TestMethod]
     public void Notes_and_telegrams_are_joined_without_markup_and_telegrams_carry_their_headers()
     {

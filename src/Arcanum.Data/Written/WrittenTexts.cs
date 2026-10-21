@@ -132,10 +132,11 @@ public sealed class WrittenTexts
     /// <summary>
     /// The document of a written item or a script opener (0x56BC00 / 0x56BCC0): <paramref name="subtype"/> and the start line, and
     /// whether the item is the alternate newspaper prototype 14092 (the executable's 14072). A schematic, a subtype outside 0..6, a missing file or a picture
-    /// art outside 0..4095 is a refusal with no body.
+    /// art outside 0..4095 is a refusal with no body. The markup follows <paramref name="rules"/> (WRD3); without rules it reads as the
+    /// retail game does (a tool's view), so a game session passes its own.
     /// </summary>
     [OriginalFunction(0x56BCC0, OriginalFunctionScope.Partial)]
-    public WrittenDocument Read(int subtype, int startLine, bool alternateNewspaper = false)
+    public WrittenDocument Read(int subtype, int startLine, bool alternateNewspaper = false, WrittenRuleProfile? rules = null)
     {
         if (subtype is < 0 or > (int)WrittenSubtype.Plaque) return Refused(WrittenReadStatus.SubtypeOutOfRange, null, startLine);
         var kind = (WrittenSubtype)subtype;
@@ -149,7 +150,7 @@ public sealed class WrittenTexts
         var raw = Lines(file, startLine).ToArray();
         IReadOnlyList<WrittenMessage> body = kind switch
         {
-            WrittenSubtype.Book or WrittenSubtype.Plaque or WrittenSubtype.Newspaper => raw.Select(m => Markup(m.Number, m.Text)).ToArray(),
+            WrittenSubtype.Book or WrittenSubtype.Plaque or WrittenSubtype.Newspaper => raw.Select(m => Markup(m.Number, m.Text, rules)).ToArray(),
             WrittenSubtype.Telegram => Joined(raw.Select(m => new WrittenMessage(m.Number, m.Text + Text(file, TelegramSuffix), 0, false))),
             _ => Joined(raw.Select(m => new WrittenMessage(m.Number, m.Text + "\n", 0, false))),
         };
@@ -168,10 +169,11 @@ public sealed class WrittenTexts
     /// The newspaper filler messages after the body (the redraw 0x56C050): the first number is 10 + start / 10 (truncated toward
     /// zero), and after each message the number rises by one; a number at or past 10 + <see cref="NewspaperFillers"/> becomes 10. A
     /// missing message stops the filling. <paramref name="count"/> is how many the caller's columns take (the original fills their
-    /// remaining height). Empty without newspaper texts or filler messages.
+    /// remaining height). Empty without newspaper texts or filler messages. The markup follows <paramref name="rules"/> as in
+    /// <see cref="Read"/>.
     /// </summary>
     [OriginalFunction(0x56C050, OriginalFunctionScope.Partial)]
-    public IReadOnlyList<WrittenMessage> NewspaperFiller(int startLine, int count)
+    public IReadOnlyList<WrittenMessage> NewspaperFiller(int startLine, int count, WrittenRuleProfile? rules = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(count, MaxFillerCount);
@@ -183,7 +185,7 @@ public sealed class WrittenTexts
         for (var i = 0; i < count; i++)
         {
             if (file.Find((int)number) is not { } message) break;
-            result.Add(Markup((int)number, Encoding.Latin1.GetString(message.Bytes.Span)));
+            result.Add(Markup((int)number, Encoding.Latin1.GetString(message.Bytes.Span), rules));
             if (++number >= end) number = FirstNewspaperFiller;
         }
         return result.AsReadOnly();
@@ -194,12 +196,15 @@ public sealed class WrittenTexts
     /// admitted), as an interface art number; the parser then skips the leading digits only, tests the next character for <c>c</c> or
     /// <c>C</c> (centred) and drops it, then drops one following whitespace character. So a message with no prefix uses font 0 and
     /// loses its first character (centred when that is a <c>c</c>). A font outside 0..4095 reads as 0 (the original turns it into
-    /// garbage: WR anomaly, both modes).
+    /// garbage: WR anomaly, both modes). Under <see cref="WrittenRuleProfile.Steamwoven"/> a message whose first character is not an
+    /// ASCII digit has no markup: its whole text, font 0, not centred (WRD3); null <paramref name="rules"/> read as the original.
     /// </summary>
     [OriginalFunction(0x56C9F0, OriginalFunctionScope.Partial)]
-    public static WrittenMessage Markup(int number, string text)
+    public static WrittenMessage Markup(int number, string text, WrittenRuleProfile? rules = null)
     {
         ArgumentNullException.ThrowIfNull(text);
+        if (rules is { UnprefixedMessageLosesFirstCharacter: false } && (text.Length == 0 || !char.IsAsciiDigit(text[0])))
+            return new(number, text, 0, false);
         var font = Atoi(text);
         var i = 0;
         while (i < text.Length && char.IsAsciiDigit(text[i])) i++;
