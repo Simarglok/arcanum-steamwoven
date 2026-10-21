@@ -143,7 +143,7 @@ public sealed partial class GameSessionOwner
             var verdict = insertCheck(new SessionInventoryItem(entity, InventoryDomain.MadeFacts(kind) with { Quantity = ammo?.Units, AmmoType = ammo?.AmmoType }));
             ThrowIfDisposed();
             if (Stale()) return RejectAssembly(GameSessionFailure.StaleVersion);
-            if (verdict != SessionInsertVerdict.Accepted) return RejectAssembly(GameSessionFailure.InsertRefused, plan);
+            if (verdict != SessionInsertVerdict.Accepted) return RejectAssembly(GameSessionFailure.InsertRefused, plan) with { Verdict = verdict };
         }
         foreach (var entity in consumed)
         {
