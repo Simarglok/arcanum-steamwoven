@@ -641,6 +641,8 @@ is wired to the viewer: items can be picked up from the ground and taken from de
 the original Inventory key shows what the PC took (FR-ITEM-001, FR-UI-004). Code:
 [`AreaInventoryHost`](../../tools/terrain-viewer/Core/AreaInventoryHost.cs) (Godot-free) and
 the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
+Since ARC-WORLD-066 ammunition can be picked up and looted too: it merges into the hero's stack of its prototype, and the
+inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inventory-runtime.md#ammunition-arc-world-066)).
 
 - **Seeds.** When the area session is created, the exterior (and, with `--area-cave-mobile`,
   the cave) seed is built from the [T0 inventory view](../world/area-inventory-view.md) and
@@ -663,13 +665,17 @@ the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
   (the use-range helper, 0x428930);
   the pickup goal's own move-near range is not pinned, so pickup uses the same reach (project
   choice). Living NPCs, chests (contents generated on first open, not modelled) and items
-  inside holders are not targets. A ground item the session refuses (gold, ammunition, keys,
+  inside holders are not targets. A ground item the session refuses (gold, keys,
   a pickup or insert script; none on the exterior core) is still shown as *pick up* and the
   click reports the refusal. Not modelled: the pickup animation and action-point cost.
 - **Use on self (ARC-SKILLS-005).** A healing item in the PC's list (the kit's from the hero load's prototype fields, a taken
   item's from its object row) gets a *Use on self* button under the list: the hero heals itself through the session's heal
   check ([heal runtime](../world/heal-runtime.md)), and the message line names the amount, the cure and the uses left or the item
   used up. No pre-made kit and nothing on the Crash Site exterior is a healing item; the synthetic self-test covers the button.
+- **Repair (ARC-SKILLS-007).** A damaged or broken item in the PC's list (its condition: the session's record over the hero
+  load's or the object row's baseline) gets a *Repair* button: the hero repairs it with its Repair skill
+  ([repair runtime](../world/repair-runtime.md)), and the message line names the hit points repaired, "nothing to repair" or
+  "the repair restored nothing". The native smoke damages an original hero's kit item and repairs it through the button.
 - **Taken items.** An item the PC took is neither drawn nor picked any more (the canvas
   skips its body; the hover pick passes over it), also after a quick load. The resource
   sweep of the native smoke counts those bodies as taken.

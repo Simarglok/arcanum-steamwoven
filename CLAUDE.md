@@ -72,13 +72,13 @@ under `docs/research`. Details: `docs/project/status.md`.
   plans, step evidence `Traversal`, T0 `Inventory`, `Lighting`, pre-made hero
   `Characters`, item/critter `Combat` fields, `Hd` pack/recipe reader, `Audio` sound catalogue, object sound fields and tile sound classes, `Written` texts of the reading window), `Arcanum.Simulation`
   (exact grid `Movement`, click-to-move `Navigation`, `Clock`, `Character`
-  stats, `Party`, `Combat` attack resolver and life rules, `Equipment` wear rules, `Sound` event cue rules, `Technology` schematic and charge-cell rules), `Arcanum.Scripting` (`Dialog`
+  stats, `Party`, `Combat` attack resolver and life rules, `Equipment` wear rules, `Sound` event cue rules, `Technology` schematic, charge-cell and device rules), `Arcanum.Scripting` (`Dialog`
   transition and conversation, `NpcDialog` entry, `GlobalFlags`),
   `Arcanum.Presentation` (animation timeline), `Arcanum.Input` (+
   `Arcanum.Input.Godot` adapter source), `Arcanum.Session` (one game-session
   owner: clock, GF, actor placement, map changes, story, party, inventory,
   starting hero, randomness, life state, event queue with life timers, NPC reaction, turn-based round, equipment,
-  durable effects with blessings and curses, experience and levels, auto-level schemes, combat mode, music and ambient scheme state, quelled rumors, the hero's skills, item durability, found schematics, made items, the spell book, fate points, the wait timer and follower loyalty, the PC's known world-map areas, NPC inventory changes, the NPC schematic crafter, the PC's reputations, snapshot schema 30), `Arcanum.Godot` (ART viewer and HD
+  durable effects with blessings and curses, experience and levels, auto-level schemes, combat mode, music and ambient scheme state, quelled rumors, the hero's skills, item durability, found schematics, made items, the spell book, fate points, the wait timer and follower loyalty, the PC's known world-map areas, NPC inventory changes, the NPC schematic crafter, the PC's reputations, the hero's placed items, ammunition stacks, snapshot schema 34), `Arcanum.Godot` (ART viewer and HD
   before/after review). Data/Simulation/Scripting/Session must stay
   Godot-independent.
 - Tools: `tools/terrain-viewer` (Core + Godot; ordinary modes `crash-site-area`

@@ -104,8 +104,8 @@ stays as the worth to beat, except in the weapon slot; any other comes off (no-d
 then the choice over the hero's items in creation order (the kit, then the items taken from the world), wielded as by
 `Equip`. The host gives every held item's facts (`SessionWearableLookup`; `SessionEquipmentFacts.Wearable` builds them from
 the stored combat fields, which now also read the script points) and answers the art and insert checks. The hero's weapon
-skill levels (melee, bow, throwing, firearms) are its session skills since ARC-SKILLS-002 ([hero skills](hero-skills-runtime.md)), and it carries no
-ammunition. `SessionEquipBestStep` lists what happened per slot. Refused before any effect: version, no hero, invalid or
+skill levels (melee, bow, throwing, firearms) are its session skills since ARC-SKILLS-002 ([hero skills](hero-skills-runtime.md)), and since
+ARC-WORLD-066 its ammunition is the units of its stack of each type ([ammunition](inventory-runtime.md#ammunition-arc-world-066)). `SessionEquipBestStep` lists what happened per slot. Refused before any effect: version, no hero, invalid or
 mismatched facts, a callback that moved the session. **Project policy:** a chosen item with a move script or item spells
 is not wielded (the session runs neither; the original wears it and runs them): its step names it, the slot keeps what it
 held when the call began (a weapon taken off for the choice goes back on) and the call goes on.
@@ -146,7 +146,7 @@ pack.
 ## Not ready
 
 - **No paperdoll.** The viewer's inventory window has no paperdoll and no host calls `Equip`; the pre-made start wields the
-  kit (ARC-WORLD-034). The best-items choice reads the hero's skill levels (ARC-SKILLS-002) and no ammunition; a custom
+  kit (ARC-WORLD-034). The best-items choice reads the hero's skill levels (ARC-SKILLS-002) and its ammunition stacks (ARC-WORLD-066); a custom
   character's start (weapon and armour only) and the AI's call with a target are not wired.
 - **NPC equipment.** NPC slots stay the host's (seed inventory locations); `EquipmentRules.Evaluate` serves them too, and
   looting a worn item is still `WornItemUnsupported`.

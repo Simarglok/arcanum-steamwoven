@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Technology;
 
@@ -7,8 +8,8 @@ public sealed partial class GameSessionOwner
 {
     /// <summary>
     /// ARC-TECHNOLOGY-007: the charge-cell facts of the hero as payer (it pays a cell-powered spell from its one power-cell
-    /// stack), or null without a hero. The stack is the host's (the session holds no ammunition yet; consumption in session state
-    /// waits for session ammunition).
+    /// stack), or null without a hero. The stack is the host's and nothing is written; since ARC-WORLD-066
+    /// <see cref="HeroCellSource"/> uses the hero's own stack and spends an applied payment.
     /// </summary>
     public CellPayer? QueryHeroCellPayer(CellStack? cells)
     {
@@ -36,5 +37,17 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(payer);
         return new ChargeCellSource(payer, _rules.Technology);
+    }
+
+    /// <summary>
+    /// ARC-TECHNOLOGY-008: how a device of this magick/tech complexity works for the hero (<see cref="TechDeviceRules.Use"/> with
+    /// the hero's effective aptitude): usable outside combat, the power the hero draws and, for a weapon, the combat failure
+    /// chance. Null without a hero or for a complexity outside the equipment limits.
+    /// </summary>
+    public TechDeviceUse? QueryHeroDeviceUse(int complexity, bool weapon)
+    {
+        ThrowIfDisposed();
+        if (_hero is null || complexity is < -EquipmentLimits.MaxMagnitude or > EquipmentLimits.MaxMagnitude) return null;
+        return TechDeviceRules.Use(complexity, HeroAptitude(), weapon);
     }
 }

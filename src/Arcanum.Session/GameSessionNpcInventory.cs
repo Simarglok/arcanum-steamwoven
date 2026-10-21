@@ -25,13 +25,18 @@ public sealed partial class GameSessionOwner
     /// attached seed, a party record, or an NPC that already holds added items (<see cref="GameSessionFailure.UnknownHolder"/>);
     /// its life is the caller's concern. The item is <c>made:n</c>, one past every made number the session knows. Refused before
     /// any effect: an invalid input (<see cref="GameSessionFailure.InvalidItem"/>), the version, an item type the lists do not
-    /// admit (<see cref="GameSessionFailure.ItemTypeUnsupported"/>: gold, ammunition, keys, key rings), a full list
+    /// admit (<see cref="GameSessionFailure.ItemTypeUnsupported"/>: gold, keys, key rings), ammunition without its type and units
+    /// or with a type out of 0..3 or negative units (<see cref="GameSessionFailure.InvalidAmmo"/>), a full list
     /// (<see cref="SessionMapInventorySeed.MaxListLength"/> with the NPC's current seed items) or store
     /// (<see cref="GameSessionLimits.MaxNpcItems"/>) or no free made number (<see cref="GameSessionFailure.BudgetExceeded"/>), the
     /// revision, then the host's insert check for the NPC (<see cref="GameSessionFailure.InsertRefused"/>; a call back into the
-    /// owner from it, a seed attach included, is <see cref="GameSessionFailure.StaleVersion"/>). One revision.
+    /// owner from it, a seed attach included, is <see cref="GameSessionFailure.StaleVersion"/>). One revision. ARC-WORLD-066: ammunition
+    /// (<paramref name="ammo"/>: its type and units) merges into the NPC's stack of the same prototype when it holds one (the stack's
+    /// units grow, no item is added: <see cref="InventoryMutationResult.Item"/> names the stack), as the original's insertion does;
+    /// a sum that does not fit 32 bits is refused (<see cref="GameSessionFailure.BudgetExceeded"/>).
     /// </summary>
-    public InventoryMutationResult AddItemToNpc(GameSessionVersion expected, string npc, SessionItemKind kind, SessionInsertCheck insertCheck)
+    public InventoryMutationResult AddItemToNpc(GameSessionVersion expected, string npc, SessionItemKind kind, SessionInsertCheck insertCheck,
+        (int AmmoType, int Units)? ammo = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -40,8 +45,13 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
         if (!InventoryDomain.Admitted(kind.Type)) return RejectItem(GameSessionFailure.ItemTypeUnsupported);
+        if ((kind.Type == SessionItemType.Ammo) != ammo.HasValue || ammo is { } given && (given.AmmoType is < 0 or >= SessionAmmoRecord.AmmoTypes || given.Units < 0))
+            return RejectItem(GameSessionFailure.InvalidAmmo);
+        if (ammo is { } units && NpcStacks(npc).Where(pair => pair.Prototype == kind.Prototype).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault() is { } stack)
+            return MergeIntoNpc(npc, stack, units.Units, insertCheck, kind);
         var added = _inventory.AddedTo(npc).Count;
-        if (added + SeedItemCount(npc) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
+        if (added + SeedItemCount(npc) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems ||
+            ammo is not null && _inventory.Ammo.Count >= _limits.MaxAmmoRecords)
             return RejectItem(GameSessionFailure.BudgetExceeded);
         var number = NextMadeNumber();
         if (number > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
@@ -55,8 +65,26 @@ public sealed partial class GameSessionOwner
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
         _inventory.AddToNpc(npc, item);
         _inventory.Taken.Add(item.Entity);
+        if (ammo is { } kept) _inventory.Ammo[item.Entity] = new(item.Entity, kept.AmmoType, kept.Units);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, Version);
+    }
+
+    // ARC-WORLD-066: ammunition added to an NPC that holds a stack of its prototype only grows that stack (the inserted object is
+    // destroyed in the original); the host's insert check still answers for the NPC.
+    private InventoryMutationResult MergeIntoNpc(string npc, SessionAmmoRecord stack, int units, SessionInsertCheck insertCheck, SessionItemKind kind)
+    {
+        if ((long)stack.Units + units > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (!_inventory.Ammo.ContainsKey(stack.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        var (revision, seeds) = (_revision, _inventory.SeedGeneration);
+        var verdict = insertCheck(new SessionInventoryItem(stack.Entity, InventoryDomain.MadeFacts(kind) with { AmmoType = stack.AmmoType, Quantity = units }));
+        ThrowIfDisposed();
+        if (_revision != revision || _inventory.SeedGeneration != seeds) return RejectItem(GameSessionFailure.StaleVersion, verdict);
+        if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
+        _inventory.Ammo[stack.Entity] = stack with { Units = stack.Units + units };
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, stack.Entity, verdict, Version);
     }
 
     /// <summary>

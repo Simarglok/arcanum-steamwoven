@@ -233,7 +233,8 @@ public sealed partial class GameSessionOwner
 
     /// <summary>The hero as the best-item choice scores it: its effective DamageBonus and aptitude, its weapon skill levels
     /// (<see cref="QueryHeroSkills"/>, ARC-SKILLS-002; firearms a tech skill), extraordinary intelligence, the local PC under the
-    /// session's difficulty, and no ammunition (the PC's list holds none).</summary>
+    /// session's difficulty, and (ARC-WORLD-066) the units of its ammunition stack of each type (its first stack of the type, the
+    /// original's one stack a critter field names).</summary>
     internal EquipmentChooser HeroChooser()
     {
         var state = _life.Hero!.Value.State;
@@ -250,6 +251,8 @@ public sealed partial class GameSessionOwner
             ExtraordinaryIntelligence = snapshot.GetEffective(CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold,
             IsPc = true,
             Difficulty = _difficulty,
+            Ammunition = Enumerable.Range(0, SessionAmmoRecord.AmmoTypes).Select(type => (type, stack: HeroStackOfType(type)))
+                .Where(pair => pair.stack is not null).ToDictionary(pair => pair.type, pair => pair.stack!.Value.Units),
         };
     }
 }

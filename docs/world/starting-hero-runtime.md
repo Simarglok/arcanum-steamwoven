@@ -80,7 +80,7 @@ critical-hit chance, the bad-reaction adjustment and age, SH-09).
 stats list that is not ten values, a stored value outside the race's range (strict, as `SetBase`), level outside
 0..51, unspent points outside 0..56, alignment outside −1000..1000 (the original's stat ranges),
 an effect the character owner refuses (no modifiers, more than seven, a magnitude above 1000, divisor 0, negative id),
-negative gold, a kit item of a type transfers cannot hold (gold, ammunition, key, key ring) and a kit larger than
+negative gold, a kit item of a type the kit cannot hold (gold, ammunition: no unit count, key, key ring) and a kit larger than
 `MaxPcItems`. The definition is copied (its lists are checked on the copy). Gold and the kit enter the inventory at revision 0: the kit as `kit:1`,
 `kit:2`, … (`SessionKitItem`, no origin map), kept apart from the items the PC takes from the world (`QueryPcInventory`
 keeps its ARC-WORLD-014 meaning, which the viewer's inventory window reads) and counted with them toward `MaxPcItems`.

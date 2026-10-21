@@ -236,7 +236,7 @@ public partial class TerrainViewerApp
     private AreaDropMap? AreaDropMapNow()
     {
         if (_worldActor.Session is not AreaGridSession session || _readyArea is not { } area || _areaSession is not { } owner) return null;
-        var occupancy = _areaCompanions?.OccupancyForPc() ?? AreaOccupancy.None;
+        var occupancy = AreaPcOccupancy() ?? AreaOccupancy.None;
         static CellCoord World(AreaGridSession s, CellCoord chart) { var w = s.Chart.ToWorld(chart); return new(checked((int)w.X), checked((int)w.Y)); }
         var live = occupancy.Occupied.Select(c => World(session, c)).Append(World(session, session.State.CommittedCell)).ToHashSet();
         var gone = ObjectTargets()?.Gone(owner) ?? new HashSet<AreaObjectKey>();
@@ -245,6 +245,27 @@ public partial class TerrainViewerApp
             row => _combatHost?.Target(owner, map, row.Key) is { } target &&
                 (target.Dead || target.Build.Combat is { } combat && owner.QueryLife(combat.Target).View?.Status.IsDead == true),
             session.Portals);
+    }
+
+    /// <summary>ARC-WORLD-065: the shown map's objects the session destroyed or switched off (the same set while nothing changed);
+    /// the original's object lists skip them, so they block no step (ledger FC1–FC3).</summary>
+    private IReadOnlySet<AreaObjectKey> AreaRemovedObjects() =>
+        _areaSession is { } session && ObjectTargets() is { } targets ? targets.Gone(session) : NoRemovedObjects;
+
+    private static readonly IReadOnlySet<AreaObjectKey> NoRemovedObjects = new HashSet<AreaObjectKey>();
+    private (IReadOnlySet<AreaObjectKey> Removed, AreaOccupancy Value)? _removedOnlyOccupancy;
+
+    /// <summary>ARC-WORLD-016/065: the PC's live overlay: the companions' (which moves the removed objects too), or with no
+    /// companions the removed objects alone (null when there are none).</summary>
+    private AreaOccupancy? AreaPcOccupancy()
+    {
+        if (_areaCompanions is { } group) return group.OccupancyForPc();
+        var removed = AreaRemovedObjects();
+        if (removed.Count == 0) return null;
+        if (_removedOnlyOccupancy is { } known && ReferenceEquals(known.Removed, removed)) return known.Value;
+        var value = AreaOccupancy.None.WithRemoved(removed);
+        _removedOnlyOccupancy = (removed, value);
+        return value;
     }
 
     /// <summary>ARC-COMBAT-011: whether a row's use script is a trap (OD6), through the shown map's use-script host; false without

@@ -42,7 +42,7 @@ Agreed through the coordinator on 2026-10-20:
   rule ([SK7](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)),
   fate points (built as ARC-WORLD-054) and the shared character-point spend and refund
   path (built as ARC-WORLD-052). Item durability (item hit points and the broken
-  state) is owned here and is the input of the Repair slice ARC-SKILLS-011.
+  state) is owned here and is the input of the Repair slice (built as ARC-SKILLS-007, [repair](../world/repair-runtime.md)).
 
 ## Vocabulary and evidence
 
@@ -341,7 +341,8 @@ check, action-point or time cost and no experience.
   parent it checks the record's intelligence and willpower and charges the
   maintenance cost through 0x450420 (dwarves × 2) unless the run is free, so a
   maintained tech record pays each period (fatigue per the magic study, cells
-  for the cell-powered records 168 and 187).
+  for a cell-powered record; the installed 168 and 187 have maintenance 0, so their
+  cells come from a ChargeNBranch component instead, ledger [DV7](original-verification-ledger.md#tech-devices-arc-technology-008)).
 - **Degrees do not change devices.** Effective expertise has no caller outside
   the sheet and the schematic gate; degrees act on devices only through tech
   points → aptitude → item power. The four tech skills work in their own
@@ -379,7 +380,8 @@ check, action-point or time cost and no experience.
 
 Re-read for ARC-WORLD-053 by a second reader (F2, [ledger DU1–DU8](original-verification-ledger.md#item-durability-arc-world-053)): every row
 below agrees; the second reader added the price's final bounds (negative 0, exactly 1 is 2), that the unwield moves only items in wear
-slots and the item is dropped when it fails, and the repair table (training none 10, apprentice 5, expert 1, master 0; 5 for a broken item).
+slots and the item is dropped when it fails, and the repair table (training none 10, apprentice 5, expert 1, master 0; 5 for a broken item,
+corrected by [RP2](original-verification-ledger.md#repair-arc-skills-007) to a master's broken item only).
 
 - **Fields and formulas**: hp_pts (0x1B), hp_adj (0x1C) and hp_damage (0x1D)
   are ordinary saved object fields (an instance stores overrides). A
@@ -650,16 +652,17 @@ this document start at F1 or F2.
    engine; FR-MAGIC-010/011): the cell source behind the engine's payment port
    (critter `cost`, item source TC1 decided, ammunition type 2; **done** as rules and a
    session port by ARC-TECHNOLOGY-007, [runtime](../world/charge-cell-runtime.md); the
-   consumption in session state waits for session ammunition, ARC-WORLD-066), the list of
-   tech items and records that reach the engine (70 item spell slots, records
-   147, 168 and 187), a test that the engine's MAINTAIN charges maintained
+   the hero's cells are spent in session state since ARC-WORLD-066), the list of
+   tech items and records that reach the engine (70 item spell slots; cell records
+   147, 168 and 187; maintained 146, 149, 168, 187, 209 and 216; **done** with the MAINTAIN test and the device rule by ARC-TECHNOLOGY-008,
+   [runtime](../world/tech-devices-runtime.md)), a test that the engine's MAINTAIN charges maintained
    tech records (the stage itself stays with the magic slices), and the rule that
    tech items are not refused to mages outside combat (the wear refusal of
    item-spell items is lifted with the shared item trigger slice, which the
    magic research owns).
 
 **Item durability** (FR-ITEM-011; done: ARC-WORLD-053, [runtime](../world/item-durability-runtime.md), ledger DU1–DU8) is one more slice, owned by this research and
-needed by ARC-SKILLS-011 (Repair). Its type is `WORLD` (item state in the
+needed by the Repair slice (built as ARC-SKILLS-007). Its type is `WORLD` (item state in the
 session runtime; the next free `WORLD` number at task creation): hp fields per item in the session (prototype values with
 instance overrides), maximum and current, the damage setter, the two-step
 break (destroyed bit, damage reset, unwield or drop, BUST hook, deletion),

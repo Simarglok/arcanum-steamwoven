@@ -7,7 +7,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 namespace Arcanum.Session.Tests;
 
 // ARC-TECHNOLOGY-007: the session's charge-cell port. The hero pays from the host's cell stack; asking changes nothing (the
-// session holds no ammunition yet); TC1 follows the session's rule mode. Numbers are invented.
+// host-stack port writes nothing; ARC-WORLD-066's HeroCellSource spends); TC1 follows the session's rule mode. Numbers are invented.
 [TestClass]
 public sealed class CellSourceStateTests
 {
@@ -24,7 +24,7 @@ public sealed class CellSourceStateTests
         Assert.AreEqual((SpellPaymentStatus.Paid, 3, true), (paid.Status, source.LastPlan!.UnitsAfter, source.LastPlan.Writes));
         var check = SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Critter, CurrentFatigue: 50), 7, false, 168, Cells, source);
         Assert.AreEqual((SpellPaymentStatus.Paid, false), (check.Status, source.LastPlan!.Writes), "an affordability check writes nothing");
-        Assert.AreEqual(before, owner.Version, "the session holds no ammunition: nothing changes");
+        Assert.AreEqual(before, owner.Version, "the host-stack port writes nothing");
         using var heroless = Create();
         Assert.IsNull(heroless.QueryHeroCellPayer(null));
         Assert.IsNull(heroless.QueryHeroItemCellPayer(-50, null));
@@ -47,5 +47,19 @@ public sealed class CellSourceStateTests
         var original = ChargeCellRules.Need(payer, 7, owner.Rules.Technology);
         owner.SelectRules(RuleMode.Steamwoven);
         Assert.AreEqual(21, original + ChargeCellRules.Need(payer, 7, owner.Rules.Technology), "TC1 mirrors the share: cost + s and 2 × cost − s");
+    }
+
+    [TestMethod]
+    public void A_device_query_uses_the_heros_aptitude_and_never_refuses_a_technological_item()
+    {
+        using var owner = CreateWith(HalfElf());
+        var aptitude = owner.QueryHeroItemCellPayer(-80, null)!.HolderAptitude;
+        var before = owner.Version;
+        Assert.AreEqual(TechDeviceRules.Use(-80, aptitude, weapon: true), owner.QueryHeroDeviceUse(-80, weapon: true));
+        Assert.IsTrue(owner.QueryHeroDeviceUse(-80, weapon: false)!.Value.Usable, "outside combat a technological device always works");
+        Assert.IsNull(owner.QueryHeroDeviceUse(5000, weapon: false), "a complexity out of range");
+        Assert.AreEqual(before, owner.Version);
+        using var heroless = Create();
+        Assert.IsNull(heroless.QueryHeroDeviceUse(-80, weapon: true));
     }
 }

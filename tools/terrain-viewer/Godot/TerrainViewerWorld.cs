@@ -127,7 +127,7 @@ public partial class TerrainViewerApp
         _worldSettings = _worldStore.Load();
         _worldPreferredZoom = _worldZoomStore.Load();
         // ARC-WORLD-016: the PC's AREA steps are admitted against the shown map's companions.
-        _worldActor.AreaOccupancy = () => _areaCompanions?.OccupancyForPc();
+        _worldActor.AreaOccupancy = AreaPcOccupancy;
         ConfigureGait();
         _worldPanel = new DiagnosticInputSettingsPanel(); AddChild(_worldPanel);
         _worldPanel.Changed += SaveWorldSettings;

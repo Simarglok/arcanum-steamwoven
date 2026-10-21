@@ -115,12 +115,22 @@ public sealed class AreaObjectTargets
             : new(item, row, DamageableObjectKind.Item, null, null, null, "values outside the durability bounds");
     }
 
-    /// <summary>The objects the session destroyed or switched off: the view no longer draws them.</summary>
+    private (GameSessionVersion Version, IReadOnlySet<AreaObjectKey> Keys)? _gone;
+
+    /// <summary>The objects the session destroyed or switched off: the view no longer draws them, and since ARC-WORLD-065 they no
+    /// longer block a step (the live overlay moves their T0 records). The same set is returned while the session's version is
+    /// unchanged.</summary>
     public IReadOnlySet<AreaObjectKey> Gone(GameSessionOwner session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        return _objects.Where(pair => session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) is SessionObjectCondition.Destroyed
+        var version = session.Version;
+        if (_gone is { } known && known.Version == version) return known.Keys;
+        var keys = _objects.Where(pair => session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) is SessionObjectCondition.Destroyed
             or SessionObjectCondition.Off).Select(pair => pair.Key).ToHashSet();
+        // An unchanged set keeps its reference, so overlays cached on it stay valid across unrelated revisions.
+        IReadOnlySet<AreaObjectKey> result = _gone is { } previous && previous.Keys.SetEquals(keys) ? previous.Keys : keys;
+        _gone = (version, result);
+        return result;
     }
 
     /// <summary>One line for the status bar about an object attack (no original text).</summary>
