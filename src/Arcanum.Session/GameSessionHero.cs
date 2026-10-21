@@ -96,6 +96,10 @@ public sealed class SessionHeroState
     internal SessionHeroState With(int[] stats, int level, int experience, int unspentPoints, SessionHeroAdvancement advancement) =>
         new(Prototype, Race, Gender, stats, level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, advancement, InnateSkills, Fate);
 
+    /// <summary>The same hero with a new stored alignment (ARC-WORLD-067).</summary>
+    internal SessionHeroState WithAlignment(int alignment) =>
+        new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, Fate);
+
     /// <summary>The same hero with new fate points and armed fates (ARC-WORLD-054).</summary>
     internal SessionHeroState WithFate(FateState fate) =>
         new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, Alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, fate);

@@ -36,16 +36,26 @@ public static class AreaCompanionRoster
         return speaker.Row.PrototypeNumber == Virgil.Prototype && speaker.ScriptId == Virgil.ScriptId ? Virgil : null;
     }
 
-    /// <summary>The follow-check facts for <paramref name="npc"/> against the diagnostic PC; <paramref name="level"/> is the NPC's
-    /// level now when the session levelled it (ARC-WORLD-036, <see cref="AreaAdvancement.Level"/>), else its T0 level.</summary>
-    public static PartyConsentFacts Facts(AreaCompanionFacts npc, int pcAlignment, int reaction, int? level = null) => new(
-        MindControlledByPc: false, PcPersuasion: PersuasionTraining.None, PcCharisma: DiagnosticPcCharisma, PcAlignment: pcAlignment,
-        PcLevel: DiagnosticPcLevel, OtherLeaderCharisma: null, Reaction: reaction, Thresholds: npc.Thresholds,
-        NpcAlignment: npc.Alignment, NpcLevel: level ?? npc.Level, MaxFollowers: FollowConsentRules.MaxFollowers(DiagnosticPcCharisma, PersuasionTraining.None));
+    /// <summary>The follow-check facts for <paramref name="npc"/>: the PC side is the session hero's (ARC-WORLD-067,
+    /// <see cref="GameSessionOwner.QueryHeroPartySide"/>: Persuasion training, effective charisma, level, alignment, max followers)
+    /// when <paramref name="hero"/> is given, else the diagnostic PC (charisma 8, level 1, no Persuasion) with
+    /// <paramref name="pcAlignment"/>, the conversation host's alignment. <paramref name="level"/> is the NPC's level now when the
+    /// session levelled it (ARC-WORLD-036, <see cref="AreaAdvancement.Level"/>), else its T0 level.</summary>
+    public static PartyConsentFacts Facts(AreaCompanionFacts npc, int pcAlignment, int reaction, int? level = null, SessionPartySide? hero = null) => new(
+        MindControlledByPc: false, PcPersuasion: hero?.Persuasion ?? PersuasionTraining.None, PcCharisma: hero?.Charisma ?? DiagnosticPcCharisma,
+        PcAlignment: hero?.Alignment ?? pcAlignment, PcLevel: hero?.Level ?? DiagnosticPcLevel, OtherLeaderCharisma: null, Reaction: reaction,
+        Thresholds: npc.Thresholds, NpcAlignment: npc.Alignment, NpcLevel: level ?? npc.Level,
+        MaxFollowers: hero?.MaxFollowers ?? FollowConsentRules.MaxFollowers(DiagnosticPcCharisma, PersuasionTraining.None));
 
-    /// <summary>ARC-WORLD-045: the wait timer facts of <paramref name="npc"/> against the diagnostic PC (with a session hero the
-    /// session uses the hero's training and charisma).</summary>
-    public static PartyWaitFacts WaitFacts(AreaCompanionFacts npc) => new(npc.WaitIndex, PersuasionTraining.None, DiagnosticPcCharisma, false);
+    /// <summary>ARC-WORLD-045: the wait timer facts of <paramref name="npc"/>: the leader's training and charisma are the session
+    /// hero's when <paramref name="hero"/> is given (ARC-WORLD-067), else the diagnostic PC's.</summary>
+    public static PartyWaitFacts WaitFacts(AreaCompanionFacts npc, SessionPartySide? hero = null) =>
+        new(npc.WaitIndex, hero?.Persuasion ?? PersuasionTraining.None, hero?.Charisma ?? DiagnosticPcCharisma, false);
+
+    /// <summary>The HUD's line for the PC side of the party rules: the hero's values, or the labelled diagnostic profile.</summary>
+    public static string PartySideLabel(SessionPartySide? hero) => hero is { } pc
+        ? $"PC side: hero (charisma {pc.Charisma}, level {pc.Level}, alignment {pc.Alignment}, persuasion {pc.Persuasion}, max followers {pc.MaxFollowers})"
+        : $"PC side: diagnostic profile (charisma {DiagnosticPcCharisma}, level {DiagnosticPcLevel}, no persuasion; start with --hero for the hero)";
 }
 
 /// <summary>

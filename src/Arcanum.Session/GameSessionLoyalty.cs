@@ -189,8 +189,8 @@ public sealed partial class GameSessionOwner
     }
 
     // The leader's side: the hero's Persuasion training and effective charisma, else the caller's.
-    private (PersuasionTraining Persuasion, int Charisma) Leader(PersuasionTraining persuasion, int charisma) => _hero is { } hero
-        ? (HeroPersuasion(), hero.Stats.Query(new(0)).Snapshot!.GetEffective(CharacterStat.Charisma))
+    private (PersuasionTraining Persuasion, int Charisma) Leader(PersuasionTraining persuasion, int charisma) => HeroPartySide() is { } pc
+        ? (pc.Persuasion, pc.Charisma)
         : (persuasion, charisma);
 
     private SessionLoyaltyResult RejectLoyalty(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, Version);
