@@ -7,7 +7,7 @@ namespace Arcanum.Session;
 public enum ReputationRangePolicy
 {
     /// <summary>The action is skipped with a <see cref="DialogReputationResult.Skipped"/> receipt and the dialog goes on (default:
-    /// the coordinator's recommendation while the owner decides; the original shows no effect of such a number).</summary>
+    /// owner decision 2026-10-21 on A5, both settings; the original shows no effect of such a number).</summary>
     Skip,
     /// <summary>The action is refused and the dialog fails, like a quest or rumor out of range.</summary>
     Refuse,

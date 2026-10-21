@@ -50,7 +50,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// The PC loses a reputation (0x4C1E10): the entry goes and the later ones move up, times with them; one not held is
     /// NoChange. The original's shift copies the wrong entries (ledger RM1, an original bug); both settings shift correctly
-    /// (recommended to the owner). A number outside 1000..1999 is <see cref="GameSessionFailure.InvalidReputation"/>.
+    /// (owner decision 2026-10-21). A number outside 1000..1999 is <see cref="GameSessionFailure.InvalidReputation"/>.
     /// </summary>
     [OriginalFunction(0x4C1E10, OriginalFunctionScope.Partial)]
     public GameSessionMutationResult RemoveReputation(GameSessionVersion expected, int reputation)

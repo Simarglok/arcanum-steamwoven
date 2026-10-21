@@ -69,8 +69,8 @@ the revision capacity. One revision per change. No record budget beyond the rang
 
 | Ledger ID | Original | Steamwoven | Switch |
 | --- | --- | --- | --- |
-| A5 | any number is stored (and read outside the table) | only 1000..1999 are admitted; a dialog `RP` action outside is skipped (`ReputationRangePolicy.Skip`, recorded as `Skipped`, the dialog goes on), a condition on it is "not held" | owner decision pending (options: skip, refuse, Original switch storing it); `ReputationRangePolicy.Refuse` makes it a typed refusal |
-| RM1 | removal copies entry 2·i into i (original bug) | a correct shift in both settings | owner decision pending (recommended: no switch) |
+| A5 | any number is stored (and read outside the table) | only 1000..1999 are admitted; a dialog `RP` action outside is skipped (`ReputationRangePolicy.Skip`, recorded as `Skipped`, the dialog goes on), a condition on it is "not held" | none: owner decision 2026-10-21 (option b), skip in both settings; `ReputationRangePolicy.Refuse` remains a host option, unused |
+| RM1 | removal copies entry 2·i into i (original bug) | a correct shift in both settings | none: owner decision 2026-10-21 (option a) |
 | A9 | the greeting pick returns the reputation's own number | not built | reconstruction slip of the earlier reading |
 
 ## Snapshot schema 26
@@ -113,4 +113,3 @@ refused, so a quick save of schema 25 loads as written by an incompatible versio
   slices call these functions.
 - NPC origins set by the dialog `OR` action and factions by scripts or summons (the viewer reads the loaded fields only).
 - Script reputation actions (add, remove) are not admitted by the SCR dispatcher.
-- The owner's decisions on A5 and RM1.
