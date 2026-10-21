@@ -172,6 +172,20 @@ public sealed class SpellComponentTests
     }
 
     [TestMethod]
+    public void Data_fix_DF4_reads_a_repeated_damage_flags_key_in_Steamwoven_only()
+    {
+        var list = List((L(21, 5), "[Begin], Type: Damage, Dmg_Flags: Full | Death, Dmg_Flags: Scaled"),
+            (L(22, 5), "[Begin], Type: Heal, Dmg_Flags: Full, Dmg_Flags: Scars, Dmg_Flags: Resurrect"));
+        var fixedTable = SpellRecordTable.Read(list, Types, SpellRecordMode.LikeOriginal, Arcanum.Data.Fixes.DataFixProfile.Steamwoven).Table!;
+        Assert.AreEqual(new DamageData(0, 0, 0, 0x1u | 0x4u | 0x800000u), fixedTable[21].Components[0].Data, "Scaled restored");
+        Assert.AreEqual(new DamageData(0, 0, 0, 0x1u | 0x1000u | 0x2u), fixedTable[22].Components[0].Data, "every repeated value");
+        Assert.AreEqual(0, fixedTable.Unread.Count);
+        var original = SpellRecordTable.Read(list, Types, SpellRecordMode.LikeOriginal, Arcanum.Data.Fixes.DataFixProfile.Original).Table!;
+        Assert.AreEqual(new DamageData(0, 0, 0, 0x1u | 0x4u), original[21].Components[0].Data, "the original loses the repeat");
+        Assert.AreEqual(original[22].Components[0].Data, Read(list, SpellRecordMode.LikeOriginal)[22].Components[0].Data, "no profile reads as the original");
+    }
+
+    [TestMethod]
     public void Strict_mode_refuses_missing_keys_the_original_logs_and_malformed_numbers()
     {
         var cast = List((L(20, 5), "[Begin], Type: Cast"));

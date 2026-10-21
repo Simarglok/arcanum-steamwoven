@@ -72,6 +72,34 @@ public sealed record MagicAnomalyProfile
     /// </summary>
     public bool UnresistableIsFinalEnd { get; init; }
 
+    /// <summary>
+    /// MG35 (ARC-MAGIC-012; pending the owner, recommended fix): the damage step takes a full or death hit's amount — the target's
+    /// current hit points — and only then applies a PC attacker's difficulty share, so on hard a PC's death spell deals three
+    /// quarters of the hit points and the target lives (and on easy one and a half). Steamwoven leaves that amount alone.
+    /// </summary>
+    public bool DifficultyScalesKillDamage { get; init; }
+
+    /// <summary>
+    /// MG36 (ARC-MAGIC-012; pending the owner, recommended fix): the spell Damage component's combat context carries the caster's
+    /// wielded weapon, so its ignore-resistance flag makes the spell ignore resistances, its "uber" flag lets the spell hurt a
+    /// nigh-invulnerable critter, and its damage-armour flag wears the target's armour. Steamwoven gives the spell no weapon.
+    /// </summary>
+    public bool SpellDamageUsesCastersWeapon { get; init; }
+
+    /// <summary>
+    /// MG37 (ARC-MAGIC-012; pending the owner, recommended fix): a resistance margin takes at least 1 from a Damage component's
+    /// amount even when the amount is 0, so a resisted stun-only spell (0–0 damage) deals −1: it heals a hit point (or lowers the
+    /// poison level by 1). Steamwoven takes nothing from an amount of 0 or less.
+    /// </summary>
+    public bool MarginTakesFromNoDamage { get; init; }
+
+    /// <summary>
+    /// MG38 (ARC-MAGIC-012; pending the owner, recommended fix): the acid damage's body-armour test compares the slot loop's index
+    /// (0..8) with the body-armour slot 1006, so it never holds and the wearer always takes a third of the acid after its worn
+    /// items. Steamwoven spares a wearer who wears body armour.
+    /// </summary>
+    public bool AcidIgnoresBodyArmour { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly MagicAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -80,7 +108,8 @@ public sealed record MagicAnomalyProfile
     {
         Name = "original", SaveSubtractsResistance = true, SummonedTestReadsLastFlags = true, MaintenancePaysBoth = true,
         SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true, ReflectionPaysLastCost = true, ReEntryDropsRuns = true,
-        FreeKeepsOtherEvents = true,
+        FreeKeepsOtherEvents = true, DifficultyScalesKillDamage = true, SpellDamageUsesCastersWeapon = true, MarginTakesFromNoDamage = true,
+        AcidIgnoresBodyArmour = true,
     };
 
     /// <summary>Both settings, default first.</summary>

@@ -951,14 +951,17 @@ public sealed partial class GameSessionOwner : IDisposable
         return Life(expected, target, true, (state, facts, _) => LifeRules.Kill(state, facts));
     }
 
-    /// <summary>One healing (<see cref="LifeRules.Heal"/>), resurrection included; amounts are 0..1,000,000.</summary>
-    public SessionLifeResult Heal(GameSessionVersion expected, SessionLifeTarget target, LifeHeal heal)
+    /// <summary>One healing (<see cref="LifeRules.Heal"/>), resurrection included; amounts are 0..1,000,000. A raise asks
+    /// <paramref name="raiseScript"/> (the target's raise script, ARC-MAGIC-012's veto port; none allows it). The port is asked while
+    /// the step is computed, before the call's later refusals, so it must answer without side effects and without calling the
+    /// session.</summary>
+    public SessionLifeResult Heal(GameSessionVersion expected, SessionLifeTarget target, LifeHeal heal, Func<bool>? raiseScript = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(heal);
         var valid = heal.HitPoints is >= 0 and <= LifeLimits.MaxAmount && heal.Fatigue is >= 0 and <= LifeLimits.MaxAmount &&
             heal.Poison is >= 0 and <= LifeLimits.MaxAmount;
-        return Life(expected, target, valid, (state, facts, _) => LifeRules.Heal(state, facts, heal));
+        return Life(expected, target, valid, (state, facts, _) => LifeRules.Heal(state, facts, heal, raiseScript));
     }
 
     /// <summary>
