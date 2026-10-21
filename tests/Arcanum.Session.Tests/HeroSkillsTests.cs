@@ -255,9 +255,14 @@ public sealed class HeroSkillsTests
         var follower = new SessionNpcAdvancement("virgil", new(CharacterRace.Human, false, [.. Enumerable.Repeat(9, 8)], 0, 0, 1, 0,
             [.. new int[12]], [.. new int[4]], [.. new int[16]], [.. new int[8]], 0, 0, 0, 0), 66);
         Assert.IsNull(owner.QueryNpcSkills("virgil", AdvancementModifiers.None));
+        // ARC-SKILLS-009: before the session holds a record, the map data's sheet answers.
+        Assert.AreEqual((0, 0), (owner.QueryNpcSkills(follower, AdvancementModifiers.None)[Skill.Dodge].Level, owner.QueryNpcSkills(follower, AdvancementModifiers.None)[Skill.Heal].Level));
         Assert.AreEqual(GameSessionFailure.None, owner.LevelFollower(owner.Version, follower, AdvancementModifiers.None, new(1, 4)).Failure);
         var skills = owner.QueryNpcSkills("virgil", AdvancementModifiers.None)!;
         Assert.AreEqual((8, 4), (skills[Skill.Dodge].Level, skills[Skill.Heal].Level));
+        Assert.AreEqual((8, 4), (owner.QueryNpcSkills(follower, AdvancementModifiers.None)[Skill.Dodge].Level,
+            owner.QueryNpcSkills(follower, AdvancementModifiers.None)[Skill.Heal].Level), "then the saved sheet wins over the map data");
+        Assert.ThrowsExactly<ArgumentException>(() => owner.QueryNpcSkills(follower with { Sheet = follower.Sheet with { Level = -1 } }, AdvancementModifiers.None));
         var boosted = AdvancementModifiers.None with { BasicSkills = [new((int)Skill.Heal, StatModifierOperator.Add, 3)] };
         Assert.AreEqual(7, owner.QueryNpcSkills("virgil", boosted)![Skill.Heal].Level, "its effects now, as the level update takes them");
         Assert.ThrowsExactly<ArgumentException>(() => owner.QueryNpcSkills("", AdvancementModifiers.None));

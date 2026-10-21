@@ -65,7 +65,7 @@ carries exactly one of the program and the refusal.
 | `UnknownValueKind`, `ValueKindNotAdmitted` | P3 | a number slot's kind byte is above 6, or outside the set |
 | `UnknownFocusKind`, `FocusKindNotAdmitted` | P3 | an object slot's kind byte is above 23, or outside the set |
 | `IndexOutOfRange` | P4 | a literal index outside its store: a counter, local variable, global flag, global variable or local object operand, or the literal flag number of a local-flag (0..31) or global-flag (0..3199) condition or action |
-| `WriteToNumber` | P5 | an assign, add, subtract, multiply, divide or get-story-state action stores into a number literal |
+| `WriteToNumber` | P5 | an assign, add, subtract, multiply, divide or get-story-state action stores into a number literal (operand 0), or a get-skill action (set S11, ARC-SKILLS-009) into one (its operand 2) |
 | `ComputedGoto` | P6 | a goto whose target is not a number literal |
 | `NegativeGoto` | P6 | a literal goto below 0 (the original reads −1..−4 as control codes, ledger X6) |
 | `GotoBeyondEnd` | P6 | a literal goto past the line count |

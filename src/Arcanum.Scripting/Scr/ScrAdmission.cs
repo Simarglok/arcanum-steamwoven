@@ -142,15 +142,23 @@ public sealed class ScrAdmissionSet
         S9.Actions.Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]), S9.ValueKinds, S9.FocusKinds);
 
     /// <summary>
-    /// The object-variable set (ARC-SCRIPT-018): <see cref="S10"/> plus call script (7), assign object (15) and get object type
+    /// The skill set (ARC-SKILLS-009, ledger SX1–SX4): <see cref="S10"/> plus get skill (47), which stores an object's effective skill
+    /// level and needs a host that implements <see cref="IScrSkillQueries"/>, and use item with skill (79), which hands one request to
+    /// the host.
+    /// </summary>
+    public static ScrAdmissionSet S11 { get; } = new("S11", S10.Conditions,
+        S10.Actions.Concat([ScrCatalogue.Action.GetSkill, ScrCatalogue.Action.UseItemWithSkill]), S10.ValueKinds, S10.FocusKinds);
+
+    /// <summary>
+    /// The object-variable set (ARC-SCRIPT-018): <see cref="S11"/> plus call script (7), assign object (15) and get object type
     /// (34), and the run's ten object variables as a focus kind (11). Call script runs another script at once with the same
     /// set (ledger OV1); assign object writes an object into the run's triggerer, attachee, extra object or an object variable
     /// (OV2); get object type writes an object's type into a number store, which the host answers through
     /// <see cref="IScrObjectQueries.ObjectType"/> (OV3).
     /// </summary>
-    public static ScrAdmissionSet S11 { get; } = new("S11", S10.Conditions,
-        S10.Actions.Concat([ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType]), S10.ValueKinds,
-        S10.FocusKinds.Append(ScrFocusKind.LocalObject));
+    public static ScrAdmissionSet S12 { get; } = new("S12", S11.Conditions,
+        S11.Actions.Concat([ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType]), S11.ValueKinds,
+        S11.FocusKinds.Append(ScrFocusKind.LocalObject));
 
     /// <summary>The conditions of <see cref="S4"/> a host answers through <see cref="IScrObjectQueries"/>.</summary>
     public static IReadOnlySet<int> ObjectQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed,
@@ -285,6 +293,8 @@ public static class ScrAdmission
                     if ((ScrFocusKind)kind == ScrFocusKind.LocalObject && value is < 0 or >= ScrCatalogue.LocalSlots) return Refuse(ScrRefusalCode.IndexOutOfRange, true);
                     break;
             }
+            // Get skill stores into its third operand (SX1), the only store outside slot 0.
+            if (!condition && type == ScrCatalogue.Action.GetSkill && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get object type stores into its number operand 1 (ARC-SCRIPT-018).
             if (!condition && type == ScrCatalogue.Action.GetObjectType && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.

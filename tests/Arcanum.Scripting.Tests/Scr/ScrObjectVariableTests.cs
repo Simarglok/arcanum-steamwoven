@@ -6,18 +6,18 @@ using static Arcanum.Scripting.Tests.Scr.ScrTestPrograms;
 
 namespace Arcanum.Scripting.Tests.Scr;
 
-/// <summary>Call script, assign object, get object type and the object variables of set S11 (ARC-SCRIPT-018, ledger
+/// <summary>Call script, assign object, get object type and the object variables of set S12 (ARC-SCRIPT-018, ledger
 /// OV1–OV4). Programs, objects and numbers are invented.</summary>
 [TestClass]
 public sealed class ScrObjectVariableTests
 {
     private const byte Triggerer = 0, Attachee = 1, Extra = 12, LocalObject = 11, LocalVariable = 2;
-    private static readonly ScrRunOptions S11 = new() { Admission = ScrAdmissionSet.S11 };
+    private static readonly ScrRunOptions S12 = new() { Admission = ScrAdmissionSet.S12 };
     private static (byte, int) Var(int index) => (LocalVariable, index);
     private static (byte, int) Obj(int index) => (LocalObject, index);
 
-    /// <summary>A recording host that also answers object types.</summary>
-    private sealed class TypeHost(FakeHost inner) : IScrHost, IScrObjectQueries
+    /// <summary>A recording host that also answers object types (and skills, which S12 holds through S11).</summary>
+    private sealed class TypeHost(FakeHost inner) : IScrHost, IScrObjectQueries, IScrSkillQueries
     {
         public FakeHost Inner { get; } = inner;
         public Dictionary<ScrObjectRef, int> Types { get; } = new() { [Pc] = 15, [Npc] = 16, [Chest] = 2 };
@@ -41,6 +41,7 @@ public sealed class ScrObjectVariableTests
         public int? WieldedItemName(ScrObjectRef obj, int location) => null;
         public bool HasReputation(ScrObjectRef obj, int reputation) => false;
         public int? ObjectType(ScrObjectRef obj) => Types.TryGetValue(obj, out var type) ? type : null;
+        public int SkillLevel(ScrObjectRef obj, int skill) => 0;
     }
 
     private static TypeHost With(ScrProgram program)
@@ -51,7 +52,7 @@ public sealed class ScrObjectVariableTests
     }
 
     private static ScrRunResult Use(IScrHost host, ScrRunOptions? options = null, ScrObjectRef? extra = null) =>
-        ScrDispatcher.RunObject(new(ScrPoint.Use, Chest, Pc, extra), host, options ?? S11);
+        ScrDispatcher.RunObject(new(ScrPoint.Use, Chest, Pc, extra), host, options ?? S12);
 
     // A program with header local flags and counters (the bytes a called script starts from, OV1).
     private static ScrProgram WithHeader(ScrProgram program, uint localFlags, uint counters)
@@ -112,12 +113,12 @@ public sealed class ScrObjectVariableTests
     [TestMethod]
     public void Admission_refuses_a_literal_type_store_and_an_object_variable_outside_ten()
     {
-        var literal = ScrAdmission.Admit(Program(Do(C(34, (Attachee, 0), N(3)))), ScrAdmissionSet.S11);
+        var literal = ScrAdmission.Admit(Program(Do(C(34, (Attachee, 0), N(3)))), ScrAdmissionSet.S12);
         Assert.AreEqual((ScrRefusalCode.WriteToNumber, 1), (literal.Refusal!.Code, literal.Refusal.Slot));
-        var outside = ScrAdmission.Admit(Program(Do(C(15, Obj(10), (Attachee, 0)))), ScrAdmissionSet.S11);
+        var outside = ScrAdmission.Admit(Program(Do(C(15, Obj(10), (Attachee, 0)))), ScrAdmissionSet.S12);
         Assert.AreEqual(ScrRefusalCode.IndexOutOfRange, outside.Refusal!.Code);
-        Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(Program(Do(C(7, N(1), N(0), (Triggerer, 0), (Attachee, 0)))), ScrAdmissionSet.S10).Refusal!.Code);
-        Assert.IsTrue(ScrAdmissionSet.S10.IsSubsetOf(ScrAdmissionSet.S11));
+        Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(Program(Do(C(7, N(1), N(0), (Triggerer, 0), (Attachee, 0)))), ScrAdmissionSet.S11).Refusal!.Code);
+        Assert.IsTrue(ScrAdmissionSet.S11.IsSubsetOf(ScrAdmissionSet.S12));
     }
 
     [TestMethod]
@@ -127,9 +128,9 @@ public sealed class ScrObjectVariableTests
         plain.Attach(Chest, ScrPoint.Use, 2793, Program(Do(C(1))));
         var types = new ScrAdmissionSet("types", ScrAdmissionSet.S5.Conditions, ScrAdmissionSet.S5.Actions.Append(34), ScrAdmissionSet.S5.ValueKinds, ScrAdmissionSet.S5.FocusKinds);
         Assert.ThrowsExactly<ArgumentException>(() => Use(plain, new() { Admission = types }));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Use(With(Program(Do(C(1)))), S11 with { MaxCallDepth = 0 }));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Use(With(Program(Do(C(1)))), S12 with { MaxCallDepth = 0 }));
         // A dialog-point event never runs call script (the callee's dialog gates E6 are not modelled).
-        Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Dialog, Chest, Pc, null), With(Program(Do(C(1)))), S11));
+        Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Dialog, Chest, Pc, null), With(Program(Do(C(1)))), S12));
     }
 
     [TestMethod]
@@ -162,7 +163,7 @@ public sealed class ScrObjectVariableTests
 
         // 601 sets a flag and calls itself: the bound ends the whole dispatch with nothing applied.
         host.Inner.Scripts[601] = ScrScriptLookup.Of(Program(Do(C(100, N(30))), Do(C(7, N(601), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(1))));
-        var deep = Use(host, S11 with { MaxCallDepth = 4 });
+        var deep = Use(host, S12 with { MaxCallDepth = 4 });
         Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.CallDepth), (deep.Outcome, deep.Stop));
         Assert.AreSame(ScrEffects.None, deep.Effects);
     }
@@ -214,7 +215,7 @@ public sealed class ScrObjectVariableTests
         var loop = With(Program(Do(C(7, N(630), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(3, N(0)))));
         loop.Inner.Scripts[630] = ScrScriptLookup.Of(Program(Do(C(7, N(631), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(3, N(0)))));
         loop.Inner.Scripts[631] = ScrScriptLookup.Of(Program(Do(C(100, N(50))), Do(C(3, N(0)))));
-        var bounded = Use(loop, S11 with { MaxCallDepth = 3, MaxExecutedLines = 50 });
+        var bounded = Use(loop, S12 with { MaxCallDepth = 3, MaxExecutedLines = 50 });
         Assert.AreEqual(ScrStop.CallDepth, bounded.Stop);
         Assert.AreSame(ScrEffects.None, bounded.Effects);
     }
