@@ -7,9 +7,9 @@ public readonly record struct SpellLocation(uint X, uint Y)
 
     public bool IsNone => X == 0 && Y == 0;
 
-    /// <summary>The original's tile distance (0x4B96F0): the larger of the two coordinate differences, taken in 64 bits.</summary>
-    [OriginalFunction(0x4B96F0, OriginalFunctionScope.Full)]
-    public static long Distance(SpellLocation a, SpellLocation b) => Math.Max(Math.Abs((long)a.X - b.X), Math.Abs((long)a.Y - b.Y));
+    /// <summary>The original's tile distance (0x4B96F0, <see cref="Travel.WorldTravelGeometry.Distance"/>): the larger of the two
+    /// coordinate differences, the unsigned coordinates taken in 64 bits.</summary>
+    public static long Distance(SpellLocation a, SpellLocation b) => Travel.WorldTravelGeometry.Distance(new(a.X, a.Y), new(b.X, b.Y));
 }
 
 /// <summary>

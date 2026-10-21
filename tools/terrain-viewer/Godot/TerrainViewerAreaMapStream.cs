@@ -191,7 +191,7 @@ public partial class TerrainViewerApp
     // Every window publication of this run (smoke report): the centres, the actor's cell, the walk and the session.
     private readonly List<(AreaSectorCoordinate From, AreaSectorCoordinate To, AreaStepCell Actor, bool Walking, GameSessionOwner? Session, long LoadMs)> _mapStreamLog = [];
 
-    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream"];
+    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap"];
 
     /// <summary>The stages <c>ARC_AREA_MAP_SMOKE_ONLY</c> names (null: all); an unknown name is refused, so a typo cannot skip
     /// every stage and still pass.</summary>

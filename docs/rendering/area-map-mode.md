@@ -640,8 +640,8 @@ map.
 - **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
   Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
   (92913, 82598). Every listed map is a destination.
-- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream`
-  narrows a run to those stages), in this order: the map battery at the new-game start (the Crash Site window: walk,
+- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,worldmap`
+  narrows a run to those stages; `worldmap` is [the world map](#world-map-arc-ui-048), after the stream), in this order: the map battery at the new-game start (the Crash Site window: walk,
   logbook, sound, dialog with Virgil, who then follows); the resource sweep and reload; the companion follow smoke and
   the map transfer smoke (exit to another map, jump point, F7/F8); `ARC-RENDER-024 native-smoke round-trip PASS`: into
   the cave and back onto the main map by the two exits; and last `ARC-RENDER-024 native-smoke stream PASS`: walks by the
@@ -659,10 +659,52 @@ map.
 **NOT READY:** the window is a fixed 3×3 core, not the original's 16-sector cache; a move costs a background load of
 the whole window (no sector is reused) and one publication, which rebuilds the scene (a frame hitch at the swap; a step
 in progress ends on its committed cell); saved sector differences (`.dif`) are not modelled; the world map's own travel
-(the original's world-map screen) is not implemented; a companion more than one sector from the actor when the window
+(the original's world-map screen) is not implemented (the diagnostic [world map](#world-map-arc-ui-048) travels by its rules since ARC-UI-048); a companion more than one sector from the actor when the window
 moves is bound only if the new window holds its cell; on the same map, an F8 save or a jump point or teleport whose cell
 lies outside the shown window is refused (the cell is not admitted in this window; another map's save or exit opens the
 window around it); routes reach 32 cells per axis (ARC-WORLD-042). Original parity NOT_VERIFIED.
+
+## World map (ARC-UI-048)
+
+On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the world map is keyed to) the original key
+**W** opens a diagnostic world-map panel over the travel rules of ARC-WORLD-056
+([world-map travel rules](../world/world-map-travel-runtime.md)).
+
+- **Opening.** W acts on its logical key down under the guards of C, L and T: not with the palette, a dialog or another
+  window open, not under UI focus. The panel is modal: the gate closes, the clock pauses for the frames and a walk stops.
+  It refuses on another map ("only on the start map"), in combat mode, while the actor is between cells, and until the
+  module's world-map data have loaded (in the background, once per module).
+- **What it shows.** It shows the project's own 500 × 500 picture of the start map. The picture is drawn from its terrain:
+  one pixel for 4 × 4 sectors, coloured by terrain type, darker where travel is blocked, and brighter where a blocked type
+  has its own sector file. On top are the PC, the areas (known ones in yellow), the waypoints and the planned route. A list
+  holds every area by its data name.
+  - A click on the picture adds a waypoint at that pixel's sector. A known area within 320 tiles takes its place.
+  - A double-click in the list adds a waypoint at that area (a diagnostic shortcut for clicking it).
+  - A refused segment shows "no route there (the original's message 601)". Clear drops the waypoints.
+- **Travel.** Travel, Enter or confirm starts the journey. It runs one travel step per 62 real ms, at most four per frame.
+  - Each step's game time jumps the session clock through the event pump, as an explicit wait does. Events that came due
+    fire once, late. On a map without lighting the clock jumps without event passes.
+  - An area the step discovers becomes known in the session, and the last discovered record is cleared again.
+- **Landing.** At the end the panel closes and the start map loads around the landing location, as a transfer does:
+  the session is carried and following companions arrive with the PC. W, Escape or cancel during the journey lands
+  where it stands, by the setting's cancel rule (A4).
+- **Native smoke** (stage `worldmap`, last; skipped off the start map). It starts wherever the earlier stages left the
+  actor; the figures below are those of `ARC_AREA_MAP_SMOKE_ONLY=worldmap` at the new-game start:
+  1. W opens the panel.
+  2. The farthest area refuses its one-waypoint route.
+  3. The nearest unknown area that travel can discover and whose route plans is chosen; from the Crash Site that is
+     Shrouded Hills, 43 steps.
+  4. Enter travels. The run checks one step per 62 ms, the clock gained exactly 43 h, Crash Site and Shrouded Hills
+     known, the start map loaded around the landing with the session carried, and the actor on the area's location:
+     `ARC-UI-048 native-smoke worldmap PASS`.
+
+**NOT READY:**
+- The original's world-map screen is not drawn: no map art, zoom, notes or town maps.
+- The original keeps the world map unwalkable in a sector with a town map; that check is not made.
+- Travel music, hiding the party, random encounters and the script-blocked list's writers are missing.
+- The journey is not saved. When the landing load fails, the start map reloads where the PC stood, with the journey's
+  hours and discoveries kept.
+- Original parity NOT_VERIFIED.
 
 ## Not yet
 
