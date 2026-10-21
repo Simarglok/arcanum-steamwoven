@@ -1,5 +1,7 @@
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Randomness;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.Session;
@@ -90,7 +92,7 @@ public sealed partial class GameSessionOwner
     /// weapon, then the shield, each when the wear check refuses it under the critter's injuries now. Returns the side without the
     /// items that left it, for the wear steps that follow.
     /// </summary>
-    private SessionWearSide ArmHitDrops(DamageRecipient whose, SessionWearSide side, SessionCritterCombat? npc, CellCoord? cell,
+    private SessionWearSide ArmHitDrops(DamageRecipient whose, SessionWearSide side, SessionCritterCombat? npc, CellCoord? cell, IDropMap? dropMap,
         List<SessionCriticalStep> steps, ref GameSessionFailure failure)
     {
         foreach (var (kind, slot) in new[] { (SessionCriticalStepKind.ArmHitWeapon, EquipmentSlot.Weapon), (SessionCriticalStepKind.ArmHitShield, EquipmentSlot.Shield) })
@@ -105,14 +107,14 @@ public sealed partial class GameSessionOwner
             // Without the item's wear values (an NPC item its map data does not list) the check cannot run.
             if (WearRefusal(side, npc, slot) is not { } refusal) { steps.Add(new(kind, whose, slot, held.Entity, SessionCriticalStepOutcome.Unknown, null)); continue; }
             if (refusal == EquipmentRefusal.None) { steps.Add(new(kind, whose, slot, held.Entity, SessionCriticalStepOutcome.Kept, null)); continue; }
-            side = Drop(kind, whose, side, slot, cell, steps, ref failure);
+            side = Drop(kind, whose, side, slot, cell, dropMap, steps, ref failure);
         }
         return side;
     }
 
     /// <summary>The "drop helmet" or "drop weapon" critical on the critter's item in <paramref name="slot"/>.</summary>
     private SessionWearSide CriticalDrop(SessionCriticalStepKind kind, DamageRecipient whose, SessionWearSide side, EquipmentSlot slot,
-        CellCoord? cell, List<SessionCriticalStep> steps, ref GameSessionFailure failure)
+        CellCoord? cell, IDropMap? dropMap, List<SessionCriticalStep> steps, ref GameSessionFailure failure)
     {
         if (failure != GameSessionFailure.None) return side;
         if (side.Worn is null) { steps.Add(new(kind, whose, slot, null, SessionCriticalStepOutcome.Unknown, null)); return side; }
@@ -121,7 +123,7 @@ public sealed partial class GameSessionOwner
             steps.Add(new(kind, whose, slot, item?.Entity, SessionCriticalStepOutcome.NoItem, null));
             return side;
         }
-        return Drop(kind, whose, side, slot, cell, steps, ref failure);
+        return Drop(kind, whose, side, slot, cell, dropMap, steps, ref failure);
     }
 
     // The wear check of the critter's item in the slot under its injuries now; null without the item or without its wear values.
@@ -135,72 +137,71 @@ public sealed partial class GameSessionOwner
         return EquipmentRules.CheckWear(item, slot, npc.Wearer(conditions), npc.WornItems);
     }
 
-    // One drop: the hero's item joins its placed items; an NPC's seed item goes to the ground at the NPC's cell as a map change.
+    // One drop (0x461A90 then 0x461AB0). The slot was checked by the caller. With the host's drop map the distance is drawn first,
+    // then the drop's refusals run, then the tries choose the cell (DropPlacementRules); without it the item lands on its holder's
+    // cell and nothing is drawn. The hero's item joins its placed items (ARC-WORLD-059), an NPC's seed item goes to the ground as a
+    // map change.
     private SessionWearSide Drop(SessionCriticalStepKind kind, DamageRecipient whose, SessionWearSide side, EquipmentSlot slot, CellCoord? cell,
-        List<SessionCriticalStep> steps, ref GameSessionFailure failure)
+        IDropMap? dropMap, List<SessionCriticalStep> steps, ref GameSessionFailure failure)
     {
         var item = side.Worn![slot];
-        if (side.Life!.IsHero) return HeroDrop(kind, whose, side, slot, item, steps, ref failure);
-        SessionCriticalStepOutcome? outcome = item.NoDrop ? SessionCriticalStepOutcome.Refused
-            : cell is null ? SessionCriticalStepOutcome.Unknown
-            : null;
-        InventoryDomain.Seed? seed = null;
-        if (outcome is null)
+        var hero = side.Life!.IsHero;
+        CellCoord? owner = hero ? _actor.Cell : cell;
+        void Skip(SessionCriticalStepOutcome outcome, CellCoord? at = null) => steps.Add(new(kind, whose, slot, item.Entity, outcome, at));
+        if (hero && !(_equipment.Worn.TryGetValue(slot, out var wornItem) && wornItem.Entity == item.Entity))
         {
-            if (!_inventory.Seeds.TryGetValue(_actor.Map, out seed) || !seed.HolderOf.TryGetValue(item.Entity, out var holder) ||
-                holder != side.Life.Entity || _inventory.Taken.Contains(item.Entity))
-                outcome = SessionCriticalStepOutcome.NotSeedItem;
-            else if (seed.Items[item.Entity].Facts.HasScript(SessionScriptPoint.Drop))
-                outcome = SessionCriticalStepOutcome.ScriptUnsupported;
-        }
-        if (outcome is { } skipped)
-        {
-            steps.Add(new(kind, whose, slot, item.Entity, skipped, null));
+            // An item an earlier step of this attack broke has left its slot (the first break takes it off): the slot is empty, as
+            // the original finds it, and no drop is called.
+            Skip(SessionCriticalStepOutcome.NoItem);
             return side;
         }
-        var written = ApplyChanges(Version, null, [new(_actor.Map, MapChangeKey.ForEntity(item.Entity, ItemDroppedProperty), DroppedValue(cell!.Value))]);
-        if (written.Disposition == GameSessionDisposition.Rejected)
+        if (owner is null) { Skip(SessionCriticalStepOutcome.Unknown); return side; }
+        if (_revision == long.MaxValue) { failure = GameSessionFailure.RevisionExhausted; Skip(SessionCriticalStepOutcome.Unknown); return side; }
+        var revision = _revision;
+        var rolls = new SessionDropRolls(_random);
+        int distance;
+        try { distance = dropMap is null ? 0 : DropPlacementRules.Distance(rolls); }
+        catch (SessionDropRolls.ExhaustedException) { failure = GameSessionFailure.RandomExhausted; Skip(SessionCriticalStepOutcome.Unknown); return side; }
+
+        // The drop's refusals (PI1): the item's drop script, which the session does not run, then the no-drop flag.
+        var script = hero ? HeroItemDropScript(item.Entity) : NpcItemSeed(side.Life.Entity!, item.Entity) is { } listed && listed.Facts.HasScript(SessionScriptPoint.Drop);
+        if (script) { Skip(SessionCriticalStepOutcome.ScriptUnsupported); return side; }
+        if (item.NoDrop) { Skip(SessionCriticalStepOutcome.Refused); return side; }
+
+        CellCoord landed;
+        try { landed = dropMap is null ? owner.Value : DropPlacementRules.Place(owner.Value, distance, DropOwnerOf(side.Life), dropMap, rolls); }
+        catch (SessionDropRolls.ExhaustedException) { failure = GameSessionFailure.RandomExhausted; Skip(SessionCriticalStepOutcome.Unknown); return side; }
+        ThrowIfDisposed();
+        if (_revision != revision) { failure = GameSessionFailure.StaleVersion; Skip(SessionCriticalStepOutcome.Unknown); return side; }
+
+        if (!DropCellFits(landed)) { Skip(SessionCriticalStepOutcome.HeroCellUnfit); return side; }
+        if (hero) PlaceHeroItem(item.Entity, landed);
+        else
         {
-            failure = written.Failure;
-            steps.Add(new(kind, whose, slot, item.Entity, SessionCriticalStepOutcome.Unknown, null));
-            return side;
+            // An item the session added to the NPC (ARC-WORLD-055) lies in no seed: not ready until a store holds it.
+            if (NpcItemSeed(side.Life.Entity!, item.Entity) is null) { Skip(SessionCriticalStepOutcome.NotSeedItem, landed); return side; }
+            var written = ApplyChanges(Version, null, [new(_actor.Map, MapChangeKey.ForEntity(item.Entity, ItemDroppedProperty), DroppedValue(landed))]);
+            if (written.Disposition == GameSessionDisposition.Rejected) { failure = written.Failure; Skip(SessionCriticalStepOutcome.Unknown); return side; }
         }
-        steps.Add(new(kind, whose, slot, item.Entity, SessionCriticalStepOutcome.Dropped, cell));
+        steps.Add(new(kind, whose, slot, item.Entity, SessionCriticalStepOutcome.Dropped, landed));
         var left = new Dictionary<EquipmentSlot, SessionWearItem>(side.Worn);
         left.Remove(slot);
         return side with { Worn = left };
     }
 
-    // ARC-WORLD-059: the hero's item goes to the ground at the hero's cell among its placed items, as an NPC's does at its cell.
-    private SessionWearSide HeroDrop(SessionCriticalStepKind kind, DamageRecipient whose, SessionWearSide side, EquipmentSlot slot,
-        SessionWearItem item, List<SessionCriticalStep> steps, ref GameSessionFailure failure)
-    {
-        var cell = _actor.Cell;
-        // An item an earlier step of this attack broke has left its slot (the first break takes it off, item durability): the slot is
-        // empty, as the original finds it.
-        var worn = _equipment.Worn.TryGetValue(slot, out var wornItem) && wornItem.Entity == item.Entity;
-        // A world item's drop script, when its seed shows one, is not run (the original's may refuse).
-        var dropScript = _inventory.Pc.Find(pc => pc.Entity == item.Entity) is { Entity: not null } taken &&
-            _inventory.Seeds.TryGetValue(taken.Origin, out var origin) && origin.Items.TryGetValue(item.Entity, out var listed) &&
-            listed.Facts.HasScript(SessionScriptPoint.Drop);
-        SessionCriticalStepOutcome? skipped = !worn ? SessionCriticalStepOutcome.NoItem
-            : item.NoDrop ? SessionCriticalStepOutcome.Refused
-            : dropScript ? SessionCriticalStepOutcome.ScriptUnsupported
-            : !DropCellFits(cell) ? SessionCriticalStepOutcome.HeroCellUnfit
-            : _revision == long.MaxValue ? SessionCriticalStepOutcome.Unknown
-            : null;
-        if (skipped is { } outcome)
-        {
-            if (outcome == SessionCriticalStepOutcome.Unknown) failure = GameSessionFailure.RevisionExhausted;
-            steps.Add(new(kind, whose, slot, item.Entity, outcome, null));
-            return side;
-        }
-        PlaceHeroItem(item.Entity, cell);
-        steps.Add(new(kind, whose, slot, item.Entity, SessionCriticalStepOutcome.Dropped, cell));
-        var left = new Dictionary<EquipmentSlot, SessionWearItem>(side.Worn!);
-        left.Remove(slot);
-        return side with { Worn = left };
-    }
+    // The hero, or an NPC the PC leads (following or waiting), avoids only a spotted trap on the drop's path; another NPC avoids
+    // every trap (0x4BBFE0).
+    private DropOwner DropOwnerOf(SessionLifeTarget who) => who.IsHero || _party.Get(who.Entity!).LedByPc ? DropOwner.PcSide : DropOwner.Npc;
+
+    // The seed listing of an NPC's item still in its list on the actor's map, or null (an added made item, another map's).
+    private SessionSeedItem? NpcItemSeed(string npc, string item) =>
+        _inventory.Seeds.TryGetValue(_actor.Map, out var seed) && seed.HolderOf.TryGetValue(item, out var holder) && holder == npc &&
+        !_inventory.Taken.Contains(item) ? seed.Items[item] : null;
+
+    // A world item of the hero's whose attached origin seed shows a drop script (the original runs it and it may refuse).
+    private bool HeroItemDropScript(string item) =>
+        _inventory.Pc.Find(pc => pc.Entity == item) is { Entity: not null } taken && _inventory.Seeds.TryGetValue(taken.Origin, out var origin) &&
+        origin.Items.TryGetValue(item, out var listed) && listed.Facts.HasScript(SessionScriptPoint.Drop);
 
     // The ammunition effects of a critical miss, after the weapon's destruction and before "drop weapon" (CW3): not ready (no
     // ammunition model); none when the weapon was destroyed.
@@ -212,4 +213,17 @@ public sealed partial class GameSessionOwner
         if (damage.MissEffects.HasFlag(CriticalMissEffects.LoseAmmo))
             steps.Add(new(SessionCriticalStepKind.LoseAmmo, damage.Recipient, EquipmentSlot.Weapon, null, SessionCriticalStepOutcome.AmmunitionNotReady, null));
     }
+}
+
+/// <summary>The session generator as the drop's roll source (ARC-COMBAT-010): it advances the session's own sequence, so a drop's
+/// draws are kept like the attack's.</summary>
+internal sealed class SessionDropRolls(SeededRandom random) : IDropRolls
+{
+    public int Roll(DropRoll purpose, int min, int max)
+    {
+        if (!Enum.IsDefined(purpose)) throw new ArgumentOutOfRangeException(nameof(purpose));
+        return random.TryNext(min, max, out var value) ? value : throw new ExhaustedException();
+    }
+
+    internal sealed class ExhaustedException : Exception;
 }
