@@ -180,6 +180,16 @@ public sealed partial class GameSessionOwner
         // The raised start always changes the slot, so a used fate commits with it.
         if (used && result.Disposition == GameSessionDisposition.Changed)
             _hero!.Apply(_hero.State.WithFate(FateRules.Use(_hero.State.Fate, FateKind.ForceGoodReaction).After));
+        // ARC-SKILLS-008 (ST4): a dialog's start ends the concealment of the hero and of the NPC it talks to; after an unchanged slot
+        // that needs a revision of its own (refused at the limit, with nothing changed).
+        if (result.Disposition == GameSessionDisposition.Rejected || !(_combat.HeroConcealed || _combat.Concealed.Contains(entity))) return result;
+        if (result.Disposition == GameSessionDisposition.NoChange && _revision == long.MaxValue) return RejectReaction(GameSessionFailure.RevisionExhausted);
+        EndConcealmentForDialog(entity);
+        if (result.Disposition == GameSessionDisposition.NoChange)
+        {
+            _revision++;
+            result = result with { Disposition = GameSessionDisposition.Changed, Version = Version };
+        }
         return result;
     }
 

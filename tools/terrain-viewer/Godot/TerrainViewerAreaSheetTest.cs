@@ -160,6 +160,15 @@ public partial class TerrainViewerApp
                 && _messageWindow.HistoryForSelfTest[0].Line == "Level 5" && _messageWindow.ShownForSelfTest?.Line == "Level 14",
                 "eleven more levels: the window keeps the last ten");
 
+            // ARC-SKILLS-008: the palette's Prowl action conceals the hero; an untrained prowler's run becomes a walk, and off again.
+            PaletteProwlToggle();
+            Require(_areaSession.IsConcealed(SessionCombatant.Hero) && _prowlNotice == "prowling (concealed)", "prowl on: " + _prowlNotice);
+            SetObjectApproachGait();
+            Require(StepGait() == Arcanum.TerrainViewer.Core.MovementGait.Walk && GaitSummary().Contains("prowling: walks only", StringComparison.Ordinal),
+                "a concealed untrained hero walks: " + GaitSummary());
+            PaletteProwlToggle();
+            Require(!_areaSession.IsConcealed(SessionCombatant.Hero) && StepGait() == Arcanum.TerrainViewer.Core.MovementGait.Run, "prowl off runs again");
+
             // A hero who dies while the sheet is open closes it; C is then refused, as the original refuses a dead PC.
             InventoryKey(Key.C);
             Require(_areaSession.Kill(_areaSession.Version, SessionLifeTarget.Hero).Disposition == GameSessionDisposition.Changed, "kill the hero");
@@ -167,7 +176,7 @@ public partial class TerrainViewerApp
             Require(!SheetOpen && !_areaSession.HeroEditorOpen, "the dead hero's sheet closed and so did its editor");
             InventoryKey(Key.C);
             Require(!SheetOpen && _sheetStatus == "refused: the hero is dead", "C for a dead hero: " + _sheetStatus);
-            return "no-hero refusal, C/controller confirm and cancel/Escape, keys owned while open, rebuild on change, skills page + and − with the editor floor, spells page tabs, learn, refusal and unlearn (ARC-MAGIC-008), level-up messages (ARC-UI-046), dead-hero close and refusal";
+            return "no-hero refusal, C/controller confirm and cancel/Escape, keys owned while open, rebuild on change, prowl toggle and the stealth gait, skills page + and − with the editor floor, spells page tabs, learn, refusal and unlearn (ARC-MAGIC-008), level-up messages (ARC-UI-046), dead-hero close and refusal";
         }
         finally
         {

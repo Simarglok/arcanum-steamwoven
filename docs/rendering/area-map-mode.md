@@ -349,8 +349,9 @@ session state on the map's runtime number, so they go with the session to the
 next map and come back with it. Since ARC-WORLD-037 the party commands (`JO`,
 `WA`, `UW`) of a speaker with follow facts go through the session party
 ([companions](#companions-arc-world-037)). A map the map
-list does not name (`scienticians underground lev 2`) has no runtime number,
-hence no session and no dialogs.
+list does not name (`scienticians underground lev 1` and `lev 2`) has no runtime number,
+hence no session (no dialogs, saves or sound; since ARC-RENDER-027 again: an unlit map's session clock, ARC-WORLD-057, had made the
+viewer ask for a session the session owner refuses for runtime map 0, `AREA_SESSION_InvalidActor`)).
 
 Opt-in census (`AreaMapConversationOriginalTests`, `DAT_ROOT`): 34 listed
 interiors have 182 dialog NPCs. Each one gets a typed start: 50 start a
@@ -663,8 +664,8 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 - **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
   Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
   (92913, 82598). Every listed map is a destination.
-- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,worldmap,walk`
-  narrows a run to those stages; without it all but `walk` run; `worldmap` is [the world map](#world-map-arc-ui-048), after the stream), in this order: the map battery at the new-game start (the Crash Site window: walk,
+- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,worldmap,walk,census`
+  narrows a run to those stages; without it all but `walk` and `census` run ([map census](#map-census-arc-render-027)); `worldmap` is [the world map](#world-map-arc-ui-048), after the stream), in this order: the map battery at the new-game start (the Crash Site window: walk,
   logbook, sound, dialog with Virgil, who then follows); the resource sweep and reload; the companion follow smoke and
   the map transfer smoke (exit to another map, jump point, F7/F8); `ARC-RENDER-024 native-smoke round-trip PASS`: into
   the cave and back onto the main map by the two exits; and last `ARC-RENDER-024 native-smoke stream PASS`: walks by the
@@ -769,6 +770,41 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
 - The journey is not saved. When the landing load fails, the start map reloads where the PC stood, with the journey's
   hours and discoveries kept.
 - Original parity NOT_VERIFIED.
+
+## Map census (ARC-RENDER-027)
+
+The native census opens every map of the game folder's catalogue that map mode opens, in turn, through the ordinary map load
+(the main world map as a window around its map-list start). A map with a sector file opens; a window also needs its
+map-list start. The two scienticians underground levels, which have no map-list row (no transfer leads to them), open too,
+without a session. The census is the map-smoke stage `census`, run only when named (`ARC_AREA_MAP_SMOKE_ONLY=census` on a
+map-mode start; named elsewhere it fails, and it ends on the last map). Per map:
+
+- the load publishes the map with no failure, also none after the publication (a session refused while the scene binds
+  fails the map); a load that fails is recorded for its map and the census goes on;
+- a frame is drawn with visible draw commands;
+- the walker stands on a tile it can step from and back (the spawn rule); a window opens around its map-list start;
+- the step evidence leaves no terrain cell, no object evaluation and no edge Unknown (an unresolved portal's flags, a
+  leaving-only lock whose tiles cannot be read, an unsupported opening piece). Edges are Unknown by contract when an
+  unlock script or an hour lock decides them; they are reported per map, and any other Unknown edge reason fails the map;
+- the load time, the slowest frame period of the seven after the publication's first (which carries the upload), the
+  managed heap after a full collection and the process working set stay within the census budgets: 60 s, 750 ms, 2 GB and
+  3 GB. They are about two to three times the largest values observed. The frame budget bounds stalls (it needs a visible
+  window; frames are paced at the display rate and other processes move them), not a frame rate.
+
+`AreaMapCensus.Maps` lists the maps; `AreaMapWindowOriginalTests` pins the list on the installed original.
+
+`ARC-RENDER-027 native-smoke census PASS` on the owner's Mac (2026-10-21, Debug source run from the Crash Site cave):
+
+- 81 catalogued maps, all published and passed, the main world map among them.
+- Two edges Unknown by contract (`PORTAL_LOCK_DEPENDS_ON_HOUR`).
+- Median load about 4 s and median heap about 200 MB.
+- The largest values all come from K'na Tha: 21 s, a 1.03 GB heap and a 1.48 GB working set.
+- The slowest frame period was 169 ms. Earlier runs saw 127 ms and 301 ms (wheel clan), which is why the frame budget is
+  750 ms.
+- Observed, not checked: the heap returns to about 200 MB on the maps after the largest ones.
+
+The census found that the two unlisted maps failed to open in map mode (`AREA_SESSION_InvalidActor`): see
+[dialogs](#dialogs-arc-world-032). Original parity does not apply (a viewer census).
 
 ## Not yet
 

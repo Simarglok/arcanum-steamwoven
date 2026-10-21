@@ -99,7 +99,7 @@ public sealed partial class GameSessionOwner : IDisposable
         {
             hero = HeroDomain.Build(definition.Prototype, definition.Race, definition.Gender, definition.Stats, definition.Level,
                 definition.UnspentPoints, definition.Alignment, definition.RaceEffect, definition.GenderEffect, definition.Experience,
-                definition.Advancement, definition.InnateSkills);
+                definition.Advancement, definition.InnateSkills, background: definition.Background);
             var kit = definition.Kit?.ToArray();
             if (hero is null || definition.Gold < 0 || kit is null || kit.Length > limits.MaxPcItems)
                 return Rejected(GameSessionFailure.InvalidHero);
@@ -180,6 +180,8 @@ public sealed partial class GameSessionOwner : IDisposable
         failure = ImportCombat(snapshot.Combat, hero is not null, out var combat);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportCombatMode(snapshot.CombatMode, hero is not null, combat);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportConcealment(snapshot.Concealment, hero is not null, party, combat);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSound(snapshot.Sound, GameRules.For(options.Rules).Sound, options.SoundMapDefault, out var sound);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -574,8 +576,9 @@ public sealed partial class GameSessionOwner : IDisposable
 
     /// <summary>
     /// The hero's DLG reply-eligibility facts, or null without a hero: gender, effective intelligence and the source race
-    /// index. <see cref="DialogPcFacts.IsDumb"/> is false: the source sets it only for backgrounds 55, 74 and 75, and the
-    /// session models no background (a pre-made hero's stored background 39..50 is display data, ARC-RES-027).
+    /// index. <see cref="DialogPcFacts.IsDumb"/> is false: the source sets it only for backgrounds 55, 74 and 75 (the dumb test
+    /// 0x45FC00), which the session does not apply yet; the hero's background id is held (ARC-WORLD-069), and a pre-made hero's is
+    /// 39..50.
     /// </summary>
     public DialogPcFacts? QueryHeroDialogFacts() { ThrowIfDisposed(); return _hero?.DialogFacts(); }
 
@@ -697,6 +700,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The NPC already has a record, so a flagged free record needs no new budget.
         _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, Jilted = leave.Jilt }, false);
+        // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
+        _combat.Concealed.Remove(entity);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(entity);
         return Changed();
     }
@@ -1250,7 +1255,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureEvents(), _lighting, _sound.Capture());
+            _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureConcealment(), CaptureEvents(), _lighting, _sound.Capture());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -1375,6 +1380,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_revision == long.MaxValue) return RejectParty(GameSessionFailure.RevisionExhausted, consent);
         _party.Put(next, true);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(current.Entity);
+        // ARC-SKILLS-008 (ST2): a new follower takes its leader's concealment.
+        if (_combat.HeroConcealed) _combat.Concealed.Add(current.Entity); else _combat.Concealed.Remove(current.Entity);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, consent, new(_identity, _revision));
     }
@@ -1418,8 +1425,9 @@ public sealed partial class GameSessionOwner : IDisposable
     // session does not know.
     private InventoryMutationResult TakePlaced(SessionPlacedItem placed, SessionInsertCheck insertCheck)
     {
-        if (placed.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(placed.Entity, out var listed) &&
-            (listed.Facts.HasScript(SessionScriptPoint.Get) || listed.Facts.HasScript(SessionScriptPoint.InsertItem)))
+        var listed = placed.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(placed.Entity, out var item)
+            ? item : null;
+        if (listed is not null && (listed.Facts.HasScript(SessionScriptPoint.Get) || listed.Facts.HasScript(SessionScriptPoint.InsertItem)))
             return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // ARC-WORLD-066: a placed ammunition stack merges into the hero's stack of the same prototype when it holds one.
         var into = placed.Kind.Type == SessionItemType.Ammo ? HeroStackOfPrototype(placed.Kind.Prototype) : null;
@@ -1427,7 +1435,9 @@ public sealed partial class GameSessionOwner : IDisposable
             !_durability.Records.ContainsKey(placed.Entity) && _durability.Count >= _limits.MaxDurabilityRecords)) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var revision = _revision;
-        var verdict = insertCheck(new SessionInventoryItem(placed.Entity, _inventory.WithAmmo(placed.Entity, InventoryDomain.MadeFacts(placed.Kind))));
+        // ARC-WORLD-069: a seed item keeps its seed's complexity for the Technophobia refusal; a made item has none in the session (0).
+        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(placed.Entity, _inventory.WithAmmo(placed.Entity, InventoryDomain.MadeFacts(placed.Kind)))),
+            listed?.Facts.Complexity ?? 0);
         ThrowIfDisposed();
         if (_revision != revision || _inventory.PlacedItem(placed.Entity) != placed || _actor.Map != placed.Map)
             return RejectItem(GameSessionFailure.StaleVersion, verdict);
@@ -1508,7 +1518,8 @@ public sealed partial class GameSessionOwner : IDisposable
         var npc = _inventory.NpcOf(item.Entity);
         bool Stale() => _revision != revision || _actor.Map != map || _flags.Version != flagVersion || !_inventory.Seeds.TryGetValue(map, out var current) ||
             !ReferenceEquals(current, seed) || (npc is null ? _inventory.Taken.Contains(item.Entity) : _inventory.NpcOf(item.Entity) != npc);
-        var verdict = insertCheck(item);
+        // ARC-WORLD-069: the Technophobia refusal between the host's weight and room answers (0x466510).
+        var verdict = HeroInsertVerdict(insertCheck(item), facts.Complexity);
         ThrowIfDisposed();
         if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict);
         // Any answer but Accepted refuses, an undefined one included.
@@ -1593,7 +1604,7 @@ public sealed partial class GameSessionOwner : IDisposable
         hero = null;
         if (saved is null) return GameSessionFailure.None;
         hero = HeroDomain.Build(saved.Prototype, saved.Race, saved.Gender, saved.Stats, saved.Level, saved.UnspentPoints, saved.Alignment,
-            saved.RaceEffect, saved.GenderEffect, saved.Experience, saved.Advancement, saved.InnateSkills, saved.Fate);
+            saved.RaceEffect, saved.GenderEffect, saved.Experience, saved.Advancement, saved.InnateSkills, saved.Fate, saved.Background);
         return hero is null ? GameSessionFailure.InvalidHero : GameSessionFailure.None;
     }
 
