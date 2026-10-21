@@ -160,9 +160,15 @@ public partial class TerrainViewerApp
             _inventoryPanel.PickButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(InventoryOpen && _lockpickArmed is null && _inventoryStatus == "not used: not lockpicks the hero holds", "unknown lockpicks: " + _inventoryStatus);
+            // ARC-SKILLS-007: a damaged line gets a Repair button; an item without a known condition is not repaired.
+            _inventoryPanel.Render(new AreaInventoryView([new("syn:worn", "sword") { Repairable = true }], null, null, []), null);
+            Require(_inventoryPanel.RepairButtonsForSelfTest.Count == 1, "one repair button for the one damaged line");
+            _inventoryPanel.RepairButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(InventoryOpen && _inventoryStatus == "not repaired: no condition for this item", "unknown item: " + _inventoryStatus);
             InventoryKey(Key.Escape);
             Require(!InventoryOpen, "Escape closed the loot window");
-            return $"walk to pick up and its ground-click cancel, pickup at reach {AreaInventoryHost.Reach}, I/Escape toggle, loot by take button, heal use button, pick a lock button";
+            return $"walk to pick up and its ground-click cancel, pickup at reach {AreaInventoryHost.Reach}, I/Escape toggle, loot by take button, heal use button, pick a lock button, repair button";
         }
         finally
         {
