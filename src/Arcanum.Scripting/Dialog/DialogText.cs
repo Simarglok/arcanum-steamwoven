@@ -135,6 +135,7 @@ internal static class DialogText
     /// case-insensitive) become the names and any other <c>@…@</c> token is dropped. An <c>@</c> without its closing one is
     /// kept with the rest of the text (not in the installed files).
     /// </summary>
+    [OriginalFunction(0x416B00, OriginalFunctionScope.Partial)]
     internal static string SubstituteGenerated(string text, DialogSpeakerNames names)
     {
         var builder = new StringBuilder(text.Length);

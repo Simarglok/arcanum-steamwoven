@@ -306,6 +306,7 @@ internal static class DialogGreeting
         if (Roll(context, DialogGreetingRoll.ReputationChance, 1, 100) is not { } chance) return RollFailed();
         if (chance > ReputationChancePercent) return null;
         var candidates = context.Port.ReputationCandidates(query, facts.Category);
+        if (candidates is null) return new(GreetingOutcomeKind.Failed, Failure: DialogConversationFailureKind.InvalidQueryResult);
         if (candidates.Count == 0) return null;
         if (Roll(context, DialogGreetingRoll.ReputationPick, 0, candidates.Count - 1) is not { } pick) return RollFailed();
         var reputation = candidates[pick];

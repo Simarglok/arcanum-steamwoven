@@ -204,16 +204,21 @@ public sealed class DialogConversation
         _ => DialogConversationSelectStatus.Failed,
     });
 
-    /// <summary>Turn and effect budgets for entering <paramref name="next"/> after <paramref name="pending"/> reply effects.</summary>
+    /// <summary>Turn and effect budgets for entering <paramref name="next"/> after <paramref name="pending"/> reply effects. A greeting
+    /// that may continue at or float a slot node (ARC-WORLD-058) also reserves that node's turn and its largest action, so a
+    /// slot never stops at a budget after the greeting's own actions ran.</summary>
     private bool Admit(StepPlan? next, int pending)
     {
         var node = next is null ? CurrentNode : new DialogNodeId(next.Npc.Id);
-        if (next is not null && Turn >= _options.MaxTurns)
+        var slotNodes = next?.Greeting is { } greeting ? greeting.Jumps.Values.Concat(greeting.Floats.Values).ToArray() : [];
+        var slotTurn = slotNodes.Length == 0 ? 0 : 1;
+        var slotActions = slotNodes.Length == 0 ? 0 : slotNodes.Max(plan => plan.Action.Count);
+        if (next is not null && (long)Turn + slotTurn >= _options.MaxTurns)
         {
             Stop(new DialogConversationFrontier(DialogFrontierKind.TurnLimit, node), null);
             return false;
         }
-        if ((long)_effects.Count + pending + (next?.Action.Count ?? 0) > _options.MaxEffects)
+        if ((long)_effects.Count + pending + (next?.Action.Count ?? 0) + slotActions > _options.MaxEffects)
         {
             Stop(new DialogConversationFrontier(DialogFrontierKind.EffectLimit, node), null);
             return false;
