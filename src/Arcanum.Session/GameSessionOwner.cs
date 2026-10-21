@@ -1551,9 +1551,10 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         else if (npc is not null)
         {
-            // A made item keeps its entity and kind: it leaves the NPC's added items and joins the hero's made items.
+            // A made item keeps its entity and kind: it leaves the NPC's added items and joins the hero's made items; ARC-WORLD-071: a kit
+            // or taken item the hero gave the NPC returns to the list it came from.
             _inventory.RemoveFromNpc(item.Entity);
-            _inventory.Add(new SessionMadeItem(item.Entity, facts.Kind));
+            _inventory.ReturnGiven(item.Entity, facts.Kind);
         }
         else _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
         if (into is null && ammo is { } added) _inventory.Ammo[item.Entity] = added;
@@ -1620,7 +1621,10 @@ public sealed partial class GameSessionOwner : IDisposable
         if (saved.Kit.Count + saved.Pc.Count + saved.Made.Count + saved.Placed.Count > limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
         // Kit items are kit:1, kit:2, … in order; a deleted one (ARC-WORLD-053) or one placed on the ground (ARC-WORLD-059) leaves
         // its number out.
-        var placedKit = saved.Placed.Where(item => item?.Source == SessionPlacedSource.Kit).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        // ARC-WORLD-071: a kit item the hero gave an NPC leaves its number out too.
+        var placedKit = saved.Placed.Where(item => item?.Source == SessionPlacedSource.Kit).Select(item => item.Entity)
+            .Concat(saved.Given.Where(item => item.Origin is null && HeroDomain.KitNumber(item.Entity) is not null).Select(item => item.Entity))
+            .ToHashSet(StringComparer.Ordinal);
         var next = 0;
         foreach (var item in saved.Kit)
         {
@@ -1647,8 +1651,32 @@ public sealed partial class GameSessionOwner : IDisposable
                 return GameSessionFailure.InvalidSnapshot;
             inventory.Add(item);
         }
+        // ARC-WORLD-071: the given items by entity: a kit item only with a hero and within the kit's numbers (checked below), a taken item
+        // with a valid origin map; the gold piles by entity, 0 or more coins, not deleted.
+        if (saved.Given.Count > limits.MaxNpcItems || saved.Piles.Count > limits.MaxGoldRecords) return GameSessionFailure.BudgetExceeded;
+        string? lastGiven = null;
+        foreach (var item in saved.Given)
+        {
+            if (!SessionValidation.Entity(item.Entity) || lastGiven is not null && string.CompareOrdinal(lastGiven, item.Entity) >= 0 || destroyed.Contains(item.Entity))
+                return GameSessionFailure.InvalidSnapshot;
+            lastGiven = item.Entity;
+            var fits = item.Origin is { } origin
+                ? SessionValidation.Map(origin) && HeroDomain.KitNumber(item.Entity) is null && !item.Entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)
+                : hero && HeroDomain.KitNumber(item.Entity) is not null;
+            if (!fits) return GameSessionFailure.InvalidSnapshot;
+            inventory.Given[item.Entity] = item;
+        }
+        string? lastPile = null;
+        foreach (var pile in saved.Piles)
+        {
+            if (!SessionValidation.Entity(pile.Entity) || lastPile is not null && string.CompareOrdinal(lastPile, pile.Entity) >= 0 || pile.Quantity < 0 ||
+                destroyed.Contains(pile.Entity)) return GameSessionFailure.InvalidSnapshot;
+            lastPile = pile.Entity;
+            inventory.Piles[pile.Entity] = pile.Quantity;
+        }
         // ARC-WORLD-055: the made items added to NPCs, by NPC entity in ordinal order, each list non-empty and within one list's bound;
-        // the same item rules as the hero's made items, and no item held twice.
+        // the same item rules as the hero's made items, and no item held twice. ARC-WORLD-071: an entry may also be a given item (its
+        // record above) or a made gold pile (with its pile record).
         if (saved.Npcs.Sum(npc => (long)(npc.Items?.Count ?? 0)) > limits.MaxNpcItems) return GameSessionFailure.BudgetExceeded;
         string? previous = null;
         foreach (var npc in saved.Npcs)
@@ -1659,8 +1687,13 @@ public sealed partial class GameSessionOwner : IDisposable
             previous = npc.Npc;
             foreach (var item in npc.Items)
             {
-                if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
-                if (SessionMadeItem.Number(item.Entity) is null || destroyed.Contains(item.Entity) || inventory.Taken.Contains(item.Entity))
+                // A gold item is only a made pile with its record.
+                var pile = item.Kind.Type == SessionItemType.Gold && inventory.Piles.ContainsKey(item.Entity);
+                if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type) && !pile) return GameSessionFailure.InvalidItem;
+                var given = inventory.Given.ContainsKey(item.Entity);
+                if ((SessionMadeItem.Number(item.Entity) is null) != given || pile && given ||
+                    given && !InventoryDomain.KitAdmitted(item.Kind.Type) && HeroDomain.KitNumber(item.Entity) is not null ||
+                    destroyed.Contains(item.Entity) || inventory.Taken.Contains(item.Entity))
                     return GameSessionFailure.InvalidSnapshot;
                 inventory.AddToNpc(npc.Npc, item);
                 inventory.Taken.Add(item.Entity);
@@ -1688,6 +1721,14 @@ public sealed partial class GameSessionOwner : IDisposable
             inventory.Placed.Add(item);
             inventory.Taken.Add(item.Entity);
         }
+        // ARC-WORLD-071: every given item is in an NPC's list, and a given kit item lies within the kit's numbers; a pile record names no
+        // item of the hero's (a seed pile, or a made pile in an NPC's list).
+        foreach (var item in inventory.Given.Values)
+            if (inventory.NpcOf(item.Entity) is null || item.Origin is null && HeroDomain.KitNumber(item.Entity) > kitNumbers) return GameSessionFailure.InvalidSnapshot;
+        foreach (var entity in inventory.Piles.Keys)
+            if (inventory.Kit.Exists(item => item.Entity == entity) || inventory.Pc.Exists(item => item.Entity == entity) || inventory.Made.Exists(item => item.Entity == entity) ||
+                inventory.PlacedItem(entity) is not null || inventory.NpcOf(entity) is { } holder && inventory.AddedTo(holder).First(item => item.Entity == entity).Kind.Type != SessionItemType.Gold)
+                return GameSessionFailure.InvalidSnapshot;
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.
         foreach (var entity in destroyed) inventory.Taken.Add(entity);
         // ARC-WORLD-066: the ammunition stacks by entity in ordinal order, within the budget, each of a type 0..3 with 0 or more units and

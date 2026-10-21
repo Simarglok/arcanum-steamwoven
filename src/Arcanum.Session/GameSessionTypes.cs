@@ -84,13 +84,15 @@ public sealed class GameSessionLimits
     /// <summary>Ammunition stacks the session tracks (ARC-WORLD-066): the hero's (at most one a prototype, four installed) and every
     /// other stack whose units it changed; far more than a playthrough's ammunition.</summary>
     public const int PolicyMaxAmmoRecords = 4096;
+    /// <summary>Gold piles the session tracks (ARC-WORLD-071): every NPC pile whose coins it changed or that it created.</summary>
+    public const int PolicyMaxGoldRecords = 4096;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
         int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
         int maxLifeRecords = PolicyMaxLifeRecords, int maxReactionRecords = PolicyMaxReactionRecords,
         int maxExperienceRecords = PolicyMaxExperienceRecords, int maxAdvancementRecords = PolicyMaxAdvancementRecords,
         int maxDurabilityRecords = PolicyMaxDurabilityRecords, int maxFoundSchematics = PolicyMaxFoundSchematics, int maxNpcItems = PolicyMaxNpcItems,
-        int maxAmmoRecords = PolicyMaxAmmoRecords)
+        int maxAmmoRecords = PolicyMaxAmmoRecords, int maxGoldRecords = PolicyMaxGoldRecords)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
@@ -105,11 +107,12 @@ public sealed class GameSessionLimits
         if (maxFoundSchematics is < 1 or > PolicyMaxFoundSchematics) throw new ArgumentOutOfRangeException(nameof(maxFoundSchematics));
         if (maxNpcItems is < 1 or > PolicyMaxNpcItems) throw new ArgumentOutOfRangeException(nameof(maxNpcItems));
         if (maxAmmoRecords is < 1 or > PolicyMaxAmmoRecords) throw new ArgumentOutOfRangeException(nameof(maxAmmoRecords));
+        if (maxGoldRecords is < 1 or > PolicyMaxGoldRecords) throw new ArgumentOutOfRangeException(nameof(maxGoldRecords));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
         MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
         MaxReactionRecords = maxReactionRecords; MaxExperienceRecords = maxExperienceRecords;
         MaxAdvancementRecords = maxAdvancementRecords; MaxDurabilityRecords = maxDurabilityRecords; MaxFoundSchematics = maxFoundSchematics;
-        MaxNpcItems = maxNpcItems; MaxAmmoRecords = maxAmmoRecords;
+        MaxNpcItems = maxNpcItems; MaxAmmoRecords = maxAmmoRecords; MaxGoldRecords = maxGoldRecords;
     }
 
     public int MaxMaps { get; }
@@ -125,6 +128,7 @@ public sealed class GameSessionLimits
     public int MaxFoundSchematics { get; }
     public int MaxNpcItems { get; }
     public int MaxAmmoRecords { get; }
+    public int MaxGoldRecords { get; }
 }
 
 /// <summary>
@@ -230,6 +234,8 @@ public enum GameSessionFailure
     InvalidSpellRun, SpellRunRefused,
     // Stealth (ARC-SKILLS-008).
     ConcealmentUnavailable, InvalidConcealment,
+    // NPC gold and transfers (ARC-WORLD-071).
+    GoldShort, GoldUnavailable,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -388,8 +394,9 @@ public sealed class GameSessionSnapshot
     /// the hero's items placed on the ground to <see cref="Inventory"/> (ARC-WORLD-059); schema 33 adds the waiting followers' missed
     /// level steps to <see cref="Advancement"/> (ARC-WORLD-047); schema 34 adds the ammunition stacks to <see cref="Inventory"/>
     /// (ARC-WORLD-066); schema 35 adds the hero's and its followers' concealment (<see cref="Concealment"/>, ARC-SKILLS-008); schema 36
-    /// adds the hero's background id to <see cref="Hero"/> (ARC-WORLD-069). Schemas 1..35 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 36;
+    /// adds the hero's background id to <see cref="Hero"/> (ARC-WORLD-069); schema 37 adds the items the hero gave NPCs and the tracked
+    /// gold piles to <see cref="Inventory"/> (ARC-WORLD-071). Schemas 1..36 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 37;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
