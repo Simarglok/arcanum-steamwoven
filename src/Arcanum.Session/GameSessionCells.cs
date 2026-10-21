@@ -8,8 +8,8 @@ public sealed partial class GameSessionOwner
 {
     /// <summary>
     /// ARC-TECHNOLOGY-007: the charge-cell facts of the hero as payer (it pays a cell-powered spell from its one power-cell
-    /// stack), or null without a hero. The stack is the host's (the session holds no ammunition yet; consumption in session state
-    /// waits for session ammunition).
+    /// stack), or null without a hero. The stack is the host's and nothing is written; since ARC-WORLD-066
+    /// <see cref="HeroCellSource"/> uses the hero's own stack and spends an applied payment.
     /// </summary>
     public CellPayer? QueryHeroCellPayer(CellStack? cells)
     {

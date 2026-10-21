@@ -68,7 +68,8 @@ public static class GameSessionSnapshotCodec
         "Gambling", "Haggle", "Heal", "Persuasion", "Repair", "Firearms", "PickLocks", "DisarmTraps"];
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
-    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed"];
+    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo"];
+    private static readonly string[] AmmoFields = ["entity", "ammoType", "units"];
     private static readonly string[] PlacedItemFields = ["entity", "source", "origin", "map", "x", "y", "type", "prototype", "name", "description"];
     private static readonly string[] NpcInventoryFields = ["npc", "items"];
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
@@ -365,6 +366,17 @@ public static class GameSessionSnapshotCodec
                 w.WriteNumber("prototype", item.Kind.Prototype);
                 w.WriteNumber("name", item.Kind.Name);
                 w.WriteNumber("description", item.Kind.Description);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-WORLD-066: by entity in ordinal order.
+            w.WriteStartArray("ammo");
+            foreach (var stack in snapshot.Inventory.Ammo)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", stack.Entity);
+                w.WriteNumber("ammoType", stack.AmmoType);
+                w.WriteNumber("units", stack.Units);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1311,7 +1323,20 @@ public static class GameSessionSnapshotCodec
                 new(Int(item["map"], path + ".map", 1, int.MaxValue)),
                 new(Int(item["x"], path + ".x", 0, MaxPlacedCoordinate), Int(item["y"], path + ".y", 0, MaxPlacedCoordinate)));
         }
-        return new(gold, kit, pc, made, npcs, placed);
+        // ARC-WORLD-066: the ammunition stacks by entity in strictly ascending ordinal order.
+        var ammoRows = Array(f["ammo"], p + ".ammo", GameSessionLimits.PolicyMaxAmmoRecords);
+        var ammo = new SessionAmmoRecord[ammoRows.Length];
+        string? lastAmmo = null;
+        for (var i = 0; i < ammoRows.Length; i++)
+        {
+            var path = $"{p}.ammo[{i}]";
+            var row = Fields(ammoRows[i], path, AmmoFields);
+            var entity = Entity(row["entity"], path + ".entity");
+            if (lastAmmo is not null && string.CompareOrdinal(lastAmmo, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            lastAmmo = entity;
+            ammo[i] = new(entity, Int(row["ammoType"], path + ".ammoType", 0, SessionAmmoRecord.AmmoTypes - 1), Int(row["units"], path + ".units", 0, int.MaxValue));
+        }
+        return new(gold, kit, pc, made, npcs, placed, ammo);
     }
 
     // A placed item's cell coordinates fit 24 bits (the drop's packing, ARC-COMBAT-009).

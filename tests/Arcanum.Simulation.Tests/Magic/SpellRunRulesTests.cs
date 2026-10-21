@@ -117,7 +117,7 @@ public sealed class SpellRunRulesTests
     }
 
     [TestMethod]
-    public void MaintainChecksTechnologyToo_Mg3PaysOnlyTheSurcharge_Mg29ChargesItAfterAFailure()
+    public void MaintainChecksTechnologyToo_Mg3PaysOnlyTheSurcharge_Mg29OnlyInTheOriginal()
     {
         var tech = SpellRunRules.Stage(Run(SpellRunAction.Maintain), Bolt with { Technology = true }, Facts(intelligence: 3), new NoCells(), new Stacking(),
             MagicAnomalyProfile.Steamwoven);
@@ -127,11 +127,20 @@ public sealed class SpellRunRulesTests
         CollectionAssert.AreEqual(new[] { 4, 5 }, original.Costs.ToArray());
         var steam = SpellRunRules.Stage(Run(SpellRunAction.Maintain, 30), Bolt, Facts(), new NoCells(), new Stacking(), MagicAnomalyProfile.Steamwoven);
         CollectionAssert.AreEqual(new[] { 5 }, steam.Costs.ToArray());
-        var free = SpellRunRules.Stage(Run(SpellRunAction.Maintain, 30, SpellRunFlags.Active | SpellRunFlags.Free), Bolt, Facts(), new NoCells(), new Stacking(),
-            MagicAnomalyProfile.Steamwoven);
-        CollectionAssert.AreEqual(new[] { 5 }, free.Costs.ToArray(), "MG29: a free run still pays the surcharge");
+        // MG29 (owner decision 2026-10-21): the original charges the surcharge for a free run, after a failed check and at a
+        // maintenance cost of 0 (then 1); Steamwoven in none of the three.
+        var freeRun = Run(SpellRunAction.Maintain, 30, SpellRunFlags.Active | SpellRunFlags.Free);
+        CollectionAssert.AreEqual(new[] { 5 }, SpellRunRules.Stage(freeRun, Bolt, Facts(), new NoCells(), new Stacking(), MagicAnomalyProfile.Original).Costs.ToArray(),
+            "MG29: a free run still pays the surcharge in the original");
+        Assert.AreEqual(0, SpellRunRules.Stage(freeRun, Bolt, Facts(), new NoCells(), new Stacking(), MagicAnomalyProfile.Steamwoven).Costs.Count);
         var weak = SpellRunRules.Stage(Run(SpellRunAction.Maintain, 30), Bolt, Facts(willpower: 2), new NoCells(), new Stacking(), MagicAnomalyProfile.Original);
         Assert.AreEqual((false, true, 1), (weak.Proceeds, weak.Ends, weak.Costs.Count), "MG29: the surcharge after a failed willpower check");
+        var weakSteam = SpellRunRules.Stage(Run(SpellRunAction.Maintain, 30), Bolt, Facts(willpower: 2), new NoCells(), new Stacking(), MagicAnomalyProfile.Steamwoven);
+        Assert.AreEqual((false, true, 0), (weakSteam.Proceeds, weakSteam.Ends, weakSteam.Costs.Count), "no surcharge after a failure");
+        var timed = Bolt with { MaintainCost = 0 };
+        CollectionAssert.AreEqual(new[] { 0, 1 }, SpellRunRules.Stage(Run(SpellRunAction.Maintain, 30), timed, Facts(), new NoCells(), new Stacking(),
+            MagicAnomalyProfile.Original).Costs.ToArray(), "a maintenance cost of 0 pays a surcharge of 1 in the original");
+        Assert.AreEqual(0, SpellRunRules.Stage(Run(SpellRunAction.Maintain, 30), timed, Facts(), new NoCells(), new Stacking(), MagicAnomalyProfile.Steamwoven).Costs.Count);
         var broke = SpellRunRules.Stage(Run(SpellRunAction.Maintain), Bolt, Facts(fatigue: -12), new NoCells(), new Stacking(), MagicAnomalyProfile.Steamwoven);
         Assert.AreEqual((SpellStageStatus.MaintainCost, (int?)SpellRunRules.MessageMaintain, true), (broke.Status, broke.Message, broke.Ends));
         Assert.AreEqual(5, SpellRunRules.SurchargedCost(4, 1, new(true, 0, -1)), "at least 1");

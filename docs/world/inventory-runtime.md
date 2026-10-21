@@ -59,8 +59,8 @@ Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and se
   (not in that holder's current list);
 - IN: `UnknownHolder` (not an NPC of that map), then no own match: NoChange, or `SubstituteInventoryUnsupported` when the
   NPC has a substitute inventory;
-- then the shared item rules: `ItemTypeUnsupported` (gold and ammunition merge into stacks, a key may go onto the PC's
-  key ring), `WornItemUnsupported` (a parented item in slots 1000..1008),
+- then the shared item rules: `ItemTypeUnsupported` (gold merges into the PC's gold, a key may go onto the PC's
+  key ring; since ARC-WORLD-066 ammunition is admitted and merges into a held stack, [below](#ammunition-arc-world-066)), `WornItemUnsupported` (a parented item in slots 1000..1008),
 `ItemScriptUnsupported` (an item `SAP_GET` for pickup or `SAP_REMOVE_ITEM` for loot and IN, or an item
 `SAP_INSERT_ITEM` when the caller passes no script host; other attachments such as examine and use do not run on a
 transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`, at most 512), `RevisionExhausted`, then `InsertRefused`, and
@@ -139,7 +139,7 @@ the host replaces the owner, like the party port.
 
 Decoding keeps the list order and refuses an entity listed twice, in either list (`NotCanonical`), an unknown type name or a map below
 1 (`OutOfRange`), missing or unknown fields and more than 512 items (`BudgetExceeded`). `Restore` refuses a type a
-transfer cannot produce (gold, ammunition, key, key ring: `InvalidItem`), a repeated entity (`InvalidSnapshot`) and the
+transfer cannot produce (gold, key, key ring: `InvalidItem`; ammunition without its stack record: `InvalidSnapshot`, ARC-WORLD-066), a repeated entity (`InvalidSnapshot`) and the
 caller's lower limit, kit and taken items together (`BudgetExceeded`); gold or a kit item without a hero, and a kit
 item that is not the next `kit:n`, are `InvalidSnapshot`. After a restore no seed is attached; `AttachMapInventory` then refuses
 (`InventoryMismatch`) a seed that lacks an item the PC took from that map, gives it another kind, or lists an item the
@@ -185,7 +185,8 @@ components and adds its products through the same rules.
 
 The NPC must be known to the session: an NPC holder of an attached seed, a party record, or an NPC that already holds added items
 (else `UnknownHolder`). Refusals, before any effect: `InvalidItem` (an invalid id, a `made:` id as the NPC, an undefined type),
-`StaleVersion`, `UnknownHolder`, then for an addition `ItemTypeUnsupported` (gold, ammunition, keys and key rings, as for the PC),
+`StaleVersion`, `UnknownHolder`, then for an addition `ItemTypeUnsupported` (gold, keys and key rings, as for the PC; ammunition since
+ARC-WORLD-066, with its type and units: `InvalidAmmo` without them),
 `BudgetExceeded` (the NPC's list at 512 with its seed items, the store at `GameSessionLimits.MaxNpcItems` = 4,096, or no free made
 number), `RevisionExhausted` and last `InsertRefused` (the host's insert check for the NPC; a call back into the owner from it, a seed
 attach included, is `StaleVersion`); for a deletion `ItemNotAvailable` (not in the NPC's current list), `WornItemUnsupported` (unequipping an NPC is not
@@ -208,10 +209,10 @@ not migrated.
 | A reference to an item no longer found is kept as a null list element with the count unchanged (NI2). | The list holds only items it has; a deleted item is gone from it. |
 | Closing a barter window restocks a non-follower NPC with an inventory source after 12–24 game hours, destroying items without the persistent flag (NI6, F1). | Not modelled (no barter); added items stay. |
 | A teleport clears an NPC's substitute-inventory link; an insert makes the NPC re-equip its best items (NI7, F1). | Not modelled. |
-| Any object type can enter an NPC's list. | Gold, ammunition, keys and key rings are refused, as for the PC's lists. |
+| Any object type can enter an NPC's list. | Gold, keys and key rings are refused, as for the PC's lists; ammunition merges into the NPC's stack of its prototype (ARC-WORLD-066). |
 
 Not modelled: moving a seed item from one NPC to another (no caller yet), giving an NPC an item from the PC (barter, drop on a
-follower), NPC worn slots, stacks, and a visiting companion's items in the map-bound calls of a map whose seed does not list it.
+follower), NPC worn slots, gold, and a visiting companion's items in the map-bound calls of a map whose seed does not list it.
 
 ## Placed items (ARC-WORLD-059)
 
@@ -345,6 +346,43 @@ The AREA viewer draws what the session holds on the ground but no T0 body drew, 
   refused for its `SAP_INSERT_ITEM` script; with the content (ARC-SCRIPT-013) it loots too, script 1341 prints line 1 of
   its DLG and writes no flag, and once global flag 1085 is set it returns at once and prints nothing. All 37 core ground items pick up. Virgil and a chest are not lootable. A save and load keep the 43 items,
   the re-attached seed agrees, and a second `IN -2804` changes nothing.
+
+## Ammunition (ARC-WORLD-066)
+
+Ammunition (type 6) is admitted to the hero's and NPCs' lists since ARC-WORLD-066 (snapshot schema 34), read in the executable
+([ledger AM1–AM7](../research/original-verification-ledger.md#ammunition-arc-world-066), anomalies AMA1–AMA6). Gold, keys and key
+rings stay out. Code: [`GameSessionAmmo`](../../src/Arcanum.Session/GameSessionAmmo.cs) and the transfers above; tests
+[`AmmoStateTests`](../../tests/Arcanum.Session.Tests/AmmoStateTests.cs) and
+[`AreaAmmoLinesTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaAmmoLinesTests.cs).
+
+- **Facts.** A seed's ammunition item carries its unit count (`Quantity`, field 0x8E) and its ammunition type (`AmmoType`,
+  field 0x8F, 0..3: arrows, bullets, charge cells, fuel). A type outside 0..3 or a negative count refuses the seed (AMA2, AMA3:
+  the original indexes past its tables). The Data reader gives the type (`AreaInventoryItem.AmmoType`).
+- **State.** The session keeps a `SessionAmmoRecord(entity, type, units)` for every ammunition item the hero holds or placed,
+  every one added to an NPC, and any other whose units it changed (a seed stack an NPC spent from or received into); by entity in
+  ordinal order, at most `GameSessionLimits.MaxAmmoRecords` (4,096). A record's units are 0 or more (the original never removes a
+  stack at 0 by itself). `QueryAmmo(entity)` gives a tracked stack or a seed stack's units; `QueryHeroAmmo()` the hero's stacks in
+  list order; the map views (`QueryMapInventory`) show the current units.
+- **Insertion (AM1, AM2).** Pickup, loot, negative `IN` and a placed item picked up again: an ammunition item merges into the
+  hero's first held stack of the same prototype (its units added, the inserted item deleted with the durability deletion, as the
+  original destroys it); without one it enters the list as a new stack. The insert check still runs. A sum that does not fit 32 bits
+  is refused (`BudgetExceeded`, AMA1). `AddItemToNpc` takes ammunition with its type and units and merges it into the NPC's stack of
+  the prototype in the same way.
+- **Spending (AM4).** `SpendAmmo(expected, holder, type, count)` spends from the hero's or an NPC's first stack of the type (the
+  original's one stack a critter field names; AMA4 latent): fewer units refuse with nothing spent (`AmmoShort`), exactly the count
+  deletes the stack, more leave the rest; a count of 0 changes nothing; a negative count or a type out of 0..3 is `InvalidAmmo`.
+  One revision.
+- **Charge cells (ARC-TECHNOLOGY-007).** `HeroCellSource(itemComplexity?)` is the engine's `ISpellCellSource` over the hero's own
+  power-cell stack: an applied, paid plan spends the cells at once through `SpendAmmo`; an unapplied request writes nothing. A
+  container's cells are never found, as in the original (AM6, AMA5).
+- **Assembly (TECH-4).** An ammunition component loses one unit (0x4658E0) and its stack goes at its last unit; an ammunition product
+  (the product prototype's type and units, `productAmmo`) merges each unit into the crafter's stack of its prototype, one new
+  `made:n` stack only when it holds none. The installed recipes use it: four make ammunition (cells ×5 and ×1, bullets ×2, the fourth
+  type ×5) and three take one unit of ammunition as a component. The NPC crafter does the same in its list.
+- **Not modelled.** Gold; a container's stacks (AM6); transfers of units between holders (AM4's destination); the critter field and its
+  clearing (AM5: the session finds a holder's stack by type); the weight of a stack (the host's insert check). The combat's ammunition
+  (a shot, and the critical misses that take the whole stack or five shots' worth) should call `SpendAmmo` with the weapon's
+  ammunition type and per-shot count; that wiring is the combat lane's.
 
 ## Next steps
 

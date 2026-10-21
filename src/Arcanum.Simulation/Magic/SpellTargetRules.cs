@@ -439,7 +439,6 @@ public static class SpellTargetRules
     /// components); this gate — when the record has item triggers and the component names some, they must meet the run's (a
     /// component with trigger 0x100 needs the run's 0x100); then the AI notice (<see cref="AiNotices"/>) and the component itself.
     /// </summary>
-    [OriginalFunction(0x4510F0, OriginalFunctionScope.Partial)]
     public static bool TriggersAllow(bool recordHasTriggers, int componentTriggers, int runTriggers) =>
         !recordHasTriggers || componentTriggers == 0 || ((componentTriggers & runTriggers) != 0 && ((componentTriggers & 0x100) == 0 || (runTriggers & 0x100) != 0));
 

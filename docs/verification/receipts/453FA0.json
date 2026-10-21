@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "function": "0x453FA0",
+  "name": "spell-schedule",
+  "method": "Arcanum.Simulation.Magic.SpellRunScheduler.Decide",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 5,
+  "mutantsCaught": 5,
+  "differences": 0,
+  "otherMode": {
+    "mode": "steamwoven",
+    "ledger": "MG19",
+    "ledgerInputs": 932,
+    "differ": 650,
+    "outsideLedger": 0
+  },
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "70e93e1d305d29dbfa00bd9bcde1f53dc0617c7b4ca70381ba80e0108f9bbf06",
+  "configuration": "Debug"
+}

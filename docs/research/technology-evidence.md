@@ -652,7 +652,7 @@ this document start at F1 or F2.
    engine; FR-MAGIC-010/011): the cell source behind the engine's payment port
    (critter `cost`, item source TC1 decided, ammunition type 2; **done** as rules and a
    session port by ARC-TECHNOLOGY-007, [runtime](../world/charge-cell-runtime.md); the
-   consumption in session state waits for session ammunition, ARC-WORLD-066), the list of
+   the hero's cells are spent in session state since ARC-WORLD-066), the list of
    tech items and records that reach the engine (70 item spell slots; cell records
    147, 168 and 187; maintained 146, 149, 168, 187, 209 and 216; **done** with the MAINTAIN test and the device rule by ARC-TECHNOLOGY-008,
    [runtime](../world/tech-devices-runtime.md)), a test that the engine's MAINTAIN charges maintained
