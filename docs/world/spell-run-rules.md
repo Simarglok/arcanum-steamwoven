@@ -156,7 +156,8 @@ maintenance cost is 0; both modes follow the original until the owner decides (r
 [plan](../research/magic-implementation-plan.md)). Three more are recorded for the owner by ARC-MAGIC-010, each following the
 original in both modes until decided: MG30 (the cancels' interrupts are refused by the guard and leave runs without a tick or an
 END; MT10), MG31 (interrupting a timed run with CALLBACK but no END_CALLBACK components does not end it; one technology record),
-MG32 (an interrupt event outlives the free and can hit a new run in the reused slot).
+MG32 (an interrupt or process event outlives the free and can hit a new run in the reused slot). The session keeps the runs unchanged when
+an action's or event's queued events do not fit; what the host's ports already did (a component's effect) is the host's.
 
 ## Not ready
 

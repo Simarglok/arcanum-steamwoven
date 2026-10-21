@@ -40,6 +40,9 @@ public sealed partial class GameSessionOwner
     // The original's run table (ARC-MAGIC-010). Not saved, like its magic-tech events, until the saved runs (MT9b).
     private SpellRunTable _spellRuns = SpellRunTable.Empty;
     private List<SessionSpellRunFiring>? _passSpellRuns;
+    // Set while the run rules act (a call or a magic-tech event): a host port calling back into the runs is refused, so no
+    // change is overwritten by the outer call's table.
+    private bool _spellRunsBusy;
 
     /// <summary>The session's spell runs (ARC-MAGIC-010; not saved).</summary>
     public SpellRunTable QuerySpellRuns() { ThrowIfDisposed(); return _spellRuns; }
@@ -47,8 +50,9 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// Starts a run (0x455AC0, 0x455C30, ARC-MAGIC-009's <see cref="SpellRunRules.Create"/>): the invocation check, a slot and
     /// the run; a run without a parent gets its BEGIN as a process event 2 ms later (the creation's), a run with one waits for
-    /// its casting goal's release frame (<see cref="SessionSpellRunActionKind.Begin"/>). Refused, in order: the version; the
-    /// rules (<see cref="GameSessionFailure.SpellRunRefused"/> with the creation's status); the event budget; the revision.
+    /// its casting goal's release frame (<see cref="SessionSpellRunActionKind.Begin"/>). Refused, in order: a call from inside the
+    /// run rules (a host port; <see cref="GameSessionFailure.InvalidSpellRun"/>); the version; the rules
+    /// (<see cref="GameSessionFailure.SpellRunRefused"/> with the creation's status); the event budget; the revision.
     /// </summary>
     public SessionSpellRunResult StartSpellRun(GameSessionVersion expected, SpellRunRequest request, SpellRunRecord record, ISpellInvocationWorld world,
         ISpellRollSource rolls, bool magicDisabled = false)
@@ -58,6 +62,7 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(record);
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(rolls);
+        if (_spellRunsBusy) return RejectRun(GameSessionFailure.InvalidSpellRun);
         if (!IsCurrent(expected)) return RejectRun(GameSessionFailure.StaleVersion);
         var creation = SpellRunRules.Create(_spellRuns, request, record, world, rolls, _rules.Magic, magicDisabled);
         if (creation.Status != SpellRunCreationStatus.Created)
@@ -74,8 +79,9 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// Acts on the session's runs through the run rules (<see cref="SpellRunSystem"/>) with the host's world: the table changes,
     /// the events the rules queue are added, the ticks they remove are removed, and the notes are handed back. Refused, in order:
-    /// an undefined action, a run outside 0..511, or a missing object (<see cref="GameSessionFailure.InvalidSpellRun"/>); the
-    /// version; the event budget; the revision. An action that changes nothing is <see cref="GameSessionDisposition.NoChange"/>.
+    /// an undefined action, a run outside 0..511, a missing object, or a call from inside the run rules (a host port;
+    /// <see cref="GameSessionFailure.InvalidSpellRun"/>); the version; the event budget (the runs stay as they were; what the host's
+    /// ports already did is the host's); the revision. An action that changes nothing is <see cref="GameSessionDisposition.NoChange"/>.
     /// </summary>
     public SessionSpellRunResult ActOnSpellRun(GameSessionVersion expected, ISpellRunHost host, SessionSpellRunAction action)
     {
@@ -83,10 +89,25 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(action);
         var objectScoped = action.Kind is SessionSpellRunActionKind.Demaintain or SessionSpellRunActionKind.ClearSources;
-        if (!Enum.IsDefined(action.Kind) || (objectScoped ? !SessionValidation.Entity(action.Object) : action.Run is < 0 or >= SpellRunTable.Slots))
+        if (!Enum.IsDefined(action.Kind) || (objectScoped ? !SessionValidation.Entity(action.Object) : action.Run is < 0 or >= SpellRunTable.Slots)
+            || _spellRunsBusy)
             return RejectRun(GameSessionFailure.InvalidSpellRun);
         if (!IsCurrent(expected)) return RejectRun(GameSessionFailure.StaleVersion);
         var system = NewSpellSystem(host);
+        _spellRunsBusy = true;
+        try { Act(system, action); }
+        finally { _spellRunsBusy = false; }
+        if (!system.Changed(_spellRuns))
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, system.Notes, Version);
+        if (!SpellEventsFit(system.Queued.Count)) return RejectRun(GameSessionFailure.EventBudgetExceeded);
+        if (_revision == long.MaxValue) return RejectRun(GameSessionFailure.RevisionExhausted);
+        CommitSpellSystem(system);
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, system.Notes, Version);
+    }
+
+    private static void Act(SpellRunSystem system, SessionSpellRunAction action)
+    {
         switch (action.Kind)
         {
             case SessionSpellRunActionKind.Begin: system.Begin(action.Run); break;
@@ -102,13 +123,6 @@ public sealed partial class GameSessionOwner
             case SessionSpellRunActionKind.Demaintain: system.Demaintain(action.Object!); break;
             case SessionSpellRunActionKind.ClearSources: system.ClearSources(action.Object!); break;
         }
-        if (ReferenceEquals(system.Table, _spellRuns) && system.Queued.Count == 0 && system.RemovedTicks.Count == 0)
-            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, system.Notes, Version);
-        if (!SpellEventsFit(system.Queued.Count)) return RejectRun(GameSessionFailure.EventBudgetExceeded);
-        if (_revision == long.MaxValue) return RejectRun(GameSessionFailure.RevisionExhausted);
-        CommitSpellSystem(system);
-        _revision++;
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, system.Notes, Version);
     }
 
     // A magic-tech event (0x459430): through the pass host's run rules, or consumed and reported not run.
@@ -116,13 +130,20 @@ public sealed partial class GameSessionOwner
     {
         var run = (int)firing.Event.Payload.Values[1];
         var code = (SpellRunEventCode)firing.Event.Payload.Values[2];
-        if (_passWorld is not ISessionSpellWorld { SpellRuns: { } host })
+        if (_passWorld is not ISessionSpellWorld { SpellRuns: { } host } || _spellRunsBusy)
         {
             _passSpellRuns?.Add(new(firing.Event, run, code, false, []));
             return GameEventHandlerOutcome.Refused;
         }
         var system = NewSpellSystem(host);
-        system.Fire(run, code);
+        _spellRunsBusy = true;
+        try { system.Fire(run, code); }
+        finally { _spellRunsBusy = false; }
+        if (!system.Changed(_spellRuns))
+        {
+            _passSpellRuns?.Add(new(firing.Event, run, code, true, system.Notes));
+            return GameEventHandlerOutcome.Completed;
+        }
         // The event left the queue; what the rules queue must fit, or the step is not applied.
         if (!SpellEventsFit(system.Queued.Count) || _revision == long.MaxValue)
         {

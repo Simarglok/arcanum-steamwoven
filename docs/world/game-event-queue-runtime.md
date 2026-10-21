@@ -139,7 +139,8 @@ the scenery stays off. A restore refuses one whose scenery is not recorded off, 
 **Magic-tech events (ARC-MAGIC-010).** The kind `magic.run` (also added to registry version 1 without a new version) is the
 original's magic-tech event (kind 5, ledger RP11–RP14): game time, **not saved** (`NotSaved`: the session's spell runs are not
 saved either until MT9b, so a restored session has neither), global, any number, at most `SessionEventKinds.MaxSpellRunEvents`
-(1,024: a tick and an interrupt for each of the 512 runs) on top of the others. No entity; values: the game time it was set at,
+(1,024, a budget of about a tick and an interrupt for each of the 512 runs; interrupt and process events are not deduplicated) on
+top of the others. No entity; values: the game time it was set at,
 the run (0..511) and the code (1 a tick, 2 an interrupt, 3 a process). The run rules queue it (a tick after the run's period or
 duration, an interrupt 1 ms after an end by event, the BEGIN of a run without a parent 2 ms after its creation) and remove a
 run's ticks; when due it runs through an `ISessionSpellWorld` host (`SessionEventPassResult.SpellRuns` reports it with the rules'

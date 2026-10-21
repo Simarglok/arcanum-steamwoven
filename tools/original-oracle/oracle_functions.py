@@ -2278,13 +2278,11 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
             emulator.call(spec.address, (run_id,), code=code, stubs={RUN_LOOKUP: lookup, REMOVE_EVENTS: remove, PROCESS_RUN: process},
                           readable=readable, writable=writable)
             after, = struct.unpack("<i", emulator.peek(run_address + 8, 4))
-            removed = int(any(kind == 1 for kind, _ in seen))
             processed = next((value for kind, value in seen if kind == 2), -9)
-            cases.append([action, *counts, found, busy, listed, after, emulator.read_u32(TARGET_LIST), removed, processed, emulator.read_u32(REMOVE_GUARD)])
+            cases.append([action, *counts, found, busy, listed, after, emulator.read_u32(TARGET_LIST), processed])
             if progress and case_number % 1000 == 0:
                 progress(case_number)
-        document.update(fields=["action", "callbackCount", "endCallbackCount", "found", "busy", "listed", "actionAfter", "listAfter", "removed",
-                                "processed", "busyAfter"])
+        document.update(fields=["action", "callbackCount", "endCallbackCount", "found", "busy", "listed", "actionAfter", "listAfter", "processed"])
     else:
         raise ValueError(f"unknown model {spec.model}")
     document["cases"] = cases

@@ -138,7 +138,7 @@ public sealed class SpellRunSystemTests
         full.Records[7] = host.Records[7];
         var bar = System(full, Run());
         bar.Begin(0);
-        Assert.IsNull(bar.Table[0], "the local player's maintain bar is full: END at once");
+        Assert.AreEqual((null, 0), (bar.Table[0], bar.Queued.Count), "the local player's maintain bar is full: END at once, its tick freed with it");
 
         var dull = new Host { Intelligence = 7 };
         dull.Records[7] = host.Records[7];

@@ -183,7 +183,8 @@ public static class SessionEventKinds
     /// session has neither.
     /// </summary>
     public const string SpellRun = "magic.run";
-    /// <summary>Pending magic-tech events a session holds: a tick and an interrupt for each of the 512 runs.</summary>
+    /// <summary>Pending magic-tech events a session holds (a budget: about a tick and an interrupt for each of the 512 runs; the
+    /// interrupts and process events are not deduplicated).</summary>
     public const int MaxSpellRunEvents = 2 * Arcanum.Simulation.Magic.SpellRunTable.Slots;
     /// <summary>The longest respawn delay: the most negative respawn field in game minutes.</summary>
     public const long MaxRespawnDelayMs = 2_147_483_648L * 60_000L;

@@ -25,6 +25,8 @@ public sealed class SessionSpellRunTests
     private sealed class Spells(SpellRunRecord record) : ISessionSpellWorld, ISpellRunHost
     {
         public int Applied { get; private set; }
+        /// <summary>Called by a component, as a port that calls back into the session would.</summary>
+        public Action? OnApply { get; set; }
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
         public ISpellRunHost SpellRuns => this;
         public SpellRunRecord Record(int spell) => record;
@@ -39,7 +41,12 @@ public sealed class SessionSpellRunTests
         public bool PerTarget(SpellRun run, SpellRunTarget target) => true;
         public bool TakesEffect(SpellRun run, SpellRunTarget target) => true;
         public SpellComponentGate Gate(SpellRun run, int component, SpellRunTarget target) => new(true, target);
-        public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target) { Applied++; return SpellComponentOutcome.None; }
+        public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target)
+        {
+            Applied++;
+            OnApply?.Invoke();
+            return SpellComponentOutcome.None;
+        }
         public SpellTimeFacts TimeFacts(SpellRun run) => new(true);
         public int? Stat(SpellRunObject who, int stat) => 12;
         public bool MaintainBarHasSlot(SpellRun run) => true;
@@ -135,5 +142,12 @@ public sealed class SessionSpellRunTests
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.ActOnSpellRun(stale, world, new(SessionSpellRunActionKind.Begin, 0)).Failure);
         var refused = Start(owner, new(300, null, Trap, Orc, SpellLocation.None), Instant);
         Assert.AreEqual((GameSessionFailure.SpellRunRefused, SpellRunCreationStatus.Refused), (refused.Failure, refused.Creation!.Status));
+        // A port that calls back into the runs while the rules act is refused, so the outer call's table cannot overwrite it.
+        SessionSpellRunResult? inner = null;
+        world.OnApply = () => inner = owner.ActOnSpellRun(owner.Version, world, new(SessionSpellRunActionKind.Interrupt, 0));
+        var outer = owner.ActOnSpellRun(owner.Version, world, new(SessionSpellRunActionKind.Begin, 0));
+        Assert.AreEqual((GameSessionFailure.InvalidSpellRun, GameSessionDisposition.Changed), (inner!.Failure, outer.Disposition));
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.ActOnSpellRun(owner.Version, world, new(SessionSpellRunActionKind.ClearSource, 5)).Disposition,
+            "nothing in the slot: no change, no revision");
     }
 }

@@ -208,8 +208,9 @@ public sealed class SpellRunSystem
         {
             if (stage.Ends)
             {
-                // A failed MAINTAIN: the maintain bar, END and its processing at once (the stage's own call, under this guard).
-                _notes.Add(new(SpellRunNoteKind.MaintainBar, id));
+                // A failed MAINTAIN: the local player's maintain bar (with its message), END and its processing at once (the
+                // stage's own call, under this guard).
+                if (stage.Message is not null) _notes.Add(new(SpellRunNoteKind.MaintainBar, id));
                 Set(run with { Action = SpellRunAction.End });
                 Process(id);
             }
@@ -340,22 +341,29 @@ public sealed class SpellRunSystem
 
     private void FreeRun(int id)
     {
+        if (Table[id] is null) return;
         Table = Table.Free(id);
         RemoveTicks(id);
         _notes.Add(new(SpellRunNoteKind.Freed, id));
     }
 
+    // The run's tick events go: the queued ones, including one queued earlier in this call, and the pending ones.
     private void RemoveTicks(int id)
     {
         _ticks.Remove(id);
+        _queued.RemoveAll(e => e.Run == id && e.Code == SpellRunEventCode.Tick);
         _removedTicks.Add(id);
     }
 
+    // A changed run replaces its slot; an unchanged one keeps the table, so a call that changes nothing changes nothing.
     private SpellRun Set(SpellRun run)
     {
-        Table = Table.With(run);
+        if (!Equals(Table[run.Id], run)) Table = Table.With(run);
         return run;
     }
+
+    /// <summary>Whether the call changed anything: the table (compared with the one it started from), the events to queue or remove.</summary>
+    public bool Changed(SpellRunTable start) => !ReferenceEquals(Table, start) || _queued.Count > 0 || _removedTicks.Count > 0;
 
     // 0x457030, 0x457060: the callback action at once, in the callback's own pass (its scheduler then frees the run).
     [OriginalFunction(0x457030, OriginalFunctionScope.Full)]
@@ -436,7 +444,7 @@ public sealed class SpellRunSystem
 
     /// <summary>Detaches a run's source (0x4572F0): the local player's maintain bar; a parent that is the source goes too; unless
     /// the run is being processed it gets the final END mark (the original's bit 0x10, also unresistable: MG19).</summary>
-    [OriginalFunction(0x4572F0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4572F0, OriginalFunctionScope.Partial)]
     public void DetachSource(int id)
     {
         if (Table[id] is not { } run) return;
