@@ -2581,8 +2581,8 @@ Data notes (not anomalies; both settings follow the original):
   cost nothing, so the payment would not have spent a charge). The owner chose unlimited charges in Steamwoven on 2026-10-21;
   ARC-TECHNOLOGY-009 then found in the installed data that both records sit in slot 1 (slot 0 is 10000) and have `ItemTriggers:`
   0; the owner chose to read further (option B). **Settled** by ARC-TECHNOLOGY-010 ([Trap devices](#trap-devices-arc-technology-010)):
-  both carry generic flag 0x4 and fire in the original as timed trap devices through slot 1 (TP2–TP3), so no data fix is needed;
-  the trap-device path is not implemented yet.
+  both carry generic flag 0x4 and fire in the original as timed trap devices through slot 1 (TP2–TP3). Not a data fix: the
+  trap-device mechanism, the same in both modes; the owner's decision on the trap mechanism is pending (not implemented).
 - Nine items that are not technological carry technology records (six food, three scrolls); they reach the engine like any device.
 - Record 187 is on no item; of the six maintained technology records only 168 is carried (three armours).
 
@@ -2610,7 +2610,8 @@ product is 15193) and 4690.
 | TP8 | prototypes 4047, 4049, 4050 | The executable names 4047 and 4049 only as the markers and never names 4050 (it comes from the Summon data). | Original |
 
 Verdict on DVD1: both devices carry generic flag 0x4, so the original fires them as trap devices (TP2–TP3); their charges, slot 0 and
-trigger mask never matter. DVD1 is no data fix: the trap-device path is to be built the same in both modes (not implemented).
+trigger mask never matter. DVD1 is not a data fix: it is the trap-device mechanism, the same in both modes (not implemented); the owner's
+decision on the trap mechanism is pending.
 
 ## Ammunition (ARC-WORLD-066)
 
