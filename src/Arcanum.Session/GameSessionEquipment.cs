@@ -250,7 +250,8 @@ public sealed partial class GameSessionOwner
         SessionInsertVerdict? verdict = null;
         if (current is not null)
         {
-            verdict = insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity)));
+            verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity))),
+                current.Item.MagickTechComplexity);
             ThrowIfDisposed();
             if (_revision != revision) return RejectWear(GameSessionFailure.StaleVersion, verdict: verdict);
             if (verdict != SessionInsertVerdict.Accepted) return RejectWear(GameSessionFailure.InsertRefused, verdict: verdict);
@@ -281,7 +282,8 @@ public sealed partial class GameSessionOwner
         if (refusal != EquipmentRefusal.None) return RejectWear(GameSessionFailure.WearRefused, refusal);
         if (_revision == long.MaxValue) return RejectWear(GameSessionFailure.RevisionExhausted);
         var revision = _revision;
-        var verdict = insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity)));
+        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity))),
+            current.Item.MagickTechComplexity);
         ThrowIfDisposed();
         if (_revision != revision) return RejectWear(GameSessionFailure.StaleVersion, verdict: verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectWear(GameSessionFailure.InsertRefused, verdict: verdict);

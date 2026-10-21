@@ -21,7 +21,12 @@ public delegate SessionCraftFacts? SessionCraftLookup(string entity);
 /// <see cref="SchematicAssemblyRules.RefusalMessage"/>.
 /// </summary>
 public sealed record SessionAssemblyResult(GameSessionDisposition Disposition, GameSessionFailure Failure, AssemblyPlan? Plan,
-    IReadOnlyList<string> Made, IReadOnlyList<string> Consumed, GameSessionVersion Version);
+    IReadOnlyList<string> Made, IReadOnlyList<string> Consumed, GameSessionVersion Version)
+{
+    /// <summary>The insert check's answer that refused a product (<see cref="GameSessionFailure.InsertRefused"/>): the host's, or
+    /// <see cref="SessionInsertVerdict.TechnologyRefused"/> for a Technophobia hero (ARC-WORLD-069); null otherwise.</summary>
+    public SessionInsertVerdict? Verdict { get; init; }
+}
 
 public sealed partial class GameSessionOwner
 {
@@ -116,16 +121,20 @@ public sealed partial class GameSessionOwner
         var next = NextMadeNumber();
         if (newItems > 0 && next > int.MaxValue - (long)newItems + 1) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         var made = Enumerable.Range((int)next, newItems).Select(SessionMadeItem.EntityOf).ToArray();
+        // ARC-WORLD-069: the product's magick/tech complexity for the insert check's background part (a Technophobia hero cannot take
+        // a technological product); a product the host gives no facts for counts as neutral (0).
+        var complexity = facts(prototype)?.Complexity ?? 0;
+        ThrowIfDisposed();
+        if (_revision != revision) return RejectAssembly(GameSessionFailure.StaleVersion);
         // The host answers one insert check a product unit, for the stack it enters.
         for (var unit = 0; unit < quantity; unit++)
         {
             var entity = into?.Entity ?? (made.Length > 0 ? made[ammo is null ? unit : 0] : SessionMadeItem.EntityOf((int)next));
-            var unitFacts = new SessionItemFacts(kind, 0, 0, -1, ammo?.Units, []) { AmmoType = ammo?.AmmoType };
-            // ARC-WORLD-069: a Technophobia hero cannot take a technological product (the insert check's background part).
-            var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(entity, unitFacts)), facts(prototype)?.Complexity ?? 0);
+            var unitFacts = new SessionItemFacts(kind, 0, complexity, -1, ammo?.Units, []) { AmmoType = ammo?.AmmoType };
+            var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(entity, unitFacts)), complexity);
             ThrowIfDisposed();
             if (_revision != revision) return RejectAssembly(GameSessionFailure.StaleVersion);
-            if (verdict != SessionInsertVerdict.Accepted) return RejectAssembly(GameSessionFailure.InsertRefused, plan);
+            if (verdict != SessionInsertVerdict.Accepted) return RejectAssembly(GameSessionFailure.InsertRefused, plan) with { Verdict = verdict };
         }
         if (_revision == long.MaxValue) return RejectAssembly(GameSessionFailure.RevisionExhausted, plan);
         foreach (var (entity, stack) in spent)

@@ -44,6 +44,65 @@ public sealed class BackgroundStateTests
     }
 
     [TestMethod]
+    public void A_technophobe_refuses_a_technological_item_from_in_and_keeps_neutral_ones_and_host_answers_pass()
+    {
+        using var owner = Hero(SessionBackgrounds.Technophobia);
+        var given = owner.GiveItemToPc(owner.Version, "corpse", 5, Accept);
+        Assert.AreEqual((GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.TechnologyRefused, 0L),
+            (given.Failure, given.Verdict, owner.Version.Revision), "negative IN");
+        using var neutral = CreateWith(HalfElf() with { Background = SessionBackgrounds.Technophobia });
+        Assert.AreEqual(GameSessionDisposition.Changed, neutral.AttachMapInventory(Exterior, new([],
+            [new("stone", new(new(SessionItemType.Generic, 5603, 7, 8), 1, 0, 0, null, []), new CellCoord(103, 200))])).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, neutral.PickUpItem(neutral.Version, "stone", Accept).Disposition, "complexity 0 is carried");
+        // The host's own answer passes unchanged for a hero who is no technophobe.
+        using var plain = Hero(SessionBackgrounds.None);
+        Assert.AreEqual(SessionInsertVerdict.TechnologyRefused, plain.PickUpItem(plain.Version, "cog", _ => SessionInsertVerdict.TechnologyRefused).Verdict);
+    }
+
+    [TestMethod]
+    public void A_technophobe_cannot_take_back_a_placed_technological_seed_item()
+    {
+        using var plain = Hero(SessionBackgrounds.None);
+        Assert.AreEqual(GameSessionDisposition.Changed, plain.PickUpItem(plain.Version, "cog", Accept).Disposition);
+        plain.PlaceHeroItem("cog", new CellCoord(120, 210));
+        var text = GameSessionSnapshotCodec.Encode(plain.Capture()).Replace(",\"background\":0}", ",\"background\":72}");
+        using var owner = GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(text).Snapshot!, RestoreOptions()).Owner!;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, Seed()).Disposition);
+        var refused = owner.PickUpItem(owner.Version, "cog", Accept);
+        Assert.AreEqual((GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.TechnologyRefused),
+            (refused.Failure, refused.Verdict), "the seed's complexity");
+        Assert.AreEqual("cog", owner.QueryPlacedItems().Single().Entity, "still on the ground");
+    }
+
+    [TestMethod]
+    public void A_technophobe_cannot_take_off_a_worn_technological_item()
+    {
+        using var owner = CreateWith(HalfElf() with { Background = SessionBackgrounds.Technophobia });
+        var gear = new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Armor, MagickTechComplexity = -10,
+            Armor = new EquipmentArmor { Coverage = ArmorCoverage.Torso, Sizes = ArmorSizes.Medium, AcAdjustment = 12 },
+        };
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:2", EquipmentSlot.Armor,
+            new(Kit[1].Kind, [], false, gear), (_, _) => true, Accept).Disposition, "the start kit's item is worn");
+        var revision = owner.Version.Revision;
+        var off = owner.Unequip(owner.Version, EquipmentSlot.Armor, Accept);
+        Assert.AreEqual((GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.TechnologyRefused, revision),
+            (off.Failure, off.Verdict, owner.Version.Revision), "the unwield runs the insert check");
+        var swap = owner.Equip(owner.Version, "kit:3", EquipmentSlot.Armor, new(Kit[2].Kind, [], false, gear with { MagickTechComplexity = 0 }),
+            (_, _) => true, Accept);
+        Assert.AreEqual((GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.TechnologyRefused), (swap.Failure, swap.Verdict), "the occupant");
+        var best = owner.EquipBest(owner.Version, entity => entity switch
+        {
+            "kit:2" => new(Kit[1].Kind, [], false, gear) { Worth = 1 },
+            "kit:3" => new(Kit[2].Kind, [], false, gear with { MagickTechComplexity = 0 }) { Worth = 50 },
+            _ => null,
+        }, (_, _) => true, Accept);
+        Assert.AreEqual(SessionInsertVerdict.TechnologyRefused, best.Steps.Single(step => step.Slot == EquipmentSlot.Armor).Verdict, "the best-items choice");
+        Assert.AreEqual("kit:2", owner.QueryEquipment().Worn.Single().Entity);
+    }
+
+    [TestMethod]
     public void A_magick_allergic_hero_cannot_wear_a_magickal_item()
     {
         using var owner = CreateWith(HalfElf() with { Background = SessionBackgrounds.MagickAllergy });
@@ -56,6 +115,28 @@ public sealed class BackgroundStateTests
         Assert.AreEqual((GameSessionFailure.WearRefused, EquipmentRefusal.WieldMagicItems), (result.Failure, result.Refusal), "code 18");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:2", EquipmentSlot.Armor,
             new(Kit[1].Kind, [], false, mail with { MagickTechComplexity = -10 }), (_, _) => true, Accept).Disposition, "a technological item is worn");
+    }
+
+    [TestMethod]
+    public void The_best_items_choice_skips_a_magickal_item_for_a_magick_allergic_hero()
+    {
+        var coat = new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Armor,
+            Armor = new EquipmentArmor { Coverage = ArmorCoverage.Torso, Sizes = ArmorSizes.Medium, AcAdjustment = 5 },
+        };
+        foreach (var (background, worn) in new[] { (SessionBackgrounds.MagickAllergy, "kit:3"), (SessionBackgrounds.None, "kit:2") })
+        {
+            using var owner = CreateWith(HalfElf() with { Background = background });
+            var result = owner.EquipBest(owner.Version, entity => entity switch
+            {
+                "kit:2" => new(Kit[1].Kind, [], false, coat with { MagickTechComplexity = 10 }) { Worth = 500 },
+                "kit:3" => new(Kit[2].Kind, [], false, coat) { Worth = 10 },
+                _ => null,
+            }, (_, _) => true, Accept);
+            Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition);
+            Assert.AreEqual(worn, owner.QueryEquipment().Worn.Single().Entity, $"background {background}");
+        }
     }
 
     [TestMethod]
@@ -93,6 +174,7 @@ public sealed class BackgroundStateTests
             using var owner = CreateWith(HalfElf() with { Background = background, Kit = [new(part), new(part)] });
             var made = owner.AssembleSchematic(owner.Version, schematic, _ => new SessionCraftFacts(10), Facts, _ => product, Accept);
             Assert.AreEqual(expected, made.Failure, $"background {background}");
+            Assert.AreEqual(expected == GameSessionFailure.None ? null : SessionInsertVerdict.TechnologyRefused, made.Verdict);
         }
     }
 }

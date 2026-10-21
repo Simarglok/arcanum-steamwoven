@@ -90,7 +90,7 @@ A seed that lists a kit entity is `InventoryMismatch`.
 | --- | --- |
 | `QueryHero()` | `SessionHeroState` (the saved fields) or `null` without a hero. |
 | `QueryHeroStats(context)` | The character owner's `CharacterStatsQueryResult` under the context (base/effective/derived values, applied innate effects), or `null`. |
-| `QueryHeroDialogFacts()` | `DialogPcFacts` for DLG gates, or `null`: gender, **effective** intelligence (race and gender effects applied), the original's race index 0..10. `IsDumb` is false: the original sets it for backgrounds 55, 74 and 75 only (the dumb test, 0x45FC00) and no background is modelled. |
+| `QueryHeroDialogFacts()` | `DialogPcFacts` for DLG gates, or `null`: gender, **effective** intelligence (race and gender effects applied), the original's race index 0..10. `IsDumb` is false: the original sets it for backgrounds 55, 74 and 75 only (the dumb test, 0x45FC00), which is not applied yet (the hero's background id is held since ARC-WORLD-069; a pre-made hero's is 39..50). |
 | `QueryGold()` | The PC's gold (0 without a hero). |
 | `QueryHeroKit()` | The starting kit in kit order (empty without a hero); in the PC's inventory it precedes `QueryPcInventory`. |
 

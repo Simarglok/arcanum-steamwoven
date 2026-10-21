@@ -127,15 +127,17 @@ PC has a background (the original's reader answers 0 for any other object), so a
   0) with `WieldMagicItems` (the original's code 18, `mes\item.mes` 118), for `Equip` and the best-items choice (which skips it).
 - **Technophobia (72, BG4).** The insert check's background part (`SessionBackgrounds.RefusesCarry`) refuses an item of negative
   complexity for the hero (`InsertRefused` with `SessionInsertVerdict.TechnologyRefused`, the original's code 15, `item.mes` 115),
-  after the host's weight answer and before its room answer: on pickup, loot, negative `IN` and an assembly product. All-or-nothing:
-  the refusal comes from the insert check, before any effect. The session applies it where it knows the item's complexity (a seed
-  item's facts, a product's component facts); a made or placed item taken back has no complexity in the session, so the host's
-  insert check answers for it. The AREA viewer names the refusal in its inventory messages.
+  after the host's weight answer and before its room answer: on pickup (a placed seed item taken back too), loot, negative `IN`, an
+  assembly product (`SessionAssemblyResult.Verdict`) and the unwield (`Unequip`, the item a swap in `Equip` or the best-items
+  choice takes off: a worn technological item stays worn). All-or-nothing: the refusal comes from the insert check, before any
+  effect. The session applies it where it knows the item's complexity (a seed item's facts, a worn item's equipment facts, a
+  product's component facts, 0 when the host gives none); a made item (looted from or given by an NPC, or dropped and taken back)
+  has no complexity in the session, so only the host's insert check answers for it. The start kit enters without an insert check
+  (as the host-free start of ARC-WORLD-015). The AREA viewer names the refusal in its inventory and schematic messages.
 
 Out of scope (ledger BG2, BG5–BG8; [characters and skills](../requirements/characters-skills.md)): choosing a background at character
 creation, its effect line (stats, skills, resistances and so on), the start kit's gold and items, the low-intelligence speech, dark
-sight, the time- and place-dependent stat changes, Educator, the container seed, and the unwield refusal of a technological item for a
-technophobe (no unwield path in the session).
+sight, the time- and place-dependent stat changes, Educator and the container seed.
 
 ## Tests
 

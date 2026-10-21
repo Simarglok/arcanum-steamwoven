@@ -574,8 +574,9 @@ public sealed partial class GameSessionOwner : IDisposable
 
     /// <summary>
     /// The hero's DLG reply-eligibility facts, or null without a hero: gender, effective intelligence and the source race
-    /// index. <see cref="DialogPcFacts.IsDumb"/> is false: the source sets it only for backgrounds 55, 74 and 75, and the
-    /// session models no background (a pre-made hero's stored background 39..50 is display data, ARC-RES-027).
+    /// index. <see cref="DialogPcFacts.IsDumb"/> is false: the source sets it only for backgrounds 55, 74 and 75 (the dumb test
+    /// 0x45FC00), which the session does not apply yet; the hero's background id is held (ARC-WORLD-069), and a pre-made hero's is
+    /// 39..50.
     /// </summary>
     public DialogPcFacts? QueryHeroDialogFacts() { ThrowIfDisposed(); return _hero?.DialogFacts(); }
 
@@ -1418,8 +1419,9 @@ public sealed partial class GameSessionOwner : IDisposable
     // session does not know.
     private InventoryMutationResult TakePlaced(SessionPlacedItem placed, SessionInsertCheck insertCheck)
     {
-        if (placed.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(placed.Entity, out var listed) &&
-            (listed.Facts.HasScript(SessionScriptPoint.Get) || listed.Facts.HasScript(SessionScriptPoint.InsertItem)))
+        var listed = placed.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(placed.Entity, out var item)
+            ? item : null;
+        if (listed is not null && (listed.Facts.HasScript(SessionScriptPoint.Get) || listed.Facts.HasScript(SessionScriptPoint.InsertItem)))
             return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // ARC-WORLD-066: a placed ammunition stack merges into the hero's stack of the same prototype when it holds one.
         var into = placed.Kind.Type == SessionItemType.Ammo ? HeroStackOfPrototype(placed.Kind.Prototype) : null;
@@ -1427,7 +1429,9 @@ public sealed partial class GameSessionOwner : IDisposable
             !_durability.Records.ContainsKey(placed.Entity) && _durability.Count >= _limits.MaxDurabilityRecords)) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var revision = _revision;
-        var verdict = insertCheck(new SessionInventoryItem(placed.Entity, _inventory.WithAmmo(placed.Entity, InventoryDomain.MadeFacts(placed.Kind))));
+        // ARC-WORLD-069: a seed item keeps its seed's complexity for the Technophobia refusal; a made item has none in the session (0).
+        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(placed.Entity, _inventory.WithAmmo(placed.Entity, InventoryDomain.MadeFacts(placed.Kind)))),
+            listed?.Facts.Complexity ?? 0);
         ThrowIfDisposed();
         if (_revision != revision || _inventory.PlacedItem(placed.Entity) != placed || _actor.Map != placed.Map)
             return RejectItem(GameSessionFailure.StaleVersion, verdict);

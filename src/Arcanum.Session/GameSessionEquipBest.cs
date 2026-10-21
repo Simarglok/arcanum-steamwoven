@@ -179,7 +179,7 @@ public sealed partial class GameSessionOwner
         {
             var current = Worn[slot];
             if (EquipmentRules.CheckRemove(current.Item) is var refusal and not EquipmentRefusal.None) { step.Refusal = refusal; return; }
-            var verdict = Insert(current.Entity);
+            var verdict = Insert(current);
             if (verdict != SessionInsertVerdict.Accepted) { step.Verdict = verdict; return; }
             Worn.Remove(slot);
             step.TakenOff = current.Entity;
@@ -207,7 +207,7 @@ public sealed partial class GameSessionOwner
             if (refusal != EquipmentRefusal.None) { step.Refusal = refusal; return; }
             if (current is not null)
             {
-                var verdict = Insert(current.Entity);
+                var verdict = Insert(current);
                 if (verdict != SessionInsertVerdict.Accepted) { step.Verdict = verdict; return; }
                 step.TakenOff ??= current.Entity;
             }
@@ -216,9 +216,10 @@ public sealed partial class GameSessionOwner
             step.Wielded = entity;
         }
 
-        private SessionInsertVerdict Insert(string entity)
+        private SessionInsertVerdict Insert(SessionWornItem current)
         {
-            var verdict = insertCheck(new SessionInventoryItem(entity, owner.CarriedFacts(entity)));
+            var verdict = owner.HeroInsertVerdict(insertCheck(new SessionInventoryItem(current.Entity, owner.CarriedFacts(current.Entity))),
+                current.Item.MagickTechComplexity);
             Fresh();
             return verdict;
         }
