@@ -25,7 +25,7 @@ differs only on MG3's inputs. Code: [`SpellRunRules`](../../src/Arcanum.Simulati
 
 `SpellRunTable` holds 512 slots; a run's id is its slot. A run (`SpellRun`) keeps its spell, current action (BEGIN 0,
 MAINTAIN 1, END 2, CALLBACK 3, END_CALLBACK 4), the source (the object whose spell it is), the parent (the caster, or an item's
-holder), the start location, the target object and tile, the other object, each captured at creation with its type and, for a
+holder), the source's location at the start, the target object and tile, the other object, each captured at creation with its type and, for a
 PC or NPC, its aptitude then; its flags (active; free; processed — set by every pass of the processing, MT9a-2; unresistable;
 final END), the item triggers it was cast with, the resistance margin (written by the per-target stage) and the trigger count
 left (`DurationTriggerCount:`).
@@ -53,7 +53,7 @@ Before an action's components:
 - **MAINTAIN.** For a PC or NPC parent — **the technology flag is not tested**, so maintained technology records (146, 149, 168,
   187, 209, 216) are checked and pay — the same checks; the maintenance (`Maintain:` cost, ×2 for a dwarf PC or NPC source, no
   mastery or cheat) unless the run is free or the intelligence check failed; with a resistance margin the surcharged maintenance
-  (`cost + max(1, cost × margin / 100)`, ×2 for a dwarf). Any failure turns the run to END; the caller empties its target list,
+  (`cost + cost × margin / 100`, 32-bit and toward zero, a share of 0 counting 1; ×2 for a dwarf). Any failure turns the run to END; the caller empties its target list,
   processes the END at once and updates the local player's maintain bar.
 - **END, CALLBACK, END_CALLBACK** go on.
 
@@ -102,4 +102,6 @@ maintenance cost is 0; both modes follow the original until the owner decides (r
 - No caller: the processing, the scheduler's order, the magic-tech events, the maintain bar and the interrupts are MT9a-2's
   (ARC-MAGIC-010); the per-target stage (resistance, shells, reflection, stacking and cancels behind `ISpellRunStacking`) is
   MT10's; saved runs are MT9b's.
+- The other object (the invocation's +0xA0, copied to the run's +0x108) is not carried by MT7's invocation yet, so a run's
+  `Other` is always null; the slice that needs it (a spell aimed at a second object) adds it to the invocation.
 - The casting goal and its eye candy are MT20a's.

@@ -23,8 +23,8 @@ public sealed record SpellRunObject(string Id, int Type, int Aptitude = 0)
 
 /// <summary>
 /// One run (a 0x158-byte slot of the original's run table): its id (the slot), spell, current action; the source (the object
-/// whose spell it is) and the parent (the caster, or an item's holder), the location at the start, the target object and
-/// tile, the other object (the invocation's +0xA0), each captured at creation; the flags; the item triggers it was cast with
+/// whose spell it is) and the parent (the caster, or an item's holder), the source's location at the start (+0x50), the target
+/// object and tile, the other object (not carried by MT7's invocation yet: null), each captured at creation; the flags; the item triggers it was cast with
 /// (+0x140); the resistance margin (+0x144, written by the per-target stage); the trigger count left (+0x150,
 /// <c>DurationTriggerCount:</c>).
 /// </summary>
@@ -171,8 +171,8 @@ public static class SpellRunRules
 
     /// <summary>
     /// Creates a run (0x455C30, from 0x455AC0): nothing while magic is switched off; the invocation check (MT7) first — a refusal
-    /// creates nothing; then the first free slot; the run captures the source, parent, start location, target object and tile and
-    /// the other object with their types and the critters' aptitudes, the spell, action BEGIN, the request's triggers and the
+    /// creates nothing; then the first free slot; the run captures the source, parent, the source's location, target object and
+    /// tile with their types and the critters' aptitudes (the other object is not carried by MT7's invocation yet), the spell, action BEGIN, the request's triggers and the
     /// record's trigger count; its flags are active, free (the request), unresistable (the request or <c>No_Resist:</c>; with the
     /// final END too in the Original setting, MG19).
     /// </summary>
@@ -196,7 +196,7 @@ public static class SpellRunRules
         var target = check.ReplacedTile.IsNone ? invocation.TargetObject : null;
         var tile = check.ReplacedTile.IsNone ? invocation.TargetTile : check.ReplacedTile;
         var run = new SpellRun(id, invocation.Spell, SpellRunAction.Begin, Capture(invocation.Source), Capture(invocation.Parent),
-            invocation.Parent?.Location ?? SpellLocation.None, Capture(target), tile, null, flags, request.Triggers, 0, record.TriggerCount);
+            invocation.Source?.Location ?? SpellLocation.None, Capture(target), tile, null, flags, request.Triggers, 0, record.TriggerCount);
         var goal = run.Parent is null ? 0 : request.SkipCastGoal ? GoalCastWithoutGoal : record.CastAnimation == -1 ? GoalCast : GoalCastAnimation;
         return new(SpellRunCreationStatus.Created, table.With(run), run, check, goal, run.Parent is null);
     }
@@ -264,37 +264,42 @@ public static class SpellRunRules
             return new(true, SpellStageStatus.Proceeds, null, payments, false) { Costs = costs };
         }
         if (run.Action != SpellRunAction.Maintain || run.Parent?.IsCritter != true) return new(true, SpellStageStatus.Proceeds, null, payments, false) { Costs = costs };
+        return Maintain(run, record, facts, cells, profile, payments, costs, sourceCritter);
+    }
+
+    // The MAINTAIN branch of the stage (from 0x453168; the plan's "0x453170" lies inside it).
+    private static SpellStageResult Maintain(SpellRun run, SpellRunRecord record, SpellStageFacts facts, ISpellCellSource cells, MagicAnomalyProfile profile,
+        List<SpellPayment> payments, List<int> costs, bool sourceCritter)
+    {
+        var pay = !run.Free;
+        var failed = false;
+        var status = SpellStageStatus.Proceeds;
+        if (facts.ParentIntelligence < SpellBookRules.MinimumIntelligence && sourceCritter) (failed, pay, status) = (true, false, SpellStageStatus.Checks);
+        var willpowerFailed = facts.ParentWillpower < record.WillpowerMinimum && sourceCritter;
+        if (willpowerFailed) (failed, status) = (true, SpellStageStatus.Checks);
+        else if (pay && !(run.Margin != 0 && !profile.MaintenancePaysBoth))
         {
-            var pay = !run.Free;
-            var failed = false;
-            var status = SpellStageStatus.Proceeds;
-            if (facts.ParentIntelligence < SpellBookRules.MinimumIntelligence && sourceCritter) (failed, pay, status) = (true, false, SpellStageStatus.Checks);
-            var willpowerFailed = facts.ParentWillpower < record.WillpowerMinimum && sourceCritter;
-            if (willpowerFailed) (failed, status) = (true, SpellStageStatus.Checks);
-            else if (pay && !(run.Margin != 0 && !profile.MaintenancePaysBoth))
+            var cost = MaintainCost(record.MaintainCost, facts.SourceCaster);
+            var payment = PayMaintenance(cost, run, record, facts, cells);
+            if (payment is not null)
             {
-                var cost = MaintainCost(record.MaintainCost, facts.SourceCaster);
-                var payment = PayMaintenance(cost, run, record, facts, cells);
-                if (payment is not null)
-                {
-                    payments.Add(payment);
-                    costs.Add(cost);
-                    if (!payment.Succeeded) (failed, status) = (true, SpellStageStatus.MaintainCost);
-                }
+                payments.Add(payment);
+                costs.Add(cost);
+                if (!payment.Succeeded) (failed, status) = (true, SpellStageStatus.MaintainCost);
             }
-            if (run.Margin != 0)
-            {
-                var cost = SurchargedCost(record.MaintainCost, run.Margin, facts.SourceCaster);
-                var payment = PayMaintenance(cost, run, record, facts, cells);
-                if (payment is not null)
-                {
-                    payments.Add(payment);
-                    costs.Add(cost);
-                    if (!payment.Succeeded) return Stop(SpellStageStatus.MaintainCost, facts, payments, costs, true);
-                }
-            }
-            return failed ? Stop(status, facts, payments, costs, true) : new(true, SpellStageStatus.Proceeds, null, payments, false) { Costs = costs };
         }
+        if (run.Margin != 0)
+        {
+            var cost = SurchargedCost(record.MaintainCost, run.Margin, facts.SourceCaster);
+            var payment = PayMaintenance(cost, run, record, facts, cells);
+            if (payment is not null)
+            {
+                payments.Add(payment);
+                costs.Add(cost);
+                if (!payment.Succeeded) return Stop(SpellStageStatus.MaintainCost, facts, payments, costs, true);
+            }
+        }
+        return failed ? Stop(status, facts, payments, costs, true) : new(true, SpellStageStatus.Proceeds, null, payments, false) { Costs = costs };
     }
 
     private static SpellPayment? PayMaintenance(int cost, SpellRun run, SpellRunRecord record, SpellStageFacts facts, ISpellCellSource cells) =>
@@ -316,8 +321,8 @@ public static class SpellRunRules
     [OriginalFunction(0x4532F0, OriginalFunctionScope.Partial)]
     public static int MaintainCost(int maintainCost, SpellCaster source) => Dwarf(source) ? unchecked(maintainCost * 2) : maintainCost;
 
-    /// <summary>The surcharged maintenance with a resistance margin (0x453370): the cost plus <c>cost × margin / 100</c> (toward
-    /// zero, at least 1), doubled for a dwarf PC or NPC source.</summary>
+    /// <summary>The surcharged maintenance with a resistance margin (0x453370): the cost plus <c>cost × margin / 100</c> (32-bit,
+    /// toward zero; a share of 0 counts 1), doubled for a dwarf PC or NPC source.</summary>
     [OriginalFunction(0x453370, OriginalFunctionScope.Partial)]
     public static int SurchargedCost(int maintainCost, int margin, SpellCaster source)
     {
@@ -341,8 +346,10 @@ public static class SpellRunRules
         if (spell is >= 0 and < SpellCostRules.CollegeSpells && facts.MasteredCollege == spell / SpellCostRules.Ranks) milliseconds = unchecked(milliseconds * 2);
         if (facts.TargetIsCritter && milliseconds > 0)
         {
-            var difference = Math.Abs(facts.ParentAptitude - facts.TargetAptitude);
-            if (difference < 0) milliseconds = (uint)(milliseconds * 100UL / (uint)(difference + 100));
+            // The larger minus the smaller (32-bit): the magnitude, negative only when it wraps.
+            var difference = facts.ParentAptitude > facts.TargetAptitude ? unchecked(facts.ParentAptitude - facts.TargetAptitude)
+                : unchecked(facts.TargetAptitude - facts.ParentAptitude);
+            if (difference < 0) milliseconds = unchecked(milliseconds * 100) / unchecked((uint)(difference + 100));
         }
         return milliseconds;
     }
@@ -417,7 +424,9 @@ public static class SpellRunRules
         return table.Runs.Count(r => HoldsSlot(r, critter.Id, records));
     }
 
-    /// <summary>A critter's free maintenance slots (0x450B40): its slots less <see cref="MaintainedRuns"/>; 0 for anything else.</summary>
+    /// <summary>A critter's free maintenance slots (0x450B40): its slots less <see cref="MaintainedRuns"/>; 0 for anything else. In
+    /// Steamwoven it can fall below 0 until the cap ends the excess run, so a "can cast" test (the original's <c>!= 0</c>) must
+    /// test <c>&gt; 0</c>.</summary>
     [OriginalFunction(0x450B40, OriginalFunctionScope.Full)]
     public static int FreeMaintainSlots(SpellRunTable table, SpellRunObject? critter, int intelligence, Func<int, SpellRunRecord> records, MagicAnomalyProfile profile) =>
         critter?.IsCritter == true ? MaintainSlots(intelligence) - MaintainedRuns(table, critter, records, profile) : 0;

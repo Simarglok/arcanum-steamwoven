@@ -63,22 +63,27 @@ public sealed class SpellRunOriginalExeTests
         var file = OracleFile.Load("452F20", "spell-stage", TestContext);
         bool Mg3(Row c) => c["action"] == 1 && c["margin"] != 0 && c["parent"] != 0 && c["parentType"] is 15 or 16 && c["source"] != 0;
         Run(file, c => Stage(c, MagicAnomalyProfile.Original), c =>
-                $"{c["result"]} {c["actionAfter"]} {c["payCalls"]} {c["pay0"]} {c["pay1"]} {c["message"]} {c["stackAsked"]} {c["cancels"]} {c["bar"]} {c["processed"]}",
+                $"{c["result"]} {c["actionAfter"]} {c["payCalls"]} {c["pay0"]} {c["pay1"]} {c["message"]} {c["stackAsked"]} {c["cancels"]} {c["bar"]} {c["processed"]} {c["stackOn"]}",
             ("steamwoven", "MG3", Mg3, c => Stage(c, MagicAnomalyProfile.Steamwoven)),
             new Mutant("technology records are checked at BEGIN", c => Stage(c, MagicAnomalyProfile.Original, r => r with { Technology = false })),
             new("a free run pays", c => Stage(c, MagicAnomalyProfile.Original, null, run => run with { Flags = run.Flags & ~SpellRunFlags.Free })),
             new("no surcharge", c => Stage(c, MagicAnomalyProfile.Original, null, run => run with { Margin = 0 })),
-            new("the minimum intelligence is 4", c => Stage(c, MagicAnomalyProfile.Original, null, null, f => f with { ParentIntelligence = f.ParentIntelligence + 1 })));
+            new("the minimum intelligence is 4", c => Stage(c, MagicAnomalyProfile.Original, null, null, f => f with { ParentIntelligence = f.ParentIntelligence + 1 })),
+            new("the no-stack test asks the source first", c => Stage(c, MagicAnomalyProfile.Original, sourceFirst: true)));
     }
 
-    private sealed class Stacking(Row c) : ISpellRunStacking
+    // sourceFirst plants the mutant that asks about the source before the target.
+    private sealed class Stacking(Row c, bool sourceFirst) : ISpellRunStacking
     {
         public int Asked { get; private set; }
         public int Cancels { get; private set; }
+        public int On { get; private set; } = -1;
 
         public int? Blocking(SpellRun run, SpellRunObject target)
         {
             Asked++;
+            var on = sourceFirst ? run.Source ?? target : target;
+            On = on.Id switch { "target" => 2, "source" => 1, _ => 0 };
             return c["blocking"] < 0 ? null : c["blocking"];
         }
 
@@ -91,7 +96,7 @@ public sealed class SpellRunOriginalExeTests
     }
 
     private static string Stage(Row c, MagicAnomalyProfile profile, Func<SpellRunRecord, SpellRunRecord>? record = null, Func<SpellRun, SpellRun>? run = null,
-        Func<SpellStageFacts, SpellStageFacts>? facts = null)
+        Func<SpellStageFacts, SpellStageFacts>? facts = null, bool sourceFirst = false)
     {
         var source = c["source"] != 0 ? new SpellRunObject("source", c["sourceType"]) : null;
         var parent = c["parent"] == 0 ? null : c["own"] != 0 && source is not null ? source : new SpellRunObject("parent", c["parentType"]);
@@ -104,12 +109,13 @@ public sealed class SpellRunOriginalExeTests
         if (record is not null) theRecord = record(theRecord);
         if (run is not null) theRun = run(theRun);
         if (facts is not null) theFacts = facts(theFacts);
-        var stacking = new Stacking(c);
+        var stacking = new Stacking(c, sourceFirst);
         var result = SpellRunRules.Stage(theRun, theRecord, theFacts, new NoCells(), stacking, profile);
         var pays = result.Costs.Concat(Enumerable.Repeat(-999, 2 - result.Costs.Count)).ToList();
         var action = result.Ends ? 2 : c["action"];
-        var bar = result.Ends && c["local"] != 0 && parent is not null ? 1 : 0;
-        return $"{(result.Proceeds ? 1 : 0)} {action} {result.Costs.Count} {pays[0]} {pays[1]} {result.Message ?? -1} {stacking.Asked} {stacking.Cancels} {bar} {(result.Ends ? 1 : 0)}";
+        // The maintain bar is updated with the message: a failure that ends the run, told to the local player.
+        var bar = result.Ends && result.Message is not null ? 1 : 0;
+        return $"{(result.Proceeds ? 1 : 0)} {action} {result.Costs.Count} {pays[0]} {pays[1]} {result.Message ?? -1} {stacking.Asked} {stacking.Cancels} {bar} {(result.Ends ? 1 : 0)} {stacking.On}";
     }
 
     [TestMethod, TestCategory(Category)]

@@ -2021,16 +2021,28 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
             if len(calls["pay"]) > 2 or len(calls["message"]) > 1 or len(calls["stack"]) > 1:
                 raise RunFailure("stub", f"unexpected calls {calls}")
             pays = calls["pay"] + [-999] * (2 - len(calls["pay"]))
+            # Which object the no-stack test asked about: −1 not asked, 0 the null handle, 1 the source, 2 the target.
+            stack_on = -1
+            if calls["stack"]:
+                asked = calls["stack"][0]
+                if target_present and asked == RUN_TARGET_H:
+                    stack_on = 2
+                elif source_present and asked == source_h:
+                    stack_on = 1
+                elif asked == (0, 0):
+                    stack_on = 0
+                else:
+                    raise RunFailure("stub", f"no-stack test of {asked}")
             cases.append([spell, action, int(source_present), int(own), int(parent_present), source_type, parent_type, int(target_present), flags, margin,
                           technology, skip_begin, stacking, willpower_min, cost, maintain, intelligence, willpower, race, mastery, cheat, dead, cannot_act,
                           local, fatigue, blocking, result, struct.unpack("<i", emulator.peek(run_address + 8, 4))[0], len(calls["pay"]), *pays,
-                          calls["message"][0] if calls["message"] else -1, len(calls["stack"]), len(calls["cancel"]), len(calls["bar"]), len(calls["process"])])
+                          calls["message"][0] if calls["message"] else -1, len(calls["stack"]), len(calls["cancel"]), len(calls["bar"]), len(calls["process"]), stack_on])
             if progress and case_number % 1000 == 0:
                 progress(case_number)
         document.update(fields=["spell", "action", "source", "own", "parent", "sourceType", "parentType", "target", "flags", "margin", "technology",
                                 "skipBeginCost", "stacking", "willpowerMinimum", "cost", "maintain", "intelligence", "willpower", "race", "mastery", "cheat",
                                 "dead", "cannotAct", "local", "fatigue", "blocking", "result", "actionAfter", "payCalls", "pay0", "pay1", "message",
-                                "stackAsked", "cancels", "bar", "processed"])
+                                "stackAsked", "cancels", "bar", "processed", "stackOn"])
     elif spec.model == "spell-cap":
         from oracle_emu import StubRejected, to_signed
         heap = HEAP_BASE_OF(emulator)
