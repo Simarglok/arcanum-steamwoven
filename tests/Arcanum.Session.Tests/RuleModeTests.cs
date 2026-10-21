@@ -79,6 +79,9 @@ public sealed class RuleModeTests
         // ARC-WORLD-072: LR4/LR7, a far click does not move under Original.
         Assert.IsTrue(GameRules.Original.Navigation.FarClickDoesNotMove);
         Assert.IsFalse(GameRules.Steamwoven.Navigation.FarClickDoesNotMove);
+        // ARC-WORLD-073: LRA1, critters walked through mid-segment under Original (the planning side here, the walk ARC-WORLD-074).
+        Assert.IsTrue(GameRules.Original.Navigation.MidSegmentCrittersWalkedThrough);
+        Assert.IsFalse(GameRules.Steamwoven.Navigation.MidSegmentCrittersWalkedThrough);
         // ARC-TECHNOLOGY-009: WRD3 and AMA5 are Steamwoven fixes with Original switches.
         Assert.IsTrue(GameRules.Original.Written.UnprefixedMessageLosesFirstCharacter);
         Assert.IsFalse(GameRules.Steamwoven.Written.UnprefixedMessageLosesFirstCharacter);

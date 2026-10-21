@@ -160,21 +160,26 @@ public sealed class RouteCorridorTests
     }
 
     [TestMethod]
-    public void Under_Original_a_near_goal_the_local_window_cannot_reach_still_follows_a_corridor()
+    public void A_near_goal_the_request_cannot_reach_follows_a_corridor_only_under_Steamwoven()
     {
-        // The switch names the far click only (beyond 32 tiles); a goal 25 tiles away behind a wall whose gap lies outside the
-        // local 64-cell window keeps its corridor in both modes (the original's no-route retry, LR4, is ARC-WORLD-073's).
+        // ARC-WORLD-073: a goal 25 tiles away behind a wall whose gap lies outside the request's 64-tile window. Steamwoven follows a
+        // corridor; Original has none (the original has no long route, LR7): the PC's straight-line retry (LR4) walks toward the goal
+        // until the wall refuses a step, and a follower without the retry does not move.
         var rows = Enumerable.Range(0, 200).Select(y => new string('.', 12) + (y == 5 ? "." : "#") + new string('.', 17)).ToArray();
         var source = new GridSource(rows);
         Assert.AreEqual("ROUTE_WINDOW_EXHAUSTED", RoutePlanner.Plan(source, new(0, 150), new(25, 150)).ReasonCode);
         foreach (var profile in NavigationRuleProfile.All)
-        {
-            var host = new RouteHost(source, new(0, 150), Step);
-            var follower = new RouteFollower(source, corridorLimits: new(), corridorAllowed: () => !profile.FarClickDoesNotMove);
-            follower.SetTarget(new(25, 150), host.State.Time);
-            host.Frames(follower, 4 * 400);
-            Assert.AreEqual((RouteFollowStatus.Arrived, new CellCoord(25, 150)), (follower.Status, host.State.CommittedCell), profile.Name);
-        }
+            foreach (var retry in new[] { false, true })
+            {
+                var host = new RouteHost(source, new(0, 150), Step);
+                var follower = new RouteFollower(source, corridorLimits: new(), corridorAllowed: () => !profile.FarClickDoesNotMove, straightRetry: retry);
+                follower.SetTarget(new(25, 150), host.State.Time);
+                host.Frames(follower, 4 * 400);
+                var at = (follower.Status, follower.StopReason, host.State.CommittedCell);
+                if (!profile.FarClickDoesNotMove) Assert.AreEqual((RouteFollowStatus.Arrived, "ROUTE_ARRIVED", new CellCoord(25, 150)), at, profile.Name);
+                else if (retry) Assert.AreEqual((RouteFollowStatus.Stopped, "ROUTE_STEP_DENIED", new CellCoord(11, 150)), at, $"the straight line up to the wall: {at}");
+                else Assert.AreEqual((RouteFollowStatus.Stopped, "ROUTE_WINDOW_EXHAUSTED", new CellCoord(0, 150)), at, "no path, no move");
+            }
     }
 
     [TestMethod]

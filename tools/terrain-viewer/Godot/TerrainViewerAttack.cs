@@ -312,7 +312,7 @@ public partial class TerrainViewerApp
         }
         // A walk that arrived and still left the target out of reach is not tried again and again.
         if (goal.Approaches >= 3) { CancelAreaAttack($"the target stays {distance} cells away"); return; }
-        if (WorldRoute(session) is { } route && ApproachCell(session, row.WorldX!.Value, row.WorldY!.Value, HeroReach(hero)) is { } approach)
+        if (WorldRoute(session) is { } route && AttackApproachCell(session, row.WorldX!.Value, row.WorldY!.Value) is { } approach)
         {
             goal.Approaches++;
             StopWorldRoute("ROUTE_REPLACED_BY_ATTACK");
@@ -325,7 +325,20 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
-        CancelAreaAttack($"the target is {distance} cells away and no standable cell within reach was found");
+        CancelAreaAttack($"the target is {distance} cells away and no route reaches it");
+    }
+
+    /// <summary>
+    /// ARC-WORLD-073: the cell the attack's approach walks to, as the original's (ledger AP1–AP4, 0x4280D0): the shared request's route to
+    /// the target's own tile with flag 0x1 and the walk's first budget, one step short of it, over the PC's steps with living critters
+    /// blocking in and out of combat mode (the approach never sets the request's flag 0x10); null when it has no route (the attack ends).
+    /// The cell is reachable by construction; the weapon's reach is tested when the walk ends (the ranged walk goes to the same cell).
+    /// </summary>
+    internal static CellCoord? AttackApproachCell(AreaGridSession session, long worldX, long worldY)
+    {
+        var routes = new AreaRouteSource(session.Snapshot, session.Chart, session.Occupancy, () => session.Portals?.Invoke());
+        var target = session.Chart.ToChart(new(worldX, worldY));
+        return RoutePlanner.PlanApproach(routes, session.State.CommittedCell, target) is { Outcome: RouteOutcome.Found } plan ? plan.Target : null;
     }
 
     /// <summary>Starts one attack animation: the clip from the attack ART and the hero's Speed and weapon, the attack sound roll

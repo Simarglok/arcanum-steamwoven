@@ -603,8 +603,11 @@ public partial class TerrainViewerApp
         {
             // ARC-WORLD-042: the player's click route follows a corridor to a goal beyond the local planner's reach; ARC-WORLD-072:
             // not under the Original rule mode, read from the session's rules when a click sets the goal (the PC does not move).
-            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy, () => area.Portals?.Invoke()),
-                corridorLimits: new RouteCorridorLimits(), corridorAllowed: () => _areaSession?.Rules.Navigation.FarClickDoesNotMove != true);
+            // ARC-WORLD-073: the original's walk (its request, budget, segments and the PC's straight-line retry); under the Original
+            // rule mode its plan ignores living critters outside combat mode (LRA1, the planning side).
+            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy, () => area.Portals?.Invoke(),
+                    () => _areaSession?.Rules.Navigation.MidSegmentCrittersWalkedThrough == true && !HeroInCombatMode),
+                corridorLimits: new RouteCorridorLimits(), corridorAllowed: () => _areaSession?.Rules.Navigation.FarClickDoesNotMove != true, straightRetry: true);
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;

@@ -34,8 +34,9 @@ distances ([C7–C10](../research/companion-follow-evidence.md#findings)):
 the leader's committed cell with the follow range (`SetTarget(target, at, range)`, new in this task: the goal is reached
 when the actor settles within `range` of it; a click route uses 0). Its route follower has no corridor limits, so a
 leader beyond the local planner's reach is not followed along a corridor as a click goal is (ARC-WORLD-042,
-[corridors](click-route-runtime.md#corridors-beyond-the-local-reach-arc-world-042)). So the follower walks through the same bounded
-planner, exact movement and step evidence as a click route, re-plans at each step end toward the leader's current
+[corridors](click-route-runtime.md#corridors-beyond-the-local-reach-arc-world-042)), and no straight-line retry (the PC's,
+ARC-WORLD-073). So the follower walks through the same planner (since ARC-WORLD-073 the original's path request with the
+walk's budget), exact movement and step evidence as a click route, re-plans at each step end toward the leader's current
 cell, and never cancels a started step. The host calls `Update(state, leader, spreadOut, following, frontier)` once
 per frame and then `Drive` to the same frontier:
 
