@@ -26,9 +26,10 @@ tests: [`SpellInvocationRulesTests`](../../tests/Arcanum.Simulation.Tests/Magic/
 - `SpellInvocation`: the spell; the **parent**, the caster (null for a sourceless cast; an item's holder when the item is in an
   inventory); the **source**, the object whose spell it is (the parent itself for its own spell, else the item); the target
   object and the target tile (either may be none); the power the parent draws from a source item (0x4614A0,
-  [`EquipmentRules.EffectivePower`](../../src/Arcanum.Simulation/Equipment/EquipmentRules.cs)); whether the parent may be
-  teleported where it stands (0x4BDD30, `Rules\AntiTeleport.mes`); whether the parent is the local player; the critter whose
-  turn it is in turn-based combat (null outside it).
+  [`EquipmentRules.EffectivePower`](../../src/Arcanum.Simulation/Equipment/EquipmentRules.cs); required when a technologist
+  parent uses an item's spell: the check throws rather than guess it); whether the parent may be teleported where it stands
+  (0x4BDD30, `Rules\AntiTeleport.mes`); whether the parent is the local player; whether turn-based combat runs and the critter
+  whose turn it is (none matches no critter parent, as in the original).
 - `SpellObjectFacts` for each object: an id (identity), the object type (15 PC, 16 NPC, 5..14 items), the location (x, y;
   `SpellLocation`, (0, 0) is none), the object flags (0x1000 in an inventory, 0x20 shoot-through), spell flags (0x1000 Bonds of
   Magick), critter flags, the effective magick/tech aptitude and intelligence.
@@ -65,7 +66,7 @@ In the original's order; the first failing step answers its refusal:
    - `ItemAptitude`: a parent with negative aptitude using an item's spell draws no power from it (0x4614A0 at most 0); the
      "resisted" effect plays (`PlaysResisted`).
    - `TargetAptitude` (MG5): for a target with negative aptitude T the chance is `(100 − A) × T / 100` (toward zero) for a
-     parent aptitude A ≥ 0, else T; a d100 at most the chance refuses. The chance is never positive, so it never refuses, but
+     parent aptitude A ≥ 0, else T; a d100 at most the chance refuses. For aptitudes in −100..100 the chance is never positive, so it never refuses, but
      the d100 is rolled whenever T is negative, as in the original (both modes).
 9. **Intelligence** (`Intelligence`): a PC or NPC casting its own spell with intelligence below 5, for technology records too.
 10. **Anti-teleport** (`AntiTeleport`): Teleportation (spell 4) where the parent may not be teleported; the local player is
@@ -73,8 +74,9 @@ In the original's order; the first failing step answers its refusal:
 
 ## Item gate (`HolderCanUseItem`, 0x456A10)
 
-An item's triggered spells (0x4CC930) fire only when the gate allows: no holder, an item without magic-tech complexity, or a
-holder whose aptitude is not negative, may; a technologist may only when it draws power from the item (asked only then).
+An item's triggered spells (0x4CC930) fire only when the gate allows; the trigger passes its event's first object (usually the
+item's holder) as the holder. No holder, an item without magic-tech complexity, or a holder whose aptitude is not negative,
+may; a technologist may only when it draws power from the item (asked only then).
 
 ## Differences from the original
 

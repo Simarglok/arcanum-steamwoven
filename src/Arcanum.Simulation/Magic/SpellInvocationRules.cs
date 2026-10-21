@@ -41,12 +41,14 @@ public readonly record struct SpellInvocationRecord(bool Technology, int Range, 
 /// <summary>
 /// One invocation: the spell, the parent (the caster; null for a sourceless cast), the source (the object whose spell it is: the
 /// caster itself for its own spell, else an item), the target object and the target tile (either may be none), the power the
-/// parent draws from a source item (0x4614A0, the equipment rules), whether the parent may be teleported where it stands (0x4BDD30),
-/// whether the parent is the local player (for the anti-teleport message), and the critter whose turn it is in turn-based combat
-/// (null outside it).
+/// parent draws from a source item (0x4614A0, the equipment rules; null when not known, which the check refuses to guess when it
+/// needs it), whether the parent may be teleported where it stands (0x4BDD30), whether the parent is the local player (for the
+/// anti-teleport message), whether turn-based combat is running and the critter whose turn it is (null: none, which no critter
+/// parent matches).
 /// </summary>
 public sealed record SpellInvocation(int Spell, SpellObjectFacts? Parent, SpellObjectFacts? Source, SpellObjectFacts? TargetObject,
-    SpellLocation TargetTile, int SourceItemPower = 0, bool TeleportAllowed = true, bool ParentIsLocalPlayer = false, string? TurnBasedActor = null);
+    SpellLocation TargetTile, int? SourceItemPower = null, bool TeleportAllowed = true, bool ParentIsLocalPlayer = false,
+    bool TurnBased = false, string? TurnBasedActor = null);
 
 /// <summary>A line-of-fire answer (0x4ADE00): the score (100 or more: no line of fire) and the first blocker on the line, if any.</summary>
 public readonly record struct SpellLineOfFire(int Score, SpellObjectFacts? Blocker);
@@ -112,7 +114,7 @@ public sealed record SpellInvocationResult(SpellInvocationRefusal Refusal, Spell
 /// <summary>
 /// ARC-MAGIC-006 (magic plan MT7): the original's invocation check (0x4564E0), which runs before any run slot or payment, with its
 /// range (0x454700), line of fire (0x456BC0), forbidden flags (0x456430) and item gate (0x456A10), as the 1.0.7.4 executable has them
-/// (contract docs/world/spell-invocation-runtime.md, ledger "Spell invocation", IV1–IV10). Pure functions over explicit facts; the
+/// (contract docs/world/spell-invocation-runtime.md, ledger "Spell invocation", IV1–IV12). Pure functions over explicit facts; the
 /// line of fire and the NPC fallback's area questions come through <see cref="ISpellInvocationWorld"/>, the MG5 d100 from the
 /// caller's <see cref="ISpellRollSource"/>. MG5 follows the original in both modes (owner decision 2026-10-20).
 /// </summary>
@@ -134,7 +136,7 @@ public static class SpellInvocationRules
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(rolls);
         var parent = invocation.Parent;
-        if (parent is not null && invocation.TurnBasedActor is { } actor && actor != parent.Id && parent.IsCritter)
+        if (parent is not null && invocation.TurnBased && invocation.TurnBasedActor != parent.Id && parent.IsCritter)
             return Refused(SpellInvocationRefusal.NotTheirTurn);
         if (invocation.Spell is < 0 or >= Spells) return Refused(SpellInvocationRefusal.InvalidSpell);
         if (parent is not null && !InRange(parent.Location, invocation.TargetTile, invocation.TargetObject, record.Range))
@@ -158,7 +160,8 @@ public static class SpellInvocationRules
         {
             var parentAptitude = parent?.Aptitude ?? 0;
             var targetAptitude = invocation.TargetObject?.Aptitude ?? 0;
-            if (invocation.Source is not null && parentAptitude < 0 && !Same(parent, invocation.Source) && invocation.SourceItemPower <= 0)
+            if (invocation.Source is not null && parentAptitude < 0 && !Same(parent, invocation.Source)
+                && (invocation.SourceItemPower ?? throw new ArgumentException("A technologist's item spell needs the item power.", nameof(invocation))) <= 0)
                 return new(SpellInvocationRefusal.ItemAptitude, replaced, true, false);
             if (targetAptitude < 0)
             {
@@ -233,7 +236,8 @@ public static class SpellInvocationRules
     }
 
     /// <summary>
-    /// Whether a holder may use an item's magic (0x456A10; the item's triggered spells ask it): no holder, an item without
+    /// Whether a holder may use an item's magic (0x456A10; the item's triggered spells ask it with the trigger event's first object,
+    /// usually the item's holder, as the holder): no holder, an item without
     /// magic-tech complexity, or a holder whose aptitude is not negative, may; a technologist may only when it draws power from the
     /// item (<paramref name="itemPower"/>, 0x4614A0, above 0; asked only then). The original also reads a second object's aptitude
     /// and ignores it.

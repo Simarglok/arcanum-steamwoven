@@ -61,12 +61,16 @@ public sealed class SpellInvocationRulesTests
     public void AnOrdinaryCastPassesAndEachEarlyStepRefusesInOrder()
     {
         Assert.IsTrue(Check(Cast()).Allowed);
-        Assert.AreEqual(SpellInvocationRefusal.NotTheirTurn, Check(Cast() with { TurnBasedActor = "orc", Spell = -1 }).Refusal, "the turn first");
-        Assert.IsTrue(Check(Cast() with { TurnBasedActor = "mage" }).Allowed);
+        Assert.AreEqual(SpellInvocationRefusal.NotTheirTurn, Check(Cast() with { TurnBased = true, TurnBasedActor = "orc", Spell = -1 }).Refusal, "the turn first");
+        Assert.IsTrue(Check(Cast() with { TurnBased = true, TurnBasedActor = "mage" }).Allowed);
+        Assert.AreEqual(SpellInvocationRefusal.NotTheirTurn, Check(Cast() with { TurnBased = true }).Refusal, "no current critter matches no critter");
+        Assert.IsTrue(Check(Cast() with { TurnBasedActor = "orc" }).Allowed, "outside turn-based combat the actor is not asked");
         var wand = new SpellObjectFacts("wand", 6, Here);
-        Assert.IsTrue(Check(new SpellInvocation(33, wand, wand, Orc, SpellLocation.None, TurnBasedActor: "orc")).Allowed,
+        Assert.IsTrue(Check(new SpellInvocation(33, wand, wand, Orc, SpellLocation.None, TurnBased: true, TurnBasedActor: "orc")).Allowed,
             "only a critter parent waits for its turn");
         Assert.AreEqual(SpellInvocationRefusal.InvalidSpell, Check(Cast(spell: SpellInvocationRules.Spells)).Refusal);
+        Assert.AreEqual(SpellInvocationRefusal.InvalidSpell, Check(Cast(spell: SpellInvocationRules.Spells), Bolt with { Range = 0 }).Refusal,
+            "the spell number before the range");
         Assert.AreEqual(SpellInvocationRefusal.OutOfRange, Check(Cast(), Bolt with { Range = 2 }, new World { Line = new(100, null) }).Refusal,
             "the range before the line of fire");
         Assert.AreEqual(SpellInvocationRefusal.NoLineOfFire, Check(Cast(), Bolt with { DisallowedTargetSpellFlags = 1 },
@@ -160,6 +164,39 @@ public sealed class SpellInvocationRulesTests
         Assert.IsTrue(SpellInvocationRules.HolderCanUseItem(10, 50, () => throw new AssertFailedException("not asked")));
         Assert.IsFalse(SpellInvocationRules.HolderCanUseItem(-50, 50, () => 0));
         Assert.IsTrue(SpellInvocationRules.HolderCanUseItem(-50, 50, () => 1));
+    }
+
+    [TestMethod]
+    public void AParentlessCastSkipsTheParentStepsButNotTheFallbackOrMg5()
+    {
+        var target = Orc with { Aptitude = -50, Location = new(9000, 9000), SpellFlags = 1 };
+        var world = new World { Line = new(100, null), Matches = false, Fallback = new(9001, 9000) };
+        var rolls = new Rolls(-50);
+        var record = Bolt with { Range = 0, DisallowedTargetSpellFlags = 1, DisallowedCasterSpellFlags = 1 };
+        var result = Check(new SpellInvocation(33, null, null, target, SpellLocation.None, TurnBased: true), record, world, rolls);
+        Assert.AreEqual((SpellInvocationRefusal.None, new SpellLocation(9001, 9000)), (result.Refusal, result.ReplacedTile),
+            "no range, line, flags or turn without a parent; the fallback still runs and clears the technologist target");
+        Assert.AreEqual(0, rolls.Made.Count, "the replaced target has no aptitude: no d100");
+        var kept = new Rolls(-50);
+        Assert.AreEqual(SpellInvocationRefusal.TargetAptitude,
+            Check(new SpellInvocation(33, null, null, target, SpellLocation.None), record, new World(), kept).Refusal,
+            "without a parent the chance is the target's aptitude itself (a roll source below it refuses)");
+        CollectionAssert.AreEqual(new[] { (SpellRollPurpose.InvocationAptitudeD100, 1, 100) }, kept.Made);
+    }
+
+    [TestMethod]
+    public void TheItemRefusalAndTechnologyRecordsDrawNoD100()
+    {
+        var tech = Mage with { Aptitude = -60 };
+        var wand = new SpellObjectFacts("wand", 6, SpellLocation.None, ObjectFlags: SpellObjectFacts.InInventory);
+        var technologist = Orc with { Aptitude = -80 };
+        var rolls = new Rolls();
+        Assert.AreEqual(SpellInvocationRefusal.ItemAptitude,
+            Check(new SpellInvocation(33, tech, wand, technologist, SpellLocation.None, SourceItemPower: -2), rolls: rolls).Refusal);
+        Assert.IsTrue(Check(Cast(target: technologist), Bolt with { Technology = true }, rolls: rolls).Allowed);
+        Assert.AreEqual(0, rolls.Made.Count);
+        Assert.ThrowsExactly<ArgumentException>(() => Check(new SpellInvocation(33, tech, wand, Orc, SpellLocation.None)),
+            "a technologist's item spell without the item power is not guessed");
     }
 
     [TestMethod]
