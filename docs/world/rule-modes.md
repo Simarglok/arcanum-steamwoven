@@ -141,7 +141,9 @@ The list covers every ledger row whose verdict is a bug of the original or a D2 
 - The SCR dispatcher (ARC-SCRIPT-008) takes `GameRules.Scripts` through its run options; no session code calls it yet.
 - The reaction domain (ARC-WORLD-026) reads `Rules.Reaction` in `GameSessionOwner.ReactToPcHit`; no host calls it yet.
 - The game data fixes (ARC-DATA-022) are read by `ScriptContent.Dialog` with `Rules.Data`; the AREA conversation
-  passes the session's rules at each dialog read.
+  passes the session's rules at each dialog read. MP7 (ARC-DATA-037) is read by `AreaMapPlans.Create`/`CreateWindow`
+  when a map plan is made: the viewer's map loads and main-map window moves pass the `Rules.Data` of the session the
+  load carries (the default rules for a load that starts a new session).
 - The experience domain (ARC-WORLD-033) reads `Rules.Experience` in `GameSessionOwner.QueryHeroExperience`.
 - The sound domain (ARC-WORLD-040) reads `Rules.Sound` when a session is restored (a load of a save made during combat
   music); the viewer's scheme player (ARC-UI-041) reads it when a map opens or a quick load replaces the session.

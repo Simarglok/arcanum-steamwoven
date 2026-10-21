@@ -102,7 +102,11 @@ public sealed class AreaMapLoadOriginalTests
         Assert.AreEqual(4, original.Length);
         Assert.IsTrue(original.All(d => d is { Length: 3 } && d[2] != 0), "Original keeps every dialog script");
         foreach (var rules in new[] { null, Arcanum.Data.Fixes.DataFixProfile.Steamwoven })
-            Assert.IsTrue(Dialogs(rules).All(d => d is [0, 0, 0]), "Steamwoven empties the slot");
+        {
+            var emptied = Dialogs(rules);
+            Assert.AreEqual(4, emptied.Length);
+            Assert.IsTrue(emptied.All(d => d is [0, 0, 0]), "Steamwoven empties the slot");
+        }
     }
 
     private static string Root()

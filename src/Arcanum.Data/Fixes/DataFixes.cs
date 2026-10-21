@@ -50,6 +50,9 @@ public sealed record DataFixProfile
     /// <summary>The ledger rows this profile has a switch for; a catalogue refuses a fix for any other row.</summary>
     public static IReadOnlySet<string> Rows { get; } = new HashSet<string>(StringComparer.Ordinal) { "DF1", "DF2", "DF3", "MP7" };
 
+    /// <summary>The rows whose fixes are DLG catalogue entries (MP7 is applied by the map patch, not by a catalogue entry).</summary>
+    public static IReadOnlySet<string> DialogRows { get; } = new HashSet<string>(StringComparer.Ordinal) { "DF1", "DF2", "DF3" };
+
     /// <summary>Whether the fixes of a ledger row apply under this profile; an unknown row never does.</summary>
     public bool Applies(string ledgerId) => ledgerId switch
     {
@@ -103,7 +106,7 @@ public sealed class DlgDataFixCatalogue
         foreach (var fix in list)
         {
             ArgumentNullException.ThrowIfNull(fix);
-            if (fix.LedgerId is null || !DataFixProfile.Rows.Contains(fix.LedgerId))
+            if (fix.LedgerId is null || !DataFixProfile.DialogRows.Contains(fix.LedgerId))
                 throw new ArgumentException($"Fix {fix.LedgerId} names no ledger row with a switch.", nameof(fixes));
             if (fix.Path is null || fix.Sha256 is null) throw new ArgumentException($"Fix {fix.LedgerId} lacks its path or digest.", nameof(fixes));
             if (Content.ContentStack.NormalizeQuery(fix.Path) != fix.Path)

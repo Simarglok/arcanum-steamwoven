@@ -183,6 +183,13 @@ internal static class MapPatchApplier
 
     private static readonly string[] TrainingTiers = ["st_untrained", "st_beginner", "st_expert", "st_master"];
 
+    // A value written as zero: an optional sign and one or more zero digits.
+    private static bool LiteralZero(string value)
+    {
+        var digits = value.AsSpan(value.Length > 0 && value[0] is '+' or '-' ? 1 : 0);
+        return digits.Length > 0 && !digits.ContainsAnyExcept('0');
+    }
+
     private static string[] Names(string list, string prefix) => list.Split(' ').Select(n => prefix + n).ToArray();
 
     internal sealed record Result(ObjectWireRecord Record, MapPatchApplication Application);
@@ -264,16 +271,20 @@ internal static class MapPatchApplier
                         break;
                     case "SCRIPT":
                         {
-                            var sap = Atoi(Value()); var number = Atoi(Value());
-                            if (scriptHeader(number) is { } header)
+                            var sap = Atoi(Value()); var numberText = Value(); var number = Atoi(numberText);
+                            if (number == 0)
+                            {
+                                // MP7: only a written zero clears (an absent or non-numeric value attaches nothing in both modes).
+                                if (scriptZeroClears && LiteralZero(numberText))
+                                {
+                                    if (sap < 0) unmodelled.Add($"line {line.Line}: script attachment {sap}");
+                                    else SetElement(ScriptsSlot, sap, [0, 0, 0]);
+                                }
+                            }
+                            else if (scriptHeader(number) is { } header)
                             {
                                 if (sap < 0) unmodelled.Add($"line {line.Line}: script attachment {sap}");
                                 else SetElement(ScriptsSlot, sap, [header.Flags, header.Counters, unchecked((uint)number)]);
-                            }
-                            else if (number == 0 && scriptZeroClears)
-                            {
-                                if (sap < 0) unmodelled.Add($"line {line.Line}: script attachment {sap}");
-                                else SetElement(ScriptsSlot, sap, [0, 0, 0]);
                             }
                             break;
                         }

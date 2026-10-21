@@ -111,8 +111,9 @@ public partial class TerrainViewerApp : Node
         TerrainLoadResult? result = null;
         try
         {
-            // ARC-DATA-037: a map opens under the data rules of the session it carries (or the scene's), read at the load.
-            arguments = WithSessionDataRules(arguments);
+            // ARC-DATA-037: a map opens under the data rules of the session the load carries; a load that carries none ends the
+            // scene's session and starts a new one, so it opens under the default rules.
+            arguments = WithSessionDataRules(arguments, _mapHandoff?.Session);
             result = await _coordinator.LoadAsync(requestGeneration, arguments, cancellationToken);
             GD.Print($"ARC-RENDER-004 load stage=decoded generation={requestGeneration}");
             if (_exiting || !_coordinator.TryPublish(requestGeneration, () => PublishReadyResult(arguments, result))) return;

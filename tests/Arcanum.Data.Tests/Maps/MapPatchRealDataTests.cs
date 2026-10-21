@@ -109,19 +109,22 @@ public sealed class MapPatchRealDataTests
         var emptied = 0;
         foreach (var name in Interiors.Where(i => NoEffect.Contains(i.Line)).Select(i => i.Map).Distinct())
         {
-            long[]? Dialog(Arcanum.Data.Fixes.DataFixProfile data, int line)
+            // One load per mode: attachment 9 of each object a script-0 line names, by line.
+            Dictionary<int, long[]?> Dialogs(Arcanum.Data.Fixes.DataFixProfile data)
             {
                 var plan = AreaMapPlans.Create(stack, catalog, name, data);
                 Assert.AreEqual(AreaMapPlanStatus.Ready, plan.Status, name);
                 using var owner = plan.Plan!.Open();
-                var o = owner.LoadStrict().Objects.Single(o => o.MapPatch is { } p && p.Lines.Contains(line));
-                return o.EffectiveFields.SingleOrDefault(f => f.Slot == 31)?.Elements.SingleOrDefault(e => e.Key == 9)?.Words.ToArray();
+                var objects = owner.LoadStrict().Objects;
+                return Interiors.Where(i => i.Map == name && NoEffect.Contains(i.Line)).ToDictionary(i => i.Line, i =>
+                    objects.Single(o => o.MapPatch is { } p && p.Lines.Contains(i.Line)).EffectiveFields.SingleOrDefault(f => f.Slot == 31)?
+                        .Elements.SingleOrDefault(e => e.Key == 9)?.Words.ToArray());
             }
-            foreach (var line in Interiors.Where(i => i.Map == name && NoEffect.Contains(i.Line)).Select(i => i.Line))
+            var original = Dialogs(Arcanum.Data.Fixes.DataFixProfile.Original); var steamwoven = Dialogs(Arcanum.Data.Fixes.DataFixProfile.Steamwoven);
+            foreach (var (line, before) in original)
             {
-                var before = Dialog(Arcanum.Data.Fixes.DataFixProfile.Original, line);
                 Assert.IsTrue(before is { Length: 3 } && before[2] != 0, $"{name} line {line}: Original keeps a dialog script");
-                CollectionAssert.AreEqual(new long[] { 0, 0, 0 }, Dialog(Arcanum.Data.Fixes.DataFixProfile.Steamwoven, line), $"{name} line {line}");
+                CollectionAssert.AreEqual(new long[] { 0, 0, 0 }, steamwoven[line], $"{name} line {line}");
                 Console.WriteLine($"ARC-DATA-037 map={name} line={line} dialog {before![2]} -> 0");
                 emptied++;
             }

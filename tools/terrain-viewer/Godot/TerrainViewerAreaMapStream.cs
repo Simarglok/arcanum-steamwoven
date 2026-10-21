@@ -48,9 +48,9 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-DATA-037: the arguments with the data rules of the session a load carries (a transfer, a window move, a quick
-    /// load) or the scene's, so a map opens under the session's mode; unchanged without a session.</summary>
-    private TerrainViewerArguments WithSessionDataRules(TerrainViewerArguments arguments) =>
-        (_mapHandoff?.Session ?? _areaSession) is { } session ? arguments with { DataRules = session.Rules.Data } : arguments;
+    /// load), so a map opens under the session's mode; without one the default rules (no rules kept from an earlier load).</summary>
+    private static TerrainViewerArguments WithSessionDataRules(TerrainViewerArguments arguments, Arcanum.Session.GameSessionOwner? session) =>
+        arguments with { DataRules = session?.Rules.Data };
 
     private bool MapStreamInFlight => _mapHandoff is { Kind: MapHandoffKind.Stream };
 
@@ -112,7 +112,7 @@ public partial class TerrainViewerApp
         _generation = _coordinator.BeginGeneration();
         var generation = _generation;
         TerrainLoadResult result;
-        next = WithSessionDataRules(next);
+        next = WithSessionDataRules(next, handoff.Session);
         try { result = await _coordinator.LoadAsync(generation, next, token); }
         catch (OperationCanceledException) { EndMapStream(handoff); return; }
         catch (Exception exception)

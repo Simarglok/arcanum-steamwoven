@@ -98,5 +98,9 @@ switch is `DataFixProfile.MapPatchScriptZeroIgnored` in `GameRules.Data`
 the viewer's map loads pass the session's rules (Steamwoven without a session), so a switch
 takes effect when the next map or main-map window opens. On the installed data the five lines
 empty the dialog slot of four Iron Clan HQ NPCs and one Ashbury-underground NPC, each of
-which held a dialog script (`MapPatchRealDataTests`, `RealData`). A negative slot stays
-unmodelled in both modes.
+which held a dialog script (`MapPatchRealDataTests`, `RealData`). Only a written zero (an
+optional sign and zero digits) clears: an absent or non-numeric number attaches nothing in both
+modes. Under Steamwoven a negative slot is reported unmodelled, as a script with a header at a
+negative slot is in both modes. `AreaWindowRoute` (the walk smoke's route) plans its windows
+under Original; its step evidence reads only the portal unlock slot, which no installed
+script-0 line names.

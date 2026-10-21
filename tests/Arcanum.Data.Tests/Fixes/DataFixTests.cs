@@ -32,6 +32,8 @@ public sealed class DataFixTests
         Assert.IsNull(DataFixProfile.FromName("Original"));
         Assert.IsFalse((DataFixProfile.Steamwoven with { Name = "mix", NpcLineEffectsInResponseLost = true }).Applies("DF2"));
         Assert.IsFalse((DataFixProfile.Steamwoven with { Name = "mix", MapPatchScriptZeroIgnored = true }).Applies("MP7"));
+        // MP7 is the map patch's switch: a DLG catalogue entry for it is refused.
+        Assert.ThrowsExactly<ArgumentException>(() => new DlgDataFixCatalogue([new("MP7", "dlg/00001a.dlg", Sha(SixFields), DlgFixOperation.CompleteLastRecord)]));
     }
 
     [TestMethod]

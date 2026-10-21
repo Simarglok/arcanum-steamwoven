@@ -140,8 +140,15 @@ public sealed class MapPatchTests
         CollectionAssert.AreEqual(new long[] { 3, 4, 30 }, scripts.Single(e => e.Key == 1).Words.ToArray());
         Assert.AreEqual(0, cleared.Application.Unmodelled.Count);
 
-        // Only script 0 clears: an unlisted number still attaches nothing, and a negative slot is unmodelled in both modes.
-        Assert.IsFalse(Apply(Record(Npc), proto, "script 9 77", scriptZeroClears: true).Record.Fields.ContainsKey(31));
+        // Only a written zero clears: an unlisted number, an absent or a non-numeric value attach nothing; a header still attaches.
+        foreach (var text in new[] { "script 9 77", "script 9", "script", "script 9 x", "script 9 0x10", "script 9 -" })
+            Assert.IsFalse(Apply(Record(Npc), proto, text, scriptZeroClears: true).Record.Fields.ContainsKey(31), text);
+        CollectionAssert.AreEqual(new long[] { 0, 0, 0 }, Apply(Record(Npc), proto, "script 9 -00", scriptZeroClears: true).Record.Fields[31].Elements.Single(e => e.Key == 9).Words.ToArray());
+        CollectionAssert.AreEqual(new long[] { 7, 8, 42 }, Apply(Record(Npc), proto, "script 9 42", n => n == 42 ? new MapPatchScriptHeader(7, 8) : null, scriptZeroClears: true)
+            .Record.Fields[31].Elements.Single(e => e.Key == 9).Words.ToArray());
+        // A header answered for script 0 is never asked for.
+        Assert.IsFalse(Apply(Record(Npc), proto, "script 9 0", _ => new MapPatchScriptHeader(1, 1)).Record.Fields.ContainsKey(31));
+        // Under Steamwoven a negative slot is unmodelled, as a script with a header at a negative slot is in both modes.
         StringAssert.Contains(Apply(Record(Npc), proto, "script -1 0", scriptZeroClears: true).Application.Unmodelled.Single(), "attachment -1");
         Assert.AreEqual(0, Apply(Record(Npc), proto, "script -1 0").Application.Unmodelled.Count, "Original: script 0 attaches nothing at any slot");
     }
