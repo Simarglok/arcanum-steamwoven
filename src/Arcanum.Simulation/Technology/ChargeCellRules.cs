@@ -5,7 +5,8 @@ namespace Arcanum.Simulation.Technology;
 
 /// <summary>
 /// The object whose charge cells pay (ledger CC2–CC3): a critter (its one power-cell stack, critter field 0xEB), a container (the
-/// first item of the cell prototype in its inventory), none (an item without a parent), or any other object (no cells).
+/// original looks for the first item of the cell prototype in its inventory but passes the raw prototype number where a handle is
+/// compared, so it never finds one: no cells, ledger AM5), none (an item without a parent), or any other object (no cells).
 /// </summary>
 public enum CellOwnerKind
 {
@@ -52,8 +53,8 @@ public sealed record CellPlan(bool Paid, CellRefusal Refusal, int Need, CellStac
 /// <summary>
 /// ARC-TECHNOLOGY-007: the charge-cell branch of the spell payment (0x450420, record flag 0x20 <c>ChargesFromCells:</c>; contract
 /// docs/world/charge-cell-runtime.md, ledger "Charge cells (ARC-TECHNOLOGY-007)"). Pure rules: the cells a payer needs, the one
-/// stack they come from and the units it keeps. The session's state is not touched here (consumption in session state waits for
-/// session ammunition).
+/// stack they come from and the units it keeps. No state is written here (the session's <c>HeroCellSource</c> spends the cells,
+/// ARC-WORLD-066).
 /// </summary>
 public static class ChargeCellRules
 {
@@ -104,8 +105,9 @@ public static class ChargeCellRules
         ArgumentNullException.ThrowIfNull(payer);
         if (Need(payer, cost, profile) is not { } need) return new(false, CellRefusal.OutOfRange, 0, null, 0, false, apply);
         if (need == 0) return new(true, CellRefusal.None, 0, null, 0, false, apply);
-        // A critter and a container each give their one stack; an item without a parent or another object counts 0.
-        var stack = payer.Owner is CellOwnerKind.Critter or CellOwnerKind.Container ? payer.Cells : null;
+        // A critter gives its one stack; a container's lookup never matches in the original (AM5), and an item without a parent or
+        // another object counts 0.
+        var stack = payer.Owner == CellOwnerKind.Critter ? payer.Cells : null;
         if (stack is not { } cells || cells.Units < need || SchematicAssemblyRules.UseUnits(cells.Units, need) is not { } left)
             return new(false, CellRefusal.TooFewCells, need, stack, stack?.Units ?? 0, false, apply);
         return new(true, CellRefusal.None, need, cells, left.Units, left.Destroyed, apply);

@@ -641,6 +641,8 @@ is wired to the viewer: items can be picked up from the ground and taken from de
 the original Inventory key shows what the PC took (FR-ITEM-001, FR-UI-004). Code:
 [`AreaInventoryHost`](../../tools/terrain-viewer/Core/AreaInventoryHost.cs) (Godot-free) and
 the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
+Since ARC-WORLD-066 ammunition can be picked up and looted too: it merges into the hero's stack of its prototype, and the
+inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inventory-runtime.md#ammunition-arc-world-066)).
 
 - **Seeds.** When the area session is created, the exterior (and, with `--area-cave-mobile`,
   the cave) seed is built from the [T0 inventory view](../world/area-inventory-view.md) and

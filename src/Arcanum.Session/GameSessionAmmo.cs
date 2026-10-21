@@ -71,15 +71,16 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectAmmo(GameSessionFailure.StaleVersion);
         var stack = holder.IsHero ? HeroStackOfType(ammoType) : NpcStackOfType(holder.Npc!, ammoType);
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, stack?.Entity, stack?.Units ?? 0, false, Version);
-        if (stack is not { } found || found.Units < count) return new(GameSessionDisposition.Rejected, GameSessionFailure.AmmoShort, stack?.Entity, stack?.Units ?? 0, false, Version);
-        var removed = found.Units == count;
+        if (stack is not { } found || SchematicAssemblyRules.UseUnits(found.Units, count) is not { } left)
+            return new(GameSessionDisposition.Rejected, GameSessionFailure.AmmoShort, stack?.Entity, stack?.Units ?? 0, false, Version);
+        var removed = left.Destroyed;
         if (removed ? !_durability.Records.ContainsKey(found.Entity) && _durability.Count >= _limits.MaxDurabilityRecords
             : !_inventory.Ammo.ContainsKey(found.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectAmmo(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectAmmo(GameSessionFailure.RevisionExhausted);
         if (removed) Delete(found.Entity);
-        else _inventory.Ammo[found.Entity] = found with { Units = found.Units - count };
+        else _inventory.Ammo[found.Entity] = found with { Units = left.Units };
         _revision++;
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, found.Entity, found.Units - count, removed, Version);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, found.Entity, left.Units, removed, Version);
     }
 
     /// <summary>
@@ -123,11 +124,14 @@ public sealed partial class GameSessionOwner
         _inventory.Kit.Select(item => (item.Entity, item.Kind)).Concat(_inventory.Pc.Select(item => (item.Entity, item.Kind)))
             .Concat(_inventory.Made.Select(item => (item.Entity, item.Kind)));
 
-    /// <summary>The hero's first held stack of an ammunition type, or null.</summary>
+    /// <summary>The hero's first held stack of an ammunition type, or null (the original reads the one stack its critter field names,
+    /// which a removal can clear while another stack of the type stays: ledger AM4).</summary>
+    [Arcanum.Simulation.OriginalFunction(0x465870, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private SessionAmmoRecord? HeroStackOfType(int ammoType) => HeroHeld().Where(item => item.Kind.Type == SessionItemType.Ammo)
         .Select(item => _inventory.Ammo[item.Entity]).Cast<SessionAmmoRecord?>().FirstOrDefault(stack => stack!.Value.AmmoType == ammoType);
 
     /// <summary>The hero's first held stack of a prototype (the merge target, 0x462930), or null.</summary>
+    [Arcanum.Simulation.OriginalFunction(0x462930, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private SessionAmmoRecord? HeroStackOfPrototype(int prototype) => HeroHeld()
         .Where(item => item.Kind.Type == SessionItemType.Ammo && item.Kind.Prototype == prototype)
         .Select(item => _inventory.Ammo[item.Entity]).Cast<SessionAmmoRecord?>().FirstOrDefault();

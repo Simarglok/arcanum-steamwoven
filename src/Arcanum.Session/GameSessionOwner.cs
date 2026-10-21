@@ -1470,6 +1470,8 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>ARC-WORLD-059: the hero's items the session placed on the ground, on every map, in placing order.</summary>
     public IReadOnlyList<SessionPlacedItem> QueryPlacedItems() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Placed.ToArray()); }
 
+    // The insertion (0x466640): since ARC-WORLD-066 its merge of ammunition into a held stack of the same prototype.
+    [Arcanum.Simulation.OriginalFunction(0x466640, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private InventoryMutationResult Take(InventoryDomain.Seed seed, SessionInventoryItem item, bool parented, SessionInsertCheck insertCheck,
         ISessionItemScriptHost? scripts)
     {

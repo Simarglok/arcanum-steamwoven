@@ -82,7 +82,7 @@ public sealed class AreaInventoryMap
                 inventory.ListOf(holder.SourceIndex).Select(item => Id(item.Key)).ToArray())).ToArray(),
             inventory.Items.Select(item => new SessionSeedItem(Id(item.Key),
                 new(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description), item.Weight, item.Complexity,
-                    item.InventoryLocation, item.Quantity, item.Scripts.Select(script => script.Sap).ToArray()),
+                    item.InventoryLocation, item.Quantity, item.Scripts.Select(script => script.Sap).ToArray()) { AmmoType = item.AmmoType },
                 item.InInventory ? null : new CellCoord(checked((int)item.WorldX!.Value), checked((int)item.WorldY!.Value)))).ToArray());
         var objects = snapshot.Objects.ToDictionary(row => row.Key);
         var rows = inventory.Holders.Select(holder => holder.Key).Concat(inventory.Items.Select(item => item.Key)).ToDictionary(Id, key => objects[key], StringComparer.Ordinal);
@@ -254,14 +254,16 @@ public sealed class AreaInventoryHost
         // item the hero wears (ARC-WORLD-028 session equipment) is marked.
         var worn = session.QueryEquipment().Worn.Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
         string Worn(string entity) => worn.Contains(entity) ? " (worn)" : string.Empty;
+        // ARC-WORLD-066: an ammunition stack shows its units.
+        string Units(string entity) => session.QueryAmmo(entity) is { } stack ? $" ×{stack.Units}" : string.Empty;
         var pc = session.QueryHeroKit().Select(item => new AreaInventoryLine(item.Entity, Line(KitName(item, catalog), item.Kind.Type, null) + " (starting kit)" + Worn(item.Entity))
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
               Repairable = Repairable(session, item.Entity, kitDurability) })
-            .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)) + Worn(item.Entity))
+            .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)) + Units(item.Entity) + Worn(item.Entity))
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
               Repairable = Repairable(session, item.Entity, kitDurability) }))
             // ARC-WORLD-055: the items the hero made or took from an NPC that held made items follow, named by their kind.
-            .Concat(session.QueryMadeItems().Select(item => new AreaInventoryLine(item.Entity, Line(KindName(item.Kind, catalog), item.Kind.Type, null) + " (made)" + Worn(item.Entity))
+            .Concat(session.QueryMadeItems().Select(item => new AreaInventoryLine(item.Entity, Line(KindName(item.Kind, catalog), item.Kind.Type, null) + Units(item.Entity) + " (made)" + Worn(item.Entity))
             { Written = item.Kind.Type == SessionItemType.Written }))
             .ToArray();
         var gold = session.QueryGold();
@@ -271,7 +273,7 @@ public sealed class AreaInventoryHost
         static bool Made(string entity) => entity.StartsWith("made:", StringComparison.Ordinal);
         var loot = list.Select(item => new AreaInventoryLine(item.Entity, Line(Made(item.Entity)
                 ? KindName(item.Facts.Kind, catalog) + " (made)" : Name(item.Entity, catalog), item.Facts.Kind.Type, Made(item.Entity) ? null : item.Facts.Weight)
-            + (item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
+            + (item.Facts.AmmoType is not null ? $" ×{item.Facts.Quantity}" : string.Empty) + (item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
         return new(Array.AsReadOnly(pc), holder, Name(holder, catalog), Array.AsReadOnly(loot)) { Gold = gold };
     }
 
@@ -377,7 +379,7 @@ public sealed class AreaInventoryHost
     {
         GameSessionFailure.ItemScriptUnsupported => "the item runs a script on this transfer that is not supported here",
         GameSessionFailure.HolderScriptUnsupported => "the body runs a use script (not supported here)",
-        GameSessionFailure.ItemTypeUnsupported => "gold, ammunition and keys are not modelled",
+        GameSessionFailure.ItemTypeUnsupported => "gold and keys are not modelled",
         GameSessionFailure.WornItemUnsupported => "worn items are not modelled",
         GameSessionFailure.ItemNotAvailable => "the item is no longer there",
         GameSessionFailure.HolderNotLootable => "only a dead NPC can be looted",

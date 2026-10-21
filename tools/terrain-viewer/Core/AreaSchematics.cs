@@ -39,8 +39,10 @@ public enum AreaSchematicDataStatus { Ready, ModuleOutsideGameRoot, MountFailed,
 /// </summary>
 public sealed class AreaSchematicData
 {
-    public AreaSchematicData(SchematicCatalog catalog, TechTexts texts, IReadOnlyDictionary<int, (ComponentFacts Facts, SessionItemKind Kind)> prototypes)
+    public AreaSchematicData(SchematicCatalog catalog, TechTexts texts, IReadOnlyDictionary<int, (ComponentFacts Facts, SessionItemKind Kind)> prototypes,
+        IReadOnlyDictionary<int, (int AmmoType, int Units)>? ammo = null)
     {
+        Ammo = ammo ?? new Dictionary<int, (int, int)>();
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(texts);
         ArgumentNullException.ThrowIfNull(prototypes);
@@ -53,6 +55,11 @@ public sealed class AreaSchematicData
     public TechTexts Texts { get; }
     /// <summary>Prototype number (base + 20) → its item facts.</summary>
     public IReadOnlyDictionary<int, (ComponentFacts Facts, SessionItemKind Kind)> Prototypes { get; }
+
+    /// <summary>ARC-WORLD-066: an ammunition prototype's type and units (its quantity), for an ammunition product.</summary>
+    public IReadOnlyDictionary<int, (int AmmoType, int Units)> Ammo { get; }
+
+    public (int AmmoType, int Units)? AmmoOf(int prototype) => Ammo.TryGetValue(prototype, out var a) ? a : null;
 
     public ComponentFacts? Facts(int prototype) => Prototypes.TryGetValue(prototype, out var p) ? p.Facts : null;
     public SessionItemKind? Kind(int prototype) => Prototypes.TryGetValue(prototype, out var p) ? p.Kind : null;
@@ -89,6 +96,7 @@ public static class AreaSchematics
         if (texts.Texts is null) return new(AreaSchematicDataStatus.TextsFailed, null, $"{texts.Refusal}");
         var prototypes = ContentPrototypes.Open(stack);
         var facts = new Dictionary<int, (ComponentFacts, SessionItemKind)>();
+        var ammo = new Dictionary<int, (int, int)>();
         foreach (var record in catalog.Catalog.Records)
             foreach (var base_ in record.Component1.Bases.Concat(record.Component2.Bases).Concat(record.Product.Bases).Distinct())
             {
@@ -97,8 +105,9 @@ public static class AreaSchematics
                 if (!Enum.IsDefined((SessionItemType)fields.Object.Type)) continue;
                 facts[prototype] = (new(item.MagickTechComplexity, item.Discipline),
                     new((SessionItemType)fields.Object.Type, prototype, fields.Object.Name, fields.Object.Description));
+                if (fields.Ammo is { } a) ammo[prototype] = (a.AmmoType, a.Quantity);
             }
-        return new(AreaSchematicDataStatus.Ready, new(catalog.Catalog, texts.Texts, facts),
+        return new(AreaSchematicDataStatus.Ready, new(catalog.Catalog, texts.Texts, facts, ammo),
             $"records {catalog.Catalog.Records.Count}, prototypes {facts.Count}");
     }
 
