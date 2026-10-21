@@ -729,13 +729,15 @@ public sealed partial class GameSessionOwner : IDisposable
         ThrowIfDisposed();
         if (!SessionValidation.Map(map)) return Reject(GameSessionFailure.InvalidMap);
         if (InventoryDomain.Validate(seed) is not { } admitted) return Reject(GameSessionFailure.InvalidInventorySeed);
-        foreach (var item in _inventory.Pc)
+        foreach (var item in _inventory.Pc.Select(pc => (pc.Entity, pc.Origin, pc.Kind))
+                     .Concat(_inventory.Placed.Where(p => p.Origin is not null).Select(p => (p.Entity, Origin: p.Origin!.Value, p.Kind))))
         {
             var listed = admitted.Items.TryGetValue(item.Entity, out var row);
             if (item.Origin == map ? !listed || row!.Facts.Kind != item.Kind : listed) return Reject(GameSessionFailure.InventoryMismatch);
         }
         // Kit and made items came from no map, so no seed may list them; the made: prefix is the session's own.
         if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity)) ||
+            _inventory.Placed.Any(item => item.Origin is null && admitted.Items.ContainsKey(item.Entity)) ||
             admitted.Items.Keys.Any(entity => entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)))
             return Reject(GameSessionFailure.InventoryMismatch);
         // ARC-WORLD-055: a holder that holds added items is an NPC, not a container, and its seed items and added items fit one list.
@@ -772,7 +774,9 @@ public sealed partial class GameSessionOwner : IDisposable
 
     /// <summary>
     /// Ground pickup (the pickup goal, then the item transfer 0x4617F0): an item lying on the actor's map goes to the end of
-    /// the PC's list. Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
+    /// the PC's list. Since ARC-WORLD-059 one of the hero's placed items on the actor's map goes back to the list it came from (a kit
+    /// item at its kit number's place, a made item to the made items) after the insert check; it runs no script, and a world item
+    /// whose attached seed shows a get or insert-item script is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
     /// effect: an item with an item <c>SAP_GET</c> script (not run here), a stack or key type (stack merge and key rings
     /// are not modelled), and a refusal of <paramref name="insertCheck"/>, which runs after every other check. An item
     /// <c>SAP_INSERT_ITEM</c> script runs through <paramref name="scripts"/> (ARC-SCRIPT-013, see <see cref="ISessionItemScriptHost"/>);
@@ -785,6 +789,8 @@ public sealed partial class GameSessionOwner : IDisposable
         ArgumentNullException.ThrowIfNull(insertCheck);
         if (!SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        // ARC-WORLD-059: one of the hero's items the session placed on this map goes back to its list.
+        if (_inventory.PlacedItem(item) is { } placed && placed.Map == _actor.Map) return TakePlaced(placed, insertCheck);
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         // ARC-COMBAT-008: an item of a container an attack broke lies on the ground at the container's cell; ARC-COMBAT-009: an NPC's
         // item a critical dropped lies at the cell it was dropped on.
@@ -1402,6 +1408,58 @@ public sealed partial class GameSessionOwner : IDisposable
     // the other checks, and the item's insert-item script, which runs last. Both are host callbacks, so a call back into the
     // owner from either (a transfer, a placement, a new seed) makes this transfer stale instead of committing over the
     // changed state.
+    // ARC-WORLD-059: a placed item back to the list it came from (a kit item at its number's place). It runs no script: a world item
+    // whose attached origin seed shows a get or insert-item script is refused (ItemScriptUnsupported); a kit or made item's scripts the
+    // session does not know.
+    private InventoryMutationResult TakePlaced(SessionPlacedItem placed, SessionInsertCheck insertCheck)
+    {
+        if (placed.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(placed.Entity, out var listed) &&
+            (listed.Facts.HasScript(SessionScriptPoint.Get) || listed.Facts.HasScript(SessionScriptPoint.InsertItem)))
+            return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        var revision = _revision;
+        var verdict = insertCheck(new SessionInventoryItem(placed.Entity, InventoryDomain.MadeFacts(placed.Kind)));
+        ThrowIfDisposed();
+        if (_revision != revision || _inventory.PlacedItem(placed.Entity) != placed || _actor.Map != placed.Map)
+            return RejectItem(GameSessionFailure.StaleVersion, verdict);
+        if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
+        _inventory.Return(placed);
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, placed.Entity, verdict, new(_identity, _revision));
+    }
+
+    /// <summary>
+    /// ARC-WORLD-059: places one of the hero's items (its kit, a taken or a made item) on the ground of the actor's map at
+    /// <paramref name="cell"/>: a worn item leaves its slot, the item leaves its list and joins the placed items, and stays taken.
+    /// One revision. The caller checked the item and the cell.
+    /// </summary>
+    internal void PlaceHeroItem(string entity, Arcanum.Simulation.Movement.CellCoord cell)
+    {
+        SessionPlacedItem placed;
+        if (_inventory.Kit.Find(item => item.Entity == entity) is { Entity: not null } kit)
+        {
+            _inventory.Kit.Remove(kit);
+            placed = new(entity, kit.Kind, SessionPlacedSource.Kit, null, _actor.Map, cell);
+        }
+        else if (_inventory.Pc.Find(item => item.Entity == entity) is { Entity: not null } pc)
+        {
+            _inventory.Pc.Remove(pc);
+            placed = new(entity, pc.Kind, SessionPlacedSource.Pc, pc.Origin, _actor.Map, cell);
+        }
+        else if (_inventory.Made.Find(item => item.Entity == entity) is { Entity: not null } made)
+        {
+            _inventory.Made.Remove(made);
+            placed = new(entity, made.Kind, SessionPlacedSource.Made, null, _actor.Map, cell);
+        }
+        else throw new InvalidOperationException("PLACED_ITEM_NOT_HELD");
+        if (_equipment.SlotOf(entity) is { } slot) _equipment.Worn.Remove(slot);
+        _inventory.Placed.Add(placed);
+        _revision++;
+    }
+
+    /// <summary>ARC-WORLD-059: the hero's items the session placed on the ground, on every map, in placing order.</summary>
+    public IReadOnlyList<SessionPlacedItem> QueryPlacedItems() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Placed.ToArray()); }
+
     private InventoryMutationResult Take(InventoryDomain.Seed seed, SessionInventoryItem item, bool parented, SessionInsertCheck insertCheck,
         ISessionItemScriptHost? scripts)
     {
@@ -1509,13 +1567,16 @@ public sealed partial class GameSessionOwner : IDisposable
         inventory = new();
         if (saved.Gold < 0 || (saved.Gold > 0 && !hero) || (saved.Kit.Count > 0 && !hero)) return GameSessionFailure.InvalidSnapshot;
         inventory.Gold = saved.Gold;
-        if (saved.Kit.Count + saved.Pc.Count + saved.Made.Count > limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
-        // Kit items are kit:1, kit:2, … in order; a deleted one (ARC-WORLD-053) leaves its number out.
+        if (saved.Kit.Count + saved.Pc.Count + saved.Made.Count + saved.Placed.Count > limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
+        // Kit items are kit:1, kit:2, … in order; a deleted one (ARC-WORLD-053) or one placed on the ground (ARC-WORLD-059) leaves
+        // its number out.
+        var placedKit = saved.Placed.Where(item => item?.Source == SessionPlacedSource.Kit).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
         var next = 0;
         foreach (var item in saved.Kit)
         {
             if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
-            while (next < limits.MaxPcItems + destroyed.Count && destroyed.Contains(HeroDomain.KitEntity(next))) next++;
+            while (next < limits.MaxPcItems + destroyed.Count &&
+                (destroyed.Contains(HeroDomain.KitEntity(next)) || placedKit.Contains(HeroDomain.KitEntity(next)))) next++;
             if (item.Entity != HeroDomain.KitEntity(next++)) return GameSessionFailure.InvalidSnapshot;
             inventory.Add(item);
         }
@@ -1554,6 +1615,28 @@ public sealed partial class GameSessionOwner : IDisposable
                 inventory.AddToNpc(npc.Npc, item);
                 inventory.Taken.Add(item.Entity);
             }
+        }
+        // ARC-WORLD-059: the hero's items placed on the ground: a kit item only with a hero, a taken item with its origin map, a made
+        // item by its number; a valid map and cell; not deleted and listed once in the whole inventory. Each stays taken.
+        // A placed kit item's number lies within the kit's numbers (the kit, its placed and its deleted items together).
+        var kitNumbers = saved.Kit.Count + placedKit.Count + destroyed.Count(entity => HeroDomain.KitNumber(entity) is not null);
+        foreach (var item in saved.Placed)
+        {
+            // Only the hero's drops place an item.
+            if (!hero) return GameSessionFailure.InvalidSnapshot;
+            if (item is null || !SessionValidation.Entity(item.Entity) || !Enum.IsDefined(item.Source) || !Enum.IsDefined(item.Kind.Type) ||
+                !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
+            var sourceFits = item.Source switch
+            {
+                SessionPlacedSource.Kit => HeroDomain.KitNumber(item.Entity) is { } number && number <= kitNumbers && item.Origin is null,
+                SessionPlacedSource.Made => SessionMadeItem.Number(item.Entity) is not null && item.Origin is null,
+                _ => item.Origin is { } origin && SessionValidation.Map(origin) && HeroDomain.KitNumber(item.Entity) is null &&
+                    !item.Entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal),
+            };
+            if (!sourceFits || !SessionValidation.Map(item.Map) || !DropCellFits(item.Cell) || destroyed.Contains(item.Entity) ||
+                inventory.Taken.Contains(item.Entity)) return GameSessionFailure.InvalidSnapshot;
+            inventory.Placed.Add(item);
+            inventory.Taken.Add(item.Entity);
         }
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.
         foreach (var entity in destroyed) inventory.Taken.Add(entity);

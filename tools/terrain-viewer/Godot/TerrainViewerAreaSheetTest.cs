@@ -127,6 +127,20 @@ public partial class TerrainViewerApp
             InventoryKey(Key.C); InventoryKey(Key.Escape);
             Require(!SheetOpen, "Escape closed the sheet");
 
+            // ARC-UI-046: an award through the production hook posts one message-window entry per level written (the project's labels
+            // without the player's texts); the window keeps the last ten.
+            var award = _areaSession.AwardHeroExperience(_areaSession.Version, 4000).Award;
+            Require(award?.LevelUps is { Count: 2 }, "an award to level 3 writes two levels");
+            var posted = _levelMessagesPosted;
+            LevelAreaFollowers(award);
+            Require(_levelMessagesPosted == posted + 2 && _messageWindow?.HistoryForSelfTest.Count == 2
+                && _messageWindow.ShownForSelfTest == new AreaMessageEntry("Level up", "Level 3", $"Unspent points: {_areaSession.QueryHero()!.UnspentPoints}"),
+                "two level-up entries, the newest shown: " + _messageWindow?.ShownForSelfTest);
+            LevelAreaFollowers(_areaSession.AwardHeroExperience(_areaSession.Version, 169000 - 4000).Award);
+            Require(_levelMessagesPosted == posted + 13 && _messageWindow!.HistoryForSelfTest.Count == AreaMessageWindow.HistorySize
+                && _messageWindow.HistoryForSelfTest[0].Line == "Level 5" && _messageWindow.ShownForSelfTest?.Line == "Level 14",
+                "eleven more levels: the window keeps the last ten");
+
             // A hero who dies while the sheet is open closes it; C is then refused, as the original refuses a dead PC.
             InventoryKey(Key.C);
             Require(_areaSession.Kill(_areaSession.Version, SessionLifeTarget.Hero).Disposition == GameSessionDisposition.Changed, "kill the hero");
@@ -134,7 +148,7 @@ public partial class TerrainViewerApp
             Require(!SheetOpen && !_areaSession.HeroEditorOpen, "the dead hero's sheet closed and so did its editor");
             InventoryKey(Key.C);
             Require(!SheetOpen && _sheetStatus == "refused: the hero is dead", "C for a dead hero: " + _sheetStatus);
-            return "no-hero refusal, C/controller confirm and cancel/Escape, keys owned while open, rebuild on change, skills page + and − with the editor floor, dead-hero close and refusal";
+            return "no-hero refusal, C/controller confirm and cancel/Escape, keys owned while open, rebuild on change, skills page + and − with the editor floor, level-up messages (ARC-UI-046), dead-hero close and refusal";
         }
         finally
         {

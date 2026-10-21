@@ -131,6 +131,11 @@ internal sealed class HeroDomain
 
     internal static string KitEntity(int index) => KitPrefix + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>The number n of a kit entity <c>kit:n</c> (1-based), or null for any other entity.</summary>
+    internal static int? KitNumber(string entity) =>
+        entity.StartsWith(KitPrefix, StringComparison.Ordinal) && int.TryParse(entity.AsSpan(KitPrefix.Length), System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var n) && n >= 1 && entity == KitEntity(n - 1) ? n : null;
+
     /// <summary>
     /// Builds the hero from saved or new fields; null when any field is outside its range or an effect is not one the
     /// character owner admits (no modifiers, an unknown stat or operator, a magnitude above its limit), or an innate skill change
