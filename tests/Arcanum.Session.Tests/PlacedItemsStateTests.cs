@@ -120,9 +120,9 @@ public sealed class PlacedItemsStateTests
         // Without a hero nothing can have been placed.
         using var heroless = GameSessionOwner.Create(Descriptor()).Owner!;
         var none = Text(heroless);
-        Assert.IsTrue(none.Contains(",\"placed\":[]}"));
-        Refused(none.Replace(",\"placed\":[]}", ",\"placed\":[{\"entity\":\"made:1\",\"source\":\"made\",\"origin\":0,\"map\":79,\"x\":1,\"y\":2," +
-            "\"type\":\"Generic\",\"prototype\":1,\"name\":2,\"description\":3}]}"), GameSessionFailure.InvalidSnapshot);
+        Assert.IsTrue(none.Contains(",\"placed\":[],"));
+        Refused(none.Replace(",\"placed\":[],", ",\"placed\":[{\"entity\":\"made:1\",\"source\":\"made\",\"origin\":0,\"map\":79,\"x\":1,\"y\":2," +
+            "\"type\":\"Generic\",\"prototype\":1,\"name\":2,\"description\":3}],"), GameSessionFailure.InvalidSnapshot);
     }
 
     [TestMethod]

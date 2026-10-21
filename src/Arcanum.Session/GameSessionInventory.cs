@@ -36,11 +36,15 @@ public readonly record struct SessionItemKind(SessionItemType Type, int Prototyp
 /// <summary>
 /// T0 facts of one item, taken by the host from the map's inventory view. <see cref="ScriptPoints"/> lists the attachment
 /// points with a script (any order, no duplicates). <see cref="InventoryLocation"/> is the serialized slot (1000..1008 are
-/// worn slots); <see cref="Quantity"/> exists for gold and ammunition only.
+/// worn slots); <see cref="Quantity"/> exists for gold and ammunition only, and (ARC-WORLD-066) <see cref="AmmoType"/> for
+/// ammunition only (0..<see cref="SessionAmmoRecord.AmmoTypes"/> − 1).
 /// </summary>
 public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Complexity, int InventoryLocation, int? Quantity,
     IReadOnlyList<int> ScriptPoints)
 {
+    /// <summary>ARC-WORLD-066: the ammunition type (field 0x8F) of an ammunition item; null for any other item.</summary>
+    public int? AmmoType { get; init; }
+
     public bool HasScript(int point) => ScriptPoints.Contains(point);
 
     /// <summary>Worn slots, helmet 1000 to boots 1008 (the source's wear locations).</summary>
@@ -99,6 +103,19 @@ public readonly record struct SessionMadeItem(string Entity, SessionItemKind Kin
 /// </summary>
 public sealed record SessionNpcInventory(string Npc, IReadOnlyList<SessionMadeItem> Items);
 
+/// <summary>
+/// ARC-WORLD-066: the units of an ammunition stack the session tracks: every ammunition item the hero holds or placed, and any
+/// other ammunition item whose units the session changed (a seed stack an NPC spent from, a stack an NPC received). Its ammunition
+/// type (0..3, the original's tables) and its unit count (0 or more; the original never removes a stack at 0 by itself).
+/// </summary>
+public readonly record struct SessionAmmoRecord(string Entity, int AmmoType, int Units)
+{
+    /// <summary>The ammunition types of the original's tables (0x5B32A0, 0x5B32B0): arrows, bullets, charge cells, fuel.</summary>
+    public const int AmmoTypes = 4;
+    /// <summary>Charge cells (ARC-TECHNOLOGY-007).</summary>
+    public const int Cells = 2;
+}
+
 /// <summary>Which of the hero's lists a placed item came from, and goes back to when it is picked up (ARC-WORLD-059).</summary>
 public enum SessionPlacedSource { Kit, Pc, Made }
 
@@ -114,13 +131,15 @@ public sealed record SessionPlacedItem(string Entity, SessionItemKind Kind, Sess
 /// kit in kit number order, the items the PC took from the world in the order they entered its list, (ARC-TECHNOLOGY-004) the
 /// items the hero made from schematics or took from an NPC that held made items, in the order they entered its list,
 /// (ARC-WORLD-055) the made items the session added to NPCs, by NPC entity in ordinal order, and (ARC-WORLD-059) the hero's items
-/// the session placed on the ground, in the order they were placed.
+/// the session placed on the ground, in the order they were placed, and (ARC-WORLD-066) the ammunition stacks it tracks, by entity
+/// in ordinal order.
 /// </summary>
 public sealed class SessionInventoryState
 {
     internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs,
-        SessionPlacedItem[] placed)
+        SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null)
     {
+        Ammo = Array.AsReadOnly(ammo ?? []);
         Gold = gold;
         Kit = Array.AsReadOnly(kit);
         Pc = Array.AsReadOnly(pc);
@@ -135,6 +154,7 @@ public sealed class SessionInventoryState
     public IReadOnlyList<SessionMadeItem> Made { get; }
     public IReadOnlyList<SessionNpcInventory> Npcs { get; }
     public IReadOnlyList<SessionPlacedItem> Placed { get; }
+    public IReadOnlyList<SessionAmmoRecord> Ammo { get; }
 }
 
 public sealed record SessionInventoryItem(string Entity, SessionItemFacts Facts);
@@ -326,12 +346,21 @@ internal sealed class InventoryDomain
         Taken.Add(item.Entity);
     }
 
+    /// <summary>ARC-WORLD-066: the ammunition stacks the session tracks, by entity.</summary>
+    internal SortedDictionary<string, SessionAmmoRecord> Ammo { get; } = new(StringComparer.Ordinal);
+
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
-        Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray()))).ToArray(), Placed.ToArray());
+        Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray()))).ToArray(), Placed.ToArray(),
+        Ammo.Values.ToArray());
 
     /// <summary>The facts of a made item: its kind, no weight, complexity, location (-1, in the bag) or scripts; the host knows
     /// the prototype's weight.</summary>
     internal static SessionItemFacts MadeFacts(SessionItemKind kind) => new(kind, 0, 0, -1, null, []);
+
+    /// <summary>ARC-WORLD-066: an item's facts with its tracked ammunition units (a made or placed stack's type and units, a seed
+    /// stack's changed units); any other item's facts unchanged.</summary>
+    internal SessionItemFacts WithAmmo(string entity, SessionItemFacts facts) =>
+        Ammo.TryGetValue(entity, out var stack) ? facts with { AmmoType = stack.AmmoType, Quantity = stack.Units } : facts;
 
     /// <summary>The map's current inventory; an NPC holder is dead when its seed says so or <paramref name="killed"/> (the session's
     /// life records, ARC-COMBAT-005) does. Ground items in seed order, then each spilled container's items at its cell (a container
@@ -347,7 +376,7 @@ internal sealed class InventoryDomain
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items
                 .Where(entity => !Taken.Contains(entity) && dropped(entity) is not null)
                 .Select(entity => new SessionGroundItem(new(entity, seed.Items[entity].Facts), dropped(entity)!.Value))))
-            .Concat(Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, MadeFacts(item.Kind)), item.Cell)))
+            .Concat(Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind))), item.Cell)))
             .ToArray(),
         seed.Source.Holders.Select(holder => new SessionHolderInventory(holder.Entity, holder.Kind,
             holder.Dead || holder.Kind == SessionHolderKind.Npc && killed(holder.Entity),
@@ -357,9 +386,9 @@ internal sealed class InventoryDomain
     /// <summary>The holder's list in its order without the taken and deleted items and the items a critical dropped
     /// (<paramref name="dropped"/>); an NPC's list is followed by the made items the session added to it (ARC-WORLD-055).</summary>
     internal IEnumerable<SessionInventoryItem> Current(Seed seed, SessionSeedHolder holder, Func<string, CellCoord?> dropped) => holder.Items
-        .Where(entity => !Taken.Contains(entity) && dropped(entity) is null).Select(entity => new SessionInventoryItem(entity, seed.Items[entity].Facts))
+        .Where(entity => !Taken.Contains(entity) && dropped(entity) is null).Select(entity => new SessionInventoryItem(entity, WithAmmo(entity, seed.Items[entity].Facts)))
         .Concat(holder.Kind == SessionHolderKind.Npc
-            ? AddedTo(holder.Entity).Select(item => new SessionInventoryItem(item.Entity, MadeFacts(item.Kind)))
+            ? AddedTo(holder.Entity).Select(item => new SessionInventoryItem(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind))))
             : []);
 
     /// <summary>Checks a seed's structure and copies it, so later changes to the caller's lists cannot reach the
@@ -399,14 +428,21 @@ internal sealed class InventoryDomain
         return new(new(Array.AsReadOnly(holderOrder.ToArray()), Array.AsReadOnly(itemOrder.ToArray())), items, holders, holderOf);
     }
 
+    // ARC-WORLD-066: an ammunition item carries its type in the original's range (a type out of it indexes past the original's tables,
+    // crash class: refused in both settings); a negative count is refused too (the original lets it grow the source of a use).
     private static bool Facts(SessionItemFacts? facts) => facts?.ScriptPoints is not null && Enum.IsDefined(facts.Kind.Type) &&
         Points(facts.ScriptPoints) && (facts.Quantity is null) == (facts.Kind.Type is not (SessionItemType.Gold or SessionItemType.Ammo)) &&
-        facts.Quantity is null or >= 0;
+        facts.Quantity is null or >= 0 && (facts.AmmoType is null) == (facts.Kind.Type != SessionItemType.Ammo) &&
+        facts.AmmoType is null or >= 0 and < SessionAmmoRecord.AmmoTypes;
 
     private static bool Points(IReadOnlyList<int> points) =>
         points.All(point => point is >= 0 and <= SessionScriptPoint.Last) && points.Distinct().Count() == points.Count;
 
-    /// <summary>Gold and ammunition merge into a matching stack on insert, and a key goes onto the PC's key ring when it has
-    /// one; neither is modelled.</summary>
-    internal static bool Admitted(SessionItemType type) => type is not (SessionItemType.Gold or SessionItemType.Ammo or SessionItemType.Key or SessionItemType.KeyRing);
+    /// <summary>Gold merges into the PC's gold and a key goes onto the PC's key ring when it has one; neither is modelled. Since
+    /// ARC-WORLD-066 ammunition is admitted: it merges into a held stack of the same prototype (<see cref="SessionAmmoRecord"/>).</summary>
+    internal static bool Admitted(SessionItemType type) => type is not (SessionItemType.Gold or SessionItemType.Key or SessionItemType.KeyRing);
+
+    /// <summary>A starting kit or a save's kit holds no ammunition: a kit item carries no unit count (no pre-made hero starts with
+    /// ammunition).</summary>
+    internal static bool KitAdmitted(SessionItemType type) => Admitted(type) && type != SessionItemType.Ammo;
 }

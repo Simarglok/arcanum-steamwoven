@@ -108,7 +108,7 @@ public sealed partial class GameSessionOwner : IDisposable
                 hero.Apply(AdvancementDomain.WithSheet(hero.State, outcome.Sheet, hero.State.Experience));
             for (var index = 0; index < kit.Length; index++)
             {
-                if (kit[index] is not { } item || !Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type))
+                if (kit[index] is not { } item || !Enum.IsDefined(item.Kind.Type) || !InventoryDomain.KitAdmitted(item.Kind.Type))
                     return Rejected(GameSessionFailure.InvalidHero);
                 inventory.Add(new SessionKitItem(HeroDomain.KitEntity(index), item.Kind));
             }
@@ -1416,6 +1416,10 @@ public sealed partial class GameSessionOwner : IDisposable
         if (placed.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(placed.Entity, out var listed) &&
             (listed.Facts.HasScript(SessionScriptPoint.Get) || listed.Facts.HasScript(SessionScriptPoint.InsertItem)))
             return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        // ARC-WORLD-066: a placed ammunition stack merges into the hero's stack of the same prototype when it holds one.
+        var into = placed.Kind.Type == SessionItemType.Ammo ? HeroStackOfPrototype(placed.Kind.Prototype) : null;
+        if (into is { } target && ((long)target.Units + _inventory.Ammo[placed.Entity].Units > int.MaxValue ||
+            !_durability.Records.ContainsKey(placed.Entity) && _durability.Count >= _limits.MaxDurabilityRecords)) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var revision = _revision;
         var verdict = insertCheck(new SessionInventoryItem(placed.Entity, InventoryDomain.MadeFacts(placed.Kind)));
@@ -1423,7 +1427,13 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_revision != revision || _inventory.PlacedItem(placed.Entity) != placed || _actor.Map != placed.Map)
             return RejectItem(GameSessionFailure.StaleVersion, verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
-        _inventory.Return(placed);
+        if (into is { } stack)
+        {
+            var units = _inventory.Ammo[placed.Entity].Units;
+            Delete(placed.Entity);
+            _inventory.Ammo[stack.Entity] = stack with { Units = stack.Units + units };
+        }
+        else _inventory.Return(placed);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, placed.Entity, verdict, new(_identity, _revision));
     }
@@ -1469,7 +1479,22 @@ public sealed partial class GameSessionOwner : IDisposable
         var insertScript = facts.HasScript(SessionScriptPoint.InsertItem);
         if ((insertScript && scripts is null) ||
             facts.HasScript(parented ? SessionScriptPoint.RemoveItem : SessionScriptPoint.Get)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
-        if (_inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
+        // ARC-WORLD-066: ammunition merges into the hero's stack of the same prototype (its units added, the item deleted, 0x466640),
+        // else enters the list as a new stack. The sum must fit 32 bits (the original wraps: crash class, refused in both settings).
+        SessionAmmoRecord? ammo = null, into = null;
+        if (facts.Kind.Type == SessionItemType.Ammo)
+        {
+            if (AmmoOf(item.Entity, facts) is not { } brought) return RejectItem(GameSessionFailure.InvalidItem);
+            ammo = brought;
+            into = HeroStackOfPrototype(facts.Kind.Prototype);
+            if (into is { } target)
+            {
+                if ((long)target.Units + brought.Units > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+                if (!_durability.Records.ContainsKey(item.Entity) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+            }
+            else if (!_inventory.Ammo.ContainsKey(item.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        }
+        if (into is null && _inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var (revision, map, flagVersion) = (_revision, _actor.Map, _flags.Version);
         // ARC-WORLD-055: a made item comes from the NPC that holds it (and is in Taken while it does), any other from a seed.
@@ -1500,13 +1525,20 @@ public sealed partial class GameSessionOwner : IDisposable
             if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = run };
             if (failure != GameSessionFailure.None) return RejectItem(failure, verdict) with { InsertScript = run };
         }
-        if (npc is not null)
+        if (into is { } stack)
+        {
+            // The inserted stack's units join the held one and the inserted item is deleted (from the NPC's added items too).
+            Delete(item.Entity);
+            _inventory.Ammo[stack.Entity] = stack with { Units = stack.Units + ammo!.Value.Units };
+        }
+        else if (npc is not null)
         {
             // A made item keeps its entity and kind: it leaves the NPC's added items and joins the hero's made items.
             _inventory.RemoveFromNpc(item.Entity);
             _inventory.Add(new SessionMadeItem(item.Entity, facts.Kind));
         }
         else _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
+        if (into is null && ammo is { } added) _inventory.Ammo[item.Entity] = added;
         foreach (var write in run?.Effects.GlobalFlags ?? [])
         {
             var receipt = _flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), _flags.Version, new FlagId(write.Index), write.Value));
@@ -1574,7 +1606,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var next = 0;
         foreach (var item in saved.Kit)
         {
-            if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
+            if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.KitAdmitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
             while (next < limits.MaxPcItems + destroyed.Count &&
                 (destroyed.Contains(HeroDomain.KitEntity(next)) || placedKit.Contains(HeroDomain.KitEntity(next)))) next++;
             if (item.Entity != HeroDomain.KitEntity(next++)) return GameSessionFailure.InvalidSnapshot;
@@ -1640,6 +1672,24 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.
         foreach (var entity in destroyed) inventory.Taken.Add(entity);
+        // ARC-WORLD-066: the ammunition stacks by entity in ordinal order, within the budget, each of a type 0..3 with 0 or more units and
+        // not deleted; every ammunition item the hero holds or placed, and every one added to an NPC, has its stack; a stack of the
+        // hero's, the NPC store's or a placed item is of an ammunition item.
+        if (saved.Ammo.Count > limits.MaxAmmoRecords) return GameSessionFailure.BudgetExceeded;
+        string? last = null;
+        foreach (var stack in saved.Ammo)
+        {
+            if (!SessionValidation.Entity(stack.Entity) || last is not null && string.CompareOrdinal(last, stack.Entity) >= 0 ||
+                stack.AmmoType is < 0 or >= SessionAmmoRecord.AmmoTypes || stack.Units < 0 || destroyed.Contains(stack.Entity))
+                return GameSessionFailure.InvalidSnapshot;
+            last = stack.Entity;
+            inventory.Ammo[stack.Entity] = stack;
+        }
+        var tracked = inventory.Pc.Select(item => (item.Entity, item.Kind)).Concat(inventory.Made.Select(item => (item.Entity, item.Kind)))
+            .Concat(inventory.Placed.Select(item => (item.Entity, item.Kind)))
+            .Concat(inventory.Npcs.Values.SelectMany(list => list).Select(item => (item.Entity, item.Kind)));
+        foreach (var (entity, kind) in tracked)
+            if ((kind.Type == SessionItemType.Ammo) != inventory.Ammo.ContainsKey(entity)) return GameSessionFailure.InvalidSnapshot;
         return GameSessionFailure.None;
     }
 

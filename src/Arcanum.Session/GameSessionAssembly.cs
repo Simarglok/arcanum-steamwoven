@@ -55,10 +55,15 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), a record without a product at the found index or with a quantity
     /// below 1 (<see cref="GameSessionFailure.InvalidSchematics"/>), the insert check (<see cref="GameSessionFailure.InsertRefused"/>),
     /// the item and durability budgets (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision.
+    /// ARC-WORLD-066: an ammunition component loses one unit (0x4658E0; the stack goes at its last unit) instead of being deleted, and
+    /// an ammunition product (<paramref name="productAmmo"/>: the product prototype's ammunition type and units) merges each unit into
+    /// the hero's stack of its prototype, a new <c>made:n</c> stack only when the hero holds none (<see cref="SessionAssemblyResult.Made"/>
+    /// then lists the stacks the products entered). An ammunition product without its facts is <see cref="GameSessionFailure.ItemTypeUnsupported"/>.
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x4ED8B0, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     public SessionAssemblyResult AssembleSchematic(GameSessionVersion expected, SchematicRecord schematic, SessionCraftLookup items,
-        Func<int, ComponentFacts?> facts, Func<int, SessionItemKind?> productKind, SessionInsertCheck insertCheck)
+        Func<int, ComponentFacts?> facts, Func<int, SessionItemKind?> productKind, SessionInsertCheck insertCheck,
+        Func<int, (int AmmoType, int Units)?>? productAmmo = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(schematic);
@@ -82,26 +87,60 @@ public sealed partial class GameSessionOwner
         if (_revision != revision) return RejectAssembly(GameSessionFailure.StaleVersion);
         if (product is not { } kind || kind.Prototype != prototype || !Enum.IsDefined(kind.Type) || !InventoryDomain.Admitted(kind.Type))
             return RejectAssembly(GameSessionFailure.ItemTypeUnsupported, plan);
-        if (_inventory.Held - 2 + (long)quantity > _limits.MaxPcItems) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
-        var newRecords = new[] { plan.First.Item!, plan.Second.Item! }.Count(entity => !_durability.Records.ContainsKey(entity));
+        (int AmmoType, int Units)? ammo = null;
+        if (kind.Type == SessionItemType.Ammo)
+        {
+            ammo = productAmmo?.Invoke(prototype);
+            ThrowIfDisposed();
+            if (_revision != revision) return RejectAssembly(GameSessionFailure.StaleVersion);
+            if (ammo is not { } a || a.AmmoType is < 0 or >= SessionAmmoRecord.AmmoTypes || a.Units < 0) return RejectAssembly(GameSessionFailure.ItemTypeUnsupported, plan);
+        }
+        var components = new[] { plan.First.Item!, plan.Second.Item! };
+        // An ammunition component keeps its stack unless its last unit goes; every other component is deleted.
+        var spent = new List<(string Entity, SessionAmmoRecord? Stack)>();
+        foreach (var entity in components) spent.Add((entity, _inventory.Ammo.TryGetValue(entity, out var stack) ? stack : null));
+        var deleted = spent.Where(c => c.Stack is not { } s || s.Units <= 1).Select(c => c.Entity).ToArray();
+        // Ammunition products: a held stack of the prototype that outlives the components takes every unit, else one new stack.
+        SessionAmmoRecord? into = ammo is not null && HeroStackOfPrototype(prototype) is { } held && !deleted.Contains(held.Entity) ? held : null;
+        var newItems = ammo is null ? quantity : into is null ? 1 : 0;
+        if (_inventory.Held - deleted.Length + (long)newItems > _limits.MaxPcItems) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
+        if (ammo is { } added)
+        {
+            var before = into is { } target ? target.Units - (components.Contains(target.Entity) ? 1 : 0) : 0L;
+            if (before + (long)added.Units * quantity > int.MaxValue) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
+            if (into is null && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
+        }
+        var newRecords = deleted.Count(entity => !_durability.Records.ContainsKey(entity));
         if (_durability.Count + newRecords > _limits.MaxDurabilityRecords) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         var next = NextMadeNumber();
-        if (next > int.MaxValue - (long)quantity + 1) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
-        var made = Enumerable.Range((int)next, quantity).Select(SessionMadeItem.EntityOf).ToArray();
-        foreach (var entity in made)
+        if (next > int.MaxValue - (long)Math.Max(newItems, 1) + 1) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
+        var made = Enumerable.Range((int)next, newItems).Select(SessionMadeItem.EntityOf).ToArray();
+        // The host answers one insert check a product unit, for the stack it enters.
+        for (var unit = 0; unit < quantity; unit++)
         {
-            var verdict = insertCheck(new SessionInventoryItem(entity, new SessionItemFacts(kind, 0, 0, -1, null, [])));
+            var entity = into?.Entity ?? (made.Length > 0 ? made[ammo is null ? unit : 0] : SessionMadeItem.EntityOf((int)next));
+            var unitFacts = new SessionItemFacts(kind, 0, 0, -1, ammo?.Units, []) { AmmoType = ammo?.AmmoType };
+            var verdict = insertCheck(new SessionInventoryItem(entity, unitFacts));
             ThrowIfDisposed();
             if (_revision != revision) return RejectAssembly(GameSessionFailure.StaleVersion);
             if (verdict != SessionInsertVerdict.Accepted) return RejectAssembly(GameSessionFailure.InsertRefused, plan);
         }
         if (_revision == long.MaxValue) return RejectAssembly(GameSessionFailure.RevisionExhausted, plan);
-        Delete(plan.First.Item!);
-        Delete(plan.Second.Item!);
-        foreach (var entity in made) _inventory.Add(new SessionMadeItem(entity, kind));
+        foreach (var (entity, stack) in spent)
+        {
+            if (stack is { Units: > 1 } s) _inventory.Ammo[entity] = s with { Units = s.Units - 1 };
+            else Delete(entity);
+        }
+        if (ammo is { } product2)
+        {
+            var target = into is { } t ? _inventory.Ammo[t.Entity] : new SessionAmmoRecord(made[0], product2.AmmoType, 0);
+            if (into is null) _inventory.Add(new SessionMadeItem(made[0], kind));
+            _inventory.Ammo[target.Entity] = target with { Units = target.Units + product2.Units * quantity };
+        }
+        else foreach (var entity in made) _inventory.Add(new SessionMadeItem(entity, kind));
         _revision++;
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, plan, Array.AsReadOnly(made),
-            Array.AsReadOnly(new[] { plan.First.Item!, plan.Second.Item! }), Version);
+        var entered = ammo is null ? made : [into?.Entity ?? made[0]];
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, plan, Array.AsReadOnly(entered), Array.AsReadOnly(components), Version);
     }
 
     private AssemblyPlan Plan(SchematicRecord schematic, IReadOnlyList<CraftItem> inventory, Func<int, ComponentFacts?> facts)
@@ -122,8 +161,9 @@ public sealed partial class GameSessionOwner
             if (items(entity) is not { } facts) continue;
             var location = _equipment.SlotOf(entity) is { } slot ? (int)slot : facts.Location;
             var broken = _durability.Records.TryGetValue(entity, out var condition) ? condition.Broken : facts.Broken;
-            // Gold and ammunition are not admitted to the hero's lists (ARC-WORLD-014), so no held item counts by units.
-            result.Add(new CraftItem(entity, kind.Prototype, location, broken, facts.DescriptionChanged));
+            // ARC-WORLD-066: an ammunition stack counts by its units (a stack at 0 is no component).
+            var stack = _inventory.Ammo.TryGetValue(entity, out var ammo) ? ammo : (SessionAmmoRecord?)null;
+            result.Add(new CraftItem(entity, kind.Prototype, location, broken, facts.DescriptionChanged, stack is not null, stack?.Units ?? 0));
         }
         return result.AsReadOnly();
     }

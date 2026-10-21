@@ -75,9 +75,12 @@ public sealed partial class GameSessionOwner
     /// admit (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), the NPC's list bound, the store, the made numbers or the durability
     /// records (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, the insert check (<see cref="GameSessionFailure.InsertRefused"/>;
     /// a call back into the owner from a host callback, a seed attach included, is <see cref="GameSessionFailure.StaleVersion"/>).
+    /// ARC-WORLD-066: as for the hero, an ammunition component loses one unit and an ammunition product (<paramref name="productAmmo"/>)
+    /// merges into the NPC's stack of its prototype, a new <c>made:n</c> stack only when it holds none.
     /// </summary>
     public SessionAssemblyResult AssembleSchematicForNpc(GameSessionVersion expected, SessionNpcCrafter crafter, SchematicRecord schematic,
-        SessionCraftLookup items, Func<int, ComponentFacts?> facts, Func<int, SessionItemKind?> productKind, SessionInsertCheck insertCheck)
+        SessionCraftLookup items, Func<int, ComponentFacts?> facts, Func<int, SessionItemKind?> productKind, SessionInsertCheck insertCheck,
+        Func<int, (int AmmoType, int Units)?>? productAmmo = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(crafter);
@@ -105,32 +108,61 @@ public sealed partial class GameSessionOwner
         if (Stale()) return RejectAssembly(GameSessionFailure.StaleVersion);
         if (product is not { } kind || kind.Prototype != prototype || !Enum.IsDefined(kind.Type) || !InventoryDomain.Admitted(kind.Type))
             return RejectAssembly(GameSessionFailure.ItemTypeUnsupported, plan);
+        (int AmmoType, int Units)? ammo = null;
+        if (kind.Type == SessionItemType.Ammo)
+        {
+            ammo = productAmmo?.Invoke(prototype);
+            ThrowIfDisposed();
+            if (Stale()) return RejectAssembly(GameSessionFailure.StaleVersion);
+            if (ammo is not { } a || a.AmmoType is < 0 or >= SessionAmmoRecord.AmmoTypes || a.Units < 0) return RejectAssembly(GameSessionFailure.ItemTypeUnsupported, plan);
+        }
         var consumed = new[] { plan.First.Item!, plan.Second.Item! };
-        var addedConsumed = consumed.Count(entity => _inventory.NpcOf(entity) == npc);
-        if (_inventory.AddedTo(npc).Count + SeedItemCount(npc) - 2 + (long)quantity > SessionMapInventorySeed.MaxListLength ||
-            _inventory.NpcHeld - addedConsumed + (long)quantity > _limits.MaxNpcItems) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
-        var newRecords = consumed.Count(entity => !_durability.Records.ContainsKey(entity));
+        // ARC-WORLD-066: an ammunition component keeps its stack unless its last unit goes.
+        var stacks = NpcStacks(npc).ToDictionary(pair => pair.Stack.Entity, pair => pair.Stack, StringComparer.Ordinal);
+        var deleted = consumed.Where(entity => !stacks.TryGetValue(entity, out var s) || s.Units <= 1).ToArray();
+        SessionAmmoRecord? into = ammo is null ? null : NpcStacks(npc).Where(pair => pair.Prototype == prototype && !deleted.Contains(pair.Stack.Entity))
+            .Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault();
+        var newItems = ammo is null ? quantity : into is null ? 1 : 0;
+        var addedConsumed = deleted.Count(entity => _inventory.NpcOf(entity) == npc);
+        if (_inventory.AddedTo(npc).Count + SeedItemCount(npc) - deleted.Length + (long)newItems > SessionMapInventorySeed.MaxListLength ||
+            _inventory.NpcHeld - addedConsumed + (long)newItems > _limits.MaxNpcItems) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
+        var keptStacks = consumed.Except(deleted).Count(entity => !_inventory.Ammo.ContainsKey(entity));
+        if (_inventory.Ammo.Count + keptStacks + (ammo is not null && into is null ? 1 : 0) + (into is { } i && !_inventory.Ammo.ContainsKey(i.Entity) ? 1 : 0) > _limits.MaxAmmoRecords)
+            return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
+        if (ammo is { } added && (into is { } t ? t.Units - (consumed.Contains(t.Entity) ? 1 : 0) : 0L) + (long)added.Units * quantity > int.MaxValue)
+            return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
+        var newRecords = deleted.Count(entity => !_durability.Records.ContainsKey(entity));
         if (_durability.Count + newRecords > _limits.MaxDurabilityRecords) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         var next = NextMadeNumber();
-        if (next > int.MaxValue - (long)quantity + 1) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
+        if (next > int.MaxValue - (long)Math.Max(newItems, 1) + 1) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         if (_revision == long.MaxValue) return RejectAssembly(GameSessionFailure.RevisionExhausted, plan);
-        var made = Enumerable.Range((int)next, quantity).Select(SessionMadeItem.EntityOf).ToArray();
-        foreach (var entity in made)
+        var made = Enumerable.Range((int)next, newItems).Select(SessionMadeItem.EntityOf).ToArray();
+        for (var unit = 0; unit < quantity; unit++)
         {
-            var verdict = insertCheck(new SessionInventoryItem(entity, InventoryDomain.MadeFacts(kind)));
+            var entity = into?.Entity ?? (made.Length > 0 ? made[ammo is null ? unit : 0] : SessionMadeItem.EntityOf((int)next));
+            var verdict = insertCheck(new SessionInventoryItem(entity, InventoryDomain.MadeFacts(kind) with { Quantity = ammo?.Units, AmmoType = ammo?.AmmoType }));
             ThrowIfDisposed();
             if (Stale()) return RejectAssembly(GameSessionFailure.StaleVersion);
             if (verdict != SessionInsertVerdict.Accepted) return RejectAssembly(GameSessionFailure.InsertRefused, plan);
         }
-        Delete(consumed[0]);
-        Delete(consumed[1]);
+        foreach (var entity in consumed)
+        {
+            if (deleted.Contains(entity)) Delete(entity);
+            else _inventory.Ammo[entity] = stacks[entity] with { Units = stacks[entity].Units - 1 };
+        }
         foreach (var entity in made)
         {
             _inventory.AddToNpc(npc, new SessionMadeItem(entity, kind));
             _inventory.Taken.Add(entity);
         }
+        if (ammo is { } made2)
+        {
+            var target = into is { } stack ? (_inventory.Ammo.TryGetValue(stack.Entity, out var current) ? current : stack) : new SessionAmmoRecord(made[0], made2.AmmoType, 0);
+            _inventory.Ammo[target.Entity] = target with { Units = target.Units + made2.Units * quantity };
+        }
         _revision++;
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, plan, Array.AsReadOnly(made), Array.AsReadOnly(consumed), Version);
+        var entered = ammo is null ? made : [into?.Entity ?? made[0]];
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, plan, Array.AsReadOnly(entered), Array.AsReadOnly(consumed), Version);
     }
 
     private static AssemblyPlan NpcPlan(ImmutableArray<SessionTechDiscipline> technology, SchematicRecord schematic, IReadOnlyList<CraftItem> inventory,
@@ -151,12 +183,14 @@ public sealed partial class GameSessionOwner
                         listed.Add((entity, seed.Items[entity].Facts.Kind.Prototype, seed.Items[entity].Facts.InventoryLocation));
         foreach (var item in _inventory.AddedTo(npc)) listed.Add((item.Entity, item.Kind.Prototype, -1));
         var result = new List<CraftItem>(listed.Count);
+        var stacks = NpcStacks(npc).ToDictionary(pair => pair.Stack.Entity, pair => pair.Stack, StringComparer.Ordinal);
         foreach (var (entity, prototype, location) in listed)
         {
             if (items(entity) is not { } host) continue;
             var broken = _durability.Records.TryGetValue(entity, out var condition) ? condition.Broken : host.Broken;
-            // Gold and ammunition are not admitted to the session's lists, so no item counts by units.
-            result.Add(new CraftItem(entity, prototype, location, broken, host.DescriptionChanged));
+            // ARC-WORLD-066: an ammunition stack counts by its units.
+            var stack = stacks.TryGetValue(entity, out var ammo) ? ammo : (SessionAmmoRecord?)null;
+            result.Add(new CraftItem(entity, prototype, location, broken, host.DescriptionChanged, stack is not null, stack?.Units ?? 0));
         }
         return result.AsReadOnly();
     }

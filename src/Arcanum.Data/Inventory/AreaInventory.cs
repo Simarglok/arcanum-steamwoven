@@ -58,10 +58,11 @@ public sealed record AreaInventoryHandle(string ObjectIdSha256, int? SourceIndex
 /// <summary>One item of the area at T0. <see cref="Holder"/> and <see cref="ListIndex"/> are set exactly for listed
 /// (inventory) items; a ground item has neither and carries its world location. All numbers are effective
 /// field values (instance, else authenticated prototype). <see cref="Name"/> is the numeric name class
-/// (<c>OBJ_F_NAME</c>), not display text; <see cref="Quantity"/> exists for gold and ammunition, <see cref="KeyId"/> for keys.</summary>
+/// (<c>OBJ_F_NAME</c>), not display text; <see cref="Quantity"/> exists for gold and ammunition, <see cref="KeyId"/> for keys, and
+/// (ARC-WORLD-066) <see cref="AmmoType"/> for ammunition (field 0x8F; 0..3 in the original's tables, not checked here).</summary>
 public sealed record AreaInventoryItem(AreaObjectKey Key, AreaItemType Type, int Prototype, AreaScope Scope, long? WorldX, long? WorldY,
     uint ObjectFlags, uint ItemFlags, int Name, int Description, int UnknownDescription, int Complexity, int Weight, int Worth,
-    int InventoryLocation, int? Quantity, int? KeyId, IReadOnlyList<AreaInventoryScript> Scripts, int? Holder, int? ListIndex)
+    int InventoryLocation, int? Quantity, int? KeyId, IReadOnlyList<AreaInventoryScript> Scripts, int? Holder, int? ListIndex, int? AmmoType = null)
 {
     public int SourceIndex => Key.SourceIndex;
     public bool InInventory => Holder is not null;
@@ -223,7 +224,8 @@ public static class AreaInventoryReader
                 Number(o, NameSlot), Number(o, DescriptionSlot), Number(o, ItemUnknownDescriptionSlot), Number(o, ItemComplexitySlot),
                 Number(o, ItemWeightSlot), Number(o, ItemWorthSlot), Number(o, ItemLocationSlot),
                 type is AreaItemType.Gold or AreaItemType.Ammo ? Number(o, ItemSecondGroupSlot + 1) : null,
-                type == AreaItemType.Key ? Number(o, ItemSecondGroupSlot) : null, Scripts(o), holderIndex, listIndex));
+                type == AreaItemType.Key ? Number(o, ItemSecondGroupSlot) : null, Scripts(o), holderIndex, listIndex,
+                type == AreaItemType.Ammo ? Number(o, ItemSecondGroupSlot + 2) : null));
         }
 
         var holders = new List<AreaInventoryHolder>(holderRows.Length);
