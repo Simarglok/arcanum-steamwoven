@@ -44,7 +44,8 @@ public partial class TerrainViewerApp
         BindAreaWorldMap(arguments);
         StartAreaAmbient(area);
         _worldGridInput = new(); PaletteScenePublished();
-        _camera!.SetAreaPlan(area.Plan, WorldViewport);
+        // ARC-RENDER-032: a map loaded as a window (the main world map) has a zoom floor.
+        _camera!.SetAreaPlan(area.Plan, WorldViewport, window: _mapWindowCentre is not null);
         _canvas!.AreaFailure = error =>
         {
             GD.Print("ARC-RENDER-007 failure stage=VisibleUpload category=" + error.GetType().Name);

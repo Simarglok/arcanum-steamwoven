@@ -118,7 +118,7 @@ Legacy axis up to 32,767 fits, at `N = 4` up to 16,383.
 item have different keys and both stay exact; an HD key keeps the integer-translation
 invariance that lets panning reuse rows. Rows hold indices only, so two items with
 equal keys may share a row whatever texture they sample. The row cache limits
-(16 MiB, 8,192 rows, 8,192-pixel rows) do not change: row length depends on the
+(16 MiB, 65,536 rows since ARC-RENDER-032, 8,192-pixel rows) do not change: row length depends on the
 screen envelope, not on the texture.
 
 ## Anchors, mirroring, wall fade, light and alpha

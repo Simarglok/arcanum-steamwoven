@@ -677,6 +677,18 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   its goal held by the new window (the far-goal hand-over was not needed on this walk; unit tests cover it), at least
   179 visible bodies after each move. Managed heap after a full collection: 265 MB at the start and 413 MB at the end
   in the Shrouded Hills window (observed values, not a growth measure; the stream smoke's windows take 368 to 435 MB).
+- **Zoom floor (ARC-RENDER-032).** On a map loaded as a window the smallest zoom is not the viewer's ordinary 1/8 but
+  the larger of 1/8 and the zoom at which the view is as wide and as tall as the window's drawn bounds
+  (`WorldZoomPolicy.WindowFloor`: the viewport size over the bounds of the 3×3 core on the tighter axis). The camera keeps
+  the view inside those bounds, so the view never reaches past what the window loads and draws; at 1/8 the screen would
+  otherwise cover 25 to 40 sectors on a large display while the window draws 9. The floor applies to every way of
+  zooming (wheel, keys, triggers, palette, Fit) and rises with a larger window; the zoom preference other maps open at
+  keeps the value asked. A whole map keeps 1/8. The HUD's window status shows the floor. Zoom is a Steamwoven viewer
+  feature, the original has none, so no parity applies. Native check in the map battery: `ARC-RENDER-032 native-smoke
+  zoom floor PASS` (asked for 1/8 in the smoke's window and in a 2560 × 1440 one: a window stops at its floor with the
+  view inside its bounds; a whole map reaches 1/8). The large view at the floor needs more nearest-index rows than the
+  renderer allowed (8,192), which made the viewer drop the scene (`AREA_NEAREST_MAPPING_BUDGET`); the row cap is now
+  65,536 ([nearest sampling](area-nearest-sampling.md)).
 - **Memory.** One window holds 1,300 to 4,900 visuals and 10 to 26 MB of CPU frames; after a full collection the
   managed heap of a run that moved the window seven times followed the window's contents (368 to 435 MB), with no
   growth from move to move; the resource stage's reload after the map battery leaves the heap 5.5 MB smaller (since
@@ -689,7 +701,10 @@ in progress ends on its committed cell); saved sector differences (`.dif`) are n
 moves is bound only if the new window holds its cell; on the same map, an F8 save or a jump point or teleport whose cell
 lies outside the shown window is refused (the cell is not admitted in this window; another map's save or exit opens the
 window around it); a click is a goal inside the shown window (a goal farther away is reached only by a host that plans
-it, as the walk smoke does with the window route). Original parity NOT_VERIFIED.
+it, as the walk smoke does with the window route); far out, the view is bounded by the window (the zoom floor):
+there is no overview of the terrain beyond it (a terrain overview from `terrain.mes` colours or thinned chunks is a
+follow-up, not started), and the corners of the window's bounding box outside its diamond stay empty, as at any map's
+edge. Original parity NOT_VERIFIED.
 
 ## World map (ARC-UI-048)
 

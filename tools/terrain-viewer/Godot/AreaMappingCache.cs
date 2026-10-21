@@ -11,11 +11,15 @@ internal readonly record struct AreaMappingKey(AreaNearestRowKey X, AreaNearestR
 /// current submission are never evicted; unused rows are evicted least recently used
 /// first. Live row payload stays within <see cref="AreaDrawItem.MaxMappingBytes"/> and the
 /// row count within <see cref="MaxRows"/>; eviction then frees down to three quarters
-/// of both so that a zoom change does not evict once per miss.</summary>
+/// of both so that a zoom change does not evict once per miss. ARC-RENDER-032: the row count
+/// allows every command of a main-map window at once (at most about 42,000: 36,864 tiles and
+/// the bodies), since far out on a large display nearly every visible item has its own row
+/// (2560 × 1440 at the window's zoom floor needed more than 8,192); rows are small, so the byte
+/// budget still binds the memory.</summary>
 internal sealed class AreaMappingCache : IDisposable
 {
     internal const int MaxRowLength = 8192;
-    internal const int MaxRows = 8192;
+    internal const int MaxRows = 65536;
     private sealed class Entry(ImageTexture texture, long bytes)
     {
         public ImageTexture Texture { get; } = texture;

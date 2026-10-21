@@ -15,6 +15,16 @@ public static class WorldZoomPolicy
         var next = Absolute(current, current * factor);
         return current < 1 && next >= 1 || current > 1 && next <= 1 ? 1 : next;
     }
+    /// <summary>ARC-RENDER-032: the smallest zoom of a map loaded as a window (the main world map): the view holds no more than
+    /// the window's drawn bounds on either axis, so it never shows past what is loaded (the camera keeps the view inside the
+    /// bounds), and never less than the ordinary 1/8. A Steamwoven viewer rule: the original has no zoom.</summary>
+    public static double WindowFloor(double viewportWidth, double viewportHeight, double boundsWidth, double boundsHeight)
+    {
+        if (!(viewportWidth > 0 && viewportHeight > 0 && boundsWidth > 0 && boundsHeight > 0)
+            || !double.IsFinite(viewportWidth) || !double.IsFinite(viewportHeight) || !double.IsFinite(boundsWidth) || !double.IsFinite(boundsHeight))
+            throw new ArgumentOutOfRangeException(nameof(viewportWidth));
+        return Math.Clamp(Math.Max(viewportWidth / boundsWidth, viewportHeight / boundsHeight), .125, 8);
+    }
     public static double Advance(double current, double drive, double delta)
     {
         if (!IsStoredZoom(current) || !double.IsFinite(drive) || Math.Abs(drive) > 1
