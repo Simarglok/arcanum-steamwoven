@@ -166,17 +166,20 @@ public partial class TerrainViewerApp
         {
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal && _conversationHost.Speakers.Count == 0, "closed at publication; the synthetic core has no dialog NPC");
             Click(GetViewport().GetVisibleRect().Size / 2); Press(Key.T);
-            TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "LMB off a dialog NPC and the reserved T key do not open a dialog");
+            TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "LMB off a dialog NPC and T (schematics, refused without a hero) do not open a dialog");
             // A row standing in for a speaker; the synthetic module is not inside a game folder, so there is no script
             // content (ARC-SCRIPT-011) and the start is a typed status.
             var row = _readyArea.Snapshot.Objects[0];
-            BeginConversation(new AreaSpeaker(0, row, 1, row.WorldX ?? 0, row.WorldY ?? 0));
+            // ARC-WORLD-048: no host lists the stand-in, so the self-test names it as its own (production routing refuses it).
+            _selfTestStandInSpeaker = new AreaSpeaker(0, row, 1, row.WorldX ?? 0, row.WorldY ?? 0);
+            BeginConversation(_selfTestStandInSpeaker);
             TerrainViewerSelfTest.Require(ConversationOpen && WorldModal && !_worldGate.IsOpen && _conversationPanel!.Conversation is null
                 && (_conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryError))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryNotAdmitted))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.GenericGreeting))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.SourceChanged))
-                    || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.ContentUnavailable))), "the modal panel opens with the typed start status");
+                    || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.ContentUnavailable))),
+                "the modal panel opens with the typed start status: " + (_conversationPanel?.OutcomeForSelfTest ?? "no panel") + $" open={ConversationOpen} modal={WorldModal} gate={_worldGate.IsOpen}");
             foreach (var key in new[] { Key.Escape, Key.Key1, Key.Enter, Key.T }) Press(key);
             TerrainViewerSelfTest.Require(ConversationOpen, "keyboard key events are not redirected to dialog actions");
             // Polled keyboard levels too: full simulated frames with held Escape/Enter/Down-equivalent levels.
@@ -196,6 +199,6 @@ public partial class TerrainViewerApp
             _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "Close ends the modal surface");
         }
-        finally { _worldFocusSimulationForSelfTest = simulatedFocus; }
+        finally { _worldFocusSimulationForSelfTest = simulatedFocus; _selfTestStandInSpeaker = null; }
     }
 }

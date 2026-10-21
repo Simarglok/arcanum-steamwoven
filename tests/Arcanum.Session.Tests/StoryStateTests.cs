@@ -61,7 +61,7 @@ public sealed class StoryStateTests
     public void AQuestAlreadyEndedForEveryoneEndsTheSameWayForThePc()
     {
         var text = GoldenJson.Replace(EmptyStory,
-            ",\"story\":{\"quests\":[],\"globalQuests\":[{\"quest\":1003,\"state\":\"Completed\"},{\"quest\":1004,\"state\":\"Botched\"}],\"rumors\":[],\"quelledRumors\":[]" + NoReputations + "}");
+            ",\"story\":{\"quests\":[],\"globalQuests\":[{\"quest\":1003,\"state\":\"Completed\"},{\"quest\":1004,\"state\":\"Botched\"}],\"rumors\":[],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0" + NoReputations + "}");
         using var owner = Restore(Decode(text));
         Changed(owner.SetQuestState(owner.Version, 1003, SessionQuestState.Mentioned), owner, 3);
         Assert.AreEqual(new SessionQuest(1003, SessionQuestState.OtherCompleted, false, StartMs), owner.QueryQuest(1003));
@@ -80,7 +80,7 @@ public sealed class StoryStateTests
             Assert.AreEqual(failure, result.Failure, story);
         }
         string Story(string quests, string globals = "", string rumors = "", string quelled = "") =>
-            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}],\"quelledRumors\":[{quelled}]" + NoReputations + "}";
+            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}],\"quelledRumors\":[{quelled}],\"knownAreas\":[],\"lastArea\":0" + NoReputations + "}";
 
         Refused(Story("{\"quest\":1001,\"state\":\"Completed\",\"botched\":true,\"timestampMs\":1}"), GameSessionFailure.InvalidQuestState);
         Refused(Story("{\"quest\":1001,\"state\":\"Completed\",\"botched\":false,\"timestampMs\":1}"), GameSessionFailure.InvalidQuestState);
@@ -149,7 +149,7 @@ public sealed class StoryStateTests
 
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"story\":{\"quests\":[{\"quest\":1001,\"state\":\"Accepted\",\"botched\":false,\"timestampMs\":54000000}]," +
-            "\"globalQuests\":[],\"rumors\":[{\"rumor\":1200,\"timestampMs\":54000000}],\"quelledRumors\":[]" + NoReputations + "}" + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoSound + NoEvents + ",\"lighting\":null}");
+            "\"globalQuests\":[],\"rumors\":[{\"rumor\":1200,\"timestampMs\":54000000}],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0" + NoReputations + "}" + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoSound + NoEvents + ",\"lighting\":null}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(owner.QueryQuest(1001), restored.QueryQuest(1001));
         Assert.AreEqual(StartMs, restored.QueryRumor(1200));
@@ -171,12 +171,12 @@ public sealed class StoryStateTests
         }
 
         string Story(string quests = "", string globals = "", string rumors = "", string quelled = "") =>
-            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}],\"quelledRumors\":[{quelled}]" + NoReputations + "}";
+            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}],\"quelledRumors\":[{quelled}],\"knownAreas\":[],\"lastArea\":0" + NoReputations + "}";
         string Quest(int quest, string state = "Accepted", string botched = "false", string time = "1") =>
             $"{{\"quest\":{quest},\"state\":\"{state}\",\"botched\":{botched},\"timestampMs\":{time}}}";
 
         Fails("", SnapshotDecodeFailure.MissingField, "$.story");
-        Fails(",\"story\":{\"quests\":[],\"rumors\":[],\"quelledRumors\":[]}", SnapshotDecodeFailure.MissingField, "$.story.globalQuests");
+        Fails(",\"story\":{\"quests\":[],\"rumors\":[],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0}", SnapshotDecodeFailure.MissingField, "$.story.globalQuests");
         Fails(",\"story\":{\"quests\":[],\"globalQuests\":[],\"rumors\":[]}", SnapshotDecodeFailure.MissingField, "$.story.quelledRumors");
         Fails(Story(quelled: "1001,1000"), SnapshotDecodeFailure.NotCanonical, "$.story.quelledRumors[1]");
         Fails(Story(quelled: "1001,1001"), SnapshotDecodeFailure.NotCanonical, "$.story.quelledRumors[1]");

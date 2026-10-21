@@ -10,6 +10,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Skills;
 
@@ -50,16 +51,16 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] LightingFields = ["schemeId", "hour"];
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
-    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "reputations"];
+    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea", "reputations"];
     private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
     private static readonly string[] RumorFields = ["rumor", "timestampMs"];
     private static readonly string[] ReputationFields = ["reputation", "timestampMs"];
     private static readonly string[] PartyFields = ["followers", "others"];
-    private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut"];
-    private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted"];
+    private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut", "loyalty"];
+    private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted", "loyalty"];
     private static readonly string[] HeroFields = ["prototype", "race", "gender", "stats", "level", "experience", "unspentPoints",
-        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills"];
+        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills", "fatePoints", "armedFates"];
     private static readonly string[] EffectFields = ["effect", "modifiers"];
     private static readonly string[] InnateSkillFields = ["cause", "skill", "operator", "value"];
     // Skill names in Skill order (ARC-SKILLS-002), the innate skill change's causes.
@@ -219,6 +220,10 @@ public static class GameSessionSnapshotCodec
             w.WriteStartArray("quelledRumors");
             foreach (var rumor in story.QuelledRumors) w.WriteNumberValue(rumor);
             w.WriteEndArray();
+            w.WriteStartArray("knownAreas");
+            foreach (var area in story.KnownAreas) w.WriteNumberValue(area);
+            w.WriteEndArray();
+            w.WriteNumber("lastArea", story.LastArea);
             w.WriteStartArray("reputations");
             foreach (var reputation in story.Reputations)
             {
@@ -238,6 +243,7 @@ public static class GameSessionSnapshotCodec
                 w.WriteString("entity", follower.Entity);
                 w.WriteBoolean("forced", follower.Forced);
                 w.WriteBoolean("spreadOut", follower.SpreadOut);
+                w.WriteNumber("loyalty", (int)follower.Loyalty);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -249,6 +255,7 @@ public static class GameSessionSnapshotCodec
                 w.WriteString("standing", StandingName(other.Standing));
                 w.WriteBoolean("spreadOut", other.SpreadOut);
                 w.WriteBoolean("jilted", other.Jilted);
+                w.WriteNumber("loyalty", (int)other.Loyalty);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -290,6 +297,8 @@ public static class GameSessionSnapshotCodec
                     w.WriteEndObject();
                 }
                 w.WriteEndArray();
+                w.WriteNumber("fatePoints", hero.Fate.Points);
+                w.WriteNumber("armedFates", hero.Fate.Armed);
                 w.WriteEndObject();
             }
             else w.WriteNull("hero");
@@ -958,6 +967,15 @@ public static class GameSessionSnapshotCodec
             quelled[i] = Int(items[i], path, SessionStoryLimits.FirstRumor, SessionStoryLimits.LastRumor);
             if (i > 0 && quelled[i] <= quelled[i - 1]) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
+        items = Array(f["knownAreas"], p + ".knownAreas", SessionStoryLimits.LastArea);
+        var areas = new int[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.knownAreas[{i}]";
+            areas[i] = Int(items[i], path, 1, SessionStoryLimits.LastArea);
+            if (i > 0 && areas[i] <= areas[i - 1]) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+        }
+        var last = Int(f["lastArea"], p + ".lastArea", 0, SessionStoryLimits.LastArea);
         // ARC-WORLD-044: the PC's reputations in the order gained (not sorted): numbers in the reputation range, none repeated,
         // times never decreasing.
         items = Array(f["reputations"], p + ".reputations", SessionStoryLimits.MaxReputations);
@@ -973,7 +991,7 @@ public static class GameSessionSnapshotCodec
             if (i > 0 && reputations[i].TimestampMs < reputations[i - 1].TimestampMs)
                 throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".timestampMs");
         }
-        return new(quests, globals, rumors, quelled, reputations);
+        return new(quests, globals, rumors, quelled, areas, last, reputations);
     }
 
     private static SessionPartyState Party(JsonElement element)
@@ -991,7 +1009,7 @@ public static class GameSessionSnapshotCodec
             // The array order is meaningful, so it is kept; an entity may appear once in the whole party.
             if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             followers[i] = new(entity, CompanionStanding.Following, Bool(item["forced"], path + ".forced"),
-                Bool(item["spreadOut"], path + ".spreadOut"), false);
+                Bool(item["spreadOut"], path + ".spreadOut"), false, Loyalty(item["loyalty"], path + ".loyalty"));
         }
         items = Array(f["others"], p + ".others", GameSessionLimits.PolicyMaxCompanions);
         if (followers.Length + items.Length > GameSessionLimits.PolicyMaxCompanions)
@@ -1011,7 +1029,7 @@ public static class GameSessionSnapshotCodec
                 _ => throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".standing"),
             };
             var record = new SessionCompanion(entity, standing, false, Bool(item["spreadOut"], path + ".spreadOut"),
-                Bool(item["jilted"], path + ".jilted"));
+                Bool(item["jilted"], path + ".jilted"), Loyalty(item["loyalty"], path + ".loyalty"));
             // Jilted only while free, and a free NPC without a flag is not listed.
             if ((standing == CompanionStanding.Waiting && record.Jilted) || record.IsBaseline)
                 throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".jilted");
@@ -1019,6 +1037,9 @@ public static class GameSessionSnapshotCodec
         }
         return new(followers, others);
     }
+
+    // ARC-WORLD-045: the four loyalty marks as their bit sum.
+    private static CompanionLoyalty Loyalty(JsonElement element, string path) => (CompanionLoyalty)Int(element, path, 0, (int)CompanionLoyalty.All);
 
     // Structure and names only; ranges, effect validity and stats within the race's limits are Restore's (InvalidHero).
     private static SessionHeroState? Hero(JsonElement element)
@@ -1039,7 +1060,9 @@ public static class GameSessionSnapshotCodec
             Int(f["level"], p + ".level", int.MinValue, int.MaxValue), Int(f["unspentPoints"], p + ".unspentPoints", int.MinValue, int.MaxValue),
             Int(f["alignment"], p + ".alignment", int.MinValue, int.MaxValue), Effect(f["raceEffect"], p + ".raceEffect"),
             Effect(f["genderEffect"], p + ".genderEffect"), Int(f["experience"], p + ".experience", int.MinValue, int.MaxValue),
-            HeroAdvancement(f["advancement"], p + ".advancement"), InnateSkills(f["innateSkills"], p + ".innateSkills"));
+            HeroAdvancement(f["advancement"], p + ".advancement"), InnateSkills(f["innateSkills"], p + ".innateSkills"),
+            new FateState(Int(f["fatePoints"], p + ".fatePoints", int.MinValue, int.MaxValue),
+                Int(f["armedFates"], p + ".armedFates", int.MinValue, int.MaxValue)));
     }
 
     // Shapes only; the count, magnitudes and divisors are the hero's import (InvalidHero).

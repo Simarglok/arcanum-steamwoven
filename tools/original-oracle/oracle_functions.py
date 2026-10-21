@@ -9,7 +9,9 @@ cost, the cheat flag and a recording payment stub; for the effectiveness functio
 optional target critter with their skill levels, the target's perception, intelligence and Magnetic Inversion flag, the
 source's extraordinary intelligence, the local PC and the game difficulty; for the spell learn of ARC-MAGIC-004 one critter's
 college rank, level, intelligence, willpower and magick points, the spell's willpower minimum and recording rank and stat
-setters); the same model becomes the inputs of the OriginalExe tests. Importing this module does not need Unicorn.
+setters; for the fate functions of ARC-WORLD-054 one PC with its fate points and armed fates and recording stubs of the stat,
+field, hit-point and fatigue writes); the same model becomes the inputs of the OriginalExe tests. Importing this module does not
+need Unicorn.
 """
 from __future__ import annotations
 
@@ -75,6 +77,26 @@ STAT_IN, STAT_PE = 4, 5
 TECH_SKILLS = 4
 TARGET = (0x5EED0002, 0x00000042)  # the second fictitious object (the target)
 OTHER_PC = (0x5EED0003, 0x00000042)
+
+# Globals, record and run fields and service functions used by the resistance and its predictor (ARC-MAGIC-005).
+RUN_POINTER = 0x5E75F0          # the magic run being processed
+RECORD_POINTER = 0x5E7598       # its spell record
+TARGET_HANDLE = 0x5E6D48        # the current target (low, high at +4)
+RESIST_POINTER = 0x5E7620       # the record's Resist: pair (stat, modifier)
+TARGET_TYPE = 0x5E75AC          # the current target's object type
+FATE_MAXIMIZED = 0x5E75A8       # the action is fate-maximised
+DISPLAY_MARGIN = 0x5E75A0       # the margin shown for the target (written)
+RUN_SPELL, RUN_ACTION, RUN_PARENT, RUN_FLAGS, RUN_MARGIN = 0x04, 0x08, 0x58, 0x13C, 0x144
+RECORD_RESIST, RECORD_PERIOD, RECORD_FLAGS = 0x0C, 0x18, 0x34
+FLAG_AGGRESSIVE, FLAG_TECHNOLOGY, FLAG_DAMAGING, RUN_UNRESISTABLE = 0x2, 0x4, 0x80, 0x10
+FIELD_CRITTER_FLAGS2, NO_DISINTEGRATE = 0xDB, 0x2000
+FIELD_RESISTANCES, MAGIC_RESISTANCE = 0x1F, 4
+STAT_APTITUDE = 16
+FATE_USE = 0x4F5270             # consume an armed fate: (handle low, handle high, kind) -> 1 consumed / 0; kind 4 "save against magick"
+FATE_SAVE_AGAINST_MAGICK = 4
+RANDOM = 0x4CEF00               # random integer: (min, max) -> min..max
+NOTIFY_AI = 0x453F20            # tell the target's AI of a spell it shrugged off: (parent low, parent high, target low, target high)
+UNTOUCHED = 0x7FFF0001          # the margins before the call: left as they are when the function returns early
 SKILL_FLAGS = (0x5B6F64, 0x5B6F64 + 4 * (BASIC_SKILLS + TECH_SKILLS))
 OPPOSED_TABLE = (0x5B7044, 0x5B7044 + 4 * 19)
 BASIC_EFFECTIVENESS_CODE = ((0x4C62E0, 0x4C6410), (0x4C6410, 0x4C64B0))
@@ -95,13 +117,24 @@ LEVEL_MINIMA = (0x5B5770, 0x5B5770 + 20)        # 1, 1, 5, 10, 15
 COLLEGE_SPELLS = 80
 SPELL_LEARN_CODE = ((0x4B1790, 0x4B1950), (0x4B1750, 0x4B1790), (0x4B1650, 0x4B1660), (0x4B1AB0, 0x4B1B90), (0x4502E0, 0x450340))
 
+# Service functions, fields and tables used by the fate functions (ARC-WORLD-054).
+FIELD_SETTER = 0x406D40         # object field write: (handle low, handle high, field, value); a recording stub
+HP_DAMAGE_SET = 0x43D530        # hit-point damage write: (handle low, handle high, value); a recording stub
+FATIGUE_DAMAGE_SET = 0x45D5A0   # fatigue damage write: (handle low, handle high, value); a recording stub
+FIELD_FATE_FLAGS = 0xFE
+STAT_FATE_POINTS, STAT_POISON = 20, 24
+FATE_KINDS = 12
+FATE_MASKS = (0x5BC48C, 0x5BC48C + 4 * FATE_KINDS)
+FATE_CALLBACK = 0x603D48        # the fate window's refresh callback; null in the world model
+FATE_IMMEDIATE_CODE = (0x4F52D0, 0x4F5320)
+
 
 @dataclass(frozen=True)
 class FunctionSpec:
     address: int
     name: str                          # Steamwoven's own name
     code: tuple[tuple[int, int], ...]  # allowed code ranges, [start, end), the function's own first
-    model: str                         # "experience", "bonus", "skill-level", "training-set", "spell-cost" or "effectiveness"
+    model: str                         # "experience", "bonus", "skill-level", "training-set", "spell-cost", "effectiveness", "spell-learn" or "fate"
 
     @property
     def key(self) -> str:
@@ -117,10 +150,16 @@ FUNCTIONS: dict[int, FunctionSpec] = {spec.address: spec for spec in (
     FunctionSpec(0x4C62E0, "basic-skill-effectiveness", BASIC_EFFECTIVENESS_CODE, "effectiveness"),
     FunctionSpec(0x4C6410, "opposed-skill-effectiveness", ((0x4C6410, 0x4C64B0),), "effectiveness"),
     FunctionSpec(0x4C69F0, "tech-skill-effectiveness", ((0x4C69F0, 0x4C6AF0),), "effectiveness"),
+    FunctionSpec(0x4F5090, "fate-armed", ((0x4F5090, 0x4F50C0),), "fate"),
+    FunctionSpec(0x4F50C0, "fate-arm", ((0x4F50C0, 0x4F51B0), FATE_IMMEDIATE_CODE), "fate"),
+    FunctionSpec(0x4F51B0, "fate-undo", ((0x4F51B0, 0x4F5270),), "fate"),
+    FunctionSpec(0x4F5270, "fate-use", ((0x4F5270, 0x4F52D0),), "fate"),
     FunctionSpec(0x4507D0, "spell-run-cost", ((0x4507D0, 0x4508A0),), "spell-cost"),
     FunctionSpec(0x4508A0, "spell-check-cost", ((0x4508A0, 0x450940),), "spell-cost"),
     FunctionSpec(0x4B1660, "spell-cast-cost", ((0x4B1660, 0x4B16C0), COST_GETTER_CODE), "spell-cost"),
     FunctionSpec(0x4B1790, "spell-learn", SPELL_LEARN_CODE, "spell-learn"),
+    FunctionSpec(0x4537B0, "spell-resist", ((0x4537B0, 0x453B20),), "spell-resist"),
+    FunctionSpec(0x453B20, "spell-fail-chance", ((0x453B20, 0x453CC0),), "spell-fail-chance"),
 )}
 
 
@@ -511,6 +550,196 @@ def spell_learn_stubs(case: SpellLearnCase, recorder: LearnRecorder) -> dict:
             STAT_GETTER: stat, STAT_BASE_GETTER: base, STAT_SETTER: set_stat, SPELL_ARRAY_SETTER: set_rank, IS_PLAYER: player}
 
 
+@dataclass
+class FateCase:
+    """The fate functions' one PC: the kind asked (0..11), its fate points (stat 20) and its armed fate flags (field 0xFE)."""
+    kind: int
+    points: int
+    armed: int
+
+
+def draw_fate_case(rng: random.Random) -> FateCase:
+    """A kind 0..11 (the full heal more often), points mostly 0..3 with the edges 0, 1, 99 and 100, armed flags with the asked
+    kind's bit half of the time among any other of the eleven bits."""
+    kind = 0 if rng.random() < 0.15 else rng.randrange(FATE_KINDS)
+    points = rng.choice((0, 1, 99, 100)) if rng.random() < 0.4 else rng.randint(0, 100) if rng.random() < 0.3 else rng.randint(0, 3)
+    armed = rng.getrandbits(11)
+    if kind > 0:
+        bit = 1 << (kind - 1)
+        armed = armed | bit if rng.random() < 0.5 else armed & ~bit
+    return FateCase(kind, points, armed)
+
+
+@dataclass
+class FateRecorder:
+    """What a fate run wrote: the field writes (field, value), the stat writes (stat, value), the hit-point and fatigue
+    damage writes."""
+    fields: list[tuple[int, int]]
+    stats: list[tuple[int, int]]
+    hit_points: list[int]
+    fatigue: list[int]
+
+
+def fate_stubs(case: FateCase, recorder: FateRecorder) -> dict:
+    """Stubs answering from one PC: its fate flags, fate points and single-player authority; every write is recorded. Any other
+    object, field or stat is rejected."""
+    from oracle_emu import StubRejected, to_signed
+
+    def same(argument) -> None:
+        if (argument(0), argument(1)) != HANDLE:
+            raise StubRejected(f"handle {argument(0):#x}:{argument(1):#x} is not the world model's object")
+
+    def field(argument) -> int:
+        same(argument)
+        if argument(2) != FIELD_FATE_FLAGS:
+            raise StubRejected(f"field {argument(2):#x} is not in the world model")
+        return case.armed
+
+    def set_field(argument) -> int:
+        same(argument)
+        if argument(2) != FIELD_FATE_FLAGS:
+            raise StubRejected(f"field write {argument(2):#x} is not in the world model")
+        recorder.fields.append((argument(2), argument(3)))
+        return 0
+
+    def stat(argument) -> int:
+        same(argument)
+        if argument(2) != STAT_FATE_POINTS:
+            raise StubRejected(f"stat {argument(2)} is not in the world model")
+        return case.points
+
+    def set_stat(argument) -> int:
+        same(argument)
+        if argument(2) not in (STAT_FATE_POINTS, STAT_POISON):
+            raise StubRejected(f"stat write {argument(2)} is not in the world model")
+        recorder.stats.append((argument(2), to_signed(argument(3))))
+        return 0
+
+    def damage(target: list[int]):
+        def answer(argument) -> int:
+            same(argument)
+            target.append(to_signed(argument(2)))
+            return 0
+        return answer
+
+    return {FIELD_GETTER: field, FIELD_SETTER: set_field, STAT_BASE_GETTER: stat, STAT_SETTER: set_stat, NETWORK_GATE: lambda argument: 1,
+            HP_DAMAGE_SET: damage(recorder.hit_points), FATIGUE_DAMAGE_SET: damage(recorder.fatigue)}
+
+@dataclass
+class ResistCase:
+    """The resistance's one run, record and target: the spell, the action (0 BEGIN), the unresistable run flag, the
+    fate-maximised flag, the record's technology, damaging and aggressive flags, maintenance period and Resist: pair (stat −1
+    for none), the target's object type, whether it is the run's parent, its "no disintegrate" flag, stored magic resistance,
+    aptitude, Resist: stat value and whether that stat is extraordinary, whether an armed fate fires, and the pre-drawn d100 and
+    d20."""
+    spell: int
+    action: int
+    unresistable: int
+    fate_maximized: int
+    technology: int
+    damaging: int
+    aggressive: int
+    period: int
+    resist_stat: int
+    modifier: int
+    kind: int
+    caster: int
+    no_disintegrate: int
+    resistance: int
+    aptitude: int
+    stat_value: int
+    extraordinary: int
+    fate: int
+    d100: int
+    d20: int
+
+
+def draw_resist_case(rng: random.Random) -> ResistCase:
+    """BEGIN mostly; Disintegrate (34) often; a save of willpower or another primary stat or none; stored resistances 0..95
+    mostly (some negative or above 100); aptitudes over the whole range; stat values around the d20."""
+    roll = rng.random()
+    resist_stat = -1 if roll < 0.3 else STAT_WILLPOWER if roll < 0.65 else rng.choice((0, 1, 2, 3, 4, 5, 7))
+    resistance = rng.randint(0, 95) if rng.random() < 0.85 else rng.choice((-20, -1, 100, 120, 200))
+    return ResistCase(spell=34 if rng.random() < 0.15 else rng.randrange(SPELL_RECORDS),
+                      action=0 if rng.random() < 0.85 else rng.choice((1, 2)), unresistable=int(rng.random() < 0.05),
+                      fate_maximized=int(rng.random() < 0.2), technology=int(rng.random() < 0.05), damaging=int(rng.random() < 0.4),
+                      aggressive=int(rng.random() < 0.6), period=rng.choice((0, 0, 0, 1, 5, -1)), resist_stat=resist_stat,
+                      modifier=rng.randint(-6, 6), kind=rng.choice((15, 16, 16)) if rng.random() < 0.9 else rng.choice((0, 5, 9)),
+                      caster=int(rng.random() < 0.1), no_disintegrate=int(rng.random() < 0.3), resistance=resistance,
+                      aptitude=rng.randint(-100, 100), stat_value=rng.randint(1, 25), extraordinary=int(rng.random() < 0.15),
+                      fate=int(rng.random() < 0.3), d100=rng.randint(1, 100), d20=rng.randint(1, 20))
+
+
+@dataclass
+class ResistRecorder:
+    """The service calls of one run: the random calls (min, max), the fate uses (kind) and the AI notifications."""
+    rolls: list[tuple[int, int]]
+    fates: list[int]
+    notified: int = 0
+
+
+def resist_stubs(case: ResistCase, recorder: ResistRecorder) -> dict:
+    """Stubs answering from one target (and, for the AI notification, its parent): object type, critter flags 2, stored magic
+    resistance, aptitude, the Resist: stat, the extraordinary test, the fate use and the random range; anything else is
+    rejected. The predictor reads the same facts without the fate use or the notification."""
+    from oracle_emu import StubRejected
+
+    def target(argument) -> None:
+        if (argument(0), argument(1)) != TARGET:
+            raise StubRejected(f"handle {argument(0):#x}:{argument(1):#x} is not the world model's target")
+
+    def field(argument) -> int:
+        target(argument)
+        if argument(2) == FIELD_TYPE:
+            return case.kind
+        if argument(2) == FIELD_CRITTER_FLAGS2:
+            return NO_DISINTEGRATE if case.no_disintegrate else 0
+        raise StubRejected(f"field {argument(2):#x} is not in the world model")
+
+    def resistances(argument) -> int:
+        target(argument)
+        if (argument(2), argument(3)) != (FIELD_RESISTANCES, MAGIC_RESISTANCE):
+            raise StubRejected(f"array {argument(2):#x}[{argument(3)}] is not in the world model")
+        return case.resistance & 0xFFFFFFFF
+
+    def stat(argument) -> int:
+        target(argument)
+        if argument(2) == STAT_APTITUDE:
+            return case.aptitude & 0xFFFFFFFF
+        if case.resist_stat != -1 and argument(2) == case.resist_stat:
+            return case.stat_value
+        raise StubRejected(f"stat {argument(2)} is not in the world model")
+
+    def extraordinary(argument) -> int:
+        target(argument)
+        if argument(2) != case.resist_stat:
+            raise StubRejected(f"extraordinary stat {argument(2)} is not the Resist: stat")
+        return case.extraordinary
+
+    def fate(argument) -> int:
+        target(argument)
+        recorder.fates.append(argument(2))
+        return case.fate
+
+    def rolled(argument) -> int:
+        bounds = (argument(0), argument(1))
+        recorder.rolls.append(bounds)
+        if bounds == (1, 100):
+            return case.d100
+        if bounds == (1, 20):
+            return case.d20
+        raise StubRejected(f"random range {bounds} is not in the world model")
+
+    def notify(argument) -> int:
+        if (argument(0), argument(1)) != (TARGET if case.caster else HANDLE) or (argument(2), argument(3)) != TARGET:
+            raise StubRejected("notification of other objects")
+        recorder.notified += 1
+        return 0
+
+    return {FIELD_GETTER: field, ARRAY_GETTER: resistances, STAT_GETTER: stat, EXTRAORDINARY: extraordinary, FATE_USE: fate,
+            RANDOM: rolled, NOTIFY_AI: notify}
+
+
 # --- runs ------------------------------------------------------------------------------------------------------------
 
 def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str, unicorn_version: str,
@@ -645,6 +874,99 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
                 progress(case_number)
         document.update(fields=["spell", "force", "type", "known", "level", "in", "wp", "magick", "loaded", "minimum", "result",
                                 "writes", "rankWritten", "magickWritten"])
+    elif spec.model == "fate":
+        from oracle_emu import RunFailure
+        emulator.set_global(FATE_CALLBACK, 0)
+        readable = (Range(*FATE_MASKS), Range(FATE_CALLBACK, FATE_CALLBACK + 4))
+        for case_number in range(count):
+            case = draw_fate_case(rng)
+            recorder = FateRecorder([], [], [], [])
+            result = emulator.call(spec.address, (*HANDLE, case.kind), code=code, stubs=fate_stubs(case, recorder), readable=readable)
+            if len(recorder.fields) > 1 or len(recorder.hit_points) > 1 or len(recorder.fatigue) > 1 or len(recorder.stats) > 2:
+                raise RunFailure("stub", f"unexpected writes {recorder}")
+            points = next((value for number, value in recorder.stats if number == STAT_FATE_POINTS), -1)
+            poison = next((value for number, value in recorder.stats if number == STAT_POISON), -1)
+            flags = recorder.fields[0][1] if recorder.fields else -1
+            cases.append([case.kind, case.points, case.armed, result, flags, points, poison,
+                          recorder.hit_points[0] if recorder.hit_points else -1, recorder.fatigue[0] if recorder.fatigue else -1])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["kind", "points", "armed", "result", "flagsWritten", "pointsWritten", "poisonWritten", "hitPointDamageWritten",
+                                "fatigueDamageWritten"])
+    elif spec.model == "spell-resist":
+        from oracle_emu import RunFailure, to_signed
+        run_address = emulator.write_heap(b"\0" * 0x200, 0)
+        record_address = emulator.write_heap(b"\0" * 0x40, 0x200)
+        resist_address = emulator.write_heap(b"\0" * 8, 0x240)
+        for address, value in ((RUN_POINTER, run_address), (RECORD_POINTER, record_address), (RESIST_POINTER, resist_address),
+                               (TARGET_HANDLE, TARGET[0]), (TARGET_HANDLE + 4, TARGET[1])):
+            emulator.set_global(address, value)
+        for case_number in range(count):
+            case = draw_resist_case(rng)
+            parent = TARGET if case.caster else HANDLE
+            flags = (FLAG_TECHNOLOGY if case.technology else 0) | (FLAG_DAMAGING if case.damaging else 0) | (FLAG_AGGRESSIVE if case.aggressive else 0)
+            emulator.write_heap(struct.pack("<ii", case.spell, case.action), RUN_SPELL)
+            emulator.write_heap(struct.pack("<II", *parent), RUN_PARENT)
+            emulator.write_heap(struct.pack("<I", RUN_UNRESISTABLE if case.unresistable else 0), RUN_FLAGS)
+            emulator.write_heap(struct.pack("<I", UNTOUCHED), RUN_MARGIN)
+            emulator.write_heap(struct.pack("<i", case.period), 0x200 + RECORD_PERIOD)
+            emulator.write_heap(struct.pack("<I", flags), 0x200 + RECORD_FLAGS)
+            emulator.write_heap(struct.pack("<ii", case.resist_stat, case.modifier), 0x240)
+            emulator.set_global(TARGET_TYPE, case.kind)
+            emulator.set_global(FATE_MAXIMIZED, case.fate_maximized)
+            emulator.set_global(DISPLAY_MARGIN, UNTOUCHED)
+            recorder = ResistRecorder([], [])
+            readable = tuple(Range(a, a + 4) for a in (RUN_POINTER, RECORD_POINTER, RESIST_POINTER, TARGET_HANDLE, TARGET_HANDLE + 4,
+                                                        TARGET_TYPE, FATE_MAXIMIZED, run_address + RUN_SPELL, run_address + RUN_ACTION,
+                                                        run_address + RUN_PARENT, run_address + RUN_PARENT + 4, run_address + RUN_FLAGS,
+                                                        record_address + RECORD_PERIOD, record_address + RECORD_FLAGS,
+                                                        resist_address, resist_address + 4))
+            writable = (Range(DISPLAY_MARGIN, DISPLAY_MARGIN + 4), Range(run_address + RUN_MARGIN, run_address + RUN_MARGIN + 4))
+            result = emulator.call(spec.address, (), code=code, stubs=resist_stubs(case, recorder), readable=readable, writable=writable)
+            if len(recorder.rolls) > 2 or len(recorder.fates) > 1 or recorder.notified > 1 or any(k != FATE_SAVE_AGAINST_MAGICK for k in recorder.fates):
+                raise RunFailure("stub", f"unexpected calls {recorder}")
+            rolls = "".join("d" if bounds == (1, 100) else "s" for bounds in recorder.rolls)
+            if rolls not in ("", "d", "s", "ds"):
+                raise RunFailure("stub", f"unexpected roll order {recorder.rolls}")
+            cases.append([case.spell, case.action, case.unresistable, case.fate_maximized, case.technology, case.damaging, case.aggressive,
+                          case.period, case.resist_stat, case.modifier, case.kind, case.caster, case.no_disintegrate, case.resistance,
+                          case.aptitude, case.stat_value, case.extraordinary, case.fate, case.d100, case.d20, result,
+                          to_signed(emulator.read_u32(run_address + RUN_MARGIN)), to_signed(emulator.read_u32(DISPLAY_MARGIN)),
+                          {"": 0, "d": 1, "s": 2, "ds": 3}[rolls], len(recorder.fates), recorder.notified])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["spell", "action", "unresistable", "fateMaximized", "technology", "damaging", "aggressive", "period",
+                                "resistStat", "modifier", "type", "caster", "noDisintegrate", "resistance", "aptitude", "statValue",
+                                "extraordinary", "fate", "d100", "d20", "result", "margin", "displayMargin", "rolls", "fateUses", "notified"])
+    elif spec.model == "spell-fail-chance":
+        from oracle_emu import RunFailure
+        table = emulator.write_heap(b"\0" * (SPELL_RECORD * SPELL_RECORDS))
+        emulator.set_global(SPELL_TABLE_POINTER, table)
+        for case_number in range(count):
+            case = draw_resist_case(rng)
+            caster = TARGET if case.caster else HANDLE
+            flags = (FLAG_TECHNOLOGY if case.technology else 0) | (FLAG_DAMAGING if case.damaging else 0) | (FLAG_AGGRESSIVE if case.aggressive else 0)
+            record = table + SPELL_RECORD * case.spell
+            emulator.write_heap(struct.pack("<ii", case.resist_stat, case.modifier), SPELL_RECORD * case.spell + RECORD_RESIST)
+            emulator.write_heap(struct.pack("<i", case.period), SPELL_RECORD * case.spell + RECORD_PERIOD)
+            emulator.write_heap(struct.pack("<I", flags), SPELL_RECORD * case.spell + RECORD_FLAGS)
+            emulator.set_global(FATE_MAXIMIZED, case.fate_maximized)
+            recorder = ResistRecorder([], [])
+            stubs = resist_stubs(case, recorder)
+            del stubs[FATE_USE], stubs[NOTIFY_AI]
+            readable = tuple(Range(a, a + 4) for a in (SPELL_TABLE_POINTER, FATE_MAXIMIZED, record + RECORD_RESIST, record + RECORD_RESIST + 4,
+                                                        record + RECORD_PERIOD)) + (Range(record + RECORD_FLAGS, record + RECORD_FLAGS + 4),)
+            result = emulator.call(spec.address, (*caster, *TARGET, case.spell), code=code, stubs=stubs, readable=readable)
+            emulator.write_heap(b"\0" * 0x38, SPELL_RECORD * case.spell)
+            if any(bounds != (1, 20) for bounds in recorder.rolls) or len(recorder.rolls) > 1:
+                raise RunFailure("stub", f"unexpected rolls {recorder.rolls}")
+            cases.append([case.spell, case.fate_maximized, case.technology, case.damaging, case.period, case.resist_stat, case.modifier,
+                          case.kind, case.caster, case.resistance, case.aptitude, case.stat_value, case.extraordinary, case.d20, result,
+                          len(recorder.rolls)])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["spell", "fateMaximized", "technology", "damaging", "period", "resistStat", "modifier", "type", "caster",
+                                "resistance", "aptitude", "statValue", "extraordinary", "d20", "result", "rolls"])
     else:
         raise ValueError(f"unknown model {spec.model}")
     document["cases"] = cases

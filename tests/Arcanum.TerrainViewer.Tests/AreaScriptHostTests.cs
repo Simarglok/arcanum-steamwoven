@@ -83,7 +83,7 @@ public sealed class AreaScriptHostTests
         var flags = f.Session.Flags;
         Assert.AreEqual(true, flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(2593))).Value);
         Assert.IsFalse(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GetStoryState) || AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.SetStoryState));
-        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S8));
+        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S9));
         Assert.IsTrue(new[] { ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme }.All(AreaScriptHost.Admission.Actions.Contains),
             "ARC-SCRIPT-040: the sound actions run in the viewer");
         Assert.ThrowsExactly<InvalidOperationException>(() => f.Host.StoryState());
@@ -144,6 +144,34 @@ public sealed class AreaScriptHostTests
         Assert.IsTrue(AreaScriptHost.SchemeRefusalStops(GameSessionFailure.BudgetExceeded));
         Assert.IsTrue(AreaScriptHost.SchemeRefusalStops(GameSessionFailure.RevisionExhausted));
         Assert.IsTrue(AreaScriptHost.SchemeRefusalStops(GameSessionFailure.StaleVersion));
+    }
+
+    // ARC-TECHNOLOGY-005 (SW8, TC2 both fixed): the PC opens its own window; an NPC without a leader opens nothing; an NPC with its
+    // PC leader is refused by name (the NPC crafter is a later slice); an absent object names none. No session state changes.
+    [TestMethod]
+    public void Schematic_requests_open_the_pc_window_and_refuse_an_npc_crafter_by_name()
+    {
+        using var f = Create();
+        var npc = f.Host.Object(f.Speaker);
+        Assert.IsTrue(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.StartSchematicUi));
+        var run = new FakeEffectsRun(f.Host, npc).Run(Program.Schematics(), new(777, 4, 0x0201), AreaScriptHost.Admission);
+        Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.Code.ToString());
+        CollectionAssert.AreEqual(new[] { new ScrSchematicRequest(f.Host.Pc), new ScrSchematicRequest(npc) }, run.Effects.Schematics.ToArray());
+        var revision = f.Session.Version.Revision;
+        Assert.IsTrue(f.Host.Apply(run.Effects));
+        Assert.AreEqual(revision, f.Session.Version.Revision, "a window request changes no session state");
+        CollectionAssert.AreEqual(new[] { new AreaSchematicScriptOpen(f.Host.Pc, f.Host.Pc, AreaSchematicScriptStatus.Open) }, f.Host.TakeSchematics().ToArray(),
+            "an NPC without a leader opens nothing");
+        Assert.AreEqual(0, f.Host.TakeSchematics().Count, "taken once");
+
+        Assert.AreEqual(GameSessionDisposition.Changed, f.Session.SetMapChange(f.Session.Version, f.Map, MapChangeKey.ForEntity(f.Entity, AreaConversationState.FollowProperty), 1).Disposition);
+        Assert.IsTrue(f.Host.Apply(run.Effects));
+        CollectionAssert.AreEqual(new[]
+        {
+            new AreaSchematicScriptOpen(f.Host.Pc, f.Host.Pc, AreaSchematicScriptStatus.Open),
+            new AreaSchematicScriptOpen(npc, f.Host.Pc, AreaSchematicScriptStatus.NpcCrafterNotReady),
+        }, f.Host.TakeSchematics().ToArray(), "a following NPC is the crafter, its PC leader the viewer: refused by name");
+        Assert.IsNull(AreaScriptHost.ResolveSchematic(npc, false, null));
     }
 
     [TestMethod]
@@ -312,6 +340,9 @@ public sealed class AreaScriptHostTests
         // ARC-SCRIPT-016: scheme 60 on the triggerer, 101 and 200 on the attachee, 70 on the absent extra object (kind 12).
         internal static ScrProgram Schemes() => Lines(
             (139, [(0, 0), (3, 60)]), (139, [(1, 0), (3, 101)]), (139, [(12, 0), (3, 70)]), (139, [(1, 0), (3, 200)]), (1, []));
+
+        // ARC-TECHNOLOGY-005: start schematic UI (129) on the triggerer (the PC), the attachee, and the absent extra object (kind 12).
+        internal static ScrProgram Schematics() => Lines((129, [(0, 0)]), (129, [(1, 0)]), (129, [(12, 0)]), (1, []));
 
         internal static ScrProgram Sounds() => Lines(
             (82, [(3, 3008)]), (83, [(3, 4010), (1, 0)]), (83, [(3, 4011), (0, 0)]), (87, [(3, 15), (3, 39)]), (1, []));

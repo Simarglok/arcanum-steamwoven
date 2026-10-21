@@ -513,4 +513,5 @@ this table on 2026-10-20 (ARC-RES-063).
   mask is a data question (P3).
 - **U3** The animation helpers called by peace and stop attacking (0x44E050,
   0x44E0E0, 0x424070) are named by what both readers saw them do; their full rules
-  belong to stage A6.
+  belong to stage A6. Closed by ARC-RES-067
+  ([followers 7.1](npc-ai-followers.md#71-peace-and-its-two-helpers)).

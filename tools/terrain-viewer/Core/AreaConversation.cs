@@ -74,7 +74,7 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
 /// stack (ARC-SCRIPT-011, <see cref="ScriptContent"/>): the original's name for each script number and the winning copy,
 /// the same for every map. Synchronous, single-threaded; Begin and Resume read the files every time.
 /// ARC-WORLD-043: as the original's dialog start and end (0x412FD0, 0x413280), every started conversation opens the NPC's
-/// reaction conversation slot in the session (<see cref="GameSessionOwner.BeginReactionConversation"/>, no fate point) before
+/// reaction conversation slot in the session (<see cref="GameSessionOwner.BeginReactionConversation"/>, which uses the hero's armed "force good reaction" fate, ARC-WORLD-054) before
 /// its first effect, and the caller closes it with <see cref="EndReaction"/> on every exit path, before a resumed script runs.
 /// </summary>
 public sealed class AreaConversationHost
@@ -376,6 +376,8 @@ public sealed class AreaConversationHost
             new DialogConversationPorts(State, State, _session.Flags, State, party, InventoryPort(), State,
                 // ARC-SKILLS-004: the skill gates read the session hero; the diagnostic PC has no skills, so they stay unadmitted.
                 _session.QueryHero() is null ? null : new SessionDialogSkillPort(_session, AreaConversationState.PcParticipant), State,
+                // ARC-WORLD-054: FP gives the session hero a fate point; without a hero it stays unadmitted.
+                _session.QueryHero() is null ? null : new SessionDialogFatePort(_session, AreaConversationState.PcParticipant),
                 // ARC-WORLD-044: RP reads and changes the session PC's reputations.
                 new SessionDialogReputationPort(_session, AreaConversationState.PcParticipant)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
@@ -613,9 +615,13 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     public DialogCommandResult Execute(GiveItemCommand command) { _items.Add(command.ItemName); return DialogCommandResult.Applied; }
     public DialogCommandResult Execute(MarkAreaCommand command) { _areas.Add(command.Area); return DialogCommandResult.Applied; }
 
+    /// <summary>AL: the diagnostic PC alignment; since ARC-WORLD-045 a change arms the session followers' loyalty marks (OL17)
+    /// first, and a refusal there leaves the alignment as it was.</summary>
     public DialogCommandResult Execute(AlignmentCommand command)
     {
-        Alignment = command.Mode == DialogReactionMode.Target ? command.Value : checked(Alignment + command.Value);
+        var next = command.Mode == DialogReactionMode.Target ? command.Value : checked(Alignment + command.Value);
+        if (_session.RecordPcAlignmentChange(_session.Version, Alignment, next).Disposition == GameSessionDisposition.Rejected) return DialogCommandResult.Rejected;
+        Alignment = next;
         return DialogCommandResult.Applied;
     }
 
@@ -667,6 +673,7 @@ public static class AreaConversationText
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",
             SkillTrainingCommand training => $"TR skill {training.Skill} -> tier {training.Training}",
+            FatePointCommand => "FP fate point +1",
             JoinCommand => "JO follow request",
             ReputationCommand reputation => $"RP {(reputation.Add ? "add" : "remove")} {reputation.Reputation}",
             _ => receipt.Command.GetType().Name,

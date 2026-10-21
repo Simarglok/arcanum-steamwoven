@@ -57,7 +57,7 @@ layout of the StaticObjects loader, in the source's field order
 | Armour | 59..67 | armour flags, AC adjustment and magic adjustment, resistance adjustments and magic adjustments (five each), silent-move adjustment and magic adjustment, unarmed bonus damage |
 | Generic | 59..61 | generic flags (lockpick, trap device, healing item, grenade and others), usage bonus, remaining usage count |
 | Critter | 36..63 | critter flags and flags 2, 28 base stats, 12 basic and 4 tech skills, 25 spell/tech values, fatigue points, adjustment and damage, critical-hit body type, inventory source, auto-level scheme |
-| NPC | 69..92 | NPC flags, AI parameter row, experience worth and pool, faction, reaction base, social class, monster damage (five min/max pairs) |
+| NPC | 69..92 | NPC flags, AI parameter row, experience worth and pool, faction, reaction base, social class, wait (slot 89, field 300: the wait timer index, ARC-WORLD-045), monster damage (five min/max pairs) |
 
 Index orders differ and are kept as stored: damage arrays by
 `CombatDamageIndex` (normal, poison, electrical, fire, fatigue), resistance

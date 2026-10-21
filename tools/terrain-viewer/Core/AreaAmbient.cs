@@ -143,10 +143,18 @@ public sealed class AreaAmbientDriver
     public bool AdvanceHours(int hours, long activeSector)
     {
         if (hours <= 0) throw new ArgumentOutOfRangeException(nameof(hours));
+        return AdvanceMilliseconds(checked(hours * HourMilliseconds), activeSector);
+    }
+
+    /// <summary>A jump of game time in milliseconds (ARC-UI-048, a world-map travel step), also while paused: as
+    /// <see cref="AdvanceHours"/>, with the events that came due fired once, late; the selection follows the new hour.</summary>
+    public bool AdvanceMilliseconds(long gameMs, long activeSector)
+    {
+        if (gameMs <= 0) throw new ArgumentOutOfRangeException(nameof(gameMs));
         var resolve = _source.TryResolveScheme(activeSector, out _, out _);
         if (resolve != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + resolve);
-        if (Events is { } events) events.Jump(checked(hours * HourMilliseconds));
-        else Mutate(_session.AdvanceGameTime(Clock.Token, checked(hours * HourMilliseconds), ClockAdvanceReason.ExplicitWait));
+        if (Events is { } events) events.Jump(gameMs);
+        else Mutate(_session.AdvanceGameTime(Clock.Token, gameMs, ClockAdvanceReason.ExplicitWait));
         return Apply(activeSector);
     }
 

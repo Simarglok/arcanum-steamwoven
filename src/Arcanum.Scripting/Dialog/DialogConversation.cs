@@ -610,6 +610,7 @@ public sealed class DialogConversation
                 ConversationMarkArea area => new MarkAreaCommand(_request.Participants.PlayerCharacter, area.Area),
                 ConversationAlignment alignment => new AlignmentCommand(_request.Participants.PlayerCharacter, alignment.Mode, alignment.Value),
                 ConversationSkillTraining training => new SkillTrainingCommand(_request.Participants.PlayerCharacter, training.Skill, training.Training),
+                ConversationFatePoint => new FatePointCommand(_request.Participants.PlayerCharacter),
                 _ => throw new InvalidOperationException("Unadmitted action."),
             };
             DialogCommandResult result;
@@ -626,6 +627,7 @@ public sealed class DialogConversation
                     MarkAreaCommand area => _ports.World!.Execute(area),
                     AlignmentCommand alignment => _ports.World!.Execute(alignment),
                     SkillTrainingCommand training => _ports.Skills!.Execute(training),
+                    FatePointCommand fate => _ports.Fate!.Execute(fate),
                     _ => throw new InvalidOperationException("Unadmitted command."),
                 };
             }
@@ -684,7 +686,7 @@ public sealed class DialogConversation
         var node = new DialogNodeId(npc.Id);
         try
         {
-            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Reputations is not null);
+            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null);
             if (MissingCapability(action) is { } missing)
             {
                 frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing);
@@ -771,7 +773,7 @@ public sealed class DialogConversation
                     record.AlternateText.PayloadOffset, 0, record.AlternateText.Length, 0), response);
             return null;
         }
-        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Reputations is not null);
+        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null);
         if (MissingCapability(condition) is { } missing)
         {
             frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing, response);
@@ -865,7 +867,7 @@ public sealed class DialogConversation
         {
             try
             {
-                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Reputations is not null);
+                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null);
                 if (MissingCapability(action) is { } actionMissing)
                 {
                     block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedOperation, actionMissing);
@@ -961,6 +963,7 @@ public sealed class DialogConversation
         ConversationReputation => _ports.Reputations is null,
         ConversationQuellRumor => _ports.Rumors is null,
         ConversationSkillGate or ConversationSkillTraining or ConversationExpertTeacher => _ports.Skills is null,
+        ConversationFatePoint => _ports.Fate is null,
         _ => false,
     })?.Source;
 

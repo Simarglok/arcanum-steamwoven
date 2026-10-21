@@ -159,6 +159,7 @@ public partial class TerrainViewerApp
     private void LogAreaEvents(AreaAmbientDriver driver)
     {
         if (driver.Events?.Last is not { } last || last.Fired + last.Dropped + last.ScriptCalls == 0) return;
+        ReportCompanionWaits(last.Waits);
         var refused = (_areaEventWorld?.CallRefusals ?? 0) > _loggedCallRefusals;
         _loggedCallRefusals = _areaEventWorld?.CallRefusals ?? 0;
         GD.Print($"ARC-WORLD-039 events steps={last.Steps} passes={last.Passes} fired={last.Fired} dropped={last.Dropped} calls={last.ScriptCallsRun}/{last.ScriptCalls}"

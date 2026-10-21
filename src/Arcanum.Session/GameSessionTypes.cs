@@ -198,6 +198,10 @@ public enum GameSessionFailure
     AssemblyRefused,
     // Spell book (ARC-MAGIC-004).
     SpellBookUnavailable, InvalidSpellBook, SpellBookRefused,
+    // Fate points (ARC-WORLD-054).
+    FateUnavailable, InvalidFateKind, FateRefused,
+    // World-map areas (ARC-WORLD-056).
+    InvalidArea,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -263,6 +267,11 @@ public static class SessionStoryLimits
     public static bool IsQuest(int quest) => quest is >= FirstQuest and <= LastQuest;
     public static bool IsRumor(int rumor) => rumor is >= FirstRumor and <= LastRumor;
 
+    /// <summary>ARC-WORLD-056: world-map areas the PC can know, 1..<see cref="LastArea"/> (project policy; the installed module
+    /// has 81, area 0 is the unknown area).</summary>
+    public const int LastArea = 4095;
+    public static bool IsArea(int area) => area is >= 1 and <= LastArea;
+
     /// <summary>ARC-WORLD-044: the reputation numbers the PC can hold (the table's range; the original stores any number, A5).</summary>
     public const int FirstReputation = 1000;
     public const int LastReputation = 1999;
@@ -272,18 +281,26 @@ public static class SessionStoryLimits
 }
 
 /// <summary>Saved story state: PC quests, non-default shared quest states, known rumors and quelled rumors (ARC-UI-008),
-/// each ascending, and the PC's reputations in the order it gained them (ARC-WORLD-044).</summary>
+/// each ascending, the PC's known world-map areas and last discovered area (ARC-WORLD-056), and the PC's reputations in the
+/// order it gained them (ARC-WORLD-044).</summary>
 public sealed class SessionStoryState
 {
     internal SessionStoryState(SessionQuest[] quests, SessionGlobalQuest[] globalQuests, SessionRumor[] rumors, int[] quelledRumors,
-        SessionReputation[] reputations)
+        int[] knownAreas, int lastArea, SessionReputation[] reputations)
     {
         Quests = Array.AsReadOnly(quests);
         GlobalQuests = Array.AsReadOnly(globalQuests);
         Rumors = Array.AsReadOnly(rumors);
         QuelledRumors = Array.AsReadOnly(quelledRumors);
+        KnownAreas = Array.AsReadOnly(knownAreas);
+        LastArea = lastArea;
         Reputations = Array.AsReadOnly(reputations);
     }
+
+    /// <summary>ARC-WORLD-056: the world-map areas the PC knows (ledger WT2), ascending.</summary>
+    public IReadOnlyList<int> KnownAreas { get; }
+    /// <summary>ARC-WORLD-056: the PC's last discovered area, 0 for none (ledger WT2).</summary>
+    public int LastArea { get; }
 
     /// <summary>ARC-WORLD-044: the PC's reputations in acquisition order (the original's list order), each with its time.</summary>
     public IReadOnlyList<SessionReputation> Reputations { get; }
@@ -336,8 +353,10 @@ public sealed class GameSessionSnapshot
     /// schema 21 adds the hero's innate skill changes (ARC-SKILLS-002); schema 22 adds <see cref="Durability"/> (ARC-WORLD-053);
     /// schema 23 adds <see cref="Schematics"/> (ARC-TECHNOLOGY-003); schema 24 adds the made items to <see cref="Inventory"/>
     /// (ARC-TECHNOLOGY-004); schema 25 adds the mastered college of the hero and of the NPC advancement sheets (ARC-MAGIC-004);
-    /// schema 26 adds the PC's reputations to the story (ARC-WORLD-044). Schemas 1..25 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 26;
+    /// schema 26 adds the hero's fate points and armed fates (ARC-WORLD-054); schema 27 adds each party record's loyalty marks
+    /// (ARC-WORLD-045); schema 28 adds the PC's known world-map areas and last discovered area to the story (ARC-WORLD-056);
+    /// schema 29 adds the PC's reputations to the story (ARC-WORLD-044). Schemas 1..28 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 29;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
