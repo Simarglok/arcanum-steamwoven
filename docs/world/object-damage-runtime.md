@@ -115,6 +115,13 @@ The registry version stays 1, as when the Lock event was added.
   - scenery and traps, with `AreaUseScriptHost.EntityId`;
   - the items on the ground.
 
+  Whether an object's use script is a trap is the caller's answer (`Target(session, key, trapped)`); the viewer passes
+  `AreaUseScriptHost.IsTrap` (ARC-COMBAT-011, 0x4BBDD0, ledger OD6): the object's point-1 script as the session holds it (a
+  script a use wrote back replaces the loaded one), when it is not 0 and its file's header flags carry 0x1 (non-magical) or 0x2
+  (magical). A script the content does not hold or cannot read is no trap, as the original's header read fails (a stored number
+  outside 0..99999 included); without script content the answer is unknown and the viewer passes no trap. The flag is read again
+  at each hit.
+
   It also names the objects the session destroyed or switched off. The view no longer draws or picks those, and a destroyed
   door's passage is open.
 
@@ -127,7 +134,9 @@ The registry version stays 1, as when the Lock event was added.
   again on every further hit (ODA3).
   This is the original's click (ledger OD14). Without Alt, the object is used as out of combat. An item on the ground is
   picked up and a trap walked to, as the original does, so neither is attacked by a click. The status line names the hit and
-  the break, and the log prints `ARC-COMBAT-008 object-attack-hit`.
+  the break (and a trap that would fire, ARC-COMBAT-011), and the log prints `ARC-COMBAT-008 object-attack-hit`. The object-attack smoke
+  stage first logs `ARC-COMBAT-011 native-smoke trap-flags`, a census (it checks nothing): the count of the shown map's attackable
+  objects whose use script is a trap (NONE without script content; the Crash Site cave has 17 objects and no trap).
 - **Wear in play.** The hero's attack on an NPC (`AttackCritter`) now passes both sides' worn items with their durability
   values, so armour and weapon wear happen in play:
   - the hero's kit, from `AreaHeroLoad.KitDurability`;
@@ -151,8 +160,8 @@ The registry version stays 1, as when the Lock event was added.
 
 - **Viewer.** It draws a busted window on frame 0 of its T0 ART (the busted ART is not loaded), a busted scenery or trap on
   its T0 ART (not the destroyed ART), and no spilled items: they lie in the session and the inventory but have no draw command.
-  A destroyed scenery or container still blocks its cells: step evidence is T0 map data. The viewer runs no trap, so it
-  passes no trap flag.
+  A destroyed scenery or container still blocks its cells: step evidence is T0 map data. The viewer passes the trap flag
+  (ARC-COMBAT-011) but runs no trap: the trap script with its built-in spells and attacks (30000..30006) is the SCR lane's.
 - **Host steps.** The trap and BUST scripts, sounds, eye candy, the witnesses' reaction and the taking-damage script are reported
   to the host, not run here.
 - **Others.** NPC attacks on objects (AI), area damage (spells, explosions) and script action 60 on objects, and the decay

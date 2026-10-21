@@ -100,6 +100,24 @@ public partial class TerrainViewerApp
             Require(_sheetPanel.SkillMessageForSelfTest == "refused: nothing bought since the sheet opened to refund", "− at the floor: " + _sheetPanel.SkillMessageForSelfTest);
             _sheetPanel.SkillPlusForSelfTest(12).EmitSignal(BaseButton.SignalName.Pressed);
             Require(_sheetPanel.SkillsForSelfTest!.Rows[12].Points == 1, "+ on a tech row");
+            // ARC-MAGIC-008: the spells page. College tabs pick the shown college; + learns its next rank and − unlearns it through
+            // the pool (the synthetic hero: willpower 8, so rank 2's minimum of 9 refuses); − is disabled at the editor's floor.
+            Require(_sheetPanel.SpellsForSelfTest is { College: 0, Rank: 0, CanLearn: true, CanUnlearn: false, EditorOpen: true }
+                && _sheetPanel.SpellTextForSelfTest(0) == "1. College 1 spell 1 (next) | minimum level 1"
+                && _sheetPanel.SpellHintForSelfTest(0) == "College 1 spell 1\nMinimum willpower: 6" && _sheetPanel.SpellMinusForSelfTest.Disabled,
+                "spells page: " + _sheetPanel.SpellTextForSelfTest(0));
+            _sheetPanel.CollegeTabForSelfTest(2).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_sheetPanel.SpellsForSelfTest is { College: 2 } && _sheetPanel.CollegeTabForSelfTest(2).ButtonPressed
+                && !_sheetPanel.CollegeTabForSelfTest(0).ButtonPressed, "a college tab shows its spells");
+            _sheetPanel.SpellPlusForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_sheetPanel.SpellsForSelfTest is { Rank: 1, CanUnlearn: true, UnspentPoints: 3 } && _sheetPanel.SkillMessageForSelfTest == "learned College 3 spell 1"
+                && _areaSession.QueryHeroSpellBook()!.Ranks[2] == 1, "+ learned rank 1: " + _sheetPanel.SkillMessageForSelfTest);
+            _sheetPanel.SpellPlusForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_sheetPanel.SkillMessageForSelfTest == "refused: raise Willpower first" && _sheetPanel.SpellsForSelfTest!.Rank == 1,
+                "+ refused for willpower: " + _sheetPanel.SkillMessageForSelfTest);
+            _sheetPanel.SpellMinusForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_sheetPanel.SpellsForSelfTest is { Rank: 0, CanUnlearn: false, UnspentPoints: 4 } && _sheetPanel.SkillMessageForSelfTest == "unlearned College 3 spell 1"
+                && _sheetPanel.SpellMinusForSelfTest.Disabled, "− unlearned it: " + _sheetPanel.SkillMessageForSelfTest);
             // The open sheet owns the keys: the Inventory key neither opens the inventory nor closes the sheet.
             InventoryKey(Key.I);
             Require(SheetOpen && !InventoryOpen, "I under the sheet");
@@ -116,6 +134,7 @@ public partial class TerrainViewerApp
             _sheetPanel.SkillMinusForSelfTest(12).EmitSignal(BaseButton.SignalName.Pressed);
             Require(_sheetPanel.SkillsForSelfTest!.Rows[12] is { Points: 1, FloorPoints: 1 } && _sheetPanel.SkillMessageForSelfTest == "refused: nothing bought since the sheet opened to refund",
                 "the reopened editor's floor holds the bought point");
+            Require(_sheetPanel.SpellsForSelfTest is { College: 2 }, "the shown college is kept between opens");
             InventoryKey(Key.C);
             // Controller pulses through the production pulse route: confirm presses the close button, cancel closes.
             static GamepadLab.Core.IntentFrame Pulse(bool confirm, bool cancel) =>
@@ -148,7 +167,7 @@ public partial class TerrainViewerApp
             Require(!SheetOpen && !_areaSession.HeroEditorOpen, "the dead hero's sheet closed and so did its editor");
             InventoryKey(Key.C);
             Require(!SheetOpen && _sheetStatus == "refused: the hero is dead", "C for a dead hero: " + _sheetStatus);
-            return "no-hero refusal, C/controller confirm and cancel/Escape, keys owned while open, rebuild on change, skills page + and − with the editor floor, level-up messages (ARC-UI-046), dead-hero close and refusal";
+            return "no-hero refusal, C/controller confirm and cancel/Escape, keys owned while open, rebuild on change, skills page + and − with the editor floor, spells page tabs, learn, refusal and unlearn (ARC-MAGIC-008), level-up messages (ARC-UI-046), dead-hero close and refusal";
         }
         finally
         {

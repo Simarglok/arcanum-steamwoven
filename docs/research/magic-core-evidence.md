@@ -167,7 +167,10 @@ function oracle, F3) and stand at F2. Three corrections to the text below: the f
 missing ranks only and never lowers a rank (SB3); unlearning keeps the mastered college (SB6); and the re-validation on a stat
 decrease runs for a base decrease of intelligence or willpower through the stat setter, not for an effect (SB11). The
 character editor reports a failed learn by testing the level and then intelligence, naming willpower for anything else
-(SB8). The runtime is the [spell book](../world/spell-book-runtime.md).
+(SB8). The runtime is the [spell book](../world/spell-book-runtime.md). The editor's spell page itself (ARC-MAGIC-008, [ledger
+SG1–SG8](original-verification-ledger.md#spell-page-arc-magic-008)) was read the same way: the spell texts named above (0x4B1600,
+0x4B1620, 0x4B1A40, with 0x4B1A50) and the UI callers (0x57C540, 0x57C670) stand at F2; the refusal messages are charedit.mes
+18, 30, 26 and 36, the − floor message 27, and a college's hint shows the mastery text for the local player's mastered college.
 
 - **Order.** Learning rank r of a college requires knowing exactly r − 1
   ranks, character level ≥ {1, 1, 5, 10, 15}[r − 1], intelligence ≥ 5 and
