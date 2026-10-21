@@ -66,6 +66,15 @@ public sealed class AreaAmbientTests
     }
 
     [TestMethod]
+    public void An_unlit_maps_clock_profile_equals_a_lit_maps_of_the_module()
+    {
+        // ARC-WORLD-057: the profile from the module's identity and start clock alone, so a session carries between both.
+        var source = Source(15);
+        Assert.AreEqual(AreaAmbientDriver.ClockProfile(source), AreaAmbientDriver.ClockProfile(source.ModuleSha256, source.Startup));
+        Assert.AreNotEqual(AreaAmbientDriver.ClockProfile(source), AreaAmbientDriver.ClockProfile(source.ModuleSha256, source.Startup with { Hour = 16 }));
+    }
+
+    [TestMethod]
     public void Driver_starts_at_declared_hour_and_applies_whole_hours_and_sector_changes()
     {
         using var session = Session(Source(15));

@@ -164,7 +164,6 @@ public sealed partial class GameSessionOwner
             // A scenery the session busted became invulnerable at its break (its object flag 0x400000).
             defender = ObjectDefender(target.Baseline, target.Baseline.Invulnerable || target.Baseline.Kind == DamageableObjectKind.Scenery &&
                 RecordedObject(_maps, target.Map, target.Entity) is { Condition: SessionObjectCondition.Busted });
-            // A recorded busted condition reaches the break facts only for a kind that has it.
         }
         else
         {

@@ -87,7 +87,7 @@ public sealed class AreaReactionConversationTests
         Assert.IsTrue(f.Host.EndReaction());
     }
 
-    private sealed class Fixture : IDisposable
+    internal sealed class Fixture : IDisposable
     {
         private readonly DirectoryInfo _root;
         private readonly ScriptContent _content;
@@ -102,7 +102,7 @@ public sealed class AreaReactionConversationTests
         public AreaConversationHost Host { get; }
         public string Entity => AreaConversationState.EntityId(Speaker.Row);
 
-        public static Fixture Create()
+        public static Fixture Create(string? dialog = null)
         {
             var root = Directory.CreateTempSubdirectory("arc-world-043-");
             void Write(string relative, byte[] bytes)
@@ -112,7 +112,7 @@ public sealed class AreaReactionConversationTests
                 File.WriteAllBytes(path, bytes);
             }
             Write("tig.dat", AreaOwnerFixture.Dat());
-            Write("modules/Syn.dat", AreaOwnerFixture.Dat(("dlg\\00777talk.dlg", Encoding.Latin1.GetBytes(Dialog)), ("scr\\00777talk.scr", Program())));
+            Write("modules/Syn.dat", AreaOwnerFixture.Dat(("dlg\\00777talk.dlg", Encoding.Latin1.GetBytes(dialog ?? Dialog)), ("scr\\00777talk.scr", Program())));
             var load = AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Syn.dat"));
             Assert.AreEqual(AreaContentRootStatus.Ready, load.Status, load.Detail);
             using var source = new AreaOwnerFixture(motionBodies: true);

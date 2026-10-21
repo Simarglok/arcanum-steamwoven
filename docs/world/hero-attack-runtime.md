@@ -69,7 +69,8 @@ No snapshot change: deaths, damage and experience are already saved by the life 
   unless Alt is held (`loot`). The status line shows the last attack: outcome, damage, the target's hit points, a knockout or
   kill and the experience it paid.
 - Combat targets are the NPC holders of the map's inventory seed; their combat values are read once per NPC. A map without an
-  inventory seed (an unlit whole map, which has no session) has no targets.
+  inventory seed (a whole map without a session: since ARC-WORLD-057 only one whose start clock cannot be read) has no
+  targets.
 - The hero is drawn with its attack ART while it attacks in place (`DiagnosticGridActor.AttackPose`); the human diagnostic profile
   `HumanFixedArea` now loads idle, walk, run, vault and attack (195 keys, 1,705,144 checked RGBA bytes; actor key cap 195).
 - A killed or unconscious NPC is drawn in its fallen pose (`AreaFallenPoses`): the pose's ART is read on demand from the archive

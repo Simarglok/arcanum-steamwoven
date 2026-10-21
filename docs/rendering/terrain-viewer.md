@@ -1083,15 +1083,19 @@ plays 3008, the player's close 3009, a discipline or page 3010, a tab 3011 (only
 character sheet it is modal (gate closed, clock paused, a walk stopped) and owns every key while open: `T`, `Escape` or a
 controller cancel closes it, `Tab` or a controller confirm assembles. Each tab keeps its discipline and page across close and
 open; a new session (a quick load) starts at the learned tab. Script action 129 of a dialog script opens the window for the PC
-once nothing else owns input; for an NPC with a PC leader it is refused by name (the NPC crafter is a later slice). The data
+once nothing else owns input; for an NPC with a PC leader, and after a conversation ended by the dialog action `su`
+(ARC-TECHNOLOGY-006), it opens with that NPC as crafter: the NPC's degrees and own list, an empty found tab, the products into its
+list ([NPC crafter](../world/schematic-window-runtime.md#npc-crafter-arc-technology-006)). The data
 (`schematic.mes`, `schematic_text.mes`, `tech.mes` and the prototypes the records name) load once per module in the background.
 The HUD adds `T schematics` and the last refusal.
 
 **Not implemented:** the original window art, slot pictures and overlays, the interface button, the slot item description box,
-the tab and discipline hover texts, the NPC crafter (dialog `su`). Self-test `ARC-TECHNOLOGY-005 self-test PASS` (observed with
-the stage moved first: the full run stops earlier at a conversation-routing check that also fails on main; synthetic
+the tab and discipline hover texts, an NPC's weight and room for its products. Self-test `ARC-TECHNOLOGY-005 self-test PASS` (synthetic
 records and hero: refusal without a hero, `T`, controls and their sounds and bounds, keys owned, refused texts, an assembly
-through the session, `Escape`, position kept, controller cancel, script 129 for the PC and the NPC refusal, dead-hero close);
+through the session, `Escape`, position kept, controller cancel, script 129 for the PC and an NPC without data, an NPC crafter's
+window with its reset, empty found tab and assembly into its list, dead-hero close); native smoke `ARC-TECHNOLOGY-006 native-smoke npc
+crafter PASS` (exterior with the cave and `--hero`: a Crash Site speaker opened through the window path `su` takes after its talk ended, one assembly into its list on
+a detached copy; the reply pick is covered by `AreaSchematicConversationTests`);
 native smoke after the logbook stage: `ARC-TECHNOLOGY-005 native-smoke schematics PASS` (the module's schematic data load; with
 `--hero`, `T` opens over the live session, the controls move, `Escape` closes, nothing changes; on a detached synthetic hero
 holding a learned record's components one assembly makes its product).

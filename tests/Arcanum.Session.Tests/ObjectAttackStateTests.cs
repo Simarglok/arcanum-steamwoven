@@ -269,7 +269,7 @@ public sealed class ObjectAttackStateTests
         {
             Assert.AreNotEqual(text, changed);
             var decoded = GameSessionSnapshotCodec.TryDecode(changed);
-            if (decoded.Snapshot is null) return;
+            Assert.IsNotNull(decoded.Snapshot, "the edit keeps a well-formed snapshot");
             Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(decoded.Snapshot, RestoreOptions()).Failure);
         }
         Refused(text.Replace($"\"deadlineMs\":{at + 80_000}", $"\"deadlineMs\":{at + 80_001}"));
