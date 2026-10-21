@@ -86,11 +86,12 @@ public sealed class PlacedItemsStateTests
     public void DecodeAndRestoreRefusePlacedItemsNoDropProduces()
     {
         using var owner = Owner();
-        owner.PlaceHeroItem("kit:2", There);
+        owner.PlaceHeroItem("kit:3", There);
         owner.PlaceHeroItem("apple", There);
         var text = Text(owner);
-        const string Kit = "{\"entity\":\"kit:2\",\"source\":\"kit\",\"origin\":0,\"map\":79,\"x\":120,\"y\":210,";
-        Assert.IsTrue(text.Contains(Kit));
+        const string Kit = "{\"entity\":\"kit:3\",\"source\":\"kit\",\"origin\":0,\"map\":79,\"x\":120,\"y\":210,";
+        const string Apple = "{\"entity\":\"apple\",\"source\":\"pc\",\"origin\":79,";
+        Assert.IsTrue(text.Contains(Kit) && text.Contains(Apple));
         void Fails(string changed, SnapshotDecodeFailure failure, string path)
         {
             var decoded = GameSessionSnapshotCodec.TryDecode(changed);
@@ -98,18 +99,72 @@ public sealed class PlacedItemsStateTests
         }
         Fails(text.Replace(Kit, Kit.Replace("\"kit\",", "\"bag\",")), SnapshotDecodeFailure.OutOfRange, "$.inventory.placed[0].source");
         Fails(text.Replace(Kit, Kit.Replace("\"origin\":0", "\"origin\":79")), SnapshotDecodeFailure.NotCanonical, "$.inventory.placed[0].origin");
-        Fails(text.Replace("\"source\":\"pc\",\"origin\":79", "\"source\":\"pc\",\"origin\":0"), SnapshotDecodeFailure.NotCanonical, "$.inventory.placed[1].origin");
+        Fails(text.Replace(Apple, Apple.Replace("\"origin\":79", "\"origin\":0")), SnapshotDecodeFailure.NotCanonical, "$.inventory.placed[1].origin");
         Fails(text.Replace(Kit, Kit.Replace("\"x\":120", "\"x\":16777216")), SnapshotDecodeFailure.OutOfRange, "$.inventory.placed[0].x");
         Fails(text.Replace(Kit, Kit.Replace("\"y\":210", "\"y\":-1")), SnapshotDecodeFailure.OutOfRange, "$.inventory.placed[0].y");
         Fails(text.Replace(Kit, Kit.Replace("\"map\":79", "\"map\":0")), SnapshotDecodeFailure.OutOfRange, "$.inventory.placed[0].map");
-        Fails(text.Replace(Kit, Kit.Replace("kit:2", "kit:1")), SnapshotDecodeFailure.NotCanonical, "$.inventory.placed[0].entity");
+        Fails(text.Replace(Kit, Kit.Replace("kit:3", "kit:1")), SnapshotDecodeFailure.NotCanonical, "$.inventory.placed[0].entity");
 
         void Refused(string changed, GameSessionFailure failure) =>
             Assert.AreEqual(failure, GameSessionOwner.Restore(Decode(changed), RestoreOptions()).Failure);
-        // A placed kit item whose number is not a kit number, a made item without a made number, a placed kit item while the kit
-        // still lists it, a deleted placed item.
-        Refused(text.Replace(Kit, Kit.Replace("kit:2", "kit:9x")), GameSessionFailure.InvalidSnapshot);
+        Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(Decode(text), RestoreOptions()).Failure);
+        // Each refused for its own reason: no kit number, a kit number beyond the kit's (kit:1, kit:2 held, one placed, none deleted),
+        // a made item without a made number (the last kit number placed, so the kit's own numbering still holds), a world item with a
+        // kit id, a deleted placed item.
+        Refused(text.Replace(Kit, Kit.Replace("kit:3", "kit:9x")), GameSessionFailure.InvalidSnapshot);
+        Refused(text.Replace(Kit, Kit.Replace("kit:3", "kit:4")), GameSessionFailure.InvalidSnapshot);
         Refused(text.Replace(Kit, Kit.Replace("\"source\":\"kit\"", "\"source\":\"made\"")), GameSessionFailure.InvalidSnapshot);
+        Refused(text.Replace(Apple, Apple.Replace("\"apple\"", "\"kit:5\"")), GameSessionFailure.InvalidSnapshot);
         Refused(text.Replace("\"destroyed\":[]", "\"destroyed\":[\"apple\"]"), GameSessionFailure.InvalidSnapshot);
+
+        // Without a hero nothing can have been placed.
+        using var heroless = GameSessionOwner.Create(Descriptor()).Owner!;
+        var none = Text(heroless);
+        Assert.IsTrue(none.Contains(",\"placed\":[]}"));
+        Refused(none.Replace(",\"placed\":[]}", ",\"placed\":[{\"entity\":\"made:1\",\"source\":\"made\",\"origin\":0,\"map\":79,\"x\":1,\"y\":2," +
+            "\"type\":\"Generic\",\"prototype\":1,\"name\":2,\"description\":3}]}"), GameSessionFailure.InvalidSnapshot);
+    }
+
+    [TestMethod]
+    public void APlacedKitItemComesBackInPlaceAgainAndAgainWithoutTheSeed()
+    {
+        using var owner = Owner();
+        owner.PlaceHeroItem("kit:1", There);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "kit:1", Accept).Disposition);
+        owner.PlaceHeroItem("kit:1", There);
+        // Restored without its seed attached, the kit item can still be picked up: it needs no seed.
+        using var restored = Restore(Decode(Text(owner)));
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.PickUpItem(restored.Version, "kit:1", Accept).Disposition);
+        CollectionAssert.AreEqual(new[] { "kit:1", "kit:2", "kit:3" }, restored.QueryHeroKit().Select(item => item.Entity).ToArray());
+
+        // An insert check that changes the session refuses as stale.
+        owner.PlaceHeroItem("apple", There);
+        var stale = owner.PickUpItem(owner.Version, "apple", _ =>
+        {
+            owner.ApplyChanges(owner.Version, null, [new(Exterior, MapChangeKey.ForEntity("x", "y"), 1)]);
+            return SessionInsertVerdict.Accepted;
+        });
+        Assert.AreEqual(GameSessionFailure.StaleVersion, stale.Failure);
+        Assert.IsNotNull(owner.QueryPlacedItems().SingleOrDefault(item => item.Entity == "apple"));
+
+        // A world item whose seed shows a get script is not picked up from the store either.
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior,
+            new([], [new SessionSeedItem("apple", AppleFacts with { ScriptPoints = [SessionScriptPoint.Get] }, AppleCell)])).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.PickUpItem(owner.Version, "apple", Accept).Failure);
+    }
+
+    [TestMethod]
+    public void APlacedMadeItemKeepsItsNumber()
+    {
+        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior,
+            new([new("smith", SessionHolderKind.Npc, false, false, [], [])], [])).Failure);
+        var kind = new SessionItemKind(SessionItemType.Generic, 2320, 5, 6);
+        Assert.AreEqual("made:1", owner.AddItemToNpc(owner.Version, "smith", kind, Accept).Item);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToPc(owner.Version, "smith", 5, Accept).Disposition);
+        owner.PlaceHeroItem("made:1", There);
+        Assert.AreEqual("made:2", owner.AddItemToNpc(owner.Version, "smith", kind, Accept).Item, "made:1 lies on the ground");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "made:1", Accept).Disposition);
+        CollectionAssert.AreEqual(new[] { "made:1" }, owner.QueryMadeItems().Select(item => item.Entity).ToArray());
     }
 }

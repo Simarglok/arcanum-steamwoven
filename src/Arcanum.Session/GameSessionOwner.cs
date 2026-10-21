@@ -767,7 +767,9 @@ public sealed partial class GameSessionOwner : IDisposable
 
     /// <summary>
     /// Ground pickup (the pickup goal, then the item transfer 0x4617F0): an item lying on the actor's map goes to the end of
-    /// the PC's list. Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
+    /// the PC's list. Since ARC-WORLD-059 one of the hero's placed items on the actor's map goes back to the list it came from (a kit
+    /// item at its kit number's place, a made item to the made items) after the insert check; it runs no script, and a world item
+    /// whose attached seed shows a get or insert-item script is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
     /// effect: an item with an item <c>SAP_GET</c> script (not run here), a stack or key type (stack merge and key rings
     /// are not modelled), and a refusal of <paramref name="insertCheck"/>, which runs after every other check. An item
     /// <c>SAP_INSERT_ITEM</c> script runs through <paramref name="scripts"/> (ARC-SCRIPT-013, see <see cref="ISessionItemScriptHost"/>);
@@ -1399,10 +1401,14 @@ public sealed partial class GameSessionOwner : IDisposable
     // the other checks, and the item's insert-item script, which runs last. Both are host callbacks, so a call back into the
     // owner from either (a transfer, a placement, a new seed) makes this transfer stale instead of committing over the
     // changed state.
-    // ARC-WORLD-059: a placed item back to the list it came from (a kit item at its number's place). It runs no script: the session
-    // knows only its kind.
+    // ARC-WORLD-059: a placed item back to the list it came from (a kit item at its number's place). It runs no script: a world item
+    // whose attached origin seed shows a get or insert-item script is refused (ItemScriptUnsupported); a kit or made item's scripts the
+    // session does not know.
     private InventoryMutationResult TakePlaced(SessionPlacedItem placed, SessionInsertCheck insertCheck)
     {
+        if (placed.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(placed.Entity, out var listed) &&
+            (listed.Facts.HasScript(SessionScriptPoint.Get) || listed.Facts.HasScript(SessionScriptPoint.InsertItem)))
+            return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var revision = _revision;
         var verdict = insertCheck(new SessionInventoryItem(placed.Entity, InventoryDomain.MadeFacts(placed.Kind)));
@@ -1605,13 +1611,17 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         // ARC-WORLD-059: the hero's items placed on the ground: a kit item only with a hero, a taken item with its origin map, a made
         // item by its number; a valid map and cell; not deleted and listed once in the whole inventory. Each stays taken.
+        // A placed kit item's number lies within the kit's numbers (the kit, its placed and its deleted items together).
+        var kitNumbers = saved.Kit.Count + placedKit.Count + destroyed.Count(entity => HeroDomain.KitNumber(entity) is not null);
         foreach (var item in saved.Placed)
         {
+            // Only the hero's drops place an item.
+            if (!hero) return GameSessionFailure.InvalidSnapshot;
             if (item is null || !SessionValidation.Entity(item.Entity) || !Enum.IsDefined(item.Source) || !Enum.IsDefined(item.Kind.Type) ||
                 !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
             var sourceFits = item.Source switch
             {
-                SessionPlacedSource.Kit => hero && HeroDomain.KitNumber(item.Entity) is not null && item.Origin is null,
+                SessionPlacedSource.Kit => HeroDomain.KitNumber(item.Entity) is { } number && number <= kitNumbers && item.Origin is null,
                 SessionPlacedSource.Made => SessionMadeItem.Number(item.Entity) is not null && item.Origin is null,
                 _ => item.Origin is { } origin && SessionValidation.Map(origin) && HeroDomain.KitNumber(item.Entity) is null &&
                     !item.Entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal),

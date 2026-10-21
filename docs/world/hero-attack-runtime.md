@@ -166,7 +166,7 @@ there (the critical tables read the host's `TargetWorn`).
 resistances, conditions), `tests/Arcanum.Session.Tests/AttackStateTests.cs` (NPC values from fields, failures, the hero's attack
 until the kill with the experience, loot of a session kill, refusals before any roll, the aimed attack, the ranged refusal,
 experience-free sessions), `tests/Arcanum.Session.Tests/CriticalEffectsStateTests.cs` (ARC-COMBAT-009: a critical hit disarms
-an NPC and the weapon lies at its cell after a restore, items without a cell stay, the hero's drop is not applied, a crippled
+an NPC and the weapon lies at its cell after a restore, items without a cell stay, the hero's dropped weapon lies at its cell until it is picked up (ARC-WORLD-059), a crippled
 arm drops a torch it can no longer hold), `tests/Arcanum.Session.Tests/AttackWearStateTests.cs` (armour wear to the second break, the critical
 weapon effects and invulnerability, the hero's weapon to its break, bare hands never killing, an NPC attacker, object targets,
 missing item data, a refused step, refusals, and the wear of the hero's attack on a stone golem), `tests/Arcanum.TerrainViewer.Tests/AreaCombatTests.cs` (facing, the attack player, the status text,

@@ -173,6 +173,38 @@ public sealed class CriticalEffectsStateTests
     }
 
     [TestMethod]
+    public void TheHeroKeepsANoDropWeaponAndCannotDropOneItsOwnHitBroke()
+    {
+        foreach (var (worn, expected) in new[]
+        {
+            (new SessionWearItem("kit:1", Sturdy) { NoDrop = true }, SessionCriticalStepOutcome.Refused),
+            // "Damage weapon" (10) breaks a weapon of 10 hit points first: the first break takes it off, so its slot is empty.
+            (new SessionWearItem("kit:1", new ItemCondition(10, 0, 0, false)), SessionCriticalStepOutcome.NoItem),
+        })
+        {
+            using var owner = Owner(missChance: 100);
+            var golem = GolemCombat();
+            var found = false;
+            for (var attempt = 0; attempt < 600 && !found; attempt++)
+            {
+                if (owner.QueryEquipment().Worn.Count == 0) Assert.Inconclusive("the blade left before a self-hit with both effects");
+                var result = owner.AttackCritter(owner.Version, new(golem)
+                {
+                    HeroWorn = new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Weapon] = worn }, TargetWorn = Worn(owner), TargetCell = GolemCell,
+                });
+                Assert.AreEqual((GameSessionFailure.None, GameSessionFailure.None), (result.Failure, result.StepFailure));
+                var effects = result.Resolution!.Damage?.HitEffects ?? CriticalHitEffects.None;
+                if (result.Recipient != DamageRecipient.Attacker || !effects.HasFlag(CriticalHitEffects.DamageWeapon | CriticalHitEffects.DropWeapon)) continue;
+                if (owner.IsItemDestroyed("kit:1")) Assert.Inconclusive("the critical miss destroyed the blade first");
+                Assert.AreEqual(expected, result.Criticals.Single(step => step.Kind == SessionCriticalStepKind.DropWeapon).Outcome);
+                Assert.AreEqual(0, owner.QueryPlacedItems().Count, "nothing lies on the ground");
+                found = true;
+            }
+            Assert.IsTrue(found, "a critical self-hit with both weapon effects within the bounded run");
+        }
+    }
+
+    [TestMethod]
     public void ACrippledArmDropsWhatItCanNoLongerHold()
     {
         // A torch in the shield slot (a generic item with the torch flag): one crippled arm refuses it, the one-handed sword stays.

@@ -220,14 +220,17 @@ executable first ([ledger "Placed items"](../research/original-verification-ledg
 original an item is an object anywhere: dropping it removes it from the owner (unwielding a worn one) and moves it to a tile,
 where it stays until something picks it up or its 48-hour decay destroys it; a pickup is the ordinary transfer.
 
-**Store.** One saved list of the hero's items on the ground, in placing order: entity, kind, the hero's list it came from
+**Store.** One saved list of the hero's items on the ground (only a session with a hero has one), in placing order: entity, kind, the hero's list it came from
 (`SessionPlacedSource`: the kit, a world item the PC took, with the map whose seed lists it, or a made item), and the map and cell
-it lies on. A placed item stays taken, so its seed never shows it at its seed position, and it counts in the hero's item budget
+it lies on. It admits the types the hero's lists admit (wider than the worn items the drops place today, for a later drop
+command). A placed item stays taken, so its seed never shows it at its seed position, and it counts in the hero's item budget
 (`MaxPcItems`), so it can always come back. `QueryMapInventory` lists the map's placed items after the NPC drops.
 
 - **Placing** (internal, the hero's critical drops of [ARC-COMBAT-009](hero-attack-runtime.md#critical-effects-arc-combat-009):
   `DropHelmet`, `DropWeapon` and the arm-hit drops): the item leaves its wear slot and its list and lies at the hero's cell
-  (`SessionCriticalStepOutcome.Dropped`). One revision. A no-drop item is refused, as in the original (PI1).
+  (`SessionCriticalStepOutcome.Dropped`). One revision. A no-drop item is refused, as in the original (PI1); an item an earlier
+  step of the same attack broke has already left its slot (`NoItem`); a made item's number is never handed out again while it lies
+  on the ground.
 - **Pickup**: `PickUpItem` of a placed item on the actor's map returns it to its list, a kit item at its kit number's place (the
   kit stays in number order), a taken or made item at the end of its list. The host's insert check runs first (a call back into the
   owner from it is `StaleVersion`); one revision. On another map the item is not available.
@@ -238,8 +241,8 @@ it lies on. A placed item stays taken, so its seed never shows it at its seed po
 **Snapshot schema 32.** `"inventory":{…,"npcs":[…],"placed":[{"entity","source":"kit"|"pc"|"made","origin","map","x","y","type",
 "prototype","name","description"}]}`, `origin` the seed map of a `pc` item and 0 otherwise, the cell 0..2^24 − 1 per coordinate.
 Decoding refuses an unknown source or out-of-range value (`OutOfRange`), an origin that does not fit the source or an item held twice
-in the whole inventory (`NotCanonical`) and more than the policy's hero items (`BudgetExceeded`); restore refuses a kit item without a
-hero or with no kit number, a made item without a made number, a world item with a kit or made id, a deleted item (`InvalidSnapshot`)
+in the whole inventory (`NotCanonical`) and more than the policy's hero items (`BudgetExceeded`); restore refuses any placed item without a hero, a kit item with no kit number or one beyond the kit's numbers (its kit, placed
+and deleted items together), a made item without a made number, a world item with a kit or made id, a deleted item (`InvalidSnapshot`)
 and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its placed items as they skip its deleted ones. Schemas
 1..31 are refused, not migrated.
 
@@ -250,8 +253,10 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
   dropped (unless its item flag 0x20000 is set; a container open in the loot window delays it by a minute); placed items, NPC drops
   and spilled containers' items stay. A follow-up task.
 - Junk piles (PI3): a dropped item joins a junk pile on its tile, or makes one with the loose items there; placed items lie loose.
-- The scripts and side effects of the removal (PI2): item spells, the wield-off and remove-item scripts and the drop script, which
-  the session cannot know for a kit item; the light and armour of the hero follow its equipment at once.
+- The scripts and side effects of the removal (PI2) and of the pickup (PI6): item spells, the wield-off, remove-item and drop scripts,
+  and the get and insert-item scripts of a pickup, none of which runs. A world item whose attached origin seed shows a drop script
+  is not dropped (`ScriptUnsupported`), one with a get or insert-item script is not picked up (`ItemScriptUnsupported`); a kit or
+  made item's scripts the session does not know. The light and armour of the hero follow its equipment at once.
 - The PC's re-wield after losing a weapon (PI5): with the "auto switch" setting on, the original wields the best weapon; the session
   leaves the slot empty.
 - The viewer draws no placed item and cannot click one (ARC-RENDER-033); NPC made items (ARC-WORLD-055) and the junk pile of OD13

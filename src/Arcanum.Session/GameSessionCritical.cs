@@ -135,7 +135,7 @@ public sealed partial class GameSessionOwner
         return EquipmentRules.CheckWear(item, slot, npc.Wearer(conditions), npc.WornItems);
     }
 
-    // One drop: the hero's is not ready; an NPC's seed item goes to the ground at the NPC's cell as a map change.
+    // One drop: the hero's item joins its placed items; an NPC's seed item goes to the ground at the NPC's cell as a map change.
     private SessionWearSide Drop(SessionCriticalStepKind kind, DamageRecipient whose, SessionWearSide side, EquipmentSlot slot, CellCoord? cell,
         List<SessionCriticalStep> steps, ref GameSessionFailure failure)
     {
@@ -176,7 +176,16 @@ public sealed partial class GameSessionOwner
         SessionWearItem item, List<SessionCriticalStep> steps, ref GameSessionFailure failure)
     {
         var cell = _actor.Cell;
-        SessionCriticalStepOutcome? skipped = item.NoDrop ? SessionCriticalStepOutcome.Refused
+        // An item an earlier step of this attack broke has left its slot (the first break takes it off, item durability): the slot is
+        // empty, as the original finds it.
+        var worn = _equipment.Worn.TryGetValue(slot, out var wornItem) && wornItem.Entity == item.Entity;
+        // A world item's drop script, when its seed shows one, is not run (the original's may refuse).
+        var dropScript = _inventory.Pc.Find(pc => pc.Entity == item.Entity) is { Entity: not null } taken &&
+            _inventory.Seeds.TryGetValue(taken.Origin, out var origin) && origin.Items.TryGetValue(item.Entity, out var listed) &&
+            listed.Facts.HasScript(SessionScriptPoint.Drop);
+        SessionCriticalStepOutcome? skipped = !worn ? SessionCriticalStepOutcome.NoItem
+            : item.NoDrop ? SessionCriticalStepOutcome.Refused
+            : dropScript ? SessionCriticalStepOutcome.ScriptUnsupported
             : !DropCellFits(cell) ? SessionCriticalStepOutcome.HeroCellUnfit
             : _revision == long.MaxValue ? SessionCriticalStepOutcome.Unknown
             : null;
