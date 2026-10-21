@@ -178,9 +178,10 @@ discipline with the degree logged negative (0x4AFE10), `level.mes` 5 or 6 for th
 | --- | --- | --- | --- |
 | OL29 | After the followers of the array (the recursive list, no death test, A5), the step goes to NPCs found in a rectangle the size of the game window centred on the PC, converted to tiles, among the loaded objects, that are not dead, have the wait flag and whose top PC leader is this PC. A waiting follower outside that rectangle, farther away on the same map or on another map (not loaded), gets nothing, then or later; XP7 keeps its gap, so it stays behind the PC for good (except the level-50 path of A1). | 0x4A69C0, 0x440FC0, 0x440FF0, 0x440B40, 0x4A6CB0 | Original (L7 "within one screen" confirmed) |
 
-Steamwoven today levels every waiting NPC of the current map
-([advancement runtime](../world/advancement-runtime.md#not-ready)), which is wider
-than the original's rectangle; see [owner decision](#owner-decisions-2026-10-21) D7.
+Steamwoven gives the step to every waiting follower wherever it waits, the steps of one whose map is not loaded kept until it
+loads, and the Original setting uses the rectangle (owner decision D7, implemented by ARC-WORLD-047;
+[advancement runtime](../world/advancement-runtime.md#viewer-host)). The rectangle is the original's 800 × 400 play view
+(0x557230; the same rectangle at 0x430137): 10 tiles on both axes.
 
 ## 6. SCR action 139: set auto-level scheme (Q6)
 

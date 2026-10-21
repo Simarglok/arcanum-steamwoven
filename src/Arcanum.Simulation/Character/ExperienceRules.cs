@@ -49,6 +49,9 @@ public readonly record struct FollowerLevelStep(int OldPcLevel, int NewPcLevel);
 /// </summary>
 public readonly record struct ExperienceLevelWritten(int Level, int UnspentBefore, int Points);
 
+/// <summary>A PC level step a waiting follower missed and how many times in a row it came (ARC-WORLD-047).</summary>
+public readonly record struct MissedLevelStep(FollowerLevelStep Step, int Times);
+
 /// <summary>A follower's level after the source's update and the points it granted (0 when the level stays).</summary>
 public readonly record struct FollowerLevelUp(int Level, int PointsGained);
 
@@ -164,6 +167,60 @@ public static class ExperienceRules
             toNext = ToNextLevel(table, level, experience);
         }
         return new(level, experience, unspentPoints, gained, points, new(old, current));
+    }
+
+    /// <summary>The game window a waiting follower's rectangle is measured with (ARC-WORLD-047): the original's play view, 800 × 400
+    /// at y 41 below the top bar (the window 0x557230 creates; a visible-tile scan passes the same 800 × 400 rectangle to the tile
+    /// conversion at 0x430137). The handle the rectangle is read from reaches 0x440FF0 through the view callback 0x43A570, whose caller
+    /// is not traced; the viewer's window size never decides it.</summary>
+    public const int ReferenceWindowWidth = 800, ReferenceWindowHeight = 400;
+
+    /// <summary>
+    /// The tile reach of the waiting followers' rectangle (ledger OL29; 0x440FF0 → 0x4B9130): the window's screen rectangle, centred
+    /// on the PC, has its four corners converted to tiles (a tile is 80 × 40 pixels, so a screen offset (x, y) is the tile offset
+    /// (y / 40 − x / 80, y / 40 + x / 80)) and the objects of the bounding box are found. The corners reach
+    /// <c>height / 80 + width / 160</c> tiles on both axes: exactly 10 for the 800 × 400 view (the corners convert with truncation).
+    /// </summary>
+    public static int WaitingStepReach(int width = ReferenceWindowWidth, int height = ReferenceWindowHeight) =>
+        width is > 0 and <= 100_000 && height is > 0 and <= 100_000 ? (2 * height + width) / 160 : throw new ArgumentOutOfRangeException(nameof(width));
+
+    /// <summary>
+    /// Whether a waiting follower of the PC gets the PC's level step (ledger OL29, owner decision D7; ARC-WORLD-047). A dead one never
+    /// does. With <see cref="ExperienceRuleProfile.WaitingFollowersStepOnlyNearPc"/> (Original) only one among the loaded objects
+    /// (<paramref name="offset"/> is its tile offset from the PC, null when it is not on the loaded map) within
+    /// <see cref="WaitingStepReach"/> on both axes; otherwise (Steamwoven) every one, wherever it waits.
+    /// </summary>
+    public static bool WaitingFollowerGetsStep((int X, int Y)? offset, bool dead, ExperienceRuleProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (dead) return false;
+        if (!profile.WaitingFollowersStepOnlyNearPc) return true;
+        var reach = WaitingStepReach();
+        return offset is { } d && Math.Abs((long)d.X) <= reach && Math.Abs((long)d.Y) <= reach;
+    }
+
+    /// <summary>The most entries a waiting follower's missed steps can hold: one per rising PC level step (old levels 0..49, the last
+    /// one into the last-level branch) and that branch's repeated step (project bound with room to spare).</summary>
+    public const int MaxMissedStepEntries = 52;
+
+    /// <summary>
+    /// The PC level steps a waiting follower missed with one more appended (ARC-WORLD-047), applied later in order, each
+    /// <see cref="MissedLevelStep.Times"/> times, so it gets every step as it would have in turn: its scheme runs at each level as it
+    /// would have (a merged step would give the same level and points but one scheme run at the last level, which can buy
+    /// differently: a target that depends on the level, such as the hit-point or fatigue maximum, which includes the level, needs
+    /// fewer bought points at a higher level). The same step again counts once more (the
+    /// last-level branch repeats 50 → 51 on every award), up to <see cref="MaxLevel"/> times, after which another changes no level.
+    /// Null when the list would pass <see cref="MaxMissedStepEntries"/>.
+    /// </summary>
+    public static IReadOnlyList<MissedLevelStep>? AppendMissedStep(IReadOnlyList<MissedLevelStep> steps, FollowerLevelStep step)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+        var list = steps.ToList();
+        if (list.Count > 0 && list[^1].Step == step)
+            list[^1] = list[^1] with { Times = Math.Min(MaxLevel, list[^1].Times + 1) };
+        else if (list.Count >= MaxMissedStepEntries) return null;
+        else list.Add(new(step, 1));
+        return list.AsReadOnly();
     }
 
     /// <summary>
