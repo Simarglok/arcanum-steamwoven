@@ -500,7 +500,8 @@ of the anomaly table above under D2; each is implemented by the slice named.
   No switch (TECH-4).
 - **TC1, switch.** Steamwoven: an experienced technologist pays fewer cells; an item source needs `2 × cost −
   trunc(cost × p / c)` cells (a strong technologist `cost`, a neutral holder about `1.5 × cost`, a mage `2 × cost`).
-  Original keeps the executable's `cost + trunc(cost × p / c)`. Implemented with the cell source in TECH-6.
+  Original keeps the executable's `cost + trunc(cost × p / c)`. Implemented with the cell source by ARC-TECHNOLOGY-007
+  ([charge cells](../world/charge-cell-runtime.md), ledger [CC1–CC8](original-verification-ledger.md#charge-cells-arc-technology-007)).
 - **TC7, switch.** Steamwoven: the repair quote starts from the undamaged sale price, `trunc(P_full / 2) × damage /
   maximum`, at least 2, so the cost grows with the damage and a nearly intact item is cheap. Original keeps the
   executable's double count. Implemented in the item durability slice.
@@ -647,7 +648,9 @@ this document start at F1 or F2.
    No launcher change (no new argument).
 6. **TECH-6 Charge cells and tech devices** (Simulation, with the magic
    engine; FR-MAGIC-010/011): the cell source behind the engine's payment port
-   (critter `cost`, item source TC1 decided, ammunition type 2), the list of
+   (critter `cost`, item source TC1 decided, ammunition type 2; **done** as rules and a
+   session port by ARC-TECHNOLOGY-007, [runtime](../world/charge-cell-runtime.md); the
+   consumption in session state waits for session ammunition, ARC-WORLD-066), the list of
    tech items and records that reach the engine (70 item spell slots, records
    147, 168 and 187), a test that the engine's MAINTAIN charges maintained
    tech records (the stage itself stays with the magic slices), and the rule that
