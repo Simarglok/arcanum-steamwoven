@@ -8,6 +8,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Magic;
+using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Technology;
 using Arcanum.Simulation.Travel;
@@ -39,7 +40,7 @@ public sealed class GameRules
     private GameRules(RuleMode mode, CombatAnomalyProfile combat, GameEventQueueProfile events, ScrRuleProfile scripts,
         ReactionRuleProfile reaction, DataFixProfile data, ExperienceRuleProfile experience, SoundRuleProfile sound, ItemRuleProfile items,
         TechnologyRuleProfile technology, MagicAnomalyProfile magic, TravelRuleProfile travel, CompanionOrderRuleProfile orders, DialogRuleProfile dialog,
-        WrittenRuleProfile written)
+        WrittenRuleProfile written, NavigationRuleProfile navigation)
     {
         Mode = mode;
         Combat = combat;
@@ -56,6 +57,7 @@ public sealed class GameRules
         Orders = orders;
         Dialog = dialog;
         Written = written;
+        Navigation = navigation;
     }
 
     public RuleMode Mode { get; }
@@ -106,17 +108,20 @@ public sealed class GameRules
     /// <summary>Reading window (ARC-TECHNOLOGY-009): WRD3, a message without a font prefix loses its first character.</summary>
     public WrittenRuleProfile Written { get; }
 
+    /// <summary>Click route (ARC-WORLD-072): LR4/LR7, a click more than 32 tiles away does not move.</summary>
+    public NavigationRuleProfile Navigation { get; }
+
     /// <summary>The default mode: the original with every recorded fix.</summary>
     public static GameRules Steamwoven { get; } = new(RuleMode.Steamwoven, CombatAnomalyProfile.Steamwoven, GameEventQueueProfile.Steamwoven, ScrRuleProfile.Steamwoven,
         ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven, ExperienceRuleProfile.Steamwoven, SoundRuleProfile.Steamwoven, ItemRuleProfile.Steamwoven, TechnologyRuleProfile.Steamwoven,
         MagicAnomalyProfile.Steamwoven, TravelRuleProfile.Steamwoven, CompanionOrderRuleProfile.Steamwoven,
-        DialogRuleProfile.Steamwoven, WrittenRuleProfile.Steamwoven);
+        DialogRuleProfile.Steamwoven, WrittenRuleProfile.Steamwoven, NavigationRuleProfile.Steamwoven);
 
     /// <summary>The retail 1.0.7.4 behaviour in every domain.</summary>
     public static GameRules Original { get; } = new(RuleMode.Original, CombatAnomalyProfile.Original, GameEventQueueProfile.Original, ScrRuleProfile.Original,
         ReactionRuleProfile.Original, DataFixProfile.Original, ExperienceRuleProfile.Original, SoundRuleProfile.Original, ItemRuleProfile.Original, TechnologyRuleProfile.Original,
         MagicAnomalyProfile.Original, TravelRuleProfile.Original, CompanionOrderRuleProfile.Original,
-        DialogRuleProfile.Original, WrittenRuleProfile.Original);
+        DialogRuleProfile.Original, WrittenRuleProfile.Original, NavigationRuleProfile.Original);
 
     /// <summary>Both modes, default first.</summary>
     public static IReadOnlyList<GameRules> All { get; } = [Steamwoven, Original];

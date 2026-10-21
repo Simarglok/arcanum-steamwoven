@@ -145,6 +145,9 @@ public sealed class AreaHoverTests
         Assert.AreEqual(AreaHoverAction.Walk, AreaHover.Ground(steps, actor, actor), "the actor's own cell");
         Assert.AreEqual(AreaHoverAction.Walk, AreaHover.Ground(steps, actor, new(32, 0)), "at the axis reach");
         Assert.AreEqual(AreaHoverAction.Walk, AreaHover.Ground(steps, actor, new(40, 0)), "beyond the axis reach: a corridor (ARC-WORLD-042)");
+        // ARC-WORLD-072: under the Original rule mode a far click is refused; at the reach it walks.
+        Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(steps, actor, new(40, 0), farClickDoesNotMove: true), "Original: beyond the reach");
+        Assert.AreEqual(AreaHoverAction.Walk, AreaHover.Ground(steps, actor, new(32, 0), farClickDoesNotMove: true), "Original: at the reach");
         Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(steps, actor, new(0, 3)), "outside the area: ROUTE_TARGET_OUTSIDE_AREA");
         Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(steps, new(0, 9), new(1, 0)), "actor outside: ROUTE_SOURCE_OUTSIDE_AREA");
         Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(new Steps(cells, []), actor, new(3, 0)), "no entry: ROUTE_NOT_FOUND pre-check");

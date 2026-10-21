@@ -93,6 +93,10 @@ critical's item drop draws a distance and a direction that are not
 1. **Refusal** without rolls: an inactive attacker (dead, unconscious,
    paralysed, stunned, stoned) or a dead target critter.
 2. **Location**: aimed, or rolled (d100 ≤ 70 torso, ≤ 85 leg, ≤ 95 arm, else head).
+   ARC-COMBAT-012: a request with `AmmunitionShort` (the attacker holds fewer units of the weapon's ammunition
+   type than one shot takes) is then refused with `AttackRefusal.OutOfAmmunition`, no later roll
+   ([ledger RA3](../research/original-verification-ledger.md#reach-and-line-of-fire-arc-combat-012)); the caller spends a shot's
+   units once the resolution ran.
 3. **Technology failure** roll (a technological weapon in magickal hands; not
    for bare hands or throwing): a critical miss.
 4. **Magick cancel** roll against the target's opposing aptitude: a magickal

@@ -167,9 +167,9 @@ public partial class TerrainViewerApp
                 _inventoryHost?.InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck, data.AmmoOf);
         if (result.Disposition == GameSessionDisposition.Changed)
         {
-            _schematicMessage = AreaSchematics.CompletedText(data, AreaHoverIndex.TextProfile);
+            _schematicMessage = AreaSchematics.CompletedText(data, AreaHoverIndex.TextProfile) + AreaSchematics.OnGroundText(result, _schematicCrafter is not null);
             SchematicSound(AreaSchematics.CompletedSound(view.Discipline), "schematics assembled");
-            GD.Print($"ARC-TECHNOLOGY-005 assembled crafter={view.Crafter ?? "hero"} record={view.Record} made={string.Join(",", result.Made)} consumed={string.Join(",", result.Consumed)}");
+            GD.Print($"ARC-TECHNOLOGY-005 assembled crafter={view.Crafter ?? "hero"} record={view.Record} made={string.Join(",", result.Made)} ground={string.Join(",", result.OnGround)} consumed={string.Join(",", result.Consumed)}");
         }
         else
         {

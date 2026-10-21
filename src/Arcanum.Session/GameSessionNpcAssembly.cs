@@ -65,22 +65,27 @@ public sealed partial class GameSessionOwner
     /// hero): the gate over the NPC's list and expertise is checked again, component 1 is reserved, every product unit must be a kind
     /// the lists admit and pass the host's insert check for the NPC (as if the components were already gone and the earlier units
     /// inserted) before anything is consumed; then both components leave the NPC with the durability deletion (as
-    /// <see cref="RemoveItemFromNpc"/>) and <c>quantity</c> made items enter its list (as <see cref="AddItemToNpc"/>). One revision. The
-    /// original creates each product on the crafter's tile and leaves it there when the NPC cannot take it; the session keeps no new
-    /// ground items, so a refused insert check refuses the assembly instead (nothing is lost), as for the hero.
+    /// <see cref="RemoveItemFromNpc"/>) and the accepted units enter its list (as <see cref="AddItemToNpc"/>). One revision.
+    /// ARC-WORLD-070: the original creates each product unit on the crafter's tile and leaves it there when the NPC cannot take it
+    /// (ledger SA3–SA5); so does the session: a refused unit lies on <paramref name="crafterCell"/> (the NPC's tile on the hero's map,
+    /// which the host knows) as a made item in the ground store (<see cref="SessionAssemblyResult.OnGround"/>), which the hero can
+    /// pick up. The ground store is the hero's, so without a hero, or without a crafter tile that fits, a refused unit refuses the
+    /// assembly (<see cref="GameSessionFailure.InsertRefused"/>, nothing consumed).
     /// Refused before any effect: an invalid crafter (<see cref="GameSessionFailure.InvalidAdvancement"/>), the version, an NPC the
     /// session does not know (<see cref="GameSessionFailure.UnknownHolder"/>), a dead NPC (<see cref="GameSessionFailure.InvalidLifeTarget"/>:
     /// the original's open refuses a dead crafter), the gate (<see cref="GameSessionFailure.AssemblyRefused"/> with the plan), a record
     /// without a product or with a quantity below 1 (<see cref="GameSessionFailure.InvalidSchematics"/>), a product the lists do not
-    /// admit (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), the NPC's list bound, the store, the made numbers or the durability
-    /// records (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, the insert check (<see cref="GameSessionFailure.InsertRefused"/>;
-    /// a call back into the owner from a host callback, a seed attach included, is <see cref="GameSessionFailure.StaleVersion"/>).
+    /// admit (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), the insert check asked for every unit (a call back into the owner
+    /// from a host callback, a seed attach included, is <see cref="GameSessionFailure.StaleVersion"/>), a refused unit that can go nowhere
+    /// (<see cref="GameSessionFailure.InsertRefused"/>), the NPC's list bound, the store, the ground store (the hero's item bound), the
+    /// made numbers or the durability records (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision.
     /// ARC-WORLD-066: as for the hero, an ammunition component loses one unit and an ammunition product (<paramref name="productAmmo"/>)
-    /// merges into the NPC's stack of its prototype, a new <c>made:n</c> stack only when it holds none.
+    /// merges into the NPC's stack of its prototype, a new <c>made:n</c> stack only when it holds none; a refused unit is a stack of its
+    /// own on the ground.
     /// </summary>
     public SessionAssemblyResult AssembleSchematicForNpc(GameSessionVersion expected, SessionNpcCrafter crafter, SchematicRecord schematic,
         SessionCraftLookup items, Func<int, ComponentFacts?> facts, Func<int, SessionItemKind?> productKind, SessionInsertCheck insertCheck,
-        Func<int, (int AmmoType, int Units)?>? productAmmo = null)
+        Func<int, (int AmmoType, int Units)?>? productAmmo = null, Arcanum.Simulation.Movement.CellCoord? crafterCell = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(crafter);
@@ -122,47 +127,48 @@ public sealed partial class GameSessionOwner
         var deleted = consumed.Where(entity => !stacks.TryGetValue(entity, out var s) || s.Units <= 1).ToArray();
         SessionAmmoRecord? into = ammo is null ? null : NpcStacks(npc).Where(pair => pair.Prototype == prototype && !deleted.Contains(pair.Stack.Entity))
             .Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault();
-        var newItems = ammo is null ? quantity : into is null ? 1 : 0;
+        // ARC-WORLD-070: one insert check a product unit for the NPC, for the object it is (the stack it merges into); a refused unit
+        // lies on the crafter's tile.
+        var units = PlanUnits(quantity, ammo is not null, into?.Entity,
+            unitEntity => insertCheck(new SessionInventoryItem(unitEntity, InventoryDomain.MadeFacts(kind) with { Quantity = ammo?.Units, AmmoType = ammo?.AmmoType })),
+            Stale, out var firstRefusal, out var unitFailure);
+        if (units is null) return unitFailure == GameSessionFailure.StaleVersion ? RejectAssembly(unitFailure) : RejectAssembly(unitFailure, plan);
+        var ground = units.Count(u => u.Ground);
+        if (ground > 0 && (_hero is null || crafterCell is not { } tile || !DropCellFits(tile)))
+            return RejectAssembly(GameSessionFailure.InsertRefused, plan) with { Verdict = firstRefusal };
+        var inList = units.Count(u => u.NewObject && !u.Ground);
         var addedConsumed = deleted.Count(entity => _inventory.NpcOf(entity) == npc);
-        if (_inventory.AddedTo(npc).Count + SeedItemCount(npc) - deleted.Length + (long)newItems > SessionMapInventorySeed.MaxListLength ||
-            _inventory.NpcHeld - addedConsumed + (long)newItems > _limits.MaxNpcItems) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
-        var keptStacks = consumed.Except(deleted).Count(entity => !_inventory.Ammo.ContainsKey(entity));
-        if (_inventory.Ammo.Count + keptStacks + (ammo is not null && into is null ? 1 : 0) + (into is { } i && !_inventory.Ammo.ContainsKey(i.Entity) ? 1 : 0) > _limits.MaxAmmoRecords)
+        if (_inventory.AddedTo(npc).Count + SeedItemCount(npc) - deleted.Length + (long)inList > SessionMapInventorySeed.MaxListLength ||
+            _inventory.NpcHeld - addedConsumed + (long)inList > _limits.MaxNpcItems || _inventory.Held + (long)ground > _limits.MaxPcItems)
             return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
-        if (ammo is { } added && (into is { } t ? t.Units - (consumed.Contains(t.Entity) ? 1 : 0) : 0L) + (long)added.Units * quantity > int.MaxValue)
+        var keptStacks = consumed.Except(deleted).Count(entity => !_inventory.Ammo.ContainsKey(entity));
+        if (ammo is not null && _inventory.Ammo.Count + keptStacks + (long)units.Count(u => u.NewObject) +
+            (into is { } i && !_inventory.Ammo.ContainsKey(i.Entity) ? 1 : 0) > _limits.MaxAmmoRecords)
+            return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
+        if (ammo is { } added && (into is { } t ? t.Units - (consumed.Contains(t.Entity) ? 1 : 0) : 0L) + (long)added.Units * units.Count(u => !u.Ground) > int.MaxValue)
             return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         var newRecords = deleted.Count(entity => !_durability.Records.ContainsKey(entity));
         if (_durability.Count + newRecords > _limits.MaxDurabilityRecords) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
-        var next = NextMadeNumber();
-        if (newItems > 0 && next > int.MaxValue - (long)newItems + 1) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         if (_revision == long.MaxValue) return RejectAssembly(GameSessionFailure.RevisionExhausted, plan);
-        var made = Enumerable.Range((int)next, newItems).Select(SessionMadeItem.EntityOf).ToArray();
-        for (var unit = 0; unit < quantity; unit++)
-        {
-            var entity = into?.Entity ?? (made.Length > 0 ? made[ammo is null ? unit : 0] : SessionMadeItem.EntityOf((int)next));
-            var verdict = insertCheck(new SessionInventoryItem(entity, InventoryDomain.MadeFacts(kind) with { Quantity = ammo?.Units, AmmoType = ammo?.AmmoType }));
-            ThrowIfDisposed();
-            if (Stale()) return RejectAssembly(GameSessionFailure.StaleVersion);
-            if (verdict != SessionInsertVerdict.Accepted) return RejectAssembly(GameSessionFailure.InsertRefused, plan) with { Verdict = verdict };
-        }
         foreach (var entity in consumed)
         {
             if (deleted.Contains(entity)) Delete(entity);
             else _inventory.Ammo[entity] = stacks[entity] with { Units = stacks[entity].Units - 1 };
         }
-        foreach (var entity in made)
+        // A seed stack the NPC holds keeps its seed units until the session tracks it.
+        if (into is { } seedStack && !_inventory.Ammo.ContainsKey(seedStack.Entity) && units.Any(u => !u.Ground)) _inventory.Ammo[seedStack.Entity] = seedStack;
+        foreach (var unit in units)
         {
-            _inventory.AddToNpc(npc, new SessionMadeItem(entity, kind));
-            _inventory.Taken.Add(entity);
-        }
-        if (ammo is { } made2)
-        {
-            var target = into is { } stack ? (_inventory.Ammo.TryGetValue(stack.Entity, out var current) ? current : stack) : new SessionAmmoRecord(made[0], made2.AmmoType, 0);
-            _inventory.Ammo[target.Entity] = target with { Units = target.Units + made2.Units * quantity };
+            if (unit.Ground) PlaceMade(unit.Entity, kind, _actor.Map, crafterCell!.Value);
+            else if (unit.NewObject)
+            {
+                _inventory.AddToNpc(npc, new SessionMadeItem(unit.Entity, kind));
+                _inventory.Taken.Add(unit.Entity);
+            }
+            if (ammo is { } a) AddAmmoUnits(unit.Entity, a.AmmoType, a.Units);
         }
         _revision++;
-        var entered = ammo is null ? made : [into?.Entity ?? made[0]];
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, plan, Array.AsReadOnly(entered), Array.AsReadOnly(consumed), Version);
+        return Assembled(plan, units, consumed, firstRefusal);
     }
 
     private static AssemblyPlan NpcPlan(ImmutableArray<SessionTechDiscipline> technology, SchematicRecord schematic, IReadOnlyList<CraftItem> inventory,

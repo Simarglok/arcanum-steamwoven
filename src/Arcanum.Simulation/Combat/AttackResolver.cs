@@ -54,6 +54,8 @@ public static class AttackResolver
 
         var aimed = request.AimedLocation is not null;
         var location = request.AimedLocation ?? AttackRules.HitLocationFromRoll(rolls.D100(CombatRollPurpose.HitLocation));
+        // ARC-COMBAT-012: the dispatcher's ammunition check comes after the hit location and before every other roll.
+        if (request.AmmunitionShort) return Refused(AttackRefusal.OutOfAmmunition, rolls);
 
         var hit = false;
         var critical = false;

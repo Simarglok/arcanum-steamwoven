@@ -527,6 +527,22 @@ public sealed class AttackResolverTests
     }
 
     [TestMethod]
+    public void TooLittleAmmunitionRefusesAfterTheHitLocationRoll()
+    {
+        // ARC-COMBAT-012: the dispatcher rolls the hit location, then checks the ammunition (0x4B65D0) before every other roll.
+        var shortOf = AttackResolver.Resolve(Melee() with { AmmunitionShort = true }, new ScriptedRolls(new[] { (LocationRoll, 50) }));
+        Assert.AreEqual((AttackRefusal.OutOfAmmunition, AttackOutcome.Refused, 1), (shortOf.Refusal, shortOf.Outcome, shortOf.Rolls.Count));
+        var aimed = AttackResolver.Resolve(Melee() with { AmmunitionShort = true, AimedLocation = HitLocation.Head },
+            new ScriptedRolls(Array.Empty<(CombatRollPurpose, int)>()));
+        Assert.AreEqual((AttackRefusal.OutOfAmmunition, 0), (aimed.Refusal, aimed.Rolls.Count), "an aimed shot rolls nothing first");
+        // An inactive attacker is refused first, with no roll.
+        Assert.AreEqual(AttackRefusal.AttackerInactive, AttackResolver.Resolve(Melee() with
+        {
+            AmmunitionShort = true, Attacker = Npc() with { Conditions = CombatantConditions.Stunned },
+        }, new ScriptedRolls(Array.Empty<(CombatRollPurpose, int)>())).Refusal);
+    }
+
+    [TestMethod]
     public void RefusalsMakeNoRolls()
     {
         var stunned = AttackResolver.Resolve(Melee() with { Attacker = Npc() with { Conditions = CombatantConditions.Stunned } },

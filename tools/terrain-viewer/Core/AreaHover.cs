@@ -180,13 +180,16 @@ public static class AreaHover
 
     /// <summary>The ground action for a goal, from the planner's refusals that need no search
     /// (<see cref="RoutePlanner.Plan"/>): both cells inside the area and the goal enterable (<see cref="GoalEnterable"/>).
-    /// A goal beyond the planner's axis reach is a walk too: the follower walks it along a corridor (ARC-WORLD-042). The
-    /// actor's own cell is a walk (the route is already there).</summary>
-    public static AreaHoverAction Ground(IRouteStepSource source, CellCoord actor, CellCoord goal)
+    /// A goal beyond the planner's axis reach is a walk too: the follower walks it along a corridor (ARC-WORLD-042), unless
+    /// <paramref name="farClickDoesNotMove"/> (the Original rule mode, ARC-WORLD-072: the click is refused,
+    /// <c>ROUTE_TARGET_OUT_OF_RANGE</c>). The actor's own cell is a walk (the route is already there).</summary>
+    public static AreaHoverAction Ground(IRouteStepSource source, CellCoord actor, CellCoord goal, bool farClickDoesNotMove = false)
     {
         ArgumentNullException.ThrowIfNull(source);
         if (!source.Contains(actor) || !source.Contains(goal)) return AreaHoverAction.NoRoute;
         if (goal == actor) return AreaHoverAction.Walk;
+        if (farClickDoesNotMove && Math.Max(Math.Abs((long)goal.X - actor.X), Math.Abs((long)goal.Y - actor.Y)) > RouteLimits.AxisDistanceMaximum)
+            return AreaHoverAction.NoRoute;
         return GoalEnterable(source, goal) ? AreaHoverAction.Walk : AreaHoverAction.NoRoute;
     }
 
