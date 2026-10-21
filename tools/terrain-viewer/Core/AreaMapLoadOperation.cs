@@ -101,6 +101,8 @@ internal static class AreaMapLoadOperation
             objectLights = local?.ObjectLightCount ?? 0;
             lit = new(lighting.Source!, AreaAmbientPolicy.Channels(snapshot, plan)) { Local = local, ObjectLightsFailure = objectsFailure };
         }
+        // ARC-WORLD-057: an unlit map's session starts from the module's start clock alone.
+        var unlitStartup = lit is null ? AreaLightingReader.ReadStartup(stack) : null;
         Console.WriteLine($"ARC-RENDER-017 load stage=lighting result={lighting.Failure} stationary={lightsFailure} objects={objectsFailure} " +
             $"object-lights={objectLights} ms={Environment.TickCount64 - lightingStarted}");
         AreaLoadOperation.VerifyFiles([(arguments.ModulePath, moduleIdentity), (arguments.ResourcePath, resourceIdentity),
@@ -125,6 +127,7 @@ internal static class AreaMapLoadOperation
             mf, rf, mf, rf, area.CpuRgbaBytes + actor.CheckedRgbaBytes, elapsed, 1)
         { Area = area, ActorPlan = actor.Plan, ActorTextures = actor.Textures, AreaStepSnapshot = traversal,
             MapTransitions = transitions, MapDestinations = destinations, MapTransitionsFailure = transitionsFailure, AreaMapWindowCentre = centre,
+            UnlitSessionStartup = unlitStartup?.Startup, UnlitSessionStartupFailure = unlitStartup?.Failure,
             ActorResourceFingerprint = new(actorIdentity.Length, actorIdentity.Sha256), ActorResourceFingerprintAfter = new(actorIdentity.Length, actorIdentity.Sha256) };
     }
 

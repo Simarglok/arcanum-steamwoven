@@ -288,6 +288,9 @@ public partial class TerrainViewerApp
         // dialog action opens the next conversation, anything else is a notice.
         var speaker = _conversationSpeaker; _conversationSpeaker = null;
         var talkHost = _talkHost; _talkHost = null;
+        // ARC-TECHNOLOGY-006: SU ended the talk; the window opens with the NPC as crafter and the talk does not resume (NC2).
+        if (conversation?.End is { Kind: DialogEndKind.SchematicWindow } && talkHost?.TakeSchematicCrafter() is { } crafter && _areaSession is not null)
+            QueueDialogSchematics(crafter);
         if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)
         {
             AreaConversationStart resumed;

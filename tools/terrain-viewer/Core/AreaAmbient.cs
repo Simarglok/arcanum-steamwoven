@@ -105,8 +105,15 @@ public sealed class AreaAmbientDriver
     public static ProfileBinding ClockProfile(AreaLightingSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
-        return new(1, ClockPolicy, ClockSourceRevision, source.ModuleSha256,
-            source.Startup.PayloadSha256, source.Startup.Year, source.Startup.Hour);
+        return ClockProfile(source.ModuleSha256, source.Startup);
+    }
+
+    /// <summary>ARC-WORLD-057: the same profile from the module's identity and start clock alone (an unlit map's session),
+    /// equal to a lit map's of that module, so a session carries between them.</summary>
+    public static ProfileBinding ClockProfile(string moduleSha256, StartupClockDeclaration startup)
+    {
+        ArgumentNullException.ThrowIfNull(moduleSha256); ArgumentNullException.ThrowIfNull(startup);
+        return new(1, ClockPolicy, ClockSourceRevision, moduleSha256, startup.PayloadSha256, startup.Year, startup.Hour);
     }
 
     /// <summary>Binds to a session whose clock was started from this source's profile and applies the

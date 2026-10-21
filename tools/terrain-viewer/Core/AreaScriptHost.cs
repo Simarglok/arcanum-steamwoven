@@ -237,15 +237,14 @@ public sealed class AreaScriptHost : IScrHost
         failure is not (GameSessionFailure.None or GameSessionFailure.InvalidAdvancement or GameSessionFailure.AdvancementUnavailable);
 
     /// <summary>
-    /// ARC-TECHNOLOGY-005: what start schematic UI (129) does for its object (ledger SW8; TC2, both fixed, both modes): the PC opens
-    /// its own window (crafter and viewer the PC); an NPC with a PC leader would open the window with the NPC as crafter and the
-    /// leader as viewer, which the viewer does not support yet (no NPC inventory state), so it is refused by name
-    /// (<see cref="AreaSchematicScriptStatus.NpcCrafterNotReady"/>), never called through a garbage callback; any other object
-    /// (an NPC without a leader, an absent or non-critter object) opens nothing (null).
+    /// ARC-TECHNOLOGY-005/006: what start schematic UI (129) does for its object (ledger SW8, NC3; TC2, both fixed, both modes): the
+    /// PC opens its own window (crafter and viewer the PC); an NPC with a PC leader (the first PC up its leader chain) opens the window
+    /// with the NPC as crafter and the leader as viewer, never through the original's unfilled callback; any other object (an NPC
+    /// without a leader, an absent or non-critter object) opens nothing (null).
     /// </summary>
     public static AreaSchematicScriptOpen? ResolveSchematic(ScrObjectRef obj, bool isPc, ScrObjectRef? leader) =>
         isPc ? new(obj, obj, AreaSchematicScriptStatus.Open)
-        : leader is { } viewer ? new(obj, viewer, AreaSchematicScriptStatus.NpcCrafterNotReady) : null;
+        : leader is { } viewer ? new(obj, viewer, AreaSchematicScriptStatus.Open) : null;
 
     /// <summary>A script object as a deferred call's session role (map and entity id), or null for an absent one.</summary>
     public static SessionScriptRole? Role(ScrObjectRef? obj) => obj is { } o ? new SessionScriptRole(new SessionMapId(o.Map), o.Code) : null;
@@ -254,10 +253,8 @@ public sealed class AreaScriptHost : IScrHost
 /// <summary>ARC-TECHNOLOGY-005: how a start schematic UI request resolved.</summary>
 public enum AreaSchematicScriptStatus
 {
-    /// <summary>The PC's own window opens.</summary>
+    /// <summary>The window opens: the PC's own (crafter and viewer the PC), or an NPC crafter's with its PC leader as viewer.</summary>
     Open = 0,
-    /// <summary>An NPC crafter with its PC leader as viewer: a later slice (NPC inventory state); refused by name.</summary>
-    NpcCrafterNotReady = 1,
 }
 
 /// <summary>ARC-TECHNOLOGY-005: one resolved start schematic UI request: the crafter, the viewer and the outcome.</summary>

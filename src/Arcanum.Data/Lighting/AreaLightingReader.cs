@@ -49,6 +49,32 @@ public static class AreaLightingReader
         return Read(new StackFiles(stack), snapshot, token);
     }
 
+    /// <summary>
+    /// ARC-WORLD-057: the module's start clock alone (<c>rules/gameinit.mes</c>, year key 4 and hour key 5, read at module
+    /// load), for a map whose other lighting inputs do not admit lighting: its game session still starts from the module's
+    /// clock (the viewer's sessions bind the clock profile to these values).
+    /// </summary>
+    public static StartupClockRead ReadStartup(ContentStack stack)
+    {
+        ArgumentNullException.ThrowIfNull(stack);
+        var failure = Startup(new StackFiles(stack), out var startup);
+        return new(failure, failure == LightingFailure.None ? startup : null);
+    }
+
+    private static LightingFailure Startup(ILightingFiles files, out StartupClockDeclaration? startup)
+    {
+        startup = null;
+        var failure = files.Read("rules/gameinit.mes", ContentLoadPhase.ModuleLoaded, out var gameInit);
+        if (failure != LightingFailure.None) return failure;
+        failure = LightingMes.TryParse(gameInit, out var init);
+        if (failure != LightingFailure.None) return failure;
+        if (!init.TryGetValue(4, out var yearText) || !LightingMes.TryInteger(yearText, out var year) || year < 0 ||
+            !init.TryGetValue(5, out var hourText) || !LightingMes.TryInteger(hourText, out var hour) || hour is < 0 or > 23)
+            return LightingFailure.StartupMalformed;
+        startup = new StartupClockDeclaration(year, hour, LightingMes.Hash(gameInit));
+        return LightingFailure.None;
+    }
+
     private static AreaLightingReadResult Read(ILightingFiles files, AreaSnapshot snapshot, CancellationToken token)
     {
         var failure = ReadCore(files, snapshot, token, out var source);
@@ -66,14 +92,8 @@ public static class AreaLightingReader
         LightingFailure Resource(string path, out byte[] bytes) => files.Read(path, ContentLoadPhase.ModuleLoaded, out bytes);
 
         token.ThrowIfCancellationRequested();
-        var failure = Resource("rules/gameinit.mes", out var gameInit);
+        var failure = Startup(files, out var startup);
         if (failure != LightingFailure.None) return failure;
-        failure = LightingMes.TryParse(gameInit, out var init);
-        if (failure != LightingFailure.None) return failure;
-        if (!init.TryGetValue(4, out var yearText) || !LightingMes.TryInteger(yearText, out var year) || year < 0 ||
-            !init.TryGetValue(5, out var hourText) || !LightingMes.TryInteger(hourText, out var hour) || hour is < 0 or > 23)
-            return LightingFailure.StartupMalformed;
-        var startup = new StartupClockDeclaration(year, hour, LightingMes.Hash(gameInit));
 
         failure = Resource("rules/maplist.mes", out var mapListBytes);
         if (failure != LightingFailure.None) return failure;
@@ -123,7 +143,7 @@ public static class AreaLightingReader
             schemes.Add(id, table!);
         }
         token.ThrowIfCancellationRequested();
-        source = new AreaLightingSource(moduleIdentity.Sha256, snapshot.CatalogueMap, mapDefault, LightingMes.Hash(mapInfo), sectors, schemes, startup);
+        source = new AreaLightingSource(moduleIdentity.Sha256, snapshot.CatalogueMap, mapDefault, LightingMes.Hash(mapInfo), sectors, schemes, startup!);
         return LightingFailure.None;
     }
 

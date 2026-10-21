@@ -64,9 +64,14 @@ Since ARC-RENDER-024 the main world map opens here too, as a window that moves w
   Site profiles draw no portal, so their plans are unchanged.
 - **Lighting and session.** The map's own ambient scheme and stationary lights
   when its sources admit them (the lighting reader now reads up to 256 core
-  sectors; otherwise the map is drawn unlit, has no session clock and the HUD
-  names the lighting failure). The session places the actor on the map's
-  runtime number.
+  sectors; otherwise the map is drawn unlit and the HUD names the lighting failure). Since ARC-WORLD-057 an unlit map
+  still has its game session: its clock starts from the module's `rules/gameinit.mes` alone
+  (`AreaLightingReader.ReadStartup`), with the same clock profile as a lit map of the module, so a session carries
+  between them (native smoke on `bessietoonesmine-fixed`, drawn unlit for sectors without the metadata section: the map
+  battery with `--hero`, the transfer to the main map and F7/F8 pass). A map whose start clock cannot be read has none.
+  On an unlit map the session clock stands still: with no ambient driver it does not flow, holds no modal pause and runs
+  no event passes, and the palette's wait is unavailable; time and the pending timers go on on the next lit map.
+  The session places the actor on the map's runtime number.
 - **Inventory.** With a session, ground pickup, looting and the inventory window
   work on the map as on the exterior (the map's T0 items seed the session).
 - **Transitions.** See [map transitions](#map-transitions-arc-world-031) below.
@@ -91,7 +96,7 @@ draws, a left click through the production ground-click seam sets a route goal
 up to 8 open steps away, frames walk the actor there on the map's chart, and the
 resource sweep and overlapped reload pass (`ARC-RENDER-017 native-smoke map
 PASS`, `ARC-RENDER-007 resources reload PASS`). Since ARC-WORLD-021 a map with a reachable window also
-steps the actor across it with the vault (`ARC-WORLD-021 native-smoke vault PASS`; otherwise `NO-WINDOW`). Since ARC-COMBAT-005, with `--hero` and a lit map, the hero attacks the living NPC with the fewest hit points until it dies ([hero attack](../world/hero-attack-runtime.md#viewer-area); `ARC-COMBAT-005 native-smoke attack PASS`, otherwise `NO-TARGET`; observed on `crash site cave`: a rat of 6 hit points, walk to reach, 12 attacks, fallen pose read, 192 experience). Observed on `elven ruins`
+steps the actor across it with the vault (`ARC-WORLD-021 native-smoke vault PASS`; otherwise `NO-WINDOW`). Since ARC-COMBAT-005, with `--hero` and a lit map, the hero attacks the living NPC with the fewest hit points until it dies ([hero attack](../world/hero-attack-runtime.md#viewer-area); `ARC-COMBAT-005 native-smoke attack PASS`, otherwise `NO-TARGET`; observed on `crash site cave`: a rat of 6 hit points, walk to reach, 12 attacks, fallen pose read, 192 experience). Since ARC-COMBAT-008, the last stage Alt-clicks the attackable door, window, container or scenery with the fewest hit points and attacks it until it breaks or 40 attacks ran ([object damage](../world/object-damage-runtime.md#viewer-arc-combat-008-part-2); `ARC-COMBAT-008 native-smoke object-attack PASS`, otherwise `NONE`). Observed on `elven ruins`
 (9 sectors), `bates mansion lev 1` (9), `crash site cave` (1) and
 `caladon-castle main floor` (79 sectors, 323,584 terrain cells, 2,967 bodies,
 load about 14 s). Since ARC-DATA-023 also on `crematorium-lev 2` (concealed
