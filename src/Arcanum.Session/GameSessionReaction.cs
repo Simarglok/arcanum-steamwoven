@@ -77,12 +77,12 @@ internal sealed class ReactionDomain
 public sealed partial class GameSessionOwner
 {
     /// <summary>
-    /// The hero's reaction facts: race, effective reaction modifier and whether its effective charisma is extraordinary.
-    /// The reputation sum is 0 and the reaction, good and bad reaction effects are empty: there is no reputation owner yet,
-    /// and the hero's innate effects keep only the stats the character owner models. Null for a session without a hero, whose host
-    /// supplies PC facts itself.
+    /// The hero's reaction facts: race, effective reaction modifier, whether its effective charisma is extraordinary, its
+    /// durable effects' reaction, good and bad reaction effects, and since ARC-WORLD-044 the reputation sum for an NPC of origin
+    /// 0 and faction 0 (<see cref="QueryHeroReactionFacts(int, int)"/> for another NPC). Null for a session without a hero, whose
+    /// host supplies PC facts itself.
     /// </summary>
-    public ReactionPcFacts? QueryHeroReactionFacts() { ThrowIfDisposed(); return _hero is null ? null : ReactionDomain.HeroFacts(_hero, _effects); }
+    public ReactionPcFacts? QueryHeroReactionFacts() => QueryHeroReactionFacts(0, 0);
 
     /// <summary>The NPC's saved reaction record, or null while the session never changed it. An invalid entity id throws.</summary>
     public SessionReaction? QueryReactionRecord(string entity)
