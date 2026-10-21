@@ -150,6 +150,18 @@ public sealed class AreaAmbientDriver
         return Apply(activeSector);
     }
 
+    /// <summary>A jump of game time in milliseconds (ARC-UI-048, a world-map travel step), also while paused: as
+    /// <see cref="AdvanceHours"/>, with the events that came due fired once, late; the selection follows the new hour.</summary>
+    public bool AdvanceMilliseconds(long gameMs, long activeSector)
+    {
+        if (gameMs <= 0) throw new ArgumentOutOfRangeException(nameof(gameMs));
+        var resolve = _source.TryResolveScheme(activeSector, out _, out _);
+        if (resolve != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + resolve);
+        if (Events is { } events) events.Jump(gameMs);
+        else Mutate(_session.AdvanceGameTime(Clock.Token, gameMs, ClockAdvanceReason.ExplicitWait));
+        return Apply(activeSector);
+    }
+
     /// <summary>Re-select for the active sector at the current hour (FR-LIGHT-007 sector change) and record
     /// the applied scheme in the session.</summary>
     public bool Apply(long activeSector)
