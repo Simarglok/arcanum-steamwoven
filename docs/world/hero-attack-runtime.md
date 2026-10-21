@@ -69,22 +69,24 @@ No snapshot change: deaths, damage and experience are already saved by the life 
 ## Critical effects (ARC-COMBAT-009)
 
 `AttackCritter` and the critical self-hit of `AttackObject` pass `OriginalCriticalEffects` to the resolver, so a critical rolls
-the original's tables ([attack resolver](attack-resolver-runtime.md#critical-effects-arc-combat-009), ledger CE1–CE15) from the
+the original's tables ([attack resolver](attack-resolver-runtime.md#critical-effects-arc-combat-009), ledger CR1–CR15) from the
 session generator, in the original's order. The recipient's `Combatant` carries what the tables read: its body type (an NPC's
 critter field 227; every pre-made PC has 0, so the hero's is 0), effective constitution and its race's maximum, whether it is
 scarred, and its worn helmet, weapon and armour pieces (the hero's from its equipment; an NPC's from `SessionAttack.TargetWorn`
 when the host passes it, else its map data).
 
-The effects are applied in the original's order (0x4B4390, CE12–CE13) by whoever took the damage, the target or, on a critical
-self-hit, the hero:
+The effects reach whoever took the damage, the target or, on a critical self-hit, the hero. The item steps keep the original's
+relative order (0x4B4390, CW8, CR12–CR13) but follow the whole life step, where the original applies them before the hit-point
+damage and death; no state or draw depends on that difference today:
 
 | Step | Contract |
 | --- | --- |
 | Life | `ApplyDamage`: stun (only on a critter that can act), knockdown, knockout (fatigue damage = maximum + 10..20, drawn), scar, blinding, crippling (the second arm at d100 ≤ 50, drawn). |
 | Arm-hit drops | After a crippling arm hit (`LifeEvents.ArmHitDropsItems`, also when nothing new was crippled): the wielded weapon, then the shield, each dropped when the wear check (`EquipmentRules.CheckWear`, 0x464D20) refuses it under the injuries now. An NPC's check reads its map data's item (an item it lists none for is `Unknown`). |
 | Wear | `ApplyAttackWear` without the items that left: the armour's damage, the weapon's critical damage and destruction, the attacker's side. |
-| Helmet and weapon drops | `DropHelmet`, then `DropWeapon` (an item a step of this attack deleted or dropped is `NoItem`). |
-| Ammunition | `DestroyAmmo` and `LoseAmmo` are reported as `AmmunitionNotReady`. |
+| Helmet drop | `DropHelmet` (an item a step of this attack deleted or dropped is `NoItem`). |
+| Ammunition | `DestroyAmmo` and `LoseAmmo` are reported as `AmmunitionNotReady`, unless the weapon was destroyed (CW3). |
+| Weapon drop | `DropWeapon` (`NoItem` as above). |
 
 A drop (`SessionCriticalStep`, `SessionCriticalStepOutcome`): an NPC's item that its map seed lists in the NPC's list goes to the
 ground at `SessionAttack.TargetCell` as a map change (`ItemDroppedProperty` = `item.dropped`, the cell packed with 24 bits per
@@ -92,13 +94,17 @@ coordinate, + 1), so no schema changes; it then lies on the ground in `QueryMapI
 leaves the NPC's list (loot, negative `IN`, the NPC crafter and the NPC inventory store no longer see it) and `PickUpItem` takes
 it. Not applied: the hero's item (`HeroDropNotReady`: the session has no store of ground items it placed, ARC-WORLD-059), an item
 the session added to the NPC (`NotSeedItem`), an item with a drop script (`ScriptUnsupported`), no cell or no item data
-(`Unknown`); an item with the no-drop flag is `Refused`, as in the original (`SessionWearItem.NoDrop`).
+(`Unknown`); an item with the no-drop flag is `Refused`, as in the original (`SessionWearItem.NoDrop`). A dropped item is no
+longer worn: a `TargetWorn` that still lists it is refused (`InvalidWear`), and `SessionAttack.TargetCell` outside 0 .. 2^24 − 1
+is `InvalidAttack`, both before any roll.
 
 **Not ready**: the original drops the item 2..4 cells away with draws of its own (a distance, then a direction per try, and a
-path, CE14); the session drops it on the holder's cell and makes none of those draws, so the generator stops matching the
+path, CR14); the session drops it on the holder's cell and makes none of those draws, so the generator stops matching the
 original after a drop. The porting needs a host port for the original's step, path (0x41F3C0) and blocking (0x4407C0) tests.
 Also not modelled: the NPC's look-for-weapon/armour flags after a drop, the PC's injury record (0x4F5690), the worn armour's
-critical scripts (points 34, 35), the drop script, the stun animation and its duration (goal 57) and the ammunition.
+critical scripts (points 34, 35), the drop script, the stun animation and its duration (goal 57) and the ammunition. An NPC's
+armour class, resistances and light still come from its map data's worn items, so a dropped or destroyed piece keeps counting
+there (the critical tables read the host's `TargetWorn`).
 
 ## Viewer (AREA)
 

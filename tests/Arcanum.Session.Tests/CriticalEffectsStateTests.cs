@@ -49,7 +49,10 @@ public sealed class CriticalEffectsStateTests
     private static SessionMapInventorySeed Seed() => new(
         [new(Golem, SessionHolderKind.Npc, false, false, [], [.. GolemItems.Values.Select(item => item.Entity)])],
         [.. GolemItems.Select(pair => new SessionSeedItem(pair.Value.Entity,
-            InventoryStateTests.Facts(pair.Key == EquipmentSlot.Weapon ? SessionItemType.Weapon : SessionItemType.Armor, 2900, (int)pair.Key), null))]);
+            InventoryStateTests.Facts(pair.Key == EquipmentSlot.Weapon ? SessionItemType.Weapon : SessionItemType.Armor,
+                pair.Key == EquipmentSlot.Weapon ? SwordName : 2900, (int)pair.Key), null))]);
+
+    private const int SwordName = 2901;
 
     private static GameSessionOwner Owner(int missChance = 0)
     {
@@ -89,7 +92,6 @@ public sealed class CriticalEffectsStateTests
         var view = owner.QueryMapInventory(Exterior)!;
         Assert.IsFalse(view.Holders.Single(h => h.Entity == Golem).Items.Any(i => i.Entity == "golem-sword"), "it left the golem's list");
         Assert.AreEqual(GolemCell, view.Ground.Single(g => g.Item.Entity == "golem-sword").Cell);
-        Assert.AreEqual(GameSessionDisposition.Rejected, owner.LootItem(owner.Version, Golem, "golem-sword", Accept).Disposition);
 
         // The drop is a map change: a restore keeps it.
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
@@ -101,6 +103,20 @@ public sealed class CriticalEffectsStateTests
         // The next attack sees the golem without a weapon: no weapon rolls.
         var next = owner.AttackCritter(owner.Version, new(golem) { HeroWorn = HeroWorn(), TargetWorn = Worn(owner), TargetCell = GolemCell });
         Assert.IsFalse(next.Resolution!.Rolls.Any(roll => roll.Purpose is CombatRollPurpose.CriticalDamageWeapon or CombatRollPurpose.CriticalDropWeapon));
+
+        // Refused before any roll: item data that still lists the dropped sword, a cell the drop cannot hold.
+        var draws = owner.QueryRandom().Draws;
+        Assert.AreEqual(GameSessionFailure.InvalidWear,
+            owner.AttackCritter(owner.Version, new(golem) { HeroWorn = HeroWorn(), TargetWorn = GolemItems, TargetCell = GolemCell }).Failure);
+        foreach (var cell in new CellCoord[] { new(-1, 0), new(0, -1), new(1 << 24, 0), new(0, 1 << 24) })
+            Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.AttackCritter(owner.Version, new(golem) { TargetCell = cell }).Failure);
+        Assert.AreEqual(draws, owner.QueryRandom().Draws);
+
+        // No other reader of the golem's list sees the sword: negative IN, the NPC inventory store, and loot once it is dead.
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.GiveItemToPc(owner.Version, Golem, SwordName, Accept).Disposition);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.RemoveItemFromNpc(owner.Version, Golem, "golem-sword").Failure);
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, owner.Kill(owner.Version, golem.Target).Disposition);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.LootItem(owner.Version, Golem, "golem-sword", Accept).Failure);
     }
 
     [TestMethod]

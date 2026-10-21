@@ -79,19 +79,25 @@ public sealed partial class GameSessionOwner
 
     private static long DroppedValue(CellCoord cell) => ((long)cell.Y << 24 | (uint)cell.X) + 1;
 
+    /// <summary>A cell the drop's packing holds: each coordinate 0 .. 2^24 − 1.</summary>
+    internal static bool DropCellFits(CellCoord cell) => cell.X is >= 0 and < 1 << 24 && cell.Y is >= 0 and < 1 << 24;
+
+    // An item an earlier step deleted or a critical dropped is no longer worn.
+    private bool Gone(string item) => _durability.Destroyed.Contains(item) || Dropped(item);
+
     /// <summary>
     /// The arm-hit drops of a critter that a crippling arm hit reached (<see cref="LifeEvents.ArmHitDropsItems"/>): the wielded
     /// weapon, then the shield, each when the wear check refuses it under the critter's injuries now. Returns the side without the
     /// items that left it, for the wear steps that follow.
     /// </summary>
     private SessionWearSide ArmHitDrops(DamageRecipient whose, SessionWearSide side, SessionCritterCombat? npc, CellCoord? cell,
-        List<SessionCriticalStep> steps, ref bool changed, ref GameSessionFailure failure)
+        List<SessionCriticalStep> steps, ref GameSessionFailure failure)
     {
         foreach (var (kind, slot) in new[] { (SessionCriticalStepKind.ArmHitWeapon, EquipmentSlot.Weapon), (SessionCriticalStepKind.ArmHitShield, EquipmentSlot.Shield) })
         {
             if (failure != GameSessionFailure.None) break;
             var held = side.Worn?.GetValueOrDefault(slot);
-            if (held is null || _durability.Destroyed.Contains(held.Entity))
+            if (held is null || Gone(held.Entity))
             {
                 steps.Add(new(kind, whose, slot, held?.Entity, side.Worn is null ? SessionCriticalStepOutcome.Unknown : SessionCriticalStepOutcome.NoItem, null));
                 continue;
@@ -99,29 +105,29 @@ public sealed partial class GameSessionOwner
             // Without the item's wear values (an NPC item its map data does not list) the check cannot run.
             if (WearRefusal(side, npc, slot) is not { } refusal) { steps.Add(new(kind, whose, slot, held.Entity, SessionCriticalStepOutcome.Unknown, null)); continue; }
             if (refusal == EquipmentRefusal.None) { steps.Add(new(kind, whose, slot, held.Entity, SessionCriticalStepOutcome.Kept, null)); continue; }
-            side = Drop(kind, whose, side, slot, cell, steps, ref changed, ref failure);
+            side = Drop(kind, whose, side, slot, cell, steps, ref failure);
         }
         return side;
     }
 
     /// <summary>The "drop helmet" or "drop weapon" critical on the critter's item in <paramref name="slot"/>.</summary>
     private SessionWearSide CriticalDrop(SessionCriticalStepKind kind, DamageRecipient whose, SessionWearSide side, EquipmentSlot slot,
-        CellCoord? cell, List<SessionCriticalStep> steps, ref bool changed, ref GameSessionFailure failure)
+        CellCoord? cell, List<SessionCriticalStep> steps, ref GameSessionFailure failure)
     {
         if (failure != GameSessionFailure.None) return side;
         if (side.Worn is null) { steps.Add(new(kind, whose, slot, null, SessionCriticalStepOutcome.Unknown, null)); return side; }
-        if (!side.Worn.TryGetValue(slot, out var item) || _durability.Destroyed.Contains(item.Entity))
+        if (!side.Worn.TryGetValue(slot, out var item) || Gone(item.Entity))
         {
             steps.Add(new(kind, whose, slot, item?.Entity, SessionCriticalStepOutcome.NoItem, null));
             return side;
         }
-        return Drop(kind, whose, side, slot, cell, steps, ref changed, ref failure);
+        return Drop(kind, whose, side, slot, cell, steps, ref failure);
     }
 
     // The wear check of the critter's item in the slot under its injuries now; null without the item or without its wear values.
     private EquipmentRefusal? WearRefusal(SessionWearSide side, SessionCritterCombat? npc, EquipmentSlot slot)
     {
-        if (side.Worn is null || !side.Worn.TryGetValue(slot, out var held) || _durability.Destroyed.Contains(held.Entity)) return null;
+        if (side.Worn is null || !side.Worn.TryGetValue(slot, out var held) || Gone(held.Entity)) return null;
         if (side.Life!.IsHero)
             return _equipment.Worn.TryGetValue(slot, out var worn) ? EquipmentRules.CheckWear(worn.Item, slot, HeroWearer(), _equipment.Items()) : null;
         if (npc?.WornItem(slot) is not { } item) return null;
@@ -131,7 +137,7 @@ public sealed partial class GameSessionOwner
 
     // One drop: the hero's is not ready; an NPC's seed item goes to the ground at the NPC's cell as a map change.
     private SessionWearSide Drop(SessionCriticalStepKind kind, DamageRecipient whose, SessionWearSide side, EquipmentSlot slot, CellCoord? cell,
-        List<SessionCriticalStep> steps, ref bool changed, ref GameSessionFailure failure)
+        List<SessionCriticalStep> steps, ref GameSessionFailure failure)
     {
         var item = side.Worn![slot];
         SessionCriticalStepOutcome? outcome = side.Life!.IsHero ? SessionCriticalStepOutcome.HeroDropNotReady
@@ -159,16 +165,17 @@ public sealed partial class GameSessionOwner
             steps.Add(new(kind, whose, slot, item.Entity, SessionCriticalStepOutcome.Unknown, null));
             return side;
         }
-        changed = true;
         steps.Add(new(kind, whose, slot, item.Entity, SessionCriticalStepOutcome.Dropped, cell));
         var left = new Dictionary<EquipmentSlot, SessionWearItem>(side.Worn);
         left.Remove(slot);
         return side with { Worn = left };
     }
 
-    // The ammunition effects of a critical miss: not ready (no ammunition model).
-    private static void AmmunitionSteps(AttackDamage damage, List<SessionCriticalStep> steps)
+    // The ammunition effects of a critical miss, after the weapon's destruction and before "drop weapon" (CW3): not ready (no
+    // ammunition model); none when the weapon was destroyed.
+    private void AmmunitionSteps(AttackDamage damage, SessionWearSide side, List<SessionCriticalStep> steps)
     {
+        if (side.Worn?.GetValueOrDefault(EquipmentSlot.Weapon) is { } weapon && _durability.Destroyed.Contains(weapon.Entity)) return;
         if (damage.MissEffects.HasFlag(CriticalMissEffects.DestroyAmmo))
             steps.Add(new(SessionCriticalStepKind.DestroyAmmo, damage.Recipient, EquipmentSlot.Weapon, null, SessionCriticalStepOutcome.AmmunitionNotReady, null));
         if (damage.MissEffects.HasFlag(CriticalMissEffects.LoseAmmo))

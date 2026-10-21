@@ -558,6 +558,7 @@ public static class AttackResolver
         Check(c.Level is >= 0 and <= MaxMagnitude && c.Strength is >= 0 and <= MaxMagnitude
             && c.Perception is >= 0 and <= MaxMagnitude && c.Constitution is >= 0 and <= MaxMagnitude, $"{name} level and stats");
         Check(c.ConstitutionMaximum is >= 1 and <= MaxMagnitude, $"{name}.ConstitutionMaximum");
+        Check(c.CriticalBody is >= 0 and <= MaxMagnitude, $"{name}.CriticalBody");
         Check((c.Worn & ~AllWorn) == 0, $"{name}.Worn");
         Check(Magnitude(c.DamageBonus, c.CriticalHitChanceAdjustment, c.CriticalMissChanceAdjustment,
             c.CriticalEffectChanceAdjustment, c.CriticalMissEffectChanceAdjustment), $"{name} adjustments");

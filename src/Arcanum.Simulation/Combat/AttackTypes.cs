@@ -199,7 +199,8 @@ public sealed record Combatant
     /// wears the attacker's weapon or hands by the material of whatever it struck, critter or object (ARC-COMBAT-007).</summary>
     public ObjectMaterial Material { get; init; } = ObjectMaterial.Flesh;
     /// <summary>The critter's critical-hit body type (critter field 227, ARC-COMBAT-009; <see cref="OriginalCriticalEffects"/>): 0
-    /// can be knocked down, 2 takes no stun, injury or knockdown, 4 only head effects, 5 no arm crippling. Every pre-made PC has 0.</summary>
+    /// can be knocked down, 2 takes no stun, injury or knockdown, 4 only head effects, 5 no arm crippling (the installed data hold 0..5;
+    /// the resolver admits 0..100,000). Every pre-made PC has 0.</summary>
     public int CriticalBody { get; init; }
     /// <summary>Effective constitution, which the critical effects' constitution checks roll against.</summary>
     public int Constitution { get; init; } = 8;

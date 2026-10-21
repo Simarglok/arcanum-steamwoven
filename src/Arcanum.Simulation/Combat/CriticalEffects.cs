@@ -59,8 +59,9 @@ public sealed record CriticalMissContext(Combatant Attacker, CombatWeapon Weapon
 
 /// <summary>
 /// The critical-effect tables (FR-COMBAT-009), injected so the resolver stays a pure function of its inputs. An
-/// implementation draws its rolls from the given source with <see cref="CombatRollPurpose.CriticalHitEffect"/> or
-/// <see cref="CombatRollPurpose.CriticalMissEffect"/>.
+/// implementation draws its rolls from the given source, each with a purpose of its own (<see cref="OriginalCriticalEffects"/> uses
+/// <see cref="CombatRollPurpose.CriticalStun"/> … <see cref="CombatRollPurpose.CriticalLoseAmmo"/>; the generic
+/// <see cref="CombatRollPurpose.CriticalHitEffect"/> and <see cref="CombatRollPurpose.CriticalMissEffect"/> serve others).
 /// </summary>
 public interface ICriticalEffects
 {

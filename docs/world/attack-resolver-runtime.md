@@ -166,9 +166,9 @@ wear last, after death and experience; the session step keeps that order within 
 
 `OriginalCriticalEffects` is the effect part of the original's critical-hit procedure (0x4B5F40) and the effect rolls of its
 critical-miss procedure (0x4B6410), read in the retail executable by two readers
-([ledger CE1–CE15](../research/original-verification-ledger.md#critical-effects-arc-combat-009), F2). The thresholds are the
+([ledger CR1–CR15](../research/original-verification-ledger.md#critical-effects-arc-combat-009), F2). The thresholds are the
 code's; the data are the weapon's charts and the recipient's critical-hit body type (`Combatant.CriticalBody`, critter field
-227). The resolver keeps the multiplier rolls before the table and the ×1.5 fallback after it (CE3); the table's rolls follow,
+227). The resolver keeps the multiplier rolls before the table and the ×1.5 fallback after it (CR3); the table's rolls follow,
 in this order, each a d100 that passes at ≤ its threshold (`chance` as in step 10):
 
 | Step | Who | Threshold and condition | Effect |
@@ -191,8 +191,8 @@ fire, electrical charts) at chance + 1, and for a weapon with an ammunition type
 ammunition at chance + 1, else five shots' worth at a second d100 ≤ chance + 11. Every roll carries its own purpose
 (`CombatRollPurpose.CriticalStun` … `CriticalLoseAmmo`).
 
-Applying the result (the damage step 0x4B4390, CE12–CE13) is shared out: the life rules take stun (only on a critter that can
-act, CEA2), knockdown, knockout, scars, blinding and crippling (`LifeRules.ApplyDamage`, [life state](life-state-runtime.md));
+Applying the result (the damage step 0x4B4390, CR12–CR13) is shared out: the life rules take stun (only on a critter that can
+act, CRA2), knockdown, knockout, scars, blinding and crippling (`LifeRules.ApplyDamage`, [life state](life-state-runtime.md));
 the wear takes the weapon's and the armour's damage and the weapon's destruction ([wear](#wear-arc-combat-007)); the session takes
 the drops ([hero attack](hero-attack-runtime.md#critical-effects-arc-combat-009)).
 

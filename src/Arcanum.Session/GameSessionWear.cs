@@ -167,6 +167,8 @@ public sealed partial class GameSessionOwner
             {
                 if (!Enum.IsDefined(slot) || item is null || !SessionValidation.Entity(item.Entity) || !ItemDurabilityRules.IsValid(item.Baseline) ||
                     item.ArtSubtype is < 0 or > CombatWearRules.MaxArtSubtype || !entities.Add(item.Entity) || !TracksItem(item.Entity)) return false;
+                // A critical dropped it (ARC-COMBAT-009): it lies on the ground.
+                if (!hero && Dropped(item.Entity)) return false;
                 // An NPC never wears an item of the hero's.
                 if (!hero && (_equipment.SlotOf(item.Entity) is not null || _inventory.Kit.Any(held => held.Entity == item.Entity) ||
                         _inventory.Pc.Any(held => held.Entity == item.Entity) || _inventory.Made.Any(held => held.Entity == item.Entity))) return false;

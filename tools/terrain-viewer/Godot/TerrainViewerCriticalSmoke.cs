@@ -9,6 +9,15 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
+    private static readonly HashSet<CombatRollPurpose> TablePurposes =
+    [
+        CombatRollPurpose.CriticalStun, CombatRollPurpose.CriticalStunCheck, CombatRollPurpose.CriticalKnockout, CombatRollPurpose.CriticalKnockoutCheck,
+        CombatRollPurpose.CriticalCrippleArm, CombatRollPurpose.CriticalCrippleArmCheck, CombatRollPurpose.CriticalCrippleLeg,
+        CombatRollPurpose.CriticalCrippleLegCheck, CombatRollPurpose.CriticalDropHelmet, CombatRollPurpose.CriticalBlind,
+        CombatRollPurpose.CriticalBlindCheck, CombatRollPurpose.CriticalScar, CombatRollPurpose.CriticalKnockdown,
+        CombatRollPurpose.CriticalDamageWeapon, CombatRollPurpose.CriticalDropWeapon, CombatRollPurpose.CriticalDamageArmor,
+    ];
+
     // Native observation (ARC-COMBAT-009) with --hero, the last stage of map mode: the hero's critical-hit fate (a granted point)
     // makes its next attack on the living NPC with the most hit points a critical hit, which the session resolves with the
     // original's critical-effect tables over the NPC's real data (body type, constitution, worn items as the viewer passes them);
@@ -49,9 +58,12 @@ public partial class TerrainViewerApp
         Require(result.Disposition == GameSessionDisposition.Changed && result.Resolution?.Outcome == AttackOutcome.CriticalHit,
             $"the fate made a critical hit ({result.Disposition} {result.Failure} {result.Resolution?.Outcome})");
         var defender = combat!.Combatant(LifeRules.Evaluate(combat.Loaded, combat.Facts), combat.Loaded, CombatAnomalyProfile.Steamwoven);
-        var tableRolls = result.Resolution!.Rolls.Count(roll => roll.Purpose >= CombatRollPurpose.CriticalStun);
-        // Every recipient except body type 2 without worn items draws at least the stun or the knockdown roll.
-        Require(tableRolls > 0 || defender.CriticalBody == OriginalCriticalEffects.ItemsOnlyBody, "the critical-effect tables drew");
+        var tableRolls = result.Resolution!.Rolls.Count(roll => TablePurposes.Contains(roll.Purpose));
+        // A recipient draws at least the stun roll unless it is of body type 2 or undead, and an undead one of body type 0 the
+        // knockdown roll; the item rolls need worn items.
+        var undead = defender.Conditions.HasFlag(CombatantConditions.Undead);
+        Require(tableRolls > 0 || defender.CriticalBody == OriginalCriticalEffects.ItemsOnlyBody
+            || undead && defender.CriticalBody != OriginalCriticalEffects.KnockdownBody, "the critical-effect tables drew");
         if (result.Life is { } life && life.Events.HasFlag(LifeEvents.Stunned))
             EndStun(session, result.Recipient == DamageRecipient.Target ? combat.Target : SessionLifeTarget.Hero, entity);
         SyncAreaCombatBodies();

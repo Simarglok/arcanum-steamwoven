@@ -155,8 +155,6 @@ public sealed class AreaCombatHost : IAreaEventObjects
         };
     }
 
-    /// <summary>One line for the status bar about an attack's result (no original text): the outcome, the damage and the
-    /// target's hit points after it, a knockout or death, and the experience it paid.</summary>
     /// <summary>One log fragment for the critical effects of an attack (ARC-COMBAT-009): the table's effects and each item step.</summary>
     public static string Criticals(AttackResolution? resolution, IReadOnlyList<SessionCriticalStep> steps)
     {
@@ -165,6 +163,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return effects + string.Concat(steps.Select(step => $",{step.Kind}:{step.Entity}:{step.Outcome}"));
     }
 
+    /// <summary>One line for the status bar about an attack's result (no original text): the outcome, the damage and the
+    /// target's hit points after it, a knockout or death, injuries and drops (ARC-COMBAT-009), and the experience it paid.</summary>
     public static string Describe(SessionAttackResult result, int? hitPoints, int? maxHitPoints)
     {
         ArgumentNullException.ThrowIfNull(result);
