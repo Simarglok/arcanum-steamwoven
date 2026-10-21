@@ -5,7 +5,7 @@ namespace Arcanum.Simulation.Magic;
 /// field; the static fields until P1 brings them into the session), the source's spell flags the shell test read (BEGIN and
 /// MAINTAIN with a source; 0 otherwise), whether the parent is the local player, the caster of the full reflection on the target
 /// (the parent of a run whose components set it on the target, 0x459040), the last cost any payment charged (0x5E762C, MG15) and
-/// the reflected run's own cost of this action (Steamwoven: what its stage asked this pass; 0 for a free, item or technology cast).
+/// the reflected run's own cost of this action (Steamwoven: what its stage asked this pass; 0 for a free or technology cast).
 /// </summary>
 public sealed record SpellTargetStageFacts(int TargetSpellFlags, int SourceSpellFlags = 0, bool ParentLocal = false, SpellRunObject? ReflectionCaster = null,
     int LastCostCharged = 0, int ReflectedCost = 0);

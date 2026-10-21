@@ -71,7 +71,7 @@ turns on the caster. When the run turns:
      (`FlagCaster`, 0x459040).
    - Original setting: the reflecting caster pays the last positive cost any payment charged (MG15).
    - Steamwoven setting: it pays what the reflected run's own stage asked in that pass — its BEGIN cost at BEGIN, its
-     maintenance at MAINTAIN, nothing for a free, item or technology cast or any other action.
+     maintenance at MAINTAIN, nothing for a free or technology cast or any other action (an item cast asks its full cost).
    - The payment uses spell 10000 and is applied. The host gets it as a `ReflectionPayment` note naming the payer, apart from
      the stage's `Payments` (the source's).
 3. **Swap.** This happens unless the target is the run's source or the run set the reflection.

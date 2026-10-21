@@ -41,8 +41,9 @@ public sealed record MagicAnomalyProfile
 
     /// <summary>
     /// MG15 (ARC-MAGIC-011, owner decision 2026-10-20): a target's full reflection charges the reflecting caster the global "last
-    /// cost" any payment charged (0x5E762C), stale for a free run or an item cast. Steamwoven charges the reflected run's own cost
-    /// of the action: its BEGIN cost at BEGIN, its maintenance at MAINTAIN, nothing otherwise.
+    /// cost" any payment charged (0x5E762C), stale for a free run, which paid nothing. Steamwoven charges what the reflected run's
+    /// own stage asked in that pass: its BEGIN cost at BEGIN, its maintenance at MAINTAIN, nothing for a free or technology cast
+    /// or another action.
     /// </summary>
     public bool ReflectionPaysLastCost { get; init; }
 
