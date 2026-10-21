@@ -60,8 +60,15 @@ compared exactly, never by tolerance.
 Rows live in one canvas-owned cache. Rows used by the current submission are never
 evicted; rows of earlier views are reused or evicted least recently used first, down
 to three quarters of the limits, when the row payload would exceed 16 MiB or the
-cache would exceed 8,192 rows. These limits count index-row payload bytes and row
-textures, not driver memory. A submission that alone needs more fails explicitly. A
+cache would exceed 65,536 rows (8,192 before ARC-RENDER-032). A zoom that is not a power of two
+has no reduced terrain chunks, so far out the terrain is drawn one item per tile and nearly every
+visible item needs its own small row (about 100 to 200 bytes): a 2560 × 1440 view of a main-map
+window at 0.1875 needed more than 8,192 rows with 1.1 MB of payload. A window has at most about
+42,000 commands (36,864 core tiles and up to about 4,900 bodies, plus the covered-tile masks and
+roofs of a submission), well under the cap. At the rows' size the payload budget no longer binds;
+the row count does, and each row is its own texture, whose driver memory these limits do not count.
+A submission that alone needs more fails explicitly: a whole map large enough, at a zoom that is not
+a power of two on a large view, or one needing more than the chunk cache's 1,024 chunks or 192 MiB. A
 standalone draw item keeps a private cache with only its current row. Shared ART
 textures retain the existing identity/dedup cache. Rows stop being sampled on
 hide/retirement and are disposed with the cache; maximum viewport axis is 8192,
