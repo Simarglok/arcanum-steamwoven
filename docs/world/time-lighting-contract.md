@@ -258,8 +258,8 @@ remain separate dependencies, not implemented by this inspector.
 **Proven source dispositions:** OFF (1) excludes contribution; DARK (2) selects
 subtraction otherwise addition. INDOOR (8) / OUTDOOR (16) choose **emitter tint
 sources**, not spatial indoor-only/outdoor-only exclusion; the tint helper (0x4DE390)
-prioritizes INDOOR if both are set. With neither flag set it retains custom color. Unknown bits
-remain Unknown. Synthetic literal words test these branches even when the actual
+prioritizes INDOOR if both are set. With neither flag set it retains custom color. The other bits
+(0x4, 0x20, 0x40, 0x80) are read in [LT6, LT8 and LT14](../research/original-verification-ledger.md#lights-on-all-maps-arc-res-069). Synthetic literal words test these branches even when the actual
 supplement has none.
 
 Sector load/fold (0x4F7940) refuses inventory world insertion and applies nocturnal

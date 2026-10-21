@@ -1649,8 +1649,8 @@ Source: [lights on all maps](lights-on-all-maps.md) (whole-world plan step R6), 
 the original's object, carried and animated lights come from, how long do they live and which light flags does it read?
 Read on 2026-10-21 by this task and, independently, by a second reader; where the second reader corrected or sharpened
 a row (LT3 prepend, LT4 indoor tile, LT5 counter reuse and repeated insert, LT7 previous frame, LT13, LT14 shadow bit),
-the row holds its reading. Field numbers are indexes of the executable's field-name table (the project's slot is one
-less): 2 location, 3/4 offsets, 13–15 light flags, ART and colour, 16–18 the overlay arrays, 19 object flags, 69 scenery
+the row holds its reading. Field numbers are indexes of the executable's field-name table (for the common fields 2–19 the project's slot is one
+less, type-specific flags are the project's slot 36, and 327–330 are runtime only): 2 location, 3/4 offsets, 13–15 light flags, ART and colour, 16–18 the overlay arrays, 19 object flags, 69 scenery
 flags, 218 critter flags, 327 render flags, 329/330 the light handles. A light record is 48 bytes: owner, location,
 offsets, flags (+0x18), ART (+0x1C), r, b, g, tinted colour, tint palette.
 

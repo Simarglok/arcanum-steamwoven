@@ -19,11 +19,11 @@ internal static partial class Program
     // object flags; the first type-specific slot (scenery, item and critter flags).
     private const int LcLightFlags = 12, LcLightArtSlot = 13, LcOverlayFlags = 15, LcOverlayArt = 16, LcObjectFlags = 18, LcTypeFlags = 36;
     private const int LcOverlaySlots = 4;
-    private const uint LcOff = 0x2, LcInventory = 0x1000, LcDontLight = 0x100000;
+    private const uint LcObjectOff = 0x2, LcInventory = 0x1000, LcDontLight = 0x100000;
     private const int LcScenery = 3, LcPc = 15, LcNpc = 16;
     private const uint LcNocturnal = 0x4;
-    // Item flags OIF_LIGHT_SMALL..XLARGE and critter flags OCF_LIGHT_SMALL..XLARGE.
-    private static readonly (uint Bit, string Name)[] LcItemSizes = [(0x40000, "small"), (0x80000, "medium"), (0x100000, "large"), (0x200000, "xlarge")];
+    // Item light sizes (item flags bits 9..12, as the carried-light rule reads them) and critter flags OCF_LIGHT_SMALL..XLARGE.
+    private static readonly (uint Bit, string Name)[] LcItemSizes = [(0x200, "small"), (0x400, "medium"), (0x800, "large"), (0x1000, "xlarge")];
     private static readonly (uint Bit, string Name)[] LcCritterSizes = [(0x80000, "small"), (0x100000, "medium"), (0x200000, "large"), (0x400000, "xlarge")];
 
     private static int ProbeLightCensus(string[] args)
@@ -151,7 +151,7 @@ internal static partial class Program
             tally.Add($"{scope}.{kind}.type.{o.Type}", weight);
             if (animated.ContainsKey(number)) tally.Add($"{scope}.{kind}.animated_art", weight);
             foreach (var bit in LcBits(flags)) tally.Add($"{scope}.{kind}.flag.{bit}", weight);
-            if ((objectFlags & LcOff) != 0) tally.Add($"{scope}.{kind}.object_off", weight);
+            if ((objectFlags & LcObjectOff) != 0) tally.Add($"{scope}.{kind}.object_off", weight);
             if ((objectFlags & LcInventory) != 0) tally.Add($"{scope}.{kind}.in_inventory", weight);
             if (o.Type == LcScenery && (typeFlags & LcNocturnal) != 0) tally.Add($"{scope}.{kind}.nocturnal_scenery", weight);
         }
@@ -164,9 +164,9 @@ internal static partial class Program
             Light("overlay", number, (uint)(overlayFlags?.Elements.FirstOrDefault(e => e.Key == slot)?.Words.FirstOrDefault() ?? 0));
         }
         if ((objectFlags & LcDontLight) != 0) tally.Add($"{scope}.dont_light_objects", weight);
-        var sizes = o.Type is LcPc or LcNpc ? LcCritterSizes : o.Type is >= 5 and <= 14 ? LcItemSizes : [];
-        foreach (var (bit, name) in sizes)
-            if ((typeFlags & bit) != 0) tally.Add($"{scope}.carried_size.{name}", weight);
+        // One count per object: its largest size, items and critters apart.
+        var (sizes, family) = o.Type is LcPc or LcNpc ? (LcCritterSizes, "critter") : o.Type is >= 5 and <= 14 ? (LcItemSizes, "item") : ([], "");
+        if (sizes.LastOrDefault(s => (typeFlags & s.Bit) != 0) is { Name: { } largest }) tally.Add($"{scope}.light_size.{family}.{largest}", weight);
         return lights;
     }
 
@@ -184,7 +184,8 @@ internal static partial class Program
         foreach (var (number, name) in names)
         {
             if (name.Length == 0 || name.Any(c => c is '/' or '\\' or ':') || name.Contains("..", StringComparison.Ordinal)) continue;
-            if (stack.Resolve("art/light/" + name.ToLowerInvariant() + ".art").Winner is not { } art) continue;
+            // A light ART is read when it is first drawn, from the whole stack.
+        if (ContentPhase.Candidate(stack, "art/light/" + name.ToLowerInvariant() + ".art", ContentLoadPhase.ModuleLoaded) is not { } art) continue;
             var bytes = stack.Read(art);
             if (bytes.Status != ContentReadStatus.Read) continue;
             try
@@ -207,6 +208,7 @@ internal static partial class Program
         Require(LcDecode([7, 0, 0, 0, 0, 0, 0, art, 0, 0, 0, 0]).Owned, "owner word");
         Require(LcArtNumber(-1) is null && LcArtNumber(uint.MaxValue) is null && LcArtNumber(art) == 3 && LcArtNumber(1 << 28) is null, "object ART");
         Require(string.Join(",", LcBits(0x8000002)) == "0x2,0x8000000", "bits");
-        Console.WriteLine("light-census self-test: PASS (record words, ART number, object ART, flag bits)");
+        Require(LcItemSizes.Select(s => s.Bit).SequenceEqual(new uint[] { 1u << 9, 1u << 10, 1u << 11, 1u << 12 }), "item sizes");
+        Console.WriteLine("light-census self-test: PASS (record words, ART number, object ART, flag bits, item sizes)");
     }
 }

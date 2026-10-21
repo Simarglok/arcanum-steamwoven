@@ -26,7 +26,7 @@ The original keeps one kind of light, a 48-byte record:
 Sector light lists hold records of both kinds, and the drawing reads only those lists.
 
 - **Stationary lights** are the records of a sector file. A record is read as stored (48 bytes) and a terrain
-  template's records move to the real sector (LT3, [Wilderness A1](original-verification-ledger.md)).
+  template's records move to the real sector (LT3, [Wilderness A1](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock)).
   - In the game a light with no owner is created only this way: the general create refuses a record without
     an owner outside the editor (LT2).
   - The installed module has **2,797** such records in its 1,680 own sector files. None has an owner word.
@@ -37,7 +37,7 @@ Sector light lists hold records of both kinds, and the drawing reads only those 
   - one primary light: field 13 flags, 14 ART, 15 colour;
   - up to four overlay lights: arrays 16, 17, 18.
   - Each takes the object's location and offsets.
-  - The handles live in two runtime fields (329, 330) that are never saved.
+  - The handles live in two runtime fields (329, 330).
   - Before an object is saved or freed, its live lights' flags, ART and colour are written back to its fields
     (LT11). This is why saved fields can carry the runtime bits 0x80 (changed) and 0x8000000 (primary); a rebuild
     sets them again anyway.
@@ -80,16 +80,16 @@ is lit only at night: hours 18 to 5.
 
 ## Carried light
 
-A critter's light comes from the worn items' light sizes ([EQ12](original-verification-ledger.md), the largest
+A critter's light comes from the worn items' light sizes ([EQ12](original-verification-ledger.md#equipment-arc-world-028), the largest
 size wins). It becomes the critter's primary light (LT12):
 - light ART 1 (frame 0);
 - one colour per size (r, g, b): extra large 244, 255, 255; large 255, 214, 172; medium 236, 138, 85; small 167, 88, 58;
 - no light (ART −1) for none.
 - The size is the largest of the worn items' sizes, each item's size shrinking with its condition (EQ12).
 
-It is rebuilt whenever the size changes.
+It is set again whenever the worn items' light is recomputed (EQ12).
 
-The installed module has 1,573 placed items and critters with a light size flag, and 38 prototypes with one. Equipment already holds
+In the installed module, 10 items in the map mobile files have a light size (9 large, 1 extra large), and 48 critters already carry the small size in their saved fields; 4 item prototypes and 9 critter prototypes have one. Equipment already holds
 the size (ARC-WORLD-028); nothing draws it yet.
 
 ## Animated light
