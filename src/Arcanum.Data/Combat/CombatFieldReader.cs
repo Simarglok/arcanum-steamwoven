@@ -20,9 +20,13 @@ public static class CombatFieldReader
 {
     /// <summary>The stored ammunition type of a weapon that uses none.</summary>
     public const int NoAmmo = 10000;
+    public const int PortalType = 1, ContainerType = 2, SceneryType = 3, TrapType = 17;
     public const int WeaponType = 5, AmmoType = 6, ArmorType = 7, WrittenType = 13, GenericType = 14, PcType = 15, NpcType = 16;
     public const int DamageTypes = 5, Resistances = 5, ItemSpells = 5, BaseStats = 28, BasicSkills = 12, TechSkills = 4, SpellTech = 25;
 
+    // ARC-COMBAT-008: the first field of a portal, container, scenery or trap block (its flags), a scenery's respawn delay and the
+    // common destroyed ART.
+    private const int TypeFlagsSlot = 36, RespawnDelaySlot = 38, DestroyedArtSlot = 24;
     // Common block.
     private const int CurrentArtSlot = 0, ScriptsSlot = 31, LastScriptPoint = 35, FlagsSlot = 18, SpellFlagsSlot = 19, NameSlot = 21, DescriptionSlot = 22, AcSlot = 25, HpSlot = 26, HpAdjustmentSlot = 27,
         HpDamageSlot = 28, MaterialSlot = 29, ResistanceSlot = 30;
@@ -88,6 +92,30 @@ public static class CombatFieldReader
                 : null);
     }
 
+    /// <summary>
+    /// ARC-COMBAT-008: a portal, container, scenery or trap of an Area snapshot (static or mobile) by its effective fields: the common
+    /// block and the fields its break reads (<see cref="CombatBreakableFields"/>). Another type is
+    /// <see cref="CombatFieldFailure.TypeUnsupported"/>; a field that is not a plain number refuses it, fail-closed.
+    /// </summary>
+    public static CombatBreakableRead ReadBreakable(AreaObjectRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.Type is not (PortalType or ContainerType or SceneryType or TrapType)) return new(CombatFieldFailure.TypeUnsupported, null, record.Type);
+        var fields = new Dictionary<int, AreaFieldValue>();
+        foreach (var value in record.EffectiveFields) fields.TryAdd(value.Slot, value);
+        Field? Lookup(int slot) => fields.TryGetValue(slot, out var value) && value.Presence != AreaPresence.Absent
+            ? new Field((Presence)((int)value.Presence - 1), value.Number, value.Elements.Select(e => (e.Key, e.Words)).ToArray())
+            : null;
+        try
+        {
+            var common = Common(record.Type, record.PrototypeNumber, Lookup);
+            var scenery = record.Type == SceneryType;
+            return new(CombatFieldFailure.None, new(common, unchecked((uint)Number(Lookup, TypeFlagsSlot)), scenery ? Number(Lookup, RespawnDelaySlot) : 0,
+                scenery || record.Type == TrapType ? unchecked((uint)Number(Lookup, DestroyedArtSlot)) : CombatBreakableFields.NoArt));
+        }
+        catch (Refusal refusal) { return new(refusal.Failure, null, refusal.Slot); }
+    }
+
     /// <summary>Every mobile item and critter of a strict Area snapshot, by source index; the first refusal stops the read. An
     /// item or critter from a sector file (not the mobile aggregate) is refused, as the inventory view refuses it.</summary>
     public static CombatAreaRead ReadArea(AreaSnapshot snapshot, CancellationToken token = default)
@@ -137,18 +165,29 @@ public static class CombatFieldReader
         catch (Refusal refusal) { return new(refusal.Failure, null, refusal.Slot); }
     }
 
+    // A plain number of a slot (a 32-bit word, signed or unsigned), else the slot refuses the object.
+    private static int Number(Func<int, Field?> field, int slot) => field(slot) is { Presence: Presence.Value, Number: { } n } && n is >= int.MinValue and <= uint.MaxValue
+        ? unchecked((int)n) : throw new Refusal(CombatFieldFailure.FieldUnresolved, slot);
+
+    // The common block every object carries.
+    private static CombatObjectFields Common(int type, int prototype, Func<int, Field?> field)
+    {
+        int Int(int slot) => Number(field, slot);
+        uint Flags(int slot) => unchecked((uint)Int(slot));
+        return new CombatObjectFields(type, prototype, Flags(FlagsSlot), Flags(SpellFlagsSlot), Int(NameSlot), Int(DescriptionSlot), Int(AcSlot),
+            Int(HpSlot), Int(HpAdjustmentSlot), Int(HpDamageSlot), Int(MaterialSlot), Values(field(ResistanceSlot), ResistanceSlot, Resistances), Flags(CurrentArtSlot))
+        { ScriptPoints = ScriptPoints(field(ScriptsSlot)) };
+    }
+
     private static CombatFields Build(CombatFieldOrigin origin, int type, int prototype, Func<int, Field?> field)
     {
-        int Int(int slot) => field(slot) is { Presence: Presence.Value, Number: { } n } && n is >= int.MinValue and <= uint.MaxValue
-            ? unchecked((int)n) : throw new Refusal(CombatFieldFailure.FieldUnresolved, slot);
+        int Int(int slot) => Number(field, slot);
         uint Flags(int slot) => unchecked((uint)Int(slot));
         IReadOnlyList<int> Array(int slot, int count) => Values(field(slot), slot, count);
         IReadOnlyList<CombatDamageRange> Ranges(IReadOnlyList<int> lower, IReadOnlyList<int> upper) =>
             System.Array.AsReadOnly(Enumerable.Range(0, DamageTypes).Select(i => new CombatDamageRange(lower[i], upper[i])).ToArray());
 
-        var common = new CombatObjectFields(type, prototype, Flags(FlagsSlot), Flags(SpellFlagsSlot), Int(NameSlot), Int(DescriptionSlot), Int(AcSlot),
-            Int(HpSlot), Int(HpAdjustmentSlot), Int(HpDamageSlot), Int(MaterialSlot), Array(ResistanceSlot, Resistances), Flags(CurrentArtSlot))
-        { ScriptPoints = ScriptPoints(field(ScriptsSlot)) };
+        var common = Common(type, prototype, field);
         if (type is PcType or NpcType)
         {
             var critter = new CombatCritterFields(Flags(CritterFlagsSlot), Flags(CritterFlags2Slot), Array(StatSlot, BaseStats),

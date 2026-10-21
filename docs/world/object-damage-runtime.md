@@ -2,7 +2,8 @@
 
 Status: **Implemented bounded component** (Godot-free rules and session owner), ARC-COMBAT-008 (2026-10-21). The hero
 attacks a non-critter object on any map: a portal, a container, a scenery, a trap or an item on the ground. The hit damages
-it and, at 0 hit points, breaks it as the retail 1.0.7.4 executable does. No viewer input reaches it yet.
+it and, at 0 hit points, breaks it as the retail 1.0.7.4 executable does. Since part 2 the AREA viewer attacks doors, windows,
+containers and scenery with an Alt-click in combat mode ([viewer](#viewer-arc-combat-008-part-2)).
 
 Requirements: [FR-COMBAT-004](../requirements/combat-magic-tech.md#fr-combat-004) (attackable targets: objects),
 [FR-COMBAT-008](../requirements/combat-magic-tech.md#fr-combat-008) (damage to objects, material reduction),
@@ -98,6 +99,38 @@ A respawning scenery schedules the saved game event `object.respawn`:
 
 The registry version stays 1, as when the Lock event was added.
 
+## Viewer (ARC-COMBAT-008 part 2)
+
+- **Data.** `CombatFieldReader.ReadBreakable(row)` reads a portal, container, scenery or trap of a map: the common block and the
+  break fields (`CombatBreakableFields`: the type block's flags, a scenery's respawn delay, the destroyed ART). The session's
+  `SessionObjectFacts.FromCombatFields` turns them into a `SessionObjectBaseline`:
+  - a window is a portal whose ART has bit 10 clear;
+  - a junk pile is prototype file 3043;
+  - respawning (0x20) and busted (0x2) come from the type flags.
+
+  `SessionObjectFacts.ItemFacts` gives an item's facts, and `SessionWearItem.FromCombatFields` its durability values.
+- **Targets.** `AreaObjectTargets` names the attackable objects of the shown map:
+  - the drawn doors and windows, with the lock domain's entity and baseline;
+  - the containers, with their inventory holder's entity, so a spill reaches the holder's items;
+  - scenery and traps, with `AreaUseScriptHost.EntityId`;
+  - the items on the ground.
+
+  It also names the objects the session destroyed or switched off. The view no longer draws or picks those, and a destroyed
+  door's passage is open.
+- **Input.** In combat mode, an Alt-click on a door, window, container or scenery walks within reach, plays the attack and
+  runs `AttackObject` with the hero's worn items. The attack repeats while the object stays whole and stops when it breaks.
+  This is the original's click (ledger OD14). Without Alt, the object is used as out of combat. An item on the ground is
+  picked up and a trap walked to, as the original does, so neither is attacked by a click. The status line names the hit and
+  the break, and the log prints `ARC-COMBAT-008 object-attack-hit`.
+- **Wear in play.** The hero's attack on an NPC (`AttackCritter`) now passes both sides' worn items with their durability
+  values, so armour and weapon wear happen in play:
+  - the hero's kit, from `AreaHeroLoad.KitDurability`;
+  - the NPC's items in wear slots, from `AreaCombatHost.WornItems`.
+- **Native smoke.** With `--hero`, as the last stage of map mode (the map keeps what the hits did), the hero Alt-clicks the
+  drawn door, window, container or scenery with the fewest hit points it can damage. It attacks until the object breaks or
+  40 attacks have run. Each hit goes through the session, and a destroyed or switched-off object is no longer drawn. The
+  stage prints `ARC-COMBAT-008 native-smoke object-attack PASS`, or `NONE` without such an object.
+
 ## Differences from the original
 
 | Original 1.0.7.4 | Steamwoven |
@@ -109,8 +142,10 @@ The registry version stays 1, as when the Lock event was added.
 
 ## Not ready
 
-- **Viewer.** It has no input to attack an object, and does not hide a destroyed door, draw a busted window's ART, show
-  spilled items or switch a respawning scenery off.
+- **Viewer.** It draws a busted window on frame 0 of its T0 ART (the busted ART is not loaded), a busted scenery or trap on
+  its T0 ART (not the destroyed ART), and no spilled items: they lie in the session and the inventory but have no draw command.
+  A destroyed scenery or container still blocks its cells: step evidence is T0 map data. The viewer runs no trap, so it
+  passes no trap flag.
 - **Host steps.** The trap and BUST scripts, sounds, eye candy, the witnesses' reaction and the taking-damage script are reported
   to the host, not run here.
 - **Others.** NPC attacks on objects (AI), area damage (spells, explosions) and script action 60 on objects, and the decay

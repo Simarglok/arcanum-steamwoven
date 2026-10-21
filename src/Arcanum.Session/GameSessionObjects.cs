@@ -47,6 +47,79 @@ public sealed record SessionObjectBaseline
     public SessionOpenableBaseline? Openable { get; init; }
 }
 
+/// <summary>
+/// The bridge from stored fields (ARC-DATA-021, ARC-COMBAT-008) to an object's damage baseline: the common hit points, material,
+/// resistances and invulnerable flag, a portal's window bit (bit 10 of its portal ART clear), a junk pile (prototype file 3043, the
+/// container whose number less 20 is 3023), a scenery's respawn flag (0x20), busted flag (0x2) and respawn field, a scenery's or
+/// trap's destroyed ART, and a trap's busted flag. Null for a type that is no portal, container, scenery or trap, a material
+/// outside the fourteen or values outside the rules' bounds. Whether its use script is a trap is the host's (<paramref name="trapped"/>).
+/// </summary>
+public static class SessionObjectFacts
+{
+    public const int JunkPilePrototypeFile = 3043;
+    private const uint InvulnerableObject = 0x400000, RespawnableScenery = 0x20, BustedFlag = 0x2;
+
+    public static SessionObjectBaseline? FromCombatFields(Arcanum.Data.Combat.CombatBreakableFields fields, CellCoord cell,
+        SessionOpenableBaseline? openable = null, bool trapped = false)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        var common = fields.Object;
+        DamageableObjectKind? kind = common.Type switch
+        {
+            Arcanum.Data.Combat.CombatFieldReader.PortalType => DamageableObjectKind.Portal,
+            Arcanum.Data.Combat.CombatFieldReader.ContainerType => DamageableObjectKind.Container,
+            Arcanum.Data.Combat.CombatFieldReader.SceneryType => DamageableObjectKind.Scenery,
+            Arcanum.Data.Combat.CombatFieldReader.TrapType => DamageableObjectKind.Trap,
+            _ => null,
+        };
+        if (kind is not { } k || !Enum.IsDefined((ObjectMaterial)common.Material)) return null;
+        var scenery = k == DamageableObjectKind.Scenery;
+        var breakable = scenery || k == DamageableObjectKind.Trap;
+        var baseline = new SessionObjectBaseline
+        {
+            Kind = k,
+            Points = common.HitPoints,
+            Adjustment = common.HitPointAdjustment,
+            Damage = Math.Max(0, common.HitPointDamage),
+            Material = (ObjectMaterial)common.Material,
+            Resistances = Resistances(common.Resistances),
+            Invulnerable = (common.Flags & InvulnerableObject) != 0,
+            Window = k == DamageableObjectKind.Portal && common.CurrentArt >> 28 == 3 && (common.CurrentArt & 0x400) == 0,
+            JunkPile = k == DamageableObjectKind.Container && common.Prototype == JunkPilePrototypeFile,
+            Respawning = scenery && (fields.TypeFlags & RespawnableScenery) != 0,
+            RespawnDelay = scenery ? fields.RespawnDelay : 0,
+            HasDestroyedArt = breakable && fields.DestroyedArt != Arcanum.Data.Combat.CombatBreakableFields.NoArt,
+            Busted = breakable && (fields.TypeFlags & BustedFlag) != 0,
+            Trapped = trapped,
+            Cell = cell,
+            Openable = k is DamageableObjectKind.Portal or DamageableObjectKind.Container ? openable : null,
+        };
+        return ValidBaseline(baseline) ? baseline : null;
+    }
+
+    /// <summary>An item's material, resistances and invulnerable flag for an attack on it where it lies
+    /// (<see cref="SessionObjectAttack.ItemFacts"/>); null for an object that is not an item or a material outside the fourteen.</summary>
+    public static SessionObjectBaseline? ItemFacts(Arcanum.Data.Combat.CombatFields fields, bool trapped = false)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        if (fields.Item is null || !Enum.IsDefined((ObjectMaterial)fields.Object.Material)) return null;
+        return new SessionObjectBaseline
+        {
+            Kind = DamageableObjectKind.Item,
+            Material = (ObjectMaterial)fields.Object.Material,
+            Resistances = Resistances(fields.Object.Resistances),
+            Invulnerable = (fields.Object.Flags & InvulnerableObject) != 0,
+            Trapped = trapped,
+        };
+    }
+
+    // Stored resistances are in the source's resistance order: normal, fire, electrical, poison, magic.
+    private static DamageResistances Resistances(IReadOnlyList<int> stored) => new(stored[0], stored[3], stored[2], stored[1]);
+
+    private static bool ValidBaseline(SessionObjectBaseline b) => GameSessionOwner.ValidObjectFacts(b) &&
+        (b.Kind != DamageableObjectKind.Portal || b.Openable is not null) && (b.Openable is null || b.Openable.Value.JunkPile == b.JunkPile);
+}
+
 /// <summary>A non-critter object of a map: its runtime map, its session entity id and its baseline.</summary>
 public sealed record SessionObjectTarget(SessionMapId Map, string Entity, SessionObjectBaseline Baseline);
 
@@ -115,6 +188,17 @@ public sealed record SessionObjectAttackResult(GameSessionDisposition Dispositio
 public sealed partial class GameSessionOwner
 {
     public const string ObjectDamageProperty = "object.damage", ObjectConditionProperty = "object.condition";
+
+    /// <summary>The condition the session recorded for an object of <paramref name="kind"/> (a condition the kind does not have counts
+    /// as none), or <see cref="SessionObjectCondition.Whole"/> without one: what a host draws (a destroyed or switched-off object is
+    /// not drawn) without the object's baseline. Throws for an invalid map or entity.</summary>
+    public SessionObjectCondition QueryObjectCondition(SessionMapId map, string entity, DamageableObjectKind kind)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Map(map) || !SessionValidation.Entity(entity) || !Enum.IsDefined(kind))
+            throw new ArgumentException("Invalid map, entity or kind.", nameof(entity));
+        return RecordedObject(_maps, map, entity) is { Condition: { } condition } && Admits(kind, condition) ? condition : SessionObjectCondition.Whole;
+    }
 
     /// <summary>The object's current state: its recorded damage and condition, or its baseline's.</summary>
     public SessionObjectState QueryObject(SessionObjectTarget target)
@@ -421,6 +505,8 @@ public sealed partial class GameSessionOwner
               target.Baseline.Openable.Value.Kind == (target.Baseline.Kind == DamageableObjectKind.Portal ? OpenableKind.Portal : OpenableKind.Container) &&
               target.Baseline.Openable.Value.JunkPile == target.Baseline.JunkPile &&
               ValidOpenable(new(target.Map, target.Entity), target.Baseline.Openable.Value));
+
+    internal static bool ValidObjectFacts(SessionObjectBaseline b) => ValidFacts(b);
 
     private static bool ValidFacts(SessionObjectBaseline b)
     {
