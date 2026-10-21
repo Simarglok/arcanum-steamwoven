@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "function": "0x4F2D20",
+  "name": "spell-area-test",
+  "method": "Arcanum.Simulation.Magic.SpellTargetRules.Test",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 4,
+  "mutantsCaught": 4,
+  "differences": 0,
+  "otherMode": {
+    "mode": "steamwoven",
+    "ledger": "MG25",
+    "ledgerInputs": 1467,
+    "differ": 13,
+    "outsideLedger": 0
+  },
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "6bb694ebe1bd4c422af8187253c65649a9b176e05c7d58f88a05ca11127a2ab9",
+  "configuration": "Debug"
+}

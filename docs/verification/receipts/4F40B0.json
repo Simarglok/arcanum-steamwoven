@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "function": "0x4F40B0",
+  "name": "spell-target-collection",
+  "method": "Arcanum.Simulation.Magic.SpellTargetRules.Collect",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 4,
+  "mutantsCaught": 4,
+  "differences": 0,
+  "otherMode": {
+    "mode": "steamwoven",
+    "ledger": "MG25",
+    "ledgerInputs": 1549,
+    "differ": 13,
+    "outsideLedger": 0
+  },
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "3d598732be0bbd65bb6086d44f7e607c20751523a856a83d0803fa493ca71483",
+  "configuration": "Debug"
+}
