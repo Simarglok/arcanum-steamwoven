@@ -244,11 +244,16 @@ public sealed class CriticalEffectsStateTests
                 var from = hero ? Start.Cell : GolemCell;
                 var asked = map.Asked.Where(a => a.From == from).ToArray();
                 Assert.IsTrue(asked.Length >= 1 && asked.All(a => a.Who == (hero ? DropOwner.PcSide : DropOwner.Npc)), "the owner's kind goes to the path");
-                var to = asked[^1].To;
-                // The walk stops on the first tile without a critter (the hero stands next to the golem), else at the path's end.
-                var expected = from;
-                while (expected != to && map.HasCritter(expected)) expected = map.Step(expected, AreaRotation(expected, to))!.Value;
-                Assert.AreEqual(expected, drop.Cell, $"{hero} {from} {to}");
+                // Each try's target gives one landing: the walk stops on the first tile without a critter (the hero stands next to the
+                // golem), else at the path's end; the owner's own tile when the target is that tile (direction 8). Two drops of one
+                // owner share the asked list, so the landing is one of its targets'.
+                var landings = asked.Select(a =>
+                {
+                    var cell = from;
+                    while (cell != a.To && map.HasCritter(cell)) cell = map.Step(cell, AreaRotation(cell, a.To))!.Value;
+                    return cell;
+                }).ToHashSet();
+                Assert.IsTrue(landings.Contains(drop.Cell!.Value), $"{hero} {from} {drop.Cell}");
                 if (hero)
                 {
                     Assert.AreEqual(drop.Cell, owner.QueryPlacedItems().Single().Cell);
@@ -266,7 +271,7 @@ public sealed class CriticalEffectsStateTests
         }
         if (!heroDropped || !npcDropped) Assert.Inconclusive($"drops seen: hero {heroDropped}, golem {npcDropped}");
 
-        // A no-drop item draws the distance (the drop's first draw) and is refused before any try.
+        // A no-drop item is refused before any try (after the distance draw, PI1).
         using var kept = Owner(missChance: 100);
         var noDrop = new OpenMap();
         for (var attempt = 0; attempt < 600; attempt++)

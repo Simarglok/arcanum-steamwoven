@@ -81,14 +81,13 @@ public sealed class AreaDropMap : IDropMap
         return new(Math.Min(result, ResultCap), partial, rotations);
     }
 
-    // The gate (0x41F3C0): the tile not blocked, and no container or scenery without the no-block flag and no living critter on it.
+    // The gate (0x41F3C0): the tile not blocked, and no container, scenery or living critter on it without the no-block flag.
     private bool DestinationOpen(CellCoord to)
     {
         if (TileBlocked(to)) return false;
         if (_liveActors.Contains(to)) return false;
-        return !Rows(to).Any(row => !_gone(row) && (row.Type is ContainerType or SceneryType
-            ? (Flags(row, ObjectFlagsSlot) & NoBlockObject) == 0
-            : row.Type is PcType or NpcType && !_moved.Contains(row.Key) && !_dead(row)));
+        return !Rows(to).Any(row => !_gone(row) && (Flags(row, ObjectFlagsSlot) & NoBlockObject) == 0 && (row.Type is ContainerType or SceneryType
+            || row.Type is PcType or NpcType && !_moved.Contains(row.Key) && !_dead(row)));
     }
 
     // 0x41F840: toward the target one rotation at a time (0x4B8D50), each step tested; a failure records the completed steps.

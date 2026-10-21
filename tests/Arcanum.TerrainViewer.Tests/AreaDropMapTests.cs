@@ -81,6 +81,7 @@ public sealed class AreaDropMapTests
         Assert.AreEqual(2, Map([new(1, Npc, 7, 5, false)], dead: [Key(1)]).Path(from, to, DropOwner.Npc).Result, "a dead NPC");
         Assert.AreEqual(2, Map([new(1, Npc, 7, 5, false)], moved: [Key(1)]).Path(from, to, DropOwner.Npc).Result, "a companion's left record");
         Assert.AreEqual(DropPath.None, Map([], live: [to]).Path(from, to, DropOwner.Npc), "the hero or a companion");
+        Assert.AreEqual(2, Map([new(1, Npc, 7, 5, false, Flags: 0x400)]).Path(from, to, DropOwner.Npc).Result, "a critter that does not block");
     }
 
     [TestMethod]
@@ -104,10 +105,16 @@ public sealed class AreaDropMapTests
     {
         CellCoord from = new(5, 5), to = new(8, 5);
         var hidden = new Thing(1, Trap, 6, 5, false);
-        Assert.AreEqual(0, Map([hidden]).Path(from, to, DropOwner.Npc).Partial, "an NPC on its own avoids every trap");
+        bool Avoids(Thing[] things, DropOwner who)
+        {
+            var map = Map(things);
+            var path = map.Path(from, to, who);
+            return path.Result > 0 && !Enumerable.Range(0, path.Result).Select(i => Walk(map, from, path, i + 1)).Contains(new CellCoord(6, 5));
+        }
+        Assert.IsTrue(Avoids([hidden], DropOwner.Npc), "an NPC on its own avoids every trap");
         Assert.AreEqual((3, 0), (Map([hidden]).Path(from, to, DropOwner.PcSide).Result, Map([hidden]).Path(from, to, DropOwner.PcSide).Partial),
             "the PC side avoids only a spotted trap");
-        Assert.AreEqual(0, Map([hidden with { TrapFlags = 0x1000000 }]).Path(from, to, DropOwner.PcSide).Partial, "spotted");
+        Assert.IsTrue(Avoids([hidden with { TrapFlags = 0x1000000 }], DropOwner.PcSide), "spotted");
         Assert.AreEqual(3, Map([hidden with { TrapFlags = 0x1000000 }]).Path(from, to, DropOwner.Npc).Result, "a trap marked for NPCs to ignore");
         Assert.AreEqual(3, Map([hidden]).Path(from, to, DropOwner.Object).Result, "an object avoids none");
         // The search pays 90 for the trap tile and walks round it.

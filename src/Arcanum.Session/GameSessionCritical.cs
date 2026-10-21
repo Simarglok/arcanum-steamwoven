@@ -189,9 +189,9 @@ public sealed partial class GameSessionOwner
         return side with { Worn = left };
     }
 
-    // The hero, or an NPC following it, avoids only a spotted trap on the drop's path; another NPC avoids every trap (0x4BBFE0).
-    private DropOwner DropOwnerOf(SessionLifeTarget who) =>
-        who.IsHero || _party.Get(who.Entity!).Standing == CompanionStanding.Following ? DropOwner.PcSide : DropOwner.Npc;
+    // The hero, or an NPC the PC leads (following or waiting), avoids only a spotted trap on the drop's path; another NPC avoids
+    // every trap (0x4BBFE0).
+    private DropOwner DropOwnerOf(SessionLifeTarget who) => who.IsHero || _party.Get(who.Entity!).LedByPc ? DropOwner.PcSide : DropOwner.Npc;
 
     // The seed listing of an NPC's item still in its list on the actor's map, or null (an added made item, another map's).
     private SessionSeedItem? NpcItemSeed(string npc, string item) =>

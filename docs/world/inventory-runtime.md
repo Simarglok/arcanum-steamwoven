@@ -279,7 +279,7 @@ lands on its holder's cell and nothing is drawn (a host without one).
 **Viewer port.** `AreaDropMap` (viewer Core) is the AREA viewer's map for the hero's attacks on NPCs and objects
 (`AreaDropMapNow`): the path's gate on the target's tile, the direct attempt and the 64 × 64 search exactly as read, with the
 step tests of the shown map's T0 step evidence (built on the same tile and traversal functions) and the doors' runtime passage;
-critters never block a step (mode 4); containers and scenery the session destroyed or switched off no longer block; a trap's
+critters never block a step (mode 4), and an object with flag 0x400 does not close the target's tile; containers and scenery the session destroyed or switched off no longer block; a trap's
 flags come from its map data (slot 36). PCs and NPCs on a tile are the map's critter records that have not moved, dead or alive,
 plus the hero's and the companions' live cells.
 
@@ -288,6 +288,8 @@ plus the hero's and the companions' live cells.
 - The NPC search budget per real second (DCA2): the session never runs out of it.
 - The map's bounds are the step evidence the viewer holds (the exterior's nine sectors, the cave); a tile or step the evidence
   cannot settle is treated as blocked (DCA3).
+- A generator that runs out during the tries (after about 2^63 draws) leaves the distance draw made and the item where it was
+  (`RandomExhausted`); the drop's draws are not taken on trial.
 - The viewer still draws no dropped item (ARC-RENDER-033).
 
 ## Evidence

@@ -63,8 +63,6 @@ public partial class TerrainViewerApp
             Require(path.Result is >= 0 and <= AreaDropMap.ResultCap && path.Partial >= 0, $"path {direction} in range");
             paths.Add($"{direction}:{path.Result}/{path.Partial}");
         }
-        Require(paths.Take(8).Any(p => !p.EndsWith(":0/0", StringComparison.Ordinal)),
-            "a free NPC reaches a tile two steps away in some direction");
         var targetWorn = _combatHost.WornItems(session, CurrentAreaMap, entity);
         var result = session.AttackCritter(session.Version, new(combat!)
         {

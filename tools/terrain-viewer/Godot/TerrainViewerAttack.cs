@@ -200,6 +200,7 @@ public partial class TerrainViewerApp
     private void RunObjectAttackHit(AttackGoal goal, AreaObjectAttackTarget target, int distance)
     {
         var owner = _areaSession!;
+        PlaceHeroForDrop();
         var result = owner.AttackObject(owner.Version, target.Attack(distance, goal.Aim, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with
         {
             DropMap = AreaDropMapNow(),
@@ -215,6 +216,16 @@ public partial class TerrainViewerApp
         if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) EndStun(owner, SessionLifeTarget.Hero, "hero");
         SyncAreaInventory();
         RefreshAreaStatus();
+    }
+
+    /// <summary>ARC-COMBAT-010: the session's actor placement follows the walking actor only at a save or a map change; a drop of the
+    /// hero's item starts from it, so the attack places it on the committed cell first (as F7 does).</summary>
+    private void PlaceHeroForDrop()
+    {
+        if (_worldActor.Session is not AreaGridSession grid || _areaSession is not { } owner) return;
+        var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
+        var placed = owner.PlaceActor(owner.Version, new(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing));
+        if (placed.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-COMBAT-010 hero-placement refused failure={placed.Failure}");
     }
 
     /// <summary>ARC-COMBAT-010: the shown map as a drop reads it now: the step evidence with the doors' runtime passage, the map's
@@ -365,6 +376,7 @@ public partial class TerrainViewerApp
             return;
         }
         if (goal.Object is { } struck) { RunObjectAttackHit(goal, struck, (int)distance); return; }
+        PlaceHeroForDrop();
         // ARC-COMBAT-008: the two sides' worn items with their durability values, so the attack wears them (ARC-COMBAT-007).
         var result = owner.AttackCritter(owner.Version, new(goal.Combat!)
         {

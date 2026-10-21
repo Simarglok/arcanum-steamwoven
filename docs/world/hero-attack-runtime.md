@@ -126,7 +126,10 @@ there (the critical tables read the host's `TargetWorn`).
   each critical item step (`crit=`). The viewer plays no stun animation, so a stun of the hero or the NPC ends at once
   (`ClearStun`, the contract for an animation that could not start; `ARC-COMBAT-009 stun-ended`); a critical knockout is drawn in
   the fallen pose like any knockout. `TargetCell` is the NPC's map-data cell (NPCs do not move in the viewer); the drop's map is
-  `AreaDropMap` over the shown map (ARC-COMBAT-010). A dropped item is hidden from the NPC but not drawn on the ground (as a
+  `AreaDropMap` over the shown map (ARC-COMBAT-010), and each hit first places the session's actor on the walking hero's committed
+  cell (`PlaceActor`, as F7 does), so the hero's drops start from where it stands. The critical stage also logs
+  `ARC-COMBAT-010 native-smoke drop-paths PASS`: the drop's path from the NPC's tile to the tile two steps away for each direction
+  draw 0..8 (result/partial steps), and it checks that each item the NPC dropped lies on the ground at the reported cell. A dropped item is hidden from the NPC but not drawn on the ground (as a
   spilled container's items).
 - Native smoke `ARC-COMBAT-009 native-smoke critical PASS` (map mode, last stage): a granted fate point arms the hero's critical
   hit, the hero attacks the living NPC with the most hit points through the session as the viewer does (worn items, cell), and
