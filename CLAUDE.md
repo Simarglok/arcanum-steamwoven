@@ -26,6 +26,9 @@ summarizes the project and points to them.
 - **Check every launch.** Within a minute of starting a Godot or launcher run,
   confirm it started the intended mode, or stop it and fix the command
   ([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
+- **One run at a time on the Mac.** Godot runs, exports and `dotnet` builds/tests go through the FIFO launch queue:
+  `./arcanum run --kind window|headless|export|dotnet -- COMMAND`; `./arcanum queue` shows the queue
+  ([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033), ARC-DEV-033). It replaces the `lockf` rule.
 - **The retired Hermes setup is off limits.** The Hermes task board and the
   Codex workflow were removed on 2026-10-16 (PR #137); do not touch `~/.hermes`
   on the owner's Mac (old board, profiles, logs with secrets) and do not run
@@ -78,7 +81,7 @@ under `docs/research`. Details: `docs/project/status.md`.
   `Arcanum.Input.Godot` adapter source), `Arcanum.Session` (one game-session
   owner: clock, GF, actor placement, map changes, story, party, inventory,
   starting hero, randomness, life state, event queue with life timers, NPC reaction, turn-based round, equipment,
-  durable effects with blessings and curses, experience and levels, auto-level schemes, combat mode, music and ambient scheme state, quelled rumors, the hero's skills, item durability, found schematics, made items, the spell book, fate points, the wait timer and follower loyalty, the PC's known world-map areas, NPC inventory changes, the NPC schematic crafter, the PC's reputations, the hero's placed items, ammunition stacks, the hero's and followers' concealment, the hero's background, snapshot schema 36), `Arcanum.Godot` (ART viewer and HD
+  durable effects with blessings and curses, experience and levels, auto-level schemes, combat mode, music and ambient scheme state, quelled rumors, the hero's skills, item durability, found schematics, made items, the spell book, fate points, the wait timer and follower loyalty, the PC's known world-map areas, NPC inventory changes, the NPC schematic crafter, the PC's reputations, the hero's placed items, ammunition stacks, the hero's and followers' concealment, the hero's background, the story-state number, snapshot schema 37), `Arcanum.Godot` (ART viewer and HD
   before/after review). Data/Simulation/Scripting/Session must stay
   Godot-independent.
 - Tools: `tools/terrain-viewer` (Core + Godot; ordinary modes `crash-site-area`

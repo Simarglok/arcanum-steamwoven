@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S12"/>.
+/// <see cref="ScrAdmissionSet.S13"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -32,6 +32,7 @@ internal sealed class ScrInterpreter
         public readonly List<ScrSchematicRequest> Schematics = new();
         public readonly List<ScrReadingRequest> Readings = new();
         public readonly List<ScrSkillUse> SkillUses = new();
+        public readonly List<ScrStateRequest> States = new();
         public readonly SortedDictionary<int, bool> Flags = new();
         public int? Story, StoryBefore;
         // Lines executed by every run of the dispatch (a project bound across nested calls).
@@ -49,6 +50,7 @@ internal sealed class ScrInterpreter
     private List<ScrSchematicRequest> _schematics => _shared.Schematics;
     private List<ScrReadingRequest> _readings => _shared.Readings;
     private List<ScrSkillUse> _skillUses => _shared.SkillUses;
+    private List<ScrStateRequest> _states => _shared.States;
     private SortedDictionary<int, bool> _flags => _shared.Flags;
     private int? _story { get => _shared.Story; set => _shared.Story = value; }
     private int? _storyBefore { get => _shared.StoryBefore; set => _shared.StoryBefore = value; }
@@ -139,7 +141,8 @@ internal sealed class ScrInterpreter
             _teleports.Count == 0 ? null : Array.AsReadOnly(_teleports.ToArray()), _schemes.Count == 0 ? null : Array.AsReadOnly(_schemes.ToArray()),
             _schematics.Count == 0 ? null : Array.AsReadOnly(_schematics.ToArray()),
             _readings.Count == 0 ? null : Array.AsReadOnly(_readings.ToArray()),
-            _skillUses.Count == 0 ? null : Array.AsReadOnly(_skillUses.ToArray()));
+            _skillUses.Count == 0 ? null : Array.AsReadOnly(_skillUses.ToArray()),
+            _states.Count == 0 ? null : Array.AsReadOnly(_states.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -251,6 +254,31 @@ internal sealed class ScrInterpreter
                 // SW8 (TC2, both fixed): the object operand; an absent object opens nothing (the original's null test). The host
                 // resolves a PC or an NPC and its leader instead of the original's never-filled callback. The run goes on.
                 if (OptionalObject(a, 0) is { } who) _schematics.Add(new(who));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.SetPcQuestState:
+            {
+                // SS2: the object operand 0 names, then the quest and the state; the run's attachee is the quest's giver.
+                var quest = Get(a, 1); var state = Get(a, 2);
+                foreach (var obj in Objects(a, 0)) _states.Add(new(ScrStateKind.QuestState, obj, quest, state, _roles.Attachee));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.MarkMapLocation:
+            case ScrCatalogue.Action.SetRumor:
+            {
+                // SS3, SS4: the number, then the first object operand 1 names; an absent one asks for nothing.
+                var number = Get(a, 0);
+                if (OptionalObject(a, 1) is { } obj)
+                    _states.Add(new(a.Type == ScrCatalogue.Action.MarkMapLocation ? ScrStateKind.KnownArea : ScrStateKind.Rumor, obj, number));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.AddReputation:
+            case ScrCatalogue.Action.RemoveReputation:
+            {
+                // SS5: every object operand 0 names, then the reputation.
+                var reputation = Get(a, 1);
+                foreach (var obj in Objects(a, 0))
+                    _states.Add(new(a.Type == ScrCatalogue.Action.AddReputation ? ScrStateKind.AddReputation : ScrStateKind.RemoveReputation, obj, reputation));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.CallScript:

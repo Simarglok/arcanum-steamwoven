@@ -95,13 +95,10 @@ public sealed class SchematicAssemblyStateTests
     [TestMethod]
     public void Nothing_is_consumed_when_the_products_cannot_be_held_TC3()
     {
+        // A product the inventory refuses lies on the ground since ARC-WORLD-070 (AssemblyGroundStateTests); a product the session
+        // cannot hold at all still refuses before anything is consumed.
         using var owner = Owner();
         var parts = Schematic([2100], [2100], quantity: 3);
-        var full = owner.AssembleSchematic(owner.Version, parts, InBag, Facts, Kinds, _ => SessionInsertVerdict.NoRoom);
-        Assert.AreEqual(GameSessionFailure.InsertRefused, full.Failure);
-        var calls = 0;
-        var third = owner.AssembleSchematic(owner.Version, parts, InBag, Facts, Kinds, _ => ++calls < 3 ? SessionInsertVerdict.Accepted : SessionInsertVerdict.TooHeavy);
-        Assert.AreEqual(GameSessionFailure.InsertRefused, third.Failure, "every unit is checked before anything is consumed");
         Assert.AreEqual(GameSessionFailure.ItemTypeUnsupported, owner.AssembleSchematic(owner.Version, parts, InBag, Facts, _ => null, Accept).Failure);
         var ammo = new SessionItemKind(SessionItemType.Ammo, 2320, 5, 6);
         Assert.AreEqual(GameSessionFailure.ItemTypeUnsupported, owner.AssembleSchematic(owner.Version, parts, InBag, Facts, _ => ammo, Accept).Failure,

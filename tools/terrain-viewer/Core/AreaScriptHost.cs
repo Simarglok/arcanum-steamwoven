@@ -24,19 +24,20 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
     public const string CountersProperty = "dialog.counters", ScriptProperty = "dialog.script";
 
     /// <summary>
-    /// The set the viewer runs: <see cref="ScrAdmissionSet.S3"/> without get and set story state, because the session
-    /// has no story-state number yet (a script that would use one is refused, not run on a made-up value), plus the three
+    /// The set the viewer runs: <see cref="ScrAdmissionSet.S3"/> (with the session's story-state number since ARC-SCRIPT-019), plus the three
     /// sound actions of <see cref="ScrAdmissionSet.S7"/> (ARC-SCRIPT-040), plus call script in and remove script call of
     /// <see cref="ScrAdmissionSet.S5"/> since the viewer pumps the session's event queue (ARC-WORLD-039), plus set auto-level
     /// scheme of <see cref="ScrAdmissionSet.S8"/> (ARC-SCRIPT-016), plus start schematic UI of <see cref="ScrAdmissionSet.S9"/>
     /// (ARC-TECHNOLOGY-005), plus the reading actions of <see cref="ScrAdmissionSet.S10"/> (ARC-UI-049). The actions of
     /// <see cref="ScrAdmissionSet.S12"/> (ARC-SCRIPT-018) are left out: a call from a dialog-point run would need the runner's dialog
     /// gates (E6) for its callee, assign object could change the dialog's NPC, which the conversation host takes from the click,
-    /// and get object type needs object queries this host does not answer.
+    /// and get object type needs object queries this host does not answer. Plus the quest, area, rumor and reputation actions of
+    /// <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019).
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading", ScrAdmissionSet.S3.Conditions,
-        ScrAdmissionSet.S3.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState)
-            .Concat([ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
+    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-story", ScrAdmissionSet.S3.Conditions,
+        ScrAdmissionSet.S3.Actions
+            .Concat([ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
+                ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
                 ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
                 ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]),
         ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
@@ -189,8 +190,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
         return read.Status == GlobalFlagReadStatus.Known && read.Value is { } value ? value : throw new InvalidOperationException("AREA_SCRIPT_FLAG_UNREADABLE");
     }
 
-    /// <summary>Never asked: <see cref="Admission"/> leaves out the story-state actions.</summary>
-    public int StoryState() => throw new InvalidOperationException("AREA_SCRIPT_STORY_STATE_NOT_BOUND");
+    /// <summary>ARC-SCRIPT-019: the session's story-state number.</summary>
+    public int StoryState() => _session.QueryStoryState();
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
     public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
@@ -219,14 +220,16 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
     public bool Apply(ScrEffects effects)
     {
         ArgumentNullException.ThrowIfNull(effects);
-        // The viewer's set admits no story state and no use item with skill; a trap object is not modelled.
-        if (effects.StoryState is not null || effects.DestroyTrapObject is not null || effects.SkillUses.Count > 0) return false;
+        // The viewer's set admits no use item with skill; a trap object is not modelled.
+        if (effects.DestroyTrapObject is not null || effects.SkillUses.Count > 0) return false;
         foreach (var write in effects.GlobalFlags)
         {
             var flags = _session.Flags;
             var receipt = flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(write.Index), write.Value));
             if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange)) return false;
         }
+        // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
+        if (!AreaScriptStory.Apply(_session, effects, IsPc, _state.AddAward)) return false;
         // ARC-SCRIPT-040: scheme pairs are the session's request, in action order; one the session drops (sound locked, as the
         // original drops it) or refuses (a negative id, a project guard) changes nothing and stops nothing. Effect sounds wait
         // for the viewer. Like the flags, they stay applied when a later step is refused (the original applies as it goes).

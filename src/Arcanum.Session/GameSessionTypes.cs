@@ -314,8 +314,9 @@ public static class SessionStoryLimits
 public sealed class SessionStoryState
 {
     internal SessionStoryState(SessionQuest[] quests, SessionGlobalQuest[] globalQuests, SessionRumor[] rumors, int[] quelledRumors,
-        int[] knownAreas, int lastArea, SessionReputation[] reputations)
+        int[] knownAreas, int lastArea, SessionReputation[] reputations, int storyState = 0)
     {
+        StoryState = storyState;
         Quests = Array.AsReadOnly(quests);
         GlobalQuests = Array.AsReadOnly(globalQuests);
         Rumors = Array.AsReadOnly(rumors);
@@ -332,6 +333,10 @@ public sealed class SessionStoryState
 
     /// <summary>ARC-WORLD-044: the PC's reputations in acquisition order (the original's list order), each with its time.</summary>
     public IReadOnlyList<SessionReputation> Reputations { get; }
+
+    /// <summary>ARC-SCRIPT-019: the game's story-state number (ledger SS1: one game-wide number, 0 at a new game, only ever
+    /// raised); 0..<see cref="int.MaxValue"/>.</summary>
+    public int StoryState { get; }
 
     public IReadOnlyList<SessionQuest> Quests { get; }
     public IReadOnlyList<SessionGlobalQuest> GlobalQuests { get; }
@@ -388,8 +393,9 @@ public sealed class GameSessionSnapshot
     /// the hero's items placed on the ground to <see cref="Inventory"/> (ARC-WORLD-059); schema 33 adds the waiting followers' missed
     /// level steps to <see cref="Advancement"/> (ARC-WORLD-047); schema 34 adds the ammunition stacks to <see cref="Inventory"/>
     /// (ARC-WORLD-066); schema 35 adds the hero's and its followers' concealment (<see cref="Concealment"/>, ARC-SKILLS-008); schema 36
-    /// adds the hero's background id to <see cref="Hero"/> (ARC-WORLD-069). Schemas 1..35 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 36;
+    /// adds the hero's background id to <see cref="Hero"/> (ARC-WORLD-069); schema 37 adds the story-state number to the story
+    /// (ARC-SCRIPT-019). Schemas 1..36 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 37;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

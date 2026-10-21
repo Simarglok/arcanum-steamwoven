@@ -51,7 +51,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] LightingFields = ["schemeId", "hour"];
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
-    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea", "reputations"];
+    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea", "reputations", "storyState"];
     private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
     private static readonly string[] RumorFields = ["rumor", "timestampMs"];
@@ -240,6 +240,7 @@ public static class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+            w.WriteNumber("storyState", story.StoryState);
             w.WriteEndObject();
 
             w.WriteStartObject("party");
@@ -1081,7 +1082,8 @@ public static class GameSessionSnapshotCodec
             if (i > 0 && reputations[i].TimestampMs < reputations[i - 1].TimestampMs)
                 throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".timestampMs");
         }
-        return new(quests, globals, rumors, quelled, areas, last, reputations);
+        var storyState = Int(f["storyState"], p + ".storyState", 0, int.MaxValue);
+        return new(quests, globals, rumors, quelled, areas, last, reputations, storyState);
     }
 
     private static SessionPartyState Party(JsonElement element)

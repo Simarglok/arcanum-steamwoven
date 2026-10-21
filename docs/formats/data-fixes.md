@@ -11,7 +11,9 @@ the Steamwoven [rule mode](../world/rule-modes.md) fixes these data defects (D2)
 the Original mode keeps them, and the fix mechanism serves later data fixes too.
 `DataFixProfile` also holds MP7 (a `map.patch` line `script N 0`, ARC-DATA-037), which the
 map patch applies when a map opens ([map patch](../world/map-patch.md#script-0-arc-data-037))
-rather than a catalogue entry.
+rather than a catalogue entry, and DF4 (a spell component line that repeats `Dmg_Flags:`,
+ARC-MAGIC-012), which the spell record reader applies when the spell data is loaded
+([spell damage and heal](../world/spell-damage-heal.md#data-fix-df4)).
 
 ## Mechanism
 
