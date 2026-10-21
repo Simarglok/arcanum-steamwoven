@@ -183,6 +183,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.UseRequested += HealSelf;
             _inventoryPanel.ReadRequested += ReadItem;
             _inventoryPanel.PickRequested += ArmLockpick;
+            _inventoryPanel.RepairRequested += RepairItem;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
@@ -191,7 +192,7 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
-    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks);
+    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks, _areaKitDurability);
 
     /// <summary>ARC-SKILLS-005: the hero uses a healing item on itself (the inventory use passes the user as the target, as the
     /// original's inventory window does). Outside a turn-based round, so no action points are charged.</summary>
@@ -235,6 +236,33 @@ public partial class TerrainViewerApp
         _portalNotice = "pick a lock: press a door or window";
         GD.Print($"ARC-SKILLS-006 lockpicks armed item={item}");
         RefreshAreaStatus();
+    }
+
+    /// <summary>ARC-SKILLS-007: the hero repairs one of its items with the Repair skill (the original's skill-bar repair, which
+    /// charges no action points and makes the hero the repairer).</summary>
+    private SessionRepairResult? _lastRepair;
+
+    private void RepairItem(string item)
+    {
+        _lastRepair = null;
+        if (!InventoryOpen || !InventoryActive) return;
+        var holder = _inventoryPanel!.Holder;
+        string message;
+        if (_inventoryHost!.RepairBaseline(_areaSession!, item, _areaKitDurability) is not { } baseline) message = "not repaired: no condition for this item";
+        else
+        {
+            var result = _areaSession!.RepairWithSkill(_areaSession.Version, item, baseline);
+            _lastRepair = result;
+            message = result.Disposition == GameSessionDisposition.Rejected ? $"not repaired: {result.Failure}"
+                : (result.Repair == Arcanum.Simulation.Items.ItemRepairStatus.NothingToRepair ? "nothing to repair"
+                    : result.Amount > 0 ? $"repaired {result.Amount} hit point(s)" : "the repair restored nothing")
+                + (result.FateUsed ? " (fate point)" : string.Empty);
+            GD.Print($"ARC-SKILLS-007 repair item={item} disposition={result.Disposition} failure={result.Failure} status={result.Repair} amount={result.Amount} " +
+                $"damage={result.Condition?.Damage} broken={result.Condition?.Broken}");
+        }
+        _inventoryStatus = message;
+        _inventoryPanel.Render(InventoryView(holder), message);
+        RefreshReadyStatus();
     }
 
     private void EndInventory()
