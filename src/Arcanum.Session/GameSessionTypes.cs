@@ -210,6 +210,8 @@ public enum GameSessionFailure
     InvalidArea,
     // Heal with a healing item (ARC-SKILLS-005).
     HealUnavailable, InvalidHealingItem,
+    // Combat wear (ARC-COMBAT-007).
+    InvalidWear,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }

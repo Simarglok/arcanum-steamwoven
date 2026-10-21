@@ -87,8 +87,7 @@ internal sealed class DurabilityDomain
 /// and the items of every attached map seed (any map, any holder or the ground). An item's condition is its host's baseline
 /// (<see cref="SessionItemConditions.FromCombatFields"/>) until the session damages, breaks or repairs it; from then on the
 /// session's record holds it, saved in <see cref="GameSessionSnapshot.Durability"/>. The rules are
-/// <see cref="ItemDurabilityRules"/>. Combat does not call these yet: the attack resolver produces no armour or weapon wear
-/// (combat core C20, C21), so its callers come with the combat item-damage slice.
+/// <see cref="ItemDurabilityRules"/>. Combat calls them through the attack's wear (<see cref="ApplyAttackWear"/>, ARC-COMBAT-007).
 /// </summary>
 public sealed partial class GameSessionOwner
 {

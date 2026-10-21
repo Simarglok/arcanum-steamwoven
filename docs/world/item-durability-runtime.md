@@ -3,7 +3,7 @@
 Status: **Implemented bounded component**, work item ARC-WORLD-053 (2026-10-20), the item durability slice of the
 [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted).
 Godot-free durability rules in `Arcanum.Simulation.Items` and the session's item condition state in `Arcanum.Session`
-(snapshot schema 22). No viewer, combat or trade caller uses them yet.
+(snapshot schema 22). Combat calls them since ARC-COMBAT-007 (attack wear); no viewer or trade caller uses them yet.
 
 Requirements: [FR-ITEM-011](../requirements/items-economy.md#fr-item-011) (durability, break and the item side of repair).
 The Repair skill rule itself is ARC-SKILLS-011 (skills plan), which calls the item side below.
@@ -108,8 +108,10 @@ deleted or a kit numbering that only an unlisted deletion would explain (`Invali
 
 ## Callers
 
-The attack resolver produces no armour or weapon wear yet (combat core C20, C21), and the session's hero attack does
-not damage items, so no combat caller exists; the damage entry point is exposed for the combat item-damage work. Trade
+Combat (ARC-COMBAT-007): `GameSessionOwner.ApplyAttackWear`, which the hero's attack (`AttackCritter`) runs and NPC AI
+will run, calls `DamageItem` for armour wear (+ 10 at the hit location), the critical "damage weapon" (+ 10) and the
+attacker's weapon wear by the struck material, and `DestroyItem` for the "destroy/explode weapon" critical
+([attack wear](attack-resolver-runtime.md#wear-arc-combat-007), ledger CW1–CW10). Trade
 (sale price, quote and payment), the Repair skill (ARC-SKILLS-011) and the schematic gate (TECH-4) call the rules when they
 exist.
 
@@ -124,7 +126,8 @@ exist.
 
 ## Not ready
 
-- No combat damage on items, armour or weapon wear, area damage or script action 60 reach the session yet.
+- Combat damage on objects (a hit on a door, a container or an item on the ground), area damage and script action 60 do not
+  reach the session yet; armour and weapon wear do (ARC-COMBAT-007), but the viewer passes no item baselines yet.
 - No trade, price function, repair window or payment; no Repair skill run (ARC-SKILLS-011).
 - The bust and destroy sounds and the BUST script are reported to the host, not played or run here.
 - Breaking walls, portals, containers, scenery and traps (other branches of 0x43F1C0) is not implemented.
