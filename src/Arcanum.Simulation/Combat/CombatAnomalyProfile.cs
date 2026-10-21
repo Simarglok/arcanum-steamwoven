@@ -51,6 +51,12 @@ public sealed record CombatAnomalyProfile
     /// </summary>
     public bool OverexertionKnockoutClearsNextActionPoints { get; init; }
 
+    /// <summary>
+    /// AW13 and AW14 (owner decision 2026-10-20): a corner step of a line of fire sums both routes around the corner, so the corner
+    /// tile's cover counts twice, and the last step also skips the side tiles' objects (see <see cref="LineOfFireRules.StepCost{TObject}"/>).
+    /// </summary>
+    public bool CornerStepCountsBothRoutes { get; init; }
+
     /// <summary>The original with every recorded D2 fix; the default setting.</summary>
     public static readonly CombatAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -65,6 +71,7 @@ public sealed record CombatAnomalyProfile
         FirstSubturnStartedTwice = true,
         StallCheckKeepsPreviousActionPoints = true,
         OverexertionKnockoutClearsNextActionPoints = true,
+        CornerStepCountsBothRoutes = true,
     };
 
     /// <summary>Both settings, default first.</summary>

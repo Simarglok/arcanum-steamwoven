@@ -11,8 +11,6 @@ public static class AreaStepInspector
 {
     private const string OriginalAreaProfile = "arc-data-009-complete-file-effective-source-v1";
     private const string OriginalCaveProfile = "arc-world-009-cave-file-effective-source-v1";
-    // Window/opening wall pieces (docs/research/cave-transition-evidence.md T7); every other piece is a solid edge.
-    private static readonly int[] OpeningWallPieces = [10, 13, 14, 17, 18, 19, 22, 25, 26, 29, 30, 31, 32];
     private const string TileNamePath = "art/tile/tilename.mes", EffectPath = "rules/effect.mes", GameEffectPath = "rules/gameeffect.mes", PatchPath = "rules/map.patch";
     // Pinned payload identities of the authenticated original profile (docs/research/area-passability-closure.md).
     private static readonly IReadOnlyDictionary<string, (long Length, string Sha256)> OriginalPayloads = new Dictionary<string, (long, string)>
@@ -286,11 +284,11 @@ public static class AreaStepInspector
                 // A wall or portal sits on one tile edge: its rotation rounded up to odd. The tile itself stays walkable.
                 var art = unchecked((uint)aid);
                 if (!walls.TryGetValue(cell, out var edges)) walls[cell] = edges = [];
-                var piece = (int)((art >> 14) & 63);
+                var piece = AreaWallPieces.Piece(art);
                 var (rule, reason) = !wholeMap ? (AreaStepEdgeRule.Legacy, (string?)null)
                     : o.Type == 1 ? PortalEdgeRule(art, Number(o, PortalFlagsSlot), HasUnlockScript(o))
                     : WallPieceRule(piece);
-                edges.Add(new(o.Key, cell, (int)((art >> 11) & 7) | 1, o.Type == 0 && OpeningWallPieces.Contains(piece), rule, reason,
+                edges.Add(new(o.Key, cell, AreaWallPieces.Edge(art), o.Type == 0 && AreaWallPieces.Kind(piece) != AreaWallPieceKind.Solid, rule, reason,
                     // ARC-WORLD-051: every portal keeps its raw rotation, a runtime leaving-only passage steps by it (the
                     // digest writes it for Leaving rules only, so the evidence digest is unchanged).
                     rule == AreaStepEdgeRule.Leaving || (wholeMap && o.Type == 1) ? (int)((art >> 11) & 7) : -1));
@@ -368,17 +366,17 @@ public static class AreaStepInspector
     private static bool Universal(string profile) =>
         profile.StartsWith(WholeMapProfilePrefix, StringComparison.Ordinal) || profile.StartsWith(WindowProfilePrefix, StringComparison.Ordinal);
     private const int PortalFlagsSlot = 36, ScriptsSlot = 31, UnlockScriptSap = 3;
-    private static readonly int[] WindowWallPieces = [10, 13, 14, 17, 18, 19];
-    private static readonly int[] DoorwayWallPieces = [22, 25, 26, 29, 30, 31, 32];
 
     /// <summary>Whole-map wall rule (docs/research/first-building-evidence.md, the source's
     /// traversal): a doorway piece never blocks, the portal on its edge decides; a window piece
     /// blocks a diagonal step and makes a cardinal one a window jump for a critter walker
     /// (ARC-WORLD-021); every other piece blocks.</summary>
-    internal static (AreaStepEdgeRule Rule, string Reason) WallPieceRule(int piece) =>
-        DoorwayWallPieces.Contains(piece) ? (AreaStepEdgeRule.Pass, "DOORWAY_PIECE_PORTAL_DECIDES")
-        : WindowWallPieces.Contains(piece) ? (AreaStepEdgeRule.WindowJump, "WINDOW_PIECE_JUMP")
-        : (AreaStepEdgeRule.Block, "WALL_PIECE_BLOCKS");
+    internal static (AreaStepEdgeRule Rule, string Reason) WallPieceRule(int piece) => AreaWallPieces.Kind(piece) switch
+    {
+        AreaWallPieceKind.Doorway => (AreaStepEdgeRule.Pass, "DOORWAY_PIECE_PORTAL_DECIDES"),
+        AreaWallPieceKind.Window => (AreaStepEdgeRule.WindowJump, "WINDOW_PIECE_JUMP"),
+        _ => (AreaStepEdgeRule.Block, "WALL_PIECE_BLOCKS"),
+    };
 
     /// <summary>A portal's edge for the player at T0 (the source's portal open attempt and
     /// lock test, ledger LV1–LV5 and docs/research/first-building-evidence.md): open or busted passes; an unlock script (SAP 3) is Unknown; jammed or
