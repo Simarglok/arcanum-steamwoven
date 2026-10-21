@@ -218,7 +218,7 @@ public sealed partial class GameSessionOwner
 
         private SessionInsertVerdict Insert(SessionWornItem current)
         {
-            var verdict = owner.HeroInsertVerdict(insertCheck(new SessionInventoryItem(current.Entity, owner.CarriedFacts(current.Entity))),
+            var verdict = owner.HeroInsertVerdict(insertCheck(new SessionInventoryItem(current.Entity, owner.CarriedFacts(current.Entity, current.Item.MagickTechComplexity))),
                 current.Item.MagickTechComplexity);
             Fresh();
             return verdict;

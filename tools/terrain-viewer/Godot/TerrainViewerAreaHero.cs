@@ -54,7 +54,32 @@ public partial class TerrainViewerApp
             Facts = facts!.ToString(), Conversation = _conversationHost is not null }));
         RunAreaSheetSmoke(hero);
         RunAreaRepairSmoke();
+        RunAreaProwlSmoke();
         return Task.CompletedTask;
+    }
+
+    // ARC-SKILLS-008 native observation with the original hero: the palette's Prowl action conceals the hero and its followers;
+    // the next step's gait follows the hero's prowling training (ST3); the action again ends it. Outcomes only.
+    private void RunAreaProwlSmoke()
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-SKILLS-008 prowl smoke: " + why); }
+        var session = _areaSession!;
+        var revision = session.Version.Revision;
+        PaletteProwlToggle();
+        Require(session.IsConcealed(Arcanum.Session.SessionCombatant.Hero) && session.Version.Revision == revision + 1, "prowl on: " + _prowlNotice);
+        var training = session.QueryHeroSkills()![Arcanum.Simulation.Skills.Skill.Prowling].Training;
+        var (gait, origin) = (_worldGait, _gaitOrigin); SetObjectApproachGait();
+        var stepped = StepGait();
+        Require(stepped == (StealthAllowsRun() ? MovementGait.Run : MovementGait.Walk), $"the stealth gait: {training} {stepped}");
+        Require(training == Arcanum.Simulation.Combat.SkillTraining.Master || stepped == MovementGait.Walk, $"below master a run is a walk: {training} {stepped}");
+        var followers = session.QueryConcealment().Npcs.Count;
+        PaletteProwlToggle();
+        // A waiting NPC keeps its own state (HK2), so only the following ones are checked.
+        Require(!session.IsConcealed(Arcanum.Session.SessionCombatant.Hero) && session.QueryParty().Followers
+            .All(member => !session.IsConcealed(Arcanum.Session.SessionCombatant.Critter(member.Entity))), "prowl off");
+        (_worldGait, _gaitOrigin) = (gait, origin);
+        GD.Print("ARC-SKILLS-008 native-smoke prowl PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            Training = training.ToString(), Step = stepped.ToString(), Followers = followers }));
     }
 
     // ARC-SKILLS-007 native observation with the original hero: one of its kit items with a condition takes 12 damage (the

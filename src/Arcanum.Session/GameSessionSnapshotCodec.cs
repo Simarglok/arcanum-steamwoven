@@ -41,7 +41,7 @@ public static class GameSessionSnapshotCodec
     /// it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
     public const int MaxEncodedCharacters = 96 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "sound", "events", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "sound", "events", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -111,6 +111,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] EventsFields = ["registry", "nextSequence", "pending"];
     private static readonly string[] CombatFields = ["turn", "participants", "current", "actionPoints"];
     private static readonly string[] CombatModeFields = ["hero", "critters"];
+    private static readonly string[] ConcealmentFields = ["hero", "npcs"];
     private static readonly string[] SoundFields = ["slots", "restorePending", "restore", "combatMusic", "preCombat"];
     private static readonly string[] PendingEventFields = ["sequence", "kind", "deadlineMs", "entities", "values"];
     private static readonly string[] EventEntityFields = ["map", "entity"];
@@ -588,6 +589,13 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteEndObject();
 
+            w.WriteStartObject("concealment");
+            w.WriteBoolean("hero", snapshot.Concealment.Hero);
+            w.WriteStartArray("npcs");
+            foreach (var entity in snapshot.Concealment.Npcs) w.WriteStringValue(entity);
+            w.WriteEndArray();
+            w.WriteEndObject();
+
             var sound = snapshot.Sound;
             w.WriteStartObject("sound");
             w.WriteStartArray("slots"); w.WriteNumberValue(sound.Slot0); w.WriteNumberValue(sound.Slot1); w.WriteEndArray();
@@ -710,7 +718,7 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Concealment(f["concealment"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
@@ -830,6 +838,22 @@ public static class GameSessionSnapshotCodec
                 throw new DecodeException(SnapshotDecodeFailure.NotCanonical, $"{p}.critters[{i}]");
         }
         return new(Bool(f["hero"], p + ".hero"), critters);
+    }
+
+    // Shapes and ordinal order; the hero's presence and the followers are Restore's.
+    private static SessionConcealmentState Concealment(JsonElement element)
+    {
+        const string p = "$.concealment";
+        var f = Fields(element, p, ConcealmentFields);
+        var items = Array(f["npcs"], p + ".npcs", SessionConcealmentState.MaxNpcs);
+        var npcs = new string[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            npcs[i] = Entity(items[i], $"{p}.npcs[{i}]");
+            if (i > 0 && string.CompareOrdinal(npcs[i - 1], npcs[i]) >= 0)
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, $"{p}.npcs[{i}]");
+        }
+        return new(Bool(f["hero"], p + ".hero"), npcs);
     }
 
     // Shapes and ranges; the slot invariants are Restore's.

@@ -162,6 +162,37 @@ public sealed class AreaWindowStepTests
             AreaWindowRoute.Plan(stack, catalog, Map, new(10, 10), new(100, 60), stepOpen: Open).Detail);
     }
 
+    [TestMethod]
+    public void Unknown_edges_are_counted_by_reason()
+    {
+        // ARC-RENDER-027: edges a step cannot settle from T0: an Unknown rule by its reason, a leaving portal whose lock is not
+        // the plain leaving-only lock, an unsupported opening piece; a blocking wall, a passing edge and a leaving-only lock are not.
+        AreaObjectKey Key(int i) => new("s", 1, AreaSourceKind.Static, 0, 0, i, "w", 1);
+        var cell = new AreaStepCell(5, 5);
+        // Edges are odd directions; a leaving portal's rotation is its edge (or the even one below it). The terrain of (5,5) and its
+        // neighbour along rotation 3, (5,6), is indoor tile art; (5,4), beyond rotation 7, has none, so that lock is unresolved.
+        var walls = new Dictionary<AreaStepCell, AreaStepWallEdge[]>
+        {
+            [cell] = [new(Key(1), cell, 1, false, AreaStepEdgeRule.Unknown, "PORTAL_UNLOCK_SCRIPT"),
+                new(Key(2), cell, 3, false, AreaStepEdgeRule.Leaving, "PORTAL_LOCK_DEPENDS_ON_HOUR", 3),
+                new(Key(3), cell, 3, false, AreaStepEdgeRule.Leaving, AreaStepInspector.LockedLeavingOnlyReason, 3),
+                new(Key(8), cell, 7, false, AreaStepEdgeRule.Leaving, AreaStepInspector.LockedLeavingOnlyReason, 7),
+                new(Key(4), cell, 5, true, AreaStepEdgeRule.Legacy),
+                new(Key(5), cell, 1, false, AreaStepEdgeRule.Block), new(Key(6), cell, 3, false, AreaStepEdgeRule.Pass),
+                new(Key(7), cell, 5, false, AreaStepEdgeRule.Unknown, "PORTAL_UNLOCK_SCRIPT")],
+        };
+        var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>
+        {
+            [cell] = new(cell, 0, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, AreaStepTerrainSource.TileName, "TEST"),
+            [new(5, 6)] = new(new(5, 6), 0, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, AreaStepTerrainSource.TileName, "TEST"),
+        };
+        var steps = new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)],
+            terrain, new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), walls);
+        CollectionAssert.AreEquivalent(new Dictionary<string, int> { ["PORTAL_LOCK_DEPENDS_ON_HOUR"] = 1, ["PORTAL_UNLOCK_SCRIPT"] = 2,
+            ["PORTAL_LEAVING_TILE_UNRESOLVED"] = 1, ["WALL_OPENING_PIECE_UNSUPPORTED"] = 1 },
+            steps.UnknownEdges.ToDictionary(e => e.Key, e => e.Value));
+    }
+
     private static byte[] BaseWithout(string name)
     {
         using var archive = DatArchive.Open(new MemoryStream(Base(Sector())));

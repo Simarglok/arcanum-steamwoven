@@ -374,8 +374,7 @@ public sealed class AreaInventoryHost
     public static string Printed(InventoryMutationResult result) =>
         result.Messages.Count == 0 ? string.Empty : " — " + string.Join(" ", result.Messages.Select(message => message.Text.Trim()));
 
-    /// <summary>Plain text for a transfer refusal shown in the window and the status line.</summary>
-    /// <summary>The text of a refusal; an insert check's Technophobia answer (ARC-WORLD-069) names the background's refusal
+    /// <summary>Plain text for a transfer refusal shown in the window and the status line; an insert check's Technophobia answer (ARC-WORLD-069) names the background's refusal
     /// (<c>mes\item.mes</c> 115 in the original).</summary>
     public static string Refusal(GameSessionFailure failure, SessionInsertVerdict? verdict = null) => failure switch
     {

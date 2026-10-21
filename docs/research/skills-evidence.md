@@ -453,6 +453,12 @@ below Expert it uses the stealth walk, and only a master can run concealed
 (path (0x425BF0), walk (0x42EDC0)). A concealed master the NPC cannot see
 is not a valid AI target (target (0x4AB990)).
 
+**Original check (ARC-SKILLS-008):** read in the retail executable by two readers, rows
+[ST1–ST6](original-verification-ledger.md#stealth-arc-skills-008). They add that the toggle costs nothing and forces the hero's
+new state on every follower, that a new follower copies its leader's concealment and a leaving one loses it, that a dialog's
+start and an attack on the party end it while being seen, a map change or a load do not, that an expert walks (only the
+stealth walk is below expert), and that the margin is computed per observer at each check and stored nowhere.
+
 ### Gambling
 
 In the trade window (gamble (0x579840, 0x579B60)) the NPC must have gambling points, the
