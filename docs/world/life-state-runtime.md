@@ -110,7 +110,10 @@ before this schema, so nothing is lost.
   [experience](experience-runtime.md) `RecordNpcKill`, ARC-WORLD-030, which a host calls), the party leaving of a dead follower,
   AI focus and near-death reactions, spell demaintenance on unconsciousness, item drops and wear, the death slide and
   return to the main menu for a dead PC, logbook injuries.
-- The dying, taking-damage and resurrect scripts (no SCR runtime). Encumbrance fatigue, the scarring effect's stat change
+- The dying and taking-damage scripts (no SCR runtime). The raise script is a port of `LifeRules.Heal` and the session's
+  `Heal` since ARC-MAGIC-012 (asked even when the target's flags refuse the raise; either refusal stops it); the host runs it.
+  A damage packet's `PlainDeath` (a spell's death flag) picks the plain dying animation ([spell damage and
+  heal](spell-damage-heal.md)). Encumbrance fatigue, the scarring effect's stat change
   (only the count is kept), Tempus Fugit and background stat adjustments. Effects on maximum HP or fatigue and their damage
   compensation came with [durable effects](durable-effects-runtime.md) (ARC-WORLD-029): `LifeFacts.MaxHitPointEffects` and
   `MaxFatigueEffects` apply to the whole sum, and facts whose maxima reach the pinned death damage are invalid; the session

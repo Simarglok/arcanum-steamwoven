@@ -348,6 +348,17 @@ normal charge (MG3). The margin is rolled per target but stored once per run,
 so the last target's margin is the one later ticks use. A skipped target
 plays the "resisted" effect.
 
+**Original check (ARC-MAGIC-012, 2026-10-21).** The Damage and Heal paths were read in the executable by two readers ([ledger
+"Spell damage and heal"](original-verification-ledger.md#spell-damage-and-heal-arc-magic-012), DH1–DH10, F2; the Damage and Heal
+components and the acid's steps F3 by the function oracle). Precisions:
+- the margin's share is taken from the component's own slot, at least 1 even from an amount of 0 (MG37);
+- acid takes no margin;
+- `Scaled` needs a parent of type PC or NPC (another parent rolls the range);
+- `Full` on a slot other than fatigue leaves the target's current hit points to the damage step: a kill. A PC's difficulty
+  share still applies to it (MG35);
+- the spell's combat context carries the caster's wielded weapon (MG36);
+- acid hits every worn item before the wearer's third, and body armour never spares the wearer (MG38).
+
 **Worked example.** Magic resistance 30, target aptitude −40: `R = 100 −
 70 × 60 / 100 = 58`; a d100 of 20 gives margin 38. A fireball-like damaging
 spell then deals 62 % of its roll before the target's fire resistance step;
@@ -485,13 +496,13 @@ the list.
 | AIRedirect | AI redirect with critter flags and `MinIQ:` (AI section) |
 | Cast | the parent casts another spell at the current target or tile as a friendly cast, through the full invocation check (cast (0x451740, 0x451850)) |
 | ChargeNBranch | pay `Cost:` from the source; on failure jump to `Branch:` or end the list |
-| Damage | `DmgType:` normal, poison, electrical, fire, "magic" (index 4, the fatigue slot) or acid; `Dmg:a-b` uniform; `Scaled` makes it `min + aptitude % × (max − min)`, no roll (aptitude ≤ 0: min); `Full` fatigue knocks out (current fatigue + 10); other `Dmg_Flags:` (death, stun, scars, dropped weapon, crippling, …) pass to the combat damage step; margin reduces it (damage (0x4518D0)) |
+| Damage | `DmgType:` normal, poison, electrical, fire, "magic" (index 4, the fatigue slot) or acid; `Dmg:a-b` uniform; `Scaled` makes it `min + aptitude % × (max − min)` for a PC or NPC parent, no roll (aptitude ≤ 0: min); `Full` fatigue knocks out (current fatigue + 10), `Full` on another slot takes the current hit points; other `Dmg_Flags:` (death, stun, scars, dropped weapon, crippling, …) pass to the combat damage step; margin reduces it; acid hits the worn items, then the wearer's third (damage (0x4518D0), acid (0x4B5810); F3, ARC-MAGIC-012) |
 | Destroy | destroy the target unless resisted; summoned objects always (destroy (0x451AF0, 0x451B90, 0x451BB0, 0x451C40)) |
 | Dispel | interrupt every other magic run sourced by, aimed at, summoned as or listing the target; clear "magically held", "stoned", perma-polymorph; destroy a summoned target (dispel (0x451AF0, 0x451B90, 0x451BB0, 0x451C40)) |
 | Effect | add or remove `Count:` entries of effect `N` with `Cause:`; `Scaled:` adds `scaled × aptitude / 100` more (effect (0x451F20)) |
 | EnvFlag | stub: logs an error, changes nothing (stub (0x452F10)) |
 | EyeCandy | add or remove a visual on the target; callback flags drive the CALLBACK actions (fx (0x451FE0)) |
-| Heal | heal HP, poison or fatigue by a range (scaled as Damage); `Full` heals everything; `Resurrect`/`Reanimate` raise the dead unless flagged unresurrectable or vetoed by the resurrect script; `Scars` remove injuries (heal (0x4521A0), combat heal (0x4B58C0)) |
+| Heal | heal HP, poison or fatigue by a range (scaled as Damage); `Full` heals all hit-point damage (fatigue only with a fatigue amount) and the injuries; `Resurrect`/`Reanimate` raise the dead unless flagged unresurrectable or vetoed by the raise script, which runs either way; `Scars` remove five scars (heal (0x4521A0), combat heal (0x4B58C0); F3, ARC-MAGIC-012) |
 | Identify | identify a critter, container contents or item |
 | Interrupt | meant to interrupt another spell on the target; a no-op, also in the original (ledger MG7) (interrupt (0x452300)) |
 | Movement | move the target to the target tile, a random tile in a radius, a world-map teleport (anti-teleport checked) or the nearest known area; skipped when resisted (movement (0x4524C0, 0x452650)) |

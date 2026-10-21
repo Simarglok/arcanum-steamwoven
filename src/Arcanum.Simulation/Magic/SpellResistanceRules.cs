@@ -11,6 +11,10 @@ public enum SpellRollPurpose
     FailChanceD20,
     /// <summary>The invocation check's d100 against a technologist target (0x4564E0, MG5): rolled although it never refuses.</summary>
     InvocationAptitudeD100,
+    /// <summary>A Damage component's amount in its <c>Dmg:</c> range (0x4518D0).</summary>
+    Damage,
+    /// <summary>A Heal component's amount in its <c>Dmg:</c> range (0x4521A0).</summary>
+    Heal,
 }
 
 /// <summary>

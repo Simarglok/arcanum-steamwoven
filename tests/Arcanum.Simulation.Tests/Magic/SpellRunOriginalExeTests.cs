@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Tests.Character;
 using Arcanum.Tests.Shared;
@@ -331,6 +332,125 @@ public sealed class SpellRunOriginalExeTests
         }
         var intelligence = divisor == 4 ? c["intelligence"] : c["intelligence"] * 4 / divisor;
         return SpellRunRules.WithinCap(self!, table, intelligence, spell => records[spell]) ? "1" : "0";
+    }
+
+    /// <summary>ARC-MAGIC-012: the Damage component (<see cref="SpellDamageRules.Damage"/>, 0x4518D0, model <c>spell-damage</c>): the draw,
+    /// the route (the damage step or the acid's), the five amounts, the flags and the damage's source the step is given; the
+    /// Steamwoven setting differs only on MG37's inputs (a margin and an amount of 0 or less).</summary>
+    [TestMethod, TestCategory(Category)]
+    public void DamageComponentMatchesTheOriginal()
+    {
+        var file = OracleFile.Load("4518D0", "spell-damage", TestContext);
+        bool Mg37(Row c) => c["target"] != 0 && c["margin"] != 0 && c["type"] < 5 && (c["flags"] & SpellDamageFlags.Death) == 0 &&
+            Packet(c, MagicAnomalyProfile.Original, noMargin: true).Packet!.Damage[(DamageType)c["type"]] <= 0;
+        Run(file, c => Damage(c, MagicAnomalyProfile.Original),
+            c => $"{c["inits"]} {c["draws"]} {Range(c)} {c["drawn"]} {c["route"]} {c["normal"]} {c["poison"]} {c["electrical"]} {c["fire"]} " +
+                 $"{c["fatigueSlot"]} {c["damageFlags"]} {c["contextFlags"]} {c["source"]}",
+            ("steamwoven", "MG37", Mg37, c => Damage(c, MagicAnomalyProfile.Steamwoven)),
+            new Mutant("Scaled for any parent", c => Damage(c, MagicAnomalyProfile.Original, anyParent: true)),
+            new("the death flag survives a margin", c => Damage(c, MagicAnomalyProfile.Original, deathSurvives: true)),
+            new("a full fatigue hit is the current fatigue", c => Damage(c, MagicAnomalyProfile.Original, fatigueBonus: -10)));
+    }
+
+    private static (SpellDamagePacket? Packet, RollReplay Rolls) Packet(Row c, MagicAnomalyProfile profile, bool anyParent = false, bool noMargin = false,
+        int fatigueBonus = 0, int clearFlags = 0)
+    {
+        var rolls = new RollReplay(c["drawn"]);
+        if (c["target"] == 0) return (null, rolls);
+        var parent = c["parent"] != 0 ? new SpellRunObject("parent", anyParent ? 16 : c["parentType"], c["aptitude"]) : null;
+        var run = new SpellRun(0, 0, SpellRunAction.Begin, parent, parent, SpellLocation.None, null, SpellLocation.None,
+            c["other"] != 0 ? new SpellRunObject("other", 16) : null, SpellRunFlags.Active, Margin: noMargin ? 0 : c["margin"]);
+        var component = new SpellDamageComponent(c["type"], c["min"], c["max"], c["flags"] & ~clearFlags);
+        return (SpellDamageRules.Damage(component, run, c["fatigue"] + fatigueBonus, rolls, profile), rolls);
+    }
+
+    private static string Damage(Row c, MagicAnomalyProfile profile, bool anyParent = false, bool deathSurvives = false, int fatigueBonus = 0)
+    {
+        var (packet, rolls) = Packet(c, profile, anyParent, fatigueBonus: fatigueBonus, clearFlags: deathSurvives ? SpellDamageFlags.Death : 0);
+        var drawn = rolls.Calls.Count == 0 ? "0 0 0" : $"{rolls.Calls[0].Min} {rolls.Calls[0].Max} {c["drawn"]}";
+        var head = $"{(packet is null ? 0 : 1)} {rolls.Calls.Count} {drawn}";
+        if (packet is null || packet.Route == SpellDamageRoute.Cancelled) return $"{head} 0 0 0 0 0 0 0 0 -9";
+        var d = packet.Damage;
+        var flags = packet.Flags | (deathSurvives ? c["flags"] & SpellDamageFlags.Death : 0);
+        var source = c["other"] != 0 ? 2 : c["parent"] != 0 ? 0 : -1;
+        return $"{head} {(packet.Route == SpellDamageRoute.Step ? 1 : 2)} {d.Normal} {d.Poison} {d.Electrical} {d.Fire} {d.Fatigue} {flags} {0x280} {source}";
+    }
+
+    /// <summary>ARC-MAGIC-012: the Heal component (<see cref="SpellDamageRules.Heal"/>, 0x4521A0, model <c>spell-heal</c>): the draw,
+    /// the amounts in the hit-point, poison and fatigue slots, and the flags the applier reads.</summary>
+    [TestMethod, TestCategory(Category)]
+    public void HealComponentMatchesTheOriginal()
+    {
+        var file = OracleFile.Load("4521A0", "spell-heal", TestContext);
+        static string Flags(int f) => string.Join("", new[] { SpellDamageFlags.Full, SpellDamageFlags.Raise, SpellDamageFlags.Scars, SpellDamageFlags.Blind,
+            SpellDamageFlags.CrippleArm, SpellDamageFlags.CrippleLeg }.Select(b => (f & b) != 0 ? '1' : '0')) + ((f & SpellDamageFlags.Reanimate) == SpellDamageFlags.Reanimate ? '1' : '0');
+        Run(file, c => Heal(c),
+            c => c["inits"] == 0 ? "0" : $"{c["draws"]} {Range(c)} {c["drawn"]} {Math.Max(0, c["normal"])} {Math.Max(0, c["poison"])} " +
+                 $"{Math.Max(0, c["fatigueSlot"])} {Flags(c["damageFlags"])}",
+            (NoSwitch, NoSwitch, _ => false, c => Heal(c)),
+            new Mutant("Scaled for any parent", c => Heal(c, anyParent: true)),
+            new("electrical heals fatigue", c => Heal(c, typeMap: t => t == 2 ? 4 : t)),
+            new("the full heal rolls too", c => Heal(c, fullRolls: true)));
+    }
+
+    private static string Heal(Row c, bool anyParent = false, Func<int, int>? typeMap = null, bool fullRolls = false)
+    {
+        if (c["target"] == 0) return "0";
+        static string Flags(LifeHeal h) => string.Concat(new[] { h.Full, h.Resurrect, h.Scars, h.Blindness, h.CrippledArms, h.CrippledLegs, h.Reanimate }
+            .Select(b => b ? '1' : '0'));
+        var rolls = new RollReplay(c["drawn"]);
+        var parent = c["parent"] != 0 ? new SpellRunObject("parent", anyParent ? 16 : c["parentType"], c["aptitude"]) : null;
+        var run = new SpellRun(0, 0, SpellRunAction.Begin, parent, parent, SpellLocation.None, null, SpellLocation.None, null, SpellRunFlags.Active);
+        var type = typeMap?.Invoke(c["type"]) ?? c["type"];
+        var heal = SpellDamageRules.Heal(new(type, c["min"], c["max"], fullRolls ? c["flags"] & ~SpellDamageFlags.Full : c["flags"]), run, rolls);
+        if (fullRolls) heal = heal with { Full = (c["flags"] & SpellDamageFlags.Full) != 0 };
+        var drawn = rolls.Calls.Count == 0 ? "0 0 0" : $"{rolls.Calls[0].Min} {rolls.Calls[0].Max} {c["drawn"]}";
+        return $"{rolls.Calls.Count} {drawn} {heal.HitPoints} {heal.Poison} {heal.Fatigue} {Flags(heal)}";
+    }
+
+    /// <summary>ARC-MAGIC-012: the acid's steps (<see cref="SpellDamageRules.Acid"/>, 0x4B5810, model <c>spell-acid</c>): each worn item
+    /// in slot order with the amount it is given (the step lowers it in place by the item's resistance, as the model's step stub
+    /// does), then the wearer's third; the Steamwoven setting differs only on MG38's inputs (a critter wearing body armour).</summary>
+    [TestMethod, TestCategory(Category)]
+    public void AcidMatchesTheOriginal()
+    {
+        var file = OracleFile.Load("4B5810", "spell-acid", TestContext);
+        static bool Critter(Row c) => c["targetType"] is 15 or 16;
+        Run(file, c => Acid(c, MagicAnomalyProfile.Original),
+            c => string.Join(" ", Enumerable.Range(0, c["steps"]).Select(i => $"{c[$"step{i}Slot"]}:{c[$"step{i}Normal"]}")),
+            ("steamwoven", "MG38", c => Critter(c) && c["worn1006"] != 0, c => Acid(c, MagicAnomalyProfile.Steamwoven)),
+            new Mutant("the wearer takes a half", c => Acid(c, MagicAnomalyProfile.Original, divisor: 2)),
+            new("the resistances do not carry over", c => Acid(c, MagicAnomalyProfile.Original, carry: false)),
+            new("any target's items are hit", c => Acid(c, MagicAnomalyProfile.Original, anyTarget: true)));
+    }
+
+    private static string Acid(Row c, MagicAnomalyProfile profile, int divisor = 3, bool carry = true, bool anyTarget = false)
+    {
+        var worn = Enumerable.Range(1000, 9).Where(s => c[$"worn{s}"] != 0)
+            .Select(s => new SpellAcidItem($"i{s}", s, false, carry ? c[$"resist{s}"] : 0)).ToList();
+        var packet = new SpellDamagePacket(SpellDamageRoute.Acid, DamageByType.Zero with { Normal = c["amount"] }, c["flags"]);
+        var plan = SpellDamageRules.Acid(packet, anyTarget || c["targetType"] is 15 or 16, worn, profile);
+        var steps = plan.Items.Select(i => $"{i.Item.Slot}:{i.Damage.Normal}").ToList();
+        if (plan.Wearer is { } share) steps.Add($"-1:{(divisor == 3 ? share.Normal : (carry ? Carried(c, worn) : c["amount"]) / divisor)}");
+        return string.Join(" ", steps);
+    }
+
+    private static int Carried(Row c, IReadOnlyList<SpellAcidItem> worn) =>
+        worn.Aggregate(c["amount"], (n, i) => n - (int)((long)i.NormalResistance * n / 100));
+
+    // The range of the draw, in order (0x4CEF00 swaps a reversed range itself; the rules pass it in order).
+    private static string Range(Row c) => $"{Math.Min(c["drawMin"], c["drawMax"])} {Math.Max(c["drawMin"], c["drawMax"])}";
+
+    /// <summary>Replays the model's one draw and records the range it was asked for.</summary>
+    private sealed class RollReplay(int value) : ISpellRollSource
+    {
+        public List<(int Min, int Max)> Calls { get; } = [];
+
+        public int Roll(SpellRollPurpose purpose, int min, int max)
+        {
+            Calls.Add((min, max));
+            return value;
+        }
     }
 
     private void Run(OracleFile file, Func<Row, string> real, Func<Row, string> original,

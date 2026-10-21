@@ -360,6 +360,39 @@ public static class AttackResolver
             };
         }
 
+        return Step(recipientRole, recipient, recipientKind, rolled, weapon, attacker.IsPc, request.Difficulty, crit,
+            critical && recipientIsCritter
+                ? () => RollCriticalHit(request, recipient, location, aimed, magicCancelled, selfHit, crit, criticalEffects, rolls)
+                : null,
+            fullAmount: null);
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-012: one damage step without an attack (the original's damage step 0x4B4390 as the spell Damage component
+    /// 0x4518D0 calls it, contract docs/world/spell-damage-heal.md): no roll, no critical procedure (the context has no critical
+    /// flag), the request's damage per type and its effects (the damage flags). The same step as an attack's (one code path):
+    /// poison immunity of undead and mechanical critters, a stoned critter takes nothing, an invulnerable target, a
+    /// nigh-invulnerable critter without an "uber" weapon in the context and a wall take nothing; then the resistances (none
+    /// with an ignoring weapon), the hit-point amount (normal + electrical + fire, or <see cref="DamageStepRequest.FullAmount"/>
+    /// for the full and death flags), a PC attacker's difficulty share, the fatigue and poison of a critter and the material
+    /// reduction of a portal or container. Applying the result is the caller's (<see cref="LifeDamage.FromStep"/>).
+    /// </summary>
+    public static AttackDamage DamageStep(DamageStepRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Validate(request);
+        var crit = new CriticalAccumulator { HitEffects = request.Effects };
+        return Step(DamageRecipient.Target, request.Target, request.TargetKind, request.Damage, request.Weapon, request.Attacker.IsPc,
+            request.Difficulty, crit, null, request.FullAmount, request.DifficultyScalesFullAmount);
+    }
+
+    // The damage step after the rolls (0x4B4390 from its gates): shared by an attack and DamageStep.
+    private static AttackDamage Step(DamageRecipient recipientRole, Combatant recipient, AttackTargetKind recipientKind, DamageByType rolled,
+        CombatWeapon weapon, bool attackerIsPc, GameDifficulty difficulty, CriticalAccumulator crit, Action? critical, int? fullAmount,
+        bool difficultyScalesFullAmount = true)
+    {
+        var recipientIsCritter = recipientKind == AttackTargetKind.Critter;
+        var conditions = recipientIsCritter ? recipient.Conditions : CombatantConditions.None;
         var damage = rolled;
         if ((conditions & (CombatantConditions.Undead | CombatantConditions.Mechanical)) != 0) damage = damage with { Poison = 0 };
         else if (conditions.HasFlag(CombatantConditions.Stoned)) damage = DamageByType.Zero;
@@ -375,10 +408,7 @@ public static class AttackResolver
         }
         if (recipientKind == AttackTargetKind.Wall) return Prevented(recipientRole, rolled, DamagePrevention.Wall);
 
-        if (critical && recipientIsCritter)
-        {
-            RollCriticalHit(request, recipient, location, aimed, magicCancelled, selfHit, crit, criticalEffects, rolls);
-        }
+        critical?.Invoke();
 
         if (!(weapon.Kind == WeaponKind.Weapon && weapon.IgnoresResistance))
         {
@@ -389,11 +419,12 @@ public static class AttackResolver
             }
         }
 
-        var hitPoints = damage.Normal + damage.Electrical + damage.Fire;
+        // The full and death flags (0x1, 0x4) take the target's current hit points instead of the sum.
+        var hitPoints = fullAmount ?? damage.Normal + damage.Electrical + damage.Fire;
         var damagesArmor = damage.Fire > 0 || (weapon.Kind == WeaponKind.Weapon && weapon.DamagesArmor);
-        if (attacker.IsPc)
+        if (attackerIsPc && (fullAmount is null || difficultyScalesFullAmount))
         {
-            hitPoints = request.Difficulty switch
+            hitPoints = difficulty switch
             {
                 GameDifficulty.Easy => hitPoints + hitPoints / 2,
                 GameDifficulty.Hard => hitPoints - hitPoints / 4,
@@ -541,6 +572,24 @@ public static class AttackResolver
         ValidateCombatant(request.Attacker, "Attacker");
         ValidateCombatant(request.Target, "Target");
     }
+
+    private static void Validate(DamageStepRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request.Attacker, nameof(DamageStepRequest.Attacker));
+        ArgumentNullException.ThrowIfNull(request.Target, nameof(DamageStepRequest.Target));
+        ArgumentNullException.ThrowIfNull(request.Weapon, nameof(DamageStepRequest.Weapon));
+        Check(Enum.IsDefined(request.TargetKind), "TargetKind");
+        Check(Enum.IsDefined(request.Difficulty), "Difficulty");
+        Check(Enum.IsDefined(request.Weapon.Kind), "Weapon.Kind");
+        Check((request.Effects & ~AllEffects) == 0, "Effects");
+        foreach (var type in Enum.GetValues<DamageType>()) Check(Math.Abs(request.Damage[type]) <= MaxMagnitude, $"Damage.{type}");
+        Check(request.FullAmount is null or >= -MaxMagnitude and <= MaxMagnitude, "FullAmount");
+        ValidateCombatant(request.Attacker, "Attacker");
+        ValidateCombatant(request.Target, "Target");
+    }
+
+    private static readonly CriticalHitEffects AllEffects =
+        Enum.GetValues<CriticalHitEffects>().Aggregate(CriticalHitEffects.None, (all, flag) => all | flag);
 
     private static void ValidateCombatant(Combatant c, string name)
     {

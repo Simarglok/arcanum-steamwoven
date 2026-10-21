@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "function": "0x4B5810",
+  "name": "spell-acid",
+  "method": "Arcanum.Simulation.Magic.SpellDamageRules.Acid",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": {
+    "mode": "steamwoven",
+    "ledger": "MG38",
+    "ledgerInputs": 4653,
+    "differ": 4653,
+    "outsideLedger": 0
+  },
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "9da45c5ef0a2327c44ddc7c2356d43ae8944e71eb414a09df0cf3f2e27a2614a",
+  "configuration": "Debug"
+}
