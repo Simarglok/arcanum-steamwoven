@@ -68,7 +68,9 @@ payer kind differs from the source's payer is a host wiring error (`PayerMismatc
 item the hero holds, with the hero's magick/tech aptitude) give the payer facts, null without a hero; `CellSource(payer)` gives
 the port under the session's technology rules. None of them changes the session. ARC-WORLD-066 adds `HeroCellSource(itemComplexity?)`:
 the port over the hero's own power-cell stack, which spends the cells of an applied, paid plan through `SpendAmmo` (type 2) and
-writes nothing for an unapplied request ([ammunition](inventory-runtime.md#ammunition-arc-world-066)).
+writes nothing for an unapplied request ([ammunition](inventory-runtime.md#ammunition-arc-world-066)). A spend moves the session's
+revision, so a caller holding a version takes the new one; a spend the session refuses (a full durability budget at the last cell,
+the revision) answers the payment as refused (`CellRefusal.WriteRefused`, nothing taken).
 
 ## Not implemented
 

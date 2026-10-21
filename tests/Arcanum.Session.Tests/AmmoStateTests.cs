@@ -197,7 +197,7 @@ public sealed class AmmoStateTests
             MissingLines = Array.AsReadOnly(new bool[7]),
         };
         var seed = new SessionMapInventorySeed([new("smith", SessionHolderKind.Npc, false, false, [], ["smith-cells", "smith-bullets"])],
-            [new("smith-cells", Ammo(CellPrototype, 2, 5), null), new("smith-bullets", Ammo(BulletPrototype, 1, 1), null)]);
+            [new("smith-cells", Ammo(CellPrototype, 2, 5), null), new("smith-bullets", Ammo(BulletPrototype, 1, 2), null)]);
         using var owner = Create();
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, seed).Disposition);
         var crafter = new SessionNpcCrafter(new("smith", new(Arcanum.Simulation.Character.CharacterRace.Human, false, [8, 8, 8, 8, 8, 8, 8, 8], 0, 0, 1, 0,
@@ -206,15 +206,20 @@ public sealed class AmmoStateTests
         static SessionItemKind? Kinds(int prototype) => new(SessionItemType.Ammo, prototype, 100, 200);
         static (int, int)? ProductAmmo(int prototype) => prototype == CellPrototype ? (2, 10) : (1, 10);
         SessionCraftLookup inBag = _ => new SessionCraftFacts(10);
-        // Cells ×1 from cells and bullets: the seed cells become a tracked stack (5 − 1 + 10), the last bullet goes.
+        // Cells ×1 from cells and bullets: the seed cells become a tracked stack (5 − 1 + 10), one bullet of two goes.
         var made = owner.AssembleSchematicForNpc(owner.Version, crafter, Schematic(CellPrototype - 20, BulletPrototype - 20, CellPrototype - 20, 1), inBag, Facts,
             Kinds, Accept, ProductAmmo);
         Assert.AreEqual((GameSessionDisposition.Changed, "smith-cells"), (made.Disposition, made.Made.Single()));
-        Assert.AreEqual(new SessionAmmoRecord("smith-cells", 2, 14), owner.QueryAmmo("smith-cells"));
+        CollectionAssert.AreEqual(new[] { new SessionAmmoRecord("smith-bullets", 1, 1), new SessionAmmoRecord("smith-cells", 2, 14) },
+            new[] { owner.QueryAmmo("smith-bullets")!.Value, owner.QueryAmmo("smith-cells")!.Value });
+        // Bullets ×2 from cells and the last bullet: the bullet stack goes and the products start a new made stack of 2 × 10.
+        var fresh = owner.AssembleSchematicForNpc(owner.Version, crafter, Schematic(CellPrototype - 20, BulletPrototype - 20, BulletPrototype - 20, 2), inBag,
+            Facts, Kinds, Accept, ProductAmmo);
+        Assert.AreEqual(GameSessionDisposition.Changed, fresh.Disposition);
         Assert.IsTrue(owner.IsItemDestroyed("smith-bullets"));
-        // Bullets ×2 without a bullet stack and the cells component: a new made stack of 20.
-        Assert.AreEqual(GameSessionFailure.AssemblyRefused, owner.AssembleSchematicForNpc(owner.Version, crafter, Schematic(CellPrototype - 20, BulletPrototype - 20,
-            BulletPrototype - 20, 2), inBag, Facts, Kinds, Accept, ProductAmmo).Failure, "no bullets left for component 2");
+        Assert.AreEqual(new SessionAmmoRecord(fresh.Made.Single(), 1, 20), owner.QueryAmmo(fresh.Made.Single()));
+        CollectionAssert.AreEqual(new[] { "smith-cells", fresh.Made.Single() }, owner.QueryMapInventory(Exterior)!.Holders.Single().Items.Select(i => i.Entity).ToArray());
+        Assert.AreEqual(13, owner.QueryAmmo("smith-cells")!.Value.Units);
     }
 
     [TestMethod]
@@ -291,5 +296,21 @@ public sealed class AmmoStateTests
         Assert.AreEqual(SpellPaymentStatus.CellsRefused, SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Critter, CurrentFatigue: 50), 1, true, 147, record, device).Status,
             "a critter payment through an item's source");
         Assert.AreEqual(units, owner.QueryHeroAmmo().Single().Units);
+    }
+
+    [TestMethod]
+    public void A_spend_the_session_refuses_answers_the_payment_as_refused()
+    {
+        // One durability record: the bullets' deletion fills it, so deleting the last cells is refused.
+        using var owner = CreateWith(HalfElf(), new GameSessionLimits(maxDurabilityRecords: 1));
+        owner.AttachMapInventory(Exterior, Seed());
+        owner.PickUpItem(owner.Version, "cells-a", Accept);
+        owner.PickUpItem(owner.Version, "bullets", Accept);
+        Assert.IsTrue(owner.SpendAmmo(owner.Version, SessionAmmoHolder.Hero, 1, 7).Removed);
+        var record = new SpellPaymentRecord(ChargesFromCells: true, MaintainPeriod: 0, DurationSeconds: 0);
+        var cells = owner.HeroCellSource()!;
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(SpellPaymentStatus.CellsRefused, SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Critter, CurrentFatigue: 50), 10, true, 168, record, cells).Status);
+        Assert.AreEqual((revision, 10), (owner.Version.Revision, owner.QueryHeroAmmo().Single().Units), "nothing taken");
     }
 }

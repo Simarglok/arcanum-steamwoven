@@ -44,7 +44,8 @@ public enum SessionCriticalStepOutcome
     ScriptUnsupported,
     /// <summary>Not applied: the host passed no item data for the critter (<see cref="SessionWearSide.Worn"/> null) or no cell.</summary>
     Unknown,
-    /// <summary>Not applied, NOT READY: no ammunition is modelled (FR-COMBAT-007).</summary>
+    /// <summary>Not applied yet (FR-COMBAT-007): the session holds ammunition since ARC-WORLD-066; the combat lane wires it through
+    /// <see cref="GameSessionOwner.SpendAmmo"/>.</summary>
     AmmunitionNotReady,
 }
 
