@@ -264,10 +264,35 @@ conversation is not run).
 - Set numbers no longer follow the slice plan of the [event dispatcher research](../research/scr-event-dispatcher.md):
   S6 is print line and S7 the sound actions, not heartbeat and combat.
 
+## Skill commands (ARC-SKILLS-009, set S11)
+
+- **`ScrAdmissionSet.S11`** is S10 plus get skill (47) and use item with skill (79); `ScrRunOptions` accepts any subset of S11 (now
+  the interpreter's widest set; the default stays S5). A set with 47 needs a host that implements `IScrSkillQueries`, checked before
+  any event runs. Read in the retail 1.0.7.4 executable by two independent readers: ledger
+  [SX1–SX6](../research/original-verification-ledger.md#script-skill-commands-arc-skills-009).
+- **Get skill (47)**: the skill number (a value), the object, the store (operand 2, the only store outside operand 0; admission refuses
+  a number literal there). The run stores `IScrSkillQueries.SkillLevel(object, skill)`: the effective level the original's level
+  functions give (basic 0..11, tech 12..15 as tech index skill − 12), never the points or the training. A number outside 0..15 stores 0
+  without asking the host; the host answers 0 for an object that is not a PC or an NPC (SX2). An absent object stops the run
+  (`MissingObject`) as every object read does: the original reads its null handle through the object pool, whose result is undefined.
+  The run goes on to the next line (SK1: no fall-through).
+- **Use item with skill (79)**: source, item, target (objects), skill and modifier (values), as read. The run returns one
+  `ScrSkillUse(Source, Item, Target, Skill, Modifier)` per action in `ScrEffects.SkillUses` and goes on; an absent target or source
+  asks for nothing (SX3). The item may be absent. What the original does next is the host's and is not built: the source's
+  use-item-with-skill goal (gate cost 4, no action points charged, no flags), which runs the shared skill check once with the modifier
+  as the invocation modifier (counted twice, SC12 and the A2 switch) and the skill's handler (SX4).
+- **The AREA viewer** admits get skill in its dialog set while the session has a hero (`AreaScriptHost.SkillAdmission`,
+  "S3-area-sound-calls-scheme-schematic-reading-skill", through `RunAdmission`; without a hero a script that reads a skill is refused,
+  not run on a made-up level). The PC's level is the session hero's; an NPC's comes from the sheet the session saved for it (a levelled
+  follower) or else its map data with its effects (`GameSessionOwner.QueryNpcSkills(SessionNpcAdvancement, AdvancementModifiers)`); any
+  other object is 0. Use item with skill is not admitted there: no live installed script uses it, and `Apply` refuses a request.
+- Installed scripts (opt-in census): 17 use action 47, 2 action 79 (none live), 1 action 115; S11 admits 683 scripts whole, 2 more
+  than S10. Action 115 (try to steal 100 coins, SX5) belongs to pick pocket (task S15) and is not admitted.
+
 ## Reading actions (ARC-UI-049, set S10)
 
 - **`ScrAdmissionSet.S10`** is S9 plus show book (64), show picture (65) and show plaque (114); `ScrRunOptions` accepts any subset
-  of S10 (now the interpreter's widest set; the default stays S5).
+  of S10 (the interpreter's widest set until ARC-SKILLS-009 widened it to S11; the default stays S5).
 - **The actions** (ledger [WR15](../research/original-verification-ledger.md#reading-window-arc-ui-049)): a value operand (the
   book's or plaque's first text line, the picture's art) and an object operand (the viewer). The run returns one
   `ScrReadingRequest(Kind, Number, Viewer)` per action in `ScrEffects.Readings`, in action order, and goes on to the next line; an
@@ -387,6 +412,12 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
 - `tests/Arcanum.Scripting.Tests/Scr/ScrSoundTests.cs` (ARC-SCRIPT-040): the sound actions refused below S7, returned in
   action order with value operands read, an absent object playing nothing, a run with only sounds not empty. Opt-in
   `ScrAdmissionRealDataTests`: S6 admits 336 installed scripts whole, S7 342; the six more each have a sound action.
+- `tests/Arcanum.Scripting.Tests/Scr/ScrSkillTests.cs` (ARC-SKILLS-009): get skill storing the host's levels, 0 outside 0..15 without
+  asking, an absent object stopping the run, the store refused as a literal, the action refused below S11, a set with 47 refused for a
+  host without skill queries; use item with skill handing its five operands on, nothing without a source or a target, the run going on.
+  Opt-in `ScrAdmissionRealDataTests`: the installed uses of 47, 79 and 115 and the S11 count. Viewer:
+  `AreaScriptHostTests.Get_skill_reads_the_heros_and_an_npcs_effective_levels`; session: `HeroSkillsTests` (the NPC skills from map data
+  until the session saves a sheet).
 - `tests/Arcanum.Scripting.Tests/Scr/ScrReadingTests.cs` (ARC-UI-049): the reading actions refused below S10, one request per action in
   order with the number and the viewer, an absent viewer showing nothing, the run going on, a run with only a request not empty; opt-in
   `ScrAdmissionRealDataTests`: the installed uses of 64, 65, 114 and 94 and the S10 count.
@@ -422,16 +453,19 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
 - The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading": S3 without
-  story state, plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI and the reading actions); since ARC-SCRIPT-015 map mode's use
+  story state, plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI and the reading actions;
+  with a session hero also get skill, ARC-SKILLS-009); since ARC-SCRIPT-015 map mode's use
   clicks on guarded use sites run it under "S4-area-use-reading", and since ARC-SCRIPT-017 the tile and sector scripts the player
   enters; heartbeat and combat are later slices.
 - Not in any admitted set yet: focus groups and local objects, loops, immediate calls and
-  call-ex, and the world actions other than teleport and fade-and-teleport (set S4), set auto-level scheme (set S8), start schematic UI (set S9) and the reading actions (set S10); float line, quests,
+  call-ex, and the world actions other than teleport and fade-and-teleport (set S4), set auto-level scheme (set S8), start schematic UI (set S9), the reading actions (set S10) and the skill commands (set S11); float line, quests,
   reactions... are not admitted.
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any
   row of the shown map, mind control from the row's spell flags and the jilted flag from the session; generators and
   traps answer "no" there too.
+- Use item with skill (79) is a request only: no host runs the goal, the check or the skill's handler, and no NPC source is modelled
+  (SX3, SX4; no live installed script uses it). Try to steal 100 coins (115) waits for pick pocket (task S15).
 - X2 (an uninitialised attachee type without attachee) is reachable only through
   call-script and is left to the slice that admits calls.

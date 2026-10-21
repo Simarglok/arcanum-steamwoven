@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S10"/>.
+/// <see cref="ScrAdmissionSet.S11"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -24,6 +24,7 @@ internal sealed class ScrInterpreter
     private readonly List<ScrSchemeRequest> _schemes = new();
     private readonly List<ScrSchematicRequest> _schematics = new();
     private readonly List<ScrReadingRequest> _readings = new();
+    private readonly List<ScrSkillUse> _skillUses = new();
     private readonly ScrRunOptions _options;
     private readonly int[] _locals = new int[ScrCatalogue.LocalSlots];
     private readonly SortedDictionary<int, bool> _flags = new();
@@ -92,7 +93,8 @@ internal sealed class ScrInterpreter
             _lines.Count == 0 ? null : Array.AsReadOnly(_lines.ToArray()), _sounds.Count == 0 ? null : Array.AsReadOnly(_sounds.ToArray()),
             _teleports.Count == 0 ? null : Array.AsReadOnly(_teleports.ToArray()), _schemes.Count == 0 ? null : Array.AsReadOnly(_schemes.ToArray()),
             _schematics.Count == 0 ? null : Array.AsReadOnly(_schematics.ToArray()),
-            _readings.Count == 0 ? null : Array.AsReadOnly(_readings.ToArray()));
+            _readings.Count == 0 ? null : Array.AsReadOnly(_readings.ToArray()),
+            _skillUses.Count == 0 ? null : Array.AsReadOnly(_skillUses.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -206,6 +208,25 @@ internal sealed class ScrInterpreter
                 if (OptionalObject(a, 0) is { } who) _schematics.Add(new(who));
                 return (Step.Next, 0);
             }
+            case ScrCatalogue.Action.GetSkill:
+            {
+                // SX1, SX2: the skill number, the object, then the store; the effective level (basic below 12, tech index skill − 12
+                // from 12); a number outside 0..15 stores 0, as the original's level functions return. The original reads an absent
+                // object's null handle through the object pool (undefined); the run stops here as at every other object read.
+                var skill = Get(a, 0);
+                var who = Object(a, 1, line);
+                Set(a, 2, skill is >= 0 and < SkillNumbers ? Skills.SkillLevel(who, skill) : 0, line);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.UseItemWithSkill:
+            {
+                // SX3: source, item, target, skill and modifier go unchanged to the source's use-item-with-skill goal, whose answer the
+                // run ignores; an absent target queues nothing (the starter's null test), nor does an absent source (its gate refuses).
+                var source = OptionalObject(a, 0); var item = OptionalObject(a, 1); var target = OptionalObject(a, 2);
+                var skill = Get(a, 3); var modifier = Get(a, 4);
+                if (source is { } user && target is { } on) _skillUses.Add(new(user, item, on, skill, modifier));
+                return (Step.Next, 0);
+            }
             case ScrCatalogue.Action.RemoveThisScript: _changedNumber = 0; return (Step.Next, 0);
             case ScrCatalogue.Action.ChangeThisScript:
             {
@@ -255,11 +276,13 @@ internal sealed class ScrInterpreter
         };
     }
 
-    // Operand 0 is the store of every writing action in the set; admission refuses a number literal there.
-    private void Set(ScrClause c, int value, int line)
+    // Operand 0 is the store of every writing action in the set but get skill (operand 2); admission refuses a number literal there.
+    private void Set(ScrClause c, int value, int line) => Set(c, 0, value, line);
+
+    private void Set(ScrClause c, int slot, int value, int line)
     {
-        var index = c.Value(0);
-        switch ((ScrValueKind)c.Kind(0))
+        var index = c.Value(slot);
+        switch ((ScrValueKind)c.Kind(slot))
         {
             case ScrValueKind.Counter:
                 // X8: the original masks a counter write to its byte (ledger X8).
@@ -315,6 +338,12 @@ internal sealed class ScrInterpreter
     // The objects an object operand names, as the original's list (0x44B4E0): one for a single-object focus kind, none for an absent
     // one. Focus groups are not admitted yet.
     private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => OptionalObject(c, slot) is { } obj ? [obj] : [];
+
+    // The basic (0..11) and tech (12..15) skill numbers.
+    private const int SkillNumbers = 16;
+
+    private IScrSkillQueries Skills => _host as IScrSkillQueries
+        ?? throw new InvalidOperationException("SCR_SKILL_QUERIES_REQUIRED: the admission set holds get skill and the host cannot answer it.");
 
     private IScrObjectQueries Queries => _host as IScrObjectQueries
         ?? throw new InvalidOperationException("SCR_OBJECT_QUERIES_REQUIRED: the admission set holds a guard condition the host cannot answer.");

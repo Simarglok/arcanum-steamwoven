@@ -401,6 +401,42 @@ public sealed class AreaScriptHostTests
     }
 
     /// <summary>Wraps the fixture host so a run uses a given program and slot.</summary>
+    // ARC-SKILLS-009 (SX1, SX2): get skill runs only with a session hero, whose levels the PC's are; an NPC's level comes from the
+    // sheet the session saved for it, else its map data; any other object, or the NPC's id on another map, is 0.
+    [TestMethod]
+    public void Get_skill_reads_the_heros_and_an_npcs_effective_levels()
+    {
+        using var heroless = ConversationSessionFixture.Create();
+        var map = new SessionMapId(1);
+        var none = new AreaScriptHost(heroless, map, [], new AreaConversationState(heroless, map, [], 50), null);
+        Assert.AreSame(AreaScriptHost.Admission, none.RunAdmission, "without a hero a script that reads a skill is refused");
+        Assert.AreEqual(0, none.SkillLevel(none.Pc, (int)Arcanum.Simulation.Skills.Skill.Prowling));
+
+        int[] basic = new int[12]; basic[(int)Arcanum.Simulation.Skills.Skill.Prowling] = 2;
+        var definition = new SessionHeroDefinition(16089, Arcanum.Simulation.Character.CharacterRace.HalfElf, Arcanum.Simulation.Character.CharacterGender.Male,
+            [8, 12, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 385, [], Advancement: SessionHeroAdvancement.None with { BasicSkills = [.. basic] });
+        var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, definition, 2352, 0, null, "synthetic");
+        using var session = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, load).Owner!;
+        int[] npcBasic = new int[12]; npcBasic[(int)Arcanum.Simulation.Skills.Skill.Melee] = 3;
+        var loaded = new SessionNpcAdvancement("oid:npc", new(Arcanum.Simulation.Character.CharacterRace.Human, false, [.. Enumerable.Repeat(8, 8)], 0, 0, 1, 0,
+            [.. npcBasic], [.. new int[4]], [.. new int[16]], [.. new int[8]], 1, 2, 0, 0), 62);
+        var modifiers = Arcanum.Simulation.Character.AdvancementModifiers.None;
+        var host = new AreaScriptHost(session, map, [], new AreaConversationState(session, map, [], 50), null,
+            npcSheet: entity => entity == "oid:npc" ? (loaded, modifiers) : null);
+        Assert.AreSame(AreaScriptHost.SkillAdmission, host.RunAdmission);
+        Assert.IsTrue(AreaScriptHost.SkillAdmission.IsSubsetOf(ScrAdmissionSet.S11) && AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.GetSkill));
+        Assert.IsFalse(AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.UseItemWithSkill), "no live script uses it");
+        var hero = session.QueryHeroSkills()!;
+        for (var skill = 0; skill < 16; skill++) Assert.AreEqual(hero[(Arcanum.Simulation.Skills.Skill)skill].Level, host.SkillLevel(host.Pc, skill));
+        Assert.IsTrue(host.SkillLevel(host.Pc, (int)Arcanum.Simulation.Skills.Skill.Prowling) > 0);
+        var npc = new ScrObjectRef(1, "oid:npc");
+        var melee = (int)Arcanum.Simulation.Skills.Skill.Melee;
+        Assert.AreEqual(session.QueryNpcSkills(loaded, modifiers)[Arcanum.Simulation.Skills.Skill.Melee].Level, host.SkillLevel(npc, melee));
+        Assert.IsTrue(host.SkillLevel(npc, melee) > 0);
+        Assert.AreEqual((0, 0, 0), (host.SkillLevel(new(1, "oid:chest"), melee), host.SkillLevel(new(2, "oid:npc"), melee), host.SkillLevel(host.Pc, 16)));
+    }
+
     private sealed class FakeEffectsRun(AreaScriptHost inner, ScrObjectRef npc, int? story = null)
     {
         internal ScrRunResult Run(ScrProgram program, ScrSlot slot, ScrAdmissionSet? admission = null) =>
