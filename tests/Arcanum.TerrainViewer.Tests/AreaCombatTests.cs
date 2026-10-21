@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Equipment;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
@@ -93,6 +94,20 @@ public sealed class AreaCombatTests
             null, null, null, null, null, GameSessionFailure.None, default), null, null));
         var corpse = Resolution(AttackOutcome.Refused) with { Refusal = AttackRefusal.TargetDead };
         Assert.AreEqual("attack: TargetDead", AreaCombatHost.Describe(Result(corpse), null, null));
+
+        // ARC-COMBAT-009: injuries and the critical item steps.
+        var crippled = new LifeOutcome(LifeState.Unharmed, new(4, 0, 0, LifeConditions.Blinded | LifeConditions.CrippledArmOne, 1),
+            LifeEvents.Blinded | LifeEvents.CrippledArm | LifeEvents.Scarred, 4, DeathAnimation.None);
+        var steps = new[]
+        {
+            new SessionCriticalStep(SessionCriticalStepKind.DropWeapon, DamageRecipient.Target, EquipmentSlot.Weapon, "sword", SessionCriticalStepOutcome.Dropped, new(1, 2)),
+            new SessionCriticalStep(SessionCriticalStepKind.DropHelmet, DamageRecipient.Target, EquipmentSlot.Helmet, "cap", SessionCriticalStepOutcome.HeroCellUnfit, null),
+            new SessionCriticalStep(SessionCriticalStepKind.ArmHitShield, DamageRecipient.Target, EquipmentSlot.Shield, "torch", SessionCriticalStepOutcome.Kept, null),
+        };
+        Assert.AreEqual("critical hit: 4 damage, HP 6/10, blinded, crippled, scarred, drops its weapon, would drop the helmet (no cell for it)",
+            AreaCombatHost.Describe(Result(Resolution(AttackOutcome.CriticalHit), crippled) with { Criticals = steps }, 6, 10));
+        Assert.AreEqual("None|None,DropWeapon:sword:Dropped,DropHelmet:cap:HeroCellUnfit,ArmHitShield:torch:Kept",
+            AreaCombatHost.Criticals(Resolution(AttackOutcome.CriticalHit), steps));
     }
 
     private static AreaObjectRecord Body(int scale = 100, uint flags = 0, int index = 7)

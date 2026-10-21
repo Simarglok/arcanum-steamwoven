@@ -3,7 +3,7 @@
 Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
 inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019; life state ARC-COMBAT-002;
 event queue ARC-WORLD-024; NPC reaction ARC-WORLD-026; turn-based round ARC-COMBAT-003; equipment ARC-WORLD-028;
-durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20); the hero's skills in play ARC-SKILLS-002 (schema 21); item durability ARC-WORLD-053 (schema 22); schematic knowledge ARC-TECHNOLOGY-003 (schema 23); made items ARC-TECHNOLOGY-004 (schema 24); the spell book's mastered college ARC-MAGIC-004 (schema 25); the hero's fate points ARC-WORLD-054 (schema 26, [fate points](fate-points-runtime.md)); the wait timer and follower loyalty ARC-WORLD-045 (schema 27, [party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045)); the PC's known world-map areas ARC-WORLD-056 (schema 28, [world-map travel](world-map-travel-runtime.md#session-gamesessionowner-gamesessionareascs)); the NPC inventory changes ARC-WORLD-055 (schema 29, [inventory runtime](inventory-runtime.md#npc-inventory-changes-arc-world-055)); the PC's reputations ARC-WORLD-044 (schema 30, [reputation runtime](reputation-runtime.md)); healing with a healing item ARC-SKILLS-005 (schema 31, the items' remaining uses, [heal runtime](heal-runtime.md)). The character editor's point pool ARC-WORLD-052 ([character point pool](character-point-pool.md)) adds no saved state: its floor lives only while the editor is open.
+durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20); the hero's skills in play ARC-SKILLS-002 (schema 21); item durability ARC-WORLD-053 (schema 22); schematic knowledge ARC-TECHNOLOGY-003 (schema 23); made items ARC-TECHNOLOGY-004 (schema 24); the spell book's mastered college ARC-MAGIC-004 (schema 25); the hero's fate points ARC-WORLD-054 (schema 26, [fate points](fate-points-runtime.md)); the wait timer and follower loyalty ARC-WORLD-045 (schema 27, [party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045)); the PC's known world-map areas ARC-WORLD-056 (schema 28, [world-map travel](world-map-travel-runtime.md#session-gamesessionowner-gamesessionareascs)); the NPC inventory changes ARC-WORLD-055 (schema 29, [inventory runtime](inventory-runtime.md#npc-inventory-changes-arc-world-055)); the PC's reputations ARC-WORLD-044 (schema 30, [reputation runtime](reputation-runtime.md)); healing with a healing item ARC-SKILLS-005 (schema 31, the items' remaining uses, [heal runtime](heal-runtime.md)). The hero's items placed on the ground ARC-WORLD-059 (schema 32, [placed items](inventory-runtime.md#placed-items-arc-world-059)). The character editor's point pool ARC-WORLD-052 ([character point pool](character-point-pool.md)) adds no saved state: its floor lives only while the editor is open.
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
@@ -157,7 +157,7 @@ state that left `Accepted` (`InvalidQuestState`). A shared state without a PC re
 as the source's shared state is not owned by one PC.
 
 
-## Snapshot schema 31
+## Snapshot schema 32
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -167,7 +167,7 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 (PC quests, shared quests that left `Accepted`, known rumors, quelled rumor numbers, known world-map areas; each ascending; then the last discovered area, 0 for none; then the PC's reputations in the order gained, [reputation runtime](reputation-runtime.md#snapshot-schema-30)), `Party`
 (the follower array in order, then waiting and flagged free NPCs, each with its loyalty marks; [party runtime](party-runtime.md#snapshot-schema-4)),
 `Hero` (the player character or `null`; [starting hero runtime](starting-hero-runtime.md#snapshot-schema-6); its fate points and armed fates, [fate points](fate-points-runtime.md#snapshot-schema-26)),
-`Inventory` (the PC's gold, the starting kit, the taken and the made items in list order, and the made items added to NPCs by NPC entity; [inventory runtime](inventory-runtime.md#snapshot-schema-5)),
+`Inventory` (the PC's gold, the starting kit, the taken and the made items in list order, the made items added to NPCs by NPC entity, and the hero's items placed on the ground in placing order; [inventory runtime](inventory-runtime.md#snapshot-schema-5), [placed items](inventory-runtime.md#placed-items-arc-world-059)),
 `Equipment` (the hero's worn items in slot order; [equipment](equipment-runtime.md#snapshot-schema-12)),
 `Durability` (the changed items' conditions, the deleted items and the spent items' remaining uses, each in ordinal order; [item durability](item-durability-runtime.md#snapshot-schema-22)),
 `Schematics` (the hero's found schematics in registration order; [schematic knowledge](schematic-knowledge-runtime.md#session)),
@@ -243,7 +243,8 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 31 is the only accepted version. ARC-SKILLS-005 added the required `uses` list to
+**Migration decision: none.** Schema 32 is the only accepted version. ARC-WORLD-059 added the required `placed` list to the
+inventory ([placed items](inventory-runtime.md#placed-items-arc-world-059)); schema 31 is refused like the earlier ones. ARC-SKILLS-005 had added the required `uses` list to
 `durability` ([heal runtime](heal-runtime.md#snapshot-schema-31)); schema 30 is refused like the earlier ones. ARC-WORLD-044 had added
 the story's required `reputations` ([reputation runtime](reputation-runtime.md)); schema 29 is refused like the earlier ones. ARC-WORLD-055 had added the required `npcs` list to the
 inventory ([inventory runtime](inventory-runtime.md#npc-inventory-changes-arc-world-055)); schema 28 is refused like the earlier ones.
@@ -309,7 +310,8 @@ the hero and the NPC advancement records as schema 25 and refuses schemas 1..24.
 schema 26 and refuses schemas 1..25. ARC-WORLD-045 added the party records' loyalty marks as schema 27 and refuses schemas 1..26. ARC-WORLD-056 added the PC's
 known world-map areas and last discovered area as schema 28 and refuses schemas 1..27. ARC-WORLD-055 added the made items added to
 NPCs as schema 29 and refuses schemas 1..28. ARC-WORLD-044 added the PC's reputations to the story domain
-as schema 30 and refuses schemas 1..29 (no migration). ARC-SKILLS-005 added the items' remaining uses as schema 31 and refuses schemas 1..30.
+as schema 30 and refuses schemas 1..29 (no migration). ARC-SKILLS-005 added the items' remaining uses as schema 31 and refuses schemas 1..30. ARC-WORLD-059 added the hero's placed items as
+schema 32 and refuses schemas 1..31.
 Adding another domain needs the next free schema number with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)

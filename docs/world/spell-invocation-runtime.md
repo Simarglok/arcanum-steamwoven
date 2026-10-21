@@ -38,7 +38,7 @@ tests: [`SpellInvocationRulesTests`](../../tests/Arcanum.Simulation.Tests/Magic/
 - `ISpellInvocationWorld`: the line of fire from the parent to a tile (score and first blocker, 0x4ADE00) — filled by the NPC
   AI awareness stage I2, which owns the line of fire, or a later line-of-sight slice; and the NPC fallback's questions — does the
   target match the record's BEGIN area, does that area take tiles, and the first matching tile in a radius around the target
-  object — filled by the target functions (MT8). Tests use a double.
+  object — filled by the target functions (MT8): `SpellInvocationAreas` answers them with the [target areas](spell-target-areas.md) (ARC-MAGIC-007). Tests use a double.
 - `ISpellRollSource`: the MG5 d100 (purpose `InvocationAptitudeD100`; the session's `SpellRolls` labels it
   `magic.InvocationAptitudeD100`).
 
@@ -98,6 +98,6 @@ anomaly needs an owner choice.
 - No caller: the run lifecycle (MT9a) runs the check before a slot; the AI's cast (0x4AC250, slice I8) runs it too, and the
   run's activation runs it a second time.
 - The line of fire itself (0x4ADE00) is the AI awareness stage I2's; until then a caller has no implementation of the port.
-- The BEGIN-area tests and the target collection (0x4F2D20, 0x4F40B0) are MT8's.
+- The BEGIN-area tests and the target collection (0x4F2D20, 0x4F40B0) are answered by `SpellInvocationAreas` (ARC-MAGIC-007); a host still has to fill its world port.
 - The anti-teleport zones (0x4BDD30, `Rules\AntiTeleport.mes`) and the movement components are MT16's (FR-TRAVEL-005).
 - The spell UI's own line-of-fire call (0x57C235) is MT19's.

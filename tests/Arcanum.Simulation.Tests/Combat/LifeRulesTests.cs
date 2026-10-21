@@ -161,6 +161,11 @@ public sealed class LifeRulesTests
         Assert.AreEqual(LifeEvents.None, Damage(stunned.After, new LifeDamage { Effects = CriticalHitEffects.Stun }).Events);
         Assert.AreEqual(Hurt(), Damage(Hurt(), new LifeDamage { Effects = CriticalHitEffects.Stun | CriticalHitEffects.Knockdown }).After);
 
+        // ARC-COMBAT-009: the stun starts only on a critter that can act (0x45D790): not unconscious, paralysed or stoned.
+        var stun = new LifeDamage { Effects = CriticalHitEffects.Stun };
+        Assert.AreEqual(LifeEvents.None, Damage(Hurt(fatigue: LifeRules.MaxFatigue(Plain)), stun).Events & LifeEvents.Stunned, "unconscious");
+        Assert.AreEqual(Hurt(), Damage(Hurt(), stun, Plain with { Traits = LifeTraits.Paralyzed }).After, "paralysed");
+        Assert.AreEqual(Hurt(), Damage(Hurt(), stun, Plain with { Traits = LifeTraits.Stoned }).After, "stoned");
         var ended = LifeRules.ClearStun(stunned.After, Plain);
         Assert.AreEqual((Hurt(), LifeEvents.StunEnded), (ended.After, ended.Events));
         Assert.AreEqual(LifeEvents.None, LifeRules.ClearStun(Hurt(), Plain).Events);

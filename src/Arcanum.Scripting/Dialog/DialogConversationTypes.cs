@@ -39,6 +39,7 @@ public sealed record DialogConversationRequest(
 /// <paramref name="MetBefore"/> (ARC-WORLD-043) answers the ME condition; without it ME is a static frontier.
 /// <paramref name="Reputations"/> (ARC-WORLD-044) admits RP as a condition and an action; without it RP stays unadmitted
 /// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
+/// <paramref name="Greeting"/> (ARC-WORLD-058) resolves an NPC <c>g:</c> greeting; without it the node is a static frontier.
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
@@ -52,7 +53,8 @@ public sealed record DialogConversationPorts(
     IDialogMetBeforePort? MetBefore = null,
     IDialogFatePort? Fate = null,
     IDialogReputationPort? Reputations = null,
-    IDialogSchematicPort? Schematics = null);
+    IDialogSchematicPort? Schematics = null,
+    IDialogGreetingPort? Greeting = null);
 
 public enum DialogReactionMode
 {
@@ -316,13 +318,16 @@ public sealed record DialogOption(
     DialogOptionToken Token,
     DialogOptionBlock? Block);
 
-public sealed record DialogNpcLine(DialogNodeId Node, string Text);
+/// <param name="Origin">ARC-WORLD-058: for a greeting line (a <c>g:</c> node), where its text came from; null for a record's
+/// own text.</param>
+public sealed record DialogNpcLine(DialogNodeId Node, string Text, DialogLineOrigin? Origin = null);
 
 public enum DialogEndKind
 {
     /// <summary>Exit or negative response: the caller SCR continues at <see cref="DialogConversationEnd.ScriptLine"/>.</summary>
     ReturnToScript,
-    /// <summary>FL: the NPC spoke its final line (<see cref="DialogConversation.NpcLine"/>); no SCR continuation follows.</summary>
+    /// <summary>FL, or a greeting that ends the talk (ARC-WORLD-058: slots 1–4, a floating slot node): the NPC spoke its final
+    /// line (<see cref="DialogConversation.NpcLine"/>); no SCR continuation follows.</summary>
     NpcFinalLine,
     /// <summary>The host closed an awaiting dialog without choosing a reply. No SCR continuation is implied.</summary>
     ClosedByHost,
@@ -346,6 +351,8 @@ public enum DialogFrontierKind
     CapabilityUnavailable,
     GlobalFlagUnknown,
     ReactionUnknown,
+    /// <summary>ARC-WORLD-058: the greeting port gave no facts for the NPC.</summary>
+    GreetingFactsUnknown,
     JoinRefused,
     /// <summary>ET refused (ARC-SKILLS-004): the PC's skill is below level 9 or untrained; the source then speaks a generated
     /// "won't teach" line this runtime cannot produce.</summary>

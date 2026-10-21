@@ -143,6 +143,67 @@ RECORD_DISALLOWED = 0x11C       # caster spell flags, then target spell flags (+
 RANGE_CODE = ((0x450280, 0x4502B0), (0x4B96F0, 0x4B9760))
 ITEM = (0x5EED0004, 0x00000042)    # the item of the item gate
 
+# Service functions, fields, stats and globals used by the area test (ARC-MAGIC-007).
+AREA_TEST_CODE = ((0x40DA20, 0x40DA4B), (0x45D870, 0x45D8C5), (0x45D8D0, 0x45D8F8), (0x43D510, 0x43D525), (0x4B96F0, 0x4B9760))
+CURRENT_HP = 0x43D600           # current hit points: (handle low, handle high) -> value
+PC_LEADER = 0x45DDA0            # the PC at the top of an NPC's leader chain: (handle low, handle high) -> handle
+TILE_BLOCKED = 0x4D7110         # a tile is blocked: (tile low, tile high, flag) -> 0 or 1
+OBJECTS_AT = 0x4407C0           # objects on a tile: (tile low, tile high, type mask, list struct*); the list head at +0x50
+LIST_FREE = 0x4410E0            # frees such a list struct
+FIND_PATH = 0x41F3C0            # path search over the request at 0x603B88 -> steps (0: none)
+SECTOR_OF = 0x4D70B0            # the sector of a location: (low, high) -> sector
+SECTOR_KIND = 0x5038C0          # a sector's indoor/outdoor kind: (sector) -> kind
+MULTIPLAYER = 0x62AC6C          # bit 0: a multiplayer game (0 in the world model)
+FAILED_BIT = 0x603D40           # the bit of the last "damaged" failure (written, 64-bit)
+PATH_GLOBALS = ((0x603B88, 0x603BAC), (0x603C98, 0x603CB8))
+FIELD_HP_DAMAGE, FIELD_MATERIAL, FIELD_WEIGHT, FIELD_PORTAL_FLAGS, FIELD_CONTAINER_FLAGS = 0x1D, 0x1E, 0x59, 0x2E, 0x38
+STAT_ALIGNMENT, STAT_POISON = 0x13, 0x18
+AREA_SELF, AREA_SOURCE, AREA_OTHER, AREA_PC_A, AREA_PC_B = ((0x5EED0011 + i, 0x42) for i in range(5))
+AREA_CANDIDATE = (0x5EED0010, 0x42)
+AREA_TILE_OBJECTS = tuple((0x5EED0020 + i, 0x42) for i in range(3))
+AREA_CONTEXT, AREA_MASK, AREA_NODES = 0x1000, 0x1100, 0x1200
+TARGET_TABLE, TARGET_NAMES = 0x596140, 65   # the target names' 64-bit values (read from the image)
+
+# Service functions and tables used by the target collection (ARC-MAGIC-007).
+COLLECT_CODE = ((0x4F2D20, 0x4F3F10), (0x4F3F10, 0x4F40B0), (0x4F2600, 0x4F2680), (0x4F25E0, 0x4F2600), (0x4F2C60, 0x4F2CB0),
+                (0x58AC70, 0x58ACA4)) + AREA_TEST_CODE
+WALL_TABLE = (0x4F4DA8, 0x4F4DC8)   # the wall branch's jump table by direction
+OBJECTS_IN_RECT = 0x440B40      # objects in a rectangle: (rect*, type mask, list struct*); the list head at +0x50
+PARTY_LIST = 0x4413E0           # a critter's party and followers: (handle low, handle high, list struct*)
+DIRECTION = 0x4B8D50            # the direction from one location to another: (low, high, low, high) -> 0..7
+ART_ROTATION = 0x502880         # the cone's art rotation (its answer is not used)
+FIELD64_GETTER_2 = 0x406E80     # 64-bit object field: (handle low, handle high, field) -> EDX:EAX (occupant 0x46, owner 0x58)
+NODE_ALLOC = 0x4BAC30           # a run-list node from the pool
+OBJECT_REFERENCE = 0x443EB0     # fills an object reference: (handle low, handle high, out*)
+FIELD_OCCUPANT, FIELD_OWNER = 0x46, 0x58
+WORLD_OBJECTS = 8
+WORLD_HANDLES = tuple((0x5EED0030 + i, 0x42) for i in range(WORLD_OBJECTS))
+COLLECT_CONTEXT, COLLECT_MASK, COLLECT_HEADS, COLLECT_LISTS, COLLECT_NODES, COLLECT_OUT = 0x1000, 0x1100, 0x1180, 0x1200, 0x3000, 0x8000
+
+# Globals and service functions used by the re-aim and the AI notice (ARC-MAGIC-007).
+COMPONENT_POINTER = 0x5E761C    # the component being applied
+CURRENT_TARGET, CURRENT_TILE, CURRENT_TYPE, LAST_SUMMONED = 0x5E6D48, 0x5E6D50, 0x5E75AC, 0x5E6D70
+LAST_NOTIFIED = 0x5E75E0        # the target the AI was last told of
+AI_ATTACKED = 0x4A9650          # tell a target's AI it was attacked: (attacker low, high, victim low, high, 1, 0)
+COMPONENT_APPLY = 0x20
+RUN_SOURCE, RUN_TARGET_OBJECT, RUN_TARGET_TILE, RUN_OTHER = 0x10, 0xA0, 0xE0, 0xE8
+
+# Run fields, record fields, globals and service functions used by the run rules (ARC-MAGIC-009).
+RUN_SOURCE_TYPE, RUN_PARENT_TYPE, RUN_TARGET_TYPE, RUN_FLAG_WORD, RUN_SLOT = 0x48, 0x90, 0xD8, 0x13C, 0x158
+RECORD_WILLPOWER, RECORD_COST, RECORD_MAINTAIN, RECORD_MAINTAIN_PERIOD, RECORD_STACKING = 0x04, 0x08, 0x14, 0x18, 0x110
+FLAG_SKIP_BEGIN_COST = 0x100
+DEAD, CANNOT_ACT = 0x45D8D0, 0x45D800
+NO_STACK, CANCELS = 0x453410, 0x4534E0
+MESSAGE_TEXT, MESSAGE_SHOW, MAINTAIN_BAR, PROCESS_RUN = 0x4D43A0, 0x460610, 0x4604C0, 0x451070
+MAGIC_MESSAGES = 0x5E7594
+STACK_OBJECT = 0x5E75B8         # the object the no-stack test asks about (written)
+TARGET_LIST = 0x5E3518          # the run's target list count (a failed maintenance clears it)
+RANGE_TEST = 0x454700
+RUN_TABLE_POINTER = 0x6876E0
+STAGE_CODE = ((0x4532F0, 0x453410), (0x4507D0, 0x4508A0), (0x4502E0, 0x450340), (0x4503E0, 0x450420))
+STAT_WILLPOWER_RUN, STAT_RACE_RUN = 6, 27
+RUN_SOURCE_H, RUN_PARENT_H, RUN_TARGET_H = (0x5EED0050, 0x42), (0x5EED0051, 0x42), (0x5EED0052, 0x42)
+
 
 @dataclass(frozen=True)
 class FunctionSpec:
@@ -178,6 +239,13 @@ FUNCTIONS: dict[int, FunctionSpec] = {spec.address: spec for spec in (
     FunctionSpec(0x454700, "spell-range", ((0x454700, 0x454790),) + RANGE_CODE, "spell-range"),
     FunctionSpec(0x456430, "spell-flags", ((0x456430, 0x4564E0),), "spell-flags"),
     FunctionSpec(0x456A10, "item-gate", ((0x456A10, 0x456A90),), "item-gate"),
+    FunctionSpec(0x4F2D20, "spell-area-test", ((0x4F2D20, 0x4F3F10),) + AREA_TEST_CODE, "spell-area-test"),
+    FunctionSpec(0x4F40B0, "spell-target-collection", ((0x4F40B0, 0x4F4DA8),) + COLLECT_CODE, "spell-target-collection"),
+    FunctionSpec(0x453D40, "spell-reaim", ((0x453D40, 0x453EE0),), "spell-reaim"),
+    FunctionSpec(0x453EE0, "spell-ai-notice", ((0x453EE0, 0x453FA0),), "spell-ai-notice"),
+    FunctionSpec(0x455250, "spell-time", ((0x455250, 0x455350),), "spell-time"),
+    FunctionSpec(0x452F20, "spell-stage", ((0x452F20, 0x4532F0),) + STAGE_CODE, "spell-stage"),
+    FunctionSpec(0x4545E0, "spell-cap", ((0x4545E0, 0x454700), (0x450B90, 0x450BB0)), "spell-cap"),
 )}
 
 
@@ -916,6 +984,409 @@ def gate_stubs(case: GateCase, recorder: GateRecorder) -> dict:
     return {FIELD_GETTER: field, STAT_GETTER: stat, ITEM_POWER: power}
 
 
+@dataclass
+class AreaTestCase:
+    """The area test's one context: the mask (low, high), the required and forbidden spell flags and the radius; the candidate
+    (0 none, 1 its own object, 2 the self, 3 the source, 4 the other object); whether self, source and the other object exist; the candidate's
+    facts (type, object flags, spell flags, critter flags and flags 2, hit points, hit-point damage, alignment, poison,
+    material, weight, portal and container flags, PC leader code); the self's and the other object's PC leader codes (0 none,
+    1 self, 2 other, 3 and 4 two PCs, 5 the candidate); the candidate's, the source's, the origin's, the candidate tile's and
+    the target tile's locations (0 none); the objects on the candidate tile (type, object flags); the tile's blocked flag, the
+    path answer and the origin's and the tile's sector kinds."""
+    lo: int
+    hi: int
+    required: int
+    forbidden: int
+    radius: int
+    candidate: int
+    self_present: int
+    source_present: int
+    other_present: int
+    facts: tuple[int, ...]
+    leader: int
+    self_leader: int
+    other_leader: int
+    candidate_location: tuple[int, int]
+    source_location: tuple[int, int]
+    origin: tuple[int, int]
+    tile: tuple[int, int]
+    target_tile: tuple[int, int]
+    tile_objects: tuple[tuple[int, int], ...]
+    blocked: int
+    path: int
+    origin_kind: int
+    tile_kind: int
+
+
+AREA_FACTS = ("type", "objectFlags", "spellFlags", "critterFlags", "critterFlags2", "hitPoints", "damage", "alignment", "poison",
+              "material", "weight", "portalFlags", "containerFlags")
+
+
+def _subset(rng: random.Random, bits: tuple[int, ...], p: float) -> int:
+    return sum(bit for bit in bits if rng.random() < p)
+
+
+def draw_area_test_case(rng: random.Random, values: list[int]) -> AreaTestCase:
+    """Masks of one to four target names with sometimes stray bits and the not-invulnerable bit; candidates of every type
+    with the flags the test reads drawn from small pools (so masks meet them often); identity with self or source sometimes;
+    leaders among the self, the other object and two PCs; locations around one point, at the radius' edge often."""
+    mask = 0
+    for _ in range(rng.randint(1, 4)):
+        mask |= rng.choice(values)
+    if rng.random() < 0.3:
+        mask |= 1 << rng.randrange(64)
+    if rng.random() < 0.5:
+        mask |= 0x2000 << 32
+    if rng.random() < 0.15:
+        mask |= (0x4000 << 32) | rng.choice((0x44, 0x40004, 0x80 << 32, 0x100 << 32))   # MG25: summoned with another flags word
+    flag_pool = (0x1, 0x1000, 0x4000, 0x400000)
+    facts = (rng.choice((0, 1, 2, 3, 5, 8, 14, 15, 16, 16, 17)),
+             _subset(rng, (0x1, 0x2, 0x100, 0x400, 0x800, 0x1000, 0x400000), 0.12),
+             _subset(rng, flag_pool, 0.25),
+             _subset(rng, (0x4, 0x8, 0x80, 0x200, 0x1000, 0x4000, 0x800000, 0x1000000, 0x2000000, 0x20000000), 0.2),
+             _subset(rng, (0x800000, 0x2000), 0.2),
+             rng.choice((-5, 0, 1, 30)), rng.choice((0, 0, 3)), rng.choice((-50, -1, 0, 1, 50)), rng.choice((0, 0, 4)),
+             rng.choice((0, 1, 4, 4, 6)), rng.choice((0, 4, 5, 10)), _subset(rng, (0x1, 0x4, 0x4000), 0.4),
+             _subset(rng, (0x1, 0x4, 0x4000), 0.4))
+    base = (rng.randint(100, 4000), rng.randint(100, 4000))
+    radius = rng.choice((-1, 0, 1, 2, 5))
+
+    def near() -> tuple[int, int]:
+        reach = max(radius, 0) + rng.choice((0, 0, 1, 2))
+        return (base[0] + rng.randint(-reach, reach), base[1] + rng.randint(-reach, reach))
+
+    def maybe(p: float) -> tuple[int, int]:
+        return (0, 0) if rng.random() < p else near()
+    return AreaTestCase(lo=mask & 0xFFFFFFFF, hi=mask >> 32, required=_subset(rng, flag_pool, 0.1), forbidden=_subset(rng, flag_pool, 0.1),
+                        radius=radius, candidate=rng.choice((0, 1, 1, 1, 1, 1, 2, 3, 4)), self_present=int(rng.random() < 0.85),
+                        source_present=int(rng.random() < 0.85), other_present=int(rng.random() < 0.4), facts=facts,
+                        leader=rng.choice((0, 0, 1, 2, 3, 4)), self_leader=rng.choice((0, 0, 3, 4, 5)), other_leader=rng.choice((0, 3, 4, 5)),
+                        candidate_location=near(), source_location=near(), origin=maybe(0.15), tile=maybe(0.2), target_tile=maybe(0.3),
+                        tile_objects=tuple((rng.choice((0, 1, 2, 3, 5, 9, 15, 16, 17)), _subset(rng, (0x400, 0x1), 0.4))
+                                           for _ in range(rng.choice((0, 0, 1, 2, 3)))),
+                        blocked=int(rng.random() < 0.15), path=rng.choice((0, 1, 7)), origin_kind=rng.randint(0, 1), tile_kind=rng.randint(0, 1))
+
+
+def area_test_admissible(case: AreaTestCase) -> bool:
+    """The original reads through a null handle where the tile-self bit and the tile bit meet a context without a candidate
+    (0x406DA0 of handle 0); those inputs are outside the model (Steamwoven answers "no location" there)."""
+    return not (case.hi & 0x10000 and case.hi & 0x8000 and area_handles(case)["candidate"] == (0, 0))
+
+
+def area_handles(case: AreaTestCase) -> dict:
+    """Which world-model handle each role has: the candidate, self, source, other (or null)."""
+    self_h = AREA_SELF if case.self_present else (0, 0)
+    source_h = AREA_SOURCE if case.source_present else (0, 0)
+    other_h = AREA_OTHER if case.other_present else (0, 0)
+    candidate = {0: (0, 0), 1: AREA_CANDIDATE, 2: self_h, 3: source_h, 4: other_h}[case.candidate]
+    return {"candidate": candidate, "self": self_h, "source": source_h, "other": other_h}
+
+
+def area_test_stubs(case: AreaTestCase, emulator, nodes: int) -> dict:
+    """Stubs answering from the case: every object's fields and stats (the candidate's facts for the candidate's handle, the
+    other roles' locations and leaders), hit points, the PC leader, the tile's objects (a list written into the caller's
+    struct), the blocked flag, the path and the sector kinds; anything else is rejected."""
+    from oracle_emu import StubRejected
+    roles = area_handles(case)
+    leaders = {0: (0, 0), 1: roles["self"], 2: roles["other"], 3: AREA_PC_A, 4: AREA_PC_B, 5: roles["candidate"]}
+    tile_objects = dict(zip(AREA_TILE_OBJECTS, case.tile_objects))
+    facts = dict(zip(AREA_FACTS, case.facts))
+
+    def role_of(handle: tuple[int, int]) -> str:
+        if handle == (0, 0):
+            raise StubRejected("a null handle")
+        if handle == roles["candidate"]:
+            return "candidate"
+        for name in ("self", "source", "other"):
+            if handle == roles[name]:
+                return name
+        if handle in tile_objects:
+            return "tile"
+        raise StubRejected(f"handle {handle[0]:#x}:{handle[1]:#x} is not in the world model")
+
+    def field(argument) -> int:
+        handle, number = (argument(0), argument(1)), argument(2)
+        role = role_of(handle)
+        if role == "tile":
+            kind, flags = tile_objects[handle]
+            if number == FIELD_TYPE:
+                return kind
+            if number == FIELD_OBJECT_FLAGS:
+                return flags
+        elif role == "candidate":
+            table = {FIELD_TYPE: facts["type"], FIELD_OBJECT_FLAGS: facts["objectFlags"], FIELD_SPELL_FLAGS: facts["spellFlags"],
+                     FIELD_CRITTER_FLAGS: facts["critterFlags"], FIELD_CRITTER_FLAGS2: facts["critterFlags2"], FIELD_HP_DAMAGE: facts["damage"],
+                     FIELD_MATERIAL: facts["material"], FIELD_WEIGHT: facts["weight"], FIELD_PORTAL_FLAGS: facts["portalFlags"],
+                     FIELD_CONTAINER_FLAGS: facts["containerFlags"]}
+            if number in table:
+                return table[number] & 0xFFFFFFFF
+        raise StubRejected(f"field {number:#x} of the {role} is not in the world model")
+
+    def location(argument) -> tuple[int, int]:
+        role = role_of((argument(0), argument(1)))
+        if argument(2) != FIELD_LOCATION or role not in ("candidate", "source"):
+            raise StubRejected(f"64-bit field {argument(2):#x} of the {role}")
+        return case.candidate_location if role == "candidate" else case.source_location
+
+    def stat(argument) -> int:
+        if role_of((argument(0), argument(1))) != "candidate" or argument(2) not in (STAT_ALIGNMENT, STAT_POISON):
+            raise StubRejected(f"stat {argument(2)}")
+        return (facts["alignment"] if argument(2) == STAT_ALIGNMENT else facts["poison"]) & 0xFFFFFFFF
+
+    def hit_points(argument) -> int:
+        if role_of((argument(0), argument(1))) != "candidate":
+            raise StubRejected("hit points of another object")
+        return facts["hitPoints"] & 0xFFFFFFFF
+
+    def leader(argument) -> tuple[int, int]:
+        role = role_of((argument(0), argument(1)))
+        code = {"candidate": case.leader, "self": case.self_leader, "other": case.other_leader}.get(role)
+        if code is None:
+            raise StubRejected(f"leader of the {role}")
+        if role == "candidate" and roles["candidate"] == roles["self"]:
+            code = case.leader
+        return leaders[code]
+
+    def tile_query(tile: tuple[int, int]) -> None:
+        if tile != case.tile:
+            raise StubRejected(f"tile {tile} is not the candidate tile")
+
+    def blocked(argument) -> int:
+        tile_query((argument(0), argument(1)))
+        if argument(2) != 0:
+            raise StubRejected("blocked flag other than 0")
+        return case.blocked
+
+    def objects_at(argument) -> int:
+        tile_query((argument(0), argument(1)))
+        mask, struct_address = argument(2), argument(3)
+        head = 0
+        for index in reversed(range(len(case.tile_objects))):
+            kind, _ = case.tile_objects[index]
+            if not mask & (1 << kind):
+                continue
+            node = nodes + 0x10 * index
+            emulator.poke(node, struct.pack("<III", *AREA_TILE_OBJECTS[index], head))
+            head = node
+        emulator.poke(struct_address + 0x50, struct.pack("<I", head))
+        return 0
+
+    def path(argument) -> int:
+        return case.path
+
+    def sector(argument) -> int:
+        point = (argument(0), argument(1))
+        if point == case.origin:
+            return 1
+        if point == case.tile:
+            return 2
+        raise StubRejected(f"sector of {point}")
+
+    def kind(argument) -> int:
+        if argument(0) not in (1, 2):
+            raise StubRejected("sector kind of another sector")
+        return case.origin_kind if argument(0) == 1 else case.tile_kind
+
+    return {FIELD_GETTER: field, FIELD64_GETTER: location, STAT_GETTER: stat, CURRENT_HP: hit_points, PC_LEADER: leader,
+            TILE_BLOCKED: blocked, OBJECTS_AT: objects_at, LIST_FREE: lambda argument: 0, FIND_PATH: path, SECTOR_OF: sector,
+            SECTOR_KIND: kind}
+
+
+@dataclass
+class CollectCase:
+    """The collection's one context over a world of eight objects: the area (mask low and high, required and forbidden spell
+    flags, radius, count); the roles as world indices (−1 none): self, source, target object, other object, last summoned,
+    candidate; the origin and target tile (0 none); the run list (−1 no list, else the stored objects, empty: not built yet),
+    the summoned list and the source's party (world indices); the direction the wall asks; per object its facts (as the area
+    test's), PC leader code (−1 none, else a world index or 8/9 for two PCs outside it), occupant and owner (world indices or
+    −1) and location."""
+    lo: int
+    hi: int
+    required: int
+    forbidden: int
+    radius: int
+    count: int
+    roles: tuple[int, ...]
+    origin: tuple[int, int]
+    target_tile: tuple[int, int]
+    run_list: tuple[int, ...] | None
+    summoned_list: tuple[int, ...] | None
+    party: tuple[int, ...]
+    direction: int
+    objects: tuple[tuple[int, ...], ...]
+
+
+COLLECT_ROLES = ("self", "source", "target", "other", "summoned", "candidate")
+COLLECT_OBJECT = (*AREA_FACTS, "leader", "occupant", "owner", "x", "y")
+COLLECT_GATHER_NAMES = (1, 2, 3, 5, 47, 48, 49, 54, 55, 56, 58, 59, 62, 64)   # self, source, object, radius, summoned, tile …
+
+
+def draw_collect_case(rng: random.Random, values: list[int]) -> CollectCase:
+    """Masks of one or two gather names and up to three test names; radius 0..3; count −1, 0, 1, 2 or 5; eight objects of
+    every type around one point (critters often, scenery with an occupant, items with an owner); roles and lists from them."""
+    mask = 0
+    for _ in range(rng.randint(1, 2)):
+        mask |= values[rng.choice(COLLECT_GATHER_NAMES)]
+    for _ in range(rng.randint(0, 3)):
+        mask |= rng.choice(values)
+    if rng.random() < 0.5:
+        mask |= 0x2000 << 32
+    if rng.random() < 0.1:
+        mask = (mask | (0x2000000 << 32) | 0x11) & ~0x4   # the cone with the radius bit and no object bit
+    if rng.random() < 0.1:
+        mask |= (0x4000 << 32) | rng.choice((0x44, 0x40004, 0x80 << 32)) | 0x10   # MG25 through the radius gather's tests
+    base = (rng.randint(100, 4000), rng.randint(100, 4000))
+
+    def near(reach: int = 3) -> tuple[int, int]:
+        return (base[0] + rng.randint(-reach, reach), base[1] + rng.randint(-reach, reach))
+    objects = []
+    for index in range(WORLD_OBJECTS):
+        kind = rng.choice((0, 1, 2, 3, 3, 5, 8, 15, 16, 16, 16, 17))
+        facts = (kind, _subset(rng, (0x1, 0x2, 0x100, 0x400, 0x1000, 0x400000), 0.08), _subset(rng, (0x1, 0x1000, 0x4000), 0.2),
+                 _subset(rng, (0x4, 0x8, 0x1000, 0x4000), 0.15), _subset(rng, (0x800000,), 0.2), rng.choice((-1, 0, 5, 20)),
+                 rng.choice((0, 0, 2)), rng.choice((-10, 0, 10)), rng.choice((0, 3)), rng.choice((0, 4)), rng.choice((1, 6)),
+                 _subset(rng, (0x1, 0x4), 0.3), _subset(rng, (0x1, 0x4), 0.3))
+        leader = rng.choice((-1, -1, -1, 8, 9, rng.randrange(WORLD_OBJECTS)))
+        occupant = rng.randrange(WORLD_OBJECTS) if kind == 3 and rng.random() < 0.5 else -1
+        owner = rng.randrange(WORLD_OBJECTS) if 5 <= kind <= 14 and rng.random() < 0.6 else -1
+        objects.append((*facts, leader, occupant, owner, *near()))
+
+    def role(p: float) -> int:
+        return rng.randrange(WORLD_OBJECTS) if rng.random() < p else -1
+    roles = (role(0.85), role(0.85), role(0.6), role(0.3), role(0.3), role(0.3))
+    run_list = None if rng.random() < 0.3 else tuple(rng.randrange(WORLD_OBJECTS) for _ in range(rng.choice((0, 0, 1, 3))))
+    summoned = None if rng.random() < 0.4 else tuple(rng.randrange(WORLD_OBJECTS) for _ in range(rng.choice((0, 1, 2))))
+    return CollectCase(lo=mask & 0xFFFFFFFF, hi=mask >> 32, required=_subset(rng, (0x1, 0x1000), 0.1), forbidden=_subset(rng, (0x4000,), 0.1),
+                       radius=rng.randint(0, 3), count=rng.choice((-1, -1, 0, 1, 2, 5)), roles=roles, origin=(0, 0) if rng.random() < 0.2 else near(),
+                       target_tile=(0, 0) if rng.random() < 0.3 else near(), run_list=run_list, summoned_list=summoned,
+                       party=tuple(rng.randrange(WORLD_OBJECTS) for _ in range(rng.choice((0, 1, 3)))), direction=rng.choice((0, 1, 2, 3, 4, 5, 6, 7, 9)),
+                       objects=tuple(objects))
+
+
+def collect_tile_facts(tile: tuple[int, int]) -> tuple[int, int, int]:
+    """The world model's tile answers, from the tile alone: blocked, a path from the source, the sector kind."""
+    x, y = tile
+    return int((x * 7 + y * 3) % 5 == 0), int((x + y) % 3 != 0), (x ^ y) & 1
+
+
+def collect_stubs(case: CollectCase, emulator, pool: list[int]) -> dict:
+    """Stubs answering from the world of eight objects: fields, stats, hit points, leaders, locations, occupants and owners;
+    the rectangle, tile and party queries (lists written into the caller's struct, in world order); the tile answers; the
+    direction; run-list nodes from a pool. A null handle or anything else outside the model is rejected."""
+    from oracle_emu import StubRejected
+    index_of = {handle: i for i, handle in enumerate(WORLD_HANDLES)}
+    pcs = {8: (0x5EED0040, 0x42), 9: (0x5EED0041, 0x42)}
+
+    def obj(argument, first: int = 0) -> tuple[int, ...]:
+        handle = (argument(first), argument(first + 1))
+        if handle not in index_of:
+            raise StubRejected("a null handle" if handle == (0, 0) else f"handle {handle[0]:#x}:{handle[1]:#x} is not in the world model")
+        return case.objects[index_of[handle]]
+
+    def fact(o: tuple[int, ...], name: str) -> int:
+        return o[COLLECT_OBJECT.index(name)]
+
+    def field(argument) -> int:
+        o = obj(argument)
+        table = {FIELD_TYPE: "type", FIELD_OBJECT_FLAGS: "objectFlags", FIELD_SPELL_FLAGS: "spellFlags", FIELD_CRITTER_FLAGS: "critterFlags",
+                 FIELD_CRITTER_FLAGS2: "critterFlags2", FIELD_HP_DAMAGE: "damage", FIELD_MATERIAL: "material", FIELD_WEIGHT: "weight",
+                 FIELD_PORTAL_FLAGS: "portalFlags", FIELD_CONTAINER_FLAGS: "containerFlags"}
+        if argument(2) == 1:
+            return 0      # the art number, read only for the cone's unused rotation
+        if argument(2) not in table:
+            raise StubRejected(f"field {argument(2):#x}")
+        return fact(o, table[argument(2)]) & 0xFFFFFFFF
+
+    def field64(argument) -> tuple[int, int]:
+        o = obj(argument)
+        if argument(2) == FIELD_LOCATION:
+            return (fact(o, "x"), fact(o, "y"))
+        raise StubRejected(f"64-bit field {argument(2):#x}")
+
+    def handle_field(argument) -> tuple[int, int]:
+        o = obj(argument)
+        name = {FIELD_OCCUPANT: "occupant", FIELD_OWNER: "owner"}.get(argument(2))
+        if name is None:
+            raise StubRejected(f"handle field {argument(2):#x}")
+        return WORLD_HANDLES[fact(o, name)] if fact(o, name) >= 0 else (0, 0)
+
+    def stat(argument) -> int:
+        o = obj(argument)
+        if argument(2) not in (STAT_ALIGNMENT, STAT_POISON, STAT_APTITUDE):
+            raise StubRejected(f"stat {argument(2)}")
+        return {STAT_ALIGNMENT: fact(o, "alignment"), STAT_POISON: fact(o, "poison"), STAT_APTITUDE: 0}[argument(2)] & 0xFFFFFFFF
+
+    def leader(argument) -> tuple[int, int]:
+        code = fact(obj(argument), "leader")
+        return (0, 0) if code < 0 else pcs.get(code, WORLD_HANDLES[code] if code < WORLD_OBJECTS else (0, 0))
+
+    def write_list(struct_address: int, indices: list[int]) -> None:
+        head = 0
+        for i in reversed(indices):
+            node = pool[0]
+            pool[0] += 0x10
+            emulator.poke(node, struct.pack("<III", *WORLD_HANDLES[i], head))
+            head = node
+        emulator.poke(struct_address + 0x50, struct.pack("<I", head))
+
+    def in_rect(argument) -> int:
+        x0, y0, x1, y1 = struct.unpack("<4q", emulator.peek(argument(0), 32))
+        write_list(argument(2), [i for i, o in enumerate(case.objects)
+                                 if x0 <= fact(o, "x") <= x1 and y0 <= fact(o, "y") <= y1 and argument(1) & (1 << fact(o, "type"))])
+        return 0
+
+    def at(argument) -> int:
+        tile = (argument(0), argument(1))
+        write_list(argument(3), [i for i, o in enumerate(case.objects) if (fact(o, "x"), fact(o, "y")) == tile and argument(2) & (1 << fact(o, "type"))])
+        return 0
+
+    def party(argument) -> int:
+        obj(argument)
+        write_list(argument(2), list(case.party))
+        return 0
+
+    def blocked(argument) -> int:
+        if argument(2) != 0:
+            raise StubRejected("blocked flag other than 0")
+        return collect_tile_facts((argument(0), argument(1)))[0]
+
+    def path(argument) -> int:
+        tile = struct.unpack("<II", bytes(emulator.mu.mem_read(0x603B98, 8)))
+        return collect_tile_facts(tile)[1]
+
+    def sector(argument) -> int:
+        return 10 + collect_tile_facts((argument(0), argument(1)))[2]
+
+    def kind(argument) -> int:
+        if argument(0) not in (10, 11):
+            raise StubRejected("sector kind of another sector")
+        return argument(0) - 10
+
+    def node(argument) -> int:
+        address = pool[1]
+        pool[1] += 0x50
+        return address
+
+    return {FIELD_GETTER: field, FIELD64_GETTER: field64, FIELD64_GETTER_2: handle_field, STAT_GETTER: stat,
+            CURRENT_HP: lambda argument: fact(obj(argument), "hitPoints") & 0xFFFFFFFF, PC_LEADER: leader, OBJECTS_IN_RECT: in_rect,
+            OBJECTS_AT: at, PARTY_LIST: party, LIST_FREE: lambda argument: 0, TILE_BLOCKED: blocked, FIND_PATH: path, SECTOR_OF: sector,
+            SECTOR_KIND: kind, DIRECTION: lambda argument: case.direction, ART_ROTATION: lambda argument: 0, NODE_ALLOC: node,
+            OBJECT_REFERENCE: lambda argument: 0}
+
+
+def _digest(values: list[int]) -> int:
+    """FNV-1a over a list of 32-bit values, as a signed 32-bit int (the C# test computes the same)."""
+    value = 0x811C9DC5
+    for item in values:
+        for byte in struct.pack("<I", item & 0xFFFFFFFF):
+            value = ((value ^ byte) * 0x01000193) & 0xFFFFFFFF
+    return value - (1 << 32) if value & 0x80000000 else value
+
+
+def HEAP_BASE_OF(emulator) -> int:
+    return emulator.heap.start
+
+
 # --- runs ------------------------------------------------------------------------------------------------------------
 
 def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str, unicorn_version: str,
@@ -1195,6 +1666,451 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
             if progress and case_number % 1000 == 0:
                 progress(case_number)
         document.update(fields=["holder", "aptitude", "other", "otherAptitude", "complexity", "power", "result", "powerCalls", "otherReads"])
+    elif spec.model == "spell-area-test":
+        from oracle_emu import RunFailure, to_signed
+        values = [v for v in (emulator.read_u32(TARGET_TABLE + 8 * i) | emulator.read_u32(TARGET_TABLE + 8 * i + 4) << 32
+                              for i in range(TARGET_NAMES)) if v]
+        context = emulator.write_heap(b"\0" * 0x64, AREA_CONTEXT)
+        mask_address = emulator.write_heap(b"\0" * 0x18, AREA_MASK)
+        nodes = emulator.write_heap(b"\0" * 0x40, AREA_NODES)
+        emulator.set_global(MULTIPLAYER, 0)
+        done = 0
+        while done < count:
+            case = draw_area_test_case(rng, values)
+            if not area_test_admissible(case):
+                continue
+            roles = area_handles(case)
+            emulator.write_heap(struct.pack("<IIiii", case.lo, case.hi, case.required, case.forbidden, case.radius) + struct.pack("<i", -1), AREA_MASK)
+            fields = struct.pack("<I4x", mask_address) + struct.pack("<II", *roles["self"]) + struct.pack("<II", *roles["source"]) \
+                + struct.pack("<II", *case.origin) + struct.pack("<II", *roles["candidate"]) + struct.pack("<II", *case.tile) \
+                + struct.pack("<II", 0, 0) + struct.pack("<II", *case.target_tile) + struct.pack("<II", *roles["other"]) + b"\0" * 0x1C
+            emulator.write_heap(fields, AREA_CONTEXT)
+            emulator.set_global(FAILED_BIT, UNTOUCHED)
+            emulator.set_global(FAILED_BIT + 4, UNTOUCHED)
+            readable = (Range(context, context + 0x64), Range(mask_address, mask_address + 0x18), Range(nodes, nodes + 0x40),
+                        Range(MULTIPLAYER, MULTIPLAYER + 4))
+            writable = (Range(FAILED_BIT, FAILED_BIT + 8),) + tuple(Range(start, end) for start, end in PATH_GLOBALS)
+            result = emulator.call(spec.address, (context,), code=code, stubs=area_test_stubs(case, emulator, nodes), readable=readable, writable=writable)
+            cases.append([to_signed(case.lo), to_signed(case.hi), case.required, case.forbidden,
+                          case.radius, case.candidate, case.self_present, case.source_present, case.other_present,
+                          *(to_signed(v) for v in case.facts), case.leader, case.self_leader, case.other_leader,
+                          *case.candidate_location, *case.source_location, *case.origin, *case.tile, *case.target_tile,
+                          len(case.tile_objects), *(v for pair in case.tile_objects + ((0, 0),) * (3 - len(case.tile_objects)) for v in pair),
+                          case.blocked, case.path, case.origin_kind, case.tile_kind, result,
+                          to_signed(emulator.read_u32(FAILED_BIT)), to_signed(emulator.read_u32(FAILED_BIT + 4))])
+            done += 1
+            if progress and done % 1000 == 0:
+                progress(done)
+        document.update(fields=["lo", "hi", "required", "forbidden", "radius", "candidate", "self", "source", "other", *AREA_FACTS, "leader",
+                                "selfLeader", "otherLeader", "candidateX", "candidateY", "sourceX", "sourceY", "originX", "originY", "tileX",
+                                "tileY", "targetTileX", "targetTileY", "tileObjects", "object0Type", "object0Flags", "object1Type", "object1Flags",
+                                "object2Type", "object2Flags", "blocked", "path", "originKind", "tileKind", "result", "failedLow", "failedHigh"])
+    elif spec.model == "spell-target-collection":
+        from oracle_emu import RunFailure, to_signed
+        values = [emulator.read_u32(TARGET_TABLE + 8 * i) | emulator.read_u32(TARGET_TABLE + 8 * i + 4) << 32 for i in range(TARGET_NAMES)]
+        context = emulator.write_heap(b"\0" * 0x64, COLLECT_CONTEXT)
+        mask_address = emulator.write_heap(b"\0" * 0x18, COLLECT_MASK)
+        heads = emulator.write_heap(b"\0" * 8, COLLECT_HEADS)
+        out = emulator.write_heap(b"\0" * (8 + 0x38 * 256), COLLECT_OUT)
+        emulator.set_global(MULTIPLAYER, 0)
+        redrawn = done = 0
+        while done < count:
+            case = draw_collect_case(rng, [v for v in values])
+            def handle(index: int) -> tuple[int, int]:
+                return WORLD_HANDLES[index] if index >= 0 else (0, 0)
+            self_h, source_h, target_h, other_h, summoned_h, candidate_h = (handle(i) for i in case.roles)
+            pool = [COLLECT_LISTS, COLLECT_NODES]
+            def stored(indices, base: int, link: int) -> int:
+                head = 0
+                for k, i in enumerate(reversed(indices)):
+                    offset = base + 0x50 * k
+                    emulator.write_heap(struct.pack("<II", *WORLD_HANDLES[i]) + b"\0" * (link - 8) + struct.pack("<I", head), offset)
+                    head = HEAP_BASE_OF(emulator) + offset
+                return head
+            run_head = stored(case.run_list or (), COLLECT_NODES + 0x2000, 0x40) if case.run_list is not None else 0
+            summoned_head = stored(case.summoned_list or (), COLLECT_NODES + 0x3000, 0x40) if case.summoned_list is not None else 0
+            emulator.write_heap(struct.pack("<II", run_head, summoned_head), COLLECT_HEADS)
+            emulator.write_heap(struct.pack("<IIIIii", case.lo, case.hi, case.required, case.forbidden, case.radius, case.count), COLLECT_MASK)
+            fields = struct.pack("<I4x", mask_address) + struct.pack("<II", *self_h) + struct.pack("<II", *source_h) + struct.pack("<II", *case.origin) \
+                + struct.pack("<II", *candidate_h) + b"\0" * 8 + struct.pack("<II", *target_h) + struct.pack("<II", *case.target_tile) \
+                + struct.pack("<II", *other_h) + struct.pack("<II", *summoned_h) + struct.pack("<I", out) \
+                + struct.pack("<I", heads if case.run_list is not None else 0) + struct.pack("<I", heads + 4 if case.summoned_list is not None else 0) \
+                + b"\0" * 8
+            emulator.write_heap(fields, COLLECT_CONTEXT)
+            emulator.write_heap(b"\0" * 8, COLLECT_OUT)
+            heap = HEAP_BASE_OF(emulator)
+            readable = (Range(heap, heap + COLLECT_OUT), Range(*WALL_TABLE), Range(MULTIPLAYER, MULTIPLAYER + 4))
+            writable = (Range(out, out + 8 + 0x38 * 256), Range(heads, heads + 8), Range(FAILED_BIT, FAILED_BIT + 8),
+                        Range(heap + COLLECT_NODES, heap + COLLECT_NODES + 0x2000)) + tuple(Range(start, end) for start, end in PATH_GLOBALS)
+            pool[0] += HEAP_BASE_OF(emulator)
+            pool[1] += HEAP_BASE_OF(emulator)
+            try:
+                emulator.call(spec.address, (context,), code=code, stubs=collect_stubs(case, emulator, pool), readable=readable, writable=writable)
+            except RunFailure as failure:
+                if "a null handle" not in str(failure):
+                    raise
+                redrawn += 1
+                continue
+            entries = []
+            for k in range(emulator.read_u32(out)):
+                lo_h, hi_h, x, y = struct.unpack("<IIII", emulator.peek(out + 8 + 0x38 * k, 16))
+                entries.append(WORLD_HANDLES.index((lo_h, hi_h)) if (lo_h, hi_h) != (0, 0) else -1)
+                entries.extend((x, y) if (lo_h, hi_h) == (0, 0) else ())
+            built = []
+            if case.run_list == ():
+                node = emulator.read_u32(heads)
+                while node:
+                    built.append(WORLD_HANDLES.index(struct.unpack("<II", emulator.peek(node, 8))))
+                    node = emulator.read_u32(node + 0x40)
+            cases.append([to_signed(case.lo), to_signed(case.hi), case.required, case.forbidden, case.radius, case.count, *case.roles, *case.origin,
+                          *case.target_tile, -1 if case.run_list is None else len(case.run_list), *(case.run_list or ()) + (-1,) * (3 - len(case.run_list or ())),
+                          -1 if case.summoned_list is None else len(case.summoned_list), *(case.summoned_list or ()) + (-1,) * (2 - len(case.summoned_list or ())),
+                          len(case.party), *case.party + (-1,) * (3 - len(case.party)), case.direction, *(to_signed(v) for o in case.objects for v in o),
+                          emulator.read_u32(out), _digest(entries), len(built), _digest(built)])
+            done += 1
+            if progress and done % 1000 == 0:
+                progress(done)
+        object_fields = [f"o{i}{name[0].upper()}{name[1:]}" for i in range(WORLD_OBJECTS) for name in COLLECT_OBJECT]
+        document.update(redrawn=redrawn, fields=["lo", "hi", "required", "forbidden", "radius", "count", *COLLECT_ROLES, "originX", "originY",
+                                                 "targetTileX", "targetTileY", "runList", "run0", "run1", "run2", "summonedList", "summoned0", "summoned1",
+                                                 "party", "party0", "party1", "party2", "direction", *object_fields, "entries", "digest", "built", "builtDigest"])
+    elif spec.model in ("spell-reaim", "spell-ai-notice"):
+        from oracle_emu import RunFailure, StubRejected, to_signed
+        handles = WORLD_HANDLES[:5]   # parent, source, run target, last summoned, other
+        run_address = emulator.write_heap(b"\0" * 0x100, 0)
+        component = emulator.write_heap(b"\0" * 0x40, 0x100)
+        record = emulator.write_heap(b"\0" * 0x40, 0x200)
+        for address, value in ((RUN_POINTER, run_address), (COMPONENT_POINTER, component), (RECORD_POINTER, record)):
+            emulator.set_global(address, value)
+        redrawn = done = 0
+        while done < count:
+            present = [rng.random() < 0.75 for _ in handles]
+            def h(i: int) -> tuple[int, int]:
+                return handles[i] if present[i] else (0, 0)
+            locations = [(rng.randint(1, 5000), rng.randint(1, 5000)) for _ in handles]
+            types = [rng.choice((3, 5, 15, 16)) for _ in handles]
+            current = rng.choice((-1, 0, 1, 2, 3, 4))
+            tile = (0, 0) if rng.random() < 0.3 else (rng.randint(1, 5000), rng.randint(1, 5000))
+            run_tile = (0, 0) if rng.random() < 0.3 else (rng.randint(1, 5000), rng.randint(1, 5000))
+            apply = 0 if rng.random() < 0.1 else sum(bit for bit in (0x1, 0x2, 0x4, 0x4000 << 32, 0x8000 << 32, 0x800000 << 32, 0x4800 << 32) if rng.random() < 0.3)
+            action = rng.choice((0, 1, 2, 3, 4))
+            aggressive = int(rng.random() < 0.6)
+            last = rng.choice((-1, 0, 1, 2, 3, 4))
+            current_h = handles[current] if current >= 0 and present[current] else (0, 0)
+            emulator.write_heap(struct.pack("<II", *h(1)), RUN_SOURCE)
+            emulator.write_heap(struct.pack("<ii", 0, action), 0x4)
+            emulator.write_heap(struct.pack("<II", *h(0)), RUN_PARENT)
+            emulator.write_heap(struct.pack("<II", *h(2)), RUN_TARGET_OBJECT)
+            emulator.write_heap(struct.pack("<II", *run_tile), RUN_TARGET_TILE)
+            emulator.write_heap(struct.pack("<II", *h(4)), RUN_OTHER)
+            emulator.write_heap(struct.pack("<Q", apply), 0x100 + COMPONENT_APPLY)
+            emulator.write_heap(struct.pack("<I", 0x2 if aggressive else 0), 0x200 + RECORD_FLAGS)
+            for address, value in ((CURRENT_TARGET, current_h[0]), (CURRENT_TARGET + 4, current_h[1]), (CURRENT_TILE, tile[0]), (CURRENT_TILE + 4, tile[1]),
+                                   (CURRENT_TYPE, UNTOUCHED), (LAST_SUMMONED, h(3)[0]), (LAST_SUMMONED + 4, h(3)[1]),
+                                   (LAST_NOTIFIED, handles[last][0] if last >= 0 else 0), (LAST_NOTIFIED + 4, handles[last][1] if last >= 0 else 0)):
+                emulator.set_global(address, value)
+            notices: list[tuple[int, int]] = []
+
+            def who(handle: tuple[int, int]) -> int:
+                if handle == (0, 0):
+                    return -1
+                if handle not in handles:
+                    raise StubRejected(f"handle {handle[0]:#x}:{handle[1]:#x} is not in the world model")
+                return handles.index(handle)
+
+            def field(argument) -> int:
+                i = who((argument(0), argument(1)))
+                if i < 0:
+                    raise StubRejected("a null handle")
+                if argument(2) != FIELD_TYPE:
+                    raise StubRejected(f"field {argument(2):#x}")
+                return types[i]
+
+            def location(argument) -> tuple[int, int]:
+                i = who((argument(0), argument(1)))
+                if i < 0:
+                    raise StubRejected("a null handle")
+                return locations[i]
+
+            def attacked(argument) -> int:
+                if (argument(4), argument(5)) != (1, 0):
+                    raise StubRejected("other arguments")
+                notices.append((who((argument(0), argument(1))), who((argument(2), argument(3)))))
+                return 0
+            words = lambda a: Range(a, a + 8)
+            readable = (Range(run_address, run_address + 0x100), Range(component, component + 0x40), Range(record, record + 0x40),
+                        Range(RUN_POINTER, RUN_POINTER + 4), Range(COMPONENT_POINTER, COMPONENT_POINTER + 4), Range(RECORD_POINTER, RECORD_POINTER + 4),
+                        words(LAST_SUMMONED))
+            writable = (words(CURRENT_TARGET), words(CURRENT_TILE), Range(CURRENT_TYPE, CURRENT_TYPE + 4), words(LAST_NOTIFIED))
+            try:
+                emulator.call(spec.address, (), code=code, stubs={FIELD_GETTER: field, FIELD64_GETTER: location, AI_ATTACKED: attacked},
+                              readable=readable, writable=writable)
+            except RunFailure as failure:
+                if "a null handle" not in str(failure):
+                    raise
+                redrawn += 1
+                continue
+            target_after = who((emulator.read_u32(CURRENT_TARGET), emulator.read_u32(CURRENT_TARGET + 4)))
+            last_after = who((emulator.read_u32(LAST_NOTIFIED), emulator.read_u32(LAST_NOTIFIED + 4)))
+            flat = [v for pair in notices for v in pair] + [-2] * (4 - 2 * len(notices))
+            cases.append([*(int(p) for p in present), *(v for loc in locations for v in loc), *types, current, *tile, *run_tile, to_signed(apply & 0xFFFFFFFF),
+                          to_signed(apply >> 32), action, aggressive, last, target_after, emulator.read_u32(CURRENT_TILE), emulator.read_u32(CURRENT_TILE + 4),
+                          len(notices), *flat, last_after])
+            done += 1
+            if progress and done % 1000 == 0:
+                progress(done)
+        roles = ("parent", "source", "runTarget", "summoned", "other")
+        document.update(redrawn=redrawn, fields=[*(f"{r}Present" for r in roles), *(f"{r}{a}" for r in roles for a in ("X", "Y")), *(f"{r}Type" for r in roles),
+                                                 "current", "tileX", "tileY", "runTileX", "runTileY", "applyLow", "applyHigh", "action", "aggressive", "last",
+                                                 "targetAfter", "tileAfterX", "tileAfterY", "notices", "attacker0", "victim0", "attacker1", "victim1", "lastAfter"])
+    elif spec.model == "spell-time":
+        from oracle_emu import StubRejected, to_signed
+        run_address = emulator.write_heap(b"\0" * RUN_SLOT, 0)
+        time_address = emulator.write_heap(b"\0" * 8, 0x200)
+        for case_number in range(count):
+            parent = rng.random() < 0.85
+            parent_type = rng.choice((15, 16, 16, 3, 5)) if parent else 0
+            target = rng.random() < 0.7
+            target_type = rng.choice((15, 16, 16, 2, 8)) if target else 0
+            spell = rng.choice((rng.randrange(80), rng.randrange(223), -1, 80, 222))
+            mastery = rng.choice((-1, rng.randrange(16), spell // 5 if 0 <= spell < 80 else 3))
+            aptitudes = (rng.randint(-100, 100), rng.randint(-100, 100))
+            days = rng.randint(0, 5)
+            ms = rng.choice((0, 1, rng.randint(1, 100000), rng.randint(1 << 30, (1 << 32) - 1)))
+            emulator.write_heap(struct.pack("<i", spell), 0x4)
+            emulator.write_heap(struct.pack("<II", *(RUN_PARENT_H if parent else (0, 0))), RUN_PARENT)
+            emulator.write_heap(struct.pack("<i", parent_type), RUN_PARENT_TYPE)
+            emulator.write_heap(struct.pack("<II", *(RUN_TARGET_H if target else (0, 0))), RUN_TARGET_OBJECT)
+            emulator.write_heap(struct.pack("<i", target_type), RUN_TARGET_TYPE)
+            emulator.write_heap(struct.pack("<II", days, ms), 0x200)
+
+            def who(argument) -> int:
+                handle = (argument(0), argument(1))
+                if handle == RUN_PARENT_H:
+                    return 0
+                if handle == RUN_TARGET_H:
+                    return 1
+                raise StubRejected(f"handle {handle[0]:#x}:{handle[1]:#x}")
+
+            def mastered(argument) -> int:
+                if who(argument) != 0:
+                    raise StubRejected("mastery of the target")
+                return mastery & 0xFFFFFFFF
+
+            def aptitude(argument) -> int:
+                if argument(2) != STAT_APTITUDE:
+                    raise StubRejected(f"stat {argument(2)}")
+                return aptitudes[who(argument)] & 0xFFFFFFFF
+            emulator.call(spec.address, (run_address, time_address), code=code, stubs={MASTERY: mastered, STAT_GETTER: aptitude},
+                          readable=(Range(run_address, run_address + RUN_SLOT),), writable=(Range(time_address, time_address + 8),))
+            cases.append([int(parent), parent_type, int(target), target_type, spell, mastery, *aptitudes, days, to_signed(ms),
+                          to_signed(emulator.read_u32(time_address)), to_signed(emulator.read_u32(time_address + 4))])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["parent", "parentType", "target", "targetType", "spell", "mastery", "parentAptitude", "targetAptitude", "days", "ms",
+                                "daysAfter", "msAfter"])
+    elif spec.model == "spell-stage":
+        from oracle_emu import RunFailure, StubRejected, to_signed
+        heap = HEAP_BASE_OF(emulator)
+        run_address = emulator.write_heap(b"\0" * RUN_SLOT, 0)
+        table = emulator.write_heap(b"\0" * (SPELL_RECORD * SPELL_RECORDS), 0x1000)
+        out_address = heap + 0x800
+        for address, value in ((RUN_POINTER, run_address), (SPELL_TABLE_POINTER, table), (SPELLS_LOADED, 1), (MAGIC_MESSAGES, 0x77)):
+            emulator.set_global(address, value)
+        for case_number in range(count):
+            spell = rng.randrange(SPELL_RECORDS)
+            action = rng.choice((0, 0, 1, 1, 1, 2, 3))
+            source_present = rng.random() < 0.9
+            own = rng.random() < 0.6
+            parent_present = rng.random() < 0.9
+            source_type = rng.choice((15, 16, 16, 5, 9)) if source_present else 0
+            parent_type = rng.choice((15, 16, 16, 3)) if parent_present else 0
+            if own and source_present and parent_present:
+                parent_type = source_type
+            target_present = rng.random() < 0.6
+            flags = 1 | (0x2 if rng.random() < 0.2 else 0)
+            margin = 0 if rng.random() < 0.5 else rng.randint(1, 60)
+            technology = int(rng.random() < 0.25)
+            skip_begin = int(rng.random() < 0.15)
+            stacking = int(rng.random() < 0.4)
+            willpower_min = rng.randint(0, 20)
+            cost, maintain = rng.randint(0, 40), rng.randint(0, 20)
+            intelligence, willpower = rng.randint(2, 12), rng.randint(4, 20)
+            race, mastery, cheat = rng.choice((0, 1, 1, 2)), rng.choice((-1, spell // 5, rng.randrange(16))), int(rng.random() < 0.1)
+            dead, cannot_act, local = int(rng.random() < 0.1), int(rng.random() < 0.1), int(rng.random() < 0.5)
+            fatigue = rng.randint(-20, 50)
+            blocking = rng.choice((-1, -1, 0, 7))   # −1: none; else the blocking run's id (0 is this run)
+            source_h = RUN_SOURCE_H if source_present else (0, 0)
+            parent_h = (source_h if own and source_present else RUN_PARENT_H) if parent_present else (0, 0)
+            emulator.write_heap(struct.pack("<iii", 0, spell, action), 0)
+            emulator.write_heap(struct.pack("<II", *source_h), RUN_SOURCE)
+            emulator.write_heap(struct.pack("<i", source_type if source_present else -1), RUN_SOURCE_TYPE)
+            emulator.write_heap(struct.pack("<II", *parent_h), RUN_PARENT)
+            emulator.write_heap(struct.pack("<i", parent_type if parent_present else -1), RUN_PARENT_TYPE)
+            emulator.write_heap(struct.pack("<II", *(RUN_TARGET_H if target_present else (0, 0))), RUN_TARGET_OBJECT)
+            emulator.write_heap(struct.pack("<I", flags), RUN_FLAG_WORD)
+            emulator.write_heap(struct.pack("<i", margin), RUN_MARGIN)
+            record_offset = 0x1000 + SPELL_RECORD * spell
+            record = table + SPELL_RECORD * spell
+            emulator.write_heap(struct.pack("<ii", willpower_min, cost), record_offset + RECORD_WILLPOWER)
+            emulator.write_heap(struct.pack("<ii", maintain, 0), record_offset + RECORD_MAINTAIN)
+            emulator.write_heap(struct.pack("<I", (FLAG_TECHNOLOGY if technology else 0) | (FLAG_SKIP_BEGIN_COST if skip_begin else 0)), record_offset + RECORD_FLAGS)
+            emulator.write_heap(struct.pack("<i", stacking), record_offset + RECORD_STACKING)
+            emulator.set_global(RECORD_POINTER, record)
+            emulator.set_global(CHEAT, cheat)
+            calls: dict[str, list] = {"pay": [], "stack": [], "cancel": [], "message": [], "bar": [], "process": []}
+
+            def handle_of(argument, first: int = 0) -> tuple[int, int]:
+                return (argument(first), argument(first + 1))
+
+            def kind(handle: tuple[int, int]) -> int:
+                if handle == source_h and source_present:
+                    return source_type
+                if handle == parent_h and parent_present:
+                    return parent_type
+                raise StubRejected(f"handle {handle[0]:#x}:{handle[1]:#x}")
+
+            def field(argument) -> int:
+                if argument(2) != FIELD_TYPE:
+                    raise StubRejected(f"field {argument(2):#x}")
+                return kind(handle_of(argument))
+
+            def stat(argument) -> int:
+                handle = handle_of(argument)
+                kind(handle)
+                number = argument(2)
+                if number == STAT_INTELLIGENCE and handle == parent_h:
+                    return intelligence
+                if number == STAT_WILLPOWER_RUN and handle == parent_h:
+                    return willpower
+                if number == STAT_RACE_RUN and handle == source_h:
+                    return race
+                raise StubRejected(f"stat {number} of {handle}")
+
+            def mastered(argument) -> int:
+                if handle_of(argument) != source_h:
+                    raise StubRejected("mastery of another object")
+                return mastery & 0xFFFFFFFF
+
+            def pay(argument) -> int:
+                if handle_of(argument) != source_h:
+                    raise StubRejected("payment by another object")
+                paid_cost = to_signed(argument(2))
+                calls["pay"].append(paid_cost)
+                return int(paid_cost <= 0 or fatigue - paid_cost > -15)
+
+            def no_stack(argument) -> int:
+                calls["stack"].append(handle_of(argument, 2))
+                if blocking < 0:
+                    return 0
+                emulator.poke(argument(4), struct.pack("<i", blocking))
+                return 1
+
+            def message(argument) -> int:
+                calls["message"].append(struct.unpack("<i", emulator.peek(argument(1), 4))[0])
+                return 0
+            stubs = {FIELD_GETTER: field, STAT_GETTER: stat, MASTERY: mastered, PAY: pay, DEAD: lambda a: dead, CANNOT_ACT: lambda a: cannot_act,
+                     NO_STACK: no_stack, CANCELS: lambda a: calls["cancel"].append(1) or 0, IS_PLAYER: lambda a: int(local and handle_of(a) == parent_h),
+                     MESSAGE_TEXT: message, MESSAGE_SHOW: lambda a: 0, MAINTAIN_BAR: lambda a: calls["bar"].append(1) or 0,
+                     PROCESS_RUN: lambda a: calls["process"].append(1) or 0}
+            readable = (Range(run_address, run_address + RUN_SLOT), Range(record, record + SPELL_RECORD),
+                        *(Range(a, a + 4) for a in (RUN_POINTER, RECORD_POINTER, SPELL_TABLE_POINTER, SPELLS_LOADED, CHEAT, MAGIC_MESSAGES)),
+                        Range(*DEFAULT_WILLPOWER))
+            writable = (Range(run_address + 0x8, run_address + 0xC), Range(STACK_OBJECT, STACK_OBJECT + 8), Range(TARGET_LIST, TARGET_LIST + 4))
+            result = emulator.call(spec.address, (), code=code, stubs=stubs, readable=readable, writable=writable)
+            if len(calls["pay"]) > 2 or len(calls["message"]) > 1 or len(calls["stack"]) > 1:
+                raise RunFailure("stub", f"unexpected calls {calls}")
+            pays = calls["pay"] + [-999] * (2 - len(calls["pay"]))
+            # Which object the no-stack test asked about: −1 not asked, 0 the null handle, 1 the source, 2 the target.
+            stack_on = -1
+            if calls["stack"]:
+                asked = calls["stack"][0]
+                if target_present and asked == RUN_TARGET_H:
+                    stack_on = 2
+                elif source_present and asked == source_h:
+                    stack_on = 1
+                elif asked == (0, 0):
+                    stack_on = 0
+                else:
+                    raise RunFailure("stub", f"no-stack test of {asked}")
+            cases.append([spell, action, int(source_present), int(own), int(parent_present), source_type, parent_type, int(target_present), flags, margin,
+                          technology, skip_begin, stacking, willpower_min, cost, maintain, intelligence, willpower, race, mastery, cheat, dead, cannot_act,
+                          local, fatigue, blocking, result, struct.unpack("<i", emulator.peek(run_address + 8, 4))[0], len(calls["pay"]), *pays,
+                          calls["message"][0] if calls["message"] else -1, len(calls["stack"]), len(calls["cancel"]), len(calls["bar"]), len(calls["process"]), stack_on])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["spell", "action", "source", "own", "parent", "sourceType", "parentType", "target", "flags", "margin", "technology",
+                                "skipBeginCost", "stacking", "willpowerMinimum", "cost", "maintain", "intelligence", "willpower", "race", "mastery", "cheat",
+                                "dead", "cannotAct", "local", "fatigue", "blocking", "result", "actionAfter", "payCalls", "pay0", "pay1", "message",
+                                "stackAsked", "cancels", "bar", "processed", "stackOn"])
+    elif spec.model == "spell-cap":
+        from oracle_emu import StubRejected, to_signed
+        heap = HEAP_BASE_OF(emulator)
+        runs = emulator.write_heap(b"\0" * (RUN_SLOT * 512), 0)
+        table = emulator.write_heap(b"\0" * (SPELL_RECORD * SPELL_RECORDS), 0x40000)
+        for address, value in ((RUN_TABLE_POINTER, runs), (SPELL_TABLE_POINTER, table)):
+            emulator.set_global(address, value)
+        parents = [(0x5EED0060 + i, 0x42) for i in range(3)]
+        redrawn = case_number = 0
+        while case_number < count:
+            spells = [rng.randrange(SPELL_RECORDS) for _ in range(6)]
+            records = {sp: (int(rng.random() < 0.2), rng.choice((0, 0, 5, 30, -1))) for sp in spells}
+            others = []
+            for k in range(rng.randint(0, 14)):
+                slot = rng.randrange(1, 512)
+                others.append((slot, rng.choice(spells), rng.choice(parents), rng.choice((0, 1, 4, 5, 5, 5, 0x15))))
+            this_source = rng.random() < 0.9
+            parent_index = rng.choice((0, 0, 1, -1))
+            parent_type = rng.choice((15, 16, 16, 3))
+            intelligence = rng.randint(0, 20)
+            emulator.write_heap(b"\0" * (RUN_SLOT * 512), 0)
+            for sp, (tech, period) in records.items():
+                emulator.write_heap(struct.pack("<ii", 0, period), 0x40000 + SPELL_RECORD * sp + RECORD_MAINTAIN)
+                emulator.write_heap(struct.pack("<I", FLAG_TECHNOLOGY if tech else 0), 0x40000 + SPELL_RECORD * sp + RECORD_FLAGS)
+            written = {}
+            for slot, sp, parent, flag in others:
+                written[slot] = (sp, parent, flag)
+            for slot, (sp, parent, flag) in written.items():
+                emulator.write_heap(struct.pack("<ii", slot, sp), RUN_SLOT * slot)
+                emulator.write_heap(struct.pack("<II", *parent), RUN_SLOT * slot + RUN_PARENT)
+                emulator.write_heap(struct.pack("<I", flag), RUN_SLOT * slot + RUN_FLAG_WORD)
+            this_spell = rng.choice(spells)
+            parent_h = parents[parent_index] if parent_index >= 0 else (0, 0)
+            this_flag = rng.choice((1, 5))
+            emulator.write_heap(struct.pack("<ii", 0, this_spell), 0)
+            emulator.write_heap(struct.pack("<II", *(RUN_SOURCE_H if this_source else (0, 0))), RUN_SOURCE)
+            emulator.write_heap(struct.pack("<II", *parent_h), RUN_PARENT)
+            emulator.write_heap(struct.pack("<I", this_flag), RUN_FLAG_WORD)
+            asked = []
+
+            def field(argument) -> int:
+                if (argument(0), argument(1)) != parent_h or parent_h == (0, 0) or argument(2) != FIELD_TYPE:
+                    raise StubRejected("a null handle" if parent_h == (0, 0) else f"field {argument(2):#x}")
+                return parent_type
+
+            def stat(argument) -> int:
+                if (argument(0), argument(1)) != parent_h or argument(2) != STAT_INTELLIGENCE:
+                    raise StubRejected(f"stat {argument(2)}")
+                return intelligence
+            stubs = {FIELD_GETTER: field, STAT_GETTER: stat, FIELD64_GETTER: lambda a: (5, 5), RANGE_TEST: lambda a: asked.append(1) or 0}
+            readable = (Range(runs, runs + RUN_SLOT * 512), Range(table, table + SPELL_RECORD * SPELL_RECORDS),
+                        Range(RUN_TABLE_POINTER, RUN_TABLE_POINTER + 4), Range(SPELL_TABLE_POINTER, SPELL_TABLE_POINTER + 4))
+            try:
+                result = emulator.call(spec.address, (runs,), code=code, stubs=stubs, readable=readable)
+            except RunFailure as failure:
+                if "a null handle" not in str(failure):
+                    raise
+                redrawn += 1   # the original reads a missing parent's type through handle 0 (MG26): outside the model
+                continue
+            slots = [[0, this_spell, parent_index, this_flag]] + [[slot, sp, parents.index(parent), flag] for slot, (sp, parent, flag) in sorted(written.items())]
+            flat = [v for row in slots for v in row] + [-1] * 4 * (15 - len(slots))
+            cases.append([int(this_source), parent_type, intelligence, len(slots), *flat,
+                          *(v for sp in spells for v in (sp, *records[sp])), result, len(asked)])
+            case_number += 1
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(redrawn=redrawn, fields=["source", "parentType", "intelligence", "runs", *(f"run{i}{n}" for i in range(15) for n in ("Slot", "Spell", "Parent", "Flags")),
+                                *(f"spell{i}{n}" for i in range(6) for n in ("", "Technology", "Period")), "result", "rangeAsked"])
     else:
         raise ValueError(f"unknown model {spec.model}")
     document["cases"] = cases

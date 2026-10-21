@@ -61,9 +61,19 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
     /// <summary>ARC-UI-043: the voice identity of the NPC line <paramref name="line"/> of this conversation (audio study SN21):
     /// the DLG script number and the number in the line's condition field; −1 without a document, line or record, or with an
     /// empty condition field.</summary>
-    public int VoiceIdentity(DialogNpcLine? line) =>
-        Document is null || line is null || !Document.TryGetRecord(line.Node.Value, out var record) || record is null ? -1
-            : SoundCatalog.SpeechIdentity(DialogScript, SoundCatalog.SpeechConditionField(record.Condition.Bytes));
+    public int VoiceIdentity(DialogNpcLine? line) => line?.Origin switch
+    {
+        // ARC-WORLD-058: an override line speaks with its own record's voice (0x418870); generated and reputation lines have none.
+        { Kind: DialogLineOriginKind.Override } origin => Greeting?.Overrides is { } overrides && Greeting.OverrideScriptNumber is { } script
+            && overrides.TryGetRecord(origin.Number, out var own) && own is not null
+            ? SoundCatalog.SpeechIdentity(script, SoundCatalog.SpeechConditionField(own.Condition.Bytes)) : -1,
+        not null => -1,
+        _ => Document is null || line is null || !Document.TryGetRecord(line.Node.Value, out var record) || record is null ? -1
+            : SoundCatalog.SpeechIdentity(DialogScript, SoundCatalog.SpeechConditionField(record.Condition.Bytes)),
+    };
+
+    /// <summary>ARC-WORLD-058: the greeting port of this conversation (its override dialog), or null without one.</summary>
+    public AreaGreeting? Greeting { get; init; }
 }
 
 /// <summary>
@@ -181,8 +191,8 @@ public sealed class AreaConversationHost
     /// the viewer cannot quick-load during a talk, whose panel takes every key).
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _map, Speakers, _content, session, _baseProfile, _givenInventory, _party,
-        _contentDetail, _companions, _npcAdvancement, _refuseUncoveredInventory);
+    public AreaConversationHost Rebind(GameSessionOwner session) => new AreaConversationHost(_snapshot, _map, Speakers, _content, session, _baseProfile, _givenInventory, _party,
+        _contentDetail, _companions, _npcAdvancement, _refuseUncoveredInventory).KeepingGreetingTexts(_greetingTexts);
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;
@@ -373,6 +383,7 @@ public sealed class AreaConversationHost
         if (State.BeginReaction(speaker.Index).Disposition == GameSessionDisposition.Rejected)
             return new(AreaConversationStartStatus.ReactionRejected, null, speaker, $"script {dialog.Script}: the session refused the NPC's reaction conversation");
         _reactionOpen = speaker.Index;
+        var greeting = Greeting(speaker);
         var conversation = DialogConversation.Start(document!,
             new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
             new DialogConversationPorts(State, State, _session.Flags, State, party, InventoryPort(), State,
@@ -383,9 +394,30 @@ public sealed class AreaConversationHost
                 // ARC-WORLD-044: RP reads and changes the session PC's reputations.
                 new SessionDialogReputationPort(_session, AreaConversationState.PcParticipant),
                 // ARC-TECHNOLOGY-006: SU asks for the schematic window with the speaker as crafter; the host opens it once the talk ended.
-                new SchematicPort(this)));
+                new SchematicPort(this),
+                // ARC-WORLD-058: an NPC g: greeting, when the module's greeting texts load.
+                greeting));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
-            document, dialog.Script);
+            document, dialog.Script) { Greeting = greeting };
+    }
+
+    /// <summary>ARC-WORLD-058: the module's greeting texts, read through the script content's stack at the first conversation
+    /// of this host (a <see cref="Rebind"/> keeps them); null before.</summary>
+    public AreaGreetingTexts? GreetingTexts => _greetingTexts;
+
+    private AreaGreetingTexts? _greetingTexts;
+
+    private AreaConversationHost KeepingGreetingTexts(AreaGreetingTexts? texts) { _greetingTexts = texts; return this; }
+
+    // The greeting port of a speaker, or null (a g: node then stays a frontier) when the texts did not load.
+    private AreaGreeting? Greeting(AreaSpeaker speaker)
+    {
+        _greetingTexts ??= AreaGreetingTexts.Load(_content!.Plan);
+        if (_greetingTexts.Status != AreaGreetingTextsStatus.Ready) return null;
+        // The override dialog is read with the session's current data-fix rules, as the conversation's own DLG.
+        var overrides = AreaGreeting.OverrideScript(speaker) is { } script && _content!.Dialog(script, _session.Rules.Data) is { Status: ScriptContentStatus.Read } read
+            ? read.Document : null;
+        return new AreaGreeting(_session, speaker, State, Profile.Pc, _greetingTexts, overrides);
     }
 
     /// <summary>The session party port for a roster speaker when the party is wired; facts are read at each call.</summary>

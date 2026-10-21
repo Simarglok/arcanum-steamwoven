@@ -309,7 +309,10 @@ public partial class TerrainViewerApp
             ObserveWorldFocus(what == NotificationApplicationFocusIn && GetWindow().HasFocus());
     }
     private void WorldWindowFocusEntered() => ObserveWorldFocus(true);
-    private void WorldWindowFocusExited() => ObserveWorldFocus(false);
+    // Raw focus-exit signals of the world window, also under simulated focus: the native smoke checks that opening the follower
+    // order menu does not take the window's focus, as an embedded popup did (ARC-WORLD-046).
+    private int _worldFocusExitSignals;
+    private void WorldWindowFocusExited() { _worldFocusExitSignals++; ObserveWorldFocus(false); }
     private void ObserveWorldFocus(bool focused)
     {
         if (_exiting || !IsWorld || !_worldInitialized) return;
@@ -321,6 +324,7 @@ public partial class TerrainViewerApp
         WorldObservation(() =>
         {
             _worldFocused = focused;
+            if (!focused) { CancelPendingWalkOrder("the window lost focus"); _orderKeyArmed = null; }
             _worldReducer.FocusChanged(focused); QuarantineWorld(); RefreshReadyStatus();
             TraceWorldInput("NativeFocus:transition");
         });
@@ -590,7 +594,9 @@ public partial class TerrainViewerApp
         if (session is not AreaGridSession area || _readyMode != TerrainViewerMode.CrashSiteArea) return null;
         if (!ReferenceEquals(_worldRouteSession, session))
         {
-            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy, () => area.Portals?.Invoke()));
+            // ARC-WORLD-042: the player's click route follows a corridor to a goal beyond the local planner's reach.
+            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy, () => area.Portals?.Invoke()),
+                corridorLimits: new RouteCorridorLimits());
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;
@@ -634,6 +640,15 @@ public partial class TerrainViewerApp
             _worldRouteClick = "ignored (map transfer pending)";
             RefreshReadyStatus(); return;
         }
+        // ARC-WORLD-046: a press outside the open follower order menu only closes it; after a portrait's walk order the press picks
+        // its tile.
+        if (_followerPortraits is { MenuShown: true } portraits)
+        {
+            portraits.CloseMenu();
+            _worldRouteClick = "closed the follower order menu";
+            RefreshReadyStatus(); return;
+        }
+        if (TryPendingWalkOrder(screen)) return;
         // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
         CancelPortalApproach("another click replaced it");
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
@@ -650,6 +665,7 @@ public partial class TerrainViewerApp
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
         CancelAreaUseApproach("a ground click replaced it"); CancelTalkApproach("a ground click replaced it"); CancelInventoryApproach("a ground click replaced it");
+        _mapFarGoal = null; // a click replaces a far goal handed on across window moves (ARC-WORLD-042)
         var accepted = route.SetTarget(cell, WorldTime);
         SetGroundClickGait(ctrl);
         _worldRouteDiagnostic = DescribeWorldRoute(route);
@@ -666,7 +682,20 @@ public partial class TerrainViewerApp
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         if (input is InputEventKey modifierKey) TrackAttackModifiers(modifierKey);
         // ARC-INPUT-003: the reserved-key notice in the sticky HUD header lasts until the next key press.
-        if (input is InputEventKey { Pressed: true, Echo: false }) _hud?.SetNotice(null);
+        if (input is InputEventKey { Pressed: true, Echo: false } pressedKey)
+        {
+            _hud?.SetNotice(null);
+            // A bare modifier is not a key press that cancels a pending walk order (ARC-WORLD-046).
+            static bool Modifier(Key key) => key is Key.Shift or Key.Ctrl or Key.Alt or Key.Meta or Key.Capslock;
+            if (!Modifier(pressedKey.Keycode) && !Modifier(pressedKey.PhysicalKeycode))
+            {
+                CancelPendingWalkOrder("a key was pressed");
+                _followerPortraits?.CloseMenu();
+                // Disarms an F1–F6 whose release was lost (a modifier held, a window that took it); a bare F1–F6 in an open world
+                // re-arms in RouteOrderKey below.
+                _orderKeyArmed = null;
+            }
+        }
         if (ConversationOpen && input is InputEventKey conversationKey && HandleConversationKey(conversationKey))
         {
             GetViewport().SetInputAsHandled();
@@ -732,7 +761,7 @@ public partial class TerrainViewerApp
                 return;
             }
             // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
-            if (!RouteQuickKey(decision) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSchematicsKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            if (!RouteQuickKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSchematicsKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
             {
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
                 _hud?.SetNotice($"Reserved: {routedKey} = {decision.OriginalAction} (NOT IMPLEMENTED)");
@@ -848,7 +877,7 @@ public partial class TerrainViewerApp
         var profile = _worldActor.Profile;
         var binding = profile.Facing(s.Action, s.Facing);
         var runtime = _worldActor.Session?.State;
-        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | {(_worldActor.Session is AreaGridSession ? "whole Crash Site core (9 sectors) at new-game T0, core edge refused" : "small diagnostic test area x4..8/y0..3 sector1452,1290")} spawn(6,1); movement may stop without visible obstacles; {(_worldActor.Session is AreaGridSession { Timing: not null } ? "step time from the human ART stride by gait (ARC-WORLD-020)" : "D=1/2s diagnostic NOT original speed")} | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17{(_worldActor.Session is AreaGridSession ? "/Run20/Vault8" : "")} | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Diagnostic palette: Ctrl+Shift+F9 / on-screen button / gamepad Start (Fit, Reset scene, Reload, exact zoom) | Gamepad: left stick eight screen sectors, right stick pan, LT/RT zoom | Keyboard/mouse (original route): arrows pan (fixed direction); original keys reserved, NOT IMPLEMENTED except Num Lock (always run) and Ctrl+LMB (run once) in crash-site-area; {(_worldActor.Session is AreaGridSession && _readyMode == TerrainViewerMode.CrashSiteArea ? "LMB click-to-move route " + _worldRouteDiagnostic + " (last click " + _worldRouteClick + ")" : "LMB click-to-move only in crash-site-area")}; no WASD/debug keys except H (visual Legacy/HD){(_worldLastReserved is null ? "" : " | last reserved key: " + _worldLastReserved)} | {PassabilityOverlayStatus()} | {_canvas!.HdStatusText()} | {VisualHudStatus()} |{(_worldActor.Session is AreaGridSession ? " " + GaitHudStatus() + " |" : "")} original motion/spawn/occlusion parity NOT_VERIFIED";
+        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | {(_worldActor.Session is AreaGridSession ? "whole Crash Site core (9 sectors) at new-game T0, core edge refused" : "small diagnostic test area x4..8/y0..3 sector1452,1290")} spawn(6,1); movement may stop without visible obstacles; {(_worldActor.Session is AreaGridSession { Timing: not null } ? "step time from the human ART stride by gait (ARC-WORLD-020)" : "D=1/2s diagnostic NOT original speed")} | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17{(_worldActor.Session is AreaGridSession ? "/Run20/Vault8" : "")} | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Diagnostic palette: Ctrl+Shift+F9 / on-screen button / gamepad Start (Fit, Reset scene, Reload, exact zoom) | Gamepad: left stick eight screen sectors, right stick pan, LT/RT zoom | Keyboard/mouse (original route): arrows pan (fixed direction); original keys reserved, NOT IMPLEMENTED except Num Lock (always run), Ctrl+LMB (run once) and F1–F6 (follower orders while the session party is wired, ARC-WORLD-046) in crash-site-area; {(_worldActor.Session is AreaGridSession && _readyMode == TerrainViewerMode.CrashSiteArea ? "LMB click-to-move route " + _worldRouteDiagnostic + " (last click " + _worldRouteClick + ")" : "LMB click-to-move only in crash-site-area")}; no WASD/debug keys except H (visual Legacy/HD){(_worldLastReserved is null ? "" : " | last reserved key: " + _worldLastReserved)} | {PassabilityOverlayStatus()} | {_canvas!.HdStatusText()} | {VisualHudStatus()} |{(_worldActor.Session is AreaGridSession ? " " + GaitHudStatus() + " |" : "")} original motion/spawn/occlusion parity NOT_VERIFIED";
     }
     private void ExitWorld()
     {

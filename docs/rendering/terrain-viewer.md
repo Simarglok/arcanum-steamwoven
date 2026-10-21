@@ -607,11 +607,10 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   a dialog NPC is *talk* within the 3-tile reach, else *walk to talk*; the cave
   entrance or exit is *use* within use range 2, else *walk to use*; anything else is a
   ground goal: *no route* when the route planner refuses it without a search (the cell or
-  the actor outside the area, the goal more than 32 cells from the actor on an axis, or no
-  neighbour step entering the cell), else *walk here*. The bounded search itself is not run
-  on hover, so a *walk here* goal can still end without a route; the reach is measured from
-  the committed cell, while during a step the route plans from the step's target cell, so a
-  goal exactly at the 32-cell edge can differ by one. Since ARC-UI-004 an item on the ground
+  the actor outside the area, or no neighbour step entering the cell), else *walk here*;
+  since ARC-WORLD-042 a goal more than 32 cells from the actor on an axis is *walk here*
+  too (the follower walks it along a corridor). The search itself is not run on hover, so
+  a *walk here* goal can still end without a route, or short of it (`ROUTE_PARTIAL`). Since ARC-UI-004 an item on the ground
   is *pick up* within reach 1, else *walk to pick up*, and a dead NPC is *loot* or *walk to
   loot* (checked after talk and use, before the ground). System cursor shapes: cross for walk,
   forbidden for no route, help (question arrow) for talk, pointing hand for use, pickup and
@@ -1054,6 +1053,46 @@ and refusal); native smoke with `--hero` after the hero stage: `ARC-UI-009 nativ
 texts describe all sixteen rows; a `+` the pool accepts, its `−` and a refused second `−`, or with no unspent points a refused
 `+`) and `ARC-UI-007 native-smoke character sheet PASS`.
 
+### Level-up messages (ARC-UI-046)
+
+Each level the hero's recalculation writes in its normal branch posts one entry to the viewer's message window, as the
+original posts one per level for the local PC (checked in the 1.0.7.4 executable, rows
+[OL27–OL28](../research/companion-orders-loyalty-evidence.md#4-level-up-message-q4-xp5)); the last-level branch and a
+follower's level update post none. Every award passes the same hook (hits, kills and the dialogs' queued awards), before the
+step goes to the followers. The entry is drawn as the original draws it:
+
+- the title (`mes\intgame.mes` 21), message 11 formatted with the new level;
+- for a hero without an auto-level scheme, message 12 formatted with the points: under the Original rules the stored unspent
+  points plus the level's points before the cap of 56 (OL28, it can name points the hero does not have), under Steamwoven the
+  capped value it holds (owner decision D6, 2026-10-21; rule switch
+  `ExperienceRuleProfile.LevelMessagePointsBeforeCap`);
+- for a hero with a scheme number, the scheme's text (0x4A7030): `mes\level.mes` 2, then message 4 when the number has no
+  rule (or the session has no scheme data), message 3 when the level bought nothing, or each purchase as its name, a space and
+  its value (a stat's effective value, a skill's points, the bought spell's name with the college's level, a tech
+  discipline with its degree's name, the hit-point or fatigue maximum with `level.mes` 5 or 6), joined by ", " with the last
+  separator turned into ". "; a space and message 1 follow when the rule completed. Purchases are logged by their name text:
+  a repeated name keeps its place with its last value, and at most ten names are kept (0x4A7B90). Names come from
+  `mes\stat.mes`, `mes\skill.mes` (tech skills from 12), `mes\tech.mes` (degree names from 8) and `mes\spell.mes`.
+
+Drawing each entry plays sound 3005 through the interface sound path (the per-revision level-up sound of ARC-UI-044 is gone).
+The texts are read from the player's installation at run time (in the background when the area binds, through the module's
+game folder like the skill texts); a file that is missing falls back to the project's labels for its lines. An award waits at most
+a second for a load still running; then its entries wait in a queue that the next frames post once the texts arrive. The two
+formats take their one number at the first `%d` or `%i` (`%%` is a percent sign; another conversion stays as text).
+
+The message window (`AreaMessageWindow`, bottom centre) is the smallest bounded stand-in for the original's: the newest entry
+with its title and lines, a history of the last ten browsed with ‹ and ›, and × hiding it until the next entry; its buttons take
+no focus, and a click elsewhere on it reaches the world. A different session (a quick load, a new game) empties it and its
+queue, and so does a session that ends without one (a failed reload); a map transfer, the main map's window move or world-map
+travel carries the session and keeps them. No other original
+message uses it yet.
+
+Self-test inside `ARC-UI-007 self-test PASS` (synthetic hero: an award to level 3 posts two entries with the project's labels,
+eleven more keep the last ten); native smoke `ARC-UI-046 native-smoke level message PASS` on the original installation (all six
+files load; an award built in the smoke, without changing the session, posts a points entry and a scheme entry that read the
+player's title, formats and names, each with the level-up sound; no text is printed). Not ready: the original's message
+window art, its other messages and its three interface callbacks after the entry (button state, two refreshes, not traced).
+
 ### Logbook (ARC-UI-008)
 
 The original Logbook key `L` (logical key down; the original's in-game key handler toggles the logbook for the local PC on
@@ -1154,10 +1193,11 @@ one schematic document registers).
 ### Reserved-key hint (ARC-INPUT-003)
 
 An original key that is reserved, not implemented ([keyboard routing](../input/diagnostic-palette.md#keyboard-routing)),
-is named in the HUD's sticky header ("Reserved: F1 = Followers: go to point (NOT IMPLEMENTED)") until the
+is named in the HUD's sticky header ("Reserved: F10 = Compact interface (source reading only) (NOT IMPLEMENTED)") until the
 next key press, so it is visible without scrolling; the detail text keeps its "last reserved key" entry. Native smoke
-after the logbook stage (exterior and map mode): `ARC-INPUT-003 native-smoke reserved-key hint PASS` (F1 pushed through
-the viewport's input path; the notice is in the sticky header, every header line shown inside the panel and the window;
+after the logbook stage (exterior and map mode): `ARC-INPUT-003 native-smoke reserved-key hint PASS` (F10, F1 before
+ARC-WORLD-046 made F1–F6 [follower orders](../world/companion-orders-runtime.md#area-viewer), pushed through the viewport's input
+path; the notice is in the sticky header, every header line shown inside the panel and the window;
 Z, an unmapped key, removes it).
 
 ### Sound output (ARC-UI-040)

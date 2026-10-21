@@ -174,7 +174,13 @@ public enum SessionObjectHostSteps
 /// </summary>
 public sealed record SessionObjectAttackResult(GameSessionDisposition Disposition, GameSessionFailure Failure, AttackResolution? Resolution,
     ObjectHitOutcome? Object, ItemDurabilityResult? Item, LifeOutcome? Life, SessionAttackWearResult? Wear, SessionObjectHostSteps Host,
-    GameSessionFailure StepFailure, GameSessionVersion Version);
+    GameSessionFailure StepFailure, GameSessionVersion Version)
+{
+    private readonly IReadOnlyList<SessionCriticalStep>? _criticals;
+
+    /// <summary>The critical item steps of a critical self-hit on the hero (ARC-COMBAT-009); empty otherwise.</summary>
+    public IReadOnlyList<SessionCriticalStep> Criticals { get => _criticals ?? Array.Empty<SessionCriticalStep>(); init => _criticals = value; }
+}
 
 /// <summary>
 /// ARC-COMBAT-008: the hero's attack on a non-critter object, and the hit-point damage and condition of portals, containers, scenery
@@ -288,7 +294,7 @@ public sealed partial class GameSessionOwner
         };
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
         AttackResolution resolution;
-        try { resolution = AttackResolver.Resolve(request, rolls, null, _rules.Combat); }
+        try { resolution = AttackResolver.Resolve(request, rolls, OriginalCriticalEffects.Instance, _rules.Combat); }
         catch (TrialCombatRolls.ExhaustedException) { return RejectObject(GameSessionFailure.RandomExhausted); }
         catch (ArgumentException) { return RejectObject(GameSessionFailure.InvalidAttack); }
         _random = rolls.Trial;
@@ -308,9 +314,10 @@ public sealed partial class GameSessionOwner
             var applied = ApplyDamage(Version, SessionLifeTarget.Hero, LifeDamage.FromAttack(resolution)!);
             if (applied.Disposition == GameSessionDisposition.Rejected)
                 return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, applied.Failure, Version);
-            var selfWear = resolution.Wear is { Any: true } ? WearSteps(new SessionAttackWear { Resolution = resolution, Attacker = heroSide, Target = objectSide }) : null;
+            var criticals = new List<SessionCriticalStep>();
+            var (selfWear, selfFailure) = CriticalAndWearSteps(resolution, applied.Outcome!, heroSide, objectSide, null, null, criticals);
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, applied.Outcome, selfWear, SessionObjectHostSteps.None,
-                WearFailure(selfWear), Version);
+                selfFailure, Version) { Criticals = criticals };
         }
 
         var amount = Math.Clamp(damage.HitPointDamage, 0, ItemDurabilityLimits.MaxDamageStep);
@@ -494,8 +501,7 @@ public sealed partial class GameSessionOwner
     private static long SpillValue(CellCoord cell) => (((long)cell.Y << 24 | (uint)cell.X) + 1) << 8;
 
     private bool OnGround(string item) =>
-        _inventory.Seeds.Any(pair => pair.Value.Items.TryGetValue(item, out var row) && !_inventory.Taken.Contains(item) &&
-            (row.Cell is not null || SpilledCell(pair.Key, pair.Value, item) is not null));
+        _inventory.Seeds.Any(pair => !_inventory.Taken.Contains(item) && LooseCell(pair.Key, pair.Value, item) is not null);
 
     private static bool ValidObject(SessionObjectTarget target) =>
         target is not null && target.Baseline is not null && SessionValidation.Map(target.Map) && SessionValidation.Entity(target.Entity) &&

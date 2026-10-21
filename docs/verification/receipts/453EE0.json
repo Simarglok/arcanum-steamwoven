@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x453EE0",
+  "name": "spell-ai-notice",
+  "method": "Arcanum.Simulation.Magic.SpellTargetRules.AiNotices",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 2,
+  "mutantsCaught": 2,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "b5fd9d98520b4635b872d8c10b458d4d5abc8c4dec832f7caa0f6de166402c68",
+  "configuration": "Debug"
+}

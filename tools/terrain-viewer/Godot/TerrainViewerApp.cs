@@ -120,13 +120,14 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap) narrows a
-                        // map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all run.
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk)
+                        // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
+                        // walk run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
                         {
-                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); }
+                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaCriticalSmokeAsync(); }
                         }
                         else await RunAreaSmokeAsync(result);
                         // S5 must observe the retired generation become
@@ -139,6 +140,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && Stage("roundtrip")) await RunAreaMapRoundTripSmokeAsync();
                         // ARC-RENDER-024: last on a window map, as the window it ends on holds no exit to use afterwards.
                         if (_readyMapName is not null && Stage("stream")) await RunAreaMapStreamSmokeAsync();
+                        // ARC-WORLD-042: only when named, a long walk across the main map by its window route.
+                        if (_readyMapName is not null && only?.Contains("walk") == true) await RunAreaMapWalkSmokeAsync();
                         // ARC-UI-048: after the stream, as the landing loads the start map around another place.
                         if (_readyMapName is not null && Stage("worldmap")) await RunAreaWorldMapSmokeAsync();
                         GetTree().Quit(0);
@@ -1020,6 +1023,7 @@ public partial class TerrainViewerApp : Node
     {
         if (_exiting) return;
         _exiting = true;
+        _walkPlanCancellation?.Cancel(); // ARC-WORLD-042: the walk smoke's background route plan
         ExitWorld();
         GetViewport().SizeChanged -= HandleViewportSizeChanged;
         _generation = _coordinator.BeginGeneration();

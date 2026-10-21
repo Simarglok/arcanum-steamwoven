@@ -207,9 +207,19 @@ public partial class TerrainViewerApp
         _attackNotice = AreaObjectTargets.Describe(result);
         GD.Print($"ARC-COMBAT-008 object-attack-hit target={goal.Entity} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} damage={result.Object?.Damage}/{result.Item?.Condition?.Damage} break={result.Object?.Break}/{result.Item?.Break}"
-            + $" host={result.Host} step={result.StepFailure} wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}");
+            + $" host={result.Host} step={result.StepFailure} wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}"
+            + $" crit={AreaCombatHost.Criticals(result.Resolution, result.Criticals)}");
+        if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) EndStun(owner, SessionLifeTarget.Hero, "hero");
         SyncAreaInventory();
         RefreshAreaStatus();
+    }
+
+    // ARC-COMBAT-009: the original keeps a critter stunned while its stun animation (goal 57) runs; the viewer plays none, so it ends
+    // the stun at once, as the session's contract has it for an animation that could not start (the duration is NOT READY).
+    private static void EndStun(GameSessionOwner owner, SessionLifeTarget target, string who)
+    {
+        var cleared = owner.ClearStun(owner.Version, target);
+        GD.Print($"ARC-COMBAT-009 stun-ended who={who} disposition={cleared.Disposition} (no stun animation in the viewer)");
     }
 
     /// <summary>The attack goal's first step: the target within the weapon's reach starts the animation; farther away the
@@ -341,6 +351,8 @@ public partial class TerrainViewerApp
             Aim = goal.Aim, Distance = (int)distance,
             HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability),
             TargetWorn = _combatHost!.WornItems(owner, CurrentAreaMap, goal.Entity),
+            // ARC-COMBAT-009: a critical drops the NPC's items where it stands (its map data's cell; NPCs do not move here).
+            TargetCell = goal.Row.WorldX is { } x && goal.Row.WorldY is { } y ? new(checked((int)x), checked((int)y)) : null,
         });
         goal.Attacks++;
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
@@ -351,7 +363,11 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-COMBAT-005 attack-hit target={goal.Entity} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} cause={result.Resolution?.MissCause} damage={result.Life?.HitPointDamage} events={result.Life?.Events}"
             + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} xp={result.HitAward?.Award}/{result.KillAward?.Award} step={result.StepFailure}"
-            + $" wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}");
+            + $" wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}"
+            + $" crit={AreaCombatHost.Criticals(result.Resolution, result.Criticals)}");
+        if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned))
+            EndStun(owner, result.Recipient == DamageRecipient.Target ? goal.Combat!.Target : SessionLifeTarget.Hero,
+                result.Recipient == DamageRecipient.Target ? goal.Entity : "hero");
         LevelAreaFollowers(result.HitAward);
         LevelAreaFollowers(result.KillAward);
         if (result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))
@@ -367,6 +383,8 @@ public partial class TerrainViewerApp
     /// </summary>
     private void SyncAreaAwards()
     {
+        // ARC-UI-046: level-up entries queued while the texts were still loading.
+        FlushLevelUps(TimeSpan.Zero);
         // ARC-WORLD-048: a visitor's talk queues its awards on its own host.
         foreach (var host in TalkHosts().ToArray())
         foreach (var award in host.State.TakeAwards()) LevelAreaFollowers(award);
@@ -374,6 +392,8 @@ public partial class TerrainViewerApp
 
     private void LevelAreaFollowers(SessionExperienceAward? award)
     {
+        // ARC-UI-046: the hero's level-up messages come first, as the source posts them before passing the step on.
+        ShowLevelUps(award);
         if (award?.Followers is null || _areaSession is null || _combatHost is null || _areaEffectRules is not { } effects) return;
         var map = CurrentAreaMap;
         // Fields come from the NPC's home map; a waiting NPC counts only while it stands on this map.

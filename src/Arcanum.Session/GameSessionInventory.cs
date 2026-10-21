@@ -19,6 +19,7 @@ public static class SessionScriptPoint
     public const int Examine = 0;
     public const int Use = 1;
     public const int Get = 4;
+    public const int Drop = 5;
     public const int InsertItem = 21;
     public const int WieldOn = 24;
     public const int WieldOff = 25;
@@ -98,21 +99,34 @@ public readonly record struct SessionMadeItem(string Entity, SessionItemKind Kin
 /// </summary>
 public sealed record SessionNpcInventory(string Npc, IReadOnlyList<SessionMadeItem> Items);
 
+/// <summary>Which of the hero's lists a placed item came from, and goes back to when it is picked up (ARC-WORLD-059).</summary>
+public enum SessionPlacedSource { Kit, Pc, Made }
+
+/// <summary>
+/// One of the hero's items the session placed on the ground (ARC-WORLD-059): its entity and kind, the hero's list it came from
+/// (<see cref="Origin"/>, the map whose seed lists it, for an item the PC took from the world), and the map and cell it lies on.
+/// </summary>
+public sealed record SessionPlacedItem(string Entity, SessionItemKind Kind, SessionPlacedSource Source, SessionMapId? Origin, SessionMapId Map,
+    CellCoord Cell);
+
 /// <summary>
 /// Saved inventory state: the PC's gold (ARC-WORLD-015: the hero's starting coins; 0 without a hero), the hero's starting
-/// kit in kit order, the items the PC took from the world in the order they entered its list, (ARC-TECHNOLOGY-004) the
-/// items the hero made from schematics or took from an NPC that held made items, in the order they entered its list, and
-/// (ARC-WORLD-055) the made items the session added to NPCs, by NPC entity in ordinal order.
+/// kit in kit number order, the items the PC took from the world in the order they entered its list, (ARC-TECHNOLOGY-004) the
+/// items the hero made from schematics or took from an NPC that held made items, in the order they entered its list,
+/// (ARC-WORLD-055) the made items the session added to NPCs, by NPC entity in ordinal order, and (ARC-WORLD-059) the hero's items
+/// the session placed on the ground, in the order they were placed.
 /// </summary>
 public sealed class SessionInventoryState
 {
-    internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs)
+    internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs,
+        SessionPlacedItem[] placed)
     {
         Gold = gold;
         Kit = Array.AsReadOnly(kit);
         Pc = Array.AsReadOnly(pc);
         Made = Array.AsReadOnly(made);
         Npcs = Array.AsReadOnly(npcs);
+        Placed = Array.AsReadOnly(placed);
     }
 
     public int Gold { get; }
@@ -120,6 +134,7 @@ public sealed class SessionInventoryState
     public IReadOnlyList<SessionPcItem> Pc { get; }
     public IReadOnlyList<SessionMadeItem> Made { get; }
     public IReadOnlyList<SessionNpcInventory> Npcs { get; }
+    public IReadOnlyList<SessionPlacedItem> Placed { get; }
 }
 
 public sealed record SessionInventoryItem(string Entity, SessionItemFacts Facts);
@@ -263,8 +278,33 @@ internal sealed class InventoryDomain
         return true;
     }
 
-    /// <summary>Items the PC holds: the kit, the taken and the made items (the bound of <see cref="GameSessionLimits.MaxPcItems"/>).</summary>
-    internal int Held => Kit.Count + Pc.Count + Made.Count;
+    /// <summary>ARC-WORLD-059: the hero's items the session placed on the ground, in the order they were placed; each is also in
+    /// <see cref="Taken"/>.</summary>
+    internal List<SessionPlacedItem> Placed { get; } = [];
+
+    /// <summary>Items the PC owns: the kit, the taken and the made items, and (ARC-WORLD-059) those it placed on the ground, which
+    /// can come back (the bound of <see cref="GameSessionLimits.MaxPcItems"/>).</summary>
+    internal int Held => Kit.Count + Pc.Count + Made.Count + Placed.Count;
+
+    /// <summary>The placed item with this entity, or null.</summary>
+    internal SessionPlacedItem? PlacedItem(string entity) => Placed.Find(item => item.Entity == entity);
+
+    /// <summary>Puts a placed item back into the list it came from: a kit item at its kit number's place (the kit stays in number
+    /// order), a taken or made item at the end of its list.</summary>
+    internal void Return(SessionPlacedItem item)
+    {
+        Placed.Remove(item);
+        switch (item.Source)
+        {
+            case SessionPlacedSource.Kit:
+                var number = HeroDomain.KitNumber(item.Entity) ?? throw new InvalidOperationException("PLACED_KIT_ENTITY");
+                var at = Kit.FindIndex(kit => HeroDomain.KitNumber(kit.Entity) > number);
+                Kit.Insert(at < 0 ? Kit.Count : at, new(item.Entity, item.Kind));
+                break;
+            case SessionPlacedSource.Pc: Pc.Add(new(item.Entity, item.Origin!.Value, item.Kind)); break;
+            default: Made.Add(new(item.Entity, item.Kind)); break;
+        }
+    }
 
     /// <summary>A made item is also recorded as taken, so no seed can list it.</summary>
     internal void Add(SessionMadeItem item)
@@ -287,30 +327,37 @@ internal sealed class InventoryDomain
     }
 
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
-        Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray()))).ToArray());
+        Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray()))).ToArray(), Placed.ToArray());
 
     /// <summary>The facts of a made item: its kind, no weight, complexity, location (-1, in the bag) or scripts; the host knows
     /// the prototype's weight.</summary>
     internal static SessionItemFacts MadeFacts(SessionItemKind kind) => new(kind, 0, 0, -1, null, []);
 
     /// <summary>The map's current inventory; an NPC holder is dead when its seed says so or <paramref name="killed"/> (the session's
-    /// life records, ARC-COMBAT-005) does. A container an attack broke (<paramref name="spilled"/>, ARC-COMBAT-008) holds nothing:
-    /// its items lie on the ground at its cell, after the seed's ground items.</summary>
-    internal SessionMapInventory View(SessionMapId map, Seed seed, Func<string, bool> killed, Func<string, CellCoord?> spilled) => new(map,
+    /// life records, ARC-COMBAT-005) does. Ground items in seed order, then each spilled container's items at its cell (a container
+    /// an attack broke holds nothing, ARC-COMBAT-008), then the NPC items a critical dropped at their cells (ARC-COMBAT-009,
+    /// <paramref name="dropped"/>), which leave their holder's list, then the hero's items placed on this map (ARC-WORLD-059) in
+    /// placing order.</summary>
+    internal SessionMapInventory View(SessionMapId map, Seed seed, Func<string, bool> killed, Func<string, CellCoord?> spilled,
+        Func<string, CellCoord?> dropped) => new(map,
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))
             .Select(item => new SessionGroundItem(new(item.Entity, item.Facts), item.Cell!.Value))
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Container).SelectMany(holder =>
-                spilled(holder.Entity) is { } cell ? Current(seed, holder).Select(item => new SessionGroundItem(item, cell)) : []))
+                spilled(holder.Entity) is { } cell ? Current(seed, holder, dropped).Select(item => new SessionGroundItem(item, cell)) : []))
+            .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items
+                .Where(entity => !Taken.Contains(entity) && dropped(entity) is not null)
+                .Select(entity => new SessionGroundItem(new(entity, seed.Items[entity].Facts), dropped(entity)!.Value))))
+            .Concat(Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, MadeFacts(item.Kind)), item.Cell)))
             .ToArray(),
         seed.Source.Holders.Select(holder => new SessionHolderInventory(holder.Entity, holder.Kind,
             holder.Dead || holder.Kind == SessionHolderKind.Npc && killed(holder.Entity),
             holder.Kind == SessionHolderKind.Container && spilled(holder.Entity) is not null ? Array.Empty<SessionInventoryItem>()
-                : Array.AsReadOnly(Current(seed, holder).ToArray()))).ToArray());
+                : Array.AsReadOnly(Current(seed, holder, dropped).ToArray()))).ToArray());
 
-    /// <summary>The holder's list in its order without the taken and deleted items; an NPC's list is followed by the made items the
-    /// session added to it (ARC-WORLD-055).</summary>
-    internal IEnumerable<SessionInventoryItem> Current(Seed seed, SessionSeedHolder holder) => holder.Items
-        .Where(entity => !Taken.Contains(entity)).Select(entity => new SessionInventoryItem(entity, seed.Items[entity].Facts))
+    /// <summary>The holder's list in its order without the taken and deleted items and the items a critical dropped
+    /// (<paramref name="dropped"/>); an NPC's list is followed by the made items the session added to it (ARC-WORLD-055).</summary>
+    internal IEnumerable<SessionInventoryItem> Current(Seed seed, SessionSeedHolder holder, Func<string, CellCoord?> dropped) => holder.Items
+        .Where(entity => !Taken.Contains(entity) && dropped(entity) is null).Select(entity => new SessionInventoryItem(entity, seed.Items[entity].Facts))
         .Concat(holder.Kind == SessionHolderKind.Npc
             ? AddedTo(holder.Entity).Select(item => new SessionInventoryItem(item.Entity, MadeFacts(item.Kind)))
             : []);

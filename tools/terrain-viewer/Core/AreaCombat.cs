@@ -155,8 +155,16 @@ public sealed class AreaCombatHost : IAreaEventObjects
         };
     }
 
+    /// <summary>One log fragment for the critical effects of an attack (ARC-COMBAT-009): the table's effects and each item step.</summary>
+    public static string Criticals(AttackResolution? resolution, IReadOnlyList<SessionCriticalStep> steps)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+        var effects = resolution?.Damage is { } damage ? $"{damage.HitEffects}|{damage.MissEffects}" : "-";
+        return effects + string.Concat(steps.Select(step => $",{step.Kind}:{step.Entity}:{step.Outcome}"));
+    }
+
     /// <summary>One line for the status bar about an attack's result (no original text): the outcome, the damage and the
-    /// target's hit points after it, a knockout or death, and the experience it paid.</summary>
+    /// target's hit points after it, a knockout or death, injuries and drops (ARC-COMBAT-009), and the experience it paid.</summary>
     public static string Describe(SessionAttackResult result, int? hitPoints, int? maxHitPoints)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -183,8 +191,18 @@ public sealed class AreaCombatHost : IAreaEventObjects
             else if (life.Events.HasFlag(LifeEvents.LostConsciousness) || life.Events.HasFlag(LifeEvents.KnockedOut)) text += ", knocked out";
             else if (life.Events.HasFlag(LifeEvents.KnockedDown)) text += ", knocked down";
             if (life.Events.HasFlag(LifeEvents.Stunned)) text += ", stunned";
+            if (life.Events.HasFlag(LifeEvents.Blinded)) text += ", blinded";
+            if ((life.Events & (LifeEvents.CrippledArm | LifeEvents.CrippledBothArms | LifeEvents.CrippledLegs)) != 0) text += ", crippled";
+            if (life.Events.HasFlag(LifeEvents.Scarred)) text += ", scarred";
         }
         else if (resolution.Damage is { Prevented: not DamagePrevention.None } prevented) text += $": no damage ({prevented.Prevented})";
+        foreach (var step in result.Criticals)
+            text += step.Outcome switch
+            {
+                SessionCriticalStepOutcome.Dropped => $", drops its {step.Slot?.ToString().ToLowerInvariant()}",
+                SessionCriticalStepOutcome.HeroCellUnfit => $", would drop the {step.Slot?.ToString().ToLowerInvariant()} (no cell for it)",
+                _ => string.Empty,
+            };
         var experience = (result.HitAward?.Award ?? 0) + (result.KillAward?.Award ?? 0);
         if (experience != 0) text += $", +{experience} XP";
         if (result.StepFailure != GameSessionFailure.None) text += $" (step refused: {result.StepFailure})";

@@ -9,8 +9,9 @@ validity, partly), [FR-COMBAT-005](../requirements/combat-magic-tech.md#fr-comba
 [FR-COMBAT-008](../requirements/combat-magic-tech.md#fr-combat-008) (typed
 damage, immunities, resistances, portal and container material; since ARC-COMBAT-007
 the armour and weapon wear of the damage step, below) and
-[FR-COMBAT-009](../requirements/combat-magic-tech.md#fr-combat-009) (the hook and,
-since ARC-COMBAT-007, the item effects of its weapon and armour criticals as wear).
+[FR-COMBAT-009](../requirements/combat-magic-tech.md#fr-combat-009) (the hook, since
+ARC-COMBAT-007 the item effects of its weapon and armour criticals as wear, and since
+ARC-COMBAT-009 the original's critical-effect tables, [below](#critical-effects-arc-combat-009)).
 
 `Arcanum.Simulation.Combat` resolves **one attack** as a pure function:
 
@@ -61,8 +62,10 @@ attack's invocation by two readers (ARC-SKILLS-003, ledger SC1–SC17).
   ARC-WORLD-019); nothing calls the resolver with it yet.
 - `ICriticalEffects`: the critical-effect tables of FR-COMBAT-009 (stun,
   knockout, knockdown, crippling, blinding, scars, drops, weapon and armour
-  damage; weapon destruction and ammunition loss on a critical miss). The
-  default `NoCriticalEffects` returns none.
+  damage; weapon destruction and ammunition loss on a critical miss).
+  `OriginalCriticalEffects` is the original's (ARC-COMBAT-009, below), which the
+  session passes; the resolver's default when none is passed stays
+  `NoCriticalEffects`, which returns none.
 - `CombatAnomalyProfile`: the two rule settings of owner decision D8,
   `Steamwoven` (the original plus the recorded D2 fixes; the default when
   `profile` is null) and `Original` (the retail 1.0.7.4 behaviour), with stable
@@ -81,9 +84,11 @@ The combat rolls are made at the same points and in the same order as in the
 original, except where a D2 fix removes one; a damage range with equal bounds
 draws nothing, like the original's random-range function (0x4CEF00). The
 original also draws from the same generator outside these rolls (the AI's
-reaction to the attack, weapon sounds, the effect tables' stat checks; not
-checked in the executable, F0), so a seeded run matches an original run only
-once those draws are modelled as well.
+reaction to the attack, weapon sounds; not checked in the executable, F0), so a
+seeded run matches an original run only once those draws are modelled as well.
+The effect tables' constitution checks are modelled since ARC-COMBAT-009; a
+critical's item drop draws a distance and a direction that are not
+([below](#critical-effects-arc-combat-009)).
 
 1. **Refusal** without rolls: an inactive attacker (dead, unconscious,
    paralysed, stunned, stoned) or a dead target critter.
@@ -147,7 +152,7 @@ target, or the attacker of a critical self-hit, which keeps the attack's locatio
 | Step | Rule |
 | --- | --- |
 | Armour (`ArmorDamage`, `ArmorSlot`) | Fire damage above 0 after resistance, a weapon with the damage-armour flag or the "damage armour" critical: the wearer's armour at the hit location (`CombatWearRules.ArmorSlot`, 0x4B54B0: head helmet, arm gauntlets, leg boots, torso body armour) loses 10, once. A critter wearer only. |
-| The wearer's weapon (`WeaponDamage`, `DestroyWeapon`, `ExplodeWeapon`) | "Damage weapon" 10, then "destroy weapon" or "explode weapon" deletes it without a break; the session passes an invulnerable weapon by. A critter wearer only. These come from the critical-effect tables (FR-COMBAT-009, ARC-COMBAT-009), so they stay unreachable until those exist. |
+| The wearer's weapon (`WeaponDamage`, `DestroyWeapon`, `ExplodeWeapon`) | "Damage weapon" 10, then "destroy weapon" or "explode weapon" deletes it without a break; the session passes an invulnerable weapon by. A critter wearer only. These come from the critical-effect tables (FR-COMBAT-009), which the session rolls since ARC-COMBAT-009. |
 | The attacker's side (`AttackerWear`, `AttackerWearAmount`) | A melee attack (armed or bare-handed; never a throw, bow or firearm) that dealt damage (hit points above 0, or for a critter fatigue above 0): `CombatWearRules.WeaponWear` (0x4B5580) by the struck one's material, stone 4, brick 3, wood 2, plant 1, metal 5, fire 5, glass 5 bare-handed only, others 0; a weapon's wear then falls by `trunc(wear × min(|complexity|, 100) / 100)` and by 2 for art subtype 4 or 1 for subtypes 5 and 13 (`CombatWeapon.ArtSubtype`); bare hands hurt the attacker itself, never its last hit point (`HandsWear`). On an object target only while the hit left it whole (`AttackerWearNeedsWholeTarget`). No roll. |
 
 The material is `Combatant.Material`, now read for critters too (a stone golem wears a sword; an NPC whose
@@ -156,6 +161,40 @@ subtype is item data the caller passes with the weapon (`CombatWeapon.ArtSubtype
 the host's `SessionWearItem` and saves none of it). The
 original applies the armour and critical weapon steps before the hit-point damage and the attacker's
 wear last, after death and experience; the session step keeps that order within the wear.
+
+## Critical effects (ARC-COMBAT-009)
+
+`OriginalCriticalEffects` is the effect part of the original's critical-hit procedure (0x4B5F40) and the effect rolls of its
+critical-miss procedure (0x4B6410), read in the retail executable by two readers
+([ledger CR1–CR15](../research/original-verification-ledger.md#critical-effects-arc-combat-009), F2). The thresholds are the
+code's; the data are the weapon's charts and the recipient's critical-hit body type (`Combatant.CriticalBody`, critter field
+227). The resolver keeps the multiplier rolls before the table and the ×1.5 fallback after it (CR3); the table's rolls follow,
+in this order, each a d100 that passes at ≤ its threshold (`chance` as in step 10):
+
+| Step | Who | Threshold and condition | Effect |
+| --- | --- | --- | --- |
+| Stun | not body type 2, not undead | chance + 5, +10 crushing or electrical chart, +10 head without a helmet; then a failed constitution check at −5 | `Stun` |
+| Knockout | stunned by this step, no PC, not fatigue-immune | the same threshold; a failed check at −5 | `Knockout` |
+| Arm | the same; location arm; not body types 4, 5 | chance + 1; a failed check at −5 | `CrippleArm` |
+| Leg | the same; location leg; not body type 4 | chance + 1; a failed check at −5 | `CrippleLeg` |
+| Head, crushing | the same; location head; a worn helmet | chance + 5, no check | `DropHelmet` |
+| Head, other charts | the same; location head; unless an NPC hits a PC | chance + 1 without a helmet, + 0 with one; a failed check at 0 | `Blind` |
+| Scar | the same; a PC; not a scarred PC that hit itself | chance + 5 | `Scar` |
+| Knockdown | body type 0, undead too | chance + 5, +5 crushing, +10 leg | `Knockdown` |
+| Weapon | an item in slot 1004 | chance + 10, then a second d100 at chance + 10 unless an NPC hits a PC | `DamageWeapon`, `DropWeapon` |
+| Armour | armour at the hit location (`CombatWornItems`, CW1) | chance + 10 | `DamageArmor` |
+
+A constitution check (0x45F060) rolls `1 .. Combatant.ConstitutionMaximum` (the race's, `CharacterStatRules.Range`) and passes at
+≤ `Combatant.Constitution` + modifier; only a failed check gives the effect. Only one location step runs. The critical miss
+(after the resolver's 50 % critical self-hit roll): "destroy weapon" (not bare hands) at chance + 1, "explode weapon" (explosive,
+fire, electrical charts) at chance + 1, and for a weapon with an ammunition type (`CombatWeapon.UsesAmmunition`) all its
+ammunition at chance + 1, else five shots' worth at a second d100 ≤ chance + 11. Every roll carries its own purpose
+(`CombatRollPurpose.CriticalStun` … `CriticalLoseAmmo`).
+
+Applying the result (the damage step 0x4B4390, CR12–CR13) is shared out: the life rules take stun (only on a critter that can
+act, CRA2), knockdown, knockout, scars, blinding and crippling (`LifeRules.ApplyDamage`, [life state](life-state-runtime.md));
+the wear takes the weapon's and the armour's damage and the weapon's destruction ([wear](#wear-arc-combat-007)); the session takes
+the drops ([hero attack](hero-attack-runtime.md#critical-effects-arc-combat-009)).
 
 ## Rule settings and anomaly switches
 
@@ -187,8 +226,14 @@ flags after a critical miss retargets the attack to the attacker.
   where a missed throw lands (FR-COMBAT-007).
 - Scripts (`SAP_TAKING_DAMAGE` veto, hit/miss events), sounds, floating text
   (the wear messages included), AI reaction to the attack and experience.
-- Critical-effect tables (FR-COMBAT-009) beyond the injected hook; effects
-  are additive stand-ins, not the effect engine.
+- The four critical chance adjustments of the attacker are additive stand-ins
+  for its effect adjustments (0x4EAB30, 0x4EAB90 and the two chance ones), not
+  the effect engine.
+- Of the critical effects (ARC-COMBAT-009): the drop's placement and draws (the
+  hero's drops lie on its cell since ARC-WORLD-059), the ammunition, the injury record of a PC, the NPC's
+  look-for-weapon/armour flags, the stun's duration (the stun animation, goal
+  57) and the worn armour's critical scripts (points 34 and 35) are not modelled
+  ([hero attack](hero-attack-runtime.md#critical-effects-arc-combat-009)).
 - Skill levels, AC, resistances and weapon data come from the caller (for the hero, the worn part of AC and resistances,
   its light and the `CombatWeapon` it strikes with come from `QueryHeroEquipmentCombat`, [equipment](equipment-runtime.md),
   ARC-WORLD-028); no
@@ -198,7 +243,8 @@ flags after a critical miss retargets the attack to the attacker.
 ## Tests
 
 `tests/Arcanum.Simulation.Tests/Combat`: synthetic, scripted rolls only, no
-original data. Formula tables and boundaries (`AttackRulesTests`), resolution
+original data. `OriginalCriticalEffectsTests` (ARC-COMBAT-009) plays every table step at its boundary, the body types, the
+NPC-hits-PC rule, the constitution checks' bounds, the miss effects and the resolver's fallback with the table. Formula tables and boundaries (`AttackRulesTests`), resolution
 paths and thresholds, dodge, fate, technology failure, magick cancel,
 objects, invulnerability, difficulty parts, awareness order, backstab,
 damage immunities and body spells, refusals, roll trace and seeded replay

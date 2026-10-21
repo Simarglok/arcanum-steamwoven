@@ -1,11 +1,13 @@
 using System.Text.Json;
 using Arcanum.Data.Fixes;
+using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Magic;
+using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Technology;
 using Arcanum.Simulation.Travel;
 using Arcanum.Simulation.Reaction;
@@ -35,7 +37,7 @@ public sealed class GameRules
 {
     private GameRules(RuleMode mode, CombatAnomalyProfile combat, GameEventQueueProfile events, ScrRuleProfile scripts,
         ReactionRuleProfile reaction, DataFixProfile data, ExperienceRuleProfile experience, SoundRuleProfile sound, ItemRuleProfile items,
-        TechnologyRuleProfile technology, MagicAnomalyProfile magic, TravelRuleProfile travel)
+        TechnologyRuleProfile technology, MagicAnomalyProfile magic, TravelRuleProfile travel, CompanionOrderRuleProfile orders, DialogRuleProfile dialog)
     {
         Mode = mode;
         Combat = combat;
@@ -49,6 +51,8 @@ public sealed class GameRules
         Technology = technology;
         Magic = magic;
         Travel = travel;
+        Orders = orders;
+        Dialog = dialog;
     }
 
     public RuleMode Mode { get; }
@@ -90,15 +94,23 @@ public sealed class GameRules
     /// <summary>World-map travel (ARC-WORLD-056): A1 discovery radius, A2 detour step, A3 segment-end time, A4 cancel landing.</summary>
     public TravelRuleProfile Travel { get; }
 
+    /// <summary>Follower orders (ARC-WORLD-046): OL6, OL13, OL14, OL15 (decisions D1–D4, owner decision 2026-10-21).</summary>
+    public CompanionOrderRuleProfile Orders { get; }
+
+    /// <summary>Dialog (ARC-WORLD-058): GD-A1, a generated line's pick spans the gaps of its block.</summary>
+    public DialogRuleProfile Dialog { get; }
+
     /// <summary>The default mode: the original with every recorded fix.</summary>
     public static GameRules Steamwoven { get; } = new(RuleMode.Steamwoven, CombatAnomalyProfile.Steamwoven, GameEventQueueProfile.Steamwoven, ScrRuleProfile.Steamwoven,
         ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven, ExperienceRuleProfile.Steamwoven, SoundRuleProfile.Steamwoven, ItemRuleProfile.Steamwoven, TechnologyRuleProfile.Steamwoven,
-        MagicAnomalyProfile.Steamwoven, TravelRuleProfile.Steamwoven);
+        MagicAnomalyProfile.Steamwoven, TravelRuleProfile.Steamwoven, CompanionOrderRuleProfile.Steamwoven,
+        DialogRuleProfile.Steamwoven);
 
     /// <summary>The retail 1.0.7.4 behaviour in every domain.</summary>
     public static GameRules Original { get; } = new(RuleMode.Original, CombatAnomalyProfile.Original, GameEventQueueProfile.Original, ScrRuleProfile.Original,
         ReactionRuleProfile.Original, DataFixProfile.Original, ExperienceRuleProfile.Original, SoundRuleProfile.Original, ItemRuleProfile.Original, TechnologyRuleProfile.Original,
-        MagicAnomalyProfile.Original, TravelRuleProfile.Original);
+        MagicAnomalyProfile.Original, TravelRuleProfile.Original, CompanionOrderRuleProfile.Original,
+        DialogRuleProfile.Original);
 
     /// <summary>Both modes, default first.</summary>
     public static IReadOnlyList<GameRules> All { get; } = [Steamwoven, Original];
