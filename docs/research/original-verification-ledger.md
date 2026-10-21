@@ -2217,6 +2217,22 @@ Not modelled (named in the runtime): the use script before a reading (two readab
 scripts use actions outside every admitted set, so their use is refused), the item-spell path, the 4 action points in a round,
 action 94, the original's pixel paging and fonts.
 
+## Freed cells (ARC-WORLD-065)
+
+Source: the [object damage runtime](../world/object-damage-runtime.md) and DC5/DC7. Question: does a container or scenery the
+session destroyed or switched off still block a step onto its tile? Read on 2026-10-21 by this task and, independently, by a fresh
+agent that saw only the questions (method step 6). Both agree on every row; the rows are F2. Every direct branch stays inside
+`.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| FC1 | step objects (0x43FD70, 0x43FDC0, 0x43FE00) | The step's object test lists the objects through 0x4407C0: walls and portals (mask 0x3) on the edge of the tile left, then walls, portals, containers, scenery, projectiles, PCs, NPCs and traps (mask 0x3801F) on the tile stepped onto, and skips an object with the no-block flag 0x400 itself. | Original |
+| FC2 | tile objects (0x4407C0) and its filter (global 0x5E2F88) | Every object whose object flags share a bit with the global filter is skipped, before its type is matched. The object module's init sets the filter to 3 (destroyed 0x1, off 0x2) unless the editor flag is set (then 0); the game's startup passes the editor flag 0, and the filter toggle (0x43AAB0) is reached by nothing in the executable. So in the game destroyed and switched-off objects are never listed for a step. | Original |
+| FC3 | tile blocking (0x4D7110) | The sector's block mask, a facade tile's bit or the tile name's blocking flag; no object is read, so a removed object leaves its tile's own blocking as it was. | Original |
+
+No anomaly: Steamwoven follows the original (the live overlay moves the removed objects' T0 records for the PC and the companions);
+a respawning scenery blocks again once it is back, as its off flag clears.
+
 ## Charge cells (ARC-TECHNOLOGY-007)
 
 Source: the [charge-cell runtime](../world/charge-cell-runtime.md) and the [technology study](technology-evidence.md#technological-items-fr-magic-010-fr-magic-011)

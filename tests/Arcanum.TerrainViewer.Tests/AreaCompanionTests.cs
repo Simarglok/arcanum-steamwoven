@@ -96,6 +96,25 @@ public sealed class AreaCompanionTests
     }
 
     [TestMethod]
+    public void RemovedObjectsAreMovedInEveryOverlay()
+    {
+        // ARC-WORLD-065: the objects the session destroyed or switched off are moved for the PC and for each companion.
+        var f = Load();
+        using var session = ConversationSessionFixture.Create();
+        var removedKey = f.Area.Objects.First(o => o.Key != f.Scenery).Key;
+        IReadOnlySet<AreaObjectKey> removed = new HashSet<AreaObjectKey> { removedKey };
+        var group = AreaCompanionGroup.Create(Templates(f), f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        Assert.IsFalse(group.OccupancyForPc().Moved.Contains(removedKey));
+        group.Removed = () => removed;
+        Assert.IsTrue(group.OccupancyForPc().Moved.IsSupersetOf([removedKey, f.Scenery]));
+        Assert.IsTrue(group.Companions.Single().Grid.Occupancy!.Invoke()!.Moved.Contains(removedKey));
+        var empty = AreaCompanionGroup.Create([], f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        Assert.AreSame(AreaOccupancy.None, empty.OccupancyForPc());
+        empty.Removed = () => removed;
+        CollectionAssert.AreEquivalent(new[] { removedKey }, empty.OccupancyForPc().Moved.ToArray());
+    }
+
+    [TestMethod]
     public void AFollowingCompanionWalksAfterThePcStopsWithinTwoAndIsDrawnWhereItStands()
     {
         var f = Load();

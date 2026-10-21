@@ -113,6 +113,14 @@ public sealed class AreaObjectTargetsTests
         Assert.IsNull(targets.Target(session, door.Key));
         Assert.IsNull(targets.Target(session, barrel.Key));
         Assert.IsNotNull(targets.Target(session, statue.Key));
+        // ARC-WORLD-065: the same set while nothing it reads changed, so overlays cached on it stay valid.
+        var gone = targets.Gone(session);
+        Assert.AreSame(gone, targets.Gone(session));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null,
+            [new(new(1), MapChangeKey.ForEntity("other", "use.lf"), 1)]).Disposition);
+        Assert.AreSame(gone, targets.Gone(session), "an unrelated change keeps the set");
+        Condition(AreaUseScriptHost.EntityId(statue), SessionObjectCondition.Destroyed);
+        Assert.AreEqual(3, targets.Gone(session).Count);
     }
 
     [TestMethod]
@@ -126,6 +134,9 @@ public sealed class AreaObjectTargetsTests
         Assert.AreEqual("hit: 4 damage", AreaObjectTargets.Describe(Hit(new(2, 6, false, ObjectBreak.None, 6))));
         Assert.AreEqual("hit: 4 damage, destroyed", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.Destroyed, 12))));
         Assert.AreEqual("hit: 4 damage, the window is busted", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.WindowBusted, 12))));
+        // ARC-COMBAT-011: a trapped object's break names the trap the viewer does not run.
+        Assert.AreEqual("hit: 4 damage, destroyed — its trap would fire (traps do not run in the viewer)", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.Destroyed, 12))
+            with { Host = SessionObjectHostSteps.TrapFires }));
         Assert.AreEqual("attack refused: ObjectUnavailable", AreaObjectTargets.Describe(new(GameSessionDisposition.Rejected, GameSessionFailure.ObjectUnavailable,
             null, null, null, null, null, SessionObjectHostSteps.None, GameSessionFailure.None, default)));
     }

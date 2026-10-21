@@ -123,7 +123,17 @@ The registry version stays 1, as when the Lock event was added.
   at each hit.
 
   It also names the objects the session destroyed or switched off. The view no longer draws or picks those, and a destroyed
-  door's passage is open.
+  door's passage is open. Since ARC-WORLD-065 they block no step either: the live overlay moves their T0 records for the PC
+  (its steps and click routes) and for each companion (`AreaCompanionGroup.Removed`), as the original's object lists skip
+  destroyed and switched-off objects in the step test (ledger FC1–FC3); a respawning scenery blocks again once it is back.
+  The same holds for destroyed doors, windows and traps: their T0 records leave no gap on a step either.
+  The tile's own blocking (sector mask, facade, tile name) does not depend on objects and stays. The object-attack smoke
+  reports the steps onto the struck object's tile that its T0 record alone blocked and how many are open afterwards
+  (`BlockedSteps`, `FreedSteps`; all of them when the object was removed, none while it stands). The next stage,
+  `ARC-WORLD-065 native-smoke freed-cell`, takes the map's first container or scenery that blocks steps by itself, marks it
+  destroyed in the session, checks those steps are open for the PC's overlay and its click routes, returns its condition to
+  what it was and checks they block again. The use reach of a trigger, the hover cursor's route and the main-map corridor still
+  read T0 steps (a removed crate on such a step is a detour or a refusal there).
 
   It works on every map the viewer shows. The exterior and the cave have no session portals, so there only containers and
   scenery are targets. A static container's entity is its inventory holder's `oid:` id, not the `sector:` id of
@@ -160,8 +170,7 @@ The registry version stays 1, as when the Lock event was added.
 
 - **Viewer.** It draws a busted window on frame 0 of its T0 ART (the busted ART is not loaded), a busted scenery or trap on
   its T0 ART (not the destroyed ART), and no spilled items: they lie in the session and the inventory but have no draw command.
-  A destroyed scenery or container still blocks its cells: step evidence is T0 map data. The viewer passes the trap flag
-  (ARC-COMBAT-011) but runs no trap: the trap script with its built-in spells and attacks (30000..30006) is the SCR lane's.
+  The viewer passes the trap flag (ARC-COMBAT-011) but runs no trap: the trap script with its built-in spells and attacks (30000..30006) is the SCR lane's.
 - **Host steps.** The trap and BUST scripts, sounds, eye candy, the witnesses' reaction and the taking-damage script are reported
   to the host, not run here.
 - **Others.** NPC attacks on objects (AI), area damage (spells, explosions) and script action 60 on objects, and the decay
