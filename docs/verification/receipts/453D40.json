@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x453D40",
+  "name": "spell-reaim",
+  "method": "Arcanum.Simulation.Magic.SpellTargetRules.ReAim",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "7e6013f56c8c872de9e53ee07116b2e2b7c1491d62328b1fb487fa2d0067a6ef",
+  "configuration": "Debug"
+}

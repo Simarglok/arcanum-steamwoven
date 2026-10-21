@@ -283,6 +283,7 @@ public static class SpellTargetRules
     }
 
     // 0x4F2C60: a scenery object with an occupant stands for the occupant (as an NPC); otherwise the object's own type.
+    [OriginalFunction(0x4F2C60, OriginalFunctionScope.Full)]
     private static (SpellTargetObject Object, int Kind) Visible(SpellTargetObject o, ISpellTargetWorld world) =>
         o.Type == SpellTargetObject.Scenery && o.Occupant is { } id && world.Object(id) is { } occupant ? (occupant, SpellTargetObject.Npc) : (o, o.Type);
 
@@ -394,6 +395,7 @@ public static class SpellTargetRules
     }
 
     // 0x4F3F10: an object, unless destroyed or switched off (a critter that is "safe off" still counts), once.
+    [OriginalFunction(0x4F3F10, OriginalFunctionScope.Partial)]
     private static void AddChecked(List<SpellTargetEntry> list, SpellTargetObject? o)
     {
         if (o is null) return;
@@ -402,6 +404,7 @@ public static class SpellTargetRules
     }
 
     // 0x4F3FD0: an object, unless destroyed, once.
+    [OriginalFunction(0x4F3FD0, OriginalFunctionScope.Partial)]
     private static void Add(List<SpellTargetEntry> list, SpellTargetObject? o)
     {
         if (o is null || (o.ObjectFlags & SpellTargetObject.Destroyed) != 0) return;
@@ -415,6 +418,7 @@ public static class SpellTargetRules
     }
 
     // 0x4F4050: a tile, unless an entry already has that location (an object entry's location is none).
+    [OriginalFunction(0x4F4050, OriginalFunctionScope.Partial)]
     private static void AddTile(List<SpellTargetEntry> list, SpellLocation tile)
     {
         if (list.Count >= Capacity || list.Any(e => e.Tile == tile)) return;
@@ -426,6 +430,7 @@ public static class SpellTargetRules
     /// <see cref="Test"/> against the target and its tile; then, when the record has item triggers and the component names
     /// some, they must meet the run's (a component with trigger 0x100 needs the run's 0x100).
     /// </summary>
+    [OriginalFunction(0x4510F0, OriginalFunctionScope.Partial)]
     public static bool ComponentApplies(SpellTargetTest areaTest, bool recordHasTriggers, int componentTriggers, int runTriggers) =>
         areaTest.Passes && (!recordHasTriggers || componentTriggers == 0
             || ((componentTriggers & runTriggers) != 0 && ((componentTriggers & 0x100) == 0 || (runTriggers & 0x100) != 0)));
@@ -460,6 +465,7 @@ public static class SpellTargetRules
     /// pairs to tell and the target to remember.
     /// </summary>
     [OriginalFunction(0x453EE0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x453F20, OriginalFunctionScope.Full)]
     public static (IReadOnlyList<(string? Attacker, string Target)> Notices, string? Remembered) AiNotices(bool aggressive, int action, string? target,
         string? parent, string? other, string? lastNotified)
     {
