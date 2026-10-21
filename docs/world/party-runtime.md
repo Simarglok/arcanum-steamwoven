@@ -177,7 +177,23 @@ owner (quick load) builds a new port.
 For Virgil the inputs are in [ARC-RES-026](../research/virgil-follow-consent.md#2-virgil-at-t0-d):
 AI row 5 (−1000, 2001, 2001, 30), level 1, alignment 1, reaction base 60. With the diagnostic PC
 (charisma 8, level 1, max followers 2) and no other leader, only the follower limit can refuse him; with `--hero` the session
-uses the hero's persuasion, charisma, level and max followers instead (ARC-SKILLS-002).
+uses the hero's persuasion, charisma, level, alignment and max followers instead (ARC-SKILLS-002, ARC-WORLD-067, below).
+
+## The session hero as the PC side (ARC-WORLD-067)
+
+With a session hero (`--hero`) every party rule reads the hero as the PC side, in every viewer path (the AREA exterior and cave,
+map mode, the visitor hosts of ARC-WORLD-048) and for every NPC: `GameSessionOwner.QueryHeroPartySide` gives its Persuasion
+training (the hero's skills, ARC-SKILLS-002), its effective charisma (the stat with its effects), its level, its stored alignment
+and the max followers they give (ledger AP4: charisma / 4, +1 from expert Persuasion, then the hero's effects on that stat, clamped
+to 1..7). The session itself uses it in the follow check (join, unwait, the orders' follow, the loyalty step), the leave guard
+(an unforced leave is refused for a hero of charisma 20 or more), the wait timer's Persuasion step and charisma cut, and the
+timeout's reaction change, whatever the caller's facts say; the viewer builds its facts from it too
+(`AreaCompanionRoster.Facts`/`WaitFacts` with the party side), so the logs and the HUD name what the rules read. A dialog's `AL`
+writes the hero's stored alignment (`ChangeHeroAlignment`: clamped to −1000..1000, the followers armed as OL17, one revision; the
+hero's alignment is already saved, no schema change), so the character sheet follows it too. Without a hero the labelled
+diagnostic profile stands in (charisma 8, level 1, no Persuasion, the conversation host's alignment, starting at 0). The HUD's
+companion line names the side: `PC side: hero (charisma …, level …, alignment …, persuasion …, max followers …)` or
+`PC side: diagnostic profile (…)`.
 
 ## Tests
 
