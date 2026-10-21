@@ -158,8 +158,8 @@ class LauncherSyncTests(unittest.TestCase):
         self.assertEqual(project["MAP_MODE"], ("crash-site-area", (launch.UNIVERSAL_TASK, "ARC-RENDER-008")))
         # Same pairing arcanum-local enforces at launch: crash-site-area only from
         # ARC-RENDER-007, ARC-INPUT-001 (diagnostic palette), ARC-WORLD-007 (LMB click-to-move) ARC-WORLD-009 (cave) or ARC-RENDER-008 (passability overlay).
-        allowed = {"crash-site-area": {"ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008"},
-                   "world-diagnostic": {"ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"}}
+        # Since ARC-RENDER-028 no MODES entry launches the pinned crash-site-area profile (`area` is map mode).
+        allowed = {"world-diagnostic": {"ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"}}
         for mode, tasks in modes.values():
             self.assertIn(mode, launch.MODE_ROLES)
             self.assertTrue(tasks and len(set(tasks)) == len(tasks), mode)
@@ -177,6 +177,32 @@ class LauncherSyncTests(unittest.TestCase):
         self.assertEqual(argv[-6:], ["--area-map", "Arcanum1-024-fixed", "--hero", "elf-male", "--area-map-sector", "1409,1314"])
         for flag in ("--prototypes", "--area-mobile", "--area-effects", "--area-patch", "--area-cave-mobile"):
             self.assertNotIn(flag, argv)
+
+    def test_area_run_launches_the_map_mode_build_with_the_main_map(self):
+        # ARC-RENDER-028: `run` for `area` tries the map-mode tasks in order and launches map mode on the main map.
+        project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
+        run = project["run"]
+        conf = {"artifactRoots": {project["ROOT_ID"]: str(self.root)}, "launchSelection": {"terrain": "previous"}}
+        tried, calls = [], []
+
+        def resolve(root, tool, *, root_id, selected_task):
+            tried.append(selected_task)
+            if selected_task == launch.UNIVERSAL_TASK:
+                raise ValueError("no build")
+            return self.root / "build" / "manifest.json", None, None
+
+        saved = []
+        with patch.dict(run.__globals__, {"local": lambda *arguments: calls.append(arguments) or 0}), \
+                patch.object(run.__globals__["manifests"], "resolve_current", resolve), \
+                patch.object(run.__globals__["config"], "load_config", lambda: conf), \
+                patch.object(run.__globals__["config"], "save_config", lambda value: saved.append(value)):
+            args = project["parser"]().parse_args(["area", "--hero", "elf-male", "--sector", "1409,1314", "--dry-run"])
+            self.assertEqual(0, run(args))
+        self.assertEqual(tried, list(project["MAP_MODE"][1]))
+        self.assertEqual(calls[0][:3], ("configure", "select-launch", "--tool"))
+        self.assertEqual(calls[1], ("launch", "terrain", "--mode", "crash-site-area", "--area-map", "Arcanum1-024-fixed", "--hero", "elf-male",
+                                    "--area-map-sector", "1409,1314", "--dry-run"))
+        self.assertEqual(saved[-1]["launchSelection"]["terrain"], "previous", "a dry run restores the previous selection")
 
     def test_the_oracle_launcher_matches_the_tool_and_the_tests(self):
         # ARC-DEV-007: `./arcanum oracle` names the oracle's functions, their OriginalExe tests and the pinned executable.

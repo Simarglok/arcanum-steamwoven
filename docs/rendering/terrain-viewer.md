@@ -434,7 +434,7 @@ and round-trips through a snapshot; it prints `ARC-WORLD-010 native-smoke clock 
 `ARC_AREA_TRANSITION_CAPTURE` saves views of both maps. The real-data Core test
 `AreaTransitionOriginalTests` walks to each trigger over the step evidence and
 checks the same transfers. The ordinary launcher passes the cave input only to an
-ARC-WORLD-009 build (`./arcanum area` prefers it); exported AREA builds that predate
+ARC-WORLD-009 build (which `./arcanum area` preferred until ARC-RENDER-028 made it map mode on the main world map); exported AREA builds that predate
 it reject the flag ([launcher](../workflow/local-development.md#cave-and-return-candidate-arc-world-009)).
 
 ### Actor anchor and wall fade (ARC-RENDER-011)

@@ -176,7 +176,7 @@ def status(_: argparse.Namespace) -> int:
     inputs = conf.get("inputs", {}) if isinstance(conf.get("inputs"), dict) else {}
     roots = conf.get("artifactRoots", {})
     for name, (mode, tasks) in MODES.items():
-        # A task's own roles (the ARC-WORLD-009 cave input) count when `run` would choose its build.
+        # A task's own roles (TASK_ROLES) count when `run` would choose its build (none of the remaining modes has any).
         chosen = None
         if isinstance(roots, dict) and isinstance(roots.get(ROOT_ID), str):
             for task in tasks:

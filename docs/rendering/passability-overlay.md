@@ -131,7 +131,7 @@ bounded WORLD003 zone); full-area traversal beyond it needs separate work.
 
 ## Owner checklist
 
-1. `./arcanum area`, open the palette, tick **Show passability**: the HUD says ON.
+1. The pinned exterior profile (before ARC-RENDER-028 `./arcanum area`; now `tools/arcanum-local launch terrain --mode crash-site-area`), open the palette, tick **Show passability**: the HUD says ON.
 2. Pan, zoom 1.00/2.00 and Fit: classes stay in place; at minimum zoom the HUD asks to zoom in.
 3. West of the spawn the scenery cell `(5,1)` is red; a red arrow marks the diagonal into `(5,0)`.
 4. Beyond the core edge the cells are gray-hatched.

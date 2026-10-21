@@ -8,7 +8,7 @@
 every identity, artifact-authority and ordinary-launch check stays there.
 
     ./arcanum setup [--game-root /Applications/Arcanum]   # find the game's inputs, record their identities, register artifacts/world-builds as root "world"
-    ./arcanum area [--hero NAME] [--sector X,Y] [--dry-run]  # the main world map at the Crash Site in map mode (= map Arcanum1-024-fixed), any installation (ARC-RENDER-028)
+    ./arcanum area [--hero NAME] [--sector X,Y] [--dry-run]  # the main world map at the Crash Site in map mode (= map Arcanum1-024-fixed), any installation, a build exported after ARC-RENDER-024 (ARC-RENDER-028)
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
     ./arcanum map NAME [--hero NAME] [--sector X,Y] [--dry-run]  # one map (a maps/ folder name) in map mode, from the ARC-DEV-015 build, else ARC-RENDER-008; any installation; the main world map (Arcanum1-024-fixed) opens as a window that moves with the actor, at --sector or the new-game start (a build exported after ARC-RENDER-024)
     ./arcanum oracle [--function ADDR|--all] [--exe PATH] # function oracle on the installed Arcanum.exe, then the OriginalExe tests (ARC-DEV-007)
@@ -44,8 +44,10 @@ again.
 requires only map mode's roles (`UNIVERSAL_ROLES`: the module, `arcanum1.dat`, `arcanum2.dat` and the game folder). It
 records an installation manifest in the configuration (`installation`, schema `arcanum-installation-v1`: each role's
 relative path, size and SHA-256, and whether it equals the pinned identity in `GAME_ROLES`; `pinnedVerified` lists the
-roles that do). The pinned identities stay the pinned Crash Site profiles': `area`, `world` and the older diagnostic
-modes are the regression of those profiles and refuse to launch when a role they read differs from its pin
+roles that do). The pinned identities stay the pinned Crash Site profiles': `world`, the pinned `crash-site-area` profile
+(since ARC-RENDER-028 reached only through `tools/arcanum-local launch terrain --mode crash-site-area` without `--area-map`;
+`./arcanum area` is map mode) and the older diagnostic modes are the regression of those profiles and refuse to launch when a
+role they read differs from its pin
 (`launch.pinned_roles`); `./arcanum status` names such roles. A configuration written before the record, or by
 `configure inputs`, has no record and keeps its earlier meaning. The universal build (export task ARC-DEV-015, below)
 is exported without the pinned Crash Site gates and launches map mode only. `--hero NAME` (ARC-WORLD-027, [starting hero](../rendering/terrain-viewer.md#starting-hero-arc-world-027)) starts
@@ -213,7 +215,8 @@ ARC-WORLD-009` adds the cave input to both area-original native smokes and requi
 other. A home configured before this role existed must run `./arcanum setup` (or
 `configure discover --write-inputs`, or `configure inputs ... --cave-mobile PATH`)
 again: launching the ARC-WORLD-009 build otherwise stops with the missing role named,
-and `./arcanum status` lists it for the build `area` would choose. Setup writes nothing
+and before ARC-RENDER-028 `./arcanum status` listed it for the build `area` would choose (`area` is map mode now, which
+reads no cave file). Setup writes nothing
 unless every pinned role, the cave file included, is found with its exact identity.
 
 ## Passability overlay candidate (ARC-RENDER-008)
