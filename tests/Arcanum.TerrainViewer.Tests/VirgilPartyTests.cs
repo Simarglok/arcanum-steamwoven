@@ -51,11 +51,12 @@ public sealed class VirgilPartyTests
         Assert.AreEqual(new DialogConversationEnd(DialogEndKind.ReturnToScript, new DialogScriptLine(5)), first.End);
         var join = first.Effects.Single(effect => effect.Command is JoinCommand);
         Assert.AreEqual(DialogCommandAttemptOutcome.Applied, join.Outcome);
-        // The walk's last effect raises the PC's alignment (AL +5) after the join, so the session arms Virgil's check-leader
-        // and "too good" loyalty marks (ARC-WORLD-045, OL17: a PC alignment rise arms every follower in its array).
+        // The walk raises the PC's alignment (AL +5) after the join, so the session arms Virgil's check-leader and
+        // "too good" loyalty marks (ARC-WORLD-045, OL17: a PC alignment rise arms every follower in its array).
         var effects = first.Effects.Select(effect => effect.Command).ToList();
         var alignment = effects.FindLastIndex(command => command is AlignmentCommand { Mode: DialogReactionMode.Adjust, Value: > 0 });
         Assert.IsTrue(alignment > effects.FindIndex(command => command is JoinCommand), "the alignment rise follows the join");
+        Assert.AreEqual(DialogCommandAttemptOutcome.Applied, first.Effects[alignment].Outcome);
         Assert.AreEqual(new SessionCompanion(entity, CompanionStanding.Following, false, false, false,
             CompanionLoyalty.CheckLeader | CompanionLoyalty.TestTooGood), session.QueryCompanion(entity));
         Assert.IsFalse(host.State.Follows(0), "the diagnostic follow.pc key is not written through the party port");
