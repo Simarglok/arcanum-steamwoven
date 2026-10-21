@@ -191,8 +191,8 @@ public sealed class AreaConversationHost
     /// the viewer cannot quick-load during a talk, whose panel takes every key).
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _map, Speakers, _content, session, _baseProfile, _givenInventory, _party,
-        _contentDetail, _companions, _npcAdvancement, _refuseUncoveredInventory);
+    public AreaConversationHost Rebind(GameSessionOwner session) => new AreaConversationHost(_snapshot, _map, Speakers, _content, session, _baseProfile, _givenInventory, _party,
+        _contentDetail, _companions, _npcAdvancement, _refuseUncoveredInventory).KeepingGreetingTexts(_greetingTexts);
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;
@@ -398,18 +398,22 @@ public sealed class AreaConversationHost
     }
 
     /// <summary>ARC-WORLD-058: the module's greeting texts, read through the script content's stack at the first conversation
-    /// of this host; null before.</summary>
-    public AreaGreetingTexts? GreetingTexts { get; private set; }
+    /// of this host (a <see cref="Rebind"/> keeps them); null before.</summary>
+    public AreaGreetingTexts? GreetingTexts => _greetingTexts;
+
+    private AreaGreetingTexts? _greetingTexts;
+
+    private AreaConversationHost KeepingGreetingTexts(AreaGreetingTexts? texts) { _greetingTexts = texts; return this; }
 
     // The greeting port of a speaker, or null (a g: node then stays a frontier) when the texts did not load.
     private AreaGreeting? Greeting(AreaSpeaker speaker)
     {
-        GreetingTexts ??= AreaGreetingTexts.Load(_content!.Plan);
-        if (GreetingTexts.Status != AreaGreetingTextsStatus.Ready) return null;
+        _greetingTexts ??= AreaGreetingTexts.Load(_content!.Plan);
+        if (_greetingTexts.Status != AreaGreetingTextsStatus.Ready) return null;
         // The override dialog is read with the session's current data-fix rules, as the conversation's own DLG.
         var overrides = AreaGreeting.OverrideScript(speaker) is { } script && _content!.Dialog(script, _session.Rules.Data) is { Status: ScriptContentStatus.Read } read
             ? read.Document : null;
-        return new AreaGreeting(_session, speaker, State, Profile.Pc, GreetingTexts, overrides);
+        return new AreaGreeting(_session, speaker, State, Profile.Pc, _greetingTexts, overrides);
     }
 
     /// <summary>The session party port for a roster speaker when the party is wired; facts are read at each call.</summary>

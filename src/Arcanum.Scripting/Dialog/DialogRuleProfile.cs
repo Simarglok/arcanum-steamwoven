@@ -13,7 +13,7 @@ public sealed record DialogRuleProfile
     /// <summary>
     /// GD-A1 (ARC-WORLD-058, 0x4D4550 with the generators 0x418480, 0x4185F0, 0x418780): a generated line is the first number of
     /// its range plus a random offset below the count of entries stored from it, so in a block with a gap it can be a missing
-    /// number, shown as the original's "Error! Missing line" text, and the block's last entries are never said; without the
+    /// number, shown as the original's missing-line message (here a project-worded text with the number and file), and the block's last entries are never said; without the
     /// first entry the count is 0. Steamwoven picks uniformly among the entries stored in the range and says nothing when there
     /// is none.
     /// </summary>

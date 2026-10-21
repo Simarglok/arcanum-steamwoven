@@ -334,9 +334,10 @@ internal static class DialogGreeting
 
     private static GreetingOutcome RollFailed() => new(GreetingOutcomeKind.Failed, Failure: DialogConversationFailureKind.InvalidQueryResult);
 
-    /// <summary>The original's text for a number its file does not hold (0x4D43A0).</summary>
+    /// <summary>The line for a number its file does not hold: the project's wording of the original's error message (0x4D43A0),
+    /// with the same number and path.</summary>
     public static string MissingLine(int number, GeneratedDialogFile file) =>
-        $"Error! Missing line {number} in {GeneratedDialogFiles.PathOf(file).Replace('/', '\\')}";
+        $"[missing generated line {number} in {GeneratedDialogFiles.PathOf(file).Replace('/', '\\')}]";
 
     internal sealed class InvalidGreetingRoll : Exception;
 }

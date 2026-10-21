@@ -83,6 +83,33 @@ public sealed class AreaGreetingTests
     }
 
     [TestMethod]
+    public void An_override_line_speaks_with_its_records_voice_and_generated_lines_are_silent()
+    {
+        using var source = new AreaOwnerFixture(motionBodies: true);
+        var area = source.Owner.LoadStrict();
+        using var session = ConversationSessionFixture.Create(area.RuntimeMap);
+        var row = area.Objects.First() with
+        {
+            Type = 16,
+            EffectiveFields = [new(31, AreaPresence.Value, AreaValueOrigin.Instance, null, [new AreaSparseElement(31, [0, 0, 0x18007])], null)],
+        };
+        var speaker = new AreaSpeaker(0, row, 1, 0, 0);
+        var state = new AreaConversationState(session, new(area.RuntimeMap), [AreaConversationState.EntityId(row)], 50);
+        var texts = new AreaGreetingTexts(AreaGreetingTextsStatus.Ready, GeneratedDialogFiles.Create(new MesFile?[GeneratedDialogFiles.Count]), new MesFile?[4], "synthetic");
+        var overrides = Arcanum.Data.DlgReader.Read(Encoding.ASCII.GetBytes("{10009}{Hi}{Hi}{}{ 42}{}{}"), new() { Mode = Arcanum.Data.DlgReadMode.Original });
+        var greeting = new AreaGreeting(session, speaker, state, new DialogPcFacts(DialogPcGender.Male, 8, false, 0), texts, overrides);
+        Assert.AreEqual(0x18007, greeting.OverrideScriptNumber);
+        var document = Arcanum.Data.DlgReader.Read(Encoding.ASCII.GetBytes("{10}{g:}{}{}{ 5}{}{}"), new() { Mode = Arcanum.Data.DlgReadMode.Original });
+        var start = new AreaConversationStart(AreaConversationStartStatus.Started, null, null, "", Document: document, DialogScript: 3) { Greeting = greeting };
+        Assert.AreEqual((7 << 16) | 42, start.VoiceIdentity(new DialogNpcLine(new(10), "Hi", new(DialogLineOriginKind.Override, 10009))), "the override record's own voice");
+        Assert.AreEqual(-1, start.VoiceIdentity(new DialogNpcLine(new(10), "Hi", new(DialogLineOriginKind.Override, 10010))), "no such override record");
+        foreach (var kind in new[] { DialogLineOriginKind.Generated, DialogLineOriginKind.Reputation, DialogLineOriginKind.MissingLine, DialogLineOriginKind.Empty })
+            Assert.AreEqual(-1, start.VoiceIdentity(new DialogNpcLine(new(10), "x", new(kind, 10000))), kind.ToString());
+        Assert.AreEqual((3 << 16) | 5, start.VoiceIdentity(new DialogNpcLine(new(10), "x")), "a record's own line keeps its voice");
+        Assert.AreEqual(-1, (start with { Greeting = null }).VoiceIdentity(new DialogNpcLine(new(10), "Hi", new(DialogLineOriginKind.Override, 10009))));
+    }
+
+    [TestMethod]
     public void The_texts_load_through_the_content_stack()
     {
         var root = Path.Combine(Path.GetTempPath(), "arc-greeting-" + Guid.NewGuid().ToString("N"));

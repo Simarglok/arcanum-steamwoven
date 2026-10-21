@@ -36,7 +36,9 @@ state holds, `N fl M` says node M as a floating line and ends. The parse is the 
 including its quirks: only a lowercase `fl` floats, an `f` without `l` ends the parse, an index without a value takes the
 next entry's index as its value. An index of 10 or more is ignored (the original writes past its arrays; no-crash rule, both
 settings). The nodes the slots name are planned with the `g:` node, before its actions: a missing node or a reply fails it
-(`MissingTarget`, `WrongTargetRole`), a node that is itself a greeting or cannot run here stops it at a frontier.
+(`MissingTarget`, `WrongTargetRole`), a node that is itself a greeting or cannot run here stops it at a frontier, even when
+its slot would never fire (the original follows a slot only when it fires; project policy, no installed slot text is
+affected). The step's turn and effect budgets reserve one more turn and the largest slot node's action.
 
 **Order** (RG4). The first kind whose state holds speaks:
 
@@ -71,7 +73,7 @@ its record's voice. A generated line has `@pcname@` and `@npcname@` substituted 
 | Setting | Pick |
 | --- | --- |
 | Steamwoven (default) | uniformly among the entries stored in the range; none gives no line (`DialogLineOriginKind.Empty`) |
-| Original | the range's first number plus a uniform roll from 0 to the run length less one (−1 or 0 without a first entry); a number the file lacks says `Error! Missing line N in mes\<file>.mes` (`MissingLine`) |
+| Original | the range's first number plus a uniform roll from 0 to the run length less one (−1 or 0 without a first entry); a number the file lacks shows the project's text `[missing generated line N in mes\<file>.mes]` (`MissingLine`); the original shows its own static error message with the same number and path (RG9) |
 
 A file the module lacks says nothing in both settings (the original exits the program).
 
@@ -122,10 +124,11 @@ AREA map census (`AreaMapConversationOriginalTests`, `DAT_ROOT`): the 35 convers
 - `Arcanum.Simulation.Tests/Reputation/ReputationRulesTests`: the candidates by scope, sign and category, held order, once each.
 - `Arcanum.Scripting.Tests/Dialog/DialogGreetingTests`: the slot parse, every reaction cell with the offsets, the files by
   gender and dumbness, the gap pick in both settings, override lines, names, the order of the states with the end rule,
-  jump and floating slots, slot 9 off, the reputation greeting, the order of action and greeting, failures and frontiers.
+  jump and floating slots (slot 9 too), slot 9 off, the reputation greeting, the order of action and greeting, the slot
+  nodes' turn and effect reservation, replies whose target is a greeting, failures and frontiers.
 - `Arcanum.Scripting.Tests/Dialog/DialogGreetingRealDataTests`: the census above.
-- `Arcanum.TerrainViewer.Tests/AreaGreetingTests`: the facts from the fields, the override script, candidates, rolls, rules
-  and the text load; `AreaMapConversationOriginalTests`: the map census.
+- `Arcanum.TerrainViewer.Tests/AreaGreetingTests`: the facts from the fields, the override script, candidates, rolls, rules,
+  the text load and the voice of override and generated lines (the host's lazy load and its rebind are covered by the map census); `AreaMapConversationOriginalTests`: the map census.
 - `Arcanum.Session.Tests/RuleModeTests`: the dialog profile of each mode.
 
 ## Not ready

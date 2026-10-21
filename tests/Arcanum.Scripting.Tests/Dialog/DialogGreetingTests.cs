@@ -88,7 +88,7 @@ public sealed class DialogGreetingTests
 
         var original = Greeter(Facts(), files, rolls: [ 100, 2 ], DialogRuleProfile.Original);
         var missing = Start("g:", original).NpcLine!;
-        Assert.AreEqual(@"Error! Missing line 10002 in mes\gd_cls_m2m.mes", missing.Text, "first + 2 is the gap");
+        Assert.AreEqual(@"[missing generated line 10002 in mes\gd_cls_m2m.mes]", missing.Text, "first + 2 is the gap");
         Assert.AreEqual(new DialogLineOrigin(DialogLineOriginKind.MissingLine, 10002, GeneratedDialogFile.ClassMaleToMale), missing.Origin);
         CollectionAssert.AreEqual(new[] { (DialogGreetingRoll.ReputationChance, 1, 100), (DialogGreetingRoll.Line, 0, 2) }, original.Asked.ToArray());
 
@@ -243,17 +243,51 @@ public sealed class DialogGreetingTests
         Assert.AreEqual((string.Empty, DialogLineOriginKind.Empty), (absent.NpcLine!.Text, absent.NpcLine.Origin!.Kind), "an absent file says nothing");
     }
 
+    [TestMethod]
+    public void Slot_nodes_reserve_their_budget_and_replies_to_greetings_are_planned_one_level()
+    {
+        // MaxTurns 1: a greeting that may jump needs a second turn, so it stops before its own action runs.
+        var ports = new Ports();
+        var limited = Start("g:9 20", Greeter(Facts()), "{20}{Jumped}{}{}{}{}{}", ports, "QU 7 1", new DialogConversationOptions { MaxTurns = 1 });
+        Assert.AreEqual(DialogFrontierKind.TurnLimit, limited.Frontier!.Kind);
+        Assert.AreEqual(0, ports.Commands.Count, "no half-run step");
+        Assert.AreEqual(DialogConversationPhase.AwaitingSelection, Start("g:", Greeter(Facts()), options: new DialogConversationOptions { MaxTurns = 1 }).Phase,
+            "a greeting without slot nodes needs no second turn");
+        var effects = Start("g:9 20", Greeter(Facts()), "{20}{Jumped}{}{}{}{}{QU 5 1, QU 6 1}", new Ports(), "QU 7 1", new DialogConversationOptions { MaxEffects = 2 });
+        Assert.AreEqual(DialogFrontierKind.EffectLimit, effects.Frontier!.Kind, "the slot node's actions are reserved");
+
+        var floated = Start("g:9 fl 20", Greeter(Facts()), "{20}{Floating}{}{}{}{}{}");
+        Assert.AreEqual(("Floating", DialogConversationPhase.Ended), (floated.NpcLine!.Text, floated.Phase), "slot 9 can float");
+        Assert.AreEqual(DialogFrontierKind.UnsupportedGeneratedText, Start("g:9 fl 20", Greeter(Facts()), "{20}{g:}{}{}{}{}{}").Frontier!.Kind,
+            "a floating node that is itself a greeting");
+
+        // A reply whose target is a g: node: a final line cannot say a greeting; a direct one plans the greeting's slot nodes.
+        var replies = Read("{10}{Hello}{}{}{}{}{}{11}{fl}{}{1}{}{20}{fl 30}{12}{direct}{}{1}{}{30}{}{13}{bad}{}{1}{}{40}{}"
+            + "{20}{x}{}{}{}{}{}{30}{g:}{}{}{}{}{}{31}{r}{}{1}{}{0}{}{40}{g:1 99}{}{}{}{}{}{41}{r}{}{1}{}{0}{}");
+        var conversation = Start(replies, Greeter(Facts()));
+        CollectionAssert.AreEqual(new DialogOptionBlockKind?[] { DialogOptionBlockKind.TargetUnsupported, null, DialogOptionBlockKind.TargetInvalid },
+            conversation.Options.Select(option => option.Block?.Kind).ToArray());
+        conversation.Select(conversation.Options[1].Token);
+        Assert.AreEqual((30, "L10000"), (conversation.CurrentNode.Value, conversation.NpcLine!.Text), "the direct reply greets");
+
+        var nullCandidates = new FakeGreeter(Facts(), new DialogGreetingSources(NumberedFiles(), new MesFile?[4], null), [1], DialogRuleProfile.Steamwoven, null!);
+        Assert.AreEqual(DialogConversationFailureKind.InvalidQueryResult, Start("g:", nullCandidates).Failure!.Kind);
+    }
+
     internal static DialogGreetingFacts Facts() => new(true, true, false, 0, 0, 0, DialogReactionCategory.Neutral, false);
 
-    private static DialogConversation Start(string greeting, IDialogGreetingPort? port, string extra = "", Ports? ports = null, string action = "")
+    private static DialogConversation Start(string greeting, IDialogGreetingPort? port, string extra = "", Ports? ports = null, string action = "",
+        DialogConversationOptions? options = null) =>
+        Start(Read($"{{10}}{{{greeting}}}{{}}{{}}{{}}{{}}{{{action}}}" + Replies + extra), port, ports, options);
+
+    private static DialogConversation Start(DlgDocument document, IDialogGreetingPort? port, Ports? ports = null, DialogConversationOptions? options = null)
     {
         ports ??= new Ports();
-        var document = Read($"{{10}}{{{greeting}}}{{}}{{}}{{}}{{}}{{{action}}}" + Replies + extra);
         return DialogConversation.Start(document,
             new DialogConversationRequest(new DialogNodeId(10),
                 new DialogParticipants(new DialogId(700), new DialogParticipantId(800), new DialogParticipantId(900)),
                 new DialogScriptLine(0), new DialogPcFacts(DialogPcGender.Male, 8, false, 0), new DialogSpeakerNames("Ada", "Bram")),
-            new DialogConversationPorts(ports, ports, Owner(), Greeting: port));
+            new DialogConversationPorts(ports, ports, Owner(), new World(), Greeting: port), options);
     }
 
     private static FakeGreeter Greeter(DialogGreetingFacts? facts, GeneratedDialogFiles? files = null, int[]? rolls = null, DialogRuleProfile? rules = null,
