@@ -37,9 +37,10 @@ object's current hit points (hp_pts + hp_adj − damage) are 0 or less, two thin
 
 1. When the object's use script is a trap, the trap fires with the attacker as triggerer (no triggerer for a ranged attack).
 2. The object breaks.
+3. The witnesses of the attacker's PC hear of the broken object (0x4AEE50 with 0: possible hostility).
 
-When the object stays whole, the guards of a portal or container hear of it and the attacker's weapon or hands wear by the
-object's material ([wear](attack-resolver-runtime.md#wear-arc-combat-007), ledger CW9). Fatigue and poison do not reach objects.
+When the object stays whole, the witnesses hear of the attack (0x4AEE50 with 1: NPCs within 10 tiles guarding the object's
+faction lower their reaction by 20, then may turn hostile), and the attacker's weapon or hands wear by the object's material ([wear](attack-resolver-runtime.md#wear-arc-combat-007), ledger CW9). Fatigue and poison do not reach objects.
 
 ## The break (0x43F1C0, ObjectDamageRules.Break)
 
@@ -74,7 +75,7 @@ An item on the ground is passed as a `SessionWearItem` with its durability basel
 | Entry | Contract |
 | --- | --- |
 | `QueryObject(target)` | The damage, current hit points and condition (`Whole`, `Destroyed`, `Busted`, `Off`): recorded, or the baseline's (a busted baseline reads `Busted`). |
-| `AttackObject(expected, attack)` | The hero's attack. Refused before any roll, in order: no hero (`AttackUnavailable`); an invalid target or item, or both or neither given (`InvalidObject`); a destroyed or switched-off object, or an item no longer on the ground (`ObjectUnavailable`); hero items that do not hold (`InvalidWear`); an aim at the torso or a distance outside the reach (`InvalidAttack`); a weapon that is not melee (`AttackUnsupported`); the version; the revision; for a respawning scenery, a full respawn budget (`EventBudgetExceeded`). Then the resolver on the session generator, the fate it used in a revision of its own, and the hit, which writes the object's damage and condition in one revision or damages the item through `DamageItem`. A critical self-hit hurts the hero instead and wears its own armour. The hero's weapon wear follows while the object stays whole. The result names what the host does (`SessionObjectHostSteps`): the trap, the BUST script, the bust or destroy sound, the spill eye candy, and the guards. |
+| `AttackObject(expected, attack)` | The hero's attack. Refused before any roll, in order: no hero (`AttackUnavailable`); an invalid target or item, or both or neither given (`InvalidObject`); a destroyed or switched-off object, or an item no longer on the ground (`ObjectUnavailable`); hero items that do not hold (`InvalidWear`); an aim at the torso or a distance outside the reach (`InvalidAttack`); a weapon that is not melee (`AttackUnsupported`); the version; the revision; for a respawning scenery, a full respawn budget (`EventBudgetExceeded`). Then the resolver on the session generator, the fate it used in a revision of its own, and the hit, which writes the object's damage and condition in one revision or damages the item through `DamageItem`. A critical self-hit hurts the hero instead and wears its own armour. The hero's weapon wear follows while the object stays whole. The result names what the host does (`SessionObjectHostSteps`): the trap, the BUST script, the bust or destroy sound, the spill eye candy, and the witnesses (`WitnessesHearAttack` while the object stays whole, `WitnessesHearBreak` when it breaks). The resolution's draws are spent once it ran, also when nothing changes. |
 
 State is kept in map changes of the object's entity, which the snapshot already carries, so there is no schema change:
 
@@ -102,6 +103,7 @@ The registry version stays 1, as when the Lock event was added.
 | Original 1.0.7.4 | Steamwoven |
 | --- | --- |
 | The respawn delay multiplies in 32 bits (it wraps beyond 268,435 seconds or 35,791 minutes). | Exact. |
+| Each spilled item goes through the drop function (0x466E50, ledger OD13): a second item landing where items lie gathers them all into a new junk pile (a container, prototype 3023), and each dropped item gets an item-decay event two days later; the container drops its last item first. | The items lie loose on the cell in the holder's order, without a pile or decay. |
 | A respawning scenery that is off can still be damaged (ODA1). | The hero's attack on it is refused (`ObjectUnavailable`): the player cannot click an object that is off. |
 | A container never opened first generates its inventory from its inventory source, then spills it. | The session holds no inventory sources: only the T0 items spill. |
 
@@ -109,7 +111,7 @@ The registry version stays 1, as when the Lock event was added.
 
 - **Viewer.** It has no input to attack an object, and does not hide a destroyed door, draw a busted window's ART, show
   spilled items or switch a respawning scenery off.
-- **Host steps.** The trap and BUST scripts, sounds, eye candy, the guards' reaction and the taking-damage script are reported
+- **Host steps.** The trap and BUST scripts, sounds, eye candy, the witnesses' reaction and the taking-damage script are reported
   to the host, not run here.
 - **Others.** NPC attacks on objects (AI), area damage (spells, explosions) and script action 60 on objects, and the decay
   of dropped items.

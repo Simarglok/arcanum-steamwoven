@@ -131,5 +131,6 @@ exist.
   an item on the ground (ARC-COMBAT-008) do, but the viewer passes no item baselines yet.
 - No trade, price function, repair window or payment; no Repair skill run (ARC-SKILLS-011).
 - The bust and destroy sounds and the BUST script are reported to the host, not played or run here.
-- Breaking walls, portals, containers, scenery and traps (other branches of 0x43F1C0) is not implemented.
+- Breaking walls (a branch of 0x43F1C0 no attack reaches) is not implemented; portals, containers, scenery and traps break in
+  the [object damage](object-damage-runtime.md) domain (ARC-COMBAT-008).
 - No viewer shows item condition or broken art.

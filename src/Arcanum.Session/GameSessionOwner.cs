@@ -51,6 +51,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private List<SessionEffectFiring>? _passEffects;
     private List<SessionLockFiring>? _passLocks;
     private List<SessionWaitFiring>? _passWaits;
+    private List<SessionRespawnFiring>? _passRespawns;
     // Replaced, not mutated, when a life step that drew on a trial copy commits.
     private SeededRandom _random;
     private readonly SessionCombatRolls _combatRolls;
@@ -750,7 +751,7 @@ public sealed partial class GameSessionOwner : IDisposable
     public SessionMapInventory? QueryMapInventory(SessionMapId map)
     {
         ThrowIfDisposed();
-        return _inventory.Seeds.TryGetValue(map, out var seed) ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, holder)) : null;
+        return _inventory.Seeds.TryGetValue(map, out var seed) ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder)) : null;
     }
 
     /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
@@ -778,8 +779,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         // ARC-COMBAT-008: an item of a container an attack broke lies on the ground at the container's cell.
-        if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item) ||
-            row.Cell is null && !(seed.HolderOf.TryGetValue(item, out var holder) && SpillCell(_actor.Map, holder) is not null))
+        if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item) || row.Cell is null && SpilledCell(_actor.Map, seed, item) is null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         return Take(seed, new(item, row.Facts), false, insertCheck, scripts);
     }
@@ -1009,6 +1009,8 @@ public sealed partial class GameSessionOwner : IDisposable
         var effects = new List<SessionEffectFiring>();
         var locks = new List<SessionLockFiring>();
         var waits = new List<SessionWaitFiring>();
+        var respawns = new List<SessionRespawnFiring>();
+        _passRespawns = respawns;
         _passWorld = world;
         _passFirings = firings;
         _passCalls = calls;
@@ -1038,10 +1040,11 @@ public sealed partial class GameSessionOwner : IDisposable
             _passEffects = null;
             _passLocks = null;
             _passWaits = null;
+            _passRespawns = null;
         }
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
-            Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly() };
+            Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly() };
     }
 
     /// <summary>

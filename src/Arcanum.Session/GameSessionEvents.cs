@@ -60,7 +60,12 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionLockFiring> Locks { get; init; } = Array.Empty<SessionLockFiring>();
     /// <summary>The wait timers that came due (ARC-WORLD-045), in firing order.</summary>
     public IReadOnlyList<SessionWaitFiring> Waits { get; init; } = Array.Empty<SessionWaitFiring>();
+    /// <summary>The respawning scenery switched on again (ARC-COMBAT-008), in firing order.</summary>
+    public IReadOnlyList<SessionRespawnFiring> Respawns { get; init; } = Array.Empty<SessionRespawnFiring>();
 }
+
+/// <summary>A respawn event that came due (ARC-COMBAT-008, ledger OD10): the scenery switched on again.</summary>
+public sealed record SessionRespawnFiring(GameEvent Event, SessionMapId Map, string Entity);
 
 /// <summary>One saved pending event: the queue record without its derived domain and scope map.</summary>
 public sealed record SessionPendingEvent(long Sequence, string Kind, long DeadlineMs, ImmutableArray<GameEventEntity> Entities,

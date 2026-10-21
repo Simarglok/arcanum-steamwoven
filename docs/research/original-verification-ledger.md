@@ -1792,7 +1792,7 @@ Anomalies (none needs a switch; the owner may still ask for one under D8):
 Source: the [object damage runtime](../world/object-damage-runtime.md). Question: what does the original's attack do to a
 non-critter object (the object branch of the damage step 0x4B4390, the break 0x43F1C0 and its callees)? Read on 2026-10-21
 by this task and, independently, by a fresh agent that saw only the questions and the project's records of the callees (method
-step 6). Both agree on every row; the rows are F2. Every direct branch stays inside `.text`. The second reader saw one summary
+step 6). Both agree on every row; OD1–OD12 are F2 and OD13, found while answering the review, has one reading (F1). Every direct branch stays inside `.text`. The second reader saw one summary
 line of the new `ObjectDamageRules` while searching for the door/window meaning of portal ART bit 10 (which comes from the
 project's portal naming, not this reading); its reading of 0x4F06E0 rests on the listing and agrees with LK12, already F2.
 
@@ -1810,6 +1810,7 @@ project's portal naming, not this reading); its reading of 0x4F06E0 rests on the
 | OD10 | 0x43F1C0, scenery; respawn (0x43F5F0) | Respawning scenery (scenery flag 0x20): BUST script, scenery flag 0x400, object flag 0x2 (off), damage 0, and a Scenery Respawn event (kind 33) after field 71 × 8,000 ms when positive, its magnitude × 60,000 ms when negative, 1 day + 1 ms at 0; the event clears 0x400 and the off flag. Other scenery: already busted (flag 0x2) is destroyed (sound 1); otherwise it takes the ART of field 25 when not −1, its damage becomes its maximum, flag 0x2, object flag 0x400000 (invulnerable), sound 0 and its BUST script. | Original |
 | OD11 | 0x43F1C0, trap | Field 25 = −1 or trap flag 0x2 already set: destroyed (sound 1). Otherwise the ART of field 25, damage 0, trap flag 0x2, sound 0, BUST script. | Original |
 | OD12 | 0x43F1C0, items | As DU4: an item whose art carries the destroyed bit is deleted (sound 1); otherwise both arts take the bit, damage 0, the item leaves a wear slot (or drops), sound 0 and its BUST script. | Original (confirms DU4) |
+| OD13 | drop (0x466E50, 0x466EF0), read by this task only (F1) | A dropped item joins a junk pile (prototype 3023) already at the location; else, when items lie there, a new junk pile is created and those items and the dropped one go into it; else it lies loose. Each drop schedules the item's decay two game days later (0x468090). So a container spilling two or more items leaves them in a junk pile. | Original; the session lays spilled items loose (a recorded difference in the [object damage runtime](../world/object-damage-runtime.md#differences-from-the-original)) |
 
 Anomalies (none needs a switch):
 
@@ -1820,6 +1821,9 @@ Anomalies (none needs a switch):
   settings (the original's behaviour; reported to the host each time).
 - ODA4 (OD4, OD6): a ranged break fires a trap with no triggerer; the session's attack is melee only, so it does not arise.
 - ODA5 (OD3): the full-damage flags lose to the material reduction and the difficulty; no caller of the session sets them.
+- ODA6 (OD13): the session lays a spilled container's items loose instead of in a junk pile and models no item decay; a
+  difference of the inventory owner, not a switch (the pile and decay come with dropping items, which the inventory does not
+  model yet).
 
 ## Decisions to revisit
 

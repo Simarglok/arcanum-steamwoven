@@ -39,15 +39,20 @@ public sealed class ObjectAttackStateTests
     private static GameSessionOwner Owner()
     {
         var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
-        var seed = new SessionMapInventorySeed(
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed()).Failure);
+        return owner;
+    }
+
+    // A chest with two items and a vase on the ground (a seed is host data: a restored session gets it again).
+    private static SessionMapInventorySeed Seed()
+    {
+        return new SessionMapInventorySeed(
             [new("chest", SessionHolderKind.Container, false, false, [], ["cup", "knife"])],
             [
                 new("cup", InventoryStateTests.Facts(SessionItemType.Generic, 5650), null),
                 new("knife", InventoryStateTests.Facts(SessionItemType.Weapon, 2001), null),
                 new("vase", InventoryStateTests.Facts(SessionItemType.Generic, 5651), new CellCoord(101, 200)),
             ]);
-        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
-        return owner;
     }
 
     // Attacks until the object breaks (or the bounded run ends); every attack must be accepted.
@@ -73,7 +78,7 @@ public sealed class ObjectAttackStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, first.Disposition);
         Assert.AreEqual(AttackOutcome.Hit, first.Resolution!.Outcome);
         Assert.AreEqual(first.Resolution.Damage!.HitPointDamage, first.Object!.Damage, "the resolver's hit points");
-        Assert.IsTrue(first.Host.HasFlag(SessionObjectHostSteps.GuardsAlerted));
+        Assert.AreEqual(SessionObjectHostSteps.WitnessesHearAttack, first.Host);
 
         var broke = BreakIt(owner, new() { Target = door });
         Assert.AreEqual(ObjectBreak.Destroyed, broke.Object!.Break);
@@ -125,7 +130,7 @@ public sealed class ObjectAttackStateTests
         var statue = Target("statue", DamageableObjectKind.Scenery, with: b => b with { HasDestroyedArt = true });
         var busted = BreakIt(owner, new() { Target = statue });
         Assert.AreEqual(ObjectBreak.SceneryBusted, busted.Object!.Break);
-        Assert.AreEqual(SessionObjectHostSteps.BustScript | SessionObjectHostSteps.BustSound, busted.Host);
+        Assert.AreEqual(SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.BustScript | SessionObjectHostSteps.BustSound, busted.Host);
         Assert.AreEqual(new SessionObjectState(6, 0, SessionObjectCondition.Busted), owner.QueryObject(statue), "damage set to the maximum");
         var again = owner.AttackObject(owner.Version, new() { Target = statue });
         Assert.AreEqual(DamagePrevention.Invulnerable, again.Resolution!.Damage!.Prevented, "a busted scenery is invulnerable");
@@ -154,7 +159,7 @@ public sealed class ObjectAttackStateTests
     {
         using var owner = Owner();
         var plain = BreakIt(owner, new() { Target = Target("trap-a", DamageableObjectKind.Trap) });
-        Assert.AreEqual((ObjectBreak.Destroyed, SessionObjectHostSteps.DestroySound), (plain.Object!.Break, plain.Host));
+        Assert.AreEqual((ObjectBreak.Destroyed, SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.DestroySound), (plain.Object!.Break, plain.Host));
         var art = Target("trap-b", DamageableObjectKind.Trap, with: b => b with { HasDestroyedArt = true });
         var busted = BreakIt(owner, new() { Target = art });
         Assert.AreEqual(ObjectBreak.TrapBusted, busted.Object!.Break);
@@ -233,6 +238,110 @@ public sealed class ObjectAttackStateTests
         Refused(new() { Target = door, Distance = 2 }, GameSessionFailure.InvalidAttack);
         Refused(new() { Target = door }, GameSessionFailure.StaleVersion, new GameSessionVersion(owner.Identity, 5));
         Assert.ThrowsExactly<ArgumentException>(() => owner.QueryObject(door with { Entity = "" }));
+    }
+
+    [TestMethod]
+    public void ASpilledContainerSurvivesASaveAtAnyCell()
+    {
+        foreach (var cell in new[] { new CellCoord(0, 0), new CellCoord((1 << 24) - 1, (1 << 24) - 1), ChestCell })
+        {
+            using var owner = Owner();
+            var chest = Target("chest", DamageableObjectKind.Container, with: b => b with { Cell = cell });
+            BreakIt(owner, new() { Target = chest });
+            using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+            Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, Seed()).Failure);
+            Assert.AreEqual(SessionObjectCondition.Destroyed, restored.QueryObject(chest).Condition);
+            CollectionAssert.AreEqual(new[] { cell, cell }, restored.QueryMapInventory(Exterior)!.Ground.Skip(1).Select(g => g.Cell).ToArray());
+        }
+        using var bad = Owner();
+        Assert.AreEqual(GameSessionFailure.InvalidObject, bad.AttackObject(bad.Version,
+            new() { Target = Target("chest", DamageableObjectKind.Container, with: b => b with { Cell = new(1 << 24, 0) }) }).Failure);
+    }
+
+    [TestMethod]
+    public void ASaveWithAMalformedRespawnEventIsRefused()
+    {
+        using var owner = Owner();
+        BreakIt(owner, new() { Target = Target("barrel", DamageableObjectKind.Scenery, with: b => b with { Respawning = true, RespawnDelay = 10 }) });
+        var at = owner.QueryClockSnapshot().GameTimestampMs;
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        void Refused(string changed)
+        {
+            Assert.AreNotEqual(text, changed);
+            var decoded = GameSessionSnapshotCodec.TryDecode(changed);
+            if (decoded.Snapshot is null) return;
+            Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(decoded.Snapshot, RestoreOptions()).Failure);
+        }
+        Refused(text.Replace($"\"deadlineMs\":{at + 80_000}", $"\"deadlineMs\":{at + 80_001}"));
+        Refused(text.Replace($"\"values\":[{at},80000]", $"\"values\":[{at},0]"));
+        Refused(text.Replace($"\"values\":[{at},80000]", $"\"values\":[{at + 1},80000]"));
+        var events = text.IndexOf("\"pending\"", StringComparison.Ordinal);
+        // A scenery that is not recorded off.
+        Refused(text[..events] + text[events..].Replace("\"entity\":\"barrel\"", "\"entity\":\"cask\""));
+    }
+
+    [TestMethod]
+    public void ABustedWindowBustsAgainOnEveryHitAndKeepsItsOtherLockBits()
+    {
+        using var owner = Owner();
+        var window = Target("sector:1:8", DamageableObjectKind.Portal, with: b => b with { Window = true, Openable = new(OpenableKind.Portal, LockRules.LockedBit, 0, 0) });
+        BreakIt(owner, new() { Target = window });
+        var damage = owner.QueryObject(window).Damage;
+        var again = owner.AttackObject(owner.Version, new() { Target = window });
+        Assert.AreEqual((true, ObjectBreak.WindowBusted), (again.Object!.Broken, again.Object.Break));
+        Assert.IsTrue(again.Host.HasFlag(SessionObjectHostSteps.BustScript));
+        Assert.IsTrue(owner.QueryObject(window).Damage >= damage, "its damage only grows");
+        Assert.AreEqual(LockRules.LockedBit | LockRules.BustedBit, owner.QueryOpenable(new(Exterior, window.Entity), window.Baseline.Openable!.Value).Flags);
+    }
+
+    [TestMethod]
+    public void AnItemCanBeInvulnerableOrTrappedAndASpilledItemIsOnTheGround()
+    {
+        using var owner = Owner();
+        var facts = new SessionObjectBaseline { Kind = DamageableObjectKind.Item, Material = ObjectMaterial.Glass };
+        var shielded = owner.AttackObject(owner.Version, new() { Item = new("vase", new(4, 0, 0, false)) { Invulnerable = true }, ItemFacts = facts });
+        Assert.AreEqual(DamagePrevention.Invulnerable, shielded.Resolution!.Damage!.Prevented);
+        Assert.AreEqual(DamagePrevention.Invulnerable, owner.AttackObject(owner.Version,
+            new() { Item = new("vase", new(4, 0, 0, false)), ItemFacts = facts with { Invulnerable = true } }).Resolution!.Damage!.Prevented);
+        var trapped = BreakIt(owner, new() { Item = new("vase", new(4, 0, 0, false)), ItemFacts = facts with { Trapped = true } });
+        Assert.IsTrue(trapped.Host.HasFlag(SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.WitnessesHearBreak));
+
+        BreakIt(owner, new() { Target = Target("chest", DamageableObjectKind.Container) });
+        var cup = owner.AttackObject(owner.Version, new() { Item = new("cup", new(400, 0, 0, false)), ItemFacts = facts });
+        Assert.AreEqual(GameSessionFailure.None, cup.Failure, "a spilled item can be struck where it lies");
+        Assert.AreEqual(SessionObjectHostSteps.WitnessesHearAttack, cup.Host);
+    }
+
+    [TestMethod]
+    public void AStoneDoorTakesNothingFromBareHandsAndARecordedConditionOfAnotherKindIsIgnored()
+    {
+        using var owner = Owner();
+        var door = Target("sector:3:1", DamageableObjectKind.Portal, material: ObjectMaterial.Stone);
+        var hit = owner.AttackObject(owner.Version, new() { Target = door });
+        Assert.AreEqual((0, false), (hit.Object!.Damage, hit.Object.Broken), "bare hands (at most 5) against the stone reduction of 10");
+        Assert.IsTrue(hit.Resolution!.Damage!.Rolled.Normal > 0);
+        // A busted condition written for a door (a crafted save): it is not a door's, so it is ignored.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, null,
+            [new(Exterior, MapChangeKey.ForEntity(door.Entity, GameSessionOwner.ObjectConditionProperty), (long)SessionObjectCondition.Busted)]).Disposition);
+        Assert.AreEqual(SessionObjectCondition.Whole, owner.QueryObject(door).Condition);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttackObject(owner.Version, new() { Target = door }).Failure);
+    }
+
+    [TestMethod]
+    public void AnUnavailableObjectIsRefusedBeforeTheHerosItemsAndARespawnIsReported()
+    {
+        using var owner = Owner();
+        var barrel = Target("barrel", DamageableObjectKind.Scenery, with: b => b with { Respawning = true, RespawnDelay = -2 });
+        BreakIt(owner, new() { Target = barrel });
+        var bad = new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Weapon] = new("kit:1", new(1, 0, 0, false)) };
+        Assert.AreEqual(GameSessionFailure.ObjectUnavailable, owner.AttackObject(owner.Version, new() { Target = barrel, HeroWorn = bad }).Failure);
+        var pending = owner.QueryEvents().Single(e => e.Kind == SessionEventKinds.ObjectRespawn);
+        Assert.AreEqual(120_000, pending.DeadlineMs - owner.QueryClockSnapshot().GameTimestampMs, "two game minutes");
+        Assert.AreEqual(ClockMutationDisposition.Changed,
+            owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 120_000, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        var fired = owner.ProcessEvents(new NoWorld()).Respawns.Single();
+        Assert.AreEqual((Exterior, "barrel"), (fired.Map, fired.Entity));
+        Assert.AreEqual(SessionObjectCondition.Whole, owner.QueryObject(barrel).Condition);
     }
 
     private sealed class NoWorld : ISessionEventWorld

@@ -85,8 +85,11 @@ public enum SessionObjectHostSteps
     DestroySound = 1 << 3,
     /// <summary>The container's spill eye candy (1203) on the first container or item at its cell.</summary>
     SpillEyeCandy = 1 << 4,
-    /// <summary>The portal or container guards (0x4AEE50) hear of the attack.</summary>
-    GuardsAlerted = 1 << 5,
+    /// <summary>The witnesses of the hero's attack on an object it left whole (0x4AEE50 with 1: NPCs near that guard the object's
+    /// faction lower their reaction by 20, then may turn hostile).</summary>
+    WitnessesHearAttack = 1 << 5,
+    /// <summary>The witnesses of the hero breaking the object (0x4AEE50 with 0: possible hostility).</summary>
+    WitnessesHearBreak = 1 << 6,
 }
 
 /// <summary>
@@ -130,11 +133,12 @@ public sealed partial class GameSessionOwner
     /// host's) and the object breaks (<see cref="ObjectDamageRules.Break"/>; an item through <see cref="DamageItem"/>). An object the
     /// hit left whole wears the hero's weapon by its material (<see cref="ApplyAttackWear"/>); a critical self-hit hurts the hero and
     /// wears its own armour. Refused before any roll, in order: no hero (<see cref="GameSessionFailure.AttackUnavailable"/>), an
-    /// invalid target (<see cref="GameSessionFailure.InvalidObject"/>), an object destroyed, switched off or busted and invulnerable
-    /// or an item no longer on the ground (<see cref="GameSessionFailure.ObjectUnavailable"/>), hero items that do not hold
+    /// invalid target (<see cref="GameSessionFailure.InvalidObject"/>), an object destroyed or switched off or an item no longer on
+    /// the ground (<see cref="GameSessionFailure.ObjectUnavailable"/>), hero items that do not hold
     /// (<see cref="GameSessionFailure.InvalidWear"/>), an aim at the torso, a distance outside 0..reach
     /// (<see cref="GameSessionFailure.InvalidAttack"/>), a weapon that is not melee (<see cref="GameSessionFailure.AttackUnsupported"/>),
-    /// the version, the revision, and for a respawning scenery a full event budget. Each step commits its own revision.
+    /// the version, the revision, and for a respawning scenery a full event budget. The resolution's draws are spent once it ran,
+    /// also when nothing changes (a hit for 0 on an object whose damage is recorded); each later step commits its own revision.
     /// Not modelled here: the taking-damage script, the trap and BUST scripts, sounds, eye candy, the guards' reaction and the
     /// inventory source of a container never opened.
     /// </summary>
@@ -160,6 +164,7 @@ public sealed partial class GameSessionOwner
             // A scenery the session busted became invulnerable at its break (its object flag 0x400000).
             defender = ObjectDefender(target.Baseline, target.Baseline.Invulnerable || target.Baseline.Kind == DamageableObjectKind.Scenery &&
                 RecordedObject(_maps, target.Map, target.Entity) is { Condition: SessionObjectCondition.Busted });
+            // A recorded busted condition reaches the break facts only for a kind that has it.
         }
         else
         {
@@ -168,7 +173,7 @@ public sealed partial class GameSessionOwner
                 !ItemDurabilityRules.IsValid(item.Baseline)) return RejectObject(GameSessionFailure.InvalidObject);
             if (!OnGround(item.Entity)) return RejectObject(GameSessionFailure.ObjectUnavailable);
             kind = AttackTargetKind.OtherObject;
-            defender = ObjectDefender(facts, facts.Invulnerable);
+            defender = ObjectDefender(facts, facts.Invulnerable || item.Invulnerable);
         }
 
         var hero = QueryHeroAttack()!;
@@ -219,7 +224,7 @@ public sealed partial class GameSessionOwner
             // A critical self-hit: the hero takes the damage and its own armour and weapon the wear (ARC-COMBAT-007).
             var applied = ApplyDamage(Version, SessionLifeTarget.Hero, LifeDamage.FromAttack(resolution)!);
             if (applied.Disposition == GameSessionDisposition.Rejected)
-                return new(Disposition(changed), GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, applied.Failure, Version);
+                return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, applied.Failure, Version);
             var selfWear = resolution.Wear is { Any: true } ? WearSteps(new SessionAttackWear { Resolution = resolution, Attacker = heroSide, Target = objectSide }) : null;
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, applied.Outcome, selfWear, SessionObjectHostSteps.None,
                 WearFailure(selfWear), Version);
@@ -249,6 +254,7 @@ public sealed partial class GameSessionOwner
                 return new(Disposition(changed), GameSessionFailure.None, resolution, null, itemResult, null, null, SessionObjectHostSteps.None,
                     itemResult.Value.Failure, Version);
             broken = itemResult.Value.Break != ItemBreakStep.None;
+            host = broken ? SessionObjectHostSteps.WitnessesHearBreak : SessionObjectHostSteps.WitnessesHearAttack;
             if (broken && attack.ItemFacts!.Trapped) host |= SessionObjectHostSteps.TrapFires;
             host |= itemResult.Value.Break switch
             {
@@ -271,16 +277,24 @@ public sealed partial class GameSessionOwner
         var map = new SessionMapId(entity.Map);
         if (RecordedObject(_maps, map, entity.Code) is not { Condition: SessionObjectCondition.Off }) return GameEventHandlerOutcome.Refused;
         var result = ApplyChanges(Version, null, [new(map, MapChangeKey.ForEntity(entity.Code, ObjectConditionProperty), null)]);
-        return result.Disposition == GameSessionDisposition.Rejected ? GameEventHandlerOutcome.Refused : GameEventHandlerOutcome.Completed;
+        if (result.Disposition == GameSessionDisposition.Rejected) return GameEventHandlerOutcome.Refused;
+        _passRespawns?.Add(new(firing.Event, map, entity.Code));
+        return GameEventHandlerOutcome.Completed;
     }
 
     // The queue's existence check for a respawn event's scenery when the host cannot answer it: the session's own record.
     private bool RespawnObjectExists(GameEventEntity entity) =>
         RecordedObject(_maps, new(entity.Map), entity.Code) is { Condition: SessionObjectCondition.Off };
 
-    /// <summary>The cell where a spilled container's items lie, or null when the holder is no spilled container (ARC-COMBAT-008).</summary>
-    internal CellCoord? SpillCell(SessionMapId map, string holder) =>
+    /// <summary>The cell where a spilled container's items lie, or null when the holder is no container of the seed or did not spill
+    /// (ARC-COMBAT-008).</summary>
+    internal CellCoord? SpillCell(SessionMapId map, InventoryDomain.Seed seed, string holder) =>
+        seed.Holders.TryGetValue(holder, out var row) && row.Kind == SessionHolderKind.Container &&
         RecordedObject(_maps, map, holder) is { Condition: SessionObjectCondition.Destroyed, Spill: { } cell } ? cell : null;
+
+    /// <summary>The spill cell of a seed item whose container spilled, or null.</summary>
+    internal CellCoord? SpilledCell(SessionMapId map, InventoryDomain.Seed seed, string item) =>
+        seed.HolderOf.TryGetValue(item, out var holder) ? SpillCell(map, seed, holder) : null;
 
     private GameSessionMutationResult ObjectWrite(SessionObjectTarget target, ObjectHitOutcome hit)
     {
@@ -323,8 +337,8 @@ public sealed partial class GameSessionOwner
 
     private static SessionObjectHostSteps HostSteps(SessionObjectBaseline baseline, ObjectHitOutcome hit)
     {
-        var steps = baseline.Kind is DamageableObjectKind.Portal or DamageableObjectKind.Container ? SessionObjectHostSteps.GuardsAlerted : SessionObjectHostSteps.None;
-        if (!hit.Broken) return steps;
+        if (!hit.Broken) return SessionObjectHostSteps.WitnessesHearAttack;
+        var steps = SessionObjectHostSteps.WitnessesHearBreak;
         if (baseline.Trapped) steps |= SessionObjectHostSteps.TrapFires;
         return steps | hit.Break switch
         {
@@ -360,9 +374,19 @@ public sealed partial class GameSessionOwner
     {
         var recorded = RecordedObject(_maps, target.Map, target.Entity);
         var damage = recorded?.Damage ?? target.Baseline.Damage;
-        var condition = recorded?.Condition ?? (target.Baseline.Busted ? SessionObjectCondition.Busted : SessionObjectCondition.Whole);
+        // A recorded condition counts only where the kind has it (busted: scenery and traps; off: scenery); another one, as only
+        // a crafted save or a host's other use of the entity writes, is ignored.
+        var condition = recorded?.Condition is { } written && Admits(target.Baseline.Kind, written) ? written
+            : target.Baseline.Busted ? SessionObjectCondition.Busted : SessionObjectCondition.Whole;
         return new(damage, target.Baseline.Points + target.Baseline.Adjustment - damage, condition);
     }
+
+    private static bool Admits(DamageableObjectKind kind, SessionObjectCondition condition) => condition switch
+    {
+        SessionObjectCondition.Busted => kind is DamageableObjectKind.Scenery or DamageableObjectKind.Trap,
+        SessionObjectCondition.Off => kind == DamageableObjectKind.Scenery,
+        _ => true,
+    };
 
     // The recorded damage and condition of an object (a condition value out of range counts as none); a spilled container's
     // condition word carries its cell above the condition.
@@ -388,7 +412,7 @@ public sealed partial class GameSessionOwner
 
     private bool OnGround(string item) =>
         _inventory.Seeds.Any(pair => pair.Value.Items.TryGetValue(item, out var row) && !_inventory.Taken.Contains(item) &&
-            (row.Cell is not null || pair.Value.HolderOf.TryGetValue(item, out var holder) && SpillCell(pair.Key, holder) is not null));
+            (row.Cell is not null || SpilledCell(pair.Key, pair.Value, item) is not null));
 
     private static bool ValidObject(SessionObjectTarget target) =>
         target is not null && target.Baseline is not null && SessionValidation.Map(target.Map) && SessionValidation.Entity(target.Entity) &&
@@ -396,6 +420,7 @@ public sealed partial class GameSessionOwner
         (target.Baseline.Openable is null ? target.Baseline.Kind is not DamageableObjectKind.Portal
             : target.Baseline.Kind is DamageableObjectKind.Portal or DamageableObjectKind.Container &&
               target.Baseline.Openable.Value.Kind == (target.Baseline.Kind == DamageableObjectKind.Portal ? OpenableKind.Portal : OpenableKind.Container) &&
+              target.Baseline.Openable.Value.JunkPile == target.Baseline.JunkPile &&
               ValidOpenable(new(target.Map, target.Entity), target.Baseline.Openable.Value));
 
     private static bool ValidFacts(SessionObjectBaseline b)
