@@ -45,7 +45,8 @@ The target functions' questions (MT8) over the shown map:
   answers under `row:` kind and source index. The hero is the PC entity `pc` on its live cell.
 - **NPC facts.** An NPC's facts are its combat values and stored fields with its life in the session: hit points, poison, the
   object, spell and critter flags, its stored magic resistance (resistance 4, O9), and its PC leader when it follows the hero.
-- **Square and tile queries.** They read the rows on their cells.
+- **Square and tile queries.** They read the rows on their cells; a carried item (object flag 0x1000) stands on no cell.
+- **Direction.** The original's octant of a tile offset (0x4B8D50, 2:1 slope rule; no offset answers 5).
 - **Line of fire.** It is the original's line (ARC-COMBAT-012) over the map's live line-of-fire map. A failed line scores 100.
 
 Stand-ins, each a later slice's:
@@ -53,7 +54,8 @@ Stand-ins, each a later slice's:
 - a path to every admitted tile;
 - NPCs stand on their map cells;
 - an NPC wields no weapon in a spell's context (MG36 only reaches a caster with a weapon);
-- spell damage to objects other than critters is not ready (an acid's worn items take no damage step).
+- spell damage to objects other than critters is not ready (an acid's worn items take no damage step), and the hero's worn kit
+  items carry no stored fields here, so the hero answers no worn items while wearing any.
 
 ## The run host (`SessionSpellCaster`)
 
@@ -64,7 +66,8 @@ The world the run rules ask (MT9a–MT12), for the hero and the map's NPCs:
   - the local player;
   - the payer: a critter pays with its fatigue; worn mana stores are not modelled yet;
   - the source's race and mastered college.
-- **Cells.** The hero's charge cells (ARC-TECHNOLOGY-007).
+- **Cells.** The hero's charge cells (ARC-TECHNOLOGY-007), for a payment the hero makes; any other payer's cells are not modelled
+  and refuse.
 - **Flags.** The forbidden flags (0x456430), the objects' spell flags and the local player's perception.
 - **Resistance.** The resistance's facts: the stored magic resistance, the aptitude, the `Resist:` stat and its extraordinary
   value. The session's rolls and the hero's fate save drive it.
@@ -76,7 +79,7 @@ The world the run rules ask (MT9a–MT12), for the hero and the map's NPCs:
 
   Every other component type does nothing and is logged as not ready (MT13–MT18).
 - **Stats.** By the original's numbers: 0..7 primary, 8..16 derived, 17 level.
-- **Time facts.** Those of the duration and the maintenance.
+- **Time facts.** Those of the duration and the maintenance, with the parent's mastered college (the hero's or an NPC's book).
 - **The maintain bar.** It always has a slot (MT20b).
 
 **Notes** (`Apply`). The payments of a call's notes are applied after the call:
@@ -87,7 +90,15 @@ The world the run rules ask (MT9a–MT12), for the hero and the map's NPCs:
 The local player's messages, resisting targets (spell.mes 643) and freed runs go to the host's log for MT20a-2's feedback.
 
 **The event pass.** The caster is also the pass's magic world (`ISessionSpellWorld`), so a run's ticks, END and interrupts run
-through the same host.
+through the same host. When the caster's event world is a script world (`ISessionScriptWorld`), the pass also runs deferred SCR
+calls through it. The notes of the firings that ran are applied after the pass, so several ticks of one run in one pass each check
+the fatigue from before the pass.
+
+Further limits of the host:
+- `SpellRunObject` lists of the run (the run list and the summoned object) are not filled; the target functions see none.
+- An object that is not a critter has magic resistance 0.
+- A refused call (a session rejection) may still have applied the components that ran before it.
+- A critter without a life record in the session has no payer and pays nothing.
 
 ## The casting goal (CG rows)
 
@@ -102,11 +113,14 @@ The original's goals 26 and 82 (`ag_throw_spell`, with the record's casting anim
 3. **Release frame (`Release`, 0x429C80).** At the animation's action frame the target is checked again (0x456A90,
    `TargetStillValid`):
    - the BEGIN area passes at once when it is 0, exactly 0x10, or has the self bit without the tile bit;
-   - otherwise the area test of the run's target object, else its tile.
+   - otherwise the picker's wrapper (0x4F2680) over the area test: a target object fails for object flag 0x800, is tested as the
+     candidate and the target with no tiles, and then with its location as both tiles; a target tile is tested as both tiles. The
+     wrapper's global gate (0x603D20) belongs to the picker and is not modelled.
 
    Then the run's BEGIN is processed (0x456F70).
-4. **End before release (`EndGoal`, 0x429CD0).** A goal that ends before its release frame frees the run with its BEGIN cost
-   charged (0x456FA0: the run cost with mastery, applied).
+4. **End (`EndGoal`, 0x429CD0).** A goal that ends before its release frame frees the run with its BEGIN cost charged (0x456FA0:
+   the run cost with mastery, applied). After the release frame (the goal's frame flag 0x8), or for a run whose BEGIN ran, the end
+   frees nothing; the host forgets the release when the run is freed, since its slot is reused.
 
 ## Differences from the original
 

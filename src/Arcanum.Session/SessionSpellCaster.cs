@@ -85,6 +85,11 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     private readonly ISpellCastMap _map;
     private readonly ISessionEventWorld _events;
     private readonly List<SpellCastEvent> _log = [];
+    // The runs whose goal reached its release frame (the goal's frame flag 0x8): their goal's end frees nothing. A freed run's id
+    // leaves the set, since the slot is reused.
+    private readonly HashSet<int> _released = [];
+    // Whose charge cells a payment spends: the payer the rules asked for last (only the hero's are modelled).
+    private string? _cellsPayer;
 
     public SessionSpellCaster(GameSessionOwner owner, Func<int, SessionSpellRecord?> records, ISpellCastMap map, ISessionEventWorld events)
     {
@@ -134,7 +139,9 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
             parent is null ? 0 : Stat(parent, 6) ?? 0, parent?.Id == Hero, source is null ? null : Payer(source), Caster(source));
     }
 
-    public ISpellCellSource Cells => _owner.HeroCellSource() ?? NoCells.Instance;
+    /// <summary>The charge cells of the payer asked for last (<see cref="Payer"/>): the hero's; any other payer's are not modelled yet
+    /// and refuse.</summary>
+    public ISpellCellSource Cells => _cellsPayer == Hero ? _owner.HeroCellSource() ?? NoCells.Instance : NoCells.Instance;
 
     public bool FlagsAllow(SpellRun run)
     {
@@ -152,6 +159,7 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     public SpellPayer? Payer(SpellRunObject who)
     {
         ArgumentNullException.ThrowIfNull(who);
+        _cellsPayer = who.Id;
         if (!who.IsCritter) return new(SpellPayerKind.Other);
         if (Life(who.Id) is not { } life) return null;
         var limiting = who.Id != Hero && _map.Critter(who.Id) is { } npc && (npc.CritterFlags & unchecked((int)0x80000000)) != 0;
@@ -222,7 +230,7 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     public SpellTimeFacts TimeFacts(SpellRun run)
     {
         ArgumentNullException.ThrowIfNull(run);
-        return new(run.Parent?.IsCritter == true, run.Parent?.Id == Hero ? _owner.QueryHeroSpellBook()?.MasteredCollege ?? -1 : -1,
+        return new(run.Parent?.IsCritter == true, run.Parent is { IsCritter: true } parent ? Caster(parent).MasteredCollege : SpellBookRules.NoMastery,
             run.Target?.IsCritter == true, run.Parent?.Aptitude ?? 0, run.Target?.Aptitude ?? 0);
     }
 
@@ -325,24 +333,31 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     public SessionSpellRunResult? Release(int run)
     {
         if (_owner.QuerySpellRuns()[run] is not { } r) return null;
+        // The release gate marks the goal's frame handled before the re-check (0x42CAA0): the goal's end then frees nothing.
+        _released.Add(run);
         if (TargetStillValid(r)) return Act(new(SessionSpellRunActionKind.Begin, run));
         if (!Profile.ReleaseRefusalKeepsRun) Act(new(SessionSpellRunActionKind.Free, run));
         return null;
     }
 
     /// <summary>
-    /// The casting goal ended before its release frame (0x429CD0): the run is freed with its BEGIN cost charged (0x456FA0, see
-    /// <see cref="ChargeBegin"/>). A goal refused before its animation (<paramref name="refused"/>: action points, the pre-animation
-    /// check or the target) ends the same way in the original (MG39); Steamwoven frees that run unpaid.
+    /// The casting goal ended (0x429CD0). After its release frame (the goal's frame flag 0x8), or for a run whose BEGIN ran, nothing
+    /// is freed and null answers; before it the run is freed with its BEGIN cost charged (0x456FA0, see <see cref="ChargeBegin"/>).
+    /// A goal refused before its animation (<paramref name="refused"/>: action points, the pre-animation check or the target) ends
+    /// the same way in the original (MG39); Steamwoven frees that run unpaid.
     /// </summary>
     [OriginalFunction(0x429CD0, OriginalFunctionScope.Partial)]
-    public SessionSpellRunResult EndGoal(int run, bool refused = false) =>
-        Act(new(refused && !Profile.GoalRefusalChargesBegin ? SessionSpellRunActionKind.Free : SessionSpellRunActionKind.FreeCharged, run));
+    public SessionSpellRunResult? EndGoal(int run, bool refused = false)
+    {
+        if (_released.Contains(run) || _owner.QuerySpellRuns()[run] is not { } r || (r.Flags & SpellRunFlags.Processed) != 0) return null;
+        return Act(new(refused && !Profile.GoalRefusalChargesBegin ? SessionSpellRunActionKind.Free : SessionSpellRunActionKind.FreeCharged, run));
+    }
 
     /// <summary>
     /// The release frame's target re-check (0x456A90): the record's BEGIN area passes at once when it is 0, exactly 0x10, or has
-    /// the self bit without the tile bit (high word 0x8000); otherwise the area test (0x4F2680, MT8) of the run's
-    /// target object, else its target tile, with its source and parent.
+    /// the self bit without the tile bit (high word 0x8000); otherwise the picker's wrapper (0x4F2680) over the area test (MT8):
+    /// a target object is the candidate and the target with no tiles (refused for object flag 0x800), retried with its location as
+    /// both tiles; a target tile is both tiles. The wrapper's further global gate (0x603D20) is the picker's and not modelled.
     /// </summary>
     [OriginalFunction(0x456A90, OriginalFunctionScope.Partial)]
     public bool TargetStillValid(SpellRun run)
@@ -351,13 +366,20 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
         if (_records(run.Spell) is not { } record || record.Areas.Length == 0) return true;
         var mask = record.Areas[0].Targets;
         if (mask == 0 || mask == 0x10 || ((mask & 0x1) != 0 && ((mask >> 32) & 0x8000) == 0)) return true;
-        var context = Context(run, record.Areas[0]) with
+        var basis = Context(run, record.Areas[0]);
+        if (run.Target is { } t)
         {
-            Candidate = run.Target is { } t ? _map.Object(t.Id) : null,
-            CandidateTile = run.Target is null ? run.TargetTile : SpellLocation.None,
-        };
-        return SpellTargetRules.Test(context, _map, Profile).Passes;
+            if (_map.Object(t.Id) is not { } o || (o.ObjectFlags & PickerRefused) != 0) return false;
+            var asObject = basis with { Candidate = o, Target = o, CandidateTile = SpellLocation.None, TargetTile = SpellLocation.None };
+            return SpellTargetRules.Test(asObject, _map, Profile).Passes
+                || SpellTargetRules.Test(asObject with { CandidateTile = o.Location, TargetTile = o.Location }, _map, Profile).Passes;
+        }
+        return SpellTargetRules.Test(basis with { Candidate = null, Target = null, CandidateTile = run.TargetTile, TargetTile = run.TargetTile }, _map,
+            Profile).Passes;
     }
+
+    /// <summary>The object flag the picker's wrapper refuses an object target for (0x4F2680).</summary>
+    public const int PickerRefused = 0x800;
 
     /// <summary>One action on the session's runs through this host, with its notes applied.</summary>
     public SessionSpellRunResult Act(SessionSpellRunAction action)
@@ -369,13 +391,26 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
         return result;
     }
 
-    /// <summary>An event pass with this host as the world (the magic-tech events run through it), its runs' notes applied.</summary>
+    /// <summary>
+    /// An event pass with this host as the magic world (the magic-tech events run through it) and, when the host's event world is a
+    /// script world, that world for deferred SCR calls. The notes of the firings that ran are applied after the pass, so several
+    /// ticks of one run in a pass are each checked against the fatigue before the pass.
+    /// </summary>
     public SessionEventPassResult ProcessEvents(int budget = 500)
     {
         var before = _owner.QuerySpellRuns();
-        var pass = _owner.ProcessEvents(this, budget);
-        foreach (var firing in pass.SpellRuns) Apply(firing.Notes, id => _owner.QuerySpellRuns()[id] ?? before[id]);
+        var pass = _owner.ProcessEvents(_events is ISessionScriptWorld scripts ? new ScriptPassWorld(this, scripts) : this, budget);
+        foreach (var firing in pass.SpellRuns.Where(f => f.Ran)) Apply(firing.Notes, id => _owner.QuerySpellRuns()[id] ?? before[id]);
         return pass;
+    }
+
+    // The pass world of a host whose event world also runs deferred script calls.
+    private sealed class ScriptPassWorld(SessionSpellCaster caster, ISessionScriptWorld scripts) : ISessionSpellWorld, ISessionScriptWorld
+    {
+        public ISpellRunHost SpellRuns => caster;
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => scripts.CritterFacts(map, entity);
+        public bool ObjectExists(SessionMapId map, string entity) => scripts.ObjectExists(map, entity);
+        public bool RunScriptCall(SessionScriptCall call) => scripts.RunScriptCall(call);
     }
 
     private SessionCombatant? Combatant(string id) =>
@@ -407,7 +442,7 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
                     _log.Add(new(SpellCastEventKind.Resisted, note.Run, 0, note.Target?.Object?.Id));
                     if (IsLocalPlayer(runs(note.Run)?.Parent)) _log.Add(new(SpellCastEventKind.Message, note.Run, ResistedMessage));
                     break;
-                case SpellRunNoteKind.Freed: _log.Add(new(SpellCastEventKind.Freed, note.Run)); break;
+                case SpellRunNoteKind.Freed: _released.Remove(note.Run); _log.Add(new(SpellCastEventKind.Freed, note.Run)); break;
             }
         }
     }

@@ -20,8 +20,7 @@ namespace Arcanum.TerrainViewer.Core;
 public sealed class AreaSpellCastMap : ISpellCastMap
 {
     private const int ObjectFlagsSlot = 18, SpellFlagsSlot = 19, PcType = 15, NpcType = 16;
-    private const int DestroyedOrOff = 0x3;
-    private static readonly (int X, int Y)[] Steps = [(1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0)];
+    private const int DestroyedOrOff = 0x3, InInventory = 0x1000;
 
     private readonly GameSessionOwner _session;
     private readonly int _map;
@@ -57,7 +56,8 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         _gone = gone ?? (_ => false);
         foreach (var row in rows)
         {
-            if (row.WorldX is not { } x || row.WorldY is not { } y) continue;
+            // A carried item (object flag 0x1000) stands in no sector list, whatever location it stores.
+            if (row.WorldX is not { } x || row.WorldY is not { } y || (Flags(row, ObjectFlagsSlot) & InInventory) != 0) continue;
             var id = Id(row);
             _rows[id] = row;
             if (!_cells.TryGetValue((x, y), out var list)) _cells[(x, y)] = list = [];
@@ -118,15 +118,20 @@ public sealed class AreaSpellCastMap : ISpellCastMap
 
     public int SectorKind(SpellLocation location) => 0;
 
-    public int Direction(SpellLocation from, SpellLocation to)
+    /// <summary>The original's direction of a tile offset (0x4B8D50): the octant of the line, a 2:1 slope rule deciding between a
+    /// straight and a diagonal step; no offset answers 5.</summary>
+    public static int Direction(long dx, long dy)
     {
-        long dx = (long)to.X - from.X, dy = (long)to.Y - from.Y;
         int sx = Math.Sign(dx), sy = Math.Sign(dy);
         if (Math.Abs(dx) > 2 * Math.Abs(dy)) sy = 0;
         if (Math.Abs(dy) > 2 * Math.Abs(dx)) sx = 0;
-        var index = Array.IndexOf(Steps, (sx, sy));
-        return index < 0 ? 0 : index;
+        return (sx, sy) switch
+        {
+            (-1, -1) => 0, (-1, 0) => 1, (-1, 1) => 2, (0, 1) => 3, (1, 1) => 4, (1, 0) => 5, (1, -1) => 6, (0, -1) => 7, _ => 5,
+        };
     }
+
+    public int Direction(SpellLocation from, SpellLocation to) => Direction((long)to.X - from.X, (long)to.Y - from.Y);
 
     public IReadOnlyList<SpellTargetObject> Party(SpellTargetObject source)
     {
@@ -164,11 +169,13 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     public IReadOnlyList<SpellAcidItem> WornItems(string entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        // The hero's kit items carry no stored fields here (their wear facts are the viewer's), so the hero answers none while it
+        // wears any; an NPC's items answer their stored acid resistance.
         var worn = entity == SessionSpellCaster.Hero ? AreaCombatHost.HeroWorn(_session, null) : _combat.WornItems(_session, _map, entity);
         if (worn is null) return [];
         return worn.OrderBy(p => (int)p.Key).Select(p => new SpellAcidItem(p.Value.Entity, (int)p.Key, false,
-            _rows.TryGetValue(p.Value.Entity, out var item) && CombatFieldReader.Read(item).Fields is { } fields && fields.Object.Resistances.Count > 0
-                ? Math.Clamp(fields.Object.Resistances[0], 0, 95) : 0)).ToArray();
+            _combat.Fields(_map, p.Value.Entity) is { } fields && fields.Object.Resistances.Count > 0 ? Math.Clamp(fields.Object.Resistances[0], 0, 95) : 0))
+            .ToArray();
     }
 
     public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) => null;
