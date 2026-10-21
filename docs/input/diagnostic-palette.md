@@ -115,7 +115,7 @@ WORLD host (`TerrainViewerWorld.cs`).
    the palette holds the same action. In `crash-site-area` Num Lock flips the original always-run lock and
    Ctrl+LMB on the ground runs once ([ARC-WORLD-020](../world/gait-runtime.md)); while it has a game session R
    toggles the combat mode ([ARC-COMBAT-004](../rendering/terrain-viewer.md#combat-mode-arc-combat-004)); while its session party is
-   wired F1–F6 send the original's follower order presets on key down
+   wired F1–F6 send the original's follower order presets on key release
    ([ARC-WORLD-046](../world/companion-orders-runtime.md#area-viewer)). So in `crash-site-area` with a
    session, its inventory and its party the keys still reserved are Escape, F10, F12, Enter, Space, Home, 1–0, A, E,
    F, K, M, O, S, V, W and held `,` `.` `/` (I too when the inventory seed was refused, F1–F6 too while the session party is

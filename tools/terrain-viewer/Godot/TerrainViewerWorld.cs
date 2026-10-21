@@ -310,7 +310,7 @@ public partial class TerrainViewerApp
     }
     private void WorldWindowFocusEntered() => ObserveWorldFocus(true);
     // Raw focus-exit signals of the world window, also under simulated focus: the native smoke checks that opening the follower
-    // order menu (an embedded popup) does not take the window's focus (ARC-WORLD-046).
+    // order menu does not take the window's focus, as an embedded popup did (ARC-WORLD-046).
     private int _worldFocusExitSignals;
     private void WorldWindowFocusExited() { _worldFocusExitSignals++; ObserveWorldFocus(false); }
     private void ObserveWorldFocus(bool focused)
@@ -639,7 +639,12 @@ public partial class TerrainViewerApp
         }
         // ARC-WORLD-046: a press outside the open follower order menu only closes it; after a portrait's walk order the press picks
         // its tile.
-        if (_followerPortraits is { MenuShown: true } portraits) { portraits.CloseMenu(); RefreshReadyStatus(); return; }
+        if (_followerPortraits is { MenuShown: true } portraits)
+        {
+            portraits.CloseMenu();
+            _worldRouteClick = "closed the follower order menu";
+            RefreshReadyStatus(); return;
+        }
         if (TryPendingWalkOrder(screen)) return;
         // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
         CancelPortalApproach("another click replaced it");
@@ -677,7 +682,8 @@ public partial class TerrainViewerApp
         {
             _hud?.SetNotice(null);
             // A bare modifier is not a key press that cancels a pending walk order (ARC-WORLD-046).
-            if (pressedKey.Keycode is not (Key.Shift or Key.Ctrl or Key.Alt or Key.Meta or Key.Capslock))
+            static bool Modifier(Key key) => key is Key.Shift or Key.Ctrl or Key.Alt or Key.Meta or Key.Capslock;
+            if (!Modifier(pressedKey.Keycode) && !Modifier(pressedKey.PhysicalKeycode))
             {
                 CancelPendingWalkOrder("a key was pressed");
                 _followerPortraits?.CloseMenu();

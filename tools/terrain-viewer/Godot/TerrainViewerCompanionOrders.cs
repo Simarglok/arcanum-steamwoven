@@ -22,20 +22,28 @@ public partial class TerrainViewerApp
     /// <summary>Orders are taken only while the world owns input: focused, no modal window or control focus, no transfer pending.</summary>
     private bool OrderInputOpen => _worldFocused && !WorldModal && !WorldUiFocus && !AreaTransferPending;
 
-    /// <summary>F1–F6 without modifiers while the session party is wired: the presets (taken, with an "ignored" notice, while the world
-    /// does not own input). Other keys, a modifier, or no party, are not orders.</summary>
+    // The F1–F6 key pressed while the world owned input; its release sends the preset (the original acts on key up).
+    private WorldKey? _orderKeyArmed;
+
+    /// <summary>F1–F6 without modifiers while the session party is wired: the presets, sent on the release of a key pressed while the
+    /// world owned input, with the tile under the pointer at the release (the original's key up). A press or release while the world
+    /// does not own input shows "ignored". Other keys, a modifier, or no party, are not orders.</summary>
     private bool RouteOrderKey(WorldKeyDecision decision, WorldKeyModifiers modifiers)
     {
         if (decision.Key is < WorldKey.F1 or > WorldKey.F6 || modifiers != WorldKeyModifiers.None) return false;
         if (_areaSession is not { } session || _areaCompanions is null || _conversationHost is not { PartyWired: true }) return false;
-        if (!decision.Pressed || decision.Echo) return true;
+        if (decision.Echo) return true;
         var key = decision.Key.ToString();
         if (!OrderInputOpen)
         {
+            _orderKeyArmed = null;
             _companionNotice = $"{key} ignored: a window is open, the world has no input focus or a map change is pending";
             RefreshReadyStatus();
             return true;
         }
+        if (decision.Pressed) { _orderKeyArmed = decision.Key; return true; }
+        if (_orderKeyArmed != decision.Key) return true;
+        _orderKeyArmed = null;
         var preset = CompanionOrderRules.Preset(decision.Key - WorldKey.F1, session.Rules.Orders);
         if (!preset.All)
         {

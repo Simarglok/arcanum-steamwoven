@@ -62,9 +62,10 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
 
 ## AREA viewer
 
-- **F1–F6** (the original's preset keys, until now reserved and not implemented) without modifiers send the presets with the chart
-  cell under the pointer as the walk tile, while the session party is wired and the world owns input (focused, no modal window or
-  control focus, no map change pending; `RouteOrderKey`); otherwise the key shows "ignored". F6 under the Original rules shows "no
+- **F1–F6** (the original's preset keys, until now reserved and not implemented) without modifiers send the presets on the key's
+  release, as the original does on key up, with the chart cell under the pointer at the release as the walk tile, while the session
+  party is wired and the world owns input (focused, no modal window or control focus, no map change pending; `RouteOrderKey`); the
+  release counts only after a press while the world owned input, and otherwise the key shows "ignored". F6 under the Original rules shows "no
   order (the original's preset names nobody)". Without a party they stay reserved keys. Requiring no modifier is the viewer's own:
   the original's F1–F6 handlers mostly ignore Ctrl and Shift (KM-09 in
   [original keyboard and mouse](../requirements/original-keyboard-mouse.md)), and the viewer keeps those combinations for its
@@ -73,10 +74,11 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   one), each opening the portrait menu: walk, attack, stay close, spread out, back off, wait, and inventory and character sheet
   shown disabled. The menu is an inline panel of buttons that take no focus, not a popup window (an embedded popup takes the world
   window's focus, which stops the PC's route and refuses the choice); a second press of the portrait, any key other than a bare
-  modifier, or a press on the ground closes it (that press does nothing else). Walk asks for a tile with the next left press on the ground (the original's target cursor; not while the hero is
+  modifier, or a press on the ground that the world accepts closes it (that press does nothing else; a press while the world does
+  not own input is ignored as any ground press is). A window resize closes it too. Walk asks for a tile with the next left press on the ground (the original's target cursor; not while the hero is
   dead or unconscious, OL1); the HUD shows the pending walk order, and any key other than a bare modifier, a modal window, focus
-  loss, another menu choice or a rebuilt group cancels it; the press itself is refused while the world does not own input or the hero
-  is dead or unconscious. Attack
+  loss, another menu choice or a rebuilt group cancels it. A ground press while the world does not own input is ignored as any
+  ground press is (the walk stays pending); the press that picks the tile is refused while the hero is dead or unconscious. Attack
   is sent at once, with no target cursor (it reaches A7's frontier and does nothing yet). The strip is hidden and its menu closed
   while a modal window is open, and a menu choice is refused unless the world owns input (as for F1–F6). The menu's labels are
   the viewer's own words (the original reads `mes\follower_ui.mes`); the Original name addressing compares them as the label.
@@ -101,9 +103,10 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   walk, move, combat and no-order outcomes, portrait addressing under both settings, whole-order refusals.
 - `tests/Arcanum.TerrainViewer.Tests/AreaCompanionOrderTests.cs`: the viewer's facts, the walk and spread goals, wait.
 - Native smoke (`--native-smoke --mode crash-site-area` with the original roles): `ARC-WORLD-046 native-smoke orders PASS` inside the
-  follow stage: F4 through the keyboard path spreads Virgil out and steps him away, F3 calls him close again; his portrait button
-  opens the order menu without a focus change of the world window (no focus-exit signal; the check failed with a popup) and its wait
-  button makes him wait (no timer, wait index 6) and removes his portrait. The reserved-key smoke now uses F10.
+  follow stage: F4 through the keyboard path (press and release) spreads Virgil out and steps him away, F3 calls him close again; a
+  mouse press on his portrait button opens the order menu without a focus change of the world window (no focus-exit signal; the
+  check failed with a popup, also without OS focus) and a press on its wait button makes him wait (no timer, wait index 6) and
+  removes his portrait; the GUI takes both presses (no world click, the PC does not move). The reserved-key smoke now uses F10.
 
 ```sh
 "$DOTNET" test tests/Arcanum.Simulation.Tests --no-build --filter "FullyQualifiedName~CompanionOrder|FullyQualifiedName~CompanionFollow"

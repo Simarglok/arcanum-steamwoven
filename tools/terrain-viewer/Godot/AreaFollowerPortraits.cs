@@ -7,7 +7,7 @@ namespace Arcanum.TerrainViewer;
 /// <summary>
 /// ARC-WORLD-046 follower portraits: one button per follower in the PC's array (the original's portrait list; waiting NPCs have none,
 /// OL16), each opening the order menu of the original's portrait (walk, attack, stay close, spread out, back off, wait, inventory,
-/// character sheet; wait is left out for a mind-controlled follower). Inventory and character sheet are shown disabled (not
+/// character sheet; the rule leaves wait out for a mind-controlled follower, which the viewer does not model yet). Inventory and character sheet are shown disabled (not
 /// modelled for followers). A diagnostic strip: no portrait art. The menu is an inline panel of buttons that take no focus, not a
 /// popup window: an embedded popup takes the world window's focus, which quarantines the world and refuses the choice.
 /// </summary>
@@ -25,25 +25,16 @@ public partial class AreaFollowerPortraits : CanvasLayer
     internal IReadOnlyList<string> EntitiesForSelfTest { get; private set; } = [];
     private const string EntityMeta = "follower_entity";
 
-    /// <summary>The native smoke's entry: presses a follower's portrait button (the production handler opens its menu); false when
-    /// it has none.</summary>
-    internal bool PressPortraitForSelfTest(string entity)
-    {
-        var button = _list.GetChildren().OfType<Button>().FirstOrDefault(b => b.HasMeta(EntityMeta) && (string)b.GetMeta(EntityMeta) == entity);
-        button?.EmitSignal(BaseButton.SignalName.Pressed);
-        return button is not null;
-    }
+    /// <summary>The screen centre of a follower's portrait button, or of an item of the open menu, for the native smoke's mouse
+    /// presses (the layer has no transform).</summary>
+    internal Vector2? PortraitCentreForSelfTest(string entity) =>
+        _list.GetChildren().OfType<Button>().FirstOrDefault(b => b.HasMeta(EntityMeta) && (string)b.GetMeta(EntityMeta) == entity)?.GetGlobalRect().GetCenter();
+    internal Vector2? MenuItemCentreForSelfTest(FollowerMenuItem item) =>
+        _menuItems.GetChildren().OfType<Button>().FirstOrDefault(b => b.HasMeta(ItemMeta) && (int)b.GetMeta(ItemMeta) == (int)item)?.GetGlobalRect().GetCenter();
 
     /// <summary>Whether the order menu is shown.</summary>
     public bool MenuShown => _menu.Visible;
 
-    /// <summary>The native smoke's entry: presses an enabled item of the open menu (its production handler); false when there is none.</summary>
-    internal bool PressMenuItemForSelfTest(FollowerMenuItem item)
-    {
-        var button = _menuItems.GetChildren().OfType<Button>().FirstOrDefault(b => b.HasMeta(ItemMeta) && (int)b.GetMeta(ItemMeta) == (int)item && !b.Disabled);
-        button?.EmitSignal(BaseButton.SignalName.Pressed);
-        return button is not null;
-    }
     private const string ItemMeta = "follower_menu_item";
 
     public override void _Ready()
@@ -65,7 +56,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         });
         AddChild(_menu);
         _menuItems = new VBoxContainer(); _menu.AddChild(_menuItems);
-        GetViewport().SizeChanged += Place;
+        GetViewport().SizeChanged += () => { CloseMenu(); Place(); };
         Hide();
     }
 
