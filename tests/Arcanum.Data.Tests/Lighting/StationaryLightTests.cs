@@ -47,6 +47,9 @@ public sealed class StationaryLightTests
         Assert.AreEqual(LightingFailure.None, TryDecode(Wire(x: 2111, y: 2047), out _));
         Assert.AreEqual(LightingFailure.LightFlagsUnsupported, TryDecode(Wire(flags: 4), out _));
         Assert.AreEqual(LightingFailure.LightFlagsUnsupported, TryDecode(Wire(flags: 0x20), out _));
+        // ARC-DATA-039: 0x40 keeps a light out of the original's object shadows only (ledger LT14).
+        Assert.AreEqual(LightingFailure.None, TryDecode(Wire(flags: 0x40), out var noShadow));
+        Assert.AreEqual(StationaryLightFlags.NoShadow, noShadow!.Flags);
         Assert.AreEqual(LightingFailure.LightArtUnsupported, TryDecode(Wire(art: 0x80280000), out _), "type 8 is not a light");
         Assert.AreEqual(LightingFailure.LightArtUnsupported, TryDecode(Wire(art: 0x90281000), out _), "frame 1");
         Assert.AreEqual(LightingFailure.LightArtUnsupported, TryDecode(Wire(art: 0x90280200), out _), "rotation 1");
@@ -161,11 +164,12 @@ public sealed class StationaryLightTests
 
     // An 8-bit single-group single-frame ART, 3x1 raw pixels with indexes 0, 1, 2; palette index 0 is
     // (9,9,9) (the colour key), index 1 is (9,9,9) too, index 2 is (40,80,120). Stored BGRA.
-    private static byte[] Art(int framesPerGroup = 1)
+    private static byte[] Art(int framesPerGroup = 1, int framesPerSecond = 0)
     {
         var bytes = new byte[132 + 1024 + 28 * framesPerGroup + 3 * framesPerGroup];
         BinaryPrimitives.WriteUInt32LittleEndian(bytes, 1); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), 8);
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12), 1); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(32), framesPerGroup);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4), framesPerSecond);
         void Palette(int index, byte r, byte g, byte b) { var at = 132 + index * 4; bytes[at] = b; bytes[at + 1] = g; bytes[at + 2] = r; }
         Palette(0, 9, 9, 9); Palette(1, 9, 9, 9); Palette(2, 40, 80, 120);
         for (var f = 0; f < framesPerGroup; f++)
@@ -174,6 +178,8 @@ public sealed class StationaryLightTests
             BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame), 3); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 4), 1);
             BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 8), 3); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 12), 2);
             BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 16), 1);
+            // Each frame's offset step: (f, -f).
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 20), f); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 24), -f);
             var payload = 132 + 1024 + 28 * framesPerGroup + 3 * f;
             bytes[payload] = 0; bytes[payload + 1] = 1; bytes[payload + 2] = 2;
         }
@@ -204,6 +210,23 @@ public sealed class StationaryLightTests
     }
 
     [TestMethod]
+    public void Reader_keeps_every_frame_of_an_animated_light_art()
+    {
+        // ARC-DATA-039 (ledger LT6, LT7): frame 0 is the light's frame; its Frames list all of them with the ART's rate and steps.
+        var result = Read(Snapshot([Wire()]), ("art\\light\\light.mes", Names), ("art\\light\\Disk5x5.art", Art(framesPerGroup: 3, framesPerSecond: 8)));
+        Assert.AreEqual(LightingFailure.None, result.Failure);
+        var frame = result.Source!.Frames[5];
+        Assert.IsTrue(frame.Animated);
+        Assert.AreEqual(8, frame.FramesPerSecond);
+        Assert.AreEqual(3, frame.Frames.Count);
+        Assert.AreSame(frame, frame.Frames[0]);
+        CollectionAssert.AreEqual(new[] { (0, 0), (1, -1), (2, -2) }, frame.Frames.Select(f => (f.StepX, f.StepY)).ToArray());
+        Assert.IsTrue(frame.Frames[2].TryPixel(2, 0, out var color)); Assert.AreEqual(new AmbientColor(40, 80, 120), color);
+        var still = Read(Snapshot([Wire()]), ("art\\light\\light.mes", Names), ("art\\light\\Disk5x5.art", Art())).Source!.Frames[5];
+        Assert.IsFalse(still.Animated); Assert.AreEqual(0, still.FramesPerSecond);
+    }
+
+    [TestMethod]
     public void Reader_fails_closed()
     {
         var names = ("art\\light\\light.mes", Names);
@@ -213,7 +236,8 @@ public sealed class StationaryLightTests
         Assert.AreEqual(LightingFailure.AmbiguousResource, Read(Snapshot([Wire()]), names, ("art/light/disk5x5.art", Art()), ("ART/LIGHT/DISK5X5.ART", Art())).Failure);
         Assert.AreEqual(LightingFailure.LightArtNotCatalogued, Read(Snapshot([Wire(art: 0x90300000)]), names).Failure, "number 6 is absent");
         Assert.AreEqual(LightingFailure.UnsafeResourceName, Read(Snapshot([Wire(art: 0x90380000)]), names).Failure, "number 7 traverses");
-        Assert.AreEqual(LightingFailure.LightArtUnsupported, Read(Snapshot([Wire()]), names, ("art/light/disk5x5.art", Art(framesPerGroup: 2))).Failure, "animated");
+        Assert.AreEqual(LightingFailure.LightArtUnsupported, Read(Snapshot([Wire()]), names, ("art/light/disk5x5.art", Art(framesPerGroup: 2))).Failure, "animated without a rate");
+        Assert.AreEqual(LightingFailure.LimitExceeded, Read(Snapshot([Wire()]), names, ("art/light/disk5x5.art", Art(framesPerGroup: StationaryLightReader.MaxArtFrames + 1, framesPerSecond: 8))).Failure, "too many frames");
         Assert.AreEqual(LightingFailure.LightArtUnsupported, Read(Snapshot([Wire()]), names, ("art/light/disk5x5.art", new byte[40])).Failure);
         Assert.AreEqual(LightingFailure.LightOutsideSector, Read(Snapshot([Wire(x: 1)]), names, ("art/light/disk5x5.art", Art())).Failure);
         // Context sectors are not read; no lights means no resource is needed at all.

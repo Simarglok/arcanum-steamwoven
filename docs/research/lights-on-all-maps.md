@@ -103,7 +103,8 @@ A light whose ART has more than one frame animates (LT6):
 - The event is of the animation domain and is not saved ([event queue](game-event-queue.md#3-event-kinds-and-consumers-s)).
 
 `art/light/light.mes` names 28 light ARTs; 7 have more than one frame (5, 6, 8 or 15 frames, at 5 or 8 frames per
-second). The viewer refuses an animated light ART today, which leaves one interior unlit.
+second). The viewer refused an animated light ART, which left one interior unlit; since ARC-DATA-039 it is read with all
+its frames and its frame 0 is drawn.
 
 ## Flags the original reads
 
@@ -117,8 +118,8 @@ The other bits:
 - **Animation:** 0x4 and 0x20 only gate it (LT6).
 - **Bookkeeping:** 0x80 marks a changed light, 0x8000000 a primary light, and 0x10000000 << slot an overlay slot.
 - **0x40: casts no shadow.** It is read only by the object shadow builder (0x4D9B20), which skips lights that are
-  off, dark or carry 0x40 (LT14). The light itself draws normally. The viewer refuses the bit today, which leaves the
-  one interior that has it unlit; V7a admits it.
+  off, dark or carry 0x40 (LT14). The light itself draws normally. The viewer refused the bit, which left the
+  one interior that has it unlit; V7a (ARC-DATA-039) admits it.
 
 ## Steamwoven: slice V7 (proposed)
 
@@ -126,7 +127,7 @@ Four slices. They need only the readers that already exist plus object light fie
 
 | Slice | What | Notes |
 | --- | --- | --- |
-| V7a | Object light descriptions in Data | Effective primary and overlay lights of sector objects and mobiles (instance field, else prototype), animated light ART (frames, rate, per-frame offsets), stationary flag 0x40 admitted and ignored. |
+| V7a | Object light descriptions in Data (done: ARC-DATA-039, [object lights](../rendering/area-lighting.md#object-lights-arc-data-039)) | Effective primary and overlay lights of sector objects and mobiles (instance field, else prototype), animated light ART (frames, rate, per-frame offsets), stationary flag 0x40 admitted and ignored. |
 | V7b | Object lights drawn in map mode | Built at load for objects not in an inventory, with the nocturnal rule at load and on each hour change; OFF and DARK as for stationary lights; the main map's template shade lights. The rule-mode switches for A1 and A2 (below) go here. |
 | V7c | Animated lights | The ⌊1000 / fps⌋ frame loop (animation time), the frame's offset step; stationary and object lights alike. |
 | V7d | Moving and carried lights | Lights move with NPCs and the hero; the hero's carried light from session equipment (EQ12, LT12). |
