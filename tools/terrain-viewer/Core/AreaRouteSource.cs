@@ -18,7 +18,6 @@ public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart 
     Func<IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? portals = null, Func<bool>? crittersPass = null,
     Func<Arcanum.Data.Area.AreaObjectKey, bool>? dead = null) : IRouteStepSource
 {
-    private const int PcType = 15, NpcType = 16;
     public AreaStepSnapshot Snapshot { get; } = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
     public AreaChart Chart { get; } = chart ?? AreaChart.Exterior;
 
@@ -51,7 +50,7 @@ public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart 
     {
         var live = occupancy?.Invoke();
         if (live?.Occupied.Contains(RoutePlanner.Neighbor(from, direction)) == true) return true;
-        return Assessment(from, direction).Objects.Any(o => o.Role == AreaStepObjectRole.Destination && o.ObjectType is PcType or NpcType
+        return Assessment(from, direction).Objects.Any(o => o.Role == AreaStepObjectRole.Destination && o.ObjectType is AreaOccupancyRules.PcType or AreaOccupancyRules.NpcType
             && o.Disposition == CardinalTraversalDisposition.Blocked && live?.Moved.Contains(o.Key) != true && dead?.Invoke(o.Key) != true);
     }
 

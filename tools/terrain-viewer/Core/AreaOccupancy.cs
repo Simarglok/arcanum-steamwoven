@@ -75,7 +75,7 @@ public static class AreaOccupancyRules
             assessment.WindowJump is not null ? "WINDOW_JUMP" : "COMPLETE_NONBLOCKING_EVIDENCE");
     }
 
-    private const int PcType = 15, NpcType = 16;
+    internal const int PcType = 15, NpcType = 16;
 
     /// <summary>
     /// ARC-WORLD-073/074: the overlay of a mover that passes living critters (a walk outside combat mode, the request's flag 0x10 and the

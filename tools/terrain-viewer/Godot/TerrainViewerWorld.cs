@@ -551,6 +551,7 @@ public partial class TerrainViewerApp
     }
     /// <summary>ARC-WORLD-016: the planner sees a companion where it stood when the route was planned; when it then steps
     /// into the route, the denied goal is planned again around it (at most <see cref="ActorDenialRetries"/> times per goal).
+    /// Since ARC-WORLD-074 a companion refuses the PC's step only in combat mode.
     /// <paramref name="route"/> is null unless this frame's advance was driven by a following route, so a stick bump into
     /// a companion never revives an earlier, finished route.</summary>
     private void RetryActorDenial(RouteFollower? route, SimulationTime frontier)
@@ -607,7 +608,8 @@ public partial class TerrainViewerApp
             // not under the Original rule mode, read from the session's rules when a click sets the goal (the PC does not move).
             // ARC-WORLD-073: the original's walk (its request, budget, segments and the PC's straight-line retry); outside combat mode its
             // plan passes living critters in both rule modes (the owner's decision 2026-10-21), and under Original the walk ends before
-            // a segment's last step onto one (LR5). Until the walker steps through critters (ARC-WORLD-074) a refused step plans around.
+            // a segment's last step onto one (LR5). The PC's steps pass them too outside combat mode (ARC-WORLD-074); a step refused
+            // for another reason (in combat, a door that closed) plans around its cell.
             _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy, () => area.Portals?.Invoke(), () => !HeroInCombatMode,
                     AreaCritterDeadNow),
                 corridorLimits: new RouteCorridorLimits(), corridorAllowed: () => _areaSession?.Rules.Navigation.FarClickDoesNotMove != true, straightRetry: true,

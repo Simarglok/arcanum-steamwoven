@@ -64,6 +64,22 @@ public sealed class AreaCritterPassTests
     }
 
     [TestMethod]
+    public void The_passing_overlay_keeps_moved_records_and_passes_a_critter_on_a_shoulder()
+    {
+        var steps = Steps();
+        // A removed chest stays moved (it no longer blocks), and the overlay's own moved records are kept.
+        var chest = steps.Assess(steps.Request(new(11, 14), new(12, 14), CardinalTraversalDirection.XPlus));
+        var removed = AreaOccupancy.None.WithRemoved(new HashSet<AreaObjectKey> { Chest });
+        Assert.AreEqual(CardinalTraversalDisposition.Open, AreaOccupancyRules.ApplyPassingCritters(chest, new(11, 14), NeighborDirection.XPlus, removed).Disposition);
+        var passing = AreaOccupancyRules.PassingCritters(chest, new AreaOccupancy([Chest], [Companion]));
+        Assert.IsTrue(passing.Moved.Contains(Chest) && passing.Occupied.Count == 0);
+        // A diagonal step whose shoulder holds the NPC: blocked for an ordinary mover, open for one passing critters.
+        var diagonal = steps.Assess(steps.Request(new(11, 10), new(12, 11), GridReplay.MapDirection(NeighborDirection.XPlusYPlus)));
+        Assert.AreEqual(CardinalTraversalDisposition.Blocked, AreaOccupancyRules.Apply(diagonal, new(11, 10), NeighborDirection.XPlusYPlus, AreaOccupancy.None).Disposition ?? diagonal.Disposition);
+        Assert.AreEqual(CardinalTraversalDisposition.Open, AreaOccupancyRules.ApplyPassingCritters(diagonal, new(11, 10), NeighborDirection.XPlusYPlus, null).Disposition);
+    }
+
+    [TestMethod]
     public void In_combat_the_PC_is_blocked()
     {
         // The admission refuses the step onto the NPC and the companion's cell; a plan that passes them ends with a typed reason.
