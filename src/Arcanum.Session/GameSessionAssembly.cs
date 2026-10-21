@@ -101,7 +101,8 @@ public sealed partial class GameSessionOwner
         foreach (var entity in components) spent.Add((entity, _inventory.Ammo.TryGetValue(entity, out var stack) ? stack : null));
         var deleted = spent.Where(c => c.Stack is not { } s || s.Units <= 1).Select(c => c.Entity).ToArray();
         // Ammunition products: a held stack of the prototype that outlives the components takes every unit, else one new stack.
-        SessionAmmoRecord? into = ammo is not null && HeroStackOfPrototype(prototype) is { } held && !deleted.Contains(held.Entity) ? held : null;
+        SessionAmmoRecord? into = ammo is null ? null : HeroHeld().Where(item => item.Kind.Type == SessionItemType.Ammo && item.Kind.Prototype == prototype &&
+            !deleted.Contains(item.Entity)).Select(item => _inventory.Ammo[item.Entity]).Cast<SessionAmmoRecord?>().FirstOrDefault();
         var newItems = ammo is null ? quantity : into is null ? 1 : 0;
         if (_inventory.Held - deleted.Length + (long)newItems > _limits.MaxPcItems) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         if (ammo is { } added)
@@ -113,7 +114,7 @@ public sealed partial class GameSessionOwner
         var newRecords = deleted.Count(entity => !_durability.Records.ContainsKey(entity));
         if (_durability.Count + newRecords > _limits.MaxDurabilityRecords) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         var next = NextMadeNumber();
-        if (next > int.MaxValue - (long)Math.Max(newItems, 1) + 1) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
+        if (newItems > 0 && next > int.MaxValue - (long)newItems + 1) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         var made = Enumerable.Range((int)next, newItems).Select(SessionMadeItem.EntityOf).ToArray();
         // The host answers one insert check a product unit, for the stack it enters.
         for (var unit = 0; unit < quantity; unit++)

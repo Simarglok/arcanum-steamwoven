@@ -665,7 +665,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   (the use-range helper, 0x428930);
   the pickup goal's own move-near range is not pinned, so pickup uses the same reach (project
   choice). Living NPCs, chests (contents generated on first open, not modelled) and items
-  inside holders are not targets. A ground item the session refuses (gold, ammunition, keys,
+  inside holders are not targets. A ground item the session refuses (gold, keys,
   a pickup or insert script; none on the exterior core) is still shown as *pick up* and the
   click reports the refusal. Not modelled: the pickup animation and action-point cost.
 - **Use on self (ARC-SKILLS-005).** A healing item in the PC's list (the kit's from the hero load's prototype fields, a taken

@@ -777,8 +777,9 @@ public sealed partial class GameSessionOwner : IDisposable
     /// the PC's list. Since ARC-WORLD-059 one of the hero's placed items on the actor's map goes back to the list it came from (a kit
     /// item at its kit number's place, a made item to the made items) after the insert check; it runs no script, and a world item
     /// whose attached seed shows a get or insert-item script is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
-    /// effect: an item with an item <c>SAP_GET</c> script (not run here), a stack or key type (stack merge and key rings
-    /// are not modelled), and a refusal of <paramref name="insertCheck"/>, which runs after every other check. An item
+    /// effect: an item with an item <c>SAP_GET</c> script (not run here), gold or a key type (gold and key rings are not modelled),
+    /// and a refusal of <paramref name="insertCheck"/>, which runs after every other check. Since ARC-WORLD-066 an ammunition item
+    /// merges into the hero's stack of its prototype (or starts one; a sum past 32 bits is <see cref="GameSessionFailure.BudgetExceeded"/>). An item
     /// <c>SAP_INSERT_ITEM</c> script runs through <paramref name="scripts"/> (ARC-SCRIPT-013, see <see cref="ISessionItemScriptHost"/>);
     /// without a host such an item is refused.
     /// </summary>
@@ -796,7 +797,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // item a critical dropped lies at the cell it was dropped on.
         if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item) || LooseCell(_actor.Map, seed, item) is null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
-        return Take(seed, new(item, row.Facts), false, insertCheck, scripts);
+        return Take(seed, new(item, _inventory.WithAmmo(item, row.Facts)), false, insertCheck, scripts);
     }
 
     /// <summary>
@@ -820,10 +821,10 @@ public sealed partial class GameSessionOwner : IDisposable
         if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
         // ARC-WORLD-055: a made item the session added to this NPC is in its list too.
         if (_inventory.AddedTo(holder).FirstOrDefault(added => added.Entity == item) is { Entity: not null } made)
-            return Take(seed, new(item, InventoryDomain.MadeFacts(made.Kind)), true, insertCheck, scripts);
+            return Take(seed, new(item, _inventory.WithAmmo(item, InventoryDomain.MadeFacts(made.Kind))), true, insertCheck, scripts);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != holder || _inventory.Taken.Contains(item) || DroppedCell(_actor.Map, seed, item) is not null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
-        return Take(seed, new(item, seed.Items[item].Facts), true, insertCheck, scripts);
+        return Take(seed, new(item, _inventory.WithAmmo(item, seed.Items[item].Facts)), true, insertCheck, scripts);
     }
 
     /// <summary>
@@ -1422,7 +1423,7 @@ public sealed partial class GameSessionOwner : IDisposable
             !_durability.Records.ContainsKey(placed.Entity) && _durability.Count >= _limits.MaxDurabilityRecords)) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var revision = _revision;
-        var verdict = insertCheck(new SessionInventoryItem(placed.Entity, InventoryDomain.MadeFacts(placed.Kind)));
+        var verdict = insertCheck(new SessionInventoryItem(placed.Entity, _inventory.WithAmmo(placed.Entity, InventoryDomain.MadeFacts(placed.Kind))));
         ThrowIfDisposed();
         if (_revision != revision || _inventory.PlacedItem(placed.Entity) != placed || _actor.Map != placed.Map)
             return RejectItem(GameSessionFailure.StaleVersion, verdict);

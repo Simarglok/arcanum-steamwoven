@@ -134,7 +134,7 @@ public sealed partial class GameSessionOwner
         var newRecords = deleted.Count(entity => !_durability.Records.ContainsKey(entity));
         if (_durability.Count + newRecords > _limits.MaxDurabilityRecords) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         var next = NextMadeNumber();
-        if (next > int.MaxValue - (long)Math.Max(newItems, 1) + 1) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
+        if (newItems > 0 && next > int.MaxValue - (long)newItems + 1) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         if (_revision == long.MaxValue) return RejectAssembly(GameSessionFailure.RevisionExhausted, plan);
         var made = Enumerable.Range((int)next, newItems).Select(SessionMadeItem.EntityOf).ToArray();
         for (var unit = 0; unit < quantity; unit++)

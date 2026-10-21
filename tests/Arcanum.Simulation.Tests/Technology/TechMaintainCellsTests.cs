@@ -8,7 +8,7 @@ namespace Arcanum.Simulation.Tests.Technology;
 /// record through the charge-cell source of ARC-TECHNOLOGY-007 (ledger CC7, TD rows): each tick pays the cells in both TC1
 /// settings, an emptied source ends the run, and BEGIN pays nothing for a technology record. A worn device (invented numbers:
 /// complexity −80, maintenance 3 every 5 seconds) whose holder is a technologist (aptitude −60) paying from 12 cells; the host
-/// writes each applied plan (the session holds no ammunition yet).</summary>
+/// writes each applied plan (the rules write nothing themselves).</summary>
 [TestClass]
 public sealed class TechMaintainCellsTests
 {

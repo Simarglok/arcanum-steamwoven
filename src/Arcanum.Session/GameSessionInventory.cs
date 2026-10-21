@@ -370,12 +370,12 @@ internal sealed class InventoryDomain
     internal SessionMapInventory View(SessionMapId map, Seed seed, Func<string, bool> killed, Func<string, CellCoord?> spilled,
         Func<string, CellCoord?> dropped) => new(map,
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))
-            .Select(item => new SessionGroundItem(new(item.Entity, item.Facts), item.Cell!.Value))
+            .Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, item.Facts)), item.Cell!.Value))
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Container).SelectMany(holder =>
                 spilled(holder.Entity) is { } cell ? Current(seed, holder, dropped).Select(item => new SessionGroundItem(item, cell)) : []))
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items
                 .Where(entity => !Taken.Contains(entity) && dropped(entity) is not null)
-                .Select(entity => new SessionGroundItem(new(entity, seed.Items[entity].Facts), dropped(entity)!.Value))))
+                .Select(entity => new SessionGroundItem(new(entity, WithAmmo(entity, seed.Items[entity].Facts)), dropped(entity)!.Value))))
             .Concat(Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind))), item.Cell)))
             .ToArray(),
         seed.Source.Holders.Select(holder => new SessionHolderInventory(holder.Entity, holder.Kind,

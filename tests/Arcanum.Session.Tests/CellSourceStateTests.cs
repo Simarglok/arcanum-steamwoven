@@ -7,7 +7,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 namespace Arcanum.Session.Tests;
 
 // ARC-TECHNOLOGY-007: the session's charge-cell port. The hero pays from the host's cell stack; asking changes nothing (the
-// session holds no ammunition yet); TC1 follows the session's rule mode. Numbers are invented.
+// host-stack port writes nothing; ARC-WORLD-066's HeroCellSource spends); TC1 follows the session's rule mode. Numbers are invented.
 [TestClass]
 public sealed class CellSourceStateTests
 {
@@ -24,7 +24,7 @@ public sealed class CellSourceStateTests
         Assert.AreEqual((SpellPaymentStatus.Paid, 3, true), (paid.Status, source.LastPlan!.UnitsAfter, source.LastPlan.Writes));
         var check = SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Critter, CurrentFatigue: 50), 7, false, 168, Cells, source);
         Assert.AreEqual((SpellPaymentStatus.Paid, false), (check.Status, source.LastPlan!.Writes), "an affordability check writes nothing");
-        Assert.AreEqual(before, owner.Version, "the session holds no ammunition: nothing changes");
+        Assert.AreEqual(before, owner.Version, "the host-stack port writes nothing");
         using var heroless = Create();
         Assert.IsNull(heroless.QueryHeroCellPayer(null));
         Assert.IsNull(heroless.QueryHeroItemCellPayer(-50, null));

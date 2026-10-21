@@ -87,7 +87,9 @@ public sealed partial class GameSessionOwner
     /// ARC-WORLD-066: the engine's charge-cell port for the hero as payer, over the hero's own power-cell stack: each request is
     /// answered by <see cref="ChargeCellRules.Plan"/> under the session's technology rules (TC1), and an applied, paid plan spends
     /// the cells at once (<see cref="SpendAmmo"/>, type 2); an unapplied request writes nothing. <paramref name="itemComplexity"/>
-    /// makes the payer an item the hero holds (its parent is the hero). Null without a hero.
+    /// makes the payer an item the hero holds (its parent is the hero). Null without a hero. A spend moves the session's revision, so a
+    /// caller holding a version takes the new one after the payment; a spend the session refuses (its budget or revision) answers the
+    /// payment as refused (<see cref="CellRefusal.WriteRefused"/>, nothing taken).
     /// </summary>
     public ISpellCellSource? HeroCellSource(int? itemComplexity = null)
     {
@@ -112,8 +114,9 @@ public sealed partial class GameSessionOwner
                 : new CellPayer(SpellPayerKind.Critter, CellOwnerKind.Critter, owner.HeroCells());
             var plan = request.Payer != payer.Payer ? new CellPlan(false, CellRefusal.PayerMismatch, 0, null, 0, false, request.Apply)
                 : ChargeCellRules.Plan(payer, request.Cost, request.Apply, owner._rules.Technology);
-            if (plan.Writes && plan.Need > 0 && owner.SpendAmmo(owner.Version, SessionAmmoHolder.Hero, SessionAmmoRecord.Cells, plan.Need).Disposition != GameSessionDisposition.Changed)
-                plan = plan with { Paid = false, Refusal = CellRefusal.TooFewCells };
+            if (plan.Writes && plan.Need > 0 && owner.SpendAmmo(owner.Version, SessionAmmoHolder.Hero, SessionAmmoRecord.Cells, plan.Need) is { Disposition: not GameSessionDisposition.Changed } refused)
+                plan = plan with { Paid = false, Refusal = refused.Failure == GameSessionFailure.AmmoShort ? CellRefusal.TooFewCells : CellRefusal.WriteRefused,
+                    UnitsAfter = plan.Stack?.Units ?? 0, StackRemoved = false };
             LastPlan = plan;
             return new(plan.Paid, plan.Need);
         }
@@ -125,7 +128,7 @@ public sealed partial class GameSessionOwner
             .Concat(_inventory.Made.Select(item => (item.Entity, item.Kind)));
 
     /// <summary>The hero's first held stack of an ammunition type, or null (the original reads the one stack its critter field names,
-    /// which a removal can clear while another stack of the type stays: ledger AM4).</summary>
+    /// which a removal can clear while another stack of the type stays: ledger AM5, AMA4).</summary>
     [Arcanum.Simulation.OriginalFunction(0x465870, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private SessionAmmoRecord? HeroStackOfType(int ammoType) => HeroHeld().Where(item => item.Kind.Type == SessionItemType.Ammo)
         .Select(item => _inventory.Ammo[item.Entity]).Cast<SessionAmmoRecord?>().FirstOrDefault(stack => stack!.Value.AmmoType == ammoType);

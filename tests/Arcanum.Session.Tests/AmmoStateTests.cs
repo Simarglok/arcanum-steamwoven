@@ -185,4 +185,111 @@ public sealed class AmmoStateTests
         Assert.IsTrue(owner.IsItemDestroyed("bullets"));
         CollectionAssert.AreEqual(new[] { new SessionAmmoRecord("cells-a", 2, 28), new SessionAmmoRecord(fresh.Made.Single(), 1, 10) }, owner.QueryHeroAmmo().ToArray());
     }
+
+    [TestMethod]
+    public void The_npc_crafter_spends_one_unit_and_its_ammunition_product_tracks_its_seed_stack()
+    {
+        static Arcanum.Data.Technology.SchematicAlternatives Alternatives(params int[] bases) => new(Array.AsReadOnly(bases), bases.Length);
+        static Arcanum.Data.Technology.SchematicRecord Schematic(int first, int second, int product, int quantity) => new()
+        {
+            Number = 2000, Kind = Arcanum.Data.Technology.SchematicKind.Learned, NameText = 1, DescriptionText = 2, Art = 3,
+            Component1 = Alternatives(first), Component2 = Alternatives(second), Product = Alternatives(product), Quantity = quantity,
+            MissingLines = Array.AsReadOnly(new bool[7]),
+        };
+        var seed = new SessionMapInventorySeed([new("smith", SessionHolderKind.Npc, false, false, [], ["smith-cells", "smith-bullets"])],
+            [new("smith-cells", Ammo(CellPrototype, 2, 5), null), new("smith-bullets", Ammo(BulletPrototype, 1, 1), null)]);
+        using var owner = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, seed).Disposition);
+        var crafter = new SessionNpcCrafter(new("smith", new(Arcanum.Simulation.Character.CharacterRace.Human, false, [8, 8, 8, 8, 8, 8, 8, 8], 0, 0, 1, 0,
+            [.. new int[12]], [.. new int[4]], [.. new int[16]], [0, 0, 0, 0, 0, 0, 0, 0], 1, 2, 0, 0), 0), Arcanum.Simulation.Character.AdvancementModifiers.None);
+        static Arcanum.Simulation.Technology.ComponentFacts? Facts(int prototype) => new(0, 3);
+        static SessionItemKind? Kinds(int prototype) => new(SessionItemType.Ammo, prototype, 100, 200);
+        static (int, int)? ProductAmmo(int prototype) => prototype == CellPrototype ? (2, 10) : (1, 10);
+        SessionCraftLookup inBag = _ => new SessionCraftFacts(10);
+        // Cells ×1 from cells and bullets: the seed cells become a tracked stack (5 − 1 + 10), the last bullet goes.
+        var made = owner.AssembleSchematicForNpc(owner.Version, crafter, Schematic(CellPrototype - 20, BulletPrototype - 20, CellPrototype - 20, 1), inBag, Facts,
+            Kinds, Accept, ProductAmmo);
+        Assert.AreEqual((GameSessionDisposition.Changed, "smith-cells"), (made.Disposition, made.Made.Single()));
+        Assert.AreEqual(new SessionAmmoRecord("smith-cells", 2, 14), owner.QueryAmmo("smith-cells"));
+        Assert.IsTrue(owner.IsItemDestroyed("smith-bullets"));
+        // Bullets ×2 without a bullet stack and the cells component: a new made stack of 20.
+        Assert.AreEqual(GameSessionFailure.AssemblyRefused, owner.AssembleSchematicForNpc(owner.Version, crafter, Schematic(CellPrototype - 20, BulletPrototype - 20,
+            BulletPrototype - 20, 2), inBag, Facts, Kinds, Accept, ProductAmmo).Failure, "no bullets left for component 2");
+    }
+
+    [TestMethod]
+    public void The_record_budget_refuses_a_new_stack_before_any_effect()
+    {
+        using var owner = CreateWith(HalfElf(), new GameSessionLimits(maxAmmoRecords: 1));
+        owner.AttachMapInventory(Exterior, Seed());
+        owner.PickUpItem(owner.Version, "cells-a", Accept);
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.PickUpItem(owner.Version, "bullets", Accept).Failure, "a second stack");
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.SpendAmmo(owner.Version, new SessionAmmoHolder("smith"), 2, 1).Failure, "an untracked seed stack");
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.AddItemToNpc(owner.Version, "smith", new(SessionItemType.Ammo, BulletPrototype, 100, 200), Accept, (1, 2)).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "cells-b", Accept).Disposition, "a merge adds no record");
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
+        // A refused insert check on a merge changes nothing.
+        var before = owner.QueryAmmo("cells-a");
+        Assert.AreEqual(GameSessionFailure.InsertRefused, owner.LootItem(owner.Version, "corpse", "corpse-cells", _ => SessionInsertVerdict.TooHeavy).Failure);
+        Assert.AreEqual((before, false), (owner.QueryAmmo("cells-a"), owner.IsItemDestroyed("corpse-cells")));
+    }
+
+    [TestMethod]
+    public void A_made_stack_looted_from_an_npc_merges_or_joins_the_made_items_and_its_check_sees_the_units()
+    {
+        using var owner = Hero(new SessionMapInventorySeed([new("corpse", SessionHolderKind.Npc, true, false, [], [])],
+            [new("cells-a", Ammo(CellPrototype, 2, 10), new CellCoord(101, 200))]));
+        var cells = owner.AddItemToNpc(owner.Version, "corpse", new(SessionItemType.Ammo, CellPrototype, 100, 200), Accept, (2, 6)).Item!;
+        var bullets = owner.AddItemToNpc(owner.Version, "corpse", new(SessionItemType.Ammo, BulletPrototype, 100, 200), Accept, (1, 3)).Item!;
+        owner.PickUpItem(owner.Version, "cells-a", Accept);
+        SessionInventoryItem? seen = null;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LootItem(owner.Version, "corpse", cells, item => { seen = item; return SessionInsertVerdict.Accepted; }).Disposition);
+        Assert.AreEqual((6, 2), (seen!.Facts.Quantity, seen.Facts.AmmoType), "the insert check sees the stack's units");
+        Assert.AreEqual(16, owner.QueryAmmo("cells-a")!.Value.Units);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LootItem(owner.Version, "corpse", bullets, Accept).Disposition);
+        Assert.AreEqual(bullets, owner.QueryMadeItems().Single().Entity, "no bullet stack held: it joins the made items");
+        Assert.AreEqual(new SessionAmmoRecord(bullets, 1, 3), owner.QueryHeroAmmo().Last());
+        Assert.AreEqual(16, owner.HeroChooser().Ammunition[2], "the best-items choice sees the held ammunition");
+        Assert.AreEqual(3, owner.HeroChooser().Ammunition[1]);
+    }
+
+    [TestMethod]
+    public void Restore_and_decode_refuse_malformed_stacks()
+    {
+        using var owner = Hero();
+        owner.PickUpItem(owner.Version, "cells-a", Accept);
+        owner.PickUpItem(owner.Version, "bullets", Accept);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        const string rows = "{\"entity\":\"bullets\",\"ammoType\":1,\"units\":7},{\"entity\":\"cells-a\",\"ammoType\":2,\"units\":10}";
+        StringAssert.Contains(text, rows);
+        Assert.AreEqual(SnapshotDecodeFailure.NotCanonical, GameSessionSnapshotCodec.TryDecode(text.Replace(rows,
+            "{\"entity\":\"cells-a\",\"ammoType\":2,\"units\":10},{\"entity\":\"bullets\",\"ammoType\":1,\"units\":7}")).Failure, "unsorted");
+        Assert.AreEqual(SnapshotDecodeFailure.OutOfRange, GameSessionSnapshotCodec.TryDecode(text.Replace("\"ammoType\":1", "\"ammoType\":4")).Failure, "type 4");
+        Assert.AreEqual(SnapshotDecodeFailure.OutOfRange, GameSessionSnapshotCodec.TryDecode(text.Replace("\"units\":7", "\"units\":-1")).Failure, "negative units");
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(text).Snapshot!,
+            RestoreOptions(new GameSessionLimits(maxAmmoRecords: 1))).Failure, "over the caller's record limit");
+        owner.SpendAmmo(owner.Version, SessionAmmoHolder.Hero, 1, 7);
+        var spent = GameSessionSnapshotCodec.Encode(owner.Capture());
+        StringAssert.Contains(spent, "\"destroyed\":[\"bullets\"]");
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(spent.Replace("\"ammo\":[",
+            "\"ammo\":[{\"entity\":\"bullets\",\"ammoType\":1,\"units\":1},")).Snapshot!, RestoreOptions()).Failure, "a deleted stack");
+    }
+
+    [TestMethod]
+    public void An_item_payer_pays_by_the_heros_aptitude_and_a_payer_mismatch_is_refused()
+    {
+        using var owner = Hero();
+        owner.PickUpItem(owner.Version, "cells-a", Accept);
+        var record = new SpellPaymentRecord(ChargesFromCells: true, MaintainPeriod: 0, DurationSeconds: 0);
+        var device = owner.HeroCellSource(itemComplexity: -50)!;
+        var aptitude = owner.QueryHeroItemCellPayer(-50, null)!.HolderAptitude;
+        var need = Arcanum.Simulation.Technology.ChargeCellRules.Need(owner.QueryHeroItemCellPayer(-50, null)!, 3, owner.Rules.Technology)!.Value;
+        Assert.AreEqual(SpellPaymentStatus.Paid, SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Item), 3, true, 147, record, device).Status);
+        Assert.AreEqual(10 - need, owner.QueryHeroAmmo().Single().Units, $"aptitude {aptitude}");
+        var units = owner.QueryHeroAmmo().Single().Units;
+        Assert.AreEqual(SpellPaymentStatus.CellsRefused, SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Critter, CurrentFatigue: 50), 1, true, 147, record, device).Status,
+            "a critter payment through an item's source");
+        Assert.AreEqual(units, owner.QueryHeroAmmo().Single().Units);
+    }
 }

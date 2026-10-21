@@ -27,7 +27,7 @@ and [`GameSessionCells`](../../src/Arcanum.Session/GameSessionCells.cs); tests
   critter parent, a container, no parent, or another object.
 - Cells are ammunition of type 2 (prototype 7060). A critter has one power-cell stack (the original merges ammunition into
   one stack per type); a container's cells would be the first item of prototype 7060 in its inventory, but the original's
-  lookup passes the raw prototype number where a handle is compared and never finds it (ledger [AM5](../research/original-verification-ledger.md#ammunition-arc-world-066),
+  lookup passes the raw prototype number where a handle is compared and never finds it (ledger [AM6](../research/original-verification-ledger.md#ammunition-arc-world-066),
   ARC-WORLD-066), so a container has none in both settings until the owner decides; no parent or another object
   has none. The host finds the stack and gives it as `CellStack(entity, units)`.
 

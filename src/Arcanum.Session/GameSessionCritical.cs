@@ -203,8 +203,9 @@ public sealed partial class GameSessionOwner
         _inventory.Pc.Find(pc => pc.Entity == item) is { Entity: not null } taken && _inventory.Seeds.TryGetValue(taken.Origin, out var origin) &&
         origin.Items.TryGetValue(item, out var listed) && listed.Facts.HasScript(SessionScriptPoint.Drop);
 
-    // The ammunition effects of a critical miss, after the weapon's destruction and before "drop weapon" (CW3): not ready (no
-    // ammunition model); none when the weapon was destroyed.
+    // The ammunition effects of a critical miss, after the weapon's destruction and before "drop weapon" (CW3): not applied yet; since
+    // ARC-WORLD-066 the session holds ammunition and these should spend through SpendAmmo (the whole stack of the weapon's type, or five
+    // shots' worth, nothing when fewer remain; ledger AM4), the combat lane's wiring; none when the weapon was destroyed.
     private void AmmunitionSteps(AttackDamage damage, SessionWearSide side, List<SessionCriticalStep> steps)
     {
         if (side.Worn?.GetValueOrDefault(EquipmentSlot.Weapon) is { } weapon && _durability.Destroyed.Contains(weapon.Entity)) return;

@@ -6,7 +6,7 @@ namespace Arcanum.Simulation.Technology;
 /// <summary>
 /// The object whose charge cells pay (ledger CC2–CC3): a critter (its one power-cell stack, critter field 0xEB), a container (the
 /// original looks for the first item of the cell prototype in its inventory but passes the raw prototype number where a handle is
-/// compared, so it never finds one: no cells, ledger AM5), none (an item without a parent), or any other object (no cells).
+/// compared, so it never finds one: no cells, ledger AM6, AMA5), none (an item without a parent), or any other object (no cells).
 /// </summary>
 public enum CellOwnerKind
 {
@@ -30,6 +30,8 @@ public enum CellRefusal
     OutOfRange,
     /// <summary>The payment's payer kind differs from the payer the source was built for (a wiring error of the host).</summary>
     PayerMismatch,
+    /// <summary>The cells were enough but writing them was refused (a session's budget or revision); nothing was taken.</summary>
+    WriteRefused,
 }
 
 /// <summary>
@@ -105,7 +107,7 @@ public static class ChargeCellRules
         ArgumentNullException.ThrowIfNull(payer);
         if (Need(payer, cost, profile) is not { } need) return new(false, CellRefusal.OutOfRange, 0, null, 0, false, apply);
         if (need == 0) return new(true, CellRefusal.None, 0, null, 0, false, apply);
-        // A critter gives its one stack; a container's lookup never matches in the original (AM5), and an item without a parent or
+        // A critter gives its one stack; a container's lookup never matches in the original (AM6), and an item without a parent or
         // another object counts 0.
         var stack = payer.Owner == CellOwnerKind.Critter ? payer.Cells : null;
         if (stack is not { } cells || cells.Units < need || SchematicAssemblyRules.UseUnits(cells.Units, need) is not { } left)
