@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Data.Tests.Messages;
 
-/// <summary>ARC-DATA-042: the generated-dialog files as read in the executable (ledger GD1–GD4) over invented files, and an
+/// <summary>ARC-DATA-042: the generated-dialog files as read in the executable (ledger GD1–GD5) over invented files, and an
 /// opt-in census of the installed module.</summary>
 [TestClass]
 public sealed class GeneratedDialogFilesTests
@@ -104,6 +104,11 @@ public sealed class GeneratedDialogFilesTests
         Assert.AreEqual((GeneratedDialogStatus.ParseFailed, "mes/gd_rce_f2f.mes"), (broken.Status, broken.Path));
         Assert.IsNull(broken.Files);
         Assert.AreEqual(MesParseStatus.UnterminatedField, broken.Parse!.Status);
+
+        File.Delete(Path.Combine(module, "mes/gd_rce_f2f.mes"));
+        var large = Load(module, data, new MesReaderOptions { MaxBytes = 8 });
+        Assert.AreEqual((GeneratedDialogStatus.ParseFailed, "mes/gd_cls_m2m.mes", MesParseStatus.TooLarge),
+            (large.Status, large.Path, large.Parse!.Status), "a file beyond the size limit is refused before it is read");
     }
 
     /// <summary>Opt-in census of the installed module (DAT_ROOT): counts only, no text.</summary>
@@ -127,19 +132,33 @@ public sealed class GeneratedDialogFilesTests
             62, 58, 33, 33, 22, 22, 22, 22, 6, 6, 6, 6, 275, 275, 275, 275,
         ];
         CollectionAssert.AreEqual(counts, Enum.GetValues<GeneratedDialogFile>().Select(file => files.File(file)!.Count).ToArray());
+        Assert.IsFalse(Enum.GetValues<GeneratedDialogFile>().Any(file =>
+            ContentPhase.IsModule(ContentPhase.Candidate(stack, GeneratedDialogFiles.PathOf(file), ContentLoadPhase.ModuleLoaded)!.Source.Role)),
+            "no file comes from the module");
+        // Aligned 50-number blocks whose stored numbers are not consecutive from the block's first stored one (GD-A1).
+        int[] gaps = [0, 0, 2, 2, 2, 2, 0, 1, 0, 0, 0, 0, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        CollectionAssert.AreEqual(gaps, Enum.GetValues<GeneratedDialogFile>().Select(file => GappedBlocks(files.File(file)!)).ToArray());
+        Assert.AreEqual(242, Blocks(files.File(GeneratedDialogFile.ClassMaleToMale)!));
+        Assert.AreEqual(33, Blocks(files.File(GeneratedDialogFile.ClassPcToFemale)!));
+        Assert.AreEqual(68, Blocks(files.File(GeneratedDialogFile.NpcMaleToMale)!));
     }
+
+    private static int Blocks(MesFile file) => file.Messages.Select(message => message.Number / 50).Distinct().Count();
+
+    private static int GappedBlocks(MesFile file) => file.Messages.GroupBy(message => message.Number / 50)
+        .Count(block => block.Max(message => message.Number) - block.Min(message => message.Number) + 1 != block.Count());
 
     private static string Name(GeneratedLineGroup group, bool npcMale, bool pcMale, bool dumb) =>
         GeneratedDialogFiles.Names[(int)GeneratedDialogFiles.NpcLineFile(group, npcMale, pcMale, dumb)];
 
-    private GeneratedDialogLoad Load(string module, string data)
+    private GeneratedDialogLoad Load(string module, string data, MesReaderOptions? options = null)
     {
         Directory.CreateDirectory(module); Directory.CreateDirectory(data);
         var plan = new ContentMountPlan(_root, "Mod", [new(ContentSourceRole.ModuleDirectory, 0, module), new(ContentSourceRole.DataDirectory, 0, data)]);
         var opened = ContentStack.Open(plan);
         Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
         using var stack = opened.Stack!;
-        return GeneratedDialogFiles.Load(stack);
+        return GeneratedDialogFiles.Load(stack, options);
     }
 
     private static MesFile Mes(string text) => MesFile.Parse(Encoding.ASCII.GetBytes(text)).File!;

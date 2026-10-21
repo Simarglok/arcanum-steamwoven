@@ -1276,7 +1276,7 @@ pointers that are empty in the file (an optional fate callback and a UI hook) an
 | DR7 | R5 and R6 (0x4C1020, 0x4C10A0, 0x4C0C40, 0x4C0F50) | Re-read for this slice: start, end, met before and forget behave as the [reaction runtime rows](#reaction-runtime-arc-world-026) record. | Original (confirmed) |
 
 Not read here: what the AI's hostile check at the dialog start and pick decides (0x45D8D0, 0x4AE120; the AI hostility
-research), the generated phrase groups 1000 and 3000 and how a line is picked from them (0x4182D0, 0x4185F0, 0x418390), and
+research), the generated phrase groups 1000 and 3000 (how a line is picked from them: [Generated dialog files](#generated-dialog-files-arc-data-042) GD3–GD5; 0x4182D0, 0x4185F0, 0x418390), and
 the screens behind UI states 3 and 5..9.
 
 ## Hero skills (ARC-SKILLS-002)
@@ -1789,7 +1789,7 @@ Anomalies (none needs a switch; the owner may still ask for one under D8):
 
 ## Generated dialog files (ARC-DATA-042)
 
-Source: the [generated dialog files](../formats/generated-dialog-files.md) contract and the greeting questions of ARC-WORLD-057
+Source: the [generated dialog files](../formats/generated-dialog-files.md) contract and the greeting questions of ARC-WORLD-058
 (R12 of the [reaction study](npc-reaction-reputation-evidence.md)). Question: which `gd_*` files does the dialog module open,
 when and how, how does a generated line pick its entry, and which file does an NPC line read? Read on 2026-10-21 by two fresh
 agents that saw only the questions and the project's own records of the dialog state (method step 6). They agree on every
@@ -1801,11 +1801,11 @@ row; the rows are F2. Every direct branch and jump table read stays inside `.tex
 | GD2 | generated file open (0x418250) | A file is opened on its first use with the path `mes\%s.mes`, and stays open until the dialog exit. A file that does not open prints "Cannot open generated dialog file" with its name and exits the program. | Original; Steamwoven reads every file at module load (the data does not change in between) and keeps a missing one absent, its lines reported as such (project policy: no exit) |
 | GD3 | MES run count (0x4D4550) | Given a first and a last number: 0 when the file has no entry numbered exactly the first; otherwise the number of stored entries, in number order from that one, numbered at most the last. Whether the numbers are consecutive is not checked. | Original |
 | GD4 | MES entry fetch (0x4D43A0) | The entry of the number; a missing one yields the static text "Error! Missing line" with the number and the file name in place of a line. | Original; Steamwoven returns a typed missing result and the caller decides what is shown |
-| GD5 | NPC-line generators (0x418480 class, 0x4185F0 race, 0x418780 NPC lines) | Each reads the file of its group by the NPC's (speaker's) gender and then the PC's: `gd_cls_*` or, for a dumb NPC (0x45FC00), `gd_cls_dumb_*`; `gd_rce_*` or `gd_rce_dumb_*`; `gd_npc_*`, which has no dumb variant. The entry is the first of the range plus a uniform random number from 0 to the GD3 count less one. The rest of each generator (ranges, offsets, override lines) belongs to the greeting slice ARC-WORLD-057. | Original |
+| GD5 | NPC-line generators (0x418480 class, 0x4185F0 race, 0x418780 NPC lines) | Each reads the file of its group by the NPC's (speaker's) gender and then the PC's: `gd_cls_*` or, for a dumb NPC (0x45FC00), `gd_cls_dumb_*`; `gd_rce_*` or `gd_rce_dumb_*`; `gd_npc_*`, which has no dumb variant. The entry is the first of the range plus a uniform random number from 0 to the GD3 count less one. The rest of each generator (ranges, offsets, override lines) belongs to the greeting slice. | Original |
 
 Anomaly (for the caller, no switch here): GD-A1 (GD3, GD5): the pick adds a random offset to the first number while the count
 counts stored entries, so a block with a gap can pick a missing number (GD4's text) and never reach its last entries; without
-the first entry the count is 0 and the offset is −1 or 0. In the installed files, 2 of the 242 aligned 50-number blocks of each `gd_cls_*`
+the first entry the count is 0 (what the pick then gives is the greeting slice's row). In the installed files, 2 of the 242 aligned 50-number blocks of each `gd_cls_*`
 file, 1 of 33 in `gd_cls_pc2f` and 10 of 68 in each `gd_npc_*` file have a gap (ARC-DATA-042 census; which real ranges hit one
 is the greeting slice's census).
 
