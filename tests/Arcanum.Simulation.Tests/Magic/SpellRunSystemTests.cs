@@ -32,14 +32,20 @@ public sealed class SpellRunSystemTests
         public SpellStageFacts StageFacts(SpellRun run) => new(false, false, Intelligence, 20, run.Parent?.Id == LocalPlayer,
             new SpellPayer(SpellPayerKind.Critter, CurrentFatigue: 50), new(true, 0, -1));
         public ISpellCellSource Cells { get; } = new NoCells();
-        public ISpellRunStacking Stacking { get; } = new NoStacking();
+        public Dictionary<string, int> Flags { get; } = [];
         public bool FlagsAllow(SpellRun run) => Allow;
-        public int SourceSpellFlags(SpellRun run) => SourceFlags;
+        public int SpellFlags(SpellRunObject who) => Flags.TryGetValue(who.Id, out var f) ? f : who.Id is "hero" or "wand" ? SourceFlags : 0;
+        public int? PlayerSpellFlags => 0;
+        public bool PlayerPerceptionExtraordinary => false;
+        public SpellPayer? Payer(SpellRunObject who) => new(SpellPayerKind.Critter, CurrentFatigue: 50);
+        public SpellResistRecord ResistRecord(int spell) => new(spell, false, false, false, 0, SpellResistanceRules.NoSave, 0);
+        public SpellResistTarget ResistTarget(SpellRun run, SpellRunTarget target) =>
+            new(false, SpellTargetKind.Npc, false, Takes ? 0 : 100, 0, 0, false);
+        public ISpellRollSource Rolls { get; } = new FixedRolls();
+        public ISpellFateSave FateSave => SpellFateSave.None;
         public bool IsLocalPlayer(SpellRunObject? who) => who?.Id is { } id && id == LocalPlayer;
         public IReadOnlyList<SpellRunTarget> Collect(SpellRun run) => Targets;
         public bool UseSpellAtMaximum(SpellRunObject pc) => Fate;
-        public bool PerTarget(SpellRun run, SpellRunTarget target) => true;
-        public bool TakesEffect(SpellRun run, SpellRunTarget target) => Takes;
         public SpellComponentGate Gate(SpellRun run, int component, SpellRunTarget target) => new(Passes, target);
         public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target)
         {
@@ -57,10 +63,9 @@ public sealed class SpellRunSystemTests
         public SpellCellPayment Pay(SpellCellRequest request) => throw new AssertFailedException("no cells");
     }
 
-    private sealed class NoStacking : ISpellRunStacking
+    private sealed class FixedRolls : ISpellRollSource
     {
-        public int? Blocking(SpellRun run, SpellRunObject target) => null;
-        public void Cancel(SpellRun run) { }
+        public int Roll(SpellRollPurpose purpose, int min, int max) => min;
     }
 
     private static SpellRunRecord Record(int begin = 1, int maintain = 0, int end = 0, int callback = 0, int endCallback = 0) =>
@@ -282,5 +287,62 @@ public sealed class SpellRunSystemTests
         Assert.IsTrue(stop.Table[0] is null && stop.Table[1] is not null, "the first match is interrupted");
         stop.ForceEnd(1);
         Assert.IsNull(stop.Table[1]);
+    }
+
+    // ARC-MAGIC-011: the stage's cancels, the per-target stage and the resistance in the run system.
+    [TestMethod]
+    public void Mg30TheCancelledRunIsLeftInTheOriginalAndProcessedAfterThePassInSteamwoven()
+    {
+        var host = new Host();
+        host.Records[7] = Record() with { CancelsSpellFlags = 0x4 };
+        host.Records[8] = Record(maintain: 1) with { MaintainPeriod = 5, CancelsSpellFlags = 0x4 };
+        var held = Run(1, spell: 8, flags: SpellRunFlags.Active | SpellRunFlags.Processed | SpellRunFlags.Free, action: SpellRunAction.Maintain);
+        var original = new SpellRunSystem(SpellRunTable.Empty.With(Run()).With(held), host, MagicAnomalyProfile.Original, pendingTicks: [1]);
+        original.Begin(0);
+        Assert.AreEqual(SpellRunAction.End, original.Table[1]!.Action, "interrupted: END, but never processed");
+        Assert.IsTrue(original.RemovedTicks.Contains(1) && original.Notes.Any(n => n is { Kind: SpellRunNoteKind.ReEntryRefused, Run: 1 }));
+        var steam = new SpellRunSystem(SpellRunTable.Empty.With(Run()).With(held), host, MagicAnomalyProfile.Steamwoven, pendingTicks: [1]);
+        steam.Begin(0);
+        Assert.IsNull(steam.Table[1], "deferred, then its END processed and the run freed");
+        Assert.IsTrue(steam.Notes.Any(n => n is { Kind: SpellRunNoteKind.Deferred, Run: 1 }));
+    }
+
+    [TestMethod]
+    public void Mg32TheFreeRemovesEveryEventInSteamwoven()
+    {
+        var host = new Host();
+        host.Records[7] = Record();
+        var original = new SpellRunSystem(SpellRunTable.Empty.With(Run(5, flags: SpellRunFlags.Active | SpellRunFlags.Processed)), host, MagicAnomalyProfile.Original);
+        original.EndByEvent(5);
+        original.Free(5, chargeBegin: false);
+        Assert.AreEqual((1, 0), (original.Queued.Count, original.RemovedEvents.Count), "the interrupt outlives the free");
+        var steam = System(host, Run(5, flags: SpellRunFlags.Active | SpellRunFlags.Processed));
+        steam.EndByEvent(5);
+        steam.Free(5, chargeBegin: false);
+        Assert.AreEqual((0, 5), (steam.Queued.Count, steam.RemovedEvents.Single()));
+    }
+
+    [TestMethod]
+    public void AReflectingTargetTurnsTheRunOnItsCasterForEveryLaterTarget()
+    {
+        var host = new Host { Targets = [new(Orc, new(5, 5)), new(Wand, new(6, 6))] };
+        host.Flags["orc"] = SpellTargetStage.FullReflection;
+        host.Records[7] = Record(end: 0) with { Cost = 3, Duration = new(30) };
+        var system = System(host, Run(flags: SpellRunFlags.Active));
+        system.Begin(0);
+        // The orc reflects: its component hits the caster; the run stays reflected, so the wand's also turns on the caster.
+        Assert.AreEqual("hero,hero", string.Join(",", host.Applied.Where(a => a.Action == SpellRunAction.Begin).Select(a => a.Target)));
+        Assert.AreEqual(("hero", true), (system.Table[0]!.Source!.Id, (system.Table[0]!.Flags & SpellRunFlags.Reflected) != 0),
+            "the source is restored after each turned target (RP6); the run keeps the reflected mark");
+    }
+
+    [TestMethod]
+    public void TheResistanceWritesTheRunsMarginAndSkipsAResistingTarget()
+    {
+        var host = new Host { Takes = false };
+        host.Records[7] = Record() with { Duration = new(30) };
+        var system = System(host, Run());
+        system.Begin(0);
+        Assert.IsTrue(system.Notes.Any(n => n is { Kind: SpellRunNoteKind.Resistance, Value: 99 }) && system.Notes.Any(n => n.Kind == SpellRunNoteKind.Resisted));
     }
 }

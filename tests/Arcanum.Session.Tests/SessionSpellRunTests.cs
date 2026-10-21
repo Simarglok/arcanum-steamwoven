@@ -32,14 +32,18 @@ public sealed class SessionSpellRunTests
         public SpellRunRecord Record(int spell) => record;
         public SpellStageFacts StageFacts(SpellRun run) => new(false, false, 12, 20, false, new SpellPayer(SpellPayerKind.Critter, CurrentFatigue: 50), new(true, 0, -1));
         public ISpellCellSource Cells { get; } = new NoCells();
-        public ISpellRunStacking Stacking { get; } = new NoStacking();
         public bool FlagsAllow(SpellRun run) => true;
-        public int SourceSpellFlags(SpellRun run) => 0;
+        public int SpellFlags(SpellRunObject who) => 0;
+        public int? PlayerSpellFlags => null;
+        public bool PlayerPerceptionExtraordinary => false;
+        public SpellPayer? Payer(SpellRunObject who) => null;
+        public SpellResistRecord ResistRecord(int spell) => new(spell, true, false, false, 0, SpellResistanceRules.NoSave, 0);
+        public SpellResistTarget ResistTarget(SpellRun run, SpellRunTarget target) => new(false, SpellTargetKind.Other, false, 0, 0, 0, false);
+        public ISpellRollSource Rolls { get; } = new NoRolls();
+        public ISpellFateSave FateSave => SpellFateSave.None;
         public bool IsLocalPlayer(SpellRunObject? who) => false;
         public IReadOnlyList<SpellRunTarget> Collect(SpellRun run) => [new(run.Target, run.TargetTile)];
         public bool UseSpellAtMaximum(SpellRunObject pc) => false;
-        public bool PerTarget(SpellRun run, SpellRunTarget target) => true;
-        public bool TakesEffect(SpellRun run, SpellRunTarget target) => true;
         public SpellComponentGate Gate(SpellRun run, int component, SpellRunTarget target) => new(true, target);
         public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target)
         {

@@ -40,6 +40,25 @@ public sealed record MagicAnomalyProfile
     public bool SurchargeAlways { get; init; }
 
     /// <summary>
+    /// MG15 (ARC-MAGIC-011, owner decision 2026-10-20): a target's full reflection charges the reflecting caster the global "last
+    /// cost" any payment charged (0x5E762C), stale for a free run or an item cast. Steamwoven charges the reflected run's own cost
+    /// of the action: its BEGIN cost at BEGIN, its maintenance at MAINTAIN, nothing otherwise.
+    /// </summary>
+    public bool ReflectionPaysLastCost { get; init; }
+
+    /// <summary>
+    /// MG30 (ARC-MAGIC-011; pending the owner, recommended fix): the runs a starting run's cancels interrupt are refused by the
+    /// processing's re-entrancy guard and left without a tick or an END. Steamwoven processes them right after the current pass.
+    /// </summary>
+    public bool ReEntryDropsRuns { get; init; }
+
+    /// <summary>
+    /// MG32 (ARC-MAGIC-011; pending the owner, recommended fix): a run's free removes only its tick events, so an interrupt or
+    /// process event outlives it and can hit a new run in the reused slot. Steamwoven removes every event of the run.
+    /// </summary>
+    public bool FreeKeepsOtherEvents { get; init; }
+
+    /// <summary>
     /// MG11 (ARC-MAGIC-009): the count of a critter's maintained runs (0x450AC0) walks the run table and answers 0, so its free
     /// maintenance slots are always intelligence / 4 (the AI's "no free slot" test). Steamwoven counts the runs that hold its slots.
     /// </summary>
@@ -59,7 +78,8 @@ public sealed record MagicAnomalyProfile
     public static readonly MagicAnomalyProfile Original = new()
     {
         Name = "original", SaveSubtractsResistance = true, SummonedTestReadsLastFlags = true, MaintenancePaysBoth = true,
-        SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true,
+        SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true, ReflectionPaysLastCost = true, ReEntryDropsRuns = true,
+        FreeKeepsOtherEvents = true,
     };
 
     /// <summary>Both settings, default first.</summary>

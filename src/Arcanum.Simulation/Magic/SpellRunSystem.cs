@@ -58,6 +58,11 @@ public enum SpellRunNoteKind
     ReEntryRefused,
     /// <summary>The fate "spell at maximum" was used for the run (both aptitudes 100).</summary>
     SpellAtMaximum,
+    /// <summary>A target's resistance (MT6): <see cref="SpellRunNote.Value"/> is the displayed margin (the AI notice of a shrugged
+    /// aggressive spell is a separate <see cref="AiNotice"/> with value −1).</summary>
+    Resistance,
+    /// <summary>The processing of a run another run's pass interrupted was deferred until after that pass (MG30, Steamwoven).</summary>
+    Deferred,
 }
 
 /// <summary>A host note: its kind, the run, a value (a message number, a component) and the target or payments it concerns.</summary>
@@ -79,13 +84,30 @@ public interface ISpellRunHost
 
     ISpellCellSource Cells { get; }
 
-    ISpellRunStacking Stacking { get; }
-
     /// <summary>The forbidden-flags check at BEGIN (0x456430 with the parent, the target and the record).</summary>
     bool FlagsAllow(SpellRun run);
 
-    /// <summary>The source's spell flags (field 0x14) now; 0 without a source.</summary>
-    int SourceSpellFlags(SpellRun run);
+    /// <summary>An object's spell flags (field 0x14) now: the session's or, until P1, the static object fields; 0 for a missing
+    /// object.</summary>
+    int SpellFlags(SpellRunObject who);
+
+    /// <summary>The local player's spell flags, or null without a local player, and whether its perception is extraordinary (the
+    /// cancels' environment test, 0x458A80).</summary>
+    int? PlayerSpellFlags { get; }
+
+    bool PlayerPerceptionExtraordinary { get; }
+
+    /// <summary>An object as a payer (the reflecting caster pays the reflection, MT10); null pays nothing.</summary>
+    SpellPayer? Payer(SpellRunObject who);
+
+    /// <summary>The record facts and a target's facts the resistance reads (0x4537B0, MT6), its rolls and the PC's fate save.</summary>
+    SpellResistRecord ResistRecord(int spell);
+
+    SpellResistTarget ResistTarget(SpellRun run, SpellRunTarget target);
+
+    ISpellRollSource Rolls { get; }
+
+    ISpellFateSave FateSave { get; }
 
     bool IsLocalPlayer(SpellRunObject? who);
 
@@ -94,12 +116,6 @@ public interface ISpellRunHost
 
     /// <summary>Uses the PC's armed fate "spell at maximum" (kind 5, 0x4F5270): true when it was armed.</summary>
     bool UseSpellAtMaximum(SpellRunObject pc);
-
-    /// <summary>The per-target stage (0x455550, MT10): false skips the target.</summary>
-    bool PerTarget(SpellRun run, SpellRunTarget target);
-
-    /// <summary>The resistance (0x4537B0, MT6): false when the target resisted.</summary>
-    bool TakesEffect(SpellRun run, SpellRunTarget target);
 
     SpellComponentGate Gate(SpellRun run, int component, SpellRunTarget target);
 
@@ -141,6 +157,11 @@ public sealed class SpellRunSystem
     private readonly HashSet<int> _ticks;
     private readonly List<SpellRunEvent> _queued = [];
     private readonly List<int> _removedTicks = [];
+    private readonly List<int> _removedEvents = [];
+    // MG30 (Steamwoven): runs the guard refused, processed after the current pass.
+    private readonly List<int> _deferred = [];
+    // The source's spell flags the shell test read this pass (0x5E6D84, context +0x5C).
+    private int _sourceFlags;
     private readonly List<SpellRunNote> _notes = [];
     private int _guard = -1;
     private bool _callbackGuard;
@@ -152,13 +173,23 @@ public sealed class SpellRunSystem
     /// <param name="host">The world.</param>
     /// <param name="profile">The rule mode's magic switches.</param>
     /// <param name="pendingTicks">The runs that have a tick event queued (the duplicate test of 0x4548D0).</param>
-    public SpellRunSystem(SpellRunTable table, ISpellRunHost host, MagicAnomalyProfile profile, IEnumerable<int>? pendingTicks = null)
+    /// <param name="lastCostCharged">The last positive cost any payment charged (0x5E762C), which the original's reflection
+    /// charges (MG15).</param>
+    public SpellRunSystem(SpellRunTable table, ISpellRunHost host, MagicAnomalyProfile profile, IEnumerable<int>? pendingTicks = null, int lastCostCharged = 0)
     {
         Table = table ?? throw new ArgumentNullException(nameof(table));
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _ticks = [.. pendingTicks ?? []];
+        LastCostCharged = lastCostCharged;
     }
+
+    /// <summary>The last positive cost any payment the rules made charged (the stage's, the reflection's); a component's own
+    /// payments are the host's (<see cref="SpellComponentOutcome"/>' cost).</summary>
+    public int LastCostCharged { get; private set; }
+
+    /// <summary>The runs whose every event to remove (a free in the Steamwoven setting, MG32), in order.</summary>
+    public IReadOnlyList<int> RemovedEvents => _removedEvents;
 
     public SpellRunTable Table { get; private set; }
 
@@ -188,20 +219,36 @@ public sealed class SpellRunSystem
     [OriginalFunction(0x451070, OriginalFunctionScope.Partial)]
     public void Process(int id)
     {
+        // A run the guard refuses leaves the current pass's state alone (the original refuses before resetting it).
+        if (_guard != -1 && _guard != id) { Run(id, new Pass()); return; }
         _endCallback = false;
         Run(id, new Pass());
+        // MG30 (Steamwoven): the runs the guard refused during that pass are processed now, in order.
+        while (_guard == -1 && _deferred.Count > 0)
+        {
+            var next = _deferred[0];
+            _deferred.RemoveAt(0);
+            Process(next);
+        }
     }
 
     [OriginalFunction(0x4510F0, OriginalFunctionScope.Partial)]
     private void Run(int id, Pass pass)
     {
         if (Table[id] is not { } run) return;
-        if (_guard != -1 && _guard != id) { _notes.Add(new(SpellRunNoteKind.ReEntryRefused, id)); return; }
+        if (_guard != -1 && _guard != id)
+        {
+            if (_profile.ReEntryDropsRuns) _notes.Add(new(SpellRunNoteKind.ReEntryRefused, id));
+            else if (!_deferred.Contains(id)) { _deferred.Add(id); _notes.Add(new(SpellRunNoteKind.Deferred, id)); }
+            return;
+        }
         run = Set(run with { Flags = run.Flags | SpellRunFlags.Processed });
         _guard = id;
         var record = _host.Record(run.Spell);
+        _sourceFlags = 0;
         if (run.Action == SpellRunAction.Begin && !_host.FlagsAllow(run)) { Refuse(id); return; }
-        var stage = SpellRunRules.Stage(run, record, _host.StageFacts(run), _host.Cells, _host.Stacking, _profile);
+        var stage = SpellRunRules.Stage(run, record, _host.StageFacts(run), _host.Cells, new Stacking(this), _profile);
+        foreach (var cost in stage.Costs) if (cost > 0) LastCostCharged = cost;
         if (stage.Payments.Count > 0) _notes.Add(new(SpellRunNoteKind.Payments, id, Payments: stage.Payments));
         if (stage.Message is { } stageMessage) _notes.Add(new(SpellRunNoteKind.Message, id, stageMessage));
         if (!stage.Proceeds)
@@ -239,7 +286,8 @@ public sealed class SpellRunSystem
     private bool SourceUnshelled(SpellRun run)
     {
         if (run.Source is null || run.Action >= SpellRunAction.End) return true;
-        if ((_host.SourceSpellFlags(run) & AntiMagicShell) == 0 || (run.SetSpellFlags & AntiMagicShell) != 0) return true;
+        _sourceFlags = _host.SpellFlags(run.Source);
+        if ((_sourceFlags & AntiMagicShell) == 0 || (run.SetSpellFlags & AntiMagicShell) != 0) return true;
         if (_host.IsLocalPlayer(run.Parent))
         {
             _notes.Add(new(SpellRunNoteKind.Message, run.Id, MessageShelled));
@@ -253,10 +301,12 @@ public sealed class SpellRunSystem
     {
         var run = Table[id]!;
         var targets = _host.Collect(run);
+        var maximized = false;
         if (run.Source is { Type: SpellObjectFacts.PcType } pc && _host.UseSpellAtMaximum(pc))
         {
             run = Set(run with { Source = pc with { Aptitude = 100 }, Parent = run.Parent is { } parent ? parent with { Aptitude = 100 } : null });
             _notes.Add(new(SpellRunNoteKind.SpellAtMaximum, id));
+            maximized = true;
         }
         if (targets.Count == 0) pass.Applied = true;
         // The source when the target list was set up (0x453630, 0x5E75B0): a component that replaces it swaps the run's
@@ -266,8 +316,8 @@ public sealed class SpellRunSystem
         {
             if (Table[id] is not { } current) return;
             var target = entry;
-            if (!_host.PerTarget(current, target)) continue;
-            if (!_host.TakesEffect(current, target)) { _notes.Add(new(SpellRunNoteKind.Resisted, id, Target: target)); continue; }
+            if (!PerTarget(id, record, ref target)) continue;
+            if (!TakesEffect(id, record, target, maximized)) { _notes.Add(new(SpellRunNoteKind.Resisted, id, Target: target)); continue; }
             for (var component = 0; component < count; component++)
             {
                 if (Table[id] is not { } live) return;
@@ -293,6 +343,67 @@ public sealed class SpellRunSystem
                 Set(swapped with { Source = target.Object });
                 target = new(replaced, target.Tile);
             }
+        }
+    }
+
+    // The per-target stage (0x455550, MT10): its pure decision, the run and target it leaves, its messages and the reflecting
+    // caster's payment.
+    private bool PerTarget(int id, SpellRunRecord record, ref SpellRunTarget target)
+    {
+        var run = Table[id]!;
+        if (target.Object is not { } obj || obj.Id == run.Parent?.Id) return true;
+        var flags = _host.SpellFlags(obj);
+        var caster = (flags & SpellTargetStage.FullReflection) != 0 ? SpellTargetStage.FlagCaster(Table, obj, flags, SpellTargetStage.FullReflection) : null;
+        var decision = SpellTargetStage.Decide(run, record, target, new(flags, _sourceFlags, _host.IsLocalPlayer(run.Parent), caster, LastCostCharged,
+            ReflectedCost(run, record)), _profile);
+        Set(decision.Run);
+        target = decision.Target;
+        if (decision.Message is { } message) _notes.Add(new(SpellRunNoteKind.Message, id, message));
+        if (decision.MaintainBar) _notes.Add(new(SpellRunNoteKind.MaintainBar, id));
+        if (decision.Payment is { } payment)
+        {
+            if (payment.Cost > 0) LastCostCharged = payment.Cost;
+            var paid = SpellPaymentRules.Pay(_host.Payer(payment.Payer) ?? new(SpellPayerKind.None), payment.Cost, true, SpellPaymentRules.NoSpell, default, _host.Cells);
+            _notes.Add(new(SpellRunNoteKind.Payments, id, Payments: [paid]));
+        }
+        return decision.Passes;
+    }
+
+    // MG15, Steamwoven: the reflected run's own cost of this action — its BEGIN cost at BEGIN, its maintenance at MAINTAIN.
+    private int ReflectedCost(SpellRun run, SpellRunRecord record)
+    {
+        var facts = _host.StageFacts(run);
+        return run.Action switch
+        {
+            SpellRunAction.Begin => SpellCostRules.RunCost(record.Cost, run.Spell, facts.SourceCaster, facts.Cheat),
+            SpellRunAction.Maintain => SpellRunRules.MaintainCost(record.MaintainCost, facts.SourceCaster),
+            _ => 0,
+        };
+    }
+
+    // The resistance of one target (0x4537B0, MT6): the run's margin and the displayed margin, the AI's notice of a shrugged
+    // aggressive spell; false when the target resisted.
+    private bool TakesEffect(int id, SpellRunRecord record, SpellRunTarget target, bool maximized)
+    {
+        var run = Table[id]!;
+        var resistance = SpellResistanceRules.Resist(_host.ResistRecord(run.Spell), _host.ResistTarget(run, target),
+            new(run.Action == SpellRunAction.Begin, (run.Flags & SpellRunFlags.Unresistable) != 0, maximized), _host.Rolls, _host.FateSave, _profile);
+        if (resistance.Margin is { } margin) Set(run with { Margin = margin });
+        if (resistance.DisplayMargin is { } display) _notes.Add(new(SpellRunNoteKind.Resistance, id, display, target));
+        if (resistance.NotifiesAi) _notes.Add(new(SpellRunNoteKind.AiNotice, id, -1, target));
+        return resistance.Applies;
+    }
+
+    // The stage's ports for the no-stack test and the cancels (0x453410, 0x4534E0) over this table.
+    private sealed class Stacking(SpellRunSystem system) : ISpellRunStacking
+    {
+        public int? Blocking(SpellRun run, SpellRunObject target) => SpellTargetStage.Blocking(system.Table, run, target, system._host.Record);
+
+        public void Cancel(SpellRun run)
+        {
+            foreach (var other in SpellTargetStage.Cancelled(system.Table, run, system._host.Record,
+                mask => SpellTargetStage.EnvironmentAllows(mask, system._host.PlayerSpellFlags, system._host.PlayerPerceptionExtraordinary)))
+                system.Interrupt(other);
         }
     }
 
@@ -343,6 +454,12 @@ public sealed class SpellRunSystem
     {
         if (Table[id] is null) return;
         Table = Table.Free(id);
+        // MG32 (Steamwoven): every event of the run goes with it, not only its ticks.
+        if (!_profile.FreeKeepsOtherEvents)
+        {
+            _queued.RemoveAll(e => e.Run == id);
+            _removedEvents.Add(id);
+        }
         RemoveTicks(id);
         _notes.Add(new(SpellRunNoteKind.Freed, id));
     }
@@ -363,7 +480,7 @@ public sealed class SpellRunSystem
     }
 
     /// <summary>Whether the call changed anything: the table (compared with the one it started from), the events to queue or remove.</summary>
-    public bool Changed(SpellRunTable start) => !ReferenceEquals(Table, start) || _queued.Count > 0 || _removedTicks.Count > 0;
+    public bool Changed(SpellRunTable start) => !ReferenceEquals(Table, start) || _queued.Count > 0 || _removedTicks.Count > 0 || _removedEvents.Count > 0;
 
     // 0x457030, 0x457060: the callback action at once, in the callback's own pass (its scheduler then frees the run).
     [OriginalFunction(0x457030, OriginalFunctionScope.Full)]

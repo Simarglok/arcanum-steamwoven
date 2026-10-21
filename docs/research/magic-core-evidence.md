@@ -380,6 +380,14 @@ below do not test the technology flag (open question O8).
 
 ### Shells, reflection, stacking and cancels
 
+**Original check (ARC-MAGIC-011, 2026-10-21).** Read in the executable by two readers ([ledger "Spell per-target
+stage"](original-verification-ledger.md#spell-per-target-stage-arc-magic-011), PT1–PT10; the stage, no-stack and cancels by the
+function oracle, F3) and implemented as the [spell per-target stage](../world/spell-target-stage.md). Corrections to the text
+below: the reflection's caster is the parent of the run that set the reflection on the target, and it pays the last positive cost
+of any payment (not this run's; MG15); a run once reflected turns every later target and pass on its caster; the cancels select
+runs by source, and the environment loop compares the starting record's own fields (MG33); a resisted target after the swap leaves
+the run's source swapped (MG34).
+
 - **Anti-magic shell** on the source: its own spells fail ("you lose your
   concentration"); on a target: the effect is nullified for that target. The
   run that grants the shell is exempt (source (0x453710),
