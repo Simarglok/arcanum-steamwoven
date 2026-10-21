@@ -34,6 +34,7 @@ public sealed class AreaStepSnapshot
             {
                 AreaStepEdgeRule.Unknown => e.Reason ?? "EDGE_RULE_UNKNOWN",
                 AreaStepEdgeRule.Leaving when e.Reason != AreaStepInspector.LockedLeavingOnlyReason => e.Reason ?? "EDGE_RULE_UNKNOWN",
+                AreaStepEdgeRule.Leaving when LeavingTiles(e) is null => "PORTAL_LEAVING_TILE_UNRESOLVED",
                 AreaStepEdgeRule.Legacy when e.Opening => "WALL_OPENING_PIECE_UNSUPPORTED",
                 _ => null,
             }).OfType<string>().GroupBy(r => r).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count()));
@@ -54,7 +55,8 @@ public sealed class AreaStepSnapshot
     public int UnknownObjects { get; }
     /// <summary>ARC-RENDER-027: the wall and portal edges whose rule a step cannot settle from the T0 evidence (every step across
     /// them is Unknown, or every step but a leaving one), by reason: an unresolved portal's flags, an unlock script, an hour
-    /// lock (<c>PORTAL_LOCK_DEPENDS_ON_HOUR</c>), an unsupported opening piece.</summary>
+    /// lock (<c>PORTAL_LOCK_DEPENDS_ON_HOUR</c>), a leaving-only lock whose tiles cannot be read
+    /// (<c>PORTAL_LEAVING_TILE_UNRESOLVED</c>), an unsupported opening piece.</summary>
     public IReadOnlyDictionary<string, int> UnknownEdges { get; }
     /// <summary>Walls registered as tile-edge components (each blocks one edge, never its tile).</summary>
     public int WallEdges { get; }
@@ -181,11 +183,20 @@ public sealed class AreaStepSnapshot
     /// it exchanges them exactly when the leg enters P from across; the door or window goal passes the direction from
     /// the walker's tile to P, which is 5 on P itself, so a portal of raw rotation 0..2 is tested in reverse there and
     /// the two attempts never agree. Null when a tile is outside the evidence or not tile or facade art.</summary>
-    private bool? LeavingStepOpens(AreaStepWallEdge portal, bool legStartsOnPortal, AreaStepCell walker)
+    /// <summary>Whether the portal's tile and the tile beyond it along its rotation are indoor; null when the rotation does not
+    /// match the edge or either tile's type cannot be read (every step across the portal is then a gap).</summary>
+    private (bool Portal, bool Other)? LeavingTiles(AreaStepWallEdge portal)
     {
         var rotation = portal.RawRotation;
         if (rotation is < 0 or > 7 || (rotation | 1) != portal.Edge) return null;
-        if (Indoor(Terrain(portal.Cell)) is not { } portalIndoor || Indoor(Terrain(Neighbor(portal.Cell, rotation))) is not { } otherIndoor) return null;
+        return Indoor(Terrain(portal.Cell)) is { } portalIndoor && Indoor(Terrain(Neighbor(portal.Cell, rotation))) is { } otherIndoor
+            ? (portalIndoor, otherIndoor) : null;
+    }
+
+    private bool? LeavingStepOpens(AreaStepWallEdge portal, bool legStartsOnPortal, AreaStepCell walker)
+    {
+        var rotation = portal.RawRotation;
+        if (LeavingTiles(portal) is not var (portalIndoor, otherIndoor)) return null;
         bool Leaves(int direction) =>
             (direction + 4) % 8 == rotation || (direction + 5) % 8 == rotation || (direction + 3) % 8 == rotation
                 ? otherIndoor && !portalIndoor

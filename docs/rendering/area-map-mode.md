@@ -349,8 +349,8 @@ next map and come back with it. Since ARC-WORLD-037 the party commands (`JO`,
 `WA`, `UW`) of a speaker with follow facts go through the session party
 ([companions](#companions-arc-world-037)). A map the map
 list does not name (`scienticians underground lev 1` and `lev 2`) has no runtime number,
-hence no session and no dialogs (since ARC-RENDER-027 again: an unlit map's session clock, ARC-WORLD-057, had made the
-viewer ask for a session the session owner refuses for runtime map 0, `AREA_SESSION_InvalidActor`).
+hence no session (no dialogs, saves or sound; since ARC-RENDER-027 again: an unlit map's session clock, ARC-WORLD-057, had made the
+viewer ask for a session the session owner refuses for runtime map 0, `AREA_SESSION_InvalidActor`)).
 
 Opt-in census (`AreaMapConversationOriginalTests`, `DAT_ROOT`): 34 listed
 interiors have 182 dialog NPCs. Each one gets a typed start: 50 start a
@@ -782,7 +782,8 @@ map-mode start; named elsewhere it fails, and it ends on the last map). Per map:
   fails the map); a load that fails is recorded for its map and the census goes on;
 - a frame is drawn with visible draw commands;
 - the walker stands on a tile it can step from and back (the spawn rule); a window opens around its map-list start;
-- the step evidence leaves no terrain cell, no object evaluation and no edge Unknown. Edges are Unknown by contract when an
+- the step evidence leaves no terrain cell, no object evaluation and no edge Unknown (an unresolved portal's flags, a
+  leaving-only lock whose tiles cannot be read, an unsupported opening piece). Edges are Unknown by contract when an
   unlock script or an hour lock decides them; they are reported per map, and any other Unknown edge reason fails the map;
 - the load time, the slowest frame period of the seven after the publication's first (which carries the upload), the
   managed heap after a full collection and the process working set stay within the census budgets: 60 s, 750 ms, 2 GB and

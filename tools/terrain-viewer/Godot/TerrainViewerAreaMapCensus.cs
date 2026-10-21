@@ -13,9 +13,9 @@ namespace Arcanum.TerrainViewer;
 // a catalogued map map mode does not open (no sector file, or a window without a map-list start) is reported, not loaded.
 public partial class TerrainViewerApp
 {
-    // Census budgets, about two to three times the largest values observed (the owner's Mac, Debug source run, 2026-10-21: K'na
-    // Tha loads in 21–22 s with a 1.05 GB heap and a 1.52 GB working set; the slowest frame period, 301 ms, wheel clan's, which
-    // other runs saw at 127–168 ms). The frame budget bounds stalls (a visible window; frames are paced at the display rate, and
+    // Census budgets, about two to three times the largest values observed over five runs (the owner's Mac, Debug source run,
+    // 2026-10-21: K'na Tha loads in 21–22 s with a heap of 1.03–1.06 GB and a working set of 1.46–1.57 GB; the slowest frame
+    // period 121–169 ms, once 301 ms, wheel clan's). The frame budget bounds stalls (a visible window; frames are paced at the display rate, and
     // other processes on the machine move it), not a frame rate.
     internal const long CensusLoadBudgetMs = 60000, CensusFrameBudgetMs = 750, CensusHeapBudgetBytes = 2L << 30, CensusWorkingSetBudgetBytes = 3L << 30;
     private const int CensusFrames = 8;
@@ -46,7 +46,8 @@ public partial class TerrainViewerApp
             {
                 if (!entry.Openable)
                 {
-                    GD.Print("ARC-RENDER-027 census map NONE " + System.Text.Json.JsonSerializer.Serialize(new { entry.Name, entry.Listed, entry.SectorFiles }));
+                    GD.Print("ARC-RENDER-027 census map NONE " + System.Text.Json.JsonSerializer.Serialize(new { entry.Name, entry.Listed, entry.SectorFiles,
+                        Reason = entry.SectorFiles == 0 ? "NO_SECTOR_FILES" : "WINDOW_NO_START" }));
                     continue;
                 }
                 GD.Print("ARC-RENDER-027 census map BEGIN " + entry.Name);
@@ -103,7 +104,7 @@ public partial class TerrainViewerApp
                 else failures.Add($"{entry.Name}: {failure}");
             }
         }
-        finally { _arguments = origin; }
+        finally { _arguments = origin; } // the run ends on the last census map with the start map's arguments, and quits
         var summary = System.Text.Json.JsonSerializer.Serialize(new { Catalogued = maps.Count, Openable = maps.Count(m => m.Openable),
             Unlisted = maps.Count(m => !m.Listed), Published = published, Passed = passed, ContractEdges = contractEdges,
             MaxLoadMs = maxLoad, MaxFrameMs = maxFrame, MaxHeapBytes = maxHeap, MaxWorkingSetBytes = maxWorkingSet,
