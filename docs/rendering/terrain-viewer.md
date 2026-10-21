@@ -1095,8 +1095,8 @@ Differences from the original, all of the page's presentation:
 
 - the college names as tab texts instead of the college icons;
 - no spell icons; the look of each rank is given as a word and a colour;
-- the hint as a tooltip; the original's 3-second hint delay after a refusal is not kept;
-- project refusal texts, with no refusal sound (the original plays 3004);
+- the hint as a tooltip; the original's 3-second hint delay after a refusal is not kept (SG6, SP5);
+- project refusal texts, with no refusal sound (the original plays 3004, SG6, SP7);
 - a success reported in words; the original clears its text bar.
 
 The view-only and character-creation modes of the original sheet have no caller in the viewer. Those modes also show `−` down

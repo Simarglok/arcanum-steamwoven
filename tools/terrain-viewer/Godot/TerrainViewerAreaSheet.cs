@@ -136,6 +136,7 @@ public partial class TerrainViewerApp
     private void SelectCollege(int college)
     {
         if (!SheetOpen || !SheetActive || college is < 0 or >= AreaSpellsPage.Colleges) return;
+        AdoptSpellData();
         _sheetCollege = college;
         if (AreaCharacterSheet.Build(_areaSession!).View is { } view) _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage());
     }
@@ -144,6 +145,7 @@ public partial class TerrainViewerApp
     private void PressSpell(int college, bool learn)
     {
         if (!SheetOpen || !SheetActive) return;
+        AdoptSpellData();
         var data = _spellData?.Data;
         var press = learn ? AreaSpellsPage.Learn(_areaSession!, college, data) : AreaSpellsPage.Unlearn(_areaSession!, college, data);
         _sheetPanel!.ShowSkillMessage(press.Message);

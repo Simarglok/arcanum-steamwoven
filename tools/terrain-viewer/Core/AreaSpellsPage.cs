@@ -66,7 +66,12 @@ public static class AreaSpellsPage
     {
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
-            return new(found.Status == AreaContentRootStatus.MountFailed ? AreaSpellDataStatus.MountFailed : AreaSpellDataStatus.ModuleOutsideGameRoot, null, found.Detail);
+            return new(found.Status switch
+            {
+                AreaContentRootStatus.MountFailed => AreaSpellDataStatus.MountFailed,
+                AreaContentRootStatus.StackFailed => AreaSpellDataStatus.StackFailed,
+                _ => AreaSpellDataStatus.ModuleOutsideGameRoot,
+            }, null, found.Detail);
         var opened = ContentStack.Open(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(AreaSpellDataStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
@@ -83,6 +88,7 @@ public static class AreaSpellsPage
         if (college is < 0 or >= Colleges) throw new ArgumentOutOfRangeException(nameof(college));
         if (session.QueryHero() is not { } hero || session.QueryHeroSpellBook() is not { } book) return null;
         var floor = session.QueryHeroEditorFloor();
+        // The stored race: the session has no effect that changes a hero's race stat.
         var caster = new SpellCaster(true, (int)hero.Race, book.MasteredCollege);
         var willpower = session.AutoLevel?.SpellWillpower ?? AutoLevelRules.DefaultSpellWillpower;
         var tabs = new AreaCollegeTab[Colleges];
@@ -117,6 +123,7 @@ public static class AreaSpellsPage
     public static AreaSpellPress Unlearn(GameSessionOwner session, int college, SpellData? data)
     {
         ArgumentNullException.ThrowIfNull(session);
+        if (college is < 0 or >= Colleges) throw new ArgumentOutOfRangeException(nameof(college));
         var rank = session.QueryHeroSpellBook()?.Ranks[college];
         var press = Press(session.RefundHeroPoint(session.Version, AdvancementTrack.College, college), false, session, college, data);
         return press.Changed && rank is > 0 ? press with { Message = "unlearned " + SpellName(data, college * Ranks + rank.Value - 1) } : press;

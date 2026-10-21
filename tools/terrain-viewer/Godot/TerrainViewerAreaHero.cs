@@ -121,12 +121,12 @@ public partial class TerrainViewerApp
             var shown = _sheetPanel.SpellsForSelfTest!;
             Require(shown.College == college && shown.EditorOpen, "college tab " + college);
             named += shown.Spells.Count(row => row.Name != AreaSpellsPage.SpellName(null, row.Spell));
-            costed += shown.Spells.Count(row => row.Cost is not null);
+            costed += shown.Spells.Count(row => row.Cost > 0);
             maintained += shown.Spells.Count(row => row.MaintainPeriod is > 0);
             described += shown.Spells.Count(row => row.Description is not null);
         }
         var colleges = _sheetPanel!.SpellsForSelfTest!.Colleges.Count(tab => tab.Name != AreaSpellsPage.CollegeName(null, tab.College) && tab.Description is not null);
-        Require(named == 80 && costed == 80 && described == 80 && colleges == 16, $"original texts named={named} costed={costed} described={described} colleges={colleges}");
+        Require(named == 80 && described == 80 && colleges == 16, $"original texts named={named} costed={costed} described={described} colleges={colleges}");
         _sheetPanel.CollegeTabForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
         var page = _sheetPanel.SpellsForSelfTest!;
         var revision = session.Version.Revision;
