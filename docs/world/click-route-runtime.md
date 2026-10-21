@@ -255,6 +255,30 @@ runtime receives therefore share one Data verdict.
   `area-grid` probes. `./arcanum area` prefers the current ARC-WORLD-007 build over
   older AREA builds (an ARC-WORLD-009 cave build, which includes the route, comes first).
 
+## Original check (ARC-WORLD-060)
+
+The original's walk to a clicked tile is read in the retail executable
+([ledger](../research/original-verification-ledger.md#long-and-far-routes-arc-world-060) LR1–LR8, with the path request
+DC2–DC8 and the freed cells FC1–FC3). Each part of this runtime against it:
+
+| Part | Original | Steamwoven | Status |
+| --- | --- | --- | --- |
+| Segments and replanning (`RouteFollower`) | at most 8 rotations a plan, then a new plan from the walker's tile toward the same goal (LR1, LR3); a new click replaces the goal (LR3) | 8-step segments, a new plan after each; a new goal at the next cell centre | Follows |
+| Straight attempt and search reach (`RoutePlanner`) | straight up to 32 tiles (larger axis; skipped with flag 0x200, LR9), search under 32 on either axis in a 64 × 64 window; no partial route (LR1, DC3, DC4) | straight attempt and a 64-cell window search, both up to 32 per axis; no partial route | Differs at exactly 32 for the search (proposal: follow) |
+| Search bound and costs | the budget `min(4 × distance + 5, 200)`, 5 more on each later plan, drops long detours; 10 a step, 1 a turn, 50 a window, 90 a spotted trap, 80 fire with flag 0x400, light with flag 0x200 (LR2, LR9, DC4) | at most 4,096 expansions; 10, 1 and 50 as the original; no budget, traps, fire or light | Differs (proposal: the original's search for the click route, one search with the drop's, ARC-COMBAT-010) |
+| Critters | ignored by the plan outside combat mode, checked only before a segment's last step; a hit ends the run, no re-route (LR2, LR5, LRA1) | living T0 critters (the step evidence) and the live companions and PC (the overlay) block in every plan; a denied step stops the route (`ROUTE_STEP_DENIED`) | Differs (question to the owner: LRA1 is a D8 candidate) |
+| No route | a PC tries once more in a straight line with every step accepted, tested as it walks (LR4) | refused (`ROUTE_NOT_FOUND`), no step | Differs (proposal: follow) |
+| A goal beyond 32 tiles (the corridor, ARC-WORLD-042) | refused: the PC does not move (LR4, LR7); at the original's fixed view such a click does not occur | followed along a corridor over the shown window, rebuilt once around an occupant | Steamwoven (question to the owner: a rule-mode switch or a viewer feature) |
+| Sector borders, the main map's windows | tiles locked on demand through the 16-sector cache, no border (LR6) | a window of 3 × 3 core sectors, moved as the actor walks; the far-goal hand-off carries a goal across a move | Host limit (no rule) |
+| Long walks (`AreaWindowRoute`) | none: far travel is the world map's (LR7) | a planning aid for the walk smoke, not a player rule | Tooling (no rule) |
+| Destroyed and switched-off objects | never listed, so they never block a step (FC2) | the PC's live overlay moves them (ARC-WORLD-065); the click route, its corridor and the far-goal hand-off read that overlay; since ARC-WORLD-060 `AreaWindowRoute` takes the host's step verdict (`stepOpen`) and the walk smoke passes the overlay's removed objects (not door state or live actors, which the walk's own route applies); the hover cursor's route source does not read the overlay yet (ARC-WORLD-068's) | Follows (the hover: open) |
+
+Differences marked "proposal" or "question" wait for the owner; until then the runtime stays as described above. Four
+searches exist: this runtime's `RoutePlanner` (the local route, project policy), its `RouteCorridor` and `AreaWindowRoute`
+(project aids beyond the local reach and across windows, with no original counterpart), and the drop's port of the
+original request in `AreaDropMap` (ARC-COMBAT-010). Putting the local route on the original's request, one search with the
+drop's, is the proposed follow-up (its task code comes with the owner's decision), as it changes this runtime's routes.
+
 ## NOT READY
 
 No hover cursor or route preview. Physical mouse: only the owner's one-line ARC-INPUT-002 check
