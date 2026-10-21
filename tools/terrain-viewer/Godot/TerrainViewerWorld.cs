@@ -324,7 +324,7 @@ public partial class TerrainViewerApp
         WorldObservation(() =>
         {
             _worldFocused = focused;
-            if (!focused) CancelPendingWalkOrder("the window lost focus");
+            if (!focused) { CancelPendingWalkOrder("the window lost focus"); _orderKeyArmed = null; }
             _worldReducer.FocusChanged(focused); QuarantineWorld(); RefreshReadyStatus();
             TraceWorldInput("NativeFocus:transition");
         });
@@ -687,6 +687,9 @@ public partial class TerrainViewerApp
             {
                 CancelPendingWalkOrder("a key was pressed");
                 _followerPortraits?.CloseMenu();
+                // Disarms an F1–F6 whose release was lost (a modifier held, a window that took it); a bare F1–F6 in an open world
+                // re-arms in RouteOrderKey below.
+                _orderKeyArmed = null;
             }
         }
         if (ConversationOpen && input is InputEventKey conversationKey && HandleConversationKey(conversationKey))

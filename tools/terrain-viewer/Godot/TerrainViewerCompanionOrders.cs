@@ -103,7 +103,7 @@ public partial class TerrainViewerApp
         {
             _followerPortraits?.Show([]);
             _followerPortraits?.CloseMenu();
-            if (WorldModal) CancelPendingWalkOrder("a window opened");
+            if (WorldModal) { CancelPendingWalkOrder("a window opened"); _orderKeyArmed = null; }
             return;
         }
         if (_followerPortraits is null)
@@ -165,9 +165,10 @@ public partial class TerrainViewerApp
     {
         if (_pendingWalkOrder is not { } entity || _canvas is null) return false;
         _pendingWalkOrder = null;
-        if (!OrderInputOpen || HeroCannotOrderWalk)
+        // The caller (WorldRouteClick) has already ignored a press while the world does not own input.
+        if (HeroCannotOrderWalk)
         {
-            _companionNotice = "walk order cancelled: the world does not own input or the hero is dead or unconscious";
+            _companionNotice = "walk order cancelled: the hero is dead or unconscious";
             RefreshReadyStatus();
             return true;
         }

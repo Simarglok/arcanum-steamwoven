@@ -65,7 +65,11 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
 - **F1–F6** (the original's preset keys, until now reserved and not implemented) without modifiers send the presets on the key's
   release, as the original does on key up, with the chart cell under the pointer at the release as the walk tile, while the session
   party is wired and the world owns input (focused, no modal window or control focus, no map change pending; `RouteOrderKey`); the
-  release counts only after a press while the world owned input, and otherwise the key shows "ignored". F6 under the Original rules shows "no
+  release counts only after a bare press while the world owned input with no other key pressed since (a modifier aside), so with
+  overlapping F-keys only the last one pressed is sent. While the palette is open, the window has no focus, a control has focus or a
+  map change is pending the key shows "ignored"; an open window that takes every key (inventory, character sheet, logbook,
+  schematics, world map, a conversation) owns it, and it does nothing. An F-key pressed while the order menu is open closes the menu
+  and is still sent on its release. F6 under the Original rules shows "no
   order (the original's preset names nobody)". Without a party they stay reserved keys. Requiring no modifier is the viewer's own:
   the original's F1–F6 handlers mostly ignore Ctrl and Shift (KM-09 in
   [original keyboard and mouse](../requirements/original-keyboard-mouse.md)), and the viewer keeps those combinations for its

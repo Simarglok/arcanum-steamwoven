@@ -329,7 +329,10 @@ public partial class TerrainViewerApp
             long Apart() => FollowDistanceRules.Distance(companion.Grid.State.CommittedCell, ((AreaGridSession)_worldActor.Session!).State.CommittedCell);
             void SettleOrder() { for (var i = 0; i < 120 && (companion.Follow.Ordered || companion.Grid.State.Phase != MovementPhase.Settled); i++) AreaSmokeFrame(); }
             GetViewport().GuiReleaseFocus();
-            Press(Key.F4);
+            // The original sends on key up: the press alone arms F4 and sends nothing.
+            GetViewport().PushInput(new InputEventKey { Keycode = Key.F4, PhysicalKeycode = Key.F4, Pressed = true });
+            Require(!_areaSession.QueryCompanion(companion.Entity).SpreadOut, "F4's press alone sent nothing");
+            GetViewport().PushInput(new InputEventKey { Keycode = Key.F4, PhysicalKeycode = Key.F4, Pressed = false });
             Require(_areaSession.QueryCompanion(companion.Entity).SpreadOut, "F4 spread him out: " + _companionNotice);
             SettleOrder();
             var spread = Apart();
