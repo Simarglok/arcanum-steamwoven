@@ -369,18 +369,22 @@ rings stay out. Code: [`GameSessionAmmo`](../../src/Arcanum.Session/GameSessionA
   original destroys it); without one it enters the list as a new stack. The insert check still runs. A sum that does not fit 32 bits
   is refused (`BudgetExceeded`, AMA1). `AddItemToNpc` takes ammunition with its type and units and merges it into the NPC's stack of
   the prototype in the same way.
-- **Spending (AM4).** `SpendAmmo(expected, holder, type, count)` spends from the hero's or an NPC's first stack of the type (the
-  original's one stack a critter field names; AMA4 latent): fewer units refuse with nothing spent (`AmmoShort`), exactly the count
+- **Spending (AM4).** `SpendAmmo(expected, holder, type, count)` spends from the hero's, an NPC's or (ARC-TECHNOLOGY-009,
+  `SessionAmmoHolder.ContainerOf`) a container's first stack of the type (the original's one stack a critter field names; AMA4
+  latent; a container's only where the item rules find it, AMA5 below): fewer units refuse with nothing spent (`AmmoShort`), exactly the count
   deletes the stack, more leave the rest; a count of 0 changes nothing; a negative count or a type out of 0..3 is `InvalidAmmo`.
   One revision.
 - **Charge cells (ARC-TECHNOLOGY-007).** `HeroCellSource(itemComplexity?)` is the engine's `ISpellCellSource` over the hero's own
-  power-cell stack: an applied, paid plan spends the cells at once through `SpendAmmo`; an unapplied request writes nothing. A
-  container's cells are never found, as in the original (AM6, AMA5).
+  power-cell stack: an applied, paid plan spends the cells at once through `SpendAmmo`; an unapplied request writes nothing.
+  `ContainerCellSource(container, itemComplexity)` (ARC-TECHNOLOGY-009) does the same for a device in a container from the
+  container's stack. AMA5 is a switch (owner decision 2026-10-21): Original keeps the failed lookup (AM6: a container's stack is
+  never found, so a spend finds nothing and a device in it has no cells), Steamwoven finds the container's first stack of the type
+  (`ItemRuleProfile.ContainerStackLookupFails`). A container's spent units are kept as the session's record of that seed stack.
 - **Assembly (TECH-4).** An ammunition component loses one unit (0x4658E0) and its stack goes at its last unit; an ammunition product
   (the product prototype's type and units, `productAmmo`) merges each unit into the crafter's stack of its prototype, one new
   `made:n` stack only when it holds none. The installed recipes use it: four make ammunition (cells ×5 and ×1, bullets ×2, the fourth
   type ×5) and three take one unit of ammunition as a component. The NPC crafter does the same in its list.
-- **Not modelled.** Gold; a container's stacks (AM6); transfers of units between holders (AM4's destination); the critter field and its
+- **Not modelled.** Gold (the AMA5 fix will apply to its container lookup too); transfers of units between holders (AM4's destination); the critter field and its
   clearing (AM5: the session finds a holder's stack by type); the weight of a stack (the host's insert check). A shot's ammunition
   should call `SpendAmmo` with the weapon's ammunition type and per-shot count (ARC-COMBAT-012); the critical misses that take the
   whole stack or five shots' worth do since ARC-COMBAT-013 ([hero attack](hero-attack-runtime.md#critical-effects-arc-combat-009)).

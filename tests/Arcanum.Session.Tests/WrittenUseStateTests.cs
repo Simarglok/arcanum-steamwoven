@@ -33,6 +33,20 @@ public sealed class WrittenUseStateTests
         Assert.AreEqual(WrittenReadStatus.Read, owner.QueryWrittenDocument(new(0, 101), Texts).Status);
     }
 
+    // ARC-TECHNOLOGY-009, WRD3: the session's reading rules reach the markup, read at each query.
+    [TestMethod]
+    public void A_message_without_a_font_prefix_follows_the_sessions_rule_mode()
+    {
+        using var owner = Owner();
+        var plain = WrittenTexts.Create(MesFile.Parse(Encoding.Latin1.GetBytes("{100}{Plain}{101}{12 Two}")).File, null, null, null, null);
+        Assert.AreEqual("Plain|Two", string.Join("|", owner.UseWrittenItem(owner.Version, "kit:1", new(0, 100), plain).Document!.Body.Select(m => m.Text)), "Steamwoven");
+        owner.SelectRules(RuleMode.Original);
+        Assert.AreEqual("lain|Two", string.Join("|", owner.UseWrittenItem(owner.Version, "kit:1", new(0, 100), plain).Document!.Body.Select(m => m.Text)), "Original");
+        Assert.AreEqual("lain", owner.QueryWrittenDocument(new(0, 100), plain).Body[0].Text);
+        owner.SelectRules(RuleMode.Steamwoven);
+        Assert.AreEqual("Plain", owner.QueryWrittenDocument(new(0, 100), plain).Body[0].Text);
+    }
+
     [TestMethod]
     public void A_schematic_document_registers_through_the_tech_3_rule()
     {

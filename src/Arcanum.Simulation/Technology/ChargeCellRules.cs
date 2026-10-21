@@ -4,9 +4,10 @@ using Arcanum.Simulation.Magic;
 namespace Arcanum.Simulation.Technology;
 
 /// <summary>
-/// The object whose charge cells pay (ledger CC2–CC3): a critter (its one power-cell stack, critter field 0xEB), a container (the
-/// original looks for the first item of the cell prototype in its inventory but passes the raw prototype number where a handle is
-/// compared, so it never finds one: no cells, ledger AM6, AMA5), none (an item without a parent), or any other object (no cells).
+/// The object whose charge cells pay (ledger CC2–CC3): a critter (its one power-cell stack, critter field 0xEB), a container (its
+/// first cell stack, as the host's lookup finds it: the original passes the raw prototype number where a handle is compared, so it
+/// never finds one, ledger AM6; Steamwoven finds it, AMA5, <c>ItemRuleProfile.ContainerStackLookupFails</c>), none (an item without a
+/// parent), or any other object (no cells).
 /// </summary>
 public enum CellOwnerKind
 {
@@ -37,7 +38,7 @@ public enum CellRefusal
 /// <summary>
 /// The facts of a cell payment the host gives: who pays (a critter pays from itself; an item from its parent), the item's
 /// magick/tech complexity (an item payer only), the parent's kind and, for a critter parent, its magick/tech aptitude, and the
-/// owner's one cell stack (null: none).
+/// owner's one cell stack (null: none; for a container, null when the host's lookup finds none, as the original's always does, AMA5).
 /// </summary>
 public sealed record CellPayer(SpellPayerKind Payer, CellOwnerKind Owner, CellStack? Cells, int ItemComplexity = 0, int HolderAptitude = 0);
 
@@ -97,8 +98,9 @@ public static class ChargeCellRules
     /// <summary>
     /// The cell payment (CC2–CC5): the owner's one stack must hold at least the need, else nothing is taken; the stack keeps the
     /// rest and is removed when its last units go (0x4658E0). The original takes the cells whether or not the payment is applied
-    /// (CCA1); here an unapplied request answers the same and the plan is not <see cref="CellPlan.Applied"/>. An item without a
-    /// parent or another owner counts no cells (CCA3, CCA4). The mark is the count's (0x465820): the plan reads the one stack the host
+    /// (CCA1); here an unapplied request answers the same and the plan is not <see cref="CellPlan.Applied"/> in both settings (owner
+    /// decision 2026-10-21, no switch). A critter or a container pays from the stack the host found (a container's only where the
+    /// host's lookup finds it, AMA5); an item without a parent or another owner counts no cells (CCA3, CCA4). The mark is the count's (0x465820): the plan reads the one stack the host
     /// found; the need's arithmetic is the payment's (0x450420, marked on <see cref="SpellPaymentRules.Pay"/>).
     /// </summary>
     [OriginalFunction(0x465820, OriginalFunctionScope.Partial)]
@@ -107,9 +109,9 @@ public static class ChargeCellRules
         ArgumentNullException.ThrowIfNull(payer);
         if (Need(payer, cost, profile) is not { } need) return new(false, CellRefusal.OutOfRange, 0, null, 0, false, apply);
         if (need == 0) return new(true, CellRefusal.None, 0, null, 0, false, apply);
-        // A critter gives its one stack; a container's lookup never matches in the original (AM6), and an item without a parent or
-        // another object counts 0.
-        var stack = payer.Owner == CellOwnerKind.Critter ? payer.Cells : null;
+        // A critter gives its one stack and a container the stack the host's lookup found (none in the original, AM6); an item without
+        // a parent or another object counts 0.
+        var stack = payer.Owner is CellOwnerKind.Critter or CellOwnerKind.Container ? payer.Cells : null;
         if (stack is not { } cells || cells.Units < need || SchematicAssemblyRules.UseUnits(cells.Units, need) is not { } left)
             return new(false, CellRefusal.TooFewCells, need, stack, stack?.Units ?? 0, false, apply);
         return new(true, CellRefusal.None, need, cells, left.Units, left.Destroyed, apply);

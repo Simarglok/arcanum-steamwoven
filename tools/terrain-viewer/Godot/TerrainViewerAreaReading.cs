@@ -93,7 +93,7 @@ public partial class TerrainViewerApp
         // The original's open toggles: a second open closes the window (WR2). The viewer's callers never reach it today: the inventory
         // closes first and a script request waits while any window is open.
         if (ReadingOpen) { CloseReadingByPlayer(); return; }
-        if (AreaReading.View(document, data.Texts, 0, AreaHoverIndex.TextProfile) is not { } view)
+        if (AreaReading.View(document, data.Texts, 0, AreaHoverIndex.TextProfile, _areaSession!.Rules.Written) is not { } view)
         {
             _readingStatus = "not read: " + AreaReading.Refused(document.Status);
             RefreshAreaStatus();
@@ -129,7 +129,7 @@ public partial class TerrainViewerApp
         if (!ReadingOpen || _reading is not { } reading || _readingPanel!.View is not { } view || _readingData?.Data is not { } data) return;
         if (by < 0 ? !view.HasPrevious : !view.HasNext) return;
         _reading = reading with { Spread = view.Spread + Math.Sign(by) };
-        if (AreaReading.View(reading.Document, data.Texts, _reading.Value.Spread, AreaHoverIndex.TextProfile) is { } turned) _readingPanel.Render(turned, reading.Title);
+        if (AreaReading.View(reading.Document, data.Texts, _reading.Value.Spread, AreaHoverIndex.TextProfile, reading.Session.Rules.Written) is { } turned) _readingPanel.Render(turned, reading.Title);
         ReadingSound(BookPageSound, "reading page");
     }
 
