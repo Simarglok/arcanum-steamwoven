@@ -77,7 +77,7 @@ current discipline (3018..3025, the window's, ARC-TECHNOLOGY-005) on success, or
 
 `SessionInventoryState.Made` / `QueryMadeItems()`: `"inventory":{…,"made":[{"entity","type","prototype","name","description"}]}`,
 in the order they entered the list. Restore refuses a made item of a type the lists do not admit (`InvalidItem`), and an entity
-that is not `made:n`, that was deleted or that is held twice (`InvalidSnapshot`). Since ARC-WORLD-055 (schema 28) an NPC can hold
+that is not `made:n`, that was deleted or that is held twice (`InvalidSnapshot`). Since ARC-WORLD-055 (schema 29) an NPC can hold
 made items too ([NPC inventory changes](inventory-runtime.md#npc-inventory-changes-arc-world-055)): the numbers are shared, and a made
 item the PC takes from an NPC joins this list in entry order (so the numbers need not ascend, and a heroless session can hold one). Made items count toward
 `GameSessionLimits.MaxPcItems`, can be worn and broken like any held item, and no seed may list them. Schemas 1..23 are refused.

@@ -108,7 +108,8 @@ WORLD host (`TerrainViewerWorld.cs`).
    session C toggles the character sheet, L the logbook and T the schematic window on key down
    ([ARC-UI-007](../rendering/terrain-viewer.md#character-sheet-arc-ui-007),
    [ARC-UI-008](../rendering/terrain-viewer.md#logbook-arc-ui-008),
-   [ARC-TECHNOLOGY-005](../rendering/terrain-viewer.md#schematic-window-arc-technology-005)).
+   [ARC-TECHNOLOGY-005](../rendering/terrain-viewer.md#schematic-window-arc-technology-005)); in map mode W opens the
+   world map on key down ([ARC-UI-048](../rendering/area-map-mode.md#world-map-arc-ui-048)).
    `H` without modifiers (not an original key) switches the visual profile Legacy/HD on a fresh press
    while the world owns input ([ARC-UI-006](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006));
    the palette holds the same action. In `crash-site-area` Num Lock flips the original always-run lock and

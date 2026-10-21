@@ -170,7 +170,9 @@ public partial class TerrainViewerApp
             // A row standing in for a speaker; the synthetic module is not inside a game folder, so there is no script
             // content (ARC-SCRIPT-011) and the start is a typed status.
             var row = _readyArea.Snapshot.Objects[0];
-            BeginConversation(new AreaSpeaker(0, row, 1, row.WorldX ?? 0, row.WorldY ?? 0));
+            // ARC-WORLD-048: no host lists the stand-in, so the self-test names it as its own (production routing refuses it).
+            _selfTestStandInSpeaker = new AreaSpeaker(0, row, 1, row.WorldX ?? 0, row.WorldY ?? 0);
+            BeginConversation(_selfTestStandInSpeaker);
             TerrainViewerSelfTest.Require(ConversationOpen && WorldModal && !_worldGate.IsOpen && _conversationPanel!.Conversation is null
                 && (_conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryError))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryNotAdmitted))
@@ -197,6 +199,6 @@ public partial class TerrainViewerApp
             _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "Close ends the modal surface");
         }
-        finally { _worldFocusSimulationForSelfTest = simulatedFocus; }
+        finally { _worldFocusSimulationForSelfTest = simulatedFocus; _selfTestStandInSpeaker = null; }
     }
 }
