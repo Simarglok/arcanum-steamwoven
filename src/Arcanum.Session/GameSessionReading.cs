@@ -22,12 +22,15 @@ public sealed partial class GameSessionOwner
     /// effect: no hero or a dead one (<see cref="GameSessionFailure.InvalidLifeTarget"/>: the original's start returns for a dead
     /// reader), an invalid entity (<see cref="GameSessionFailure.InvalidItem"/>), the version, an item the hero does not hold
     /// (<see cref="GameSessionFailure.ItemNotAvailable"/>) or that is not written (<see cref="GameSessionFailure.InventoryMismatch"/>),
-    /// an item with a use script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>: not run here) or on the item-spell path
+    /// an item with a use script the caller has not run (<see cref="GameSessionFailure.ItemScriptUnsupported"/>; ARC-SCRIPT-020: a host runs
+    /// it first, the use going on only on its run default, and passes <paramref name="useScriptRan"/>) or on the item-spell path
     /// (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), a subtype outside 0..6 or a picture art outside 0..4095
     /// (<see cref="GameSessionFailure.InvalidItem"/>: the original reads out of bounds, both modes refuse), then the registration's own
     /// refusals. The 4 action points a use costs in a turn-based round are not charged (the viewer reads outside rounds).
     /// </summary>
-    public SessionWrittenUse UseWrittenItem(GameSessionVersion expected, string entity, SessionWrittenFacts facts, WrittenTexts texts)
+    /// <param name="useScriptRan">ARC-SCRIPT-020: the caller ran the item's use script (point 1, the hero as the user) and it let the
+    /// use go on (run default; a skip default stops the use there, as the original's item use 0x462CC0 does).</param>
+    public SessionWrittenUse UseWrittenItem(GameSessionVersion expected, string entity, SessionWrittenFacts facts, WrittenTexts texts, bool useScriptRan = false)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(texts);
@@ -36,7 +39,7 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectUse(GameSessionFailure.StaleVersion);
         if (HeldKind(entity) is not { } kind) return RejectUse(GameSessionFailure.ItemNotAvailable);
         if (kind.Type != SessionItemType.Written) return RejectUse(GameSessionFailure.InventoryMismatch);
-        if (facts.UseScript) return RejectUse(GameSessionFailure.ItemScriptUnsupported);
+        if (facts.UseScript && !useScriptRan) return RejectUse(GameSessionFailure.ItemScriptUnsupported);
         if (facts.ItemSpell) return RejectUse(GameSessionFailure.ItemTypeUnsupported);
         if (facts.Subtype == SchematicKnowledgeRules.SchematicSubtype)
         {

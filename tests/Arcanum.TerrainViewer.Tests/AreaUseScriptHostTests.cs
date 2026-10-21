@@ -101,6 +101,9 @@ public sealed class AreaUseScriptHostTests
             // 706: a tile script that keeps a local flag and teleports the player; 707: a sector script that sets a flag.
             Write("scr/00706tile.scr", Program(Do(new(ScrCatalogue.Action.SetLocalFlag, N(2))), Do(TeleportPc(5076)), Do(Skip)));
             Write("scr/00707sector.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(9))), Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(Skip)));
+            // 721, 722 (ARC-SCRIPT-020): an item's use script that sets a flag and runs default, and one that skips default.
+            Write("scr/00721use.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(31))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00722stop.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(32))), Do(Skip)));
             // 720: raises the story state, sets a quest (for the PC and for the gate, which is ignored), marks an area, learns a rumor
             // and adds a reputation (ARC-SCRIPT-019).
             Write("scr/00720story.scr", Program(Do(new(ScrCatalogue.Action.SetStoryState, N(5))), Do(new(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(1016), N(2))),
@@ -390,6 +393,27 @@ public sealed class AreaUseScriptHostTests
             Assert.IsNotNull(session.QueryRumor(1100));
             Assert.IsTrue(session.HeroHasReputation(1005));
             Assert.AreEqual(5, host.StoryState());
+        });
+    }
+
+    // ARC-SCRIPT-020: a held item's use script runs on its origin map's inventory row; its outcome decides the use.
+    [TestMethod]
+    public void An_item_s_use_script_runs_with_the_pc_as_the_user_and_its_outcome_decides()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var items = new AreaInventoryMap(1, new([], [new SessionSeedItem(Entity(6), Facts(60), new CellCoord(16, 20)), new SessionSeedItem(Entity(7), Facts(61), new CellCoord(17, 20))]),
+                new[] { Row(6, 13, 721, 60), Row(7, 13, 722, 61) }.ToDictionary(row => Entity(row.Key.SourceIndex)));
+            // Map 2 is shown: the item taken on map 1 runs on map 1's inventory row.
+            var host = new AreaUseScriptHost(session, 2, [], [items], content);
+            var go = host.RunItemUse(1, Entity(6), session.Rules.Scripts);
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.RunDefault), (go.Outcome, go.Run!.Outcome), go.Detail);
+            Assert.IsTrue(host.GlobalFlag(31));
+            var stop = host.RunItemUse(1, Entity(7), session.Rules.Scripts);
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.SkipDefault), (stop.Outcome, stop.Run!.Outcome));
+            Assert.IsTrue(host.GlobalFlag(32), "the effects apply either way, as the original's run does");
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunItemUse(2, Entity(6), session.Rules.Scripts).Outcome, "not a row of a loaded map");
         });
     }
 }

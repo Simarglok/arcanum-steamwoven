@@ -247,6 +247,23 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         finally { _clicked = null; }
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-020: an item's use script (point 1, item use 0x462CC0; ledger IU rows) with the PC as the user and no target, before
+    /// the use goes on: the run's outcome decides (run default lets the use go on, skip default stops it). The item is a row of a
+    /// loaded map's inventory (<see cref="AreaInventoryMap"/>), named by its origin map and entity; its use slot is kept as map
+    /// changes there. A teleport is not modelled from an item's use and leaves the run unapplied.
+    /// </summary>
+    public AreaScriptedUse RunItemUse(int originMap, string entity, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(entity); ArgumentNullException.ThrowIfNull(rules);
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        var item = new ScrObjectRef(originMap, entity);
+        if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
+        var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, null), this, new() { Rules = rules, Admission = Admission });
+        return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
+    }
+
     /// <summary>Map-change keys of a tile or sector script's slot, on its sector: <c>tile.N.script</c>, <c>tile.N.lf</c>,
     /// <c>tile.N.counters</c> for the tile index N, <c>sector.script</c>, <c>sector.lf</c>, <c>sector.counters</c>.</summary>
     public static string PlacedProperty(MapPlacedScript placed, string part)
