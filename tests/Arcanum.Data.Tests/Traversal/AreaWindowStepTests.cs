@@ -162,6 +162,28 @@ public sealed class AreaWindowStepTests
             AreaWindowRoute.Plan(stack, catalog, Map, new(10, 10), new(100, 60), stepOpen: Open).Detail);
     }
 
+    [TestMethod]
+    public void Unknown_edges_are_counted_by_reason()
+    {
+        // ARC-RENDER-027: edges a step cannot settle from T0: an Unknown rule by its reason, a leaving portal whose lock is not
+        // the plain leaving-only lock, an unsupported opening piece; a blocking wall, a passing edge and a leaving-only lock are not.
+        AreaObjectKey Key(int i) => new("s", 1, AreaSourceKind.Static, 0, 0, i, "w", 1);
+        var cell = new AreaStepCell(5, 5);
+        var walls = new Dictionary<AreaStepCell, AreaStepWallEdge[]>
+        {
+            [cell] = [new(Key(1), cell, 0, false, AreaStepEdgeRule.Unknown, "PORTAL_UNLOCK_SCRIPT"),
+                new(Key(2), cell, 2, false, AreaStepEdgeRule.Leaving, "PORTAL_LOCK_DEPENDS_ON_HOUR"),
+                new(Key(3), cell, 4, false, AreaStepEdgeRule.Leaving, AreaStepInspector.LockedLeavingOnlyReason),
+                new(Key(4), cell, 6, true, AreaStepEdgeRule.Legacy),
+                new(Key(5), cell, 1, false, AreaStepEdgeRule.Block), new(Key(6), cell, 3, false, AreaStepEdgeRule.Pass),
+                new(Key(7), cell, 5, false, AreaStepEdgeRule.Unknown, "PORTAL_UNLOCK_SCRIPT")],
+        };
+        var steps = new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)],
+            new Dictionary<AreaStepCell, AreaStepTerrainEvidence>(), new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), walls);
+        CollectionAssert.AreEquivalent(new Dictionary<string, int> { ["PORTAL_LOCK_DEPENDS_ON_HOUR"] = 1, ["PORTAL_UNLOCK_SCRIPT"] = 2, ["WALL_OPENING_PIECE_UNSUPPORTED"] = 1 },
+            steps.UnknownEdges.ToDictionary(e => e.Key, e => e.Value));
+    }
+
     private static byte[] BaseWithout(string name)
     {
         using var archive = DatArchive.Open(new MemoryStream(Base(Sector())));
