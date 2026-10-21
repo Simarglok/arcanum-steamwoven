@@ -1,7 +1,7 @@
 # World-map travel rules (ARC-WORLD-056)
 
-Status: **Implemented** (Godot-free rules and the session's known areas; slice W3 of the whole-world plan M4). No
-caller yet: the viewer's world-map panel is a later task. The rules follow the retail 1.0.7.4 executable as read in
+Status: **Implemented** (Godot-free rules and the session's known areas; slice W3 of the whole-world plan M4). Caller:
+the viewer's diagnostic world map in map mode since ARC-UI-048 ([world map](../rendering/area-map-mode.md#world-map-arc-ui-048)). The rules follow the retail 1.0.7.4 executable as read in
 [world-map travel](../research/world-map-travel.md) and
 [ledger WT1–WT13](../research/original-verification-ledger.md#world-map-travel-arc-res-068).
 
@@ -98,6 +98,6 @@ or water needs waypoints. Every planned journey lands on its area under both set
 
 ## Limits (NOT READY)
 
-- **No viewer.** There is no world-map panel, no clock pump at 62 ms and no landing through the map transfer yet.
+- **Viewer.** The diagnostic world map of ARC-UI-048 is the only host. It draws no original map art and has no town maps.
 - **Not modelled.** Random encounters (the encounter module, F0), the script-blocked list's writers, town maps,
   notes and the original's world-map interface. Travel music and hiding the party are the host's.
