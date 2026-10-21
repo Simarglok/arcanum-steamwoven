@@ -98,11 +98,10 @@ public sealed class TechnologyFixesStateTests
             var device = owner.HeroCellSource(itemComplexity: -50)!;
             Assert.AreEqual(SpellPaymentStatus.Paid, SpellPaymentRules.Pay(Device, 3, false, 147, Cells, device).Status);
             Assert.AreEqual((revision, 10), (owner.Version.Revision, owner.QueryHeroAmmo().Single().Units), $"{mode}: an item's check too");
-            if (mode == RuleMode.Steamwoven)
-            {
-                Assert.AreEqual(SpellPaymentStatus.Paid, SpellPaymentRules.Pay(Device, 4, false, 147, Cells, owner.ContainerCellSource("chest", -50)!).Status);
-                Assert.AreEqual((revision, new SessionAmmoRecord("chest-cells", 2, 6)), (owner.Version.Revision, owner.QueryAmmo("chest-cells")), "a container's check too");
-            }
+            // A container's check: paid in Steamwoven, refused in Original (its lookup finds no stack); neither writes anything.
+            var container = SpellPaymentRules.Pay(Device, 4, false, 147, Cells, owner.ContainerCellSource("chest", -50)!).Status;
+            Assert.AreEqual(mode == RuleMode.Steamwoven ? SpellPaymentStatus.Paid : SpellPaymentStatus.CellsRefused, container);
+            Assert.AreEqual((revision, new SessionAmmoRecord("chest-cells", 2, 6)), (owner.Version.Revision, owner.QueryAmmo("chest-cells")), $"{mode}: a container's check too");
         }
     }
 }

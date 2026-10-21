@@ -24,7 +24,7 @@ public sealed record ItemRuleProfile
     /// Ledger AM6 (AMA5): a container's stack of an ammunition type (the cell, gold and ammunition lookups 0x465870 and 0x4647D0) is
     /// looked up by passing the raw prototype number where a prototype handle is compared, so it is never found: a device in a
     /// container has no cells, as the retail executable does. Steamwoven finds the container's first stack of the type in its list
-    /// (owner decision 2026-10-21, ARC-TECHNOLOGY-009; the cell lookup only, gold is not modelled).
+    /// (owner decision 2026-10-21, ARC-TECHNOLOGY-009; the ammunition lookups, cells included; gold is not modelled).
     /// </summary>
     public bool ContainerStackLookupFails { get; init; }
 

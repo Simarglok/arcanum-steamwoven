@@ -56,7 +56,7 @@ its written flags are never read (WR4).
 (`GameRules.Written`; `QueryWrittenDocument` and the viewer pass the session's). Original (and no profile, a tool's view) drops the
 first character of a message without a font prefix as above. Steamwoven reads a message whose first character is not an ASCII digit
 as having no markup: its whole text, font 0, not centred (owner decision 2026-10-21; switch `UnprefixedMessageLosesFirstCharacter`).
-A message with a font prefix reads the same in both.
+A message that starts with an ASCII digit reads the same in both; one whose `atoi` prefix follows white space or a sign gets that font in Original and font 0 (whole text) in Steamwoven.
 
 Refused as the original cannot show them, in both rule settings (WRA1–WRA4): a subtype outside 0..6 (`SubtypeOutOfRange`), a picture
 art outside 0..4095 (`ArtOutOfRange`), a missing text file (`TextsUnavailable`, as the original refuses silently); the note and

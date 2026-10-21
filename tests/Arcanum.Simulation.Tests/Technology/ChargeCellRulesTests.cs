@@ -103,7 +103,7 @@ public sealed class ChargeCellRulesTests
         // An item payer: the payment's payer kind reaches the source, which uses the item's facts.
         var device = new ChargeCellSource(Item(-50, -100), Steamwoven);
         Assert.AreEqual(7, SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Item, ItemCharges: 0), 7, true, 147, record, device).Cells!.Cells);
-        // A container paying from its own first cell item; an out-of-range plan and a payer the source was not built for refuse with 0 cells.
+        // A container whose lookup found no stack (the original's, AM6); an out-of-range plan and a payer the source was not built for refuse with 0 cells.
         var container = new ChargeCellSource(new(SpellPayerKind.Other, CellOwnerKind.Container, null), Original);
         Assert.AreEqual(SpellPaymentStatus.CellsRefused, SpellPaymentRules.Pay(new SpellPayer(SpellPayerKind.Other), 7, true, 187, record, container).Status,
             "the original's container lookup never finds its cells (AM6): the host gives no stack");

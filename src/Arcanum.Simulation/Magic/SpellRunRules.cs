@@ -237,7 +237,7 @@ public static class SpellRunRules
     /// block it; then the cancels run. MAINTAIN: for a PC or NPC parent — the technology flag is not tested — the same checks,
     /// the maintenance (<see cref="MaintainCost"/>) unless free or the intelligence check failed, and with a resistance margin
     /// the surcharged maintenance (<see cref="SurchargedCost"/>; MG3: the original pays both, Steamwoven only the surcharged; the
-    /// surcharge is paid even for a free run or after a failed check, MG29, as the original in both modes until the owner decides);
+    /// surcharge is paid even for a free run or after a failed check, MG29, in Original only, <see cref="MagicAnomalyProfile.SurchargeAlways"/>);
     /// a failure turns the run to END. Other
     /// actions proceed.
     /// </summary>
