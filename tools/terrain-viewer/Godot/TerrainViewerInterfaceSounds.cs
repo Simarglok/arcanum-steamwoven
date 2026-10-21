@@ -11,7 +11,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     public const int BookOpenSound = 3008, BookCloseSound = 3009, BookPageSound = 3010, BookSwitchSound = 3011, LevelUpSound = 3005, QuestCompleteSound = 3028;
-    private (GameSessionOwner Session, long Revision, int Level, IReadOnlySet<int> Completed)? _interfaceWatch;
+    private (GameSessionOwner Session, long Revision, IReadOnlySet<int> Completed)? _interfaceWatch;
     private int _interfaceSoundsPlayed;
 
     private void PlayInterfaceSound(int id, string what)
@@ -22,21 +22,19 @@ public partial class TerrainViewerApp
         _cueNotice = $"{what} {id}: {result?.Status.ToString() ?? "not played"}";
     }
 
-    /// <summary>Per frame: a level the hero gained plays the level-up sound, a quest that became completed for the PC the quest
-    /// sound (checked once per session revision; the original plays it on every set to completed, which the session does not
-    /// report).</summary>
+    /// <summary>Per frame: a quest that became completed for the PC plays the quest sound (checked once per session revision; the
+    /// original plays it on every set to completed, which the session does not report). The level-up sound plays with each level-up
+    /// message since ARC-UI-046 (<see cref="ShowLevelUps"/>).</summary>
     private void TickInterfaceSounds()
     {
         if (_areaSession is not { } session) { _interfaceWatch = null; return; }
         if (_interfaceWatch is { } seen && ReferenceEquals(seen.Session, session) && seen.Revision == session.Version.Revision) return;
-        var level = session.QueryHero()?.Level ?? 0;
         IReadOnlySet<int> completed = session.QueryStory().Quests.Where(q => q.Effective == SessionQuestState.Completed).Select(q => q.Quest).ToHashSet();
         if (_interfaceWatch is { } before && ReferenceEquals(before.Session, session))
         {
-            if (level > before.Level) PlayInterfaceSound(LevelUpSound, "level up");
             if (completed.Any(q => !before.Completed.Contains(q))) PlayInterfaceSound(QuestCompleteSound, "quest completed");
         }
-        _interfaceWatch = (session, session.Version.Revision, level, completed);
+        _interfaceWatch = (session, session.Version.Revision, completed);
     }
 
     /// <summary>A volume setting changed in the palette (SN8): it is saved, every live sound of its channel takes the bare
