@@ -56,6 +56,17 @@ public sealed class TechMaintainCellsTests
     }
 
     [TestMethod]
+    public void A_cell_record_with_maintenance_0_pays_nothing_at_the_stage()
+    {
+        // The installed cell records 168 and 187 have maintenance 0 (ledger DV7): the stage's payment returns before the cells.
+        var cells = new ChargeCellSource(new CellPayer(SpellPayerKind.Item, CellOwnerKind.Critter, new CellStack("cells", 12), -80, -60), TechnologyRuleProfile.Original);
+        var tick = SpellRunRules.Stage(Run(SpellRunAction.Maintain), Device with { MaintainCost = 0 }, Facts, cells, new NoStacking(), MagicAnomalyProfile.Steamwoven);
+        Assert.IsTrue(tick.Proceeds);
+        Assert.AreEqual(SpellPaymentStatus.Paid, tick.Payments.Single().Status);
+        Assert.IsNull(cells.LastPlan, "no cell was asked");
+    }
+
+    [TestMethod]
     public void Begin_pays_nothing_for_a_technology_record()
     {
         var cells = new ChargeCellSource(new CellPayer(SpellPayerKind.Item, CellOwnerKind.Critter, new CellStack("cells", 12), -80, -60), TechnologyRuleProfile.Original);

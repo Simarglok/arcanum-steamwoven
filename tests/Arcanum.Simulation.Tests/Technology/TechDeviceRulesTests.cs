@@ -18,7 +18,10 @@ public sealed class TechDeviceRulesTests
         Assert.AreEqual(new TechDeviceUse(true, -70, 87, 0), TechDeviceRules.Use(-80, -60, weapon: true));
         // The gate refuses only a magickal item to a technologist who draws no power from it.
         Assert.IsFalse(TechDeviceRules.Use(40, -60, weapon: false).Usable);
-        Assert.IsTrue(TechDeviceRules.Use(40, -30, weapon: false).Usable == (Arcanum.Simulation.Equipment.EquipmentRules.EffectivePower(40, -30) > 0));
+        Assert.IsTrue(TechDeviceRules.Use(40, -30, weapon: false).Usable, "power trunc((40 − 30) / 2) = 5");
+        foreach (var c in new[] { -100, -1, 0, 1, 2, 100 })
+            foreach (var a in new[] { -100, -2, -1, 0, 1, 100 })
+                Assert.AreEqual(c <= 0 || a >= 0 || a + c >= 2, TechDeviceRules.Use(c, a, false).Usable, $"{c} {a}: the gate (DV2)");
         Assert.IsTrue(TechDeviceRules.Use(0, -100, weapon: true).Usable, "a neutral item");
         Assert.AreEqual(Arcanum.Simulation.Combat.AttackRules.TechnologyFailureChance(-80, 60), TechDeviceRules.Use(-80, 60, true).CombatFailureChance);
     }

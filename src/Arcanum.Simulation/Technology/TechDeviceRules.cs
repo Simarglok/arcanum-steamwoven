@@ -26,10 +26,11 @@ public static class TechDeviceRules
     /// a weapon's combat failure chance is <see cref="AttackRules.TechnologyFailureChance"/> (0x461700: a technological weapon in a
     /// mage's hands, rolled before the hit roll for any attack but a throw; a failure is a critical miss, DV4).
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">A complexity or aptitude outside the equipment limits.</exception>
     public static TechDeviceUse Use(int complexity, int aptitude, bool weapon)
     {
         var power = EquipmentRules.EffectivePower(complexity, aptitude);
-        var usable = complexity <= 0 || aptitude >= 0 || power > 0;
+        var usable = Magic.SpellInvocationRules.HolderCanUseItem(aptitude, complexity, () => power);
         return new(usable, power, EquipmentRules.EffectivePowerRatio(complexity, aptitude),
             weapon ? AttackRules.TechnologyFailureChance(complexity, aptitude) : 0);
     }

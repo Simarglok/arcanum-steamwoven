@@ -32,11 +32,12 @@ complexity, slot, record, spell charges); a spell outside 0..222 is a `TechDevic
 | --- | --- |
 | BEGIN (the stage) | nothing: every record from 140 has the technology flag, and the stage skips the checks and the cost (CC7) |
 | BEGIN components | a ChargeNBranch on the Begin action pays its cost (cells for a cell record, through the payment) |
-| each MAINTAIN tick (the stage) | the maintenance cost through the payment: cells for a cell record (`TechMaintainPayment.Cells`), else the source's payment (a critter's stores and fatigue, an item's spell charge); a cost of 0 pays nothing |
+| each MAINTAIN tick (the stage) | for a PC or NPC parent, the maintenance cost through the payment: cells for a cell record (`TechMaintainPayment.Cells`), else the source's payment (a critter's stores and fatigue, an item's spell charge; another payer pays nothing); a cost of 0 pays nothing |
 | MAINTAIN components | a ChargeNBranch on the Maintain action pays its cost each tick |
 
 The installed data (opt-in census): 70 item spell slots name technology records, 65 distinct records, on 70 items (61
-technological; nine others: six food and three scrolls); charges −1 ×21, 0 ×2, 1 ×47; no slot out of range. Maintained
+technological; nine others: six food and three scrolls); charges −1 ×21, 0 ×2, 1 ×47; no slot out of range. The two devices without charges also lack the magical flag, so they never fire on
+use (ledger DVD1, a proposal for the owner). Maintained
 technology records: 146, 149 (maintenance 1 every 10 s, the source's payment), 168, 187 (maintenance 0: cells come from their
 ChargeNBranch, 168 one cell a MAINTAIN tick, 187 one at BEGIN), 209, 216 (maintenance 0). Cell records 147 (one weapon, BEGIN
 branch), 168 (three armours, Maintain branch), 187 (no item). Only 168 is both maintained and carried.

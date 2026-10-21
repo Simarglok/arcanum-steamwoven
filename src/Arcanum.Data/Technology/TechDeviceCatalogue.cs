@@ -44,8 +44,9 @@ public sealed record TechDeviceSlot(int Prototype, int ObjectType, int Complexit
     public bool Technological => Complexity < 0;
 }
 
-/// <summary>Why an item spell slot was left out of the catalogue: a spell number that is neither a record 0..222 nor the
-/// "no spell" 10000 (the original would read past its record table).</summary>
+/// <summary>An item spell slot left out of the catalogue: a spell number that is neither a record 0..222 nor the "no spell" 10000.
+/// The original's trigger executors run the slot's low byte (0x4CB790), so such a value runs record <c>spell &amp; 0xFF</c>, and
+/// 223..255 after the mask read past the record table (ledger DV1).</summary>
 public sealed record TechDeviceAnomaly(int Prototype, int Slot, int Spell);
 
 /// <summary>
