@@ -75,8 +75,9 @@ public readonly record struct SessionPcItem(string Entity, SessionMapId Origin, 
 /// no map; in the PC's inventory they precede every item it took from the world.</summary>
 public readonly record struct SessionKitItem(string Entity, SessionItemKind Kind);
 
-/// <summary>An item the hero made from a schematic (ARC-TECHNOLOGY-004): entity <c>made:n</c> and its saved kind. Made items came
-/// from no map; in the hero's inventory they follow the items it took from the world.</summary>
+/// <summary>A made item (ARC-TECHNOLOGY-004): entity <c>made:n</c> and its saved kind. Made items came from no map: the hero makes
+/// them from schematics, and since ARC-WORLD-055 the session adds them to NPCs (one numbering); in the hero's inventory they follow
+/// the items it took from the world.</summary>
 public readonly record struct SessionMadeItem(string Entity, SessionItemKind Kind)
 {
     internal const string Prefix = "made:";
@@ -90,24 +91,35 @@ public readonly record struct SessionMadeItem(string Entity, SessionItemKind Kin
 }
 
 /// <summary>
+/// ARC-WORLD-055: the items the session added to one NPC's inventory, keyed by the NPC's entity identity (the entity of its
+/// home map, so the list follows a companion that visits another map, as the original carries a follower with its items).
+/// The items are made items (<c>made:n</c>, numbered with the hero's), in the order they entered the NPC's list; in the NPC's
+/// list they follow its seed items.
+/// </summary>
+public sealed record SessionNpcInventory(string Npc, IReadOnlyList<SessionMadeItem> Items);
+
+/// <summary>
 /// Saved inventory state: the PC's gold (ARC-WORLD-015: the hero's starting coins; 0 without a hero), the hero's starting
-/// kit in kit order, the items the PC took from the world in the order they entered its list, and (ARC-TECHNOLOGY-004) the
-/// items the hero made from schematics, in the order they were made.
+/// kit in kit order, the items the PC took from the world in the order they entered its list, (ARC-TECHNOLOGY-004) the
+/// items the hero made from schematics or took from an NPC that held made items, in the order they entered its list, and
+/// (ARC-WORLD-055) the made items the session added to NPCs, by NPC entity in ordinal order.
 /// </summary>
 public sealed class SessionInventoryState
 {
-    internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made)
+    internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs)
     {
         Gold = gold;
         Kit = Array.AsReadOnly(kit);
         Pc = Array.AsReadOnly(pc);
         Made = Array.AsReadOnly(made);
+        Npcs = Array.AsReadOnly(npcs);
     }
 
     public int Gold { get; }
     public IReadOnlyList<SessionKitItem> Kit { get; }
     public IReadOnlyList<SessionPcItem> Pc { get; }
     public IReadOnlyList<SessionMadeItem> Made { get; }
+    public IReadOnlyList<SessionNpcInventory> Npcs { get; }
 }
 
 public sealed record SessionInventoryItem(string Entity, SessionItemFacts Facts);
@@ -116,7 +128,8 @@ public sealed record SessionGroundItem(SessionInventoryItem Item, CellCoord Cell
 
 public sealed record SessionHolderInventory(string Entity, SessionHolderKind Kind, bool Dead, IReadOnlyList<SessionInventoryItem> Items);
 
-/// <summary>Detached current inventory of one attached map: its seed without the items the PC has taken.</summary>
+/// <summary>Detached current inventory of one attached map: its seed without the items the PC has taken or the session deleted,
+/// each NPC holder's list followed by the made items the session added to that NPC (ARC-WORLD-055).</summary>
 public sealed class SessionMapInventory
 {
     internal SessionMapInventory(SessionMapId map, SessionGroundItem[] ground, SessionHolderInventory[] holders)
@@ -199,7 +212,8 @@ public static class SessionItemScripts
         ScrAdmissionSet.S6.ValueKinds, ScrAdmissionSet.S6.FocusKinds);
 }
 
-/// <summary>Mutable inventory domain of one owner: attached map seeds, the PC's gold and the PC's list.</summary>
+/// <summary>Mutable inventory domain of one owner: attached map seeds, the PC's gold and the PC's list, and the made items added to
+/// NPCs.</summary>
 internal sealed class InventoryDomain
 {
     internal sealed class Seed(SessionMapInventorySeed source, Dictionary<string, SessionSeedItem> items,
@@ -213,11 +227,41 @@ internal sealed class InventoryDomain
     }
 
     internal Dictionary<SessionMapId, Seed> Seeds { get; } = [];
+    /// <summary>Moves on every seed attach; a seed is not state, so it moves no revision, but a transfer that called the host must
+    /// see that the seeds it read are still the same.</summary>
+    internal long SeedGeneration { get; set; }
     internal int Gold { get; set; }
     internal List<SessionKitItem> Kit { get; } = [];
     internal List<SessionPcItem> Pc { get; } = [];
     internal List<SessionMadeItem> Made { get; } = [];
     internal HashSet<string> Taken { get; } = new(StringComparer.Ordinal);
+    /// <summary>ARC-WORLD-055: the made items added to each NPC, by NPC entity; a list is never empty.</summary>
+    internal SortedDictionary<string, List<SessionMadeItem>> Npcs { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The made items added to NPCs (the bound of <see cref="GameSessionLimits.MaxNpcItems"/>).</summary>
+    internal int NpcHeld => Npcs.Values.Sum(list => list.Count);
+
+    /// <summary>The NPC that holds the added made item, or null.</summary>
+    internal string? NpcOf(string entity) => Npcs.FirstOrDefault(pair => pair.Value.Exists(item => item.Entity == entity)).Key;
+
+    /// <summary>The made items added to an NPC, in order (empty when none).</summary>
+    internal IReadOnlyList<SessionMadeItem> AddedTo(string npc) => Npcs.TryGetValue(npc, out var list) ? list : [];
+
+    internal void AddToNpc(string npc, SessionMadeItem item)
+    {
+        if (!Npcs.TryGetValue(npc, out var list)) Npcs[npc] = list = [];
+        list.Add(item);
+    }
+
+    /// <summary>Removes an added made item from whichever NPC holds it; an emptied list is dropped.</summary>
+    internal bool RemoveFromNpc(string entity)
+    {
+        if (NpcOf(entity) is not { } npc) return false;
+        var list = Npcs[npc];
+        list.RemoveAll(item => item.Entity == entity);
+        if (list.Count == 0) Npcs.Remove(npc);
+        return true;
+    }
 
     /// <summary>Items the PC holds: the kit, the taken and the made items (the bound of <see cref="GameSessionLimits.MaxPcItems"/>).</summary>
     internal int Held => Kit.Count + Pc.Count + Made.Count;
@@ -242,7 +286,12 @@ internal sealed class InventoryDomain
         Taken.Add(item.Entity);
     }
 
-    internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray());
+    internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
+        Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray()))).ToArray());
+
+    /// <summary>The facts of a made item: its kind, no weight, complexity, location (-1, in the bag) or scripts; the host knows
+    /// the prototype's weight.</summary>
+    internal static SessionItemFacts MadeFacts(SessionItemKind kind) => new(kind, 0, 0, -1, null, []);
 
     /// <summary>The map's current inventory; an NPC holder is dead when its seed says so or <paramref name="killed"/> (the session's
     /// life records, ARC-COMBAT-005) does.</summary>
@@ -253,9 +302,13 @@ internal sealed class InventoryDomain
             holder.Dead || holder.Kind == SessionHolderKind.Npc && killed(holder.Entity),
             Array.AsReadOnly(Current(seed, holder).ToArray()))).ToArray());
 
-    /// <summary>The holder's list in its order without the taken items.</summary>
+    /// <summary>The holder's list in its order without the taken and deleted items; an NPC's list is followed by the made items the
+    /// session added to it (ARC-WORLD-055).</summary>
     internal IEnumerable<SessionInventoryItem> Current(Seed seed, SessionSeedHolder holder) => holder.Items
-        .Where(entity => !Taken.Contains(entity)).Select(entity => new SessionInventoryItem(entity, seed.Items[entity].Facts));
+        .Where(entity => !Taken.Contains(entity)).Select(entity => new SessionInventoryItem(entity, seed.Items[entity].Facts))
+        .Concat(holder.Kind == SessionHolderKind.Npc
+            ? AddedTo(holder.Entity).Select(item => new SessionInventoryItem(item.Entity, MadeFacts(item.Kind)))
+            : []);
 
     /// <summary>Checks a seed's structure and copies it, so later changes to the caller's lists cannot reach the
     /// session; null when it is not admissible.</summary>
