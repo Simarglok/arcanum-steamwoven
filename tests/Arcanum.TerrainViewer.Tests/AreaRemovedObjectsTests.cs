@@ -40,8 +40,12 @@ public sealed class AreaRemovedObjectsTests
         var diagonal = steps.Assess(steps.Request(new(10, 11), new(11, 10), GridReplay.MapDirection(NeighborDirection.XPlusYMinus)));
         Assert.AreEqual(CardinalTraversalDisposition.Blocked, diagonal.Disposition);
         Assert.AreEqual(CardinalTraversalDisposition.Open, AreaOccupancyRules.Apply(diagonal, new(10, 11), NeighborDirection.XPlusYMinus, overlay).Disposition);
-        // A standing chest still blocks with the same overlay minus it.
-        Assert.AreEqual(CardinalTraversalDisposition.Blocked, AreaOccupancyRules.Apply(onto, new(10, 10), NeighborDirection.XPlus, AreaOccupancy.None).Disposition);
+        // A standing chest still blocks under a live overlay that does not move it (a companion elsewhere).
+        var companionOnly = new AreaOccupancy([Companion], [new CellCoord(30, 30)]);
+        Assert.AreEqual(("DESTINATION_OBJECT_BLOCKER", (CardinalTraversalDisposition?)CardinalTraversalDisposition.Blocked),
+            (AreaOccupancyRules.Apply(onto, new(10, 10), NeighborDirection.XPlus, companionOnly).ReasonCode,
+             AreaOccupancyRules.Apply(onto, new(10, 10), NeighborDirection.XPlus, companionOnly).Disposition));
+        Assert.AreEqual(CardinalTraversalDisposition.Open, AreaOccupancyRules.Apply(onto, new(10, 10), NeighborDirection.XPlus, companionOnly.WithRemoved(removed)).Disposition);
     }
 
     [TestMethod]

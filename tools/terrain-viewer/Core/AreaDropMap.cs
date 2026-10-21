@@ -30,7 +30,8 @@ public sealed class AreaDropMap : IDropMap
     private readonly Dictionary<AreaObjectKey, AreaObjectRecord> _byKey = [];
 
     /// <param name="rows">The map's object rows; their world cells place them.</param>
-    /// <param name="moved">T0 records that no longer stand at their T0 cell (companions).</param>
+    /// <param name="moved">T0 records the live overlay moved (companions; since ARC-WORLD-065 removed objects too, which
+    /// <paramref name="gone"/> already answers for).</param>
     /// <param name="liveActors">The cells the hero and the companions stand on now.</param>
     /// <param name="gone">Whether a row is destroyed or switched off in the session (the original's object lists skip it).</param>
     /// <param name="dead">Whether a critter row is dead in the session or its map data.</param>
