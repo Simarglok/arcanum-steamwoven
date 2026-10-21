@@ -24,7 +24,9 @@ public sealed record RouteDrive(MovementState State, IReadOnlyList<MovementResul
 /// planner; a leg that fails on the way (an occupant on a waypoint) builds the corridor again once from where the actor
 /// stands; a corridor that only nears the goal (no route reaches it) stops at its end with <c>ROUTE_PARTIAL</c>, and one
 /// that reaches nothing stops with its own reason. A goal outside the source stays refused; a host heads for one through
-/// the end of its own partial corridor (a streamed window, ARC-RENDER-024).
+/// the end of its own partial corridor (a streamed window, ARC-RENDER-024). ARC-WORLD-072: a host may also say, per goal,
+/// whether the corridor is allowed (<c>corridorAllowed</c>, asked when a goal is set: the Original rule mode's far click does
+/// not move, <see cref="NavigationRuleProfile.FarClickDoesNotMove"/>); without it, the corridor limits decide alone.
 /// </summary>
 public sealed class RouteFollower
 {
@@ -37,13 +39,17 @@ public sealed class RouteFollower
     private SimulationTime? _requestedAt;
     private InputKey? _issued;
 
-    public RouteFollower(IRouteStepSource source, RouteLimits? limits = null, RouteCorridorLimits? corridorLimits = null)
+    public RouteFollower(IRouteStepSource source, RouteLimits? limits = null, RouteCorridorLimits? corridorLimits = null, Func<bool>? corridorAllowed = null)
     {
         _source = source ?? throw new ArgumentNullException(nameof(source));
         _limits = limits ?? new RouteLimits();
         _corridorLimits = corridorLimits;
+        _corridorAllowed = corridorAllowed;
     }
     private readonly RouteCorridorLimits? _corridorLimits;
+    private readonly Func<bool>? _corridorAllowed;
+    // Whether the current goal may follow a corridor: the host's answer when the goal was set.
+    private bool _corridorForGoal;
     private int _waypointNext;
     private bool _corridorRebuilt;
     /// <summary>The corridor followed toward the current goal (ARC-WORLD-042), null while the local planner reaches it.</summary>
@@ -69,6 +75,7 @@ public sealed class RouteFollower
         if (Status == RouteFollowStatus.Following && Target == target && Range == range) return false;
         Target = target; Range = range; Status = RouteFollowStatus.Following; StopReason = null; LastPlan = null; PlannedSegments = 0;
         _requestedAt = observedAt; ResetSegment(); Corridor = null; _waypointNext = 0; _corridorRebuilt = false;
+        _corridorForGoal = _corridorLimits is not null && (_corridorAllowed?.Invoke() ?? true);
         return true;
     }
 
@@ -168,7 +175,7 @@ public sealed class RouteFollower
             var plan = RoutePlanner.Plan(_source, cell, local.Value, _limits);
             // Beyond the local reach: a corridor over the whole source, once per goal; a leg along it that fails (an occupant
             // on its waypoint) builds it once more from here.
-            if (plan.Outcome != RouteOutcome.Found && _corridorLimits is { } corridorLimits
+            if (plan.Outcome != RouteOutcome.Found && _corridorForGoal && _corridorLimits is { } corridorLimits
                 && (Corridor is null ? CorridorReasons.Contains(plan.ReasonCode) : !_corridorRebuilt))
             {
                 _corridorRebuilt = Corridor is not null;

@@ -2376,7 +2376,9 @@ questions (method step 6). Rows are F2 where both readers read the code, F1 wher
 | LR9 | walk flags (0x425BF0), their effect (0x41F3C0, 0x41F9F0) | For a PC or NPC mover the builder sets 0x2 and 0x4 when 0x45F550 and 0x45F570 answer no, 0x200 when 0x45EDE0 answers yes and skill 6 (0x4C60C0) is 0 or less, 0x400 when the light at the mover (0x43D6D0) is under 45 and 0x4B0490 answers yes, and refuses (no request) for a mover whose field 0x14 has bit 0x1000000. Flag 0x200 skips the straight attempt and makes the search cost light: 40 more onto a tile more than 20 brighter, 6 less onto one more than 20 darker (0x4D9240); flag 0x400 adds 80 onto a tile with fire (0x444500). DC2 and DC4 do not name these. | Original (F2: this task and the reviewer) |
 
 Anomalies. Steamwoven does not implement this walk yet: the click route keeps its project policy until the owner decides
-([comparison](../world/click-route-runtime.md#original-check-arc-world-060)). LRA1 is a question to the owner:
+([comparison](../world/click-route-runtime.md#original-check-arc-world-060)). The far click of LR4 and LR7 is a rule-mode
+switch since ARC-WORLD-072 (owner decision 2026-10-21): Steamwoven walks the corridor, Original does not move
+(`NavigationRuleProfile.FarClickDoesNotMove`). LRA1 is a question to the owner:
 
 - LRA1 (LR5): a living critter on a step other than a segment's last one is walked through (the plan ignores critters outside
   combat, LR2, and the walk checks only the segment's last step). In the original; a D8 candidate.
