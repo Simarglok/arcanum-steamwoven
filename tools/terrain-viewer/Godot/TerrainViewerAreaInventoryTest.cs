@@ -154,9 +154,15 @@ public partial class TerrainViewerApp
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(_inventoryStatus == "not used: not a healing item the hero holds" && _inventoryPanel.UseButtonsForSelfTest.Count == 0,
                 "the use button ran the app's heal: " + _inventoryStatus);
+            // ARC-SKILLS-006: a lockpick line gets a Pick a lock button; lockpicks the host does not know are refused and the window stays.
+            _inventoryPanel.Render(new AreaInventoryView([new("syn:picks", "lockpicks") { Lockpick = true }], null, null, []), null);
+            Require(_inventoryPanel.PickButtonsForSelfTest.Count == 1 && _inventoryPanel.UseButtonsForSelfTest.Count == 0, "one pick button for the one lockpick line");
+            _inventoryPanel.PickButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(InventoryOpen && _lockpickArmed is null && _inventoryStatus == "not used: not lockpicks the hero holds", "unknown lockpicks: " + _inventoryStatus);
             InventoryKey(Key.Escape);
             Require(!InventoryOpen, "Escape closed the loot window");
-            return $"walk to pick up and its ground-click cancel, pickup at reach {AreaInventoryHost.Reach}, I/Escape toggle, loot by take button, heal use button";
+            return $"walk to pick up and its ground-click cancel, pickup at reach {AreaInventoryHost.Reach}, I/Escape toggle, loot by take button, heal use button, pick a lock button";
         }
         finally
         {
