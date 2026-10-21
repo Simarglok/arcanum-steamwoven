@@ -103,7 +103,7 @@ public sealed class GeneratedDialogFiles
     public int RunLength(GeneratedDialogFile file, int first, int last) => _files[Index(file)]?.RunLength(first, last) ?? 0;
 
     /// <summary>The entry <paramref name="number"/> of a file (0x4D43A0): its message, or none when it is missing (the original
-    /// shows "Error! Missing line" with the number and file instead; formatting it is the caller's).</summary>
+    /// shows a static missing-line message naming the number and the file instead; what is shown is the caller's).</summary>
     [OriginalFunction(0x4D43A0, OriginalFunctionScope.Partial)]
     public GeneratedLine Line(GeneratedDialogFile file, int number)
     {
