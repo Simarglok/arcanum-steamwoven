@@ -168,7 +168,7 @@ original's path search.
 
 - On the installed original (development Mac, 2026-10-21, `AreaWindowStepRealDataTests`): the new-game start
   (92958, 82592) to the middle of the Shrouded Hills town sector (90208, 84128) is found: 3,106 cells (the straight
-  line is 2,750) through 88 sectors, off the plateau south first, with 49 window loads and 143,401 expansions in 170 s.
+  line is 2,750) through 88 sectors, off the plateau south first, with 51 window loads (49 before the goal check ahead of the search was added) and 143,401 expansions in 157 s.
 - Synthetic: `AreaWindowStepTests` (the 3×3-sector fixture map: a route across sectors through windows loaded on
   demand, one resident window, the window-load and expansion limits, a start off the map, a goal off it refused before
   any search).

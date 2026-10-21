@@ -666,13 +666,17 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   map's windows in the background ([window route](../world/click-route-runtime.md#world-routes-across-windows-arc-world-042)),
   then walks it with the production route follower, which it gives the farthest route cell of the shown window each time
   the follower stops or the window moves, while the window streams. A smoke frame is one second of walk; while a window
-  loads, one frame a second of wall time. It requires no seam: the actor's cell changes by no more than a second's walk
-  a frame (8 steps), every window move publishes the actor on the cell it stood on, inside the new core, drawn, with the
-  session carried, and no move fails or is given up. `ARC-WORLD-042 native-smoke walk PASS` on the owner's Mac
-  (2026-10-21): route planned in 207 s (3,106 cells, 88 sectors, 49 windows, 143,401 expansions), walked in 2,328
-  frames with at most 2 steps a frame, 72 window moves (loads 5.1 to 9.1 s, median 7.0 s), each resumed with its goal
-  held by the new window (the far-goal hand-over was not needed on this walk; unit tests cover it), at least 179 visible
-  bodies after each move, managed heap 254 MB before and 298 MB after (window contents, no growth with the route).
+  loads, one frame a second of wall time. It requires no seam: the follower never stops short (a denied step, no route
+  or a partial corridor fails the smoke at once), the actor's cell changes by no more than a second's run a frame
+  (6 steps), every window move publishes the actor on the cell it stood on, inside the new core and drawn, with the
+  session carried, no window fails to load and no move is given up (a counter of abandoned or superseded moves stays
+  0). Named on another map, the stage fails. It reports its slowest frame (the walk, its route plans with corridors and
+  the steering on the main thread). `ARC-WORLD-042 native-smoke walk PASS` on the owner's Mac (2026-10-21, on main with
+  #345): route planned in 225 s (3,106 cells, 88 sectors, 51 window loads, 143,401 expansions), walked in 2,330 frames
+  with at most 2 steps a frame and a slowest frame of 188 ms, 72 window moves (loads up to 8.8 s), each resumed with
+  its goal held by the new window (the far-goal hand-over was not needed on this walk; unit tests cover it), at least
+  179 visible bodies after each move. Managed heap after a full collection: 265 MB at the start and 413 MB at the end
+  in the Shrouded Hills window (observed values, not a growth measure; the stream smoke's windows take 368 to 435 MB).
 - **Memory.** One window holds 1,300 to 4,900 visuals and 10 to 26 MB of CPU frames; after a full collection the
   managed heap of a run that moved the window seven times followed the window's contents (368 to 435 MB), with no
   growth from move to move; the resource stage's reload after the map battery leaves the heap 5.5 MB smaller (since
