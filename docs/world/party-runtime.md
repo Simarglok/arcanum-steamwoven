@@ -221,6 +221,13 @@ companion line names the side: `PC side: hero (charisma …, level …, alignmen
   and save/load; waiting, a save/load round trip and node 385 then offer only the `WA 1` / `UW 0 518` replies, which bring him back;
   following, node 385 offers its `WA 0` replies. A PC already leading two followers is refused
   at node 210 with `LimitReached`.
+  `Original_virgil_joins_the_session_hero_as_the_pc_side` (ARC-WORLD-067): with the installed pre-made `human-male` hero the
+  party side is the hero's (effective charisma, level, alignment), the conversation reads its alignment, the original first talk
+  joins Virgil and its `AL` raises the hero's alignment.
+- `tests/Arcanum.Session.Tests/HeroPartySideTests.cs` and `tests/Arcanum.TerrainViewer.Tests/AreaHeroPartySideTests.cs`
+  (ARC-WORLD-067): the hero's party side, the follow limit from charisma and expert Persuasion, the hero's level and alignment in
+  the check, the leave guard at charisma 20, the wait timer's Persuasion step and charisma cut, the alignment change, the viewer's
+  facts and label with and without a hero.
 
 ```sh
 "$DOTNET" test tests/Arcanum.Simulation.Tests --no-build --filter "FullyQualifiedName~FollowConsent"
