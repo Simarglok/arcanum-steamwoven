@@ -7,7 +7,8 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
 /// Live actors over the T0 step evidence (ARC-WORLD-016): <see cref="Moved"/> are T0 records the T0 evidence no longer
-/// speaks for (every companion's, wherever it stands: its live cell is in <see cref="Occupied"/> instead),
+/// speaks for (every companion's, wherever it stands: its live cell is in <see cref="Occupied"/> instead; since ARC-WORLD-065
+/// also the objects the session destroyed or switched off, which the original's object lists skip),
 /// <see cref="Occupied"/> the chart cells other live actors hold for the mover (committed cell and the other cell of a
 /// started step). Immutable.
 /// </summary>
@@ -25,6 +26,14 @@ public sealed class AreaOccupancy
     public IReadOnlySet<AreaObjectKey> Moved { get; }
     public IReadOnlySet<CellCoord> Occupied { get; }
     public bool IsEmpty => Moved.Count == 0 && Occupied.Count == 0;
+
+    /// <summary>ARC-WORLD-065: this overlay with <paramref name="removed"/> T0 records moved too (objects the session destroyed or
+    /// switched off); the same overlay when there are none.</summary>
+    public AreaOccupancy WithRemoved(IReadOnlySet<AreaObjectKey> removed)
+    {
+        ArgumentNullException.ThrowIfNull(removed);
+        return removed.Count == 0 || removed.IsSubsetOf(Moved) ? this : new(Moved.Concat(removed), Occupied);
+    }
 }
 
 /// <summary>One directed step's verdict after the live overlay; <see cref="Overlaid"/> when it differs from the T0 assessment.</summary>
