@@ -117,6 +117,8 @@ public sealed class CriticalEffectsStateTests
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.RemoveItemFromNpc(owner.Version, Golem, "golem-sword").Failure);
         Assert.AreNotEqual(GameSessionDisposition.Rejected, owner.Kill(owner.Version, golem.Target).Disposition);
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.LootItem(owner.Version, Golem, "golem-sword", Accept).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttackCritter(owner.Version, new(golem) { TargetCell = new((1 << 24) - 1, (1 << 24) - 1) }).Failure,
+            "the highest cell the drop holds is admitted (the dead golem then refuses in the resolver)");
     }
 
     [TestMethod]
