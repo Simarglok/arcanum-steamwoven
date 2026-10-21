@@ -135,16 +135,20 @@ followed along a `RouteCorridor` instead:
   one through its own partial corridor, as the streamed main map does ([map mode](../rendering/area-map-mode.md#the-main-world-map-arc-render-024)).
 - The far click is a rule-mode switch (ARC-WORLD-072, ledger LR4/LR7, owner decision 2026-10-21): a follower may take
   `corridorAllowed`, asked once when a goal is set. The viewer's click route answers from the session's
-  `Rules.Navigation.FarClickDoesNotMove`: under Original no corridor is built, so a goal beyond the local reach stops with
-  `ROUTE_TARGET_OUT_OF_RANGE` and the PC does not move, as in the original. A goal within 32 tiles walks as before. A
-  corridor walk already started goes on after a switch, and the next goal set reads the new value; a goal carried across
-  a main-map window move is set again and so reads it too.
+  `Rules.Navigation.FarClickDoesNotMove`: under Original no corridor is built for a goal beyond the 32-tile reach; it stops with
+  `ROUTE_TARGET_OUT_OF_RANGE` and the PC does not move, as in the original. The switch names the far click only: a goal
+  within 32 tiles walks as before in both modes, along a corridor too when the local window or expansion limit stops it
+  (the original's no-route retry, LR4, is ARC-WORLD-073's port). A corridor walk already started goes on after a switch;
+  the next goal set reads the new value, the same goal clicked again included (a changed answer makes it a new goal), and
+  a goal carried across a main-map window move is set again and so reads it too. The hover's ground action follows it
+  (*no route* beyond 32 tiles under Original).
 - Tests: `tests/Arcanum.Simulation.Tests/Navigation/RouteCorridorTests.cs` (a maze longer than the local reach cut into
   waypoints, partial and refused corridors and the limits, the follower walking the maze through its gaps, a walled-in
   goal beyond reach stopping `ROUTE_PARTIAL`, a goal outside the source refused, an occupant on a waypoint rebuilding the
   corridor once, a follower without corridor limits refusing as before, the far-click switch in both modes and a switch
-  change applied at the next goal). The map-mode native smoke's map stage (`ARC-WORLD-072 native-smoke far click`) takes the
-  first cell 40 tiles from the start reachable over the shown chart and clicks it under Original (refused with
+  change applied at the next goal, a near goal that keeps its corridor under Original, the same goal clicked again after a
+  switch). The map-mode native smoke's map stage (`ARC-WORLD-072 native-smoke far click`) takes the
+  first cell 40 tiles from the start reachable over the shown chart (over no exit tile) and clicks it under Original (refused with
   `ROUTE_TARGET_OUT_OF_RANGE`, the PC does not move) and under Steamwoven (walked along a corridor to the goal). It then puts
   the PC back and restores the session's mode. A map without such a cell reports NONE (the Crash Site cave). On the main map
   at the Crash Site, 2026-10-21: 40 tiles, a corridor of 2 waypoints, 11 smoke frames.

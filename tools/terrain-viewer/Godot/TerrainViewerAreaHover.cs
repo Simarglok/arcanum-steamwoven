@@ -129,7 +129,7 @@ public partial class TerrainViewerApp
         var stamp = (screen, AreaDrawItem.RasterTransform(GetViewport()), index, visible, open,
             _worldActor.Session is AreaGridSession session ? session.State.CommittedCell : (Arcanum.Simulation.Movement.CellCoord?)null,
             _inventoryHidden, _areaCompanions?.Companions.FirstOrDefault()?.Grid.State, _areaCompanions,
-            (HeroInCombatMode, LeftAltHeld, Godot.Input.IsKeyPressed(Key.Alt), _areaSession?.Version.Revision));
+            (HeroInCombatMode, LeftAltHeld, Godot.Input.IsKeyPressed(Key.Alt), _areaSession?.Version.Revision, _areaSession?.Rules.Mode));
         if (Equals(stamp, _hoverStamp)) return;
         _hoverStamp = stamp;
         var key = visible ? AreaObjectAtScreen(screen) : null;
@@ -177,8 +177,9 @@ public partial class TerrainViewerApp
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return AreaHoverAction.None;
         if (!ReferenceEquals(_hoverRoutesSession, session)) { _hoverRoutes = new AreaRouteSource(session.Snapshot, session.Chart); _hoverRoutesSession = session; }
-        // As WorldRoute's follower: a goal beyond the local reach is a walk (its corridor, ARC-WORLD-042).
-        return AreaHover.Ground(_hoverRoutes!, session.State.CommittedCell, cell);
+        // As WorldRoute's follower: a goal beyond the local reach is a walk (its corridor, ARC-WORLD-042), not under the
+        // Original rule mode (ARC-WORLD-072).
+        return AreaHover.Ground(_hoverRoutes!, session.State.CommittedCell, cell, _areaSession?.Rules.Navigation.FarClickDoesNotMove == true);
     }
 
     private void ShowAreaHover(AreaObjectKey? key, AreaHoverAction action, Vector2? screen, bool refreshStatus = true)

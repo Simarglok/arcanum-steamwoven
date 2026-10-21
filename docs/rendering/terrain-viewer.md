@@ -609,7 +609,9 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   ground goal: *no route* when the route planner refuses it without a search (the cell or
   the actor outside the area, or no neighbour step entering the cell), else *walk here*;
   since ARC-WORLD-042 a goal more than 32 cells from the actor on an axis is *walk here*
-  too (the follower walks it along a corridor). The search itself is not run on hover, so
+  too (the follower walks it along a corridor), and since ARC-WORLD-072 *no route* under the
+  Original rule mode (its far click does not move); the *walk to …* actions of far objects do
+  not read the mode yet (hover and use reach are ARC-WORLD-068's). The search itself is not run on hover, so
   a *walk here* goal can still end without a route, or short of it (`ROUTE_PARTIAL`). Since ARC-UI-004 an item on the ground
   is *pick up* within reach 1, else *walk to pick up*, and a dead NPC is *loot* or *walk to
   loot* (checked after talk and use, before the ground). System cursor shapes: cross for walk,

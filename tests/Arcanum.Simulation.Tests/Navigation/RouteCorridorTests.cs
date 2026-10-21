@@ -160,6 +160,40 @@ public sealed class RouteCorridorTests
     }
 
     [TestMethod]
+    public void Under_Original_a_near_goal_the_local_window_cannot_reach_still_follows_a_corridor()
+    {
+        // The switch names the far click only (beyond 32 tiles); a goal 25 tiles away behind a wall whose gap lies outside the
+        // local 64-cell window keeps its corridor in both modes (the original's no-route retry, LR4, is ARC-WORLD-073's).
+        var rows = Enumerable.Range(0, 200).Select(y => new string('.', 12) + (y == 5 ? "." : "#") + new string('.', 17)).ToArray();
+        var source = new GridSource(rows);
+        Assert.AreEqual("ROUTE_WINDOW_EXHAUSTED", RoutePlanner.Plan(source, new(0, 150), new(25, 150)).ReasonCode);
+        foreach (var profile in NavigationRuleProfile.All)
+        {
+            var host = new RouteHost(source, new(0, 150), Step);
+            var follower = new RouteFollower(source, corridorLimits: new(), corridorAllowed: () => !profile.FarClickDoesNotMove);
+            follower.SetTarget(new(25, 150), host.State.Time);
+            host.Frames(follower, 4 * 400);
+            Assert.AreEqual((RouteFollowStatus.Arrived, new CellCoord(25, 150)), (follower.Status, host.State.CommittedCell), profile.Name);
+        }
+    }
+
+    [TestMethod]
+    public void The_same_far_goal_clicked_again_after_a_switch_is_a_new_goal()
+    {
+        var source = GridSource.Open(200, 3);
+        var host = new RouteHost(source, new(0, 1), Step);
+        var original = false;
+        var follower = new RouteFollower(source, corridorLimits: new(), corridorAllowed: () => !original);
+        Assert.IsTrue(follower.SetTarget(new(90, 1), host.State.Time));
+        host.Frames(follower, 4 * 4);
+        Assert.IsFalse(follower.SetTarget(new(90, 1), host.State.Time), "the same goal, the same answer: kept");
+        original = true;
+        Assert.IsTrue(follower.SetTarget(new(90, 1), host.State.Time), "the answer changed: a new goal");
+        host.Frames(follower, 4 * 10);
+        Assert.AreEqual((RouteFollowStatus.Stopped, "ROUTE_TARGET_OUT_OF_RANGE"), (follower.Status, follower.StopReason));
+    }
+
+    [TestMethod]
     public void A_switch_change_applies_at_the_next_click()
     {
         // Read at the decision: a corridor walk already started goes on; the next far click reads the new value.

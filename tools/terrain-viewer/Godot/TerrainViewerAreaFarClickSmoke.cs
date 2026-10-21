@@ -24,21 +24,23 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-072 far-click smoke FAIL: " + why);
             throw new InvalidOperationException("AREA_FAR_CLICK_SMOKE_FAILED");
         }
-        // The first cell in breadth-first order over open steps at least FarClickMinimum tiles away on the larger axis.
+        // The first cell in breadth-first order over open steps at least FarClickMinimum tiles away on the larger axis, over no exit
+        // tile (a step onto one would start a map transfer).
         var map = new AreaMapRuntime(area.Snapshot, grid.Snapshot, grid.Chart);
         var start = grid.State.CommittedCell;
         var routes = new AreaRouteSource(grid.Snapshot, grid.Chart, grid.Occupancy, () => grid.Portals?.Invoke());
+        var exits = new HashSet<Arcanum.Data.Traversal.AreaStepCell>(_mapTransfers?.TriggerCells ?? []);
         var seen = new HashSet<CellCoord> { start }; var queue = new Queue<CellCoord>([start]); CellCoord? goal = null;
         while (goal is null && seen.Count < FarClickSearchCells && queue.TryDequeue(out var cell))
             foreach (var direction in Enum.GetValues<NeighborDirection>())
             {
                 var next = RoutePlanner.Neighbor(cell, direction);
-                if (seen.Contains(next) || !routes.Contains(next) || routes.Assess(cell, direction) != RouteStepVerdict.Open) continue;
+                if (seen.Contains(next) || !routes.Contains(next) || routes.Assess(cell, direction) != RouteStepVerdict.Open || exits.Contains(grid.Chart.ToWorld(next))) continue;
                 seen.Add(next); queue.Enqueue(next);
                 if (Math.Max(Math.Abs((long)next.X - start.X), Math.Abs((long)next.Y - start.Y)) >= FarClickMinimum) { goal = next; break; }
             }
         if (goal is not { } target) { GD.Print($"ARC-WORLD-072 native-smoke far click NONE map={_readyMapName} (no reachable cell {FarClickMinimum} tiles away, searched {seen.Count})"); return; }
-        var prior = session.Rules.Mode;
+        var prior = session.Rules.Mode; var mapBefore = CurrentAreaMap;
         object? original = null, steamwoven = null;
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
@@ -64,6 +66,7 @@ public partial class TerrainViewerApp
                 AreaSmokeFrame(); frames++;
                 if (frames % 8 == 0) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             }
+            Require(CurrentAreaMap == mapBefore && !AreaTransferPending, "the walk stays on the map (no transfer)");
             var walked = (AreaGridSession)_worldActor.Session!;
             Require(route.Status == RouteFollowStatus.Arrived && walked.State.CommittedCell == target,
                 $"Steamwoven walks the far goal ({DescribeWorldRoute(route)}, at {walked.State.CommittedCell}, frames {frames})");
