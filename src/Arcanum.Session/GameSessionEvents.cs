@@ -60,7 +60,12 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionLockFiring> Locks { get; init; } = Array.Empty<SessionLockFiring>();
     /// <summary>The wait timers that came due (ARC-WORLD-045), in firing order.</summary>
     public IReadOnlyList<SessionWaitFiring> Waits { get; init; } = Array.Empty<SessionWaitFiring>();
+    /// <summary>The respawning scenery switched on again (ARC-COMBAT-008), in firing order.</summary>
+    public IReadOnlyList<SessionRespawnFiring> Respawns { get; init; } = Array.Empty<SessionRespawnFiring>();
 }
+
+/// <summary>A respawn event that came due (ARC-COMBAT-008, ledger OD10): the scenery switched on again.</summary>
+public sealed record SessionRespawnFiring(GameEvent Event, SessionMapId Map, string Entity);
 
 /// <summary>One saved pending event: the queue record without its derived domain and scope map.</summary>
 public sealed record SessionPendingEvent(long Sequence, string Kind, long DeadlineMs, ImmutableArray<GameEventEntity> Entities,
@@ -93,7 +98,7 @@ public static class SessionEventKinds
 {
     /// <summary>
     /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/>, ARC-WORLD-029 <see cref="HeroEffectEnd"/>, ARC-WORLD-050
-    /// <see cref="LockReset"/> and ARC-WORLD-045 <see cref="PartyWait"/> without a new version:
+    /// <see cref="LockReset"/>, ARC-WORLD-045 <see cref="PartyWait"/> and ARC-COMBAT-008 <see cref="ObjectRespawn"/> without a new version:
     /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
     /// </summary>
     public const int RegistryVersion = 1;
@@ -156,9 +161,20 @@ public static class SessionEventKinds
     /// <summary>Pending events a session holds: four timers for each NPC life record and three for the hero, so a life step
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events and the wait timers.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns;
     /// <summary>Pending Lock events a session holds (project policy; the original has no bound).</summary>
     public const int MaxLockResets = 1024;
+
+    /// <summary>
+    /// The original's respawn event (kind 33; ARC-COMBAT-008, ledger OD8): a respawning scenery an attack broke is switched on again.
+    /// Scoped to the object's map, one per break. Entity: the scenery; values: the game time it was scheduled at and its delay
+    /// (<see cref="Arcanum.Simulation.Combat.ObjectDamageRules.RespawnDelayMs"/>).
+    /// </summary>
+    public const string ObjectRespawn = "object.respawn";
+    /// <summary>Pending respawn events a session holds (project policy; the original has no bound).</summary>
+    public const int MaxObjectRespawns = 1024;
+    /// <summary>The longest respawn delay: the most negative respawn field in game minutes.</summary>
+    public const long MaxRespawnDelayMs = 2_147_483_648L * 60_000L;
 
     internal static GameEventQueueLimits Limits { get; } = new(MaxPending: MaxPending);
 
@@ -184,6 +200,9 @@ public static class SessionEventKinds
                 new LockResetHandler(owner), Validate: payload => payload.Values[0] >= 0),
             new(PartyWait, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.KeepExisting, GameEventScopeRule.EntityMap, 1, 3, 1, 0,
                 new WaitTimerHandler(owner), Validate: WaitPayload),
+            new(ObjectRespawn, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
+                new ObjectRespawnHandler(owner),
+                Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= MaxRespawnDelayMs && payload.Entities[0].Code != AbsentRole),
         ]);
     }
 
@@ -277,6 +296,12 @@ internal sealed class WaitTimerHandler(SessionEventSink sink) : IGameEventHandle
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireWaitTimer(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class ObjectRespawnHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireObjectRespawn(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class LockResetHandler(SessionEventSink sink) : IGameEventHandler

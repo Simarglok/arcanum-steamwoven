@@ -189,7 +189,7 @@ public sealed class SessionEventTests
             Damage(owner, Npc($"oid:n{i}"), new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
         Damage(owner, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
         Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxScriptCalls - SessionEffectLimits.MaxTimedEffects - SessionEventKinds.MaxLockResets
-            - SessionEventKinds.MaxWaitTimers, owner.QueryEvents().Count);
+            - SessionEventKinds.MaxWaitTimers - SessionEventKinds.MaxObjectRespawns, owner.QueryEvents().Count);
         // ARC-SCRIPT-010: the deferred SCR calls have their own share of the queue on top.
         for (var i = 0; i < SessionEventKinds.MaxScriptCalls; i++)
             Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleScriptCall(owner.Version, new(i + 1, 0, null, null), 1000).Disposition);
@@ -216,6 +216,14 @@ public sealed class SessionEventTests
             Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, $"oid:w{i}").Disposition);
             Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, $"oid:w{i}", wait).Disposition);
         }
+        // ARC-COMBAT-008: and so do the respawn events of respawning scenery an attack broke (no hit points: every hit breaks it).
+        SessionObjectTarget Barrel(string entity) => new(Exterior, entity, new SessionObjectBaseline
+        {
+            Kind = Arcanum.Simulation.Combat.DamageableObjectKind.Scenery, Respawning = true, RespawnDelay = 10,
+        });
+        for (var i = 0; i < SessionEventKinds.MaxObjectRespawns; i++)
+            Assert.AreEqual(GameSessionFailure.None, owner.AttackObject(owner.Version, new() { Target = Barrel($"barrel:{i}") }).Failure);
+        Assert.AreEqual(GameSessionFailure.EventBudgetExceeded, owner.AttackObject(owner.Version, new() { Target = Barrel("barrel:x") }).Failure);
         Assert.AreEqual(SessionEventKinds.MaxPending, owner.QueryEvents().Count);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, Npc("oid:n0"), new LifeDamage { HitPoints = 1 }).Disposition);
         // A save of a full queue restores.

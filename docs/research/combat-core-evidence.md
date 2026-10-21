@@ -347,7 +347,8 @@ neither see nor hear the attacker; then the critical chance gains
   earlier reading, which had the complexity raise the wear,
   [ledger CW5–CW9](original-verification-ledger.md#combat-wear-arc-combat-007)). Portals and containers subtract a material reduction (stone,
   brick, metal, force 10; wood 5) and are busted, triggering any trap, at 0 HP
-  (damage (0x4B4390)).
+  (damage (0x4B4390); every object kind's break was read in the executable by
+  ARC-COMBAT-008, [ledger OD1–OD12](original-verification-ledger.md#object-damage-arc-combat-008)).
 
 ### Fatigue, knockout and death (FR-COMBAT-010)
 
