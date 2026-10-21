@@ -94,5 +94,5 @@ follow the original in both modes, as decided.
 ## Not ready
 
 - No caller: the per-target stage (MT10) runs the resolver for each target and applies the margin to the components
-  (MT12–MT18); the AI (slice I8) and the casting UI (MT20a) ask the predictor.
+  (MT12–MT18); the AI (slice I8) and the casting UI (MT20a-2) ask the predictor.
 - The entangle effect's re-resistance (0x459C10, RS10) is not implemented (slice MT13).

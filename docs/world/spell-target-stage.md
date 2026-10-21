@@ -130,7 +130,7 @@ Both modes follow the original, no switch (owner decision 2026-10-21):
 
 ## Not ready
 
-- No viewer caller: the casting UI (MT20a).
+- No viewer caller: the casting UI (MT20a-2).
 - The components behind the swap are MT12–MT18's.
 - The session's own spell flags of objects are P1's.
 - Saved runs are MT9b's.
