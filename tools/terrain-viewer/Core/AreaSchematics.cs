@@ -201,6 +201,7 @@ public static class AreaSchematics
     public static string Refused(SessionAssemblyResult result, bool npc = false) => result.Failure switch
     {
         GameSessionFailure.AssemblyRefused => result.Plan?.Button == AssemblyButton.ExpertiseLacking ? "expertise lacking" : "an item is missing",
+        GameSessionFailure.InsertRefused when result.Verdict == SessionInsertVerdict.TechnologyRefused => "the hero's Technophobia refuses the technological product",
         GameSessionFailure.InsertRefused => "no room for the product (the original would leave it on the ground)",
         GameSessionFailure.ItemTypeUnsupported => "the product is not an item the session holds (stack or key)",
         GameSessionFailure.BudgetExceeded => "inventory limit",

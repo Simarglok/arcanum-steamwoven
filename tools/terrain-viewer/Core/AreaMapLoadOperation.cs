@@ -207,7 +207,7 @@ internal static class AreaMapLoadOperation
         throw new InvalidOperationException("AREA_MAP_NO_WALKABLE_TILE");
     }
 
-    private static bool CanStep(AreaStepSnapshot steps, AreaStepCell cell)
+    internal static bool CanStep(AreaStepSnapshot steps, AreaStepCell cell)
     {
         if (!steps.IsAdmitted(cell) || steps.Terrain(cell) is not { Disposition: CardinalTraversalDisposition.Open }) return false;
         for (var direction = 1; direction < 8; direction += 2)
@@ -270,4 +270,33 @@ public static class AreaMapWalk
     // The movement direction of each traversal direction (the inverse of GridReplay.MapDirection).
     internal static readonly IReadOnlyDictionary<CardinalTraversalDirection, NeighborDirection> Neighbor =
         Enum.GetValues<NeighborDirection>().ToDictionary(GridReplay.MapDirection);
+}
+
+/// <summary>ARC-RENDER-027: the maps of a game folder's content stack the map census opens, in catalogue order: every
+/// catalogued map with its listing (<c>rules/maplist.mes</c>, the transfer destinations), its sector file count and its
+/// map-list start tile. Map mode opens a map with at least one sector file; a window (more than
+/// <see cref="AreaMapPlans.MaxSectorFiles"/>) also needs its map-list start.</summary>
+public static class AreaMapCensus
+{
+    public sealed record Entry(string Name, bool Listed, int SectorFiles, WorldLocation? Start)
+    {
+        public bool Window => SectorFiles > AreaMapPlans.MaxSectorFiles;
+        public bool Openable => SectorFiles > 0 && (!Window || Start is not null);
+    }
+
+    /// <summary>Whether the walker can stand on the cell: open terrain and a cardinal step out and back (the spawn rule).</summary>
+    public static bool Stands(AreaStepSnapshot steps, AreaStepCell cell) => AreaMapLoadOperation.CanStep(steps, cell);
+
+    public static IReadOnlyList<Entry> Maps(TerrainViewerArguments arguments)
+    {
+        var discovery = ContentMountPlan.Discover(arguments.GameRoot ?? throw new InvalidOperationException("AREA_MAP_GAME_ROOT_REQUIRED"));
+        if (discovery.Status != ContentMountStatus.Ready) throw new InvalidOperationException("AREA_MAP_MOUNT_" + discovery.Status.ToString().ToUpperInvariant());
+        var opened = ContentStack.Open(discovery.Plan!);
+        if (opened.Status != ContentStackStatus.Ready) throw new InvalidOperationException("AREA_MAP_STACK_" + opened.Status.ToString().ToUpperInvariant());
+        using var stack = opened.Stack!;
+        var catalog = WorldCatalog.Open(stack);
+        var list = MapList.Read(stack);
+        return catalog.Maps.Select(m => list.Status == MapListStatus.Read && list.Find(m.Name) is { } row
+            ? new Entry(m.Name, true, m.SectorFiles.Count, row.Start) : new Entry(m.Name, false, m.SectorFiles.Count, null)).ToArray();
+    }
 }

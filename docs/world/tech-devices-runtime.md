@@ -78,7 +78,8 @@ slice runs item spells (DV3; the magic plan's "Item spells").
 
 ## Not implemented
 
+The background refusals of DV6 are implemented by ARC-WORLD-069 ([backgrounds](equipment-runtime.md#backgrounds-arc-world-069)).
+
 - Running a device's spells: the item trigger executor (DV3), the use's spell path, item spell charges spent by the payment's
   item branch in session state, and the lift of the equipment's refusal (the shared item trigger slice).
-- The background refusals of DV6 (backgrounds are not modelled).
 - The ChargeNBranch components (the end-to-end MAINTAIN over game time is tested since ARC-MAGIC-010).

@@ -388,7 +388,7 @@ public sealed partial class GameSessionOwner
     /// are skipped without experience data. A critical rolls the original's critical-effect tables (<see cref="OriginalCriticalEffects"/>,
     /// ARC-COMBAT-009) and their item steps follow (<see cref="SessionAttackResult.Criticals"/>: the arm-hit drops, then the wear, then
     /// the helmet drop, the ammunition and the weapon drop; an NPC's item drops at <see cref="SessionAttack.TargetCell"/>, the hero's
-    /// drops and the ammunition are not applied). The attack's armour and weapon wear (<see cref="ApplyAttackWear"/>, ARC-COMBAT-007)
+    /// among its placed items, and a critical miss spends the hero's ammunition, ARC-COMBAT-013). The attack's armour and weapon wear (<see cref="ApplyAttackWear"/>, ARC-COMBAT-007)
     /// with the hero as attacker and the NPC as target and the items of <see cref="SessionAttack.HeroWorn"/> and
     /// <see cref="SessionAttack.TargetWorn"/>: the armour of whoever took the damage at the hit location, the critical weapon effects,
     /// the hero's weapon (with the art subtype its <see cref="SessionWearItem"/> carries) or bare hands by the NPC's material. Refused before any roll, in order: no hero
@@ -402,7 +402,7 @@ public sealed partial class GameSessionOwner
     /// once it ran; a fate the resolver used (ARC-WORLD-054) is cleared in a revision of its own, so such an attack is Changed even
     /// without damage; each later step commits on its own revision.
     /// Not modelled: the target's taking-damage and dying scripts, its reaction and AI, the critical effects listed as not ready
-    /// (the drop's placement and draws, ammunition), backstab, the target's awareness (an NPC always sees the hero)
+    /// (an NPC's ammunition, the NPC search budget of the drop's path), backstab, the target's awareness (an NPC always sees the hero)
     /// and light (every position is lit).
     /// </summary>
     public SessionAttackResult AttackCritter(GameSessionVersion expected, SessionAttack attack)
@@ -509,7 +509,7 @@ public sealed partial class GameSessionOwner
     /// original's relative order (0x4B4390), after the whole life step: the arm-hit drops of whoever took the damage, the wear (its
     /// armour, its weapon's critical damage and destruction, the attacker's side), its helmet drop, the ammunition effects of a
     /// critical miss and its weapon drop. An NPC's item drops at <paramref name="recipientCell"/>, the hero's at its own cell among its
-    /// placed items (ARC-WORLD-059); the ammunition is not applied (NOT READY).
+    /// placed items (ARC-WORLD-059); a critical miss spends the hero's ammunition of the attack's weapon (ARC-COMBAT-013).
     /// </summary>
     private (SessionAttackWearResult? Wear, GameSessionFailure StepFailure) CriticalAndWearSteps(AttackResolution resolution, LifeOutcome life,
         SessionWearSide attacker, SessionWearSide target, SessionCritterCombat? npc, Arcanum.Simulation.Movement.CellCoord? recipientCell,
@@ -519,6 +519,8 @@ public sealed partial class GameSessionOwner
         var whose = damage.Recipient;
         var recipient = whose == DamageRecipient.Target ? target : attacker;
         var failure = GameSessionFailure.None;
+        // The attack's weapon, before a step of this attack breaks or drops it: the damage step's ammunition use reads it (CR15).
+        var attackWeapon = recipient.Life is { IsHero: true } && _equipment.Worn.TryGetValue(EquipmentSlot.Weapon, out var wielded) ? wielded.Item.Weapon : null;
         if (life.Events.HasFlag(LifeEvents.ArmHitDropsItems))
             recipient = ArmHitDrops(whose, recipient, npc, recipientCell, dropMap, criticals, ref failure);
         if (failure != GameSessionFailure.None) return (null, failure);
@@ -536,7 +538,7 @@ public sealed partial class GameSessionOwner
         }
         if (damage.HitEffects.HasFlag(CriticalHitEffects.DropHelmet))
             recipient = CriticalDrop(SessionCriticalStepKind.DropHelmet, whose, recipient, EquipmentSlot.Helmet, recipientCell, dropMap, criticals, ref failure);
-        AmmunitionSteps(damage, recipient, criticals);
+        AmmunitionSteps(damage, recipient, attackWeapon, criticals, ref failure);
         if (damage.HitEffects.HasFlag(CriticalHitEffects.DropWeapon))
             CriticalDrop(SessionCriticalStepKind.DropWeapon, whose, recipient, EquipmentSlot.Weapon, recipientCell, dropMap, criticals, ref failure);
         return (wear, failure);
