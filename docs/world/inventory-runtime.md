@@ -255,8 +255,8 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 - Junk piles (PI3): a dropped item joins a junk pile on its tile, or makes one with the loose items there; placed items lie loose.
 - The scripts and side effects of the removal (PI2) and of the pickup (PI6): item spells, the wield-off, remove-item and drop scripts,
   and the get and insert-item scripts of a pickup, none of which runs. A world item whose attached origin seed shows a drop script
-  is not dropped (`ScriptUnsupported`), one with a get or insert-item script is not picked up (`ItemScriptUnsupported`); a kit or
-  made item's scripts the session does not know. The light and armour of the hero follow its equipment at once.
+  is not dropped (`ScriptUnsupported`), one with a get or insert-item script is not picked up (`ItemScriptUnsupported`); with its
+  seed not attached, and for a kit or made item, the session does not know the scripts and the item goes unchecked. The light and armour of the hero follow its equipment at once.
 - The PC's re-wield after losing a weapon (PI5): with the "auto switch" setting on, the original wields the best weapon; the session
   leaves the slot empty.
 - The viewer draws no placed item and cannot click one (ARC-RENDER-033); NPC made items (ARC-WORLD-055) and the junk pile of OD13
