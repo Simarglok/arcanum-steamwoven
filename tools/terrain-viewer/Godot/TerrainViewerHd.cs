@@ -22,8 +22,8 @@ namespace Arcanum.TerrainViewer;
 /// <item>Automated runs (self-test, native smoke) neither read nor write the owner's file or packs:
 /// they start Legacy unless an override or <c>VISUAL_PROFILE_TEST_PATH</c> says otherwise.</item>
 /// </list>
-/// <c>ARC_HD_BUDGET_PATH=FILE</c> selects the device budget file (default
-/// <c>user://hd_budget_v1.json</c>; missing or invalid means the contract ceilings).</summary>
+/// <c>ARC_HD_BUDGET_PATH=FILE</c> selects the device budget file (default <c>user://hd_budget_v1.json</c>, which an automated
+/// run does not read, ARC-DEV-032; missing or invalid means the contract ceilings).</summary>
 public partial class TerrainViewerApp
 {
     private HdFrameSource? _hdSource;
@@ -35,7 +35,7 @@ public partial class TerrainViewerApp
     private string? _visualNotice;
     private string? _visualKeyNotice;
 
-    private bool AutomatedVisualRun => _automatedHost || _nativeSmoke || SelfTestBootstrap;
+    private bool AutomatedVisualRun => _automatedHost || _nativeSmoke || SelfTestBootstrap || ViewerAutomatedStorage.Automated;
 
     private void ConfigureVisualProfile()
     {
@@ -72,10 +72,11 @@ public partial class TerrainViewerApp
             if (HdActivePack.Choose(listed) is { } chosen) { pack = chosen.Result.Pack; open = chosen.Result.Status.ToString(); }
             _visualPack = listed.Count == 0 ? "no pack in the pack folders" : pack is null ? $"{listed.Count} found, none opened" : $"1 of {listed.Count} found";
         }
+        // ARC-DEV-032: an automated run reads no player budget (the contract ceilings unless ARC_HD_BUDGET_PATH names one).
         var budgetPath = System.Environment.GetEnvironmentVariable("ARC_HD_BUDGET_PATH") is { Length: > 0 } custom ? custom
-            : ProjectSettings.GlobalizePath("user://hd_budget_v1.json");
+            : AutomatedVisualRun ? null : ProjectSettings.GlobalizePath("user://hd_budget_v1.json");
         string? budgetText = null;
-        try { if (System.IO.File.Exists(budgetPath)) budgetText = System.IO.File.ReadAllText(budgetPath); }
+        try { if (budgetPath is not null && System.IO.File.Exists(budgetPath)) budgetText = System.IO.File.ReadAllText(budgetPath); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
         var scale = pack?.Scale ?? 4;
         var budget = HdDeviceBudgetCodec.DeserializeOrCeiling(budgetText, scale);

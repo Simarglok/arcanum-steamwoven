@@ -98,7 +98,7 @@ The session tracks every item it knows: the hero's kit, the items the PC took, a
 ### Snapshot (schema 22)
 
 `"durability":{"items":[{"entity","points","adjustment","damage","broken","inventoryArtBroken"}],"destroyed":[entity],"uses":[{"entity","uses"}]}`,
-each in strictly ascending ordinal order. Schemas 1..21 are refused, not migrated. Since schema 29 (ARC-SKILLS-005) `uses` holds the
+each in strictly ascending ordinal order. Schemas 1..21 are refused, not migrated. Since schema 30 (ARC-SKILLS-005) `uses` holds the
 remaining uses of every item whose uses the session spent (1..1,000,000; a used-up item is deleted), counted in the same record
 budget ([heal runtime](heal-runtime.md)). The decoder refuses a list out of order or with a repeated entity
 (`NotCanonical`), a value outside the bounds (points and adjustment within ±100,000, damage 0..200,000: `OutOfRange`) and a

@@ -45,6 +45,7 @@ public sealed class AreaHealRealDataTests
         var taken = healing.Select(item => item.Entity).FirstOrDefault(entity =>
             (ground.Any(g => g.Entity == entity) ? host.PickUp(session, entity)
                 : host.Loot(session, map.Seed.Holders.First(h => h.Items.Contains(entity)).Entity, entity)).Disposition == GameSessionDisposition.Changed);
+        // The self-heal below runs only once an installation has a takeable healing item on the Crash Site (the census above).
         if (taken is null) { Assert.AreEqual(0, healing.Length, "a healing item the hero could take"); return; }
         Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 5 }).Disposition);
         var item = host.HealingItem(session, taken, hero.KitHealing)!;

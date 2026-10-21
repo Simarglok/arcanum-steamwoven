@@ -216,6 +216,7 @@ public sealed partial class GameSessionOwner
         _inventory.Kit.RemoveAll(item => item.Entity == entity);
         _inventory.Pc.RemoveAll(item => item.Entity == entity);
         _inventory.Made.RemoveAll(item => item.Entity == entity);
+        _inventory.RemoveFromNpc(entity);
         // Taken hides an item from every seed view and from pickup and loot.
         _inventory.Taken.Add(entity);
         _durability.Records.Remove(entity);
@@ -223,10 +224,11 @@ public sealed partial class GameSessionOwner
         _durability.Destroyed.Add(entity);
     }
 
-    /// <summary>An item of the hero's kit, one the PC took, or one an attached seed lists, and not deleted.</summary>
+    /// <summary>An item of the hero's kit, one the PC took or made, a made item added to an NPC (ARC-WORLD-055), or one an attached seed
+    /// lists, and not deleted.</summary>
     private bool TracksItem(string entity) =>
         !_durability.Destroyed.Contains(entity) && (_inventory.Kit.Any(item => item.Entity == entity) || _inventory.Pc.Any(item => item.Entity == entity) ||
-            _inventory.Made.Any(item => item.Entity == entity) ||
+            _inventory.Made.Any(item => item.Entity == entity) || _inventory.NpcOf(entity) is not null ||
             _inventory.Seeds.Values.Any(seed => seed.Items.ContainsKey(entity)));
 
     private ItemDurabilityResult RejectDurability(GameSessionFailure failure) =>

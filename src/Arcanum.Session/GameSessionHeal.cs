@@ -1,5 +1,6 @@
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Randomness;
 using Arcanum.Simulation.Skills;
@@ -84,6 +85,12 @@ public sealed partial class GameSessionOwner
             if (!target.IsHero && !recordedCritter && _life.Critters.Count >= _limits.MaxLifeRecords || NewDurabilityRecord(item.Entity, destroyed: false) &&
                 _durability.Count >= _limits.MaxDurabilityRecords)
                 return RejectHeal(GameSessionFailure.BudgetExceeded);
+            // An NPC's heal can add its resting timer and move its pending timers to this map.
+            if (!target.IsHero && (_events.Count > _events.Limits.MaxPending - 1 || _events.NextSequence > long.MaxValue - 1 ||
+                _clock.QueryClockSnapshot().GameTimestampMs > long.MaxValue - SessionEventKinds.RestingDelayMs))
+                return RejectHeal(GameSessionFailure.EventBudgetExceeded);
+            if (!target.IsHero && _passWorld is not null && StrayMaps(target.Entity!, _actor.Map.RuntimeMap).Length > 0)
+                return RejectHeal(GameSessionFailure.InvalidEventPass);
             if (_revision >= long.MaxValue - 1) return RejectHeal(GameSessionFailure.RevisionExhausted);
             charge = ConsumeActionPoints(Version, SessionCombatant.Hero, TurnBasedRules.UseItemCost, world);
             if (charge.Disposition == GameSessionDisposition.Rejected) return RejectHeal(charge.Failure) with { Charge = charge };
@@ -148,6 +155,17 @@ public sealed partial class GameSessionOwner
         var current = _durability.Uses.TryGetValue(item.Entity, out var spent) ? spent : item.Uses;
         var left = (long)current - outcome.UsesSpent;
         var destroyed = left <= 0;
+        // An NPC's life write follows the session's life rule (ARC-WORLD-024): hit-point damage left positive and changed schedules
+        // its resting timer on the map it is on (the actor's), and its pending timers on another map move here.
+        var now = _clock.QueryClockSnapshot().GameTimestampMs;
+        var map = _actor.Map.RuntimeMap;
+        var timers = life is null || target.IsHero ? [] : Timers(false, record.State, life.After, null)
+            .Select(timer => TimerEvent(timer, target, map, now, 1)).Where(pending => !IsPending(pending.Kind, target.Entity)).ToArray();
+        var stray = life is null || target.IsHero ? [] : StrayMaps(target.Entity!, map);
+        if (stray.Length > 0 && _passWorld is not null) return RejectHeal(GameSessionFailure.InvalidEventPass);
+        if (timers.Length > 0 && (_events.Count > _events.Limits.MaxPending - timers.Length ||
+            _events.NextSequence > long.MaxValue - timers.Length || now > long.MaxValue - SessionEventKinds.RestingDelayMs))
+            return RejectHeal(GameSessionFailure.EventBudgetExceeded);
         // Budgets before anything is written: a new NPC life record, a new use record.
         if (lifeChanged && !target.IsHero && !recorded && _life.Critters.Count >= _limits.MaxLifeRecords) return RejectHeal(GameSessionFailure.BudgetExceeded);
         if (NewDurabilityRecord(item.Entity, destroyed) && _durability.Count >= _limits.MaxDurabilityRecords)
@@ -155,6 +173,12 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return RejectHeal(GameSessionFailure.RevisionExhausted);
 
         _random = rolls.Trial;
+        foreach (var from in stray)
+            if (_events.Relocate(from, map, entity => entity.Code == target.Entity).Failure != GameEventFailure.None)
+                throw new InvalidOperationException("Timer relocation failed after admission.");
+        foreach (var (kind, payload) in timers)
+            if (_events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), new(0, now, 0)).Disposition != GameEventScheduleDisposition.Added)
+                throw new InvalidOperationException("Timer scheduling failed after admission.");
         if (lifeChanged)
         {
             var next = new SessionLifeRecord(life!.After, record.DeathTimeMs);

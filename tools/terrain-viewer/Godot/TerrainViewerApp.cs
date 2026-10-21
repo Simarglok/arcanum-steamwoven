@@ -63,6 +63,9 @@ public partial class TerrainViewerApp : Node
         // The process hosting --self-test is automated too: its frame loop drives the frame-bound
         // tests, so it must not cap the engine frame rate (ARC-RENDER-009 pacing).
         _automatedHost = args.Contains("--self-test", StringComparer.Ordinal);
+        // ARC-DEV-032: a self-test, a native smoke or the WORLD settings validation never reads or writes the player's settings and saves.
+        if (_automatedHost || args.Contains("--native-smoke", StringComparer.Ordinal) || args.Contains("--world-settings-test", StringComparer.Ordinal))
+            ViewerAutomatedStorage.MarkAutomated();
         if (RunWorldSettingsTest(args)) return;
         if (args.Contains("--self-test", StringComparer.Ordinal))
         {
@@ -1028,6 +1031,8 @@ public partial class TerrainViewerApp : Node
         _conversationHost = null; ReleaseConversationContent();
         DisposeAudio();
         _cache.Dispose();
+        // ARC-DEV-032: the main app (not a self-test's child) removes the automated run's own folder after its last save.
+        if (!SelfTestBootstrap) ViewerAutomatedStorage.Delete();
     }
 }
 

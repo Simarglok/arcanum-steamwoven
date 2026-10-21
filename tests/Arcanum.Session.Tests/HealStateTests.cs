@@ -190,6 +190,37 @@ public sealed class HealStateTests
     }
 
     [TestMethod]
+    public void APartialHealOfAnNpcSchedulesItsRestingAsEveryLifeWriteDoes()
+    {
+        // A master with 1 point (heal level 4) heals 6 of the rat's 10.
+        using var owner = Healer(1, SkillTraining.Master);
+        var rat = SessionLifeTarget.Critter("oid:rat", new LifeFacts(), new LifeState(10, 0, 0, LifeConditions.None, 0));
+        var result = owner.HealWithItem(owner.Version, rat, Item(bonus: 50));
+        Assert.AreEqual((GameSessionDisposition.Changed, 6), (result.Disposition, result.Heal!.Value.HitPoints));
+        Assert.AreEqual(4, owner.QueryLifeRecord("oid:rat")!.Value.State.HitPointDamage);
+        var resting = owner.QueryEvents().Single();
+        Assert.AreEqual((SessionEventKinds.NpcResting, "oid:rat"), (resting.Kind, resting.Payload.Entities[0].Code));
+        // A full heal leaves no damage and schedules nothing more.
+        owner.HealWithItem(owner.Version, SessionLifeTarget.Critter("oid:rat", new LifeFacts(), default), Item(bonus: 50));
+        Assert.AreEqual(1, owner.QueryEvents().Count);
+    }
+
+    [TestMethod]
+    public void TheLifeRecordBudgetIsCheckedBeforeTheCharge()
+    {
+        using var owner = Healer(5, SkillTraining.Master, new GameSessionLimits(maxLifeRecords: 1));
+        LifeState Hurt(int damage) => new(damage, 0, 0, LifeConditions.None, 0);
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            owner.HealWithItem(owner.Version, SessionLifeTarget.Critter("oid:rat", new LifeFacts(), Hurt(6)), Item(bonus: 50)).Disposition);
+        var world = HeroSubturn(owner);
+        var points = owner.QueryCombatRound()!.ActionPoints;
+        var revision = owner.Version.Revision;
+        var refused = owner.HealWithItem(owner.Version, SessionLifeTarget.Critter("oid:dog", new LifeFacts(), Hurt(6)), Item(bonus: 50), world);
+        Assert.AreEqual((GameSessionFailure.BudgetExceeded, (SessionCombatResult?)null), (refused.Failure, refused.Charge));
+        Assert.AreEqual((points, revision), (owner.QueryCombatRound()!.ActionPoints, owner.Version.Revision), "nothing charged");
+    }
+
+    [TestMethod]
     public void ADeadHeroCannotHeal()
     {
         using var owner = Healer(5, SkillTraining.Master);

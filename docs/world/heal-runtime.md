@@ -5,7 +5,7 @@ the first use of the [shared skill check](skill-check-runtime.md). The hero uses
 the heal check, the healed amount, the master's and the critical success's cure, the item's uses and its destruction, and the
 4 action points in a turn-based round. Pure rules: `HealRules` in [`Arcanum.Simulation.Skills`](../../src/Arcanum.Simulation/Skills/HealRules.cs)
 and `LifeRules.SkillHeal`; session: `HealWithItem` in [`GameSessionHeal.cs`](../../src/Arcanum.Session/GameSessionHeal.cs);
-viewer: "Use on self" in the AREA inventory window. Snapshot schema 29 (the items' remaining uses).
+viewer: "Use on self" in the AREA inventory window. Snapshot schema 30 (the items' remaining uses).
 Requirements: [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019) (a skill used),
 [FR-ITEM-009](../requirements/items-economy.md#fr-item-009) (item use and charges),
 [FR-CHAR-026](../requirements/characters-skills.md#fr-char-026) (healing the life state).
@@ -42,21 +42,26 @@ invalid target, the version. With a world and the hero's subturn it first checks
 record, a new durability record) and two free revisions, then charges 4 action points (`ConsumeActionPoints`, its own revision;
 overexertion as there); only an exhausted generator can then refuse the heal, and the charge stays. Without a world nothing is
 charged, even in the hero's subturn (the caller's choice). A destroyed item counts against the durability budget unless it
-already had a record. Then the check, the life record, the fate and the item are one revision; the rolls (check,
+already had a record. The check before the charge is the worst case: in a round, a full life-record table refuses a heal of an
+unrecorded NPC even when the heal would leave it unchanged (a failed check, full hit points), which the same call outside a round
+would allow. An NPC's life write follows the session's life rule (ARC-WORLD-024): hit-point damage left positive and changed
+schedules its resting timer on the actor's map, and its pending timers on another map move there; before the charge an NPC heal
+needs room for one event. Then the check, the life record, the fate and the item are one revision; the rolls (check,
 critical, amount) come from the session generator. The answer carries the check, the outcome, the life outcome, the uses left or
 the destruction, and whether the heal fate was used.
 
-## Snapshot schema 29
+## Snapshot schema 30
 
 The `durability` section gains `uses`: the remaining uses of every item whose uses the session spent (entity and count 1..1,000,000,
 ordinal order; a used-up item is in `destroyed`). The decoder refuses a count outside the range (`OutOfRange`), an out-of-order or
-repeated entity (`NotCanonical`) and a missing or unknown field; Restore refuses a uses record of a destroyed item (`InvalidDurability`). Schema 28 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-29)).
+repeated entity (`NotCanonical`) and a missing or unknown field; Restore refuses a uses record of a destroyed item (`InvalidDurability`). Schema 29 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-30)).
 
 ## Viewer
 
 The AREA inventory window lists a **Use on self** button for each healing item in the PC's list (the kit's from the hero load's
 prototype fields, a taken item's from its object row) and runs `HealWithItem` on the hero (no turn-based round in the viewer, so
-no action points). The window reports the amount, the cure, the uses left or the item used up.
+no action points). A made item (ARC-TECHNOLOGY-004, ARC-WORLD-055) gets no button: the viewer has no object row and so no healing
+fields for it, although `HealWithItem` accepts one the hero holds. The window reports the amount, the cure, the uses left or the item used up.
 
 ## Boundaries
 

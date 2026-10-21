@@ -250,11 +250,16 @@ public sealed class AreaInventoryHost
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null })
             .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)) + Worn(item.Entity))
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null }))
+            // ARC-WORLD-055: the items the hero made or took from an NPC that held made items follow, named by their kind.
+            .Concat(session.QueryMadeItems().Select(item => new AreaInventoryLine(item.Entity, Line(KindName(item.Kind, catalog), item.Kind.Type, null) + " (made)" + Worn(item.Entity))))
             .ToArray();
         var gold = session.QueryGold();
         if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>()) { Gold = gold };
         var list = session.QueryMapInventory(new(runtimeMap))?.Holders.FirstOrDefault(h => h.Entity == holder)?.Items ?? [];
-        var loot = list.Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Facts.Kind.Type, item.Facts.Weight)
+        // ARC-WORLD-055: a made item the session added to the NPC has no area row; its kind names it.
+        static bool Made(string entity) => entity.StartsWith("made:", StringComparison.Ordinal);
+        var loot = list.Select(item => new AreaInventoryLine(item.Entity, Line(Made(item.Entity)
+                ? KindName(item.Facts.Kind, catalog) + " (made)" : Name(item.Entity, catalog), item.Facts.Kind.Type, Made(item.Entity) ? null : item.Facts.Weight)
             + (item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
         return new(Array.AsReadOnly(pc), holder, Name(holder, catalog), Array.AsReadOnly(loot)) { Gold = gold };
     }
@@ -278,11 +283,14 @@ public sealed class AreaInventoryHost
 
     /// <summary>A kit item's shown name: the text of its prototype's description number (the identified name; the kit's
     /// identification state is not modelled). No catalog, an absent or undecodable text gives a bracketed label.</summary>
-    public static string KitName(SessionKitItem item, ObjectDescriptionCatalog? catalog)
+    public static string KitName(SessionKitItem item, ObjectDescriptionCatalog? catalog) => KindName(item.Kind, catalog);
+
+    /// <summary>An item's shown name from its saved kind: the text of its description number, as <see cref="KitName"/>.</summary>
+    public static string KindName(SessionItemKind kind, ObjectDescriptionCatalog? catalog)
     {
-        var type = AreaHoverIndex.TypeName((int)item.Kind.Type);
+        var type = AreaHoverIndex.TypeName((int)kind.Type);
         if (catalog is null) return $"[{type}: name unavailable]";
-        var found = catalog.Find(item.Kind.Description);
+        var found = catalog.Find(kind.Description);
         if (found.Status != DescriptionLookupStatus.Found || found.Message is null) return $"[{type}: unnamed]";
         return MesText.Decode(found.Message, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { Length: > 0 } decoded }
             ? decoded : $"[{type}: name not decodable]";
