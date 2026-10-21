@@ -54,6 +54,9 @@ public sealed record AreaLightingPlan(AreaLightingSource Source, IReadOnlyDictio
 {
     /// <summary>ARC-RENDER-012 stationary lights and tile channels of this map; absent for fixtures without them.</summary>
     public AreaLocalLighting? Local { get; init; }
+    /// <summary>ARC-RENDER-030: why the object lights are not part of <see cref="Local"/> (None when they are, or the map has
+    /// none).</summary>
+    public LightingFailure ObjectLightsFailure { get; init; }
 }
 
 /// <summary>

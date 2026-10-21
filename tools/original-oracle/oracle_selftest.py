@@ -373,8 +373,9 @@ class OracleSelfTest(unittest.TestCase):
             with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
                 call(address, *arguments)
 
-    def test_the_registry_names_eighteen_functions_with_their_own_code_first(self):
-        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x4537B0, 0x453B20, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660,
+    def test_the_registry_names_twenty_one_functions_with_their_own_code_first(self):
+        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x4537B0, 0x453B20, 0x454700, 0x456430, 0x456A10,
+                                                              0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660,
                                                               0x4B1790, 0x4C5EB0, 0x4C6170, 0x4C62E0, 0x4C6410, 0x4C69F0, 0x4F5090,
                                                               0x4F50C0, 0x4F51B0, 0x4F5270])
         for address, spec in oracle_functions.FUNCTIONS.items():
@@ -409,6 +410,37 @@ class OracleSelfTest(unittest.TestCase):
                                    (oracle_functions.EXTRAORDINARY, (*target, 4)), (oracle_functions.FIELD_GETTER, (*oracle_functions.HANDLE, 0x14F))):
             with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
                 call(address, *arguments)
+
+    def test_the_invocation_models_stay_in_the_csharp_domain_and_reject_anything_else(self):
+        rng = random.Random(7)
+        ranges = [oracle_functions.draw_range_case(rng) for _ in range(2000)]
+        self.assertTrue(all(0 <= c.spell < oracle_functions.SPELL_RECORDS and 0 <= min(*c.origin, *c.tile, *c.location) <= 0xFFFFFFFF
+                            for c in ranges))
+        self.assertTrue(any(c.range < 0 for c in ranges) and any(c.origin == (0, 0) for c in ranges) and any(c.loaded == 0 for c in ranges))
+        self.assertTrue(any(c.flags & oracle_functions.IN_INVENTORY for c in ranges))
+        target, item, holder, other = oracle_functions.TARGET, oracle_functions.ITEM, oracle_functions.HANDLE, oracle_functions.OTHER_PC
+        case = ranges[0]
+        stubs = oracle_functions.range_stubs(case)
+
+        def call(address, *arguments):
+            return stubs[address](lambda index: arguments[index])
+        self.assertEqual((call(oracle_functions.FIELD_GETTER, *target, 0x13), call(oracle_functions.FIELD64_GETTER, *target, 2)),
+                         (case.flags, case.location))
+        flags = oracle_functions.draw_flags_case(rng)
+        flag_stubs = oracle_functions.flags_stubs(flags)
+        self.assertEqual(flag_stubs[oracle_functions.FIELD_GETTER](lambda i: (*target, 0xDA)[i]), flags.critter_flags)
+        gate = oracle_functions.draw_gate_case(rng)
+        recorder = oracle_functions.GateRecorder()
+        gate_stubs = oracle_functions.gate_stubs(gate, recorder)
+        self.assertEqual(gate_stubs[oracle_functions.ITEM_POWER](lambda i: (*item, *holder)[i]), gate.power & 0xFFFFFFFF)
+        gate_stubs[oracle_functions.STAT_GETTER](lambda i: (*other, 16)[i])
+        self.assertEqual((recorder.powers, recorder.other_reads), (1, 1))
+        for stub, arguments in ((stubs[oracle_functions.FIELD_GETTER], (*target, 0x14)), (stubs[oracle_functions.FIELD64_GETTER], (*holder, 2)),
+                                (flag_stubs[oracle_functions.FIELD_GETTER], (*holder, 0xDA)),
+                                (gate_stubs[oracle_functions.FIELD_GETTER], (*item, 0x14)), (gate_stubs[oracle_functions.STAT_GETTER], (*holder, 4)),
+                                (gate_stubs[oracle_functions.ITEM_POWER], (*holder, *item))):
+            with self.assertRaises(StubRejected, msg=f"{arguments}"):
+                stub(lambda index: arguments[index])
 
     def test_generated_inputs_stay_out_of_the_work_tree(self):
         with self.assertRaises(ValueError):

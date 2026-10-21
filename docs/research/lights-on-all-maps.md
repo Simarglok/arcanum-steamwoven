@@ -104,7 +104,7 @@ A light whose ART has more than one frame animates (LT6):
 
 `art/light/light.mes` names 28 light ARTs; 7 have more than one frame (5, 6, 8 or 15 frames, at 5 or 8 frames per
 second). The viewer refused an animated light ART, which left one interior unlit; since ARC-DATA-039 it is read with all
-its frames and its frame 0 is drawn.
+its frames, and since ARC-RENDER-031 it animates.
 
 ## Flags the original reads
 
@@ -128,8 +128,8 @@ Four slices. They need only the readers that already exist plus object light fie
 | Slice | What | Notes |
 | --- | --- | --- |
 | V7a | Object light descriptions in Data (done: ARC-DATA-039, [object lights](../rendering/area-lighting.md#object-lights-arc-data-039)) | Effective primary and overlay lights of sector objects and mobiles (instance field, else prototype), animated light ART (frames, rate, per-frame offsets), stationary flag 0x40 admitted and ignored. |
-| V7b | Object lights drawn in map mode | Built at load for objects not in an inventory, with the nocturnal rule at load and on each hour change; OFF and DARK as for stationary lights; the main map's template shade lights. The rule-mode switches for A1 and A2 (below) go here. |
-| V7c | Animated lights | The ⌊1000 / fps⌋ frame loop (animation time), the frame's offset step; stationary and object lights alike. |
+| V7b | Object lights drawn in map mode (done: ARC-RENDER-030, [object lights in map mode](../rendering/area-lighting.md#object-lights-in-map-mode-arc-render-030)) | Built at load for objects not in an inventory, with the nocturnal rule at load and on each hour change; OFF and DARK as for stationary lights; the main map's template shade lights (its generated sectors' objects are part of the window). A1 and A2 (below) are fixed in both modes, proposed. |
+| V7c | Animated lights (done: ARC-RENDER-031, [animated lights](../rendering/area-lighting.md#animated-lights-arc-render-031)) | The ⌊1000 / fps⌋ frame loop (animation time), the frame's offset step; stationary and object lights alike. |
 | V7d | Moving and carried lights | Lights move with NPCs and the hero; the hero's carried light from session equipment (EQ12, LT12). |
 
 Each slice keeps original parity NOT_VERIFIED: the lights' pixels and blending stay the composition of ARC-RENDER-012.

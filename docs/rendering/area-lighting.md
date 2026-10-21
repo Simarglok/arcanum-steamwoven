@@ -121,8 +121,58 @@ builds them at sector load ([ledger LT1, LT4](../research/original-verification-
 
 On the installed original (opt-in `ObjectLightRealDataTests`), all 80 interiors and two main-map windows (the Crash Site,
 Shrouded Hills) read without a failure: 6,809 object lights, at most 5,083 in one map (k'na tha), 109 of them nocturnal. The cap was checked on windows of
-radius 1 only. No viewer
-draws them yet (slice V7b).
+radius 1 only. Map mode draws them since ARC-RENDER-030 (below).
+
+### Object lights in map mode (ARC-RENDER-030)
+
+Map mode (whole maps and main-map windows) draws the object lights with the stationary lights; the pinned Crash Site
+exterior and cave keep their stationary lights only.
+
+- **At load** the viewer reads the object lights and builds two lightings: the night form (every object light) and,
+  when a map has nocturnal scenery on outdoor tiles, the day form without it
+  (`AreaStationaryLightSource.WithObjectLights`, ledger LT4/LT5). A built nocturnal light is switched on with its
+  object (its saved OFF cleared, `FlagsAtLoad`); every other object light keeps its saved flags, so a saved OFF stays off.
+- **Each hour** `AreaLocalLighting.AtHour` picks the form (day = hours 6..17), so the nocturnal lights go on at 18:00
+  and off at 6:00 with the lattice the hour change rebuilds. The original's refresh slips A1 and A2 are not emulated:
+  every nocturnal light switches (proposed, [rule modes](../world/rule-modes.md)). Nor is the refresh's skip of scenery
+  with scenery flag 0x400 (LT5): such scenery switches with the hour too.
+- **Drawing** is the stationary lights' composition: OFF gives nothing, DARK (the shade under trees and buildings, most
+  object lights) subtracts. An object light shows its saved ART frame. Object lights that cannot be read, or whose
+  frames or lattice exceed the caps, leave the map lit by its stationary lights alone (`objects=` on the load line,
+  `AreaLightingPlan.ObjectLightsFailure`).
+- **Scale.** Point samples look only at the lights whose rectangle meets a 256-pixel bucket, and each light adds into
+  the lattice nodes its rectangle covers (the same sums as node by node, tested); the lattice cap is 2^22 nodes.
+  K'na tha (5,083 object lights) builds its lighting in about 1 s at load; the Crash Site window holds 42. The shade
+  lights are outdoor-tinted, so every hour change rebuilds the lattice and the body colours: about 100 ms on k'na tha,
+  16 ms on caladon-castle main floor (`ViewMs` in the smoke), once per game hour.
+- **Native smoke** (map stage): `ARC-RENDER-030 native-smoke object lights PASS` observes terrain pixels near object
+  lights that are on and meet no stationary light (k'na tha, caladon-castle main floor, elven ruins and the Crash Site
+  window: 3 of 3 each); it skips a map without such a light and fails when its object lights could not be read.
+
+Not drawn: moving and carried lights (V7d), shadows.
+
+### Animated lights (ARC-RENDER-031)
+
+A light whose ART has more than one frame animates in map mode, stationary and object lights alike, unless it carries
+0x20 or was saved while animating (0x4; the reader turns a saved 0x4 into 0x20, ledger LT6, LT7).
+
+- **Pose.** `StationaryLightField.PosesAt(ms)` gives each animated light's pose after `ms` of animation time: one step
+  every ⌊1000 / frames per second⌋ ms, to the next frame (wrapping) and by that frame's offset step, from the light's
+  saved frame and offsets. `Point` and `Lattice` take the poses, so a posed light is drawn and sampled where it stands
+  now, in source order with the others.
+- **Time.** The viewer's light animation time starts at 0 whenever a map's lighting binds (a load, a transfer, a quick
+  load), as the original starts a light's animation when it enters its sector list, and runs with real time unless the
+  session clock is paused (a modal window); the original's animation clock rate is F0. A nocturnal light switched on at
+  18:00 takes its phase from that time, where the original would start it at its insertion (F0). Each frame the viewer compares the poses
+  (`AreaLocalLighting.AnimationKey`) and pushes a new view only when one changed; a map without animated lights does no
+  work. Automated runs drive the time themselves.
+- **Cost.** A changed pose rebuilds the whole lattice and every body colour of the map, so it is cheap only on maps with
+  few lights; the installed module has one animated light, on void (228 lights, 10 to 15 ms per view). An ART whose
+  frame steps do not sum to zero would walk the light away over time; the lattice cap is checked at load for frame 0.
+- **Native smoke** (map stage): `ARC-RENDER-031 native-smoke light animation PASS` sets three animation times one
+  step apart on void: frames 0, 1, 2 at 5 per second, the lattice changes at each step, and at the second and third a
+  terrain pixel inside the posed light, where the pose changes the colour, reads back as the posed lattice predicts. It
+  skips a map without an animated light that is on.
 
 ## Viewer controls
 

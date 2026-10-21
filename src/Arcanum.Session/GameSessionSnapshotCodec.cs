@@ -51,10 +51,11 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] LightingFields = ["schemeId", "hour"];
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
-    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea"];
+    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea", "reputations"];
     private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
     private static readonly string[] RumorFields = ["rumor", "timestampMs"];
+    private static readonly string[] ReputationFields = ["reputation", "timestampMs"];
     private static readonly string[] PartyFields = ["followers", "others"];
     private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut", "loyalty"];
     private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted", "loyalty"];
@@ -72,7 +73,8 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
     private static readonly string[] WornFields = ["slot", "entity", "item"];
-    private static readonly string[] DurabilityFields = ["items", "destroyed"];
+    private static readonly string[] DurabilityFields = ["items", "destroyed", "uses"];
+    private static readonly string[] ItemUseFields = ["entity", "uses"];
     private static readonly string[] SchematicsFields = ["found"];
     private static readonly string[] ItemConditionFields = ["entity", "points", "adjustment", "damage", "broken", "inventoryArtBroken"];
     private static readonly string[] EquipmentItemFields = ["kind", "complexity", "noDrop", "broken", "uber", "light", "usesShieldLocation",
@@ -224,6 +226,15 @@ public static class GameSessionSnapshotCodec
             foreach (var area in story.KnownAreas) w.WriteNumberValue(area);
             w.WriteEndArray();
             w.WriteNumber("lastArea", story.LastArea);
+            w.WriteStartArray("reputations");
+            foreach (var reputation in story.Reputations)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("reputation", reputation.Reputation);
+                w.WriteNumber("timestampMs", reputation.TimestampMs);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
             w.WriteEndObject();
 
             w.WriteStartObject("party");
@@ -358,6 +369,15 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteStartArray("destroyed");
             foreach (var entity in snapshot.Durability.Destroyed) w.WriteStringValue(entity);
+            w.WriteEndArray();
+            w.WriteStartArray("uses");
+            foreach (var item in snapshot.Durability.Uses)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", item.Entity);
+                w.WriteNumber("uses", item.Uses);
+                w.WriteEndObject();
+            }
             w.WriteEndArray();
             w.WriteEndObject();
 
@@ -970,7 +990,22 @@ public static class GameSessionSnapshotCodec
             if (i > 0 && areas[i] <= areas[i - 1]) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
         var last = Int(f["lastArea"], p + ".lastArea", 0, SessionStoryLimits.LastArea);
-        return new(quests, globals, rumors, quelled, areas, last);
+        // ARC-WORLD-044: the PC's reputations in the order gained (not sorted): numbers in the reputation range, none repeated,
+        // times never decreasing.
+        items = Array(f["reputations"], p + ".reputations", SessionStoryLimits.MaxReputations);
+        var reputations = new SessionReputation[items.Length];
+        var held = new HashSet<int>();
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.reputations[{i}]";
+            var item = Fields(items[i], path, ReputationFields);
+            var reputation = Int(item["reputation"], path + ".reputation", SessionStoryLimits.FirstReputation, SessionStoryLimits.LastReputation);
+            if (!held.Add(reputation)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".reputation");
+            reputations[i] = new(reputation, Long(item["timestampMs"], path + ".timestampMs", 0, long.MaxValue));
+            if (i > 0 && reputations[i].TimestampMs < reputations[i - 1].TimestampMs)
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".timestampMs");
+        }
+        return new(quests, globals, rumors, quelled, areas, last, reputations);
     }
 
     private static SessionPartyState Party(JsonElement element)
@@ -1353,7 +1388,17 @@ public static class GameSessionSnapshotCodec
             destroyed[i] = Entity(listed[i], path);
             if (i > 0 && string.CompareOrdinal(destroyed[i], destroyed[i - 1]) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
-        return new(items, destroyed);
+        var used = Array(f["uses"], p + ".uses", GameSessionLimits.PolicyMaxDurabilityRecords);
+        var uses = new SessionItemUses[used.Length];
+        for (var i = 0; i < used.Length; i++)
+        {
+            var path = $"{p}.uses[{i}]";
+            var item = Fields(used[i], path, ItemUseFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (i > 0 && string.CompareOrdinal(entity, uses[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            uses[i] = new(entity, Int(item["uses"], path + ".uses", 1, SessionItemUseLimits.MaxUses));
+        }
+        return new(items, destroyed, uses);
     }
 
     // Shapes, names and ranges, definitions by strictly ascending number; causes, rules in use and the hero's presence are Restore's.
