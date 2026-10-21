@@ -20,7 +20,7 @@ public sealed class CriticalEffectsStateTests
     private static readonly ItemCondition Sturdy = new(1000, 0, 0, false);
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
-    private static EquipmentItem Blade(int missChance = 0) => new()
+    private static EquipmentItem Blade(int missChance = 0, int? ammoType = null, int ammoConsumption = 0) => new()
     {
         Kind = EquipmentItemKind.Weapon,
         HitPoints = 1000,
@@ -30,6 +30,7 @@ public sealed class CriticalEffectsStateTests
             Skill = CombatSkill.Melee, Damage = DamageRanges.None with { Normal = new(1, 2) }, SpeedFactor = 15,
             CriticalHitChart = CriticalHitChart.Cutting, CriticalMissChart = CriticalMissChart.Bladed,
             MagicCriticalHitChance = 100, MagicCriticalHitEffect = 100, MagicCriticalMissChance = missChance,
+            AmmoType = ammoType, AmmoConsumption = ammoConsumption, MagicCriticalMissEffect = ammoType is null ? 0 : 30,
         },
     };
 
@@ -295,6 +296,62 @@ public sealed class CriticalEffectsStateTests
     {
         (-1, -1) => 0, (-1, 0) => 1, (-1, 1) => 2, (0, 1) => 3, (1, 1) => 4, (1, 0) => 5, (1, -1) => 6, _ => 7,
     };
+
+    [TestMethod]
+    public void ACriticalMissSpendsTheHerosAmmunitionOfItsWeaponsType()
+    {
+        // ARC-COMBAT-013 (CR15, AM4): a blade that uses bullets (type 1), two a shot, with a magic critical-miss effect of 30 (a
+        // critical self-hit takes all at d100 ≤ 31, else five shots at a second d100 ≤ 41), and 40 bullets the hero picked up. "Lose
+        // ammunition" takes five shots' worth (10), "destroy ammunition" the whole stack; with too few, nothing goes.
+        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        var seed = Seed();
+        seed = new(seed.Holders, [.. seed.Items, new SessionSeedItem("bullets", new(new(SessionItemType.Ammo, 7059, 100, 200), 1, 0, 0, 40, []) { AmmoType = 1 },
+            new CellCoord(105, 200))]);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "bullets", Accept).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon,
+            new(Kit[0].Kind, [], false, Blade(missChance: 100, ammoType: 1, ammoConsumption: 2)), (_, _) => true, Accept).Failure);
+        var golem = GolemCombat();
+        var seen = new HashSet<(SessionCriticalStepKind, SessionCriticalStepOutcome)>();
+        bool Done() => seen.Contains((SessionCriticalStepKind.DestroyAmmo, SessionCriticalStepOutcome.AmmunitionSpent))
+            && seen.Contains((SessionCriticalStepKind.LoseAmmo, SessionCriticalStepOutcome.AmmunitionSpent)) && seen.Any(s => s.Item2 == SessionCriticalStepOutcome.NoAmmunition);
+        for (var attempt = 0; attempt < 2000 && !Done(); attempt++)
+        {
+            owner.ClearStun(owner.Version, SessionLifeTarget.Hero);
+            owner.Heal(owner.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true });
+            if (owner.IsItemDestroyed("kit:1") || owner.QueryEquipment().Worn.Count == 0) Assert.Inconclusive("the blade left before the ammunition effects were seen");
+            var before = owner.QueryHeroAmmo().SingleOrDefault().Units;
+            // An invulnerable blade is never destroyed (CW3), so the ammunition steps run; a no-drop one stays wielded.
+            var result = owner.AttackCritter(owner.Version, new(golem)
+            {
+                HeroWorn = new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Weapon] = new("kit:1", Sturdy) { Invulnerable = true, NoDrop = true } },
+                TargetWorn = Worn(owner), TargetCell = GolemCell,
+            });
+            Assert.AreEqual((GameSessionFailure.None, GameSessionFailure.None), (result.Failure, result.StepFailure));
+            var spent = 0;
+            foreach (var step in result.Criticals.Where(step => step.Kind is SessionCriticalStepKind.DestroyAmmo or SessionCriticalStepKind.LoseAmmo))
+            {
+                seen.Add((step.Kind, step.Outcome));
+                Assert.AreEqual(DamageRecipient.Attacker, step.Whose);
+                switch (step.Outcome)
+                {
+                    case SessionCriticalStepOutcome.AmmunitionSpent:
+                        Assert.AreEqual(step.Kind == SessionCriticalStepKind.LoseAmmo ? 10 : before - spent, step.Units);
+                        Assert.AreEqual("bullets", step.Entity);
+                        spent += step.Units;
+                        break;
+                    case SessionCriticalStepOutcome.NoAmmunition:
+                        Assert.IsTrue(step.Kind == SessionCriticalStepKind.LoseAmmo ? before - spent < 10 : before - spent == 0, $"{step.Kind} with {before - spent}");
+                        break;
+                    default: Assert.Fail($"{step.Kind} {step.Outcome}"); break;
+                }
+            }
+            Assert.AreEqual(before - spent, owner.QueryHeroAmmo().SingleOrDefault().Units, "the stack lost exactly the spent units");
+        }
+        Assert.IsTrue(Done(), string.Join(",", seen));
+        Assert.IsTrue(owner.IsItemDestroyed("bullets"), "a stack spent to 0 is deleted");
+        Assert.IsTrue(seen.Any(s => s.Item2 == SessionCriticalStepOutcome.NoAmmunition), "after the stack is gone nothing is spent");
+    }
 
     [TestMethod]
     public void ACrippledArmDropsWhatItCanNoLongerHold()

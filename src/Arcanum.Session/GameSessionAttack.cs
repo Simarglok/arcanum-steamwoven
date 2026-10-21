@@ -531,7 +531,7 @@ public sealed partial class GameSessionOwner
         }
         if (damage.HitEffects.HasFlag(CriticalHitEffects.DropHelmet))
             recipient = CriticalDrop(SessionCriticalStepKind.DropHelmet, whose, recipient, EquipmentSlot.Helmet, recipientCell, dropMap, criticals, ref failure);
-        AmmunitionSteps(damage, recipient, criticals);
+        AmmunitionSteps(damage, recipient, criticals, ref failure);
         if (damage.HitEffects.HasFlag(CriticalHitEffects.DropWeapon))
             CriticalDrop(SessionCriticalStepKind.DropWeapon, whose, recipient, EquipmentSlot.Weapon, recipientCell, dropMap, criticals, ref failure);
         return (wear, failure);
