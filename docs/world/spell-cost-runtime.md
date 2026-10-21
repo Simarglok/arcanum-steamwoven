@@ -53,7 +53,7 @@ to write and the "last cost" the original keeps for reflection (MG15, slice MT10
 1. A spell number outside 0..222 that is not 10000 (no record) is refused (`SpellOutOfRange`).
 2. A cost of 0 or less pays nothing (no last cost); no payer pays nothing (the last cost is kept).
 3. **Charge cells first and alone**: a record with `ChargesFromCells:` asks the cell source port (`ISpellCellSource`,
-   filled by the technology lane: a critter pays `cost` cells, an item source its surcharge, TC1) before any other
+   filled by the technology lane, [charge cells](charge-cell-runtime.md), ARC-TECHNOLOGY-007: a critter pays `cost` cells, an item source its surcharge, TC1) before any other
    payment step and pays nothing else; the source refusing is `CellsRefused`. The original spends cells **whether or not
    the payment is applied** (the affordability checks spend them too); the request carries the apply flag for the source.
 4. **An item source** (object types 5..14) spends one spell charge when applied: 0 charges refuse (`NoCharges`), a negative
@@ -101,7 +101,8 @@ rule modes; this slice adds no rule-mode switch.
 
 ## Not ready
 
-- No caller: the run (MT9a) charges BEGIN and MAINTAIN through these rules; the spell UI (MT19, MT20a) and the AI (I8)
-  will show and weigh `CastCost`.
-- The charge-cell amounts and refusals are the technology lane's (TC1); this slice defines only the port and its place.
+- The run (MT9a) charges BEGIN and MAINTAIN through these rules. The character sheet's spells page (ARC-MAGIC-008) shows
+  `CastCost` and `MaintainCost` in its hints, as the original's text bar does. The casting UI (MT20a) and the AI (I8) will show
+  and weigh `CastCost`.
+- The charge-cell amounts and refusals are the technology lane's (TC1), implemented by ARC-TECHNOLOGY-007 ([charge cells](charge-cell-runtime.md)); this slice defines only the port and its place.
 - The recharge event (scheduling, merging, saving) is MT11's; reflection's use of the last cost is MT10's (MG15).

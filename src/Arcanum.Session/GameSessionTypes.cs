@@ -216,6 +216,8 @@ public enum GameSessionFailure
     InvalidObject, ObjectUnavailable,
     // Pick locks (ARC-SKILLS-006).
     PickLockUnavailable, InvalidLockpick,
+    // Repair (ARC-SKILLS-007).
+    RepairUnavailable,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }

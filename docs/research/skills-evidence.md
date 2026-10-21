@@ -409,6 +409,12 @@ failure, and fixes a broken item at a 5 % cost as an automatic success. The
 amount is applied whatever the roll (SK7). NPC repair in the trade window is a
 forced repair for gold (service (0x4C8E60)).
 
+**Original check (ARC-SKILLS-007):** read in the retail executable by two readers, rows
+[RP1–RP5](original-verification-ledger.md#repair-arc-skills-007). They confirm SK7 (the case sets success whatever the roll), add
+that the repair fate is used before the case also when there is nothing to repair, that the player's skill-bar repair makes the
+PC the repairer of any item it holds without action points, and that the master's 1 % with the critical flag is reachable only when
+the run restores nothing (an effectiveness of 0, which clears the case's success), on an item that is not broken.
+
 ### Spot trap and disarm traps
 
 Spotting (spot (0x4BBE40)) is tried for every unspotted trap on the next

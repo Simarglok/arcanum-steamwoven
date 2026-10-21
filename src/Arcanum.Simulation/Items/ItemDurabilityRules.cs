@@ -196,12 +196,36 @@ public static class ItemDurabilityRules
         return amount <= 0 ? 1 : amount;
     }
 
+    /// <summary>
+    /// ARC-SKILLS-007: how many hit points the Repair skill's own run restores (the repair case of the skill run, ledger RP2): the
+    /// whole maximum with the PC's fate full repair, else <c>maximum × effectiveness / 100</c>, at least 1 only while the
+    /// effectiveness is above 0; with an effectiveness of 0 or less nothing is restored (the run is not forced, unlike the
+    /// service's, <see cref="RepairAmount"/>).
+    /// </summary>
+    public static int SkillRepairAmount(ItemCondition item, int effectiveness, bool fullRepair)
+    {
+        var maximum = MaximumHitPoints(item);
+        // The floor follows both branches, as in the case: a fated repair of an item whose maximum is 0 or less is 1 or 0 too.
+        var amount = fullRepair ? maximum : (int)((long)maximum * effectiveness / 100);
+        return amount > 0 ? amount : effectiveness > 0 ? 1 : 0;
+    }
+
+    /// <summary>
+    /// ARC-SKILLS-007: the hp_adj share of the Repair skill's own run (ledger RP2): <see cref="RepairAdjustmentPercent"/>, except that
+    /// a master who restores nothing (an effectiveness of 0, which clears the case's success) on an item that is not broken takes 1 %
+    /// when the check's critical flag is set.
+    /// </summary>
+    public static int SkillRepairAdjustmentPercent(RepairTraining repairer, bool broken, int amount, bool critical) =>
+        repairer == RepairTraining.Master && !broken && amount == 0 && critical ? 1 : RepairAdjustmentPercent(repairer, broken);
+
     /// <summary>The share of the maximum a repair takes from hp_adj, by the repairer's training: none 10, apprentice 5, expert 1,
-    /// master 0, and 5 for a broken item (which only a master repairs).</summary>
+    /// master 0, and 5 when a master repairs a broken item (ledger RP2: a repairer who is not a master keeps the table for a broken
+    /// item that took damage again).</summary>
     public static int RepairAdjustmentPercent(RepairTraining repairer, bool broken)
     {
         if (!Enum.IsDefined(repairer)) throw new ArgumentOutOfRangeException(nameof(repairer));
-        return broken ? 5 : repairer switch { RepairTraining.None => 10, RepairTraining.Apprentice => 5, RepairTraining.Expert => 1, _ => 0 };
+        return broken && repairer == RepairTraining.Master ? 5
+            : repairer switch { RepairTraining.None => 10, RepairTraining.Apprentice => 5, RepairTraining.Expert => 1, _ => 0 };
     }
 
     /// <summary>
@@ -210,7 +234,8 @@ public static class ItemDurabilityRules
     /// repaired by any repairer and stays broken unless the repairer is a master (only the quote turns a broken item away from
     /// others). Otherwise the damage falls by
     /// <paramref name="amount"/> (to 0 at least) and hp_adj by <c>trunc(maximum × percent / 100)</c> of the maximum before the
-    /// repair, without a clamp. <paramref name="amount"/> is <see cref="RepairAmount"/> and <paramref name="adjustmentPercent"/>
+    /// repair, without a clamp. An amount of 0 (the skill's own run at effectiveness 0) restores nothing and still takes the share.
+    /// <paramref name="amount"/> is <see cref="RepairAmount"/> or <see cref="SkillRepairAmount"/> and <paramref name="adjustmentPercent"/>
     /// <see cref="RepairAdjustmentPercent"/> as the original passes them; the payment, made whatever the skill gives, is the
     /// caller's.
     /// </summary>
@@ -218,7 +243,7 @@ public static class ItemDurabilityRules
     public static ItemRepairOutcome Repair(ItemCondition item, int amount, int adjustmentPercent, RepairTraining repairer)
     {
         if (!Enum.IsDefined(repairer)) throw new ArgumentOutOfRangeException(nameof(repairer));
-        ArgumentOutOfRangeException.ThrowIfLessThan(amount, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
         ArgumentOutOfRangeException.ThrowIfNegative(adjustmentPercent);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(adjustmentPercent, 100);
         var master = repairer == RepairTraining.Master;

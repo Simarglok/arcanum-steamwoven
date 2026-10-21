@@ -3,10 +3,11 @@
 Status: **Implemented bounded component**, work item ARC-WORLD-053 (2026-10-20), the item durability slice of the
 [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted).
 Godot-free durability rules in `Arcanum.Simulation.Items` and the session's item condition state in `Arcanum.Session`
-(snapshot schema 22). Combat calls them since ARC-COMBAT-007 (attack wear); no viewer or trade caller uses them yet.
+(snapshot schema 22). Combat calls them since ARC-COMBAT-007 (attack wear) and the hero's Repair skill since ARC-SKILLS-007, which
+the AREA viewer's inventory window runs with the kit's and the object rows' baselines; no trade caller uses them yet.
 
 Requirements: [FR-ITEM-011](../requirements/items-economy.md#fr-item-011) (durability, break and the item side of repair).
-The Repair skill rule itself is ARC-SKILLS-011 (skills plan), which calls the item side below.
+The Repair skill's own run is ARC-SKILLS-007 ([repair](repair-runtime.md)), which calls the item side below.
 
 Every rule was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers: the first reading of ARC-RES-062
 ([item durability](../research/technology-evidence.md#item-durability-fr-item-011)) and a second reading for this slice
@@ -74,8 +75,11 @@ ARC-DATA-021).
   again is repaired by any repairer and stays broken unless the repairer is a master: only the quote turns a broken item away
   from a repairer who is not a master.
 - `RepairAmount`: the whole maximum with the PC's fate full repair, else `maximum × effectiveness / 100`, at least 1 (the
-  service forces success). `RepairAdjustmentPercent`: the repairer's training none 10, apprentice 5, expert 1, master 0,
-  and 5 for a broken item. The payment, made whatever the skill gives, is the trade owner's.
+  service forces success; its repairer is an NPC, so no fate applies there, ledger RP3). `RepairAdjustmentPercent`: the repairer's training none 10, apprentice 5, expert 1, master 0,
+  and 5 when a master mends a broken item (ledger RP2: a repairer who is not a master keeps the table). The payment, made
+  whatever the skill gives, is the trade owner's. The skill's own run is not forced: `SkillRepairAmount` restores nothing at an
+  effectiveness of 0, and `Repair` then still takes the share (ARC-SKILLS-007, [repair](repair-runtime.md)). Ledger RP2 places
+  this item part in the run's own repair case, which the service reaches through a forced run.
 
 ## Session
 
@@ -113,8 +117,8 @@ will run, calls `DamageItem` for armour wear (+ 10 at the hit location), the cri
 attacker's weapon wear by the struck material, and `DestroyItem` for the "destroy/explode weapon" critical
 ([attack wear](attack-resolver-runtime.md#wear-arc-combat-007), ledger CW1–CW10). The hero's attack on an item on the ground
 (`AttackObject`, ARC-COMBAT-008, [object damage](object-damage-runtime.md)) damages it through `DamageItem`. Trade
-(sale price, quote and payment), the Repair skill (ARC-SKILLS-011) and the schematic gate (TECH-4) call the rules when they
-exist.
+(sale price, quote and payment) and the schematic gate (TECH-4) call the rules when they exist; the Repair skill's run calls
+`SkillRepairAmount`, `SkillRepairAdjustmentPercent` and `Repair` since ARC-SKILLS-007 ([repair](repair-runtime.md)).
 
 ## Differences from the original
 
@@ -129,7 +133,7 @@ exist.
 
 - Area damage and script action 60 do not reach the session yet; armour and weapon wear (ARC-COMBAT-007) and the hero's hit on
   an item on the ground (ARC-COMBAT-008) do, but the viewer passes no item baselines yet.
-- No trade, price function, repair window or payment; no Repair skill run (ARC-SKILLS-011).
+- No trade, price function, repair window or payment; the Repair skill's run is ARC-SKILLS-007.
 - The bust and destroy sounds and the BUST script are reported to the host, not played or run here.
 - Breaking walls (a branch of 0x43F1C0 no attack reaches) is not implemented; portals, containers, scenery and traps break in
   the [object damage](object-damage-runtime.md) domain (ARC-COMBAT-008).

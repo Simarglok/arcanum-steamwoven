@@ -42,7 +42,7 @@ Agreed through the coordinator on 2026-10-20:
   rule ([SK7](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)),
   fate points (built as ARC-WORLD-054) and the shared character-point spend and refund
   path (built as ARC-WORLD-052). Item durability (item hit points and the broken
-  state) is owned here and is the input of the Repair slice ARC-SKILLS-011.
+  state) is owned here and is the input of the Repair slice (built as ARC-SKILLS-007, [repair](../world/repair-runtime.md)).
 
 ## Vocabulary and evidence
 
@@ -379,7 +379,8 @@ check, action-point or time cost and no experience.
 
 Re-read for ARC-WORLD-053 by a second reader (F2, [ledger DU1–DU8](original-verification-ledger.md#item-durability-arc-world-053)): every row
 below agrees; the second reader added the price's final bounds (negative 0, exactly 1 is 2), that the unwield moves only items in wear
-slots and the item is dropped when it fails, and the repair table (training none 10, apprentice 5, expert 1, master 0; 5 for a broken item).
+slots and the item is dropped when it fails, and the repair table (training none 10, apprentice 5, expert 1, master 0; 5 for a broken item,
+corrected by [RP2](original-verification-ledger.md#repair-arc-skills-007) to a master's broken item only).
 
 - **Fields and formulas**: hp_pts (0x1B), hp_adj (0x1C) and hp_damage (0x1D)
   are ordinary saved object fields (an instance stores overrides). A
@@ -477,7 +478,7 @@ decided every row on 2026-10-20 ([owner decisions](#owner-decisions-2026-10-20))
 
 | ID | Where | Original 1.0.7.4 | Verdict | Proposal (Steamwoven / Original) |
 | --- | --- | --- | --- | --- |
-| TC1 | cell payment (0x450420 with 0x461590), F2 | An item source pays `cost × (1 + p / c)` cells: a strong technologist pays double, a mage the minimum; the technological adjustment branch looks swapped | Original bug | **Decided** ([owner](#owner-decisions-2026-10-20)): switch. Steamwoven `2 × cost − trunc(cost × p / c)` (a technologist pays fewer cells); Original keeps it. Reaches records 147 (one weapon) and 168 (three armours); TECH-6 |
+| TC1 | cell payment (0x450420 with 0x461590), F2 | An item source pays `cost × (1 + p / c)` cells: a strong technologist pays double, a mage the minimum; the technological adjustment branch looks swapped | Original bug | **Decided** ([owner](#owner-decisions-2026-10-20)): switch. Steamwoven `2 × cost − trunc(cost × p / c)` (a technologist pays fewer cells); Original keeps it. Reaches records 147 (one weapon) and 168 (three armours); **implemented** by ARC-TECHNOLOGY-007 |
 | TC2 | action 129 (0x44A7BD, 0x460B50, 0x45FD40, 0x57C6E0), F2 | Calls an unfilled slot of an uninitialised callback structure: undefined | Original bug (crash class) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: open the window with (PC, PC) or (NPC, its PC leader); unused in the data; **implemented** for the PC by ARC-TECHNOLOGY-005 and for an NPC with a PC leader by ARC-TECHNOLOGY-006 |
 | TC3 | assembly (0x56E720), F2 | A failed product creation returns after the components are spent and some products given | Original bug (latent) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes all or nothing (room and creation checked before consuming); no switch; TECH-4 |
 | TC4 | assembly (0x56E720), second reader | Both components are found before consuming, so one item matching both lists would be consumed twice (the second time a deleted object) | Original bug (latent, use of a deleted object) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: a found item is reserved for one component; no installed record triggers it; TECH-4 |
@@ -500,7 +501,8 @@ of the anomaly table above under D2; each is implemented by the slice named.
   No switch (TECH-4).
 - **TC1, switch.** Steamwoven: an experienced technologist pays fewer cells; an item source needs `2 × cost −
   trunc(cost × p / c)` cells (a strong technologist `cost`, a neutral holder about `1.5 × cost`, a mage `2 × cost`).
-  Original keeps the executable's `cost + trunc(cost × p / c)`. Implemented with the cell source in TECH-6.
+  Original keeps the executable's `cost + trunc(cost × p / c)`. Implemented with the cell source by ARC-TECHNOLOGY-007
+  ([charge cells](../world/charge-cell-runtime.md), ledger [CC1–CC8](original-verification-ledger.md#charge-cells-arc-technology-007)).
 - **TC7, switch.** Steamwoven: the repair quote starts from the undamaged sale price, `trunc(P_full / 2) × damage /
   maximum`, at least 2, so the cost grows with the damage and a nearly intact item is cheap. Original keeps the
   executable's double count. Implemented in the item durability slice.
@@ -647,7 +649,9 @@ this document start at F1 or F2.
    No launcher change (no new argument).
 6. **TECH-6 Charge cells and tech devices** (Simulation, with the magic
    engine; FR-MAGIC-010/011): the cell source behind the engine's payment port
-   (critter `cost`, item source TC1 decided, ammunition type 2), the list of
+   (critter `cost`, item source TC1 decided, ammunition type 2; **done** as rules and a
+   session port by ARC-TECHNOLOGY-007, [runtime](../world/charge-cell-runtime.md); the
+   consumption in session state waits for session ammunition, ARC-WORLD-066), the list of
    tech items and records that reach the engine (70 item spell slots, records
    147, 168 and 187), a test that the engine's MAINTAIN charges maintained
    tech records (the stage itself stays with the magic slices), and the rule that
@@ -656,7 +660,7 @@ this document start at F1 or F2.
    magic research owns).
 
 **Item durability** (FR-ITEM-011; done: ARC-WORLD-053, [runtime](../world/item-durability-runtime.md), ledger DU1–DU8) is one more slice, owned by this research and
-needed by ARC-SKILLS-011 (Repair). Its type is `WORLD` (item state in the
+needed by the Repair slice (built as ARC-SKILLS-007). Its type is `WORLD` (item state in the
 session runtime; the next free `WORLD` number at task creation): hp fields per item in the session (prototype values with
 instance overrides), maximum and current, the damage setter, the two-step
 break (destroyed bit, damage reset, unwield or drop, BUST hook, deletion),

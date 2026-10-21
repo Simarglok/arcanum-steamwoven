@@ -602,6 +602,9 @@ Native smoke (`ARC-WORLD-051 native-smoke portal PASS`, after the talk smoke):
    The session then records the door open, and after the animation it is drawn
    on its open frame.
 2. A press on the door closes it, and it is drawn on its T0 frame again.
+   Bodies drawn in front can hide an open frame at every pixel, so the door cannot be pressed (ashbury haunted castle:
+   a tall wall two tiles south of a door). Since ARC-WORLD-061 the smoke closes such a door again by a use, lists it under
+   `Hidden` and tries the next door; it fails when all of the first eight are hidden.
 3. When the map has a door the player cannot open, a press next to it is
    refused and that door stays closed.
 4. Since ARC-SKILLS-006, when the PC holds lockpicks (the halfling-male hero's kit), the inventory's *Pick a lock* button arms
