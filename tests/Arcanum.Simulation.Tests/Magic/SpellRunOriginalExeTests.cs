@@ -64,7 +64,8 @@ public sealed class SpellRunOriginalExeTests
         bool Mg3(Row c) => c["action"] == 1 && c["margin"] != 0 && c["parent"] != 0 && c["parentType"] is 15 or 16 && c["source"] != 0;
         Run(file, c => Stage(c, MagicAnomalyProfile.Original), c =>
                 $"{c["result"]} {c["actionAfter"]} {c["payCalls"]} {c["pay0"]} {c["pay1"]} {c["message"]} {c["stackAsked"]} {c["cancels"]} {c["bar"]} {c["processed"]} {c["stackOn"]}",
-            ("steamwoven", "MG3", Mg3, c => Stage(c, MagicAnomalyProfile.Steamwoven)),
+            // MG3 and MG29 (owner decision 2026-10-21) both change only a MAINTAIN tick with a margin of a critter parent's sourced run.
+            ("steamwoven", "MG3, MG29", Mg3, c => Stage(c, MagicAnomalyProfile.Steamwoven)),
             new Mutant("technology records are checked at BEGIN", c => Stage(c, MagicAnomalyProfile.Original, r => r with { Technology = false })),
             new("a free run pays", c => Stage(c, MagicAnomalyProfile.Original, null, run => run with { Flags = run.Flags & ~SpellRunFlags.Free })),
             new("no surcharge", c => Stage(c, MagicAnomalyProfile.Original, null, run => run with { Margin = 0 })),

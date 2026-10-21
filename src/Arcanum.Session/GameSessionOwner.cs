@@ -1017,7 +1017,8 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(world);
-        if (_passWorld is not null || budget < 1 || budget > _events.Limits.MaxPerPass)
+        // A pass inside the spell-run rules (a host port) is refused: it would consume their events without running them.
+        if (_passWorld is not null || _spellRunsBusy || budget < 1 || budget > _events.Limits.MaxPerPass)
             return new(GameSessionFailure.InvalidEventPass, null, Array.Empty<SessionLifeFiring>(), new(_identity, _revision));
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         var firings = new List<SessionLifeFiring>();

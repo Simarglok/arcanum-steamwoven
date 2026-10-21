@@ -304,7 +304,9 @@ public static class SpellRunRules
                 if (!payment.Succeeded) (failed, status) = (true, SpellStageStatus.MaintainCost);
             }
         }
-        if (run.Margin != 0)
+        // MG29: the original charges the surcharge in every case; Steamwoven not for a free run, after a failure, or at a
+        // maintenance cost of 0.
+        if (run.Margin != 0 && (profile.SurchargeAlways || (pay && !failed && record.MaintainCost != 0)))
         {
             var cost = SurchargedCost(record.MaintainCost, run.Margin, facts.SourceCaster);
             var payment = PayMaintenance(cost, run, record, facts, cells);

@@ -403,7 +403,7 @@ Read in the executable by two readers for the run's creation, stage, times and c
 [ledger "Spell runs"](original-verification-ledger.md#spell-runs-arc-magic-009), RN1–RN14; time, stage and cap F3), with these
 precisions: a timed run makes `DurationTriggerCount:` + 1 periods before its END; the cap counts runs that were processed at
 least once and refuses a parent that is no critter; MAINTAIN checks and charges technology records too, and charges the
-surcharged maintenance even for a free run (MG29); a full run table quits the game (MG28). The implementation is the
+surcharged maintenance even for a free run (MG29: Steamwoven does not, owner decision 2026-10-21); a full run table quits the game (MG28). The implementation is the
 [spell run rules](../world/spell-run-rules.md). The scheduler and the interrupts below were read the same way by ARC-MAGIC-010
 ([ledger "Spell run processing"](original-verification-ledger.md#spell-run-processing-arc-magic-010), RP1–RP14; the scheduler
 and the interrupt's action F3) and stand at F2/F3, with these precisions: "nothing applied" is decided per pass (an action

@@ -138,6 +138,7 @@ Owner decisions 2026-10-20: every difference is documented.
 | Original 1.0.7.4 | Steamwoven | Mode |
 | --- | --- | --- |
 | With a resistance margin a maintenance tick charges the plain maintenance and then the surcharged one (MG3). | Only the surcharged maintenance. | `MagicAnomalyProfile.MaintenancePaysBoth` (Original) |
+| The surcharged maintenance is charged by a free run, after a failed check or payment, and — at least 1 — by a timed spell whose maintenance cost is 0 (MG29). | None in those three cases (owner decision 2026-10-21). | `MagicAnomalyProfile.SurchargeAlways` (Original) |
 | The maintained-run count answers 0, so free slots are always intelligence / 4 (MG11). | The runs holding the critter's slots are counted. | `MagicAnomalyProfile.MaintainedCountIsZero` (Original) |
 | One run flag is both "unresistable" and "final END scheduled": an unresistable spell ends after BEGIN, a run whose END is scheduled is unresistable (MG19). | Two flags. | `MagicAnomalyProfile.UnresistableIsFinalEnd` (Original) |
 | A full run table quits the game (MG28). | The cast is refused. | both (no-crash) |
@@ -150,10 +151,7 @@ Owner decisions 2026-10-20: every difference is documented.
 | A non-critter's aptitude and a missing target's type keep the slot's previous values. | No aptitude, no target. | — |
 | The run reads its objects, the record and the globals directly; the presentation (facing, eye candy, casting goal) and the multiplayer packets are part of creation. | The caller passes the facts and starts the run; multiplayer is not modelled. | — |
 
-MG6 (the aptitude scaling of durations never applies) follows the original in both modes, as decided. MG29 is recorded for the
-owner: the surcharged maintenance is paid even for a free run, after a failed check, and — at least 1 — by a timed spell whose
-maintenance cost is 0; both modes follow the original until the owner decides (recommendation in the
-[plan](../research/magic-implementation-plan.md)). Three more are recorded for the owner by ARC-MAGIC-010, each following the
+MG6 (the aptitude scaling of durations never applies) follows the original in both modes, as decided. Three more are recorded for the owner by ARC-MAGIC-010, each following the
 original in both modes until decided: MG30 (the cancels' interrupts are refused by the guard and leave runs without a tick or an
 END; MT10), MG31 (interrupting a timed run with CALLBACK but no END_CALLBACK components does not end it; one technology record),
 MG32 (an interrupt or process event outlives the free and can hit a new run in the reused slot). The session keeps the runs unchanged when
@@ -167,3 +165,6 @@ an action's or event's queued events do not fit; what the host's ports already d
 - The other object (the invocation's +0xA0, copied to the run's +0x108) is not carried by MT7's invocation yet, so a run's
   `Other` is always null; the slice that needs it (a spell aimed at a second object) adds it to the invocation.
 - The casting goal and its eye candy are MT20a's.
+- While the rules act, the session refuses calls back into its runs and an event pass from a host port (so nothing is overwritten
+  or consumed unrun); a component that casts a spell (MT12–MT18) will need its own path, as the original's guard refuses only
+  processing.

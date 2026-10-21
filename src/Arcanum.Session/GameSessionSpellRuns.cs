@@ -81,7 +81,8 @@ public sealed partial class GameSessionOwner
     /// the events the rules queue are added, the ticks they remove are removed, and the notes are handed back. Refused, in order:
     /// an undefined action, a run outside 0..511, a missing object, or a call from inside the run rules (a host port;
     /// <see cref="GameSessionFailure.InvalidSpellRun"/>); the version; the event budget (the runs stay as they were; what the host's
-    /// ports already did is the host's); the revision. An action that changes nothing is <see cref="GameSessionDisposition.NoChange"/>.
+    /// ports already did is the host's); the revision. An action that changes nothing is <see cref="GameSessionDisposition.NoChange"/>;
+    /// its notes (payments, messages) still come back and are the host's to apply.
     /// </summary>
     public SessionSpellRunResult ActOnSpellRun(GameSessionVersion expected, ISpellRunHost host, SessionSpellRunAction action)
     {

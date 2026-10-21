@@ -33,6 +33,13 @@ public sealed record MagicAnomalyProfile
     public bool MaintenancePaysBoth { get; init; }
 
     /// <summary>
+    /// MG29 (ARC-MAGIC-009, owner decision 2026-10-21, ARC-MAGIC-010): with a resistance margin a maintenance tick charges the
+    /// surcharged maintenance even for a free run, after a failed check or payment, and — at least 1 — for a timed spell whose
+    /// maintenance cost is 0. Steamwoven takes no surcharge in those three cases.
+    /// </summary>
+    public bool SurchargeAlways { get; init; }
+
+    /// <summary>
     /// MG11 (ARC-MAGIC-009): the count of a critter's maintained runs (0x450AC0) walks the run table and answers 0, so its free
     /// maintenance slots are always intelligence / 4 (the AI's "no free slot" test). Steamwoven counts the runs that hold its slots.
     /// </summary>
@@ -52,7 +59,7 @@ public sealed record MagicAnomalyProfile
     public static readonly MagicAnomalyProfile Original = new()
     {
         Name = "original", SaveSubtractsResistance = true, SummonedTestReadsLastFlags = true, MaintenancePaysBoth = true,
-        MaintainedCountIsZero = true, UnresistableIsFinalEnd = true,
+        SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true,
     };
 
     /// <summary>Both settings, default first.</summary>
