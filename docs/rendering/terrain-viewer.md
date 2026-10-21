@@ -289,7 +289,8 @@ lab retains its historical true/true default. Common engine-free v1 settings
 codec supports the host fallback, but WORLD stores only
 `user://world_diagnostic_input_v1.json`, never the lab file. Missing, unreadable,
 corrupt or unsupported settings fall back to WORLD defaults; isolated automated
-restart tests do not overwrite ordinary preferences.
+restart tests do not overwrite ordinary preferences, and since ARC-DEV-032 no automated run reads or writes
+them ([automated runs](#automated-runs-and-the-players-settings-arc-dev-032)).
 Modal digital navigation is single-press edge driven, not render/event-rate
 repeat; held keys, D-pad, echo and unrelated mouse events do not advance it.
 Focused numeric editors retain native digit/edit/Enter/Tab input. Mouse clicks
@@ -516,7 +517,8 @@ step.
 
 While `crash-site-area` has a game session (every published area since ARC-SCRIPT-006),
 the original **F7** saves and **F8** loads one quick-save slot,
-`user://saves/quicksave.json` (Godot user data of the viewer). There is no save
+`user://saves/quicksave.json` (Godot user data of the viewer; an automated run keeps its slots in its own
+folder, [ARC-DEV-032](#automated-runs-and-the-players-settings-arc-dev-032)). There is no save
 list, naming, confirmation or autosave. Elsewhere F7/F8 stay reserved. Map mode
 has its own slot and also loads a save of another map
 ([ARC-WORLD-038](area-map-mode.md#quick-save-arc-world-038)).
@@ -779,7 +781,8 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
   still override it for that run with environment variables: `ARC_HD_PACK=DIR` (one pack directory
   outside the repository; implies profile Hd), `ARC_VISUAL_PROFILE=hd|legacy` (`hd` without a pack
   draws everything Legacy as `NoPack`) and `ARC_HD_BUDGET_PATH=FILE` (default
-  `user://hd_budget_v1.json`; missing or invalid means the ceilings). The start line
+  `user://hd_budget_v1.json`, which an automated run does not read (ARC-DEV-032); missing or invalid means the
+  ceilings). The start line
   `ARC-RENDER-014 visual profile=…` names the pack id, scale and open status, never a path.
 
 Checks: `HdPresentationTests` (scaled crop and axis limit; frame questions; the nearest pack at
@@ -1157,7 +1160,8 @@ ARC-INPUT-001 the world wheel and `+`/`-` do not zoom in WORLD (they did, with
 factors 1.25/0.8 stopping exactly at 1.00); exact zoom is a palette action.
 Standalone preview controls remain unchanged.
 
-Separate `user://world_diagnostic_zoom_v1.json` stores numeric
+Separate `user://world_diagnostic_zoom_v1.json` (an automated run uses its own file,
+[ARC-DEV-032](#automated-runs-and-the-players-settings-arc-dev-032)) stores numeric
 `{"version":1,"zoom":2.0}` with finite inclusive 0.125..8. Missing, unreadable,
 malformed/type/version/range-invalid files fall back to 2.00. Reset scene/Reload retain
 the preferred value and reset actor/Follow; Reset preferences persists
@@ -1275,6 +1279,32 @@ separate. Ordinary `tools/arcanum-local launch terrain --mode world-diagnostic`
 must use the selected sealed RENDER006 manifest, no automation flags, and owned
 isolated preference paths; actual Idle/Walk observation and post-run signature
 and complete payload integrity are still mandatory outside the sealed bundle.
+
+## Automated runs and the player's settings (ARC-DEV-032)
+
+A self-test (`--self-test`), a native smoke (`--native-smoke`) or the WORLD settings validation (`--world-settings-test`)
+never reads, writes or deletes the player's saved
+viewer files: the app marks the process automated before it reads any setting (`ViewerAutomatedStorage`). Each store
+then picks its path by `ViewerStoragePaths.Choose` (Core): an explicit test path wins
+(`WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH`, `WORLD_DIAGNOSTIC_ZOOM_TEST_PATH`, and as before `ALWAYS_RUN_TEST_PATH`,
+`VISUAL_PROFILE_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `ARC_HD_BUDGET_PATH`); otherwise an automated run uses a fresh
+temporary folder of its own process (`arcanum-viewer-automated-<pid>-<id>` under the system temporary folder, deleted when
+the viewer app exits); only an ordinary run uses the `user://` file. Per setting:
+
+| Setting | Ordinary run | Automated run without a test path |
+| --- | --- | --- |
+| Input preferences `world_diagnostic_input_v1.json` | `user://` | the run's folder (starts at the WORLD defaults) |
+| Zoom `world_diagnostic_zoom_v1.json` | `user://` | the run's folder (starts at 2.00) |
+| Quick saves `saves/`, `saves/map/` | `user://` | the run's folder (stages that test saving use their own slot as before) |
+| HD budget `hd_budget_v1.json` | `user://` | none (the contract ceilings) |
+| Always run, visual profile, audio volumes | `user://` | none, as before (off, Legacy, defaults) |
+| HD pack folders | discovered | not searched, as before |
+
+So a zoom the player saved (for example 1.70) no longer changes a self-test, and a self-test's own zoom steps no longer
+land in the player's file. The self-test checks it first and fails with `SELF_TEST_SETTINGS_NOT_ISOLATED` when the zoom or
+input store would use a `user://` path; the log prints `ARC-DEV-032 self-test PASS settings isolated (the zoom and input stores use no user:// file)` and
+`ARC-DEV-032 automated run: settings and saves are isolated from the player's files` when the folder is first used. The
+WORLD settings validation launch still requires both explicit test paths. Checks: `ViewerStoragePathsTests`.
 
 ## Reproducible local verification
 
