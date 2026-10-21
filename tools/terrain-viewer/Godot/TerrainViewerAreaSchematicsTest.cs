@@ -148,12 +148,13 @@ public partial class TerrainViewerApp
             HandleWorldPulse(Pulse(confirm: false, cancel: true), true);
             Require(!SchematicsOpen && !PaletteOpen, "controller cancel closed the window without opening the palette");
 
-            // Script action 129 (SW8): the PC's request opens the window once nothing else owns input; an NPC crafter is refused by name.
+            // Script action 129 (SW8): the PC's request opens the window once nothing else owns input; an NPC crafter without map data
+            // (ARC-TECHNOLOGY-006: the window opens with the NPC's home-map facts) is named and opens nothing.
             var pc = new ScrObjectRef(actor.Map.RuntimeMap, AreaScriptHost.PcCode);
             var npc = new ScrObjectRef(actor.Map.RuntimeMap, "npc:1");
-            QueueScriptSchematics([new(npc, pc, AreaSchematicScriptStatus.NpcCrafterNotReady)]);
+            QueueScriptSchematics([new(npc, pc, AreaSchematicScriptStatus.Open)]);
             TakeScriptSchematics();
-            Require(!SchematicsOpen && _schematicsStatus == "script 129: an NPC crafter is not ready (later slice)", "NPC crafter refused: " + _schematicsStatus);
+            Require(!SchematicsOpen && _schematicsStatus == "script 129: no data of the NPC crafter", "NPC crafter without data: " + _schematicsStatus);
             ToggleWorldSettings();
             Require(PaletteOpen, "the palette is open");
             QueueScriptSchematics([new(pc, pc, AreaSchematicScriptStatus.Open)]);
@@ -162,6 +163,30 @@ public partial class TerrainViewerApp
             ToggleWorldSettings();
             TakeScriptSchematics();
             Require(SchematicsOpen, "the PC's request opened the window");
+            InventoryKey(Key.Escape);
+
+            // ARC-TECHNOLOGY-006: an NPC crafter (synthetic: degree 1 in discipline 0, two parts in its own list on another map's seed)
+            // through the production open path the dialog's `su` and action 129 use; its products go to its list, the hero's parts stay.
+            var smithSeed = new SessionMapInventorySeed([new("smith", SessionHolderKind.Npc, false, false, [], ["s1", "s2"])],
+                [new("s1", new SessionItemFacts(part, 5, 0, 10, null, []), null), new("s2", new SessionItemFacts(part, 5, 0, 10, null, []), null)]);
+            Require(owner.AttachMapInventory(new SessionMapId(actor.Map.RuntimeMap + 1), smithSeed).Disposition == GameSessionDisposition.Changed, "attach the smith");
+            var smith = new SessionNpcCrafter(new("smith", new(CharacterRace.Human, false, [8, 8, 8, 8, 8, 8, 8, 8], 0, 0, 1, 0, [.. new int[12]], [.. new int[4]],
+                [.. new int[16]], [1, 0, 0, 0, 0, 0, 0, 0], 1, 2, 0, 0), 0), AdvancementModifiers.None);
+            SelectSchematicTab(AreaSchematicTab.Found);
+            _schematicScriptOpen = (owner, smith);
+            TakeScriptSchematics();
+            Require(SchematicsOpen && _schematicsPanel.ViewForSelfTest is { Crafter: "smith", Tab: AreaSchematicTab.Learned, Pages: 1, Record: 2000, Button: AssemblyButton.CanAssemble },
+                "the NPC crafter's window opened, reset to the learned tab: " + _schematicsPanel.ViewForSelfTest);
+            SelectSchematicTab(AreaSchematicTab.Found);
+            Require(_schematicsPanel.ViewForSelfTest is { Tab: AreaSchematicTab.Found, Placeholder: true, Pages: 0 }, "an NPC crafter's found tab is empty");
+            SelectSchematicTab(AreaSchematicTab.Learned);
+            var heroMade = owner.QueryMadeItems().Count;
+            InventoryKey(Key.Tab);
+            Require(owner.QueryNpcInventory("smith").Count == 2 && owner.QueryMadeItems().Count == heroMade && owner.IsItemDestroyed("s1")
+                && _schematicsPanel.MessageForSelfTest == "Done" && _schematicSounds.Last() == SchematicAssemblyRules.CompletedSoundBase,
+                "the NPC assembled from its own list into its own list (text 2, 3018)");
+            InventoryKey(Key.Escape);
+            Require(!SchematicsOpen, "Escape closed the NPC crafter's window");
 
             // A hero who dies while the window is open closes it; T is then refused.
             Require(owner.Kill(owner.Version, SessionLifeTarget.Hero).Disposition == GameSessionDisposition.Changed, "kill the hero");
@@ -170,7 +195,7 @@ public partial class TerrainViewerApp
             InventoryKey(Key.T);
             Require(!SchematicsOpen && _schematicsStatus == "refused: the hero is dead", "T for a dead hero: " + _schematicsStatus);
             return "no-hero refusal, open with T (3008), discipline/page/tab controls with 3010/3011 and bounds, keys owned, refused button texts 0 and 1, " +
-                "assembly through the session (2 made, text 2, 3018), Escape (3009), position kept, controller cancel, script 129 PC open and NPC refusal, dead-hero close";
+                "assembly through the session (2 made, text 2, 3018), Escape (3009), position kept, controller cancel, script 129 PC open and an NPC without data named, an NPC crafter's window (reset, empty found tab, assembly into its list), dead-hero close";
         }
         finally
         {
@@ -254,6 +279,81 @@ public partial class TerrainViewerApp
             Require(session.Version.Revision == revision, "the live session is untouched");
             GD.Print("ARC-TECHNOLOGY-005 native-smoke schematics PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Data = _schematicData.Detail, Hero = hero, Live = live, Assembly = made, Tried = tried }));
+        }
+        finally
+        {
+            if (SchematicsOpen) EndSchematics();
+            _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
+        }
+    }
+}
+
+public partial class TerrainViewerApp
+{
+    /// <summary>
+    /// ARC-TECHNOLOGY-006 native observation on the original data: a dialog speaker of the shown map whose home-map data give an NPC
+    /// crafter is passed to the production path the dialog's `su` takes once its talk ended; the window opens over the live session
+    /// with that NPC as crafter and closes, changing nothing. Then, on a detached copy with the seeds attached again, the NPC is given
+    /// the components of a learned record and (a synthetic sheet with every degree 7) assembles it into its own list. Prints counts and
+    /// outcomes only.
+    /// </summary>
+    private async Task RunAreaNpcCrafterSmokeAsync()
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-TECHNOLOGY-006 NPC crafter smoke: " + why); }
+        if (_areaSession is not { } session || _conversationHost is null) { GD.Print("ARC-TECHNOLOGY-006 native-smoke npc crafter SKIP (no area session or dialog host)"); return; }
+        for (var i = 0; i < 600 && _schematicData is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptSchematicData(); }
+        Require(_schematicData is { Status: AreaSchematicDataStatus.Ready, Data: not null }, "data " + _schematicData?.Status);
+        var data = _schematicData!.Data!;
+        var npc = _conversationHost.Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row))
+            .FirstOrDefault(entity => AreaNpcCrafter(entity) is not null && !session.QueryNpcDead(entity));
+        if (npc is null)
+        {
+            var speakers = _conversationHost.Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray();
+            var homed = speakers.Count(entity => _combatHost?.HomeMap(entity) is not null);
+            var fielded = speakers.Count(entity => _combatHost?.HomeMap(entity) is { } home && _combatHost.Fields(home, entity) is not null);
+            GD.Print($"ARC-TECHNOLOGY-006 native-smoke npc crafter SKIP (no living speaker with home-map data: speakers {speakers.Length}, " +
+                $"on a covered map {homed}, with fields {fielded}, effect rules {(_areaEffectRules is null ? "absent" : "present")})");
+            return;
+        }
+        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
+        _worldFocusSimulationForSelfTest = true; _worldFocused = true;
+        try
+        {
+            var revision = session.Version.Revision;
+            QueueDialogSchematics(npc);
+            TakeScriptSchematics();
+            Require(SchematicsOpen && _schematicsPanel!.ViewForSelfTest is { Crafter: { } crafter } && crafter == npc, "the window opened with the speaker as crafter: " + _schematicsStatus);
+            var view = _schematicsPanel!.ViewForSelfTest!;
+            InventoryKey(Key.Escape);
+            Require(!SchematicsOpen && session.Version.Revision == revision, "Escape closed it; nothing changed");
+
+            var saved = session.Capture();
+            var options = new GameSessionRestoreOptions(new(saved.Identity.World, session.Flags.Binding.Identity.Module),
+                session.QueryClockSnapshot().ProfileBinding, new(Guid.NewGuid()), session.Limits, session.Rules.Mode, session.Experience, session.Difficulty);
+            using var copy = GameSessionOwner.Restore(saved, options).Owner ?? throw new InvalidOperationException("copy");
+            Require(_inventoryHost?.Attach(copy) == GameSessionFailure.None, "seeds attached to the copy");
+            var real = AreaNpcCrafter(npc)!;
+            var stats = real.Loaded.Sheet.Stats.SetItem(4, 20);
+            var expert = real with { Loaded = real.Loaded with { Sheet = real.Loaded.Sheet with { Stats = stats, TechDegrees = [7, 7, 7, 7, 7, 7, 7, 7] } } };
+            string? made = null;
+            foreach (var record in data.Catalog.Records.Where(r => r.Kind == Arcanum.Data.Technology.SchematicKind.Learned && r.IsComplete))
+            {
+                if (record.Component1.Prototypes.Count == 0 || record.Component2.Prototypes.Count == 0) continue;
+                if (data.Kind(record.Component1.Prototypes[0]) is not { } first || data.Kind(record.Component2.Prototypes[0]) is not { } second) continue;
+                if (copy.AddItemToNpc(copy.Version, npc, first, AreaInventoryHost.DiagnosticInsertCheck).Disposition != GameSessionDisposition.Changed) continue;
+                if (copy.AddItemToNpc(copy.Version, npc, second, AreaInventoryHost.DiagnosticInsertCheck).Disposition != GameSessionDisposition.Changed) continue;
+                var before = copy.QueryNpcInventory(npc).Count;
+                var result = copy.AssembleSchematicForNpc(copy.Version, expert, record, SchematicItems, data.Facts, data.Kind, AreaInventoryHost.DiagnosticInsertCheck);
+                if (result.Disposition != GameSessionDisposition.Changed) continue;
+                Require(copy.QueryNpcInventory(npc).Count == before - 2 + record.Quantity && result.Made.All(entity => copy.QueryNpcInventory(npc).Any(i => i.Entity == entity)),
+                    "the products replace the components in the NPC's list");
+                made = $"record {record.Number}: {result.Made.Count} made into the NPC";
+                break;
+            }
+            Require(made is not null, "no learned record assembled");
+            Require(session.Version.Revision == revision, "the live session is untouched");
+            GD.Print("ARC-TECHNOLOGY-006 native-smoke npc crafter PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Live = $"opened from the su path, learned pages {view.Pages} in discipline {view.Discipline}, button {view.Button}", Assembly = made }));
         }
         finally
         {

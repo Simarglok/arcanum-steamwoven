@@ -94,9 +94,23 @@ item the PC takes from an NPC joins this list in entry order (so the numbers nee
 | — | The reservation is greedy: component 1 takes its first alternative present even when another would leave component 2 an item (latent: no installed record lists one prototype in both lists). |
 | An ammunition component loses one unit. | The rule does (`UseUnits`); the hero's lists hold no ammunition, so the session never meets one. |
 
+## NPC crafter (ARC-TECHNOLOGY-006)
+
+`QueryNpcTechnology(crafter)`, `QueryNpcAssembly(crafter, schematic, items, facts)` and
+`AssembleSchematicForNpc(expected, crafter, schematic, items, facts, productKind, insertCheck)` run the same gate, button and plan for
+an NPC (ledger [NC4–NC7](../research/original-verification-ledger.md#npc-schematic-crafter-arc-technology-006), SW7). `SessionNpcCrafter`
+is the NPC's map data (sheet and scheme, read only while the session keeps no advancement record of it) and its effects' stat
+changes. The components are searched in the NPC's current list (seed items still there on every attached seed that lists it, then
+its added made items), with its expertise; on success both components leave the NPC with the durability deletion and the products
+enter its list as `made:n` ([NPC inventory changes](inventory-runtime.md#npc-inventory-changes-arc-world-055)), one revision.
+Refusals, before any effect: an invalid crafter (`InvalidAdvancement`), the version, an NPC the session does not know
+(`UnknownHolder`), a dead NPC (`InvalidLifeTarget`: the original's open refuses a dead crafter), then the hero's: the gate, the
+record, the product kind, the budgets (the NPC's list bound, the store, the made numbers, the durability records), the revision and
+the insert check for the NPC (a call back into the owner, a seed attach included, is `StaleVersion`). The original leaves a product
+the NPC cannot take on the ground at the crafter and still completes (NC7); the session refuses instead, as for the hero.
+
 ## Not ready
 
-- NPC crafters (the dialog's `su`): the rules take any crafter's item view and expertise, but the session wiring for an NPC's
-  inventory and degrees is not done.
+- NPC crafters are done by ARC-TECHNOLOGY-006 (below); the "expertise in discipline" effects of an NPC are not modelled.
 - Ammunition and stack products and components in the hero's lists (ARC-WORLD-014 refuses stacks).
 - Dropping a product on the ground when the inventory cannot take it.

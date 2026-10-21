@@ -476,7 +476,7 @@ decided every row on 2026-10-20 ([owner decisions](#owner-decisions-2026-10-20))
 | ID | Where | Original 1.0.7.4 | Verdict | Proposal (Steamwoven / Original) |
 | --- | --- | --- | --- | --- |
 | TC1 | cell payment (0x450420 with 0x461590), F2 | An item source pays `cost × (1 + p / c)` cells: a strong technologist pays double, a mage the minimum; the technological adjustment branch looks swapped | Original bug | **Decided** ([owner](#owner-decisions-2026-10-20)): switch. Steamwoven `2 × cost − trunc(cost × p / c)` (a technologist pays fewer cells); Original keeps it. Reaches records 147 (one weapon) and 168 (three armours); TECH-6 |
-| TC2 | action 129 (0x44A7BD, 0x460B50, 0x45FD40, 0x57C6E0), F2 | Calls an unfilled slot of an uninitialised callback structure: undefined | Original bug (crash class) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: open the window with (PC, PC) or (NPC, its PC leader); unused in the data; **implemented** for the PC by ARC-TECHNOLOGY-005 (an NPC with a leader is refused by name until the NPC crafter slice) |
+| TC2 | action 129 (0x44A7BD, 0x460B50, 0x45FD40, 0x57C6E0), F2 | Calls an unfilled slot of an uninitialised callback structure: undefined | Original bug (crash class) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: open the window with (PC, PC) or (NPC, its PC leader); unused in the data; **implemented** for the PC by ARC-TECHNOLOGY-005 and for an NPC with a PC leader by ARC-TECHNOLOGY-006 |
 | TC3 | assembly (0x56E720), F2 | A failed product creation returns after the components are spent and some products given | Original bug (latent) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes all or nothing (room and creation checked before consuming); no switch; TECH-4 |
 | TC4 | assembly (0x56E720), second reader | Both components are found before consuming, so one item matching both lists would be consumed twice (the second time a deleted object) | Original bug (latent, use of a deleted object) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: a found item is reserved for one component; no installed record triggers it; TECH-4 |
 | TC5 | assembly (0x56E720) | Expertise is gated only by the button state; assembly itself does not check (a multiplayer host does not re-check a client) | Original (no single-player effect) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes: assembly re-checks the gate, which changes nothing a single-player player can do; TECH-4 |
@@ -639,8 +639,10 @@ this document start at F1 or F2.
    integration): key `T` with the sheet's guard, learned and
    found tabs, discipline tabs, pages, button texts and hover text, sounds
    3008/3009/3010/3011/3018 + discipline, and script action 129 for the PC (TC2). The NPC
-   crafter (the dialog action `su` and action 129 for an NPC with a PC leader) is refused by
-   name and stays a later slice: it needs NPC inventory state. No launcher change (no new argument).
+   crafter (the dialog action `su` and action 129 for an NPC with a PC leader) is done by
+   ARC-TECHNOLOGY-006 over the NPC inventory store (ARC-WORLD-055), its degrees from the NPC's
+   map data ([ledger NC1–NC8](original-verification-ledger.md#npc-schematic-crafter-arc-technology-006)).
+   No launcher change (no new argument).
 6. **TECH-6 Charge cells and tech devices** (Simulation, with the magic
    engine; FR-MAGIC-010/011): the cell source behind the engine's payment port
    (critter `cost`, item source TC1 decided, ammunition type 2), the list of

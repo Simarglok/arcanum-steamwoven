@@ -87,6 +87,8 @@ public partial class AreaConversationPanel : CanvasLayer
             or DialogConversationSelectStatus.WrongPhase)) Picked?.Invoke();
         Render(result.Status is DialogConversationSelectStatus.UnsupportedTransition or DialogConversationSelectStatus.StaleSelection
             ? $"[{result.Status}: the reply was not executed]" : null);
+        // ARC-TECHNOLOGY-006: SU ends the dialog at once for the schematic window, with no further NPC line (ledger NC1–NC2).
+        if (conversation.End?.Kind == DialogEndKind.SchematicWindow) CloseRequested?.Invoke();
     }
 
     /// <summary>Diagnostic leave: closes an awaiting dialog without a reply effect, or dismisses a finished one.</summary>

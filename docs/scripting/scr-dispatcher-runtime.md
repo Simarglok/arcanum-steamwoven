@@ -275,8 +275,8 @@ conversation is not run).
   resolves it (TC2, both fixed).
 - **The AREA viewer** admits 129 in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound-calls-scheme-schematic"); `Apply`
   resolves each request (`AreaScriptHost.ResolveSchematic`): the PC opens the hero's window once nothing else owns input; an NPC
-  with a PC leader is refused by name (`AreaSchematicScriptStatus.NpcCrafterNotReady`, the NPC crafter is a later slice); any
-  other object opens nothing. It changes no session state ([schematic window](../world/schematic-window-runtime.md#script-action-129-sw8-tc2)).
+  with a PC leader (the first PC up its leader chain) opens it with the NPC as crafter (ARC-TECHNOLOGY-006, ledger NC3); any other
+  object opens nothing. It changes no session state ([schematic window](../world/schematic-window-runtime.md#script-action-129-sw8-tc2)).
 - No installed script uses action 129.
 
 ## Set auto-level scheme (ARC-SCRIPT-016, set S8)

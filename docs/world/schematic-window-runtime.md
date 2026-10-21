@@ -1,18 +1,20 @@
 # Schematic window runtime
 
-Status: **Implemented bounded component (viewer, PC crafter only).** Work item ARC-TECHNOLOGY-005 (2026-10-21), slice TECH-5 of
-the [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted). The
-hero's schematic window in the AREA viewer (`crash-site-area`: exterior, cave and `--area-map`), opened with the original key
-`T` or by script action 129 for the PC, over the session's [tech degrees](tech-degrees-runtime.md),
-[found schematics](schematic-knowledge-runtime.md) and [assembly](schematic-assembly-runtime.md). No saved state is added (the
-snapshot schema is unchanged).
+Status: **Implemented bounded component (viewer).** Work items ARC-TECHNOLOGY-005 (the hero's window, slice TECH-5) and
+ARC-TECHNOLOGY-006 (the NPC crafter), 2026-10-21, of the
+[technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted). The
+schematic window in the AREA viewer (`crash-site-area`: exterior, cave and `--area-map`): the hero's, opened with the original key
+`T` or by script action 129 for the PC, and an NPC crafter's, opened by the dialog action `su` or action 129 for an NPC with a PC
+leader, over the session's [tech degrees](tech-degrees-runtime.md), [found schematics](schematic-knowledge-runtime.md),
+[assembly](schematic-assembly-runtime.md) and [NPC inventory changes](inventory-runtime.md#npc-inventory-changes-arc-world-055). No
+saved state is added (the snapshot schema is unchanged).
 
 Requirements: [FR-MAGIC-012](../requirements/combat-magic-tech.md#fr-magic-012) (schematics),
 [FR-ITEM-017](../requirements/items-economy.md#fr-item-017) (learned and found schematics shown),
-[FR-ITEM-018](../requirements/items-economy.md#fr-item-018) (assembly). The NPC crafter remains (below).
+[FR-ITEM-018](../requirements/items-economy.md#fr-item-018) (assembly).
 
 Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Schematic window"](../research/original-verification-ledger.md#schematic-window-arc-technology-005),
-SW1–SW8). Code: [`AreaSchematics`](../../tools/terrain-viewer/Core/AreaSchematics.cs) (the Godot-free page),
+SW1–SW8, and ["NPC schematic crafter"](../research/original-verification-ledger.md#npc-schematic-crafter-arc-technology-006), NC1–NC8). Code: [`AreaSchematics`](../../tools/terrain-viewer/Core/AreaSchematics.cs) (the Godot-free page),
 [`AreaSchematicsPanel`](../../tools/terrain-viewer/Godot/AreaSchematicsPanel.cs) (the diagnostic panel),
 [`TerrainViewerAreaSchematics`](../../tools/terrain-viewer/Godot/TerrainViewerAreaSchematics.cs) (keys, sounds, routing),
 [`AreaScriptHost`](../../tools/terrain-viewer/Core/AreaScriptHost.cs) (action 129) and the SCR dispatcher's
@@ -20,9 +22,10 @@ SW1–SW8). Code: [`AreaSchematics`](../../tools/terrain-viewer/Core/AreaSchemat
 [`AreaSchematicsTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaSchematicsTests.cs),
 [`AreaScriptHostTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaScriptHostTests.cs),
 [`ScrSchematicTests`](../../tests/Arcanum.Scripting.Tests/Scr/ScrSchematicTests.cs), the Godot self-test
-`ARC-TECHNOLOGY-005 self-test PASS` and the native smoke `ARC-TECHNOLOGY-005 native-smoke schematics PASS`. The full
-`--self-test` currently stops earlier, at a conversation-routing check that also fails on main (2026-10-21), so the window's
-self-test was observed in a local run with it moved before that check.
+`ARC-TECHNOLOGY-005 self-test PASS` (since ARC-TECHNOLOGY-006 with an NPC crafter) and the native smokes
+`ARC-TECHNOLOGY-005 native-smoke schematics PASS` and `ARC-TECHNOLOGY-006 native-smoke npc crafter PASS`; the NPC crafter in
+[`NpcAssemblyStateTests`](../../tests/Arcanum.Session.Tests/NpcAssemblyStateTests.cs) and
+[`DialogSchematicsTests`](../../tests/Arcanum.Scripting.Tests/Dialog/DialogSchematicsTests.cs).
 
 ## Opening and closing (SW1–SW3)
 
@@ -46,7 +49,7 @@ self-test was observed in a local run with it moved before that check.
   disabled on the first and last page (the original disables them in the redraw).
 - A tab button acts only from the other tab: it keeps each tab's own discipline and page and plays 3011; the shown tab's button
   does nothing. The tab, discipline and page are kept across close and open and reset for a new session (a quick load), as the
-  original keeps them until a game reset; the original also resets them for an NPC crafter (not reachable here).
+  original keeps them until a game reset; every NPC crafter's open resets them (NC5, below).
 - While open the window owns every key: `T` and `Escape` close it, `Tab` or a controller confirm presses Assemble.
 
 ## The page and Assemble (SW5, SW6)
@@ -78,16 +81,47 @@ run goes on); the admission set S9 adds it to S8, and the viewer's dialog-script
 | Object | Original intent (arguments of the open) | Viewer |
 | --- | --- | --- |
 | the PC | (PC, PC) | the hero's window opens, as with `T`, once no dialog, window or palette owns input (a dialog's script runs while its dialog is open; the original's mode change would end the dialog first) |
-| an NPC with a PC leader | (NPC, leader) | refused by name: `script 129: an NPC crafter is not ready (later slice)`; nothing opens, nothing changes |
+| an NPC with a PC leader (the first PC up its leader chain, NC3) | (NPC, leader) | the NPC crafter's window (below), from the NPC's home-map data |
 | an NPC without a leader, an absent object | nothing | nothing |
 
 No installed script uses action 129.
+
+## NPC crafter (ARC-TECHNOLOGY-006)
+
+The original's crafter can be an NPC (ledger NC1–NC7, SW7): the window searches the NPC's own inventory with the NPC's expertise,
+assembly consumes the components from the NPC and puts the products into the NPC, and the PC (the viewer) only sees the completion
+text and hears its sound. Both modes do the same; any NPC on any map.
+
+- **Openers.** The dialog action `su` on a PC reply (NC1): the conversation's schematic port (`IDialogSchematicPort`) checks that
+  neither the NPC nor the hero is dead, the field's other actions run in order, the reply's target node is not entered, and the
+  conversation ends at once with no further NPC line (`DialogEndKind.SchematicWindow`; the original's mode change ends the dialog,
+  NC2). The viewer then opens the window with that NPC as crafter; closing it returns to the world, the talk does not resume.
+  Script action 129 for an NPC with a PC leader opens the same window (the table above). `su` together with JO, UW, FL, ET or an
+  insult in one reply is offered blocked, and `su` in an NPC line's own action stops at an unsupported-operation frontier (NC8, F1).
+- **Crafter facts.** `SessionNpcCrafter`: the NPC's sheet and scheme from its home-map fields (instance over prototype, the whole
+  field, NC4) unless the session keeps an advancement record of it, and the stat changes of its effects there
+  (`AreaAdvancement.Npc`). `GameSessionOwner.QueryNpcTechnology` gives its degrees, counting degrees and expertise (effective
+  intelligence through those changes). The "expertise in discipline" effects the original applies to every critter are not modelled
+  for NPCs (the session keeps no NPC effects).
+- **The window.** The learned tab lists the first "degree" records of each discipline by the NPC's stored degrees; the found tab is
+  empty (the original builds it for a PC crafter only, NC5); every NPC open resets the tab, discipline and page. The page searches
+  the NPC's current list: its seed items still there, then the made items the session added to it
+  ([NPC inventory changes](inventory-runtime.md#npc-inventory-changes-arc-world-055)).
+- **Assemble.** `GameSessionOwner.AssembleSchematicForNpc` (the hero's rules, TC3/TC4/TC5): both components leave the NPC with the
+  durability deletion and the products enter its list as `made:n`, one revision; text 2 and sound 3018 + the discipline. The viewer
+  has no NPC weight or room model, so its insert check for the NPC accepts; the session itself refuses a full list or store.
+
+## Differences from the original
 
 ## Differences from the original
 
 | Original 1.0.7.4 | Steamwoven (both modes) |
 | --- | --- |
-| Action 129 calls a pointer the game never fills (TC2). | The PC opens its window; an NPC with a PC leader is refused by name until the NPC crafter slice. |
+| Action 129 calls a pointer the game never fills (TC2). | The PC opens its window; an NPC with a PC leader opens the NPC crafter's window. |
+| A product the NPC cannot take stays on the ground at the crafter, with a floating refusal text, and the assembly still completes (NC7). | The assembly is refused before anything is consumed (the session keeps no new ground items), as for the hero; the viewer's insert check for an NPC accepts. |
+| An NPC crafter's expertise includes the "expertise in discipline" effects of its effect list (NC4). | Not modelled: the session keeps no NPC effects. |
+| `su` in an NPC line's own action also opens the window (NC8, F1). | Not admitted (an unsupported-operation frontier). |
+| When the open refuses (a dead NPC or PC), the dialog text was cleared and later picks are ignored (NC2, inferred). | The schematic port refuses and the conversation fails with a rejected command (nothing applied). |
 | `T` with another window open: the mode change closes that window and opens the schematics. | The open window owns the keys; `T` acts from the world only. |
 | `T` also plays the generic click sound 0. | Only the window's own sounds play. |
 | Assemble acts on the button's release. | The mouse button does too; `Tab` and a controller confirm act on their press. |
@@ -96,9 +130,7 @@ No installed script uses action 129.
 
 ## Not ready
 
-- **NPC crafter** (the dialog action `su`, pending dialog action 7, and action 129 for an NPC with a PC leader): the original
-  takes the components from and puts the products into the NPC's inventory, the PC only sees the completion message (SW7). It
-  needs NPC inventory state in the session; refused by name until then.
 - The interface button, the window art, the slot pictures and overlays, the item description box on slot hover, the tab and
   discipline hover texts, the close spot.
 - Dropping a product on the ground when the inventory cannot take it (the assembly is refused, [assembly](schematic-assembly-runtime.md)).
+- An NPC's weight, background and room in the viewer's insert check for an NPC crafter; NPC effects on expertise.

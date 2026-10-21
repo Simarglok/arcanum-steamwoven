@@ -161,7 +161,15 @@ public sealed partial class GameSessionOwner
         return result.AsReadOnly();
     }
 
-    /// <summary>An NPC the seed of an attached map marks dead, or one the session killed (its life records).</summary>
+    /// <summary>Whether an NPC is dead: an attached seed marks it dead, or the session killed it (its life records). An invalid entity
+    /// id throws.</summary>
+    public bool QueryNpcDead(string npc)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(npc)) throw new ArgumentException("Invalid entity id.", nameof(npc));
+        return NpcDead(npc);
+    }
+
     private bool NpcDead(string npc) => KilledNpc(npc) ||
         _inventory.Seeds.Values.Any(seed => seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == SessionHolderKind.Npc && holder.Dead);
 }

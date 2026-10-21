@@ -366,7 +366,9 @@ public sealed class AreaConversationHost
                 // ARC-SKILLS-004: the skill gates read the session hero; the diagnostic PC has no skills, so they stay unadmitted.
                 _session.QueryHero() is null ? null : new SessionDialogSkillPort(_session, AreaConversationState.PcParticipant), State,
                 // ARC-WORLD-054: FP gives the session hero a fate point; without a hero it stays unadmitted.
-                _session.QueryHero() is null ? null : new SessionDialogFatePort(_session, AreaConversationState.PcParticipant)));
+                _session.QueryHero() is null ? null : new SessionDialogFatePort(_session, AreaConversationState.PcParticipant),
+                // ARC-TECHNOLOGY-006: SU asks for the schematic window with the speaker as crafter; the host opens it once the talk ended.
+                new SchematicPort(this)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script);
     }
@@ -391,6 +393,30 @@ public sealed class AreaConversationHost
     {
         internal static RefusedInventory Instance { get; } = new();
         public DialogCommandResult Execute(GiveItemCommand command) => DialogCommandResult.Rejected;
+    }
+
+    /// <summary>ARC-TECHNOLOGY-006: the NPC crafter the last SU asked for (its entity), set when the port applied it; the host opens the
+    /// schematic window with it after the conversation ended with <see cref="DialogEndKind.SchematicWindow"/>.</summary>
+    public string? SchematicCrafter { get; private set; }
+
+    /// <summary>Takes the crafter the last SU asked for, once.</summary>
+    public string? TakeSchematicCrafter()
+    {
+        var crafter = SchematicCrafter;
+        SchematicCrafter = null;
+        return crafter;
+    }
+
+    // SU (ledger NC1): the original's open refuses a dead crafter or viewer; the session knows both lives.
+    private sealed class SchematicPort(AreaConversationHost host) : IDialogSchematicPort
+    {
+        public DialogCommandResult Execute(OpenSchematicsCommand command)
+        {
+            if (command.PlayerCharacter != AreaConversationState.PcParticipant || host.SpeakerEntity(command.Npc) is not { } entity) return DialogCommandResult.Rejected;
+            if (host._session.QueryNpcDead(entity) || host._session.QueryHeroLife() is { Status.IsDead: true }) return DialogCommandResult.Rejected;
+            host.SchematicCrafter = entity;
+            return DialogCommandResult.Applied;
+        }
     }
 
     private string? SpeakerEntity(DialogParticipantId npc) =>

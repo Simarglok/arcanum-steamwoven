@@ -48,7 +48,8 @@ public sealed record DialogConversationPorts(
     IDialogRumorPort? Rumors = null,
     IDialogSkillPort? Skills = null,
     IDialogMetBeforePort? MetBefore = null,
-    IDialogFatePort? Fate = null);
+    IDialogFatePort? Fate = null,
+    IDialogSchematicPort? Schematics = null);
 
 public enum DialogReactionMode
 {
@@ -107,6 +108,19 @@ public sealed record FatePointCommand(DialogParticipantId PlayerCharacter) : Dia
 public interface IDialogFatePort
 {
     DialogCommandResult Execute(FatePointCommand command);
+}
+
+/// <summary>ARC-TECHNOLOGY-006: the SU action, the schematic window with the NPC as crafter and the PC as viewer (ledger NC1).</summary>
+public sealed record OpenSchematicsCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter) : DialogCommand;
+
+/// <summary>
+/// Schematic seam (ARC-TECHNOLOGY-006): SU. Applied means the host will open the window with the NPC as crafter once the
+/// conversation has ended (<see cref="DialogEndKind.SchematicWindow"/>); Rejected (a dead NPC or PC, as the original's open refuses)
+/// fails the conversation with no effect of this action; a thrown exception is recorded as indeterminate.
+/// </summary>
+public interface IDialogSchematicPort
+{
+    DialogCommandResult Execute(OpenSchematicsCommand command);
 }
 
 /// <summary>
@@ -235,6 +249,9 @@ public enum DialogOptionTransition
     /// <summary>The reply action ends with ET (ARC-SKILLS-004): when the PC's skill is at least level 9 and trained, the dialog
     /// continues at <see cref="DialogOption.Target"/>; otherwise the source speaks a generated refusal (a frontier here).</summary>
     ExpertTeacher,
+    /// <summary>ARC-TECHNOLOGY-006: the reply action holds SU: every action of the field runs, the reply's target node is not entered
+    /// and the dialog ends for the schematic window (<see cref="DialogEndKind.SchematicWindow"/>).</summary>
+    Schematics,
     /// <summary>Generated interaction (barter, training, …) this runtime does not perform.</summary>
     Unsupported,
 }
@@ -289,6 +306,10 @@ public enum DialogEndKind
     /// <summary>ARC-WORLD-043: an insult (a Player <c>i:</c> reply) left the NPC's reaction at 20 or below, so the NPC
     /// answered with a generated line (not loaded) and ended the talk, as after FL: no SCR continuation follows.</summary>
     Insulted,
+    /// <summary>ARC-TECHNOLOGY-006: SU: the dialog ended without another NPC line and the host opens the schematic window with the NPC
+    /// as crafter (the original's interface-mode change ends the dialog, NC2); no SCR continuation follows and the talk does not
+    /// resume when the window closes.</summary>
+    SchematicWindow,
 }
 
 public sealed record DialogConversationEnd(DialogEndKind Kind, DialogScriptLine? ScriptLine);
