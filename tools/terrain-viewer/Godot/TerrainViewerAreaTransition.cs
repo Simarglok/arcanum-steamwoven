@@ -31,8 +31,9 @@ public partial class TerrainViewerApp
     private bool InCave => _readyArea is not null && _caveLoad is not null && ReferenceEquals(_readyArea, _caveLoad.Area);
 
     // ARC-SCRIPT-006: the area's game session exists with or without the cave; dialogs keep their consequences in it.
-    // Its clock profile comes from the area lighting source. A synthetic self-test publication has no lighting and
-    // gets an invented synthetic profile instead (never used for original data).
+    // Its clock profile comes from the area lighting source, or for a map drawn unlit from the module's start clock alone
+    // (ARC-WORLD-057; the module id is the snapshot's module input, as the lighting source's). A synthetic self-test
+    // publication has no lighting and gets an invented synthetic profile instead (never used for original data).
     private void StartAreaTransitions(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
         StopAreaTransitions();
@@ -54,7 +55,8 @@ public partial class TerrainViewerApp
         if (carried is null && clock is null)
         {
             if (mapMode) StartMapTransfers(arguments, result);
-            _areaUseStatus = mapMode ? $"map {arguments.AreaMapName}: drawn unlit ({area.UnlitReason}), no session clock; " + _areaUseStatus : "cave: not loaded (no session clock)";
+            _areaUseStatus = mapMode ? $"map {arguments.AreaMapName}: drawn unlit ({area.UnlitReason}), no session clock ({result.UnlitSessionStartupFailure}); " + _areaUseStatus
+                : "cave: not loaded (no session clock)";
             return;
         }
         _areaEffectRules = result.Hero?.Effects;

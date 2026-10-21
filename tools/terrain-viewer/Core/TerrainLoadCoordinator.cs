@@ -49,6 +49,8 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     /// <summary>ARC-WORLD-057 (map mode): the module's start clock when the map is drawn unlit, so its game session still
     /// starts; null when the map is lit (its lighting carries the clock) or the clock cannot be read.</summary>
     public Arcanum.Data.Lighting.StartupClockDeclaration? UnlitSessionStartup { get; init; }
+    /// <summary>Why <see cref="UnlitSessionStartup"/> is null on an unlit map (null when the map is lit).</summary>
+    public Arcanum.Data.Lighting.LightingFailure? UnlitSessionStartupFailure { get; init; }
 }
 
 /// <summary>The cave's strict snapshot, scene, frames and step evidence, bound to the same generation.</summary>
