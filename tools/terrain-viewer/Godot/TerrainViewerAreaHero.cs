@@ -71,7 +71,7 @@ public partial class TerrainViewerApp
         var (gait, origin) = (_worldGait, _gaitOrigin); SetObjectApproachGait();
         var stepped = StepGait();
         Require(stepped == (StealthAllowsRun() ? MovementGait.Run : MovementGait.Walk), $"the stealth gait: {training} {stepped}");
-        Require(training == Arcanum.Simulation.Skills.SkillTraining.Master || stepped == MovementGait.Walk, $"below master a run is a walk: {training} {stepped}");
+        Require(training == Arcanum.Simulation.Combat.SkillTraining.Master || stepped == MovementGait.Walk, $"below master a run is a walk: {training} {stepped}");
         var followers = session.QueryConcealment().Npcs.Count;
         PaletteProwlToggle();
         Require(!session.IsConcealed(Arcanum.Session.SessionCombatant.Hero) && session.QueryConcealment().Npcs.Count == 0, "prowl off");
