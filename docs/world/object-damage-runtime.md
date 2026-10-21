@@ -155,7 +155,16 @@ The registry version stays 1, as when the Lock event was added.
 - **Native smoke.** With `--hero`, as the last stage of map mode (the map keeps what the hits did), the hero Alt-clicks the
   drawn door, window, container or scenery with the fewest hit points it can damage. It attacks until the object breaks or
   40 attacks have run. Each hit goes through the session, and a destroyed or switched-off object is no longer drawn. The
-  stage prints `ARC-COMBAT-008 native-smoke object-attack PASS`, or `NONE` without such an object.
+  stage prints `ARC-COMBAT-008 native-smoke object-attack PASS`, or `NONE` without such an object. Since ARC-COMBAT-014 the
+  candidates are only the objects the player's click can pick: a click-through scenery (OF_CLICK_THROUGH) is never picked, as in
+  the original, and a roof-covered body is not drawn, so neither can be Alt-clicked. A candidate is skipped for the next (at
+  most eight tried, `Skipped` in the PASS line) when it has no cell within the hero's reach to stand on, when no start a few
+  cells away has a planner route to the cell the attack will walk to, or when the pointer finds no point of it; with every
+  candidate skipped the stage is `NONE` with the reasons. On the main map the earlier stage chose a click-through scenery
+  ("target not visible") and then a start with no route to the approach cell. Known limit: the attack walks to the standable
+  cell nearest the object and then nearest the actor (`ApproachCell`), which does not ask whether a route leads there; the
+  smoke starts where it does, so another reachable cell beside the object is not tried by the attack (the original's move-near
+  is not read).
 
 ## Differences from the original
 
