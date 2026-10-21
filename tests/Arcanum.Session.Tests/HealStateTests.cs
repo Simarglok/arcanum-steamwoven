@@ -201,8 +201,26 @@ public sealed class HealStateTests
         var resting = owner.QueryEvents().Single();
         Assert.AreEqual((SessionEventKinds.NpcResting, "oid:rat"), (resting.Kind, resting.Payload.Entities[0].Code));
         // A full heal leaves no damage and schedules nothing more.
-        owner.HealWithItem(owner.Version, SessionLifeTarget.Critter("oid:rat", new LifeFacts(), default), Item(bonus: 50));
+        var full = owner.HealWithItem(owner.Version, SessionLifeTarget.Critter("oid:rat", new LifeFacts(), default), Item(bonus: 50));
+        Assert.AreEqual((GameSessionDisposition.Changed, 0), (full.Disposition, owner.QueryLifeRecord("oid:rat")!.Value.State.HitPointDamage));
         Assert.AreEqual(1, owner.QueryEvents().Count);
+    }
+
+    [TestMethod]
+    public void AHealMovesTheNpcsTimersOnAnotherMapToTheActorsMap()
+    {
+        using var hurt = Healer(1, SkillTraining.Master);
+        var rat = SessionLifeTarget.Critter("oid:rat", new LifeFacts(), default);
+        Assert.AreEqual(GameSessionDisposition.Changed, hurt.ApplyDamage(hurt.Version, rat, new LifeDamage { HitPoints = 10 }).Disposition);
+        // The rat's resting timer as if the session had not seen it change maps (on map 80).
+        var text = GameSessionSnapshotCodec.Encode(hurt.Capture());
+        var moved = text.Replace("{\"map\":79,\"entity\":\"oid:rat\"}", "{\"map\":80,\"entity\":\"oid:rat\"}", StringComparison.Ordinal);
+        Assert.AreNotEqual(text, moved);
+        using var owner = Restore(Decode(moved));
+        Assert.AreEqual(80, owner.QueryEvents().Single().Payload.Entities[0].Map);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.HealWithItem(owner.Version, rat, Item(bonus: 50)).Disposition);
+        var resting = owner.QueryEvents().Single();
+        Assert.AreEqual((SessionEventKinds.NpcResting, 79), (resting.Kind, resting.Payload.Entities[0].Map), "moved, not doubled");
     }
 
     [TestMethod]

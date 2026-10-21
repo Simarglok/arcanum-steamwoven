@@ -85,8 +85,9 @@ public sealed partial class GameSessionOwner
             if (!target.IsHero && !recordedCritter && _life.Critters.Count >= _limits.MaxLifeRecords || NewDurabilityRecord(item.Entity, destroyed: false) &&
                 _durability.Count >= _limits.MaxDurabilityRecords)
                 return RejectHeal(GameSessionFailure.BudgetExceeded);
-            // An NPC's heal can add its resting timer and move its pending timers to this map.
-            if (!target.IsHero && (_events.Count > _events.Limits.MaxPending - 1 || _events.NextSequence > long.MaxValue - 1 ||
+            // An NPC's heal can add its resting timer and move its pending timers to this map; an overexerting charge can add the
+            // hero's fatigue timer first, so two slots.
+            if (!target.IsHero && (_events.Count > _events.Limits.MaxPending - 2 || _events.NextSequence > long.MaxValue - 2 ||
                 _clock.QueryClockSnapshot().GameTimestampMs > long.MaxValue - SessionEventKinds.RestingDelayMs))
                 return RejectHeal(GameSessionFailure.EventBudgetExceeded);
             if (!target.IsHero && _passWorld is not null && StrayMaps(target.Entity!, _actor.Map.RuntimeMap).Length > 0)

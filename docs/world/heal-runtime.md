@@ -46,7 +46,8 @@ already had a record. The check before the charge is the worst case: in a round,
 unrecorded NPC even when the heal would leave it unchanged (a failed check, full hit points), which the same call outside a round
 would allow. An NPC's life write follows the session's life rule (ARC-WORLD-024): hit-point damage left positive and changed
 schedules its resting timer on the actor's map, and its pending timers on another map move there; before the charge an NPC heal
-needs room for one event. Then the check, the life record, the fate and the item are one revision; the rolls (check,
+needs room for two events (its resting timer and the hero's fatigue timer an overexerting charge can add), and is refused during
+an event pass when its timers are on another map; both worst-case checks also refuse when the heal would need neither. Then the check, the life record, the fate and the item are one revision; the rolls (check,
 critical, amount) come from the session generator. The answer carries the check, the outcome, the life outcome, the uses left or
 the destruction, and whether the heal fate was used.
 
