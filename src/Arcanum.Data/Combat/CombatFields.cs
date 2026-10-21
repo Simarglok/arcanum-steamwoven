@@ -164,6 +164,21 @@ public enum CombatFieldFailure
 /// object type of a type failure.</param>
 public sealed record CombatFieldRead(CombatFieldFailure Failure, CombatFields? Fields, int? Detail = null);
 
+/// <summary>
+/// ARC-COMBAT-008: what an attack's damage and break read of a portal, container, scenery or trap (types 1, 2, 3, 17) besides
+/// the common fields: its type's flags (portal field 46, container 56, scenery 69, trap 307; the project's slot 36), a
+/// scenery's respawn delay (field 71, slot 38; 0 for the other types) and the destroyed ART of a scenery or trap (field 25,
+/// slot 24; <see cref="NoArt"/> for none and for the other types).
+/// </summary>
+public sealed record CombatBreakableFields(CombatObjectFields Object, uint TypeFlags, int RespawnDelay, uint DestroyedArt)
+{
+    /// <summary>The stored "no ART" value (−1).</summary>
+    public const uint NoArt = uint.MaxValue;
+}
+
+/// <param name="Detail">The type for <see cref="CombatFieldFailure.TypeUnsupported"/>, else the slot that did not read.</param>
+public sealed record CombatBreakableRead(CombatFieldFailure Failure, CombatBreakableFields? Fields, int? Detail = null);
+
 /// <summary>One mobile object of an Area snapshot with its combat fields.</summary>
 public sealed record CombatAreaObject(int SourceIndex, int Prototype, CombatFields Fields);
 
