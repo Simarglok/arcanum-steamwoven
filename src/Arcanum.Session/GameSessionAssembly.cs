@@ -128,12 +128,13 @@ public sealed partial class GameSessionOwner
         return result.AsReadOnly();
     }
 
-    /// <summary>The next made number: one past every made entity the hero or an NPC (ARC-WORLD-055) holds, the session deleted or
-    /// keeps a durability record of (no seed or taken item can carry the prefix); past int.MaxValue there is none.</summary>
+    /// <summary>The next made number: one past every made entity the hero or an NPC (ARC-WORLD-055) holds, the hero placed on the
+    /// ground (ARC-WORLD-059), the session deleted or keeps a durability record of (no seed or taken item can carry the prefix); past
+    /// int.MaxValue there is none.</summary>
     private long NextMadeNumber()
     {
         var numbers = _inventory.Made.Select(item => item.Entity).Concat(_inventory.Npcs.Values.SelectMany(list => list).Select(item => item.Entity))
-            .Concat(_durability.Destroyed).Concat(_durability.Records.Keys)
+            .Concat(_inventory.Placed.Select(item => item.Entity)).Concat(_durability.Destroyed).Concat(_durability.Records.Keys)
             .Select(entity => (long)(SessionMadeItem.Number(entity) ?? 0));
         return numbers.DefaultIfEmpty(0).Max() + 1;
     }

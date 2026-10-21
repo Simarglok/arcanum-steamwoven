@@ -15,14 +15,14 @@ interface sound is non-positional at the plain volume (127, centre) through the 
 | Logbook opens (`L`) | 3011 (book switch), 3010 (page) and 3008 (book open), in that order: opening selects the tab |
 | Logbook tab pressed (button or `Tab`) | 3010 (page) |
 | The player closes the logbook | 3009 (book close); closing it on a map change or reload is silent |
-| The hero gains a level | 3005 (level up) |
+| The hero gains a level | 3005 (level up), with each level's message-window entry since [ARC-UI-046](../rendering/terrain-viewer.md#level-up-messages-arc-ui-046): one per level written, as the original plays it when it draws each entry |
 | A quest becomes completed for the PC (also by un-botching) | 3028 (quest completed) |
 | An item is taken from a body in the inventory window | the item's pickup sound ([sound cues](sound-cues.md)) |
 
 The viewer's logbook has no pages to turn, so the page sound plays only for the tab. The original
 plays the pickup sound when an item is picked up in its inventory window; the viewer's take is one
 click and plays it once, and taking every item plays the first item's sound once (a Steamwoven
-mapping). Level up and quest completed are noticed once per session revision; the original plays
+mapping). Quest completed is noticed once per session revision; the original plays
 3028 on every set to completed, which the session does not report, so a quest already completed
 that is set again stays silent here.
 

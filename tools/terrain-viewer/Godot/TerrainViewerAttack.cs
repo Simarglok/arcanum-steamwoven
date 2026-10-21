@@ -383,6 +383,8 @@ public partial class TerrainViewerApp
     /// </summary>
     private void SyncAreaAwards()
     {
+        // ARC-UI-046: level-up entries queued while the texts were still loading.
+        FlushLevelUps(TimeSpan.Zero);
         // ARC-WORLD-048: a visitor's talk queues its awards on its own host.
         foreach (var host in TalkHosts().ToArray())
         foreach (var award in host.State.TakeAwards()) LevelAreaFollowers(award);
@@ -390,6 +392,8 @@ public partial class TerrainViewerApp
 
     private void LevelAreaFollowers(SessionExperienceAward? award)
     {
+        // ARC-UI-046: the hero's level-up messages come first, as the source posts them before passing the step on.
+        ShowLevelUps(award);
         if (award?.Followers is null || _areaSession is null || _combatHost is null || _areaEffectRules is not { } effects) return;
         var map = CurrentAreaMap;
         // Fields come from the NPC's home map; a waiting NPC counts only while it stands on this map.

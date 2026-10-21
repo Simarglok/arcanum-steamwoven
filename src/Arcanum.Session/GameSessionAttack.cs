@@ -399,7 +399,7 @@ public sealed partial class GameSessionOwner
     /// once it ran; a fate the resolver used (ARC-WORLD-054) is cleared in a revision of its own, so such an attack is Changed even
     /// without damage; each later step commits on its own revision.
     /// Not modelled: the target's taking-damage and dying scripts, its reaction and AI, the critical effects listed as not ready
-    /// (the drop's placement and draws, the hero's drops, ammunition), backstab, the target's awareness (an NPC always sees the hero)
+    /// (the drop's placement and draws, ammunition), backstab, the target's awareness (an NPC always sees the hero)
     /// and light (every position is lit).
     /// </summary>
     public SessionAttackResult AttackCritter(GameSessionVersion expected, SessionAttack attack)
@@ -500,8 +500,8 @@ public sealed partial class GameSessionOwner
     /// The item steps after the life step of an attack on a critter or a critical self-hit (ARC-COMBAT-007, ARC-COMBAT-009), in the
     /// original's relative order (0x4B4390), after the whole life step: the arm-hit drops of whoever took the damage, the wear (its
     /// armour, its weapon's critical damage and destruction, the attacker's side), its helmet drop, the ammunition effects of a
-    /// critical miss and its weapon drop. A drop of the
-    /// hero's item and the ammunition are not applied (NOT READY); an NPC's item drops at <paramref name="recipientCell"/>.
+    /// critical miss and its weapon drop. An NPC's item drops at <paramref name="recipientCell"/>, the hero's at its own cell among its
+    /// placed items (ARC-WORLD-059); the ammunition is not applied (NOT READY).
     /// </summary>
     private (SessionAttackWearResult? Wear, GameSessionFailure StepFailure) CriticalAndWearSteps(AttackResolution resolution, LifeOutcome life,
         SessionWearSide attacker, SessionWearSide target, SessionCritterCombat? npc, Arcanum.Simulation.Movement.CellCoord? recipientCell,

@@ -229,8 +229,8 @@ flags after a critical miss retargets the attack to the attacker.
 - The four critical chance adjustments of the attacker are additive stand-ins
   for its effect adjustments (0x4EAB30, 0x4EAB90 and the two chance ones), not
   the effect engine.
-- Of the critical effects (ARC-COMBAT-009): the drop's placement and draws, the
-  hero's drops, the ammunition, the injury record of a PC, the NPC's
+- Of the critical effects (ARC-COMBAT-009): the drop's placement and draws (the
+  hero's drops lie on its cell since ARC-WORLD-059), the ammunition, the injury record of a PC, the NPC's
   look-for-weapon/armour flags, the stun's duration (the stun animation, goal
   57) and the worn armour's critical scripts (points 34 and 35) are not modelled
   ([hero attack](hero-attack-runtime.md#critical-effects-arc-combat-009)).

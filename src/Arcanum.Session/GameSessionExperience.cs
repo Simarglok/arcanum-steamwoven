@@ -89,10 +89,25 @@ public sealed class SessionExperienceState
 /// The host passes the step to <see cref="GameSessionOwner.LevelFollower"/> for each follower and nearby waiting follower,
 /// also when the result is NoChange (at the last level an award can leave the hero unchanged and still step the followers, as
 /// the source does). <see cref="Purchases"/> are what the hero's auto-level scheme bought at each level written (ARC-WORLD-036),
-/// in order; null when it bought nothing.
+/// in order; null when it bought nothing. <see cref="LevelUps"/> are the level-up messages of the levels written (ARC-UI-046),
+/// in order; null when no level was written.
 /// </summary>
 public sealed record SessionExperienceAward(int Award, int LevelsGained, int PointsGained, FollowerLevelStep? Followers,
-    IReadOnlyList<AdvancementPurchase>? Purchases = null);
+    IReadOnlyList<AdvancementPurchase>? Purchases = null, IReadOnlyList<SessionLevelUp>? LevelUps = null);
+
+/// <summary>
+/// The level-up message of one level the hero's recalculation writes in its normal branch (ARC-UI-046, ledger OL27, 0x4A69C0):
+/// the new level, then either the points line (<see cref="Points"/>, for a hero without an auto-level scheme; the active
+/// <see cref="ExperienceRuleProfile.LevelMessagePointsBeforeCap"/> decides it, OL28) or the scheme's text (<see cref="Scheme"/>).
+/// The source posts one per level for the local PC only: the last-level branch and a follower's level update post none.
+/// </summary>
+public sealed record SessionLevelUp(int Level, int Points, SessionLevelUpScheme? Scheme);
+
+/// <summary>
+/// What a level's scheme text names (0x4A7030): a scheme number without a rule (<see cref="HasRule"/> false: message 4), or the
+/// purchases of this level in order (none: message 3) and whether the rule completed (a space and message 1 follow).
+/// </summary>
+public sealed record SessionLevelUpScheme(bool HasRule, IReadOnlyList<AdvancementPurchase> Purchases, bool Completed);
 
 /// <summary>An experience call: the hero's award (null when none was given: refused, a zero amount, a dead hero, an award
 /// to nobody; set also for NoChange when an award left the hero unchanged, such as a negative one at 0 or the last-level
@@ -255,8 +270,11 @@ public sealed partial class GameSessionOwner
         // The hero's scheme spends each level's points as the level is written (ARC-WORLD-036), over a running copy of its sheet.
         var sheet = AdvancementDomain.HeroSheet(hero);
         var purchases = new List<AdvancementPurchase>();
+        // ARC-UI-046: one message per level written; a hero with a scheme number gets its scheme's text instead of the points.
+        var levelUps = new List<SessionLevelUp>();
+        var schemeNumber = hero.Advancement.AutoLevelScheme;
         Func<int, int, int>? spend = null;
-        if (_advancement.Rules is { } rules && rules.Scheme(hero.Advancement.AutoLevelScheme) is { } scheme)
+        if (_advancement.Rules is { } rules && rules.Scheme(schemeNumber) is { } scheme)
         {
             var modifiers = AdvancementDomain.HeroModifiers(_hero, _effects, life.PoisonLevel);
             spend = (level, unspent) =>
@@ -267,13 +285,20 @@ public sealed partial class GameSessionOwner
                 if (!AdvancementDomain.HeroBounded(outcome.Sheet)) return unspent;
                 sheet = outcome.Sheet;
                 purchases.AddRange(outcome.Purchases);
+                levelUps[^1] = levelUps[^1] with { Scheme = new(true, outcome.Purchases.ToArray(), outcome.Completed) };
                 return sheet.UnspentPoints;
             };
         }
-        var advance = Simulation.Character.ExperienceRules.Advance(_experience.Rules!.Levels, hero.Level, experience, hero.UnspentPoints, spend);
+        var noRule = schemeNumber == 0 ? null : new SessionLevelUpScheme(false, [], false);
+        var withRule = new SessionLevelUpScheme(true, [], false);
+        void Written(Simulation.Character.ExperienceLevelWritten level) => levelUps.Add(new(level.Level,
+            Simulation.Character.ExperienceRules.LevelMessagePoints(level, _rules.Experience), spend is null ? noRule : withRule));
+        var advance = Simulation.Character.ExperienceRules.Advance(_experience.Rules!.Levels, hero.Level, experience, hero.UnspentPoints, spend,
+            Written);
         sheet = sheet with { Level = advance.Level, UnspentPoints = advance.UnspentPoints };
         return new(AdvancementDomain.WithSheet(hero, sheet, advance.Experience),
-            new(gain, advance.LevelsGained, advance.PointsGained, advance.Followers, purchases.Count == 0 ? null : purchases.AsReadOnly()));
+            new(gain, advance.LevelsGained, advance.PointsGained, advance.Followers, purchases.Count == 0 ? null : purchases.AsReadOnly(),
+                levelUps.Count == 0 ? null : levelUps.AsReadOnly()));
     }
 
     // Every experience call commits here after its own checks: NoChange when neither the hero nor the NPC record changes, else

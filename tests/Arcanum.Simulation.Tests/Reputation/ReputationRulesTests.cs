@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Reputation;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -28,6 +29,28 @@ public sealed class ReputationRulesTests
         Assert.AreEqual(0, ReputationRules.ReactionSum([1500], Catalog, 5, 8), "a number without a record has an empty one");
         Assert.AreEqual(0, ReputationRules.ReactionSum([1000], ReputationCatalog.Empty, 0, 0));
     }
+
+    [TestMethod]
+    public void A_greeting_candidate_has_an_effect_in_scope_whose_sign_fits_the_category()
+    {
+        // 1000: +7 any/any; 1001: −3 (origin 5), −4 (faction 8), −6 (5, 8), +100 (origin 6); 1002: +1, +1; 1003: 0 any/any.
+        var catalog = ReputationCatalog.Create([.. Enumerable.Range(0, 3).Select(i => Catalog.Find(1000 + i)!), new(1003, [], [new(0, 0, 0)])])!;
+        CollectionAssert.AreEqual(new[] { 1000, 1002 }, Candidates([1000, 1001, 1002], catalog, 5, 8, ReactionCategory.Love).ToArray(),
+            "positive effects for love; 1001's +100 is for origin 6 only");
+        CollectionAssert.AreEqual(new[] { 1000, 1001, 1002 }, Candidates([1000, 1001, 1002], catalog, 6, 0, ReactionCategory.Courteous).ToArray());
+        CollectionAssert.AreEqual(new[] { 1001 }, Candidates([1000, 1001, 1002], catalog, 0, 8, ReactionCategory.Suspicious).ToArray(),
+            "negative effects for suspicious, dislike and hatred");
+        CollectionAssert.AreEqual(Array.Empty<int>(), Candidates([1000, 1001, 1002], catalog, 0, 0, ReactionCategory.Hatred).ToArray(), "no scoped effect reaches origin 0, faction 0");
+        CollectionAssert.AreEqual(Array.Empty<int>(), Candidates([1000, 1001, 1002, 1003], catalog, 5, 8, ReactionCategory.Neutral).ToArray(), "neutral never fits");
+        CollectionAssert.AreEqual(Array.Empty<int>(), Candidates([1003], catalog, 0, 0, ReactionCategory.Love).ToArray(), "an adjustment of 0 never fits");
+        CollectionAssert.AreEqual(new[] { 1002, 1000 }, Candidates([1002, 1500, 1001, 1000], catalog, 5, 8, ReactionCategory.Amiable).ToArray(),
+            "held order; a number without a record is skipped; 1002's two fitting effects count once");
+        CollectionAssert.AreEqual(new[] { 1002 }, Candidates([1002], catalog, 0, 0, ReactionCategory.Love).ToArray());
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ReputationRules.GreetingCandidates([], catalog, 0, 0, (ReactionCategory)7));
+    }
+
+    private static IReadOnlyList<int> Candidates(int[] held, ReputationCatalog catalog, int origin, int faction, ReactionCategory category) =>
+        ReputationRules.GreetingCandidates(held, catalog, origin, faction, category);
 
     [TestMethod]
     public void A_reputation_grants_its_three_factions_and_never_faction_0()
