@@ -11,8 +11,8 @@ the order part of [FR-SOCIAL-004](../requirements/story-social-ai.md#fr-social-0
 **NOT READY:** combat orders (attack, back off/stop, curse) are parsed and returned to the NPC AI's combat stage A7 with no
 behaviour; there is no typed order text (Enter) and no keyword lookup of `mes\broadcast.mes`; the move order's "please move" goal
 and the follower's AI pass after an order are not run by the viewer; lines are named by their message range, no line text or speech
-is loaded; the spread-out step is a project approximation (below). Owner decisions D1–D4 are open: the Steamwoven setting carries the
-coordinator's recommended fixes until the owner answers. Parity of the viewer's goals NOT_VERIFIED.
+is loaded; the spread-out step is a project approximation (below). Owner decisions D1–D4 (2026-10-21): the Steamwoven setting fixes each
+bug, the Original setting keeps it. Parity of the viewer's goals NOT_VERIFIED.
 
 ## Rules (`Arcanum.Simulation.Party.CompanionOrderRules`)
 

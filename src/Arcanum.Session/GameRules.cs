@@ -92,7 +92,7 @@ public sealed class GameRules
     /// <summary>World-map travel (ARC-WORLD-056): A1 discovery radius, A2 detour step, A3 segment-end time, A4 cancel landing.</summary>
     public TravelRuleProfile Travel { get; }
 
-    /// <summary>Follower orders (ARC-WORLD-046): OL6, OL13, OL14, OL15 (decisions D1–D4, open with the owner).</summary>
+    /// <summary>Follower orders (ARC-WORLD-046): OL6, OL13, OL14, OL15 (decisions D1–D4, owner decision 2026-10-21).</summary>
     public CompanionOrderRuleProfile Orders { get; }
 
     /// <summary>The default mode: the original with every recorded fix.</summary>

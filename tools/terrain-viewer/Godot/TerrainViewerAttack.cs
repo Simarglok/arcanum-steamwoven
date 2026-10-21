@@ -32,10 +32,21 @@ public partial class TerrainViewerApp
 
     /// <summary>One attack goal: its target, the aim, and either the walk to reach it or the attack animation playing (or the
     /// 5 ms pause before the auto-attack repeat).</summary>
-    private sealed class AttackGoal(AreaCombatTarget target, SessionCritterCombat combat, HitLocation? aim)
+    private sealed class AttackGoal(AreaObjectRecord row, string entity, HitLocation? aim)
     {
-        public AreaCombatTarget Target { get; } = target;
-        public SessionCritterCombat Combat { get; } = combat;
+        public AttackGoal(AreaCombatTarget target, SessionCritterCombat combat, HitLocation? aim) : this(target.Row, target.Entity, aim)
+        {
+            Target = target; Combat = combat;
+        }
+
+        public AttackGoal(AreaObjectAttackTarget target, HitLocation? aim) : this(target.Row, target.Entity, aim) => Object = target;
+
+        public AreaObjectRecord Row { get; } = row;
+        public string Entity { get; } = entity;
+        // ARC-COMBAT-005: an NPC target with its combat values; ARC-COMBAT-008: an object target instead.
+        public AreaCombatTarget? Target { get; }
+        public SessionCritterCombat? Combat { get; }
+        public AreaObjectAttackTarget? Object { get; }
         public HitLocation? Aim { get; } = aim;
         public bool Approaching { get; set; }
         public AreaAttackPlayer? Player { get; set; }
@@ -45,6 +56,8 @@ public partial class TerrainViewerApp
         public int Approaches { get; set; }
         // The last hit ended the goal (refused, or the resolver refused the attack): no repeat follows.
         public bool Stop { get; set; }
+        // ARC-COMBAT-008: the last hit broke the object: no repeat follows.
+        public bool Broke { get; set; }
     }
 
     /// <summary>An attack animation is playing (the exit gate's attempt-attack test).</summary>
@@ -88,7 +101,8 @@ public partial class TerrainViewerApp
     /// (an attack, a refused one, or a corpse clicked without Alt, which does nothing in the original).</summary>
     private bool TryAreaAttack(Vector2 screen, bool alt)
     {
-        if (CombatTargetAt(screen) is not { } target) return false;
+        // ARC-COMBAT-008: an object is attacked only with Alt held (ledger OD14); without it the click uses the object as out of combat.
+        if (CombatTargetAt(screen) is not { } target) return alt && TryAreaObjectAttack(screen);
         // FA6: a hero that cannot act (stoned, stunned, paralysed, unconscious, dead) does nothing with the click.
         if (_areaSession!.QueryHeroLife() is not { Status.IsActive: true })
         {
@@ -125,11 +139,77 @@ public partial class TerrainViewerApp
         }
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
         // The same target clicked again keeps its goal (the original adds no second attack goal on that target).
-        if (_attack is { } running && running.Target.Entity == target.Entity && !running.Stop) return true;
+        if (_attack is { } running && running.Entity == target.Entity && !running.Stop) return true;
         CancelAreaAttack(null);
         _attack = new(target, combat, HeldAim());
         StartAttackGoal(_attack);
         return true;
+    }
+
+    // ARC-COMBAT-008: the attackable objects of the shown map, rebuilt when the map or its portals are bound again.
+    private AreaObjectTargets? _objectTargets;
+    private object? _objectTargetsStamp;
+
+    private AreaObjectTargets? ObjectTargets()
+    {
+        // The exterior and the cave have no session portals (map mode binds them): their containers and scenery are targets all the same.
+        if (!AttackMapActive || _readyArea is not { } area) return null;
+        var stamp = (area, (object?)_areaPortals);
+        if (!Equals(stamp, _objectTargetsStamp))
+        {
+            var inventory = _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == area.Snapshot.RuntimeMap);
+            _objectTargets = _areaPortals is { } portals ? AreaObjectTargets.From(area.Snapshot, portals, inventory)
+                : new AreaObjectTargets(area.Snapshot.RuntimeMap, area.Snapshot.Objects, new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), inventory);
+            _objectTargetsStamp = stamp;
+            GD.Print($"ARC-COMBAT-008 object-targets map={_readyMapName} objects={_objectTargets.Count}");
+        }
+        return _objectTargets;
+    }
+
+    /// <summary>ARC-COMBAT-008: a guarded left press with Alt in combat mode on a door, window, container or scenery: the original's click
+    /// gives these the attack goal (ledger OD14; an item on the ground is picked up and a trap walked to, as without combat mode): true
+    /// when the press belongs to combat.</summary>
+    private bool TryAreaObjectAttack(Vector2 screen)
+    {
+        if (!AttackMapActive || !HeroInCombatMode || AreaObjectAtScreen(screen) is not { } key || ObjectTargets()?.Target(_areaSession!, key) is not { } target
+            || target.Kind is Arcanum.Simulation.Combat.DamageableObjectKind.Item or Arcanum.Simulation.Combat.DamageableObjectKind.Trap)
+            return false;
+        if (_areaSession!.QueryHeroLife() is not { Status.IsActive: true })
+        {
+            _attackNotice = "the hero cannot act";
+            RefreshAreaStatus();
+            return true;
+        }
+        if (target.Refusal is not null)
+        {
+            _attackNotice = $"cannot attack: {target.Refusal}";
+            GD.Print($"ARC-COMBAT-008 object-attack refused entity={target.Entity} detail={target.Refusal}");
+            RefreshAreaStatus();
+            return true;
+        }
+        CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
+        if (_attack is { } running && running.Entity == target.Entity && !running.Stop) return true;
+        CancelAreaAttack(null);
+        _attack = new(target, HeldAim());
+        StartAttackGoal(_attack);
+        return true;
+    }
+
+    /// <summary>ARC-COMBAT-008: the hit on an object at the action frame, through the session; the view then redraws what the hit
+    /// destroyed, busted or switched off.</summary>
+    private void RunObjectAttackHit(AttackGoal goal, AreaObjectAttackTarget target, int distance)
+    {
+        var owner = _areaSession!;
+        var result = owner.AttackObject(owner.Version, target.Attack(distance, goal.Aim, AreaCombatHost.HeroWorn(owner, _areaKitDurability)));
+        goal.Attacks++;
+        goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
+        goal.Broke = result.Object?.Broken == true || result.Item?.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted;
+        _attackNotice = AreaObjectTargets.Describe(result);
+        GD.Print($"ARC-COMBAT-008 object-attack-hit target={goal.Entity} disposition={result.Disposition} failure={result.Failure}"
+            + $" outcome={result.Resolution?.Outcome} damage={result.Object?.Damage}/{result.Item?.Condition?.Damage} break={result.Object?.Break}/{result.Item?.Break}"
+            + $" host={result.Host} step={result.StepFailure} wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}");
+        SyncAreaInventory();
+        RefreshAreaStatus();
     }
 
     /// <summary>The attack goal's first step: the target within the weapon's reach starts the animation; farther away the
@@ -141,7 +221,7 @@ public partial class TerrainViewerApp
         if (hero is null) { CancelAreaAttack("needs a hero (start with --hero)"); return; }
         if (!hero.Supported) { CancelAreaAttack($"a {hero.Skill} weapon cannot attack yet (melee only)"); return; }
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
-        var row = goal.Target.Row;
+        var row = goal.Row;
         var distance = Chebyshev(row, (cell.X, cell.Y));
         if (distance <= hero.Range)
         {
@@ -178,14 +258,14 @@ public partial class TerrainViewerApp
         var clip = new AttackClip(art.FramesPerGroup, art.ActionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, hero.WeaponSpeed), AttackArtWeapon.Unarmed);
         var sound = _areaSession!.Roll("combat.AttackSound", 1, RealTimeCombatRules.AttackSoundSides);
         var session = (AreaGridSession)_worldActor.Session!;
-        var targetCell = session.Chart.ToChart(new(goal.Target.Row.WorldX!.Value, goal.Target.Row.WorldY!.Value));
+        var targetCell = session.Chart.ToChart(new(goal.Row.WorldX!.Value, goal.Row.WorldY!.Value));
         goal.Octant = AreaCombatHost.Facing(session.State.CommittedCell, targetCell) is { } facing ? DiagnosticGridActor.Octant(facing)
             : DiagnosticGridActor.RenderState(session.State).Facing;
         goal.Player = new AreaAttackPlayer(clip, WorldMilliseconds());
         goal.RepeatAtMs = null;
         _worldActor.AttackPose = (goal.Octant, 0);
         PlayAttackStartSounds(sound.Roll?.Value);
-        GD.Print($"ARC-COMBAT-005 attack-start target={goal.Target.Entity} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs} rate={rate}"
+        GD.Print($"ARC-COMBAT-005 attack-start target={goal.Entity} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs} rate={rate}"
             + $" sound={sound.Roll?.Value.ToString() ?? sound.Failure.ToString()} aim={goal.Aim?.ToString() ?? "none"}");
         PublishWorldSelection();
     }
@@ -229,13 +309,15 @@ public partial class TerrainViewerApp
         }
         _worldActor.AttackPose = null;
         goal.Player = null;
-        var target = _combatHost!.Target(owner, CurrentAreaMap, goal.Target.Row.Key);
-        var dead = target?.Dead != false || owner.QueryLife(goal.Combat.Target).View?.Status.IsDead != false;
+        // An object stays a target while the session draws it and the last hit did not break it (ARC-COMBAT-008).
+        var target = goal.Combat is null ? null : _combatHost!.Target(owner, CurrentAreaMap, goal.Row.Key);
+        var dead = goal.Combat is null ? goal.Broke || _objectTargets?.Target(owner, goal.Row.Key) is null
+            : target?.Dead != false || owner.QueryLife(goal.Combat.Target).View?.Status.IsDead != false;
         var repeats = !goal.Stop && RealTimeCombatRules.Repeats(new(HeroInCombatMode, true, RealTimeCombatRules.AutoAttackDefault,
-            owner.QueryCombatRound() is not null, target is null, dead, false, false, false, false));
+            owner.QueryCombatRound() is not null, goal.Combat is not null && target is null, dead, false, false, false, false));
         if (repeats) goal.RepeatAtMs = now + RealTimeCombatRules.RepeatDelayMs;
         else _attack = null;
-        GD.Print($"ARC-COMBAT-005 attack-end target={goal.Target.Entity} attacks={goal.Attacks} repeat={repeats}");
+        GD.Print($"ARC-COMBAT-005 attack-end target={goal.Entity} attacks={goal.Attacks} repeat={repeats}");
         PublishWorldSelection(); RefreshAreaStatus();
     }
 
@@ -245,27 +327,35 @@ public partial class TerrainViewerApp
     {
         var owner = _areaSession!;
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
-        var distance = Chebyshev(goal.Target.Row, (cell.X, cell.Y));
+        var distance = Chebyshev(goal.Row, (cell.X, cell.Y));
         if (distance > (owner.QueryHeroAttack()?.Range ?? 1))
         {
             goal.Player!.Abort();
             _attackNotice = "the target is out of reach";
             return;
         }
-        var result = owner.AttackCritter(owner.Version, new(goal.Combat) { Aim = goal.Aim, Distance = (int)distance });
+        if (goal.Object is { } struck) { RunObjectAttackHit(goal, struck, (int)distance); return; }
+        // ARC-COMBAT-008: the two sides' worn items with their durability values, so the attack wears them (ARC-COMBAT-007).
+        var result = owner.AttackCritter(owner.Version, new(goal.Combat!)
+        {
+            Aim = goal.Aim, Distance = (int)distance,
+            HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability),
+            TargetWorn = _combatHost!.WornItems(owner, CurrentAreaMap, goal.Entity),
+        });
         goal.Attacks++;
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
-        PlayAttackResultSounds(result, goal.Target.Row, goal.Target.Entity);
-        var life = owner.QueryLife(goal.Combat.Target).View;
+        PlayAttackResultSounds(result, goal.Row, goal.Entity);
+        var life = owner.QueryLife(goal.Combat!.Target).View;
         _attackNotice = AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
-        GD.Print($"ARC-COMBAT-005 attack-hit target={goal.Target.Entity} disposition={result.Disposition} failure={result.Failure}"
+        GD.Print($"ARC-COMBAT-005 attack-hit target={goal.Entity} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} cause={result.Resolution?.MissCause} damage={result.Life?.HitPointDamage} events={result.Life?.Events}"
-            + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} xp={result.HitAward?.Award}/{result.KillAward?.Award} step={result.StepFailure}");
+            + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} xp={result.HitAward?.Award}/{result.KillAward?.Award} step={result.StepFailure}"
+            + $" wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}");
         LevelAreaFollowers(result.HitAward);
         LevelAreaFollowers(result.KillAward);
         if (result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))
-            _deathAnimations[(CurrentAreaMap, goal.Target.Entity)] = AreaFallenPoses.Animation(dealt.Death);
+            _deathAnimations[(CurrentAreaMap, goal.Entity)] = AreaFallenPoses.Animation(dealt.Death);
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();
@@ -395,7 +485,7 @@ public partial class TerrainViewerApp
     {
         if (!AttackMapActive) return string.Empty;
         var state = _attack is null ? string.Empty : _attack.Approaching ? " (walking to attack)" : _attack.Player is not null ? " (attacking)" : " (attack repeats)";
-        return _attackNotice is null && _attack is null ? (HeroInCombatMode ? " | attack: left-click an NPC" : string.Empty)
+        return _attackNotice is null && _attack is null ? (HeroInCombatMode ? " | attack: left-click an NPC, Alt+click an object" : string.Empty)
             : $" | attack{state}: {_attackNotice ?? "-"}";
     }
 }

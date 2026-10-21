@@ -1643,9 +1643,9 @@ and SCR action 139. Read on 2026-10-21 by a first reader and, independently, a s
 (method step 6). After resolving one data-reading difference (below), both agree on every behaviour and verdict. The second reader added that the PC's own text is floated over the PC first, that the curse line is a race insult of the generated race-line files and that the multiplayer phase scans players within a screen-sized rectangle; it first read keyword 116 ("stop") as having no rule entry, which the installed `Rules\BroadCastRules.mes` does have (back off), a data-reading difference, not a code one. Every direct branch stays inside `.text`. Message numbers are of the installed files
 named in the study; no game text is copied. Rows OL17–OL26 are implemented by ARC-WORLD-045
 ([party runtime](../world/party-runtime.md#wait-timer-and-loyalty-arc-world-045); registry rows 0x4AA7A0, 0x4AA990, 0x4AAA30,
-0x4AC380, 0x4ADB50 at F2); OL19's goal gate is the host's input (decision D5, both settings as the original until the owner decides). Rows OL1–OL16 are implemented by ARC-WORLD-046 ([companion orders](../world/companion-orders-runtime.md); registry rows
+0x4AC380, 0x4ADB50 at F2); OL19's goal gate is the host's input (decision D5, owner decision 2026-10-21: both settings as the original). Rows OL1–OL16 are implemented by ARC-WORLD-046 ([companion orders](../world/companion-orders-runtime.md); registry rows
 0x4133B0, 0x4C31A0, 0x4C3BE0, 0x56A9D0 at F2; the reach is the Chebyshev tile distance 0x4B96F0, at most 10; the portrait text's format
-is two strings joined by a space); D1–D4 are rule-mode switches pending the owner.
+is two strings joined by a space); D1–D4 are rule-mode switches (owner decision 2026-10-21: Steamwoven fixes, Original keeps the original); D6 is ARC-UI-046's switch and D7 ARC-WORLD-047's, decided the same day.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
@@ -1653,18 +1653,18 @@ is two strings joined by a space); D1–D4 are rule-mode switches pending the ow
 | OL2 | broadcast (0x4C31A0) | A copy of the PC's follower array (direct followers, not waiting NPCs), each within 10 tiles (0x4B96F0); `#` addresses every one, otherwise the first whose known name (0x441B60) is a case-insensitive prefix of the text; one AI pass each (0x4A84F0); no match → multiplayer phase only. | Original (C14) |
 | OL3 | keyword lookup (0x4C3B40), init (0x4C2C10) | Whole-word, case-insensitive, first match of keywords 100–117; 14 types from `Rules\BroadCastRules.mes`; "follow other" unreachable (keyword 117 repeats "follow"). | Original |
 | OL4–OL5 | 0x4C348D, 0x4C34E2 | Leave: mind control → nothing, else farewell and a **forced** leave. Wait: mind control → nothing, else acknowledgement, animations interrupted, ordinary wait with its timer. | Original |
-| OL6 | 0x4C3542, 0x4AD950, 0x4AA8C0 | Follow/come: follow check (limit ignored only when forced); refusal → "cannot" line only; acceptance → acknowledgement and an unwait that never acts (followers in the array never wait): no state change. | Original bug (likely); decision candidate D1 |
+| OL6 | 0x4C3542, 0x4AD950, 0x4AA8C0 | Follow/come: follow check (limit ignored only when forced); refusal → "cannot" line only; acceptance → acknowledgement and an unwait that never acts (followers in the array never wait): no state change. | Original bug (likely); D1 (owner decision 2026-10-21: switch, Steamwoven fixes) |
 | OL7–OL9 | 0x4363E0, 0x45F5C0, 0x45F600, 0x436960, 0x433C80 | Move: please-move goal (68) out of the PC's way. Stay close / spread out: clear / set NPC flag 0x10 (spread out also starts goal 69 when newly set). Walk here: run-to-tile goal (4) to the order's tile. | Original |
 | OL10 | 0x4C3849, 0x4AA4A0 | Back off and stop are "stop attacking" (HS18): no movement. | Original (combat side A7) |
 | OL11 | 0x4C3703, 0x4C377D, 0x43C570, 0x4AA580, 0x4A9650 | Curse and attack: boundary recorded, settled by stage A7. | Not checked here (A7); read by ARC-RES-067: Original ([FO2, FO3](#npc-ai-followers-in-combat-arc-res-067)) |
 | OL12 | 0x418780, 0x418250, 0x418870, 0x4AD800, 0x568430 | Lines: random entry of `mes\gd_npc_*.mes` by both genders: acknowledgement 2100–2199, cannot 2200–2299, farewells 1900–2099; an NPC's own dialog may override (not traced); none when it cannot speak; floated with speech. | Original |
-| OL13 | 0x4133B0, 0x4C0FC0 | Leave farewell: reaction 40 or less → 1900–1999 (labelled friendly), above → 2000–2099 (labelled hostile). | Original bug (likely); D3 |
-| OL14 | 0x4C3BE0 | Preset 5 (F6) has no `#` and names no follower: no effect in single player. | Original bug (likely, data); D2 |
-| OL15 | 0x56A9D0, 0x56B180 | The portrait order goes to the first follower in reach whose name shares the prefix, not necessarily the clicked one; none beyond 10 tiles. | Original bug (likely); D4 |
+| OL13 | 0x4133B0, 0x4C0FC0 | Leave farewell: reaction 40 or less → 1900–1999 (labelled friendly), above → 2000–2099 (labelled hostile). | Original bug (likely); D3(owner decision 2026-10-21: switch, Steamwoven fixes) |
+| OL14 | 0x4C3BE0 | Preset 5 (F6) has no `#` and names no follower: no effect in single player. | Original bug (likely, data); D2(owner decision 2026-10-21: switch, Steamwoven fixes) |
+| OL15 | 0x56A9D0, 0x56B180 | The portrait order goes to the first follower in reach whose name shares the prefix, not necessarily the clicked one; none beyond 10 tiles. | Original bug (likely); D4(owner decision 2026-10-21: switch, Steamwoven fixes) |
 | OL16 | 0x56B6F0, 0x4411C0 | No portrait and no order for a waiting NPC. | Original (C14) |
 | OL17 | 0x4C0DE0, 0x4B0980 | Arming: negative reaction change by the direct PC leader → check-leader (NPC flag 0x10000) and reaction bit (critter flags 2, 0x1000000); PC alignment change → each array follower gets check-leader and 0x2000000 (rose) or 0x4000000 (fell). | Original (C13) |
 | OL18 | 0x4AC380, 0x423300 | Non-combat pass with a leader: leave combat mode; waiting → stop; request follow; loyalty step only without a running action goal (overlay goals do not count). | Original (C13) |
-| OL19 | 0x4346A0, goal 24 (0x5A85D0), 0x433270, 0x4B7CD0 | A follow goal starts only beyond 4 (7) tiles and restarts itself every 100 ms in real time; so the loyalty step is skipped while it lives and runs only while the follower idles near its leader without one. Frequency in play: F4 needed. | Original (intent unclear); answers O4 statically; D5 |
+| OL19 | 0x4346A0, goal 24 (0x5A85D0), 0x433270, 0x4B7CD0 | A follow goal starts only beyond 4 (7) tiles and restarts itself every 100 ms in real time; so the loyalty step is skipped while it lives and runs only while the follower idles near its leader without one. Frequency in play: F4 needed. | Original (intent unclear); answers O4 statically; D5 (owner decision 2026-10-21: both settings as the original) |
 | OL20 | 0x4AC380, 0x45DFC0, 0x413A90 | Refused check (limit ignored) → unforced leave; if it left: jilted, then the reason's refusal line (1600–2999 by reason); a refused leave falls through to check leader. | Original (C13) |
 | OL21 | 0x4ADB50, 0x414290 | Check leader clears the three bits; no warning when mind controlled by the leader, Persuasion Master, or forced; reaction ≤ field 5 + 20 → 3; alignment gap > field 6 − 100 (too good) → 1 or > field 7 − 100 (too bad) → 2; warning lines 5200–5499; never leaves. | Original (C13) |
 | OL22 | 0x4AA990, 0x4C0DE0 | Bits armed just before the leader is cleared stay until the NPC follows again (one stale test). | Original (latent) |
@@ -1673,8 +1673,8 @@ is two strings joined by a space); D1–D4 are rule-mode switches pending the ow
 | OL25 | 0x4AA8C0, 0x4AAA30, 0x45BFF0 | Any successful unwait cancels the event: dialog `UW`, leave, join, kill notification (forced), forced disband on object destruction (0x45E180). | Original (C11) |
 | OL26 | 0x45BCE0, 0x45C2F0, 0x45C580 | The event stays with the waiting NPC's map, parked while the PC is away, fires at the first ping after the return when overdue. | Original (with OQ3) |
 | OL27 | 0x4A69C0, 0x460630 → 0x550750 → 0x552770, 0x5529C0, 0x4A7030 | Per level reached, local PC only: message-window entry `intgame.mes` 21 (title), 11 (level), 12 (points) or the scheme text (`level.mes` 2/3/4, 1 when completed); sound 3005; none in the last-level branch, none for followers. | Original (XP5) |
-| OL28 | 0x4A69C0 | The points line shows the sum before the 56 clamp. | Original bug (cosmetic); D6 |
-| OL29 | 0x440FC0, 0x440FF0, 0x440B40 | Waiting followers get the level step only inside a screen-sized rectangle centred on the PC among loaded objects (alive, waiting, top PC leader this PC). | Original (L7); D7 |
+| OL28 | 0x4A69C0 | The points line shows the sum before the 56 clamp. | Original bug (cosmetic); D6(owner decision 2026-10-21: switch, Steamwoven fixes) |
+| OL29 | 0x440FC0, 0x440FF0, 0x440B40 | Waiting followers get the level step only inside a screen-sized rectangle centred on the PC among loaded objects (alive, waiting, top PC leader this PC). | Original (L7); D7(owner decision 2026-10-21: switch, Steamwoven fixes) |
 | OL30 | 0x44ABC8, 0x44B4E0, 0x44BA70, 0x4A6D90 | Action 139: object operand (a list) and a number; each PC or NPC gets field 245 written, no range check, no purchase until its next level step. | Original |
 | OL31 | 0x4064B0, 0x410C50, 0x406520, 0x40BDB0, 0x40BE70, 0x40BFC0, 0x4E50E0 | Handles saved as IDs; a map open converts every marked object's handle fields and array elements back among loaded objects; not found → null (in place). | Original (answers O7) |
 | OL32–OL33 | as OL31, 0x4D3460 | A waiting follower on another map keeps its leader as an ID and rebinds when its map opens; a follower carried to another map is that map's object from then on. | Original (O7; OL33 partly inference) |
@@ -1833,7 +1833,7 @@ Anomalies (none needs a switch; the owner may still ask for one under D8):
 Source: the [object damage runtime](../world/object-damage-runtime.md). Question: what does the original's attack do to a
 non-critter object (the object branch of the damage step 0x4B4390, the break 0x43F1C0 and its callees)? Read on 2026-10-21
 by this task and, independently, by a fresh agent that saw only the questions and the project's records of the callees (method
-step 6). Both agree on every row; OD1–OD12 are F2 and OD13, found while answering the review, has one reading (F1). Every direct branch stays inside `.text`. The second reader saw one summary
+step 6). Both agree on every row; OD1–OD12 are F2; OD13 (found while answering the review) and OD14 (read for the viewer, part 2) have one reading each (F1). Every direct branch stays inside `.text`. The second reader saw one summary
 line of the new `ObjectDamageRules` while searching for the door/window meaning of portal ART bit 10 (which comes from the
 project's portal naming, not this reading); its reading of 0x4F06E0 rests on the listing and agrees with LK12, already F2.
 
@@ -1852,6 +1852,7 @@ project's portal naming, not this reading); its reading of 0x4F06E0 rests on the
 | OD11 | 0x43F1C0, trap | Field 25 = −1 or trap flag 0x2 already set: destroyed (sound 1). Otherwise the ART of field 25, damage 0, trap flag 0x2, sound 0, BUST script. | Original |
 | OD12 | 0x43F1C0, items | As DU4: an item whose art carries the destroyed bit is deleted (sound 1); otherwise both arts take the bit, damage 0, the item leaves a wear slot (or drops), sound 0 and its BUST script. | Original (confirms DU4) |
 | OD13 | drop (0x466E50, 0x466EF0), read by this task only (F1) | A dropped item joins a junk pile (prototype 3023) already at the location; else, when items lie there, a new junk pile is created and those items and the dropped one go into it; else it lies loose. Each drop schedules the item's decay two game days later (0x468090). So a container spilling two or more items leaves them in a junk pile. | Original; the session lays spilled items loose (a recorded difference in the [object damage runtime](../world/object-damage-runtime.md#differences-from-the-original)) |
+| OD14 | object click (0x54ED30), combat mode, read by this task only (F1) | In combat mode the click's goal follows the target's type (byte table 0x54FCA0): a wall, portal or scenery gets the attack goal (Shift: attempt attack) only with left or right Alt held, else the use goal; a container with Alt the attack goal, else the use-container goal; an item the pick-up goal; a trap a walk to its location; critters as FA1–FA3. | Original; the viewer attacks objects only with Alt (ARC-COMBAT-008 part 2) |
 
 Anomalies (none needs a switch):
 
