@@ -1279,6 +1279,11 @@ public sealed partial class GameSessionOwner : IDisposable
             if (!SessionStoryLimits.IsRumor(rumor)) return GameSessionFailure.InvalidRumor;
             if (!story.QuelledRumors.Add(rumor)) return GameSessionFailure.InvalidSnapshot;
         }
+        // ARC-WORLD-056: known areas, and a last discovered area that the PC knows (the original sets it with the known bit).
+        foreach (var area in saved.KnownAreas)
+            if (!SessionStoryLimits.IsArea(area) || !story.KnownAreas.Add(area)) return GameSessionFailure.InvalidSnapshot;
+        if (saved.LastArea != 0 && !story.KnownAreas.Contains(saved.LastArea)) return GameSessionFailure.InvalidSnapshot;
+        story.LastArea = saved.LastArea;
         foreach (var quest in story.Quests.Values)
         {
             var shared = quest.Effective switch
@@ -1809,10 +1814,12 @@ internal sealed class Story
     internal Dictionary<int, SessionQuestState> GlobalQuests { get; } = [];
     internal Dictionary<int, long> Rumors { get; } = [];
     internal HashSet<int> QuelledRumors { get; } = [];
+    internal HashSet<int> KnownAreas { get; } = [];
+    internal int LastArea { get; set; }
 
     internal SessionStoryState Capture() => new(
         Quests.Values.OrderBy(quest => quest.Quest).ToArray(),
         GlobalQuests.OrderBy(pair => pair.Key).Select(pair => new SessionGlobalQuest(pair.Key, pair.Value)).ToArray(),
         Rumors.OrderBy(pair => pair.Key).Select(pair => new SessionRumor(pair.Key, pair.Value)).ToArray(),
-        QuelledRumors.Order().ToArray());
+        QuelledRumors.Order().ToArray(), KnownAreas.Order().ToArray(), LastArea);
 }

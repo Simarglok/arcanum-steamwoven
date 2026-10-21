@@ -119,7 +119,7 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip) narrows a
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap) narrows a
                         // map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
@@ -138,6 +138,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && Stage("roundtrip")) await RunAreaMapRoundTripSmokeAsync();
                         // ARC-RENDER-024: last on a window map, as the window it ends on holds no exit to use afterwards.
                         if (_readyMapName is not null && Stage("stream")) await RunAreaMapStreamSmokeAsync();
+                        // ARC-UI-048: after the stream, as the landing loads the start map around another place.
+                        if (_readyMapName is not null && Stage("worldmap")) await RunAreaWorldMapSmokeAsync();
                         GetTree().Quit(0);
                     }
                     else await RunNativeSmokeAsync(result);
@@ -865,7 +867,7 @@ public partial class TerrainViewerApp : Node
         TickAudio();
         if (IsWorld)
         {
-            try { TickAreaClock(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaAwards(); }
+            try { TickAreaClock(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaWorldMap(delta); SyncAreaAwards(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
