@@ -309,7 +309,7 @@ conversation is not run).
 - **Session**: `SetAutoLevelScheme(expected, SessionSchemeTarget.Hero | ForNpc(loaded), scheme)` stores it (registry 0x4A6D90,
   partial, F2). The session keeps schemes within 0..199 (its snapshot bound), so a number outside is refused where the original
   stores it and later buys nothing with it: a documented deviation no installed script reaches.
-- **The AREA viewer** admits 139 in its dialog set (`AreaScriptHost.Admission`, since ARC-TECHNOLOGY-005 "S3-area-sound-calls-scheme-schematic"); `Apply` hands each
+- **The AREA viewer** admits 139 in its dialog set (`AreaScriptHost.Admission`, since ARC-TECHNOLOGY-005 "S3-area-sound-calls-scheme-schematic", since ARC-UI-049 "…-reading"); `Apply` hands each
   request to the session in action order: the PC's own scheme, or an NPC's record with its map data (the host's `npcAdvancement`,
   which the viewer reads from the NPC's home-map fields with `--hero`); any other object is ignored, and a refused number or a PC
   without a hero changes nothing and stops nothing, as the original's run goes on; a change the session cannot take (the record

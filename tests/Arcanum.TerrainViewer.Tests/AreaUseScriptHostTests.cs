@@ -204,6 +204,7 @@ public sealed class AreaUseScriptHostTests
             var host = Host(session, content, Gate(708));
             var ran = host.Run(Gate(708), session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(2, ran.Run!.Effects.Readings.Count, "the run asked for both");
             CollectionAssert.AreEqual(new[] { new ScrReadingRequest(ScrReadingKind.Book, 1020, new ScrObjectRef(1, AreaScriptHost.PcCode)) },
                 host.TakeReadings().ToArray(), "only a player viewer gets the window (WR15)");
             Assert.AreEqual(0, host.TakeReadings().Count, "taken once");
