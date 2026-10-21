@@ -70,6 +70,8 @@ public partial class TerrainCanvas
     public int AreaVisibleCount { get; private set; }
     internal int AreaPoolCount => _areaItems.Count;
     internal long AreaMappingCreatedCount => _areaMappings.CreatedCount;
+    /// <summary>Index rows resident in the shared cache (ARC-RENDER-032 smoke).</summary>
+    internal int AreaMappingRows => _areaMappings.Count;
     public int AreaCulledCount => (_area?.Commands.Count ?? 0) - AreaVisibleCount;
     public IReadOnlyList<AreaDrawCommand> AreaVisibleCommands { get; private set; } = Array.Empty<AreaDrawCommand>();
     private (Rect2 View, Transform2D Transform, ActorDiagnosticDrawCommand Actor,

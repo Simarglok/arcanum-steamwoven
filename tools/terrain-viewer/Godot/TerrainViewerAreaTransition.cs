@@ -265,7 +265,7 @@ public partial class TerrainViewerApp
         var area = transition.ToMap == _caveLoad!.Area.Snapshot.RuntimeMap ? _caveLoad.Area : _exteriorArea!;
         _readyArea = area;
         ConfigureAreaActor(target, transition.ArrivalChartCell, session.State.Facing);
-        _camera!.SetAreaPlan(area.Plan, WorldViewport);
+        _camera!.SetAreaPlan(area.Plan, WorldViewport, window: false); // the pinned Crash Site and cave (not map mode)
         RebindAreaMapAmbient();
         EnterAreaMapSound(area.Snapshot.CatalogueMap);
         // The camera centres on the arrival first, then the scene is published at that view.
