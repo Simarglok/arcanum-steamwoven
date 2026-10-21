@@ -15,8 +15,9 @@ public partial class TerrainViewerApp
     // and containers whose material subtracts nothing, first), walks within reach and attacks until it breaks or a bounded number of
     // attacks ran; each hit runs through the session, and an object the hit destroyed or switched off is no longer drawn. NONE on a
     // map without such an object. ARC-COMBAT-014: only an object the player's click can pick is a candidate (a click-through scenery,
-    // OF_CLICK_THROUGH, is never picked, as in the original, and a roof-covered body is not drawn); a candidate the view shows no
-    // point of under the pointer is skipped for the next, up to eight.
+    // OF_CLICK_THROUGH, is never picked, as in the original, and a roof-covered body is not drawn); a candidate with no cell within the
+    // hero's reach to stand on, with no start the route planner connects to the cell the attack walks to, or with no point under the
+    // pointer is skipped for the next, up to eight; NONE with the reasons when all are skipped.
     private async Task RunAreaObjectAttackSmokeAsync()
     {
         if (_areaSession is not { } session || session.QueryHero() is null || ObjectTargets() is not { } targets || _readyArea is not { } area
@@ -46,6 +47,7 @@ public partial class TerrainViewerApp
             .Where(c => c.State.HitPoints > 0)
             .OrderBy(c => c.Reduced).ThenBy(c => c.State.HitPoints).ThenBy(c => c.Target.Entity, StringComparer.Ordinal).ToArray();
         if (candidates.Length == 0) { GD.Print($"ARC-COMBAT-008 native-smoke object-attack NONE map={_readyMapName} objects={targets.Count}"); return; }
+        var reach = session.QueryHeroAttack()?.Range ?? 1;
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
         try
@@ -57,9 +59,9 @@ public partial class TerrainViewerApp
             foreach (var candidate in candidates.Take(8))
             {
                 var cell = map.Chart.ToChart(new(candidate.Target.Row.WorldX!.Value, candidate.Target.Row.WorldY!.Value));
-                // The hero attacks at reach 1 from a cell next to the object it can step onto, the cell the attack's approach looks for
-                // (ApproachCell); an object without one cannot be reached, nor in the original.
-                try { AreaSmokeStandable(map, cell, 1); }
+                // The hero attacks within its weapon's reach from a cell it can step onto, the cell the attack's approach looks for
+                // (ApproachCell); an object without one cannot be reached.
+                try { AreaSmokeStandable(map, cell, reach); }
                 catch (InvalidOperationException) { skipped.Add($"{candidate.Target.Entity}:no standable cell within reach"); continue; }
                 // A start a few cells away from which the planner finds a route to the cell the attack's approach will walk to (a
                 // start across a fence or wall from the object would leave the walk without a route).
@@ -72,7 +74,7 @@ public partial class TerrainViewerApp
                     try { standable = AreaSmokeStandable(map, near, 1); } catch (InvalidOperationException) { continue; }
                     AreaSmokePlace(map, standable);
                     if (_worldActor.Session is not AreaGridSession live
-                        || ApproachCell(live, candidate.Target.Row.WorldX!.Value, candidate.Target.Row.WorldY!.Value, 1) is not { } approach) continue;
+                        || ApproachCell(live, candidate.Target.Row.WorldX!.Value, candidate.Target.Row.WorldY!.Value, reach) is not { } approach) continue;
                     var routes = new AreaRouteSource(live.Snapshot, live.Chart, live.Occupancy, () => live.Portals?.Invoke());
                     if (approach != standable && Arcanum.Simulation.Navigation.RoutePlanner.Plan(routes, standable, approach).Outcome
                         != Arcanum.Simulation.Navigation.RouteOutcome.Found) continue;
@@ -87,7 +89,11 @@ public partial class TerrainViewerApp
                 (chosen, targetCell, point) = (candidate, cell, found);
                 break;
             }
-            Require(chosen.Target is not null, "a pickable object is under the pointer: " + string.Join("; ", skipped));
+            if (chosen.Target is null)
+            {
+                GD.Print($"ARC-COMBAT-008 native-smoke object-attack NONE map={_readyMapName} (every candidate skipped: {string.Join("; ", skipped)})");
+                return;
+            }
             var (target, before, reduced) = (chosen.Target!, chosen.State, chosen.Reduced);
             var key = target.Row.Key;
             HoverAtForSelfTest(point);
