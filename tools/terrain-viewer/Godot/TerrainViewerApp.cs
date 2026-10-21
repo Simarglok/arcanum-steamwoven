@@ -868,7 +868,7 @@ public partial class TerrainViewerApp : Node
         TickAudio();
         if (IsWorld)
         {
-            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaWorldMap(delta); SyncAreaAwards(); }
+            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaAwards(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");

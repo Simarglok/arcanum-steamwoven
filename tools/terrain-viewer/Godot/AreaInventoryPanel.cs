@@ -30,6 +30,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     public event Action? TakeAllRequested;
     /// <summary>ARC-SKILLS-005: use a healing item of the PC's list on the PC.</summary>
     public event Action<string>? UseRequested;
+    /// <summary>ARC-UI-049: use a written item of the PC's list (read it, or register a schematic document).</summary>
+    public event Action<string>? ReadRequested;
     public bool IsOpen => Visible;
     /// <summary>The looted holder's entity, or null in the plain inventory view.</summary>
     public string? Holder => IsOpen ? _view?.Holder : null;
@@ -110,6 +112,17 @@ public partial class AreaInventoryPanel : CanvasLayer
             use.Pressed += () => Callable.From(() => UseRequested?.Invoke(entity)).CallDeferred();
             _use.AddChild(use); _useButtons.Add(use);
         }
+        foreach (var line in view.Pc.Where(line => line.Written))
+        {
+            var entity = line.Entity;
+            var read = new Button
+            {
+                Name = $"Read{_useButtons.Count + 1}", Text = "Read: " + line.Text, Alignment = HorizontalAlignment.Left,
+                AutowrapMode = TextServer.AutowrapMode.WordSmart, FocusMode = Control.FocusModeEnum.All,
+            };
+            read.Pressed += () => Callable.From(() => ReadRequested?.Invoke(entity)).CallDeferred();
+            _use.AddChild(read); _useButtons.Add(read);
+        }
         var looting = view.Holder is not null;
         _lootHeader.Visible = looting; _loot.Visible = looting; _takeAll.Visible = looting;
         if (looting)
@@ -131,7 +144,8 @@ public partial class AreaInventoryPanel : CanvasLayer
         }
         _message.Text = message ?? string.Empty;
         _hint.Text = (looting ? "Click an item to take it (controller: D-pad, confirm) | " : string.Empty)
-            + (_useButtons.Count > 0 ? "Use on self heals the hero with a healing item | " : string.Empty)
+            + (view.Pc.Any(line => line.Healing) ? "Use on self heals the hero with a healing item | " : string.Empty)
+            + (view.Pc.Any(line => line.Written) ? "Read opens a written item (a schematic document registers) | " : string.Empty)
             + "I, Escape or cancel closes | PROJECT diagnostic window: no grid, equipment, drop or weight limit; original UI parity NOT_VERIFIED";
         var enabled = Focusable();
         enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();

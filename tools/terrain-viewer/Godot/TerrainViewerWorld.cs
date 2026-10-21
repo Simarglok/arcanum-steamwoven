@@ -111,7 +111,7 @@ public partial class TerrainViewerApp
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
     private bool PaletteOpen => _worldPanel?.IsOpen == true;
-    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || WorldMapOpen;
+    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -187,7 +187,7 @@ public partial class TerrainViewerApp
     }
     private void ToggleWorldSettings()
     {
-        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || WorldMapOpen) return;
+        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); _visualKeyNotice = null; }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); _overlayPanelState = null; SyncPassabilityOverlay(); }
@@ -334,6 +334,7 @@ public partial class TerrainViewerApp
         if (SheetOpen) { HandleSheetPulse(intent); return; }
         if (LogbookOpen) { HandleLogbookPulse(intent); return; }
         if (SchematicsOpen) { HandleSchematicsPulse(intent); return; }
+        if (ReadingOpen) { HandleReadingPulse(intent); return; }
         if (WorldMapOpen) { HandleWorldMapPulse(intent); return; }
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
@@ -696,6 +697,13 @@ public partial class TerrainViewerApp
         if (SchematicsOpen && input is InputEventKey schematicsKey)
         {
             HandleSchematicsKey(schematicsKey);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // ARC-UI-049: the open reading window owns every key (Escape closes it, Left/Right turn a book's pages).
+        if (ReadingOpen && input is InputEventKey readingKey)
+        {
+            HandleReadingKey(readingKey);
             GetViewport().SetInputAsHandled();
             return;
         }
