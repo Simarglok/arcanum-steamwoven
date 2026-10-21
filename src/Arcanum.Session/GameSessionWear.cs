@@ -36,7 +36,8 @@ public sealed record SessionWearItem(string Entity, ItemCondition Baseline)
 /// <summary>
 /// One side of an attack for its wear step. <see cref="Life"/> is the critter (the hero or an NPC), null for an attacked object
 /// that is no critter. <see cref="Worn"/> holds the items in its wear slots with their baselines; an empty slot takes no wear. For
-/// the hero it must name exactly the items the hero wears in the session. Null means the host passes no item data: every item step
+/// the hero it must name exactly the items the hero wears in the session; an item the session deleted (an earlier attack's second
+/// break or destroying critical) is refused, so a host leaves those out (<see cref="GameSessionOwner.IsItemDestroyed"/>). Null means the host passes no item data: every item step
 /// of that side is skipped (<see cref="SessionWearSkip.ItemsUnknown"/>), the bare-handed attacker's own wear still applies.
 /// </summary>
 public sealed record SessionWearSide
