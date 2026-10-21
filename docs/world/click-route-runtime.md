@@ -115,10 +115,16 @@ RouteDrive Drive(MovementState state, SimulationTime target, Func<SimulationTime
   with `straightRetry` (the viewer's click route; a companion follow has none) takes `StraightRetry` when a plan finds no
   path, and from then on every plan toward that goal is the straight line again (the run's flag 0x400 survives); the
   movement tests each step and a refused one stops the walk (`ROUTE_STEP_DENIED`), as the original ends the run.
+- ARC-WORLD-074: the PC's own steps pass living critters outside combat mode (`AreaGridSession.CrittersPass`, set by the viewer
+  as "not in combat mode", read once per advance): T0 PC and NPC records count as moved and the live actors (companions) hold no
+  cell for the PC, through the same `AreaOccupancyRules.ApplyPassingCritters` the click route plans with; objects, walls and doors
+  keep blocking. Tests: `tests/Arcanum.TerrainViewer.Tests/AreaCritterPassTests.cs` (through an NPC and a companion outside combat,
+  blocked in combat, the goal holding an NPC refused, the Original segment-end stop and Steamwoven walking through).
 - ARC-WORLD-073, living critters (owner decision 2026-10-21 12:09, "outside combat NPCs do not block the way"): the viewer's click
   route plans through them outside combat mode in both rule modes, refuses a goal that holds one, and with `segmentEndCritterEndsWalk`
   (Original, LR5) ends the walk before a segment's last step onto one (`ROUTE_SEGMENT_END_CRITTER`). With `replanOnDenial` a step the
-  movement refuses during a normal plan (until ARC-WORLD-074, a critter's tile) makes the next plan avoid that cell, at most
+  movement refuses during a normal plan (since ARC-WORLD-074 not a critter's tile outside combat mode: a door that closed, an
+  object that changed) makes the next plan avoid that cell, at most
   `DenialReplanMaximum` (8) cells a goal, after which a refused step stops with `ROUTE_STEP_DENIED`; so no walk stalls: it goes
   round, or stops with a typed reason. A diagonal step refused for a critter on its shoulder avoids the step's destination, not
   the shoulder (bounded by the same limit). Critters the session killed are dead for these checks. A leg of Steamwoven's
@@ -314,7 +320,7 @@ DC2–DC8 and the freed cells FC1–FC3). Each part of this runtime against it:
 | Segments and replanning (`RouteFollower`) | at most 8 rotations a plan, then a new plan from the walker's tile toward the same goal (LR1, LR3); a new click replaces the goal (LR3) | 8-step segments, a new plan after each; a new goal at the next cell centre | Follows |
 | Straight attempt and search reach (`RoutePlanner`) | straight up to 32 tiles (larger axis; skipped with flag 0x200, LR9), search under 32 on either axis in a 64 × 64 window; no partial route (LR1, DC3, DC4) | the shared request (ARC-WORLD-073) | Follows (flag 0x200 not modelled) |
 | Search bound and costs | the budget `min(4 × distance + 5, 200)` on every plan (a pop clears it between plans, LR2 as corrected), drops long detours; 10 a step, 1 a turn, 50 a window, 90 a spotted trap, 80 fire with flag 0x400, light with flag 0x200 (LR2, LR9, DC4) | the shared request with the walk's budget; 10, 1 and 50 | Follows (traps, fire and light not yet in the step source) |
-| Critters | ignored by the plan outside combat mode, checked only before a segment's last step; a hit ends the run, no re-route (LR2, LR5, LRA1); in combat mode they block | owner decision 2026-10-21 12:09: outside combat mode the plan passes living critters in both modes (`AreaRouteSource` `crittersPass`), a living critter on the goal still refuses it (DC2, `GoalHoldsCritter`); in combat mode they block; the segment-end stop is the switch `SegmentEndCritterEndsWalk` (Original stops with `ROUTE_SEGMENT_END_CRITTER`, Steamwoven walks on) | Follows in the plan; the step through a critter's tile is ARC-WORLD-074 (NOT READY: until then the movement refuses it and the click route plans around the refused cell, `replanOnDenial`, at most 8 times a goal, then stops with the plan's reason) |
+| Critters | ignored by the plan outside combat mode, checked only before a segment's last step; a hit ends the run, no re-route (LR2, LR5, LRA1); in combat mode they block | owner decision 2026-10-21 12:09: outside combat mode the plan passes living critters in both modes (`AreaRouteSource` `crittersPass`), a living critter on the goal still refuses it (DC2, `GoalHoldsCritter`); in combat mode they block; the segment-end stop is the switch `SegmentEndCritterEndsWalk` (Original stops with `ROUTE_SEGMENT_END_CRITTER`, Steamwoven walks on) | Follows: since ARC-WORLD-074 the PC's steps pass them too outside combat mode (`AreaGridSession.CrittersPass`, `AreaOccupancyRules.ApplyPassingCritters`); a companion's own walk does not yet (NOT READY below) |
 | No route | a PC tries once more in a straight line with every step accepted, tested as it walks, and keeps planning straight lines for the rest of the walk (LR4 as extended) | `StraightRetry` for the click route's follower, kept for the goal | Follows |
 | A goal beyond 32 tiles (the corridor, ARC-WORLD-042) | refused: the PC does not move (LR4, LR7); at the original's fixed view such a click does not occur | followed along a corridor over the shown window, rebuilt once around an occupant | Switch (owner decision 2026-10-21, ARC-WORLD-072): Steamwoven walks the corridor, Original does not move (`NavigationRuleProfile.FarClickDoesNotMove`); since ARC-WORLD-073 Original builds no corridor for a near goal either |
 | Sector borders, the main map's windows | tiles locked on demand through the 16-sector cache, no border (LR6) | a window of 3 × 3 core sectors, moved as the actor walks; the far-goal hand-off carries a goal across a move | Host limit (no rule) |
@@ -335,10 +341,11 @@ NPC/object goals, doors, windows, traps or state after T0 other than the live PC
 [ARC-WORLD-016](companion-follow-runtime.md#live-actors-over-t0-evidence-terrain-viewer-core),
 movement speed or original path choice. Unknown or unsupported evidence is
 reported, not explored. A goal beyond the local planner's 32-cell reach is followed along a corridor over the
-source (ARC-WORLD-042; Steamwoven only since ARC-WORLD-072/073). The step through a critter's tile outside combat mode is
-ARC-WORLD-074 for both modes: until then the movement's step admission refuses a step onto a critter, and the click route plans
-around the refused cell (at most 8 cells a goal, then `ROUTE_STEP_DENIED`; a step refused during the straight-line retry ends the
-walk); a companion's follow has no re-plan and stops (`ROUTE_STEP_DENIED`). The attack's approach walks to its cell with the
+source (ARC-WORLD-042; Steamwoven only since ARC-WORLD-072/073). Since ARC-WORLD-074 the PC steps through living NPCs and
+companions outside combat mode in both rule modes, and may stand on a cell one holds (a walk stopped there by a new click); in
+combat mode they block. A companion's own walk does not pass critters yet: the original gives an NPC mover the same flag 0x10
+outside combat (LR2), which is the companions lane's follow-up (NOT READY; its admission and planning overlays,
+`AreaCompanionGroup.OccupancyFor`, are unchanged), so a companion still stops for the PC and the other companions. The attack's approach walks to its cell with the
 click route's rules (its plan passes critters outside combat mode, and it has the straight-line retry), while the original's
 approach keeps critters blocking and has no retry; a step refused on
 the way is planned around as for any click walk (the original re-plans in goal 79, AP5, F1); a target that moves while the PC walks is

@@ -128,6 +128,8 @@ public partial class TerrainViewerApp
         _worldPreferredZoom = _worldZoomStore.Load();
         // ARC-WORLD-016: the PC's AREA steps are admitted against the shown map's companions.
         _worldActor.AreaOccupancy = AreaPcOccupancy;
+        // ARC-WORLD-074: outside combat mode the PC steps through living NPCs and companions (the owner's decision 2026-10-21).
+        _worldActor.AreaCrittersPass = () => !HeroInCombatMode;
         ConfigureGait();
         _worldPanel = new DiagnosticInputSettingsPanel(); AddChild(_worldPanel);
         _worldPanel.Changed += SaveWorldSettings;

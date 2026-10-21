@@ -59,9 +59,8 @@ public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart 
     {
         var assessment = Assessment(from, direction);
         var live = occupancy?.Invoke();
-        if (crittersPass?.Invoke() != true) return AreaOccupancyRules.Apply(assessment, from, direction, live);
-        var critters = assessment.Objects.Where(o => o.ObjectType is PcType or NpcType).Select(o => o.Key).ToArray();
-        return AreaOccupancyRules.Apply(assessment, from, direction, new AreaOccupancy((live?.Moved ?? new HashSet<Arcanum.Data.Area.AreaObjectKey>()).Concat(critters), []));
+        return crittersPass?.Invoke() == true ? AreaOccupancyRules.ApplyPassingCritters(assessment, from, direction, live)
+            : AreaOccupancyRules.Apply(assessment, from, direction, live);
     }
 
     /// <summary>ARC-WORLD-021: a window jump costs 50 on top of the plain step, as the source's path search does

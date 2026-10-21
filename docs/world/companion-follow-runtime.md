@@ -10,7 +10,7 @@ covers the follow part of [FR-SOCIAL-003](../requirements/story-social-ai.md#fr-
 through the cave entrance and exit with the PC ([map change](#map-change-arc-world-017)), the bounded
 [FR-WORLD-010](../requirements/world.md#fr-world-010) A→B→A case for one follower.
 
-**NOT READY:** no walk cycle or turning for Virgil (his T0 body frame moves with him), running uses the human gait timing
+**NOT READY:** a companion does not walk through living critters outside combat mode, as the original's NPC movers do (the request's flag 0x10, ledger LR2): since ARC-WORLD-074 the PC does, and may stand on a cell a companion wants, while a companion's admission and planning overlays still block on the PC, the other companions and T0 critters (the companions lane's follow-up). No walk cycle or turning for Virgil (his T0 body frame moves with him), running uses the human gait timing
 (ARC-WORLD-020, [gait runtime](gait-runtime.md); his own ART stride is not read), only the two cave endpoints carry him (no other map, no
 follower of a follower, no unconscious-follower rule, no carried inventory payload), no combat orders, combat or turn-based cost, no
 refusal or warning line text (the loyalty step and the wait timer of ARC-WORLD-045 name their line ranges, [below](#loyalty-and-the-wait-timer-arc-world-045)), and the PC side of the follow check is still the AREA diagnostic profile (charisma 8, level 1), not
