@@ -27,9 +27,14 @@ public partial class TerrainViewerApp
             throw new InvalidOperationException("AREA_OBJECT_ATTACK_SMOKE_FAILED");
         }
         var map = new AreaMapRuntime(area.Snapshot, grid.Snapshot, grid.Chart);
+        // ARC-COMBAT-011: the trap flag of every attackable row's use script (OD6); unknown without script content.
+        var useHost = UseScriptHost(area.Snapshot);
+        var trapFlags = area.Snapshot.Objects.Where(row => targets.Target(session, row.Key) is not null).Select(row => useHost?.IsTrap(row)).ToArray();
+        GD.Print($"ARC-COMBAT-011 native-smoke trap-flags {(useHost is null || trapFlags.Any(t => t is null) ? "NONE" : "PASS")} map={_readyMapName}"
+            + $" objects={trapFlags.Length} traps={trapFlags.Count(t => t == true)} unknown={trapFlags.Count(t => t is null)}");
         var commands = area.Plan.Commands.Where(c => c.Identity is not null).GroupBy(c => c.Identity!.Value).ToDictionary(g => g.Key, g => g.First());
         var candidates = area.Snapshot.Objects.Where(row => row.Scope == AreaScope.Core && commands.ContainsKey(row.Key))
-            .Select(row => targets.Target(session, row.Key))
+            .Select(row => targets.Target(session, row.Key, AreaTrapped))
             .Where(t => t is { Refusal: null, Object: { } o } && t.Kind is DamageableObjectKind.Portal or DamageableObjectKind.Container or DamageableObjectKind.Scenery
                 && !o.Baseline.Invulnerable && !o.Baseline.Busted && !o.Baseline.JunkPile)
             .Select(t => (Target: t!, State: session.QueryObject(t!.Object!), Reduced: t!.Kind != DamageableObjectKind.Scenery
@@ -84,7 +89,7 @@ public partial class TerrainViewerApp
             GD.Print("ARC-COMBAT-008 native-smoke object-attack PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, target.Entity, Kind = target.Kind.ToString(), Material = target.Object!.Baseline.Material.ToString(), Reduced = reduced,
                 Before = before.HitPoints, After = after.HitPoints, Condition = after.Condition.ToString(), Walked = walked, Attacks = attacks, Frames = frames,
-                Hidden = gone, Notice = _attackNotice,
+                Hidden = gone, Notice = _attackNotice, Trapped = target.Object.Baseline.Trapped,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally

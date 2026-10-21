@@ -171,7 +171,7 @@ public partial class TerrainViewerApp
     /// when the press belongs to combat.</summary>
     private bool TryAreaObjectAttack(Vector2 screen)
     {
-        if (!AttackMapActive || !HeroInCombatMode || AreaObjectAtScreen(screen) is not { } key || ObjectTargets()?.Target(_areaSession!, key) is not { } target
+        if (!AttackMapActive || !HeroInCombatMode || AreaObjectAtScreen(screen) is not { } key || ObjectTargets()?.Target(_areaSession!, key, AreaTrapped) is not { } target
             || target.Kind is Arcanum.Simulation.Combat.DamageableObjectKind.Item or Arcanum.Simulation.Combat.DamageableObjectKind.Trap)
             return false;
         if (_areaSession!.QueryHeroLife() is not { Status.IsActive: true })
@@ -200,6 +200,8 @@ public partial class TerrainViewerApp
     private void RunObjectAttackHit(AttackGoal goal, AreaObjectAttackTarget target, int distance)
     {
         var owner = _areaSession!;
+        // ARC-COMBAT-011: the object as it is now, its use script's trap included (a use may have changed the script).
+        if (ObjectTargets()?.Target(owner, goal.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
         PlaceHeroForDrop();
         var result = owner.AttackObject(owner.Version, target.Attack(distance, goal.Aim, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with
         {
@@ -244,6 +246,10 @@ public partial class TerrainViewerApp
                 (target.Dead || target.Build.Combat is { } combat && owner.QueryLife(combat.Target).View?.Status.IsDead == true),
             session.Portals);
     }
+
+    /// <summary>ARC-COMBAT-011: whether a row's use script is a trap (OD6), through the shown map's use-script host; false without
+    /// script content (the status line then cannot say that a trap would fire).</summary>
+    private bool AreaTrapped(AreaObjectRecord row) => _readyArea is { } area && UseScriptHost(area.Snapshot)?.IsTrap(row) == true;
 
     // ARC-COMBAT-009: the original keeps a critter stunned while its stun animation (goal 57) runs; the viewer plays none, so it ends
     // the stun at once, as the session's contract has it for an animation that could not start (the duration is NOT READY).
