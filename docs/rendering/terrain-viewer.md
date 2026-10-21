@@ -1045,13 +1045,77 @@ spent or refunded (the original clears the text bar, SP7) and no 3 s hint delay 
 mode of the original (mode 2, + and − hidden) has no caller in the viewer.
 
 **Not implemented:** spending unspent points on stats, hit points or fatigue (the original's +/− buttons and their
-errors), tech disciplines, spells and schematics panels, age (not session state), the portrait and PC lens,
+errors), tech disciplines and schematics panels, age (not session state), the portrait and PC lens,
 followers' sheets (passive mode from dialog or the follower menu), switching straight from one window to another by
 key. Self-test `ARC-UI-007 self-test PASS` (synthetic hero session: no-hero refusal, `C`/close/`Escape`, keys owned
 while open, rebuild on change, the skills page's `+` and `−` with the editor's floor over a close and reopen, dead-hero close
 and refusal); native smoke with `--hero` after the hero stage: `ARC-UI-009 native-smoke skills page PASS` (the original skill
 texts describe all sixteen rows; a `+` the pool accepts, its `−` and a refused second `−`, or with no unspent points a refused
 `+`) and `ARC-UI-007 native-smoke character sheet PASS`.
+
+#### Spells page (ARC-MAGIC-008)
+
+Requirements: [FR-UI-004](../requirements/ui-media-lifecycle.md#fr-ui-004) (the character sheet's spell page),
+[FR-MAGIC-002](../requirements/combat-magic-tech.md#fr-magic-002) (learning colleges in order with the editor).
+
+Since ARC-MAGIC-008 (slice MT19 of the [magic implementation plan](../research/magic-implementation-plan.md)) the sheet has
+the original's college page as a second tab beside the skills, checked in the original executable (ledger rows
+[SG1–SG8](../research/original-verification-ledger.md#spell-page-arc-magic-008)). Code: `AreaSpellsPage` (Core, Godot-free)
+and the panel's "Spells" tab; tests `AreaSpellsPageTests`.
+
+- **Colleges.** Sixteen college tabs, one shown at a time. The shown college is kept between opens, as the original keeps
+  it (initially the first).
+- **The shown college's five spells**, in rank order. Each row has the spell's name and the minimum level it needs, as the
+  original prints it beside the name. Known ranks are drawn white, the next rank gold and the ranks above it grey, as the
+  original draws the names; the original also greys the icons of every rank not yet known.
+- **Hover hints, as the original's text bar shows them.**
+  - Over a spell, or over `+` (the next rank) and `−` (the highest known rank):
+    - the name;
+    - the minimum willpower;
+    - the fatigue cost the hero would pay (a dwarf twice, the mastered college half);
+    - for a maintained spell, the maintenance per second or per period (a dwarf twice; the mastered college doubles the
+      period);
+    - the description.
+  - Over a college: its name, then its description — or the mastery description for the college the hero mastered.
+  - Names and descriptions come from the player's `mes\spell.mes`, costs from `rules\spelllist.mes`. Both load in the
+    background through the module's game folder, with `rules\magictech.mes`, as the original's magic init reads them;
+    without them the project's labels are shown and no costs.
+  - The willpower is the minimum the session's pool checks (the spell list's `IQ:` loaded with the hero, else the
+    defaults).
+- **`+` learns the college's next rank.** It is enabled below five ranks. It goes through the session's point pool
+  (`SpendHeroPoint`, track College: the [spell book](../world/spell-book-runtime.md)'s lane). Unspent points are tested
+  first, then the level, intelligence and willpower. A refusal names the failing check in project words, matching the
+  original's `charedit.mes` messages 18, 30, 26 and 36.
+- **`−` unlearns the highest rank** (`RefundHeroPoint`). It is enabled only above the rank the hero had when the sheet
+  opened (the editor's floor), as the original's in-game sheet shows its `−`. A press at the floor is refused with the
+  original's meaning (message 27): a spell learned before the sheet opened cannot be unlearned.
+- **Feedback.** Each press reports on the page: the spell learned or unlearned, or the refusal.
+
+Differences from the original, all of the page's presentation:
+
+- the college names as tab texts instead of the college icons;
+- no spell icons; the look of each rank is given as a word and a colour;
+- the hint as a tooltip; the original's 3-second hint delay after a refusal is not kept (SG6, SP5);
+- project refusal texts, with no refusal sound (the original plays 3004, SG6, SP7);
+- a success reported in words; the original clears its text bar.
+
+The view-only and character-creation modes of the original sheet have no caller in the viewer. Those modes also show `−` down
+to rank 0.
+
+**Not implemented:**
+
+- clearing an unlearned spell from the spell bar (SB10): the spell bar is MT20's;
+- casting;
+- followers' pages.
+
+**Checks:**
+
+- The self-test inside `ARC-UI-007 self-test PASS` uses a synthetic hero with willpower 8. A college tab shows its spells;
+  `+` learns rank 1; a second `+` is refused for willpower; `−` unlearns the rank and is then disabled at the floor. The
+  shown college is kept over a close and reopen.
+- The native smoke with `--hero`, after the skills page, prints `ARC-MAGIC-008 native-smoke spells page PASS`. It checks
+  that the original data names the sixteen colleges and all eighty spells and gives every spell a description and a cost.
+  Then a `+` on the first college either learns the next rank (`−` then unlearns it) or is refused with the failing check.
 
 ### Level-up messages (ARC-UI-046)
 
