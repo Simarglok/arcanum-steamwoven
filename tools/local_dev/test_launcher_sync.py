@@ -166,6 +166,18 @@ class LauncherSyncTests(unittest.TestCase):
             for task in tasks:
                 self.assertIn(task, allowed[mode], mode)
 
+    def test_area_is_map_mode_on_the_main_world_map(self):
+        # ARC-RENDER-028: the pinned Crash Site exterior is no launcher mode; `area` opens the main map in map mode.
+        project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
+        self.assertNotIn("area", project["MODES"])
+        self.assertEqual(project["AREA_MAP"], "Arcanum1-024-fixed")
+        args = project["parser"]().parse_args(["area", "--hero", "elf-male", "--sector", "1409,1314", "--dry-run"])
+        self.assertEqual((args.mode, args.hero, args.sector, args.func), ("area", "elf-male", "1409,1314", project["run"]))
+        argv = launch.map_arguments(self.inputs(), project["AREA_MAP"], "elf-male", "1409,1314")
+        self.assertEqual(argv[-6:], ["--area-map", "Arcanum1-024-fixed", "--hero", "elf-male", "--area-map-sector", "1409,1314"])
+        for flag in ("--prototypes", "--area-mobile", "--area-effects", "--area-patch", "--area-cave-mobile"):
+            self.assertNotIn(flag, argv)
+
     def test_the_oracle_launcher_matches_the_tool_and_the_tests(self):
         # ARC-DEV-007: `./arcanum oracle` names the oracle's functions, their OriginalExe tests and the pinned executable.
         sys.path.insert(0, str(REPO / "tools/original-oracle"))

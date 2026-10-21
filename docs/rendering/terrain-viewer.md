@@ -951,7 +951,7 @@ auto-level scheme spends its 5 starting points at the start and each level's poi
 experience award (a dialog's quest completion, a hit, a kill) the followers and the NPCs waiting on this map follow the
 hero's level step with their own schemes ([auto-level schemes](../world/advancement-runtime.md#viewer-host); the log prints
 `ARC-WORLD-036 follower-level`). The actor is still drawn with the fixed human body of the AREA profile, not the hero's own
-race/gender ART. Launcher: `./arcanum area --hero NAME`, `./arcanum map NAME --hero HERO`
+race/gender ART. Launcher: `./arcanum area --hero NAME` (since ARC-RENDER-028 the main world map in map mode), `./arcanum map NAME --hero HERO`
 ([local development](../workflow/local-development.md#project-launcher)). Native smoke with `--hero` (after the
 inventory stage, and in map mode after the map stages): `ARC-WORLD-027 native-smoke hero PASS`.
 

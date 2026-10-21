@@ -8,7 +8,7 @@
 every identity, artifact-authority and ordinary-launch check stays there.
 
     ./arcanum setup [--game-root /Applications/Arcanum]   # find the game's inputs, record their identities, register artifacts/world-builds as root "world"
-    ./arcanum area [--hero NAME] [--dry-run]              # crash-site-area from the current ARC-RENDER-008 build, else ARC-WORLD-009, ARC-WORLD-007, ARC-INPUT-001, ARC-RENDER-007
+    ./arcanum area [--hero NAME] [--sector X,Y] [--dry-run]  # the main world map at the Crash Site in map mode (= map Arcanum1-024-fixed), any installation (ARC-RENDER-028)
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
     ./arcanum map NAME [--hero NAME] [--sector X,Y] [--dry-run]  # one map (a maps/ folder name) in map mode, from the ARC-DEV-015 build, else ARC-RENDER-008; any installation; the main world map (Arcanum1-024-fixed) opens as a window that moves with the actor, at --sector or the new-game start (a build exported after ARC-RENDER-024)
     ./arcanum oracle [--function ADDR|--all] [--exe PATH] # function oracle on the installed Arcanum.exe, then the OriginalExe tests (ARC-DEV-007)
@@ -17,12 +17,13 @@ every identity, artifact-authority and ordinary-launch check stays there.
     ./arcanum run --kind KIND [--timeout MIN] [--label TEXT] -- COMMAND  # run COMMAND through the launch queue (ARC-DEV-033)
     ./arcanum queue [--history N]                         # the launch queue: runs holding a place and the waiters in order
 
-`area` and `world` select the build named by that task's `current.json` pointer
-(never timestamps or directory order) and launch it; `area` tries its tasks in the
-fixed order ARC-RENDER-008 (adds the [passability overlay](../rendering/passability-overlay.md) on top of the cave build),
-ARC-WORLD-009 (cave and return), ARC-WORLD-007 (the same AREA build plus [LMB click-to-move](../world/click-route-runtime.md)),
-ARC-INPUT-001 (plus the [diagnostic palette](../input/diagnostic-palette.md)), then ARC-RENDER-007; a real run leaves the terrain
-launch selection on that build, a `--dry-run` restores the previous selection.
+`area`, `world` and `map` select the build named by that task's `current.json` pointer
+(never timestamps or directory order) and launch it; `area` and `map` try the universal ARC-DEV-015 build, then
+ARC-RENDER-008. Since ARC-RENDER-028 `area` is map mode on the main world map (`Arcanum1-024-fixed`) opened as a window
+around its map-list start, the Crash Site, on any installation: the pinned Crash Site exterior profile is no launcher mode any
+more (the viewer keeps it as a regression smoke, started by its own arguments; `tools/arcanum-local launch terrain --mode
+crash-site-area` without `--area-map` still reaches it). A real run leaves the terrain launch selection on that build, a
+`--dry-run` restores the previous selection.
 A real `area`, `world` or `map` launch takes the [launch queue](toolchain.md#launch-queue-arc-dev-033)'s Godot slot
 first in line and keeps it until the viewer window closes (the command waits in the terminal until then; Ctrl-C
 gives the place up and leaves the viewer open), so it does not open over a thread's smoke; `--no-queue` starts at once.
