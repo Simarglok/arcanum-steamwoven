@@ -209,8 +209,9 @@ public partial class TerrainViewerApp
     // Every window publication of this run (smoke report): the centres, the actor's cell, the walk and the session.
     private readonly List<(AreaSectorCoordinate From, AreaSectorCoordinate To, AreaStepCell Actor, bool Walking, GameSessionOwner? Session, long LoadMs)> _mapStreamLog = [];
 
-    // "walk" (ARC-WORLD-042) runs only when named: it walks across the main map for minutes.
-    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap", "walk"];
+    // "walk" (ARC-WORLD-042) and "census" (ARC-RENDER-027) run only when named: they walk across the main map or open every
+    // map, for minutes.
+    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap", "walk", "census"];
 
     /// <summary>The stages <c>ARC_AREA_MAP_SMOKE_ONLY</c> names (null: all); an unknown name is refused, so a typo cannot skip
     /// every stage and still pass.</summary>
