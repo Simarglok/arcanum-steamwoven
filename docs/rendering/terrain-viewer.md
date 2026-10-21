@@ -667,6 +667,10 @@ the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
   inside holders are not targets. A ground item the session refuses (gold, ammunition, keys,
   a pickup or insert script; none on the exterior core) is still shown as *pick up* and the
   click reports the refusal. Not modelled: the pickup animation and action-point cost.
+- **Use on self (ARC-SKILLS-005).** A healing item in the PC's list (the kit's from the hero load's prototype fields, a taken
+  item's from its object row) gets a *Use on self* button under the list: the hero heals itself through the session's heal
+  check ([heal runtime](../world/heal-runtime.md)), and the message line names the amount, the cure and the uses left or the item
+  used up. No pre-made kit and nothing on the Crash Site exterior is a healing item; the synthetic self-test covers the button.
 - **Taken items.** An item the PC took is neither drawn nor picked any more (the canvas
   skips its body; the hover pick passes over it), also after a quick load. The resource
   sweep of the native smoke counts those bodies as taken.

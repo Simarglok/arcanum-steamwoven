@@ -131,7 +131,8 @@ public static class ObjectLightReader
                 if (art is not { } value || (uint)value == uint.MaxValue) return LightingFailure.None;
                 var id = (uint)value;
                 if (id >> 28 != 9 || (id & 0xFFF) != 0) return LightingFailure.LightArtUnsupported;
-                var bits = (uint)(flags ?? 0) & ~RuntimeBits;
+                // LT6: a light saved while animating (0x4) does not start animating again, as one with 0x20.
+                var bits = (uint)(flags ?? 0) & ~RuntimeBits | (((uint)(flags ?? 0) & 0x4) != 0 ? (uint)StationaryLightFlags.NoAnimation : 0);
                 if ((bits & ~(uint)(StationaryLightReader.KnownFlags | StationaryLightFlags.NoAnimation)) != 0) return LightingFailure.LightFlagsUnsupported;
                 if (found.Count == MaxLights) return LightingFailure.LimitExceeded;
                 var packed = (uint)(color ?? 0);

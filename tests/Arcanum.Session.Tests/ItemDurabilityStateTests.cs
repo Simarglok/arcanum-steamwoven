@@ -148,7 +148,7 @@ public sealed class ItemDurabilityStateTests
         StringAssert.Contains(text, ",\"durability\":{\"items\":[" +
             "{\"entity\":\"apple\",\"points\":15,\"adjustment\":5,\"damage\":0,\"broken\":true,\"inventoryArtBroken\":true}," +
             "{\"entity\":\"sword\",\"points\":15,\"adjustment\":5,\"damage\":3,\"broken\":false,\"inventoryArtBroken\":false}]," +
-            "\"destroyed\":[\"kit:3\"]},\"schematics\":");
+            "\"destroyed\":[\"kit:3\"],\"uses\":[]},\"schematics\":");
         StringAssert.Contains(text, $"\"schemaVersion\":{GameSessionSnapshot.CurrentSchemaVersion},");
         var restored = GameSessionOwner.Restore(Decode(text), RestoreOptions());
         Assert.AreEqual(GameSessionFailure.None, restored.Failure);

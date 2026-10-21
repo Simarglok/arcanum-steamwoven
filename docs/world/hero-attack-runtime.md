@@ -11,7 +11,9 @@ effective object fields. No NPC fights back. Requirements:
 [FR-COMBAT-004](../requirements/combat-magic-tech.md#fr-combat-004) (the target and the reach),
 [FR-COMBAT-006](../requirements/combat-magic-tech.md#fr-combat-006) (the attack animation's hit, partly),
 [FR-COMBAT-011](../requirements/combat-magic-tech.md#fr-combat-011) (the attack click, cursor and feedback, partly) and
-[FR-CHAR-016](../requirements/characters-skills.md#fr-char-016) (combat skill levels).
+[FR-CHAR-016](../requirements/characters-skills.md#fr-char-016) (combat skill levels). Since ARC-COMBAT-007 the attack also
+wears armour and weapons ([FR-COMBAT-008](../requirements/combat-magic-tech.md#fr-combat-008),
+[FR-ITEM-011](../requirements/items-economy.md#fr-item-011); [attack wear](attack-resolver-runtime.md#wear-arc-combat-007)).
 
 ## Evidence
 
@@ -53,7 +55,8 @@ effective object fields. No NPC fights back. Requirements:
 | --- | --- |
 | `SessionCritterCombat.From(entity, fields, carried)` | One NPC's combat values from its ARC-DATA-021 fields and the fields of the items it carries (those in a wear slot count): life facts (pools, level, effective ST under each poison penalty, CN, WP, HealRate, PoisonRecovery, normal resistance, traits from the critter, object and spell flags), the loaded life state (hit-point and fatigue damage, poison, stun and injury flags), the experience worth and pool, and `Combatant(status, state, profile)` with its effective stats under its poison and crippled legs, armour class, resistances, dodge and backstab, light and conditions. Effective stats are the character owner's for the NPC's race and gender over its stored base stats, each clamped to the race's range first (monsters store values beyond it); its stored effects are not applied. Typed `SessionCritterCombatFailure`, never an exception for data. |
 | `QueryHeroAttack()` | The hero's `Combatant`, its weapon (bare hands without one), the weapon's skill with its level and training (`QueryHeroSkills`, ARC-SKILLS-002; dodge and backstab too), weapon speed with that training, Speed, range and whether the attack is supported (melee only). Null without a hero. |
-| `AttackCritter(expected, attack)` | Refused before any roll: no hero (`AttackUnavailable`), an invalid target, an aim at the torso or an undefined location, a distance outside 0..1 (`InvalidAttack`), a weapon that is not melee (`AttackUnsupported`), the version, an exhausted revision (`RevisionExhausted`). Then the resolver on a trial copy of the session generator (`RandomExhausted` when it runs out), adopted once it ran; a resolver refusal (the hero cannot act, the target is dead) is NoChange with the resolution. A fate the resolver used (the hero's armed critical hit, ARC-WORLD-054, [fate points](fate-points-runtime.md)) is cleared in a revision of its own, so such an attack is Changed even without damage. Then `ApplyDamage` on the target or, on a critical self-hit, the hero; then, with experience data, `RecordNpcDamage` for an NPC that is not stoned and `RecordNpcKill` on a death. Each step commits its own revision; a later refusal is `StepFailure` and leaves the earlier steps. |
+| `AttackCritter(expected, attack)` | Refused before any roll: no hero (`AttackUnavailable`), an invalid target, an aim at the torso or an undefined location, a distance outside 0..1 (`InvalidAttack`), a weapon that is not melee (`AttackUnsupported`), the version, an exhausted revision (`RevisionExhausted`). Then the resolver on a trial copy of the session generator (`RandomExhausted` when it runs out), adopted once it ran; a resolver refusal (the hero cannot act, the target is dead) is NoChange with the resolution. A fate the resolver used (the hero's armed critical hit, ARC-WORLD-054, [fate points](fate-points-runtime.md)) is cleared in a revision of its own, so such an attack is Changed even without damage. Then `ApplyDamage` on the target or, on a critical self-hit, the hero; then, with experience data, `RecordNpcDamage` for an NPC that is not stoned and `RecordNpcKill` on a death; last the attack's wear (`ApplyAttackWear` with the hero as attacker and the NPC as target, `SessionAttackResult.Wear`). Each step commits its own revision; a later refusal is `StepFailure` and leaves the earlier steps. `SessionAttack.HeroWorn` and `TargetWorn` carry the items in the two sides' wear slots with their durability baselines (the hero's exactly its worn items, else `InvalidWear` before any roll); null skips that side's items (the bare-handed hero's own wear still applies). |
+| `ApplyAttackWear(expected, wear)` | ARC-COMBAT-007, for any attacker and recipient (the NPC AI will call it for NPC attacks): in the original's order, the armour at the hit location of whoever took the damage (`DamageItem` + 10), that critter's wielded weapon on the critical "damage weapon" (+ 10) and "destroy/explode weapon" (`DestroyItem`) unless invulnerable, and the attacker's weapon (`DamageItem`) or, bare-handed, its own hit points (never the last one). Each step is reported (`SessionWearStep`: kind, slot, item, amount, skip reason, durability result or life outcome); a first break of the hero's item takes it off its slot (item durability), of an NPC's item is reported for the host. `SessionWearItem` carries an item's entity, durability baseline, invulnerable flag and weapon art subtype, all host data passed at each attack (`SessionWearItem.FromCombatFields`); the hero's attack takes its weapon's subtype from it. Refused before any change (`InvalidWear`): no attacker critter, the same critter on both sides, a hero side that is not exactly the hero's worn items, an NPC side naming one of the hero's items, items on an object side, an invalid entity, baseline or subtype, an item the session does not track or deleted (a host leaves out items an earlier attack deleted, `IsItemDestroyed`; the `ItemDeleted` skip is only for an item a step of the same wear deleted), armour or weapon steps on an object; then the version. A refused step ends the wear: `StepFailure` after changes, Rejected when nothing changed. |
 | `QueryNpcKilled(entity)` | Whether the session's record of the NPC holds the pinned death damage. |
 | Loot | `LootItem` and `QueryMapInventory` count an NPC the session killed as dead, besides those its map data shows dead. |
 
@@ -65,7 +68,8 @@ No snapshot change: deaths, damage and experience are already saved by the life 
   unless Alt is held (`loot`). The status line shows the last attack: outcome, damage, the target's hit points, a knockout or
   kill and the experience it paid.
 - Combat targets are the NPC holders of the map's inventory seed; their combat values are read once per NPC. A map without an
-  inventory seed (an unlit whole map, which has no session) has no targets.
+  inventory seed (a whole map without a session: since ARC-WORLD-057 only one whose start clock cannot be read) has no
+  targets.
 - The hero is drawn with its attack ART while it attacks in place (`DiagnosticGridActor.AttackPose`); the human diagnostic profile
   `HumanFixedArea` now loads idle, walk, run, vault and attack (195 keys, 1,705,144 checked RGBA bytes; actor key cap 195).
 - A killed or unconscious NPC is drawn in its fallen pose (`AreaFallenPoses`): the pose's ART is read on demand from the archive
@@ -84,7 +88,7 @@ No snapshot change: deaths, damage and experience are already saved by the life 
   focus and taunts; the exit gate's threats are still empty.
 - Ranged and thrown attacks (ammunition, projectiles, line of fire), the "default throws" weapon, backstab (needs facing and
   perception), aimed-attack critical bonuses beyond the resolver's, the target's awareness (an NPC always sees the hero) and the
-  darkness penalty (every position is lit), critical-effect tables (FR-COMBAT-009), weapon and armour wear, the taking-damage
+  darkness penalty (every position is lit), critical-effect tables (FR-COMBAT-009), the taking-damage
   and dying scripts, blood splotches, the corpse's decay timer, alignment and the kill log.
 - The attack ART of a wielded weapon (the diagnostic human is drawn bare-handed; the viewer has no equip action, so the hero
   fights bare-handed), the low attack, the hero's own knockdown and death animations, the dying animation itself (the body jumps
@@ -99,6 +103,8 @@ No snapshot change: deaths, damage and experience are already saved by the life 
 - The turn-based round in the viewer (an attack there costs AP and passes turns; the session supports the round but the viewer
   has no turn-based setting).
 - NPC stored effects (race, items, spells) in its effective stats; skill and resistance effects of the hero.
+- The viewer passes no item baselines yet (`HeroWorn`/`TargetWorn` null), so in the viewer only the bare-handed hero's own wear
+  happens; item wear needs the hero's kit and the NPC's worn items' fields at the attack, and no viewer shows item condition.
 - Original-runtime parity: NOT_VERIFIED (static reading only).
 
 ## Tests
@@ -106,6 +112,8 @@ No snapshot change: deaths, damage and experience are already saved by the life 
 `tests/Arcanum.Simulation.Tests/Combat/CombatSkillRulesTests.cs` (cap table, levels, monstrous melee, training tiers,
 resistances, conditions), `tests/Arcanum.Session.Tests/AttackStateTests.cs` (NPC values from fields, failures, the hero's attack
 until the kill with the experience, loot of a session kill, refusals before any roll, the aimed attack, the ranged refusal,
-experience-free sessions), `tests/Arcanum.TerrainViewer.Tests/AreaCombatTests.cs` (facing, the attack player, the status text,
+experience-free sessions), `tests/Arcanum.Session.Tests/AttackWearStateTests.cs` (armour wear to the second break, the critical
+weapon effects and invulnerability, the hero's weapon to its break, bare hands never killing, an NPC attacker, object targets,
+missing item data, a refused step, refusals, and the wear of the hero's attack on a stone golem), `tests/Arcanum.TerrainViewer.Tests/AreaCombatTests.cs` (facing, the attack player, the status text,
 `Repose`, the frame overlay, the dying animation and the pose read from a synthetic archive with its refusals) and the native
 smoke above; synthetic only in git.

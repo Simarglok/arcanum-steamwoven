@@ -329,14 +329,23 @@ neither see nor hear the attacker; then the critical chance gains
   other effect at all (crit hit (0x4B5F40)). A critical can therefore carry
   no multiplier. Fatigue damage
   is added unless the target is fatigue-immune; poison raises the poison level.
-  Fire damage or a damage-armour weapon also wears the armour at the hit
-  location by 10 HP (armour slot (0x4B54B0)).
+  Fire damage (after resistance), a damage-armour weapon (weapon flag 0x100)
+  or the "damage armour" critical wears the armour at the hit location (head
+  helmet, arm gauntlets, leg boots, else body armour) by 10 HP, once, before
+  the hit-point damage; at 0 HP it breaks (armour slot (0x4B54B0); read in the
+  executable by ARC-COMBAT-007, [ledger CW1–CW2](original-verification-ledger.md#combat-wear-arc-combat-007)).
 - **C21** Side effects (vitals (0x4B4390)): any attacker drains
   `worth × damage% / 100` from the NPC's experience pool, and only a PC
   attacker is paid it; a PC follower dropping below 20 %
-  HP triggers its near-death reaction; a melee hit wears the weapon by the
-  target's material, or hurts an unarmed attacker but never kills it
-  (wear (0x4B5580)). Portals and containers subtract a material reduction (stone,
+  HP triggers its near-death reaction; a melee hit that dealt damage wears
+  the attacker's weapon by the struck critter's or object's material (stone
+  4, brick 3, wood 2, plant 1, metal and fire 5, glass 5 bare-handed only),
+  **less** a share of its magick/tech complexity (none at ±100) and 1–2 for
+  some art subtypes, or hurts a bare-handed attacker but never takes its last
+  hit point; it runs last, also after the target died, and on an object only
+  while the object stays whole (wear (0x4B5580); ARC-COMBAT-007 corrected the
+  earlier reading, which had the complexity raise the wear,
+  [ledger CW5–CW9](original-verification-ledger.md#combat-wear-arc-combat-007)). Portals and containers subtract a material reduction (stone,
   brick, metal, force 10; wood 5) and are busted, triggering any trap, at 0 HP
   (damage (0x4B4390)).
 

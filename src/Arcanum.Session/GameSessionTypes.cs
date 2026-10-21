@@ -208,6 +208,10 @@ public enum GameSessionFailure
     FateUnavailable, InvalidFateKind, FateRefused,
     // World-map areas (ARC-WORLD-056).
     InvalidArea,
+    // Heal with a healing item (ARC-SKILLS-005).
+    HealUnavailable, InvalidHealingItem,
+    // Combat wear (ARC-COMBAT-007).
+    InvalidWear,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -362,8 +366,9 @@ public sealed class GameSessionSnapshot
     /// schema 26 adds the hero's fate points and armed fates (ARC-WORLD-054); schema 27 adds each party record's loyalty marks
     /// (ARC-WORLD-045); schema 28 adds the PC's known world-map areas and last discovered area to the story (ARC-WORLD-056).
     /// Schema 29 adds the made items added to NPCs to <see cref="Inventory"/> (ARC-WORLD-055); schema 30 adds the PC's reputations to
-    /// the story (ARC-WORLD-044). Schemas 1..29 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 30;
+    /// the story (ARC-WORLD-044); schema 31 adds the items' remaining uses to <see cref="Durability"/> (ARC-SKILLS-005). Schemas 1..30
+    /// are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 31;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
