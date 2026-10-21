@@ -21,6 +21,8 @@ public static class AttackResolver
     public const int MaxMagnitude = 100_000;
     public const int MaxResistance = 1_000;
     public const int MaxAptitude = 100;
+    private const CombatWornItems AllWorn = CombatWornItems.Helmet | CombatWornItems.Weapon | CombatWornItems.Gauntlets
+        | CombatWornItems.Boots | CombatWornItems.BodyArmor;
 
     private const CombatantConditions Inactive = CombatantConditions.Dead | CombatantConditions.Unconscious
         | CombatantConditions.Paralyzed | CombatantConditions.Stunned | CombatantConditions.Stoned;
@@ -554,7 +556,9 @@ public static class AttackResolver
         Check(c.LightLevel is >= 0 and <= AttackRules.MaxLightLevel, $"{name}.LightLevel");
         Check(c.MagickTechAptitude is >= -MaxAptitude and <= MaxAptitude, $"{name}.MagickTechAptitude");
         Check(c.Level is >= 0 and <= MaxMagnitude && c.Strength is >= 0 and <= MaxMagnitude
-            && c.Perception is >= 0 and <= MaxMagnitude, $"{name} level and stats");
+            && c.Perception is >= 0 and <= MaxMagnitude && c.Constitution is >= 0 and <= MaxMagnitude, $"{name} level and stats");
+        Check(c.ConstitutionMaximum is >= 1 and <= MaxMagnitude, $"{name}.ConstitutionMaximum");
+        Check((c.Worn & ~AllWorn) == 0, $"{name}.Worn");
         Check(Magnitude(c.DamageBonus, c.CriticalHitChanceAdjustment, c.CriticalMissChanceAdjustment,
             c.CriticalEffectChanceAdjustment, c.CriticalMissEffectChanceAdjustment), $"{name} adjustments");
         var r = c.Resistances;

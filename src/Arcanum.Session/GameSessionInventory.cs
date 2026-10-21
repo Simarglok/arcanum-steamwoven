@@ -19,6 +19,7 @@ public static class SessionScriptPoint
     public const int Examine = 0;
     public const int Use = 1;
     public const int Get = 4;
+    public const int Drop = 5;
     public const int InsertItem = 21;
     public const int WieldOn = 24;
     public const int WieldOff = 25;
@@ -296,21 +297,27 @@ internal sealed class InventoryDomain
     /// <summary>The map's current inventory; an NPC holder is dead when its seed says so or <paramref name="killed"/> (the session's
     /// life records, ARC-COMBAT-005) does. A container an attack broke (<paramref name="spilled"/>, ARC-COMBAT-008) holds nothing:
     /// its items lie on the ground at its cell, after the seed's ground items.</summary>
-    internal SessionMapInventory View(SessionMapId map, Seed seed, Func<string, bool> killed, Func<string, CellCoord?> spilled) => new(map,
+    /// <summary>The map's view: ground items in seed order, then each spilled container's items at its cell (ARC-COMBAT-008), then the
+    /// NPC items a critical dropped at their cells (ARC-COMBAT-009, <paramref name="dropped"/>), which leave their holder's list.</summary>
+    internal SessionMapInventory View(SessionMapId map, Seed seed, Func<string, bool> killed, Func<string, CellCoord?> spilled,
+        Func<string, CellCoord?> dropped) => new(map,
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))
             .Select(item => new SessionGroundItem(new(item.Entity, item.Facts), item.Cell!.Value))
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Container).SelectMany(holder =>
-                spilled(holder.Entity) is { } cell ? Current(seed, holder).Select(item => new SessionGroundItem(item, cell)) : []))
+                spilled(holder.Entity) is { } cell ? Current(seed, holder, dropped).Select(item => new SessionGroundItem(item, cell)) : []))
+            .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items
+                .Where(entity => !Taken.Contains(entity) && dropped(entity) is not null)
+                .Select(entity => new SessionGroundItem(new(entity, seed.Items[entity].Facts), dropped(entity)!.Value))))
             .ToArray(),
         seed.Source.Holders.Select(holder => new SessionHolderInventory(holder.Entity, holder.Kind,
             holder.Dead || holder.Kind == SessionHolderKind.Npc && killed(holder.Entity),
             holder.Kind == SessionHolderKind.Container && spilled(holder.Entity) is not null ? Array.Empty<SessionInventoryItem>()
-                : Array.AsReadOnly(Current(seed, holder).ToArray()))).ToArray());
+                : Array.AsReadOnly(Current(seed, holder, dropped).ToArray()))).ToArray());
 
-    /// <summary>The holder's list in its order without the taken and deleted items; an NPC's list is followed by the made items the
-    /// session added to it (ARC-WORLD-055).</summary>
-    internal IEnumerable<SessionInventoryItem> Current(Seed seed, SessionSeedHolder holder) => holder.Items
-        .Where(entity => !Taken.Contains(entity)).Select(entity => new SessionInventoryItem(entity, seed.Items[entity].Facts))
+    /// <summary>The holder's list in its order without the taken and deleted items and the items a critical dropped
+    /// (<paramref name="dropped"/>); an NPC's list is followed by the made items the session added to it (ARC-WORLD-055).</summary>
+    internal IEnumerable<SessionInventoryItem> Current(Seed seed, SessionSeedHolder holder, Func<string, CellCoord?> dropped) => holder.Items
+        .Where(entity => !Taken.Contains(entity) && dropped(entity) is null).Select(entity => new SessionInventoryItem(entity, seed.Items[entity].Facts))
         .Concat(holder.Kind == SessionHolderKind.Npc
             ? AddedTo(holder.Entity).Select(item => new SessionInventoryItem(item.Entity, MadeFacts(item.Kind)))
             : []);

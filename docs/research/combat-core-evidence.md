@@ -286,7 +286,8 @@ Order of resolution in `sub_4B3170` (0x4B3170):
     it always strikes itself with a normal damage roll, and with chance 50 %
     the self-hit is also critical, adding chances to destroy or explode the
     weapon and lose ammunition plus a critical-hit roll on itself (anomaly
-    A7). The effect tables belong to FR-COMBAT-009.
+    A7). The effect tables belong to FR-COMBAT-009 (read in the executable by
+    ARC-COMBAT-009, ledger CE11).
 11. Ranged attacks continue as a projectile; melee applies damage now
     (melee (0x4B3770), ranged (0x4B39B0)).
 
@@ -362,15 +363,19 @@ neither see nor hear the attacker; then the critical chance gains
   subturn (fatigue set (0x45D5A0)).
 - **C24** Critical outcomes (crit hit (0x4B5F40)): stun when
   `d100 ≤ chance + 5` (+10 crushing or electrical, +10 head without helmet)
-  and the target fails a CN check at −5; for an NPC that is not fatigue-immune
-  a second roll (`d100 < chance + 5 …`, strict) with another failed CN check
-  turns it into a **knockout**, which sets fatigue damage to
-  `max fatigue + 10..20` (damage (0x4B4390)). Undead and amorphous targets are
-  never stunned or knocked out, and a PC is never knocked out by a critical.
-  Bipeds can be knocked down (`chance + 5`, +5 crushing, +10 leg). `chance`
-  is the weapon's magic critical-effect value (0 unarmed) plus effects, +10
-  when aimed; with a weapon whose magic was cancelled it is undefined
-  (anomaly A8).
+  and the target fails a CN check at −5; only after a stun, for an NPC that is
+  not fatigue-immune, a second `d100 ≤` the same threshold with another failed
+  CN check turns it into a **knockout**, which sets fatigue damage to
+  `max fatigue + 10..20` (damage (0x4B4390)). Body type 2 takes no stun,
+  knockout, injury, scar or knockdown; undead are never stunned, knocked out,
+  injured or scarred but a body type 0 undead is knocked down; a PC is never
+  knocked out by a critical. Only body type 0 is knocked down (`chance + 5`,
+  +5 crushing, +10 leg). `chance` is the weapon's magic critical-effect value
+  (0 unarmed, and 0 with a weapon whose magic was cancelled, A8) plus effects,
+  +10 when aimed. *Re-read in the executable by two readers (ARC-COMBAT-009,
+  [ledger CE1–CE15](original-verification-ledger.md#critical-effects-arc-combat-009)),
+  which corrected the strict knockout threshold, tied the knockout to the stun
+  and added the body types, the location effects, scars and the item effects.*
 - **C25** Recovery (fatigue event (0x45E610, 0x45E820), time (0x45A7F0, 0x45A820, 0x45A840, 0x45A870, 0x45A890, 0x45A8B0, 0x45A8D0, 0x45A8E0, 0x45A900, 0x45A920, 0x45A950)): any non-zero
   fatigue damage schedules one recovery event per critter 80 000 ms of game
   time ahead. It removes `HealRate × max(1, elapsed seconds/80)` fatigue damage;
@@ -424,7 +429,8 @@ neither see nor hear the attacker; then the critical chance gains
   (step (0x430FC0), fatigue set (0x45D5A0)).
 - **A5** A crippled-arm critical drops the **weapon** handle when only the
   shield qualifies; partial healing of crippled legs clears blindness instead
-  (damage (0x4B4390), heal (0x4B58C0)).
+  (damage (0x4B4390), heal (0x4B58C0)). *ARC-COMBAT-009 re-read the drop: each
+  of the two slots is tested with its own handle (ledger CE13).*
 - **A6** `object_get_ac` applies AC-adjustment effects to the whole AC and
   then adds the effective `AcAdjustment` stat again (AC (0x43D880)).
 - **A7** On a critical self-hit the critical-hit effects are rolled twice: once

@@ -399,6 +399,35 @@ dead humans have row 0 and no kill-on-sight flag.
    until a fight has two or more creatures); LM1 and LM2 need no decision
    before I10, because no Crash Site NPC holds two weapons.
 
+## 9. Critical charts and body types (ARC-COMBAT-009)
+
+A second probe mode counts what the original's critical-effect procedures read
+([ledger CE1–CE15](original-verification-ledger.md#critical-effects-arc-combat-009)):
+every critter's critical-hit body type (field 227) and every weapon's critical
+hit and miss charts (fields 129 and 132), for prototypes and for every map's
+mobiles by their effective fields, through the module content stack.
+
+```bash
+dotnet run --project tools/research/Arcanum.CrashSiteProbe -- --critical-census --game-root <game folder> [--module <name>]
+dotnet run --project tools/research/Arcanum.CrashSiteProbe -- --critical-census-self-test
+```
+
+On the owner's installation (2026-10-21, about 1 s, SHA-256
+`d1f2ff409d23325809de45ed06582a581f260ac783d3cb84c47222d68c11c923`):
+
+| Count | Prototypes | Map mobiles |
+| --- | --- | --- |
+| PC body types | 13 × 0 | none |
+| NPC body types 0 / 1 / 2 / 3 / 4 / 5 | 391 / 41 / 28 / 23 / 7 / 7 | 2,677 / 619 / 158 / 216 / 3 / 119 |
+| Undead NPCs by body type | 49 × 0 | 550 × 0 |
+| Fatigue-immune NPCs by body type 0 / 2 / 3 | 48 / 17 / 6 | 539 / 86 / 22 |
+| Weapon hit charts 0 / 1 / 2 / 3 / 4 | 51 / 28 / 66 / 2 / 3 | 620 / 217 / 881 / 0 / 0 |
+| Weapon miss charts 0 / 1 / 2 / 3 / 4 / 6 / 7 / 8 | 54 / 27 / 14 / 36 / 12 / 2 / 3 / 2 | 982 / 216 / 162 / 119 / 235 / 0 / 4 / 0 |
+
+115 prototypes are of types the combat-field reader does not read (walls,
+portals, containers, scenery, traps). So the hero's body type is 0, every body
+type of the procedures occurs, and the undead are all of the knockdown body type.
+
 ## Unknowns
 
 - **U1** Column meanings beyond the plan's reading stay with stage A1; the

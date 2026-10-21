@@ -96,12 +96,12 @@ public sealed partial class GameSessionOwner
     /// <summary>The NPC's seed items still in its list, in every attached seed that lists it as an NPC.</summary>
     private int SeedItemCount(string npc) => _inventory.Seeds.Values
         .Sum(seed => seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == SessionHolderKind.Npc
-            ? holder.Items.Count(entity => !_inventory.Taken.Contains(entity)) : 0);
+            ? holder.Items.Count(entity => !_inventory.Taken.Contains(entity) && !Dropped(entity)) : 0);
 
     /// <summary>The seed item of an attached seed that lists <paramref name="item"/> in the NPC's list and still holds it, or null.</summary>
     private SessionSeedItem? SeedListing(string npc, string item)
     {
-        if (_inventory.Taken.Contains(item)) return null;
+        if (_inventory.Taken.Contains(item) || Dropped(item)) return null;
         foreach (var seed in _inventory.Seeds.Values)
             if (seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == SessionHolderKind.Npc &&
                 seed.HolderOf.TryGetValue(item, out var of) && of == npc) return seed.Items[item];

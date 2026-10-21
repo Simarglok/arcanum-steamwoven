@@ -1865,6 +1865,55 @@ Anomalies (none needs a switch):
   difference of the inventory owner, not a switch (the pile and decay come with dropping items, which the inventory does not
   model yet).
 
+## Critical effects (ARC-COMBAT-009)
+
+Source: the [attack resolver](../world/attack-resolver-runtime.md#critical-effects-arc-combat-009) and the
+[combat core](combat-core-evidence.md) C20/C24. Question: what do the original's critical-hit and critical-miss procedures roll,
+in which order, and how does the damage step apply the result? Read on 2026-10-21 by this task and, independently, by a fresh
+agent that saw only the questions and the project's records of the callees (method step 6). Both agree on every row except where
+a row says otherwise; CE1–CE14 are F2, CE15 has one reading (F1). Every direct branch stays inside `.text`. The thresholds are in
+the code; the data are the weapon's charts (fields 129 hit, 132 miss) and the critter's critical-hit body type (field 227). The
+census mode `--critical-census` of the Crash Site probe counted them in the owner's installation through the module content
+stack (prototypes): every one of the 13 PC prototypes has body type 0; NPC prototypes 391 type 0, 41 type 1, 28 type 2, 23
+type 3, 7 type 4, 7 type 5 (the 49 undead are all type 0); weapon hit charts 0..4 and miss charts 0..8 all occur. Re-checked
+anomalies of ARC-RES-030: A5 holds (an arm hit tests the weapon and the shield each with its own handle, CE13), A7 holds (the
+critical-miss procedure calls the critical-hit procedure once, the damage step again, CE11), A8 holds (a cancelled weapon magic
+gives the weapon part 0, CE2).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| CE1 | critical hit (0x4B5F40), gates | Nothing on a network client (0x62AC6C bit 0 without bit 1). The target and the attacker must both be PCs or NPCs (type 15 or 16), else the procedure returns before any roll, the multipliers included. "NPC hits PC" is a target of type 15 hit by an attacker of type 16. | Original |
+| CE2 | the same, chance and chart | A wielded weapon item (type 5) gives the chart (field 129) and the weapon part: its magic critical-effect value (field 131) scaled for the attacker (0x461590), or 0 when the context's magic-cancelled flag 0x20000 is set (the chart stays); no weapon or a non-weapon item gives chart 1 (crushing) and part 0. The chance is the part plus the attacker's effect adjustment (0x4EAB30, adjustment kind 4, no draw), + 10 with the context's aimed flag 0x1. | Original |
+| CE3 | the same, multipliers and fallback | Unless an NPC hits a PC: d100 ≤ chance + 10 ×3, else a second d100 ≤ chance + 30 ×2, else a third d100 ≤ chance + 60 ×1.5. Last: when the whole damage-flags word is still 0 (bits set before the procedure count), it becomes ×1.5. | Original |
+| CE4 | the same, body types | Body type 2 skips everything up to the item rolls (no stun, knockout, injury, scar or knockdown). Any other undead target (critter flag 0x4) skips stun, knockout, injuries and scars but reaches the knockdown. Otherwise: body type 4 has head effects only, body type 5 no arm crippling; only body type 0 is knocked down. | Original |
+| CE5 | the same, stun and knockout | Stun at d100 ≤ chance + 5, + 10 for chart 1 or 3 (crushing, electrical), + 10 on the head (location 1) without a helmet (slot 1000), then a constitution check at −5 (CE10) that fails. Only after a stun, and only for a target that is no PC and lacks critter flag 0x4000000 (fatigue-immune): knockout at d100 ≤ the same threshold (≤, not <) and another failed check at −5. | Original; the earlier reading had a strict < for the knockout and did not tie it to the stun (C24 corrected) |
+| CE6 | the same, hit location | One effect at most, by the location: arm (2, not body types 4 and 5) cripples at d100 ≤ chance + 1 and a failed check at −5; leg (3, not body type 4) the same; head (1) with chart 1 drops a worn helmet at d100 ≤ chance + 5 (no check; nothing without a helmet); head with any other chart blinds, unless an NPC hits a PC, at d100 ≤ chance + 1 without a helmet or chance + 0 with one and a failed check at 0. | Original |
+| CE7 | the same, scars | A PC target only: d100 ≤ chance + 5. With the context's flag 0x8 (the attack turned on its attacker) the roll is skipped when the target already has effect 50 (0x4EA4A0 counts the effect list's entries of that number). | Original (CEA1) |
+| CE8 | the same, knockdown | Body type 0, also undead: d100 ≤ chance + 5, + 5 for chart 1, + 10 on a leg. | Original |
+| CE9 | the same, items | With an item in the target's slot 1004 (0x4B23B0): "damage weapon" at d100 ≤ chance + 10, then, unless an NPC hits a PC, "drop weapon" at a second, independent d100 ≤ chance + 10. With armour at the location (0x4B54B0, CW1): "damage armour" at d100 ≤ chance + 10. | Original |
+| CE10 | check (0x45F060), bounds (0x4B0FC0, 0x4B0FD0) | One draw: 0x4CEF00(minimum, maximum) for the stat, which passes at ≤ effective stat + modifier (returns 1). Constitution's minimum is 1 (table 0x5B5194); its maximum is 20 except race 1 and 6 (21) and race 10 (22) (the race table 0x4B1074, default table 0x5B5204), as `CharacterStatRules.Range`. | Original |
+| CE11 | critical miss (0x4B6410) | Chart and part: no weapon chart 5 (hands), a non-weapon item chart 1, a weapon field 132 with its magic critical-miss effect value (field 134, scaled) unless the magic was cancelled; the chance adds the attacker's adjustment (0x4EAB90, kind 6). The context turns on the attacker: flags lose 0x1 and 0x4 and gain 0x2 and 0x8, the target becomes the attacker, its location is copied. d100 > 50 ends it (no critical self-hit, no call). Else flag 0x4, then "destroy weapon" (chart not 5) at d100 ≤ chance + 1, "explode weapon" (charts 6, 7, 8) at d100 ≤ chance + 1, and for a weapon with an ammunition type (0x465CA0: field 125, 10 000 for none or no weapon) "all ammunition" (0x40000) at d100 ≤ chance + 1, else "five shots" (0x20000) at a second d100 ≤ chance + 11; then the critical-hit procedure once (A7: the damage step calls it again for flag 0x4). | Original |
+| CE12 | damage step (0x4B4390), stun and knockdown | With context flag 0x4 the scripts of the target's worn armour (type 7, slots 1000..1008) run with the attacker: point 34 (critical hit) when flag 0x2 is set, else 35. Stun (0x40) when not already stunned and no knockdown or knockout bit: critter flag 0x20, then the stun animation (0x4357B0, goal 57 with (20 − constitution) / 2) starts only on a critter that can act (0x45D790: not destroyed or off, not dead, not unconscious, not stunned or paralysed, not stoned), else the flag is cleared. Knockdown or knockout (0x80, 0x100): the knockdown animation; a knockout of a critter still conscious draws 10..20 (on a network client the stored value) and sets fatigue damage to maximum fatigue + that. | Original (the stoned test of 0x45D790, spell flag 0x10000, was read by one reader) |
+| CE13 | the same, injuries and drops | In order: scar (effect 50, cause 7), blinding (unless blinded), arm (the first arm, else the second at d100 ≤ 50; then, whatever happened, the item in slot 1004 and the item in slot 1005 are each dropped when the wear check 0x464D20 refuses it now), legs (unless crippled); later, after the armour wear, a helmet drop (slot 1000, no wear check). Each injury of a PC is written to its injury record (0x4F5690: the first free pair from index 64 of field 268, the cause and the kind 0 blind, 1 arm, 2 legs, 3 scar). | Original |
+| CE14 | drop (0x461A90, 0x461AB0, 0x4F4E40) | 0x461A90 draws a distance 2..4 first, then 0x461AB0: the owner's drop script (point 5) or the remove check 0x466DA0 (the no-drop flag) refuses it; the item starts at the owner's tile and up to 10 tries of 0x4F4E40 move it: one direction draw per try, a walk of the distance from the owner (a try fails only when a step leaves the map), a path back (0x41F3C0, limit 200); no path or one of the distance + 2 or longer keeps the owner's tile, else the path is walked and, for a critter owner, ends at the first tile with no critter on it. An NPC owner then gets NPC flag 0x2000000 (look for a weapon) for a weapon, 0x4000000 (look for armour) for armour. | Original; the direction draw's bounds are 0 and 8 (0x4CEF00 is inclusive), the second reader read 0..7: F1 for that bound, to be read again with the placement |
+| CE15 | ammunition loss (0x4B65D0) | Nothing for an NPC holder without a leader (0x45DDA0); otherwise all the holder's ammunition of the weapon's type, or five times the weapon's consumption (field 126) when it holds at least that. | Original (one reader) |
+
+Anomalies (none needs a switch):
+
+- CEA1 (CE7): another's critical hit scars a PC that is already scarred again (the scars add up; healing removes five at a
+  time, HL4), while the PC's own critical self-hit scars only a PC without a scar. In the original; kept in both settings (a
+  consistent rule, not a defect). The owner may still ask for a switch under D8.
+- CEA2 (CE12): the session's life rules stunned a critter that could not act (unconscious, paralysed, stoned); the original's
+  stun animation does not start there and the stun is cleared at once. A slip of the earlier reading; both settings follow the
+  original (`LifeRules.ApplyDamage`).
+- CEA3 (CE5, CE4, CE8): C24 said the knockout roll was strict and that bipeds alone are knocked down "+5 crushing, +10 leg" with
+  undead and amorphous never stunned; the reading here (≤, the knockout only after a stun, body type 2 with no knockdown either,
+  undead body type 0 knocked down) corrects it. A slip of the earlier reading; both settings follow the original.
+- CEA4 (CE13, CE14): NOT READY, not a difference: the session drops an NPC's item at the NPC's cell without the drop's draws
+  (2..4 and one direction per try) or its path, the hero's drops are not applied (no store of ground items the session placed,
+  ARC-WORLD-059), the NPC flags of CE14 and the PC's injury record of CE13 are not session state, the drop and armour scripts are
+  not run, and no ammunition is modelled (CE15). A seeded run stops matching the original's generator after a drop.
+
 ## Decisions to revisit
 
 These owner decisions or accepted proposals rest on a fact of the earlier reading that the original does not share.

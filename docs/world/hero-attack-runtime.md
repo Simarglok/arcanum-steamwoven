@@ -13,7 +13,9 @@ effective object fields. No NPC fights back. Requirements:
 [FR-COMBAT-011](../requirements/combat-magic-tech.md#fr-combat-011) (the attack click, cursor and feedback, partly) and
 [FR-CHAR-016](../requirements/characters-skills.md#fr-char-016) (combat skill levels). Since ARC-COMBAT-007 the attack also
 wears armour and weapons ([FR-COMBAT-008](../requirements/combat-magic-tech.md#fr-combat-008),
-[FR-ITEM-011](../requirements/items-economy.md#fr-item-011); [attack wear](attack-resolver-runtime.md#wear-arc-combat-007)).
+[FR-ITEM-011](../requirements/items-economy.md#fr-item-011); [attack wear](attack-resolver-runtime.md#wear-arc-combat-007)), and
+since ARC-COMBAT-009 a critical hit rolls the original's critical-effect tables and applies them
+([FR-COMBAT-009](../requirements/combat-magic-tech.md#fr-combat-009), [below](#critical-effects-arc-combat-009)).
 
 ## Evidence
 
@@ -56,12 +58,47 @@ wears armour and weapons ([FR-COMBAT-008](../requirements/combat-magic-tech.md#f
 | `SessionCritterCombat.From(entity, fields, carried)` | One NPC's combat values from its ARC-DATA-021 fields and the fields of the items it carries (those in a wear slot count): life facts (pools, level, effective ST under each poison penalty, CN, WP, HealRate, PoisonRecovery, normal resistance, traits from the critter, object and spell flags), the loaded life state (hit-point and fatigue damage, poison, stun and injury flags), the experience worth and pool, and `Combatant(status, state, profile)` with its effective stats under its poison and crippled legs, armour class, resistances, dodge and backstab, light and conditions. Effective stats are the character owner's for the NPC's race and gender over its stored base stats, each clamped to the race's range first (monsters store values beyond it); its stored effects are not applied. Typed `SessionCritterCombatFailure`, never an exception for data. |
 | `QueryHeroAttack()` | The hero's `Combatant`, its weapon (bare hands without one), the weapon's skill with its level and training (`QueryHeroSkills`, ARC-SKILLS-002; dodge and backstab too), weapon speed with that training, Speed, range and whether the attack is supported (melee only). Null without a hero. |
 | `AttackCritter(expected, attack)` | Refused before any roll: no hero (`AttackUnavailable`), an invalid target, an aim at the torso or an undefined location, a distance outside 0..1 (`InvalidAttack`), a weapon that is not melee (`AttackUnsupported`), the version, an exhausted revision (`RevisionExhausted`). Then the resolver on a trial copy of the session generator (`RandomExhausted` when it runs out), adopted once it ran; a resolver refusal (the hero cannot act, the target is dead) is NoChange with the resolution. A fate the resolver used (the hero's armed critical hit, ARC-WORLD-054, [fate points](fate-points-runtime.md)) is cleared in a revision of its own, so such an attack is Changed even without damage. Then `ApplyDamage` on the target or, on a critical self-hit, the hero; then, with experience data, `RecordNpcDamage` for an NPC that is not stoned and `RecordNpcKill` on a death; last the attack's wear (`ApplyAttackWear` with the hero as attacker and the NPC as target, `SessionAttackResult.Wear`). Each step commits its own revision; a later refusal is `StepFailure` and leaves the earlier steps. `SessionAttack.HeroWorn` and `TargetWorn` carry the items in the two sides' wear slots with their durability baselines (the hero's exactly its worn items, else `InvalidWear` before any roll); null skips that side's items (the bare-handed hero's own wear still applies). |
+| Critical effects | ARC-COMBAT-009, [below](#critical-effects-arc-combat-009): the resolver runs with `OriginalCriticalEffects`; `SessionAttack.TargetCell` is where the NPC's dropped items go; `SessionAttackResult.Criticals` reports the item steps. |
 | `ApplyAttackWear(expected, wear)` | ARC-COMBAT-007, for any attacker and recipient (the NPC AI will call it for NPC attacks): in the original's order, the armour at the hit location of whoever took the damage (`DamageItem` + 10), that critter's wielded weapon on the critical "damage weapon" (+ 10) and "destroy/explode weapon" (`DestroyItem`) unless invulnerable, and the attacker's weapon (`DamageItem`) or, bare-handed, its own hit points (never the last one). Each step is reported (`SessionWearStep`: kind, slot, item, amount, skip reason, durability result or life outcome); a first break of the hero's item takes it off its slot (item durability), of an NPC's item is reported for the host. `SessionWearItem` carries an item's entity, durability baseline, invulnerable flag and weapon art subtype, all host data passed at each attack (`SessionWearItem.FromCombatFields`); the hero's attack takes its weapon's subtype from it. Refused before any change (`InvalidWear`): no attacker critter, the same critter on both sides, a hero side that is not exactly the hero's worn items, an NPC side naming one of the hero's items, items on an object side, an invalid entity, baseline or subtype, an item the session does not track or deleted (a host leaves out items an earlier attack deleted, `IsItemDestroyed`; the `ItemDeleted` skip is only for an item a step of the same wear deleted), armour or weapon steps on an object; then the version. A refused step ends the wear: `StepFailure` after changes, Rejected when nothing changed. |
 | `AttackObject(expected, attack)` | ARC-COMBAT-008: the hero's attack on a portal, container, scenery, trap or an item on the ground ([object damage](object-damage-runtime.md)). |
 | `QueryNpcKilled(entity)` | Whether the session's record of the NPC holds the pinned death damage. |
 | Loot | `LootItem` and `QueryMapInventory` count an NPC the session killed as dead, besides those its map data shows dead. |
 
 No snapshot change: deaths, damage and experience are already saved by the life and experience domains.
+
+## Critical effects (ARC-COMBAT-009)
+
+`AttackCritter` and the critical self-hit of `AttackObject` pass `OriginalCriticalEffects` to the resolver, so a critical rolls
+the original's tables ([attack resolver](attack-resolver-runtime.md#critical-effects-arc-combat-009), ledger CE1–CE15) from the
+session generator, in the original's order. The recipient's `Combatant` carries what the tables read: its body type (an NPC's
+critter field 227; every pre-made PC has 0, so the hero's is 0), effective constitution and its race's maximum, whether it is
+scarred, and its worn helmet, weapon and armour pieces (the hero's from its equipment; an NPC's from `SessionAttack.TargetWorn`
+when the host passes it, else its map data).
+
+The effects are applied in the original's order (0x4B4390, CE12–CE13) by whoever took the damage, the target or, on a critical
+self-hit, the hero:
+
+| Step | Contract |
+| --- | --- |
+| Life | `ApplyDamage`: stun (only on a critter that can act), knockdown, knockout (fatigue damage = maximum + 10..20, drawn), scar, blinding, crippling (the second arm at d100 ≤ 50, drawn). |
+| Arm-hit drops | After a crippling arm hit (`LifeEvents.ArmHitDropsItems`, also when nothing new was crippled): the wielded weapon, then the shield, each dropped when the wear check (`EquipmentRules.CheckWear`, 0x464D20) refuses it under the injuries now. An NPC's check reads its map data's item (an item it lists none for is `Unknown`). |
+| Wear | `ApplyAttackWear` without the items that left: the armour's damage, the weapon's critical damage and destruction, the attacker's side. |
+| Helmet and weapon drops | `DropHelmet`, then `DropWeapon` (an item a step of this attack deleted or dropped is `NoItem`). |
+| Ammunition | `DestroyAmmo` and `LoseAmmo` are reported as `AmmunitionNotReady`. |
+
+A drop (`SessionCriticalStep`, `SessionCriticalStepOutcome`): an NPC's item that its map seed lists in the NPC's list goes to the
+ground at `SessionAttack.TargetCell` as a map change (`ItemDroppedProperty` = `item.dropped`, the cell packed with 24 bits per
+coordinate, + 1), so no schema changes; it then lies on the ground in `QueryMapInventory` (after the spilled containers' items),
+leaves the NPC's list (loot, negative `IN`, the NPC crafter and the NPC inventory store no longer see it) and `PickUpItem` takes
+it. Not applied: the hero's item (`HeroDropNotReady`: the session has no store of ground items it placed, ARC-WORLD-059), an item
+the session added to the NPC (`NotSeedItem`), an item with a drop script (`ScriptUnsupported`), no cell or no item data
+(`Unknown`); an item with the no-drop flag is `Refused`, as in the original (`SessionWearItem.NoDrop`).
+
+**Not ready**: the original drops the item 2..4 cells away with draws of its own (a distance, then a direction per try, and a
+path, CE14); the session drops it on the holder's cell and makes none of those draws, so the generator stops matching the
+original after a drop. The porting needs a host port for the original's step, path (0x41F3C0) and blocking (0x4407C0) tests.
+Also not modelled: the NPC's look-for-weapon/armour flags after a drop, the PC's injury record (0x4F5690), the worn armour's
+critical scripts (points 34, 35), the drop script, the stun animation and its duration (goal 57) and the ammunition.
 
 ## Viewer (AREA)
 
@@ -78,6 +115,14 @@ No snapshot change: deaths, damage and experience are already saved by the life 
   (ordinal, flags, sizes, offset, name digest); the frame joins the map's frame repository (`AreaFrameOverlay`) and the body is
   drawn, lit and picked as a moved body (`AreaScenePlan.Repose`). A pose that cannot be read leaves the standing body and is
   logged. Reading a pose opens that archive's index on the main thread (a few milliseconds on the installed archives).
+- The status line names a critical's injuries and drops; the log line `ARC-COMBAT-005 attack-hit` adds the table's effects and
+  each critical item step (`crit=`). The viewer plays no stun animation, so a stun of the hero or the NPC ends at once
+  (`ClearStun`, the contract for an animation that could not start; `ARC-COMBAT-009 stun-ended`); a critical knockout is drawn in
+  the fallen pose like any knockout. `TargetCell` is the NPC's map-data cell (NPCs do not move in the viewer). A dropped item is
+  hidden from the NPC but not drawn on the ground (as a spilled container's items).
+- Native smoke `ARC-COMBAT-009 native-smoke critical PASS` (map mode, last stage): a granted fate point arms the hero's critical
+  hit, the hero attacks the living NPC with the most hit points through the session as the viewer does (worn items, cell), and
+  the stage checks the critical hit and that the tables drew; in the Crash Site cave a rat (body type 1) took a doubled torso hit.
 - Native smoke: `ARC-COMBAT-005 native-smoke attack PASS` (with `--hero`, after the combat-mode stage, on the exterior and in map
   mode): the living NPC with the fewest hit points is attacked from a few cells away until it dies; the stage checks the attack
   ART, the rolls, the death, the experience, the corpse being lootable, the fallen pose, the status line and that a corpse click
@@ -89,7 +134,7 @@ No snapshot change: deaths, damage and experience are already saved by the life 
   focus and taunts; the exit gate's threats are still empty.
 - Ranged and thrown attacks (ammunition, projectiles, line of fire), the "default throws" weapon, backstab (needs facing and
   perception), aimed-attack critical bonuses beyond the resolver's, the target's awareness (an NPC always sees the hero) and the
-  darkness penalty (every position is lit), critical-effect tables (FR-COMBAT-009), the taking-damage
+  darkness penalty (every position is lit), the critical effects listed above as not ready, the taking-damage
   and dying scripts, blood splotches, the corpse's decay timer, alignment and the kill log.
 - The attack ART of a wielded weapon (the diagnostic human is drawn bare-handed; the viewer has no equip action, so the hero
   fights bare-handed), the low attack, the hero's own knockdown and death animations, the dying animation itself (the body jumps
@@ -113,7 +158,9 @@ No snapshot change: deaths, damage and experience are already saved by the life 
 `tests/Arcanum.Simulation.Tests/Combat/CombatSkillRulesTests.cs` (cap table, levels, monstrous melee, training tiers,
 resistances, conditions), `tests/Arcanum.Session.Tests/AttackStateTests.cs` (NPC values from fields, failures, the hero's attack
 until the kill with the experience, loot of a session kill, refusals before any roll, the aimed attack, the ranged refusal,
-experience-free sessions), `tests/Arcanum.Session.Tests/AttackWearStateTests.cs` (armour wear to the second break, the critical
+experience-free sessions), `tests/Arcanum.Session.Tests/CriticalEffectsStateTests.cs` (ARC-COMBAT-009: a critical hit disarms
+an NPC and the weapon lies at its cell after a restore, items without a cell stay, the hero's drop is not applied, a crippled
+arm drops a torch it can no longer hold), `tests/Arcanum.Session.Tests/AttackWearStateTests.cs` (armour wear to the second break, the critical
 weapon effects and invulnerability, the hero's weapon to its break, bare hands never killing, an NPC attacker, object targets,
 missing item data, a refused step, refusals, and the wear of the hero's attack on a stone golem), `tests/Arcanum.TerrainViewer.Tests/AreaCombatTests.cs` (facing, the attack player, the status text,
 `Repose`, the frame overlay, the dying animation and the pose read from a synthetic archive with its refusals) and the native

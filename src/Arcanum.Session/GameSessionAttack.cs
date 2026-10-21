@@ -66,15 +66,19 @@ public sealed class SessionCritterCombat
     private readonly LightEmission _ownLight;
     private readonly CombatantFlags _flags;
     private readonly ObjectMaterial _material;
+    private readonly int _criticalBody;
+    private readonly int _constitutionMaximum;
+    private readonly CharacterRace _race;
+    private readonly CharacterGender _gender;
 
     private SessionCritterCombat(string entity, CharacterStatsOwner stats, IReadOnlyDictionary<EquipmentSlot, EquipmentItem> worn,
         IReadOnlyList<int> basicSkills, int baseArmorClass, DamageResistances storedResistances, LightEmission ownLight, CombatantFlags flags,
-        ObjectMaterial material, LifeFacts facts, LifeState loaded, SessionNpcExperience experience, bool monstrous, int level,
-        SessionSkills? sheetSkills = null)
+        ObjectMaterial material, int criticalBody, CharacterRace race, CharacterGender gender, LifeFacts facts, LifeState loaded,
+        SessionNpcExperience experience, bool monstrous, int level, SessionSkills? sheetSkills = null)
     {
         Entity = entity; _stats = stats; _worn = worn; _basicSkills = basicSkills; _sheetSkills = sheetSkills; _baseArmorClass = baseArmorClass;
-        _storedResistances = storedResistances; _ownLight = ownLight; _flags = flags; _material = material; Facts = facts; Loaded = loaded;
-        Experience = experience; Monstrous = monstrous; Level = level;
+        _storedResistances = storedResistances; _ownLight = ownLight; _flags = flags; _material = material; _criticalBody = criticalBody;
+        _race = race; _gender = gender; _constitutionMaximum = CharacterStatRules.Range(race, CharacterStat.Constitution).Maximum; Facts = facts; Loaded = loaded; Experience = experience; Monstrous = monstrous; Level = level;
         Target = SessionLifeTarget.Critter(entity, facts, loaded);
     }
 
@@ -94,7 +98,8 @@ public sealed class SessionCritterCombat
     /// follower's saved advancement record, read under the sheet's own stats as <see cref="GameSessionOwner.QueryNpcSkills"/>
     /// reads it) and that sheet's level; its other values stay the map data's.</summary>
     internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, _baseArmorClass,
-        _storedResistances, _ownLight, _flags, _material, Facts, Loaded, Experience, Monstrous, sheet.Level, SessionSkills.Of(sheet, AdvancementModifiers.None));
+        _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, sheet.Level,
+        SessionSkills.Of(sheet, AdvancementModifiers.None));
 
     /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
@@ -191,11 +196,26 @@ public sealed class SessionCritterCombat
         if (!ExperienceDomain.Valid(experience)) return Fail(SessionCritterCombatFailure.InvalidExperience);
         var lightEmission = (LightEmission)Math.Max((int)light, (int)equipment.Light);
         return new(SessionCritterCombatFailure.None, new(entity, owner, worn, critter.BasicSkills, fields.Object.ArmorClass,
-            StoredResistances(fields.Object.Resistances), lightEmission, combatFlags, Material(fields.Object.Material), facts, loaded, experience,
-            monstrous, level));
+            StoredResistances(fields.Object.Resistances), lightEmission, combatFlags, Material(fields.Object.Material), critter.CriticalHitChart,
+            race, gender, facts, loaded, experience, monstrous, level));
 
         static SessionCritterCombatBuild Fail(SessionCritterCombatFailure failure) => new(failure, null);
     }
+
+    /// <summary>The item the map data has the NPC wear in a slot (ARC-COMBAT-009: the arm-hit drops ask the wear check about it).</summary>
+    internal EquipmentItem? WornItem(EquipmentSlot slot) => _worn.TryGetValue(slot, out var item) ? item : null;
+
+    internal IReadOnlyDictionary<EquipmentSlot, EquipmentItem> WornItems => _worn;
+
+    /// <summary>The NPC as a wearer under <paramref name="conditions"/>: race, gender and crippled arms; its spells, background and art
+    /// are not read (never transformed, magick-allergic or unique), so a body armour's unique-art refusal is not seen.</summary>
+    internal EquipmentWearer Wearer(LifeConditions conditions) => new()
+    {
+        Race = _race,
+        Gender = _gender,
+        CrippledArmOne = conditions.HasFlag(LifeConditions.CrippledArmOne),
+        CrippledArmsBoth = conditions.HasFlag(LifeConditions.CrippledArmsBoth),
+    };
 
     /// <summary>What the NPC defends as in this life state: effective stats under its poison and crippled legs, armour class
     /// (<see cref="AttackRules.ArmorClass"/> under <paramref name="profile"/>), resistances, dodge, light and conditions.</summary>
@@ -230,6 +250,11 @@ public sealed class SessionCritterCombat
             BackstabLevel = _sheetSkills?[Skill.Backstab].Level ?? SkillLevel(BasicCombatSkill.Backstab),
             BackstabTraining = _sheetSkills?[Skill.Backstab].Training
                 ?? CombatSkillRules.Training(BasicCombatSkill.Backstab, _basicSkills[(int)BasicCombatSkill.Backstab], Monstrous, 0, Level),
+            CriticalBody = _criticalBody,
+            Constitution = snapshot.GetEffective(CharacterStat.Constitution),
+            ConstitutionMaximum = _constitutionMaximum,
+            Worn = CombatantRules.WornItems(_worn.Keys),
+            Scarred = state.Scars > 0,
         };
     }
 
@@ -275,6 +300,8 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     public int Distance { get; init; } = 1;
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? HeroWorn { get; init; }
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? TargetWorn { get; init; }
+    /// <summary>The target's cell now, where a critical drops its items (ARC-COMBAT-009); null: its drops are not applied.</summary>
+    public Arcanum.Simulation.Movement.CellCoord? TargetCell { get; init; }
 }
 
 /// <summary>
@@ -290,6 +317,11 @@ public sealed record SessionAttackResult(GameSessionDisposition Disposition, Gam
     GameSessionFailure StepFailure, GameSessionVersion Version)
 {
     public SessionAttackWearResult? Wear { get; init; }
+    private readonly IReadOnlyList<SessionCriticalStep>? _criticals;
+
+    /// <summary>The critical item steps (ARC-COMBAT-009) of whoever took the damage, in the original's order: the arm-hit drops, the
+    /// helmet and weapon drops and the ammunition effects; empty when the attack had none.</summary>
+    public IReadOnlyList<SessionCriticalStep> Criticals { get => _criticals ?? Array.Empty<SessionCriticalStep>(); init => _criticals = value; }
 }
 
 public sealed partial class GameSessionOwner
@@ -331,6 +363,12 @@ public sealed partial class GameSessionOwner
             BackstabTraining = skills[Skill.Backstab].Training,
             CriticalHitFateArmed = FateRules.IsArmed(_hero.State.Fate, FateKind.CriticalHit),
             CriticalMissFateArmed = FateRules.IsArmed(_hero.State.Fate, FateKind.CriticalMiss),
+            // ARC-COMBAT-009: every pre-made PC's critical-hit body type is 0 (critical census).
+            CriticalBody = 0,
+            Constitution = snapshot.GetEffective(CharacterStat.Constitution),
+            ConstitutionMaximum = CharacterStatRules.Range(_hero.State.Race, CharacterStat.Constitution).Maximum,
+            Worn = CombatantRules.WornItems(_equipment.Worn.Keys),
+            Scarred = state.Scars > 0,
         };
         var weaponSkill = skills[SkillRules.Of(equipment.Skill)];
         var range = equipment.Weapon.Kind == WeaponKind.Unarmed ? 1 : Math.Max(1, equipment.Weapon.Range);
@@ -387,6 +425,9 @@ public sealed partial class GameSessionOwner
         Combatant defender;
         try { defender = defending.Combatant(targetStatus, record.State, _rules.Combat); }
         catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
+        // ARC-COMBAT-009: the items the critical-hit procedure looks at are the ones the host says the NPC wears now (an earlier
+        // critical may have dropped or destroyed some of its map data's).
+        if (attack.TargetWorn is { } targetWorn) defender = defender with { Worn = CombatantRules.WornItems(targetWorn.Keys) };
         var request = new AttackRequest
         {
             Attacker = hero.Combatant,
@@ -401,7 +442,7 @@ public sealed partial class GameSessionOwner
         };
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
         AttackResolution resolution;
-        try { resolution = AttackResolver.Resolve(request, rolls, null, _rules.Combat); }
+        try { resolution = AttackResolver.Resolve(request, rolls, OriginalCriticalEffects.Instance, _rules.Combat); }
         catch (TrialCombatRolls.ExhaustedException) { return RejectAttack(GameSessionFailure.RandomExhausted); }
         catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
         _random = rolls.Trial;
@@ -439,15 +480,53 @@ public sealed partial class GameSessionOwner
             }
         }
         SessionAttackWearResult? wear = null;
-        if (stepFailure == GameSessionFailure.None && resolution.Wear is { Any: true })
-        {
-            wear = WearSteps(new SessionAttackWear { Resolution = resolution, Attacker = heroSide, Target = targetSide });
-            stepFailure = wear.Disposition == GameSessionDisposition.Rejected ? wear.Failure : wear.StepFailure;
-        }
+        var criticals = new List<SessionCriticalStep>();
+        if (stepFailure == GameSessionFailure.None)
+            (wear, stepFailure) = CriticalAndWearSteps(resolution, outcome, heroSide, targetSide, recipient == DamageRecipient.Target ? target : null,
+                attack.TargetCell, criticals);
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, outcome, hitAward, killAward, stepFailure, Version)
         {
             Wear = wear,
+            Criticals = criticals,
         };
+    }
+
+    /// <summary>
+    /// The item steps after the life step of an attack on a critter or a critical self-hit (ARC-COMBAT-007, ARC-COMBAT-009), in the
+    /// original's order (0x4B4390): the arm-hit drops of whoever took the damage, the wear (its armour, its weapon's critical damage and
+    /// destruction, the attacker's side), its helmet and weapon drops, and the ammunition effects of a critical miss. A drop of the
+    /// hero's item and the ammunition are not applied (NOT READY); an NPC's item drops at <paramref name="recipientCell"/>.
+    /// </summary>
+    private (SessionAttackWearResult? Wear, GameSessionFailure StepFailure) CriticalAndWearSteps(AttackResolution resolution, LifeOutcome life,
+        SessionWearSide attacker, SessionWearSide target, SessionCritterCombat? npc, Arcanum.Simulation.Movement.CellCoord? recipientCell,
+        List<SessionCriticalStep> criticals)
+    {
+        var damage = resolution.Damage!;
+        var whose = damage.Recipient;
+        var recipient = whose == DamageRecipient.Target ? target : attacker;
+        var changed = false;
+        var failure = GameSessionFailure.None;
+        if (life.Events.HasFlag(LifeEvents.ArmHitDropsItems))
+            recipient = ArmHitDrops(whose, recipient, npc, recipientCell, criticals, ref changed, ref failure);
+        if (failure != GameSessionFailure.None) return (null, failure);
+        SessionAttackWearResult? wear = null;
+        if (resolution.Wear is { Any: true })
+        {
+            wear = WearSteps(new SessionAttackWear
+            {
+                Resolution = resolution,
+                Attacker = whose == DamageRecipient.Attacker ? recipient : attacker,
+                Target = whose == DamageRecipient.Target ? recipient : target,
+            });
+            failure = wear.Disposition == GameSessionDisposition.Rejected ? wear.Failure : wear.StepFailure;
+            if (failure != GameSessionFailure.None) return (wear, failure);
+        }
+        if (damage.HitEffects.HasFlag(CriticalHitEffects.DropHelmet))
+            recipient = CriticalDrop(SessionCriticalStepKind.DropHelmet, whose, recipient, EquipmentSlot.Helmet, recipientCell, criticals, ref changed, ref failure);
+        if (damage.HitEffects.HasFlag(CriticalHitEffects.DropWeapon))
+            CriticalDrop(SessionCriticalStepKind.DropWeapon, whose, recipient, EquipmentSlot.Weapon, recipientCell, criticals, ref changed, ref failure);
+        AmmunitionSteps(damage, criticals);
+        return (wear, failure);
     }
 
     /// <summary>Whether an NPC is dead in this session: its saved record holds the pinned death damage (every death through the
