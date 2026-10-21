@@ -175,4 +175,72 @@ public sealed class ExperienceRulesTests
         Assert.AreEqual((500, 0), ExperienceRules.DamageShare(200, 500, 90, 30));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ExperienceRules.DamageShare(1, 1, 1, 0));
     }
+
+    [TestMethod]
+    public void TheWaitingFollowersRectangleReachesTwelveTilesInTheOriginalSetting()
+    {
+        // ARC-WORLD-047 (OL29, D7): an 800 × 600 window reaches 12.5 tiles from the PC on both axes, so 12 whole tiles.
+        Assert.AreEqual(12, ExperienceRules.WaitingStepReach());
+        Assert.AreEqual(16, ExperienceRules.WaitingStepReach(1024, 768));
+        var original = ExperienceRuleProfile.Original;
+        Assert.IsTrue(ExperienceRules.WaitingFollowerGetsStep((12, -12), false, original));
+        Assert.IsFalse(ExperienceRules.WaitingFollowerGetsStep((13, 0), false, original));
+        Assert.IsFalse(ExperienceRules.WaitingFollowerGetsStep((0, -13), false, original));
+        Assert.IsFalse(ExperienceRules.WaitingFollowerGetsStep(null, false, original), "not on the loaded map");
+        Assert.IsFalse(ExperienceRules.WaitingFollowerGetsStep((0, 0), true, original), "dead");
+        // Steamwoven: every waiting follower wherever it waits, never a dead one.
+        var steamwoven = ExperienceRuleProfile.Steamwoven;
+        Assert.IsTrue(ExperienceRules.WaitingFollowerGetsStep(null, false, steamwoven));
+        Assert.IsTrue(ExperienceRules.WaitingFollowerGetsStep((400, 0), false, steamwoven));
+        Assert.IsFalse(ExperienceRules.WaitingFollowerGetsStep(null, true, steamwoven));
+        Assert.IsTrue(original.WaitingFollowersStepOnlyNearPc);
+        Assert.IsFalse(steamwoven.WaitingFollowersStepOnlyNearPc);
+    }
+
+    [TestMethod]
+    public void MissedStepsAppliedLaterGiveTheSameLevelsAndPointsAsInTurn()
+    {
+        // Every PC level history the recalculation can produce: rising levels up to 50 (each award's step continues the last), then
+        // the step into the last-level branch (to 51) and its repeats (50 → 51). Applying the recorded list later gives every follower
+        // level the same level and points as the steps one after the other.
+        IEnumerable<FollowerLevelStep[]> Histories()
+        {
+            for (var start = 1; start <= 50; start++)
+            for (var mid = start + 1; mid <= 51; mid++)
+            for (var repeats = 0; repeats <= 3; repeats++)
+            {
+                var steps = new List<FollowerLevelStep> { new(start, mid) };
+                if (mid < 51) steps.Add(new(mid, Math.Min(51, mid + 3)));
+                // The repeat comes only once the PC is in the last-level branch (its last step reached 51).
+                if (repeats > 0 && steps[^1].NewPcLevel != 51) continue;
+                for (var i = 0; i < repeats; i++) steps.Add(new(50, 51));
+                yield return steps.ToArray();
+            }
+        }
+        foreach (var history in Histories())
+        {
+            IReadOnlyList<MissedLevelStep> recorded = [];
+            foreach (var step in history) recorded = ExperienceRules.AppendMissedStep(recorded, step)!;
+            Assert.IsTrue(recorded.Count <= 3, "at most three entries: " + string.Join(", ", recorded));
+            for (var level = 1; level < ExperienceRules.MaxLevel; level++)
+            {
+                int Apply(IEnumerable<FollowerLevelStep> steps, out int points)
+                {
+                    var (now, sum) = (level, 0);
+                    foreach (var step in steps) { var up = ExperienceRules.FollowerLevel(now, step); sum += up.PointsGained; now = up.Level; }
+                    points = sum;
+                    return now;
+                }
+                var inTurn = Apply(history, out var inTurnPoints);
+                var later = Apply(recorded.SelectMany(e => Enumerable.Repeat(e.Step, e.Times)), out var laterPoints);
+                Assert.AreEqual((inTurn, inTurnPoints), (later, laterPoints), $"level {level}, history {string.Join(", ", history)}");
+            }
+        }
+        // The repeat count stops at the maximum level; an unrelated step past the bound is refused.
+        IReadOnlyList<MissedLevelStep> many = [];
+        for (var i = 0; i < 80; i++) many = ExperienceRules.AppendMissedStep(many, new(50, 51))!;
+        Assert.AreEqual(new MissedLevelStep(new(50, 51), ExperienceRules.MaxLevel), many.Single());
+        IReadOnlyList<MissedLevelStep> full = Enumerable.Range(0, ExperienceRules.MaxMissedStepEntries).Select(i => new MissedLevelStep(new(i, i + 2), 1)).ToArray();
+        Assert.IsNull(ExperienceRules.AppendMissedStep(full, new(1, 3)));
+    }
 }
