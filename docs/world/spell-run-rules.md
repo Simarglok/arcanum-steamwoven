@@ -88,6 +88,7 @@ Owner decisions 2026-10-20: every difference is documented.
 | One run flag is both "unresistable" and "final END scheduled": an unresistable spell ends after BEGIN, a run whose END is scheduled is unresistable (MG19). | Two flags. | `MagicAnomalyProfile.UnresistableIsFinalEnd` (Original) |
 | A full run table quits the game (MG28). | The cast is refused. | both (no-crash) |
 | The cap reads a missing parent's type through handle 0 (MG26). | A missing parent is no PC or NPC: the cap refuses. | both (no-crash) |
+| An aptitude difference that wraps to −100 divides by zero in the time scaling. | The time is left unscaled (unreachable with aptitudes of −100..100). | both (no-crash) |
 | The cap asks the range test and ignores its answer. | Not asked. | — |
 | A non-critter's aptitude and a missing target's type keep the slot's previous values. | No aptitude, no target. | — |
 | The run reads its objects, the record and the globals directly; the presentation (facing, eye candy, casting goal) and the multiplayer packets are part of creation. | The caller passes the facts and starts the run; multiplayer is not modelled. | — |

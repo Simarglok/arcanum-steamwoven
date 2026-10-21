@@ -346,10 +346,11 @@ public static class SpellRunRules
         if (spell is >= 0 and < SpellCostRules.CollegeSpells && facts.MasteredCollege == spell / SpellCostRules.Ranks) milliseconds = unchecked(milliseconds * 2);
         if (facts.TargetIsCritter && milliseconds > 0)
         {
-            // The larger minus the smaller (32-bit): the magnitude, negative only when it wraps.
+            // The larger minus the smaller (32-bit): the magnitude, negative only when it wraps. A wrap to −100 divides by zero in
+            // the original; here it leaves the time (no-crash; aptitudes run −100..100, so no data reaches it).
             var difference = facts.ParentAptitude > facts.TargetAptitude ? unchecked(facts.ParentAptitude - facts.TargetAptitude)
                 : unchecked(facts.TargetAptitude - facts.ParentAptitude);
-            if (difference < 0) milliseconds = unchecked(milliseconds * 100) / unchecked((uint)(difference + 100));
+            if (difference < 0 && difference != -100) milliseconds = unchecked(milliseconds * 100) / unchecked((uint)(difference + 100));
         }
         return milliseconds;
     }

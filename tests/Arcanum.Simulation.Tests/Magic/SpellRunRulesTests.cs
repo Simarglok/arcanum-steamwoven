@@ -58,6 +58,8 @@ public sealed class SpellRunRulesTests
         var sourceless = Create(new(new SpellInvocation(33, null, trap, Orc, SpellLocation.None)));
         Assert.AreEqual((0, true, 0), (sourceless.CastGoal, sourceless.BeginEvent, sourceless.Run!.Source!.Aptitude), "no parent: a BEGIN event; no aptitude for a trap");
         Assert.AreEqual(1, Create(new(AtOrc), table: created.Table).Run!.Id, "the next free slot");
+        var wand = new SpellObjectFacts("wand", 5, new(3, 4));
+        Assert.AreEqual(new SpellLocation(3, 4), Create(new(AtOrc with { Source = wand })).Run!.StartLocation, "the source's location, not the holder's");
         Assert.AreEqual(SpellRunCreationStatus.Refused, Create(new(AtOrc with { Spell = 300 })).Status, "the invocation check first");
         Assert.AreEqual(SpellRunCreationStatus.Disabled, SpellRunRules.Create(SpellRunTable.Empty, new(AtOrc), Bolt, new World(), new NoRolls(),
             MagicAnomalyProfile.Steamwoven, magicDisabled: true).Status);
