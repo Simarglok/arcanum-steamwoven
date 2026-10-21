@@ -634,7 +634,9 @@ public partial class TerrainViewerApp
             RefreshReadyStatus(); return;
         }
         // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
-        CancelPortalApproach("another click replaced it");
+        CancelPortalApproach("another click replaced it", keepArmed: true);
+        // ARC-SKILLS-006: armed lockpicks take this press: a door or window has its lock picked, anything else cancels the pick.
+        if (_lockpickArmed is not null) { if (TryAreaPortalUse(screen)) SetObjectApproachGait(); else RefreshReadyStatus(); return; }
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
         if (TryAreaAttack(screen, alt)) return;
         CancelAreaAttack("another click replaced it");

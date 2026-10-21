@@ -342,6 +342,27 @@ public sealed partial class GameSessionOwner : IDisposable
         return Changed();
     }
 
+    // The changes that differ from the recorded values.
+    private MapChangeEdit[] EffectiveChanges(IReadOnlyList<MapChangeEdit> changes) => changes.Where(change =>
+    {
+        var current = _maps.TryGetValue(change.Map, out var map) && map.TryGetValue(change.Key, out var value) ? value : (long?)null;
+        return current != change.Value;
+    }).ToArray();
+
+    // Whether the map-change budgets hold on the state after the whole step.
+    private bool ChangesFit(IReadOnlyList<MapChangeEdit> effective)
+    {
+        var counts = _maps.ToDictionary(pair => pair.Key, pair => pair.Value.Count);
+        var total = _totalChanges;
+        foreach (var change in effective)
+        {
+            var exists = _maps.TryGetValue(change.Map, out var map) && map.ContainsKey(change.Key);
+            var delta = change.Value is null ? (exists ? -1 : 0) : (exists ? 0 : 1);
+            counts[change.Map] = counts.GetValueOrDefault(change.Map) + delta; total += delta;
+        }
+        return counts.Count(pair => pair.Value > 0) <= _limits.MaxMaps && counts.Values.All(count => count <= _limits.MaxChangesPerMap) && total <= _limits.MaxTotalChanges;
+    }
+
     /// <summary>
     /// ARC-WORLD-017: one guarded atomic step over the actor and several map changes, such as a map transfer that
     /// carries the PC's followers. Every input is validated (the actor when given, each map and key, no key listed
@@ -362,23 +383,9 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var actorChanged = actor is { } next && next != _actor;
-        var effective = changes.Where(change =>
-        {
-            var current = _maps.TryGetValue(change.Map, out var map) && map.TryGetValue(change.Key, out var value) ? value : (long?)null;
-            return current != change.Value;
-        }).ToArray();
+        var effective = EffectiveChanges(changes);
         if (!actorChanged && effective.Length == 0) return NoChange();
-        // The budget is checked on the state after the whole step.
-        var counts = _maps.ToDictionary(pair => pair.Key, pair => pair.Value.Count);
-        var total = _totalChanges;
-        foreach (var change in effective)
-        {
-            var exists = _maps.TryGetValue(change.Map, out var map) && map.ContainsKey(change.Key);
-            var delta = change.Value is null ? (exists ? -1 : 0) : (exists ? 0 : 1);
-            counts[change.Map] = counts.GetValueOrDefault(change.Map) + delta; total += delta;
-        }
-        if (counts.Count(pair => pair.Value > 0) > _limits.MaxMaps || counts.Values.Any(count => count > _limits.MaxChangesPerMap) || total > _limits.MaxTotalChanges)
-            return Reject(GameSessionFailure.BudgetExceeded);
+        if (!ChangesFit(effective)) return Reject(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The last refusal: an atomic move that changes nothing when it fails.
         if (actorChanged && MoveFollowerEvents(actor!.Value.Map) is var moved && moved != GameSessionFailure.None) return Reject(moved);

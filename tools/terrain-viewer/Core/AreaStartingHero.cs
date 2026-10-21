@@ -59,6 +59,9 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
     /// <summary>ARC-SKILLS-005: the kit's healing items, by kit index (null for anything else), from the same prototype fields.</summary>
     public IReadOnlyList<SessionHealingItem?>? KitHealing { get; init; }
 
+    /// <summary>ARC-SKILLS-006: the kit's lockpicks, by kit index (null for anything else), from the same prototype fields.</summary>
+    public IReadOnlyList<SessionLockpick?>? KitLockpicks { get; init; }
+
     /// <summary>ARC-COMBAT-008: the kit's durability values for the attack's wear, by kit index (null for a prototype that does not
     /// read or an item outside the durability bounds), from the same prototype fields (<see cref="SessionWearItem.FromCombatFields"/>).</summary>
     public IReadOnlyList<SessionWearItem?>? KitDurability { get; init; }
@@ -144,6 +147,7 @@ public static class AreaStartingHero
         return new(AreaHeroStatus.Ready, hero, definition, flag, dropped, read, "hero ready", experience, autoLevel, Effect, wear)
         {
             KitHealing = KitHealing(prototypes.Read, definition),
+            KitLockpicks = KitLockpicks(prototypes.Read, definition),
             KitDurability = KitDurability(prototypes.Read, definition),
         };
     }
@@ -187,6 +191,16 @@ public static class AreaStartingHero
         ArgumentNullException.ThrowIfNull(definition);
         return definition.Kit.Select((item, index) => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields is { } fields
             ? AreaHealingItems.From("kit:" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), fields) : null).ToArray();
+    }
+
+    /// <summary>ARC-SKILLS-006: each kit item's lockpick facts (<see cref="AreaLockpicks.From"/>) under its kit entity, null for an
+    /// item that is not lockpicks or whose prototype does not read.</summary>
+    public static IReadOnlyList<SessionLockpick?> KitLockpicks(Func<int, PrototypeFile> prototypes, SessionHeroDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(prototypes);
+        ArgumentNullException.ThrowIfNull(definition);
+        return definition.Kit.Select((item, index) => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields is { } fields
+            ? AreaLockpicks.From("kit:" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), fields) : null).ToArray();
     }
 
     /// <summary>ARC-COMBAT-008: each kit item's durability values for the attack's wear under its kit entity

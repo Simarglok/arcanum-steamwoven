@@ -243,7 +243,8 @@ forced, hearing or seeing check, steal or plant mode)
   "use skill on" goal that walks to the target; pick locks queues a variant
   of it whose working time is halved for an apprentice (goal (0x4350F0),
   pick locks (0x436220)). The goal charges 4 action points when it fires
-  (charge (0x42A2A0)). Using bandages or lockpicks from the inventory
+  (charge (0x42A2A0)); the timed pick-lock goal does not (its check node 0x42A4E0 has no charge), and it
+  belongs to the AI, scripts and dialog services, not to the player (ledger PL3). Using bandages or lockpicks from the inventory
   queues "use item with skill", charging 4 points at use
   (item use (0x462CC0), goal (0x4352C0), run (0x428E10)).
 - **Immediate.** Repair and disarm from the skill bar run at once, without an
@@ -377,6 +378,11 @@ jams the lock. On an unlocked
 one success locks it. Lockpicks lower the difficulty by their usage bonus; the
 lock's difficulty is added (difficulty (0x4C8430)). Lockpicks are optional:
 a follower without them still tries (lockpicks (0x571CB0)).
+
+**Original check (ARC-SKILLS-006):** read in the retail executable by two readers, rows
+[PL1–PL7](original-verification-ledger.md#pick-locks-arc-skills-006). They add that the case reads only the lock query (not the
+jam, hold or always-locked bits), that the witnesses are called only for a locked target, that lockpicks are never used up, and
+that the player's only start is the inventory use (4 action points, no animation); PL7 corrects SK4 below.
 
 ### Heal
 
@@ -513,7 +519,7 @@ Recorded, not adopted. "Inference" marks a reading of intent.
 | SK1 | script command "get skill" (script (0x447220)) | the case has no `return`, so after storing the level it falls into "cast spell" and casts with its own operands reinterpreted as caster, spell and target | return after storing; reachability depends on shipped scripts (census) |
 | SK2 | basic skill − button (dec (0x57ACD0, 0x57AEB0)) | the loop "until the level changes" re-sets the same `points − 1` and refunds a point on every pass; when one point does not change the level (an effect pins it at 0, at 20 or at the key-stat cap) it never ends and keeps refunding; reachable only after buying a point in the same editor session, since − stops at the accepted value | update the point count each pass, or refund once |
 | SK3 | `skill_ui_set_training` (dispatch (0x57AC90)) | sends a tech skill to the basic setter and a basic skill to the tech setter; `ui_set_skill_training` has no single-player caller (ui (0x4603E0)) | swapped labels; harmless in single player (ledger SK3: called only from the multiplayer handler, where the repair off-by-one is an original bug) (confirms the FR-CHAR-018 note; not new) |
-| SK4 | `ai_check_use_skill` (check (0x4AE570)) | the disarm-traps case demands lockpicks (or a PC leader) and a lockable target; pick locks has no case | the case belongs to pick locks; disarm then has no check |
+| SK4 | `ai_check_use_skill` (check (0x4AE570)) | **Corrected by ledger PL7 (ARC-SKILLS-006):** the case is pick locks (skill 14), not disarm traps: an NPC with a PC leader may pick without lockpicks, any other picker needs them, and the target must be lockable; disarm traps has no case | no anomaly: the earlier reading numbered the skills one off |
 | SK5 | gambling gates (gamble (0x579840, 0x579B60)) | worn (Expert) and "won't sell" (Master) gates read the **NPC's** gambling training, while the price limit reads the PC's; haggle's matching gates read the PC's (sell/buy (0x462170, 0x462230)) | the PC's training |
 | SK6 | skill effectiveness (effectiveness (0x4C62E0)) | the prowling formula is unreachable (prowling is opposed); backstab has no formula (0) | dead branches; prowling's opposed path is the live rule |
 | SK7 | repair (handler (0x4C7160)) | HP is restored and durability lost whatever the roll; success only changes the message (and fate gives full HP) | unknown: may be the original design ("repair a percentage"); retail check |

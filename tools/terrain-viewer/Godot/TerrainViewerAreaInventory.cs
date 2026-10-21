@@ -23,6 +23,7 @@ public partial class TerrainViewerApp
     private AreaInventoryPanel? _inventoryPanel;
     // ARC-SKILLS-005: the hero's kit healing items from its load (null without --hero).
     private IReadOnlyList<SessionHealingItem?>? _areaKitHealing;
+    private IReadOnlyList<SessionLockpick?>? _areaKitLockpicks;
     // ARC-COMBAT-008: the kit's durability values for the attack's wear.
     private IReadOnlyList<SessionWearItem?>? _areaKitDurability;
     // A pickup or loot clicked from too far: the click route walks within reach first, then the same action runs once.
@@ -180,6 +181,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.TakeRequested += TakeFromBody;
             _inventoryPanel.TakeAllRequested += TakeAllFromBody;
             _inventoryPanel.UseRequested += HealSelf;
+            _inventoryPanel.PickRequested += ArmLockpick;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
@@ -188,7 +190,7 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
-    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing);
+    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks);
 
     /// <summary>ARC-SKILLS-005: the hero uses a healing item on itself (the inventory use passes the user as the target, as the
     /// original's inventory window does). Outside a turn-based round, so no action points are charged.</summary>
@@ -213,6 +215,24 @@ public partial class TerrainViewerApp
         _inventoryStatus = message;
         _inventoryPanel.Render(InventoryView(holder), message);
         RefreshReadyStatus();
+    }
+
+    /// <summary>ARC-SKILLS-006: lockpicks chosen in the window: it closes and the next left press on a door or window picks its
+    /// lock (the original's use of lockpicks on an object, 0x571CB0); a press elsewhere cancels.</summary>
+    private void ArmLockpick(string item)
+    {
+        if (!InventoryOpen || !InventoryActive) return;
+        if (_inventoryHost!.Lockpick(_areaSession!, item, _areaKitLockpicks) is null)
+        {
+            _inventoryStatus = "not used: not lockpicks the hero holds";
+            _inventoryPanel!.Render(InventoryView(_inventoryPanel.Holder), _inventoryStatus);
+            return;
+        }
+        EndInventory();
+        _lockpickArmed = item;
+        _portalNotice = "pick a lock: press a door or window";
+        GD.Print($"ARC-SKILLS-006 lockpicks armed item={item}");
+        RefreshAreaStatus();
     }
 
     private void EndInventory()

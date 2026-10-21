@@ -586,6 +586,10 @@ the executable as read in
   player's open attempt succeeds. A locked, jammed or magically held one plays
   the locked sound and stays closed. One with an unlock script is not opened (its
   script is not run).
+- **Pick a lock (ARC-SKILLS-006).** The inventory window's *Pick a lock with:* button on lockpicks closes it and arms
+  them; the next left press on a door or window picks its lock ([pick locks](../world/pick-locks-runtime.md)), walking within
+  range 1 first; a press anywhere else cancels. The HUD names the outcome (the lock opens, locked it, the lock jams, the pick
+  failed); nothing opens by itself. Full light and no turn-based round are passed.
 - **Saves.** F7/F8 and map changes carry the state, because it is part of the
   session's map changes. A Lock event that comes due locks, unjams and closes
   the portal while its map is shown, and waits while another map is.
@@ -599,6 +603,9 @@ Native smoke (`ARC-WORLD-051 native-smoke portal PASS`, after the talk smoke):
 2. A press on the door closes it, and it is drawn on its T0 frame again.
 3. When the map has a door the player cannot open, a press next to it is
    refused and that door stays closed.
+4. Since ARC-SKILLS-006, when the PC holds lockpicks (the halfling-male hero's kit), the inventory's *Pick a lock* button arms
+   them and a press on that door picks its lock; the session's lock state follows the outcome
+   (`ARC-SKILLS-006 native-smoke pick PASS`, otherwise `NONE`).
 
 The smoke prints `NONE` on a map without a door that opens. An opt-in test
 (`AreaPortalsOriginalTests`) checks every installed interior: the frames of

@@ -83,7 +83,9 @@ public partial class TerrainViewerApp
                     || _portalNotice.EndsWith(": Jammed", StringComparison.Ordinal) || _portalNotice.EndsWith(": MagicallyHeld", StringComparison.Ordinal)),
                     $"the locked door {locked.Portal.Entity} was refused: {_portalNotice}");
                 refused = new { locked.Portal.Entity, Notice = _portalNotice, Flags = locked.Portal.Baseline.Flags };
+                RunAreaPickLockSmoke(locked.Portal, command);
             }
+            else GD.Print($"ARC-SKILLS-006 native-smoke pick NONE map={_readyMapName} (no door the player cannot open)");
             GD.Print("ARC-WORLD-051 native-smoke portal PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, door.Portal.Entity, From = map.Chart.ToWorld(door.From), To = map.Chart.ToWorld(door.To), door.Portal.Art.Rotation,
                 OpenFrame = openFrame, door.Portal.StepMs, Frames = frames, Portals = portals.All.Count, Refused = refused, Parity = "NOT_VERIFIED" }));
@@ -93,6 +95,43 @@ public partial class TerrainViewerApp
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
+    }
+
+    // ARC-SKILLS-006 native observation on the refused locked door (the PC stands next to it): with lockpicks in the PC's list
+    // (the halfling-male hero's kit), the inventory's Pick a lock button arms them and the next press on the door picks its
+    // lock through the production click route; the session's answer and the door's lock state agree. NONE without lockpicks.
+    private void RunAreaPickLockSmoke(AreaPortal door, AreaDrawCommand command)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-SKILLS-006 pick smoke: " + why); }
+        var session = _areaSession!;
+        if (_inventoryHost is null || !InventoryView(null).Pc.Any(line => line.Lockpick))
+        { GD.Print($"ARC-SKILLS-006 native-smoke pick NONE map={_readyMapName} (no lockpicks in the PC's list)"); return; }
+        InventoryKey(Key.I);
+        Require(InventoryOpen && _inventoryPanel!.PickButtonsForSelfTest.Count > 0, "the window lists a Pick a lock button");
+        var picks = _inventoryPanel!.ViewForSelfTest!.Pc.First(line => line.Lockpick).Entity;
+        ArmLockpick(picks);
+        Require(!InventoryOpen && _lockpickArmed == picks, "the button closed the window and armed the lockpicks");
+        var revision = session.Version.Revision;
+        var point = PortalCenterPoint(command);
+        AreaSmokeClick(point);
+        for (var i = 0; i < 300 && _portalNotice.StartsWith("walking", StringComparison.Ordinal); i++) AreaSmokeFrame();
+        var state = session.QueryOpenable(_areaPortals!.Openable(door), door.Baseline);
+        var notice = _portalNotice;
+        Require(notice.Contains("the lock opens") || notice.Contains("the pick failed") || notice.Contains("the lock jams"), "the press picked the lock: " + notice);
+        Require(session.Version.Revision > revision && state.Locked == !notice.Contains("the lock opens"), $"the session's lock state follows the pick: locked {state.Locked}, {notice}");
+        GD.Print("ARC-SKILLS-006 native-smoke pick PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            Map = _readyMapName, door.Entity, door.LockDifficulty, Notice = notice, Locked = state.Locked, Parity = "NOT_VERIFIED" }));
+    }
+
+    // A point of the command's destination rectangle the shared pick resolves to it: its centre, else a scan.
+    private Vector2 PortalCenterPoint(AreaDrawCommand command)
+    {
+        var transform = AreaDrawItem.RasterTransform(GetViewport()); var size = GetViewport().GetVisibleRect().Size; var hud = _hud!.Rect;
+        for (var y = 0; y < (int)size.Y; y += 2)
+        for (var x = 0; x < (int)size.X; x += 2)
+            if (!hud.HasPoint(new(x + .5f, y + .5f)) && AreaAlphaAt(command, AreaFrames(), transform, x, y) != 0 && AreaObjectAtScreen(new(x + .5f, y + .5f)) == command.Identity)
+                return new Vector2(x + .5f, y + .5f);
+        throw new InvalidOperationException("AREA_PORTAL_NOT_VISIBLE");
     }
 
     // The visible command of the portal once it draws the frame, after a few published frames.
