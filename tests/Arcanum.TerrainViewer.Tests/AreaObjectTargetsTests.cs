@@ -69,6 +69,20 @@ public sealed class AreaObjectTargetsTests
     }
 
     [TestMethod]
+    public void TheCallerSaysWhichUseScriptIsATrap()
+    {
+        // ARC-COMBAT-011: the baseline carries the caller's trap answer for its row; without one no object is trapped.
+        using var session = ConversationSessionFixture.Create();
+        var chest = Row(0, 2);
+        var barrel = Row(1, 3);
+        var targets = Targets(chest, barrel);
+        Assert.IsFalse(targets.Target(session, chest.Key)!.Object!.Baseline.Trapped);
+        bool Trapped(AreaObjectRecord row) => row.Key == chest.Key;
+        Assert.IsTrue(targets.Target(session, chest.Key, Trapped)!.Object!.Baseline.Trapped);
+        Assert.IsFalse(targets.Target(session, barrel.Key, Trapped)!.Object!.Baseline.Trapped);
+    }
+
+    [TestMethod]
     public void AnObjectWhoseFieldsDoNotReadIsARefusal()
     {
         using var session = ConversationSessionFixture.Create();

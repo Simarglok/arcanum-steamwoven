@@ -108,14 +108,31 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         return new((int)element.Words[2], (uint)element.Words[0], (uint)element.Words[1]);
     }
 
-    public ScrSlot? Slot(ScrObjectRef attachee, int point)
+    public ScrSlot? Slot(ScrObjectRef attachee, int point) => Row(attachee) is { } row ? Slot(row, attachee, point) : null;
+
+    // The row's loaded slot for the point; the use slot as the session last wrote it back for the attachee.
+    private ScrSlot? Slot(AreaObjectRecord row, ScrObjectRef attachee, int point)
     {
-        if (Row(attachee) is not { } row || LoadedSlot(row, point) is not { } loaded) return null;
+        if (LoadedSlot(row, point) is not { } loaded) return null;
         if (point != ScrPoint.Use) return loaded;
         long? Read(string property) => _session.QueryMapChange(new SessionMapId(attachee.Map), MapChangeKey.ForEntity(attachee.Code, property));
         return new(Read(ScriptProperty) is { } script ? checked((int)script) : loaded.Script,
             Read(LocalFlagsProperty) is { } flags ? checked((uint)flags) : loaded.LocalFlags,
             Read(CountersProperty) is { } counters ? checked((uint)counters) : loaded.Counters);
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-011: whether the object's use script is a trap (0x4BBDD0, ledger OD6): the script of its point-1 slot as the
+    /// session holds it, when it is not 0 and its file's header flags carry 0x1 (non-magical) or 0x2 (magical); a script the
+    /// content does not hold or cannot read is none, as the original's header read fails. Null without script content (unknown).
+    /// </summary>
+    public bool? IsTrap(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (_content is null) return null;
+        if (Slot(row, new(row.Key.RuntimeMap, EntityId(row)), ScrPoint.Use) is not { Script: not 0 } slot) return false;
+        return Script(slot.Script) is { Status: ScrScriptStatus.Found, Program: { } program } &&
+            (program.FileFlags & (ScrCatalogue.FileFlag.NonmagicalTrap | ScrCatalogue.FileFlag.MagicalTrap)) != 0;
     }
 
     public ScrScriptLookup Script(int number) => AreaScriptHost.Lookup(_content, number);
