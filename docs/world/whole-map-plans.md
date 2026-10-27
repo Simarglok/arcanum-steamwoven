@@ -113,7 +113,7 @@ Every plan:
 - resolves no body for an object other than a wall or portal whose ART id is
   0xFFFFFFFF (ARC-DATA-038): the original names no ART for ART type 15, so its
   object draw gets an empty rectangle
-  ([ledger NA1](../research/original-verification-ledger.md#objects-without-art-arc-data-038));
+  ([ledger NA1](../research/ledger/data.md#objects-without-art-arc-data-038));
   the object stays, with its step evidence, and the viewer counts it as suppressed
   (`NoArt`). Any other type-15 ID, and a wall or portal with that ID, is still
   refused. A main-map window around Caladon holds such scenery; every window a
@@ -236,7 +236,7 @@ draw.
 main world map included, through the same area owner. It is how the main map loads through the universal path.
 
 - **Selection.** The core is the `(2·radius + 1)²` sectors around the centre (radius 1, the default, is the 3×3 the original
-  loads around the PC when it teleports, [ledger SS4](../research/original-verification-ledger.md#main-map-streaming-arc-data-030)),
+  loads around the PC when it teleports, [ledger SS4](../research/ledger/world.md#main-map-streaming-arc-data-030)),
   and one ring of context sectors surrounds it; radius at most `MaxWindowRadius` (2). Sectors outside the map's `map.prp`
   size are left out (the original never loads them); a centre outside it is `OutsideMap`.
 - **Sources.** Each sector is resolved by the map catalogue as the original takes it

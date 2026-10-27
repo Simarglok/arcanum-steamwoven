@@ -20,7 +20,7 @@ Requirements: [FR-MAGIC-005](../requirements/combat-magic-tech.md#fr-magic-005) 
 ## Verification
 
 Two independent readers read every rule in the retail 1.0.7.4 `Arcanum.exe`
-([ledger "Spell per-target stage"](../research/original-verification-ledger.md#spell-per-target-stage-arc-magic-011), PT1–PT10).
+([ledger "Spell per-target stage"](../research/ledger/spell-runs.md#spell-per-target-stage-arc-magic-011), PT1–PT10).
 
 The function oracle compared three functions with the original on 10,000 seeded inputs each (F3):
 

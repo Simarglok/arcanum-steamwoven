@@ -4,7 +4,7 @@
 
 Roofs of any whole map of the content stack, read as the original reads them
 and kept with the original's rules for hiding, fading and covering, checked in
-the retail executable ([ledger RF1–RF10](../research/original-verification-ledger.md#roofs-arc-render-021);
+the retail executable ([ledger RF1–RF10](../research/ledger/world.md#roofs-arc-render-021);
 the stored layout and the first house are the
 [first building research](../research/first-building-evidence.md#roofs-fr-scene-010), ARC-RES-029).
 ARC-RENDER-021 is the data half: the roofs in the strict snapshot and the rules
@@ -56,7 +56,7 @@ implements an original function carries its address
   covers only when the caller counts it (objects do, tiles do not) (RF4). The
   caller tells whether a tile's art is of type 0: tile art with bit 8 clear,
   facade art with bit 25 clear, and any other art (a missing tile included),
-  as in the [leaving test](../research/original-verification-ledger.md#leaving-a-building-through-a-locked-portal-arc-res-049).
+  as in the [leaving test](../research/ledger/world.md#leaving-a-building-through-a-locked-portal-arc-res-049).
 - `HotSpot(visual)`: a mirrored roof frame is drawn with hot spot x 0 and
   offset x 0, unlike other mirrored art (RF7).
 - `Slot`, `Normalize`, `ScreenPosition`, `Art` (RF1), `FadeCorners` (the corner

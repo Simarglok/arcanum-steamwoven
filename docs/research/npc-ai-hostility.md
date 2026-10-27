@@ -15,7 +15,7 @@ Earlier facts reused here: the [core loop](npc-ai-core-loop.md) (ARC-RES-054: th
 pass record, the danger state read and setter, the parameter dictionary, whose
 slots 9, 10, 11 and 12 are read here), the [reaction runtime](../world/npc-reaction-runtime.md)
 and its ledger rows (ARC-WORLD-026: the effective reaction and its AI variant, the
-enemy list reading 0), the [follow consent](original-verification-ledger.md#ai-parameters-and-follow-consent-arc-data-033)
+enemy list reading 0), the [follow consent](ledger/npc-ai.md#ai-parameters-and-follow-consent-arc-data-033)
 rows (ARC-DATA-033: the follow check's result codes) and the
 [session random contract](../world/session-random-runtime.md) (the range draw).
 
@@ -28,7 +28,7 @@ questions ([method step 6](original-executable-check.md)). Object field numbers
 were named from the executable's own field table (0x59BEA8); flag bits, object
 types, stats, skills, social classes, script points and struct offsets come from
 the project's records of the executable's constants. The rows and verdicts are in
-the [ledger](original-verification-ledger.md#npc-ai-hostility-and-targeting-arc-res-057).
+the [ledger](ledger/npc-ai.md#npc-ai-hostility-and-targeting-arc-res-057).
 Everything below is read in the executable unless marked **(inference)**; the
 functions of other stages that these call (sight, hearing, should-flee, spell
 choice, the noise fan-out) are named, not re-read.
@@ -157,7 +157,7 @@ a container) stays valid until it is busted; the 20-tile leash still applies.
    0x4AE4E0 → rectangle query 0x440B40); PCs and NPCs only (type mask bits 15
    and 16), dead ones and the NPC itself included. A box of 3×3 to 21×21 tiles.
 3. **Cap.** At most the first 50 critters of the rectangle query's order (sector by
-   sector, the most recently placed first: [round order row](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024))
+   sector, the most recently placed first: [round order row](ledger/npc-ai.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024))
    are kept, before sorting (HS20).
 4. **Order.** With two or more, each gets a key: 0 when it is a decoy for this NPC
    (alive, NPC intelligence below 5, name 6719), else its distance; plus 1000 when
@@ -375,7 +375,7 @@ PC's attack order passes 4 after clearing the follower's no-attack flag).
 
 | Victim | Hit | Effect |
 | --- | --- | --- |
-| the PC's direct follower | deliberate | reaction += parameter 9 ([Reputation A2](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024): Steamwoven lowers by it, Original switch keeps the rise) |
+| the PC's direct follower | deliberate | reaction += parameter 9 ([Reputation A2](ledger/npc-ai.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024): Steamwoven lowers by it, Original switch keeps the rise) |
 | the PC's direct follower | any | follow check (0x4AD950, ignoring the follower limit); a refusal disbands it (0x45DFC0) and, when that succeeds, sets JILTED (NPC flag 0x20) and floats the "won't follow" line for the refusal code; otherwise one time in three (`random(1, 3) = 1`) the "accidental attack" line, deliberate or not |
 | any other NPC | accidental | reaction −10 |
 | any other NPC | deliberate | the AI reaction variant above parameter 10 is lowered to parameter 10 |
@@ -471,7 +471,7 @@ one-sided for a non-PC head: the head's own focus and enemy list keep N.
 ## 8. Anomalies and decisions
 
 Verdicts and rows:
-[ledger](original-verification-ledger.md#npc-ai-hostility-and-targeting-arc-res-057).
+[ledger](ledger/npc-ai.md#npc-ai-hostility-and-targeting-arc-res-057).
 Decisions follow D2 and D8. The owner accepted every proposed Original switch of
 this table on 2026-10-20 (ARC-RES-063).
 

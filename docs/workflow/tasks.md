@@ -19,6 +19,112 @@ Continue from the [merged component catalogue](../project/status.md) and current
 `origin/main`, not from a document's dated snapshot. Every work item has a code
 under the [task naming policy](task-naming.md).
 
+### One task per thread
+
+Owner decision 2026-10-21: one Claude thread, and its session, works on exactly
+one `ARC-*` code. When that code's PR merges, is handed to the owner for review,
+or the owner cancels the code, the session posts its report, writes a handoff of
+at most 40 lines for the next item and ends. The handoff holds the handoff
+record above (base, head, workspace, reviewer findings) plus the next item's
+plan row verbatim, decisions taken, branch and open questions; it goes where the
+queue of follow-up work is kept (the plan or checklist that lists the next
+items, or the project's coordinator thread). The next code starts in a new
+thread with a fresh session from that handoff; a thread does not take a second
+code, even a small fix found on the way, which goes back to the coordinator
+thread. Inside one task, do not clear or restart the context while it is still
+needed for correctness (part of the same decision).
+
+Why: a session carried across codes re-reads every earlier task's history on
+each step. The token audit of 2026-10-21 found lane sessions living 3.5 to 5
+days across 13 to 25 codes at a median context of about 550 thousand tokens.
+
+### Small search and read output
+
+Owner decision 2026-10-27 (ARC-DEV-035): every tool output stays in the
+session's context and is re-read on each later step, so search and reading
+output is kept small.
+
+- Search for files first, then lines: list matching files or counts
+  (`rg -l` or `rg -c`; `grep -l` or `grep -c` where `rg` is missing), then show
+  only the lines needed: `rg -n -m 20 PATTERN FILES | cut -c1-200`.
+- Read files in ranges of at most 120 lines (`sed -n 'A,Bp'`, or the read
+  tool's offset and limit); never `cat` a whole source file or document.
+- Never read a saved large tool output whole; grep it for what you need.
+- The component catalogue, the coverage matrix and the verification ledger
+  are split by area ([area files](#area-files-of-the-catalogue-matrix-and-ledger)):
+  find the row in the area folder, grep only that row and cut it
+  (`| cut -c1-300`); their rows run to thousands of characters.
+- Subagents (executable readers, reviewers) get the diff or exact file ranges
+  and a short brief; they never read a catalogue, matrix or ledger file whole.
+
+Why: in the token audit of 2026-10-21, search and read output (`grep`, `find`,
+`sed`, `cat`) was the largest share of re-read tokens in the three audited
+lanes (about 75 to 150 million cache-read tokens each), and saved tool outputs of
+32 to 48 KB were read whole and re-read about 390 times. Godot, launcher and
+`dotnet` output follow [quiet run output](#quiet-run-output).
+
+### Area files of the catalogue, matrix and ledger
+
+Owner decision 2026-10-27 (ARC-DEV-038, token audit item 5): the three shared
+records are split by area, so a lane reads and edits only its own area and
+lanes in different areas do not conflict.
+
+| Record | Index (small, shared) | Area files (full rows) |
+| --- | --- | --- |
+| [Component catalogue](../project/status.md) | audit note, one line per component (name, area, first task codes), credited verification, maintenance rule | `docs/project/status/<area>.md`: the full "Implemented components" and "Merged research" rows of the area |
+| [Coverage matrix](../requirements/coverage.md) | status scale and the summary counts by section | `docs/requirements/coverage/<domain>.md`, one per domain document of the register (`world.md`, `scene.md`, …): the requirement rows |
+| [Verification ledger](../research/original-verification-ledger.md) | inputs and method, verdicts, one line per section with its row IDs, decisions to revisit, second reading, not checked | `docs/research/ledger/<area>.md`: the sections of the area with their rows |
+
+- Find a row by name, task code, requirement code or row ID in the area folder,
+  for example `grep -n "FR-WORLD-013" docs/requirements/coverage/*.md | cut -c1-300`,
+  `grep -n "^| WT3 " docs/research/ledger/*.md | cut -c1-300` or
+  `grep -n "ARC-MAGIC-004" docs/project/status/*.md | cut -c1-300`.
+- Edit a row in its area file. A new component adds its full row to the area
+  file and one line to the index of the catalogue; a new ledger section goes at
+  the end of its area file and adds one line (section, area, row IDs) to the
+  ledger's area index; a coverage status change also updates the section's counts
+  in the matrix summary.
+- A new area file is made only when no area fits; it gets the same header as its
+  neighbours and a link from its index.
+- Links to a row's section point at the area file
+  (`../research/ledger/magic.md#spell-book-arc-magic-004`); old links to the
+  index's section anchors still resolve through the index.
+
+### Fewer steps
+
+Owner decision 2026-10-27 (ARC-DEV-036): every step re-reads the whole session
+context, so a task takes as few steps as its work allows.
+
+- Put independent tool calls in one response: reads, searches and checks that
+  do not depend on each other's results go out together, not one per step.
+- Update the thread's progress checklist only when a step changes state, and
+  in the same response as other work, never as a step of its own.
+- Coordinator: send a running lane only what needs action from it; batch
+  messages that are for information only.
+
+Why: in the token audit of 2026-10-21, lanes made about one tool call per step,
+status (progress-checklist) and no-reply calls were 12 to 21 percent of all
+steps (about 220 such calls per audited lane), and each lane received 16 to 23 coordinator messages,
+many for information only.
+
+### Quiet run output
+
+Owner decision 2026-10-27 (ARC-DEV-037): Godot, smoke, export and `dotnet`
+output is read from a log file, not from the session.
+
+- Run them through `./arcanum run`, which is quiet by default: the whole output
+  goes to a log file, and stdout shows only PASS or FAIL with the first error
+  and at most 40 lines around it; the `ARCANUM_QUEUE` lines stay on stderr
+  ([quiet output](toolchain.md#quiet-output-arc-dev-037)).
+- Check a run's start in its log with a narrow search or `tail -n 20`; never
+  read a log whole. Use `--verbose` only when the whole output is the point.
+- Give `dotnet build` and `dotnet test` `-v q --nologo`, and tests
+  `--logger "console;verbosity=minimal"`.
+
+Why: in the token audit of 2026-10-21, Godot output was the next largest share
+of re-read tokens after search and reading (63 million cache-read tokens in the
+map-mode lane alone).
+
 ## Definition of Ready
 
 Owner decision 2026-10-14: work stalls when one work item carries several
@@ -69,7 +175,8 @@ is checked when a task is created and kept current when a change lands.
   work that no requirement covers is raised with the owner too: either it belongs under
   an existing requirement, or the register needs a new one.
 - **When the change lands**, the same PR updates the matrix row of every
-  requirement whose coverage it changes: status, what is implemented, what is
+  requirement whose coverage it changes (in the section's file under
+  `docs/requirements/coverage/`, with the section's counts in the matrix summary): status, what is implemented, what is
   missing and the documentation links, using the matrix's status scale. A new
   requirement, or a changed one, is edited in its domain document with the owner's
   agreement, and the counts

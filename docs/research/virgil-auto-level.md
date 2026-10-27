@@ -191,7 +191,7 @@ matters only once both schemes are complete, since a running rule spends them.
 
 ## Anomalies (S)
 
-**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027) supersede the earlier readings below where they differ.
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](ledger/character.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027) supersede the earlier readings below where they differ.
 
 - **A1** At PC level 50 with enough XP for 51, the recalculation caps the XP
   instead of storing level 51. Setting the XP runs the recalculation again

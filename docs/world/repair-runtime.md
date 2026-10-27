@@ -15,7 +15,7 @@ Requirements: [FR-ITEM-011](../requirements/items-economy.md#fr-item-011) (durab
 ## Evidence
 
 - The retail 1.0.7.4 `Arcanum.exe`, read statically per the [original executable check](../research/original-executable-check.md)
-  by two independent readers: rows RP1–RP5 of the [verification ledger](../research/original-verification-ledger.md#repair-arc-skills-007).
+  by two independent readers: rows RP1–RP5 of the [verification ledger](../research/ledger/skills.md#repair-arc-skills-007).
   They agree on every row; SK7 (the roll changes nothing) is the original's behaviour, no rule-mode switch.
 - RP2 corrects two details of the item rules: the 5 % loss for a broken item is a master's only (a repairer who is not a master
   keeps the training table), and the skill's own run restores nothing at an effectiveness of 0. `RepairAdjustmentPercent` now

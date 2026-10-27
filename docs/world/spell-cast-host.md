@@ -12,7 +12,7 @@ areas), [FR-COMBAT-003](../requirements/combat-magic-tech.md#fr-combat-003) (a c
 ## Verification
 
 Two readers read the casting goal in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Cast host and casting
-goal"](../research/original-verification-ledger.md#cast-host-and-casting-goal-arc-magic-014), CG1–CG8). The headless first cast
+goal"](../research/ledger/spell-runs.md#cast-host-and-casting-goal-arc-magic-014), CG1–CG8). The headless first cast
 runs on the installed original (`AreaSpellCastRealDataTests`).
 
 Code:

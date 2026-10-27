@@ -10,7 +10,7 @@ schema is unchanged).
 Requirements: [FR-ITEM-010](../requirements/items-economy.md#fr-item-010) (written objects),
 [FR-ITEM-017](../requirements/items-economy.md#fr-item-017) (a found document registers).
 
-Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Reading window"](../research/original-verification-ledger.md#reading-window-arc-ui-049),
+Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Reading window"](../research/ledger/ui-audio.md#reading-window-arc-ui-049),
 WR1–WR16, anomalies WRA1–WRA4 and data oddities WRD1–WRD3). Code:
 [`WrittenTexts`](../../src/Arcanum.Data/Written/WrittenTexts.cs) (the texts and the document of each kind),
 [`GameSessionReading`](../../src/Arcanum.Session/GameSessionReading.cs) (the use entry and the document query),

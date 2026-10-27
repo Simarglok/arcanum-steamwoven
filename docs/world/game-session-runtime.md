@@ -138,7 +138,7 @@ rules (quest state set (0x4C4CB0, 0x4C4D20, 0x4C4E60), quest reset (0x4C45C0, 0x
 - **Rumors** are numbered 1000..2999. `LearnRumor` records the current game time once;
   learning a known rumor is `NoChange` and keeps the first time.
 - **Quelled rumors** (ARC-UI-008): `QuellRumor(expected, rumor)` sets a game-wide mark, as the original's dialog `RQ`
-  does with no participant (ledger [LB11–LB12](../research/original-verification-ledger.md#logbook-arc-ui-008)); the PC
+  does with no participant (ledger [LB11–LB12](../research/ledger/ui-audio.md#logbook-arc-ui-008)); the PC
   need not know the rumor, quelling a quelled rumor is `NoChange`, nothing clears it, and a number outside 1000..2999 is
   `InvalidRumor` (the original writes it unchecked).
 - **Logbook lists** (ARC-UI-008, LB6 and LB9): `QueryQuestLog` lists every PC record whose stored state is not `Unknown`

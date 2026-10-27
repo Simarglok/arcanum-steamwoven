@@ -21,7 +21,7 @@ import sys
 import time
 from typing import Any, Callable, Sequence
 
-from . import config
+from . import config, run_log
 
 SCHEMA = "arcanum-run-queue-v1"
 KINDS = ("window", "headless", "export", "dotnet")
@@ -351,11 +351,35 @@ def nested(kind: str) -> bool:
     return True
 
 
+def pinned_sdk(environment: dict[str, str]) -> Path:
+    """The pinned .NET SDK folder: DOTNET_ROOT, else ~/.local/share/dotnet (docs/workflow/toolchain.md)."""
+    return Path(environment.get("DOTNET_ROOT") or Path.home() / ".local" / "share" / "dotnet")
+
+
+def command_environment(kind: str, seq: int, base: dict[str, str] | None = None) -> dict[str, str]:
+    """ARC-DEV-041: the environment of a queued command. Its ticket and kind (for nested runs); the pinned SDK first on
+    PATH with DOTNET_ROOT set, so `dotnet` in any kind is the global.json SDK and never another one earlier on PATH
+    (Homebrew's); PYTHONUNBUFFERED, so a Python command (the export endpoint, the validate tools) writes each line to the
+    log as it prints it instead of when it exits. A missing pinned SDK leaves PATH as it is."""
+    environment = dict(os.environ if base is None else base)
+    environment.update({TICKET_ENV: str(seq), KIND_ENV: kind})
+    environment.setdefault("PYTHONUNBUFFERED", "1")
+    sdk = pinned_sdk(environment)
+    if os.access(sdk / "dotnet", os.X_OK):
+        rest = [item for item in environment.get("PATH", "").split(os.pathsep) if item and Path(item) != sdk]
+        environment.update({"DOTNET_ROOT": str(sdk), "PATH": os.pathsep.join([str(sdk), *rest])})
+    elif kind == "dotnet":
+        say(f"note: no pinned SDK at {sdk / 'dotnet'}; `dotnet` comes from PATH")
+    return environment
+
+
 def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | None = None, priority: int = NORMAL,
-        hold: Callable[[], None] | None = None, sleep: Callable[[float], None] = time.sleep) -> int:
+        hold: Callable[[], None] | None = None, sleep: Callable[[float], None] = time.sleep, quiet: bool = False) -> int:
     """Wait for this run's turn, run the command, give the place to the next run. Returns the command's exit code,
     TIMEOUT_EXIT when it ran out of time, or 128+N when this wrapper was stopped by signal N. `hold`, called after the
-    command succeeded, keeps the place while something the command left running is still open (the detached viewer)."""
+    command succeeded, keeps the place while something the command left running is still open (the detached viewer).
+    `quiet` (ARC-DEV-037) writes the command's output to a log file and prints only PASS or FAIL with the first error
+    (run_log.summary) on stdout; a nested run ignores it, its output goes wherever its parent's goes."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
     if not command:
@@ -370,6 +394,15 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
             hold()
         return code
     fd, path, ticket = _enqueue(kind, label, command, priority, minutes)
+    log = None
+    if quiet:
+        try:
+            log = run_log.open_log(ticket["seq"], kind)
+        except BaseException:
+            path.unlink(missing_ok=True)
+            os.close(fd)
+            raise
+        say(f"log ticket={ticket['seq']} {log}")
     child: subprocess.Popen[bytes] | None = None
     legacy = None
     stopped: list[int] = []
@@ -390,14 +423,23 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
             legacy = _legacy_hold()
         waited = ticket["startedAt"] - ticket["enqueuedAt"]
         say(f"start ticket={ticket['seq']} kind={kind} waited={waited:.0f}s")
-        environment = dict(os.environ, **{TICKET_ENV: str(ticket["seq"]), KIND_ENV: kind})
+        environment = command_environment(kind, ticket["seq"])
         # Godot kinds hand the ticket's lock to the command, so a run whose wrapper was killed keeps its place while
         # its command still runs (until its limit, see _expired); dotnet runs do not (their build servers would
         # inherit it). The lockf lock stays with the wrapper: a leftover descendant holding it would block lockf
         # lanes and the next Godot run with no way to tell it from a live run.
         critical[0] = True
-        child = subprocess.Popen(list(command), env=environment, start_new_session=True,
-                                 pass_fds=(fd,) if kind in GODOT_KINDS else ())
+        if log is None:
+            child = subprocess.Popen(list(command), env=environment, start_new_session=True,
+                                     pass_fds=(fd,) if kind in GODOT_KINDS else ())
+        else:
+            output = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+            try:  # the child keeps its own copy of the descriptor
+                child = subprocess.Popen(list(command), env=environment, start_new_session=True, stdin=subprocess.DEVNULL,
+                                         stdout=output, stderr=subprocess.STDOUT,
+                                         pass_fds=(fd,) if kind in GODOT_KINDS else ())
+            finally:
+                os.close(output)
         critical[0] = False
         if stopped:
             raise KeyboardInterrupt
@@ -432,6 +474,8 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         os.close(fd)
         if legacy is not None:
             os.close(legacy)
+    if log is not None and ticket.get("startedAt"):
+        print("\n".join(run_log.summary(log, exit_code, ended - ticket["startedAt"])), flush=True)
     return exit_code
 
 

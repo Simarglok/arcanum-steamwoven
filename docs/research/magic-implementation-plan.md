@@ -216,7 +216,7 @@ in a docs-only PR; ARC-MAGIC-002 added no switch): MG5, MG6, O9, O10, the charm 
 "follow the original, no switch"; MG7 is record only; MG18 is classified in MT8; MG3, MG4, MG9, MG10, MG11, MG15 and
 MG19 stay as Steamwoven fixes with Original switches. The
 verdicts come from the
-[ledger](original-verification-ledger.md#magic-arc-res-043-load-map-arc-res-040). Under the
+[ledger](ledger/magic.md#magic-arc-res-043-load-map-arc-res-040). Under the
 [rule modes](../world/rule-modes.md), a reconstruction slip and the original's intended behaviour get no switch; a bug
 of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bounds access is fixed in both modes.
 

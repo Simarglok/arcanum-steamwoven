@@ -12,7 +12,7 @@ parameters: range, line of fire, forbidden flags, the NPC fallback), [FR-MAGIC-0
 technology: the technologist's powerless magic item, the technologist target, the item gate).
 
 Every rule below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
-([ledger "Spell invocation"](../research/original-verification-ledger.md#spell-invocation-arc-magic-006), rows IV1–IV12), and the
+([ledger "Spell invocation"](../research/ledger/spell-runs.md#spell-invocation-arc-magic-006), rows IV1–IV12), and the
 range (0x454700), the forbidden flags (0x456430) and the item gate (0x456A10) were compared with the original in the function
 oracle on 10,000 seeded inputs each (F3, receipts [`454700.json`](../verification/receipts/454700.json),
 [`456430.json`](../verification/receipts/456430.json), [`456A10.json`](../verification/receipts/456A10.json); re-run with

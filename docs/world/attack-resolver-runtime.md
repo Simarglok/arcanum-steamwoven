@@ -95,7 +95,7 @@ critical's item drop draws a distance and a direction that are not
 2. **Location**: aimed, or rolled (d100 ≤ 70 torso, ≤ 85 leg, ≤ 95 arm, else head).
    ARC-COMBAT-012: a request with `AmmunitionShort` (the attacker holds fewer units of the weapon's ammunition
    type than one shot takes) is then refused with `AttackRefusal.OutOfAmmunition`, no later roll
-   ([ledger RA3](../research/original-verification-ledger.md#reach-and-line-of-fire-arc-combat-012)); the caller spends a shot's
+   ([ledger RA3](../research/ledger/combat.md#reach-and-line-of-fire-arc-combat-012)); the caller spends a shot's
    units once the resolution ran.
 3. **Technology failure** roll (a technological weapon in magickal hands; not
    for bare hands or throwing): a critical miss.
@@ -148,7 +148,7 @@ stay with the item owners.
 
 `AttackResolution.Wear` (`AttackWear`, built by `CombatWearRules.Of`) names the item steps of the
 original's damage step (0x4B4390), read in the executable by two readers
-([ledger CW1–CW10](../research/original-verification-ledger.md#combat-wear-arc-combat-007), F2). It is
+([ledger CW1–CW10](../research/ledger/combat.md#combat-wear-arc-combat-007), F2). It is
 null without a damage packet and when invulnerability, nigh-invulnerability or a wall prevented the
 damage (the original returns before any item step). The wearer is whoever took the damage: the
 target, or the attacker of a critical self-hit, which keeps the attack's location.
@@ -170,7 +170,7 @@ wear last, after death and experience; the session step keeps that order within 
 
 `OriginalCriticalEffects` is the effect part of the original's critical-hit procedure (0x4B5F40) and the effect rolls of its
 critical-miss procedure (0x4B6410), read in the retail executable by two readers
-([ledger CR1–CR15](../research/original-verification-ledger.md#critical-effects-arc-combat-009), F2). The thresholds are the
+([ledger CR1–CR15](../research/ledger/combat.md#critical-effects-arc-combat-009), F2). The thresholds are the
 code's; the data are the weapon's charts and the recipient's critical-hit body type (`Combatant.CriticalBody`, critter field
 227). The resolver keeps the multiplier rolls before the table and the ×1.5 fallback after it (CR3); the table's rolls follow,
 in this order, each a d100 that passes at ≤ its threshold (`chance` as in step 10):

@@ -19,7 +19,7 @@ Behaviour comes from the retail executable (`Arcanum.exe` 1.0.7.4, SHA-256
 `9bd80511…78d52`), read statically with `llvm-objdump` by a first reader and,
 independently, by a second reader that saw only the questions
 ([method step 6](original-executable-check.md)). The rows and verdicts are in the
-[ledger](original-verification-ledger.md#main-map-streaming-arc-data-030). Local observations
+[ledger](ledger/world.md#main-map-streaming-arc-data-030). Local observations
 come from the read-only `tools/research/terrain_template_probe.py` helpers on the owner's
 installation and are counts and coordinates only.
 
@@ -86,8 +86,8 @@ cache needs the room.
 
 | Data | When | Scope |
 | --- | --- | --- |
-| Mobile objects (critters, items, portals, containers…) | map open, from the map's mobile file and the save ([MP1](original-verification-ledger.md#map-patch-arc-data-028)) | whole map; a sector only lists those standing in it (SS7) |
-| `Rules\map.patch` | map open, after the mobiles ([MP1](original-verification-ledger.md#map-patch-arc-data-028)) | whole map, mobile objects only |
+| Mobile objects (critters, items, portals, containers…) | map open, from the map's mobile file and the save ([MP1](ledger/data.md#map-patch-arc-data-028)) | whole map; a sector only lists those standing in it (SS7) |
+| `Rules\map.patch` | map open, after the mobiles ([MP1](ledger/data.md#map-patch-arc-data-028)) | whole map, mobile objects only |
 | Sector lights, light scheme word | sector load | per sector, moved for templates |
 | Map default light scheme | map open (`mapinfo.txt`, [area lighting](../rendering/area-lighting.md)) | whole map |
 | Saved differences | sector load (`.dif`) and save at eviction | per sector, own and template |

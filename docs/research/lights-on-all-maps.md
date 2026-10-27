@@ -2,7 +2,7 @@
 
 Status: **Research** (whole-world plan M4, step R6; the viewer slice V7 builds on it). The behaviour below is
 read in the retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…8d52`). Two readers checked it, and the rows are in
-[ledger LT1–LT15](original-verification-ledger.md#lights-on-all-maps-arc-res-069). Data facts are from the owner's
+[ledger LT1–LT15](ledger/world.md#lights-on-all-maps-arc-res-069). Data facts are from the owner's
 installed module (GOG 1.0.7.4), counted by the probe `--light-census` (below).
 
 The viewer already draws the stationary lights of sector files
@@ -26,7 +26,7 @@ The original keeps one kind of light, a 48-byte record:
 Sector light lists hold records of both kinds, and the drawing reads only those lists.
 
 - **Stationary lights** are the records of a sector file. A record is read as stored (48 bytes) and a terrain
-  template's records move to the real sector (LT3, [Wilderness A1](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock)).
+  template's records move to the real sector (LT3, [Wilderness A1](ledger/world.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock)).
   - In the game a light with no owner is created only this way: the general create refuses a record without
     an owner outside the editor (LT2).
   - The installed module has **2,797** such records in its 1,680 own sector files. None has an owner word.
@@ -80,7 +80,7 @@ is lit only at night: hours 18 to 5.
 
 ## Carried light
 
-A critter's light comes from the worn items' light sizes ([EQ12](original-verification-ledger.md#equipment-arc-world-028), the largest
+A critter's light comes from the worn items' light sizes ([EQ12](ledger/items.md#equipment-arc-world-028), the largest
 size wins). It becomes the critter's primary light (LT12):
 - light ART 1 (frame 0);
 - one colour per size (r, g, b): extra large 244, 255, 255; large 255, 214, 172; medium 236, 138, 85; small 167, 88, 58;

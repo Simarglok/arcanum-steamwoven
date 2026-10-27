@@ -92,7 +92,7 @@ profiles state, with the same arrival tiles.
 ## Original check
 
 The decoded facts were checked in the retail executable
-([ledger TR1–TR5](../research/original-verification-ledger.md#map-transitions-arc-data-025)):
+([ledger TR1–TR5](../research/ledger/world.md#map-transitions-arc-data-025)):
 the teleport and fade-and-teleport operands and their map − 4999, a jump
 point firing for any PC, a tile script for any critter, one pending player
 teleport, −1 as the current map, the first jump point of a tile, and a tile
