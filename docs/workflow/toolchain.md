@@ -130,7 +130,8 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
 - **Log file.** The command's whole output (stdout and stderr together) goes to
   `~/Library/Application Support/Arcanum Steamwoven/run-logs/run-<ticket>-<kind>.log` (or `$ARCANUM_LOCAL_HOME/run-logs`);
   its stdin is closed. The wrapper prints `ARCANUM_QUEUE log ticket=N PATH` on stderr before it waits, so the log can
-  be checked while the run goes; the log fills as the command prints (ARC-DEV-041, [command environment](#command-environment-arc-dev-041)). The newest 200 logs are kept; older ones are removed when a run is queued.
+  be checked while the run goes; the log fills as the command prints (ARC-DEV-041,
+  [command environment](#command-environment-arc-dev-041)). The newest 200 logs are kept; older ones are removed when a run is queued.
 - **Summary.** The `ARCANUM_QUEUE` lines stay on stderr as [above](#launch-queue-arc-dev-033). When the command ends,
   stdout gets `PASS exit=0 ran=Ss lines=L log=PATH`, or `FAIL exit=E ran=Ss lines=L log=PATH` and the first error
   line with at most 40 lines around it (3 before, each cut to 300 characters), and the last error line when it lies

@@ -110,6 +110,7 @@ class WrapperTests(unittest.TestCase):
         self.env = {**os.environ, "ARCANUM_LOCAL_HOME": str(Path(self.temp.name) / "home"),
                     "ARCANUM_QUEUE_LEGACY_LOCK": str(Path(self.temp.name) / "legacy.lock")}
         self.env.pop("ARCANUM_QUEUE_TICKET", None)
+        self.env.pop("PYTHONUNBUFFERED", None)  # a suite run inside the queue must still test that the queue sets it
 
     def tearDown(self) -> None:
         self.temp.cleanup()
