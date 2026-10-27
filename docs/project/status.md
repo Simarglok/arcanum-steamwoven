@@ -109,6 +109,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Wait timer and loyalty | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-045, ARC-WORLD-046 |
 | Companion orders | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-046, ARC-WORLD-045 |
 | Companion map change | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-017 |
+| NPC awareness rules | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-078, ARC-COMBAT-012, ARC-SKILLS-008 |
 | Function oracle | [Verification and tools](status/tools.md) | ARC-DEV-007, ARC-WORLD-033, ARC-SKILLS-001 |
 | Function registry | [Verification and tools](status/tools.md) | ARC-DEV-008, ARC-DEV-023, ARC-DEV-009 |
 | Local workflow/research tools | [Verification and tools](status/tools.md) | ARC-DEV-026, ARC-DEV-028, ARC-DEV-033, ARC-DEV-041 |
@@ -162,7 +163,7 @@ One line per subject; the full row (canonical result, what remains) is in its ar
 | NPC AI followers in combat | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-067, ARC-WORLD-046, ARC-RES-064 |
 | NPC AI action execution | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-066, ARC-COMBAT-007 |
 | NPC AI support and magic | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-059, ARC-RES-043 |
-| NPC AI awareness | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-056, ARC-SKILLS-003, ARC-WORLD-078 |
+| NPC AI awareness | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-056, ARC-SKILLS-003 |
 | NPC AI morale | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-058 |
 | NPC AI hostility and targeting | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-057 |
 | Magic core | [Magic](status/magic.md) | ARC-RES-043, ARC-RES-030, ARC-RES-060 |

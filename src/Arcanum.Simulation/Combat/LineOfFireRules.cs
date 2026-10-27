@@ -216,7 +216,8 @@ public static class LineOfFireRules
     /// <summary>
     /// The animation's "clear shot from here" test on a traced line (the two attack-goal callbacks 0x425590 and 0x429960, ledger
     /// AW8; their weapon, reach and goal handling are the attack executor's): the cover is below <see cref="ClearShotCover"/>, so at
-    /// most one see-through cover object, and nothing but <paramref name="target"/> stops the line.
+    /// most one see-through cover object, and nothing but <paramref name="target"/> (the same object: identity, as the original compares
+    /// object handles) stops the line.
     /// </summary>
     public static bool ClearShot<TObject>(LineOfFireTrace<TObject> trace, TObject target) where TObject : class
     {

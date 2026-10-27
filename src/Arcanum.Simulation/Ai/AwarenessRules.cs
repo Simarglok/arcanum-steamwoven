@@ -49,7 +49,7 @@ public readonly record struct AwarenessResult(int Excess, AwarenessReason Reason
 /// </summary>
 public sealed record SightFacts
 {
-    /// <summary>The observer's effective Perception.</summary>
+    /// <summary>The observer's effective Perception, 0..<see cref="AwarenessRules.MaxPerception"/>.</summary>
     public required int Perception { get; init; }
     /// <summary>The rotation 0..7 of the observer's current art.</summary>
     public required int Rotation { get; init; }
@@ -79,7 +79,7 @@ public sealed record SightFacts
 /// </summary>
 public sealed record HearingFacts
 {
-    /// <summary>The observer's effective Perception.</summary>
+    /// <summary>The observer's effective Perception, 0..<see cref="AwarenessRules.MaxPerception"/>.</summary>
     public required int Perception { get; init; }
     /// <summary>Critter flag 0x20.</summary>
     public bool Stunned { get; init; }
@@ -111,6 +111,8 @@ public static class AwarenessRules
     public const int NotPerceived = 1000, MaxDistance = 1000;
     /// <summary>The perception distance's bounds (0x4AF240).</summary>
     public const int MinPerceptionDistance = 1, MaxPerceptionDistance = 10;
+    /// <summary>The largest effective Perception the checks accept (a stat is far below it; it keeps the arithmetic in range).</summary>
+    public const int MaxPerception = 1000;
     /// <summary>What hearing takes off Perception before the distance (AW1).</summary>
     public const int HearingPerceptionOffset = 4;
     /// <summary>A sound line's step costs (0x43FE00 with flag 0x20, AW6): a wall on the crossed edge, a closed unbroken door or
@@ -154,6 +156,7 @@ public static class AwarenessRules
         ArgumentNullException.ThrowIfNull(facts);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(profile);
+        CheckPerception(facts.Perception);
         CheckMargin(facts.ProwlingMargin);
         CheckRotation(facts.Rotation);
         if (facts.Stunned || facts.Blinded || facts.Sleeping || facts.Unconscious) return new(NotPerceived, AwarenessReason.State);
@@ -180,6 +183,7 @@ public static class AwarenessRules
         ArgumentNullException.ThrowIfNull(facts);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(profile);
+        CheckPerception(facts.Perception);
         CheckMargin(facts.ProwlingMargin);
         var radius = NoiseRadius(loudness);
         if (facts.Stunned || facts.Unconscious) return new(NotPerceived, AwarenessReason.State);
@@ -271,11 +275,16 @@ public static class AwarenessRules
         return line.Blocker is not null ? facts with { ProwlerHidden = true, ProwlerCover = 0 } : facts with { ProwlerHidden = false, ProwlerCover = line.Cost };
     }
 
-    // The original's tile distance (0x4B96F0, Travel.WorldTravelGeometry.Distance): the larger of the two axis deltas.
-    private static long Distance(CellCoord a, CellCoord b) => Math.Max(Math.Abs((long)a.X - b.X), Math.Abs((long)a.Y - b.Y));
+    // The original's tile distance (0x4B96F0): the larger of the two axis deltas.
+    private static long Distance(CellCoord a, CellCoord b) => Travel.WorldTravelGeometry.Distance(new(a.X, a.Y), new(b.X, b.Y));
 
     private static int Index(Loudness loudness) =>
         loudness is >= Loudness.Silent and <= Loudness.Loud ? (int)loudness : throw new ArgumentOutOfRangeException(nameof(loudness));
+
+    private static void CheckPerception(int perception)
+    {
+        if (perception is < 0 or > MaxPerception) throw new ArgumentOutOfRangeException(nameof(perception), "an effective Perception is 0..1000");
+    }
 
     private static void CheckMargin(int margin)
     {

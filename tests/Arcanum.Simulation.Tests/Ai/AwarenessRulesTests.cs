@@ -257,8 +257,37 @@ public sealed class AwarenessRulesTests
         var side = new Map().WithQuiet(new(10, 11)).WithPiece(new(11, 10), 3, "wall", LineOfFirePieceKind.Solid);
         Assert.AreEqual(10, AwarenessRules.SoundStepCost(Observer, 4, side, Steamwoven));
         Assert.AreEqual(10, AwarenessRules.SoundStepCost(Observer, 4, side, Original));
-        // A side tile off the map: 1.
+        // A side tile off the map: 1, the clockwise one from (0, 5) and the counter-clockwise one from (5, 0), whatever the walls add.
         Assert.AreEqual(1, AwarenessRules.SoundStepCost(new(0, 5), 0, new Map(), Steamwoven));
+        var walled = new Map().WithPiece(new(5, 0), 1, "wall", LineOfFirePieceKind.Solid).WithQuiet(new(4, 0));
+        Assert.AreEqual(1, AwarenessRules.SoundStepCost(new(5, 0), 0, walled, Steamwoven));
+    }
+
+    [TestMethod]
+    public void TheObserversPixelOffsetShiftsTheLine()
+    {
+        // AW18: a pixel offset of one tile step in +x (−40, +20 on screen) moves the walk off the tiles straight ahead, past the crates
+        // on them; the same offset with its axes swapped walks other tiles.
+        var crates = new Map().With(Ahead(1), "crate", Opaque).With(Ahead(2), "crate", Opaque);
+        Assert.AreEqual(new AwarenessResult(1, AwarenessReason.Blocked), See(crates, Eyes, Ahead(3)));
+        var shifted = LineOfFireRules.Walk(Observer, -40, 20, Ahead(3), crates.Contains)!;
+        Assert.IsTrue(shifted.Count > 0 && shifted.All(s => s.To.X == 11), string.Join(" ", shifted));
+        Assert.IsFalse(LineOfFireRules.Walk(Observer, 20, -40, Ahead(3), crates.Contains)!.All(s => s.To.X == 11));
+        Assert.AreEqual(new AwarenessResult(0, AwarenessReason.Perceived), AwarenessRules.See(Eyes, Observer, -40, 20, Ahead(3), crates, Steamwoven));
+        var walls = new Map().WithPiece(Observer, 3, "wall", LineOfFirePieceKind.Solid);
+        Assert.AreEqual(2, AwarenessRules.SoundCost(Observer, 0, 0, Ahead(3), walls, Steamwoven));
+        Assert.AreEqual(shifted.Sum(s => AwarenessRules.SoundStepCost(s.From, s.Rotation, walls, Steamwoven)),
+            AwarenessRules.SoundCost(Observer, -40, 20, Ahead(3), walls, Steamwoven));
+    }
+
+    [TestMethod]
+    public void APerceptionOutsideZeroToAThousandIsRefused()
+    {
+        var map = new Map();
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => See(map, Eyes with { Perception = -1 }, Ahead(1)));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Hear(map, Ears with { Perception = 1001 }, Ahead(1)));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Hear(map, Ears with { Perception = int.MinValue }, Ahead(1)));
+        Assert.AreEqual(new AwarenessResult(0, AwarenessReason.Perceived), Hear(map, Ears with { Perception = 0 }, Observer, Loudness.Silent));
     }
 
     [TestMethod]

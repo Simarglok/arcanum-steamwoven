@@ -38,7 +38,7 @@ session state, no caller yet. The line of fire is ARC-COMBAT-012's
   the line of fire does.
 - **Prowling margin.** `M` (0..100) is an input: the shared skill check
   (`SkillCheckRules.Effectiveness` and `Difficulty` for prowling, the prowler as source and the
-  observer as target) through `StealthRules.Margin`; for the hero, `GameSession.HeroProwlingMargin`
+  observer as target) through `StealthRules.Margin`; for the hero, `GameSessionOwner.HeroProwlingMargin`
   (ARC-SKILLS-008). `WithProwlerLine` carries the line traced from the observer to the prowler's tile
   into the sight difficulty's facts (a blocker hides the prowler, else the cost is the cover). The
   margin is 0 when the target is not concealed (sight) or not moving silently (hearing).
