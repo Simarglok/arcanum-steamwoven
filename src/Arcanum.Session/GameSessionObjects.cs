@@ -135,6 +135,9 @@ public sealed record SessionObjectAttack
 {
     public SessionObjectTarget? Target { get; init; }
     public SessionWearItem? Item { get; init; }
+    /// <summary>ARC-COMBAT-015: a wall the line of fire struck instead of the target (RA4, RH5): the shot is resolved (no skill
+    /// roll, its damage rolled) and the wall takes nothing (the damage step leaves at once for a wall); its ammunition is spent.</summary>
+    public bool Wall { get; init; }
     /// <summary>For an item: its stored material and resistances (normal, fire, electrical, poison, magic) and the invulnerable flag.</summary>
     public SessionObjectBaseline? ItemFacts { get; init; }
     public HitLocation? Aim { get; init; }
@@ -231,9 +234,12 @@ public sealed partial class GameSessionOwner
     /// invalid target (<see cref="GameSessionFailure.InvalidObject"/>), an object destroyed or switched off or an item no longer on
     /// the ground (<see cref="GameSessionFailure.ObjectUnavailable"/>), hero items that do not hold
     /// (<see cref="GameSessionFailure.InvalidWear"/>), an aim at the torso, a distance outside 0..reach
-    /// (<see cref="GameSessionFailure.InvalidAttack"/>), a weapon that is not melee (<see cref="GameSessionFailure.AttackUnsupported"/>),
+    /// (<see cref="GameSessionFailure.InvalidAttack"/>), a wielded throwing weapon (<see cref="GameSessionFailure.AttackUnsupported"/>),
     /// the version, the revision, and for a respawning scenery a full event budget. The resolution's draws are spent once it ran,
     /// also when nothing changes (a hit for 0 on an object whose damage is recorded); each later step commits its own revision.
+    /// A wall (<see cref="SessionObjectAttack.Wall"/>, ARC-COMBAT-015: the line of fire struck it) is resolved the same way and takes
+    /// nothing; the shot's draws and ammunition are spent. Exactly one of the target, the item and the wall is named, else
+    /// <see cref="GameSessionFailure.InvalidObject"/>.
     /// Not modelled here: the taking-damage script, the trap and BUST scripts, sounds, eye candy, the guards' reaction and the
     /// inventory source of a container never opened.
     /// </summary>
@@ -242,10 +248,15 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(attack);
         if (_hero is null) return RejectObject(GameSessionFailure.AttackUnavailable);
-        if ((attack.Target is null) == (attack.Item is null)) return RejectObject(GameSessionFailure.InvalidObject);
+        if ((attack.Target is null ? 0 : 1) + (attack.Item is null ? 0 : 1) + (attack.Wall ? 1 : 0) != 1) return RejectObject(GameSessionFailure.InvalidObject);
         AttackTargetKind kind;
         Combatant defender;
-        if (attack.Target is { } target)
+        if (attack.Wall)
+        {
+            kind = AttackTargetKind.Wall;
+            defender = new Combatant();
+        }
+        else if (attack.Target is { } target)
         {
             if (!ValidObject(target)) return RejectObject(GameSessionFailure.InvalidObject);
             var state = ObjectState(target);

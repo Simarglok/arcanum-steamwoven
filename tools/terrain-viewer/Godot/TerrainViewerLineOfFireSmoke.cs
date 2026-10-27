@@ -13,7 +13,8 @@ public partial class TerrainViewerApp
     // traces the line from the cells around each living NPC with combat values to it, and looks for a cell next to another such NPC,
     // or else next to a door, window, container or scenery the hero can attack, that stops the line; the hero stands there with a
     // lent reach (no kit holds a reach weapon), attacks the farther NPC in combat mode, and the hit goes through the session to the
-    // nearer one instead (the original's ranged path, 0x4B3170 with flag 0x200); the farther NPC keeps its hit points. A struck NPC
+    // nearer one instead (the original's ranged path, 0x4B3170 with flag 0x200); the farther NPC keeps its hit points. The animation
+    // starts without the goal's reach test, which admits only a clear line (ARC-COMBAT-015, ledger RH1). A struck NPC
     // is healed back; a struck object keeps what the hit did (the last stage of map mode). NONE on a map without such a cell.
     private async Task RunAreaLineOfFireSmokeAsync()
     {
@@ -100,7 +101,9 @@ public partial class TerrainViewerApp
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             CancelAreaAttack(null);
             _attack = new(pick.Target, pick.Target.Build.Combat!, null);
-            StartAttackGoal(_attack);
+            // ARC-COMBAT-015: the goal's reach test admits only a clear line (ledger RH1), so the stage starts the animation itself,
+            // as when the line changed after that test, and the hit meets the blocker.
+            BeginAttackAnimation(_attack, session.QueryHeroAttack()!);
             Require(_attack is { Approaching: false, Player: not null }, "the attack starts without a walk: " + _attackNotice);
             var frames = 0;
             for (; frames < 2000 && _attack is not null && _attack.Attacks == 0; frames++)

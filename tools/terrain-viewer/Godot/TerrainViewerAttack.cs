@@ -65,6 +65,9 @@ public partial class TerrainViewerApp
         public bool Stop { get; set; }
         // ARC-COMBAT-008: the last hit broke the object: no repeat follows.
         public bool Broke { get; set; }
+        // ARC-COMBAT-015: the walk stopped at a clear shot (Steamwoven, EX9), and the cell last tested on the walk.
+        public bool ClearShotStop { get; set; }
+        public CellCoord? TestedCell { get; set; }
     }
 
     /// <summary>An attack animation is playing (the exit gate's attempt-attack test).</summary>
@@ -300,18 +303,19 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-COMBAT-009 stun-ended who={who} disposition={cleared.Disposition} (no stun animation in the viewer)");
     }
 
-    /// <summary>The attack goal's first step: the target within the weapon's reach starts the animation; farther away the
-    /// click route walks within reach first (the goal's move-near step).</summary>
+    /// <summary>The attack goal's first step: the target within the weapon's reach (and on the ranged path with a clear shot,
+    /// ARC-COMBAT-015) starts the animation; otherwise the click route walks toward it first (the goal's move-near step).</summary>
     private void StartAttackGoal(AttackGoal goal)
     {
         if (_worldActor.Session is not AreaGridSession session || _areaSession is not { } owner) { CancelAreaAttack("no actor"); return; }
         var hero = owner.QueryHeroAttack();
         if (hero is null) { CancelAreaAttack("needs a hero (start with --hero)"); return; }
-        if (!hero.Supported) { CancelAreaAttack($"a {hero.Skill} weapon cannot attack yet (melee only)"); return; }
+        if (!hero.Supported) { CancelAreaAttack($"a {hero.Skill} weapon cannot attack yet (its throw is not ready)"); return; }
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         var row = goal.Row;
         var distance = Chebyshev(row, (cell.X, cell.Y));
-        if (distance <= HeroReach(hero))
+        goal.ClearShotStop = false; goal.TestedCell = null;
+        if (InAttackReach(row, new(checked((int)cell.X), checked((int)cell.Y)), hero))
         {
             StopWorldRoute("ROUTE_REPLACED_BY_ATTACK");
             goal.Approaching = false;
@@ -319,7 +323,7 @@ public partial class TerrainViewerApp
             return;
         }
         // A walk that arrived and still left the target out of reach is not tried again and again.
-        if (goal.Approaches >= 3) { CancelAreaAttack($"the target stays {distance} cells away"); return; }
+        if (goal.Approaches >= 3) { CancelAreaAttack(distance <= HeroReach(hero) ? "no clear shot at the target" : $"the target stays {distance} cells away"); return; }
         if (WorldRoute(session) is { } route && AttackApproachCell(session, row.WorldX!.Value, row.WorldY!.Value) is { } approach)
         {
             goal.Approaches++;
@@ -328,7 +332,7 @@ public partial class TerrainViewerApp
             goal.Approaching = true;
             SetObjectApproachGait();
             _worldRouteDiagnostic = DescribeWorldRoute(route); _worldRouteClick = $"{approach.X},{approach.Y} walk to attack";
-            _attackNotice = $"walking to attack: {distance} cells away";
+            _attackNotice = distance <= HeroReach(hero) ? "walking to attack: no clear shot" : $"walking to attack: {distance} cells away";
             GD.Print($"ARC-COMBAT-005 attack-approach distance={distance} goal={approach}");
             RefreshAreaStatus();
             return;
@@ -382,8 +386,10 @@ public partial class TerrainViewerApp
         if (goal.Player is null && !HeroInCombatMode) { CancelAreaAttack("left combat mode"); return; }
         if (goal.Approaching)
         {
+            ApproachClearShot(goal, session, owner);
             if (session.State.Phase != MovementPhase.Settled || _worldRoute is not { } route || route.Status == RouteFollowStatus.Following) return;
-            if (route.Status != RouteFollowStatus.Arrived) { CancelAreaAttack("walk to attack stopped: " + (route.StopReason ?? route.Status.ToString())); return; }
+            if (route.Status != RouteFollowStatus.Arrived && !goal.ClearShotStop)
+            { CancelAreaAttack("walk to attack stopped: " + (route.StopReason ?? route.Status.ToString())); return; }
             StartAttackGoal(goal);
             return;
         }
@@ -436,24 +442,72 @@ public partial class TerrainViewerApp
             return;
         }
         // ARC-COMBAT-012: a reach above 1 takes the original's ranged path, whose line of fire may strike something else first.
-        if (LineOfFireBlocker(session, goal.Row) is { } blocker) { StrikeBlocker(goal, blocker, session); return; }
+        var trace = RangedPath(owner.QueryHeroAttack()) ? LoggedLineOfFire(session, goal.Row) : null;
+        if (trace?.Blocker is { } blocker && blocker.Key != goal.Row.Key) { StrikeBlocker(goal, blocker, session); return; }
         if (goal.Object is { } struck) { RunObjectAttackHit(goal, struck, (int)distance); return; }
-        HitCritter(goal, goal, (int)distance);
+        HitCritter(goal, goal, (int)distance, ShotLine(trace, goal.Row));
     }
 
-    /// <summary>ARC-COMBAT-012: the line of fire from the hero's tile to the target's (0x4ADE00) when the hero's weapon reaches beyond 1
-    /// (the original's ranged path, 0x4B3170 with flag 0x200): the first object that stops it, when that is not the target; the original
-    /// then strikes that object instead (ledger RA rows).</summary>
-    private AreaObjectRecord? LineOfFireBlocker(AreaGridSession session, AreaObjectRecord target)
+    /// <summary>ARC-COMBAT-012/015: the attack takes the original's ranged path (RA1: the throwing skill or a reach above 1).</summary>
+    private bool RangedPath(SessionHeroAttack? hero) => HeroReach(hero) > 1 || hero?.Skill == CombatSkill.Throwing;
+
+    /// <summary>ARC-COMBAT-012: the line of fire from the tile <paramref name="from"/> (world cell) to the target's (0x4ADE00), from the
+    /// tile's centre (the hero stands settled, so no pixel offset); null without the shown map's line-of-fire view or target cell.</summary>
+    private LineOfFireTrace<AreaObjectRecord>? TraceLineOfFire(CellCoord from, AreaObjectRecord target) =>
+        target.WorldX is { } x && target.WorldY is { } y && AreaLineOfFireNow() is { } map && _areaSession is { } owner
+            ? LineOfFireRules.Trace(from, 0, 0, new(checked((int)x), checked((int)y)), map, owner.Rules.Combat) : null;
+
+    /// <summary>ARC-COMBAT-012: the line of fire from the hero's committed cell to <paramref name="target"/>, logged; the original strikes
+    /// its blocker instead of the target (ledger RA4).</summary>
+    private LineOfFireTrace<AreaObjectRecord>? LoggedLineOfFire(AreaGridSession session, AreaObjectRecord target)
     {
-        var owner = _areaSession!;
-        if (HeroReach(owner.QueryHeroAttack()) <= 1 || target.WorldX is not { } x || target.WorldY is not { } y || AreaLineOfFireNow() is not { } map)
-            return null;
         var hero = session.Chart.ToWorld(session.State.CommittedCell);
-        var trace = LineOfFireRules.Trace(new(checked((int)hero.X), checked((int)hero.Y)), 0, 0, new(checked((int)x), checked((int)y)), map, owner.Rules.Combat);
+        if (TraceLineOfFire(new(checked((int)hero.X), checked((int)hero.Y)), target) is not { } trace) return null;
         GD.Print($"ARC-COMBAT-012 line-of-fire target={target.Key.Kind}:{target.Key.SourceIndex} cost={trace.Cost} failed={trace.LineFailed}"
             + $" tiles={trace.Tiles.Count} blocker={(trace.Blocker is { } b ? $"{b.Key.Kind}:{b.Key.SourceIndex} type={b.Type}" : "none")}");
-        return trace.Blocker is { } blocker && blocker.Key != target.Key ? blocker : null;
+        return trace;
+    }
+
+    /// <summary>ARC-COMBAT-015: what the shared check reads of a line traced to <paramref name="struck"/> (SC8): its cost and whether
+    /// another object stops it.</summary>
+    private static SessionLineOfFire? ShotLine(LineOfFireTrace<AreaObjectRecord>? trace, AreaObjectRecord struck) =>
+        trace is null ? null : new SessionLineOfFire(Math.Min(trace.Cost, AttackResolver.MaxMagnitude), trace.Blocker is { } b && b.Key != struck.Key);
+
+    /// <summary>
+    /// ARC-COMBAT-015: the attack goal's reach test (0x429960, ledger EX8, RH1) from the world cell <paramref name="from"/>: the target
+    /// within the weapon's reach and a clear shot (<see cref="LineOfFireRules.InReach{TObject}"/>: the line's cost below 26 and nothing
+    /// but the target stopping it), for every weapon, a melee one next to its target too. A map without a line-of-fire view tests the
+    /// reach alone.
+    /// </summary>
+    private bool InAttackReach(AreaObjectRecord target, CellCoord from, SessionHeroAttack hero)
+    {
+        var reach = HeroReach(hero);
+        var distance = Chebyshev(target, (from.X, from.Y));
+        if (distance > reach) return false;
+        if (TraceLineOfFire(from, target) is not { } trace) return true;
+        // The original compares object handles: the blocker is the target when it is the same row.
+        return LineOfFireRules.InReach((int)distance, reach, trace, trace.Blocker is { } blocker && blocker.Key == target.Key ? blocker : target);
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-015 (EX9): on the ranged path, Steamwoven stops the walk to the target at the first cell the hero commits to from
+    /// which the reach test passes (the started step still ends at its cell centre); the Original setting
+    /// (<see cref="CombatAnomalyProfile.RangedApproachSkipsClearShot"/>) walks on to the approach's tile, as the original's callback
+    /// does while the attack is possible.
+    /// </summary>
+    private void ApproachClearShot(AttackGoal goal, AreaGridSession session, GameSessionOwner owner)
+    {
+        if (goal.ClearShotStop || owner.Rules.Combat.RangedApproachSkipsClearShot || _worldRoute is not { Status: RouteFollowStatus.Following }
+            || owner.QueryHeroAttack() is not { } hero || !RangedPath(hero)) return;
+        var cell = session.State.CommittedCell;
+        if (goal.TestedCell == cell) return;
+        goal.TestedCell = cell;
+        var world = session.Chart.ToWorld(cell);
+        if (!InAttackReach(goal.Row, new(checked((int)world.X), checked((int)world.Y)), hero)) return;
+        goal.ClearShotStop = true;
+        StopWorldRoute("ROUTE_STOPPED_AT_CLEAR_SHOT");
+        _clearShotStops++;
+        GD.Print($"ARC-COMBAT-015 clear-shot stop at={world.X},{world.Y} target={goal.Entity}");
     }
 
     /// <summary>ARC-COMBAT-012: the shown map as the line of fire reads it now: the step evidence's tiles, the map's rows less what the
@@ -479,8 +533,9 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-COMBAT-012: the shot strikes the object that stopped the line of fire: an NPC through the critter attack (its own
-    /// rolls), a door, window, container, scenery or trap through the object attack; striking a wall, a companion or an NPC without
-    /// combat values is not ready, and the goal ends without a hit.</summary>
+    /// rolls), a door, window, container, scenery or trap through the object attack, and since ARC-COMBAT-015 a wall, which takes the
+    /// shot and nothing else (ledger RH5); striking a companion or an NPC without combat values is not ready, and the goal ends without
+    /// a hit. The goal's reach test (RH1) admits only a clear line, so a blocker shows up here only when the line changed after it.</summary>
     private void StrikeBlocker(AttackGoal goal, AreaObjectRecord blocker, AreaGridSession session)
     {
         var owner = _areaSession!;
@@ -490,7 +545,8 @@ public partial class TerrainViewerApp
         {
             GD.Print($"ARC-COMBAT-012 line-of-fire strikes npc={npc.Entity} instead of {goal.Entity}");
             _lineOfFireStruck = npc.Entity;
-            HitCritter(goal, new AttackGoal(npc, combat, goal.Aim), distance);
+            // ARC-COMBAT-015: the shared check traces its own line, to the struck NPC (SC8).
+            HitCritter(goal, new AttackGoal(npc, combat, goal.Aim), distance, ShotLine(LoggedLineOfFire(session, blocker), blocker));
             return;
         }
         if (ObjectTargets()?.Target(owner, blocker.Key, AreaTrapped) is { Refusal: null } struck
@@ -501,15 +557,34 @@ public partial class TerrainViewerApp
             RunObjectAttackHit(goal, struck, distance);
             return;
         }
+        if (blocker.Type == 0)
+        {
+            GD.Print($"ARC-COMBAT-015 line-of-fire strikes wall={blocker.Key.Kind}:{blocker.Key.SourceIndex} instead of {goal.Entity}");
+            _lineOfFireStruck = $"wall:{blocker.Key.SourceIndex}";
+            PlaceHeroForDrop();
+            var result = owner.AttackObject(owner.Version, new SessionObjectAttack
+            {
+                Wall = true, Aim = goal.Aim, Distance = distance, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
+            });
+            goal.Attacks++;
+            goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
+            _attackNotice = "the line of fire struck a wall: " + AreaObjectTargets.Describe(result);
+            GD.Print($"ARC-COMBAT-015 wall-hit disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
+                + $" prevented={result.Resolution?.Damage?.Prevented} ammo={result.Ammunition?.UnitsAfter.ToString() ?? "none"} step={result.StepFailure}");
+            if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) EndStun(owner, SessionLifeTarget.Hero, "hero");
+            SyncAreaInventory();
+            RefreshAreaStatus();
+            return;
+        }
         goal.Stop = true;
-        _attackNotice = $"the line of fire stops at {(blocker.Type == 0 ? "a wall" : IsAreaCompanion(blocker.Key) ? "a companion" : $"an object of type {blocker.Type}")}: striking it is not ready";
+        _attackNotice = $"the line of fire stops at {(IsAreaCompanion(blocker.Key) ? "a companion" : $"an object of type {blocker.Type}")}: striking it is not ready";
         GD.Print($"ARC-COMBAT-012 line-of-fire stopped type={blocker.Type} (not ready)");
         RefreshAreaStatus();
     }
 
     /// <summary>The hit on an NPC through the session: <paramref name="struck"/> is the NPC hit (the goal's own target, or the one the
     /// line of fire struck instead), <paramref name="goal"/> the goal whose count and end it sets.</summary>
-    private void HitCritter(AttackGoal goal, AttackGoal struck, int distance)
+    private void HitCritter(AttackGoal goal, AttackGoal struck, int distance, SessionLineOfFire? line)
     {
         var owner = _areaSession!;
         PlaceHeroForDrop();
@@ -517,6 +592,8 @@ public partial class TerrainViewerApp
         var result = owner.AttackCritter(owner.Version, new(struck.Combat!)
         {
             Aim = struck.Aim, Distance = distance,
+            // ARC-COMBAT-015: the bow and firearms skills read the line of fire's cost and blocker (SC8).
+            LineOfFire = line,
             HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability),
             TargetWorn = _combatHost!.WornItems(owner, CurrentAreaMap, struck.Entity),
             // ARC-COMBAT-009: a critical drops the NPC's items where it stands (its map data's cell; NPCs do not move here).
@@ -524,6 +601,7 @@ public partial class TerrainViewerApp
             // ARC-COMBAT-010: the original's draws choose the cell a dropped item lands on, over the shown map.
             DropMap = AreaDropMapNow(),
         });
+        _lastCritterAttackForSelfTest = result;
         goal.Attacks++;
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;

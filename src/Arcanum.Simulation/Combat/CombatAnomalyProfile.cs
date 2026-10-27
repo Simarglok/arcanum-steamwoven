@@ -71,6 +71,14 @@ public sealed record CombatAnomalyProfile
     /// </summary>
     public bool LockedNoneStateFights { get; init; }
 
+    /// <summary>
+    /// EX9 (owner decision 2026-10-21; ARC-COMBAT-015): the ranged approach's callback (0x425590) stops at a clear shot only when the
+    /// attack has become impossible, so an attacker walking to a target that stands still closes to the adjacent tile before it shoots.
+    /// Steamwoven stops the approach at the first tile from which the attack goal's reach test passes
+    /// (<see cref="LineOfFireRules.InReach{TObject}"/>: within the weapon's range and a clear shot).
+    /// </summary>
+    public bool RangedApproachSkipsClearShot { get; init; }
+
     /// <summary>The original with every recorded D2 fix; the default setting.</summary>
     public static readonly CombatAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -88,6 +96,7 @@ public sealed record CombatAnomalyProfile
         CornerStepCountsBothRoutes = true,
         SurrenderKeepsCombatModeFlag = true,
         LockedNoneStateFights = true,
+        RangedApproachSkipsClearShot = true,
     };
 
     /// <summary>Both settings, default first.</summary>

@@ -189,4 +189,24 @@ public sealed class LineOfFireRulesTests
         var shifted = LineOfFireRules.Trace(new CellCoord(2, 2), 0, 25, new CellCoord(2, 8), new Map(), CombatAnomalyProfile.Steamwoven);
         CollectionAssert.AreNotEqual(straight.Tiles.ToArray(), shifted.Tiles.ToArray());
     }
+
+    [TestMethod]
+    public void TheGoalsReachTestNeedsTheRangeAndAClearShot()
+    {
+        // ARC-COMBAT-015 (ledger RH1): distance at most max(range, 1), cost below 26, no blocker but the target.
+        var open = new LineOfFireTrace<string>(0, null, false, []);
+        Assert.IsTrue(LineOfFireRules.InReach(10, 10, open, "target"));
+        Assert.IsFalse(LineOfFireRules.InReach(11, 10, open, "target"), "beyond the range");
+        Assert.IsTrue(LineOfFireRules.InReach(1, 0, open, "target"), "a range below 1 reaches 1");
+        Assert.IsFalse(LineOfFireRules.InReach(2, 0, open, "target"));
+        Assert.IsTrue(LineOfFireRules.InReach(3, 10, new LineOfFireTrace<string>(25, null, false, []), "target"));
+        Assert.IsFalse(LineOfFireRules.InReach(3, 10, new LineOfFireTrace<string>(26, null, false, []), "target"), "cost 26 is no clear shot");
+        Assert.IsFalse(LineOfFireRules.InReach(3, 10, new LineOfFireTrace<string>(0, "crate", false, []), "target"), "another blocker");
+        var target = "target";
+        Assert.IsTrue(LineOfFireRules.InReach(3, 10, new LineOfFireTrace<string>(0, target, false, []), target), "the target itself");
+        // Two see-through cover objects (20 each) on the way deny the shot; one does not.
+        var map = new Map().With(2, 4, "screen", Cover);
+        Assert.IsTrue(LineOfFireRules.InReach(6, 10, Trace(map, (2, 2), (2, 8)), "target"));
+        Assert.IsFalse(LineOfFireRules.InReach(6, 10, Trace(map.With(2, 5, "screen2", Cover), (2, 2), (2, 8)), "target"));
+    }
 }
