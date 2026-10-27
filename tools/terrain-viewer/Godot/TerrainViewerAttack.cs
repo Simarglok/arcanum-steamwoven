@@ -73,9 +73,12 @@ public partial class TerrainViewerApp
     private bool AttackMapActive => _combatHost is not null && _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea
         && _combatHost.Covers(CurrentAreaMap);
 
-    private void BindAreaCombat(AreaInventoryHost host) { CancelAreaAttack(null); _combatHost = new AreaCombatHost(host); _attackNotice = null; }
+    private void BindAreaCombat(AreaInventoryHost host)
+    {
+        CancelAreaAttack(null); CancelSpellCast(null); _combatHost = new AreaCombatHost(host); _attackNotice = null; _spellCasterStamp = null;
+    }
 
-    private void UnbindAreaCombat() { CancelAreaAttack(null); _combatHost = null; _attackNotice = null; }
+    private void UnbindAreaCombat() { CancelAreaAttack(null); CancelSpellCast(null); _combatHost = null; _attackNotice = null; _spellCasterStamp = null; }
 
     private long WorldMilliseconds() { var time = WorldTime.Value; return (long)(time.Numerator * 1000 / time.Denominator); }
 

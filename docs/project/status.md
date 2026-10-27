@@ -40,6 +40,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Spell run rules | [Magic](status/magic.md) | ARC-MAGIC-009, ARC-MAGIC-010 |
 | Spell per-target stage | [Magic](status/magic.md) | ARC-MAGIC-011, ARC-MAGIC-013 |
 | Spell damage and heal | [Magic](status/magic.md) | ARC-MAGIC-012 |
+| Spell cast host and viewer casting | [Magic](status/magic.md) | ARC-MAGIC-014, ARC-MAGIC-015 |
 | Schematic data | [Technology](status/technology.md) | ARC-TECHNOLOGY-001 |
 | ART and playback | [Data and formats](status/data.md) | ARC-DATA-016 |
 | HD pack format | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DATA-014, ARC-RENDER-016, ARC-DEV-003 |
