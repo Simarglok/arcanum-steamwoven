@@ -32,8 +32,8 @@ public static class ReactionLimits
 
 /// <summary>
 /// The NPC's side of a reaction query, supplied by its owner: the reaction base (instance field, prototype default 50), its
-/// race, the aloof flag and whether it is monstrous (both skip the race and beauty term), whether this PC is on its enemy list, and whether this PC mind-controls it. Enemy list and mind control belong to the AI
-/// and magic domains, which are not built yet, so their owners state them here.
+/// race, the aloof flag and whether it is monstrous (both skip the race and beauty term), whether this PC is on its enemy list, and whether this PC mind-controls it. The session replaces the enemy-list fact with
+/// its NPC danger record (ARC-WORLD-080); mind control belongs to the magic domain, which is not built yet, so its owner states it here.
 /// </summary>
 public sealed record ReactionNpcFacts(
     int BaseReaction,

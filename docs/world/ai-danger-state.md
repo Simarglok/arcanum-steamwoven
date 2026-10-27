@@ -7,8 +7,9 @@ stage A1; [enemy list and target lock](../research/npc-ai-hostility.md#6-enemy-l
 [ledger CL4, CL10](../research/ledger/npc-ai.md#npc-ai-core-loop-arc-res-054) and
 [HS18](../research/ledger/npc-ai.md#npc-ai-hostility-and-targeting-arc-res-057), two readers, re-read by this task)
 as pure rules in `Arcanum.Simulation.Ai.DangerRules` and per-NPC session state in
-`Arcanum.Session` (`GameSessionDanger.cs`, snapshot schema 38). No AI pass, scan, attack event or host
-calls it yet: slice I4 is its first caller.
+`Arcanum.Session` (`GameSessionDanger.cs`, snapshot schema 38). No AI pass or host
+calls it yet: the rules of slice I4 ([hostility and targets](ai-hostility.md), ARC-WORLD-080) decide its requests, and peace,
+stop attacking and the attack event's writes are session operations there.
 
 ## Rules (`DangerRules`)
 
@@ -85,17 +86,16 @@ migrated.
 
 ## Not ready
 
-- **Callers.** No AI pass (slice I6), danger update, attack event, reaction to an attack, kill-on-sight
-  or scan (slice I4), morale (I5) or follower order (I9) calls the setter yet; the viewer shows nothing.
+- **Callers.** No AI pass (slice I6), morale (I5) or follower order (I9) calls the setter yet, and nothing calls the danger
+  update, attack event, reaction to an attack, kill-on-sight or scan rules of slice I4; the viewer shows nothing.
   The hosts run no enter or exit combat script: the hook is returned, and the dispatcher's combat
   hooks (S7) are to carry it. The start and end combat points (15, 16) are I6's gate.
 - **Hook order.** The host runs the hook after the call, so a script sees the focus and reaction
   already written; the original runs the enter-combat script before rules 8 and 9.
-- **Peace and stop attacking** (0x4AA300, 0x4AA4A0) and therefore any writer of `NoAttack` besides a
-  restore are left to slice I4, with the attack event they mirror; FO7 and FO8 land with them.
-- **Not read by other owners yet.** The reaction owner's queries still take `PcOnEnemyList` from the
-  caller (only the setter's rule 8 uses the session's list); the exit gate's threats
-  (`SessionCombatThreat`) still come from the host; the enemy-list pick (0x4AFA90) and target validity
-  are I4's; the combat category refresh after an add (0x4B80E0) is presentation.
+- **Peace and stop attacking** (0x4AA300, 0x4AA4A0), the only writers of `NoAttack` besides a restore, FO7 and FO8 landed with
+  slice I4 ([hostility and targets](ai-hostility.md), ARC-WORLD-080), as did the enemy-list pick and target validity; the
+  reaction owner's queries now read the session's list.
+- **Not read by other owners yet.** The exit gate's threats (`SessionCombatThreat`) still come from the host; the combat
+  category refresh after an add (0x4B80E0) is presentation.
 - **Data.** NO_FLEE, invulnerability and the leader's charisma are caller facts; spells and scripts that
   write them (MR13, EX12, SU17) are later slices'.
