@@ -54,7 +54,9 @@ public sealed class AiParameterTableRealDataTests
         var root = Environment.GetEnvironmentVariable("DAT_ROOT");
         if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in AI table check; this is not a synthetic pass.");
         using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
-        var table = AiParameterTable.Open(stack).Table!;
+        var load = AiParameterTable.Open(stack);
+        Assert.AreEqual(AiParameterTableStatus.Read, load.Status, load.Detail);
+        var table = load.Table!;
         var rows = Enumerable.Range(0, table.BaseFilled).Select(i => table.Lookup(i).Row!).ToList();
         Assert.AreEqual(41, rows.Count);
         Assert.IsTrue(rows.All(r => r.HostileAlignmentGap == 2001), "slot 11 is 2001 in every row");

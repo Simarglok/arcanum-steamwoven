@@ -95,6 +95,7 @@ public sealed class AiParameterTableTests
         foreach (var outside in new[] { int.MinValue, -1, 150, int.MaxValue })
             Assert.AreEqual(new AiParameterLookup(AiParameterLookupStatus.OutsideTable, outside, null), table.Lookup(Npc(outside)));
         Assert.ThrowsExactly<ArgumentNullException>(() => table.Lookup(null!));
+        Assert.AreEqual(AiParameterLookupStatus.OutsideTable, default(AiParameterLookup).Status, "a default lookup is no row");
     }
 
     [TestMethod]

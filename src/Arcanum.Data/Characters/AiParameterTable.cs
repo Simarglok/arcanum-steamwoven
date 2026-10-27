@@ -103,12 +103,13 @@ public sealed record AiParameterRow
     ];
 }
 
+/// <summary>The outcome of <see cref="AiParameterTable.Lookup(int)"/>; the default is a refusal, never a row.</summary>
 public enum AiParameterLookupStatus
 {
-    Found,
     /// <summary>The index is outside rows 0..149: the original reads past its table there (ledger LM3; project policy in
     /// both settings: refused).</summary>
     OutsideTable,
+    Found,
 }
 
 /// <summary>The row an NPC's AI data field names, or a typed refusal with the index asked for.</summary>

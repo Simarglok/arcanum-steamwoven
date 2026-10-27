@@ -36,6 +36,9 @@ slots are read, named and kept, and each one's rule lands with its slice (I2..I9
 - **Lookup.** `Lookup(index)` or `Lookup(CombatNpcFields)` (the AI data field) returns an
   `AiParameterLookup`: `Found` with the row for 0..149, `OutsideTable` with no row for any other index,
   where the original reads past its table (ledger LM3; project policy in both settings).
+- **Refusals.** A table that cannot be read is `BaseUnreadable` or `ModuleUnreadable`. A table the MES
+  grammar does not admit (`MesFile`) is `BaseRefused` or `ModuleRefused`, instead of being read partially.
+  A failing module table fails the whole load, where the original keeps rows 0..99 (project policy).
 
 ## Slots
 
@@ -63,9 +66,6 @@ stage's (A3..A7, S22) and lands with the matching slice, not here.
 | 16 | `OpensPortals` | flag (nonzero set), kept as stored | S22 |
 
 `Values` gives the 17 in slot order; a row is a value (equal rows compare equal).
-- **Refusals.** A table that cannot be read is `BaseUnreadable` or `ModuleUnreadable`. A table the MES
-  grammar does not admit (`MesFile`) is `BaseRefused` or `ModuleRefused`, instead of being read partially.
-  A failing module table fails the whole load, where the original keeps rows 0..99 (project policy).
 
 ## Installed original
 
