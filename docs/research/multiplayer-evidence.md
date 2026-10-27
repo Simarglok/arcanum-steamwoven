@@ -347,11 +347,13 @@ No present group covers a network session: FR-SOCIAL-006 covers only the
 player party, and the UI section names multiplayer as an early non-goal. The
 proposal is a new section **"Сетевая игра" (network game)** with eight groups,
 added to the registry only if the owner accepts multiplayer as a product goal.
-The owner accepted the groups on 2026-10-27; ARC-DEV-044 added them as the
-section [Сетевая игра](../requirements/network.md) (191 groups in all).
-FR-SOCIAL-006 keeps its own ID for the exchange of story state; FR-NET-007
-holds the network party rules. Loading a second module in single player
-(FR-CONTENT-003) is queued after alpha by the same decision:
+On 2026-10-27 the owner had the groups added without setting a date for
+multiplayer, which stays outside alpha; ARC-DEV-044 added them as the section
+[Сетевая игра](../requirements/network.md) (191 groups in all). FR-SOCIAL-006
+keeps its own ID for the exchange of story state (an ARC-DEV-044 choice, not
+part of the proposal); FR-NET-007 holds the network party rules. By the same
+decision, loading a second module in single player (FR-CONTENT-003) comes
+after alpha:
 
 | Proposed ID | Group | Original basis |
 | --- | --- | --- |
@@ -361,7 +363,7 @@ holds the network party rules. Loading a second module in single player
 | FR-NET-004 | Multiplayer modules: a module marker, a fresh world instance per game, world transfer to a joining client, host save and load | Modules |
 | FR-NET-005 | Multiplayer characters: export from single player, import with checks, the reset, auto-equip at join, stored PCs | Characters and saves |
 | FR-NET-006 | Server options: player killing, friendly fire, private chat, key sharing, auto-join, auto-equip, advertised game type | Server options |
-| FR-NET-007 | Player parties and experience split, shared keys and quests (absorbs FR-SOCIAL-006) | Parties |
+| FR-NET-007 | Player parties and experience split, shared keys and quests (proposed to absorb FR-SOCIAL-006; ARC-DEV-044 keeps FR-SOCIAL-006 for the story-state exchange) | Parties |
 | FR-NET-008 | Lobby, chat and administration: player list, broadcast and private messages, admit, kick, ban | Sessions, options |
 
 ## Recommendation

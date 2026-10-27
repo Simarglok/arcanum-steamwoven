@@ -2,7 +2,7 @@
 
 Audit baseline: merged main [`a8a553b7c406ace77ea019bf2b13251f00ecddb6`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), through PR #54, 2026-10-09. The audit compared repository source/tests/contracts, all 54 merged PR records and the read-only Hermes board snapshot at **18:11:36 UTC**. Merge commits were checked against this baseline; root-card `done` alone is not product delivery. Later merges require another coverage update.
 
-This is a source/delivery audit, **not a new build, game, original-data, graphical, export or device run**. Test results below are historical evidence reported for the linked reviewed candidates. They do not certify every subsystem together on the audit baseline. The [183-group requirements register](../requirements/README.md) gives each requirement one status with what is implemented, what is missing and documentation links in its [coverage matrix](../requirements/coverage.md) (re-checked 2026-10-20); no whole-game readiness percentage is inferred.
+This is a source/delivery audit, **not a new build, game, original-data, graphical, export or device run**. Test results below are historical evidence reported for the linked reviewed candidates. They do not certify every subsystem together on the audit baseline. The [191-group requirements register](../requirements/README.md) gives each requirement one status with what is implemented, what is missing and documentation links in its [coverage matrix](../requirements/coverage.md) (re-checked 2026-10-20); no whole-game readiness percentage is inferred.
 
 ## Implemented components
 
