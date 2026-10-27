@@ -25,7 +25,7 @@ public partial class TerrainViewerApp
     {
         StopAreaAmbient();
         if (area.Lighting is not { } lighting || _areaSession is null) return;
-        _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents);
+        _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents, SpellCasterForEvents);
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
@@ -39,7 +39,7 @@ public partial class TerrainViewerApp
         if (_areaAmbient is not { } previous || (_exteriorArea ?? _readyArea)?.Lighting is not { } lighting) return;
         // The source of the map shown so far (the exterior's or, after ARC-RENDER-012, the cave's); the map of the
         // loaded actor is bound once it is placed (RebindAreaMapAmbient).
-        _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents);
+        _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents, SpellCasterForEvents);
         _areaAmbient.Enabled = previous.Enabled;
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
