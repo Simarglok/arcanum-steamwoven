@@ -353,6 +353,8 @@ public partial class TerrainViewerApp
     /// (a draw the original makes at every attack start), the facing toward the target.</summary>
     private void BeginAttackAnimation(AttackGoal goal, SessionHeroAttack hero)
     {
+        // ARC-COMBAT-020: in a turn-based round the attack's start charges its action points (ledger CT2); refused, there is no attack.
+        if (!ChargeHeroAction(TurnBasedRules.AttackCost(hero.WeaponSpeed), "attack")) { CancelAreaAttack(_turnBasedNotice); return; }
         var art = _worldActor.Profile.Attack!;
         var rate = RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Unarmed, Math.Clamp(hero.Speed, 1, RealTimeCombatRules.MaxStat),
             art.RawFramesPerSecond);

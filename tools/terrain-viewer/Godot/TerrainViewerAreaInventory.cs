@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Input;
 using Arcanum.Session;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
@@ -134,7 +135,11 @@ public partial class TerrainViewerApp
 
     private void ActOnInventoryTarget(AreaInventoryTarget target)
     {
-        if (target.Kind == AreaInventoryTargetKind.DeadNpc) { OpenInventory(target.Entity); return; }
+        // ARC-COMBAT-020: in a turn-based round a pickup costs 1 action point and a body's loot (an object's use) 2 (ledger CT3).
+        var pickup = target.Kind != AreaInventoryTargetKind.DeadNpc;
+        if (!ChargeHeroAction(pickup ? TurnBasedRules.PickUpCost : TurnBasedRules.UseObjectCost, pickup ? "pickup" : "loot"))
+        { _inventoryStatus = _turnBasedNotice; RefreshAreaStatus(); return; }
+        if (!pickup) { OpenInventory(target.Entity); return; }
         var result = _inventoryHost!.PickUp(_areaSession!, target.Entity);
         var name = _inventoryHost.Name(target.Entity, _hoverNames?.Catalog);
         _inventoryStatus = result.Disposition == GameSessionDisposition.Changed
@@ -197,7 +202,8 @@ public partial class TerrainViewerApp
     private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks, _areaKitDurability);
 
     /// <summary>ARC-SKILLS-005: the hero uses a healing item on itself (the inventory use passes the user as the target, as the
-    /// original's inventory window does). Outside a turn-based round, so no action points are charged.</summary>
+    /// original's inventory window does). In a turn-based round the use charges its action points (ARC-COMBAT-020; the original goes on
+    /// whatever the charge answers).</summary>
     private void HealSelf(string item)
     {
         if (!InventoryOpen || !InventoryActive) return;
@@ -207,7 +213,7 @@ public partial class TerrainViewerApp
         if (healing is null) message = "not used: not a healing item the hero holds";
         else
         {
-            var result = _areaSession!.HealWithItem(_areaSession.Version, SessionLifeTarget.Hero, healing);
+            var result = _areaSession!.HealWithItem(_areaSession.Version, SessionLifeTarget.Hero, healing, CombatWorldOrNull());
             var life = _areaSession.QueryHeroLife()?.Record.State;
             message = result.Disposition == GameSessionDisposition.Rejected ? $"not used: {result.Failure}"
                 : (result.Check!.Success ? $"healed {result.Heal!.Value.HitPoints} hit point(s){(result.Heal.Value.Cure ? " and cured an injury" : string.Empty)}" : "the heal failed")

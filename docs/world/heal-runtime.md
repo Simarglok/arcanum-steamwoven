@@ -60,8 +60,8 @@ repeated entity (`NotCanonical`) and a missing or unknown field; Restore refuses
 ## Viewer
 
 The AREA inventory window lists a **Use on self** button for each healing item in the PC's list (the kit's from the hero load's
-prototype fields, a taken item's from its object row) and runs `HealWithItem` on the hero (no turn-based round in the viewer, so
-no action points). A made item (ARC-TECHNOLOGY-004, ARC-WORLD-055) gets no button: the viewer has no object row and so no healing
+prototype fields, a taken item's from its object row) and runs `HealWithItem` on the hero; in a turn-based round (ARC-COMBAT-020) it passes the round's world, so the use charges its 4
+action points on the hero's subturn and goes on whatever the charge answers. A made item (ARC-TECHNOLOGY-004, ARC-WORLD-055) gets no button: the viewer has no object row and so no healing
 fields for it, although `HealWithItem` accepts one the hero holds. The window reports the amount, the cure, the uses left or the item used up.
 
 ## Boundaries

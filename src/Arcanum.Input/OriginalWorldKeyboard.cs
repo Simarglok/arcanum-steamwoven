@@ -58,7 +58,7 @@ public static class OriginalWorldKeyboard
         [WorldKey.Home] = "Center on PC",
         [WorldKey.A] = "Last active action",
         [WorldKey.C] = "Character sheet",
-        [WorldKey.E] = "Turn-Based sub-turn (source reading only)",
+        [WorldKey.E] = "Turn-Based: end the sub-turn",
         [WorldKey.F] = "Fate points",
         [WorldKey.I] = "Inventory",
         [WorldKey.K] = "Skills pane (source reading only)",

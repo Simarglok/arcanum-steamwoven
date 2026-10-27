@@ -280,3 +280,24 @@ its step cost by a second independent pair; they agree on every row, so the rows
 
 Anomalies: none new. AW13 and AW14 are implemented as `CornerStepCountsBothRoutes` (Steamwoven counts the corner tile's objects on
 the first route only and skips only the target tile's objects; the side tiles and the blocking stay the original's).
+
+## Turn-based host (ARC-COMBAT-020)
+
+Source: the [viewer host](../../world/turn-based-round-runtime.md#viewer-host-arc-combat-020) of the turn-based round
+(alpha-gap N3): where the original charges a PC's actions, what a refused charge does to the action and the turn, and the two
+keys of a round. Read on 2026-10-27 by a first reader and, independently, a second reader that saw only the questions (method
+step 6); they agree on every row (the second reader added the PC's exemption in 0x433270 and the non-PC charge in 0x423560 to CT3,
+and named field 0x14F the object type), so the rows are F2. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| CT1 | animation step (0x430FC0) | The step charges its cost through the action-point charge (0x4B7CD0) when it starts, before the step proceeds: walk 2, run 1 with fatigue left (TB14). When the charge answers 0 the step does not happen: it stores 0 in the global 0x5DE6E4, fails the move goal (0x44E2C0 with 6) and returns 0; otherwise (paid or overexerted) the step goes on. | Original |
+| CT2 | attack start (0x432700) | Before the attack animation's art is set: the attack cost (0x4B7C30, attacker and target) through the charge; when it answers 0 the goal fails (0x44E2C0 with 6) and nothing is attacked. A stoned attacker (spell flag 0x10000) and a critter attacker (type 15 or 16) that is stunned or paralysed (critter flags 0x60) leave at once without a charge or an attack. | Original |
+| CT3 | goal starts 0x428A10, 0x429B50, 0x42A2A0, 0x42AA70, 0x42E590, 0x433270, 0x462CC0, 0x462FC0, 0x57A320, 0x423560 | The use or open goal of an object (0x428A10: a portal, a container, a critter's body) charges 2 first and does nothing on 0; cast 4 (0x429B50) and use skill 4 (0x42A2A0, after its target test) stop on 0; pick up 1 (0x42AA70) picks nothing up on 0; 0x42E590 (animation 8, the actor's own subturn only) 5; item use 4 (0x462CC0, 0x462FC0) whose answer the ordinary path ignores, so the use goes on; the interface's skill handler (0x57A320) 4. The shared goal callback 0x433270 charges 2 to anyone but the local PC, and the goal-transition step (0x423560) charges a non-PC the cost its last check recorded. | Original |
+| CT4 | action-point charge (0x4B7CD0) | In a round, for the current participant only (anyone else: 1, nothing charged): covered, the cost is taken and it answers 1. Not covered: the local PC with points above 0 and fatigue above 1 takes the overexertion (TB9), its points become 0 and it answers 1, so the action goes ahead; anyone else, and the PC with 0 points or fatigue 1 or less, gets 0 points, the next subturn (0x4B7690) and the answer 0. | Original |
+| CT5 | turn-based interface event (0x56F9B0) | The end-turn button (the id in 0x5CAA44) and E released (scancode 0x12, no text focus 0x566EF0): when the current participant is the local PC and it runs no animation (0x423300), or the one it runs is its goal-2 animation (0x44E830, 0x421D60), the next subturn starts at once (0x4B7690); the action points are not zeroed first. Otherwise nothing. | Original |
+| CT6 | in-game filter (0x54B5D0), toggle (0x4B6D20) | During a round on another participant's subturn the filter passes only Space pressed, which calls the toggle. The toggle turns the setting off whatever the PC's state, and on only when the PC is active (0x45D790) (RT4). | Original |
+
+Anomalies: none. The viewer follows CT1–CT6 in both rule modes; the goal-2 animation of CT5 is its idle state (no walk,
+attack or cast), and its E zeroes the hero's points before the next subturn (the session's end of a critter's turn), which
+nothing reads: the next subturn grants its own.

@@ -143,6 +143,10 @@ public sealed class AreaGridSession : IGridSession
     public GaitTiming? Timing { get; init; }
     /// <summary>ARC-WORLD-020: the gait a step starts with, read when it is admitted; null walks.</summary>
     public Func<MovementGait>? Gait { get; set; }
+    /// <summary>ARC-COMBAT-020: asked once when an open step starts, with the gait it starts with (the original charges a step's
+    /// action points when it starts, 0x430FC0); a reason refuses the step (its live verdict is blocked with that reason), null lets it
+    /// go. Null: every open step goes.</summary>
+    public Func<AdmissionKey, MovementGait, string?>? StepCharge { get; set; }
     public const string PcActorId = "HUMAN_FIXED_DIAGNOSTIC", PcCapabilities = "ISOLATED_PC_HUMAN_FIXED_V1";
 
     public AreaGridSession(AreaStepSnapshot snapshot, SimulationTime initialTime, StepDuration? duration = null, MovementLimits? limits = null,
@@ -183,6 +187,8 @@ public sealed class AreaGridSession : IGridSession
             var live = pass ? AreaOccupancyRules.ApplyPassingCritters(assessment, key.From, key.Direction, occupancy)
                 : AreaOccupancyRules.Apply(assessment, key.From, key.Direction, occupancy);
             var gait = Gait?.Invoke() ?? MovementGait.Walk;
+            if (live.Disposition == CardinalTraversalDisposition.Open && StepCharge?.Invoke(key, gait) is { } refusal)
+                live = new AreaStepVerdict(live.Coverage, CardinalTraversalDisposition.Blocked, refusal, true);
             // ARC-WORLD-021: an Open window jump is the vault (its own time and ART), whatever the gait.
             var vault = Timing?.Vault is { } vaultTime && assessment.WindowJump is not null ? vaultTime : (StepDuration?)null;
             var duration = vault ?? Timing?.For(gait, key.Direction) ?? Duration;

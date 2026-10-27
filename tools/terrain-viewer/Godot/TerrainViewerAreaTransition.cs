@@ -72,7 +72,7 @@ public partial class TerrainViewerApp
         _areaKitLockpicks = result.Hero?.KitLockpicks;
         _areaKitDurability = result.Hero?.KitDurability;
         _areaKitArt = result.Hero?.KitArt;
-        if (carried is not null) _areaSession = carried;
+        if (carried is not null) { _areaSession = carried; SyncTurnBasedSetting(carried); }
         else
         {
             // The game-generated object file carries an empty module GUID here, so the session's module id is

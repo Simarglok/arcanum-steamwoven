@@ -9,7 +9,10 @@ as a domain of the [game session](game-session-runtime.md) (snapshot schema 11).
 [FR-COMBAT-001](../requirements/combat-magic-tech.md#fr-combat-001) (the round part),
 [FR-COMBAT-002](../requirements/combat-magic-tech.md#fr-combat-002) and
 [FR-COMBAT-003](../requirements/combat-magic-tech.md#fr-combat-003). Real-time combat and the combat mode flag
-([real-time combat](real-time-combat-runtime.md), ARC-COMBAT-004), AI, the attack animation and the viewer are not part of it ([Not ready](#not-ready)).
+([real-time combat](real-time-combat-runtime.md), ARC-COMBAT-004), AI and the attack animation are not part of it ([Not ready](#not-ready)).
+The AREA viewer hosts the round since ARC-COMBAT-020 ([Viewer host](#viewer-host-arc-combat-020)): the turn-based setting,
+the round started with combat mode, the hero's actions charging its action points, the NPCs' subturns passing and the round's
+second feeding the event pump ([FR-COMBAT-010](../requirements/combat-magic-tech.md#fr-combat-010), the recovery timers).
 
 ## Evidence
 
@@ -122,18 +125,42 @@ saved required action points (reset on load) and the unused second actor handle 
   at every round, the gate and the preview, a joining NPC, stopped game time, a world that calls back, the canonical
   text and restore, and the restore and decode refusals.
 
+## Viewer host (ARC-COMBAT-020)
+
+Alpha-gap item N3. The AREA viewer (every map it shows) hosts the round over this domain; the host's decisions are
+`Arcanum.TerrainViewer.Core.AreaTurnBased` and its world is `AreaCombatWorld`
+([core](../../tools/terrain-viewer/Core/AreaCombatRound.cs), [viewer](../../tools/terrain-viewer/Godot/TerrainViewerTurnBased.cs)).
+The original's charges and keys the host follows were read in the executable by two readers
+([ledger CT1–CT6](../research/ledger/combat.md#turn-based-host-arc-combat-020)).
+
+| Part | Behaviour |
+| --- | --- |
+| Setting | Space (on the press) toggles the turn-based setting through `SwitchTurnBased`: on only for an active hero, off always (RT4, CT6), also during another participant's subturn (CT6); off by default, as the original's setting. Out of combat mode it only stores; with the hero in combat mode it starts or ends the round. Refused (unchanged) while the hero's attack or cast plays: the original refuses when the PC runs an animation it cannot interrupt (whose goal priorities are not read; the viewer counts those two). A quick load that brings a round turns the setting on. |
+| Round start | R entering combat mode with the setting on starts the round (`ToggleHeroCombatMode` with the turn-based context); a round that begins stops the hero's walk and its approaches (the original interrupts animations at its start). Leaving combat mode (R, a dialog, a map change) ends it. The session's actor is placed on the hero's cell before each round call, so the scan square is around where the hero stands. |
+| Scan | Every NPC of the shown map with its stored cell (less what the session destroyed or switched off and the companions away), the companions here at their live cells and the hero, in the original's scan order (TB13): sector rows from the top, sectors from the left, in a sector the critter attached last first. Critters that walked into a sector are attached after those loaded with it, the latest entry first; the load order of the others is approximated by their source order (terrain, static, then mobile objects, each in file order). An NPC's facts are its home map's stored fields: effective Speed in its session life state, life facts, hidden from drawing (object flag 0x100) and sleeping (critter flag 0x1000). |
+| NPC subturns | An NPC's subturn ends at once (`EndCombatTurn`): the viewer has no AI, and the original ends the subturn of an NPC that starts no animation (TB5). The host passes at most 64 subturns per frame and stops after a new round began, so the event pump runs between rounds; each round end moves the clock 1000 game ms, and the timers then due (fatigue, poison, wake-up) fire on the next frame. |
+| Hero's subturn | The hero keeps its subturn while it is active and has action points; once it is idle (settled, no walk, attack, cast or held stick) with no points left, or inactive, the completion check passes it on. E (on the release) ends it when the hero is idle (CT5). Clicks on another participant's subturn are ignored, as the original's world handler does; companions stand while a round runs (they would move on their own subturns by their AI). |
+| Charges | In a round each step the hero starts charges its action points when it starts (walk 2, run 1 while it has fatigue; CT1), the attack's start its attack cost (CT2), a pickup 1, a body's loot and a door's or window's use 2, a cast 4 (the casting goal, ARC-MAGIC-014), a heal and a lock pick 4 (the item use; the original goes on whatever they answer) (CT3). A charge the points cover is paid; beyond them an active hero with fatigue above 1 overexerts (the action goes ahead); else the action does not happen and the turn passes on (TB9, CT4): a refused step stops the walk (`ROUTE_STOPPED_BY_TURN_BASED`), so it does not continue in a later turn. Another participant's subturn or an inactive hero refuses a step, an attack, a pickup, a loot or a use without a charge (a heal or a lock pick is charged by the session only on the hero's subturn and otherwise goes on). Leaving combat mode ends a running round even when the host cannot scan the map. |
+| Status line | `turn-based: off`, `on, no round`, or `round N, hero's turn` / `<entity>'s turn`, the action points and the place in the order; combat mode reads `ON (turn-based)` during a round. |
+
+Native smoke (map mode, the Crash Site cave, `ARC_AREA_MAP_SMOKE_ONLY=turn-based`, also in the map battery after the cast stage):
+`ARC-COMBAT-020 native-smoke turn-based PASS`: Space without combat mode stores the setting; R begins round 1 with the NPC
+first, whose subturn takes no press; a one-cell walk costs 2; E passes the turn and round 2 begins one game second later with
+the grant again; next to the NPC the attack's start charges its cost; a long walk spends the rest, overexerts and is refused,
+which passes the turn on; Space off ends the round and the event pump recovers the overexertion's fatigue as the clock flows.
+
 ## Not ready
 
-- **No host yet.** The AREA viewer starts no round; the turn-based setting, animation interrupts and the per-participant
-  calls of the round start are the host's. Combat mode, its toggle, the exit rule and the round started or ended with it
-  (C1–C3) came with [real-time combat](real-time-combat-runtime.md) (ARC-COMBAT-004).
 - **No AI.** `SubturnStarted` and `SubturnEnded` tell the host to run the NPC's heartbeat, AI and end-of-combat scripts;
-  there is no SCR heartbeat dispatch or AI yet (RES-039 I6/I7). With A9 the host runs them twice.
-- **Movement and attacks do not charge yet.** The step, attack and use costs are rules; the movement runtime and the
-  attack resolver do not call `ConsumeActionPoints` until a host wires them. Get up (A3) is the cost and the own-subturn
-  gate; the get-up animation is the host's. The hero's weapon speed and attack cost come from its worn items
-  (`QueryHeroEquipmentCombat`, [equipment](equipment-runtime.md), ARC-WORLD-028), and its worn normal resistance enters the
-  overexertion damage.
+  there is no SCR heartbeat dispatch or AI yet (RES-039 I6/I7, the AI lane's I10 takes over the NPC's subturn from the
+  viewer host). With A9 the host runs them twice. An NPC never joins a round on its own (the AI's insert).
+- **Charges not wired.** Reading, repairing, assembling and the other inventory and window actions charge nothing in a
+  round; the get-up (A3) has no host; a reach-1 attack's adjacent move is charged step by step as the approach walks, not
+  as one estimate; the path cost preview and the turn-based cursor are not shown (the HUD is alpha-gap N4).
+- **No turn-based UI.** No end-turn button, action-point bar or participant list (N4); the status line only.
+- **Approximations.** The scan's load order of objects loaded with the map is their source order; the interruptible test
+  of the setting toggle counts the hero's attack and cast only; the hero and its companions start with no sector entry
+  after a load.
 - **Map changes.** A round is on the actor's map; the host ends it before a map change. The session does not refuse a
   map change during a round.
 - **Fast turn-based mode** (several steps per goal) and the turn-based UI callbacks are not modelled.
