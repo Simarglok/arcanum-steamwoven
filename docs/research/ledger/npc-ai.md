@@ -85,7 +85,10 @@ as positive; asked to re-check the sign, it worked the numbers (P 8, margin 85 �
 The second reader added the view-option dependence of the line (AW17), the dropped cost when a step leaves the map
 (AW6), the unconscious test's cases (AW2) and the attack event's flag gate (AW9); the first reader re-read them and agrees.
 No first-pass anomaly (P1–P7) belongs to this stage; the F0 summaries of S6–S9 are confirmed or refined. Every direct
-branch stays inside `.text`.
+branch stays inside `.text`. ARC-WORLD-078 (slice I2) re-read two details on 2026-10-27, one reader, both agreeing with
+the rows: under the sound flag 0x20 the step cost adds 2 for every wall on the crossed edge before it looks at the wall
+piece or the pass-wall spell flag, so window, doorway and pass-walled pieces cost 2 too (AW6); `object_rot` (0x441B20) is
+the tile direction 0x4B8D50 between the two objects' locations (AW3).
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |

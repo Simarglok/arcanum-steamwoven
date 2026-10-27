@@ -53,7 +53,8 @@ public sealed record CombatAnomalyProfile
 
     /// <summary>
     /// AW13 and AW14 (owner decision 2026-10-20): a corner step of a line of fire sums both routes around the corner, so the corner
-    /// tile's cover counts twice, and the last step also skips the side tiles' objects (see <see cref="LineOfFireRules.StepCost{TObject}"/>).
+    /// tile's cover counts twice, and the last step also skips the side tiles' objects (see <see cref="LineOfFireRules.StepCost{TObject}"/>);
+    /// on a sound line the corner tile's soundproofing counts twice (see <see cref="Ai.AwarenessRules.SoundStepCost{TObject}"/>).
     /// </summary>
     public bool CornerStepCountsBothRoutes { get; init; }
 

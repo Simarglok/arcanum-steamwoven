@@ -99,7 +99,7 @@ The MT7 check's area questions: the BEGIN target mask alone (no spell flags), ra
 the invocation's source, the source's location as origin (the invocation's +0x38) and the target object and tile as candidate and action target. The
 NPC fallback marks the target's location as candidate and target tile, adds the tile-radius and indoor/outdoor bits, gathers
 the list and answers the first tile that passes the same test (an object target with object bits fails again; tile areas find
-a tile). The line of fire stays the caller's (I2).
+a tile). The line of fire stays the caller's (`LineOfFireRules.Trace`, ARC-COMBAT-012).
 
 ## Differences from the original
 
@@ -128,4 +128,4 @@ the same square) any likely fix changes nothing, so it follows the original in b
 - No caller: the run lifecycle (MT9a) gathers the list per action and the per-target stage (MT10) filters and re-aims per
   component; the spell UI's picker (0x4F2680, 0x4F28A0) is the casting UI's (MT20a-2).
 - No host fills `ISpellTargetWorld` yet; the viewer's map data and the session's party are its sources.
-- The line of fire (0x4ADE00) is the AI awareness stage I2's.
+- The line of fire (0x4ADE00) is ARC-COMBAT-012's `LineOfFireRules.Trace`; no caller passes it here yet.
