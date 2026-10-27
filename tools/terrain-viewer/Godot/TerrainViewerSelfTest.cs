@@ -204,7 +204,8 @@ public static partial class TerrainViewerSelfTest
     internal static void Stage(string name)
     {
         GD.Print($"ARC-DEV-043 self-test stage {name} begin t={StageClock.ElapsedMilliseconds}ms"
-                 + $" can-draw={DisplayServer.WindowCanDraw()} focused={DisplayServer.WindowIsFocused()}");
+                 + $" can-draw={DisplayServer.WindowCanDraw()} focused={DisplayServer.WindowIsFocused()}"
+                 + $" forced-draws={HiddenWindowDrawKeeper.ForcedDraws}");
         if (OperatingSystem.IsWindows()) return;
         // A diagnostic line never changes the outcome: a missing libc only loses the flush.
         try { _ = FlushAllStreams(IntPtr.Zero); }
