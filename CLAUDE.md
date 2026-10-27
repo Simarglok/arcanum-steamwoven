@@ -13,6 +13,8 @@ summarizes the project and points to them.
   in a new thread ([one task per thread](docs/workflow/tasks.md#one-task-per-thread)).
   Keep search and read output small: files first, then line ranges, no whole
   `cat` ([small search and read output](docs/workflow/tasks.md#small-search-and-read-output)).
+  Batch independent tool calls in one response and update the checklist only
+  when a step changes ([fewer steps](docs/workflow/tasks.md#fewer-steps)).
   Name threads, branches, PRs and commits by the task code
   ([`docs/workflow/task-naming.md`](docs/workflow/task-naming.md)):
   `ARC-TYPE-NNN` first, a Russian result in thread titles. Types: `RES`, `DATA`,
