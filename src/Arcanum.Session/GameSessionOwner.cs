@@ -724,6 +724,7 @@ public sealed partial class GameSessionOwner : IDisposable
         _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, Jilted = leave.Jilt }, false);
         // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
         _combat.Concealed.Remove(entity);
+        ClearNoAttackOnLeave(entity);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(entity);
         return Changed();
     }

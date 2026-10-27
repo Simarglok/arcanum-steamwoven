@@ -91,7 +91,11 @@ first read the concealment margin as raising the observer's Perception, having t
 as positive; asked to re-check the sign, it worked the numbers (P 8, margin 85 → P 2) and agrees that the margin lowers it.
 The second reader added the view-option dependence of the line (AW17), the dropped cost when a step leaves the map
 (AW6), the unconscious test's cases (AW2) and the attack event's flag gate (AW9); the first reader re-read them and agrees.
-No first-pass anomaly (P1–P7) belongs to this stage; the F0 summaries of S6–S9 are confirmed or refined. Every direct
+No first-pass anomaly (P1–P7) belongs to this stage; the F0 summaries of S6–S9 are confirmed or refined. ARC-WORLD-080 (slice
+I4) re-read the noise fan-out (0x4A9E10) and the witness rule (0x4A9F10) on 2026-10-27, one reader, agreeing with section 6 of
+the study: both squares have the half-size of the attack's loudness, the attacker's square is taken when the two are less than
+twice the loud radius apart and the victim's when they are more than 1 tile apart (AW16), and each witness test asks sight
+before hearing. Every direct
 branch stays inside `.text`. ARC-WORLD-078 (slice I2) re-read two details on 2026-10-27, one reader, both agreeing with
 the rows: under the sound flag 0x20 the step cost adds 2 for every wall on the crossed edge before it looks at the wall
 piece or the pass-wall spell flag, so window, doorway and pass-walled pieces cost 2 too (AW6); `object_rot` (0x441B20) is
@@ -163,6 +167,17 @@ on 2026-10-27, one reader, agreeing with HS18 and section 6 of the study: the te
 into each hole and checks the same index again; the lock acts only for an NPC owner (type 0x10) and a target, unlocks, asks the
 setter for COMBAT_FOCUS with no sound and sets critter flag 2 0x200000 only when the state read then gives COMBAT_FOCUS on that
 target; allow attacking clears NPC flag 0x20000000 of an NPC with a PC leader, or of each NPC of a PC's recursive follower list.
+ARC-WORLD-080 (slice I4) re-read the danger update, validity, invisibility, find target, avenge, kill-on-sight, protect, upset,
+choose target, fight or flee, flee distance, the pick, the focus-or-rescan helper (0x4ABBC0), the reaction to an attack, peace
+and its forget helper, stop attacking and the attack event on 2026-10-27, one reader, agreeing with HS1–HS7, HS10, HS11, HS13,
+HS14, HS16, HS18 and HS21. Details the rows leave implicit: the scan computes the sort keys only for two or more candidates and
+hears a candidate before it looks; in the ally-help step validity is asked for the danger source before the state is read
+(no difference, the source of NONE is null); the danger update's NONE, focus and who-hit-me-last paths pass the setter a saved
+copy of the found target and only the enemy-list path the pass record's (SP16); the reaction to an attack's FLEE branch measures
+the 64-bit distance to what it flees against parameter 4 (0x4AB030); peace reads the standard reaction (0x4C0CC0) after the
+head left the list and calls the setter for NONE with no target and the record's sound; stop attacking makes peace, interrupts
+the animation (priority 3) and leaves combat mode only when the NPC has a focus, then sets no-attack for a PC-led NPC and
+unlocks; the attack event tells the victim's direct followers for any critter victim, PC or NPC.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
