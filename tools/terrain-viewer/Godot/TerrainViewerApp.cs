@@ -65,7 +65,11 @@ public partial class TerrainViewerApp : Node
         _automatedHost = args.Contains("--self-test", StringComparer.Ordinal);
         // ARC-DEV-032: a self-test, a native smoke or the WORLD settings validation never reads or writes the player's settings and saves.
         if (_automatedHost || args.Contains("--native-smoke", StringComparer.Ordinal) || args.Contains("--world-settings-test", StringComparer.Ordinal))
+        {
             ViewerAutomatedStorage.MarkAutomated();
+            // ARC-DEV-045: an automated run keeps drawing while its window cannot draw (minimized).
+            if (DisplayServer.GetName() != "headless") AddChild(new HiddenWindowDrawKeeper());
+        }
         if (RunWorldSettingsTest(args)) return;
         if (args.Contains("--self-test", StringComparer.Ordinal))
         {
@@ -123,18 +127,20 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, ranged)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
                         // walk and census run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
                         {
-                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); }
+                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); }
+                            // ARC-MAGIC-015: the cast stage alone, for a quick first-cast observation (the map battery runs it too).
                             else
                             {
-                                // ARC-MAGIC-015: the cast stage alone, for a quick first-cast observation (the map battery runs it too).
                                 if (Stage("cast")) await RunAreaCastSmokeAsync(result);
+                                // ARC-COMBAT-020: the turn-based round alone (the map battery runs it too).
+                                if (Stage("turn-based")) await RunAreaTurnBasedSmokeAsync(result);
                                 // ARC-COMBAT-015: the combat stages after the cast (object attack, critical, line of fire, ranged shot), as the
                                 // map battery runs them last.
                                 if (Stage("ranged")) { await RunAreaObjectAttackSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); }

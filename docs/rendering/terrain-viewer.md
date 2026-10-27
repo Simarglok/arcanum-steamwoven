@@ -1480,6 +1480,9 @@ input store would use a `user://` path; the log prints `ARC-DEV-032 self-test PA
 `ARC-DEV-032 automated run: settings and saves are isolated from the player's files` when the folder is first used. The
 WORLD settings validation launch still requires both explicit test paths. Checks: `ViewerStoragePathsTests`.
 
+The same automated runs keep drawing, at full speed, while the window cannot draw (minimized): see
+[minimized window draw](../workflow/toolchain.md#minimized-window-draw-arc-dev-045) (ARC-DEV-045).
+
 ## Reproducible local verification
 
 Initialize `DOTNET`, `GODOT` and `godot_canonical` from the shared toolchain, and provide the

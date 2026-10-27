@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Audio;
 using Arcanum.Presentation.Audio;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Locks;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
@@ -144,7 +145,7 @@ public partial class TerrainViewerApp
         var session = _areaSession!;
         var lockpick = _inventoryHost?.Lockpick(session, item, _areaKitLockpicks);
         if (lockpick is null) { _portalNotice = $"{PortalName(portal)}: the lockpicks are gone"; RefreshAreaStatus(); return; }
-        var result = _areaPortals!.Pick(session, portal, lockpick);
+        var result = _areaPortals!.Pick(session, portal, lockpick, world: CombatWorldOrNull());
         _portalNotice = result.Disposition == Arcanum.Session.GameSessionDisposition.Rejected ? $"{PortalName(portal)}: pick refused ({result.Failure})"
             : $"{PortalName(portal)}: {result.Outcome!.Value.Result switch
             {
@@ -159,6 +160,8 @@ public partial class TerrainViewerApp
     private void UsePortal(AreaPortal portal)
     {
         if (_portalPickWith is { } pickWith) { _portalPickWith = null; PickPortal(portal, pickWith); return; }
+        // ARC-COMBAT-020: in a turn-based round the use of an object costs 2 action points (ledger CT3).
+        if (!ChargeHeroAction(TurnBasedRules.UseObjectCost, "use")) { _portalNotice = $"{PortalName(portal)}: {_turnBasedNotice}"; RefreshAreaStatus(); return; }
         var session = _areaSession!; var portals = _areaPortals!;
         var from = DrawnFrame(portal, session);
         var use = portals.Use(session, portal);

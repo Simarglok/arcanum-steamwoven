@@ -41,7 +41,7 @@ Known pitfalls:
 
 - zsh, the default shell on the owner's Mac, does not split an unquoted `$ARGS` string into words: pass arguments as separate words or an array (or run the line under `bash`), and check the started command line.
 - The exterior AREA mode rejects `--game-root` (a map-mode argument) with a Usage failure on its HUD and leaves its window open.
-- A windowed native smoke needs its window visible: a hidden or covered window is one cause of a stop at the first pixel stage (`AREA_CLASS_PIXEL_NOT_OBSERVED`). Make the window visible and rerun; a stop there with the window visible and unobstructed is a result. Before ARC-RENDER-029 the exterior smoke also stopped there with its window focus simulated on (the camera follow moved the sampled view back to the actor); its samplers now hold the camera and refuse a moved view with a `..._CAMERA_MOVED` code ([map mode](../rendering/area-map-mode.md#camera-held-during-smoke-samples-arc-render-023)). A run with real window focus was not observed; if the stop persists with a visible window, compare with `main` before blaming the change.
+- A windowed native smoke needs its window visible: a hidden or covered window is one cause of a stop at the first pixel stage (`AREA_CLASS_PIXEL_NOT_OBSERVED`). Since ARC-DEV-045 a minimized window keeps drawing in an automated run ([minimized window draw](#minimized-window-draw-arc-dev-045)), so a minimized window is no longer this cause; a covered window may still be. Make the window visible and rerun; a stop there with the window visible and unobstructed is a result. Before ARC-RENDER-029 the exterior smoke also stopped there with its window focus simulated on (the camera follow moved the sampled view back to the actor); its samplers now hold the camera and refuse a moved view with a `..._CAMERA_MOVED` code ([map mode](../rendering/area-map-mode.md#camera-held-during-smoke-samples-arc-render-023)). A run with real window focus was not observed; if the stop persists with a visible window, compare with `main` before blaming the change.
 - A command given to the owner is one you ran yourself, or one checked with the launcher's `--dry-run` (on `area`, `world` and `map`) or `--help` and [the launcher docs](local-development.md#project-launcher). A dry run checks the launcher's command and build, not the viewer's own arguments: a viewer argument is checked by a run.
 
 ## Launch queue (ARC-DEV-033)
@@ -127,9 +127,10 @@ before another `dotnet` on `PATH`, a missing pinned SDK, the export's step lines
 A windowed WORLD validation step of an export once timed out (exit 124 after 60 s) where reruns took 10–11 s, and its
 evidence log held only the validator's closed summary, so the stage it waited in was unknown.
 
-- **Stage lines.** The viewer `--self-test` prints `ARC-DEV-043 self-test stage NAME begin t=MSms can-draw=B focused=B`
+- **Stage lines.** The viewer `--self-test` prints `ARC-DEV-043 self-test stage NAME begin t=MSms can-draw=B focused=B forced-draws=N`
   before each frame-bound stage (the area probes too), with the time since the self-test began and whether the window
-  can draw and has focus, and flushes stdout at once (a release export does not flush each print). The last such line
+  can draw and has focus and how many frames it drew itself because the window could not
+  ([ARC-DEV-045](#minimized-window-draw-arc-dev-045)), and flushes stdout at once (a release export does not flush each print). The last such line
   in a stopped run names the stage it waited in.
 - **Raw Godot output.** `world_validate.py --raw-log FILE` (only `--kind synthetic` and `--kind persistence`, which read
   no original data; refused for the original kinds, whose output never leaves memory) writes each child's whole output
@@ -144,6 +145,46 @@ evidence log held only the validator's closed summary, so the stage it waited in
 Tests: `python3 -B -m unittest tools.local_dev.test_world_runner` (framing, owner-only mode, timeout and failure
 lines, the persistence children in order, refusal for original kinds, probe variables and an existing file, no file
 without the flag).
+
+### Minimized window draw (ARC-DEV-045)
+
+On macOS (Godot 4.7.2, compatibility renderer) a window that cannot draw (`DisplayServer.window_can_draw()` false, seen
+when the window is minimized) keeps its process frames but the engine skips every draw: `frame_post_draw` never fires,
+so each `FramePostDraw` await of a self-test or smoke waits for its timeout (the cause of the export's exit 124 found in
+ARC-DEV-043). Two throttles make such a run slow as well: the engine sleeps the low-processor time (6.9 ms) after every
+frame while no window can draw, and App Nap cut a minimized app from about 100 to 18 frames per second after about 30 s.
+
+The viewer process that hosts a self-test, a native smoke or the WORLD settings validation (not a headless run, not an
+interactive viewer, not the self-test's bootstrap apps) adds a `HiddenWindowDrawKeeper` node and prints
+`ARC-DEV-045 hidden-window draw keeper on app-nap=held` (`unavailable` without the Objective-C runtime, `not-macos`
+elsewhere). While the
+window cannot draw, the node draws each frame itself (`RenderingServer.force_draw(false, delta)`) where the engine would:
+after the frame's process callbacks, deferred calls, timers and tweens, from a callback posted to the Godot
+synchronization context (a draw from `_process` missed the frame's deferred redraws, and the HD toggle check failed
+with "a frame mixed Legacy and HD"). C# continuations posted earlier in the same frame run before this draw, where the
+engine would draw before them, so their changes appear one frame earlier than in a visible run. It sets the low-processor sleep to 0 (the viewer never uses low-processor mode) and
+holds a user-initiated activity (no App Nap; idle system sleep stays allowed) while it is in the tree.
+
+Evidence (the owner's Mac, queued window runs that never took focus; probes outside git):
+
+| Run | Window | Result |
+| --- | --- | --- |
+| GDScript probe, no keeper | can-draw false | `frame_post_draw` stopped: 2 timeouts of 3 s in 7 frames |
+| GDScript probe, keeper | can-draw false | main-viewport and SubViewport pixels equal the colour set that frame, 40/40, and 20/20 after 120 s |
+| Same, 120 s | can-draw false | ~108 frames/s falling to ~18/s after 30–45 s; with App Nap disabled ~103–106/s for 75 s |
+| Viewer `--self-test`, no keeper | can-draw false from the start | stuck in its first frame-bound stage (`AreaRaster`) until the queue's 3 min limit |
+| Viewer `--self-test`, keeper in `_process`, engine sleep | can-draw false from the start | 192 s to the HD toggle stage (visible: 7.6 s), then the mixed-frame failure |
+| Viewer `--self-test`, posted draw, engine sleep | can-draw false from the start | 194 s to the hover stage, then `GRID_OBSERVATION_NONMONOTONIC` (its synthetic route runs on the wall clock) |
+| Viewer `--self-test`, final keeper | can-draw false from the start | PASS in about 9 s (visible: about 9.4 s), 5586 forced draws |
+
+How the window was made unable to draw without taking focus: inside the run, `window_set_mode(MINIMIZED)`, then after
+5 s `window_set_mode(WINDOWED)`; `window_can_draw()` turned false within about 0.6 s and stayed false. Only
+`window_set_mode(MINIMIZED)` reported the minimized mode but left `window_can_draw()` true and the frames drawn; hiding the
+app (`NSRunningApplication hide`, `open -j`) and a covered window also left it true and drawing. So `can-draw=False` in a
+stage line is the case this node covers; a window that reads true still draws by itself.
+
+Not covered: Windows and Linux were not run; another OS window of the process that can draw while the main one cannot
+would get a second draw in that frame (the viewer opens none).
 
 ### Quiet output (ARC-DEV-037)
 

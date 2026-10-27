@@ -37,10 +37,12 @@ public sealed class DiagnosticGridActor
     /// when no explicit step duration is given; null timing, or an explicit duration, keeps the fixed duration.</summary>
     public GaitTiming? AreaGaitTiming { get; set; }
     public Func<MovementGait>? AreaGait { get; set; }
+    /// <summary>ARC-COMBAT-020: the step charge every AREA session this actor configures asks (<see cref="AreaGridSession.StepCharge"/>).</summary>
+    public Func<AdmissionKey, MovementGait, string?>? AreaStepCharge { get; set; }
     public void Configure(AreaStepSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null,
         AreaChart? chart = null, CellCoord? start = null, NeighborDirection facing = NeighborDirection.XPlus)
     {
-        var session = new AreaGridSession(snapshot, time, duration, limits, chart, start, facing) { Occupancy = AreaOccupancy, CrittersPass = AreaCrittersPass, Timing = duration is null ? AreaGaitTiming : null, Gait = AreaGait };
+        var session = new AreaGridSession(snapshot, time, duration, limits, chart, start, facing) { Occupancy = AreaOccupancy, CrittersPass = AreaCrittersPass, Timing = duration is null ? AreaGaitTiming : null, Gait = AreaGait, StepCharge = AreaStepCharge };
         Session = session; AttackPose = null; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
     public void DisposeSession() { Session = null; AttackPose = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }
