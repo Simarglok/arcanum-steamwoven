@@ -346,8 +346,12 @@ some scanned starts are tails of a longer function (0x49CEE0 continues
 No present group covers a network session: FR-SOCIAL-006 covers only the
 player party, and the UI section names multiplayer as an early non-goal. The
 proposal is a new section **"Сетевая игра" (network game)** with eight groups,
-added to the registry only if the owner accepts multiplayer as a product goal
-(until then the count of 183 groups is unchanged):
+added to the registry only if the owner accepts multiplayer as a product goal.
+The owner accepted the groups on 2026-10-27; ARC-DEV-044 added them as the
+section [Сетевая игра](../requirements/network.md) (191 groups in all).
+FR-SOCIAL-006 keeps its own ID for the exchange of story state; FR-NET-007
+holds the network party rules. Loading a second module in single player
+(FR-CONTENT-003) is queued after alpha by the same decision:
 
 | Proposed ID | Group | Original basis |
 | --- | --- | --- |
