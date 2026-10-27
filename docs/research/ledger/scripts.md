@@ -135,3 +135,24 @@ The runtime runs the use script in the viewer's use script host (the PC as the u
 host's admission set) and reads only on a run-default answer; a run the host refuses is not read (PROJECT: the original has no
 refusal). Not modelled: the action points (the viewer reads outside rounds), the trap check, the item-spell path (no written item
 takes it), a teleport from an item's use script.
+
+## Template sector scripts (ARC-RES-073)
+
+Source: the [plant generator study](../template-sector-plants.md). Question: what the sector script of the terrain
+templates (30285, the plant generator) does when it runs, which objects it creates and where, and whether a template
+sector's script runs like an own sector's. Read on 2026-10-27 by this task and, independently, by a fresh agent that
+saw only the questions and the addresses (method step 6); the rows are F2 unless marked. The readers agree on every
+row; the second reader corrected the critter case of PG2 and added the network paths of PG1 and the span limit of PG5.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| PG1 | script action (0x447220, jump table 0x44ADBC, entry 51: create object, 0x448537), object create (0x4ED8B0) | Operand 0 is the prototype number, operand 1 the object to create it next to (the first one it names). Up to ten times the nearby-tile search (PG2) runs with a random distance 1..3; after ten failures the object's own location is used. The single-player path turns the number into a prototype (PG8) and creates an object there (0x43CBA0); a network host also sends the creation to the clients, and a client creates nothing. The action ignores the create result; a created NPC (type 16) gets bit 0x20000 in field 0xDA, and nothing else follows. | Original |
+| PG2 | nearby tile (0x4F4E40), direction step (0x4B8FF0), path (0x41F3C0) | A random direction 0..8 and the distance in steps from the object's location; direction 8 is no direction (the step keeps the tile), and a step off the map fails the search. A path search from the object to that tile (at most 200 nodes) then decides: no path, or a path longer than the distance + 1, gives the object's own tile; otherwise the tile reached by walking the path. When the object itself is a critter, the walk returns the first tile on the way that holds no PC or NPC (the end tile is not checked). | Original |
+| PG3 | object list (0x44B4E0, focus kind 15, every scenery in vicinity), vicinity (0x440FC0, 0x440FF0) | The centre is the run's attachee; with none the list is empty. The area is the game window's rectangle moved so that its centre is on the attachee's location, turned into a location rectangle; the type mask holds scenery only. At most the first 100 objects of the list are copied. | Original (the cap drops objects silently) |
+| PG4 | script condition (0x4451B0, jump table 0x44714C, entry 3: local flag, 0x445307) | Tests bit (value & 31) of the running attachment's flags word. | Original |
+| PG5 | script action, entry 36 (random, 0x447DCA), random between (0x4CEF00), generator (0x4CEF50) | Operand 0 and operand 1 are the bounds (either order, both included), operand 2 receives the number, the low bound plus a draw modulo the span; the generator is the game's shared linear congruential one (15 bits a draw), so a span above 32,768 is not covered. | Original |
+| PG6 | value read (0x44BA70), kind 0 (counter) | The counter word is shifted right by eight times the index and masked to a byte; the shift count keeps five bits, so an index above 3 reads counter (index mod 4): the plant generator's index 2,012,780,696 reads counter 0. | Original (no range check) |
+| PG7 | script action, entries 17 and 18 (loop for 0x44762B, loop end 0x4476C2) | Loop for fills the run's list (PG3, at most 100) once, remembers the line after it and makes the first object the current looped object; an empty list skips to after its loop end. Loop end steps to the next object and jumps back, or clears the loop after the last. A loop for inside a running loop logs an error and does nothing. | Original |
+| PG8 | prototype from number (0x4685A0, 0x468860) | A script's prototype number gets 20 added before the lookup (the basic number, as the prototype file numbering). | Original |
+| PG9 | sector notification (0x4F2330) | Locks the entered sector and runs its script record copied from the sector (0x4C0440) without asking where the sector came from: a template sector runs the script section read from its template (SS5) like an own sector file. | Original (F1: one reader) |
+| PG10 | script condition, entries 4 and 5 (equal 0x445355, less or equal 0x4453A7) | Both read their operands with PG6's reader and compare them as signed 32-bit numbers. | Original |

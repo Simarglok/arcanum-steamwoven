@@ -155,6 +155,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="window-key-modifiers-arc-input-004"></a>[Window key modifiers (ARC-INPUT-004)](ledger/ui-audio.md#window-key-modifiers-arc-input-004) | [Interface windows and audio](ledger/ui-audio.md) | WK1–WK4 |
 | <a id="item-decay-arc-world-062"></a>[Item decay (ARC-WORLD-062)](ledger/items.md#item-decay-arc-world-062) | [Items and inventory](ledger/items.md) | ID1–ID9 |
 | <a id="multiplayer-arc-res-072"></a>[Multiplayer (ARC-RES-072)](ledger/multiplayer.md#multiplayer-arc-res-072) | [Multiplayer](ledger/multiplayer.md) | NT1–NT16 |
+| <a id="template-sector-scripts-arc-res-073"></a>[Template sector scripts (ARC-RES-073)](ledger/scripts.md#template-sector-scripts-arc-res-073) | [Scripts and events](ledger/scripts.md) | PG1–PG10 |
 
 ## Decisions to revisit
 
