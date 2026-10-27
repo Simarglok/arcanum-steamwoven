@@ -32,6 +32,10 @@ public enum AreaHoverAction
     /// <summary>ARC-COMBAT-005: in combat mode a living NPC within the weapon's reach is attacked.</summary>
     Attack,
     WalkToAttack,
+    /// <summary>ARC-MAGIC-015: the spell's targeting cursor is open and the object or tile under it passes the spell's area.</summary>
+    Cast,
+    /// <summary>ARC-MAGIC-015: the targeting cursor is open and nothing under it passes (a press shows at most a message).</summary>
+    CastNoTarget,
 }
 
 public enum AreaNamesStatus { Ready, ModuleOutsideGameRoot, MountFailed, StackFailed, CatalogFailed }
@@ -208,6 +212,8 @@ public static class AreaHover
         AreaHoverAction.WalkToLoot => "walk to loot",
         AreaHoverAction.Attack => "attack",
         AreaHoverAction.WalkToAttack => "walk to attack",
+        AreaHoverAction.Cast => "cast",
+        AreaHoverAction.CastNoTarget => "no target",
         _ => "none",
     };
 

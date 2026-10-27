@@ -39,7 +39,7 @@
 | 0x45FD40–0x460DE0 (87 функций) — обратные вызовы игры в интерфейс: инвентарь, полосы здоровья и усталости | Без range-ссылки | Открытый пробел; см. оговорку выше. |
 | 0x460E70–0x4681A0 (140 функций) — предметы: ношение, вес, вычисляемые свойства, вставка и снятие, свет, использование | Есть диапазоны: 36 | [characters-skills](characters-skills.md), [items-economy](items-economy.md), [lighting-time](lighting-time.md), [world-travel-runtime](world-travel-runtime.md) |
 | 0x4681B0–0x49C610 (27 функций) — прототипы объектов | Есть диапазоны: 1 | [world-travel-runtime](world-travel-runtime.md) |
-| 0x49C670–0x4A6560 (102 функции) — многопользовательская игра | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md), [мультиплеер оригинала](../research/multiplayer-evidence.md) (ARC-RES-072: роли функций; скан нашёл около 140 точек входа, расхождение не разобрано) |
+| 0x49C670–0x4A6560 (102 функции) — многопользовательская игра | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md), [сетевая игра](network.md) (FR-NET-001…008), [мультиплеер оригинала](../research/multiplayer-evidence.md) (ARC-RES-072: роли функций; скан нашёл около 140 точек входа, расхождение не разобрано) |
 | 0x4A6620–0x4A7B90 (21 функция) — уровни: пороги опыта, повышение уровня, схемы автоуровня | Есть диапазоны: 7 | [characters-skills](characters-skills.md) |
 | 0x4A7C60–0x4A8060 (15 функций) — схемы освещения по часам | Есть диапазоны: 7 | [lighting-time](lighting-time.md) |
 | 0x4A8320–0x4AFC70 (119 функций) — ИИ NPC: решения, атака, бегство, следование, лечение, использование навыков | Есть диапазоны: 16 | [story-social-ai](story-social-ai.md), [world-travel-runtime](world-travel-runtime.md) |
