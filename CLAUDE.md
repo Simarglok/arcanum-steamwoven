@@ -35,8 +35,8 @@ and its link holds the detail.
   ([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033)). It is
   quiet: the whole output goes to a log file, stdout keeps PASS/FAIL and the
   first error ([quiet run output](docs/workflow/tasks.md#quiet-run-output)).
-  Within a minute of a start, confirm it started the intended mode, or stop it
-  and fix the command ([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
+  Within a minute of starting any Godot or launcher run, confirm it started the
+  intended mode, or stop it and fix the command ([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
 - **Pull requests.** Every change goes through a PR from a branch (never push
   to `main`) as GitHub user `Simarglok`. A fresh subagent reviews the exact
   diff first. Once the acceptance criteria, task checks and root checks pass
@@ -74,7 +74,9 @@ yet. Current state: the component catalogue
 
   The root solution leaves out the terrain viewer and its tests,
   `Arcanum.Input`, research probes and labs (own commands in the toolchain
-  doc). Real-data tests are opt-in by env vars and test categories
+  doc). Real-data tests are opt-in by env vars (`DAT_ROOT`, `ARCANUM_*`,
+  `ARC_AREA_*`, `ARC_CAVE_*`, `ARC_NPC_*`) and categories (`RealData`,
+  `DlgRealData`, `DlgRuntimeRealData`, `NpcDialogEntryRealData`)
   ([opt-in original data](docs/workflow/toolchain.md#opt-in-original-data)).
 - Code: `src/` holds `Arcanum.Data`, `Arcanum.Simulation`,
   `Arcanum.Scripting`, `Arcanum.Presentation`, `Arcanum.Input`,
