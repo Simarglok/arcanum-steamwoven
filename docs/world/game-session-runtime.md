@@ -23,8 +23,9 @@ it can store here. It covers the state boundary of
 [FR-WORLD-013](../requirements/world.md#fr-world-013) and
 [FR-LIFECYCLE-003](../requirements/ui-media-lifecycle.md#fr-lifecycle-003).
 The owner itself does no file I/O. One [save slot](#save-slot-arc-world-011)
-(ARC-WORLD-011) writes and reads a snapshot file atomically; there is still no
-save/load screen or save list, no autosave and no original `.gsi`/sector-diff format.
+(ARC-WORLD-011) writes and reads a snapshot file atomically; the [save list](#save-list-arc-ui-010)
+(ARC-UI-010) keeps a folder of such slots with their details and previews. There is no
+timed autosave (the original has none either) and no original `.gsi`/sector-diff format.
 
 ## Why a separate assembly
 
@@ -338,6 +339,27 @@ The slot does not restore: the caller passes the snapshot to `Restore` with its 
 expectations. Durability: file data is flushed before the rename; the directory entry
 is not separately synced. One process per slot; there is no cross-process lock.
 
+## Save list (ARC-UI-010)
+
+`GameSaveLibrary` (same assembly, Godot-free) is one folder of saves for the
+[save and load windows](../rendering/terrain-viewer.md#save-list-arc-ui-010) and F7/F8. Each save
+`NAME` is a snapshot slot `NAME.json` (`GameSessionSaveSlot`, unchanged), a details file
+`NAME.meta.json` and an optional preview `NAME.png`. The rules are the original's
+([ledger SL1–SL8](../research/ledger/ui-audio.md#save-list-arc-ui-010)).
+
+| Entry | Contract |
+| --- | --- |
+| Names | `quicksave` is the auto slot (the original's `SlotAuto`, described "Auto-Save"; the ARC-WORLD-011 file, so older quick saves are listed); numbered saves are `slot0000`..`slot9998`. Any other file is ignored; a bad name is `BadName`. |
+| `List()` | The auto slot first, then newest first by the snapshot file's last write time (ties: the higher name first), as the original's save window sorts by file date. Each `GameSaveEntry` has its byte count, date, preview flag and `GameSaveDetails`: `Present`, `Missing` (no details file), `Damaged` (not strict UTF-8, over 16 KiB, not exactly the written properties, out of bounds) or `Stale` (written for another snapshot: its recorded byte count differs). `DisplayDescription` falls back to "Auto-Save" or the slot name. Bounded to 10,000 entries (`Truncated`); a folder that cannot be listed is `ListFailed`; a missing folder is an empty list. |
+| `Latest()` | The newest save by file date, the auto slot included (the original's latest-save helper behind F8), or null. |
+| `Create(snapshot, summary, png)` | A new save named the highest number plus one (`slot0000` when there is none; gaps are not reused, the auto slot is not counted); `SlotNumbersExhausted` once that reaches 9999, as the original refuses. A truncated list refuses (`ListFailed`) rather than reuse a number. |
+| `Write(name, snapshot, summary, png)` | Validates the summary (one-line texts: description ≤ 80, hero ≤ 64, place ≤ 128 characters; level 0..1000; month, day, hour and minute in range) and the preview (PNG signature, ≤ 2 MiB) before anything is written (`InvalidSummary`). Then the snapshot is written atomically by the slot (`SnapshotFailed` keeps the previous save, its details and preview); then the details and the preview, each atomically. A failure there leaves a loadable save and a `Warning`; a save without a preview removes the old preview. The host asks before overwriting. |
+| `Delete(name)` | `Protected` for the auto slot (the original's delete helper refuses its auto-save name); `NoSuchSave`; otherwise the snapshot is deleted first (`DeleteFailed` removes nothing), then the details, preview and temporary files (a leftover is a `Warning`). |
+| `ReadThumbnail(name)` | The preview's bytes when present, PNG-signed and within the bound; else null. |
+
+Details are display only: the snapshot is authoritative, and a stale or missing details file
+never blocks a load. Caller-serialized, one process per folder, no lock.
+
 ## Tests
 
 [Session tests](../../tests/Arcanum.Session.Tests) use synthetic ids and fingerprints
@@ -368,6 +390,11 @@ and a literal, independently written canonical JSON text:
   save and removes the temporary file; an unwritable slot; a stale temporary file;
   truncated, empty, BOM, invalid UTF-8, newer-schema, foreign-format and out-of-range
   files as typed failures; the byte limit; path validation.
+- `SaveLibraryTests` (ARC-UI-010): numbering from the highest (slot0000 first, gaps not reused, refused at 9999);
+  the list order (auto slot first, newest first, ties by name) and the latest save; details round trip, missing,
+  damaged and stale details; an overwrite without a preview removes the old one; the auto slot is not deleted and a
+  delete removes the save's files; an invalid summary or preview writes nothing; a failed snapshot write keeps the
+  previous save and details; unrelated files and the entry bound.
 - `SnapshotRestoreTests`: literal canonical encoding, full restore with pause, Unknown
   flag and stale old tokens, refused restores (world, module, profile, budget, epoch,
   clock schema, empty GF domain) leaving the current session unchanged, typed decode
@@ -380,8 +407,8 @@ and a literal, independently written canonical JSON text:
 
 ## Not implemented / remaining work
 
-- Save/load UI, a save list, more than one slot, backups, autosave, thumbnails (the
-  one quick-save slot is ARC-WORLD-011).
+- The in-game menu that opens the save and load windows, backups, the original `.gsi` save format (the save list
+  and its windows are ARC-UI-010).
 - Script (SCR) state and timers.
 - Concrete map-change vocabulary beyond the viewer's NPC dialog keys (doors, containers,
   other NPC state) and their application to rendering or step assessment; original

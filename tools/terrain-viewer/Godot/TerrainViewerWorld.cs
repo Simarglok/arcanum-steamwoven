@@ -111,7 +111,7 @@ public partial class TerrainViewerApp
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
     private bool PaletteOpen => _worldPanel?.IsOpen == true;
-    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen;
+    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen || SaveListOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -145,6 +145,8 @@ public partial class TerrainViewerApp
         _worldPanel.AlwaysRunToggleRequested += PaletteAlwaysRunToggle;
         _worldPanel.ProwlToggleRequested += PaletteProwlToggle;
         _worldPanel.SoundTestRequested += PaletteSoundTest;
+        _worldPanel.SaveGameRequested += PaletteSaveGame;
+        _worldPanel.LoadGameRequested += PaletteLoadGame;
         _worldPanel.VolumeChanged += PaletteVolumeChanged;
         _worldPanel.OverlayToggled += SetPassabilityOverlay; _overlayPanelState = null;
         _hud!.SettingsRequested += ToggleWorldSettings;
@@ -190,7 +192,7 @@ public partial class TerrainViewerApp
     }
     private void ToggleWorldSettings()
     {
-        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen) return;
+        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen || SaveListOpen) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); _visualKeyNotice = null; }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); _overlayPanelState = null; SyncPassabilityOverlay(); }
@@ -347,6 +349,7 @@ public partial class TerrainViewerApp
         if (SchematicsOpen) { HandleSchematicsPulse(intent); return; }
         if (ReadingOpen) { HandleReadingPulse(intent); return; }
         if (WorldMapOpen) { HandleWorldMapPulse(intent); return; }
+        if (SaveListOpen) { HandleSaveListPulse(intent); return; }
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
         if (intent.MenuPressedDirection != 0) _worldPanel?.Navigate(intent.MenuPressedDirection);
@@ -782,6 +785,12 @@ public partial class TerrainViewerApp
             GetViewport().SetInputAsHandled();
             return;
         }
+        // ARC-UI-010: the open save window owns every key except the typing of a description into its field.
+        if (SaveListOpen && input is InputEventKey saveListKey)
+        {
+            if (HandleSaveListKey(saveListKey)) GetViewport().SetInputAsHandled();
+            return;
+        }
         // ARC-UI-048: the open world map owns every key (W and Escape close it or end the journey, Enter travels).
         if (WorldMapOpen && input is InputEventKey worldMapKey)
         {
@@ -967,6 +976,7 @@ public partial class TerrainViewerApp
                     panel.VisualToggleRequested -= PaletteVisualToggle;
                     panel.AlwaysRunToggleRequested -= PaletteAlwaysRunToggle;
                     panel.SoundTestRequested -= PaletteSoundTest;
+                    panel.SaveGameRequested -= PaletteSaveGame; panel.LoadGameRequested -= PaletteLoadGame;
                     panel.VolumeChanged -= PaletteVolumeChanged;
                     panel.Hide(); RemoveChild(panel); panel.QueueFree();
                 }

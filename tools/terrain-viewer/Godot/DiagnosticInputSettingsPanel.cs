@@ -33,6 +33,9 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     /// <summary>ARC-SKILLS-008: the original's skill-bar prowling button.</summary>
     public event Action? ProwlToggleRequested;
     public event Action? SoundTestRequested;
+    /// <summary>ARC-UI-010: the save and load windows of the save list (the original opens them from its in-game menu, not yet built).</summary>
+    public event Action? SaveGameRequested;
+    public event Action? LoadGameRequested;
     /// <summary>ARC-UI-044: a volume setting (0–10) the player changed: the channel and its new value.</summary>
     public event Action<Arcanum.Presentation.Audio.AudioChannel, int>? VolumeChanged;
     private readonly Dictionary<Arcanum.Presentation.Audio.AudioChannel, SpinBox> _volumes = [];
@@ -103,6 +106,9 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         AddAction("Always Run on/off", () => AlwaysRunToggleRequested?.Invoke());
         AddAction("Prowl (stealth) on/off", () => ProwlToggleRequested?.Invoke());
         _gait = new Label { Name = "PaletteGait", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_gait);
+        // ARC-UI-010: the save list (F7 writes its auto-save, F8 loads its newest save).
+        AddAction("Save game (save list)", () => SaveGameRequested?.Invoke());
+        AddAction("Load game (save list)", () => LoadGameRequested?.Invoke());
         // ARC-UI-040: sound output and the original's fixed interface sounds, played by id from the module's catalogue.
         AddAction("Sound test: next interface sound", () => SoundTestRequested?.Invoke());
         _sound = new Label { Name = "PaletteSound", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_sound);

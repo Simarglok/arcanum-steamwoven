@@ -1,0 +1,157 @@
+using Arcanum.TerrainViewer.Core;
+using Godot;
+
+namespace Arcanum.TerrainViewer;
+
+/// <summary>
+/// ARC-UI-010 save and load window: the save list of <see cref="AreaSaveList"/> as a scrolled list (the auto slot first, then newest
+/// first), the selected save's details and preview, a description field (save mode), and Save/Load, Delete and Close buttons; a
+/// question (overwrite, delete) shows Yes and No. The app owns the state and rebuilds the window after every change; the original's
+/// save window art and layout are not drawn.
+/// </summary>
+public partial class AreaSaveListPanel : CanvasLayer
+{
+    private PanelContainer _panel = null!;
+    private Label _header = null!;
+    private ItemList _rows = null!;
+    private LineEdit _description = null!;
+    private Label _detail = null!;
+    private TextureRect _preview = null!;
+    private Label _notice = null!;
+    private Button _confirm = null!;
+    private Button _delete = null!;
+    private Button _close = null!;
+    private HBoxContainer _question = null!;
+    private Label _hint = null!;
+    private bool _binding;
+    private (string Name, DateTime Saved)? _previewOf;
+    public event Action<int>? RowRequested;
+    public event Action? ConfirmRequested;
+    public event Action? DeleteRequested;
+    public event Action<bool>? AnswerRequested;
+    public event Action? CloseRequested;
+    public event Action<string>? DescriptionChanged;
+    public bool IsOpen => Visible;
+    /// <summary>True while the description field has the keyboard (typed keys go to it, not to the list).</summary>
+    public bool TypingDescription => IsOpen && _description.Visible && _description.HasFocus();
+    internal IReadOnlyList<string> RowsForSelfTest => Enumerable.Range(0, _rows.ItemCount).Select(_rows.GetItemText).ToArray();
+    internal bool PreviewShownForSelfTest => _preview.Texture is not null;
+    internal string NoticeForSelfTest => _notice.Text;
+
+    public override void _Ready()
+    {
+        Layer = 4;
+        _panel = new PanelContainer { Name = "AreaSaveList", MouseFilter = Control.MouseFilterEnum.Stop };
+        _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color(232 / 255f, 222 / 255f, 196 / 255f, .97f),
+            ContentMarginLeft = 16, ContentMarginRight = 16, ContentMarginTop = 12, ContentMarginBottom = 12,
+        });
+        AddChild(_panel);
+        var contents = new VBoxContainer(); _panel.AddChild(contents);
+        _header = new Label { Modulate = new Color(.2f, .12f, .05f) };
+        var body = new HBoxContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        _rows = new ItemList
+        {
+            Name = "Saves", SelectMode = ItemList.SelectModeEnum.Single, FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(360, 300),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+        };
+        _rows.ItemSelected += index => { if (!_binding) RowRequested?.Invoke((int)index); };
+        _rows.ItemActivated += index => { if (!_binding) { RowRequested?.Invoke((int)index); ConfirmRequested?.Invoke(); } };
+        var side = new VBoxContainer { CustomMinimumSize = new Vector2(220, 0) };
+        _preview = new TextureRect { Name = "Preview", ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            CustomMinimumSize = new Vector2(200, 150) };
+        _detail = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.1f, .1f, .1f), CustomMinimumSize = new Vector2(220, 0) };
+        side.AddChild(_preview); side.AddChild(_detail);
+        body.AddChild(_rows); body.AddChild(side);
+        _description = new LineEdit { Name = "Description", PlaceholderText = "description (empty: the slot name)", MaxLength = 80, FocusMode = Control.FocusModeEnum.All };
+        _description.TextChanged += text => { if (!_binding) DescriptionChanged?.Invoke(text); };
+        _description.TextSubmitted += _ => ConfirmRequested?.Invoke();
+        var buttons = new HBoxContainer();
+        _confirm = new Button { Name = "Confirm", FocusMode = Control.FocusModeEnum.None };
+        _confirm.Pressed += () => ConfirmRequested?.Invoke();
+        _delete = new Button { Name = "Delete", Text = "Delete", FocusMode = Control.FocusModeEnum.None };
+        _delete.Pressed += () => DeleteRequested?.Invoke();
+        _close = new Button { Name = "Close", Text = "Close", FocusMode = Control.FocusModeEnum.None };
+        _close.Pressed += () => CloseRequested?.Invoke();
+        foreach (var button in new[] { _confirm, _delete, _close }) buttons.AddChild(button);
+        _question = new HBoxContainer();
+        var yes = new Button { Name = "Yes", Text = "Yes", FocusMode = Control.FocusModeEnum.None };
+        yes.Pressed += () => AnswerRequested?.Invoke(true);
+        var no = new Button { Name = "No", Text = "No", FocusMode = Control.FocusModeEnum.None };
+        no.Pressed += () => AnswerRequested?.Invoke(false);
+        _question.AddChild(yes); _question.AddChild(no);
+        _notice = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.45f, .1f, .05f) };
+        _hint = new Label
+        {
+            Modulate = new Color(.3f, .3f, .3f), AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            Text = "Up/Down select, Return saves or loads, Delete or Backspace deletes (asks first), Escape closes | PROJECT window over the original's " +
+                "save list rules (auto-save first, newest first, auto-save not deletable); original art and layout NOT_VERIFIED",
+        };
+        foreach (var control in new Control[] { _header, body, _description, buttons, _question, _notice, _hint }) contents.AddChild(control);
+        GetViewport().SizeChanged += ResizePanel;
+        ResizePanel(); Hide();
+    }
+
+    public void Open(AreaSaveList list, byte[]? preview)
+    {
+        Show();
+        _binding = true; _description.Text = list.Description; _binding = false;
+        Render(list, preview);
+        if (list.Mode == AreaSaveListMode.Save) _description.GrabFocus();
+        else GetViewport().GuiReleaseFocus();
+    }
+
+    public void CloseView()
+    {
+        Hide(); _preview.Texture = null; _previewOf = null;
+        GetViewport().GuiReleaseFocus();
+    }
+
+    /// <summary>The window for the list's state; <paramref name="preview"/> is the selected save's PNG (null: none).</summary>
+    public void Render(AreaSaveList list, byte[]? preview)
+    {
+        ArgumentNullException.ThrowIfNull(list);
+        _binding = true;
+        var rows = list.Rows();
+        _rows.Clear();
+        foreach (var row in rows) _rows.AddItem(row.Title);
+        if (list.Selected >= 0 && list.Selected < rows.Count) { _rows.Select(list.Selected); _rows.EnsureCurrentIsVisible(); }
+        else _rows.DeselectAll();
+        _binding = false;
+        var save = list.Mode == AreaSaveListMode.Save;
+        _header.Text = (save ? "Save game" : "Load game") + $" | {list.Entries.Count} save{(list.Entries.Count == 1 ? "" : "s")}";
+        _description.Visible = save;
+        _confirm.Text = save ? "Save" : "Load";
+        var entry = list.SelectedEntry;
+        _detail.Text = entry is null ? save ? "A new numbered save of the game as it is now." : "" : AreaSaveList.Detail(entry);
+        _delete.Disabled = entry is null || entry.IsAuto;
+        _question.Visible = list.Prompt != AreaSavePrompt.None;
+        _confirm.Disabled = list.Prompt != AreaSavePrompt.None || (!save && entry is null);
+        _notice.Text = list.Notice ?? "";
+        ShowPreview(entry is null ? null : (entry.Name, entry.SavedAtUtc), preview);
+        ResizePanel();
+    }
+
+    private void ShowPreview((string, DateTime)? of, byte[]? png)
+    {
+        if (Equals(of, _previewOf)) return;
+        _previewOf = of; _preview.Texture = null;
+        if (png is null) return;
+        var image = new Image();
+        if (image.LoadPngFromBuffer(png) == Error.Ok && !image.IsEmpty()) _preview.Texture = ImageTexture.CreateFromImage(image);
+    }
+
+    private void ResizePanel()
+    {
+        if (_panel is null) return;
+        var size = GetViewport().GetVisibleRect().Size;
+        var width = Math.Max(1, Math.Min(900, size.X - 48));
+        var height = Math.Max(1, Math.Min(640, size.Y - 48));
+        _panel.Size = new(width, height);
+        _panel.Position = new((size.X - width) / 2, Math.Max(24, (size.Y - height) / 2));
+    }
+
+    public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
+    public override void _ExitTree() => GetViewport().SizeChanged -= ResizePanel;
+}
