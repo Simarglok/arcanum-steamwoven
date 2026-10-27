@@ -30,13 +30,15 @@ The verified rows are in the ledger section
   multiplayer screens of the main menu (0x540930–0x549A80, 0x583200–0x586ED0,
   0x569DD0) and the callers named below. A second reader re-read every function
   the answers rest on without seeing the first verdicts (method step 6); its
-  five refinements were checked and taken, and no disagreement remains. Every
+  refinements (listed in the ledger section) were checked and taken, and no disagreement remains. Every
   direct branch stays inside `.text`; none reaches `.IIDKing`. No bytes,
   listings or decompiled code were kept; scratch stayed on the Mac.
-- **Original data (D).** Member names of `modules/Arcanum.dat` and
-  `modules/Vormantown.dat` compared with
-  [`dat_probe.py`](../../tools/research/dat_probe.py) (read-only); no game
-  text is copied here.
+- **Original data (D).** Member names and sizes of `modules/Arcanum.dat`,
+  `modules/Vormantown.dat` and the base archives compared with
+  [`dat_probe.py`](../../tools/research/dat_probe.py) (read-only); the
+  matchmaker settings (product, default server, port, server list) were read
+  from the contents of `Rules\Matchmaker.mes` together with its reader
+  0x4A4D60. No game text is copied here.
 - **The manual (reported).** Chapter 5 of the install's `Manual.pdf`,
   paraphrased; the readme has no multiplayer section. A manual states intent,
   not code.
@@ -57,15 +59,15 @@ game for up to **8 players** over its own TCP layer on WinSock. Discovery is
 a UDP broadcast on the LAN, a bookmark list or a typed IP address; the
 "Internet" route uses Sierra's WON matchmaker (`mm_won.dll`) only as a lobby,
 chat and server list, and game traffic still goes host-to-client over TCP. WON
-was shut down on 2008-11-01, so in a retail install only the LAN and direct-IP
+was shut down on 2008-11-01 (reported), so in a retail install only the LAN and direct-IP
 routes can still work (forum players use LAN tunnelling tools; not checked).
 
 A module is multiplayer-capable only when its archive or folder contains a
 root file `mp.txt` (its content is never read). `Vormantown` has it, the main
 `Arcanum` module does not, so the server list never offers the main campaign;
-nothing else in the code forbids it. The host creates a fresh instance of the
+nothing else in the read code forbids it. The host creates a fresh instance of the
 module, runs all rules and AI, and replicates the results through 130 packet
-types; clients send requests and apply what the host sends. A network game has
+types (124 handled); clients send requests and apply what the host sends. A network game has
 no turn-based combat, no sleep and no world-map travel (town maps only), and
 its clock is driven by the host. Characters travel between games as `.mpc`
 files: an exported PC keeps its stats, skills, spells and tech, but loses its
@@ -110,7 +112,7 @@ id (0x5E8AD0; slot clear 0x49CB80; object ↔ slot 0x4A2B10, 0x4A2B60).
   start 0x49CC70), 0x8 the client was admitted to a slot, 0x10 auto-join,
   0x20 no broadcast, 0x40 a network reset was requested. A **client** is
   "bit 0x1 without bit 0x2", the test many rule functions already carry in the
-  ledger (for example SC12, CR1, FT3, PC4).
+  ledger (for example skills SC12, combat CR1, skills FT3, magic PC4).
 - The network test 0x4A2BA0 answers 1 in single player; in a network game it
   answers 1 only while a counter is above 0. The dispatcher raises that
   counter around the application of a received packet (0x4A2BC0, 0x4A2BD0).
@@ -331,8 +333,9 @@ some scanned starts are tails of a longer function (0x49CEE0 continues
 - What the private-chat bit changes in 0x571489 (interface only?).
 - What 0x4C5400 and 0x4C5B10 do when a player joins a party: this reading saw
   a mutual reaction setup with the members, while
-  [FR-SOCIAL-006](../requirements/story-social-ai.md#fr-social-006) reads them
-  (F0) as the transfer of selected quests and rumors.
+  [FR-SOCIAL-006](../requirements/story-social-ai.md#fr-social-006) (F0) names
+  quest transfer at 0x4C51C0 and 0x4C5250 and rumor transfer at 0x4C5B10 and
+  does not name 0x4C5400.
 - Raising a dead player: no respawn code; raising probably goes through the
   ordinary spells (not read).
 - Whether the shipped LAN path works on current Windows or a compatibility
@@ -362,8 +365,9 @@ added to the registry only if the owner accepts multiplayer as a product goal
 **Not before a single-player release; at the earliest as its own lane after
 alpha, once the single-player game is complete.** Reasons:
 
-- Every rule domain has a network branch in the original (about 350 functions
-  outside the range), so a network mode touches the whole session at once; it
+- Most rule domains have network branches in the original (about 350 functions
+  outside the range test the network flags or send packets), so a network mode
+  touches nearly the whole session at once (inference); it
   pays off only after those domains are finished in single player.
 - The original network game is small in content: one shipped module with
   three maps and no world-map travel. The main campaign was never playable
