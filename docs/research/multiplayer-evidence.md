@@ -47,8 +47,9 @@ The verified rows are in the ledger section
   shipped), forum threads on Steam and GOG (players' reports), and the
   Wikipedia list of WON games. They are context only; where they differ from
   the executable, the executable wins.
-- **No source reconstruction.** The arcanum-ce project never implemented
-  multiplayer; nothing from it is used (owner decision 2026-10-18).
+- **No source reconstruction.** The source reconstruction the project no
+  longer uses never implemented multiplayer; nothing from it is used (owner
+  decision 2026-10-18).
 
 Function names below are labels of this reading; the address is the reference.
 
