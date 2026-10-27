@@ -77,7 +77,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="limits-census-arc-data-029"></a>[Limits census (ARC-DATA-029)](ledger/data.md#limits-census-arc-data-029) | [Data and loading](ledger/data.md) | LC1 |
 | <a id="main-map-streaming-arc-data-030"></a>[Main-map streaming (ARC-DATA-030)](ledger/world.md#main-map-streaming-arc-data-030) | [World, maps and movement](ledger/world.md) | SS1–SS8 |
 | <a id="terrain-templates-arc-data-031"></a>[Terrain templates (ARC-DATA-031)](ledger/world.md#terrain-templates-arc-data-031) | [World, maps and movement](ledger/world.md) | TR1–TR5 |
-| <a id="ai-parameters-and-follow-consent-arc-data-033"></a>[AI parameters and follow consent (ARC-DATA-033)](ledger/npc-ai.md#ai-parameters-and-follow-consent-arc-data-033) | [NPC AI](ledger/npc-ai.md) | AP1–AP5 |
+| <a id="ai-parameters-and-follow-consent-arc-data-033"></a>[AI parameters and follow consent (ARC-DATA-033)](ledger/npc-ai.md#ai-parameters-and-follow-consent-arc-data-033) | [NPC AI](ledger/npc-ai.md) | AP1–AP6 |
 | <a id="npc-ai-core-loop-arc-res-054"></a>[NPC AI core loop (ARC-RES-054)](ledger/npc-ai.md#npc-ai-core-loop-arc-res-054) | [NPC AI](ledger/npc-ai.md) | CL1–CL13 |
 | <a id="implemented-functions-arc-dev-025"></a>[Implemented functions (ARC-DEV-025)](ledger/data.md#implemented-functions-arc-dev-025) | [Data and loading](ledger/data.md) | IF1–IF12 |
 | <a id="guard-conditions-arc-script-014"></a>[Guard conditions (ARC-SCRIPT-014)](ledger/scripts.md#guard-conditions-arc-script-014) | [Scripts and events](ledger/scripts.md) | SG1–SG6 |

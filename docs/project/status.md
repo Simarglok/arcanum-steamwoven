@@ -125,7 +125,7 @@ One line per subject; the full row (canonical result, what remains) is in its ar
 | Character creation and starting hero | [Game session and character](status/session.md) | ARC-RES-025, ARC-RES-027 |
 | Dialog state and replies | [Dialog and scripting](status/scripting.md) | — |
 | Negative inventory transfer | [Items and inventory](status/items.md) | — |
-| AI parameter table | [NPC AI, reaction and companions](status/npc.md) | ARC-DATA-033, ARC-WORLD-037 |
+| AI parameter table | [NPC AI, reaction and companions](status/npc.md) | ARC-DATA-033, ARC-WORLD-037, ARC-WORLD-077 |
 | Companion follow (Virgil) | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-024, ARC-WORLD-013, ARC-WORLD-016 |
 | Virgil's follow consent | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-026 |
 | Virgil's auto-level and level gate | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-031, ARC-WORLD-036 |

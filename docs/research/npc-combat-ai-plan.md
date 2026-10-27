@@ -264,7 +264,7 @@ A9 is part of A0.
 
 | Slice | Needs | Result |
 | --- | --- | --- |
-| I1 AI parameters | A1, A0 | Data reader for both files and a typed 17-field record with names from A1. |
+| I1 AI parameters | A1, A0 | Data reader for both files and a typed 17-field record with names from A1. Done: reader ARC-DATA-033, typed `AiParameterRow` and `Lookup` ARC-WORLD-077 ([AI parameters](../world/ai-parameters.md)). |
 | I2 Awareness | A2, I1, ARC-SKILLS-003 (prowling margin) | Pure see/hear/line-of-fire functions over explicit inputs; synthetic matrix (FR-AI-002 acceptance). |
 | I3 Danger state | A1, I1 | Session-owned per-NPC state, flags, focus, enemy list, snapshot schema version, script hook points as typed events. |
 | I4 Hostility and targets | A3, I2, I3 | KOS/protect/upset with reason codes, scan and choice with injected rolls; the attack event's callers include the script and DLG attacks of [A8](npc-ai-script-surface.md#3-actions) and pick pocket's typed detection result (thief, victim, steal or plant, reason) of ARC-SKILLS-010 (skills plan task S15; ledger PP1–PP8, not yet merged). |
