@@ -71,14 +71,14 @@ lanes in different areas do not conflict.
 
 | Record | Index (small, shared) | Area files (full rows) |
 | --- | --- | --- |
-| [Component catalogue](../project/status.md) | audit note, one line per component (name, area, task codes), credited verification, maintenance rule | `docs/project/status/<area>.md`: the full "Implemented components" and "Merged research" rows of the area |
+| [Component catalogue](../project/status.md) | audit note, one line per component (name, area, first task codes), credited verification, maintenance rule | `docs/project/status/<area>.md`: the full "Implemented components" and "Merged research" rows of the area |
 | [Coverage matrix](../requirements/coverage.md) | status scale and the summary counts by section | `docs/requirements/coverage/<domain>.md`, one per domain document of the register (`world.md`, `scene.md`, …): the requirement rows |
 | [Verification ledger](../research/original-verification-ledger.md) | inputs and method, verdicts, one line per section with its row IDs, decisions to revisit, second reading, not checked | `docs/research/ledger/<area>.md`: the sections of the area with their rows |
 
 - Find a row by name, task code, requirement code or row ID in the area folder,
   for example `grep -n "FR-WORLD-013" docs/requirements/coverage/*.md | cut -c1-300`,
   `grep -n "^| WT3 " docs/research/ledger/*.md | cut -c1-300` or
-  `grep -n "ARC-MAGIC-004" docs/project/status.md`.
+  `grep -n "ARC-MAGIC-004" docs/project/status/*.md | cut -c1-300`.
 - Edit a row in its area file. A new component adds its full row to the area
   file and one line to the index of the catalogue; a new ledger section goes at
   the end of its area file and adds one line (section, area, row IDs) to the
