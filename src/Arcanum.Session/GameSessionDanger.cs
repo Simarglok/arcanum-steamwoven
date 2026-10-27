@@ -19,8 +19,7 @@ public sealed record SessionDanger
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(enemies);
-        Entity = entity; Flags = flags; Focus = focus; FleeingFrom = fleeingFrom; HitBy = hitBy;
-        Enemies = Array.AsReadOnly(enemies.ToArray());
+        Entity = entity; Flags = flags; Focus = focus; FleeingFrom = fleeingFrom; HitBy = hitBy; Enemies = enemies;
     }
 
     public string Entity { get; }
@@ -28,7 +27,14 @@ public sealed record SessionDanger
     public SessionCombatant? Focus { get; init; }
     public SessionCombatant? FleeingFrom { get; init; }
     public SessionCombatant? HitBy { get; init; }
-    public IReadOnlyList<SessionCombatant> Enemies { get; init; }
+    /// <summary>A read-only copy of the list it is given.</summary>
+    public IReadOnlyList<SessionCombatant> Enemies
+    {
+        get => _enemies;
+        init => _enemies = Array.AsReadOnly((value ?? throw new ArgumentNullException(nameof(value))).ToArray());
+    }
+
+    private readonly IReadOnlyList<SessionCombatant> _enemies = [];
 
     /// <summary>The state read (<see cref="DangerRules.Read"/>).</summary>
     public DangerState State => DangerRules.Read(Flags);
@@ -185,11 +191,11 @@ public sealed partial class GameSessionOwner
     /// <summary>The target unlock (0x4AFC70): the lock bit cleared.</summary>
     [OriginalFunction(0x4AFC70, OriginalFunctionScope.Full)]
     public SessionDangerResult UnlockDangerTarget(GameSessionVersion expected, string entity) =>
-        ChangeDanger(expected, entity, null, plan => plan.Update(entity, record => record with { Flags = record.Flags & ~DangerFlags.TargetLocked }));
+        ChangeDanger(expected, entity, null, false, plan => plan.Update(entity, record => record with { Flags = record.Flags & ~DangerFlags.TargetLocked }));
 
     /// <summary>Who-hit-me-last := <paramref name="attacker"/> (none clears it; the attack event's step 10 and peace, slice I4).</summary>
     public SessionDangerResult SetDangerHitBy(GameSessionVersion expected, string entity, SessionCombatant? attacker) =>
-        ChangeDanger(expected, entity, attacker, plan => plan.Update(entity, record => record with { HitBy = attacker }));
+        ChangeDanger(expected, entity, attacker, false, plan => plan.Update(entity, record => record with { HitBy = attacker }));
 
     /// <summary>
     /// The enemy-list add (<see cref="DangerRules.SkipsEnemy"/>): skipped when the owner follows or waits for the hero and the
@@ -199,7 +205,7 @@ public sealed partial class GameSessionOwner
     public SessionDangerResult AddDangerEnemy(GameSessionVersion expected, string owner, SessionCombatant entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        return ChangeDanger(expected, owner, entry, plan => plan.AddEnemy(owner, entry));
+        return ChangeDanger(expected, owner, entry, false, plan => plan.AddEnemy(owner, entry));
     }
 
     /// <summary>
@@ -211,7 +217,7 @@ public sealed partial class GameSessionOwner
     public SessionDangerResult AddDangerEnemyTeam(GameSessionVersion expected, string owner, SessionCombatant offender)
     {
         ArgumentNullException.ThrowIfNull(offender);
-        return ChangeDanger(expected, owner, offender, plan =>
+        return ChangeDanger(expected, owner, offender, false, plan =>
         {
             var head = offender.IsHero || LedByPc(offender.Entity!) ? SessionCombatant.Hero : offender;
             plan.AddEnemy(owner, head);
@@ -225,7 +231,7 @@ public sealed partial class GameSessionOwner
     public SessionDangerResult RemoveDangerEnemy(GameSessionVersion expected, string owner, SessionCombatant entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        return ChangeDanger(expected, owner, entry, plan =>
+        return ChangeDanger(expected, owner, entry, false, plan =>
             plan.Update(owner, record => record with { Enemies = DangerRules.RemoveEnemy(record.Enemies, entry) }));
     }
 
@@ -238,16 +244,16 @@ public sealed partial class GameSessionOwner
     public SessionDangerResult AllowAttacking(GameSessionVersion expected, SessionCombatant combatant)
     {
         ArgumentNullException.ThrowIfNull(combatant);
-        return ChangeDanger(expected, combatant.Entity, null, plan => plan.AllowAttacking(combatant));
+        return ChangeDanger(expected, combatant.Entity, null, combatant.IsHero, plan => plan.AllowAttacking(combatant));
     }
 
     // ---- shared steps ----
 
-    // The owner id (none for the hero, which AllowAttacking alone accepts) and the handle: valid ids, then the version.
-    private SessionDangerResult ChangeDanger(GameSessionVersion expected, string? entity, SessionCombatant? handle, Action<DangerPlan> step)
+    // The owner id (none only for the hero, which AllowAttacking alone passes) and the handle: valid ids, then the version.
+    private SessionDangerResult ChangeDanger(GameSessionVersion expected, string? entity, SessionCombatant? handle, bool hero, Action<DangerPlan> step)
     {
         ThrowIfDisposed();
-        if (entity is not null && !SessionValidation.Entity(entity) || !ValidDangerHandle(handle)) return RejectDanger(GameSessionFailure.InvalidDangerTarget);
+        if (!(hero ? entity is null : SessionValidation.Entity(entity)) || !ValidDangerHandle(handle)) return RejectDanger(GameSessionFailure.InvalidDangerTarget);
         if (!IsCurrent(expected)) return RejectDanger(GameSessionFailure.StaleVersion);
         var plan = new DangerPlan(this);
         step(plan);

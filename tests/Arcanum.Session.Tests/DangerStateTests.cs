@@ -1,6 +1,7 @@
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Reaction;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
@@ -118,17 +119,48 @@ public sealed class DangerStateTests
     }
 
     [TestMethod]
-    public void AToggleThatRefusesLeavesTheBitAndTheLock()
+    public void AToggleThatRefusesKeepsTheBitAndOnlyFo14DecidesTheLock()
+    {
+        foreach (var (rules, locked) in new[] { (RuleMode.Steamwoven, false), (RuleMode.Original, true) })
+        {
+            using var owner = Owner(rules);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.SetCombatMode(owner.Version, WolfHandle, true, Living).Disposition);
+            Changed(owner.LockDangerTarget(owner.Version, Fight(Wolf, Hero)), owner, 2);
+            var stoned = new SessionCombatModeContext { Facts = new() { Speed = 7, Life = new LifeFacts { Traits = LifeTraits.Stoned } } };
+            var result = Changed(owner.SetDangerState(owner.Version, new() { Entity = Wolf, State = DangerState.Surrender, Target = Hero, CombatMode = stoned }), owner, 3);
+            Assert.IsFalse(result.LeftCombatMode);
+            Assert.IsTrue(owner.QueryCombatMode(WolfHandle));
+            // No toggle, no unlock: Steamwoven's FO14 fix clears the lock with the applied SURRENDER, the original keeps it.
+            Assert.AreEqual(locked, owner.QueryDanger(Wolf).Flags.HasFlag(DangerFlags.TargetLocked), rules.ToString());
+        }
+    }
+
+    [TestMethod]
+    public void DeathLeavesCombatModeAndUnlocks()
     {
         using var owner = Owner();
         Assert.AreEqual(GameSessionDisposition.Changed, owner.SetCombatMode(owner.Version, WolfHandle, true, Living).Disposition);
-        Changed(owner.LockDangerTarget(owner.Version, Fight(Wolf, Hero)), owner, 2);
-        var stoned = new SessionCombatModeContext { Facts = new() { Speed = 7, Life = new LifeFacts { Traits = LifeTraits.Stoned } } };
-        var result = Changed(owner.SetDangerState(owner.Version, new() { Entity = Wolf, State = DangerState.Surrender, Target = Hero, CombatMode = stoned }), owner, 3);
-        Assert.IsFalse(result.LeftCombatMode);
-        Assert.IsTrue(owner.QueryCombatMode(WolfHandle));
-        // Steamwoven's FO14 fix still clears the lock with the applied SURRENDER.
+        Assert.IsTrue(Changed(owner.LockDangerTarget(owner.Version, Fight(Wolf, Hero)), owner, 2).Locked);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Critter(Wolf, new LifeFacts(), default)).Disposition);
+        Assert.IsFalse(owner.QueryCombatMode(WolfHandle));
+        Assert.AreEqual(DangerState.CombatFocus, owner.QueryDanger(Wolf).State);
         Assert.IsFalse(owner.QueryDanger(Wolf).Flags.HasFlag(DangerFlags.TargetLocked));
+    }
+
+    [TestMethod]
+    public void AFightOfAFollowerOnTheHeroArmsItsLeaderCheckAndTheReactionBudgetRefusesAll()
+    {
+        using var owner = Owner();
+        Join(owner, Virgil);
+        var revision = owner.Version.Revision;
+        var fight = Changed(owner.SetDangerState(owner.Version, Fight(Virgil, Hero)), owner, revision + 1);
+        Assert.IsTrue(fight.Reaction!.Value.LeaderCheck);
+        Assert.AreEqual(CompanionLoyaltyRules.ArmReaction(CompanionLoyalty.None), owner.QueryCompanion(Virgil).Loyalty);
+
+        using var tight = GameSessionOwner.Create(Descriptor(new GameSessionLimits(maxReactionRecords: 1)) with { Hero = HalfElf() }).Owner!;
+        Changed(tight.SetDangerState(tight.Version, Fight(Sogg, Hero)), tight, 1);
+        Rejected(tight.SetDangerState(tight.Version, Fight(Wolf, Hero)), tight, GameSessionFailure.BudgetExceeded, 1);
+        Assert.AreEqual(DangerState.None, tight.QueryDanger(Wolf).State, "nothing of the refused call is applied");
     }
 
     [TestMethod]
@@ -213,6 +245,22 @@ public sealed class DangerStateTests
         Assert.AreEqual(DangerFlags.None, stopped.QueryDanger(Virgil).Flags);
         Assert.AreEqual(0, stopped.QueryDangerRecords().Records.Count(record => record.Entity == Virgil), "a baseline record is dropped");
         Assert.AreEqual(GameSessionDisposition.NoChange, stopped.AllowAttacking(stopped.Version, VirgilHandle).Disposition);
+        // One led NPC alone; an NPC the hero does not lead keeps NO_ATTACK.
+        var noAttack = text.Replace("\"CheckGrenade\"],\"focus\":\"\"", "\"CheckGrenade\",\"NoAttack\"],\"focus\":\"\"")
+            .Replace("\"danger\":{\"records\":[", "\"danger\":{\"records\":[{\"entity\":\"oid:virgil\",\"flags\":[\"NoAttack\"],\"focus\":null,\"fleeingFrom\":null,\"hitBy\":null,\"enemies\":[]},");
+        using var single = Restore(Decode(noAttack));
+        Assert.AreEqual(GameSessionDisposition.NoChange, single.AllowAttacking(single.Version, WolfHandle).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, single.AllowAttacking(single.Version, VirgilHandle).Disposition);
+        Assert.AreEqual(DangerFlags.None, single.QueryDanger(Virgil).Flags);
+        Assert.IsTrue(single.QueryDanger(Wolf).Flags.HasFlag(DangerFlags.NoAttack));
+        Rejected(single.UnlockDangerTarget(single.Version, null!), single, GameSessionFailure.InvalidDangerTarget, single.Version.Revision);
+        Rejected(single.AllowAttacking(single.Version, SessionCombatant.Critter("bad id")), single, GameSessionFailure.InvalidDangerTarget, single.Version.Revision);
+
+        // The last revision refuses a change and applies nothing.
+        using var full = Restore(Decode(System.Text.RegularExpressions.Regex.Replace(text, "\"module\":(\"[^\"]*\"),\"revision\":\\d+,",
+            "\"module\":$1,\"revision\":" + long.MaxValue + ",")));
+        Rejected(full.SetDangerHitBy(full.Version, Sogg, Hero), full, GameSessionFailure.RevisionExhausted, long.MaxValue);
+        Assert.IsNull(full.QueryDanger(Sogg).HitBy);
     }
 
     [TestMethod]

@@ -60,8 +60,8 @@ public sealed record CombatAnomalyProfile
 
     /// <summary>
     /// CL4 (owner decision 2026-10-20): a surrender leaves combat mode and then writes back critter flags read before, so the
-    /// combat-mode bit is set again while the rest of leaving combat mode (the target unlock) stays done (see
-    /// <see cref="Ai.DangerRules.Set"/>).
+    /// combat-mode bit is set again while the rest of leaving combat mode (the target unlock) stays done. Read by the session's
+    /// danger setter (<c>GameSessionOwner.SetDangerState</c>, ARC-WORLD-079), which applies <see cref="Ai.DangerTransition.LeavesCombatMode"/>.
     /// </summary>
     public bool SurrenderKeepsCombatModeFlag { get; init; }
 

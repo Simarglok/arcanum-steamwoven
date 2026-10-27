@@ -58,7 +58,8 @@ public readonly record struct DangerSetterFacts(
     bool FloatsLine = false,
     bool TargetIsPc = false);
 
-/// <summary>Why the setter applied another state than the one requested, or stopped early.</summary>
+/// <summary>The rule that decided the applied state (it may equal the requested one, as NONE for an invulnerable NPC), or stopped
+/// the setter early.</summary>
 public enum DangerSetterRule
 {
     /// <summary>The request was applied as asked.</summary>
