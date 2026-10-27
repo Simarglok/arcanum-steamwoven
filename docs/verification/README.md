@@ -17,7 +17,7 @@ tests in `tests/Arcanum.Session.Tests/Verification` keep all four consistent.
 | `status` | `full`, `partial`, `not implemented` or `out of scope` |
 | `reason` | what is left out and why; required unless the status is `full` |
 | `level` | evidence level F0–F4 of the [original executable check](../research/original-executable-check.md#evidence-levels-for-a-function-f0f4) |
-| `evidence` | repository path (optionally with an anchor) of the evidence: the ledger section for F1/F2 (rows written before ARC-DEV-038 name the ledger index's anchor, which links to the section in its area file), the receipt for F3, the contract or research document whose claims the code follows for F0 |
+| `evidence` | repository path (optionally with an anchor) of the evidence: the ledger section in its area file for F1/F2 (`docs/research/ledger/<area>.md#<section>`; ARC-DEV-040 moved the rows that named the ledger index's anchors there), the receipt for F3, the contract or research document whose claims the code follows for F0 |
 | `method` | the implementing method (`Namespace.Type.Method`) of a `full` or `partial` row; empty otherwise |
 
 The registry covers the experience functions of ARC-WORLD-030 (three full at F3 by the oracle; progress since its XP3
