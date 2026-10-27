@@ -8,16 +8,22 @@ namespace Arcanum.Data.Magic;
 /// <summary>
 /// ARC-MAGIC-001: the texts of <c>mes\spell.mes</c> the original keeps (ledger "Spell records"): the name of each of the 223
 /// records (message n), the 16 college names (500 + c), the descriptions of the 80 college spells (700 + n), the college
-/// descriptions (8000 + c) and the mastery descriptions (9000 + c). A missing message is null: the original then shows its
+/// descriptions (8000 + c) and the mastery descriptions (9000 + c); since ARC-MAGIC-015 also the magic messages 600..699 the spell UI
+/// and the runs show (0x44FDC0 reads any number). A missing message is null: the original then shows its
 /// shared missing-line text, which the host formats. Text is the stored bytes as Latin-1 characters.
 /// </summary>
 public sealed class SpellTexts
 {
     public const string Path = "mes/spell.mes";
-    public const int FirstCollegeName = 500, FirstSpellDescription = 700, FirstCollegeDescription = 8000, FirstMasteryDescription = 9000;
+    public const int FirstCollegeName = 500, FirstSpellDescription = 700, FirstCollegeDescription = 8000, FirstMasteryDescription = 9000,
+        FirstMessage = 600, Messages = 100;
 
-    private SpellTexts(string?[] names, string?[] colleges, string?[] descriptions, string?[] collegeDescriptions, string?[] masteries)
+    private readonly string?[] _messages;
+
+    private SpellTexts(string?[] names, string?[] colleges, string?[] descriptions, string?[] collegeDescriptions, string?[] masteries,
+        string?[] messages)
     {
+        _messages = messages;
         Names = Array.AsReadOnly(names);
         CollegeNames = Array.AsReadOnly(colleges);
         SpellDescriptions = Array.AsReadOnly(descriptions);
@@ -51,6 +57,10 @@ public sealed class SpellTexts
     public string? CollegeDescription(int college, int masteredCollege) =>
         masteredCollege == Check(college, SpellRecord.Colleges, nameof(college)) ? MasteryDescriptions[college] : CollegeDescriptions[college];
 
+    /// <summary>A magic message 600..699 (the spell UI's 600, 604 and 606, the runs' 601..603 and 643); null when missing or outside
+    /// the range. Not read in strict mode's completeness test: the original shows its missing-line text.</summary>
+    public string? Message(int number) => number is >= FirstMessage and < FirstMessage + Messages ? _messages[number - FirstMessage] : null;
+
     private static int Check(int value, int count, string name) => value >= 0 && value < count ? value : throw new ArgumentOutOfRangeException(name);
 
     /// <summary>Reads the texts; strict mode refuses a missing one.</summary>
@@ -69,7 +79,8 @@ public sealed class SpellTexts
                 .Order().Cast<int?>().FirstOrDefault();
             if (missing is { } number) return new(SpellDataStatus.MissingText, null, new(SpellDataStatus.MissingText, Path, number));
         }
-        return new(SpellDataStatus.Read, new(names, texts.Colleges, texts.Descriptions, texts.CollegeDescriptions, texts.Masteries));
+        return new(SpellDataStatus.Read, new(names, texts.Colleges, texts.Descriptions, texts.CollegeDescriptions, texts.Masteries,
+            Range(file, FirstMessage, Messages)));
     }
 
     /// <summary>The spell module's init: the college names, spell descriptions, college and mastery descriptions.</summary>

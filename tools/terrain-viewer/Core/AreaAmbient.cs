@@ -118,12 +118,14 @@ public sealed class AreaAmbientDriver
 
     /// <summary>Binds to a session whose clock was started from this source's profile and applies the
     /// current hour for the active sector. With <paramref name="events"/> every clock move goes through an
-    /// <see cref="AreaEventPump"/> over that world (ARC-WORLD-039).</summary>
-    public static AreaAmbientDriver Create(AreaLightingSource source, GameSessionOwner session, long activeSector, ISessionEventWorld? events = null)
+    /// <see cref="AreaEventPump"/> over that world (ARC-WORLD-039), whose passes go through the cast host <paramref name="spells"/>
+    /// answers when it answers one (ARC-MAGIC-015).</summary>
+    public static AreaAmbientDriver Create(AreaLightingSource source, GameSessionOwner session, long activeSector, ISessionEventWorld? events = null,
+        Func<SessionSpellCaster?>? spells = null)
     {
         ArgumentNullException.ThrowIfNull(source); ArgumentNullException.ThrowIfNull(session);
         if (session.QueryClockSnapshot().ProfileBinding != ClockProfile(source)) throw new InvalidOperationException("AREA_AMBIENT_CLOCK_PROFILE");
-        var driver = new AreaAmbientDriver(source, session, new AmbientLightingState(source), events is null ? null : new AreaEventPump(session, events));
+        var driver = new AreaAmbientDriver(source, session, new AmbientLightingState(source), events is null ? null : new AreaEventPump(session, events, spells: spells));
         driver.Apply(activeSector);
         return driver;
     }

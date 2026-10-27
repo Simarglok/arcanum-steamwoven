@@ -116,7 +116,7 @@ public partial class TerrainViewerApp
     private void BindAreaSpellData(TerrainViewerArguments arguments)
     {
         if (_spellDataModule == arguments.ModulePath) return;
-        _spellDataModule = arguments.ModulePath; _spellData = null;
+        _spellDataModule = arguments.ModulePath; _spellData = null; _spellRecords = null;
         var module = arguments.ModulePath;
         _spellDataTask = Task.Run(() => AreaSpellsPage.LoadData(module));
     }

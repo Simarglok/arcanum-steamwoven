@@ -1,31 +1,43 @@
 # Spell cast host (ARC-MAGIC-014)
 
-Status: **Implemented bounded component; headless (no viewer caller yet).** Work item ARC-MAGIC-014 (2026-10-21), slice MT20a-1
+Status: **Implemented bounded component; the AREA viewer casts through it (ARC-MAGIC-015).** Work item ARC-MAGIC-014 (2026-10-21), slice MT20a-1
 "Cast host" of the [magic implementation plan](../research/magic-implementation-plan.md). The owner split MT20a on 2026-10-21:
 - MT20a-1 (this slice) builds the world the run rules ask, over the session and any map, and the casting goal as the original's
   rules, and proves the first cast without a window;
-- MT20a-2 (ARC-MAGIC-015) puts it in the AREA viewer: spell choice, targeting cursor, cast animation, texts and eye candy.
+- MT20a-2 (ARC-MAGIC-015, 2026-10-27) puts it in the AREA viewer: the spell pane, the targeting cursor, the casting goal's timing,
+  the feedback texts and the eye candy as presentation events ([below](#the-viewer-arc-magic-015)).
 
 Requirements: [FR-MAGIC-003](../requirements/combat-magic-tech.md#fr-magic-003) (the invocation over a real map: line of fire,
-areas), [FR-COMBAT-003](../requirements/combat-magic-tech.md#fr-combat-003) (a cast costs 4 action points).
+areas), [FR-COMBAT-003](../requirements/combat-magic-tech.md#fr-combat-003) (a cast costs 4 action points),
+[FR-MAGIC-012](../requirements/combat-magic-tech.md#fr-magic-012) (the spell UI: activation, target choice, refusals; ARC-MAGIC-015),
+[FR-COMBAT-006](../requirements/combat-magic-tech.md#fr-combat-006) (the cast's release frame; ARC-MAGIC-015).
 
 ## Verification
 
 Two readers read the casting goal in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Cast host and casting
 goal"](../research/ledger/spell-runs.md#cast-host-and-casting-goal-arc-magic-014), CG1–CG8). The headless first cast
-runs on the installed original (`AreaSpellCastRealDataTests`).
+runs on the installed original (`AreaSpellCastRealDataTests`). The spell UI is read in [ledger "Spell
+UI"](../research/ledger/spell-runs.md#spell-ui-arc-magic-015) (SU1–SU14, MG42); the viewer's cast is observed by the L2 native smoke
+`ARC-MAGIC-015 native-smoke cast`.
 
 Code:
 - [`SessionSpellRecords`](../../src/Arcanum.Session/SessionSpellRecords.cs) — the spell data in the rules' types;
 - [`SessionSpellCaster`](../../src/Arcanum.Session/SessionSpellCaster.cs) — the run host, the damage world, the event pass's
   magic host and the casting goal;
 - [`AreaSpellCastMap`](../../tools/terrain-viewer/Core/AreaSpellCastMap.cs) — the AREA map as a cast reads it;
+- [`SpellUiRules`](../../src/Arcanum.Simulation/Magic/SpellUiRules.cs) — the spell UI's activation, cursor mask and no-target message
+  (ARC-MAGIC-015);
+- [`AreaSpellCasting`](../../tools/terrain-viewer/Core/AreaSpellCasting.cs) and the viewer's
+  [`TerrainViewerSpellCast`](../../tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs), [`AreaSpellPane`](../../tools/terrain-viewer/Godot/AreaSpellPane.cs)
+  — the viewer's casting (ARC-MAGIC-015);
 - `GameSessionOwner.PaySpellFatigue` — a payment's fatigue.
 
 Tests:
 - [`SessionSpellRecordsTests`](../../tests/Arcanum.Session.Tests/SessionSpellRecordsTests.cs);
 - [`SessionSpellCasterTests`](../../tests/Arcanum.Session.Tests/SessionSpellCasterTests.cs);
-- [`AreaSpellCastRealDataTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaSpellCastRealDataTests.cs).
+- [`AreaSpellCastRealDataTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaSpellCastRealDataTests.cs);
+- [`SpellUiRulesTests`](../../tests/Arcanum.Simulation.Tests/Magic/SpellUiRulesTests.cs),
+  [`AreaSpellCastingTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaSpellCastingTests.cs) (ARC-MAGIC-015).
 
 ## The records (`SessionSpellRecords`)
 
@@ -126,6 +138,38 @@ The original's goals 26 and 82 (`ag_throw_spell`, with the record's casting anim
    A goal starts once (`StartGoal`) for the run it was made for: a caller must not start a second goal for a run the original
    keeps after a failed release (MG41, Original), since the new start forgets that release and the end would then free the run.
 
+## The viewer (ARC-MAGIC-015)
+
+The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the original's spell UI does (ledger SU1–SU14):
+
+1. **The spell pane.** `M` shows or hides a pane with one button per spell the hero knows (the spell book's ranks, college by
+   college) and the cost the original's UI shows (`CastCost`). The original's in-game key handler has no key for it (SU14): its
+   interface button opens it; `M` is the viewer's key, under the input map's reserved name. The pane is no window: the world keeps
+   its clicks.
+2. **The activation** (`SpellUiRules.Activate`, SU1–SU3). Nothing for a hero that is dead or unconscious or a disabled spell. A BEGIN
+   area 0, exactly the radius bit, or self without the tile bit is cast at once at the hero's tile. Otherwise the action points are
+   checked (4 in a turn-based round; the viewer starts none, so it passes) and the targeting cursor opens with the BEGIN area, plus
+   the non-party bit for an aggressive spell while no Alt key is held; an Alt key held in the cursor removes it (SU7). With Shift, an
+   object spell that may target its caster is cast at once at the hero. An open cursor is closed first.
+3. **The cursor** (SU9). The hover shows "cast" (cross cursor) where a left press would cast and "no target" (forbidden cursor)
+   elsewhere. A left press casts at the object under the pointer when it passes the area test, else at the hero when its tile is under
+   the pointer, else at the tile; a failure shows spell.mes 606 for "not damaged" (SU10) and keeps the cursor. The cursor stays open
+   after a cast, as in the original, until a right press, another activation, a window (inventory, sheet, logbook, dialog …) or a
+   map change.
+4. **The cast** (`SessionSpellCaster.CastAt`, SU8): spell.mes 600 when the hero cannot afford the spell, 604 without a line of fire,
+   then the run; its casting goal starts (`StartGoal`; a refusal ends it, `EndGoal(refused: true)`), the release frame comes
+   `TerrainViewerApp.SpellReleaseMs` (500 ms of world time) later (`Release`: the re-check and BEGIN), the end 400 ms after it
+   (`EndGoal`). A goal cut short before its release frame (a lost hero, a map change) ends there and frees its run (0x429CD0).
+5. **Feedback.** The host's new log entries become one line in the status bar and the message window: spell.mes messages by
+   number (the player's own texts, `SpellTexts.Message`), the fatigue paid, damage, healing, resistance and the component types
+   that are not ready. Eye candy is a presentation event only: the log lines `eye-candy=6·spell` at the goal's start and
+   `6·spell+4` at the release (SU12, CG8); no art is drawn.
+6. **Events.** While the viewer has a cast host for the shown map, the event pump's passes go through it
+   (`SessionSpellCaster.ProcessEvents`), so a run's later events run with the map's magic world and their payments are applied.
+
+The first cast (plan milestone) is the native smoke: the pre-made hero learns the first damaging rank-1 college spell, opens the
+pane, activates it and casts at a living NPC of the cave with the cursor; its fatigue drops and the NPC resists or takes damage.
+
 ## Differences from the original
 
 Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is documented.
@@ -137,6 +181,8 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | A failed target re-check at the release frame leaves the run in its slot (MG41). | The run is freed unpaid. | `MagicAnomalyProfile.ReleaseRefusalKeepsRun` (owner decision 2026-10-27: fix) |
 | The stage writes its payment's fatigue before the components run. | The host applies the call's payments after the call, so a component reading the caster's fatigue in the same pass sees it unpaid. | — |
 | A spell's life changes come from the components inside the run's pass. | The same, through the session's life calls; their revisions come before the run's own. | — |
+| A pick with no target shows spell.mes 606 when the area test's failure global holds "not damaged" — a global no pick clears, so an earlier test's reason can show (MG42). | 606 only for the current pick's own reason. | — (pending the owner; proposed fix without a switch) |
+| The cast is timed by the caster eye-candy overlay's action frame and frame rate; the body art does not change (SU12). | No eye-candy art is drawn: the release frame comes 500 ms of world time after the goal's start, the end 400 ms later. | — (stand-in, not ready) |
 
 Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Friendly cast.** Goal 73 (the friendly cast) has no end and frees nothing on its refusals.
@@ -145,8 +191,14 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 
 ## Not ready
 
-- No viewer caller: the AREA viewer's casting (MT20a-2, ARC-MAGIC-015).
-- The spell UI checks (0x57BC70, 0x57BFF0–0x57C110) and the predictor's display are MT20a-2's.
+- Eye-candy art (caster overlay, missile, target), its timing and the missile's flight (goal 28); the facing turn of goal 26
+  (0x42C850).
+- A second cast while one plays: the original queues it under the running goal (SU13); the viewer refuses it ("a cast is still
+  playing").
+- Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item); item and hotkey activation
+  (0x57C040, 0x57C080); the picker 0x4F28A0's own object/tile order (the viewer's: object, hero tile, tile).
+- No turn-based round in the viewer, so the cast's 4 action points are never charged there. The predictor has no display in the
+  original's UI (SU11), so none is planned.
 - Worn mana stores do not pay (no item store state).
 - Spell damage to objects other than critters; NPC casters' weapons; the sector kind; paths.
 - The raise and taking-damage scripts run no SCR.

@@ -74,6 +74,9 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         return _combat.Entity(_map, row.Key) ?? $"row:{row.Key.Kind}:{row.Key.SourceIndex}";
     }
 
+    /// <summary>ARC-MAGIC-015: the map row behind a cast's object id, or null (the hero, or no such row).</summary>
+    public AreaObjectRecord? Row(string id) => _rows.GetValueOrDefault(id ?? throw new ArgumentNullException(nameof(id)));
+
     /// <summary>The map location of a cell.</summary>
     public static SpellLocation Location(CellCoord cell) => new(checked((uint)cell.X), checked((uint)cell.Y));
 

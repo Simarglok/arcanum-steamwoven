@@ -50,6 +50,14 @@ public enum SpellCastGoalOutcome { Started, NoActionPoints, CannotAfford, Target
 /// <summary>A casting goal's start and its action-point charge (null when the parent is not a combatant).</summary>
 public sealed record SpellCastGoalStart(SpellCastGoalOutcome Outcome, SessionCombatResult? ActionPoints);
 
+/// <summary>How the spell UI's cast at a target went (<see cref="SessionSpellCaster.CastAt"/>): nothing (a missing, dead or
+/// unconscious caster), the caster cannot afford it (spell.mes 600), no line of fire (604), the run was refused (the invocation
+/// check or the session: <see cref="SpellCastAttempt.Run"/>), or the run started and waits for its casting goal.</summary>
+public enum SpellCastAttemptOutcome { Nothing, CannotAfford, NoLineOfFire, Refused, Started }
+
+/// <summary>The spell UI's cast: its outcome, the spell.mes message the UI showed, the run start and the started run's slot.</summary>
+public sealed record SpellCastAttempt(SpellCastAttemptOutcome Outcome, int? Message = null, SessionSpellRunResult? Run = null, int? RunId = null);
+
 public enum SpellCastEventKind
 {
     /// <summary>spell.mes <see cref="SpellCastEvent.Value"/> for the local player (601 maintenance, 602 checks or a shelled source,
@@ -388,6 +396,59 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
         }
         return SpellTargetRules.Test(basis with { Candidate = null, Target = null, CandidateTile = run.TargetTile, TargetTile = run.TargetTile }, _map,
             Profile).Passes;
+    }
+
+    /// <summary>
+    /// The spell UI's cast at a picked target (0x57C110, ARC-MAGIC-015) by <paramref name="caster"/>, which is the run's source and
+    /// parent: nothing when the caster is missing, dead or unconscious; a critter caster must afford the spell's <c>Cost:</c> (0x4508A0:
+    /// <see cref="SpellCostRules.CheckCost"/>, the payment asked without applying), else spell.mes 600; the invocation (0x455A20) takes
+    /// the target object, or else the tile; no line of fire (0x456BC0) shows spell.mes 604; then the run starts (0x455AC0: the
+    /// invocation check, a slot and the run), whose casting goal is the host's (<see cref="StartGoal"/>).
+    /// </summary>
+    [OriginalFunction(0x57C110, OriginalFunctionScope.Partial)]
+    public SpellCastAttempt CastAt(string caster, int spell, string? targetObject, SpellLocation targetTile)
+    {
+        ArgumentNullException.ThrowIfNull(caster);
+        if (Life(caster) is not { } life || life.Status.IsDead || life.Status.IsUnconscious) return new(SpellCastAttemptOutcome.Nothing);
+        if (_records(spell) is not { } record || RunObject(caster) is not { } source || Facts(caster) is not { } facts)
+            return new(SpellCastAttemptOutcome.Nothing);
+        if (source.IsCritter)
+        {
+            var cost = SpellCostRules.CheckCost(record.Run.Cost, Caster(source), false);
+            if (Payer(source) is not { } payer || !SpellPaymentRules.Pay(payer, cost, false, spell, record.Run.Payment, Cells).Succeeded)
+                return Refused(SpellCastAttemptOutcome.CannotAfford, SpellUiRules.CannotAffordMessage);
+        }
+        var target = targetObject is null ? null : Facts(targetObject);
+        if (targetObject is not null && target is null) return new(SpellCastAttemptOutcome.Nothing);
+        var invocation = new SpellInvocation(spell, facts, facts, target, target is null ? targetTile : SpellLocation.None, ParentIsLocalPlayer: caster == Hero);
+        var world = InvocationWorld();
+        if (!SpellInvocationRules.HasLineOfFire(invocation, world)) return Refused(SpellCastAttemptOutcome.NoLineOfFire, SpellUiRules.NoLineOfFireMessage);
+        var started = _owner.StartSpellRun(_owner.Version, new(invocation), record.Run, world, _owner.SpellRolls);
+        return started.Disposition == GameSessionDisposition.Changed && started.Creation?.Run is { } run
+            ? new(SpellCastAttemptOutcome.Started, null, started, run.Id)
+            : new(SpellCastAttemptOutcome.Refused, null, started);
+    }
+
+    private SpellCastAttempt Refused(SpellCastAttemptOutcome outcome, int message)
+    {
+        _log.Add(new(SpellCastEventKind.Message, -1, message));
+        return new(outcome, message);
+    }
+
+    /// <summary>
+    /// The targeting cursor's test of a candidate (0x4F2830's area test, ARC-MAGIC-015): the BEGIN area with <paramref name="mask"/>
+    /// (the cursor's) for <paramref name="caster"/> as self and source, the candidate object as candidate and target, or with none the
+    /// tile as both tiles. The answer carries the area test's failure reason for the cursor's message.
+    /// </summary>
+    public SpellTargetTest TestTarget(string caster, int spell, ulong mask, string? candidate, SpellLocation tile)
+    {
+        ArgumentNullException.ThrowIfNull(caster);
+        if (_records(spell) is not { } record || record.Areas.Length == 0 || _map.Object(caster) is not { } self) return new(false);
+        var basis = new SpellTargetContext(record.Areas[0] with { Targets = mask }, self, self, self.Location);
+        if (candidate is not null)
+            return _map.Object(candidate) is { } o && (o.ObjectFlags & PickerRefused) == 0
+                ? SpellTargetRules.Test(basis with { Candidate = o, Target = o }, _map, Profile) : new(false);
+        return SpellTargetRules.Test(basis with { CandidateTile = tile, TargetTile = tile }, _map, Profile);
     }
 
     // A run whose BEGIN has not run yet: the only one a release frame begins.

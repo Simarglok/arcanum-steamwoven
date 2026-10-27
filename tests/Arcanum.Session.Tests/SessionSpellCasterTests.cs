@@ -13,7 +13,7 @@ public sealed class SessionSpellCasterTests
 {
     private static readonly SpellLocation HeroTile = new(5, 5), BoxTile = new(6, 5);
 
-    private sealed class Map(GameSessionOwner owner, bool boxDestroyed = true, int boxFlags = 0) : ISpellCastMap
+    private sealed class Map(GameSessionOwner owner, bool boxDestroyed = true, int boxFlags = 0, bool noLineOfFire = false) : ISpellCastMap
     {
         public SpellTargetObject? Object(string id) => id switch
         {
@@ -28,7 +28,7 @@ public sealed class SessionSpellCasterTests
         public int SectorKind(SpellLocation location) => 0;
         public int Direction(SpellLocation from, SpellLocation to) => 0;
         public IReadOnlyList<SpellTargetObject> Party(SpellTargetObject source) => [];
-        public SpellLineOfFire LineOfFire(SpellObjectFacts parent, SpellLocation tile) => new(0, null);
+        public SpellLineOfFire LineOfFire(SpellObjectFacts parent, SpellLocation tile) => new(noLineOfFire ? 100 : 0, null);
         public SpellCastCritter? Critter(string entity) => null;
         public CombatWeapon WieldedWeapon(string entity) => CombatWeapon.Unarmed();
         public IReadOnlyList<SpellAcidItem> WornItems(string entity) => [];
@@ -55,11 +55,13 @@ public sealed class SessionSpellCasterTests
         with { Cost = cost, DurationSeconds = duration, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0, DisallowedCasterSpellFlags = 0,
             DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0 });
 
-    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(RuleMode mode, SessionSpellRecord record, bool boxDestroyed = true)
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(RuleMode mode, SessionSpellRecord record, bool boxDestroyed = true,
+        bool noLineOfFire = false)
     {
         var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
         owner.SelectRules(mode);
-        return (owner, new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, new Map(owner, boxDestroyed), new Events()));
+        return (owner, new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, new Map(owner, boxDestroyed, noLineOfFire: noLineOfFire),
+            new Events()));
     }
 
     private static int Start(GameSessionOwner owner, SessionSpellCaster caster, SessionSpellRecord record, string target = SessionSpellCaster.Hero, bool free = false)
@@ -320,5 +322,56 @@ public sealed class SessionSpellCasterTests
         Assert.AreEqual(SpellCastGoalOutcome.Started, caster.StartGoal(second, new NoCombat()).Outcome);
         Assert.IsNotNull(caster.EndGoal(second, refused: true));
         Assert.IsNull(owner.QuerySpellRuns()[second], "the new goal's end frees its run");
+    }
+
+    // ARC-MAGIC-015: the spell UI's cast at a picked target (0x57C110).
+
+    [TestMethod]
+    public void The_ui_cast_starts_a_run_at_its_target_object_whose_goal_then_plays()
+    {
+        var record = SelfBolt(beginTargets: 0x4);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record, boxDestroyed: false);
+        using var _ = owner;
+        var attempt = caster.CastAt(SessionSpellCaster.Hero, record.Data.Number, "box", SpellLocation.None);
+        Assert.AreEqual(SpellCastAttemptOutcome.Started, attempt.Outcome, $"{attempt.Run?.Failure} {attempt.Run?.Creation?.Check}");
+        var run = owner.QuerySpellRuns()[attempt.RunId!.Value]!;
+        Assert.AreEqual(("box", SpellLocation.None, SessionSpellCaster.Hero), (run.Target?.Id, run.TargetTile, run.Source?.Id), "the object, no tile");
+        Assert.AreEqual(SpellCastGoalOutcome.Started, caster.StartGoal(run.Id, new NoCombat()).Outcome);
+    }
+
+    [TestMethod]
+    public void The_ui_cast_shows_600_when_the_caster_cannot_afford_it_and_604_without_a_line_of_fire()
+    {
+        var dear = SelfBolt(beginTargets: 0x4, cost: 100000);
+        var (owner, caster) = Session(RuleMode.Steamwoven, dear, boxDestroyed: false);
+        using (owner)
+        {
+            var attempt = caster.CastAt(SessionSpellCaster.Hero, dear.Data.Number, "box", SpellLocation.None);
+            Assert.AreEqual((SpellCastAttemptOutcome.CannotAfford, (int?)600), (attempt.Outcome, attempt.Message));
+            Assert.AreEqual(600, caster.Log.Single(e => e.Kind == SpellCastEventKind.Message).Value);
+            Assert.AreEqual(0, owner.QuerySpellRuns().Count, "no run");
+        }
+        var record = SelfBolt(beginTargets: 0x4);
+        var (blocked, blockedCaster) = Session(RuleMode.Steamwoven, record, boxDestroyed: false, noLineOfFire: true);
+        using (blocked)
+        {
+            var attempt = blockedCaster.CastAt(SessionSpellCaster.Hero, record.Data.Number, "box", SpellLocation.None);
+            Assert.AreEqual((SpellCastAttemptOutcome.NoLineOfFire, (int?)604), (attempt.Outcome, attempt.Message));
+            // A self-cast needs no line of fire (0x456BC0).
+            Assert.AreEqual(SpellCastAttemptOutcome.Started, blockedCaster.CastAt(SessionSpellCaster.Hero, record.Data.Number, SessionSpellCaster.Hero,
+                SpellLocation.None).Outcome);
+        }
+    }
+
+    [TestMethod]
+    public void The_cursor_tests_a_candidate_against_its_mask()
+    {
+        var record = SelfBolt(beginTargets: 0x4);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record, boxDestroyed: false);
+        using var _ = owner;
+        Assert.IsTrue(caster.TestTarget(SessionSpellCaster.Hero, record.Data.Number, 0x4, "box", SpellLocation.None).Passes);
+        Assert.IsFalse(caster.TestTarget(SessionSpellCaster.Hero, record.Data.Number, 0x44, "box", SpellLocation.None).Passes, "a box is no critter");
+        Assert.IsFalse(caster.TestTarget(SessionSpellCaster.Hero, record.Data.Number, 0x4, "nobody", SpellLocation.None).Passes);
+        Assert.IsTrue(caster.TestTarget(SessionSpellCaster.Hero, record.Data.Number, 0x8000UL << 32, null, BoxTile).Passes, "a tile spell takes a tile");
     }
 }
