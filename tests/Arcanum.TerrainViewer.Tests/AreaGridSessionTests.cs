@@ -46,6 +46,29 @@ public sealed class AreaGridSessionTests
         Assert.AreSame(walk, session.LastAdvance);
     }
 
+    // ARC-COMBAT-020: the step charge is asked once per open step, with its gait, and its reason refuses the step.
+    [TestMethod]
+    public void TheStepChargeIsAskedOncePerOpenStepAndARefusalBlocksIt()
+    {
+        var asked = new List<(AdmissionKey Key, MovementGait Gait)>();
+        var allowed = 3;
+        var session = new AreaGridSession(Steps(), SimulationTime.At(0), StepDuration.Of(8))
+        {
+            Gait = () => MovementGait.Run,
+            StepCharge = (key, gait) => { asked.Add((key, gait)); return asked.Count <= allowed ? null : "TURN_BASED_REFUSED"; },
+        };
+        var blocked = session.Advance(SimulationTime.At(1), [Input(0, 0, NeighborDirection.XMinus)]);
+        Assert.AreEqual(0, asked.Count, "a step the map blocks is not charged");
+        var walk = session.Advance(SimulationTime.At(2 + 8 * 10), [Input(2, 1, NeighborDirection.XPlus)]);
+        Assert.AreEqual(new CellCoord(9, 1), session.State.CommittedCell, "three steps went, the fourth was refused");
+        Assert.AreEqual(4, asked.Count);
+        Assert.IsTrue(asked.All(a => a.Gait == MovementGait.Run));
+        CollectionAssert.AreEqual(asked.Select(a => a.Key).Distinct().ToArray(), asked.Select(a => a.Key).ToArray(), "each step asked once");
+        var refused = walk.AreaEvidence.Last();
+        Assert.AreEqual(((CardinalTraversalDisposition?)CardinalTraversalDisposition.Blocked, "TURN_BASED_REFUSED"), (refused.Live!.Value.Disposition, refused.Live.Value.ReasonCode));
+        Assert.AreEqual((CardinalTraversalDisposition?)CardinalTraversalDisposition.Open, refused.Assessment.Disposition, "the map itself stays open");
+    }
+
     [TestMethod]
     public void NoBlockCanopyCellIsEnterableAndUnknownTilesAreUnknown()
     {

@@ -153,6 +153,8 @@ public partial class TerrainViewerApp
     private void DriveAreaCompanions(IGridSession session, SimulationTime frontier)
     {
         if (_areaCompanions is not { } group || _areaSession is not { } owner || session is not AreaGridSession pc) return;
+        // ARC-COMBAT-020: in a turn-based round a companion moves only on its own subturn, by its AI (none yet): it stands.
+        if (owner.QueryCombatRound() is not null) { RefreshFollowerPortraits(); return; }
         foreach (var (companion, advance) in group.Drive(owner, pc.State, frontier))
         foreach (var item in advance.Movement.Events)
             if (item.Kind is MovementEventKind.StepStarted or MovementEventKind.StepRejected or MovementEventKind.CenterArrived)

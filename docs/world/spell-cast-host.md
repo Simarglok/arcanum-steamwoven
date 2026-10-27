@@ -148,7 +148,7 @@ The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the origina
    keeps its clicks.
 2. **The activation** (`SpellUiRules.Activate`, SU1–SU3). Nothing for a hero that is dead or unconscious or a disabled spell. A BEGIN
    area 0, exactly the radius bit, or self without the tile bit is cast at once at the hero's tile. Otherwise the action points are
-   checked (4 in a turn-based round; the viewer starts none, so it passes) and the targeting cursor opens with the BEGIN area, plus
+   checked (4 in a turn-based round, the session's preview of the charge; since ARC-COMBAT-020 the viewer hosts one) and the targeting cursor opens with the BEGIN area, plus
    the non-party bit for an aggressive spell while no Alt key is held; an Alt key held in the cursor removes it (SU7). With Shift, an
    object spell that may target its caster is cast at once at the hero. An open cursor is closed first.
 3. **The cursor** (SU9). The hover shows "cast" (cross cursor) where a left press would cast and "no target" (forbidden cursor)
@@ -203,8 +203,8 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
   (0x57C040, 0x57C080); the picker 0x4F28A0's own object/tile order (the viewer's: object, hero tile, tile).
 - A run's events on a map the viewer has no cast host for (no combat host, or no spell data yet) get plain passes, which refuse
   them.
-- No turn-based round in the viewer, so the cast's 4 action points are never charged there. The predictor has no display in the
-  original's UI (SU11), so none is planned.
+- In a turn-based round (ARC-COMBAT-020) the casting goal's start charges its 4 action points through the round's world; outside
+  one nothing is charged. The predictor has no display in the original's UI (SU11), so none is planned.
 - Worn mana stores do not pay (no item store state).
 - Spell damage to objects other than critters; NPC casters' weapons; the sector kind; paths.
 - The raise and taking-damage scripts run no SCR.

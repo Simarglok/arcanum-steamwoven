@@ -298,7 +298,8 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
-        var start = caster.StartGoal(run, NoSpellCombat.Instance);
+        // ARC-COMBAT-020: in a turn-based round the casting goal's start charges its 4 action points.
+        var start = caster.StartGoal(run, CombatWorldOrNull() ?? NoSpellCombat.Instance);
         if (start.Outcome != SpellCastGoalOutcome.Started)
         {
             var ended = caster.EndGoal(run, refused: true);
@@ -354,7 +355,7 @@ public partial class TerrainViewerApp
         : " | M spells" + (_spellTargeting is { } t ? $" (targeting spell {t.Spell})" : "") + (_spellGoal is { } g ? $" (casting run {g.Run})" : "")
           + (_spellNotice is null ? "" : ": " + _spellNotice);
 
-    /// <summary>The viewer starts no turn-based round: a casting goal's action points are only charged in one (none here).</summary>
+    /// <summary>Outside a turn-based round a casting goal charges no action points: the world it is given then is never asked.</summary>
     private sealed class NoSpellCombat : ISessionCombatWorld
     {
         public static readonly NoSpellCombat Instance = new();

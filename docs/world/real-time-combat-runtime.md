@@ -88,9 +88,9 @@ incompatible version" and the next F7 overwrites it. No host kept combat mode be
   repeat shot have no host yet.
 - AI: NPC combat mode, combat focus and fighting (the exit gate's threats are always empty in the viewer), the attacked
   NPC's AI pass, NPC attacks.
-- The turn-based setting in the viewer (Space) and its round world; the session supports both.
-- The event-queue pump in the viewer: fatigue spent running in combat mode does not recover there (quick load resets);
-  an unconscious hero still moves (movement does not read life yet).
+- The turn-based setting in the viewer (Space) and its round came with ARC-COMBAT-020
+  ([viewer host](turn-based-round-runtime.md#viewer-host-arc-combat-020)); the event pump (ARC-WORLD-039) recovers the fatigue
+  spent running as the clock flows. Outside a round an unconscious hero still moves (movement does not read life yet).
 - The viewer leaves combat mode before its own dialog-start checks (the source checks the speaker first); a dialog that
   then fails to start leaves the hero out of combat mode.
 - Encumbrance, fatigue-limiting and fatigue-draining heroes, the stunned-animation activation (a no-op for an inactive

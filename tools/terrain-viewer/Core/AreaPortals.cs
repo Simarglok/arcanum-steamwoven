@@ -102,11 +102,13 @@ public sealed class AreaPortals
     }
 
     /// <summary>ARC-SKILLS-006: the hero picks the portal's lock with <paramref name="lockpick"/> (null: no lockpicks), at the light
-    /// <paramref name="light"/> of the portal (full light when the host has none). The session's answer; nothing opens.</summary>
-    public SessionPickLockResult Pick(GameSessionOwner session, AreaPortal portal, SessionLockpick? lockpick, int light = SessionPickLockTarget.FullLight)
+    /// <paramref name="light"/> of the portal (full light when the host has none). The session's answer; nothing opens. In a turn-based
+    /// round (ARC-COMBAT-020) <paramref name="world"/> is its world, and the pick charges its action points.</summary>
+    public SessionPickLockResult Pick(GameSessionOwner session, AreaPortal portal, SessionLockpick? lockpick, int light = SessionPickLockTarget.FullLight,
+        ISessionCombatWorld? world = null)
     {
         ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(portal);
-        return session.PickLock(session.Version, new(Openable(portal), portal.Baseline, portal.LockDifficulty, light), lockpick);
+        return session.PickLock(session.Version, new(Openable(portal), portal.Baseline, portal.LockDifficulty, light), lockpick, world);
     }
 
     /// <summary>A use of the portal by the player (FR-SCENE-014): an open portal closes; a closed one opens when the

@@ -130,6 +130,8 @@ public partial class TerrainViewerApp
         _worldActor.AreaOccupancy = AreaPcOccupancy;
         // ARC-WORLD-074: outside combat mode the PC steps through living NPCs and companions (the owner's decision 2026-10-21).
         _worldActor.AreaCrittersPass = () => !HeroInCombatMode;
+        // ARC-COMBAT-020: in a turn-based round each step the PC starts charges its action points.
+        _worldActor.AreaStepCharge = HeroStepCharge;
         ConfigureGait();
         _worldPanel = new DiagnosticInputSettingsPanel(); AddChild(_worldPanel);
         _worldPanel.Changed += SaveWorldSettings;
@@ -483,6 +485,8 @@ public partial class TerrainViewerApp
         ProcessInventoryAfterRoute();
         ProcessAreaAttack();
         ProcessAreaSpells();
+        // ARC-COMBAT-020: the NPCs' subturns pass and the hero's completion check runs before the hero moves.
+        ProcessTurnBasedRound();
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
         // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.
@@ -669,6 +673,13 @@ public partial class TerrainViewerApp
             _worldRouteClick = "closed the follower order menu";
             RefreshReadyStatus(); return;
         }
+        // ARC-COMBAT-020: in a turn-based round the world takes the hero's commands only on its own subturn (the original's world
+        // handler ignores them during another's).
+        if (_areaSession?.QueryCombatRound() is { } round && CombatModeActive && !round.Actor.IsHero)
+        {
+            _worldRouteClick = "ignored (another participant's turn)"; _turnBasedNotice = "the press waits for the hero's turn";
+            RefreshReadyStatus(); return;
+        }
         // ARC-MAGIC-015: the open targeting cursor takes every left press (the original's interface mode 1).
         if (_spellTargeting is not null) { SpellTargetClick(screen); return; }
         // ARC-MAGIC-015: the casting goal holds the hero until it ends (the original queues other goals under it, not ready here).
@@ -808,7 +819,7 @@ public partial class TerrainViewerApp
             // ARC-INPUT-004: Ctrl, Alt or Command with a character letter (A C F I L R S T W) is no key in the original:
             // no window opens and nothing is reported as reserved.
             // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
-            if (!OriginalWorldKeyboard.CharacterKeySilenced(decision.Key, modifiers) && !RouteQuickKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteSchematicsKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            if (!OriginalWorldKeyboard.CharacterKeySilenced(decision.Key, modifiers) && !RouteQuickKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteSchematicsKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteTurnBasedKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
             {
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
                 _hud?.SetNotice($"Reserved: {routedKey} = {decision.OriginalAction} (NOT IMPLEMENTED)");
