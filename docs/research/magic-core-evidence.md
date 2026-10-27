@@ -248,6 +248,17 @@ or the target tile (apply area (0x453D40, 0x453EE0, 0x453F20)). The earlier read
 and count code (targets (0x4F40B0)); this reading did not audit the
 target module beyond those paths.
 
+**Original check of the casting goal (ARC-MAGIC-014, 2026-10-21).** Read in the executable by two readers ([ledger "Cast host and
+casting goal"](ledger/spell-runs.md#cast-host-and-casting-goal-arc-magic-014), CG1–CG8, F2; the goal table and the
+release re-check F1). Precisions:
+- the goal's start charges the parent 4 action points before the pre-animation check, which reads the cast spell's own cost (MG1
+  settled: the record table, not the run table);
+- a target destroyed or off ends the goal;
+- at the release frame the target is checked again before BEGIN;
+- a goal that ends before its release frees the run with its BEGIN charged, even when it was refused before its animation (MG39) or
+  the run is free or technology (MG40);
+- a failed re-check at the release frame leaves the run in its slot (MG41).
+
 ### Paying (FR-MAGIC-004)
 
 **When.** The casting goal spends 4 AP in turn-based mode and checks that the

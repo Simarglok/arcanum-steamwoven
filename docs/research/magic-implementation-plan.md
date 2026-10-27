@@ -1,7 +1,7 @@
 # Magic implementation plan
 
 Status: **Plan**, work item ARC-RES-060 (2026-10-20), top-20 item 12; the owner approved starting the slices on 2026-10-20,
-and MT1, MT2, MT3, MT5, MT6, MT7, MT8, MT9a-1, MT9a-2, MT10, MT12 and MT19 are done as ARC-MAGIC-001, ARC-MAGIC-002, ARC-MAGIC-004, ARC-MAGIC-003, ARC-MAGIC-005, ARC-MAGIC-006, ARC-MAGIC-007, ARC-MAGIC-009, ARC-MAGIC-010, ARC-MAGIC-011, ARC-MAGIC-012 and ARC-MAGIC-008. The owner split MT9a into MT9a-1 (ARC-MAGIC-009, run creation and the payment stage, which the technology lane waits on) and MT9a-2 (ARC-MAGIC-010, the scheduler and interrupts) on 2026-10-21; "MT9a" below means both. It cuts the
+and MT1, MT2, MT3, MT5, MT6, MT7, MT8, MT9a-1, MT9a-2, MT10, MT12, MT19 and MT20a-1 are done as ARC-MAGIC-001, ARC-MAGIC-002, ARC-MAGIC-004, ARC-MAGIC-003, ARC-MAGIC-005, ARC-MAGIC-006, ARC-MAGIC-007, ARC-MAGIC-009, ARC-MAGIC-010, ARC-MAGIC-011, ARC-MAGIC-012, ARC-MAGIC-008 and ARC-MAGIC-014. The owner split MT9a into MT9a-1 (ARC-MAGIC-009, run creation and the payment stage, which the technology lane waits on) and MT9a-2 (ARC-MAGIC-010, the scheduler and interrupts) on 2026-10-21; "MT9a" below means both. It cuts the
 [magic core research](magic-core-evidence.md) (ARC-RES-043) into ordered code slices, one PR each, and says for every
 slice what it builds, which requirements it covers, what it depends on, what it reuses and how it is checked against the
 original executable. It replaces the eight slices proposed at the end of that research
@@ -32,8 +32,8 @@ script hooks of [FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002
    components (MT12–MT15), world components (MT16–MT18) and host (MT19–MT21). Two prerequisites belong to the WORLD
    type: per-critter magic state for every NPC (P1) and creating objects at run time (P2).
 2. **First visible result** ("first cast"): the hero learns a spell in the character sheet and casts a damaging or
-   healing spell at a critter in the AREA viewer, on any map: MT1, MT2, MT3, MT5–MT8, MT9a-1, MT9a-2, MT10, MT12, MT19 and
-   MT20a, thirteen PRs (plus the skills lane's point transaction). The first cast uses a damage or heal spell without
+   healing spell at a critter in the AREA viewer, on any map: MT1, MT2, MT3, MT5–MT8, MT9a-1, MT9a-2, MT10, MT12, MT19,
+   MT20a-1 and MT20a-2 (the owner split MT20a on 2026-10-21), fourteen PRs (plus the skills lane's point transaction). The first cast uses a damage or heal spell without
    `Duration:` or `Maintain:`, which ends right after BEGIN, so it needs no saved runs (MT9b) and no maintain bar (MT20b). MT4 and MT11 can run beside them.
 3. **Most foundations exist**: the session clock, saved event queue, labelled seeded randomness, life state (hit points,
    fatigue, knockout, death, heal, resurrect), the attack resolver's typed damage and resistances, the hero's effect
@@ -123,7 +123,7 @@ Data questions (record contents, component use, which items carry mana) go throu
 | [Equipment](../world/equipment-runtime.md) | MT5, MT11 | worn slots for mana stores; unwear ends item runs |
 | [Reaction](../world/npc-reaction-runtime.md) | MT14 | charm ±30 and mind control −50 through the reaction owner |
 | [Party and follow](../world/party-runtime.md) | MT11, MT14 | follower leaving combat demaintains; mind control follows and disbands |
-| [Turn-based round](../world/turn-based-round-runtime.md) (`CastSpellCost = 4`), [real-time combat](../world/real-time-combat-runtime.md) | MT20a | casting costs 4 AP; the BEGIN fires on the release frame |
+| [Turn-based round](../world/turn-based-round-runtime.md) (`CastSpellCost = 4`), [real-time combat](../world/real-time-combat-runtime.md) | MT20a-2 | casting costs 4 AP; the BEGIN fires on the release frame |
 | The session's map change and the map catalogue; `AreaMapTransfers` (ARC-WORLD-031) as the viewer host's part | MT16 | teleport as a map change, anti-teleport areas |
 | [SCR dispatcher](../scripting/scr-dispatcher-runtime.md) admission sets | MT15, MT21 | Use component, spell conditions and actions |
 | [Rule modes](../world/rule-modes.md), [function registry](../verification/README.md), oracle (ARC-DEV-007) | all | switches, marks, receipts |
@@ -186,15 +186,16 @@ parallel. "Read" lists the function groups each slice reads twice in the executa
 | Slice | Type | Result | FR | Needs | Read / oracle | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
 | **MT19 Spell book in the character sheet** (done: ARC-MAGIC-008, [viewer](../rendering/terrain-viewer.md#spells-page-arc-magic-008); college page, hints, + and − through the pool, ledger SG1–SG8) | UI | Colleges, ranks and mastery in the character sheet (ARC-UI-007); learn and unlearn through MT3 with the refusal text of the failing check. L2 native smoke. | 012; FR-UI-004 | MT3 | UI learning (0x57C540, 0x57C670) | — |
-| **MT20a Casting in the AREA viewer** | UI | Spell choice, targeting cursor, cast goal (4 AP in turn-based mode, BEGIN on the release frame), feedback texts of `spell.mes`, eye candy as presentation events. L2 native smoke; owner look-and-feel check as a separate owner-validation item. | 012, 003; FR-COMBAT-003, FR-COMBAT-006 | MT7, MT9a, MT10, MT12, MT19 | spell UI (0x57BC70, 0x57BFF0–0x57C110), casting goal (0x429B50–0x429CD0) | — |
-| **MT20b Maintain bar** | UI | The `INT / 4` slots of the PC's maintained runs with stop (MG12 fixed in both modes: it is an out-of-bounds write). L2 native smoke. | 012, 006 | MT20a, MT9b | maintain bar (0x57C290–0x57C4B0) | MG12 |
+| **MT20a-1 Cast host** (done: ARC-MAGIC-014, [contract](../world/spell-cast-host.md); the owner split MT20a on 2026-10-21) | MAGIC | The spell data in the rules' types, the world the run rules ask over the session and any map (target functions, line of fire, run host, damage world, the event pass's magic world), the casting goal as the original's rules (4 AP in turn-based mode, the pre-animation check, BEGIN at the release frame with the target re-check, the end that frees a run charged) and the first cast without a window on the installed original. MG39–MG41 switches. | 003; FR-COMBAT-003 | MT7, MT9a, MT10, MT12, MT19 | casting goal (0x429B50–0x429CD0), pre-animation check (0x450940), release re-check (0x456A90) | — |
+| **MT20a-2 Casting in the AREA viewer** (ARC-MAGIC-015; the owner split MT20a on 2026-10-21) | UI | Spell choice, targeting cursor, the cast goal's animation through MT20a-1's host (the release frame's BEGIN), feedback texts of `spell.mes`, eye candy as presentation events, the predictor (MT6). L2 native smoke of the first cast; owner look-and-feel check as a separate owner-validation item. | 012, 003; FR-COMBAT-003, FR-COMBAT-006 | MT20a-1 | spell UI (0x57BC70, 0x57BFF0–0x57C110), the goals' nodes and eye candy (CG1, CG8) | — |
+| **MT20b Maintain bar** | UI | The `INT / 4` slots of the PC's maintained runs with stop (MG12 fixed in both modes: it is an out-of-bounds write). L2 native smoke. | 012, 006 | MT20a-2, MT9b | maintain bar (0x57C290–0x57C4B0) | MG12 |
 | **MT21 Scripts and dialog** | SCRIPT | SCR conditions `knows_spell`, `mastered_spell_college`, `obj_is_influenced_by_spell`, `obj_has_body_spell`; actions cast spell on (81 lines, 40 live, [census](scr-census.md)), free and unresistable casts, give mastery, stop spell; a dialog NPC's free cast; paid spellcasting services (100 coins). | FR-SCRIPT-002; 002, 006 | MT9a, MT3 | script (0x447220) spell branches, dialog (0x419D50), money (0x4B1650–0x4B1740) | — |
 
 ### Milestones
 
 | Milestone | Slices | What the owner can see |
 | --- | --- | --- |
-| First cast | MT1, MT2, MT3, MT5, MT6, MT7, MT8, MT9a-1, MT9a-2, MT10, MT12, MT19, MT20a | The hero learns a spell and casts a damaging or healing spell at a critter on any map; fatigue drops; the target resists or takes damage. |
+| First cast | MT1, MT2, MT3, MT5, MT6, MT7, MT8, MT9a-1, MT9a-2, MT10, MT12, MT19, MT20a-1, MT20a-2 (all done but MT20a-2) | The hero learns a spell and casts a damaging or healing spell at a critter on any map; fatigue drops; the target resists or takes damage. |
 | Magic core | + MT4, MT9b, MT11, MT20b, P1, MT13, MT14, MT15, MT21 | Maintained spells with the bar, buffs and curses on NPCs, charm and mind control, dispel, scripted casts; FR-MAGIC-001..007 covered. |
 | World magic | + MT16, P2, MT17, MT18 | Teleport, summons, polymorph. |
 
@@ -253,6 +254,9 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG36 | original bug (ARC-MAGIC-012, ledger MG36) | fix (owner decision 2026-10-21), switch `SpellDamageUsesCastersWeapon`: a spell's damage step has no weapon, so the caster's weapon flags (ignore resistance, "uber", damage armour) do not reach it | MT12 |
 | MG37 | original bug (ARC-MAGIC-012, ledger MG37) | fix (owner decision 2026-10-21), switch `MarginTakesFromNoDamage`: a margin takes nothing from an amount of 0 or less | MT12 |
 | MG38 | original bug (ARC-MAGIC-012, ledger MG38) | fix (owner decision 2026-10-21), switch `AcidIgnoresBodyArmour`: a wearer who wears body armour is spared | MT12 |
+| MG39 | original bug (ARC-MAGIC-014, ledger MG39; **pending the owner**, recommended fix built) | a Steamwoven fix with an Original switch `GoalRefusalChargesBegin`: a casting goal refused before its animation frees its run unpaid | MT20a-1 |
+| MG40 | original bug (ARC-MAGIC-014, ledger MG40; **pending the owner**, recommended fix built) | a Steamwoven fix with an Original switch `GoalEndChargesAnyRun`: a run freed before its BEGIN is charged only when its BEGIN would have paid | MT20a-1 |
+| MG41 | original bug (ARC-MAGIC-014, ledger MG41; **pending the owner**, recommended fix built) | a Steamwoven fix with an Original switch `ReleaseRefusalKeepsRun`: a run whose target fails the release re-check is freed unpaid | MT20a-1 |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |
 | O10 shell and reflection order | reconstruction change | the original in both modes | MT10 |
 | Charm asymmetry | reconstruction change confirmed | the original (+30 and −30 both through the reaction effects) | MT14 |
@@ -289,7 +293,7 @@ Agreed through the coordinator on 2026-10-20:
   short research item first (open question O6), then one shared slice after MT9a; equipment now refuses items with
   spells, and that refusal lifts there.
 - **Technology runtime**: the technology lane above.
-- **Spell visuals**: `SpellEyeCandy.mes`, casting and missile art and their animation; MT20a emits presentation events
+- **Spell visuals**: `SpellEyeCandy.mes`, casting and missile art and their animation; MT20a-2 emits presentation events
   only, and the visual catalogue is a presentation task.
 - **Line of fire**: the AI awareness lane (combat open question O4).
 - **Fate state**: slice S7 of the [skills plan](skills-plan.md).

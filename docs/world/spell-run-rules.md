@@ -164,11 +164,11 @@ an action's or event's queued events do not fit; what the host's ports already d
 
 ## Not ready
 
-- No viewer caller: the casting UI (MT20a) starts runs and their BEGIN; Damage and Heal are ARC-MAGIC-012's ([spell damage and heal](spell-damage-heal.md), the host's `Apply` calls `SpellLifeComponents`), the other components MT13–MT18's; the maintain bar is MT20b's;
+- No viewer caller: the casting UI (MT20a-2) starts runs and their BEGIN; Damage and Heal are ARC-MAGIC-012's ([spell damage and heal](spell-damage-heal.md), the host's `Apply` calls `SpellLifeComponents`), the other components MT13–MT18's; the maintain bar is MT20b's;
   the endings' callers (fainting, rest, travel, death) are MT11's; saved runs and events are MT9b's.
 - The other object (the invocation's +0xA0, copied to the run's +0x108) is not carried by MT7's invocation yet, so a run's
   `Other` is always null; the slice that needs it (a spell aimed at a second object) adds it to the invocation.
-- The casting goal and its eye candy are MT20a's.
+- The casting goal's rules are the cast host's (ARC-MAGIC-014, MT20a-1); its animation and eye candy are MT20a-2's.
 - While the rules act, the session refuses calls back into its runs and an event pass from a host port (so nothing is overwritten
   or consumed unrun); a component that casts a spell (MT12–MT18) will need its own path, as the original's guard refuses only
   processing.

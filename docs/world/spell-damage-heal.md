@@ -147,6 +147,6 @@ No installed record reaches either: the one acid component is a technology recor
 
 ## Not ready
 
-- No viewer caller: the casting UI (MT20a).
-- The world port behind the session's NPCs is the casting host's (MT20a).
+- No viewer caller: the casting UI (MT20a-2).
+- The world port behind the session's NPCs is the cast host's ([spell cast host](spell-cast-host.md), ARC-MAGIC-014).
 - The taking-damage script (point 0x17) runs no SCR yet.

@@ -100,4 +100,4 @@ anomaly needs an owner choice.
 - The line of fire itself (0x4ADE00) is ARC-COMBAT-012's `LineOfFireRules.Trace`; no caller wires it to the port yet.
 - The BEGIN-area tests and the target collection (0x4F2D20, 0x4F40B0) are answered by `SpellInvocationAreas` (ARC-MAGIC-007); a host still has to fill its world port.
 - The anti-teleport zones (0x4BDD30, `Rules\AntiTeleport.mes`) and the movement components are MT16's (FR-TRAVEL-005).
-- The spell UI's own line-of-fire call (0x57C235) is the casting UI's (MT20a).
+- The spell UI's own line-of-fire call (0x57C235) is the casting UI's (MT20a-2).

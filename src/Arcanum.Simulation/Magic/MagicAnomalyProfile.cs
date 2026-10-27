@@ -107,6 +107,28 @@ public sealed record MagicAnomalyProfile
     /// </summary>
     public bool AcidIgnoresBodyArmour { get; init; }
 
+    /// <summary>
+    /// MG39 (ARC-MAGIC-014; pending the owner, recommended fix): a casting goal refused before its animation — the parent's action
+    /// points refused in a turn-based round, the source cannot afford the cast, or the target is destroyed or off — ends through the
+    /// goal's end (0x429CD0), which frees the run with its BEGIN cost charged and applied: the hero pays for a cast that never
+    /// started. Steamwoven frees the run unpaid.
+    /// </summary>
+    public bool GoalRefusalChargesBegin { get; init; }
+
+    /// <summary>
+    /// MG40 (ARC-MAGIC-014; pending the owner, recommended fix): the charge of a run freed before its BEGIN (0x456FA0 through 0x4507D0)
+    /// tests neither the run's free flag, nor the record's technology flag or <c>ChargeBeginCost: 0</c>, as the BEGIN itself does, so
+    /// such a run pays its cost anyway. Steamwoven charges it only when its BEGIN would have paid.
+    /// </summary>
+    public bool GoalEndChargesAnyRun { get; init; }
+
+    /// <summary>
+    /// MG41 (ARC-MAGIC-014; pending the owner, recommended fix): when the target re-check at the release frame (0x456A90) fails, the
+    /// release gate has already marked the frame handled, so the goal's end frees nothing and the run keeps its slot until the game
+    /// ends. Steamwoven frees it, unpaid.
+    /// </summary>
+    public bool ReleaseRefusalKeepsRun { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly MagicAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -116,7 +138,8 @@ public sealed record MagicAnomalyProfile
         Name = "original", SaveSubtractsResistance = true, SummonedTestReadsLastFlags = true, MaintenancePaysBoth = true,
         SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true, ReflectionPaysLastCost = true, ReEntryDropsRuns = true,
         FreeKeepsOtherEvents = true, DifficultyScalesKillDamage = true, SpellDamageUsesCastersWeapon = true, MarginTakesFromNoDamage = true,
-        AcidIgnoresBodyArmour = true, ResistedReflectionKeepsSwap = true,
+        AcidIgnoresBodyArmour = true, ResistedReflectionKeepsSwap = true, GoalRefusalChargesBegin = true, GoalEndChargesAnyRun = true,
+        ReleaseRefusalKeepsRun = true,
     };
 
     /// <summary>Both settings, default first.</summary>

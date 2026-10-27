@@ -242,3 +242,35 @@ technology record, which resistance never reaches, and `Full` alone is used only
 the step (a kill), and acid hits the worn items before the wearer's third; [FR-MAGIC-007](../../requirements/combat-magic-tech.md#fr-magic-007)'s
 damage and heal path, [FR-COMBAT-008](../../requirements/combat-magic-tech.md#fr-combat-008)'s damage step for a spell and
 [FR-COMBAT-010](../../requirements/combat-magic-tech.md#fr-combat-010)'s raise.
+
+## Cast host and casting goal (ARC-MAGIC-014)
+
+Source: the [spell cast host](../../world/spell-cast-host.md), slice MT20a-1 of the [magic implementation plan](../magic-implementation-plan.md)
+(the owner split MT20a on 2026-10-21). Read on 2026-10-21 by this task and, independently, by a second reader that saw only the
+questions (method step 6). Both read the goal's start (0x429B50), the pre-animation check (0x450940), the target node (0x429BC0),
+the release (0x429C80) and the end (0x429CD0) and agree; the second reader alone read the goal table, the release re-check
+(0x456A90) and the eye-candy keys (F1), and corrected this reading's keys of 0x458B70 and 0x456E00 (six eye-candy entries per spell).
+MG1 is settled again: 0x450940 indexes the spell record table (0x6876D8), not the run table (0x6876E0), which has the same stride.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| CG1 | goal table (0x5B03D0; goals 26, 82 at 0x5A89D0, 0x5AF9D0) | `ag_throw_spell` and its casting-animation twin: get up, unconceal, the start node (0x429B50), the target node (0x429BC0), the facing turn (0x42C850), then replaced by goal 27 (82: 83) that plays the cast; a refusal goes through the overlay removal to the end node (0x429CD0). Goal 73 (the friendly cast) runs the same start but has no end node. | Original (F1: the second reader; the node order is the viewer's, MT20a-2) |
+| CG2 | casting goal start (0x429B50) | The goal's object (SELF, the run's parent) is charged 4 action points (0x4B7CD0: only in a turn-based round in its own subturn; with too few, the local player with points and fatigue above 1 pays all and takes 2 fatigue damage, anyone else's subturn ends); a refusal ends the goal. Then the pre-animation check of the goal's run (frame slot 11). | Original |
+| CG3 | pre-animation check (0x450940) | PC3: a failed lookup refuses; a free run or one without a source passes; the cast spell's `Cost:` at BEGIN, its maintenance cost otherwise (record table 0x6876D8, not the run table: MG1 settled); cheat 1; dwarf × 2; no mastery; the payment asked without applying (cells are taken anyway, CC6). | Original |
+| CG4 | target node (0x429BC0) | A target destroyed or off (object flags 0x3) ends the goal; otherwise its location is read and discarded. | Original |
+| CG5 | release (0x429C80; goals 27, 83 at the action frame after the release gate 0x42CAA0, goal 28 when a missile arrives) | The target re-check (0x456A90) first; a failure begins nothing. Without missile art the caster's eye candy (0x456E00, entry 6·spell+4); the goal's flags gain 0xC; BEGIN (0x456F70). | Original |
+| CG6 | release target re-check (0x456A90) | The record's BEGIN area passes at once when it is 0, exactly 0x10, or has the self bit without the tile bit (high 0x8000); otherwise the picker's wrapper (0x4F2680) over the area test (0x4F2D20), with the run's source and parent: a target object fails for object flag 0x800, is tested as the candidate and the target with no tiles, and on a failure again with its location as the candidate and target tile (on a pass the wrapper turns the target into that tile); a target tile is tested as both tiles. A pass also needs the picker's global 0x603D20 set. | Original (F1; the wrapper read by one reader at the review) |
+| CG7 | goal end (0x429CD0) | Unless the goal's frame is already handled (flag 0x8) or skipped: the eye-candy art and light are removed; a run that did not begin is freed with its BEGIN charged (0x456FA0 through 0x4507D0: the run cost with mastery, applied, then the free) and the frame's run slots cleared; the caster's art is reset (not for goal 73's flag 0x200000). | Original |
+| CG8 | eye-candy table (0x5E7568, `rules\SpellEyeCandy.mes`) | Six entries per spell: the caster overlay (6·spell), the missile art (6·spell+1, turned to the parent's facing, 0x458B70) and the caster eye candy of the release (6·spell+4, 0x456E00). | Original (F1; presentation, MT20a-2) |
+| MG39 | goal start and end (CG2, CG4, CG7) | A goal refused before its animation (action points, the pre-animation check, a target destroyed or off) ends through the end node, which charges the BEGIN cost: the caster pays for a cast that never started; the applied payment also drains mana stores and cells before its fatigue test. | Original bug (pending the owner; recommended a Steamwoven fix with an Original switch: the run is freed unpaid; built) |
+| MG40 | the end's charge (0x456FA0, 0x4507D0) | The charge tests neither the run's free flag nor the record's technology flag or `ChargeBeginCost: 0`, as the BEGIN does (RN5). | Original bug (pending the owner; recommended a Steamwoven fix with an Original switch: charged only when the BEGIN would have paid; built) |
+| MG41 | release (CG5) and end (CG7) | The release gate marks the frame handled before the re-check; when the re-check fails nothing begins and the end node frees nothing, so the run keeps its slot until the game ends. | Original bug (pending the owner; recommended a Steamwoven fix with an Original switch: the run is freed unpaid; built) |
+
+Recorded for MT20a-2, which plays the goals (F1): goal 73 frees nothing on its refusals (no end node); a queued cast stores its
+casting animation in another frame slot than the one goal 83 plays (unless the queue start moves it, not read); a goal refused
+before goal 27 loaded its overlay removes art 0.
+
+**F0 facts raised** (owner decision 2026-10-20): the magic research's cast pipeline step "the casting animation (4 AP in turn-based
+mode and an affordability check)" and the paying paragraph's "a cast interrupted before its BEGIN ran is charged in full and dropped"
+(F2, with MG39–MG41); [FR-MAGIC-003](../../requirements/combat-magic-tech.md#fr-magic-003) and
+[FR-COMBAT-003](../../requirements/combat-magic-tech.md#fr-combat-003)'s casting path.
