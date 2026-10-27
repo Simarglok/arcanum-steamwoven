@@ -128,7 +128,7 @@ public sealed class AreaQuickSaveTests
             return result;
         }
 
-        Assert.AreEqual("quick load FAILED: no quick save yet (F7 saves)", Load(current).Status);
+        Assert.AreEqual("quick load FAILED: no save yet (F7 saves)", Load(current).Status);
 
         using (var saver = Session()) Assert.IsTrue(AreaQuickSave.Save(saver, Outside, Slot()).Saved);
         var unloaded = Load(current, _ => "map not loaded in this run");

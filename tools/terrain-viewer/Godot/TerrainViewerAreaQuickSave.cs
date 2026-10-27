@@ -25,22 +25,27 @@ namespace Arcanum.TerrainViewer;
 // session and standing the actor on the saved cell (the running session is kept until the map is published with the
 // loaded one, and comes back with the origin map when the destination does not load or refuses the loaded session; the
 // saved cell and that map's inventory seed can only be checked once it is loaded).
+// ARC-UI-010: the slot is the save list's auto slot (the original's SlotAuto "Auto-Save"): F7 writes it with its details and a
+// preview, and F8 loads the newest save of the list by file date, which is the auto slot only when it is the newest (ledger
+// SL1, SL2). The save and load window (TerrainViewerAreaSaveList) writes, loads and deletes the other saves of the same folder.
 public partial class TerrainViewerApp
 {
     private const string QuickSaveDirectory = "user://saves";
     private const string MapQuickSaveDirectory = "user://saves/map";
-    private GameSessionSaveSlot? _quickSaveSlot;
-    private GameSessionSaveSlot? _mapQuickSaveSlot;
-    // The native smoke writes to its own temporary slot, never to the player's quick save.
-    private GameSessionSaveSlot? _quickSaveSlotForSelfTest;
+    private GameSaveLibrary? _saveLibrary;
+    private GameSaveLibrary? _mapSaveLibrary;
+    // The native smoke writes to its own temporary folder, never to the player's saves.
+    private GameSaveLibrary? _saveLibraryForSelfTest;
     private readonly QuickKeyGate _quickKeys = new();
     private string? _quickSaveStatus;
 
     private enum QuickBusy { None, NoActor, Lifecycle, TransferPending, MapLoading }
 
-    private GameSessionSaveSlot QuickSaveSlot => _quickSaveSlotForSelfTest ?? (_readyMapName is not null
-        ? _mapQuickSaveSlot ??= GameSessionSaveSlot.QuickSave(SaveDirectory(MapQuickSaveDirectory))
-        : _quickSaveSlot ??= GameSessionSaveSlot.QuickSave(SaveDirectory(QuickSaveDirectory)));
+    private GameSaveLibrary SaveLibrary => _saveLibraryForSelfTest ?? (_readyMapName is not null
+        ? _mapSaveLibrary ??= new(SaveDirectory(MapQuickSaveDirectory))
+        : _saveLibrary ??= new(SaveDirectory(QuickSaveDirectory)));
+
+    private GameSessionSaveSlot QuickSaveSlot => SaveLibrary.AutoSlot;
 
     // ARC-DEV-032: an automated run keeps its quick saves in its isolated folder, never in the player's saves.
     private static string SaveDirectory(string user) => ViewerAutomatedStorage.Automated
@@ -88,29 +93,57 @@ public partial class TerrainViewerApp
 
     private int CurrentAreaMap => _areaTransitions?.CurrentMap ?? _readyArea!.Snapshot.RuntimeMap;
 
-    private void QuickSave()
+    /// <summary>F7: the auto slot, described "Auto-Save" as the original's F7 save, with a preview of the screen as it is.</summary>
+    private void QuickSave() => SaveGame(GameSaveLibrary.AutoName, GameSaveLibrary.AutoDescription, CaptureSaveThumbnail(), "F7 ");
+
+    /// <summary>Saves the session into the save list: <paramref name="name"/> is the save to write, or null for a new numbered save.
+    /// The HUD and the log say what happened; the written save's name, or null when nothing was saved.</summary>
+    private string? SaveGame(string? name, string description, byte[]? thumbnail, string prefix)
     {
         var busy = QuickBusyReason();
-        if (busy != QuickBusy.None) { SetQuickStatus("F7 quick save refused: " + Describe(busy)); return; }
+        if (busy != QuickBusy.None) { SetQuickStatus(prefix + "save refused: " + Describe(busy)); return null; }
         // ARC-MAGIC-015: a casting goal is not saved (no goal state in the session); its run would wait for a release that never comes.
-        if (_spellGoal is not null) { SetQuickStatus("F7 quick save refused: a cast is playing"); return; }
+        if (_spellGoal is not null) { SetQuickStatus(prefix + "save refused: a cast is playing"); return null; }
         var grid = (AreaGridSession)_worldActor.Session!;
         var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
         var placement = new ActorPlacement(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing);
         // ARC-WORLD-016: the companions' cells are session state too; a refused placement refuses the save.
-        if (!RecordAreaCompanions("quick save")) { SetQuickStatus("F7 quick save refused: " + _companionNotice); return; }
-        var result = AreaQuickSave.Save(_areaSession!, placement, QuickSaveSlot);
+        if (!RecordAreaCompanions("save")) { SetQuickStatus(prefix + "save refused: " + _companionNotice); return null; }
+        var result = AreaQuickSave.Save(_areaSession!, placement, SaveLibrary, name, session => AreaSaveList.Summary(session, description, SaveLocation()), thumbnail);
         GD.Print("ARC-WORLD-011 quick-save " + System.Text.Json.JsonSerializer.Serialize(new {
-            result.Saved, Failure = result.Write?.Failure.ToString(), result.Write?.Detail, result.Write?.Bytes, Place = result.PlaceFailure.ToString(),
-            Map = placement.Map.RuntimeMap, placement.Cell, Revision = _areaSession!.Version.Revision }));
-        SetQuickStatus("F7 " + result.Status);
+            result.Saved, Name = result.Library?.Name, Failure = result.Library?.Failure.ToString(), Snapshot = result.Write?.Failure.ToString(), result.Write?.Detail,
+            result.Write?.Bytes, result.Library?.Warning, Place = result.PlaceFailure.ToString(), Map = placement.Map.RuntimeMap, placement.Cell,
+            Thumbnail = thumbnail?.Length ?? 0, Revision = _areaSession!.Version.Revision }));
+        SetQuickStatus(prefix + result.Status);
+        return result.Saved ? result.Library!.Name : null;
     }
 
-    private void QuickLoad()
+    /// <summary>The location a save names: the map mode's map, else the Crash Site or its cave.</summary>
+    private string SaveLocation() => _readyMapName ?? (InCave ? "Crash Site cave" : "Crash Site");
+
+    /// <summary>A PNG of the frame on screen fitted into the original's fixed 468×300 preview (SL8), or null when the frame cannot be
+    /// read (a headless run).</summary>
+    private byte[]? CaptureSaveThumbnail()
+    {
+        if (DisplayServer.GetName() == "headless") return null;
+        var image = GetViewport().GetTexture()?.GetImage();
+        if (image is null || image.IsEmpty()) return null;
+        var scale = Math.Min(468.0 / image.GetWidth(), 300.0 / image.GetHeight());
+        image.Resize(Math.Max(1, (int)(image.GetWidth() * scale)), Math.Max(1, (int)(image.GetHeight() * scale)), Image.Interpolation.Bilinear);
+        var png = image.SavePngToBuffer();
+        return png is { Length: > 0 } && png.Length <= SaveLibrary.Limits.MaxThumbnailBytes ? png : null;
+    }
+
+    /// <summary>F8: the newest save of the list (the original's latest-save helper), the auto slot only when it is the newest.</summary>
+    private void QuickLoad() => LoadGame(SaveLibrary.Latest() is { } latest ? SaveLibrary.Slot(latest.Name) : QuickSaveSlot, "F8 ");
+
+    /// <summary>Loads one save of the list. True when the loaded session was adopted or its map load started; on false the running
+    /// session and scene are unchanged and the HUD says why.</summary>
+    private bool LoadGame(GameSessionSaveSlot slot, string prefix)
     {
         // A load supersedes a queued transfer; it waits only for a reset/reload.
         var busy = QuickBusyReason();
-        if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading) { SetQuickStatus("F8 quick load refused: " + Describe(busy)); return; }
+        if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading) { SetQuickStatus(prefix + "quick load refused: " + Describe(busy)); return false; }
         var maps = AreaRuntimes();
         // ARC-WORLD-038: in map mode a save on another map is loaded with that map, where its cell is placed.
         AreaMapDestination? elsewhere = null;
@@ -120,18 +153,18 @@ public partial class TerrainViewerApp
             if (_mapTransfers?.Destinations.TryGetValue(placement.Map.RuntimeMap, out var destination) != true) return "map mode cannot open that map";
             elsewhere = destination; return null;
         }
-        var result = AreaQuickSave.Load(QuickSaveSlot, _areaSession!, Refusal, MapSoundDefault);
+        var result = AreaQuickSave.Load(slot, _areaSession!, Refusal, MapSoundDefault);
         GD.Print("ARC-WORLD-011 quick-load " + System.Text.Json.JsonSerializer.Serialize(new {
-            Loaded = result.Owner is not null, Read = result.Read?.Failure.ToString(), Decode = result.Read?.DecodeFailure.ToString(),
+            Slot = System.IO.Path.GetFileName(slot.Path), Loaded = result.Owner is not null, Read = result.Read?.Failure.ToString(), Decode = result.Read?.DecodeFailure.ToString(),
             result.Read?.DecodePath, Restore = result.RestoreFailure.ToString() }));
-        if (result.Owner is null) { SetQuickStatus("F8 " + result.Status); return; }
+        if (result.Owner is null) { SetQuickStatus(prefix + result.Status); return false; }
         // ARC-UI-004: the loaded maps' inventory seeds are attached to the restored session before anything changes; a
         // save whose taken items disagree with them is refused (the item would be lost or duplicated).
         if (_inventoryHost?.Attach(result.Owner) is { } attached && attached != GameSessionFailure.None)
         {
             result.Owner.Dispose();
-            SetQuickStatus($"F8 quick load REFUSED: the save's inventory does not match the loaded maps ({attached})");
-            return;
+            SetQuickStatus($"{prefix}quick load REFUSED: the save's inventory does not match the loaded maps ({attached})");
+            return false;
         }
         // ARC-SCRIPT-006: the dialog host reads its state from the session, so it moves to the loaded one; a session
         // whose dialog values it cannot read is refused here, before anything changes.
@@ -140,13 +173,15 @@ public partial class TerrainViewerApp
         catch (ArgumentException)
         {
             result.Owner.Dispose();
-            SetQuickStatus("F8 quick load REFUSED: the save's dialog state is not readable");
-            return;
+            SetQuickStatus(prefix + "quick load REFUSED: the save's dialog state is not readable");
+            return false;
         }
         // The shown map's seeds and dialog state are checked above; the other map binds its own when it is published.
-        if (elsewhere is { } map) { QuickLoadOtherMap(result.Owner, map, result.Status); return; }
+        var from = " from " + System.IO.Path.GetFileNameWithoutExtension(slot.Path);
+        if (elsewhere is { } map) { QuickLoadOtherMap(result.Owner, map, prefix + result.Status + from); return true; }
         AdoptLoadedSession(result.Owner, maps, talk);
-        SetQuickStatus("F8 " + result.Status);
+        SetQuickStatus(prefix + result.Status + from);
+        return true;
     }
 
     /// <summary>ARC-WORLD-038: the loaded session goes with a load of its map (a pending transfer is dropped, the actor's host
@@ -164,7 +199,7 @@ public partial class TerrainViewerApp
             Previous: _areaSession, Kind: MapHandoffKind.QuickLoad, OriginFacing: grid.State.Facing);
         var next = origin with { AreaMapName = map.Name, AreaMapArrival = new(actor.Cell.X, actor.Cell.Y), AreaMapSector = null };
         GD.Print("ARC-WORLD-038 quick-load map " + System.Text.Json.JsonSerializer.Serialize(new { From = _readyArea.Snapshot.RuntimeMap, To = map, actor.Cell }));
-        SetQuickStatus($"F8 {status}; loading '{map.Name}'");
+        SetQuickStatus($"{status}; loading '{map.Name}'");
         _lastLoad = LoadTransferAsync(next);
     }
 
@@ -237,7 +272,7 @@ public partial class TerrainViewerApp
     }
 
     private string QuickSaveStatus() => !QuickKeysActive ? ""
-        : " | F7 quick save / F8 quick load (one slot " + (_readyMapName is null ? QuickSaveDirectory : MapQuickSaveDirectory) + "/" + GameSessionSaveSlot.QuickSaveFileName + ")"
+        : " | F7 auto-save / F8 load the newest save (" + (_readyMapName is null ? QuickSaveDirectory : MapQuickSaveDirectory) + "; save list in the palette)"
             + (_quickSaveStatus is null ? "" : ": " + _quickSaveStatus);
 
     // Native observation (ARC-WORLD-011), run after the transition smoke with the exterior published: F7 through the
@@ -249,7 +284,7 @@ public partial class TerrainViewerApp
         var directory = System.IO.Directory.CreateTempSubdirectory("arc-world-011-").FullName;
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
-        _quickSaveSlotForSelfTest = GameSessionSaveSlot.QuickSave(directory);
+        _saveLibraryForSelfTest = new(directory);
         try
         {
             static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-WORLD-011 quick save smoke: " + why); }
@@ -260,8 +295,11 @@ public partial class TerrainViewerApp
             var savedCell = UseCell(exterior, new(trigger.WorldX!.Value, trigger.WorldY!.Value));
             AreaSmokePlace(exterior, savedCell);
             QuickKey(Key.F7);
-            var slot = _quickSaveSlotForSelfTest;
+            var slot = _saveLibraryForSelfTest.AutoSlot;
             Require(slot.Exists && _quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved: " + _quickSaveStatus);
+            // ARC-UI-010: the auto-save carries its details (the original's "Auto-Save" description, the place) for the save list.
+            Require(_saveLibraryForSelfTest.List().Entries is [{ IsAuto: true, Details: GameSaveDetails.Present, Summary.Location: "Crash Site" } auto]
+                && auto.DisplayDescription == GameSaveLibrary.AutoDescription, "the auto-save has its details");
             var savedWorld = exterior.Chart.ToWorld(savedCell);
             Require(_areaSession!.QueryActor() is { } placed && placed.Map.RuntimeMap == 1 && placed.Cell == new CellCoord((int)savedWorld.X, (int)savedWorld.Y), "the session holds the saved cell");
             var savedBytes = System.IO.File.ReadAllBytes(slot.Path);
@@ -309,7 +347,7 @@ public partial class TerrainViewerApp
         finally
         {
             if (WorldModal) ToggleWorldSettings();
-            _quickSaveSlotForSelfTest = null; _quickKeys.Reset();
+            _saveLibraryForSelfTest = null; _quickKeys.Reset();
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             System.IO.Directory.Delete(directory, recursive: true);
