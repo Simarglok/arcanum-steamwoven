@@ -106,7 +106,8 @@ The original's goals 26 and 82 (`ag_throw_spell`, with the record's casting anim
 (`ag_attempt_spell`) play the cast:
 
 1. **Start (`StartGoal`, 0x429B50).** The parent pays 4 action points (0x4B7CD0, only in a turn-based round in its own subturn;
-   the hero overexerts as in ledger TB9). A refusal ends the goal. Then the pre-animation check (0x450940, PC3): unless the run is
+   the hero overexerts as in ledger TB9; a hero knocked out by that overexertion still starts the goal here, and whether the
+   original's later nodes stop it is not read: MT20a-2's). A refusal ends the goal. Then the pre-animation check (0x450940, PC3; a failed record lookup refuses): unless the run is
    free or has no source, the source must afford the cast spell's `Cost:` (its maintenance cost for another action) — no mastery,
    1 under the cheat, doubled for a dwarf — asked without applying. A refusal ends the goal.
 2. **Target.** A target that is destroyed or off ends the goal (0x429BC0); the facing turn is the viewer's.
@@ -117,10 +118,11 @@ The original's goals 26 and 82 (`ag_throw_spell`, with the record's casting anim
      candidate and the target with no tiles, and then with its location as both tiles; a target tile is tested as both tiles. The
      wrapper's global gate (0x603D20) belongs to the picker and is not modelled.
 
-   Then the run's BEGIN is processed (0x456F70).
+   Then the run's BEGIN is processed (0x456F70). The release fires once per goal: a run already released, or whose BEGIN already
+   ran, is not released again.
 4. **End (`EndGoal`, 0x429CD0).** A goal that ends before its release frame frees the run with its BEGIN cost charged (0x456FA0:
    the run cost with mastery, applied). After the release frame (the goal's frame flag 0x8), or for a run whose BEGIN ran, the end
-   frees nothing; the host forgets the release when the run is freed, since its slot is reused.
+   frees nothing; the host forgets the release when the run is freed or a new goal starts for its slot, since the slot is reused.
 
 ## Differences from the original
 

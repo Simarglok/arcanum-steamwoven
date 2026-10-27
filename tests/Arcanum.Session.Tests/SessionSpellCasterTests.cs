@@ -234,8 +234,90 @@ public sealed class SessionSpellCasterTests
             var run = Start(owner, caster, record, "box");
             var gone = new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, new Map(owner), new Events());
             Assert.IsFalse(gone.TargetStillValid(owner.QuerySpellRuns()[run]!));
+            var before = Hero(owner).Fatigue;
             Assert.IsNull(gone.Release(run), "nothing begins");
             Assert.AreEqual(kept, owner.QuerySpellRuns()[run] is not null, $"{mode}");
+            Assert.IsNull(gone.EndGoal(run), "the release frame handled the goal's frame");
+            Assert.AreEqual(before, Hero(owner).Fatigue, $"{mode}: unpaid");
         }
+    }
+
+    private sealed class SoloRound : ISessionCombatWorld
+    {
+        public IReadOnlyList<SessionCombatCandidate> ScanCombatants(SessionMapId map) => [new(SessionCombatant.Hero, new(0, 0))];
+        public SessionCombatantFacts? CombatantFacts(SessionMapId map, string entity) => null;
+    }
+
+    [TestMethod]
+    public void A_goal_charges_4_action_points_in_a_turn_based_round_and_the_hero_overexerts_without_them()
+    {
+        var record = SelfBolt(cost: 1);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var round = new SoloRound();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.StartCombatRound(owner.Version, round).Disposition);
+        var points = owner.QueryCombatRound()!.ActionPoints;
+        Assert.IsTrue(points >= TurnBasedRules.CastSpellCost);
+
+        var paid = caster.StartGoal(Start(owner, caster, record), round);
+        Assert.AreEqual((SpellCastGoalOutcome.Started, SessionActionPointUse.Paid), (paid.Outcome, paid.ActionPoints!.Charge));
+        Assert.AreEqual(points - TurnBasedRules.CastSpellCost, owner.QueryCombatRound()!.ActionPoints);
+
+        // Spend the round's points with further goals until fewer than 4 are left: with some left the hero overexerts and the goal
+        // starts; with none the charge is refused and the goal ends.
+        SpellCastGoalStart last;
+        do last = caster.StartGoal(Start(owner, caster, record), round);
+        while (last.ActionPoints!.Charge == SessionActionPointUse.Paid);
+        if (points % TurnBasedRules.CastSpellCost != 0)
+        {
+            Assert.AreEqual((SpellCastGoalOutcome.Started, SessionActionPointUse.Overexerted), (last.Outcome, last.ActionPoints.Charge));
+            Assert.IsTrue(owner.QueryHeroLife()!.Record.State.FatigueDamage > 0, "the overexertion's fatigue damage");
+        }
+        else Assert.AreEqual((SpellCastGoalOutcome.NoActionPoints, SessionActionPointUse.Refused), (last.Outcome, last.ActionPoints.Charge));
+    }
+
+    [TestMethod]
+    public void A_goal_ended_before_its_release_frame_is_charged_in_Steamwoven_when_its_begin_would_pay()
+    {
+        var record = SelfBolt();
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var before = Hero(owner).Fatigue;
+        var run = Start(owner, caster, record);
+        Assert.IsNotNull(caster.EndGoal(run));
+        Assert.AreEqual((before - 7, (SpellRun?)null), (Hero(owner).Fatigue, owner.QuerySpellRuns()[run]));
+    }
+
+    [TestMethod]
+    public void A_release_frame_begins_a_run_once()
+    {
+        var record = SelfBolt(duration: 30);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var before = Hero(owner);
+        var run = Start(owner, caster, record);
+        Assert.IsNotNull(caster.Release(run));
+        Assert.IsNull(caster.Release(run), "the release gate fires once");
+        // Another host, which never saw the release frame, reads that the BEGIN ran.
+        Assert.IsNull(new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, new Map(owner), new Events()).Release(run));
+        Assert.AreEqual((before.Fatigue - 7, before.HitPoints - 3), Hero(owner), "paid and hurt once");
+    }
+
+    [TestMethod]
+    public void A_slot_freed_outside_the_host_starts_a_new_goal_that_its_end_frees()
+    {
+        var record = SelfBolt(duration: 30);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var run = Start(owner, caster, record);
+        caster.Release(run);
+        // Freed by the session directly, not through this host: the host never sees the note.
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            owner.ActOnSpellRun(owner.Version, caster, new(SessionSpellRunActionKind.Free, run)).Disposition);
+        var second = Start(owner, caster, record);
+        Assert.AreEqual(run, second, "the slot is reused");
+        Assert.AreEqual(SpellCastGoalOutcome.Started, caster.StartGoal(second, new NoCombat()).Outcome);
+        Assert.IsNotNull(caster.EndGoal(second, refused: true));
+        Assert.IsNull(owner.QuerySpellRuns()[second], "the new goal's end frees its run");
     }
 }

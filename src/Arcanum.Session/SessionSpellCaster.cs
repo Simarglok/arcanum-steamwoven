@@ -305,6 +305,8 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     {
         ArgumentNullException.ThrowIfNull(combat);
         if (_owner.QuerySpellRuns()[run] is not { } r) return new(SpellCastGoalOutcome.NoRun, null);
+        // A new goal for the slot: a release this host remembers belongs to an earlier run, freed elsewhere.
+        _released.Remove(run);
         SessionCombatResult? points = null;
         if (r.Parent is { } parent && Combatant(parent.Id) is { } combatant)
         {
@@ -315,7 +317,8 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
         if (SpellCostRules.PreAnimationChecked(r.Free, r.Source is not null))
         {
             var source = r.Source!;
-            var record = Record(r.Spell);
+            // PC3: a failed record lookup refuses.
+            if (_records(r.Spell)?.Run is not { } record) return new(SpellCastGoalOutcome.CannotAfford, points);
             var cost = SpellCostRules.PreAnimationCost(r.Action == SpellRunAction.Begin, record.Cost, record.MaintainCost, Caster(source), false);
             if (Payer(source) is { } payer && !SpellPaymentRules.Pay(payer, cost, false, r.Spell, record.Payment, Cells).Succeeded)
                 return new(SpellCastGoalOutcome.CannotAfford, points);
@@ -334,7 +337,8 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     [OriginalFunction(0x429C80, OriginalFunctionScope.Partial)]
     public SessionSpellRunResult? Release(int run)
     {
-        if (_owner.QuerySpellRuns()[run] is not { } r) return null;
+        // The release gate fires once per goal (0x42CAA0, the frame flag 0x8): a run already released or begun answers null.
+        if (_released.Contains(run) || _owner.QuerySpellRuns()[run] is not { } r || !AwaitsBegin(r)) return null;
         // The release gate marks the goal's frame handled before the re-check (0x42CAA0): the goal's end then frees nothing.
         _released.Add(run);
         if (TargetStillValid(r))
@@ -385,6 +389,9 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
         return SpellTargetRules.Test(basis with { Candidate = null, Target = null, CandidateTile = run.TargetTile, TargetTile = run.TargetTile }, _map,
             Profile).Passes;
     }
+
+    // A run whose BEGIN has not run yet: the only one a release frame begins.
+    private static bool AwaitsBegin(SpellRun run) => run.Action == SpellRunAction.Begin && (run.Flags & SpellRunFlags.Processed) == 0;
 
     /// <summary>The object flag the picker's wrapper refuses an object target for (0x4F2680).</summary>
     public const int PickerRefused = 0x800;
@@ -527,7 +534,7 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     {
         if (_owner.QueryHeroLife() is not { } life) return null;
         var state = life.Record.State;
-        return _owner.QueryHeroStats(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))?.Snapshot?.GetEffective(stat);
+        return _owner.QueryHeroStats(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel), state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))?.Snapshot?.GetEffective(stat);
     }
 
     private int? NpcStat(SpellCastCritter npc, CharacterStat stat) =>
