@@ -299,7 +299,9 @@ runtime receives therefore share one Data verdict.
   the same goal kept, a stick takeover in the route's own direction, a click observed
   just before a stick release (no route step is cancelled), the palette stop
   (step ends at its centre, a click under the palette is ignored), an occupied goal
-  (`ROUTE_NOT_FOUND`, no step), and native dispatch (a ground click through
+  (since ARC-WORLD-073 the straight retry `ROUTE_STRAIGHT_RETRY` whose first step the source refuses, so the route
+  stops `ROUTE_STEP_DENIED` with no step; the probe expected the older `ROUTE_NOT_FOUND` until ARC-INPUT-004, hidden
+  behind its earlier palette-chord failure), and native dispatch (a ground click through
   `SubViewport.PushInput` sets the goal, a HUD click does not).
 - Original data (development Mac, 2026-10-16, local check, not a sealed gate): in the
   running `crash-site-area` viewer a click inside the (3,3) diamond planned

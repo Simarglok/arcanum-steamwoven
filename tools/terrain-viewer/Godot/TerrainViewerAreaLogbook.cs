@@ -131,7 +131,7 @@ public partial class TerrainViewerApp
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         if (!key.Pressed || key.Echo) return;
-        if (routed is Key.L or Key.Escape) CloseLogbookByPlayer();
+        if (routed == Key.Escape || (routed == Key.L && !CharacterKeySilenced(key, routed))) CloseLogbookByPlayer();
         else if (routed == Key.Tab) _logbookPanel!.Confirm();
     }
 

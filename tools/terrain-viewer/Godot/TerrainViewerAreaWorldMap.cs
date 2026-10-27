@@ -201,7 +201,7 @@ public partial class TerrainViewerApp
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         if (!key.Pressed || key.Echo) return;
-        if (routed is Key.W or Key.Escape) CloseWorldMapByPlayer();
+        if (routed == Key.Escape || (routed == Key.W && !CharacterKeySilenced(key, routed))) CloseWorldMapByPlayer();
         else if (routed is Key.Enter or Key.KpEnter) _worldMapPanel!.Confirm();
     }
 

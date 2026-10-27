@@ -323,7 +323,7 @@ public partial class TerrainViewerApp
     private void HandleInventoryKey(InputEventKey key)
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (key.Pressed && !key.Echo && routed is Key.I or Key.Escape) EndInventory();
+        if (key.Pressed && !key.Echo && (routed == Key.Escape || (routed == Key.I && !CharacterKeySilenced(key, routed)))) EndInventory();
     }
 
     private void HandleInventoryPulse(IntentFrame intent)
