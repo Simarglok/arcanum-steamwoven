@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -168,11 +169,87 @@ class WrapperTests(unittest.TestCase):
         self.assertNotIn("never", result.stdout)
         self.assertEqual(list((home / "run-queue").glob("t-*.json")), [])
 
+    def test_the_log_fills_while_the_command_runs(self) -> None:
+        # ARC-DEV-041: a Python command (the export endpoint) wrote nothing to the log until it ended; the queue now runs
+        # it unbuffered, so the start check can read the log while the command still runs.
+        release = Path(self.temp.name) / "release"
+        code = (f"import os, time\nprint('first line')\ndeadline = time.time() + 30\n"
+                f"while not os.path.exists({str(release)!r}) and time.time() < deadline: time.sleep(0.05)\n"
+                f"print('second line')")
+        process = subprocess.Popen([sys.executable, "-B", str(ARCANUM), "run", "--kind", "headless", "--",
+                                    sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, env=self.env)
+        try:
+            logs = Path(self.env["ARCANUM_LOCAL_HOME"]) / "run-logs"
+            deadline = time.monotonic() + 20
+            while not any("first line" in item.read_text() for item in logs.glob("run-*.log")):
+                self.assertIsNone(process.poll(), "the command ended before its first line reached the log")
+                self.assertLess(time.monotonic(), deadline, "the first line did not reach the log while the run went")
+                time.sleep(0.05)
+        finally:
+            release.touch()
+            out, err = process.communicate(timeout=60)
+        self.assertEqual(process.returncode, 0, err)
+        self.assertIn("second line", Path(out.splitlines()[0].split("log=", 1)[1]).read_text())
+
+    def dotnet_run(self, root: Path) -> tuple[subprocess.CompletedProcess, str]:
+        other = Path(self.temp.name) / "homebrew"
+        other.mkdir()
+        (other / "dotnet").write_text("#!/bin/sh\necho homebrew-sdk\n")
+        (other / "dotnet").chmod(0o755)
+        env = {**self.env, "DOTNET_ROOT": str(root), "PATH": f"{other}:/usr/bin:/bin"}
+        result = subprocess.run([sys.executable, "-B", str(ARCANUM), "run", "--kind", "dotnet", "--", "sh", "-c",
+                                 'dotnet; echo "root=$DOTNET_ROOT"'], capture_output=True, text=True, env=env, timeout=60)
+        return result, Path(result.stdout.splitlines()[0].split("log=", 1)[1]).read_text()
+
+    def test_dotnet_is_the_pinned_sdk_not_the_first_on_path(self) -> None:
+        # ARC-DEV-041: `dotnet build-server shutdown` in the queue found Homebrew's 8.0.131 first on PATH.
+        root = Path(self.temp.name) / "pinned"
+        root.mkdir()
+        (root / "dotnet").write_text("#!/bin/sh\necho pinned-sdk\n")
+        (root / "dotnet").chmod(0o755)
+        result, text = self.dotnet_run(root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("pinned-sdk", text)
+        self.assertNotIn("homebrew-sdk", text)
+        self.assertIn(f"root={root}", text)
+
+    def test_a_missing_pinned_sdk_is_named_and_leaves_path(self) -> None:
+        result, text = self.dotnet_run(Path(self.temp.name) / "no-sdk")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("homebrew-sdk", text)
+        self.assertIn("ARCANUM_QUEUE note: no pinned SDK at", result.stderr)
+
     def test_verbose_streams_as_before(self) -> None:
         result = self.run_wrapper("print('hello')", "--verbose")
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "hello\n")
         self.assertNotIn("ARCANUM_QUEUE log", result.stderr)
+
+
+class ExportStepTests(unittest.TestCase):
+    """ARC-DEV-041: the terrain export names each step in its own output (the queue's run log) and, when one fails,
+    its exit code, evidence log and last lines, so the run log is not empty while the steps log elsewhere."""
+
+    def test_steps_are_named_and_a_failure_shows_its_log_tail(self) -> None:
+        source = (REPO / "tools/terrain-viewer/Godot/tools/validate-macos.sh").read_text()
+        function = "run_log() {" + source.split("\nrun_log() {", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "evidence").mkdir()
+            script = root / "steps.sh"
+            script.write_text("set -eu\n" + function + "run_log ok.log sh -c 'echo fine'\n"
+                              "run_log bad.log sh -c 'echo first; echo why it broke; exit 7'\necho after\n")
+            result = subprocess.run(["/bin/sh", str(script)], capture_output=True, text=True, timeout=30,
+                                    env={**os.environ, "task": "ARC-DEV-015", "area_task": "0", "build_root": str(root)})
+            self.assertEqual(result.returncode, 7, result.stderr)
+            evidence = root / "evidence"
+            self.assertEqual(result.stdout.splitlines(), [
+                "validate-macos: step ok.log", "validate-macos: step bad.log",
+                f"validate-macos: step bad.log FAILED exit=7 log={evidence / 'bad.log'}", "first", "why it broke"])
+            self.assertEqual((evidence / "ok.log").read_text(), "fine\n")
+            self.assertTrue(run_log.is_error(result.stdout.splitlines()[2]))
+            self.assertFalse(run_log.is_error(result.stdout.splitlines()[0]))
 
 
 if __name__ == "__main__":

@@ -98,6 +98,30 @@ starved, and an export gets a quiet Mac in its turn instead of waiting for one. 
 Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (order, gaps, export quiet, crashed and killed runs,
 limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
 
+### Command environment (ARC-DEV-041)
+
+`./arcanum run` starts its command with `ARCANUM_QUEUE_TICKET` and `ARCANUM_QUEUE_KIND` (for nested runs) and:
+
+- **The pinned SDK.** `DOTNET_ROOT` (or, when it is not set, `~/.local/share/dotnet`, as [above](#process-local-environment))
+  is put first on `PATH` and set as `DOTNET_ROOT`, so `dotnet` in a command of any kind is the `global.json` SDK
+  8.0.425, never another one earlier on `PATH` (Homebrew's `dotnet@8` 8.0.131 failed `dotnet build-server shutdown`
+  with `sdk-not-found`). When the pinned SDK is missing, `PATH` is left as it is and a `dotnet` run prints
+  `ARCANUM_QUEUE note: no pinned SDK at PATH` on stderr. A `DOTNET_ROOT` set to another SDK is used as given.
+- **Unbuffered Python.** `PYTHONUNBUFFERED=1` (unless already set): a Python command, such as the export endpoint or
+  the validate tools, writes each line when it prints it, not when it exits, so a quiet run's log fills while the run
+  goes. `dotnet` writes its lines at once; Godot editor and debug runs flush each print (`flush_stdout_on_print.debug`)
+  and its errors go to stderr, which is never buffered. A program that buffers its own stdout can still lag.
+- **Export progress.** An export keeps each step's whole output in its evidence logs, so its own output used to be
+  empty until the end. The export endpoint now prints `export-endpoint: validate TASK HEAD evidence=FOLDER`,
+  `export-endpoint: finalize` and `export-endpoint: registered FOLDER` (or `... FAILED exit=E`) as each phase starts or
+  ends, and the terrain export prints `validate-macos: step NAME` before each step and, when a step fails,
+  `validate-macos: step NAME FAILED exit=E log=PATH` with the step log's last 20 lines, then stops. The start check of
+  an export reads these lines in its run log; the lab exports (gamepad, display) print the phase lines only.
+
+Tests: `python3 -B -m unittest tools.local_dev.test_run_log` (the log filling while the command runs, the pinned SDK
+before another `dotnet` on `PATH`, a missing pinned SDK, the export's step lines) and the export endpoint test in
+`tools.local_dev.test_local_dev` (phase lines).
+
 ### Quiet output (ARC-DEV-037)
 
 Owner decision 2026-10-27 (token audit item 4): every tool output stays in an agent session's context and is re-read
@@ -106,7 +130,7 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
 - **Log file.** The command's whole output (stdout and stderr together) goes to
   `~/Library/Application Support/Arcanum Steamwoven/run-logs/run-<ticket>-<kind>.log` (or `$ARCANUM_LOCAL_HOME/run-logs`);
   its stdin is closed. The wrapper prints `ARCANUM_QUEUE log ticket=N PATH` on stderr before it waits, so the log can
-  be checked while the run goes. The newest 200 logs are kept; older ones are removed when a run is queued.
+  be checked while the run goes; the log fills as the command prints (ARC-DEV-041, [command environment](#command-environment-arc-dev-041)). The newest 200 logs are kept; older ones are removed when a run is queued.
 - **Summary.** The `ARCANUM_QUEUE` lines stay on stderr as [above](#launch-queue-arc-dev-033). When the command ends,
   stdout gets `PASS exit=0 ran=Ss lines=L log=PATH`, or `FAIL exit=E ran=Ss lines=L log=PATH` and the first error
   line with at most 40 lines around it (3 before, each cut to 300 characters), and the last error line when it lies
