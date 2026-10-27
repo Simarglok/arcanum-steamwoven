@@ -142,7 +142,7 @@ Source: the [plant generator study](../template-sector-plants.md). Question: wha
 templates (30285, the plant generator) does when it runs, which objects it creates and where, and whether a template
 sector's script runs like an own sector's. Read on 2026-10-27 by this task and, independently, by a fresh agent that
 saw only the questions and the addresses (method step 6); the rows are F2 unless marked. The readers agree on every
-row; the second reader corrected the critter case of PG2 and added the network paths of PG1 and the span limit of PG5.
+row both read (PG9 was read by the first reader only); the second reader corrected the critter case of PG2 and added the network paths of PG1 and the span limit of PG5.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |

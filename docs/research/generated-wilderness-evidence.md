@@ -394,8 +394,8 @@ checked in the executable ([ledger TR1–TR5](ledger/world.md#terrain-templates-
 - The probe models the mounts of the measured installation (`patch0`,
   `arcanum1..4`, folders, `tig.dat`) and refuses others; an ambiguous loose name is
   treated as absent.
-- Script 30285 (sector plant generator) in 20 plain templates lays Herbology ingredients
-  (items) next to one marked scenery object when the player enters the sector
+- Script 30285 (sector plant generator) in 20 plain templates lays herbs (items: Herbology
+  ingredients and Passion Root) next to one marked scenery object when the player enters the sector
   ([template sector scripts](template-sector-plants.md), ARC-RES-073).
 - `.dif` files for generated sectors (save state) are not examined here; the executable
   looks one up under the real sector id for template sectors too

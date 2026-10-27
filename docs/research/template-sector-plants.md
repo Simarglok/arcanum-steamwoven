@@ -1,6 +1,6 @@
 # Template sector scripts: the plant generator (ARC-RES-073)
 
-Status: **research, docs only**, work item ARC-RES-073 (alpha gap N2), 2026-10-27. No `src/`, viewer, session or probe
+Status: **research, docs only**, work item ARC-RES-073, 2026-10-27. No `src/`, viewer, session or probe
 change. This document answers what the one sector script found in terrain templates does, when the original runs it, what
 it creates and where, and how many sectors carry it. It is the input for ARC-WORLD-081 (running the scripts of generated
 sectors and the create-object action).
@@ -16,7 +16,7 @@ over 36,864 admitted cells (2026-10-27).
 
 What generated sectors still lack is their **sector script**: the viewer runs the sector scripts of a map's own sector
 files only ([tile and sector scripts](../rendering/area-map-mode.md#tile-and-sector-scripts-arc-script-017)). Of the
-template's sector-local sections (ledger SS5: tiles, roofs, block mask, sounds, light scheme, scripts), the script is the
+template's sector-local sections ([ledger SS5](ledger/world.md#main-map-streaming-arc-data-030): tiles, roofs, block mask, sounds, light scheme, scripts), the script is the
 one with gameplay effect.
 
 ## Sources and boundary
@@ -37,14 +37,14 @@ one with gameplay effect.
 Script 30285 (`scr/30285sectorplantgen.scr`, in `arcanum2.dat` only) has 20 lines. Read with the editor signatures and
 the executable's operand readers (PG1–PG7), it does this when it runs:
 
-1. Makes the player (the run's triggerer) the run's attachee (assign object, OV2).
+1. Makes the player (the run's triggerer) the run's attachee (assign object, [OV2](ledger/scripts.md#object-variables-and-calls-arc-script-018)).
 2. Takes two prototype numbers from the sector's own counters: **A** = 10000 + counter 2 and **B** = 10000 + counter 0.
    The second add names counter index 2,012,780,696 (editor bytes in the operand); the counter reader shifts by eight
    times the index and the shift keeps only five bits, so it reads counter 0 (PG6).
 3. Counts the set bits 0..31 of the sector script's own flags word (local flag, PG4) into **R**; with none set it stops
    and runs the default.
 4. Loops over every scenery object in the vicinity of the attachee, now the player (PG3). For each one whose name field
-   is 1673 (obj_is_named, ledger SG3) it makes R draws: two random numbers 1..100 (PG5); when the first is at most
+   is 1673 (obj_is_named, [ledger SG3](ledger/scripts.md#guard-conditions-arc-script-014)) it makes R draws: two random numbers 1..100 (PG5); when the first is at most
    counter 3 it creates A, and when the second is at most counter 1 it creates B, each next to that scenery (PG1, PG2).
    Other scenery is skipped.
 
@@ -54,8 +54,8 @@ it runs again on every entry.
 ## When it runs
 
 A sector script runs when the local player's move enters another sector, with the player as triggerer and no attachee
-(ledger TS2, TS3). The sector notification locks the entered sector and copies its script record; it makes no difference
-between an own sector file and a template, and a template sector reads its script section from the template (SS5). So
+([ledger TS2, TS3](ledger/scripts.md#tile-and-sector-scripts-arc-script-017)). The sector notification locks the entered sector and copies its script record; it makes no difference
+between an own sector file and a template, and a template sector reads its script section from the template ([SS5](ledger/world.md#main-map-streaming-arc-data-030)). So
 every crossing into one of the sectors below runs the generator, and crossing back and forth runs it each time.
 
 ## What it creates and where
@@ -113,7 +113,8 @@ Sectors that carry it:
 - No other map uses these templates or the script.
 
 The 15 own-file copies are among the 19 sector scripts ARC-SCRIPT-017 refuses: the viewer reads them but refuses the
-run, because no admission set holds create object (52).
+run, because the admission sets lack random, the loops, the vicinity focus kinds, a counter index above 3 and create
+object (52).
 
 ## What ARC-WORLD-081 needs
 
@@ -121,8 +122,8 @@ run, because no admission set holds create object (52).
   sector-local) and run it on entry like an own sector's, with its slot on the sector (the same session keys).
 - Admit what the script uses beyond today's sets (which already hold true, equal, less-or-equal, local flag, add,
   goto, return and run default, is named and assign object): random (37), loop for and loop end (18, 19) with the
-  focus kinds "every scenery in vicinity" (15) and "current looped object" (10), the 100-object cap, assign object
-  into the attachee, a counter operand with an index above 3 (PG6), and create object (52) with the tile choice above.
+  focus kinds "every scenery in vicinity" (15, centred on the assigned attachee) and "current looped object" (10), the
+  100-object cap, a counter operand with an index above 3 (PG6), and create object (52) with the tile choice above.
 - A store for created objects on generated and own sectors that survives window moves, F7/F8 and leaving the map (the
   original keeps them in the sector's saved differences, which the project does not model).
 - Decisions to put to the owner: the vicinity size (the original's depends on the game window; the project draws a
@@ -134,5 +135,5 @@ run, because no admission set holds create object (52).
 - Static reading only (F2 where both readers agree); how often a marker is on screen at a crossing in play is not
   observed.
 - Not read: the window size the vicinity takes, the order of the vicinity list (which 100 objects are kept), the path
-  search's own rules, and how created objects are saved and reloaded for a template sector beyond SS2/SS5.
+  search's own rules, and how created objects are saved and reloaded for a template sector beyond [SS2 and SS5](ledger/world.md#main-map-streaming-arc-data-030).
 - Nothing in the project runs template sector scripts or creates objects from scripts yet (ARC-WORLD-081).
