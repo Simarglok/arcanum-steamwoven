@@ -151,6 +151,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="backgrounds-arc-world-069"></a>[Backgrounds (ARC-WORLD-069)](ledger/character.md#backgrounds-arc-world-069) | [Character](ledger/character.md) | BG1–BG8 |
 | <a id="reach-and-line-of-fire-arc-combat-012"></a>[Reach and line of fire (ARC-COMBAT-012)](ledger/combat.md#reach-and-line-of-fire-arc-combat-012) | [Combat](ledger/combat.md) | RA1–RA10 |
 | <a id="npc-ai-script-and-dialog-surface-arc-res-070"></a>[NPC AI script and dialog surface (ARC-RES-070)](ledger/npc-ai.md#npc-ai-script-and-dialog-surface-arc-res-070) | [NPC AI](ledger/npc-ai.md) | SU1–SU17 |
+| <a id="multiplayer-arc-res-072"></a>[Multiplayer (ARC-RES-072)](ledger/multiplayer.md#multiplayer-arc-res-072) | [Multiplayer](ledger/multiplayer.md) | NT1–NT16 |
 
 ## Decisions to revisit
 

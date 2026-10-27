@@ -156,6 +156,7 @@ One line per subject; the full row (canonical result, what remains) is in its ar
 | SCR program and admission | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-007, ARC-RES-045, ARC-SCRIPT-008 |
 | SCR opcode and attachment census | [Dialog and scripting](status/scripting.md) | ARC-RES-045 |
 | Game event queue | [Game session and character](status/session.md) | ARC-RES-046, ARC-WORLD-022, ARC-WORLD-024 |
+| Multiplayer of the original | [Game session and character](status/session.md) | ARC-RES-072 |
 | Combat-domain load map | [Combat](status/combat.md) | ARC-RES-040, ARC-RES-041 |
 | Combat-domain data census | [Combat](status/combat.md) | ARC-RES-041 |
 | NPC AI core loop | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-054, ARC-DATA-033 |
