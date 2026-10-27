@@ -257,7 +257,7 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG39 | original bug (ARC-MAGIC-014, ledger MG39) | fix (owner decision 2026-10-27), switch `GoalRefusalChargesBegin`: a casting goal refused before its animation frees its run unpaid | MT20a-1 |
 | MG40 | original bug (ARC-MAGIC-014, ledger MG40) | fix (owner decision 2026-10-27), switch `GoalEndChargesAnyRun`: a run freed before its BEGIN is charged only when its BEGIN would have paid | MT20a-1 |
 | MG41 | original bug (ARC-MAGIC-014, ledger MG41) | fix (owner decision 2026-10-27), switch `ReleaseRefusalKeepsRun`: a run whose target fails the release re-check is freed unpaid | MT20a-1 |
-| MG42 | original bug (ARC-MAGIC-015, ledger MG42) | proposed: fix without a switch (presentation only): the cursor's "not damaged" message only for the current pick's reason; pending the owner | MT20a-2 |
+| MG42 | original bug (ARC-MAGIC-015, ledger MG42) | fix without a switch (owner decision 2026-10-27, presentation only): the cursor's "not damaged" message only for the current pick's reason | MT20a-2 |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |
 | O10 shell and reflection order | reconstruction change | the original in both modes | MT10 |
 | Charm asymmetry | reconstruction change confirmed | the original (+30 and −30 both through the reaction effects) | MT14 |

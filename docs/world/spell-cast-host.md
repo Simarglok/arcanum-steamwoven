@@ -185,7 +185,7 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | A failed target re-check at the release frame leaves the run in its slot (MG41). | The run is freed unpaid. | `MagicAnomalyProfile.ReleaseRefusalKeepsRun` (owner decision 2026-10-27: fix) |
 | The stage writes its payment's fatigue before the components run. | The host applies the call's payments after the call, so a component reading the caster's fatigue in the same pass sees it unpaid. | — |
 | A spell's life changes come from the components inside the run's pass. | The same, through the session's life calls; their revisions come before the run's own. | — |
-| A pick with no target shows spell.mes 606 when the area test's failure global holds "not damaged" — a global no pick clears, so an earlier test's reason can show (MG42). | 606 only for the current pick's own reason. | — (pending the owner; proposed fix without a switch) |
+| A pick with no target shows spell.mes 606 when the area test's failure global holds "not damaged" — a global no pick clears, so an earlier test's reason can show (MG42). | 606 only for the current pick's own reason. | — (owner decision 2026-10-27: fix without a switch) |
 | The cast is timed by the caster eye-candy overlay's action frame and frame rate; the body art does not change (SU12). | No eye-candy art is drawn: the release frame comes 500 ms of world time after the goal's start, the end 400 ms later. | — (stand-in, not ready) |
 
 Recorded for MT20a-2, which plays the goals (F1, one reader):
