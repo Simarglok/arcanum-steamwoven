@@ -124,7 +124,8 @@ interior stays complete, and the shades are 255, 200 and 80.
   recalculate roofs (the original does it for the local PC only).
 - Roofs of the pinned Crash Site exterior (a regression smoke only since
   ARC-RENDER-028). The main world map opens by window since ARC-RENDER-024 and
-  its windows read roofs (ARC-DATA-036); no roof smoke runs there.
+  its windows read roofs (ARC-DATA-036); the map battery's roof smoke runs
+  there too, but no main-map outcome is recorded.
 - What recomputes fill and fade after a save is loaded is not traced (U7 of the
   research).
 - The hit test's pixel rule: the original counts palette indexes 0 and 1 as a
