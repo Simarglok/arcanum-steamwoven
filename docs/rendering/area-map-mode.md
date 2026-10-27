@@ -287,7 +287,7 @@ with an unconditional exit stays that exit.
   session's queue, the use slot; a step the session refuses leaves the earlier ones applied and the use is reported
   refused. Printed lines show on the status line; effect sounds are not played. The first teleport of the player is the
   transfer: its map (−1 keeps this map, ledger TR4) and tile replace the site's, and it queues through the ordinary
-  transfer path. A teleport map mode cannot take (an exit to the start map, an arrival the step evidence does not admit)
+  transfer path. A teleport map mode cannot take (an arrival the step evidence does not admit)
   is checked before anything is applied: the use is refused, the door stays as it was and its printed lines are not shown. A teleport of another object
   is not modelled: the run's effects are dropped and the use is refused. A run outside the set, without script content or
   after a script file changed is refused and changes nothing.

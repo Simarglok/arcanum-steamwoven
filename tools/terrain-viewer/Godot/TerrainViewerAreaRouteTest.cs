@@ -145,9 +145,11 @@ public partial class TerrainViewerApp
         Require(!WorldModal && _worldGate.IsOpen && State().CommittedCell == stepping.To, "palette closed, no motion");
         Case("palette-stop");
 
-        // An occupied goal stops with the planner's reason and no motion.
+        // An occupied goal: with no path the original walks straight at it (ARC-WORLD-073, LR4), and the source refuses
+        // that first step, so the route stops with the step denial and no motion.
         Prepare(); Click(new(5, 1)); Run(6);
-        Require(Route().Status == RouteFollowStatus.Stopped && Route().StopReason == "ROUTE_NOT_FOUND", "occupied goal reason");
+        Require(Route() is { Status: RouteFollowStatus.Stopped, StopReason: "ROUTE_STEP_DENIED", LastPlan.ReasonCode: "ROUTE_STRAIGHT_RETRY" },
+            "occupied goal reason: " + DescribeWorldRoute(Route()));
         Settled(new(6, 1), "occupied goal");
         Require(!events.Any(e => e.Kind == MovementEventKind.StepStarted), "no step toward an occupied goal");
         Case("occupied-goal");
