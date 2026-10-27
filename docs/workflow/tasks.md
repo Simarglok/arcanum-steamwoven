@@ -38,6 +38,32 @@ Why: a session carried across codes re-reads every earlier task's history on
 each step. The token audit of 2026-10-21 found lane sessions living 3.5 to 5
 days across 13 to 25 codes at a median context of about 550 thousand tokens.
 
+### Small search and read output
+
+Owner decision 2026-10-27 (ARC-DEV-035): every tool output stays in the
+session's context and is re-read on each later step, so search and reading
+output is kept small.
+
+- Search for files first, then lines: list matching files or counts
+  (`rg -l` or `rg -c`; `grep -l` or `grep -c` where `rg` is missing), then show
+  only the lines needed: `rg -n -m 20 PATTERN FILES | cut -c1-200`.
+- Read files in ranges of at most 120 lines (`sed -n 'A,Bp'`, or the read
+  tool's offset and limit); never `cat` a whole source file or document.
+- Never read a saved large tool output whole; grep it for what you need.
+- In `docs/project/status.md`, `docs/requirements/coverage.md` and the
+  [verification ledger](../research/original-verification-ledger.md), grep
+  only the row you need and cut it (`| cut -c1-300`); their rows run to
+  thousands of characters.
+- Subagents (executable readers, reviewers) get the diff or exact file ranges
+  and a short brief; they never read status.md, coverage.md or the ledger
+  whole.
+
+Why: in the token audit of 2026-10-21, search and read output (`grep`, `find`,
+`sed`, `cat`) was the largest share of re-read tokens in the three audited
+lanes (about 75 to 150 million cache-read tokens each), and saved tool outputs of
+32 to 48 KB were read whole and re-read about 390 times. Godot, launcher and
+`dotnet` output stay outside this rule.
+
 ## Definition of Ready
 
 Owner decision 2026-10-14: work stalls when one work item carries several
