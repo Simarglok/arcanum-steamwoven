@@ -70,13 +70,22 @@ cleanup_candidate() {
   git -C "$candidate_root" clean -f -q -- 'tools/terrain-viewer/Godot/*.uid'
 }
 trap cleanup_candidate EXIT HUP INT TERM
+# Each step's whole output goes to its evidence log. ARC-DEV-041: the export's own output (the launch queue's run log)
+# names each step as it starts and, when one fails, its exit code, evidence log and last 20 lines, then stops.
 run_log() {
   name=$1; shift
+  printf 'validate-macos: step %s\n' "$name"
+  step_exit=0
   if test "$task" = ARC-WORLD-003 || test "$area_task" = 1; then
     (cd "$candidate_root" && /usr/bin/python3 -B -m tools.local_dev.grid_export_gates \
-      --evidence "$build_root/evidence" --head "$head" --task "$task" --log "$name" -- "$@")
+      --evidence "$build_root/evidence" --head "$head" --task "$task" --log "$name" -- "$@") || step_exit=$?
   else
-    "$@" >"$build_root/evidence/$name" 2>&1
+    "$@" >"$build_root/evidence/$name" 2>&1 || step_exit=$?
+  fi
+  if test "$step_exit" -ne 0; then
+    printf 'validate-macos: step %s FAILED exit=%s log=%s\n' "$name" "$step_exit" "$build_root/evidence/$name"
+    /usr/bin/tail -n 20 "$build_root/evidence/$name" 2>/dev/null || true
+    exit "$step_exit"
   fi
 }
 # One opt-in native AREA probe per call, with owned isolated preferences.

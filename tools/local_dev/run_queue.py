@@ -351,6 +351,28 @@ def nested(kind: str) -> bool:
     return True
 
 
+def pinned_sdk(environment: dict[str, str]) -> Path:
+    """The pinned .NET SDK folder: DOTNET_ROOT, else ~/.local/share/dotnet (docs/workflow/toolchain.md)."""
+    return Path(environment.get("DOTNET_ROOT") or Path.home() / ".local" / "share" / "dotnet")
+
+
+def command_environment(kind: str, seq: int, base: dict[str, str] | None = None) -> dict[str, str]:
+    """ARC-DEV-041: the environment of a queued command. Its ticket and kind (for nested runs); the pinned SDK first on
+    PATH with DOTNET_ROOT set, so `dotnet` in any kind is the global.json SDK and never another one earlier on PATH
+    (Homebrew's); PYTHONUNBUFFERED, so a Python command (the export endpoint, the validate tools) writes each line to the
+    log as it prints it instead of when it exits. A missing pinned SDK leaves PATH as it is."""
+    environment = dict(os.environ if base is None else base)
+    environment.update({TICKET_ENV: str(seq), KIND_ENV: kind})
+    environment.setdefault("PYTHONUNBUFFERED", "1")
+    sdk = pinned_sdk(environment)
+    if os.access(sdk / "dotnet", os.X_OK):
+        rest = [item for item in environment.get("PATH", "").split(os.pathsep) if item and Path(item) != sdk]
+        environment.update({"DOTNET_ROOT": str(sdk), "PATH": os.pathsep.join([str(sdk), *rest])})
+    elif kind == "dotnet":
+        say(f"note: no pinned SDK at {sdk / 'dotnet'}; `dotnet` comes from PATH")
+    return environment
+
+
 def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | None = None, priority: int = NORMAL,
         hold: Callable[[], None] | None = None, sleep: Callable[[float], None] = time.sleep, quiet: bool = False) -> int:
     """Wait for this run's turn, run the command, give the place to the next run. Returns the command's exit code,
@@ -401,7 +423,7 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
             legacy = _legacy_hold()
         waited = ticket["startedAt"] - ticket["enqueuedAt"]
         say(f"start ticket={ticket['seq']} kind={kind} waited={waited:.0f}s")
-        environment = dict(os.environ, **{TICKET_ENV: str(ticket["seq"]), KIND_ENV: kind})
+        environment = command_environment(kind, ticket["seq"])
         # Godot kinds hand the ticket's lock to the command, so a run whose wrapper was killed keeps its place while
         # its command still runs (until its limit, see _expired); dotnet runs do not (their build servers would
         # inherit it). The lockf lock stays with the wrapper: a leftover descendant holding it would block lockf

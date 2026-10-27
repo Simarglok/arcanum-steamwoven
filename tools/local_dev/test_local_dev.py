@@ -577,6 +577,9 @@ class LocalDevTests(unittest.TestCase):
             "--temporary-root", args.temporary_root, "--output-bytes", "7", "--estimate-manifest", args.estimate_manifest,
             "--", *args.command], capture_output=True, text=True, timeout=5)
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        # ARC-DEV-041: each phase names itself on stdout (the launch queue's run log) as it starts.
+        self.assertIn("export-endpoint: validate ARC-GPAD-003 ", result.stdout)
+        self.assertIn("export-endpoint: finalize\n", result.stdout)
         self.assertTrue(stat.S_ISFIFO(pointer.lstat().st_mode))
         self.assertEqual(config.registry_path().read_bytes(), before_registry)
         self.assertTrue(Path(args.manifest).is_file(), "real finalize path must execute before snapshot")
