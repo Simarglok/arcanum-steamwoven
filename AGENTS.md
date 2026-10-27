@@ -35,6 +35,8 @@ AC2. ...
 
 ## Implementation and evidence
 
+- Keep search and read output small: list matching files or counts first, then at most 20 matching lines cut to 200 characters; read files in ranges of at most 120 lines, never `cat` a whole file or a saved large output; grep only the needed row of `docs/project/status.md`, `docs/requirements/coverage.md` and the verification ledger; give subagents the diff or exact ranges, not those files whole ([small search and read output](docs/workflow/tasks.md#small-search-and-read-output), owner decision 2026-10-27).
+
 - Keep parsers and simulation independent of Godot. Use the pinned versions and process-local launch guidance in `docs/workflow/toolchain.md`; do not change shared installations implicitly.
 - Prefer existing evidence; document unknown fields and link technical claims to versioned sources. Distinguish source claims, hypotheses and experiments.
 - No mechanical copying from a reconstruction of the original's source or from projects derived from one; the project uses none (owner decision 2026-10-18). Record provenance and applicable licenses before reuse; MIT labels alone do not prove independent lineage.
