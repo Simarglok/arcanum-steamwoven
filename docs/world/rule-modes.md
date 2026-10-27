@@ -71,6 +71,11 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Combat | `CombatAnomalyProfile` | `CornerStepCountsBothRoutes` | AW13 | a corner step of a line of fire counts the corner tile's cover on both routes around it, and the last step also skips the side tiles' objects (AW14; ARC-COMBAT-012); a corner step of a sound line counts a soundproof corner tile twice (ARC-WORLD-078) |
 | Combat | `CombatAnomalyProfile` | `SurrenderKeepsCombatModeFlag` | CL4 | a surrender leaves combat mode but the setter writes back critter flags read before, so the combat-mode bit is set again (ARC-WORLD-079) |
 | Combat | `CombatAnomalyProfile` | `LockedNoneStateFights` | FO14 | the danger setter keeps the target lock when it applies a state other than COMBAT_FOCUS (ARC-WORLD-079) |
+| Combat | `CombatAnomalyProfile` | `UpsetPartyMatchesMissingLeader` | HS9 | upset attacking counts a leaderless target as the party of a leaderless NPC, so its scan never helps an ally against a PC or a loner and a leaderless guard never turns on a leaderless aggressor (ARC-WORLD-080) |
+| Combat | `CombatAnomalyProfile` | `WitnessHandledTwice` | AW16 | an NPC inside both alert squares of an attack is handled twice (ARC-WORLD-080) |
+| Combat | `CombatAnomalyProfile` | `EnemyListFocusTakesSpellTarget` | SP16 | the danger update's enemy-list path passes the setter the pass record's target after the spell choice (ARC-WORLD-080) |
+| Combat | `CombatAnomalyProfile` | `NoAttackSurvivesLeaving` | FO7 | leaving the hero does not clear the no-attack flag (ARC-WORLD-080) |
+| Combat | `CombatAnomalyProfile` | `NoAttackKeepsChosenAction` | FO8 | the spell or item chosen for the danger update's target stands when setter rule 4 refuses the fight (ARC-WORLD-080) |
 | Combat | `CombatAnomalyProfile` | `RangedApproachSkipsClearShot` | EX9 | the ranged approach stops at a clear shot only when the attack has become impossible, so a ranged attacker walks to the adjacent tile of a still target (the hero's attack goal, ARC-COMBAT-015) |
 | Event queue | `GameEventQueueProfile` | `RebuildOnLoad` | OQ2 | AI ticks are rebuilt with fresh jitter on load |
 | Event queue | `GameEventQueueProfile` | `PoisonRecoveryTwice` | TE10 | from the second recovery tick on, poison recovers twice every 120 s (ARC-WORLD-024 life timers) |

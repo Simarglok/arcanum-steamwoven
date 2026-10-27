@@ -217,13 +217,7 @@ public sealed partial class GameSessionOwner
     public SessionDangerResult AddDangerEnemyTeam(GameSessionVersion expected, string owner, SessionCombatant offender)
     {
         ArgumentNullException.ThrowIfNull(offender);
-        return ChangeDanger(expected, owner, offender, false, plan =>
-        {
-            var head = offender.IsHero || LedByPc(offender.Entity!) ? SessionCombatant.Hero : offender;
-            plan.AddEnemy(owner, head);
-            if (head.IsHero)
-                foreach (var follower in _party.Order) plan.AddEnemy(owner, SessionCombatant.Critter(follower));
-        });
+        return ChangeDanger(expected, owner, offender, false, plan => plan.AddTeam(owner, offender));
     }
 
     /// <summary>The enemy-list remove (<see cref="DangerRules.RemoveEnemy"/>): every entry equal to <paramref name="entry"/>, the
@@ -318,16 +312,14 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// The staged changes of one danger call: records of the danger domain, an NPC's combat-mode exit and a reaction write. Nothing
+    /// The staged changes of one danger call: records of the danger domain, NPCs' combat-mode exits and reaction writes. Nothing
     /// touches the owner until <see cref="Commit"/>, which checks the budgets and the revision and applies them in one revision.
     /// </summary>
     private sealed class DangerPlan(GameSessionOwner owner)
     {
         private readonly Dictionary<string, SessionDanger> _staged = new(StringComparer.Ordinal);
-        private string? _leavesCombatMode;
-        private SessionReaction? _reaction;
-        private ReactionAdjustment? _adjustment;
-        private string? _reactionEntity;
+        private readonly HashSet<string> _leavesCombatMode = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, (SessionReaction? Write, ReactionAdjustment Adjustment)> _reactions = new(StringComparer.Ordinal);
 
         internal SessionDanger Get(string entity) => _staged.TryGetValue(entity, out var record) ? record : owner._danger.Get(entity);
 
@@ -339,6 +331,16 @@ public sealed partial class GameSessionOwner
             var sameLeader = owner.LedByPc(entity) && (entry.IsHero || owner.LedByPc(entry.Entity!));
             if (DangerRules.SkipsEnemy(record.Enemies, entry, sameLeader)) return;
             _staged[entity] = record with { Enemies = [.. record.Enemies, entry] };
+        }
+
+        // The team add (0x4AF8C0): the offender's PC leader (the hero for its followers) or the offender, and for the hero its
+        // follower array in order.
+        internal void AddTeam(string entity, SessionCombatant offender)
+        {
+            var head = offender.IsHero || owner.LedByPc(offender.Entity!) ? SessionCombatant.Hero : offender;
+            AddEnemy(entity, head);
+            if (head.IsHero)
+                foreach (var follower in owner._party.Order) AddEnemy(entity, SessionCombatant.Critter(follower));
         }
 
         internal void AllowAttacking(SessionCombatant combatant)
@@ -358,7 +360,7 @@ public sealed partial class GameSessionOwner
             var step = DangerRules.Set(record.Flags, request.State, request.Facts with { TargetIsPc = target?.IsHero == true }, profile);
             var flags = step.Flags;
             var left = false;
-            if (step.LeavesCombatMode && owner._combat.Critters.Contains(entity))
+            if (step.LeavesCombatMode && InCombatMode(entity))
             {
                 if (request.CombatMode?.Facts is null) return Failed(GameSessionFailure.InvalidDangerFacts);
                 // The toggle's refusals decide whether it acts; when it does it unlocks the target (0x4B411C) and the Original
@@ -367,16 +369,18 @@ public sealed partial class GameSessionOwner
                 if (left)
                 {
                     flags &= ~DangerFlags.TargetLocked;
-                    if (!profile.SurrenderKeepsCombatModeFlag) _leavesCombatMode = entity;
+                    if (!profile.SurrenderKeepsCombatModeFlag) _leavesCombatMode.Add(entity);
                 }
             }
             var next = record with { Flags = flags };
             if (step.WritesFleeingFrom) next = next with { FleeingFrom = target };
             if (step.WritesFocus) next = next with { Focus = target };
+            ReactionAdjustment? adjustment = null;
             if (step.LowersReaction)
             {
                 if (request.Reaction is not { } reaction) return Failed(GameSessionFailure.InvalidDangerFacts);
-                var failure = PlanReactionCap(entity, reaction, record.Enemies.Contains(SessionCombatant.Hero));
+                var failure = PlanReactionTo(entity, reaction.Npc, reaction.Pc, record.Enemies.Contains(SessionCombatant.Hero), reaction.HostileReaction,
+                    ReactionQuery.Hostility, lower: true, out adjustment);
                 if (failure != GameSessionFailure.None) return Failed(failure);
             }
             _staged[entity] = next;
@@ -384,26 +388,45 @@ public sealed partial class GameSessionOwner
                 ? new SessionDangerHook(point, target, entity) : null;
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, owner.Version)
             {
-                Transition = step with { AlertSound = step.AlertSound && alertSound }, Hook = hook, LeftCombatMode = left, Reaction = _adjustment,
+                Transition = step with { AlertSound = step.AlertSound && alertSound }, Hook = hook, LeftCombatMode = left, Reaction = adjustment,
             };
         }
 
-        // Rule 8: the hostility-variant reaction (the enemy list the session's) above parameter 10 is lowered to it, the delta
-        // through the PC's effects (0x4C0DE0), as a deliberate hit's (ReactionRules.PcHit).
-        private GameSessionFailure PlanReactionCap(string entity, SessionDangerReaction facts, bool heroListed)
+        // An NPC in combat mode, after this plan's exits.
+        internal bool InCombatMode(string entity) => owner._combat.Critters.Contains(entity) && !_leavesCombatMode.Contains(entity);
+
+        // The combat-mode exit of an NPC (0x4B3F20) when its toggle acts; it unlocks the target. False when it is not in combat mode
+        // or the toggle refuses; Failure when its facts are missing.
+        internal GameSessionFailure LeaveCombatMode(string entity, SessionCombatModeContext? context, out bool left)
         {
-            var npc = facts.Npc with { PcOnEnemyList = heroListed };
-            var record = owner._reactions.Get(entity);
+            left = false;
+            if (!InCombatMode(entity)) return GameSessionFailure.None;
+            if (context?.Facts is null) return GameSessionFailure.InvalidDangerFacts;
+            left = owner.NpcCombatModeExitActs(entity, context);
+            if (!left) return GameSessionFailure.None;
+            _leavesCombatMode.Add(entity);
+            Update(entity, record => record with { Flags = record.Flags & ~DangerFlags.TargetLocked });
+            return GameSessionFailure.None;
+        }
+
+        // The reaction of <entity> toward the hero moved to <bound> through the PC's effects (0x4C0DE0): lowered to it when above
+        // (setter rule 8, the hostility variant) or raised to it when below (peace, the standard reaction). heroListed is whether
+        // the hero is on the NPC's enemy list at that moment.
+        internal GameSessionFailure PlanReactionTo(string entity, ReactionNpcFacts facts, ReactionPcFacts pc, bool heroListed, int bound,
+            ReactionQuery query, bool lower, out ReactionAdjustment? planned)
+        {
+            planned = null;
+            var npc = facts with { PcOnEnemyList = heroListed };
+            var record = _reactions.TryGetValue(entity, out var staged) && staged.Write is { } write ? write : owner._reactions.Get(entity);
             var stored = record.Stored(npc.BaseReaction);
-            var hostile = ReactionRules.Effective(stored, npc, facts.Pc, ReactionQuery.Hostility);
-            if (hostile <= facts.HostileReaction) return GameSessionFailure.None;
-            var delta = ReactionRules.DeltaTo(facts.HostileReaction, hostile);
+            var value = ReactionRules.Effective(stored, npc, pc, query);
+            if (lower ? value <= bound : value >= bound) return GameSessionFailure.None;
+            var delta = ReactionRules.DeltaTo(bound, value);
             if (!ReactionLimits.InRange(delta)) return GameSessionFailure.InvalidReactionAmount;
-            var failure = PlanReaction(record, stored, (int)delta, npc, facts.Pc, owner.LedByPc(entity), out var adjustment, out var updated);
-            _adjustment = adjustment;
-            _reactionEntity = entity;
+            var failure = PlanReaction(record, stored, (int)delta, npc, pc, owner.LedByPc(entity), out var adjustment, out var updated);
+            planned = adjustment;
             if (failure != GameSessionFailure.None) return failure;
-            if (adjustment.Applies) _reaction = updated;
+            _reactions[entity] = (adjustment.Applies ? updated : staged.Write, adjustment);
             return GameSessionFailure.None;
         }
 
@@ -411,36 +434,43 @@ public sealed partial class GameSessionOwner
             new(GameSessionDisposition.Rejected, failure, owner.Version);
 
         // Budgets, then the revision; an unchanged plan is NoChange with the caller's details.
-        internal SessionDangerResult Commit(SessionDangerResult result)
+        internal TResult Commit<TResult>(TResult result, Func<TResult, GameSessionDisposition, GameSessionVersion, TResult> with,
+            Func<GameSessionFailure, TResult> reject)
         {
             var danger = owner._danger;
             var changed = _staged.Values.Where(record => !(danger.Records.TryGetValue(record.Entity, out var current) ? current.SameAs(record) : record.IsBaseline)).ToArray();
-            var reaction = _reaction is { } next && !(owner._reactions.Records.TryGetValue(next.Entity, out var stored) ? stored == next : next.IsBaseline) ? _reaction : null;
-            var companion = _adjustment is { LeaderCheck: true } ? owner._party.Get(_reactionEntity!) : (SessionCompanion?)null;
-            var armed = companion is { } c ? c with { Loyalty = CompanionLoyaltyRules.ArmReaction(c.Loyalty) } : (SessionCompanion?)null;
-            if (changed.Length == 0 && _leavesCombatMode is null && reaction is null && armed == companion)
-                return result with { Disposition = GameSessionDisposition.NoChange, Version = owner.Version };
+            var writes = _reactions.Values.Select(r => r.Write).OfType<SessionReaction>()
+                .Where(next => !(owner._reactions.Records.TryGetValue(next.Entity, out var stored) ? stored == next : next.IsBaseline)).ToArray();
+            var armed = _reactions.Where(r => r.Value.Adjustment.LeaderCheck).Select(r => owner._party.Get(r.Key))
+                .Select(c => (Before: c, After: c with { Loyalty = CompanionLoyaltyRules.ArmReaction(c.Loyalty) }))
+                .Where(c => c.After != c.Before).Select(c => c.After).ToArray();
+            var leaving = _leavesCombatMode.Where(owner._combat.Critters.Contains).ToArray();
+            if (changed.Length == 0 && leaving.Length == 0 && writes.Length == 0 && armed.Length == 0)
+                return with(result, GameSessionDisposition.NoChange, owner.Version);
             var records = danger.Records.Count + changed.Count(record => !record.IsBaseline && !danger.Records.ContainsKey(record.Entity))
                 - changed.Count(record => record.IsBaseline && danger.Records.ContainsKey(record.Entity));
             var enemies = danger.Enemies + changed.Sum(record => record.Enemies.Count -
                 (danger.Records.TryGetValue(record.Entity, out var current) ? current.Enemies.Count : 0));
             if (records > owner._limits.MaxDangerRecords || enemies > owner._limits.MaxDangerEnemies)
-                return owner.RejectDanger(GameSessionFailure.BudgetExceeded);
-            if (reaction is { } r && !owner._reactions.Records.ContainsKey(r.Entity) && !r.IsBaseline &&
-                owner._reactions.Records.Count >= owner._limits.MaxReactionRecords)
-                return owner.RejectDanger(GameSessionFailure.BudgetExceeded);
-            if (owner._revision == long.MaxValue) return owner.RejectDanger(GameSessionFailure.RevisionExhausted);
+                return reject(GameSessionFailure.BudgetExceeded);
+            var added = writes.Count(r => !owner._reactions.Records.ContainsKey(r.Entity) && !r.IsBaseline);
+            if (added > 0 && owner._reactions.Records.Count + added > owner._limits.MaxReactionRecords)
+                return reject(GameSessionFailure.BudgetExceeded);
+            if (owner._revision == long.MaxValue) return reject(GameSessionFailure.RevisionExhausted);
             foreach (var record in changed) danger.Put(record);
-            if (_leavesCombatMode is { } entity) owner._combat.Critters.Remove(entity);
-            if (reaction is { } write)
+            foreach (var entity in leaving) owner._combat.Critters.Remove(entity);
+            foreach (var write in writes)
             {
                 if (write.IsBaseline) owner._reactions.Records.Remove(write.Entity);
                 else owner._reactions.Records[write.Entity] = write;
             }
             // ARC-WORLD-045 (OL17): a reaction drop of a follower arms its leader check in the same revision.
-            if (armed is { } arm && arm != companion) owner._party.Put(arm, false);
+            foreach (var arm in armed) owner._party.Put(arm, false);
             owner._revision++;
-            return result with { Disposition = GameSessionDisposition.Changed, Version = owner.Version };
+            return with(result, GameSessionDisposition.Changed, owner.Version);
         }
+
+        internal SessionDangerResult Commit(SessionDangerResult result) =>
+            Commit(result, (r, disposition, version) => r with { Disposition = disposition, Version = version }, owner.RejectDanger);
     }
 }
