@@ -20,9 +20,9 @@ Requirements:
 [FR-WORLD-010](../requirements/world.md#fr-world-010).
 
 Earlier results reused, not re-read: the follow check and the follower limit
-([ledger AP3, AP4](original-verification-ledger.md#ai-parameters-and-follow-consent-arc-data-033)),
+([ledger AP3, AP4](ledger/npc-ai.md#ai-parameters-and-follow-consent-arc-data-033)),
 the wait timer's scheduling condition (ledger row Wait timer (C12, O3, TE8)),
-the reaction change rules ([R2](original-verification-ledger.md#reaction-runtime-arc-world-026)),
+the reaction change rules ([R2](ledger/social.md#reaction-runtime-arc-world-026)),
 the AI pass and its cadence ([core loop](npc-ai-core-loop.md), CL7–CL12), the
 event queue's map scope (ledger OQ3 and the [event queue](game-event-queue.md)
 P3–P5), the level recalculation and follower levels (XP5, XP7, AL12) and
@@ -50,7 +50,7 @@ Verdicts follow the [ledger](original-verification-ledger.md#verdicts-and-what-t
 **Reconstruction slip** (the earlier reading was wrong), **Original bug** (the
 original does it and it looks unintended; a candidate for a switch of the
 Original setting). The rows are also in the
-[ledger](original-verification-ledger.md#companion-orders-and-loyalty-arc-res-064).
+[ledger](ledger/social.md#companion-orders-and-loyalty-arc-res-064).
 
 ## Answer
 
@@ -142,7 +142,7 @@ the follower's spell flag 0x8000000.
 
 The other loyalty path, the PC leader hitting its own follower (reaction A2, R8:
 parameter 9, then the same check), is in the
-[reaction ledger](original-verification-ledger.md#reaction-runtime-arc-world-026)
+[reaction ledger](ledger/social.md#reaction-runtime-arc-world-026)
 and stays with stage A7.
 
 ## 3. Wait timeout (Q3, companion C12)
@@ -256,4 +256,4 @@ A second reader that saw only the questions re-read Q1–Q7 in the executable. B
 behaviour and verdict, including all seven decision candidates. The second reader added the PC's own float
 (OL2), the curse line's source (OL11) and the multiplayer phase's screen-sized search. It first read keyword
 116 ("stop") as having no rule entry; the installed rule file has it (back off), so this was a data-reading
-difference. Details are in the [ledger section](original-verification-ledger.md#companion-orders-and-loyalty-arc-res-064).
+difference. Details are in the [ledger section](ledger/social.md#companion-orders-and-loyalty-arc-res-064).

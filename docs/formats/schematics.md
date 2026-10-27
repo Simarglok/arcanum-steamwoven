@@ -11,7 +11,7 @@ Requirements: [FR-ITEM-017](../requirements/items-economy.md#fr-item-017) (found
 
 Every behaviour below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers: the first reading of
 ARC-RES-062 ([technology study](../research/technology-evidence.md#schematic-records-fr-item-017-fr-item-018)) and a
-second reading for this slice ([ledger "Schematic data"](../research/original-verification-ledger.md#schematic-data-arc-technology-001),
+second reading for this slice ([ledger "Schematic data"](../research/ledger/technology.md#schematic-data-arc-technology-001),
 rows SD1–SD6 and TC11). The registry rows ([functions](../verification/functions.csv)) are at F2.
 
 Code: [`src/Arcanum.Data/Technology`](../../src/Arcanum.Data/Technology); tests:
@@ -44,7 +44,7 @@ Code: [`src/Arcanum.Data/Technology`](../../src/Arcanum.Data/Technology); tests:
 ## Files
 
 All three are init files: each comes from the **first base source** holding it (`ContentLoadPhase.GameStart`,
-[load phases](../research/original-verification-ledger.md#load-phases-arc-data-027)); a module copy is never read.
+[load phases](../research/ledger/data.md#load-phases-arc-data-027)); a module copy is never read.
 
 | File | Read | Required |
 | --- | --- | --- |

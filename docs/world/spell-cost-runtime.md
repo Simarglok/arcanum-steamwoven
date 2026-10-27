@@ -8,7 +8,7 @@ the recharge of a worn mana item. No session state, snapshot or viewer change: t
 Requirements: [FR-MAGIC-004](../requirements/combat-magic-tech.md#fr-magic-004) (casting spends the stated resource).
 
 Every rule below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
-([ledger "Spell cost and payment"](../research/original-verification-ledger.md#spell-cost-and-payment-arc-magic-003),
+([ledger "Spell cost and payment"](../research/ledger/magic.md#spell-cost-and-payment-arc-magic-003),
 rows PC1–PC12), and three functions were compared with the original in the function oracle on 10,000 seeded inputs each
 (F3, receipts in [`docs/verification/receipts`](../verification/receipts)). Where the
 [magic study](../research/magic-core-evidence.md#paying-fr-magic-004) differs, the ledger is the newer evidence.

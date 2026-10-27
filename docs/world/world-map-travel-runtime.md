@@ -3,7 +3,7 @@
 Status: **Implemented** (Godot-free rules and the session's known areas; slice W3 of the whole-world plan M4). Caller:
 the viewer's diagnostic world map in map mode since ARC-UI-048 ([world map](../rendering/area-map-mode.md#world-map-arc-ui-048)). The rules follow the retail 1.0.7.4 executable as read in
 [world-map travel](../research/world-map-travel.md) and
-[ledger WT1–WT13](../research/original-verification-ledger.md#world-map-travel-arc-res-068).
+[ledger WT1–WT13](../research/ledger/world.md#world-map-travel-arc-res-068).
 
 ## Data (`Arcanum.Data.Maps`, WorldAreas.cs)
 

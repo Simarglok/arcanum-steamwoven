@@ -19,7 +19,7 @@ a goal limit) and KM-03 in [original keyboard and mouse](../requirements/origina
 
 ARC-WORLD-073: the original's path request (0x41F3C0, the gate, the direct attempt 0x41F840 and the 64 × 64 search
 0x41F9F0) and the walk around it (0x426040, the budget 0x426320, the segments and the PC's straight-line retry), read in
-the retail executable ([ledger](../research/original-verification-ledger.md#long-and-far-routes-arc-world-060) LR1–LR9 and
+the retail executable ([ledger](../research/ledger/world.md#long-and-far-routes-arc-world-060) LR1–LR9 and
 DC2–DC8, two readers, F2). One search, `OriginalPathRequest` (`Arcanum.Simulation.Navigation`), serves the click route, its
 corridor's core and the drop's placement (ARC-COMBAT-010, `AreaDropMap`); a test checks it returns what the drop's own port
 returned on random invented maps. The code is independently written. The request's flags 0x200 (light costs), 0x400 (fire
@@ -182,7 +182,7 @@ long route (LR7):
 ## Attack approach (ARC-WORLD-073)
 
 The original's approach for an attack beyond reach, read in the executable by two readers
-([ledger](../research/original-verification-ledger.md#attack-approach-arc-world-073) AP1–AP7):
+([ledger](../research/ledger/combat.md#attack-approach-arc-world-073) AP1–AP7):
 `RoutePlanner.PlanApproach(source, from, target)` asks the shared request for a route to the target's own tile with the
 request's flag 0x1 (the goal's gate skipped, the step onto the goal taken untested) and the walk's budget, and ends one step
 short of it; the cell it ends on is `RoutePlan.Target` (`ROUTE_APPROACH`). No route, or a route of no step (the target next
@@ -312,7 +312,7 @@ runtime receives therefore share one Data verdict.
 ## Original check (ARC-WORLD-060)
 
 The original's walk to a clicked tile is read in the retail executable
-([ledger](../research/original-verification-ledger.md#long-and-far-routes-arc-world-060) LR1–LR8, with the path request
+([ledger](../research/ledger/world.md#long-and-far-routes-arc-world-060) LR1–LR8, with the path request
 DC2–DC8 and the freed cells FC1–FC3). Each part of this runtime against it:
 
 | Part | Original | Steamwoven | Status |

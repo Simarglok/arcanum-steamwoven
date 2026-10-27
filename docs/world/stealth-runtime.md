@@ -11,9 +11,9 @@ Snapshot schema 35. Requirements: [FR-AI-002](../requirements/story-social-ai.md
 ## Evidence
 
 - The retail 1.0.7.4 `Arcanum.exe`, read statically per the [original executable check](../research/original-executable-check.md)
-  by two independent readers: rows ST1–ST6 of the [verification ledger](../research/original-verification-ledger.md#stealth-arc-skills-008).
+  by two independent readers: rows ST1–ST6 of the [verification ledger](../research/ledger/skills.md#stealth-arc-skills-008).
   They agree on every row (ST1's hotkey refusal of a stunned or paralysed PC was read by one reader only). No rule-mode switch.
-- Sight, hearing and the margin's terms: [AW1–AW12](../research/original-verification-ledger.md#npc-ai-awareness-arc-res-056).
+- Sight, hearing and the margin's terms: [AW1–AW12](../research/ledger/npc-ai.md#npc-ai-awareness-arc-res-056).
 
 ## Rules
 

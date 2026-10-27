@@ -265,7 +265,7 @@ Order of resolution in `sub_4B3170` (0x4B3170):
      adds the line-of-fire rating;
    - light (not undead; melee experts exempt): `30 × (255 − light)/255`,
      reduced by the attacker's own light (÷4, ÷3, ÷2, ×⅔; the executable keeps
-     ×¾ for a small light, [SC9](original-verification-ledger.md#skill-check-arc-skills-003))
+     ×¾ for a small light, [SC9](ledger/skills.md#skill-check-arc-skills-003))
      and inverted by dark sight;
    - blinded +30; crippled arms +20 one, +50 both.
 7. **Critical.** A second d100 decides the critical (crit chance (0x4C81A0, 0x4C82E0)):
@@ -334,7 +334,7 @@ neither see nor hear the attacker; then the critical chance gains
   or the "damage armour" critical wears the armour at the hit location (head
   helmet, arm gauntlets, leg boots, else body armour) by 10 HP, once, before
   the hit-point damage; at 0 HP it breaks (armour slot (0x4B54B0); read in the
-  executable by ARC-COMBAT-007, [ledger CW1–CW2](original-verification-ledger.md#combat-wear-arc-combat-007)).
+  executable by ARC-COMBAT-007, [ledger CW1–CW2](ledger/combat.md#combat-wear-arc-combat-007)).
 - **C21** Side effects (vitals (0x4B4390)): any attacker drains
   `worth × damage% / 100` from the NPC's experience pool, and only a PC
   attacker is paid it; a PC follower dropping below 20 %
@@ -346,10 +346,10 @@ neither see nor hear the attacker; then the critical chance gains
   hit point; it runs last, also after the target died, and on an object only
   while the object stays whole (wear (0x4B5580); ARC-COMBAT-007 corrected the
   earlier reading, which had the complexity raise the wear,
-  [ledger CW5–CW9](original-verification-ledger.md#combat-wear-arc-combat-007)). Portals and containers subtract a material reduction (stone,
+  [ledger CW5–CW9](ledger/combat.md#combat-wear-arc-combat-007)). Portals and containers subtract a material reduction (stone,
   brick, metal, force 10; wood 5) and are busted, triggering any trap, at 0 HP
   (damage (0x4B4390); every object kind's break was read in the executable by
-  ARC-COMBAT-008, [ledger OD1–OD12](original-verification-ledger.md#object-damage-arc-combat-008)).
+  ARC-COMBAT-008, [ledger OD1–OD12](ledger/combat.md#object-damage-arc-combat-008)).
 
 ### Fatigue, knockout and death (FR-COMBAT-010)
 
@@ -373,7 +373,7 @@ neither see nor hear the attacker; then the critical chance gains
   +5 crushing, +10 leg). `chance` is the weapon's magic critical-effect value
   (0 unarmed, and 0 with a weapon whose magic was cancelled, A8) plus effects,
   +10 when aimed. *Re-read in the executable by two readers (ARC-COMBAT-009,
-  [ledger CR1–CR15](original-verification-ledger.md#critical-effects-arc-combat-009)),
+  [ledger CR1–CR15](ledger/combat.md#critical-effects-arc-combat-009)),
   which corrected the strict knockout threshold, tied the knockout to the stun
   and added the body types, the location effects, scars and the item effects.*
 - **C25** Recovery (fatigue event (0x45E610, 0x45E820), time (0x45A7F0, 0x45A820, 0x45A840, 0x45A870, 0x45A890, 0x45A8B0, 0x45A8D0, 0x45A8E0, 0x45A900, 0x45A920, 0x45A950)): any non-zero
@@ -460,7 +460,7 @@ neither see nor hear the attacker; then the critical chance gains
 
 The decisions on A1–A12 (owner decision D2) are recorded in the [NPC combat
 AI plan](npc-combat-ai-plan.md#anomaly-decisions); A11 and A12 were checked in
-the original by ARC-COMBAT-003 ([ledger](original-verification-ledger.md#turn-based-round-arc-combat-003)).
+the original by ARC-COMBAT-003 ([ledger](ledger/combat.md#turn-based-round-arc-combat-003)).
 
 ## Original executable check (ARC-COMBAT-001)
 
@@ -494,11 +494,11 @@ repository; the table records only the observed behaviour.
 - **O2** The scan order of `object_list_rect`, which is the actual NPC order in
   a round, was not read. *Answered by ARC-COMBAT-003:* sector rows from the
   top, sectors from the left, and inside a sector the critter that entered it
-  last first ([ledger TB13](original-verification-ledger.md#turn-based-round-arc-combat-003)).
+  last first ([ledger TB13](ledger/combat.md#turn-based-round-arc-combat-003)).
 - **O3** The Speed-scaled animation rate (`sub_437990`), so the real-time
   cadence as a function of Speed, was not read. *Answered by ARC-COMBAT-004:* the attack rate per weapon slot and
   Speed, the frame pause and the goal timeline, read in the original
-  ([ledger RT8–RT11](original-verification-ledger.md#real-time-combat-arc-combat-004)).
+  ([ledger RT8–RT11](ledger/combat.md#real-time-combat-arc-combat-004)).
 - **O4** The line-of-fire test `sub_4ADE00` (the 26 threshold and the cover
   rating) belongs to FR-COMBAT-007 and was not read. *Settled by ARC-RES-056:* the
   test sums cover along a straight tile line: closed doors, objects and living

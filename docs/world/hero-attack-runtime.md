@@ -25,7 +25,7 @@ since ARC-COMBAT-009 a critical hit rolls the original's critical-effect tables 
   animations).
 - The retail 1.0.7.4 `Arcanum.exe`, read statically by two independent readers per the
   [original executable check](../research/original-executable-check.md); rows FA1–FA10 of the
-  [verification ledger](../research/original-verification-ledger.md#hero-attack-arc-combat-005). Three rows differ from that first
+  [verification ledger](../research/ledger/combat.md#hero-attack-arc-combat-005). Three rows differ from that first
   reading: a click on a follower of the hero does nothing unless left Alt is held (FA2), a corpse click without Alt does
   nothing (FA3), and the click does nothing when the PC is not active, is stoned, or is stunned or paralysed (FA6); none
   is a bug of the original, so there is no rule-mode switch.
@@ -111,7 +111,7 @@ there (the critical tables read the host's `TargetWorn`).
 
 Requirements: [FR-COMBAT-007](../requirements/combat-magic-tech.md#fr-combat-007) (ammunition per shot, partly) and
 [FR-COMBAT-004](../requirements/combat-magic-tech.md#fr-combat-004) (the line of fire chooses the struck object). Read in the
-retail 1.0.7.4 executable by two readers ([ledger RA1–RA10](../research/original-verification-ledger.md#reach-and-line-of-fire-arc-combat-012)).
+retail 1.0.7.4 executable by two readers ([ledger RA1–RA10](../research/ledger/combat.md#reach-and-line-of-fire-arc-combat-012)).
 
 | Rule | Value |
 | --- | --- |

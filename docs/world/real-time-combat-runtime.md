@@ -21,7 +21,7 @@ Requirements: [FR-COMBAT-001](../requirements/combat-magic-tech.md#fr-combat-001
   mode.
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically by two independent readers per the
   [original executable check](../research/original-executable-check.md); the rows RT1–RT12 are in the
-  [verification ledger](../research/original-verification-ledger.md#real-time-combat-arc-combat-004). The original does
+  [verification ledger](../research/ledger/combat.md#real-time-combat-arc-combat-004). The original does
   what that first reading describes except in three places: the `auto attack` default is "1" (RT6), Speed 8 gives the
   middle rate (LA1, RT10) and the attack start clears invisibility for an attacker that is not the local PC (RT8). None
   is a bug of the original, so there is no rule-mode switch.

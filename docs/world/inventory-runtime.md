@@ -154,7 +154,7 @@ in schema 4 to lose (its `IN` record was in memory only).
 ## NPC inventory changes (ARC-WORLD-055)
 
 One store of NPC inventory changes for every NPC on every map (`GameSessionNpcInventory.cs`), read in the executable first
-([ledger "NPC inventory changes"](../research/original-verification-ledger.md#npc-inventory-changes-arc-world-055), NI1–NI7).
+([ledger "NPC inventory changes"](../research/ledger/items.md#npc-inventory-changes-arc-world-055), NI1–NI7).
 
 **Original (NI1–NI5).** The original keeps no inventory store of its own: an NPC's list is fields of the NPC, each item its own
 object with a parent field, and all of them are saved with the map the NPC stands on when the PC leaves it (changed fields of
@@ -218,7 +218,7 @@ follower), NPC worn slots, gold, and a visiting companion's items in the map-bou
 ## Placed items (ARC-WORLD-059)
 
 The hero's items the session placed on the ground (`GameSessionOwner.QueryPlacedItems`, `SessionPlacedItem`), read in the
-executable first ([ledger "Placed items"](../research/original-verification-ledger.md#placed-items-arc-world-059), PI1–PI6). In the
+executable first ([ledger "Placed items"](../research/ledger/items.md#placed-items-arc-world-059), PI1–PI6). In the
 original an item is an object anywhere: dropping it removes it from the owner (unwielding a worn one) and moves it to a tile,
 where it stays until something picks it up or its 48-hour decay destroys it; a pickup is the ordinary transfer.
 
@@ -271,7 +271,7 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 
 ## Drop cell (ARC-COMBAT-010)
 
-Where a dropped item lands, read in the executable first ([ledger "Drop cell"](../research/original-verification-ledger.md#drop-cell-arc-combat-010),
+Where a dropped item lands, read in the executable first ([ledger "Drop cell"](../research/ledger/combat.md#drop-cell-arc-combat-010),
 DC1–DC8, with CR14). `DropPlacementRules` (Simulation) is the drop's draws and tries: `Distance` draws 2..4 (0x461A90), `Place` makes
 up to ten tries of 0x4F4E40, each with a direction draw 0..8 (8 stays), over an injected `IDropMap`: the original's step
 (0x4B8FF0), its path request with the drop's flags (0x41F3C0, flags 0x10) for a `DropOwner` (an object, the PC side, or an NPC on
@@ -357,7 +357,7 @@ The AREA viewer draws what the session holds on the ground but no T0 body drew, 
 ## Ammunition (ARC-WORLD-066)
 
 Ammunition (type 6) is admitted to the hero's and NPCs' lists since ARC-WORLD-066 (snapshot schema 34), read in the executable
-([ledger AM1–AM7](../research/original-verification-ledger.md#ammunition-arc-world-066), anomalies AMA1–AMA6). Gold, keys and key
+([ledger AM1–AM7](../research/ledger/items.md#ammunition-arc-world-066), anomalies AMA1–AMA6). Gold, keys and key
 rings stay out. Code: [`GameSessionAmmo`](../../src/Arcanum.Session/GameSessionAmmo.cs) and the transfers above; tests
 [`AmmoStateTests`](../../tests/Arcanum.Session.Tests/AmmoStateTests.cs) and
 [`AreaAmmoLinesTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaAmmoLinesTests.cs).

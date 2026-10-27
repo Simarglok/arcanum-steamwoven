@@ -11,7 +11,7 @@ Requirements: [FR-MAGIC-003](../requirements/combat-magic-tech.md#fr-magic-003) 
 definition's parameters: self, object, group, tile and radius, line, the NPC fallback).
 
 Every rule below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
-([ledger "Spell target areas"](../research/original-verification-ledger.md#spell-target-areas-arc-magic-007), rows TA1–TA16),
+([ledger "Spell target areas"](../research/ledger/spell-runs.md#spell-target-areas-arc-magic-007), rows TA1–TA16),
 and the area test (0x4F2D20), the collection (0x4F40B0), the re-aim (0x453D40) and the AI notice (0x453EE0) were compared with
 the original in the function oracle on 10,000 seeded inputs each (F3, receipts [`4F2D20.json`](../verification/receipts/4F2D20.json),
 [`4F40B0.json`](../verification/receipts/4F40B0.json), [`453D40.json`](../verification/receipts/453D40.json),

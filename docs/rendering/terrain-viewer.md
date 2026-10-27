@@ -975,7 +975,7 @@ run may end under a roof.
 
 In combat mode (R, `--hero`) a left click on a living NPC attacks it, on the exterior, in the cave and in `--area-map`
 ([hero attack runtime](../world/hero-attack-runtime.md#viewer-area), ledger
-[FA1–FA10](../research/original-verification-ledger.md#hero-attack-arc-combat-005)): the hero walks (running) within its
+[FA1–FA10](../research/ledger/combat.md#hero-attack-arc-combat-005)): the hero walks (running) within its
 weapon's reach, turns to the target and plays its bare-handed attack ART at the rate of its Speed; the frame that shows the
 action frame resolves the hit through the session, and the attack repeats (auto attack) until the target dies. Shift makes
 it the attempt-attack goal (here the same attack); a follower is attacked only with left Alt held; held `,` `.` `/` aim at the
@@ -992,7 +992,7 @@ living NPC with combat values.
 The original Character sheet key `C` (logical key down) toggles a diagnostic sheet of the session's hero in
 crash-site-area (exterior, cave and `--area-map`). It shows what the original sheet of the PC shows
 (`charedit` in active mode, checked in the original executable, ledger rows
-[CS1–CS7](../research/original-verification-ledger.md#character-sheet-arc-ui-007)), every value a session query:
+[CS1–CS7](../research/ledger/character.md#character-sheet-arc-ui-007)), every value a session query:
 
 - the hero's project name (no PC name in the session), race and gender;
 - level, experience still needed for the next level (`last level` at 51; `next level unknown` without experience data),
@@ -1028,7 +1028,7 @@ not admitted fails the load (`AREA_HERO_TableUnavailable`, `AREA_HERO_Experience
 #### Skills page (ARC-UI-009)
 
 Since ARC-UI-009 (task S6 of the [skills plan](../research/skills-plan.md)) the sheet has the original's skills page, checked
-in the original executable (ledger rows [SP1–SP8](../research/original-verification-ledger.md#skills-page-arc-ui-009)):
+in the original executable (ledger rows [SP1–SP8](../research/ledger/skills.md#skills-page-arc-ui-009)):
 
 - the sixteen skills in the original's four groups of four (three of basic skills, the fourth the tech skills), all four
   groups at once instead of the original's tabs;
@@ -1071,7 +1071,7 @@ Requirements: [FR-UI-004](../requirements/ui-media-lifecycle.md#fr-ui-004) (the 
 
 Since ARC-MAGIC-008 (slice MT19 of the [magic implementation plan](../research/magic-implementation-plan.md)) the sheet has
 the original's college page as a second tab beside the skills, checked in the original executable (ledger rows
-[SG1–SG8](../research/original-verification-ledger.md#spell-page-arc-magic-008)). Code: `AreaSpellsPage` (Core, Godot-free)
+[SG1–SG8](../research/ledger/magic.md#spell-page-arc-magic-008)). Code: `AreaSpellsPage` (Core, Godot-free)
 and the panel's "Spells" tab; tests `AreaSpellsPageTests`.
 
 - **Colleges.** Sixteen college tabs, one shown at a time. The shown college is kept between opens, as the original keeps
@@ -1171,7 +1171,7 @@ window art, its other messages and its three interface callbacks after the entry
 ### Logbook (ARC-UI-008)
 
 The original Logbook key `L` (logical key down; the original's in-game key handler toggles the logbook for the local PC on
-`l`/`L`, ledger [LB1](../research/original-verification-ledger.md#logbook-arc-ui-008)) toggles a read-only diagnostic
+`l`/`L`, ledger [LB1](../research/ledger/ui-audio.md#logbook-arc-ui-008)) toggles a read-only diagnostic
 logbook of the session's PC in crash-site-area (exterior, cave and `--area-map`), with the two tabs of the original that
 the session can fill: **rumors** and **quests**. What it lists and how each entry looks follow the original logbook
 (ledger rows LB2–LB13):
@@ -1217,7 +1217,7 @@ on the live session; on a detached copy every quest and rumor that has a text is
 ### Schematic window (ARC-TECHNOLOGY-005)
 
 The original Technical schematics key `T` (logical key down; the original's in-game key handler opens the window for the local
-PC as crafter and viewer, ledger [SW1](../research/original-verification-ledger.md#schematic-window-arc-technology-005)) toggles
+PC as crafter and viewer, ledger [SW1](../research/ledger/technology.md#schematic-window-arc-technology-005)) toggles
 a diagnostic schematic window of the session's hero in crash-site-area (exterior, cave and `--area-map`), with the learned and
 found tabs, the eight discipline tabs, Previous and Next, the record's name and description, the two components (found or
 missing, the expertise they need), the product and quantity, and the Assemble button with its state. Contract:
@@ -1250,7 +1250,7 @@ holding a learned record's components one assembly makes its product).
 
 The inventory window shows a `Read:` button for each written item the hero holds; the session decides the use
 ([reading window runtime](../world/reading-window-runtime.md), ledger
-[WR1–WR16](../research/original-verification-ledger.md#reading-window-arc-ui-049)). A schematic document registers and the
+[WR1–WR16](../research/ledger/ui-audio.md#reading-window-arc-ui-049)). A schematic document registers and the
 inventory message shows `tech.mes` 89 with its name (88 when known); any other kind replaces the inventory with a modal reading
 window, as the original's mode change pops the inventory. Script actions 64, 65 and 114 of the dialog, use, tile and sector scripts
 open it for a PC viewer once nothing else owns input. The window owns every key: `Escape` or a controller cancel closes it, a book's
