@@ -151,7 +151,8 @@ Software only (synthetic Godot InputEvents and simulated controller levels):
   silenced by Ctrl, Alt, Command and Ctrl+Shift but not by Shift, and no other key silenced.
 - ARC-INPUT-004 in the `ARC-UI-008` AREA self-test (production key route, synthetic session): L, C, I, T, R and W
   with Ctrl, Alt, Command or Ctrl+Shift change no window, status, notice or reserved report; Shift+C/T/R act as
-  bare; Shift+L opens and closes the logbook and Ctrl+L does not close it. The palette chord matrix's held-modifier
+  bare; Shift+L opens and closes the logbook and Ctrl+L does not close it (the other windows' close gates share the code
+  but are not driven: without a hero the sheet and schematic window do not open, and the fixture has no inventory host). The palette chord matrix's held-modifier
   check (held Ctrl+Shift + F1–F5, R, F, L, 1, 0, WASD) failed in its `ARC_AREA_GRID_PROBE` run in `crash-site-area`
   from ARC-UI-008 until this fix (Ctrl+Shift+L opened the logbook).
 - Godot self-test (`--self-test`, headless and graphical): `ARC-INPUT-001 palette chord

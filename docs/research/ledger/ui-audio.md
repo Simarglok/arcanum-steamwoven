@@ -125,4 +125,5 @@ AltGr and the active layout decide the character (a Cyrillic layout gives bytes 
 Latin layout). So in the original, L and Shift+L (or Caps Lock) open the logbook, and Ctrl+L, Ctrl+Shift+L, Alt+L and
 Ctrl+Alt+L do nothing; the same holds for A, C, F, I, R, S, T and W. Steamwoven (`OriginalWorldKeyboard.CharacterKeySilenced`)
 silences these letters under Ctrl, Alt or Command (Command is the Mac system's), lets Shift through, and an open window's
-own letter does not close it under those modifiers either.
+own letter does not close it under those modifiers either. Not located in this pass: where O (options), V (version) and E
+(the turn-based sub-turn) are read; they stay reserved keys at F0 with their earlier addresses.
