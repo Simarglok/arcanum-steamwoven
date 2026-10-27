@@ -46,6 +46,8 @@ Largest installed value against each cap; "interiors" are the 80 maps a whole-ma
 | `GameSessionLimits.PolicyMaxTotalChanges` (was 16,384) | 524,288 | 276,625 objects | all maps | 1.9× |
 | `GameSessionLimits.PolicyMaxLifeRecords`, `…ReactionRecords`, `…ExperienceRecords` (were 4,096) | 8,192 | 3,792 NPCs | all maps | 2.2× |
 | `GameSessionLimits.PolicyMaxFoundSchematics` (ARC-TECHNOLOGY-003: the hero's found schematics; the original has no limit) | 128 | 62 found records (57 with a document) | `rules\schematic.mes` and the written prototypes | 2.1× |
+| `GameSessionLimits.PolicyMaxDangerRecords` (ARC-WORLD-079: NPC danger records) | 8,192 | 3,792 NPCs | all maps | 2.2× |
+| `GameSessionLimits.PolicyMaxDangerEnemies` (ARC-WORLD-079: enemy-list entries of all records; the original has no limit) | 65,536 | not counted: a policy cap, eight entries per record at the record cap; about 4.6 MB of snapshot at the cap | all maps | — |
 | `GameSessionLimits.PolicyMaxDurabilityRecords` (ARC-WORLD-053: changed and deleted items) | 8,192 | not counted: a policy cap as life, far above the items a playthrough damages; about 1–2 MB of snapshot at the cap | all maps | — |
 | `GameSessionSnapshotCodec.MaxEncodedCharacters` (save file, was 8 MiB) | 96 MiB | about 43 MB estimated | all maps | 2.3× |
 
