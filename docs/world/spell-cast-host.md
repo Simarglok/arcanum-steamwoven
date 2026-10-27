@@ -128,13 +128,13 @@ The original's goals 26 and 82 (`ag_throw_spell`, with the record's casting anim
 
 ## Differences from the original
 
-Owner decisions 2026-10-20 and 2026-10-21: every difference is documented.
+Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is documented.
 
 | Original 1.0.7.4 | Steamwoven | Mode |
 | --- | --- | --- |
-| A goal refused before its animation (action points, the pre-animation check, or a target destroyed or off) frees the run with its BEGIN charged: the caster pays for a cast that never started (MG39). | The run is freed unpaid. | `MagicAnomalyProfile.GoalRefusalChargesBegin` (pending the owner, recommended) |
-| The charge of a run freed before its BEGIN ignores the free flag, the technology flag and `ChargeBeginCost: 0` (MG40). | Charged only when its BEGIN would have paid. | `MagicAnomalyProfile.GoalEndChargesAnyRun` (pending the owner, recommended) |
-| A failed target re-check at the release frame leaves the run in its slot (MG41). | The run is freed unpaid. | `MagicAnomalyProfile.ReleaseRefusalKeepsRun` (pending the owner, recommended) |
+| A goal refused before its animation (action points, the pre-animation check, or a target destroyed or off) frees the run with its BEGIN charged: the caster pays for a cast that never started (MG39). | The run is freed unpaid. | `MagicAnomalyProfile.GoalRefusalChargesBegin` (owner decision 2026-10-27: fix) |
+| The charge of a run freed before its BEGIN ignores the free flag, the technology flag and `ChargeBeginCost: 0` (MG40). | Charged only when its BEGIN would have paid. | `MagicAnomalyProfile.GoalEndChargesAnyRun` (owner decision 2026-10-27: fix) |
+| A failed target re-check at the release frame leaves the run in its slot (MG41). | The run is freed unpaid. | `MagicAnomalyProfile.ReleaseRefusalKeepsRun` (owner decision 2026-10-27: fix) |
 | The stage writes its payment's fatigue before the components run. | The host applies the call's payments after the call, so a component reading the caster's fatigue in the same pass sees it unpaid. | — |
 | A spell's life changes come from the components inside the run's pass. | The same, through the session's life calls; their revisions come before the run's own. | — |
 
