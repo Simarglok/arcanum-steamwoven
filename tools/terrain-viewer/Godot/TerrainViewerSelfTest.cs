@@ -11,6 +11,7 @@ public static partial class TerrainViewerSelfTest
 {
     public static async void Run(Node host)
     {
+        StageClock.Restart();
         try
         {
             // ARC-DEV-032: the self-test reads and writes no setting of the player.
@@ -21,6 +22,7 @@ public static partial class TerrainViewerSelfTest
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_GRID_PROBE") == "1")
             {
                 if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("AREA_GRID_NATIVE_REQUIRED");
+                Stage("AreaGrid");
                 await AssertAreaGridAsync(host);
                 host.GetTree().Quit(0);
                 return;
@@ -28,6 +30,7 @@ public static partial class TerrainViewerSelfTest
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_OWNER_SEAM_PROBE") == "1")
             {
                 if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("AREA_SEAM_NATIVE_REQUIRED");
+                Stage("AreaOwnerSeams");
                 await AssertAreaOwnerSeamsAsync(host);
                 host.GetTree().Quit(0);
                 return;
@@ -35,6 +38,7 @@ public static partial class TerrainViewerSelfTest
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_OWNER_PROBE") == "1")
             {
                 if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("AREA_OWNER_NATIVE_REQUIRED");
+                Stage("AreaOwner");
                 await AssertAreaOwnerAsync(host);
                 host.GetTree().Quit(0);
                 return;
@@ -42,12 +46,14 @@ public static partial class TerrainViewerSelfTest
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_COMPOSITION_PROBE") == "1")
             {
                 if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("AREA_COMPOSITION_NATIVE_REQUIRED");
+                Stage("AreaCompositionMatrix");
                 await AssertAreaCompositionMatrixAsync(host);
                 host.GetTree().Quit(0);
                 return;
             }
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_NEAREST_PROBE") == "1")
             {
+                Stage("AreaNearestHoldouts");
                 await AssertAreaNearestHoldoutsAsync(host);
                 host.GetTree().Quit(0);
                 return;
@@ -58,6 +64,7 @@ public static partial class TerrainViewerSelfTest
                 app.SelfTestBootstrap = true; app.SetProcess(false);
                 var fixture = WorldFixture();
                 app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
+                Stage("WorldMainSettings");
                 var verified = await app.WorldMainSettingsForSelfTestAsync();
                 app.ClearSyntheticForSelfTest();
                 GD.Print("ARC-WORLD-003 main settings focused control " + (verified ? "PASS" : "NOT_VERIFIED") + "; historical cause UNKNOWN; physical usability NOT_VERIFIED");
@@ -66,32 +73,41 @@ public static partial class TerrainViewerSelfTest
             }
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_STABILITY_PROBE") == "1")
             {
+                Stage("AreaIndexStability");
                 await AssertAreaIndexStabilityAsync(host);
                 host.GetTree().Quit(0);
                 return;
             }
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_INDEX_PROBE") == "1")
             {
+                Stage("AreaIndexMapping");
                 await AssertAreaIndexMappingAsync(host);
                 host.GetTree().Quit(0);
                 return;
             }
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_PROBE") == "1")
             {
+                Stage("ConversationPanel");
                 await AssertConversationPanelAsync(host);
+                Stage("ConversationRouting");
                 await AssertConversationRoutingAsync(host);
                 if (!string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT")))
+                {
+                    Stage("OriginalConversation");
                     await AssertOriginalConversationAsync(host);
+                }
                 host.GetTree().Quit(0);
                 return;
             }
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_ADMISSION_PROBE") == "1")
             {
+                Stage("AreaAdmission");
                 await AssertAreaAdmissionAsync(host);
                 host.GetTree().Quit(0);
                 return;
             }
             AssertIndependentGeometryConstants();
+            Stage("AreaRaster");
             await AssertAreaRasterAsync(host);
             var frame = ArtDecoder.Decode(SyntheticTerrainFixture.CreateArt(), new ArtFrameSelection(0, 0, 0));
             AssertFrameBytes(frame);
@@ -106,34 +122,58 @@ public static partial class TerrainViewerSelfTest
             AssertAreaRetentionOrder();
             AssertReloadAndExitTextureOwnership(frame);
             AssertReadyStateRetainsOnlyHudMetrics();
+            Stage("SyntheticProductionApp");
             await AssertSyntheticProductionAppAsync(host);
+            Stage("SyntheticWorldApp");
             await AssertSyntheticWorldAppAsync(host);
+            Stage("SyntheticWorldRetirement");
             await AssertSyntheticWorldRetirementAsync(host);
+            Stage("AreaCanvas");
             await AssertAreaCanvasAsync(host);
-            if (DisplayServer.GetName() != "headless") await AssertAreaOwnerAsync(host);
+            if (DisplayServer.GetName() != "headless") { Stage("AreaOwner"); await AssertAreaOwnerAsync(host); }
+            Stage("AreaCompositionMatrix");
             await AssertAreaCompositionMatrixAsync(host);
+            Stage("AreaLighting");
             await AssertAreaLightingAsync(host);
+            Stage("AreaLocalLighting");
             await AssertAreaLocalLightingAsync(host);
+            Stage("HdPresentation");
             await AssertHdPresentationAsync(host);
+            Stage("WorldHdPresentation");
             await AssertWorldHdPresentationAsync(host);
             AssertVisualProfileStore();
+            Stage("HdToggle");
             await AssertHdToggleAsync(host);
+            Stage("WorldHdToggle");
             await AssertWorldHdToggleAsync(host);
+            Stage("ConversationPanel");
             await AssertConversationPanelAsync(host);
+            Stage("ConversationRouting");
             await AssertConversationRoutingAsync(host);
+            Stage("AreaHover");
             await AssertAreaHoverAsync(host);
+            Stage("AreaInventory");
             await AssertAreaInventoryAsync(host);
+            Stage("AreaSheet");
             await AssertAreaSheetAsync(host);
+            Stage("AreaLogbook");
             await AssertAreaLogbookAsync(host);
+            Stage("AreaSchematics");
             await AssertAreaSchematicsAsync(host);
+            Stage("AreaReading");
             await AssertAreaReadingAsync(host);
+            Stage("ViewerAudio");
             await AssertViewerAudioAsync(host);
+            Stage("VisualToggleApp");
             await AssertVisualToggleAppAsync(host);
 
             if (DisplayServer.GetName() != "headless")
             {
+                Stage("CanvasOracles");
                 await AssertCanvasOraclesAsync(host, cache, keys);
+                Stage("CombinedCanvasOracle");
                 await AssertCombinedCanvasOracleAsync(host, cache, keys.Red);
+                Stage("StaticRasterPolicies");
                 await AssertStaticRasterPoliciesAsync(host, cache, keys.Red);
                 GD.Print("ARC-RENDER-005 self-test PASS terrain/static/actor production-app pixel oracle");
             }
@@ -155,6 +195,24 @@ public static partial class TerrainViewerSelfTest
             host.GetTree().Quit(1);
         }
     }
+
+    // ARC-DEV-043: each frame-bound stage names itself as it begins, with the time since the self-test began and whether
+    // the window can draw and has focus, and the line is flushed at once (a release export does not flush each print), so a
+    // run stopped by its timeout shows the stage it waited in.
+    private static readonly System.Diagnostics.Stopwatch StageClock = new();
+
+    internal static void Stage(string name)
+    {
+        GD.Print($"ARC-DEV-043 self-test stage {name} begin t={StageClock.ElapsedMilliseconds}ms"
+                 + $" can-draw={DisplayServer.WindowCanDraw()} focused={DisplayServer.WindowIsFocused()}");
+        if (OperatingSystem.IsWindows()) return;
+        // A diagnostic line never changes the outcome: a missing libc only loses the flush.
+        try { _ = FlushAllStreams(IntPtr.Zero); }
+        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException) { }
+    }
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "fflush")]
+    private static extern int FlushAllStreams(IntPtr stream);
 
     private static (TerrainTextureKey Tile, TerrainTextureKey Facade, TerrainTextureKey Red, TerrainTextureKey Green, TerrainTextureKey Blue) CreateKeys()
         => (new("synthetic", 1, 0, 1, "tile", 0, 0, 0), new("synthetic", 2, 0, 1, "facade", 0, 0, 0),

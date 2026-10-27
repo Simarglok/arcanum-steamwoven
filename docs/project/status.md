@@ -2,7 +2,7 @@
 
 Audit baseline: merged main [`a8a553b7c406ace77ea019bf2b13251f00ecddb6`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), through PR #54, 2026-10-09. The audit compared repository source/tests/contracts, all 54 merged PR records and the read-only Hermes board snapshot at **18:11:36 UTC**. Merge commits were checked against this baseline; root-card `done` alone is not product delivery. Later merges require another coverage update.
 
-This is a source/delivery audit, **not a new build, game, original-data, graphical, export or device run**. Test results below are historical evidence reported for the linked reviewed candidates. They do not certify every subsystem together on the audit baseline. The [183-group requirements register](../requirements/README.md) gives each requirement one status with what is implemented, what is missing and documentation links in its [coverage matrix](../requirements/coverage.md) (re-checked 2026-10-20); no whole-game readiness percentage is inferred.
+This is a source/delivery audit, **not a new build, game, original-data, graphical, export or device run**. Test results below are historical evidence reported for the linked reviewed candidates. They do not certify every subsystem together on the audit baseline. The [191-group requirements register](../requirements/README.md) gives each requirement one status with what is implemented, what is missing and documentation links in its [coverage matrix](../requirements/coverage.md) (re-checked 2026-10-20); no whole-game readiness percentage is inferred.
 
 ## Implemented components
 
@@ -40,6 +40,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Spell run rules | [Magic](status/magic.md) | ARC-MAGIC-009, ARC-MAGIC-010 |
 | Spell per-target stage | [Magic](status/magic.md) | ARC-MAGIC-011, ARC-MAGIC-013 |
 | Spell damage and heal | [Magic](status/magic.md) | ARC-MAGIC-012 |
+| Spell cast host and viewer casting | [Magic](status/magic.md) | ARC-MAGIC-014, ARC-MAGIC-015 |
 | Schematic data | [Technology](status/technology.md) | ARC-TECHNOLOGY-001 |
 | ART and playback | [Data and formats](status/data.md) | ARC-DATA-016 |
 | HD pack format | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DATA-014, ARC-RENDER-016, ARC-DEV-003 |
@@ -114,7 +115,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | NPC awareness rules | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-078, ARC-COMBAT-012, ARC-SKILLS-008 |
 | Function oracle | [Verification and tools](status/tools.md) | ARC-DEV-007, ARC-WORLD-033, ARC-SKILLS-001 |
 | Function registry | [Verification and tools](status/tools.md) | ARC-DEV-008, ARC-DEV-023, ARC-DEV-009 |
-| Local workflow/research tools | [Verification and tools](status/tools.md) | ARC-DEV-026, ARC-DEV-028, ARC-DEV-033, ARC-DEV-041 |
+| Local workflow/research tools | [Verification and tools](status/tools.md) | ARC-DEV-026, ARC-DEV-028, ARC-DEV-033, ARC-DEV-041, ARC-DEV-043 |
 
 ## Merged research, not production runtime
 
@@ -158,6 +159,7 @@ One line per subject; the full row (canonical result, what remains) is in its ar
 | SCR program and admission | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-007, ARC-RES-045, ARC-SCRIPT-008 |
 | SCR opcode and attachment census | [Dialog and scripting](status/scripting.md) | ARC-RES-045 |
 | Game event queue | [Game session and character](status/session.md) | ARC-RES-046, ARC-WORLD-022, ARC-WORLD-024 |
+| Multiplayer of the original | [Game session and character](status/session.md) | ARC-RES-072 |
 | Combat-domain load map | [Combat](status/combat.md) | ARC-RES-040, ARC-RES-041 |
 | Combat-domain data census | [Combat](status/combat.md) | ARC-RES-041 |
 | NPC AI core loop | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-054, ARC-DATA-033 |

@@ -82,7 +82,8 @@ public sealed class AreaInventoryMap
                 inventory.ListOf(holder.SourceIndex).Select(item => Id(item.Key)).ToArray())).ToArray(),
             inventory.Items.Select(item => new SessionSeedItem(Id(item.Key),
                 new(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description), item.Weight, item.Complexity,
-                    item.InventoryLocation, item.Quantity, item.Scripts.Select(script => script.Sap).ToArray()) { AmmoType = item.AmmoType },
+                    item.InventoryLocation, item.Quantity, item.Scripts.Select(script => script.Sap).ToArray())
+                    { AmmoType = item.AmmoType, NoDecay = (item.ItemFlags & Arcanum.Simulation.Items.ItemDecayRules.NoDecayFlag) != 0 },
                 item.InInventory ? null : new CellCoord(checked((int)item.WorldX!.Value), checked((int)item.WorldY!.Value)))).ToArray());
         var objects = snapshot.Objects.ToDictionary(row => row.Key);
         var rows = inventory.Holders.Select(holder => holder.Key).Concat(inventory.Items.Select(item => item.Key)).ToDictionary(Id, key => objects[key], StringComparer.Ordinal);

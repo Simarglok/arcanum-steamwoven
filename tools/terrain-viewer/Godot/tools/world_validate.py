@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Bounded WORLD validation children. Private original argv/output never leave memory."""
+"""Bounded WORLD validation children. Private original argv/output never leave memory.
+
+ARC-DEV-043: the synthetic and persistence kinds read no original data; with --raw-log their whole Godot
+output also goes to that owner-only file (the export's git-ignored evidence), so a timed-out child shows the
+stage it waited in. The printed summary stays closed either way."""
 from __future__ import annotations
 
 import argparse
@@ -102,6 +106,33 @@ def run_child(argv: list[str], env: dict[str, str], timeout: int) -> tuple[int, 
         raise failure from error
 
 
+class RawLog:
+    """ARC-DEV-043: one owner-only file per validation; each child is framed by start and exit lines."""
+
+    def __init__(self, path: Path):
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        self.stream = os.fdopen(descriptor, "w", encoding="utf-8")
+
+    def begin(self, label: str, timeout: int) -> None:
+        # Written before the child starts, so even a validator stopped from outside names the running child.
+        self.stream.write(f"world-validate child {label} start timeout={timeout}s\n")
+        self.stream.flush()
+
+    def end(self, label: str, code: int, output: str, elapsed: float) -> None:
+        self.stream.write(output if not output or output.endswith("\n") else output + "\n")
+        outcome = "timeout" if code == 124 else "exit"
+        self.stream.write(f"world-validate child {label} {outcome} code={code} elapsed={elapsed:.3f}s\n")
+        self.stream.flush()
+
+    def failed(self, label: str, stage: str, elapsed: float) -> None:
+        # The child's output is lost with a spawn or communication failure; the closed stage still frames it.
+        self.stream.write(f"world-validate child {label} failure stage={stage} elapsed={elapsed:.3f}s\n")
+        self.stream.flush()
+
+    def cleanup(self) -> None:
+        self.stream.close()
+
+
 def _main(state: dict) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--candidate-root", type=Path, required=True)
@@ -110,10 +141,15 @@ def _main(state: dict) -> int:
     parser.add_argument("--task", choices=("ARC-RENDER-006", "ARC-WORLD-003"), default="ARC-RENDER-006")
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--timeout", type=int, default=60)
+    parser.add_argument("--raw-log", type=Path)
     args = parser.parse_args()
     state.update(stage="argument-policy", kind=args.kind, host="exported" if args.app else "source")
     if not 1 <= args.timeout <= 180:
         raise ValueError("bounded timeout outside permitted range")
+    if args.raw_log is not None and (args.kind not in ("synthetic", "persistence") or any(
+            name.startswith("ARC_") and name.endswith("_PROBE") and value for name, value in os.environ.items())):
+        # A self-test probe (such as the conversation probe with its game root) can make a synthetic child read original data.
+        raise ValueError("raw output is kept only for kinds that read no original data")
     state["stage"] = "root-resolution"
     root = args.candidate_root.resolve(strict=True)
     sys.path.insert(0, str(root))
@@ -130,6 +166,24 @@ def _main(state: dict) -> int:
     state["owned"].append(owned)
     env["WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH"] = str(Path(owned.name) / "input.json")
     env["WORLD_DIAGNOSTIC_ZOOM_TEST_PATH"] = str(Path(owned.name) / "zoom.json")
+    raw = None
+    if args.raw_log is not None:
+        state["stage"] = "raw-log"
+        raw = RawLog(args.raw_log)
+        state["owned"].append(raw)
+
+    def child(argv: list[str], timeout: int, label: str) -> tuple[int, str]:
+        if raw is None:
+            return run_child(argv, env, timeout)
+        raw.begin(label, timeout)
+        started = time.monotonic()
+        try:
+            code, output = run_child(argv, env, timeout)
+        except ChildFailure as failure:
+            raw.failed(label, failure.stage, time.monotonic() - started)
+            raise
+        raw.end(label, code, output, time.monotonic() - started)
+        return code, output
     env.update(__GODOT_SHELL_ENV_SET="1", DOTNET_ROOT=str(Path.home() / ".local/share/dotnet"),
                PATH=str(Path.home() / ".local/share/dotnet") + ":/usr/bin:/bin:/usr/sbin:/sbin")
     state["stage"] = "git-head"
@@ -158,7 +212,7 @@ def _main(state: dict) -> int:
         # ARC-DEV-015: no installation-record gate; only the pinned regression exports run this validator, on the pinned installation.
         argv = prefix + ["--", "--native-smoke", *launch.terrain_arguments(config.load_config().get("inputs", {}), "world-diagnostic")]
         state["stage"] = "child-launch"
-        code, output = run_child(argv, env, args.timeout)
+        code, output = child(argv, args.timeout, "native-smoke")
         state["childExit"] = code
         state["stage"] = "report-processing"
         # ARC-RENDER-008: the original overlay check (Open/Blocked/reverse/outside) runs in every native smoke.
@@ -220,7 +274,7 @@ def _main(state: dict) -> int:
                 return 0 if passed else 1
     elif args.kind == "synthetic":
         state["stage"] = "child-launch"
-        code, output = run_child(prefix + ["--", "--self-test"], env, args.timeout)
+        code, output = child(prefix + ["--", "--self-test"], args.timeout, "self-test")
         state["childExit"] = code
         # ARC-INPUT-001: the palette chord matrix and the palette UI at both required viewports.
         passed = (code == 0 and "ARC-WORLD-001 self-test PASS" in output
@@ -243,7 +297,7 @@ def _main(state: dict) -> int:
             for stage in ("first-launch", "write-00", "read-00", "write-01", "read-01",
                           "write-10", "read-10", "write-11", "read-11", "reset", "defaults"):
                 state["stage"] = "child-launch"
-                code, output = run_child(prefix + ["--", "--world-settings-test", stage], env, min(args.timeout, 30))
+                code, output = child(prefix + ["--", "--world-settings-test", stage], min(args.timeout, 30), f"settings-test {stage}")
                 state["childExit"] = code
                 passed &= code == 0 and f"ARC-WORLD-001 settings-test PASS {stage}" in output
                 stage_results.append({"stage": stage, "exitCode": code, "outcome": "PASS" if passed else "FAIL"})
@@ -253,7 +307,7 @@ def _main(state: dict) -> int:
                 def zoom_stage(stage: str, label: str | None = None) -> bool:
                     nonlocal code, output
                     state["stage"] = "child-launch"
-                    code, output = run_child(prefix + ["--", "--world-settings-test", stage], env, min(args.timeout, 30))
+                    code, output = child(prefix + ["--", "--world-settings-test", stage], min(args.timeout, 30), f"settings-test {label or stage}")
                     state["childExit"] = code
                     ok = code == 0 and f"ARC-GPAD-004 settings-test PASS {stage}" in output
                     stage_results.append({"stage": label or stage, "exitCode": code, "outcome": "PASS" if ok else "FAIL"})

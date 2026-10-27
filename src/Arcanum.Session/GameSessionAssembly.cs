@@ -206,6 +206,8 @@ public sealed partial class GameSessionOwner
     {
         _inventory.Placed.Add(new(entity, kind, SessionPlacedSource.Made, null, map, cell));
         _inventory.Taken.Add(entity);
+        // ARC-WORLD-062: no decay event. The original creates the product on the tile (0x4ED8B0) and a refused transfer (0x4617F0)
+        // leaves it there; neither reaches the schedule 0x468090, so it lies until someone moves it (ledger ID9).
     }
 
     /// <summary>An ammunition product unit's units into its stack (a new stack starts at 0).</summary>

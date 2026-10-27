@@ -70,8 +70,10 @@ cleanup_candidate() {
   git -C "$candidate_root" clean -f -q -- 'tools/terrain-viewer/Godot/*.uid'
 }
 trap cleanup_candidate EXIT HUP INT TERM
-# Each step's whole output goes to its evidence log. ARC-DEV-041: the export's own output (the launch queue's run log)
-# names each step as it starts and, when one fails, its exit code, evidence log and last 20 lines, then stops.
+# Each step's whole output goes to its evidence log; the synthetic and persistence WORLD validations also keep the raw
+# Godot output beside it as NAME.godot.log (ARC-DEV-043), so a timed-out child shows the stage it waited in.
+# ARC-DEV-041: the export's own output (the launch queue's run log) names each step as it starts and, when one fails,
+# its exit code, evidence log and last 20 lines (and the raw log's, when there is one), then stops.
 run_log() {
   name=$1; shift
   printf 'validate-macos: step %s\n' "$name"
@@ -85,6 +87,11 @@ run_log() {
   if test "$step_exit" -ne 0; then
     printf 'validate-macos: step %s FAILED exit=%s log=%s\n' "$name" "$step_exit" "$build_root/evidence/$name"
     /usr/bin/tail -n 20 "$build_root/evidence/$name" 2>/dev/null || true
+    raw="$build_root/evidence/${name%.log}.godot.log"
+    if test -f "$raw"; then
+      printf 'validate-macos: step %s raw Godot output %s (last 20 lines)\n' "$name" "$raw"
+      /usr/bin/tail -n 20 "$raw" 2>/dev/null || true
+    fi
     exit "$step_exit"
   fi
 }
@@ -100,15 +107,18 @@ run_log locked-restore.log "$DOTNET" restore "$project_root/Arcanum.TerrainViewe
 run_log locked-build.log "$DOTNET" build "$project_root/Arcanum.TerrainViewer.sln" --no-restore
 run_log tests.log "$DOTNET" test "$candidate_root/tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj" --no-build
 if test "$task" != ARC-DEV-001; then
-  run_log source-headless.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind synthetic --headless
-  run_log source-graphical.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind synthetic
+  run_log source-headless.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind synthetic --headless \
+    --raw-log "$build_root/evidence/source-headless.godot.log"
+  run_log source-graphical.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind synthetic \
+    --raw-log "$build_root/evidence/source-graphical.godot.log"
 else
   run_log source-headless.log "$GODOT" --headless --path "$project_root" -- --self-test
   run_log source-graphical.log "$GODOT" --path "$project_root" -- --self-test
 fi
 if test "$pinned" = 1; then
   run_log source-world-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root"
-  run_log source-world-persistence.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind persistence
+  run_log source-world-persistence.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind persistence \
+    --raw-log "$build_root/evidence/source-world-persistence.godot.log"
 fi
 if test "$task" = ARC-RENDER-006 || test "$task" = ARC-WORLD-003 || test "$area_task" = 1; then
   run_log source-human-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --task "$regression_task" --kind human --timeout 180
@@ -135,15 +145,18 @@ run_log export.log "$GODOT" --verbose --headless --path "$project_root" --export
 app="$build_root/ArcanumTerrainViewer.app/Contents/MacOS/Arcanum Terrain Viewer"
 test -x "$app"
 if test "$task" != ARC-DEV-001; then
-  run_log exported-headless.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind synthetic --headless
-  run_log exported-graphical.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind synthetic
+  run_log exported-headless.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind synthetic --headless \
+    --raw-log "$build_root/evidence/exported-headless.godot.log"
+  run_log exported-graphical.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind synthetic \
+    --raw-log "$build_root/evidence/exported-graphical.godot.log"
 else
   run_log exported-headless.log "$app" --headless -- --self-test
   run_log exported-graphical.log "$app" -- --self-test
 fi
 if test "$pinned" = 1; then
   run_log exported-world-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app"
-  run_log exported-world-persistence.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind persistence
+  run_log exported-world-persistence.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind persistence \
+    --raw-log "$build_root/evidence/exported-world-persistence.godot.log"
 fi
 if test "$task" != ARC-DEV-001; then
   run_log hostfxr.log /usr/bin/python3 -B "$project_root/tools/hostfxr_validate.py" "$build_root/ArcanumTerrainViewer.app"

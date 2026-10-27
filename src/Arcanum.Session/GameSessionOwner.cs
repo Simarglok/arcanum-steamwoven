@@ -53,6 +53,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private List<SessionLockFiring>? _passLocks;
     private List<SessionWaitFiring>? _passWaits;
     private List<SessionRespawnFiring>? _passRespawns;
+    private List<SessionDecayFiring>? _passDecays;
     // Replaced, not mutated, when a life step that drew on a trial copy commits.
     private SeededRandom _random;
     private readonly SessionCombatRolls _combatRolls;
@@ -819,13 +820,13 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         // ARC-WORLD-059: one of the hero's items the session placed on this map goes back to its list.
-        if (_inventory.PlacedItem(item) is { } placed && placed.Map == _actor.Map) return TakePlaced(placed, insertCheck);
+        if (_inventory.PlacedItem(item) is { } placed && placed.Map == _actor.Map) return Picked(item, TakePlaced(placed, insertCheck));
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         // ARC-COMBAT-008: an item of a container an attack broke lies on the ground at the container's cell; ARC-COMBAT-009: an NPC's
         // item a critical dropped lies at the cell it was dropped on.
         if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item) || LooseCell(_actor.Map, seed, item) is null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
-        return Take(seed, new(item, _inventory.WithAmmo(item, row.Facts)), false, insertCheck, scripts);
+        return Picked(item, Take(seed, new(item, _inventory.WithAmmo(item, row.Facts)), false, insertCheck, scripts));
     }
 
     /// <summary>
@@ -1060,6 +1061,13 @@ public sealed partial class GameSessionOwner : IDisposable
         var waits = new List<SessionWaitFiring>();
         var respawns = new List<SessionRespawnFiring>();
         var spellRuns = new List<SessionSpellRunFiring>();
+        var decays = new List<SessionDecayFiring>();
+        _passDecays = decays;
+        // ARC-WORLD-062: the items the pending decay events name are the session's to answer for (the hero's kit and made items are
+        // no map object of the host's, and a seed item's map may not be attached yet: its handler postpones).
+        var decaying = _events.Any(SessionEventKinds.ItemDecay)
+            ? _events.QueryPending(SessionEventKinds.ItemDecay).Select(e => e.Payload.Entities[0].Code).ToHashSet(StringComparer.Ordinal)
+            : null;
         _passRespawns = respawns;
         _passSpellRuns = spellRuns;
         _passWorld = world;
@@ -1075,6 +1083,7 @@ public sealed partial class GameSessionOwner : IDisposable
             // absent role always does).
             pass = _events.ProcessDue(new(new(0, now, 0), _actor.Map.RuntimeMap, budget, entity =>
                 entity.Code == SessionEventKinds.AbsentRole
+                || decaying?.Contains(entity.Code) == true && !_durability.Destroyed.Contains(entity.Code)
                 || (_life.Critters.ContainsKey(entity.Code)
                     ? world.CritterFacts(new(entity.Map), entity.Code) is not null
                     // A host that knows objects answers for every kind; otherwise a Lock event's object exists while the
@@ -1093,10 +1102,12 @@ public sealed partial class GameSessionOwner : IDisposable
             _passWaits = null;
             _passRespawns = null;
             _passSpellRuns = null;
+            _passDecays = null;
         }
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
-            Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly() };
+            Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly(),
+            Decays = decays.AsReadOnly() };
     }
 
     /// <summary>
@@ -1507,6 +1518,8 @@ public sealed partial class GameSessionOwner : IDisposable
         else throw new InvalidOperationException("PLACED_ITEM_NOT_HELD");
         if (_equipment.SlotOf(entity) is { } slot) _equipment.Worn.Remove(slot);
         _inventory.Placed.Add(placed);
+        // ARC-WORLD-062: every drop on the ground schedules the item's decay (ledger ID4).
+        ScheduleDecay(entity, placed.Map);
         _revision++;
     }
 
@@ -1880,6 +1893,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var registry = SessionEventKinds.Build(sink);
         var converted = ImmutableArray.CreateBuilder<GameEvent>(saved.Pending.Count);
         var maps = new Dictionary<string, int>(StringComparer.Ordinal);
+        var decaying = new HashSet<string>(StringComparer.Ordinal);
         foreach (var pending in saved.Pending)
         {
             if (pending is null || !registry.TryGet(pending.Kind, out var kind) || pending.Entities.IsDefault || pending.Values.IsDefault ||
@@ -1912,6 +1926,18 @@ public sealed partial class GameSessionOwner : IDisposable
                     RecordedIn(mapChanges, new(new(pending.Entities[0].Map), pending.Entities[0].Code)) is null ||
                     pending.Values[0] < 0 || pending.Values[0] > clockMs ||
                     (pending.DeadlineMs - pending.Values[0]) is not (Arcanum.Simulation.Locks.LockRules.UnlockResetDelayMs or Arcanum.Simulation.Locks.LockRules.JamResetDelayMs))
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
+            if (pending.Kind == SessionEventKinds.ItemDecay)
+            {
+                // An Item Decay event (ARC-WORLD-062): one item on a map, set no later than the saved clock, the decay delay or the
+                // retry's before its deadline, one per item. Whether the item still lies there is asked when it fires (seeds are host
+                // data the restore does not have).
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || !SessionValidation.Entity(pending.Entities[0].Code) ||
+                    !SessionEventKinds.DecayPayload(new(pending.Entities, pending.Values)) || pending.Values[0] > clockMs ||
+                    pending.DeadlineMs != pending.Values[0] + pending.Values[1] || !decaying.Add(pending.Entities[0].Code))
                     return GameSessionFailure.InvalidEvents;
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
@@ -1957,7 +1983,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (converted.Count(e => e.Kind == SessionEventKinds.ScriptCall) > SessionEventKinds.MaxScriptCalls ||
             converted.Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) > SessionEffectLimits.MaxTimedEffects ||
             converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets ||
-            converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns) return GameSessionFailure.EventBudgetExceeded;
+            converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns ||
+            converted.Count(e => e.Kind == SessionEventKinds.ItemDecay) > SessionEventKinds.MaxItemDecays) return GameSessionFailure.EventBudgetExceeded;
         var result = GameEventQueue.Restore(registry, new(saved.Registry, saved.NextSequence, converted.ToImmutable()), profile,
             SessionEventKinds.Limits);
         if (result.Queue is null)

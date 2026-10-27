@@ -129,7 +129,8 @@ public partial class TerrainViewerApp
         var stamp = (screen, AreaDrawItem.RasterTransform(GetViewport()), index, visible, open,
             _worldActor.Session is AreaGridSession session ? session.State.CommittedCell : (Arcanum.Simulation.Movement.CellCoord?)null,
             _inventoryHidden, _areaCompanions?.Companions.FirstOrDefault()?.Grid.State, _areaCompanions,
-            (HeroInCombatMode, LeftAltHeld, Godot.Input.IsKeyPressed(Key.Alt), _areaSession?.Version.Revision, _areaSession?.Rules.Mode));
+            (HeroInCombatMode, LeftAltHeld, Godot.Input.IsKeyPressed(Key.Alt), _areaSession?.Version.Revision, _areaSession?.Rules.Mode),
+            (_spellTargeting?.Spell, _spellTargeting?.Mask));
         if (Equals(stamp, _hoverStamp)) return;
         _hoverStamp = stamp;
         var key = visible ? AreaObjectAtScreen(screen) : null;
@@ -141,6 +142,8 @@ public partial class TerrainViewerApp
     private AreaHoverAction HoverAction(Vector2 screen, AreaObjectKey? key)
     {
         if (_worldActor.Session is not AreaGridSession session || _canvas is null) return AreaHoverAction.None;
+        // ARC-MAGIC-015: the targeting cursor answers for every point.
+        if (_spellTargeting is not null) return SpellTargetAt(screen) is { Test.Passes: true } ? AreaHoverAction.Cast : AreaHoverAction.CastNoTarget;
         var actor = session.Chart.ToWorld(session.State.CommittedCell);
         if (key is { } hit)
         {
@@ -195,6 +198,8 @@ public partial class TerrainViewerApp
             AreaHoverAction.Use or AreaHoverAction.WalkToUse or AreaHoverAction.PickUp or AreaHoverAction.WalkToPickUp
                 or AreaHoverAction.Loot or AreaHoverAction.WalkToLoot => Godot.Input.CursorShape.PointingHand,
             AreaHoverAction.Attack or AreaHoverAction.WalkToAttack => Godot.Input.CursorShape.Drag,
+            AreaHoverAction.Cast => Godot.Input.CursorShape.Cross,
+            AreaHoverAction.CastNoTarget => Godot.Input.CursorShape.Forbidden,
             _ => Godot.Input.CursorShape.Arrow,
         };
         if (cursor != _hoverCursor) { _hoverCursor = cursor; Godot.Input.SetDefaultCursorShape(cursor); }
