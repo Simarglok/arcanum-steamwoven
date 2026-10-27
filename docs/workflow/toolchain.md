@@ -51,7 +51,7 @@ through one first-in, first-out queue, so Godot windows never open over each oth
 starved, and an export gets a quiet Mac in its turn instead of waiting for one. It replaces the earlier
 `lockf /tmp/arcanum-godot-window.lock` rule, which was not first-in, first-out and covered windows only.
 
-    ./arcanum run --kind window|headless|export|dotnet [--timeout MIN] [--label TEXT] -- COMMAND [ARGS...]
+    ./arcanum run --kind window|headless|export|dotnet [--timeout MIN] [--label TEXT] [--verbose] -- COMMAND [ARGS...]
     ./arcanum queue                 # the runs holding a place, then the waiters in order
     ./arcanum queue --history N     # the last N finished runs: waited, ran, exit
 
@@ -67,8 +67,10 @@ starved, and an export gets a quiet Mac in its turn instead of waiting for one. 
   its turn always comes. Other commands (git, Python self-tests, reading logs) are not queued.
 - **Start check.** The wrapper prints `ARCANUM_QUEUE queued ticket=N kind=K ahead=A waiting-for=#M ...` while it waits
   (again when its position changes), `ARCANUM_QUEUE start ticket=N kind=K waited=Ss` when the command starts, and
-  `ARCANUM_QUEUE end ticket=N exit=E ran=Ss` at the end, on stderr. Within the first minute after starting, check that
-  one of the first two lines is there; after `start`, check the command itself as [above](#checking-that-a-run-started-arc-dev-029).
+  `ARCANUM_QUEUE end ticket=N exit=E ran=Ss` at the end, on stderr; a [quiet](#quiet-output-arc-dev-037) run also
+  prints `ARCANUM_QUEUE log ticket=N PATH` before it waits. Within the first minute after starting, check that
+  one of the `queued` or `start` lines is there; after `start`, check the command itself as [above](#checking-that-a-run-started-arc-dev-029),
+  in its log file for a quiet run.
   A queued run is not stuck: `./arcanum queue` shows what it waits for.
 - **Limits.** A run that exceeds its limit has its whole process group stopped (SIGTERM, then SIGKILL after 10 s) and
   exits 124 with `ARCANUM_QUEUE timeout`. `--timeout MIN` changes the limit, `--timeout 0` removes it. Stopping the
@@ -95,6 +97,34 @@ starved, and an export gets a quiet Mac in its turn instead of waiting for one. 
 
 Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (order, gaps, export quiet, crashed and killed runs,
 limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
+
+### Quiet output (ARC-DEV-037)
+
+Owner decision 2026-10-27 (token audit item 4): every tool output stays in an agent session's context and is re-read
+on each later step, so `./arcanum run` keeps the command's output out of it by default.
+
+- **Log file.** The command's whole output (stdout and stderr together) goes to
+  `~/Library/Application Support/Arcanum Steamwoven/run-logs/run-<ticket>-<kind>.log` (or `$ARCANUM_LOCAL_HOME/run-logs`);
+  its stdin is closed. The wrapper prints `ARCANUM_QUEUE log ticket=N PATH` on stderr before it waits, so the log can
+  be checked while the run goes. The newest 200 logs are kept; older ones are removed when a run starts.
+- **Summary.** The `ARCANUM_QUEUE` lines stay on stderr as [above](#launch-queue-arc-dev-033). When the command ends,
+  stdout gets `PASS exit=0 ran=Ss lines=L log=PATH`, or `FAIL exit=E ran=Ss lines=L log=PATH` and the first error
+  line with at most 40 lines around it (3 before, each cut to 300 characters). A failure with no error line shows the
+  log's last 40 lines instead. A pass whose log has error lines (Godot can exit 0 after a `SCRIPT ERROR`) adds one
+  `note:` line with their count and the first one. Error lines are Godot `ERROR:`, `SCRIPT ERROR:` and `USER ERROR:`,
+  `dotnet` `error CS…`/`MSB…`/`NU…`/`NETSDK…` and failed tests, Python tracebacks, .NET exceptions, `FAIL`/`FAILED`
+  markers, `failure mode=`/`failure stage=` and `..._FAILED` codes; summary lines that count zero errors are not.
+- **Reading the log.** Check the start in the log (`rg -n -m 20 'stage|ERROR' PATH`, `tail -n 20 PATH`), and read
+  more of it only in small ranges, as [small search and read output](tasks.md#small-search-and-read-output) says.
+- **`--verbose`** streams the command's output to the terminal as before, with no log file and no summary. Use it only
+  when the whole output is the point (a human watching a run). A nested run (`./arcanum run` inside a queued command)
+  ignores the setting: its output goes wherever its parent's goes. `./arcanum area`, `world` and `map` are not quiet.
+- **dotnet.** Inside the queue, give `dotnet build` and `dotnet test` `-v q --nologo`, and tests
+  `--logger "console;verbosity=minimal"`, so the log itself stays small, for example:
+  `./arcanum run --kind dotnet -- sh -c 'dotnet restore Arcanum.Steamwoven.sln --locked-mode && dotnet build --no-restore -v q --nologo && dotnet test --no-build -v q --nologo --logger "console;verbosity=minimal" --filter "TestCategory!=RealData"'`.
+
+Tests: `python3 -B -m unittest tools.local_dev.test_run_log` (error lines, summary, kept logs, quiet and `--verbose`
+wrapper runs).
 
 ## Root solution synthetic checks
 

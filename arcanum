@@ -149,7 +149,7 @@ def oracle(args: argparse.Namespace) -> int:
 def queued(args: argparse.Namespace) -> int:
     """ARC-DEV-033: run one command through the launch queue (docs/workflow/toolchain.md#launch-queue-arc-dev-033)."""
     command = args.cmd[1:] if args.cmd[:1] == ["--"] else args.cmd
-    return run_queue.run(args.kind, command, label=args.label or "", timeout=args.timeout)
+    return run_queue.run(args.kind, command, label=args.label or "", timeout=args.timeout, quiet=not args.verbose)
 
 
 def positive(value: str) -> int:
@@ -258,6 +258,9 @@ def parser() -> argparse.ArgumentParser:
                          help="minutes before the run is stopped (default " + ", ".join(
                              f"{kind} {value:g}" for kind, value in run_queue.DEFAULT_TIMEOUT_MINUTES.items()) + "; 0: no limit)")
     command.add_argument("--label", help="a short note shown in ./arcanum queue")
+    command.add_argument("--verbose", action="store_true",
+                         help="stream the command's output here instead of the quiet default (ARC-DEV-037): the whole "
+                              "output goes to a log file and only PASS or FAIL with the first error is printed")
     command.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- COMMAND", help="the command and its arguments, after --")
     command.set_defaults(func=queued)
     command = commands.add_parser("queue", help="show the launch queue: the runs holding a place and the waiters in order")
