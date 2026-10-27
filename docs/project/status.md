@@ -162,7 +162,7 @@ One line per subject; the full row (canonical result, what remains) is in its ar
 | NPC AI followers in combat | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-067, ARC-WORLD-046, ARC-RES-064 |
 | NPC AI action execution | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-066, ARC-COMBAT-007 |
 | NPC AI support and magic | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-059, ARC-RES-043 |
-| NPC AI awareness | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-056, ARC-SKILLS-003 |
+| NPC AI awareness | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-056, ARC-SKILLS-003, ARC-WORLD-078 |
 | NPC AI morale | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-058 |
 | NPC AI hostility and targeting | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-057 |
 | Magic core | [Magic](status/magic.md) | ARC-RES-043, ARC-RES-030, ARC-RES-060 |

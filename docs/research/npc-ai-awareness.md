@@ -441,7 +441,7 @@ loudness and fires on use, not on explosion.
 
 ## 10. Consequences for Steamwoven (project policy proposals)
 
-1. **Slice I2** implements `PerceptionDistance`, `CanSee`, `CanHear`,
+1. **Slice I2** (done: ARC-WORLD-078, [AI awareness](../world/ai-awareness.md)) implements `PerceptionDistance`, `CanSee`, `CanHear`,
    `SoundCost` and `LineOfFire` as pure functions over an explicit record
    (observer and target flags, stats, light level and carried light, dark
    sight, facing, the tile line and the objects on its tiles) with the

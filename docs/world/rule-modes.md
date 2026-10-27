@@ -68,7 +68,7 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Combat | `CombatAnomalyProfile` | `FirstSubturnStartedTwice` | A9 | after the next-subturn skip loop runs past the end, the new round's first subturn starts twice (ARC-COMBAT-003) |
 | Combat | `CombatAnomalyProfile` | `StallCheckKeepsPreviousActionPoints` | A11 | the stalled-actor check compares a new actor's second check with the previous actor's action points (ARC-COMBAT-003) |
 | Combat | `CombatAnomalyProfile` | `OverexertionKnockoutClearsNextActionPoints` | A12 | an overexertion that knocks the PC out zeroes the next participant's action points (ARC-COMBAT-003) |
-| Combat | `CombatAnomalyProfile` | `CornerStepCountsBothRoutes` | AW13 | a corner step of a line of fire counts the corner tile's cover on both routes around it, and the last step also skips the side tiles' objects (AW14; ARC-COMBAT-012) |
+| Combat | `CombatAnomalyProfile` | `CornerStepCountsBothRoutes` | AW13 | a corner step of a line of fire counts the corner tile's cover on both routes around it, and the last step also skips the side tiles' objects (AW14; ARC-COMBAT-012); a corner step of a sound line counts a soundproof corner tile twice (ARC-WORLD-078) |
 | Event queue | `GameEventQueueProfile` | `RebuildOnLoad` | OQ2 | AI ticks are rebuilt with fresh jitter on load |
 | Event queue | `GameEventQueueProfile` | `PoisonRecoveryTwice` | TE10 | from the second recovery tick on, poison recovers twice every 120 s (ARC-WORLD-024 life timers) |
 | Scripts | `ScrRuleProfile` | `GlobalFlagWriteSpills` | X10 | a value written into a global flag is ORed, shifted, into the flag's 32-flag word (ARC-SCRIPT-008) |
