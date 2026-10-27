@@ -345,6 +345,41 @@ public sealed class HostilityRulesTests
     }
 
     [TestMethod]
+    public void Hs9LetsALeaderlessNpcHelpAnAllyAgainstThePcInSteamwoven()
+    {
+        var world = Basic();
+        world.Add("villager", HostilityKind.Npc, 1);
+        world.Same("wolf", "villager");
+        world.Sees("wolf", "villager");
+        world.Squares["wolf"] = ["villager"];
+        world.Dangers["villager"] = Fighting("pc");
+        Assert.AreEqual(new ScanResult("pc", ScanStep.AllyHelp, KillOnSight.No, null), HostilityRules.FindTarget(world, "wolf", Steamwoven));
+        Assert.AreEqual(new ScanResult(null, ScanStep.None, KillOnSight.No, null), HostilityRules.FindTarget(world, "wolf", Original),
+            "Original: the PC counts as the leaderless wolf's party");
+    }
+
+    [TestMethod]
+    public void HandlesTheWorldNoLongerKnowsCountAsNone()
+    {
+        var world = Basic();
+        world.Add("bandit", HostilityKind.Npc, 2, b => b with { Monstrous = true });
+        world.Dangers["bandit"] = Fighting("gone");
+        Assert.AreEqual(KillOnSight.No, HostilityRules.KillOnSight(world, "wolf", "bandit", Steamwoven), "nobody protects a stale focus");
+        world.Edit("wolf", n => n with { Guard = true });
+        Assert.AreEqual(KillOnSight.Guard, HostilityRules.KillOnSight(world, "wolf", "bandit", Steamwoven), "the monster clause still holds");
+        var none = new Rolls();
+        Assert.AreEqual("pc", HostilityRules.ChooseTarget(world, "wolf", "gone", "pc", none));
+        Assert.AreEqual("pc", HostilityRules.ChooseTarget(world, "wolf", "pc", "gone", none));
+        Assert.AreEqual(0, none.Asked.Count);
+        world.Dangers["wolf"] = new(DangerState.Flee, "gone", null, null, []);
+        Assert.IsTrue(HostilityRules.FleesFar(world, "wolf"));
+        Assert.AreEqual(AttackReactionStep.Weigh, HostilityRules.ReactToAttack(world, "wolf", "pc", () => false, none).Step);
+        world.Dangers["wolf"] = Fighting("gone");
+        Assert.AreEqual(new AttackReaction(AttackReactionStep.Weigh, DangerState.CombatFocus, "pc", true),
+            HostilityRules.ReactToAttack(world, "wolf", "pc", () => false, none));
+    }
+
+    [TestMethod]
     public void ChooseTargetRollsOnlyWhenTheRowsDoNotDecide()
     {
         var world = Basic();

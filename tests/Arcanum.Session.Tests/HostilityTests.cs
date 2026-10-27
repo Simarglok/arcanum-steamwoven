@@ -171,6 +171,29 @@ public sealed class HostilityTests
     }
 
     [TestMethod]
+    public void AStaleVersionOrBadFactsApplyNothing()
+    {
+        using var owner = Owner();
+        Join(owner, Virgil);
+        Changed(owner.SetCombatMode(owner.Version, VirgilHandle, true, Living).Disposition);
+        Changed(owner.SetDangerState(owner.Version, Fight(Virgil, WolfHandle)).Disposition);
+        var stale = new GameSessionVersion(owner.Identity, owner.Version.Revision - 1);
+        var before = GameSessionSnapshotCodec.Encode(owner.Capture());
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.MakePeace(stale, new() { Entity = Virgil, Other = WolfHandle }).Failure);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.StopAttacking(stale, new() { Combatant = Hero }).Failure);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.ApplyAttackEvent(stale, new()
+        {
+            Attacker = WolfHandle, Victim = Virgil, Plan = new() { WritesHitBy = true, AddsAttackerTeam = true },
+        }).Failure);
+        var broken = new SessionCombatModeContext { Facts = new() { Speed = int.MaxValue, Life = new LifeFacts() } };
+        Assert.AreEqual(GameSessionFailure.InvalidDangerFacts, owner.StopAttacking(owner.Version, new()
+        {
+            Combatant = Hero, Facts = new Dictionary<string, SessionPeaceFacts> { [Virgil] = new() { CombatMode = broken } },
+        }).Failure);
+        Assert.AreEqual(before, GameSessionSnapshotCodec.Encode(owner.Capture()), "nothing applied");
+    }
+
+    [TestMethod]
     public void TheEnemyListPickDrawsFromTheSessionGeneratorAlsoForAnEmptyList()
     {
         using var owner = Owner();

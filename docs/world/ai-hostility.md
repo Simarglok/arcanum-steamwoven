@@ -4,7 +4,7 @@ Status: **Implemented bounded component**, ARC-WORLD-080, NPC combat AI plan sli
 [I4](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research).
 The hostility and targeting rules of the retail 1.0.7.4 executable ([hostility study](../research/npc-ai-hostility.md), stage A3;
 [noise and witnesses](../research/npc-ai-awareness.md#6-noise-and-witnesses-s9), stage A2; ledger
-[HS1–HS21](../research/ledger/npc-ai.md#npc-ai-hostility-and-targeting-arc-res-057), two readers, re-read by this task) as pure
+[HS1–HS22](../research/ledger/npc-ai.md#npc-ai-hostility-and-targeting-arc-res-057), two readers, re-read by this task) as pure
 rules in `Arcanum.Simulation.Ai.HostilityRules` over an `IHostilityWorld` and an `IAiRollSource`, and the writes they decide in
 `Arcanum.Session` (`GameSessionHostility.cs`) on the danger records of slice I3 ([danger state](ai-danger-state.md)). No AI pass,
 combat path or host calls them yet: the scheduler (I6) and the executor (I7) are their first callers.
@@ -15,7 +15,8 @@ The world (`IHostilityWorld`) answers by object id: the object (`HostilityCritte
 flag bits the rules test, perception, intelligence, level, alignment, hit-point percent, origin, direct and PC leader), the tile
 distance, faction-same (0x45D110, the reputation owner's `FactionSame`), the AI reaction variant toward a PC (0x4C0CE0), the
 will-kos script's verdict (point 22), the AI parameters 4, 10, 11 and 12, sight and hearing (`AwarenessRules`, slice I2), an
-NPC's danger record, its mind controller (0x459040) and the scan's rectangle query in the map's order.
+NPC's danger record, its mind controller (0x459040) and the scan's rectangle query in the map's order. A stored handle the
+world no longer knows (a focus, source or enemy that left the map) counts as none.
 
 | Rule | Original | What it decides |
 | --- | --- | --- |
@@ -39,7 +40,7 @@ NPC's danger record, its mind controller (0x459040) and the scan's rectangle que
 | Operation | Original | What it does |
 | --- | --- | --- |
 | `MakePeace(request)` | peace 0x4AA300 | One revision: head := the other's PC leader (the hero for its followers) or the other; the NPC's focus and who-hit-me-last cleared, the head off its list; for the hero, the standard reaction below 50 raised to 50 through the PC's effects (`SessionPeaceFacts.Reaction` needed); the setter asked for NONE (exit hook); each NPC of the hero's follower array forgets the NPC and leaves its list. One-sided: the head's own record keeps the NPC. |
-| `StopAttacking(request)` | 0x4AA4A0 | One revision, for an NPC or each of the hero's followers: with a focus, peace with it, the animation interrupt and the combat-mode exit (`SessionPeaceFacts.CombatMode` needed when in combat mode); a follower of the hero gets NO_ATTACK; the lock is cleared. Returns one `SessionPeaceStep` per NPC. |
+| `StopAttacking(request)` | 0x4AA4A0 | One revision, for an NPC or each of the hero's followers: with a focus, peace with it, the animation interrupt and the combat-mode exit (`SessionPeaceFacts.CombatMode` needed when in combat mode); a follower of the hero gets NO_ATTACK; the lock is cleared. Returns one `SessionPeaceStep` per NPC. A peace with the hero's side always needs its reaction facts, so a stop of the hero's party whose follower fights the hero or a fellow follower needs that follower's `Reaction` entry. |
 | `ApplyAttackEvent(request)` | 0x4A9650 steps 10–11 | Who-hit-me-last and the team adds both ways as the plan decided; a stopped plan writes nothing. |
 | `PickDangerEnemy(entity, valid)` | pick 0x4AFA90 | The pick over the NPC's list with the host's validity, drawing `ai.EnemyListStart` from the session generator; no revision. |
 | `AiRolls` | | The session generator as `IAiRollSource`, labels `ai.ChooseTargetScore`, `ai.EnemyListStart`, `ai.SurrenderCalm`. |

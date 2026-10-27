@@ -84,7 +84,8 @@ public sealed record HostilityDanger(DangerState State, string? Source, string? 
 /// <summary>
 /// What the hostility rules ask of the world, by object id. Answers must be stable within one rule call. <see cref="Find"/>
 /// returns null for a handle that names nothing; the other members are asked only about ids it knows.
-/// <see cref="Square"/> is the rectangle query of find target (0x4AE4E0 → 0x440B40): the PCs and NPCs on the tiles within
+/// A handle a danger record keeps (focus, source, who-hit-me-last, enemies) may name an object the world no longer knows; the
+/// rules treat it as none. <see cref="Square"/> is the rectangle query of find target (0x4AE4E0 → 0x440B40): the PCs and NPCs on the tiles within
 /// <paramref name="halfSize"/> of the NPC, both edges included, dead ones and the NPC itself too, in the query's order
 /// (sector by sector, the most recently placed first). <see cref="HostilityReaction"/> is the AI reaction variant
 /// (0x4C0CE0) of the NPC toward a PC; <see cref="AllowsKillOnSight"/> is false when the NPC's will-kos script (attachment

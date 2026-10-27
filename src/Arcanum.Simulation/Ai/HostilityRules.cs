@@ -129,7 +129,8 @@ public static class HostilityRules
         if (c.Kind != HostilityKind.Npc) return Ai.KillOnSight.No;
         var fight = world.Danger(c.Id);
         if (fight.State != DangerState.CombatFocus || fight.Source is not { } victim) return Ai.KillOnSight.No;
-        var defends = Protect(world, npc, Get(world, victim)) != Protection.No || npc.Guard && c.Monstrous && c.Leader is null;
+        // A stale handle (an object the world no longer knows) is protected by nobody.
+        var defends = world.Find(victim) is { } v && Protect(world, npc, v) != Protection.No || npc.Guard && c.Monstrous && c.Leader is null;
         return defends && Upset(world, npc, c, npc.Leader, profile) == UpsetReason.None ? Ai.KillOnSight.Guard : Ai.KillOnSight.No;
     }
 
@@ -264,8 +265,9 @@ public static class HostilityRules
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(rolls);
         var n = Get(world, npc);
-        if (current is null) return newcomer;
-        if (newcomer is null) return current;
+        // A stale handle (an object the world no longer knows) counts as none.
+        if (current is null || world.Find(current) is null) return newcomer;
+        if (newcomer is null || world.Find(newcomer) is null) return current;
         var (a, b) = (Get(world, current), Get(world, newcomer));
         if (!b.IsCritter) return current;
         if (!a.IsCritter) return newcomer;
@@ -344,10 +346,12 @@ public static class HostilityRules
             }
             case DangerState.Flee:
                 return new(DangerUpdatePath.Flee, null, null, false, null);
-            default:
+            case DangerState.Surrender:
                 return n.HealthPercent >= SurrenderCalmHealth && rolls.Roll(AiRollPurpose.SurrenderCalm, 1, SurrenderCalmSides) == 1
                     ? new(DangerUpdatePath.SurrenderCalms, null, DangerState.None, false, null)
                     : new(DangerUpdatePath.SurrenderStays, null, null, false, null);
+            default:
+                throw new InvalidOperationException($"The world gave an undefined danger state {danger.State}.");
         }
     }
 
@@ -413,15 +417,16 @@ public static class HostilityRules
 
     /// <summary>
     /// 0x4AB030: whether a fleeing NPC may turn on a new attacker: it is mind-controlled, or farther than parameter 4 (flee
-    /// distance) from its danger source. With no source recorded it counts as far (inference: the original measures to a null
-    /// handle).
+    /// distance) from its danger source. With no source recorded, or one the world no longer knows, it counts as far (inference:
+    /// the original measures to a null handle).
     /// </summary>
     [OriginalFunction(0x4AB030, OriginalFunctionScope.Partial)]
     public static bool FleesFar(IHostilityWorld world, string npc)
     {
         ArgumentNullException.ThrowIfNull(world);
         var n = Get(world, npc);
-        return n.MindControlled || world.Danger(npc).Source is not { } source || world.Distance(npc, source) > world.Parameters(npc).FleeDistance;
+        return n.MindControlled || world.Danger(npc).Source is not { } source || world.Find(source) is null ||
+            world.Distance(npc, source) > world.Parameters(npc).FleeDistance;
     }
 
     /// <summary>
@@ -513,7 +518,7 @@ public static class HostilityRules
     /// and is in no danger state flees from the attacker when it sees or hears the victim. Sight is tested before hearing, at the
     /// attack's loudness; the caller's sight and hearing see the witness awake.
     /// </summary>
-    [OriginalFunction(0x4A9F10, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4A9F10, OriginalFunctionScope.Partial)]
     public static WitnessOutcome Witness(IHostilityWorld world, string witness, string attacker, string victim, Loudness loudness)
     {
         ArgumentNullException.ThrowIfNull(world);

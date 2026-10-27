@@ -75,15 +75,15 @@ public sealed record SessionEnemyPickResult(GameSessionFailure Failure, SessionC
 
 /// <summary>
 /// The session generator behind the AI rules' <see cref="IAiRollSource"/> (ARC-WORLD-080): each roll is labelled <c>ai.</c> and
-/// the <see cref="AiRollPurpose"/> name; refusals throw as in <see cref="SessionCombatRolls"/>. Reversed bounds are swapped, as
-/// the original's range draw does (the enemy-list pick of an empty list asks for 0..−1).
+/// the <see cref="AiRollPurpose"/> name; refusals throw as in <see cref="SessionCombatRolls"/>, and so does a range with
+/// <c>min &gt; max</c> (the rules swap the original's reversed bounds themselves, as the enemy-list pick of an empty list does).
 /// </summary>
 internal sealed class SessionAiRolls(GameSessionOwner owner) : IAiRollSource
 {
     public int Roll(AiRollPurpose purpose, int min, int max)
     {
         if (!Enum.IsDefined(purpose)) throw new ArgumentOutOfRangeException(nameof(purpose));
-        if (min > max) (min, max) = (max, min);
+        if (min > max) throw new ArgumentOutOfRangeException(nameof(min), "min must not exceed max");
         var result = owner.Roll(Label(purpose), min, max);
         return result.Roll?.Value ?? throw new InvalidOperationException($"Session roll {purpose} refused: {result.Failure}.");
     }
@@ -138,6 +138,8 @@ public sealed partial class GameSessionOwner
         if (request.Combatant is null || !ValidDangerHandle(request.Combatant) || request.Facts is null ||
             request.Facts.Any(pair => !SessionValidation.Entity(pair.Key) || pair.Value is null))
             return RejectPeace(GameSessionFailure.InvalidDangerTarget);
+        if (request.Facts.Values.Any(facts => facts.CombatMode is { Facts: { } combat } && !ValidFacts(combat)))
+            return RejectPeace(GameSessionFailure.InvalidDangerFacts);
         if (!IsCurrent(expected)) return RejectPeace(GameSessionFailure.StaleVersion);
         var plan = new DangerPlan(this);
         var steps = new List<SessionPeaceStep>();
@@ -194,14 +196,17 @@ public sealed partial class GameSessionOwner
     /// The enemy-list pick (<see cref="HostilityRules.PickEnemy{T}"/>) over the NPC's enemy list with the host's target validity
     /// (<paramref name="valid"/>, which must not call back into the owner): the start drawn from the session generator
     /// (<c>ai.EnemyListStart</c>, also for an empty list). It writes nothing and does not move the revision. An invalid entity id
-    /// is <see cref="GameSessionFailure.InvalidDangerTarget"/>.
+    /// is <see cref="GameSessionFailure.InvalidDangerTarget"/>; an exhausted generator <see cref="GameSessionFailure.RandomExhausted"/>.
     /// </summary>
     public SessionEnemyPickResult PickDangerEnemy(string entity, Func<SessionCombatant, bool> valid)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(valid);
         if (!SessionValidation.Entity(entity)) return new(GameSessionFailure.InvalidDangerTarget, null);
-        return new(GameSessionFailure.None, HostilityRules.PickEnemy(_danger.Get(entity).Enemies, valid, AiRolls));
+        var enemies = _danger.Get(entity).Enemies;
+        // Only a one-entry list draws nothing (equal bounds).
+        if (_random.Draws == long.MaxValue && enemies.Count != 1) return new(GameSessionFailure.RandomExhausted, null);
+        return new(GameSessionFailure.None, HostilityRules.PickEnemy(enemies, valid, AiRolls));
     }
 
     // Peace for one NPC into the plan (0x4AA300).
