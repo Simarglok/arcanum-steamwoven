@@ -122,6 +122,29 @@ Tests: `python3 -B -m unittest tools.local_dev.test_run_log` (the log filling wh
 before another `dotnet` on `PATH`, a missing pinned SDK, the export's step lines) and the export endpoint test in
 `tools.local_dev.test_local_dev` (phase lines).
 
+### Self-test stage evidence (ARC-DEV-043)
+
+A windowed WORLD validation step of an export once timed out (exit 124 after 60 s) where reruns took 10–11 s, and its
+evidence log held only the validator's closed summary, so the stage it waited in was unknown.
+
+- **Stage lines.** The viewer `--self-test` prints `ARC-DEV-043 self-test stage NAME begin t=MSms can-draw=B focused=B`
+  before each frame-bound stage (the area probes too), with the time since the self-test began and whether the window
+  can draw and has focus, and flushes stdout at once (a release export does not flush each print). The last such line
+  in a stopped run names the stage it waited in.
+- **Raw Godot output.** `world_validate.py --raw-log FILE` (only `--kind synthetic` and `--kind persistence`, which read
+  no original data; refused for the original kinds, whose output never leaves memory) writes each child's whole output
+  to `FILE`, created owner-only and never overwritten, framed by `world-validate child LABEL start timeout=Ns` (written
+  before the child starts) and `world-validate child LABEL exit|timeout code=E elapsed=Ss` (or
+  `world-validate child LABEL failure stage=S elapsed=Ss`, with no output, when the child cannot be started or read).
+  It is also refused when an `ARC_*_PROBE` variable is set, since a probe (the conversation probe with its game root)
+  can make a synthetic child read original data. The printed summary stays closed. The terrain export passes it for its headless, graphical and persistence steps, so the git-ignored evidence
+  folder holds `NAME.godot.log` beside each such step log; when such a step fails, the export prints the raw log's last
+  20 lines after the step log's.
+
+Tests: `python3 -B -m unittest tools.local_dev.test_world_runner` (framing, owner-only mode, timeout and failure
+lines, the persistence children in order, refusal for original kinds, probe variables and an existing file, no file
+without the flag).
+
 ### Quiet output (ARC-DEV-037)
 
 Owner decision 2026-10-27 (token audit item 4): every tool output stays in an agent session's context and is re-read

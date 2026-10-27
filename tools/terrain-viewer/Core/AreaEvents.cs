@@ -50,16 +50,21 @@ public sealed record AreaEventReport(int Steps, int Passes, int Fired, int Dropp
 /// on how the host splits time into frames (FR-RUNTIME-001). An explicit wait is one jump followed by a pass: its events
 /// fire late and see the final time, as the original's time jump does. Due events left behind a pass's budget get more
 /// passes, at most <see cref="AreaEventPumpLimits.MaxPassesPerStep"/> per step. The pump owns neither the session nor the
-/// world; caller-serialized like the session.
+/// world; caller-serialized like the session. ARC-MAGIC-015: while the viewer has a cast host, a pass goes through it
+/// (<see cref="SessionSpellCaster.ProcessEvents"/>), so the spell runs' events run with the map's magic world and their payments
+/// are applied.
 /// </summary>
 public sealed class AreaEventPump
 {
     private readonly GameSessionOwner _session;
     private readonly ISessionEventWorld _world;
     private readonly AreaEventPumpLimits _limits;
+    private readonly Func<SessionSpellCaster?>? _spells;
 
-    public AreaEventPump(GameSessionOwner session, ISessionEventWorld world, AreaEventPumpLimits? limits = null)
+    /// <param name="spells">ARC-MAGIC-015: the cast host of the shown map now, or null (no host: plain passes).</param>
+    public AreaEventPump(GameSessionOwner session, ISessionEventWorld world, AreaEventPumpLimits? limits = null, Func<SessionSpellCaster?>? spells = null)
     {
+        _spells = spells;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _world = world ?? throw new ArgumentNullException(nameof(world));
         _limits = limits ?? new();
@@ -135,7 +140,8 @@ public sealed class AreaEventPump
     {
         for (var pass = 0; pass < _limits.MaxPassesPerStep; pass++)
         {
-            var result = _session.ProcessEvents(_world);
+            // Only a host of this pump's session (a replaced session's host answers for another).
+            var result = _spells?.Invoke() is { } caster && ReferenceEquals(caster.Owner, _session) ? caster.ProcessEvents() : _session.ProcessEvents(_world);
             if (result.Failure != GameSessionFailure.None || result.Pass is not { } outcome)
                 throw new InvalidOperationException("AREA_EVENTS_PASS_" + result.Failure);
             tally.Passes++;
