@@ -106,14 +106,16 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
 - **Log file.** The command's whole output (stdout and stderr together) goes to
   `~/Library/Application Support/Arcanum Steamwoven/run-logs/run-<ticket>-<kind>.log` (or `$ARCANUM_LOCAL_HOME/run-logs`);
   its stdin is closed. The wrapper prints `ARCANUM_QUEUE log ticket=N PATH` on stderr before it waits, so the log can
-  be checked while the run goes. The newest 200 logs are kept; older ones are removed when a run starts.
+  be checked while the run goes. The newest 200 logs are kept; older ones are removed when a run is queued.
 - **Summary.** The `ARCANUM_QUEUE` lines stay on stderr as [above](#launch-queue-arc-dev-033). When the command ends,
   stdout gets `PASS exit=0 ran=Ss lines=L log=PATH`, or `FAIL exit=E ran=Ss lines=L log=PATH` and the first error
-  line with at most 40 lines around it (3 before, each cut to 300 characters). A failure with no error line shows the
+  line with at most 40 lines around it (3 before, each cut to 300 characters), and the last error line when it lies
+  beyond them (an early harmless Godot `ERROR:` does not hide the failure at the end). A failure with no error line shows the
   log's last 40 lines instead. A pass whose log has error lines (Godot can exit 0 after a `SCRIPT ERROR`) adds one
   `note:` line with their count and the first one. Error lines are Godot `ERROR:`, `SCRIPT ERROR:` and `USER ERROR:`,
-  `dotnet` `error CS…`/`MSB…`/`NU…`/`NETSDK…` and failed tests, Python tracebacks, .NET exceptions, `FAIL`/`FAILED`
-  markers, `failure mode=`/`failure stage=` and `..._FAILED` codes; summary lines that count zero errors are not.
+  `dotnet` `error CS…`/`MSB…`/`NU…`/`NETSDK…`, failed tests and non-zero error counts, Python tracebacks and
+  `…Error:` lines, .NET exceptions, `fatal:`/`error:` lines, `command not found`, `Segmentation fault`, `FAIL`/`FAILED`
+  markers, `failure mode=`/`failure stage=` and `..._FAILED` codes; counts of zero errors are not.
 - **Reading the log.** Check the start in the log (`rg -n -m 20 'stage|ERROR' PATH`, `tail -n 20 PATH`), and read
   more of it only in small ranges, as [small search and read output](tasks.md#small-search-and-read-output) says.
 - **`--verbose`** streams the command's output to the terminal as before, with no log file and no summary. Use it only

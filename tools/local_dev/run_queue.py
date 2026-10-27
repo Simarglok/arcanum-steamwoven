@@ -411,10 +411,13 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
             child = subprocess.Popen(list(command), env=environment, start_new_session=True,
                                      pass_fds=(fd,) if kind in GODOT_KINDS else ())
         else:
-            with log.open("ab") as output:  # the child keeps its own copy of the descriptor
+            output = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+            try:  # the child keeps its own copy of the descriptor
                 child = subprocess.Popen(list(command), env=environment, start_new_session=True, stdin=subprocess.DEVNULL,
                                          stdout=output, stderr=subprocess.STDOUT,
                                          pass_fds=(fd,) if kind in GODOT_KINDS else ())
+            finally:
+                os.close(output)
         critical[0] = False
         if stopped:
             raise KeyboardInterrupt

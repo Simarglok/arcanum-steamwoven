@@ -23,13 +23,16 @@ class ErrorLineTests(unittest.TestCase):
                      "Failed!  - Failed:     2, Passed:    10, Skipped: 0", "Traceback (most recent call last):",
                      "Unhandled exception. System.InvalidOperationException: nope",
                      "ARC-RENDER-003 self-test FAIL RenderFailure", "result=AREA_CAPTURE_FAILED map=x",
-                     "ARC-RENDER-004 native-smoke failure mode=area stage=Arguments code=Usage", "[FAIL] probe"):
+                     "ARC-RENDER-004 native-smoke failure mode=area stage=Arguments code=Usage", "[FAIL] probe",
+                     "Failed: 0, Errors: 3", "    3 Error(s)", "ValueError: bad value", "fatal: not a git repository",
+                     "error: pathspec 'x' did not match", "sh: godot: command not found", "Segmentation fault: 11"):
             self.assertTrue(run_log.is_error(line), line)
 
     def test_passing_summaries_and_ordinary_lines_are_not_errors(self) -> None:
         for line in ("Build succeeded.", "    0 Error(s)", "Passed!  - Failed:     0, Passed:    10, Skipped: 0",
                      "ARC-UI-004 native-smoke inventory PASS {}", "errors=0 warnings=0", "the error budget is fine",
-                     "WALL_PASSWALL_UNOBSERVED is not a failure code"):
+                     "WALL_PASSWALL_UNOBSERVED is not a failure code", "Errors: 0, Failed: 0",
+                     "    0 Warning(s)", "Time Elapsed 00:00:03.21"):
             self.assertFalse(run_log.is_error(line), line)
 
     def test_first_error_keeps_three_lines_before_and_forty_in_all(self) -> None:
@@ -72,6 +75,16 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(lines[1], "first error at line 3 of 4 (1 error line(s)):")
         self.assertEqual(lines[2:], ["start", "stage 1", "ERROR: boom", "   at: x.cs:3"])
 
+    def test_a_failure_also_names_a_last_error_beyond_the_context(self) -> None:
+        text = "ERROR: harmless startup noise\n" + "".join(f"line {number}\n" for number in range(100)) + \
+            "ARC-RENDER-004 native-smoke failure mode=area stage=Load code=X\n"
+        lines = self.summary(text, 1)
+        self.assertEqual(lines[1], "first error at line 1 of 102 (2 error line(s)):")
+        self.assertEqual(lines[-1], "last error (line 102): ARC-RENDER-004 native-smoke failure mode=area stage=Load code=X")
+        self.assertEqual(len(lines), 2 + run_log.CONTEXT_LINES + 1)
+        near = self.summary("ERROR: one\nERROR: two\n", 1)
+        self.assertEqual(near[2:], ["ERROR: one", "ERROR: two"])  # the last error is already shown
+
     def test_a_failure_without_an_error_line_shows_the_tail(self) -> None:
         lines = self.summary("".join(f"line {number}\n" for number in range(60)), 124)
         self.assertEqual(lines[1], "no error line found; the last 40 lines:")
@@ -105,11 +118,12 @@ class WrapperTests(unittest.TestCase):
                                sys.executable, "-c", code], capture_output=True, text=True, env=self.env, timeout=60)
 
     def test_quiet_by_default_the_output_goes_to_the_log(self) -> None:
-        code = ("import sys\nfor n in range(500): print('noise', n)\n"
+        code = ("import sys\nfor n in range(500): print('noise', n)\nsys.stdout.flush()\n"
                 "print('ERROR: broken thing', file=sys.stderr)\nsys.exit(3)")
         result = self.run_wrapper(code)
         self.assertEqual(result.returncode, 3)
         self.assertNotIn("noise 1\n", result.stdout)
+        self.assertIn("noise 499", result.stdout)  # the context before the error
         out = result.stdout.splitlines()
         self.assertTrue(out[0].startswith("FAIL exit=3 "), out)
         self.assertIn("ERROR: broken thing", out)
@@ -127,6 +141,32 @@ class WrapperTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(len(result.stdout.splitlines()), 1)
         self.assertTrue(result.stdout.startswith("PASS exit=0 "))
+
+    def test_a_run_out_of_time_fails_with_124(self) -> None:
+        result = self.run_wrapper("import time; print('waiting', flush=True); time.sleep(60)", "--timeout", "0.03")
+        self.assertEqual(result.returncode, 124)
+        out = result.stdout.splitlines()
+        self.assertTrue(out[0].startswith("FAIL exit=124 "), out)
+        self.assertIn("waiting", out)
+
+    def test_a_nested_run_writes_into_its_parents_log_with_one_summary(self) -> None:
+        inner = f"{sys.executable} -B {ARCANUM} run --kind headless -- {sys.executable} -c \"print('inner says hi')\""
+        result = subprocess.run([sys.executable, "-B", str(ARCANUM), "run", "--kind", "headless", "--", "sh", "-c", inner],
+                                capture_output=True, text=True, env=self.env, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        out = result.stdout.splitlines()
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("inner says hi", Path(out[0].split("log=", 1)[1]).read_text())
+
+    def test_a_log_folder_that_cannot_be_used_leaves_no_ticket(self) -> None:
+        home = Path(self.env["ARCANUM_LOCAL_HOME"])
+        home.mkdir(parents=True)
+        (home / "elsewhere").mkdir()
+        (home / "run-logs").symlink_to(home / "elsewhere")
+        result = self.run_wrapper("print('never')")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("never", result.stdout)
+        self.assertEqual(list((home / "run-queue").glob("t-*.json")), [])
 
     def test_verbose_streams_as_before(self) -> None:
         result = self.run_wrapper("print('hello')", "--verbose")
