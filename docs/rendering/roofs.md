@@ -122,8 +122,9 @@ interior stays complete, and the shades are 255, 200 and 80.
 - The actor itself on a covered tile is still drawn (T0 bodies are covered on
   their tile, and since ARC-WORLD-037 a companion on the tile it stands on); the tile scripts' and other critters' moves do not
   recalculate roofs (the original does it for the local PC only).
-- Roofs of the start map (it is not opened in map mode) and of the pinned
-  Crash Site exterior.
+- Roofs of the pinned Crash Site exterior (a regression smoke only since
+  ARC-RENDER-028). The main world map opens by window since ARC-RENDER-024 and
+  its windows read roofs (ARC-DATA-036); no roof smoke runs there.
 - What recomputes fill and fade after a save is loaded is not traced (U7 of the
   research).
 - The hit test's pixel rule: the original counts palette indexes 0 and 1 as a
