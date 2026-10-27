@@ -123,6 +123,8 @@ The original's goals 26 and 82 (`ag_throw_spell`, with the record's casting anim
 4. **End (`EndGoal`, 0x429CD0).** A goal that ends before its release frame frees the run with its BEGIN cost charged (0x456FA0:
    the run cost with mastery, applied). After the release frame (the goal's frame flag 0x8), or for a run whose BEGIN ran, the end
    frees nothing; the host forgets the release when the run is freed or a new goal starts for its slot, since the slot is reused.
+   A goal starts once (`StartGoal`) for the run it was made for: a caller must not start a second goal for a run the original
+   keeps after a failed release (MG41, Original), since the new start forgets that release and the end would then free the run.
 
 ## Differences from the original
 

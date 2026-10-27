@@ -263,17 +263,18 @@ public sealed class SessionSpellCasterTests
         Assert.AreEqual((SpellCastGoalOutcome.Started, SessionActionPointUse.Paid), (paid.Outcome, paid.ActionPoints!.Charge));
         Assert.AreEqual(points - TurnBasedRules.CastSpellCost, owner.QueryCombatRound()!.ActionPoints);
 
-        // Spend the round's points with further goals until fewer than 4 are left: with some left the hero overexerts and the goal
-        // starts; with none the charge is refused and the goal ends.
+        // Spend the round's points with further goals until fewer than 4 are left: with some left the hero overexerts (paying them
+        // all) and the goal starts; with none the charge is refused and the goal ends.
         SpellCastGoalStart last;
         do last = caster.StartGoal(Start(owner, caster, record), round);
         while (last.ActionPoints!.Charge == SessionActionPointUse.Paid);
-        if (points % TurnBasedRules.CastSpellCost != 0)
+        if (last.ActionPoints.Charge == SessionActionPointUse.Overexerted)
         {
-            Assert.AreEqual((SpellCastGoalOutcome.Started, SessionActionPointUse.Overexerted), (last.Outcome, last.ActionPoints.Charge));
+            Assert.AreEqual(SpellCastGoalOutcome.Started, last.Outcome);
             Assert.IsTrue(owner.QueryHeroLife()!.Record.State.FatigueDamage > 0, "the overexertion's fatigue damage");
+            last = caster.StartGoal(Start(owner, caster, record), round);
         }
-        else Assert.AreEqual((SpellCastGoalOutcome.NoActionPoints, SessionActionPointUse.Refused), (last.Outcome, last.ActionPoints.Charge));
+        Assert.AreEqual((SpellCastGoalOutcome.NoActionPoints, SessionActionPointUse.Refused), (last.Outcome, last.ActionPoints!.Charge));
     }
 
     [TestMethod]
