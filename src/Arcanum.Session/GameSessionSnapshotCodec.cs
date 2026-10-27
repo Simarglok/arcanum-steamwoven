@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
@@ -41,7 +42,7 @@ public static class GameSessionSnapshotCodec
     /// it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
     public const int MaxEncodedCharacters = 96 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "sound", "events", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -112,6 +113,8 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] CombatFields = ["turn", "participants", "current", "actionPoints"];
     private static readonly string[] CombatModeFields = ["hero", "critters"];
     private static readonly string[] ConcealmentFields = ["hero", "npcs"];
+    private static readonly string[] DangerFields = ["records"];
+    private static readonly string[] DangerRecordFields = ["entity", "flags", "focus", "fleeingFrom", "hitBy", "enemies"];
     private static readonly string[] SoundFields = ["slots", "restorePending", "restore", "combatMusic", "preCombat"];
     private static readonly string[] PendingEventFields = ["sequence", "kind", "deadlineMs", "entities", "values"];
     private static readonly string[] EventEntityFields = ["map", "entity"];
@@ -597,6 +600,28 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteEndObject();
 
+            // ARC-WORLD-079: a handle is the entity id, "" for the hero (never a valid id) or null for none.
+            w.WriteStartObject("danger");
+            w.WriteStartArray("records");
+            foreach (var record in snapshot.Danger.Records)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", record.Entity);
+                w.WriteStartArray("flags");
+                for (var i = 0; i < DangerFlagNames.Length; i++)
+                    if (((int)record.Flags & (1 << i)) != 0) w.WriteStringValue(DangerFlagNames[i]);
+                w.WriteEndArray();
+                WriteHandle(w, "focus", record.Focus);
+                WriteHandle(w, "fleeingFrom", record.FleeingFrom);
+                WriteHandle(w, "hitBy", record.HitBy);
+                w.WriteStartArray("enemies");
+                foreach (var enemy in record.Enemies) w.WriteStringValue(enemy.Entity ?? "");
+                w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
+
             var sound = snapshot.Sound;
             w.WriteStartObject("sound");
             w.WriteStartArray("slots"); w.WriteNumberValue(sound.Slot0); w.WriteNumberValue(sound.Slot1); w.WriteEndArray();
@@ -644,6 +669,12 @@ public static class GameSessionSnapshotCodec
             w.WriteEndObject();
         }
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    private static void WriteHandle(Utf8JsonWriter w, string name, SessionCombatant? handle)
+    {
+        if (handle is null) w.WriteNull(name);
+        else w.WriteString(name, handle.Entity ?? "");
     }
 
     private static void WriteLifeRecord(Utf8JsonWriter w, SessionLifeRecord record)
@@ -719,7 +750,7 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Concealment(f["concealment"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Concealment(f["concealment"]), Danger(f["danger"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
@@ -856,6 +887,46 @@ public static class GameSessionSnapshotCodec
         }
         return new(Bool(f["hero"], p + ".hero"), npcs);
     }
+
+    // Shapes, flag order and ordinal record order; the baseline, unique enemies and the budgets are Restore's.
+    private static SessionDangerState Danger(JsonElement element)
+    {
+        const string p = "$.danger";
+        var f = Fields(element, p, DangerFields);
+        var items = Array(f["records"], p + ".records", GameSessionLimits.PolicyMaxDangerRecords);
+        var records = new SessionDanger[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.records[{i}]";
+            var item = Fields(items[i], path, DangerRecordFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (i > 0 && string.CompareOrdinal(records[i - 1].Entity, entity) >= 0)
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            var flagItems = Array(item["flags"], path + ".flags", DangerFlagNames.Length);
+            var flags = DangerFlags.None;
+            var last = -1;
+            for (var j = 0; j < flagItems.Length; j++)
+            {
+                var at = $"{path}.flags[{j}]";
+                var index = Name(flagItems[j], at, DangerFlagNames);
+                if (index <= last) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at);
+                last = index;
+                flags |= (DangerFlags)(1 << index);
+            }
+            var enemyItems = Array(item["enemies"], path + ".enemies", GameSessionLimits.PolicyMaxDangerEnemies);
+            var enemies = new SessionCombatant[enemyItems.Length];
+            for (var j = 0; j < enemyItems.Length; j++) enemies[j] = Handle(enemyItems[j], $"{path}.enemies[{j}]");
+            records[i] = new(entity, flags, OptionalHandle(item["focus"], path + ".focus"),
+                OptionalHandle(item["fleeingFrom"], path + ".fleeingFrom"), OptionalHandle(item["hitBy"], path + ".hitBy"), enemies);
+        }
+        return new(records);
+    }
+
+    private static SessionCombatant? OptionalHandle(JsonElement element, string path) =>
+        element.ValueKind == JsonValueKind.Null ? null : Handle(element, path);
+
+    private static SessionCombatant Handle(JsonElement element, string path) =>
+        String(element, path) is "" ? SessionCombatant.Hero : SessionCombatant.Critter(Entity(element, path));
 
     // Shapes and ranges; the slot invariants are Restore's.
     private static SessionSoundState Sound(JsonElement element)
@@ -1820,6 +1891,9 @@ public static class GameSessionSnapshotCodec
         "ReactionModifier", "MaxFollowers", "MagickTechAptitude",
     ];
     private static readonly string[] OperatorNames = ["Add", "Multiply", "Divide", "Minimum", "Maximum", "Percent"];
+    /// <summary>Wire names of <see cref="DangerFlags"/> by bit, in flag order (ARC-WORLD-079).</summary>
+    private static readonly string[] DangerFlagNames =
+        ["Fighting", "CheckWield", "CheckGrenade", "BackingOff", "DemaintainSpells", "NoAttack", "Fleeing", "Surrendered", "TargetLocked"];
     /// <summary>Wire names of <see cref="LifeConditions"/> by bit, in flag order.</summary>
     private static readonly string[] ConditionNames = ["Stunned", "Blinded", "CrippledArmOne", "CrippledArmsBoth", "CrippledLegsBoth"];
     /// <summary>Field names of <c>hero.stats</c> in <see cref="SessionHeroLimits.StoredStats"/> order.</summary>

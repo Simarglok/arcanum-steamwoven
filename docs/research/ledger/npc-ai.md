@@ -56,7 +56,14 @@ from and who reads them, when an NPC thinks in real time and in a round, the ord
 changes. Read on 2026-10-18 by a first reader and, independently, a second reader that saw only the questions (method
 step 6). Both agree on every row. The second reader added CL4, CL5, the conversation slot's writers and the negative-distance
 detail of CL8; the first reader re-read them and agrees. Rows P5, LM3 and LM4 above were read again with the same result.
-Every direct branch stays inside `.text`.
+Every direct branch stays inside `.text`. ARC-WORLD-079 (slice I3) re-read the state read and the setter on 2026-10-27, one
+reader, agreeing with CL4 and CL10: the read tests critter flag 0x10, then 0x4000, then NPC flag 0x1; the setter writes the
+critter flags (FLEEING and SURRENDERED cleared, and for a flight or surrender its own bit set) before its lock test, so a
+target-locked NPC asked to fight still loses FLEEING and SURRENDERED; a fight's entry sets NPC flags 0x40000041, where 0x40 is
+"check wield" (the gate's step 14 tests 0x40 and "check weapon" 0x80) and 0x40000000 is "check grenade" (the back-off writes
+0x50000000 with BACKING_OFF 0x10000000); the calm-down sets DEMAINTAIN_SPELLS 0x1000000; rule 8 reads the reaction through
+0x4C0CE0, which is 0x4C0D00 with the hostility flag 1, and adds `parameter 10 − reaction` through 0x4C0DE0. The toggle's exit
+(0x4B4100) clears critter flag bit 18 and then unlocks the target (call 0x4B411C).
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
@@ -149,7 +156,13 @@ stays valid, how the enemy list and the target lock live, and what one attack se
 and, independently, a second reader that saw only the questions (method step 6). Both agree on every row, and each found HS9
 and the P3 reading on its own. The second reader added HS22 and what the animation helper called by peace (0x44E050)
 interrupts; the first reader re-read them and agrees. The first reader added HS19. Row P3 above was read again with the same
-result. Every direct branch stays inside `.text`.
+result. Every direct branch stays inside `.text`. ARC-WORLD-079 (slice I3) re-read the enemy list, the lock and allow attacking
+on 2026-10-27, one reader, agreeing with HS18 and section 6 of the study: the team of a PC head (0x4413E0) is the party's PC list
+(0x441310) followed by the first PC's recursive follower list (0x441260), any other head alone; the add compares the entry
+(a PC) or the entry's PC leader with the owner's PC leader, then searches the list (0x4AFB30); the remove moves the last entry
+into each hole and checks the same index again; the lock acts only for an NPC owner (type 0x10) and a target, unlocks, asks the
+setter for COMBAT_FOCUS with no sound and sets critter flag 2 0x200000 only when the state read then gives COMBAT_FOCUS on that
+target; allow attacking clears NPC flag 0x20000000 of an NPC with a PC leader, or of each NPC of a PC's recursive follower list.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
