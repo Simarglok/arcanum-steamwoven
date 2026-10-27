@@ -18,7 +18,7 @@ Earlier facts reused here: the [core loop](npc-ai-core-loop.md) (ARC-RES-054:
 the danger states and their setter 0x4AABE0, parameter slots), the
 [skills study](skills-evidence.md) (ARC-RES-044: prowling, the opposed table,
 the difficulty terms; effectiveness row SKX1 of the
-[ledger](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)),
+[ledger](ledger/character.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)),
 the [area passability notes](sector-passability-evidence.md) (the shared step
 cost function 0x43FDC0/0x43FE00, F0 until now) and the
 [script census](scr-census.md) (conditions 28 and 29).
@@ -33,7 +33,7 @@ once to re-check one point, the sign of the concealment margin, as the ledger
 intro records. Object fields were named from
 the executable's own field table (0x59BEA8); flag bits, skill, stat and
 social-class numbers are the project's records of the same constants. The rows
-and verdicts are in the [ledger](original-verification-ledger.md#npc-ai-awareness-arc-res-056).
+and verdicts are in the [ledger](ledger/npc-ai.md#npc-ai-awareness-arc-res-056).
 Everything below is read from the executable unless marked **(inference)**.
 Rules owned by other stages (protect, the attacked reaction, the target scan)
 are named with their address and stage and only their inputs are stated here.
@@ -412,7 +412,7 @@ dynamite. The table index therefore stays 0..2 (a 3 would read the global
 ## 9. Anomalies and decisions
 
 Verdicts and rows:
-[ledger](original-verification-ledger.md#npc-ai-awareness-arc-res-056). No
+[ledger](ledger/npc-ai.md#npc-ai-awareness-arc-res-056). No
 first-pass anomaly (P1–P7) belongs to A2, and the F0 summaries of S6–S9 were
 confirmed or refined, none contradicted. The rows below are behaviour of the
 original that looks unplanned; none crashes or reads out of bounds. Decisions

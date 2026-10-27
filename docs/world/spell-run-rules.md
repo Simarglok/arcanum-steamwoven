@@ -14,7 +14,7 @@ Requirements: [FR-MAGIC-006](../requirements/combat-magic-tech.md#fr-magic-006) 
 payment, duration, the cap of maintained spells).
 
 Every rule below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
-([ledger "Spell runs"](../research/original-verification-ledger.md#spell-runs-arc-magic-009), rows RN1–RN14), and the time
+([ledger "Spell runs"](../research/ledger/spell-runs.md#spell-runs-arc-magic-009), rows RN1–RN14), and the time
 scaling (0x455250), the stage (0x452F20 with its payment helpers) and the cap (0x4545E0) were compared with the original in the
 function oracle on 10,000 seeded inputs each (F3, receipts [`455250.json`](../verification/receipts/455250.json),
 [`452F20.json`](../verification/receipts/452F20.json), [`4545E0.json`](../verification/receipts/4545E0.json); re-run with
@@ -83,7 +83,7 @@ within it and one whose parent is no PC or NPC is not. The count the AI and the 
 
 ## Processing and scheduling (ARC-MAGIC-010)
 
-Read in the executable by two readers ([ledger "Spell run processing"](../research/original-verification-ledger.md#spell-run-processing-arc-magic-010),
+Read in the executable by two readers ([ledger "Spell run processing"](../research/ledger/spell-runs.md#spell-run-processing-arc-magic-010),
 RP1–RP14); the scheduler (0x453FA0 with its tick helpers) and the interrupt's action (0x457110) were compared with the original in
 the function oracle on 10,000 seeded inputs each (F3, receipts [`453FA0.json`](../verification/receipts/453FA0.json),
 [`457110.json`](../verification/receipts/457110.json)). Code: [`SpellRunSystem`](../../src/Arcanum.Simulation/Magic/SpellRunSystem.cs)

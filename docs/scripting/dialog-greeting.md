@@ -13,8 +13,8 @@ stay frontiers ([Not ready](#not-ready)).
 ## Evidence
 
 The retail 1.0.7.4 `Arcanum.exe`, read statically in two rounds by two independent readers each
-([ledger "Reputation greetings"](../research/original-verification-ledger.md#reputation-greetings-arc-world-058), RG1–RG12,
-anomaly GD-A1; the files: [GD1–GD5](../research/original-verification-ledger.md#generated-dialog-files-arc-data-042)). Local data:
+([ledger "Reputation greetings"](../research/ledger/social.md#reputation-greetings-arc-world-058), RG1–RG12,
+anomaly GD-A1; the files: [GD1–GD5](../research/ledger/data.md#generated-dialog-files-arc-data-042)). Local data:
 the opt-in census below (counts only).
 
 ## Components

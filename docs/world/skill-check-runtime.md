@@ -15,7 +15,7 @@ Requirements: [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019) (t
 
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically per the
   [original executable check](../research/original-executable-check.md) by two independent readers: rows SC1–SC17 of the
-  [verification ledger](../research/original-verification-ledger.md#skill-check-arc-skills-003). They agree on every row.
+  [verification ledger](../research/ledger/skills.md#skill-check-arc-skills-003). They agree on every row.
   One earlier reading was wrong and is fixed in both rule settings: a small light of the source keeps three quarters of the
   darkness penalty, not two thirds (SC9). The attack's own invocation and the dodge (SC16, SC17), F0 facts of the resolver
   until now, were re-read in the same pass (owner decision 2026-10-20).

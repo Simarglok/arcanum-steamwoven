@@ -6,7 +6,7 @@ source reading (provenance in git history), cited by the executable address of
 each function, and checked in the retail
 `Arcanum.exe` (SHA-256 `9bd80511…8d52`) by the
 [original executable check](original-executable-check.md) where the ledger says so, rows MA1–MA8 of the
-[verification ledger](original-verification-ledger.md#art-names-and-missing-art-arc-res-050).
+[verification ledger](ledger/data.md#art-names-and-missing-art-arc-res-050).
 No code changes; the slices below implement it.
 
 ## Scope

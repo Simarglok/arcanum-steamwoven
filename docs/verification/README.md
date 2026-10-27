@@ -17,7 +17,7 @@ tests in `tests/Arcanum.Session.Tests/Verification` keep all four consistent.
 | `status` | `full`, `partial`, `not implemented` or `out of scope` |
 | `reason` | what is left out and why; required unless the status is `full` |
 | `level` | evidence level F0–F4 of the [original executable check](../research/original-executable-check.md#evidence-levels-for-a-function-f0f4) |
-| `evidence` | repository path (optionally with an anchor) of the evidence: the ledger section for F1/F2, the receipt for F3, the contract or research document whose claims the code follows for F0 |
+| `evidence` | repository path (optionally with an anchor) of the evidence: the ledger section for F1/F2 (rows written before ARC-DEV-038 name the ledger index's anchor, which links to the section in its area file), the receipt for F3, the contract or research document whose claims the code follows for F0 |
 | `method` | the implementing method (`Namespace.Type.Method`) of a `full` or `partial` row; empty otherwise |
 
 The registry covers the experience functions of ARC-WORLD-030 (three full at F3 by the oracle; progress since its XP3
@@ -28,7 +28,7 @@ does the same since ARC-SCRIPT-013),
 the rows other tasks added, and since ARC-DEV-009 and ARC-DEV-010 the original functions the Simulation, Session and Data code implements and names (F2 where
 the [ledger](../research/original-verification-ledger.md) has two readings, F0 where the function was not read in the
 executable). Since ARC-DEV-025 no implemented row is at F0: the twelve that were F0 have been read by two readers
-([ledger IF1–IF12](../research/original-verification-ledger.md#implemented-functions-arc-dev-025)). Since 2026-10-20
+([ledger IF1–IF12](../research/ledger/data.md#implemented-functions-arc-dev-025)). Since 2026-10-20
 (owner decision, ARC-DEV-030) a new implemented row starts at F1 or higher: the implementing task reads the function in
 the executable first. A host method that
 only calls the registered rule carries no mark (one method per address). Other domains add their rows when they are migrated.

@@ -215,7 +215,7 @@ digest; the rules are appended to the digest only when present):
   mobiles are; a whole map reads the patched portal flags (ARC-DATA-028);
 - since ARC-RES-049 the leaving shortcut is decided per step, as the original
   1.0.7.4 executable does it
-  ([ledger LV1–LV5](../research/original-verification-ledger.md#leaving-a-building-through-a-locked-portal-arc-res-049)):
+  ([ledger LV1–LV5](../research/ledger/world.md#leaving-a-building-through-a-locked-portal-arc-res-049)):
   a locked portal that is not always-locked has the edge rule `Leaving` and keeps
   its raw ART rotation r. With P its tile and Q the tile one step along r (the tile
   across for an odd r, the diagonal tile for an even one), a leg leaves when both

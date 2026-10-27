@@ -11,7 +11,7 @@ Requirements: [FR-ITEM-018](../requirements/items-economy.md#fr-item-018) (assem
 Every rule was read in the retail 1.0.7.4 `Arcanum.exe`: the first reading of ARC-RES-062
 ([the window and its gate](../research/technology-evidence.md#the-window-and-its-gate-fr-item-018-fr-magic-012),
 [assembly](../research/technology-evidence.md#assembly-0x56e720-fr-item-018-f2)) and a reading for this slice
-([ledger "Schematic assembly"](../research/original-verification-ledger.md#schematic-assembly-arc-technology-004), SA1–SA6).
+([ledger "Schematic assembly"](../research/ledger/technology.md#schematic-assembly-arc-technology-004), SA1–SA6).
 Code: [`SchematicAssemblyRules`](../../src/Arcanum.Simulation/Technology/SchematicAssemblyRules.cs),
 [`GameSessionAssembly`](../../src/Arcanum.Session/GameSessionAssembly.cs); tests
 [`SchematicAssemblyRulesTests`](../../tests/Arcanum.Simulation.Tests/Technology/SchematicAssemblyRulesTests.cs),
@@ -107,7 +107,7 @@ item the PC takes from an NPC joins this list in entry order (so the numbers nee
 
 `QueryNpcTechnology(crafter)`, `QueryNpcAssembly(crafter, schematic, items, facts)` and
 `AssembleSchematicForNpc(expected, crafter, schematic, items, facts, productKind, insertCheck, productAmmo, crafterCell)` run the same gate, button and plan for
-an NPC (ledger [NC4–NC7](../research/original-verification-ledger.md#npc-schematic-crafter-arc-technology-006), SW7). `SessionNpcCrafter`
+an NPC (ledger [NC4–NC7](../research/ledger/technology.md#npc-schematic-crafter-arc-technology-006), SW7). `SessionNpcCrafter`
 is the NPC's map data (sheet and scheme, read only while the session keeps no advancement record of it) and its effects' stat
 changes. The components are searched in the NPC's current list (seed items still there on every attached seed that lists it, then
 its added made items), with its expertise; on success both components leave the NPC with the durability deletion and the products

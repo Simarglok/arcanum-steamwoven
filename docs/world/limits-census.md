@@ -53,7 +53,7 @@ Notes on the policy caps:
 
 - **Maps.** The original keeps its map list in a table of 200 entries, and the loader stops
   adding maps when it is full (checked in the 1.0.7.4 executable:
-  [ledger](../research/original-verification-ledger.md#limits-census-arc-data-029)). A session
+  [ledger](../research/ledger/data.md#limits-census-arc-data-029)). A session
   can therefore never have changes on more maps than that.
 - **Changes.** A whole playthrough is sized as a change of every object of the largest map, and
   of every object of every installed map, once. A change is a keyed property value

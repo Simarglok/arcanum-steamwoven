@@ -50,7 +50,7 @@ points come from the project's records of the executable's constants; goal
 priorities were read from the executable's goal-type table (0x5B03D0). Order
 types and message numbers of installed files are those ARC-RES-064 recorded
 (OL3, OL12); no game text is reproduced. The rows and verdicts are in the
-[ledger](original-verification-ledger.md#npc-ai-followers-in-combat-arc-res-067).
+[ledger](ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067).
 Everything below is read in the executable unless marked **(inference)**.
 
 Conventions: "the PC" is the broadcasting PC; "a follower" is an entry of its
@@ -445,7 +445,7 @@ so only a destroyed or unresolved handle leaves a null entry).
 
 ## 9. Anomalies and decisions
 
-Verdicts and rows: [ledger](original-verification-ledger.md#npc-ai-followers-in-combat-arc-res-067).
+Verdicts and rows: [ledger](ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067).
 Decisions follow D2 and D8; the owner accepted every proposed Original switch of
 this table on 2026-10-21 (ARC-RES-071). No first-pass anomaly (P1–P7) belongs to A7.
 
@@ -529,4 +529,4 @@ missing null test of the drawn follower in the taunt function (FO17); and the
 turn-based start failure in the toggle (open question 8). The second reader also
 flagged the enemy-list branch's spell-target focus, which is support's SP16 and is
 not repeated. Details are in the
-[ledger section](original-verification-ledger.md#npc-ai-followers-in-combat-arc-res-067).
+[ledger section](ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067).

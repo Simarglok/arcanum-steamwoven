@@ -18,7 +18,7 @@ Fate points and the AI consumers are not part of it ([Not ready](#not-ready)).
   attack handler (0x4A9650) and the internal quest state setter (0x4C4E60).
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically by two independent readers per the
   [original executable check](../research/original-executable-check.md); verdicts in the
-  [verification ledger](../research/original-verification-ledger.md#reaction-runtime-arc-world-026). Every function below
+  [verification ledger](../research/ledger/social.md#reaction-runtime-arc-world-026). Every function below
   behaves as that first reading describes except one: the effective reaction passes the **PC**, not the NPC, to the
   `reaction` effect lookup (the reaction getter 0x4C0D00 → 0x4EAA80, ledger R1 effects), so both rule modes use the
   PC's effects. The original has no switch that lets charm bypass the PC's adjustment effects (A4): the delta always
@@ -103,7 +103,7 @@ are therefore never read; a quick save of schema 9 loads as "written by an incom
 
 ## Dialog binding (ARC-WORLD-043)
 
-Read in the retail executable by two readers ([ledger DR1–DR7](../research/original-verification-ledger.md#dialog-reaction-binding-arc-world-043)):
+Read in the retail executable by two readers ([ledger DR1–DR7](../research/ledger/social.md#dialog-reaction-binding-arc-world-043)):
 
 | Original | Steamwoven |
 | --- | --- |

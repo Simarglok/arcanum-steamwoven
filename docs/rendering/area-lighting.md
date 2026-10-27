@@ -73,7 +73,7 @@ Viewer Core (`tools/terrain-viewer/Core/AreaAmbient.cs`): `AreaAmbientPolicy`
 
 The universal readers take each file from the sources the original reads it from, which
 depends on when it reads it (`ContentLoadPhase`, checked in the 1.0.7.4 executable,
-[ledger "Load phases"](../research/original-verification-ledger.md#load-phases-arc-data-027)):
+[ledger "Load phases"](../research/ledger/data.md#load-phases-arc-data-027)):
 
 | File | Read by the original | Sources |
 | --- | --- | --- |
@@ -102,7 +102,7 @@ headroom, ARC-DATA-039 the frames from 16 for the object lights; [limits census]
 ### Object lights (ARC-DATA-039)
 
 `ObjectLightReader` (Godot-free, `Arcanum.Data.Lighting`) reads the object lights of a strict snapshot as the original
-builds them at sector load ([ledger LT1, LT4](../research/original-verification-ledger.md#lights-on-all-maps-arc-res-069)):
+builds them at sector load ([ledger LT1, LT4](../research/ledger/world.md#lights-on-all-maps-arc-res-069)):
 
 - For every core object with a location that is not in an inventory: the primary light of slots 12–14 (flags, ART,
   colour packed r << 16 | g << 8 | b) when its ART is not −1, and each overlay slot 0..3 of the arrays 15–17 whose

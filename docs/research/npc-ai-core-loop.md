@@ -27,7 +27,7 @@ independently, by a second reader that saw only the questions
 ([method step 6](original-executable-check.md)). Function names are the
 descriptive names the project uses for these addresses; object field numbers
 were named from the executable's own field name table (0x59BEA8). The rows and
-verdicts are in the [ledger](original-verification-ledger.md#npc-ai-core-loop-arc-res-054).
+verdicts are in the [ledger](ledger/npc-ai.md#npc-ai-core-loop-arc-res-054).
 Everything below is read from the executable unless marked **(inference)**.
 Readings of the functions that only *consume* a parameter (stages A2–A7) are
 marked as such: this note fixes which function reads which parameter slot, not
@@ -81,7 +81,7 @@ the full rule of that function.
 | Event | Mode | What runs | Function (address) |
 | --- | --- | --- | --- |
 | AI event of the NPC | real time | the tick ([section 2](#2-cadence)); thinks only outside a round | AI event (0x4AD200) |
-| A sector's objects are folded in (sector load) | both | an immediate AI event marked "wake-up" for every NPC that is not destroyed ([main-map streaming SS7](original-verification-ledger.md#main-map-streaming-arc-data-030)) | immediate event (0x4AD790), from the fold (0x441FC0) |
+| A sector's objects are folded in (sector load) | both | an immediate AI event marked "wake-up" for every NPC that is not destroyed ([main-map streaming SS7](ledger/world.md#main-map-streaming-arc-data-030)) | immediate event (0x4AD790), from the fold (0x441FC0) |
 | An NPC is created or placed into a sector | both | a normal AI event after the distance delay; not in the editor | delayed event (0x4AD6E0), from object placement (0x442260) |
 | A dead non-PC critter is resurrected | both | a normal AI event after the distance delay | delayed event (0x4AD6E0), from the heal step (0x4B58C0) |
 | Start of a non-PC subturn | turn-based | action points `max(5, Speed)`, then heartbeat; on "continue" one AI pass; no animation left → action points 0, subturn ends | turn set (0x4B6E70), subturn hook (0x4B7010) |
@@ -281,7 +281,7 @@ the state read; whether any caller relies on it is stage A3's question).
 
 ## 7. Anomalies and decisions
 
-Verdicts and rows: [ledger](original-verification-ledger.md#npc-ai-core-loop-arc-res-054).
+Verdicts and rows: [ledger](ledger/npc-ai.md#npc-ai-core-loop-arc-res-054).
 Decisions follow D2 and D8: a bug of the original game gets a fix and an
 Original switch; where only the reconstruction differs, both settings follow the
 original and there is no switch.

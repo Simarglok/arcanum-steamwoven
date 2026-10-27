@@ -158,7 +158,7 @@ of the game folder that holds the module archive (the description tables' rule),
 `AreaStartingHero.Definition` (the mapping above, moved out of the real-data test). Refusals are typed
 (`AreaHeroStatus`: module outside a game folder, mount or stack failure, a table absent or invalid, a reader refusal,
 an invalid flag message) and fail the viewer's load. Each table comes from the sources of the phase the original reads
-it in (ARC-DATA-027, exe-checked, [ledger](../research/original-verification-ledger.md#load-phases-arc-data-027)):
+it in (ARC-DATA-027, exe-checked, [ledger](../research/ledger/data.md#load-phases-arc-data-027)):
 `rules\effect.mes`, `rules\InvenSource.mes`, `rules\InvenSourceBuy.mes`, `mes\MainMenu.mes`, `rules\xp_level.mes` and
 `rules\xp_quest.mes` at game start, so from the first base source (a module copy is never read; a table only a module
 holds is absent, detail `<path> NotInPhase`); `rules\gamequest.mes` at module load, so the stack winner. The installed module holds none of the
@@ -166,7 +166,7 @@ game-start tables, so the installed heroes read unchanged.
 
 **Pre-made hero flag** (S, and checked in the original executable): picking a hero, the main menu's pre-made hero step
 (0x545B60) reads `MainMenu.mes` messages 551 + i for each hero index i, turns each into a flag number with `atoi` and
-writes 1 for the chosen hero and 0 for the others ([ledger](../research/original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)).
+writes 1 for the chosen hero and 0 for the others ([ledger](../research/ledger/character.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)).
 The viewer starts from the original new-game flags (all 0..3199 known false, so the 0 writes change nothing) with the
 chosen hero's flag true (`AreaStartingHero.NewGameFlags`); on the installed original that is flag 2350 + i (CC-07).
 Project admission: the chosen message must be one to five ASCII digits (space-padded allowed) naming a flag below 3,200;

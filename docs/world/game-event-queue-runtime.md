@@ -167,7 +167,7 @@ only for a critter that already has damage or poison but no pending timer: an NP
 poisoned, or a follower whose resting timer ended while it had a PC leader and who then left the party. The next
 change of the value sets the timer. The hero gets no resting timer: the source schedules one but its handler heals
 only NPCs. Whether the source also ticks the poison of a switched-off critter is open (ledger
-[TE11](../research/original-verification-ledger.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019)).
+[TE11](../research/ledger/scripts.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019)).
 Sources: fatigue (0x45E610), resting (0x45E910, 0x45EA00, 0x45EA80, 0x45EAB0), poison (0x4B1170),
 poison schedule (0x4B1350), hit-point write (0x43D530), poison write (0x4B0980).
 

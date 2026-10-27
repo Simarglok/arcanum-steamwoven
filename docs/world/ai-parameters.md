@@ -2,7 +2,7 @@
 
 Status: **Implemented bounded component**, ARC-DATA-033. `Arcanum.Data.Characters.AiParameterTable`
 reads the original's AI parameter table from the content stack, as the retail executable builds it
-([ledger AP1, AP2](../research/original-verification-ledger.md#ai-parameters-and-follow-consent-arc-data-033)).
+([ledger AP1, AP2](../research/ledger/npc-ai.md#ai-parameters-and-follow-consent-arc-data-033)).
 An NPC's AI data field (field 282, `CombatNpcFields.AiData` of ARC-DATA-021) names its row. The follow
 check reads fields 5..8 ([party runtime](party-runtime.md#follow-check-arcanumsimulationparty)); the
 other fields (flee, combat, portals and others) are read and kept but not interpreted here.

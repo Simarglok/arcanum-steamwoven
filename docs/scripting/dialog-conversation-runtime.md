@@ -139,7 +139,7 @@ owner's current version; `Unknown`/`Unavailable` is a frontier, `Failed`/`Stale`
 ## Skill gates (ARC-SKILLS-004)
 
 The source's dialog skill cases, read in the retail 1.0.7.4 executable by two readers
-([ledger DS1–DS5](../research/original-verification-ledger.md#dialog-skill-gates-arc-skills-004)). Skills are the source's
+([ledger DS1–DS5](../research/ledger/skills.md#dialog-skill-gates-arc-skills-004)). Skills are the source's
 numbers: 0..11 the basic skills, 12..15 the tech skills; the port reads any other number as level 0 and no training, as the
 source's getters answer 0 for it. Codes match case-insensitively.
 
@@ -167,7 +167,7 @@ operation outside this subset (money `$$` 121, rumors 84, quests 47, …), never
 ## Fate point action (ARC-WORLD-054)
 
 With the optional `IDialogFatePort` (`DialogConversationPorts.Fate`) the NPC and Player actions admit `FP`: the PC gets one fate
-point (the source's dialog action `fp`, code 29 of its action table, [FT8](../research/original-verification-ledger.md#fate-points-arc-world-054)).
+point (the source's dialog action `fp`, code 29 of its action table, [FT8](../research/ledger/skills.md#fate-points-arc-world-054)).
 The receipt is a `FatePointCommand`; Applied also covers a PC already at 100 points. Every installed `fp` is written without an
 operand, so `FP` takes none here; a number after it is an `UnsupportedOperation` frontier (the source reads it and ignores it).
 Without the port `FP` stays unadmitted. The session's port is `SessionDialogFatePort` over the hero
@@ -176,7 +176,7 @@ Without the port `FP` stays unadmitted. The session's port is `SessionDialogFate
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
 With the optional `IDialogSchematicPort` (`DialogConversationPorts.Schematics`) a Player reply's action admits `SU` (the source's
-dialog action `su`, code 30 of its action table, [NC1–NC2](../research/original-verification-ledger.md#npc-schematic-crafter-arc-technology-006)):
+dialog action `su`, code 30 of its action table, [NC1–NC2](../research/ledger/technology.md#npc-schematic-crafter-arc-technology-006)):
 an operand is read and ignored; the receipt is an `OpenSchematicsCommand` (the NPC as crafter, the PC as viewer) recorded in field
 order, so the field's other actions run before and after it; the reply's transition is `DialogOptionTransition.Schematics` with no
 target node (no look-ahead; a missing or non-NPC response target does not fail the step, since the reply never enters it), and picking it ends the conversation with `DialogEndKind.SchematicWindow`: no further NPC line, no SCR

@@ -274,7 +274,7 @@ technology.
 | +5..+48 | B | stops at first gap | one effect component per line: action, area keys, `Type:` (one of 25) and a type payload: animation goal, AI redirect (critter flag, `MinIQ:`), cast, charge-and-branch, damage or heal (`DmgType:`, `Dmg:a-b`, `Dmg_Flags:`), effect add or remove (`Cause:`, `Scaled:`), environment or object flag, eye candy, interrupt, movement, recharge, summon (`Proto:` resolved immediately, `Clear_Faction:`, `Palette:`, `List:`), test-and-branch, trait setters |
 
 Lines +0..+4 and the component lines were read in the executable by ARC-MAGIC-001 and ARC-MAGIC-002 (two readers each,
-[ledger](original-verification-ledger.md#spell-components-arc-magic-002); format in the
+[ledger](ledger/magic.md#spell-components-arc-magic-002); format in the
 [spell record contract](../formats/spell-records.md)); the rows below stand, with the ledger's detail.
 
 Pass B runs after Map because `Proto:` needs the prototype pool
@@ -459,7 +459,7 @@ loader does not look for one:
 
 ## 8. Anomalies found by this reading
 
-**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable (magic, skills and AI sections of the ledger); the verdicts in the [verification ledger](original-verification-ledger.md#magic-arc-res-043-load-map-arc-res-040) supersede the earlier readings below where they differ.
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable (magic, skills and AI sections of the ledger); the verdicts in the [verification ledger](ledger/magic.md#magic-arc-res-043-load-map-arc-res-040) supersede the earlier readings below where they differ.
 
 Recorded, not adopted. "Inference" marks a reading of intent.
 

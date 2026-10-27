@@ -14,7 +14,7 @@ drawing side of [FR-SCENE-008](../requirements/scene.md#fr-scene-008) (a destroy
 ready.
 
 Every rule was read in the executable by two independent readers
-([ledger "Object damage"](../research/original-verification-ledger.md#object-damage-arc-combat-008), rows OD1–OD12, F2).
+([ledger "Object damage"](../research/ledger/combat.md#object-damage-arc-combat-008), rows OD1–OD12, F2).
 
 Code: [`ObjectDamageRules`](../../src/Arcanum.Simulation/Combat/ObjectDamageRules.cs),
 [`GameSessionObjects`](../../src/Arcanum.Session/GameSessionObjects.cs); tests

@@ -139,7 +139,7 @@ With compaction, in four runs, the samples equal the live bytes to within about
 
 The scene plan draws three more serialized body states, by rules checked in the
 retail executable
-([ledger BL1–BL5](../research/original-verification-ledger.md#rendering-body-blends-and-wading-arc-render-018)).
+([ledger BL1–BL5](../research/ledger/world.md#rendering-body-blends-and-wading-arc-render-018)).
 They are general rules of every body, not of these maps.
 
 - **Blend choice.** Blit additive `0x10` wins over multiply `0x40`, which wins
@@ -474,7 +474,7 @@ travels with the player. Nothing is pinned to Virgil or to a location.
   and alignment as the original's stat getter reads them. That means the stored
   stat, then every effect of its effect list that changes it (the effect tables
   from the content stack, the original's aggregation), then the getter's clamp of
-  0..51 and −1000..1000 ([ledger AP5](../research/original-verification-ledger.md#ai-parameters-and-follow-consent-arc-data-033));
+  0..51 and −1000..1000 ([ledger AP5](../research/ledger/npc-ai.md#ai-parameters-and-follow-consent-arc-data-033));
   an effect number without a definition changes nothing, as in the original.
   `AreaCompanionData` opens the tables once per module. The PC side stays the
   AREA diagnostic profile (charisma 8, level 1), so through a dialog `JO` the
@@ -559,7 +559,7 @@ loyalty or wait timer. The exterior keeps its measured roster (Virgil).
 Doors and windows keep their state in the session's lock owner
 ([lock state](../world/lock-state-runtime.md), ARC-WORLD-050). Their rules follow
 the executable as read in
-[ledger LK1–LK13](../research/original-verification-ledger.md#doors-containers-and-locks-arc-res-065).
+[ledger LK1–LK13](../research/ledger/world.md#doors-containers-and-locks-arc-res-065).
 
 - **Frames.** The area owner decodes every frame of a portal ART with more than
   one frame as `PortalFrame` visuals, and the plan copies them into the map's

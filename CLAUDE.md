@@ -119,8 +119,9 @@ under `docs/research`. Details: `docs/project/status.md`.
 ## 3. Truth hierarchy
 
 1. **Code and git history** (prefer `origin/main` — see §4).
-2. Repo docs: `docs/project/status.md` (component catalogue, updated by each
-   task), `docs/requirements/coverage.md`, contracts under `docs/world`,
+2. Repo docs: `docs/project/status.md` (component catalogue index, full rows in
+   `docs/project/status/`, updated by each task), `docs/requirements/coverage.md`
+   (rows in `docs/requirements/coverage/`), contracts under `docs/world`,
    `docs/scripting`, `docs/rendering`, `docs/formats`, research under
    `docs/research`, owner decisions in `docs/architecture/decisions.md`.
 3. For how the **original game** behaves, the retail executable is the only
@@ -166,7 +167,8 @@ under `docs/research`. Details: `docs/project/status.md`.
   lab and export commands.
 - `docs/project/status.md` — component catalogue; `docs/requirements/coverage.md` — status of
   every functional requirement, checked when creating a task and updated in the PR that
-  changes it (`docs/workflow/tasks.md#functional-requirements`).
+  changes it (`docs/workflow/tasks.md#functional-requirements`). Both, and the verification
+  ledger, keep their full rows in area files (`docs/workflow/tasks.md#area-files-of-the-catalogue-matrix-and-ledger`).
 - `docs/architecture/decisions.md` — owner decisions (graphics, HD pack, controls,
   platforms); `docs/research/method.md` — research method and provenance;
   `docs/research/original-executable-check.md` — checking behaviour in the

@@ -50,19 +50,45 @@ output is kept small.
 - Read files in ranges of at most 120 lines (`sed -n 'A,Bp'`, or the read
   tool's offset and limit); never `cat` a whole source file or document.
 - Never read a saved large tool output whole; grep it for what you need.
-- In `docs/project/status.md`, `docs/requirements/coverage.md` and the
-  [verification ledger](../research/original-verification-ledger.md), grep
-  only the row you need and cut it (`| cut -c1-300`); their rows run to
-  thousands of characters.
+- The component catalogue, the coverage matrix and the verification ledger
+  are split by area ([area files](#area-files-of-the-catalogue-matrix-and-ledger)):
+  find the row in the area folder, grep only that row and cut it
+  (`| cut -c1-300`); their rows run to thousands of characters.
 - Subagents (executable readers, reviewers) get the diff or exact file ranges
-  and a short brief; they never read status.md, coverage.md or the ledger
-  whole.
+  and a short brief; they never read a catalogue, matrix or ledger file whole.
 
 Why: in the token audit of 2026-10-21, search and read output (`grep`, `find`,
 `sed`, `cat`) was the largest share of re-read tokens in the three audited
 lanes (about 75 to 150 million cache-read tokens each), and saved tool outputs of
 32 to 48 KB were read whole and re-read about 390 times. Godot, launcher and
 `dotnet` output follow [quiet run output](#quiet-run-output).
+
+### Area files of the catalogue, matrix and ledger
+
+Owner decision 2026-10-27 (ARC-DEV-038, token audit item 5): the three shared
+records are split by area, so a lane reads and edits only its own area and
+lanes in different areas do not conflict.
+
+| Record | Index (small, shared) | Area files (full rows) |
+| --- | --- | --- |
+| [Component catalogue](../project/status.md) | audit note, one line per component (name, area, first task codes), credited verification, maintenance rule | `docs/project/status/<area>.md`: the full "Implemented components" and "Merged research" rows of the area |
+| [Coverage matrix](../requirements/coverage.md) | status scale and the summary counts by section | `docs/requirements/coverage/<domain>.md`, one per domain document of the register (`world.md`, `scene.md`, …): the requirement rows |
+| [Verification ledger](../research/original-verification-ledger.md) | inputs and method, verdicts, one line per section with its row IDs, decisions to revisit, second reading, not checked | `docs/research/ledger/<area>.md`: the sections of the area with their rows |
+
+- Find a row by name, task code, requirement code or row ID in the area folder,
+  for example `grep -n "FR-WORLD-013" docs/requirements/coverage/*.md | cut -c1-300`,
+  `grep -n "^| WT3 " docs/research/ledger/*.md | cut -c1-300` or
+  `grep -n "ARC-MAGIC-004" docs/project/status/*.md | cut -c1-300`.
+- Edit a row in its area file. A new component adds its full row to the area
+  file and one line to the index of the catalogue; a new ledger section goes at
+  the end of its area file and adds one line (section, area, row IDs) to the
+  ledger's area index; a coverage status change also updates the section's counts
+  in the matrix summary.
+- A new area file is made only when no area fits; it gets the same header as its
+  neighbours and a link from its index.
+- Links to a row's section point at the area file
+  (`../research/ledger/magic.md#spell-book-arc-magic-004`); old links to the
+  index's section anchors still resolve through the index.
 
 ### Fewer steps
 
@@ -149,7 +175,8 @@ is checked when a task is created and kept current when a change lands.
   work that no requirement covers is raised with the owner too: either it belongs under
   an existing requirement, or the register needs a new one.
 - **When the change lands**, the same PR updates the matrix row of every
-  requirement whose coverage it changes: status, what is implemented, what is
+  requirement whose coverage it changes (in the section's file under
+  `docs/requirements/coverage/`, with the section's counts in the matrix summary): status, what is implemented, what is
   missing and the documentation links, using the matrix's status scale. A new
   requirement, or a changed one, is edited in its domain document with the owner's
   agreement, and the counts
