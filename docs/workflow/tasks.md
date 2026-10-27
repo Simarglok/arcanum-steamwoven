@@ -60,9 +60,9 @@ output is kept small.
 
 Why: in the token audit of 2026-10-21, search and read output (`grep`, `find`,
 `sed`, `cat`) was the largest share of re-read tokens in the three audited
-lanes (about 75 to 150 million cached tokens each), and saved tool outputs of
+lanes (about 75 to 150 million cache-read tokens each), and saved tool outputs of
 32 to 48 KB were read whole and re-read about 390 times. Godot, launcher and
-`dotnet` output are not covered by this rule.
+`dotnet` output stay outside this rule.
 
 ## Definition of Ready
 
