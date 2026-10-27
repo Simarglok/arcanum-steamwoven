@@ -222,9 +222,12 @@ public partial class TerrainViewerApp
         if (_spellTargeting is not { } targeting) return;
         var aggressive = targeting.Record.Resist.Aggressive;
         targeting.Mask = key.Pressed ? SpellUiRules.AltPressed(targeting.Mask, aggressive)
-            : _spellAltLeft || _spellAltRight ? targeting.Mask : SpellUiRules.AltReleased(targeting.Mask, aggressive);
+            : SpellAltHeld ? targeting.Mask : SpellUiRules.AltReleased(targeting.Mask, aggressive);
         _hoverStamp = null;
     }
+
+    // A key-up lost to a focus change cannot leave an Alt held: some Alt must still be down (as the attack's left Alt).
+    private bool SpellAltHeld => (_spellAltLeft || _spellAltRight) && Godot.Input.IsKeyPressed(Key.Alt);
 
     /// <summary>What the cursor would cast at under the screen point: the object under it, else the hero when its tile is under it,
     /// else the tile; null when the point is off the map. The answer carries the area test.</summary>

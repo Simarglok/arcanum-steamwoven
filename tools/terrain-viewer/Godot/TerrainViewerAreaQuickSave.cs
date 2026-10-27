@@ -92,6 +92,8 @@ public partial class TerrainViewerApp
     {
         var busy = QuickBusyReason();
         if (busy != QuickBusy.None) { SetQuickStatus("F7 quick save refused: " + Describe(busy)); return; }
+        // ARC-MAGIC-015: a casting goal is not saved (no goal state in the session); its run would wait for a release that never comes.
+        if (_spellGoal is not null) { SetQuickStatus("F7 quick save refused: a cast is playing"); return; }
         var grid = (AreaGridSession)_worldActor.Session!;
         var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
         var placement = new ActorPlacement(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing);
