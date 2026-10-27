@@ -62,7 +62,7 @@ Why: in the token audit of 2026-10-21, search and read output (`grep`, `find`,
 `sed`, `cat`) was the largest share of re-read tokens in the three audited
 lanes (about 75 to 150 million cache-read tokens each), and saved tool outputs of
 32 to 48 KB were read whole and re-read about 390 times. Godot, launcher and
-`dotnet` output stay outside this rule.
+`dotnet` output follow [quiet run output](#quiet-run-output).
 
 ### Fewer steps
 
@@ -80,6 +80,24 @@ Why: in the token audit of 2026-10-21, lanes made about one tool call per step,
 status (progress-checklist) and no-reply calls were 12 to 21 percent of all
 steps (about 220 such calls per audited lane), and each lane received 16 to 23 coordinator messages,
 many for information only.
+
+### Quiet run output
+
+Owner decision 2026-10-27 (ARC-DEV-037): Godot, smoke, export and `dotnet`
+output is read from a log file, not from the session.
+
+- Run them through `./arcanum run`, which is quiet by default: the whole output
+  goes to a log file, and stdout shows only PASS or FAIL with the first error
+  and at most 40 lines around it; the `ARCANUM_QUEUE` lines stay on stderr
+  ([quiet output](toolchain.md#quiet-output-arc-dev-037)).
+- Check a run's start in its log with a narrow search or `tail -n 20`; never
+  read a log whole. Use `--verbose` only when the whole output is the point.
+- Give `dotnet build` and `dotnet test` `-v q --nologo`, and tests
+  `--logger "console;verbosity=minimal"`.
+
+Why: in the token audit of 2026-10-21, Godot output was the next largest share
+of re-read tokens after search and reading (63 million cache-read tokens in the
+map-mode lane alone).
 
 ## Definition of Ready
 

@@ -35,6 +35,8 @@ summarizes the project and points to them.
 - **One run at a time on the Mac.** Godot runs, exports and `dotnet` builds/tests go through the FIFO launch queue:
   `./arcanum run --kind window|headless|export|dotnet -- COMMAND`; `./arcanum queue` shows the queue
   ([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033), ARC-DEV-033). It replaces the `lockf` rule.
+  It is quiet by default: the whole output goes to a log file, stdout keeps PASS/FAIL and the first error
+  ([quiet run output](docs/workflow/tasks.md#quiet-run-output), ARC-DEV-037).
 - **The retired Hermes setup is off limits.** The Hermes task board and the
   Codex workflow were removed on 2026-10-16 (PR #137); do not touch `~/.hermes`
   on the owner's Mac (old board, profiles, logs with secrets) and do not run

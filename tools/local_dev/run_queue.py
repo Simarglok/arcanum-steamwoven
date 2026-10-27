@@ -21,7 +21,7 @@ import sys
 import time
 from typing import Any, Callable, Sequence
 
-from . import config
+from . import config, run_log
 
 SCHEMA = "arcanum-run-queue-v1"
 KINDS = ("window", "headless", "export", "dotnet")
@@ -352,10 +352,12 @@ def nested(kind: str) -> bool:
 
 
 def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | None = None, priority: int = NORMAL,
-        hold: Callable[[], None] | None = None, sleep: Callable[[float], None] = time.sleep) -> int:
+        hold: Callable[[], None] | None = None, sleep: Callable[[float], None] = time.sleep, quiet: bool = False) -> int:
     """Wait for this run's turn, run the command, give the place to the next run. Returns the command's exit code,
     TIMEOUT_EXIT when it ran out of time, or 128+N when this wrapper was stopped by signal N. `hold`, called after the
-    command succeeded, keeps the place while something the command left running is still open (the detached viewer)."""
+    command succeeded, keeps the place while something the command left running is still open (the detached viewer).
+    `quiet` (ARC-DEV-037) writes the command's output to a log file and prints only PASS or FAIL with the first error
+    (run_log.summary) on stdout; a nested run ignores it, its output goes wherever its parent's goes."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
     if not command:
@@ -370,6 +372,15 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
             hold()
         return code
     fd, path, ticket = _enqueue(kind, label, command, priority, minutes)
+    log = None
+    if quiet:
+        try:
+            log = run_log.open_log(ticket["seq"], kind)
+        except BaseException:
+            path.unlink(missing_ok=True)
+            os.close(fd)
+            raise
+        say(f"log ticket={ticket['seq']} {log}")
     child: subprocess.Popen[bytes] | None = None
     legacy = None
     stopped: list[int] = []
@@ -396,8 +407,17 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         # inherit it). The lockf lock stays with the wrapper: a leftover descendant holding it would block lockf
         # lanes and the next Godot run with no way to tell it from a live run.
         critical[0] = True
-        child = subprocess.Popen(list(command), env=environment, start_new_session=True,
-                                 pass_fds=(fd,) if kind in GODOT_KINDS else ())
+        if log is None:
+            child = subprocess.Popen(list(command), env=environment, start_new_session=True,
+                                     pass_fds=(fd,) if kind in GODOT_KINDS else ())
+        else:
+            output = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+            try:  # the child keeps its own copy of the descriptor
+                child = subprocess.Popen(list(command), env=environment, start_new_session=True, stdin=subprocess.DEVNULL,
+                                         stdout=output, stderr=subprocess.STDOUT,
+                                         pass_fds=(fd,) if kind in GODOT_KINDS else ())
+            finally:
+                os.close(output)
         critical[0] = False
         if stopped:
             raise KeyboardInterrupt
@@ -432,6 +452,8 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         os.close(fd)
         if legacy is not None:
             os.close(legacy)
+    if log is not None and ticket.get("startedAt"):
+        print("\n".join(run_log.summary(log, exit_code, ended - ticket["startedAt"])), flush=True)
     return exit_code
 
 

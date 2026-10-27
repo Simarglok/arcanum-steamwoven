@@ -14,7 +14,7 @@ every identity, artifact-authority and ordinary-launch check stays there.
     ./arcanum oracle [--function ADDR|--all] [--exe PATH] # function oracle on the installed Arcanum.exe, then the OriginalExe tests (ARC-DEV-007)
     ./arcanum status                                      # which modes have every input configured
     ./arcanum clean [--apply] [--json]                    # which builds are protected and which disposable (dry run); --apply removes only disposable payloads (ARC-DEV-028)
-    ./arcanum run --kind KIND [--timeout MIN] [--label TEXT] -- COMMAND  # run COMMAND through the launch queue (ARC-DEV-033)
+    ./arcanum run --kind KIND [--timeout MIN] [--label TEXT] [--verbose] -- COMMAND  # run COMMAND through the launch queue (ARC-DEV-033), quiet unless --verbose (ARC-DEV-037)
     ./arcanum queue [--history N]                         # the launch queue: runs holding a place and the waiters in order
 
 `area`, `world` and `map` select the build named by that task's `current.json` pointer
