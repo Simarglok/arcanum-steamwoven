@@ -557,7 +557,7 @@ has its own slot and also loads a save of another map
   whose dialog values it cannot read is refused before anything changes. Snapshot sections other domains
   add later are restored with the session; the day/night driver (ARC-WORLD-010) rebinds
   there to the loaded clock, so a load restores the saved time, pause and applied scheme.
-- **HUD.** The area status line shows the save folder and the last F7/F8 result.
+- **HUD.** The area status line shows the save folder and the last F7/F8 result, a load naming the save it read.
 
 The native smoke (`--native-smoke` with the cave input) runs a quick-save phase after
 the transition phase, on a temporary slot, never the player's: F7 through the
@@ -1187,24 +1187,28 @@ art and layout are the project's.
   save from before ARC-UI-010) or with details from another snapshot is listed and marked.
 - **Save window.** A "new save" row first, then the saves; the first save is selected on opening (as the original).
   (In an empty window the original selects nothing; here the new-save row is selected so Return saves.)
-  The description field has the keyboard. Return or **Save** on the new row writes a new numbered save (the
-  highest number plus one; refused at 9999) with the typed description (empty or only spaces: the slot name);
-  on a listed save it asks first, Return or **Yes** overwrites it keeping that save's own description (as the
-  original, which puts it in the field before asking) and Escape or **No** keeps it. The save is the game as it was when the window opened (the window is modal: the gate
+  The description field has the keyboard on the new-save row only. Return or **Save** there writes a new
+  numbered save (the highest number plus one; refused at 9999) with the typed description (empty or only
+  spaces: the slot name); on a listed save it asks first, Return or **Yes** overwrites it keeping that save's
+  own description (as the original, which puts it in the field before asking) and Escape or **No** keeps it.
+  A double click on a row confirms it, but never answers an open question. A save that succeeds closes the
+  window, as the original; a failure keeps it open with the reason. The save is the game as it was when the window opened (the window is modal: the gate
   closes, the clock pauses, a walk stops), with the preview taken when the palette had left the screen.
 - **Load window.** The saves; Return or **Load** loads the selected save through the quick load's path (every check
   before anything changes; a save of another map loads that map in map mode) and closes the window; a failed load
   keeps the window and the session and names the reason.
-- **Delete.** Delete or Backspace (outside the description field) or **Delete** asks first, then removes the save,
-  its details and preview; the auto-save is never deleted.
+- **Delete.** Delete or Backspace on a selected save or **Delete** asks first, then removes the save, its details
+  and preview and clears the selection, as the original; the auto-save is never deleted.
 - **Keys.** The open window owns every key except the typing in its description field: Up/Down select, Return
   confirms or answers yes, Escape answers no or closes; F7, F8 and the window letters do nothing under it. A
   controller confirm, cancel and menu direction do the same.
 
 Self-test `ARC-UI-010 self-test PASS synthetic save list` (the production app over the synthetic area owner, on a
-temporary folder): a new save, an overwrite asked and refused then accepted, keys owned, the F7 auto-save's
-details (and the preview when a frame can be read), the auto-save first and not deletable, a load by row under a
-new session, F8 loading the newest save, a delete asked first. The native quick-save smoke checks the auto-save's
+temporary folder): a new save closing the window, an overwrite asked (a row activation leaves the question open,
+Escape refuses, Return accepts) keeping the save's description, keys owned, the F7 auto-save's details (and the
+preview when a frame can be read), the auto-save first and not deletable, a load by row under a new session, F8
+loading the newest save (the auto-save, then a numbered save made newer; the HUD names the loaded save), a delete
+asked first that clears the selection. The native quick-save smoke checks the auto-save's
 details on the original data. Not done: the in-game menu that opens the windows (FR-UI-006, the next tasks), the
 original window art, sorting or paging options, a text cursor of the original's own, and the original `.gsi` format.
 

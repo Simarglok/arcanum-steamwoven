@@ -72,43 +72,44 @@ public partial class TerrainViewerApp
             Require(_saveListPanel!.RowsForSelfTest.SequenceEqual(["<new save>"]) && _saveList!.Selected == 0, "an empty folder lists the new-save row only");
             Require(GetSelfTestSnapshot().Hud.Contains(" | save list open: Escape closes", StringComparison.Ordinal), "HUD open status");
             Require(_saveListPanel.TypingDescription && !HandleSaveListKey(new InputEventKey { Keycode = Key.A, PhysicalKeycode = Key.A, Pressed = true }),
-                "a typed letter reaches the description field");
+                "a typed letter reaches the description field on the new-save row");
             _saveList!.Description = "Synthetic start";
             InventoryKey(Key.Enter);
             var listed = library.List().Entries;
             Require(listed is [{ Name: "slot0000", Details: GameSaveDetails.Present }] && listed[0].DisplayDescription == "Synthetic start",
                 "Return saved slot0000 with its description: " + _quickSaveStatus);
-            var saved = listed[0];
-            Require(saved.HasThumbnail == framed && SaveListOpen && _saveListPanel.NoticeForSelfTest == "saved as slot0000"
-                && _saveListPanel.RowsForSelfTest.SequenceEqual(["<new save>", "Synthetic start"]) && _saveList.Selected == 1, "the list shows the new save, selected");
-            Require(_saveListPanel.PreviewShownForSelfTest == framed, "the new save's preview is shown when a frame was read");
-            var savedBytes = System.IO.File.ReadAllBytes(File("slot0000.json"));
+            Require(listed[0].HasThumbnail == framed && !SaveListOpen && !WorldModal
+                && _quickSaveStatus?.StartsWith("Save saved slot0000", StringComparison.Ordinal) == true, "a successful save closed the window: " + _quickSaveStatus);
 
-            // Overwrite asks first: Escape answers no (the window stays), Return yes.
-            _saveList.Description = "Typed but not used";
+            // Overwrite asks first: Escape answers no (the window stays), Return yes; the listed save keeps its description.
+            OpenSaveList(AreaSaveListMode.Save);
+            Require(_saveListPanel.RowsForSelfTest.SequenceEqual(["<new save>", "Synthetic start"]) && _saveList!.Selected == 1 && !_saveListPanel.TypingDescription,
+                "the first save is selected and the field does not take the keys there");
+            Require(_saveListPanel.PreviewShownForSelfTest == framed, "the save's preview is shown when a frame was read");
+            _saveList!.Description = "Typed but not used";
             InventoryKey(Key.Enter);
             Require(_saveList.Prompt == AreaSavePrompt.ConfirmOverwrite && SaveListOpen, "Return on a listed save asks before overwriting");
+            // A double click on another row does not answer the question.
+            _saveListPanel.EmitRowActivatedForSelfTest(0);
+            Require(_saveList.Prompt == AreaSavePrompt.ConfirmOverwrite && library.List().Entries.Count == 1, "a row activation left the question open");
             InventoryKey(Key.Escape);
-            Require(_saveList.Prompt == AreaSavePrompt.None && SaveListOpen && library.List().Entries.Single().DisplayDescription == "Synthetic start",
-                "Escape answered no and kept the window and the save");
-            Age("slot0000", 5);
-            InventoryKey(Key.Enter); InventoryKey(Key.Enter);
-            Require(System.IO.File.GetLastWriteTimeUtc(File("slot0000.json")) > DateTime.UtcNow.AddMinutes(-1)
-                && library.List().Entries.Single().DisplayDescription == "Synthetic start", "Return, Return overwrote the save, keeping its description");
+            Require(_saveList.Prompt == AreaSavePrompt.None && SaveListOpen, "Escape answered no and kept the window");
             // The open window owns the keys: F7 saves nothing, L opens no logbook.
             InventoryKey(Key.F7); InventoryKey(Key.L);
             Require(!System.IO.File.Exists(File("quicksave.json")) && !LogbookOpen && SaveListOpen, "F7 and L did nothing under the save window");
-            InventoryKey(Key.Escape);
-            Require(!SaveListOpen && !WorldModal, "Escape closed the save window");
+            Age("slot0000", 5);
+            InventoryKey(Key.Enter); InventoryKey(Key.Enter);
+            Require(!SaveListOpen && System.IO.File.GetLastWriteTimeUtc(File("slot0000.json")) > DateTime.UtcNow.AddMinutes(-1)
+                && library.List().Entries.Single().DisplayDescription == "Synthetic start", "Return, Return overwrote the save, kept its description and closed");
 
             // F7: the auto-save with the original's description and the details of the session.
             QuickKey(Key.F7);
             var auto = library.List().Entries[0];
             Require(auto is { Name: "quicksave", IsAuto: true, Details: GameSaveDetails.Present } && auto.DisplayDescription == "Auto-Save"
                 && auto.Summary!.Location == "Crash Site" && auto.Summary.HeroName == "diagnostic PC" && auto.HasThumbnail == framed, "F7 wrote the auto-save: " + _quickSaveStatus);
-            Age("slot0000", 30); Age("quicksave", 10);
 
             // The load window: the auto-save first; it cannot be deleted; Down and Return load slot0000 under a new session.
+            Age("slot0000", 30); Age("quicksave", 10);
             OpenSaveList(AreaSaveListMode.Load);
             Require(_saveListPanel.RowsForSelfTest.SequenceEqual(["[auto] Auto-Save", "Synthetic start"]) && _saveList!.Selected == 0, "load rows, auto first");
             InventoryKey(Key.Delete);
@@ -117,28 +118,32 @@ public partial class TerrainViewerApp
             var running = _areaSession;
             InventoryKey(Key.Down); InventoryKey(Key.Enter);
             Require(!SaveListOpen && !ReferenceEquals(running, _areaSession) && _areaSession!.QueryActor() == start
-                && _quickSaveStatus?.StartsWith("Load quick loaded", StringComparison.Ordinal) == true, "Return loaded slot0000 and closed the window: " + _quickSaveStatus);
-            Require(System.IO.File.ReadAllBytes(File("slot0000.json")).Length > 0 && savedBytes.Length > 0, "the save files stay");
+                && _quickSaveStatus?.StartsWith("Load quick loaded", StringComparison.Ordinal) == true && _quickSaveStatus.EndsWith(" from slot0000", StringComparison.Ordinal),
+                "Return loaded slot0000 and closed the window: " + _quickSaveStatus);
 
-            // F8 loads the newest save (the auto-save here), not the selected or the first numbered one.
+            // F8 loads the newest save by file date: the auto-save while it is newer, then a numbered save made newer.
+            QuickKey(Key.F8);
+            Require(_quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true && _quickSaveStatus.EndsWith(" from quicksave", StringComparison.Ordinal),
+                "F8 loaded the newer auto-save: " + _quickSaveStatus);
+            Age("slot0000", 1);
             var beforeQuick = _areaSession;
             QuickKey(Key.F8);
-            Require(!ReferenceEquals(beforeQuick, _areaSession) && _quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true, "F8 loaded: " + _quickSaveStatus);
-            Age("slot0000", 1);
-            Require(library.Latest()!.Name == "slot0000", "a newer numbered save becomes the latest");
+            Require(!ReferenceEquals(beforeQuick, _areaSession) && _quickSaveStatus?.EndsWith(" from slot0000", StringComparison.Ordinal) == true,
+                "F8 loaded the newer numbered save, not the auto-save: " + _quickSaveStatus);
 
-            // A delete asks first; Return deletes; the list keeps the auto-save.
+            // A delete asks first; Return deletes; the selection is cleared and the list keeps the auto-save.
             OpenSaveList(AreaSaveListMode.Load);
             Require(_saveListPanel.RowsForSelfTest.SequenceEqual(["[auto] Auto-Save", "Synthetic start"]), "the auto-save stays first");
             InventoryKey(Key.Down); InventoryKey(Key.Backspace);
             Require(_saveList!.Prompt == AreaSavePrompt.ConfirmDelete && library.Slot("slot0000").Exists, "Backspace asked before deleting");
             InventoryKey(Key.Enter);
             Require(!library.Slot("slot0000").Exists && _saveListPanel.RowsForSelfTest.SequenceEqual(["[auto] Auto-Save"])
-                && _saveListPanel.NoticeForSelfTest == "deleted", "Return deleted slot0000");
+                && _saveListPanel.NoticeForSelfTest == "deleted" && _saveList.Selected == -1, "Return deleted slot0000 and cleared the selection");
             InventoryKey(Key.Escape);
             Require(!SaveListOpen, "Escape closed the load window");
-            return $"new save, overwrite asked (no then yes), keys owned, F7 auto-save details, preview {(framed ? "written and shown" : "skipped headless")}, " +
-                "auto-save first and not deletable, load by row, F8 newest, delete asked";
+            return $"new save closes, overwrite asked (row activation ignored, no then yes) keeping the description, keys owned, F7 auto-save details, " +
+                $"preview {(framed ? "written and shown" : "skipped headless")}, auto-save first and not deletable, load by row, F8 newest (auto then numbered), " +
+                "delete asked and selection cleared";
         }
         finally
         {

@@ -32,8 +32,8 @@ public sealed record AreaSaveRow(GameSaveEntry? Entry, string Title, string Deta
 /// <summary>
 /// ARC-UI-010 save and load window state, Godot-free. Save mode lists a "new save" row first and then the saves; load mode lists the
 /// saves only; both in the library's order (auto slot first, then newest first). As the original's save window (ledger SL3–SL7):
-/// saving onto an existing row asks before overwriting it and keeps that save's description; a delete asks first and the auto
-/// slot is never deleted; an empty or blank description saves under the slot name. Unlike the original, which selects nothing in
+/// saving onto an existing row asks before overwriting it and keeps that save's description; a delete asks first, the auto
+/// slot is never deleted and the selection is cleared afterwards; an empty or blank description saves under the slot name. Unlike the original, which selects nothing in
 /// an empty save window, the new-save row is selected there so Return saves. Up and Down move the selection, Return confirms, Delete or Backspace asks to delete
 /// (outside the description field), Escape answers a question with no or closes. The host runs the returned command and calls
 /// <see cref="Refresh"/> with the new list. Caller-serialized.
@@ -101,6 +101,15 @@ public sealed class AreaSaveList
 
     public void Move(int delta) => Select(Selected < 0 ? 0 : Selected + delta);
 
+    /// <summary>A double click on a row: selects it and confirms; while a question is open it does nothing (a click on another row
+    /// must not answer it).</summary>
+    public AreaSaveCommand Activate(int row)
+    {
+        if (Prompt != AreaSavePrompt.None) return AreaSaveCommand.Nothing;
+        Select(row);
+        return Confirm();
+    }
+
     /// <summary>Return or the Save/Load button: saves, loads or asks before overwriting; a pending question is answered yes.</summary>
     public AreaSaveCommand Confirm()
     {
@@ -148,13 +157,14 @@ public sealed class AreaSaveList
         return true;
     }
 
-    /// <summary>A new list after a save or delete: the selection follows <paramref name="select"/> when it is listed, else stays in range.</summary>
-    public void Refresh(IReadOnlyList<GameSaveEntry> entries, string? select, string? notice)
+    /// <summary>A new list after a save, a failure or a delete: the selection follows <paramref name="select"/> when it is listed,
+    /// else stays in range; <paramref name="clearSelection"/> selects nothing, as the original after a delete (SL6).</summary>
+    public void Refresh(IReadOnlyList<GameSaveEntry> entries, string? select, string? notice, bool clearSelection = false)
     {
         Entries = entries ?? throw new ArgumentNullException(nameof(entries));
         Prompt = AreaSavePrompt.None;
         var found = select is null ? -1 : entries.ToList().FindIndex(e => e.Name == select);
-        Selected = found >= 0 ? found + Offset : RowCount == 0 ? -1 : Math.Clamp(Selected, 0, RowCount - 1);
+        Selected = clearSelection ? -1 : found >= 0 ? found + Offset : RowCount == 0 ? -1 : Math.Clamp(Selected, 0, RowCount - 1);
         Notice = notice;
     }
 

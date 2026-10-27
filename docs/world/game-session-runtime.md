@@ -351,9 +351,9 @@ is not separately synced. One process per slot; there is no cross-process lock.
 | --- | --- |
 | Names | `quicksave` is the auto slot (the original's `SlotAuto`, described "Auto-Save"; the ARC-WORLD-011 file, so older quick saves are listed); numbered saves are `slot0000`..`slot9998`. Any other file is ignored; a bad name is `BadName`. |
 | `List()` | The auto slot first, then newest first by the snapshot file's last write time (ties: the higher name first), as the original's save window sorts by file date. Each `GameSaveEntry` has its byte count, date, preview flag and `GameSaveDetails`: `Present`, `Missing` (no details file), `Damaged` (not strict UTF-8, over 16 KiB, not exactly the written properties, out of bounds) or `Stale` (written for another snapshot: its recorded byte count differs). `DisplayDescription` falls back to "Auto-Save" or the slot name. Bounded to 10,000 entries (`Truncated`); a folder that cannot be listed is `ListFailed`; a missing folder is an empty list. |
-| `Latest()` | The newest save by file date, the auto slot included (the original's latest-save helper behind F8), or null. |
+| `Latest()` | The newest save by file date, the auto slot included (the original's latest-save helper behind F8), or null. It reads file dates only, no details. |
 | `Create(snapshot, summary, png)` | A new save named the highest number plus one (`slot0000` when there is none; gaps are not reused, the auto slot is not counted); `SlotNumbersExhausted` once that reaches 9999, as the original refuses. A truncated list refuses (`ListFailed`) rather than reuse a number. |
-| `Write(name, snapshot, summary, png)` | Validates the summary (one-line texts: description ≤ 80, hero ≤ 64, place ≤ 128 characters; level 0..1000; month, day, hour and minute in range) and the preview (PNG signature, ≤ 2 MiB) before anything is written (`InvalidSummary`). Then the snapshot is written atomically by the slot (`SnapshotFailed` keeps the previous save, its details and preview); then the details and the preview, each atomically. A failure there leaves a loadable save and a `Warning`; a save without a preview removes the old preview. The host asks before overwriting. |
+| `Write(name, snapshot, summary, png)` | Validates the summary (one-line texts: description ≤ 80, hero ≤ 64, place ≤ 128 characters; level 0..1000; month, day, hour and minute in range) and the preview (PNG signature, ≤ 2 MiB) before anything is written (`InvalidSummary`). Then the snapshot is written atomically by the slot (`SnapshotFailed` keeps the previous save, its details and preview); then the details and the preview, each atomically. A failure there leaves a loadable save and a `Warning`, and the old details or preview of that name are removed so the list never shows another snapshot's (the save is then listed with `Missing` details); a save without a preview removes the old preview. The host asks before overwriting. |
 | `Delete(name)` | `Protected` for the auto slot (the original's delete helper refuses its auto-save name); `NoSuchSave`; otherwise the snapshot is deleted first (`DeleteFailed` removes nothing), then the details, preview and temporary files (a leftover is a `Warning`). |
 | `ReadThumbnail(name)` | The preview's bytes when present, PNG-signed and within the bound; else null. |
 
@@ -392,7 +392,8 @@ and a literal, independently written canonical JSON text:
   files as typed failures; the byte limit; path validation.
 - `SaveLibraryTests` (ARC-UI-010): numbering from the highest (slot0000 first, gaps not reused, refused at 9999);
   the list order (auto slot first, newest first, ties by name) and the latest save; details round trip, missing,
-  damaged and stale details; an overwrite without a preview removes the old one; the auto slot is not deleted and a
+  damaged and stale details; details that cannot be written are removed; an overwrite without a preview removes the old one;
+  `slot9999` is not a save name; the auto slot is not deleted and a
   delete removes the save's files; an invalid summary or preview writes nothing; a failed snapshot write keeps the
   previous save and details; unrelated files and the entry bound.
 - `SnapshotRestoreTests`: literal canonical encoding, full restore with pause, Unknown

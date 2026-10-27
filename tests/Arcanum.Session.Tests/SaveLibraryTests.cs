@@ -101,6 +101,19 @@ public sealed class SaveLibraryTests
     }
 
     [TestMethod]
+    public void DetailsThatCannotBeWrittenAreRemovedRatherThanLeftStale()
+    {
+        using var owner = GoldenSession();
+        Assert.IsTrue(Library().Create(owner.Capture(), Summary("old details")).Saved);
+        var tight = Library(new(MaxDetailsBytes: 256));
+        var written = tight.Write("slot0000", owner.Capture(), Summary(new string('d', 80)) with { HeroName = new string('h', 64), Location = new string('l', 128) });
+        Assert.IsTrue(written.Saved);
+        StringAssert.StartsWith(written.Warning, "DETAILS_NOT_WRITTEN DETAILS_TOO_LARGE");
+        var entry = Library().List().Entries.Single();
+        Assert.AreEqual((GameSaveDetails.Missing, "slot0000"), (entry.Details, entry.DisplayDescription), "The old description is not shown for the new snapshot.");
+    }
+
+    [TestMethod]
     public void AnEmptyDescriptionShowsTheSlotNameAndTheAutoSlotItsFixedText()
     {
         using var owner = GoldenSession();
@@ -161,6 +174,7 @@ public sealed class SaveLibraryTests
         Assert.AreEqual(GameSaveFailure.NoSuchSave, library.Delete("slot0000").Failure);
         Assert.AreEqual(GameSaveFailure.BadName, library.Delete("../quicksave").Failure);
         Assert.AreEqual(GameSaveFailure.BadName, library.Delete("slot1").Failure);
+        Assert.AreEqual(GameSaveFailure.BadName, library.Write("slot9999", owner.Capture(), Summary()).Failure, "Numbered saves stop at slot9998.");
     }
 
     [TestMethod]

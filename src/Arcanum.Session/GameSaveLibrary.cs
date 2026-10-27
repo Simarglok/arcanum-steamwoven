@@ -99,7 +99,7 @@ public sealed class GameSaveLibrary
     private const string SnapshotSuffix = ".json";
     private const string DetailsFormat = "arcanum-steamwoven-save-details";
     private const int DetailsSchema = 1;
-    private static readonly Regex Names = new("^(quicksave|slot[0-9]{4})$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex Names = new("^(quicksave|slot(?!9999)[0-9]{4})$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly byte[] PngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     private static readonly UTF8Encoding Strict = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
@@ -146,7 +146,8 @@ public sealed class GameSaveLibrary
     [OriginalFunction(0x403850, OriginalFunctionScope.Partial)]
     public GameSaveEntry? Latest()
     {
-        var scan = Scan();
+        // Only the file dates decide; the details files are not read (F8 runs this on every press).
+        var scan = Scan(readDetails: false);
         return scan.Entries.OrderByDescending(e => e.SavedAtUtc).ThenByDescending(e => e.Name, StringComparer.Ordinal).FirstOrDefault();
     }
 
@@ -179,11 +180,14 @@ public sealed class GameSaveLibrary
         if (!written.Saved) return new(name, GameSaveFailure.SnapshotFailed, written, null, $"{written.Failure} {written.Detail}");
         var warnings = new List<string>();
         var details = Strict.GetBytes(EncodeDetails(summary, written.Bytes));
-        if (details.Length > Limits.MaxDetailsBytes) warnings.Add("DETAILS_TOO_LARGE");
-        else if (WriteAtomic(DetailsPath(name), details) is { } detailsFailure) warnings.Add("DETAILS_NOT_WRITTEN " + detailsFailure);
+        // Details or a preview that were not written are removed, so the list never shows another snapshot's (Missing instead).
+        var detailsFailure = details.Length > Limits.MaxDetailsBytes ? "DETAILS_TOO_LARGE" : WriteAtomic(DetailsPath(name), details);
+        if (detailsFailure is not null)
+            warnings.Add("DETAILS_NOT_WRITTEN " + detailsFailure + (TryDelete(DetailsPath(name)) is { } old ? " OLD_DETAILS_NOT_REMOVED " + old : ""));
         if (thumbnail is { } image)
         {
-            if (WriteAtomic(ThumbnailPath(name), image) is { } thumbnailFailure) warnings.Add("THUMBNAIL_NOT_WRITTEN " + thumbnailFailure);
+            if (WriteAtomic(ThumbnailPath(name), image) is { } thumbnailFailure)
+                warnings.Add("THUMBNAIL_NOT_WRITTEN " + thumbnailFailure + (TryDelete(ThumbnailPath(name)) is { } old ? " OLD_THUMBNAIL_NOT_REMOVED " + old : ""));
         }
         // A save without a preview must not show the previous save's preview.
         else if (TryDelete(ThumbnailPath(name)) is { } stale) warnings.Add("OLD_THUMBNAIL_NOT_REMOVED " + stale);
@@ -212,7 +216,7 @@ public sealed class GameSaveLibrary
         return bytes is not null && bytes.AsSpan().StartsWith(PngSignature) ? bytes : null;
     }
 
-    private GameSaveListResult Scan()
+    private GameSaveListResult Scan(bool readDetails = true)
     {
         var entries = new List<GameSaveEntry>();
         var truncated = false;
@@ -228,7 +232,7 @@ public sealed class GameSaveLibrary
                 if (entries.Count == Limits.MaxEntries) { truncated = true; break; }
                 var info = new FileInfo(path);
                 if (!info.Exists) continue;
-                var (details, summary) = ReadDetails(name, info.Length);
+                var (details, summary) = readDetails ? ReadDetails(name, info.Length) : (GameSaveDetails.Missing, null);
                 entries.Add(new(name, name == AutoName, info.Length, info.LastWriteTimeUtc, details, summary, File.Exists(ThumbnailPath(name))));
             }
         }

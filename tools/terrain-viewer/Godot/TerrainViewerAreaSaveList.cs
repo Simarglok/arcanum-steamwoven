@@ -11,8 +11,9 @@ namespace Arcanum.TerrainViewer;
 // window is modal like the logbook (gate closed, clock paused, a walk stopped) and owns the keys: Up/Down select, Return saves or
 // loads, Delete or Backspace asks to delete, Escape answers no or closes, as the original's save window keys (U3). A save writes the
 // game as it was when the window opened (the actor does not move while it is open) with the preview taken just before the window
-// was drawn; a new save takes the next number, saving onto a listed save asks first, the auto-save cannot be deleted (ledger
-// SL3–SL6). A load that succeeds closes the window; a failed load or save keeps it open with the reason.
+// was drawn; a new save takes the next number, saving onto a listed save asks first and keeps its description, the auto-save
+// cannot be deleted, a delete clears the selection (ledger SL3–SL6). A save or load that succeeds closes the window, as the
+// original; a failed one keeps it open with the reason. The description is typed on the new-save row only.
 public partial class TerrainViewerApp
 {
     private AreaSaveListPanel? _saveListPanel;
@@ -54,6 +55,7 @@ public partial class TerrainViewerApp
         {
             _saveListPanel = new AreaSaveListPanel(); AddChild(_saveListPanel);
             _saveListPanel.RowRequested += row => SaveListCommand(() => { _saveList!.Select(row); return AreaSaveCommand.Nothing; });
+            _saveListPanel.RowActivated += row => SaveListCommand(() => _saveList!.Activate(row));
             _saveListPanel.ConfirmRequested += () => SaveListCommand(() => _saveList!.Confirm());
             _saveListPanel.DeleteRequested += () => SaveListCommand(() => _saveList!.RequestDelete());
             _saveListPanel.AnswerRequested += yes => SaveListCommand(() => _saveList!.Answer(yes));
@@ -90,12 +92,12 @@ public partial class TerrainViewerApp
             case AreaSaveCommandKind.SaveNew:
             case AreaSaveCommandKind.Overwrite:
                 var name = command.Kind == AreaSaveCommandKind.SaveNew ? null : command.Name;
-                if (SaveGame(name, command.Description, _saveListThumbnail?.Png, "Save ") is { } saved)
-                    RefreshSaveList(saved, $"saved as {saved}");
+                // As the original, a save that succeeded closes the window (SL5); a failure keeps it with the reason.
+                if (SaveGame(name, command.Description, _saveListThumbnail?.Png, "Save ") is not null) EndSaveList();
                 else RefreshSaveList(command.Name, _quickSaveStatus);
                 return;
             case AreaSaveCommandKind.Load:
-                // A load replaces the session (or starts its map's load); the window closes first so nothing reads the old one.
+                // A load replaces the session (or starts its map's load); the window then closes, a failed load keeps it.
                 var slot = SaveLibrary.Slot(command.Name!);
                 if (LoadGame(slot, "Load ")) { EndSaveList(); return; }
                 RefreshSaveList(command.Name, _quickSaveStatus);
@@ -104,17 +106,17 @@ public partial class TerrainViewerApp
                 var deleted = SaveLibrary.Delete(command.Name!);
                 GD.Print($"ARC-UI-010 save delete name={command.Name} failure={deleted.Failure} warning={deleted.Warning ?? "none"} detail={deleted.Detail ?? "none"}");
                 RefreshSaveList(null, deleted.Deleted ? "deleted" + (deleted.Warning is null ? "" : $" (warning: {deleted.Warning})")
-                    : $"delete FAILED ({deleted.Failure} {deleted.Detail})");
+                    : $"delete FAILED ({deleted.Failure} {deleted.Detail})", clearSelection: deleted.Deleted);
                 return;
         }
         _saveListPanel!.Render(_saveList, SelectedPreview());
     }
 
-    private void RefreshSaveList(string? select, string? notice)
+    private void RefreshSaveList(string? select, string? notice, bool clearSelection = false)
     {
         if (!SaveListOpen || _saveList is null) return;
         var list = SaveLibrary.List();
-        _saveList.Refresh(list.Entries, select, list.Failure == GameSaveFailure.None ? notice : $"the save folder could not be listed ({list.Failure})");
+        _saveList.Refresh(list.Entries, select, list.Failure == GameSaveFailure.None ? notice : $"the save folder could not be listed ({list.Failure})", clearSelection);
         _saveListPanel!.Render(_saveList, SelectedPreview());
         RefreshAreaStatus();
     }

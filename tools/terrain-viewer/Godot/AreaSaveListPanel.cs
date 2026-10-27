@@ -26,6 +26,7 @@ public partial class AreaSaveListPanel : CanvasLayer
     private bool _binding;
     private (string Name, DateTime Saved)? _previewOf;
     public event Action<int>? RowRequested;
+    public event Action<int>? RowActivated;
     public event Action? ConfirmRequested;
     public event Action? DeleteRequested;
     public event Action<bool>? AnswerRequested;
@@ -37,6 +38,7 @@ public partial class AreaSaveListPanel : CanvasLayer
     internal IReadOnlyList<string> RowsForSelfTest => Enumerable.Range(0, _rows.ItemCount).Select(_rows.GetItemText).ToArray();
     internal bool PreviewShownForSelfTest => _preview.Texture is not null;
     internal string NoticeForSelfTest => _notice.Text;
+    internal void EmitRowActivatedForSelfTest(int row) => RowActivated?.Invoke(row);
 
     public override void _Ready()
     {
@@ -57,7 +59,7 @@ public partial class AreaSaveListPanel : CanvasLayer
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill,
         };
         _rows.ItemSelected += index => { if (!_binding) RowRequested?.Invoke((int)index); };
-        _rows.ItemActivated += index => { if (!_binding) { RowRequested?.Invoke((int)index); ConfirmRequested?.Invoke(); } };
+        _rows.ItemActivated += index => { if (!_binding) RowActivated?.Invoke((int)index); };
         var side = new VBoxContainer { CustomMinimumSize = new Vector2(220, 0) };
         _preview = new TextureRect { Name = "Preview", ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
             CustomMinimumSize = new Vector2(200, 150) };
@@ -66,7 +68,6 @@ public partial class AreaSaveListPanel : CanvasLayer
         body.AddChild(_rows); body.AddChild(side);
         _description = new LineEdit { Name = "Description", PlaceholderText = "description (empty: the slot name)", MaxLength = 80, FocusMode = Control.FocusModeEnum.All };
         _description.TextChanged += text => { if (!_binding) DescriptionChanged?.Invoke(text); };
-        _description.TextSubmitted += _ => ConfirmRequested?.Invoke();
         var buttons = new HBoxContainer();
         _confirm = new Button { Name = "Confirm", FocusMode = Control.FocusModeEnum.None };
         _confirm.Pressed += () => ConfirmRequested?.Invoke();
@@ -85,7 +86,8 @@ public partial class AreaSaveListPanel : CanvasLayer
         _hint = new Label
         {
             Modulate = new Color(.3f, .3f, .3f), AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            Text = "Up/Down select, Return saves or loads, Delete or Backspace deletes (asks first), Escape closes | PROJECT window over the original's " +
+            Text = "Up/Down select, Return saves or loads, Delete or Backspace deletes a selected save (asks first), Escape closes; the description " +
+                "is typed on the new-save row | PROJECT window over the original's " +
                 "save list rules (auto-save first, newest first, auto-save not deletable); original art and layout NOT_VERIFIED",
         };
         foreach (var control in new Control[] { _header, body, _description, buttons, _question, _notice, _hint }) contents.AddChild(control);
@@ -98,8 +100,7 @@ public partial class AreaSaveListPanel : CanvasLayer
         Show();
         _binding = true; _description.Text = list.Description; _binding = false;
         Render(list, preview);
-        if (list.Mode == AreaSaveListMode.Save) _description.GrabFocus();
-        else GetViewport().GuiReleaseFocus();
+        if (list.Mode == AreaSaveListMode.Load) GetViewport().GuiReleaseFocus();
     }
 
     public void CloseView()
@@ -122,6 +123,11 @@ public partial class AreaSaveListPanel : CanvasLayer
         var save = list.Mode == AreaSaveListMode.Save;
         _header.Text = (save ? "Save game" : "Load game") + $" | {list.Entries.Count} save{(list.Entries.Count == 1 ? "" : "s")}";
         _description.Visible = save;
+        // The field has the keyboard on the new-save row only (an overwrite keeps the listed save's description), so on a listed
+        // save Delete and Backspace delete.
+        _description.Editable = save && list.Selected == 0;
+        if (save && list.Selected == 0 && list.Prompt == AreaSavePrompt.None) _description.GrabFocus();
+        else if (_description.HasFocus()) _description.ReleaseFocus();
         _confirm.Text = save ? "Save" : "Load";
         var entry = list.SelectedEntry;
         _detail.Text = entry is null ? save ? "A new numbered save of the game as it is now." : "" : AreaSaveList.Detail(entry);

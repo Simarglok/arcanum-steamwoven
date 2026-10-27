@@ -177,9 +177,10 @@ public partial class TerrainViewerApp
             return false;
         }
         // The shown map's seeds and dialog state are checked above; the other map binds its own when it is published.
-        if (elsewhere is { } map) { QuickLoadOtherMap(result.Owner, map, prefix + result.Status); return true; }
+        var from = " from " + System.IO.Path.GetFileNameWithoutExtension(slot.Path);
+        if (elsewhere is { } map) { QuickLoadOtherMap(result.Owner, map, prefix + result.Status + from); return true; }
         AdoptLoadedSession(result.Owner, maps, talk);
-        SetQuickStatus(prefix + result.Status);
+        SetQuickStatus(prefix + result.Status + from);
         return true;
     }
 

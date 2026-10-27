@@ -70,6 +70,17 @@ public sealed class AreaSaveListTests
     }
 
     [TestMethod]
+    public void ActivatingARowConfirmsItButNeverAnswersAnOpenQuestion()
+    {
+        var list = new AreaSaveList(AreaSaveListMode.Load, [Entry("quicksave"), Entry("slot0001"), Entry("slot0000")]);
+        Assert.AreEqual(new AreaSaveCommand(AreaSaveCommandKind.Load, "slot0000", ""), list.Activate(2));
+        list.Select(1);
+        list.RequestDelete();
+        Assert.AreEqual(AreaSaveCommand.Nothing, list.Activate(2), "A double click on another row does not delete the asked one.");
+        Assert.AreEqual((AreaSavePrompt.ConfirmDelete, 1), (list.Prompt, list.Selected));
+    }
+
+    [TestMethod]
     public void DeleteAsksFirstAndTheAutoSaveIsRefused()
     {
         var list = new AreaSaveList(AreaSaveListMode.Load, [Entry("quicksave"), Entry("slot0000")]);
@@ -83,8 +94,11 @@ public sealed class AreaSaveListTests
         list.RequestDelete();
         Assert.AreEqual(new AreaSaveCommand(AreaSaveCommandKind.Delete, "slot0000", ""), list.Answer(true));
 
-        list.Refresh([Entry("quicksave")], null, "deleted");
-        Assert.AreEqual((0, "deleted", AreaSavePrompt.None), (list.Selected, list.Notice, list.Prompt), "The selection stays in range.");
+        list.Refresh([Entry("quicksave")], null, "deleted", clearSelection: true);
+        Assert.AreEqual((-1, "deleted", AreaSavePrompt.None), (list.Selected, list.Notice, list.Prompt), "A delete clears the selection, as the original.");
+        Assert.AreEqual(AreaSaveCommand.Nothing, list.Confirm());
+        list.Refresh([Entry("quicksave"), Entry("slot0004")], null, null);
+        Assert.AreEqual(0, list.Selected, "Without clearing, the selection is kept in range.");
         Assert.AreEqual(new AreaSaveCommand(AreaSaveCommandKind.Load, "quicksave", ""), list.Confirm());
         list.Refresh([Entry("slot0003"), Entry("slot0002")], "slot0002", null);
         Assert.AreEqual(1, list.Selected, "A refresh selects the named save.");
