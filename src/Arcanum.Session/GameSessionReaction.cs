@@ -104,6 +104,7 @@ public sealed partial class GameSessionOwner
         ReactionQuery query = ReactionQuery.Standard)
     {
         ThrowIfDisposed();
+        npc = Listed(entity, npc);
         var failure = ResolveReaction(entity, npc, pc, out var record);
         if (failure == GameSessionFailure.None && !Enum.IsDefined(query)) failure = GameSessionFailure.InvalidReactionFacts;
         if (failure != GameSessionFailure.None) return new(failure, null);
@@ -123,6 +124,7 @@ public sealed partial class GameSessionOwner
         int delta)
     {
         ThrowIfDisposed();
+        npc = Listed(entity, npc);
         return ChangeReaction(expected, entity, npc, pc, _ => delta);
     }
 
@@ -135,6 +137,7 @@ public sealed partial class GameSessionOwner
         int target)
     {
         ThrowIfDisposed();
+        npc = Listed(entity, npc);
         return ChangeReaction(expected, entity, npc, pc,
             stored => ReactionRules.DeltaTo(target, ReactionRules.Effective(stored, npc, pc)), validAmount: ReactionLimits.InRange(target));
     }
@@ -149,6 +152,7 @@ public sealed partial class GameSessionOwner
         ReactionHitFacts ai, bool deliberate)
     {
         ThrowIfDisposed();
+        npc = Listed(entity, npc);
         var validAi = ReactionLimits.InRange(ai.FollowerHitAdjustment) && ReactionLimits.InRange(ai.HostileReaction);
         var profile = _rules.Reaction;
         var follow = false;

@@ -71,6 +71,37 @@ public sealed record CombatAnomalyProfile
     /// </summary>
     public bool LockedNoneStateFights { get; init; }
 
+    /// <summary>
+    /// HS9 (owner decision 2026-10-20): upset attacking returns PARTY when the target's leader equals the leader argument also when
+    /// both are null, so a leaderless NPC's scan never helps an ally against a PC or a leaderless NPC and a leaderless guard never
+    /// turns on a leaderless aggressor (see <see cref="Ai.HostilityRules.Upset"/>, ARC-WORLD-080).
+    /// </summary>
+    public bool UpsetPartyMatchesMissingLeader { get; init; }
+
+    /// <summary>
+    /// AW16 (owner decision 2026-10-20): an NPC inside both alert squares of an attack is handled twice, repeating its attacked
+    /// reaction and target-choice roll (see <see cref="Ai.HostilityRules.NoiseWitnesses{T}"/>, ARC-WORLD-080).
+    /// </summary>
+    public bool WitnessHandledTwice { get; init; }
+
+    /// <summary>
+    /// SP16 (owner decision 2026-10-20): in the danger update's enemy-list path the setter receives the pass record's target after
+    /// the spell choice, which a summon or self-aimed spell replaced with the NPC itself (see <see cref="Ai.HostilityRules.FocusTarget"/>).
+    /// </summary>
+    public bool EnemyListFocusTakesSpellTarget { get; init; }
+
+    /// <summary>
+    /// FO7 (owner decision 2026-10-21): no leave clears the no-attack flag, so a follower told to stop and then dismissed, cursed,
+    /// jilted or left by an expired wait never fights again until it rejoins (the session's party leaves, ARC-WORLD-080).
+    /// </summary>
+    public bool NoAttackSurvivesLeaving { get; init; }
+
+    /// <summary>
+    /// FO8 (owner decision 2026-10-21): the spell or item chosen for the danger update's target is kept when setter rule 4 refuses
+    /// the fight (no-attack flag or the "NPC fighting" switch off; see <see cref="Ai.HostilityRules.KeepsChosenAction"/>).
+    /// </summary>
+    public bool NoAttackKeepsChosenAction { get; init; }
+
     /// <summary>The original with every recorded D2 fix; the default setting.</summary>
     public static readonly CombatAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -88,6 +119,11 @@ public sealed record CombatAnomalyProfile
         CornerStepCountsBothRoutes = true,
         SurrenderKeepsCombatModeFlag = true,
         LockedNoneStateFights = true,
+        UpsetPartyMatchesMissingLeader = true,
+        WitnessHandledTwice = true,
+        EnemyListFocusTakesSpellTarget = true,
+        NoAttackSurvivesLeaving = true,
+        NoAttackKeepsChosenAction = true,
     };
 
     /// <summary>Both settings, default first.</summary>

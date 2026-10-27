@@ -65,7 +65,11 @@ public partial class TerrainViewerApp : Node
         _automatedHost = args.Contains("--self-test", StringComparer.Ordinal);
         // ARC-DEV-032: a self-test, a native smoke or the WORLD settings validation never reads or writes the player's settings and saves.
         if (_automatedHost || args.Contains("--native-smoke", StringComparer.Ordinal) || args.Contains("--world-settings-test", StringComparer.Ordinal))
+        {
             ViewerAutomatedStorage.MarkAutomated();
+            // ARC-DEV-045: an automated run keeps drawing while its window cannot draw (minimized).
+            if (DisplayServer.GetName() != "headless") AddChild(new HiddenWindowDrawKeeper());
+        }
         if (RunWorldSettingsTest(args)) return;
         if (args.Contains("--self-test", StringComparer.Ordinal))
         {

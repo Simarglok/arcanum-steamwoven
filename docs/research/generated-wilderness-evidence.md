@@ -385,7 +385,8 @@ Since ARC-DATA-031 the Data layer implements slices 1–3 in the map catalogue
 ([generated sectors](../world/map-catalog.md#generated-sectors-arc-data-031)), with the type table and path rule
 checked in the executable ([ledger TR1–TR5](ledger/world.md#terrain-templates-arc-data-031)).
 
-- No renderer, plan or session consumes generated sectors yet; nothing in the viewer changes.
+- Since ARC-DATA-032 window plans build generated sectors and since ARC-RENDER-024 map mode draws, walks and streams
+  them; their sector scripts do not run yet (ARC-RES-073).
 - This study read no executable; later checks did (A1 and A3/A6 in ARC-RES-048, the type
   table and path rule in ARC-DATA-031). The fill's random tile variation is still unchecked.
 - The v119 record walker met only object types 0 and 3 on real data; other types
@@ -393,8 +394,9 @@ checked in the executable ([ledger TR1–TR5](ledger/world.md#terrain-templates-
 - The probe models the mounts of the measured installation (`patch0`,
   `arcanum1..4`, folders, `tig.dat`) and refuses others; an ambiguous loose name is
   treated as absent.
-- Script 30285 (sector plant generator) in 20 plain templates may change vegetation
-  at run time; what it does is not researched here.
+- Script 30285 (sector plant generator) in 20 plain templates lays herbs (items: Herbology
+  ingredients and Passion Root) next to one marked scenery object when the player enters the sector
+  ([template sector scripts](template-sector-plants.md), ARC-RES-073).
 - `.dif` files for generated sectors (save state) are not examined here; the executable
   looks one up under the real sector id for template sectors too
   ([main-map streaming](main-map-streaming.md), SS5).

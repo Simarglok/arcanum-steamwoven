@@ -149,13 +149,13 @@ public static class ReactionRules
         forceGoodReaction && stored < ForcedGoodReaction ? ForcedGoodReaction : stored;
 
     /// <summary>
-    /// The reaction effect of a PC's hit on an NPC (R8, 0x4A9650). An NPC that follows the attacker
+    /// The reaction effect of a PC's hit on an NPC (R8, step 12 of the attack event 0x4A9650, whose steps are
+    /// <see cref="Ai.HostilityRules.AttackEvent"/>). An NPC that follows the attacker
     /// (<paramref name="ledByPc"/>) gets parameter 9 added on a deliberate hit in the Original setting and subtracted in
     /// Steamwoven (A2), nothing on an accidental one, and must re-run its follow check either way. Any other NPC loses 10 on
     /// an accidental hit, and on a deliberate one is lowered to parameter 10 when its hostility-variant reaction
     /// (<paramref name="stored"/> under the facts) is above it. The deltas still go through <see cref="Adjust"/>.
     /// </summary>
-    [OriginalFunction(0x4A9650, OriginalFunctionScope.Partial)]
     public static ReactionHit PcHit(int stored, ReactionNpcFacts npc, ReactionPcFacts pc, ReactionHitFacts ai, bool ledByPc,
         bool deliberate, ReactionRuleProfile profile)
     {

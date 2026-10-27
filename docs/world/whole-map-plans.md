@@ -292,7 +292,9 @@ from its template (metadata + 8, read through the stack like the sector file the
 the map default, as for an own sector); the stationary-light reader reads the moved lights. Every installed test window
 lights, and a template held as a loose file is read for lighting and step evidence alike.
 
-**NOT READY:** the viewer does not stream windows; saved differences are not modelled.
+**NOT READY:** saved differences are not modelled, and the sector scripts of generated sectors are not run
+([template sector scripts](../research/template-sector-plants.md), ARC-RES-073). The viewer streams windows since
+ARC-RENDER-024 ([map mode](../rendering/area-map-mode.md#the-main-world-map-arc-render-024)).
 
 ## One rule set (ARC-DATA-036)
 

@@ -332,7 +332,9 @@ the start map), one per tile.
   2,328 tile and 19 sector scripts are refused because they need actions or conditions outside the set (before
   ARC-SCRIPT-018: 5, 249 and 2,758; before ARC-SCRIPT-019: 6, 638 and 2,368).
 - **Not covered.** Tile scripts for NPCs; the actions and conditions outside the set (most tile scripts); tile and
-  sector scripts of generated main-map sectors (only the map's own sector files are read); the arrival tile of a
+  sector scripts of generated main-map sectors (only the map's own sector files are read; the one such script, the
+  plant generator 30285, is described in [template sector scripts](../research/template-sector-plants.md),
+  ARC-RES-073); the arrival tile of a
   transfer; a fade-and-teleport's fade, sound and movie.
 
 ## Dialogs (ARC-WORLD-032)
