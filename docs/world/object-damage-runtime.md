@@ -141,7 +141,7 @@ The registry version stays 1, as when the Lock event was added.
 - **Input.** In combat mode, an Alt-click on a door, window, container or scenery walks within reach, plays the attack and
   runs `AttackObject` with the hero's worn items. Since ARC-COMBAT-015 "within reach" is the attack goal's reach test (ledger RH1):
   also a clear line of fire from the hero's tile, for every weapon, so an object next to the hero across a wall edge or behind
-  cover worth 26 or more makes the hero walk, and the goal ends after three walks that leave no clear shot. The attack repeats while the object stays whole and stops when it breaks.
+  cover worth 26 or more has no approach and ends the goal at once (AP4); a farther one is approached. The attack repeats while the object stays whole and stops when it breaks.
   Stopping at a break is the viewer's own choice, not read in the executable: a busted window or a spared junk pile would break
   again on every further hit (ODA3).
   This is the original's click (ledger OD14). Without Alt, the object is used as out of combat. An item on the ground is
@@ -154,7 +154,7 @@ The registry version stays 1, as when the Lock event was added.
   - the hero's kit, from `AreaHeroLoad.KitDurability`;
   - the NPC's items in wear slots, from `AreaCombatHost.WornItems`. An item the session broke counts as taken off, as the
     original takes it off at its first break.
-- **Native smoke.** With `--hero`, as the last stage of map mode (the map keeps what the hits did), the hero Alt-clicks the
+- **Native smoke.** With `--hero`, as a late stage of map mode (the map keeps what the hits did), the hero Alt-clicks the
   drawn door, window, container or scenery with the fewest hit points it can damage. It attacks until the object breaks or
   40 attacks have run. Each hit goes through the session, and a destroyed or switched-off object is no longer drawn. The
   stage prints `ARC-COMBAT-008 native-smoke object-attack PASS`, or `NONE` without such an object. Since ARC-COMBAT-014 the

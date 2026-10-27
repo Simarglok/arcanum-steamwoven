@@ -45,7 +45,7 @@ since ARC-COMBAT-009 a critical hit rolls the original's critical-effect tables 
 | Training (FA8) | Stored bits 6..7; a monstrous critter's melee takes the highest tier whose melee level and character level reach 1/10, 9/20, 18/30 in order. |
 | Monstrous (FA9) | Mechanical, monster, animal or undead critter flag. |
 | Resistance (`CombatantRules.Resistances`) | Stored + worn armour (with its magic, scaled for the wearer) + `5 × (CN − 4)` for poison when positive, clamped 0..95 unless a monstrous NPC (the resistance getter 0x43D6D0, ledger EQ8); resistance effects are not applied. |
-| Reach | The weapon's range, 1 bare-handed, and since ARC-COMBAT-015 a clear line of fire to the target for every weapon (the goal's reach test, ledger RH1, [below](#ranged-hero-attack-arc-combat-015): a melee target next to the hero across a wall edge or cover worth 26 or more is approached, and three walks without a clear shot end the goal); farther away the click route walks (running, as every object approach) (since ARC-WORLD-073 the original's approach: the cell one step short of the target on the shared request's route into its tile, [click route](click-route-runtime.md#attack-approach-arc-world-073)) first, the attack goal's move-near step. |
+| Reach | The weapon's range, 1 bare-handed, and since ARC-COMBAT-015 a clear line of fire to the target for every weapon (the goal's reach test, ledger RH1, [below](#ranged-hero-attack-arc-combat-015): a target farther away without a clear shot is approached; a target next to the hero across a wall edge or cover worth 26 or more has no approach, so the goal ends at once, as the original's empty plan does, AP4); farther away the click route walks (running, as every object approach) (since ARC-WORLD-073 the original's approach: the cell one step short of the target on the shared request's route into its tile, [click route](click-route-runtime.md#attack-approach-arc-world-073)) first, the attack goal's move-near step. |
 | Animation | The hero's bare-handed attack ART (animation 20, weapon slot 1: 9 frames, 15 fps, action frame 6) played by [`RealTimeCombatRules`](real-time-combat-runtime.md#rules-realtimecombatrules) at the rate of the hero's Speed and the pause of its weapon speed; one attack sound roll (1..4) per attack start; facing the target. |
 | Hit | The update that shows the action frame runs the hit once when the target is still within reach (else the attack ends without one): `GameSessionOwner.AttackCritter`. |
 | Repeat | Auto attack (on, the original's default) starts the attack again 5 ms after it ends while the hero is in combat mode, no round runs and the target is alive. A click elsewhere, the stick, a dialog or window, a quick load, the hero leaving the map or combat mode (refused while an animation plays: the exit gate's attempt-attack test) or losing the ability to act stop it; a refused hit ends it; the same target clicked again keeps its goal. |
@@ -223,7 +223,7 @@ bows' repeat shot (RT rows), the weapon attack ART, a follower struck on the lin
   `ARC-COMBAT-010 native-smoke drop-paths PASS`: the drop's path from the NPC's tile to the tile two steps away for each direction
   draw 0..8 (result/partial steps), and it checks that each item the NPC dropped lies on the ground at the reported cell. A dropped item is hidden from the NPC but not drawn on the ground (as a
   spilled container's items).
-- Native smoke `ARC-COMBAT-009 native-smoke critical PASS` (map mode, last stage): a granted fate point arms the hero's critical
+- Native smoke `ARC-COMBAT-009 native-smoke critical PASS` (map mode, after the far-click stage): a granted fate point arms the hero's critical
   hit, the hero attacks the living NPC with the most hit points through the session as the viewer does (worn items, cell), and
   the stage checks the critical hit and that the tables drew; in the Crash Site cave a rat (body type 1) took a doubled torso hit.
 - Native smoke: `ARC-COMBAT-005 native-smoke attack PASS` (with `--hero`, after the combat-mode stage, on the exterior and in map
@@ -235,8 +235,9 @@ bows' repeat shot (RT rows), the weapon attack ART, a follower struck on the lin
 
 - AI: no NPC fights back, flees, joins combat mode or changes its reaction when attacked; the attacked NPC's AI pass, combat
   focus and taunts; the exit gate's threats are still empty.
-- Ranged and thrown attacks (the [proposed split](#proposed-split-of-true-ranged-combat-not-ready); a melee-skill weapon with reach,
-  the ammunition per shot and the line of fire are in since ARC-COMBAT-012), the "default throws" weapon, backstab (needs facing and
+- Thrown and returning weapons and projectile flight (the [proposed split](#proposed-split-of-true-ranged-combat-not-ready); a melee-skill
+  weapon with reach, the ammunition per shot and the line of fire are in since ARC-COMBAT-012, bow and firearm shots since
+  ARC-COMBAT-015), the "default throws" weapon, backstab (needs facing and
   perception), aimed-attack critical bonuses beyond the resolver's, the target's awareness (an NPC always sees the hero) and the
   darkness penalty (every position is lit), the critical effects listed above as not ready, the taking-damage
   and dying scripts, blood splotches, the corpse's decay timer, alignment and the kill log.

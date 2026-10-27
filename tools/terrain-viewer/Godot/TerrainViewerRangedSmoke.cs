@@ -50,7 +50,8 @@ public partial class TerrainViewerApp
         var profile = session.Rules.Combat;
         // A cell the hero can stand on (ApproachCell's step test) at a distance in the band whose line can be built; within the bow's
         // range also with a clear shot.
-        CellCoord? Shooting(AreaCombatTarget target, int near, int far)
+        CellCoord? Shooting(AreaCombatTarget target, int near, int far) => Shootings(target, near, far).Cast<CellCoord?>().FirstOrDefault();
+        IEnumerable<CellCoord> Shootings(AreaCombatTarget target, int near, int far)
         {
             var at = World(target.Row);
             for (var d = near; d <= far; d++)
@@ -65,9 +66,8 @@ public partial class TerrainViewerApp
                     continue;
                 var chart = map.Chart.ToChart(new(hero.X, hero.Y));
                 if (!map.Chart.Contains(chart) || ApproachCell(grid, at.X, at.Y, far, cell => cell == chart) != chart) continue;
-                return hero;
+                yield return hero;
             }
-            return null;
         }
         (AreaCombatTarget Target, CellCoord Hero)? shot = null;
         foreach (var target in npcs) if (Shooting(target, 3, 6) is { } cell) { shot = (target, cell); break; }
@@ -116,27 +116,37 @@ public partial class TerrainViewerApp
                 + $" range {result?.Resolution?.Difficulty?.Range}, cover {result?.Resolution?.Difficulty?.Cover})");
             var first = new { Distance = distance, Perception = perception, trace.Cost, Range = result!.Resolution!.Difficulty!.Range, result.Resolution.Outcome };
 
-            // Approach: from farther away the walk stops at the first clear shot within the range (Steamwoven).
+            // Approach: from farther away the walk stops at the first clear shot within the range (Steamwoven). A critical miss may
+            // have dropped or broken the lent bow; a far cell the approach cannot route from is skipped for the next (at most five).
             object? second = null;
-            if (!profile.RangedApproachSkipsClearShot && Shooting(pick.Target, 12, 16) is { } far)
+            var stillBow = session.QueryHeroAttack() is { Skill: CombatSkill.Bow };
+            var tried = 0;
+            foreach (var far in profile.RangedApproachSkipsClearShot || !stillBow ? [] : Shootings(pick.Target, 12, 16).Take(5).ToArray())
             {
+                tried++;
                 Heal();
                 _clearShotStops = 0;
                 AreaSmokePlace(map, map.Chart.ToChart(new(far.X, far.Y)));
                 _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
                 PublishWorldSelection();
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                var walked = await ShootOnce(pick.Target, expectWalk: true);
+                CancelAreaAttack(null);
+                _attack = new(pick.Target, pick.Target.Build.Combat!, null);
+                StartAttackGoal(_attack);
+                if (_attack is not { Approaching: true }) { GD.Print($"ARC-COMBAT-015 ranged smoke approach skipped from={far.X},{far.Y}: {_attackNotice}"); continue; }
+                var walked = await ShootOnce(pick.Target, expectWalk: true, started: true);
                 var from = ((AreaGridSession)_worldActor.Session!).Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
                 var shotFrom = Math.Max(Math.Abs(at.X - from.X), Math.Abs(at.Y - from.Y));
                 Require(walked is { Failure: GameSessionFailure.None, Resolution.Refusal: AttackRefusal.None } && _clearShotStops > 0 && shotFrom is >= 2 and <= LentBowRange,
                     $"the walk stopped at a clear shot ({_clearShotStops}) and the hit ran from {shotFrom} cells ({walked?.Failure}, notice {_attackNotice})");
                 second = new { From = new[] { far.X, far.Y }, ShotFrom = shotFrom, walked!.Resolution?.Difficulty?.Range };
+                break;
             }
+            Require(second is not null || tried == 0, $"an approach ran from one of {tried} far cells");
             ToggleCombatMode();
             GD.Print("ARC-COMBAT-015 native-smoke ranged PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, Target = pick.Target.Entity, Hero = new[] { pick.Hero.X, pick.Hero.Y }, Shot = first,
-                Approach = second ?? (object)"NONE (no cell 12..16 away with a clear shot, or the Original setting)", Npcs = npcs.Length,
+                Approach = second ?? (object)(stillBow ? "NONE (no cell 12..16 away, or the Original setting)" : "NONE (the first shot's critical miss took the bow)"), Npcs = npcs.Length,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
@@ -157,12 +167,15 @@ public partial class TerrainViewerApp
         }
 
         // One attack goal on the target, run frame by frame until its first hit (a walk first when expected).
-        async Task<SessionAttackResult?> ShootOnce(AreaCombatTarget target, bool expectWalk)
+        async Task<SessionAttackResult?> ShootOnce(AreaCombatTarget target, bool expectWalk, bool started = false)
         {
-            CancelAreaAttack(null);
             _lastCritterAttackForSelfTest = null;
-            _attack = new(target, target.Build.Combat!, null);
-            StartAttackGoal(_attack);
+            if (!started)
+            {
+                CancelAreaAttack(null);
+                _attack = new(target, target.Build.Combat!, null);
+                StartAttackGoal(_attack);
+            }
             Require(_attack is not null && _attack.Approaching == expectWalk && (expectWalk || _attack.Player is not null),
                 $"the attack {(expectWalk ? "walks first" : "starts without a walk")}: {_attackNotice}");
             for (var frames = 0; frames < 4000 && _attack is not null && _attack.Attacks == 0; frames++)

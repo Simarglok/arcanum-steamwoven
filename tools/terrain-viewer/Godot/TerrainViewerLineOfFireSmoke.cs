@@ -15,7 +15,7 @@ public partial class TerrainViewerApp
     // lent reach (no kit holds a reach weapon), attacks the farther NPC in combat mode, and the hit goes through the session to the
     // nearer one instead (the original's ranged path, 0x4B3170 with flag 0x200); the farther NPC keeps its hit points. The animation
     // starts without the goal's reach test, which admits only a clear line (ARC-COMBAT-015, ledger RH1). A struck NPC
-    // is healed back; a struck object keeps what the hit did (the last stage of map mode). NONE on a map without such a cell.
+    // is healed back; a struck object keeps what the hit did (a late stage of map mode). NONE on a map without such a cell.
     private async Task RunAreaLineOfFireSmokeAsync()
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area

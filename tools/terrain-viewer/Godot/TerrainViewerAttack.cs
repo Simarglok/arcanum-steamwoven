@@ -337,7 +337,7 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
-        CancelAreaAttack($"the target is {distance} cells away and no route reaches it");
+        CancelAreaAttack(distance <= HeroReach(hero) ? "no clear shot at the target and no approach" : $"the target is {distance} cells away and no route reaches it");
     }
 
     /// <summary>
