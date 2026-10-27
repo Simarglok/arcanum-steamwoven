@@ -19,6 +19,25 @@ Continue from the [merged component catalogue](../project/status.md) and current
 `origin/main`, not from a document's dated snapshot. Every work item has a code
 under the [task naming policy](task-naming.md).
 
+### One task per thread
+
+Owner decision 2026-10-21: one Claude thread, and its session, works on exactly
+one `ARC-*` code. When that code's PR merges, is handed to the owner for review,
+or the owner cancels the code, the session posts its report, writes a handoff of
+at most 40 lines for the next item and ends. The handoff holds the handoff
+record above (base, head, workspace, reviewer findings) plus the next item's
+plan row verbatim, decisions taken, branch and open questions; it goes where the
+queue of follow-up work is kept (the plan or checklist that lists the next
+items, or the project's coordinator thread). The next code starts in a new
+thread with a fresh session from that handoff; a thread does not take a second
+code, even a small fix found on the way, which goes back to the coordinator
+thread. Inside one task, do not clear or restart the context while it is still
+needed for correctness (part of the same decision).
+
+Why: a session carried across codes re-reads every earlier task's history on
+each step. The token audit of 2026-10-21 found lane sessions living 3.5 to 5
+days across 13 to 25 codes at a median context of about 550 thousand tokens.
+
 ## Definition of Ready
 
 Owner decision 2026-10-14: work stalls when one work item carries several

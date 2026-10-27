@@ -9,8 +9,10 @@ summarizes the project and points to them.
   request, a Claude project thread, or a named `ARC-*` work item) and follow
   `AGENTS.md` (task authority, task readiness, implementation and evidence,
   GitHub identity, delivery), `docs/workflow/tasks.md` and
-  `docs/workflow/toolchain.md`. Name threads, branches, PRs and commits by the
-  task code ([`docs/workflow/task-naming.md`](docs/workflow/task-naming.md)):
+  `docs/workflow/toolchain.md`. One task code per thread: the next code starts
+  in a new thread ([one task per thread](docs/workflow/tasks.md#one-task-per-thread)).
+  Name threads, branches, PRs and commits by the task code
+  ([`docs/workflow/task-naming.md`](docs/workflow/task-naming.md)):
   `ARC-TYPE-NNN` first, a Russian result in thread titles. Types: `RES`, `DATA`,
   `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`, `SCRIPT`, `DEV`, `AI`, `COMBAT`,
   `SKILLS`, `MAGIC`, `TECHNOLOGY`. Check the number is unused (git history,
