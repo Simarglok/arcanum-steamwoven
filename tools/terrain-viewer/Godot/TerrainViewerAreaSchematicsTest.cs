@@ -295,13 +295,14 @@ public partial class TerrainViewerApp
                     var productArt = data.ArtOf(lying[0].Kind.Prototype) is { } art ? ExtraArt()?.Load(art).Status.ToString() ?? "no extra art" : "no art";
                     Require(productArt == nameof(AreaExtraArtStatus.Ready), "the product's ground art reads: " + productArt);
                     made += $", full inventory: {lying.Length} on the ground ({AreaSchematics.OnGroundText(ground).Trim()}), ground art {productArt}";
-                    // ARC-WORLD-062: the products on the ground decay; the viewer's event pump, two game days on, destroys them.
-                    Require(ground.OnGround.All(entity => full.QueryItemDecays().Any(d => d.Entity == entity)), "every product on the ground has its decay event");
-                    var decayed = new AreaEventPump(full, new PlainEventWorld()).Jump(Arcanum.Simulation.Items.ItemDecayRules.DelayMs);
-                    Require(decayed.Decays.Count(d => d.Step == Arcanum.Simulation.Items.ItemDecayStep.Destroy) == record.Quantity &&
-                        ground.OnGround.All(full.IsItemDestroyed) && !full.QueryPlacedItems().Any(p => ground.OnGround.Contains(p.Entity)),
-                        $"two game days on the products decayed ({decayed.Decays.Count} fired)");
-                    made += $", decayed {decayed.Decays.Count} after 48 game hours";
+                    // ARC-WORLD-062: a product created on the tile is not dropped, so it never decays (ledger ID9): two game days on the
+                    // viewer's event pump fires nothing for it and the products still lie there.
+                    Require(!full.QueryItemDecays().Any(d => ground.OnGround.Contains(d.Entity)), "no product on the ground has a decay event");
+                    var later = new AreaEventPump(full, new PlainEventWorld()).Jump(Arcanum.Simulation.Items.ItemDecayRules.DelayMs);
+                    Require(later.Decays.Count == 0 && ground.OnGround.All(entity => !full.IsItemDestroyed(entity)) &&
+                        ground.OnGround.All(entity => full.QueryPlacedItems().Any(p => p.Entity == entity)),
+                        $"two game days on the products still lie ({later.Decays.Count} decays fired)");
+                    made += $", still {ground.OnGround.Count} on the ground after 48 game hours";
                     break;
                 }
             }

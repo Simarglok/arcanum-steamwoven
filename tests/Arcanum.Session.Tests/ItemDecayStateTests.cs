@@ -130,6 +130,24 @@ public sealed class ItemDecayStateTests
         // So is a deadline that is not its time plus its delay.
         var late = text.Replace(deadline, $"\"kind\":\"item.decay\",\"deadlineMs\":{now + ItemDecayRules.DelayMs + 1},");
         Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(Decode(late), RestoreOptions()).Failure);
+        // And one set after the saved clock, though its deadline is its time plus the delay.
+        var future = text.Replace(deadline, $"\"kind\":\"item.decay\",\"deadlineMs\":{now + 1 + ItemDecayRules.DelayMs},")
+            .Replace(values, $"\"values\":[{now + 1},{ItemDecayRules.DelayMs}]");
+        Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(Decode(future), RestoreOptions()).Failure);
+    }
+
+    [TestMethod]
+    public void TwoPendingDecaysOfOneItemAreRefusedOnRestore()
+    {
+        using var owner = Owner();
+        owner.PlaceHeroItem("kit:2", There);
+        owner.PlaceHeroItem("apple", There);
+        Assert.AreEqual(2, owner.QueryItemDecays().Count);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var apple = $"\"entities\":[{{\"map\":{Exterior.RuntimeMap},\"entity\":\"apple\"}}]";
+        Assert.AreEqual(1, text.Split(apple).Length - 1, "the apple's event");
+        var twice = text.Replace(apple, $"\"entities\":[{{\"map\":{Exterior.RuntimeMap},\"entity\":\"kit:2\"}}]");
+        Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(Decode(twice), RestoreOptions()).Failure);
     }
 
     [TestMethod]

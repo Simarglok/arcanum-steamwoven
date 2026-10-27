@@ -355,7 +355,7 @@ public sealed class ObjectAttackStateTests
     }
 
     [TestMethod]
-    public void ASpilledItemBackInItsContainerOrWithoutItsSeedIsNotDeleted()
+    public void ASpilledItemStaysInItsMendedContainerAndWaitsForItsSeed()
     {
         // ARC-WORLD-062: the chest made whole again holds its items, so their events find nothing on the ground (Keep).
         using var owner = Owner();

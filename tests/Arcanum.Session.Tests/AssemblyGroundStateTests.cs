@@ -64,11 +64,11 @@ public sealed class AssemblyGroundStateTests
         Assert.AreEqual(1L, owner.Version.Revision, "one revision");
         Assert.AreEqual("made:1@100,200 made:2@100,200 made:3@100,200", Ground(owner), "on the hero's tile");
         Assert.IsTrue(owner.QueryPlacedItems().All(p => p.Source == SessionPlacedSource.Made && p.Kind == Product && p.Map == Exterior));
-        // ARC-WORLD-062: each product on the ground decays; the one picked up no longer does.
-        CollectionAssert.AreEqual(new[] { "made:1", "made:2", "made:3" }, owner.QueryItemDecays().Select(d => d.Entity).ToArray());
+        // ARC-WORLD-062: a product created on the tile is not dropped, so it gets no decay event (ledger ID9).
+        Assert.AreEqual(0, owner.QueryItemDecays().Count, "refused products do not decay");
         // The hero picks one up into its made items; saved and restored, the rest stay on the ground.
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "made:2", Accept).Disposition);
-        CollectionAssert.AreEqual(new[] { "made:1", "made:3" }, owner.QueryItemDecays().Select(d => d.Entity).ToArray());
+        Assert.AreEqual(0, owner.QueryItemDecays().Count);
         CollectionAssert.AreEqual(new[] { new SessionMadeItem("made:2", Product) }, owner.QueryMadeItems().ToArray());
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
         CollectionAssert.AreEqual(owner.QueryPlacedItems().ToArray(), restored.QueryPlacedItems().ToArray());
@@ -116,7 +116,7 @@ public sealed class AssemblyGroundStateTests
         CollectionAssert.AreEqual(new[] { "made:1", "made:2", "made:3" }, all.OnGround.ToArray());
         Assert.AreEqual(0, full.QueryHeroAmmo().Count);
         Assert.IsTrue(all.OnGround.All(entity => full.QueryAmmo(entity) == new SessionAmmoRecord(entity, 2, 5)));
-        CollectionAssert.AreEqual(all.OnGround.ToArray(), full.QueryItemDecays().Select(d => d.Entity).ToArray(), "refused stacks decay too (ARC-WORLD-062)");
+        Assert.AreEqual(0, full.QueryItemDecays().Count, "refused stacks do not decay either (ARC-WORLD-062, ledger ID9)");
     }
 
     [TestMethod]

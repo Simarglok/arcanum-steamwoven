@@ -137,7 +137,7 @@ the scenery stays off. A restore refuses one whose scenery is not recorded off, 
 1 ms or above `MaxRespawnDelayMs`, or whose deadline is not its time plus its delay. See [object damage](object-damage-runtime.md).
 
 **Item Decay events (ARC-WORLD-062).** The kind `item.decay` (also added to registry version 1 without a new version) is the
-original's Item Decay event (kind 25, ledger ID1–ID8): game time, saved, scoped to the item's map, one per item (a new drop replaces
+original's Item Decay event (kind 25, ledger ID1–ID9): game time, saved, scoped to the item's map, one per item (a new drop replaces
 the item's earlier one), at most `SessionEventKinds.MaxItemDecays` (8,192) on top of the others. One entity, the item; values: the
 game time it was set at and its delay (two game days, or a minute for the loot window's retry). Every drop on the ground sets it; a
 pickup or a deletion removes it; when due an item still on the ground is deleted (one revision), and
@@ -242,7 +242,7 @@ D2: the Steamwoven mode applies one tick per period, the Original mode keeps two
 ```
 
 Pending events are in queue order. Decoding checks shapes and ranges: registry and next sequence at least 1, at most
-45,187 events (34,883 before ARC-WORLD-045, 34,947 before ARC-COMBAT-008, 36,995 before ARC-WORLD-062), 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
+45,187 events (34,883 before ARC-WORLD-045, 34,947 before ARC-COMBAT-008, 35,971 before ARC-MAGIC-010, 36,995 before ARC-WORLD-062), 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
 (`OutOfRange`, `BudgetExceeded`, missing, unknown and wrongly typed fields). Restore refuses (`InvalidEvents`) another
 registry version, an unknown kind, a value count other than the kind's (2 for poison recovery, else 1), a recovery
 value other than 1 or 2, an NPC with timers on two maps, a timer whose deadline is not its kind's delay after its scheduling time or that was

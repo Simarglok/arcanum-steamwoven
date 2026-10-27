@@ -17,7 +17,7 @@ public enum ItemDecayStep
 
 /// <summary>
 /// ARC-WORLD-062: the original's Item Decay (event kind 25; 0x468090, 0x468010, 0x467FC0, 0x468110, read in the retail 1.0.7.4
-/// executable by two readers, ledger "Item decay" ID1–ID8). An item dropped on the ground (loose or into a junk pile) decays two
+/// executable by two readers, ledger "Item decay" ID1–ID9). An item dropped on the ground (loose or into a junk pile) decays two
 /// game days later unless it is picked up first; while the loot window shows a container the event waits a minute more each time.
 /// </summary>
 public static class ItemDecayRules

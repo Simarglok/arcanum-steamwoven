@@ -146,8 +146,8 @@ Anomalies:
 Source: the [inventory runtime](../../world/inventory-runtime.md#item-decay-arc-world-062). Question: when does the original destroy an
 item lying on the ground, what keeps it, what delays it, and which clock and saving rules its event follows? It settles the two
 points PI4 left at one reading (the disabling global and the clock). Read on 2026-10-21 by this task and, independently, by a fresh
-agent that saw only the questions (method step 6); both agree on every row, so the rows are F2. Every direct branch stays inside
-`.text`.
+agent that saw only the questions (method step 6); both agree on every row, so the rows are F2. ID9 was read the same way on
+2026-10-27. Every direct branch stays inside `.text`.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
@@ -159,6 +159,8 @@ agent that saw only the questions (method step 6); both agree on every row, so t
 | ID6 | 0x5E8800 (0x460E70, 0x468180, 0x468190, 0x4681A0; window open 0x5727B0, close 0x573440) | Set to 1 at the item module's start, not saved; lowered when the inventory window opens in mode 2 (loot) or mode 4 (a second container view whose use was not identified) on a container (object type 2), raised when it closes. While it is 0 every decay event that fires waits a minute; a dead critter opened for loot does not count. | Original (mode 4's use unknown) |
 | ID7 | container break (0x43F1C0 → 0x463730), drop (0x461A90, 0x461AB0) | A broken container drops each item through the drop's placement and an NPC's or PC's drop goes there too, so each such item gets its decay event (OD13, PI3). | Original |
 | ID8 | event queue (ledger Q6), map close (0x45C2F0) and open (0x45C610) | A firing whose item was destroyed or can no longer be found is dropped without running. Closing a map moves its events, with their absolute game time, into the map's save; reopening loads them back, so an overdue decay fires right after the return. A dead body's decay (kind 24) and the destruction of a holder also drop items through the placement, so they decay too (not modelled: no body decay or holder destruction drops yet). | Original |
+| ID9 | object creation (0x4ED8B0), transfer refused by the insert check (0x4617F0 → 0x461810, 0x466510) | Neither reaches the schedule 0x468090: its only direct callers are the item transfer into a holder (0x461CA0), the drop's placement (0x466E50) and the firing's retry (0x467FC0). Creation lays the object on the tile without the drop; a refused transfer shows its message and returns before the removal from the tile, the insert and the cancel. So an assembly product the crafter's inventory refuses (SA3–SA5, NC7) lies on the tile with no Item Decay event until something moves it. Read on 2026-10-27 by this task and, independently, by a fresh agent that saw only the questions; neither followed the indirect calls of the placement (redraw and sector hooks) or what the item's get script may do. | Original |
 
-No anomaly. The session's limits (no junk pile yet, no container in the viewer's loot window, a bound on pending events) are in the
+No anomaly. The session's limits (no junk pile yet, no container in the viewer's loot window, a bound on pending events, the no-decay
+flag kept only on seed rows) are in the
 [inventory runtime](../../world/inventory-runtime.md#item-decay-arc-world-062).

@@ -152,7 +152,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="reach-and-line-of-fire-arc-combat-012"></a>[Reach and line of fire (ARC-COMBAT-012)](ledger/combat.md#reach-and-line-of-fire-arc-combat-012) | [Combat](ledger/combat.md) | RA1–RA10 |
 | <a id="npc-ai-script-and-dialog-surface-arc-res-070"></a>[NPC AI script and dialog surface (ARC-RES-070)](ledger/npc-ai.md#npc-ai-script-and-dialog-surface-arc-res-070) | [NPC AI](ledger/npc-ai.md) | SU1–SU17 |
 | <a id="window-key-modifiers-arc-input-004"></a>[Window key modifiers (ARC-INPUT-004)](ledger/ui-audio.md#window-key-modifiers-arc-input-004) | [Interface windows and audio](ledger/ui-audio.md) | WK1–WK4 |
-| <a id="item-decay-arc-world-062"></a>[Item decay (ARC-WORLD-062)](ledger/items.md#item-decay-arc-world-062) | [Items and inventory](ledger/items.md) | ID1–ID8 |
+| <a id="item-decay-arc-world-062"></a>[Item decay (ARC-WORLD-062)](ledger/items.md#item-decay-arc-world-062) | [Items and inventory](ledger/items.md) | ID1–ID9 |
 
 ## Decisions to revisit
 

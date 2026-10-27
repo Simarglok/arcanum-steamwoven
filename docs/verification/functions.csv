@@ -203,7 +203,7 @@ address,name,domain,status,reason,level,evidence,method
 0x467E80,item light,items,full,,F2,docs/research/ledger/items.md#equipment-arc-world-028,Arcanum.Simulation.Equipment.EquipmentRules.Light
 0x467FC0,item decay event,items,full,,F2,docs/research/ledger/items.md#item-decay-arc-world-062,Arcanum.Simulation.Items.ItemDecayRules.Fire
 0x468010,item decays,items,full,,F2,docs/research/ledger/items.md#item-decay-arc-world-062,Arcanum.Simulation.Items.ItemDecayRules.Decays
-0x468090,schedule item decay,items,partial,"the session's ground items only (no junk pile yet); the editor's switch is never set; beyond the project's bound of pending events a drop gets none",F2,docs/research/ledger/items.md#item-decay-arc-world-062,Arcanum.Session.GameSessionOwner.ScheduleDecay
+0x468090,schedule item decay,items,partial,"the session's ground items only (no junk pile yet); the editor's switch is never set; beyond the project's bound of pending events a drop gets none; the no-decay flag is read from an attached seed only",F2,docs/research/ledger/items.md#item-decay-arc-world-062,Arcanum.Session.GameSessionOwner.ScheduleDecay
 0x4A6620,experience table load,experience,partial,project admission: an entry that is not a number is refused instead of read with atoi,F2,docs/research/ledger/character.md#experience-and-levels-arc-world-030,Arcanum.Data.Characters.ExperienceTables.ReadLevels
 0x4A68B0,experience to next level,experience,full,,F3,docs/verification/receipts/4A68B0.json,Arcanum.Simulation.Character.ExperienceRules.ToNextLevel
 0x4A6900,experience progress,experience,full,,F3,docs/verification/receipts/4A6900.json,Arcanum.Simulation.Character.ExperienceRules.Progress

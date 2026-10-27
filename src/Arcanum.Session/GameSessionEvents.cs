@@ -182,7 +182,8 @@ public static class SessionEventKinds
     public const long RestingDelayMs = 3_600_000;
 
     /// <summary>Pending events a session holds: four timers for each NPC life record and three for the hero, so a life step
-    /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events and the wait timers.</summary>
+    /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
+    /// magic-tech events and the Item Decay events.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
         + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays;
     /// <summary>Pending Lock events a session holds (project policy; the original has no bound).</summary>
@@ -198,7 +199,7 @@ public static class SessionEventKinds
     public const int MaxObjectRespawns = 1024;
 
     /// <summary>
-    /// The original's Item Decay event (kind 25, saved, game time; ARC-WORLD-062, ledger ID1–ID8): an item dropped on the ground is
+    /// The original's Item Decay event (kind 25, saved, game time; ARC-WORLD-062, ledger ID1–ID9): an item dropped on the ground is
     /// destroyed two game days later unless it was picked up (<see cref="Arcanum.Simulation.Items.ItemDecayRules"/>). Scoped to the
     /// item's map, one per item (a new one replaces the item's earlier one). Entity: the item; values: the game time it was
     /// scheduled at and its delay (<see cref="Arcanum.Simulation.Items.ItemDecayRules.DelayMs"/>, or the retry's

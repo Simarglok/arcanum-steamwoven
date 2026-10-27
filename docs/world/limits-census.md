@@ -73,8 +73,9 @@ Notes on the policy caps:
   alone take about 16.8 MB. The estimate of a whole playthrough is a change of every installed
   object under the viewer's 68-character object ids (`oid:` and a SHA-256), about 141 characters
   each with a 12-character property and a 7-digit value (276,625 × 141 ≈ 39.0 MB), plus a life,
-  reaction and experience record and four timers for every NPC (3,792 NPCs, about 4.4 MB):
-  about 43.4 MB, so 96 MiB keeps 2.3 times. It is an estimate, not a measured save. A snapshot
+  reaction and experience record and four timers for every NPC (3,792 NPCs, about 4.4 MB) and
+  the 8,192 Item Decay events the queue can hold (about 170 characters each, about 1.4 MB):
+  about 44.8 MB, so 96 MiB keeps 2.2 times. It is an estimate, not a measured save. A snapshot
   that reaches the count caps with the longest keys (128-character entities, 64-character
   properties) can exceed the cap; saving it is then the typed `TooLarge`, as before. A save file
   is read into a buffer of its own size, not of the cap. Raising the caps does not change the

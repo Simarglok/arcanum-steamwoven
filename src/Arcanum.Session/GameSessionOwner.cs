@@ -1065,7 +1065,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-WORLD-062: the items the pending decay events name are the session's to answer for (the hero's kit and made items are
         // no map object of the host's, and a seed item's map may not be attached yet: its handler postpones).
         var decaying = _events.Any(SessionEventKinds.ItemDecay)
-            ? _events.QueryPending().Where(e => e.Kind == SessionEventKinds.ItemDecay).Select(e => e.Payload.Entities[0].Code).ToHashSet(StringComparer.Ordinal)
+            ? _events.QueryPending(SessionEventKinds.ItemDecay).Select(e => e.Payload.Entities[0].Code).ToHashSet(StringComparer.Ordinal)
             : null;
         _passRespawns = respawns;
         _passSpellRuns = spellRuns;

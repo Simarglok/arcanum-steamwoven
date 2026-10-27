@@ -269,13 +269,13 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 ## Item decay (ARC-WORLD-062)
 
 Requirement: [FR-ITEM-012](../requirements/items-economy.md#fr-item-012). Read in the retail 1.0.7.4 executable by two readers
-([ledger "Item decay"](../research/ledger/items.md#item-decay-arc-world-062), ID1–ID8; it settles PI4).
+([ledger "Item decay"](../research/ledger/items.md#item-decay-arc-world-062), ID1–ID9; it settles PI4).
 
 | Rule | Value |
 | --- | --- |
 | Event (ID1) | The original's Item Decay (kind 25): saved, on the game clock (the column Poison, Resting and Lock use). `SessionEventKinds.ItemDecay` (`item.decay`): scoped to the item's map, so it fires while that map is the actor's (late, on return, as the Lock event); entity the item; values the game time it was scheduled at and its delay. |
-| Which items (ID2, ID4, ID7) | Every drop on the ground schedules it two game days (172,800,000 ms) on, replacing the item's earlier one: the hero's placed items (critical drops, assembly products the inventory refused, ARC-WORLD-070, ammunition stacks among them), an NPC's items a critical dropped, and the items a broken container spilled. An item a map's data lays on the ground gets none (nothing dropped it). |
-| No decay (ID2, ID5) | An item with item flag 0x20000 (`SessionItemFacts.NoDecay`, from the map data) gets no event; no installed item prototype carries it (opt-in census `ItemDecayFlagCensusTests`: 0 of 798). The switch that turns decay off is the world editor's; the game never sets it. |
+| Which items (ID2, ID4, ID7, ID9) | Every drop on the ground schedules it two game days (172,800,000 ms) on, replacing the item's earlier one: the hero's critical drops, an NPC's items a critical dropped, and the items a broken container spilled. An item a map's data lays on the ground gets none (nothing dropped it), and neither does an assembly product the inventory refused (ARC-WORLD-070, ammunition stacks among them): the original creates it on the crafter's tile and the refused transfer leaves it there, and neither path reaches the schedule (ID9), so it lies until it is moved. |
+| No decay (ID2, ID5) | An item with item flag 0x20000 (`SessionItemFacts.NoDecay`, from the map data) gets no event; no installed item prototype carries it (opt-in census `ItemDecayFlagCensusTests`: 0 of 798), but map instances can (two Crash Site items, [item inventory](../research/crash-site-item-inventory.md)). The switch that turns decay off is the world editor's; the game never sets it. |
 | Pickup (ID4) | A pickup of the item ends its event (`PickUpItem`); a deleted item loses it too. |
 | Firing (ID3, ID6) | An item that still lies loose on its map is deleted (one revision; it leaves the placed items or its seed's ground). While the host's loot window shows a container (`ISessionLootWindowWorld.LootWindowShowsContainer`) the event waits a minute more each time. An item no longer on the ground: nothing. The pass reports each firing (`SessionEventPassResult.Decays`: map, item, `ItemDecayStep`). Two session limits postpone a deletion a minute (`Postponed`): a seed item whose map's seed is not attached yet, and a full deleted-item budget (`MaxDurabilityRecords`; every decayed item stays in the saved deleted list). |
 | Budget | At most 8,192 pending decay events (`MaxItemDecays`, project bound; the original has none): a drop beyond it does not decay. |
@@ -287,7 +287,11 @@ event pump fires them like the other kinds (`AreaEventReport.Decays`, log `ARC-W
 Not ready: junk piles (ARC-WORLD-063; an item in a pile decays as a loose one, and a move into a pile restarts the two days, ID4);
 the player's own drop command (ARC-WORLD-064); the viewer opens no container in the loot window (it loots dead NPCs only, which
 the original's counter does not count), so it never delays a decay; the item flag of the hero's kit and made items is not known (no
-installed prototype sets it); a dead body's decay (kind 24, a day after death) and the destruction of a holder, which drop their items
+installed prototype sets it); the session reads the no-decay flag only from an attached seed's row, so a seed item the PC took
+whose map's seed is not attached (after a restore on another map) reads as decaying and is deleted two days after a drop, where the
+original keeps it; a container broken while its map's seed is not attached spills items that get no event; while the deleted-item
+budget (`MaxDurabilityRecords`) is full, each due decay postpones itself a minute at a time, so a long wait runs it once a game
+minute; a dead body's decay (kind 24, a day after death) and the destruction of a holder, which drop their items
 with decay in the original (ID8), are not modelled.
 
 ## Drop cell (ARC-COMBAT-010)
