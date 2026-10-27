@@ -2,6 +2,7 @@ using System.Reflection;
 using Arcanum.Data.Area;
 using Arcanum.Data.Characters;
 using Arcanum.Data.Messages;
+using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
@@ -52,6 +53,49 @@ public static partial class TerrainViewerSelfTest
 
 public partial class TerrainViewerApp
 {
+    /// <summary>ARC-INPUT-004 through the production key route: each window letter (L, C, I, T, R and W) does nothing with Ctrl,
+    /// Alt, Command or Ctrl+Shift held (no window, status, notice or reserved report), and acts with Shift as bare; an open
+    /// window's letter does not close it under Ctrl. W is routed on a named map, so the check names one for its silent half.</summary>
+    private void AssertWindowKeyModifiers(Action<bool, string> require)
+    {
+        void Press(Key key, WorldKeyModifiers modifiers)
+        {
+            foreach (var pressed in new[] { true, false })
+                InputWorld(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = pressed, CtrlPressed = modifiers.HasFlag(WorldKeyModifiers.Ctrl),
+                    ShiftPressed = modifiers.HasFlag(WorldKeyModifiers.Shift), AltPressed = modifiers.HasFlag(WorldKeyModifiers.Alt), MetaPressed = modifiers.HasFlag(WorldKeyModifiers.Meta) });
+        }
+        string Windows() => string.Join("|", LogbookOpen, SheetOpen, InventoryOpen, SchematicsOpen, WorldMapOpen, WorldModal, HeroInCombatMode,
+            _logbookStatus, _sheetStatus, _inventoryStatus, _schematicsStatus, _worldMapStatus, _combatModeNotice, _worldLastReserved);
+        var silent = new[] { WorldKeyModifiers.Ctrl, WorldKeyModifiers.Alt, WorldKeyModifiers.Meta, WorldKeyModifiers.Ctrl | WorldKeyModifiers.Shift };
+        var mapName = _readyMapName;
+        _readyMapName ??= "synthetic-map";
+        try
+        {
+            require(LogbookActive && SheetActive && SchematicsActive && CombatModeActive && WorldMapActive, "the window keys are routed");
+            foreach (var key in new[] { Key.L, Key.C, Key.I, Key.T, Key.R, Key.W })
+                foreach (var modifiers in silent)
+                {
+                    var before = Windows();
+                    Press(key, modifiers);
+                    require(Windows() == before, $"{modifiers}+{key} did something: {before} -> {Windows()}");
+                }
+        }
+        finally { _readyMapName = mapName; }
+        // Shift gives the capital, the same action as the bare letter (the original's character table has both cases).
+        foreach (var key in new[] { Key.C, Key.T, Key.R })
+        {
+            var before = Windows();
+            Press(key, WorldKeyModifiers.Shift);
+            require(Windows() != before && !WorldModal, $"Shift+{key} acted as {key} (no hero: a refusal status)");
+        }
+        Press(Key.L, WorldKeyModifiers.Shift);
+        require(LogbookOpen && WorldModal, "Shift+L opened the logbook");
+        Press(Key.L, WorldKeyModifiers.Ctrl);
+        require(LogbookOpen, "Ctrl+L did not close the open logbook");
+        Press(Key.L, WorldKeyModifiers.Shift);
+        require(!LogbookOpen && !WorldModal, "Shift+L closed the logbook");
+    }
+
     internal string AreaLogbookForSelfTest()
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA logbook: " + why); }
@@ -75,6 +119,7 @@ public partial class TerrainViewerApp
             Require(GetSelfTestSnapshot().Hud.Contains(" | logbook open: L or Escape closes", StringComparison.Ordinal), "HUD open status");
             InventoryKey(Key.L);
             Require(!LogbookOpen && !WorldModal, "L closed the logbook");
+            AssertWindowKeyModifiers(Require);
 
             // Story through the session: rumor 1002 then 1001 an hour later, 1002 quelled; quest 1001 completed, 1000 accepted later.
             Require(session.LearnRumor(session.Version, 1002).Disposition == GameSessionDisposition.Changed, "learn rumor 1002");

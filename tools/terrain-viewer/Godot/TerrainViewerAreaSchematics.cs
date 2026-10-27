@@ -266,7 +266,7 @@ public partial class TerrainViewerApp
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         if (!key.Pressed || key.Echo) return;
-        if (routed is Key.T or Key.Escape) CloseSchematicsByPlayer();
+        if (routed == Key.Escape || (routed == Key.T && !CharacterKeySilenced(key, routed))) CloseSchematicsByPlayer();
         else if (routed == Key.Tab) _schematicsPanel!.Confirm();
     }
 

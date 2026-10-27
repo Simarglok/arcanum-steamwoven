@@ -145,4 +145,27 @@ public sealed class DiagnosticPaletteRoutingTests
             context with { KeyboardCameraFixedSign = false }).CameraPan;
         Assert.AreEqual(invertX ? 1 : -1, Math.Sign(lab.X)); Assert.AreEqual(invertY ? 1 : -1, Math.Sign(lab.Y));
     }
+
+    /// <summary>ARC-INPUT-004: the original's character letters act bare or with Shift (the capital is the same action);
+    /// Ctrl, Alt or Command, alone or with Shift, leave them without any action. Other keys are never silenced here.</summary>
+    [TestMethod]
+    [DataRow(WorldKey.A)] [DataRow(WorldKey.C)] [DataRow(WorldKey.F)] [DataRow(WorldKey.I)] [DataRow(WorldKey.L)]
+    [DataRow(WorldKey.R)] [DataRow(WorldKey.S)] [DataRow(WorldKey.T)] [DataRow(WorldKey.W)]
+    public void CharacterLetterIsSilencedByCtrlAltOrCommand(WorldKey key)
+    {
+        Assert.IsFalse(OriginalWorldKeyboard.CharacterKeySilenced(key, WorldKeyModifiers.None), "bare");
+        Assert.IsFalse(OriginalWorldKeyboard.CharacterKeySilenced(key, WorldKeyModifiers.Shift), "Shift");
+        foreach (var modifiers in new[] { WorldKeyModifiers.Ctrl, WorldKeyModifiers.Alt, WorldKeyModifiers.Meta, Chord,
+            WorldKeyModifiers.Alt | WorldKeyModifiers.Shift, WorldKeyModifiers.Meta | WorldKeyModifiers.Shift, WorldKeyModifiers.Ctrl | WorldKeyModifiers.Alt })
+            Assert.IsTrue(OriginalWorldKeyboard.CharacterKeySilenced(key, modifiers), modifiers.ToString());
+    }
+
+    [TestMethod]
+    public void OtherKeysAreNotCharacterLetters()
+    {
+        var letters = new[] { WorldKey.A, WorldKey.C, WorldKey.F, WorldKey.I, WorldKey.L, WorldKey.R, WorldKey.S, WorldKey.T, WorldKey.W };
+        const WorldKeyModifiers all = WorldKeyModifiers.Ctrl | WorldKeyModifiers.Shift | WorldKeyModifiers.Alt | WorldKeyModifiers.Meta;
+        foreach (var key in Enum.GetValues<WorldKey>().Except(letters))
+            Assert.IsFalse(OriginalWorldKeyboard.CharacterKeySilenced(key, all), key.ToString());
+    }
 }

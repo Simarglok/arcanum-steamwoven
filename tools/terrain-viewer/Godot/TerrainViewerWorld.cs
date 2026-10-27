@@ -708,6 +708,14 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-WORLD-007 route click cell={cell} accepted={accepted}");
         RefreshReadyStatus();
     }
+    private static WorldKeyModifiers KeyModifiers(InputEventKey key)
+        => (key.CtrlPressed ? WorldKeyModifiers.Ctrl : 0) | (key.ShiftPressed ? WorldKeyModifiers.Shift : 0)
+            | (key.AltPressed ? WorldKeyModifiers.Alt : 0) | (key.MetaPressed ? WorldKeyModifiers.Meta : 0);
+
+    /// <summary>ARC-INPUT-004: an open window's own letter (L, C, I, T, W) does not close it under Ctrl, Alt or Command.</summary>
+    private static bool CharacterKeySilenced(InputEventKey key, Key routed)
+        => OriginalWorldKeyboard.CharacterKeySilenced(GodotInputAdapter.ToWorldKey(routed), KeyModifiers(key));
+
     private void InputWorld(InputEvent input)
     {
         if (_worldInitialized && !_exiting) WorldObservation(() => InputWorldObserved(input));
@@ -786,8 +794,7 @@ public partial class TerrainViewerApp
             // Diagnostics first: a consumed chord key never reaches the shared
             // mapping, native GUI or an original-key sink (down, echo or release).
             var routedKey = chordKey.Keycode != Key.None ? chordKey.Keycode : chordKey.PhysicalKeycode;
-            var modifiers = (chordKey.CtrlPressed ? WorldKeyModifiers.Ctrl : 0) | (chordKey.ShiftPressed ? WorldKeyModifiers.Shift : 0)
-                | (chordKey.AltPressed ? WorldKeyModifiers.Alt : 0) | (chordKey.MetaPressed ? WorldKeyModifiers.Meta : 0);
+            var modifiers = KeyModifiers(chordKey);
             var decision = _worldChord.Route(GodotInputAdapter.ToWorldKey(routedKey), chordKey.Pressed, chordKey.Echo, modifiers,
                 WorldModal, _worldFocused && !WorldUiFocus);
             if (decision.Consumed)
@@ -796,8 +803,10 @@ public partial class TerrainViewerApp
                 if (decision.TogglePalette) ToggleWorldSettings();
                 return;
             }
+            // ARC-INPUT-004: Ctrl, Alt or Command with a character letter (A C F I L R S T W) is no key in the original:
+            // no window opens and nothing is reported as reserved.
             // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
-            if (!RouteQuickKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteSchematicsKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            if (!OriginalWorldKeyboard.CharacterKeySilenced(decision.Key, modifiers) && !RouteQuickKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteSchematicsKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
             {
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
                 _hud?.SetNotice($"Reserved: {routedKey} = {decision.OriginalAction} (NOT IMPLEMENTED)");

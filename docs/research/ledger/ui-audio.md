@@ -103,3 +103,27 @@ Data oddities (not crash class; both settings follow the original until the owne
 Not modelled (named in the runtime): the item-spell path, the 4 action points in a round, action 94, the original's pixel paging
 and fonts. The use script before a reading runs since ARC-SCRIPT-020 (IU rows below); the two readable prototypes with one (14086,
 14090) are read.
+
+## Window key modifiers (ARC-INPUT-004)
+
+Source: the [WORLD keyboard route](../../input/diagnostic-palette.md) and
+[KM-07](../../requirements/original-keyboard-mouse.md#km-07--переносимость-key-identity-и-модификаторов). Question: do the
+original's window letters (L, C, I, T, W, R and the other letters of the character table) act while Ctrl, Shift or Alt is
+held? Read on 2026-10-27 by this task and, independently, by a fresh agent that saw only the questions (method step 6);
+both agree on every row. Every direct branch stays inside `.text`; the indirect ones (the window procedure's message
+switch, the filter's character and scancode tables) stay inside their functions. The rows are F2.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| WK1 | message pump (0x52B7B0), window procedure (0x52B9D0), enqueue (0x52B890) | Every message goes through `TranslateMessage` (the game sets no pre-translate hook). WM_CHAR is the only keyboard message the window procedure turns into a game message: a character message (type 4) carrying the low byte of `wParam`. WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP and WM_SYSCHAR go to `DefWindowProcA`. Of the enqueue's 19 callers only the WM_CHAR case writes type 4. | Original |
+| WK2 | in-game filter (0x54B5D0, a copy at 0x54C8E0), 0x57DC60 | The character branch acts on the character alone, with no modifier read: space, C, F, I, L, R, S, T and W in both cases through one table (character − 0x20, at most 0x57), A and a in 0x57DC60. A code below 0x20 (Ctrl+letter's control code) fails the range test and does nothing, except 0x0D, handled first as Enter; codes from 0x78 and bytes from 0x80 are ignored too. | Original |
+| WK3 | in-game filter scancode tables (0x54C3E8, 0x54C57D), keyboard poll (0x52B380) | No scancode branch acts on A, C, F, I, L, R, S, T or W (key down: Backspace, Delete, `,` `.` `/`, the numpad block; key up: K, M, `,` `.` `/`). The poll queues no scancode message of a non-modifier key while either Ctrl or either Alt is held (Shift is not tested). | Original (the poll's Ctrl/Alt drop is not modelled: the viewer keeps its other keys' modifier rules) |
+| WK4 | logbook open (0x53F0E0) | With left Ctrl and left Alt held the logbook opens in an alternate state (sound 0xBBA), cleared on close; this path is reached from the logbook button, since Ctrl+Alt+L makes no character on a standard layout. | Original (not modelled) |
+
+What Windows does, not the executable: Ctrl+letter is a control code (Ctrl+M is 0x0D, Enter), Alt+letter is WM_SYSCHAR,
+AltGr and the active layout decide the character (a Cyrillic layout gives bytes from 0x80, so the letters act only on a
+Latin layout). So in the original, L and Shift+L (or Caps Lock) open the logbook, and Ctrl+L, Ctrl+Shift+L, Alt+L and
+Ctrl+Alt+L do nothing; the same holds for A, C, F, I, R, S, T and W. Steamwoven (`OriginalWorldKeyboard.CharacterKeySilenced`)
+silences these letters under Ctrl, Alt or Command (Command is the Mac system's), lets Shift through, and an open window's
+own letter does not close it under those modifiers either. Not located in this pass: where O (options), V (version) and E
+(the turn-based sub-turn) are read; they stay reserved keys at F0 with their earlier addresses.
