@@ -48,11 +48,12 @@ public sealed class SessionSpellCasterTests
     }
 
     // A self spell (BEGIN area self, cost 7, instant) whose BEGIN deals 3 normal damage to its target.
-    private static SessionSpellRecord SelfBolt(ulong beginTargets = 0x1, int cost = 7, bool technology = false, bool heal = false, int duration = 0) =>
+    private static SessionSpellRecord SelfBolt(ulong beginTargets = 0x1, int cost = 7, bool technology = false, bool heal = false, int duration = 0,
+        int range = 99) =>
         SessionSpellRecords.Translate(Record(number: 90, beginTargets: beginTargets, info: SpellInfo.Friendly, technology: technology,
             components: [new(SpellAction.Begin, SpellComponentType.Damage, new(0x1, 0, 0, 0, -1), 0, 0, new DamageData(0, 3, 3, 0)),
                 .. heal ? new[] { new SpellComponent(SpellAction.Begin, SpellComponentType.Heal, new(0x1, 0, 0, 0, -1), 0, 0, new DamageData(0, 2, 2, 0)) } : []])
-        with { Cost = cost, DurationSeconds = duration, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0, DisallowedCasterSpellFlags = 0,
+        with { Cost = cost, Range = range, DurationSeconds = duration, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0, DisallowedCasterSpellFlags = 0,
             DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0 });
 
     private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(RuleMode mode, SessionSpellRecord record, bool boxDestroyed = true,
@@ -373,5 +374,39 @@ public sealed class SessionSpellCasterTests
         Assert.IsFalse(caster.TestTarget(SessionSpellCaster.Hero, record.Data.Number, 0x44, "box", SpellLocation.None).Passes, "a box is no critter");
         Assert.IsFalse(caster.TestTarget(SessionSpellCaster.Hero, record.Data.Number, 0x4, "nobody", SpellLocation.None).Passes);
         Assert.IsTrue(caster.TestTarget(SessionSpellCaster.Hero, record.Data.Number, 0x8000UL << 32, null, BoxTile).Passes, "a tile spell takes a tile");
+    }
+
+    [TestMethod]
+    public void The_ui_cast_checks_the_cost_before_the_line_of_fire_and_refuses_a_missing_target_or_an_out_of_range_run()
+    {
+        var dear = SelfBolt(beginTargets: 0x4, cost: 100000);
+        var (owner, caster) = Session(RuleMode.Steamwoven, dear, boxDestroyed: false, noLineOfFire: true);
+        using (owner)
+        {
+            Assert.AreEqual(SpellCastAttemptOutcome.CannotAfford, caster.CastAt(SessionSpellCaster.Hero, dear.Data.Number, "box", SpellLocation.None).Outcome,
+                "600 before 604");
+        }
+        var near = SelfBolt(beginTargets: 0x4, range: 0);
+        var (closed, closedCaster) = Session(RuleMode.Steamwoven, near, boxDestroyed: false);
+        using (closed)
+        {
+            var attempt = closedCaster.CastAt(SessionSpellCaster.Hero, near.Data.Number, "box", SpellLocation.None);
+            Assert.AreEqual((SpellCastAttemptOutcome.Refused, (int?)null), (attempt.Outcome, attempt.RunId), $"{attempt.Run?.Creation?.Check}");
+            Assert.AreEqual(0, closed.QuerySpellRuns().Count, "the invocation check refused the run");
+            Assert.AreSame(closed, closedCaster.Owner);
+            Assert.AreEqual(SpellCastAttemptOutcome.Nothing, closedCaster.CastAt(SessionSpellCaster.Hero, near.Data.Number, "nobody", SpellLocation.None).Outcome,
+                "a target missing from the map");
+        }
+    }
+
+    [TestMethod]
+    public void The_cursor_refuses_an_object_the_picker_marks()
+    {
+        var record = SelfBolt(beginTargets: 0x4);
+        var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        using var _ = owner;
+        var caster = new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null,
+            new Map(owner, boxDestroyed: false, boxFlags: SessionSpellCaster.PickerRefused), new Events());
+        Assert.IsFalse(caster.TestTarget(SessionSpellCaster.Hero, record.Data.Number, 0x4, "box", SpellLocation.None).Passes);
     }
 }

@@ -137,7 +137,8 @@ public sealed class AreaEventPump
     {
         for (var pass = 0; pass < _limits.MaxPassesPerStep; pass++)
         {
-            var result = _spells?.Invoke() is { } caster ? caster.ProcessEvents() : _session.ProcessEvents(_world);
+            // Only a host of this pump's session (a replaced session's host answers for another).
+            var result = _spells?.Invoke() is { } caster && ReferenceEquals(caster.Owner, _session) ? caster.ProcessEvents() : _session.ProcessEvents(_world);
             if (result.Failure != GameSessionFailure.None || result.Pass is not { } outcome)
                 throw new InvalidOperationException("AREA_EVENTS_PASS_" + result.Failure);
             tally.Passes++;

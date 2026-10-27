@@ -486,7 +486,7 @@ public partial class TerrainViewerApp
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
         // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.
-        var direction = _worldResetPending || _worldReloadPending || AreaTransferPending || WorldModal ? null
+        var direction = _worldResetPending || _worldReloadPending || AreaTransferPending || WorldModal || _spellGoal is not null ? null
             : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         // The stick takes over at once; the click route never fights it.
         if (direction is null) _stickHeld = false;
@@ -671,6 +671,8 @@ public partial class TerrainViewerApp
         }
         // ARC-MAGIC-015: the open targeting cursor takes every left press (the original's interface mode 1).
         if (_spellTargeting is not null) { SpellTargetClick(screen); return; }
+        // ARC-MAGIC-015: the casting goal holds the hero until it ends (the original queues other goals under it, not ready here).
+        if (_spellGoal is not null) { _spellNotice = "casting: the press waits for the cast to end (ignored)"; RefreshReadyStatus(); return; }
         if (TryPendingWalkOrder(screen)) return;
         // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
         CancelPortalApproach("another click replaced it", keepArmed: true);

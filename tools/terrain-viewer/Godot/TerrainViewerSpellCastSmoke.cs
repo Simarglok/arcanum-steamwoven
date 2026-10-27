@@ -20,7 +20,8 @@ public partial class TerrainViewerApp
     // stay. A map without a living NPC that has combat values reports that and passes nothing.
     private async Task RunAreaCastSmokeAsync(TerrainLoadResult? mapMode = null)
     {
-        if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area) return;
+        if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area)
+        { GD.Print("ARC-MAGIC-015 native-smoke cast SKIP (needs --hero, an area session and its combat host)"); return; }
         static void Require(bool value, string why)
         {
             if (value) return;

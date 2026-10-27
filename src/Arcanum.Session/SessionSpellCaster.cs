@@ -109,6 +109,9 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
         _events = events ?? throw new ArgumentNullException(nameof(events));
     }
 
+    /// <summary>The session this host casts in.</summary>
+    public GameSessionOwner Owner => _owner;
+
     /// <summary>What the casts so far left for the host, in order.</summary>
     public IReadOnlyList<SpellCastEvent> Log => _log;
 

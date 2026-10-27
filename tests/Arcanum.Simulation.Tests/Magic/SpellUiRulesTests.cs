@@ -51,6 +51,7 @@ public sealed class SpellUiRulesTests
         Assert.AreEqual(SpellActivationKind.CastAtPlayer, Activate(Critter, shift: true).Kind);
         Assert.AreEqual(SpellActivationKind.Target, Activate(NoSelf, shift: true).Kind);
         Assert.AreEqual(SpellActivationKind.Target, Activate(Tile, shift: true).Kind, "a tile spell has no object bit");
+        Assert.AreEqual(SpellActivationKind.NoActionPoints, Activate(Critter, shift: true, points: false).Kind, "the action points come first");
     }
 
     [TestMethod]

@@ -32,6 +32,8 @@ public partial class TerrainViewerApp
     private SpellTargeting? _spellTargeting;
     private SpellCastGoal? _spellGoal;
     private string? _spellNotice;
+    // The Alt keys held, left and right apart (the original adds the non-party bit back only when the last one is released).
+    private bool _spellAltLeft, _spellAltRight;
     private int _spellLogSeen;
     private int _spellCasts;
 
@@ -45,8 +47,9 @@ public partial class TerrainViewerApp
 
     /// <summary>A casting goal playing: its run, spell and target, when it started (the first frame after the click, on the frames'
     /// clock), and whether its release frame fired.</summary>
-    private sealed class SpellCastGoal(int run, int spell, string target)
+    private sealed class SpellCastGoal(SessionSpellCaster caster, int run, int spell, string target)
     {
+        public SessionSpellCaster Caster { get; } = caster;
         public int Run { get; } = run;
         public int Spell { get; } = spell;
         public string Target { get; } = target;
@@ -80,10 +83,15 @@ public partial class TerrainViewerApp
         return _spellCaster;
     }
 
-    /// <summary>The cast host for the event pump: only the one built for the shown map (another map's passes stay plain).</summary>
-    private SessionSpellCaster? SpellCasterForEvents() =>
-        _spellCaster is not null && _areaSession is { } owner && _readyArea is { } area && _worldActor.Session is AreaGridSession grid
-        && Equals((owner, area, grid, (object?)_areaPortals), _spellCasterStamp) ? _spellCaster : null;
+    /// <summary>The cast host for the event pump: the shown map's, built as soon as the session holds a run (its ticks and end need
+    /// the map's magic world); without runs the host already built, or none (plain passes).</summary>
+    private SessionSpellCaster? SpellCasterForEvents()
+    {
+        if (_areaSession is not { } owner) return null;
+        if (owner.QuerySpellRuns().Count > 0) return SpellCasterNow();
+        return _spellCaster is not null && _readyArea is { } area && _worldActor.Session is AreaGridSession grid
+            && Equals((owner, area, grid, (object?)_areaPortals), _spellCasterStamp) ? _spellCaster : null;
+    }
 
     private CellCoord? HeroWorldCell()
     {
@@ -94,12 +102,13 @@ public partial class TerrainViewerApp
 
     // ---- the pane (M) ----
 
-    /// <summary>The original Spells key (M) shows or hides the spell pane while the hero can cast. Returns true when the key belongs
-    /// to it, so it is not reported as a reserved, unimplemented original key.</summary>
+    /// <summary>The original Spells key (M, acting on its release as the original's scancode handler does, SU14) shows or hides the
+    /// spell pane while the hero can cast. Returns true when the key belongs to it, so it is not reported as a reserved,
+    /// unimplemented original key.</summary>
     private bool RouteSpellKey(WorldKeyDecision decision)
     {
         if (decision.Key != WorldKey.M || !SpellMapActive || _areaSession?.QueryHero() is null) return false;
-        if (!decision.Pressed || decision.Echo) return true;
+        if (decision.Pressed || decision.Echo) return true;
         if (!_worldFocused || WorldModal || WorldUiFocus) { _spellNotice = "M ignored: palette, dialog, window or UI focus owns input"; RefreshAreaStatus(); return true; }
         if (_spellPane?.Shown == true) { _spellPane.HidePane(); _spellNotice = null; }
         else ShowSpellPane();
@@ -125,8 +134,11 @@ public partial class TerrainViewerApp
             else _spellPane.Show(AreaSpellCasting.Known(_areaSession, _spellData?.Data));
         }
         if (_spellTargeting is not null && (!SpellMapActive || WorldModal || ConversationOpen)) CancelSpellTargeting("a window opened or the map changed");
-        if (_spellGoal is not { } goal) return;
-        if (SpellCasterForEvents() is not { } caster || _areaSession is not { } owner) { CancelSpellCast("the map changed"); return; }
+        if (_spellGoal is null) return;
+        // Another map, actor or session rebuilds the host, which ends the goal through its own host first; no host ends it too.
+        if (SpellCasterNow() is null) CancelSpellCast("the map changed");
+        if (_spellGoal is not { } goal || _areaSession is not { } owner) return;
+        var caster = goal.Caster;
         var now = WorldMilliseconds();
         var started = goal.StartMs ??= now;
         if (!goal.Released && owner.QueryHeroLife() is not { Status.IsActive: true }) { EndSpellGoal(caster, goal, "the hero cannot act"); return; }
@@ -161,8 +173,8 @@ public partial class TerrainViewerApp
         { _spellNotice = "no spell can be cast here (needs --hero and the spell data)"; RefreshAreaStatus(); return; }
         var record = records[spell];
         var begin = record.Areas.Length > 0 ? record.Areas[0].Targets : 0;
-        if (SpellUiRules.TargetsInventory(begin)) { _spellNotice = "a spell on an inventory item is not ready"; RefreshAreaStatus(); return; }
         var active = owner.QueryHeroLife() is { Status: { IsDead: false, IsUnconscious: false } };
+        if (active && SpellUiRules.TargetsInventory(begin)) { _spellNotice = "a spell on an inventory item is not ready"; RefreshAreaStatus(); return; }
         var activation = SpellUiRules.Activate(active, record.Data.Enabled, begin, record.Resist.Aggressive, Godot.Input.IsKeyPressed(Key.Alt),
             Godot.Input.IsKeyPressed(Key.Shift), owner.QueryActionPointCheck(SessionCombatant.Hero, TurnBasedRules.CastSpellCost));
         GD.Print($"ARC-MAGIC-015 activate spell={spell} kind={activation.Kind} mask=0x{activation.Mask:X}");
@@ -196,18 +208,21 @@ public partial class TerrainViewerApp
     private void CancelSpellCast(string? why)
     {
         CancelSpellTargeting(why);
-        // A goal of another session or map is only dropped: its host no longer answers for the shown map.
-        if (_spellGoal is { } goal && SpellCasterForEvents() is { } caster) EndSpellGoal(caster, goal, why ?? "cancelled");
+        // A goal ends through its own host while its session is the shown one (a map change frees its run, 0x429CD0); a goal of a
+        // replaced session (a quick load) is only dropped.
+        if (_spellGoal is { } goal && ReferenceEquals(goal.Caster.Owner, _areaSession)) EndSpellGoal(goal.Caster, goal, why ?? "cancelled");
         _spellGoal = null;
     }
 
     /// <summary>The Alt keys while the cursor is open (0x57C0B0, 0x57C0E0): an aggressive spell may then pick the hero's party.</summary>
     private void TrackSpellModifiers(InputEventKey key)
     {
-        if (_spellTargeting is not { } targeting || key.Keycode != Key.Alt || key.Echo) return;
+        if (key.Keycode != Key.Alt || key.Echo) return;
+        if (key.Location == KeyLocation.Right) _spellAltRight = key.Pressed; else _spellAltLeft = key.Pressed;
+        if (_spellTargeting is not { } targeting) return;
         var aggressive = targeting.Record.Resist.Aggressive;
         targeting.Mask = key.Pressed ? SpellUiRules.AltPressed(targeting.Mask, aggressive)
-            : Godot.Input.IsKeyPressed(Key.Alt) ? targeting.Mask : SpellUiRules.AltReleased(targeting.Mask, aggressive);
+            : _spellAltLeft || _spellAltRight ? targeting.Mask : SpellUiRules.AltReleased(targeting.Mask, aggressive);
         _hoverStamp = null;
     }
 
@@ -297,7 +312,7 @@ public partial class TerrainViewerApp
         }
         StopWorldRoute("ROUTE_REPLACED_BY_CAST");
         CancelAreaAttack("a cast replaced it");
-        _spellGoal = new(run, spell, target ?? $"tile {tile.X},{tile.Y}");
+        _spellGoal = new(caster, run, spell, target ?? $"tile {tile.X},{tile.Y}");
         _spellNotice = $"casting {AreaSpellsPage.SpellName(_spellData?.Data, spell)}";
         GD.Print($"ARC-MAGIC-015 goal-start run={run} spell={spell} ap={start.ActionPoints?.Charge.ToString() ?? "no round"}"
             + $" eye-candy={6 * spell} (presentation event, not drawn)");

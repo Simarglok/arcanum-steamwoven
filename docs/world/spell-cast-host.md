@@ -142,10 +142,10 @@ The original's goals 26 and 82 (`ag_throw_spell`, with the record's casting anim
 
 The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the original's spell UI does (ledger SU1–SU14):
 
-1. **The spell pane.** `M` shows or hides a pane with one button per spell the hero knows (the spell book's ranks, college by
-   college) and the cost the original's UI shows (`CastCost`). The original's in-game key handler has no key for it (SU14): its
-   interface button opens it; `M` is the viewer's key, under the input map's reserved name. The pane is no window: the world keeps
-   its clicks.
+1. **The spell pane.** `M`, on its release as in the original (SU14), shows or hides a pane with one button per spell the hero
+   knows (the spell book's ranks, college by college) and the cost the original's UI shows (`CastCost`). The original switches
+   its interface bar to the spell pane; the viewer has no bar, so the key toggles the pane. The pane is no window: the world
+   keeps its clicks.
 2. **The activation** (`SpellUiRules.Activate`, SU1–SU3). Nothing for a hero that is dead or unconscious or a disabled spell. A BEGIN
    area 0, exactly the radius bit, or self without the tile bit is cast at once at the hero's tile. Otherwise the action points are
    checked (4 in a turn-based round; the viewer starts none, so it passes) and the targeting cursor opens with the BEGIN area, plus
@@ -159,16 +159,20 @@ The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the origina
 4. **The cast** (`SessionSpellCaster.CastAt`, SU8): spell.mes 600 when the hero cannot afford the spell, 604 without a line of fire,
    then the run; its casting goal starts (`StartGoal`; a refusal ends it, `EndGoal(refused: true)`), the release frame comes
    `TerrainViewerApp.SpellReleaseMs` (500 ms of world time) later (`Release`: the re-check and BEGIN), the end 400 ms after it
-   (`EndGoal`). A goal cut short before its release frame (a lost hero, a map change) ends there and frees its run (0x429CD0).
+   (`EndGoal`). While the goal plays, world presses and the stick are ignored (the original queues other goals under it). A goal
+   cut short before its release frame (a lost hero, a map change, another actor) ends through its own host and frees its run
+   (0x429CD0); a goal of a session a quick load replaced is dropped with that session.
 5. **Feedback.** The host's new log entries become one line in the status bar and the message window: spell.mes messages by
    number (the player's own texts, `SpellTexts.Message`), the fatigue paid, damage, healing, resistance and the component types
    that are not ready. Eye candy is a presentation event only: the log lines `eye-candy=6·spell` at the goal's start and
    `6·spell+4` at the release (SU12, CG8); no art is drawn.
-6. **Events.** While the viewer has a cast host for the shown map, the event pump's passes go through it
-   (`SessionSpellCaster.ProcessEvents`), so a run's later events run with the map's magic world and their payments are applied.
+6. **Events.** While the session holds a run, or the shown map's host exists, the event pump's passes go through the shown
+   map's host (`SessionSpellCaster.ProcessEvents`, only a host of the pump's own session), so a run's later events run with the
+   map's magic world and their payments are applied.
 
 The first cast (plan milestone) is the native smoke: the pre-made hero learns the first damaging rank-1 college spell, opens the
-pane, activates it and casts at a living NPC of the cave with the cursor; its fatigue drops and the NPC resists or takes damage.
+pane, activates it and casts with the cursor at the core NPC with the fewest hit points of the shown map (exterior, cave or
+`--area-map`); its fatigue drops and the NPC resists or takes damage.
 
 ## Differences from the original
 
@@ -197,6 +201,8 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
   playing").
 - Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item); item and hotkey activation
   (0x57C040, 0x57C080); the picker 0x4F28A0's own object/tile order (the viewer's: object, hero tile, tile).
+- A run's events on a map the viewer has no cast host for (no combat host, or no spell data yet) get plain passes, which refuse
+  them.
 - No turn-based round in the viewer, so the cast's 4 action points are never charged there. The predictor has no display in the
   original's UI (SU11), so none is planned.
 - Worn mana stores do not pay (no item store state).
