@@ -58,6 +58,19 @@ public sealed record CombatAnomalyProfile
     /// </summary>
     public bool CornerStepCountsBothRoutes { get; init; }
 
+    /// <summary>
+    /// CL4 (owner decision 2026-10-20): a surrender leaves combat mode and then writes back critter flags read before, so the
+    /// combat-mode bit is set again while the rest of leaving combat mode (the target unlock) stays done (see
+    /// <see cref="Ai.DangerRules.Set"/>).
+    /// </summary>
+    public bool SurrenderKeepsCombatModeFlag { get; init; }
+
+    /// <summary>
+    /// FO14 (owner decision 2026-10-21): the setter keeps the target lock when it applies a state other than COMBAT_FOCUS, so a
+    /// locked NPC whose flight ended in NONE ignores every later fight request (see <see cref="Ai.DangerRules.Set"/>).
+    /// </summary>
+    public bool LockedNoneStateFights { get; init; }
+
     /// <summary>The original with every recorded D2 fix; the default setting.</summary>
     public static readonly CombatAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -73,6 +86,8 @@ public sealed record CombatAnomalyProfile
         StallCheckKeepsPreviousActionPoints = true,
         OverexertionKnockoutClearsNextActionPoints = true,
         CornerStepCountsBothRoutes = true,
+        SurrenderKeepsCombatModeFlag = true,
+        LockedNoneStateFights = true,
     };
 
     /// <summary>Both settings, default first.</summary>
