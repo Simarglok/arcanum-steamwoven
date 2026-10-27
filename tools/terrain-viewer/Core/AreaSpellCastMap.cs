@@ -10,8 +10,8 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
 /// ARC-MAGIC-014: the AREA map as a cast reads it (<see cref="ISpellCastMap"/>), for any map the viewer opens. Objects are the map's
-/// rows on their world cells — an object with a session entity (an NPC, a container, an item: the inventory seed) under that id, any
-/// other under <c>row:</c> kind and source index — and the hero (<see cref="SessionSpellCaster.Hero"/>) on its live cell. An NPC's facts
+/// rows — an object with a session entity (an NPC, a container, an item: the inventory seed) under that id, any other under
+/// <c>row:</c> kind and source index — on their world cells (a carried item, object flag 0x1000, on none) and the hero (<see cref="SessionSpellCaster.Hero"/>) on its live cell. An NPC's facts
 /// are its combat values (<see cref="AreaCombatHost"/>) and stored fields with its life in the session; the line of fire is the
 /// original's (<see cref="LineOfFireRules.Trace"/>, ARC-COMBAT-012) over the map's live <see cref="AreaLineOfFire"/>.
 /// Stand-ins, each documented in the contract: the sector kind is one for the whole map, a path exists to every admitted tile, NPCs stand on
@@ -20,7 +20,7 @@ namespace Arcanum.TerrainViewer.Core;
 public sealed class AreaSpellCastMap : ISpellCastMap
 {
     private const int ObjectFlagsSlot = 18, SpellFlagsSlot = 19, PcType = 15, NpcType = 16;
-    private const int DestroyedOrOff = 0x3, InInventory = 0x1000;
+    private const int DestroyedOrOff = 0x3;
 
     private readonly GameSessionOwner _session;
     private readonly int _map;
@@ -57,9 +57,10 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         foreach (var row in rows)
         {
             // A carried item (object flag 0x1000) stands in no sector list, whatever location it stores.
-            if (row.WorldX is not { } x || row.WorldY is not { } y || (Flags(row, ObjectFlagsSlot) & InInventory) != 0) continue;
+            if (row.WorldX is not { } x || row.WorldY is not { } y) continue;
             var id = Id(row);
             _rows[id] = row;
+            if ((Flags(row, ObjectFlagsSlot) & SpellTargetObject.Inventory) != 0) continue;
             if (!_cells.TryGetValue((x, y), out var list)) _cells[(x, y)] = list = [];
             list.Add(id);
             if (row.Type == NpcType) _npcs.Add(id);

@@ -3,6 +3,7 @@ using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
+using Arcanum.Simulation.Reaction;
 
 namespace Arcanum.Session;
 
@@ -88,7 +89,8 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     // The runs whose goal reached its release frame (the goal's frame flag 0x8): their goal's end frees nothing. A freed run's id
     // leaves the set, since the slot is reused.
     private readonly HashSet<int> _released = [];
-    // Whose charge cells a payment spends: the payer the rules asked for last (only the hero's are modelled).
+    // Whose charge cells a payment spends: the payer the rules asked for last (only the hero's are modelled). The rules ask the payer
+    // before the cells of every payment; a run without a source asks neither and pays nothing.
     private string? _cellsPayer;
 
     public SessionSpellCaster(GameSessionOwner owner, Func<int, SessionSpellRecord?> records, ISpellCastMap map, ISessionEventWorld events)
@@ -335,7 +337,13 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
         if (_owner.QuerySpellRuns()[run] is not { } r) return null;
         // The release gate marks the goal's frame handled before the re-check (0x42CAA0): the goal's end then frees nothing.
         _released.Add(run);
-        if (TargetStillValid(r)) return Act(new(SessionSpellRunActionKind.Begin, run));
+        if (TargetStillValid(r))
+        {
+            var begun = Act(new(SessionSpellRunActionKind.Begin, run));
+            // A BEGIN the session rejected left the run untouched: its goal's end still frees it.
+            if (begun.Disposition == GameSessionDisposition.Rejected) _released.Remove(run);
+            return begun;
+        }
         if (!Profile.ReleaseRefusalKeepsRun) Act(new(SessionSpellRunActionKind.Free, run));
         return null;
     }
@@ -399,16 +407,24 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     public SessionEventPassResult ProcessEvents(int budget = 500)
     {
         var before = _owner.QuerySpellRuns();
-        var pass = _owner.ProcessEvents(_events is ISessionScriptWorld scripts ? new ScriptPassWorld(this, scripts) : this, budget);
+        var pass = _owner.ProcessEvents(_events is ISessionScriptWorld scripts ? new ScriptPassWorld(this, scripts) : new PassWorld(this, _events), budget);
         foreach (var firing in pass.SpellRuns.Where(f => f.Ran)) Apply(firing.Notes, id => _owner.QuerySpellRuns()[id] ?? before[id]);
         return pass;
     }
 
-    // The pass world of a host whose event world also runs deferred script calls.
-    private sealed class ScriptPassWorld(SessionSpellCaster caster, ISessionScriptWorld scripts) : ISessionSpellWorld, ISessionScriptWorld
+    // The pass world: this host for the magic-tech events, the host's event world for the rest (its party facts when it has them; a
+    // world without them answers none, as the pass then does).
+    private class PassWorld(SessionSpellCaster caster, ISessionEventWorld events) : ISessionSpellWorld, ISessionPartyEventWorld
     {
         public ISpellRunHost SpellRuns => caster;
-        public LifeFacts? CritterFacts(SessionMapId map, string entity) => scripts.CritterFacts(map, entity);
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => events.CritterFacts(map, entity);
+        public ReactionNpcFacts? ReactionNpcFacts(SessionMapId map, string entity) => (events as ISessionPartyEventWorld)?.ReactionNpcFacts(map, entity);
+        public ReactionPcFacts? ReactionPcFacts() => (events as ISessionPartyEventWorld)?.ReactionPcFacts();
+    }
+
+    // The pass world of a host whose event world also runs deferred script calls.
+    private sealed class ScriptPassWorld(SessionSpellCaster caster, ISessionScriptWorld scripts) : PassWorld(caster, scripts), ISessionScriptWorld
+    {
         public bool ObjectExists(SessionMapId map, string entity) => scripts.ObjectExists(map, entity);
         public bool RunScriptCall(SessionScriptCall call) => scripts.RunScriptCall(call);
     }

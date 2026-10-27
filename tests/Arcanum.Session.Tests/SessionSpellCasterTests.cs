@@ -48,11 +48,11 @@ public sealed class SessionSpellCasterTests
     }
 
     // A self spell (BEGIN area self, cost 7, instant) whose BEGIN deals 3 normal damage to its target.
-    private static SessionSpellRecord SelfBolt(ulong beginTargets = 0x1, int cost = 7, bool technology = false, bool heal = false) =>
+    private static SessionSpellRecord SelfBolt(ulong beginTargets = 0x1, int cost = 7, bool technology = false, bool heal = false, int duration = 0) =>
         SessionSpellRecords.Translate(Record(number: 90, beginTargets: beginTargets, info: SpellInfo.Friendly, technology: technology,
             components: [new(SpellAction.Begin, SpellComponentType.Damage, new(0x1, 0, 0, 0, -1), 0, 0, new DamageData(0, 3, 3, 0)),
                 .. heal ? new[] { new SpellComponent(SpellAction.Begin, SpellComponentType.Heal, new(0x1, 0, 0, 0, -1), 0, 0, new DamageData(0, 2, 2, 0)) } : []])
-        with { Cost = cost, DurationSeconds = 0, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0, DisallowedCasterSpellFlags = 0,
+        with { Cost = cost, DurationSeconds = duration, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0, DisallowedCasterSpellFlags = 0,
             DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0 });
 
     private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(RuleMode mode, SessionSpellRecord record, bool boxDestroyed = true)
@@ -123,22 +123,42 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
-    public void A_goal_ends_nothing_after_its_release_frame_and_frees_a_run_once()
+    public void A_goal_ends_nothing_after_its_release_frame_and_a_reused_slot_is_freed_again()
     {
-        var record = SelfBolt();
+        // Original MG41: the box gone at the release frame keeps the run in its slot; its goal's end then frees nothing.
+        var record = SelfBolt(beginTargets: 0x4);
+        var (owner, caster) = Session(RuleMode.Original, record, boxDestroyed: false);
+        using var _ = owner;
+        var run = Start(owner, caster, record, "box");
+        var gone = new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, new Map(owner), new Events());
+        Assert.IsNull(gone.Release(run));
+        var before = Hero(owner).Fatigue;
+        Assert.IsNull(gone.EndGoal(run), "the release frame handled the goal's frame");
+        Assert.AreEqual((before, true), (Hero(owner).Fatigue, owner.QuerySpellRuns()[run] is not null), "nothing charged or freed");
+
+        // Freed through the same host, its slot reused: the new run's goal ends charged, once.
+        gone.Act(new(SessionSpellRunActionKind.Free, run));
+        var second = Start(owner, caster, record, "box");
+        Assert.AreEqual(run, second, "the slot is reused");
+        Assert.IsNotNull(gone.EndGoal(second));
+        Assert.IsNull(gone.EndGoal(second), "a goal ends once");
+        Assert.AreEqual(before - 7, Hero(owner).Fatigue, "charged once");
+    }
+
+    [TestMethod]
+    public void A_goal_ends_nothing_for_a_run_whose_begin_ran()
+    {
+        var record = SelfBolt(duration: 30);
         var (owner, caster) = Session(RuleMode.Original, record);
         using var _ = owner;
         var run = Start(owner, caster, record);
         caster.Release(run);
-        var after = Hero(owner);
-        Assert.IsNull(caster.EndGoal(run), "the release frame handled the goal's frame");
-        Assert.AreEqual(after, Hero(owner), "nothing charged again");
-
-        var second = Start(owner, caster, record);
+        Assert.IsNotNull(owner.QuerySpellRuns()[run], "a lasting spell keeps its slot after BEGIN");
         var before = Hero(owner).Fatigue;
-        Assert.IsNotNull(caster.EndGoal(second));
-        Assert.IsNull(caster.EndGoal(second), "a goal ends once");
-        Assert.AreEqual(before - 7, Hero(owner).Fatigue, "charged once");
+        // Another host, which never saw the release frame, reads the run's processed flag.
+        var other = new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, new Map(owner), new Events());
+        Assert.IsNull(other.EndGoal(run));
+        Assert.AreEqual(before, Hero(owner).Fatigue);
     }
 
     [TestMethod]
