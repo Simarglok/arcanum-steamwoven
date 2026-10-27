@@ -299,12 +299,31 @@ class WorldRunnerRawLogTests(unittest.TestCase):
                 self.assertEqual((2, "argument-policy", "ValueError"), (code, report["failureStage"], report["exceptionClass"]))
                 self.assertFalse(raw.exists())
                 run.assert_not_called()
+        with patch.dict(os.environ, {"ARC_AREA_CONVERSATION_PROBE": "1"}):
+            raw = self.root / "probe.godot.log"
+            code, report, run = self.invoke("synthetic", raw, lambda argv, env, timeout: (0, ""))
+            self.assertEqual((2, "argument-policy"), (code, report["failureStage"]))
+            self.assertFalse(raw.exists())
+            run.assert_not_called()
         raw = self.root / "kept.godot.log"
         raw.write_text("earlier evidence\n", encoding="utf-8")
         code, report, run = self.invoke("synthetic", raw, lambda argv, env, timeout: (0, ""))
         self.assertEqual((2, "raw-log", "OSError"), (code, report["failureStage"], report["exceptionClass"]))
         self.assertEqual("earlier evidence\n", raw.read_text(encoding="utf-8"))
         run.assert_not_called()
+
+    def test_a_child_that_cannot_be_read_is_framed_with_its_closed_stage(self):
+        raw = self.root / "source-graphical.godot.log"
+
+        def child(argv, env, timeout):
+            raise self.runner.ChildFailure("child-communication", OSError(5, "PRIVATE-SENTINEL"), None)
+        code, report, _ = self.invoke("synthetic", raw, child)
+        self.assertEqual((2, "child-communication"), (code, report["failureStage"]))
+        lines = raw.read_text(encoding="utf-8").splitlines()
+        self.assertEqual("world-validate child self-test start timeout=60s", lines[0])
+        self.assertRegex(lines[1], r"^world-validate child self-test failure stage=child-communication elapsed=\d+\.\d{3}s$")
+        self.assertEqual(2, len(lines))
+        self.assertNotIn("PRIVATE-SENTINEL", raw.read_text(encoding="utf-8"))
 
     def test_without_the_flag_no_file_is_written(self):
         output = io.StringIO()

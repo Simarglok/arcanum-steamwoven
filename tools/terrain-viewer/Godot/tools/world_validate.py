@@ -124,6 +124,11 @@ class RawLog:
         self.stream.write(f"world-validate child {label} {outcome} code={code} elapsed={elapsed:.3f}s\n")
         self.stream.flush()
 
+    def failed(self, label: str, stage: str, elapsed: float) -> None:
+        # The child's output is lost with a spawn or communication failure; the closed stage still frames it.
+        self.stream.write(f"world-validate child {label} failure stage={stage} elapsed={elapsed:.3f}s\n")
+        self.stream.flush()
+
     def cleanup(self) -> None:
         self.stream.close()
 
@@ -141,7 +146,9 @@ def _main(state: dict) -> int:
     state.update(stage="argument-policy", kind=args.kind, host="exported" if args.app else "source")
     if not 1 <= args.timeout <= 180:
         raise ValueError("bounded timeout outside permitted range")
-    if args.raw_log is not None and args.kind not in ("synthetic", "persistence"):
+    if args.raw_log is not None and (args.kind not in ("synthetic", "persistence") or any(
+            name.startswith("ARC_") and name.endswith("_PROBE") and value for name, value in os.environ.items())):
+        # A self-test probe (such as the conversation probe with its game root) can make a synthetic child read original data.
         raise ValueError("raw output is kept only for kinds that read no original data")
     state["stage"] = "root-resolution"
     root = args.candidate_root.resolve(strict=True)
@@ -170,7 +177,11 @@ def _main(state: dict) -> int:
             return run_child(argv, env, timeout)
         raw.begin(label, timeout)
         started = time.monotonic()
-        code, output = run_child(argv, env, timeout)
+        try:
+            code, output = run_child(argv, env, timeout)
+        except ChildFailure as failure:
+            raw.failed(label, failure.stage, time.monotonic() - started)
+            raise
         raw.end(label, code, output, time.monotonic() - started)
         return code, output
     env.update(__GODOT_SHELL_ENV_SET="1", DOTNET_ROOT=str(Path.home() / ".local/share/dotnet"),

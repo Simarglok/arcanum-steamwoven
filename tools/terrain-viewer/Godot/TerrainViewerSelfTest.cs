@@ -11,6 +11,7 @@ public static partial class TerrainViewerSelfTest
 {
     public static async void Run(Node host)
     {
+        StageClock.Restart();
         try
         {
             // ARC-DEV-032: the self-test reads and writes no setting of the player.
@@ -63,6 +64,7 @@ public static partial class TerrainViewerSelfTest
                 app.SelfTestBootstrap = true; app.SetProcess(false);
                 var fixture = WorldFixture();
                 app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
+                Stage("WorldMainSettings");
                 var verified = await app.WorldMainSettingsForSelfTestAsync();
                 app.ClearSyntheticForSelfTest();
                 GD.Print("ARC-WORLD-003 main settings focused control " + (verified ? "PASS" : "NOT_VERIFIED") + "; historical cause UNKNOWN; physical usability NOT_VERIFIED");
@@ -197,13 +199,16 @@ public static partial class TerrainViewerSelfTest
     // ARC-DEV-043: each frame-bound stage names itself as it begins, with the time since the self-test began and whether
     // the window can draw and has focus, and the line is flushed at once (a release export does not flush each print), so a
     // run stopped by its timeout shows the stage it waited in.
-    private static readonly System.Diagnostics.Stopwatch StageClock = System.Diagnostics.Stopwatch.StartNew();
+    private static readonly System.Diagnostics.Stopwatch StageClock = new();
 
     internal static void Stage(string name)
     {
         GD.Print($"ARC-DEV-043 self-test stage {name} begin t={StageClock.ElapsedMilliseconds}ms"
                  + $" can-draw={DisplayServer.WindowCanDraw()} focused={DisplayServer.WindowIsFocused()}");
-        if (!OperatingSystem.IsWindows()) _ = FlushAllStreams(IntPtr.Zero);
+        if (OperatingSystem.IsWindows()) return;
+        // A diagnostic line never changes the outcome: a missing libc only loses the flush.
+        try { _ = FlushAllStreams(IntPtr.Zero); }
+        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException) { }
     }
 
     [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "fflush")]

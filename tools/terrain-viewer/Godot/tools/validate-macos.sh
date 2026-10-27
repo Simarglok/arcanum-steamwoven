@@ -71,8 +71,9 @@ cleanup_candidate() {
 }
 trap cleanup_candidate EXIT HUP INT TERM
 # Each step's whole output goes to its evidence log; the synthetic and persistence WORLD validations also keep the raw
-# Godot output beside it as NAME.godot.log (ARC-DEV-043), so a timed-out child shows the stage it waited in. ARC-DEV-041: the export's own output (the launch queue's run log)
-# names each step as it starts and, when one fails, its exit code, evidence log and last 20 lines, then stops.
+# Godot output beside it as NAME.godot.log (ARC-DEV-043), so a timed-out child shows the stage it waited in.
+# ARC-DEV-041: the export's own output (the launch queue's run log) names each step as it starts and, when one fails,
+# its exit code, evidence log and last 20 lines (and the raw log's, when there is one), then stops.
 run_log() {
   name=$1; shift
   printf 'validate-macos: step %s\n' "$name"
