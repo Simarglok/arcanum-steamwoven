@@ -143,9 +143,8 @@ Anomalies (none needs a switch):
   settings (the original's behaviour; reported to the host each time).
 - ODA4 (OD4, OD6): a ranged break fires a trap with no triggerer; the session's attack is melee only, so it does not arise.
 - ODA5 (OD3): the full-damage flags lose to the material reduction and the difficulty; no caller of the session sets them.
-- ODA6 (OD13): the session lays a spilled container's items loose instead of in a junk pile and models no item decay; a
-  difference of the inventory owner, not a switch (the pile and decay come with dropping items, which the inventory does not
-  model yet).
+- ODA6 (OD13): the session lays a spilled container's items loose instead of in a junk pile; a difference of the inventory owner,
+  not a switch (the pile comes with ARC-WORLD-063; the items' decay is in since ARC-WORLD-062, [ID7](items.md#item-decay-arc-world-062)).
 
 ## Critical effects (ARC-COMBAT-009)
 

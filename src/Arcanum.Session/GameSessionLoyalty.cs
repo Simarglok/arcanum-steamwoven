@@ -82,7 +82,11 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return RejectLoyalty(GameSessionFailure.RevisionExhausted);
         _party.Put(next, false);
         // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
-        if (next.Standing == CompanionStanding.Free) _combat.Concealed.Remove(next.Entity);
+        if (next.Standing == CompanionStanding.Free)
+        {
+            _combat.Concealed.Remove(next.Entity);
+            ClearNoAttackOnLeave(next.Entity);
+        }
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, step, Version);
     }
@@ -159,7 +163,7 @@ public sealed partial class GameSessionOwner
         if (current.Standing != CompanionStanding.Waiting || _revision == long.MaxValue) return GameEventHandlerOutcome.Refused;
         var charisma = _hero is null ? (int)e.Payload.Values[2] : Leader(PersuasionTraining.None, 0).Charisma;
         var world = _passWorld as ISessionPartyEventWorld;
-        var npc = world?.ReactionNpcFacts(new(entity.Map), entity.Code);
+        var npc = world?.ReactionNpcFacts(new(entity.Map), entity.Code) is { } given ? Listed(entity.Code, given) : null;
         var pc = QueryHeroReactionFacts() ?? world?.ReactionPcFacts();
         ReactionAdjustment? adjustment = null;
         SessionReaction? reaction = null;
@@ -187,6 +191,7 @@ public sealed partial class GameSessionOwner
         _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, Jilted = true, Loyalty = loyalty }, false);
         // ARC-SKILLS-008 (ST2): the waiting follower that leaves is no longer concealed.
         _combat.Concealed.Remove(current.Entity);
+        ClearNoAttackOnLeave(current.Entity);
         _revision++;
         _passWaits?.Add(new(e, entity.Code, charisma, failure == GameSessionFailure.None ? adjustment : null, failure));
         return GameEventHandlerOutcome.Completed;
