@@ -129,6 +129,7 @@ public sealed class AssemblyGroundStateTests
         CollectionAssert.AreEqual(new[] { "made:1", "made:2" }, result.OnGround.ToArray());
         Assert.AreEqual(0, owner.QueryNpcInventory("smith").Count, "the NPC's list gets nothing");
         Assert.AreEqual("made:1@104,201 made:2@104,201", Ground(owner), "on the smith's tile");
+        Assert.AreEqual(0, owner.QueryItemDecays().Count, "an NPC crafter's refused products do not decay either (ARC-WORLD-062, ledger ID9)");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "made:1", Accept).Disposition, "the hero can pick it up");
 
         // Without the crafter's tile, or without a hero (the ground store is the hero's), a refused unit can go nowhere: nothing is spent.

@@ -349,7 +349,7 @@ The AREA viewer draws what the session holds on the ground but no T0 body drew, 
   body as it was and is logged once (`ARC-RENDER-033 extra-art`).
 
 **Not ready.** The junk pile of OD13
-(ARC-WORLD-063) and the items' decay (ARC-WORLD-062); a busted window's busted ART.
+(ARC-WORLD-063); a busted window's busted ART. The items' decay is in since ARC-WORLD-062 (the event pump redraws the ground).
 
 ## Evidence
 
