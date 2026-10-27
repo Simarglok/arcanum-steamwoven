@@ -72,7 +72,7 @@ later task. The original lists and
 reads every `proto\*.pro` once while the game initialises, before it mounts the
 module, and keeps them for the process: the map subsystem's Proto entry has an
 init function and no module-load function (checked in the 1.0.7.4 executable,
-[ledger](../research/original-verification-ledger.md#prototype-phase-arc-data-026)
+[ledger](../research/ledger/data.md#prototype-phase-arc-data-026)
 row "Prototype phase"). So a prototype is read from the base sources only —
 `data/`, `arcanum*.dat`, the game folder and `tig.dat`, the first of them in
 search order — and a module's copy is never read, also not when no base copy
@@ -116,8 +116,8 @@ header (1.8 MB for the main map); this costs time, not correctness.
 ## Generated sectors (ARC-DATA-031)
 
 A sector without its own file is generated from a terrain template, as the 1.0.7.4 executable does (checked by two
-readers: [ledger](../research/original-verification-ledger.md#terrain-templates-arc-data-031) TR1–TR5 and
-[SS2, SS5, SS6](../research/original-verification-ledger.md#main-map-streaming-arc-data-030); facts and counts in the
+readers: [ledger](../research/ledger/world.md#terrain-templates-arc-data-031) TR1–TR5 and
+[SS2, SS5, SS6](../research/ledger/world.md#main-map-streaming-arc-data-030); facts and counts in the
 [generated-wilderness study](../research/generated-wilderness-evidence.md)).
 
 - **Types.** `TerrainTypeTable.Open(stack)` reads `terrain/terrain.mes` from the base sources only (the highest-ranked

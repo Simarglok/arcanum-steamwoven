@@ -321,7 +321,14 @@ public sealed class SpellRunSystem
             if (Table[id] is not { } current) return;
             var target = entry;
             if (!PerTarget(id, record, ref target, pass)) continue;
-            if (!TakesEffect(id, record, target, maximized)) { _notes.Add(new(SpellRunNoteKind.Resisted, id, Target: target)); continue; }
+            if (!TakesEffect(id, record, target, maximized))
+            {
+                _notes.Add(new(SpellRunNoteKind.Resisted, id, Target: target));
+                // MG34: the original skips the restore below for a resisted target, so a reflection's swap stays for the rest of
+                // the run; Steamwoven restores it as for an applied target.
+                if (!_profile.ResistedReflectionKeepsSwap) RestoreSource(id, startSource, ref target);
+                continue;
+            }
             for (var component = 0; component < count; component++)
             {
                 if (Table[id] is not { } live) return;
@@ -339,14 +346,20 @@ public sealed class SpellRunSystem
                 if (outcome.CallbackNow) { pass.CallbackNow = true; if (outcome.EndCallback) _endCallback = true; }
                 if (outcome.JumpTo is { } jump) component = Math.Min(jump, count);
             }
-            // A source let go during the pass: the run's source becomes the current target and the current target the new
-            // source (none), for every later target too (the snapshot is not refreshed).
-            if (Table[id] is { } swapped && !Equals(swapped.Source, startSource))
-            {
-                var replaced = swapped.Source;
-                Set(swapped with { Source = target.Object });
-                target = new(replaced, target.Tile);
-            }
+            RestoreSource(id, startSource, ref target);
+        }
+    }
+
+    // After a target's components (0x4510F0): a source changed during the pass (a reflection's swap, a source let go) is
+    // swapped back — the run's source becomes the current target and the current target the changed source, for every later
+    // target too (the snapshot is not refreshed).
+    private void RestoreSource(int id, SpellRunObject? startSource, ref SpellRunTarget target)
+    {
+        if (Table[id] is { } swapped && !Equals(swapped.Source, startSource))
+        {
+            var replaced = swapped.Source;
+            Set(swapped with { Source = target.Object });
+            target = new(replaced, target.Tile);
         }
     }
 

@@ -4,7 +4,7 @@ Status: **Research** (whole-world plan M4, step R7; the travel slice W3 builds o
 ARC-WORLD-056). The
 behaviour below is read in the retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…8d52`).
 Two readers checked it, and the rows are in
-[ledger WT1–WT13](original-verification-ledger.md#world-map-travel-arc-res-068). Data facts are
+[ledger WT1–WT13](ledger/world.md#world-map-travel-arc-res-068). Data facts are
 from the owner's installed module (GOG 1.0.7.4). The interface itself (buttons, zoom, notes,
 town maps) and random encounters are summarized only as far as travel needs them. Their
 functions keep level F0 until their own slices.
@@ -92,7 +92,7 @@ travel step.
 ## Travel (WT9–WT13)
 
 - **Start.** Entering the travel state calls 0x424070 with the PC at level 3 (the animation
-  interrupt that companion orders also use, [OL5](original-verification-ledger.md#companion-orders-and-loyalty-arc-res-064))
+  interrupt that companion orders also use, [OL5](ledger/social.md#companion-orders-and-loyalty-arc-res-064))
   and then 0x457450 (demaintain, [magic](magic-core-evidence.md)); neither is read here (F0).
   It hides the PC and its followers and starts the travel music: every sound stops and
   `sound\music\arcanum.mp3` loops, with fade 25 ([SN30](audio-evidence.md#dialogue-voice-event-sounds-scripts-and-interface)). It then schedules the

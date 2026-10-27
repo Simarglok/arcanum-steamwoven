@@ -14,7 +14,7 @@ drawing side of [FR-SCENE-008](../requirements/scene.md#fr-scene-008) (a destroy
 ready.
 
 Every rule was read in the executable by two independent readers
-([ledger "Object damage"](../research/original-verification-ledger.md#object-damage-arc-combat-008), rows OD1–OD12, F2).
+([ledger "Object damage"](../research/ledger/combat.md#object-damage-arc-combat-008), rows OD1–OD12, F2).
 
 Code: [`ObjectDamageRules`](../../src/Arcanum.Simulation/Combat/ObjectDamageRules.cs),
 [`GameSessionObjects`](../../src/Arcanum.Session/GameSessionObjects.cs); tests
@@ -162,7 +162,7 @@ The registry version stays 1, as when the Lock event was added.
   cells away has a planner route to the cell the attack will walk to, or when the pointer finds no point of it; with every
   candidate skipped the stage is `NONE` with the reasons. On the main map the earlier stage chose a click-through scenery
   ("target not visible") and then a start with no route to the approach cell. Known limit: the attack walks to the standable
-  cell nearest the object and then nearest the actor (`ApproachCell`), which does not ask whether a route leads there; the
+  cell nearest the object and then nearest the actor (`ApproachCell`), which does not ask whether a route leads there (since ARC-WORLD-073 the attack takes the original's approach instead, a cell a route reaches by construction, [click route](click-route-runtime.md#attack-approach-arc-world-073)); the
   smoke starts where it does, so another reachable cell beside the object is not tried by the attack (the original's move-near
   is not read).
 

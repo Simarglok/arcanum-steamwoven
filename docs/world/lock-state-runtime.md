@@ -5,7 +5,7 @@ runtime in the viewer's map mode since ARC-WORLD-051
 ([doors and windows](../rendering/area-map-mode.md#doors-and-windows-arc-world-051)) and the
 pick-locks skill since ARC-SKILLS-006 ([pick locks](pick-locks-runtime.md)).
 The rules follow the retail 1.0.7.4 executable as read in
-[ledger LK1–LK13](../research/original-verification-ledger.md#doors-containers-and-locks-arc-res-065).
+[ledger LK1–LK13](../research/ledger/world.md#doors-containers-and-locks-arc-res-065).
 
 ## Rules (`Arcanum.Simulation.Locks`)
 

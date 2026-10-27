@@ -11,7 +11,7 @@ The Repair skill's own run is ARC-SKILLS-007 ([repair](repair-runtime.md)), whic
 
 Every rule was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers: the first reading of ARC-RES-062
 ([item durability](../research/technology-evidence.md#item-durability-fr-item-011)) and a second reading for this slice
-([ledger "Item durability"](../research/original-verification-ledger.md#item-durability-arc-world-053), rows DU1–DU8). The
+([ledger "Item durability"](../research/ledger/items.md#item-durability-arc-world-053), rows DU1–DU8). The
 registry rows ([functions](../verification/functions.csv)) are at F2.
 
 Code: [`ItemDurabilityRules`](../../src/Arcanum.Simulation/Items/ItemDurabilityRules.cs),

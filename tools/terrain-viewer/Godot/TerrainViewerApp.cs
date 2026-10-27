@@ -275,6 +275,7 @@ public partial class TerrainViewerApp : Node
         // A disposed session's follower must not keep its step snapshot reachable.
         _worldRoute = null; _worldRouteSession = null;
         RetirePassabilityOverlay();
+        RetireAreaOverview();
         ClearReadyMetrics();
         _canvas!.ClearScene();
         _cache.Clear();

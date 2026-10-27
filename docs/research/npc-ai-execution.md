@@ -20,9 +20,9 @@ its 26 threshold (ARC-RES-056), the [danger update and target
 choice](npc-ai-hostility.md) (ARC-RES-057), the [flee, surrender and
 back-off decisions](npc-ai-morale.md) (ARC-RES-058), the [heal, spell, item and
 grenade choices](npc-ai-support.md) (ARC-RES-059), the turn-based action-point
-rules of the [turn-based round](original-verification-ledger.md#turn-based-round-arc-combat-003)
+rules of the [turn-based round](ledger/combat.md#turn-based-round-arc-combat-003)
 (ARC-COMBAT-003, TB5–TB14), the attack animation, pause and repeat of the
-[real-time combat](original-verification-ledger.md#real-time-combat-arc-combat-004)
+[real-time combat](ledger/combat.md#real-time-combat-arc-combat-004)
 (ARC-COMBAT-004, RT7–RT12) and the walk, run and step costs of the
 [locomotion study](locomotion-evidence.md) (L5, L9, W6).
 
@@ -38,7 +38,7 @@ named from the executable's own field table (0x59BEA8); flag bits from the
 executable's own flag-name tables (critter, NPC, spell, item and weapon flags);
 animation goal names from the executable's own goal-name table (0x5A164C); goal
 node tables through the executable's goal-type table (0x5B03D0). The rows and
-verdicts are in the [ledger](original-verification-ledger.md#npc-ai-action-execution-arc-res-066).
+verdicts are in the [ledger](ledger/npc-ai.md#npc-ai-action-execution-arc-res-066).
 Everything below is read in the executable unless marked **(inference)**.
 Functions of other domains that these call (the magic run, the skill invocation,
 the attack resolution, the path planners) are named with their address and only
@@ -404,7 +404,7 @@ goal as long as the source is within 9 tiles; in a flight node 5's NO_FLEE branc
 never taken and node 7 is reached when no escape line can be planned; in a spread-out
 run both set NO_FLEE. So the live run-time ways NO_FLEE is set are mind control, a
 flight's node 7 and the spread-out move-away
-([morale MR12, MR13](original-verification-ledger.md#npc-ai-morale-arc-res-058)).
+([morale MR12, MR13](ledger/npc-ai.md#npc-ai-morale-arc-res-058)).
 
 **Back off.** The AI back-off runs to its tile with the run-to-tile goal (4
 [ag_run_to_tile]: running unless encumbered, a path, the same no-path rule)
@@ -524,7 +524,7 @@ records the resulting lists from the installed records.
 
 ## 9. Anomalies and decisions
 
-Verdicts and rows: [ledger](original-verification-ledger.md#npc-ai-action-execution-arc-res-066).
+Verdicts and rows: [ledger](ledger/npc-ai.md#npc-ai-action-execution-arc-res-066).
 Decisions follow D2 and D8: a bug of the original gets a Steamwoven fix and a
 proposed Original switch; where only the reconstruction differs, both settings
 follow the original. The owner accepted every proposed Original switch of this

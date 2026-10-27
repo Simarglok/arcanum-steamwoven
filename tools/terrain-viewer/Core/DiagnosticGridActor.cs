@@ -31,6 +31,8 @@ public sealed class DiagnosticGridActor
     }
     /// <summary>ARC-WORLD-016: the live actor overlay every AREA session this actor configures admits its steps against.</summary>
     public Func<AreaOccupancy?>? AreaOccupancy { get; set; }
+    /// <summary>ARC-WORLD-074: whether every AREA session this actor configures passes living critters (<see cref="AreaGridSession.CrittersPass"/>).</summary>
+    public Func<bool>? AreaCrittersPass { get; set; }
     /// <summary>ARC-WORLD-020: the gait timing and the current gait every AREA session this actor configures uses
     /// when no explicit step duration is given; null timing, or an explicit duration, keeps the fixed duration.</summary>
     public GaitTiming? AreaGaitTiming { get; set; }
@@ -38,7 +40,7 @@ public sealed class DiagnosticGridActor
     public void Configure(AreaStepSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null,
         AreaChart? chart = null, CellCoord? start = null, NeighborDirection facing = NeighborDirection.XPlus)
     {
-        var session = new AreaGridSession(snapshot, time, duration, limits, chart, start, facing) { Occupancy = AreaOccupancy, Timing = duration is null ? AreaGaitTiming : null, Gait = AreaGait };
+        var session = new AreaGridSession(snapshot, time, duration, limits, chart, start, facing) { Occupancy = AreaOccupancy, CrittersPass = AreaCrittersPass, Timing = duration is null ? AreaGaitTiming : null, Gait = AreaGait };
         Session = session; AttackPose = null; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
     public void DisposeSession() { Session = null; AttackPose = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }

@@ -84,13 +84,18 @@ public sealed class GameSessionLimits
     /// <summary>Ammunition stacks the session tracks (ARC-WORLD-066): the hero's (at most one a prototype, four installed) and every
     /// other stack whose units it changed; far more than a playthrough's ammunition.</summary>
     public const int PolicyMaxAmmoRecords = 4096;
+    /// <summary>NPC danger records (ARC-WORLD-079): NPCs whose danger bits, handles or enemy list the session holds (as life).</summary>
+    public const int PolicyMaxDangerRecords = 8192;
+    /// <summary>Enemy-list entries of all danger records together (ARC-WORLD-079; the original's lists have no limit): eight for
+    /// every danger record, about 4.6 MB of snapshot at the cap.</summary>
+    public const int PolicyMaxDangerEnemies = 65_536;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
         int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
         int maxLifeRecords = PolicyMaxLifeRecords, int maxReactionRecords = PolicyMaxReactionRecords,
         int maxExperienceRecords = PolicyMaxExperienceRecords, int maxAdvancementRecords = PolicyMaxAdvancementRecords,
         int maxDurabilityRecords = PolicyMaxDurabilityRecords, int maxFoundSchematics = PolicyMaxFoundSchematics, int maxNpcItems = PolicyMaxNpcItems,
-        int maxAmmoRecords = PolicyMaxAmmoRecords)
+        int maxAmmoRecords = PolicyMaxAmmoRecords, int maxDangerRecords = PolicyMaxDangerRecords, int maxDangerEnemies = PolicyMaxDangerEnemies)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
@@ -105,11 +110,13 @@ public sealed class GameSessionLimits
         if (maxFoundSchematics is < 1 or > PolicyMaxFoundSchematics) throw new ArgumentOutOfRangeException(nameof(maxFoundSchematics));
         if (maxNpcItems is < 1 or > PolicyMaxNpcItems) throw new ArgumentOutOfRangeException(nameof(maxNpcItems));
         if (maxAmmoRecords is < 1 or > PolicyMaxAmmoRecords) throw new ArgumentOutOfRangeException(nameof(maxAmmoRecords));
+        if (maxDangerRecords is < 1 or > PolicyMaxDangerRecords) throw new ArgumentOutOfRangeException(nameof(maxDangerRecords));
+        if (maxDangerEnemies is < 1 or > PolicyMaxDangerEnemies) throw new ArgumentOutOfRangeException(nameof(maxDangerEnemies));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
         MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
         MaxReactionRecords = maxReactionRecords; MaxExperienceRecords = maxExperienceRecords;
         MaxAdvancementRecords = maxAdvancementRecords; MaxDurabilityRecords = maxDurabilityRecords; MaxFoundSchematics = maxFoundSchematics;
-        MaxNpcItems = maxNpcItems; MaxAmmoRecords = maxAmmoRecords;
+        MaxNpcItems = maxNpcItems; MaxAmmoRecords = maxAmmoRecords; MaxDangerRecords = maxDangerRecords; MaxDangerEnemies = maxDangerEnemies;
     }
 
     public int MaxMaps { get; }
@@ -125,6 +132,8 @@ public sealed class GameSessionLimits
     public int MaxFoundSchematics { get; }
     public int MaxNpcItems { get; }
     public int MaxAmmoRecords { get; }
+    public int MaxDangerRecords { get; }
+    public int MaxDangerEnemies { get; }
 }
 
 /// <summary>
@@ -230,6 +239,8 @@ public enum GameSessionFailure
     InvalidSpellRun, SpellRunRefused,
     // Stealth (ARC-SKILLS-008).
     ConcealmentUnavailable, InvalidConcealment,
+    // NPC danger state (ARC-WORLD-079).
+    InvalidDangerTarget, InvalidDangerFacts,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -394,19 +405,20 @@ public sealed class GameSessionSnapshot
     /// level steps to <see cref="Advancement"/> (ARC-WORLD-047); schema 34 adds the ammunition stacks to <see cref="Inventory"/>
     /// (ARC-WORLD-066); schema 35 adds the hero's and its followers' concealment (<see cref="Concealment"/>, ARC-SKILLS-008); schema 36
     /// adds the hero's background id to <see cref="Hero"/> (ARC-WORLD-069); schema 37 adds the story-state number to the story
-    /// (ARC-SCRIPT-019). Schemas 1..36 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 37;
+    /// (ARC-SCRIPT-019); schema 38 adds the NPCs' danger records (<see cref="Danger"/>, ARC-WORLD-079). Schemas 1..37 are refused,
+    /// not migrated.</summary>
+    public const int CurrentSchemaVersion = 38;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
         SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionEquipmentState equipment, SessionDurabilityState durability, SessionSchematicState schematics,
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
-        SessionConcealmentState concealment, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound)
+        SessionConcealmentState concealment, SessionDangerState danger, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Equipment = equipment; Durability = durability; Schematics = schematics; Effects = effects; Experience = experience; Advancement = advancement; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Concealment = concealment; Events = events; Lighting = lighting; Sound = sound;
+        Hero = hero; Inventory = inventory; Equipment = equipment; Durability = durability; Schematics = schematics; Effects = effects; Experience = experience; Advancement = advancement; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Concealment = concealment; Danger = danger; Events = events; Lighting = lighting; Sound = sound;
     }
 
     public int SchemaVersion { get; }
@@ -446,6 +458,8 @@ public sealed class GameSessionSnapshot
     public SessionCombatModeState CombatMode { get; }
     /// <summary>The hero's and its followers' concealment (ARC-SKILLS-008).</summary>
     public SessionConcealmentState Concealment { get; }
+    /// <summary>The NPCs' danger records: bits, focus, fleeing-from, who-hit-me-last and enemy list (ARC-WORLD-079).</summary>
+    public SessionDangerState Danger { get; }
     /// <summary>The pending game events (ARC-WORLD-024).</summary>
     public SessionEventState Events { get; }
     /// <summary>Applied ambient lighting, or null when none was recorded (an unlit session).</summary>

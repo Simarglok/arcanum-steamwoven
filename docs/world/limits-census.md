@@ -38,6 +38,7 @@ Largest installed value against each cap; "interiors" are the 80 maps a whole-ma
 | `ObjectLightReader.MaxLights` | 8,192 | 5,083 | k'na tha | 1.6× |
 | `MapPatchFile.MaxBytes` (`Rules\map.patch`) | 1 MiB | 5,779 | — | 181× |
 | `AreaMapLoadOperation.MaxChartSectors` | 32 | 14 | k'na tha | 2.3× |
+| `AreaTerrainOverview.Radius` (ARC-RENDER-034: the overview beyond a window's core, one flat diamond per sector; a fixed size, not a cap) | 6 (13 × 13 sectors) | 160 diamonds (13 × 13 less the core) | arcanum1-024-fixed | — |
 | `AreaRepositoryPolicy.MaxMapFrames` (CPU, and GPU visible since ARC-DATA-029) | 16,384 | 4,557 drawn frames (4,562 owner frame requests; void has no door, so the portal frames of ARC-WORLD-051 add none there) | void | 3.6× |
 | `AreaRepositoryPolicy.MaxMapCpuBytes` (CPU, and GPU visible) | 160 MiB | 58,892,780 (56.2 MiB) | void | 2.8× |
 | `GameSessionLimits.PolicyMaxMaps` (was 64) | 200 | 81 maps | — | 2.5× |
@@ -45,6 +46,8 @@ Largest installed value against each cap; "interiors" are the 80 maps a whole-ma
 | `GameSessionLimits.PolicyMaxTotalChanges` (was 16,384) | 524,288 | 276,625 objects | all maps | 1.9× |
 | `GameSessionLimits.PolicyMaxLifeRecords`, `…ReactionRecords`, `…ExperienceRecords` (were 4,096) | 8,192 | 3,792 NPCs | all maps | 2.2× |
 | `GameSessionLimits.PolicyMaxFoundSchematics` (ARC-TECHNOLOGY-003: the hero's found schematics; the original has no limit) | 128 | 62 found records (57 with a document) | `rules\schematic.mes` and the written prototypes | 2.1× |
+| `GameSessionLimits.PolicyMaxDangerRecords` (ARC-WORLD-079: NPC danger records) | 8,192 | 3,792 NPCs | all maps | 2.2× |
+| `GameSessionLimits.PolicyMaxDangerEnemies` (ARC-WORLD-079: enemy-list entries of all records; the original has no limit) | 65,536 | not counted: a policy cap, eight entries per record at the record cap; about 4.6 MB of snapshot at the cap | all maps | — |
 | `GameSessionLimits.PolicyMaxDurabilityRecords` (ARC-WORLD-053: changed and deleted items) | 8,192 | not counted: a policy cap as life, far above the items a playthrough damages; about 1–2 MB of snapshot at the cap | all maps | — |
 | `GameSessionSnapshotCodec.MaxEncodedCharacters` (save file, was 8 MiB) | 96 MiB | about 43 MB estimated | all maps | 2.3× |
 
@@ -52,7 +55,7 @@ Notes on the policy caps:
 
 - **Maps.** The original keeps its map list in a table of 200 entries, and the loader stops
   adding maps when it is full (checked in the 1.0.7.4 executable:
-  [ledger](../research/original-verification-ledger.md#limits-census-arc-data-029)). A session
+  [ledger](../research/ledger/data.md#limits-census-arc-data-029)). A session
   can therefore never have changes on more maps than that.
 - **Changes.** A whole playthrough is sized as a change of every object of the largest map, and
   of every object of every installed map, once. A change is a keyed property value

@@ -16,7 +16,7 @@ Categories: **Data (D)** is the authenticated installation (its `Version.txt` sa
 readers ([script content](../scripting/script-content.md), [SCR program](../scripting/scr-program-admission.md),
 [Area T0 inventory](../world/area-inventory-view.md)); **Executable (E)** is a static reading of the retail
 `Arcanum.exe` (SHA-256 `9bd80511…3678d52`) under the [original executable check](original-executable-check.md),
-recorded in the [verification ledger](original-verification-ledger.md#item-insert-script-arc-res-055); **Proposal (P)**
+recorded in the [verification ledger](ledger/scripts.md#item-insert-script-arc-res-055); **Proposal (P)**
 and **Unknown (U)** as usual. No original text is published: numbers, sizes and digests only.
 
 ## Answer
@@ -29,7 +29,7 @@ and **Unknown (U)** as usual. No original text is published: numbers, sizes and 
   prefix, so here it only shows text.
 - **Can it change or remove the item? (E)** No. Printing this line reads the script's DLG and hands text to the user
   interface; with an empty action field it touches no object. The insert-item point cannot cancel: the insertion is already done when the script
-  runs and its result is ignored (ledger [IF10](original-verification-ledger.md#implemented-functions-arc-dev-025),
+  runs and its result is ignored (ledger [IF10](ledger/data.md#implemented-functions-arc-dev-025),
   [dispatcher table](scr-event-dispatcher.md), point 21).
 - **When it fires (D, E).** On every insertion through the item, gold and ammunition insert functions that fire point 21
   (any holder, PC or not), every time: there is no local flag or counter. Only global flag 1085 silences it. Whether a

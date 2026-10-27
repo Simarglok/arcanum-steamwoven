@@ -14,7 +14,7 @@ Requirements: [FR-MAGIC-006](../requirements/combat-magic-tech.md#fr-magic-006) 
 payment, duration, the cap of maintained spells).
 
 Every rule below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
-([ledger "Spell runs"](../research/original-verification-ledger.md#spell-runs-arc-magic-009), rows RN1–RN14), and the time
+([ledger "Spell runs"](../research/ledger/spell-runs.md#spell-runs-arc-magic-009), rows RN1–RN14), and the time
 scaling (0x455250), the stage (0x452F20 with its payment helpers) and the cap (0x4545E0) were compared with the original in the
 function oracle on 10,000 seeded inputs each (F3, receipts [`455250.json`](../verification/receipts/455250.json),
 [`452F20.json`](../verification/receipts/452F20.json), [`4545E0.json`](../verification/receipts/4545E0.json); re-run with
@@ -83,7 +83,7 @@ within it and one whose parent is no PC or NPC is not. The count the AI and the 
 
 ## Processing and scheduling (ARC-MAGIC-010)
 
-Read in the executable by two readers ([ledger "Spell run processing"](../research/original-verification-ledger.md#spell-run-processing-arc-magic-010),
+Read in the executable by two readers ([ledger "Spell run processing"](../research/ledger/spell-runs.md#spell-run-processing-arc-magic-010),
 RP1–RP14); the scheduler (0x453FA0 with its tick helpers) and the interrupt's action (0x457110) were compared with the original in
 the function oracle on 10,000 seeded inputs each (F3, receipts [`453FA0.json`](../verification/receipts/453FA0.json),
 [`457110.json`](../verification/receipts/457110.json)). Code: [`SpellRunSystem`](../../src/Arcanum.Simulation/Magic/SpellRunSystem.cs)
@@ -154,20 +154,21 @@ Owner decisions 2026-10-20: every difference is documented.
 | A non-critter's aptitude and a missing target's type keep the slot's previous values. | No aptitude, no target. | — |
 | The run reads its objects, the record and the globals directly; the presentation (facing, eye candy, casting goal) and the multiplayer packets are part of creation. | The caller passes the facts and starts the run; multiplayer is not modelled. | — |
 
-MG6 (the aptitude scaling of durations never applies) follows the original in both modes, as decided. Three more are recorded for the owner by ARC-MAGIC-010, each following the
-original in both modes until decided: MG30 (the cancels' interrupts are refused by the guard and leave runs without a tick or an
+MG6 (the aptitude scaling of durations never applies) follows the original in both modes, as decided. Three more were recorded by ARC-MAGIC-010 and decided by the owner on
+2026-10-21: MG30 (the cancels' interrupts are refused by the guard and leave runs without a tick or an
 END), MG31 (interrupting a timed run with CALLBACK but no END_CALLBACK components does not end it; one technology record), MG32 (an
-interrupt or process event outlives the free and can hit a new run in the reused slot). ARC-MAGIC-011 built the recommended fixes
-of MG30 and MG32 as switches (`ReEntryDropsRuns`, `FreeKeepsOtherEvents`; still pending the owner); MG31 keeps the original. The session keeps the runs unchanged when
+interrupt or process event outlives the free and can hit a new run in the reused slot). MG30 and MG32 are fixed
+in Steamwoven with Original switches (`ReEntryDropsRuns`, `FreeKeepsOtherEvents`, ARC-MAGIC-011); MG31 follows the original in both
+modes, no switch. The session keeps the runs unchanged when
 an action's or event's queued events do not fit; what the host's ports already did (a component's effect) is the host's.
 
 ## Not ready
 
-- No viewer caller: the casting UI (MT20a) starts runs and their BEGIN; Damage and Heal are ARC-MAGIC-012's ([spell damage and heal](spell-damage-heal.md), the host's `Apply` calls `SpellLifeComponents`), the other components MT13–MT18's; the maintain bar is MT20b's;
+- No viewer caller: the casting UI (MT20a-2) starts runs and their BEGIN; Damage and Heal are ARC-MAGIC-012's ([spell damage and heal](spell-damage-heal.md), the host's `Apply` calls `SpellLifeComponents`), the other components MT13–MT18's; the maintain bar is MT20b's;
   the endings' callers (fainting, rest, travel, death) are MT11's; saved runs and events are MT9b's.
 - The other object (the invocation's +0xA0, copied to the run's +0x108) is not carried by MT7's invocation yet, so a run's
   `Other` is always null; the slice that needs it (a spell aimed at a second object) adds it to the invocation.
-- The casting goal and its eye candy are MT20a's.
+- The casting goal's rules are the cast host's (ARC-MAGIC-014, MT20a-1); its animation and eye candy are MT20a-2's.
 - While the rules act, the session refuses calls back into its runs and an event pass from a host port (so nothing is overwritten
   or consumed unrun); a component that casts a spell (MT12–MT18) will need its own path, as the original's guard refuses only
   processing.

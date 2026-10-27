@@ -9,7 +9,7 @@ mobile objects only, and it overrides restored save state. Steamwoven applies it
 area owner of every whole-map plan ([whole-map plans](whole-map-plans.md)), so the patched
 object is what every consumer reads: visuals, step evidence, inventory, names, combat
 fields and dialog attachments. Behaviour checked in the 1.0.7.4 executable by two readers:
-[ledger "Map patch"](../research/original-verification-ledger.md#map-patch-arc-data-028).
+[ledger "Map patch"](../research/ledger/data.md#map-patch-arc-data-028).
 
 **NOT READY:** the pinned Crash Site exterior and cave profiles do not apply it (they keep
 their pinned evidence, in which no patched object occurs); the main world map, which holds

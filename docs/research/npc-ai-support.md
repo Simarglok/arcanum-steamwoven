@@ -36,7 +36,7 @@ questions ([method step 6](original-executable-check.md)). Object field numbers
 were named from the executable's own field table (0x59BEA8); flag bits, object
 types and type masks, stats, skills, colleges, prototype numbers and struct
 offsets come from the project's records of the executable's constants. The rows
-and verdicts are in the [ledger](original-verification-ledger.md#npc-ai-support-and-magic-arc-res-059).
+and verdicts are in the [ledger](ledger/npc-ai.md#npc-ai-support-and-magic-arc-res-059).
 Everything below is read in the executable unless marked **(inference)**; the
 functions of other stages and domains that these call (perform, the animation
 goals, the magic predicates) are named, not re-read.
@@ -381,7 +381,7 @@ LOOK_FOR_WEAPON, one that drops armour LOOK_FOR_ARMOR (item drop 0x461AB0).
 (0x4654F0), or with only CHECK_WEAPON the best weapon (0x465170), passing the
 pass's target, the danger source, so a weapon in range of it is preferred
 ([core loop gate step 14](npc-ai-core-loop.md#3-one-pass); the choice rules are
-[WB1–WB8](original-verification-ledger.md#starting-kit-arc-world-034)).
+[WB1–WB8](ledger/character.md#starting-kit-arc-world-034)).
 
 ## 7. Grenades
 
@@ -415,7 +415,7 @@ M3).
 ## 8. Anomalies and decisions
 
 Verdicts and rows:
-[ledger](original-verification-ledger.md#npc-ai-support-and-magic-arc-res-059).
+[ledger](ledger/npc-ai.md#npc-ai-support-and-magic-arc-res-059).
 Decisions follow D2 and D8: a bug of the original gets a Steamwoven fix and a
 proposed Original switch; where only the reconstruction differs, both settings
 follow the original. The owner accepted every proposed Original switch of this

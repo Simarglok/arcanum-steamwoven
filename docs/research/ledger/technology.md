@@ -1,0 +1,253 @@
+# Original verification ledger: Technology
+
+Part of the [original verification ledger](../original-verification-ledger.md) (ARC-RES-048): its [inputs and method](../original-verification-ledger.md#inputs-and-method), [verdicts](../original-verification-ledger.md#verdicts-and-what-they-mean-for-the-two-settings), [decisions to revisit](../original-verification-ledger.md#decisions-to-revisit) and [second reading](../original-verification-ledger.md#second-reading) cover every section below. A new section of this area goes at the end of this file and adds one line to the ledger's [area index](../original-verification-ledger.md#areas).
+
+## Technology (ARC-RES-062)
+
+Source: [technology research](../technology-evidence.md). Question: how degrees and expertise work, how
+schematics are stored, learned, found and assembled, how technological items and records 140..222 behave
+against magic, which scripts and dialogs touch technology, and how item durability, breaking, price and the
+item side of repair work. Most of these functions had no earlier reading beyond the addresses of the
+requirements; the raise (AL8), item power (EQ9), the wear check (EQ1), the skill run (SK7) and the combat
+damage step and weapon wear (combat core C20, C21) were read before and agree. Read on 2026-10-20 by a first reader
+and, independently, a second reader that saw only the questions (method step 6) on 13 decision-bearing
+questions: 10 agree, the intelligence guard and the editor's decrease address were corrected to the second
+reader's version, and the button codes of the schematic page stay a disagreement (F1). The second reader
+found TC4. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| Degree raise | 0x4AFEC0 | Critter only, cap 7, the **effective** intelligence must meet {0, 5, 8, 11, 13, 15, 17, 19} for the new degree, base tech points + 1; unspent points are the editor wrapper's (0x589A20). | Original (agrees with AL8) |
+| Degree lower | 0x4AFFF0, sell wrapper 0x589AF0 | Degree > 0: base tech points − cost, degree − 1, no check; the wrapper refunds the point. | Original |
+| Effective expertise | 0x4B00B0 | Stored degree lowered until the effective intelligence meets its minimum, then {0, 10, 20, 35, 50, 65, 80, 100} through the expertise effects, unclamped; callers: sheet and schematic gate only. | Original |
+| Intelligence guard | 0x4B02B0, base stat set 0x4B0980 | Only a base intelligence decrease: the new effective intelligence must hold every spell and degree, else the base is restored; effects are not guarded. | Original |
+| Learned number | 0x4B0320 | `1990 + 200 × discipline + 10 × degree`; used by editor tooltips and the multiplayer auto-equip, not by the window. | Original |
+| Registration | 0x4B0120, reading 0x56BB60 | Subtype 5 document: number from the start text line; known → message 88, document kept; new → appended without limit, document destroyed, message 89. | Original |
+| Recipe | 0x56DBD0, parse 0x56DD20 | Seven lines (name, description, art, component 1, component 2, product, quantity), up to three alternatives (prototype = number + 20), one or two tokens repeat the last. | Original |
+| Window open | 0x56D130, dialog 0x567E30 (F2 for the dialog path) | No combat or dialog check of its own; learned tab = first stored-degree records of each discipline; found tab for a PC crafter; dialog `su` makes the NPC the crafter. | Original |
+| Component gate | 0x56E190 (F2 since ARC-TECHNOLOGY-004, [SA1, SA2](#schematic-assembly-arc-technology-004): the button codes are settled) | Crafter's own inventory, exact prototype, worn, broken and changed-description items skipped; expertise in the component's discipline ≥ −complexity (signed). | Original |
+| Assembly | 0x56E720 (re-read by ARC-TECHNOLOGY-004, [SA3–SA5](#schematic-assembly-arc-technology-004)) | Find both, consume 1 then 2 (one ammunition unit or destroy), create the product quantity times on the crafter's tile and transfer it into the crafter; no expertise check, roll, skill, AP, time or experience. | Original |
+| Tech maintenance | 0x453170 | MAINTAIN does not test the tech flag: maintained tech records check intelligence and willpower and pay maintenance. | Original (refines the magic study, which names only the BEGIN payment skip) |
+| Holder gate | 0x456A10, use 0x462CC0, triggers 0x4CB830 | Only magickal items in technological hands can be refused; technological items are never refused to mages outside combat. | Original |
+| Item break | 0x43F1C0 | First: destroyed art bit, damage reset to 0, unwield or drop, BUST script; second: delete, no BUST. | Original |
+| Sale price | 0x461F80 | Damage scales the price (`current / maximum`) only when the PC sells. | Original |
+| TC1 | payment 0x450420, 0x461590 | Cell-powered item source pays `cost × (1 + power / complexity)`: technologists pay up to double. | Original bug |
+| TC2 | action 129 (0x44A7BD), 0x460B50, 0x45FD40, 0x57C6E0 | Calls an unfilled slot of an uninitialised callback structure. | Original bug (crash class, both fixed; implemented for the PC by ARC-TECHNOLOGY-005, [SW8](#schematic-window-arc-technology-005), and for an NPC with a PC leader by ARC-TECHNOLOGY-006, [NC3](#npc-schematic-crafter-arc-technology-006)) |
+| TC3 | 0x56E720 | A failed product creation returns after the components were consumed. | Original bug (latent) |
+| TC4 | 0x56E720 | Both components found before consuming; one item in both lists would be consumed twice. | Original bug (latent; no installed record) |
+| TC5 | 0x56E720 | The expertise gate is only the button's. | Original |
+| TC6 | 0x56DD20 | More than three tokens or a line over 2000 bytes write out of bounds. | Original bug (latent, both fixed) |
+| TC7 | repair quote 0x578760 | Damage counted twice in the quote. | Original |
+| TC8 | data: one schematic written prototype | Its schematic number is 0: reading registers a schematic 0 whose record reads all zeros. | Original (data) |
+| TC9 | 0x462CC0, 0x4CB830 | A broken item can be used and its spells fire. | Original |
+| TC10 | editor 0x55F5F0, 0x55D940, 0x589AF0 | Selling a degree is not compared with the editor's snapshot: the sell handler has no comparison. The editor-open snapshot of the degrees (0x64DEEC) is read only by the tech page's draw, which in the in-game editor hides the − button at it (corrected by ARC-WORLD-052, [CP1, CP2](character.md#character-point-pool-arc-world-052); 0x64DF10 is a per-player copy, never read). | Original bug (reachability O2: in the in-game editor the button is not drawn at the snapshot) |
+
+## Schematic data (ARC-TECHNOLOGY-001)
+
+Source: the [schematics](../../formats/schematics.md) contract (slice TECH-1 of the
+[technology research](../technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted)) and the
+[technology study](#technology-arc-res-062) rows above, read there by one reader. Re-read on 2026-10-20 for this slice by a
+fresh agent that saw only the questions (method step 6): the tech module init, the schematic window init, the discipline,
+the selection, the record read and the list parse. Every direct branch of these functions (and of the whole Schematic-UI
+module 0x56CD60–0x56EA90) stays inside `.text`; there is no indirect call. Both readers agree on every point the first
+reading recorded; the second reader added the details SD2, SD4 and SD6 name and found TC11. The rows are F2.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SD1 | tech module init (0x4AFCD0) | Loads `mes\tech.mes` (a failed load fails the module) and keeps the text of messages 0..7, 8..15, 16..23 and 24..87 in four tables (8, 8, 8, 64); the 64-entry getter (0x4AFE40) reads entry `a + 8b`, message `24 + a + 8b`, with a the discipline and b the degree (the help window passes `v % 8` and `v / 8`). No message is tested; a missing one is the shared missing-line text. Messages 88 and 89 are not read here (the registration reads them). The second reader confirms the arithmetic; that 0..7 are the names and 16..23 the descriptions rests on the first reading and on their use (heading, body). | Original |
+| SD2 | schematic window init (0x56CD60) | Loads `rules\schematic.mes`, then `mes\schematic_text.mes`; the first failing returns failure, the second failing unloads the first. The learned count is the messages in 2000..3999 (counted only when message 2000 itself exists, else 0) divided by 7. Only for a count above 0: a list of "count" slots, filled with each of 2000, 2010, ... below 3999 whose message exists, and a per-discipline counter (0x56DB00) per start in a table of eight. The list's length for the window is the count. | Original (TC11 below) |
+| SD3 | discipline (0x56DB00) | 4000 and up (signed): the item discipline field (0x61) of prototype `first product value + 20`, the record read through 0x56DBD0; 2000..3999: `(n − 2000) / 200` (3600..3999 give 8 and 9); otherwise, negative numbers included, 0. | Original |
+| SD4 | selection (0x56DB60) | No arguments: the active tab's list and length, its per-discipline count table (the stored degrees on the learned tab, the found counts on the found tab), the discipline and the page. A count of 0 gives −1; otherwise the walk to the length returns the page-th entry whose discipline matches, else −1. The page bound (below the count) is the redraw's. Callers: the redraw passes the result to the record read; the build button builds nothing on −1. | Original |
+| SD5 | record read (0x56DBD0) | Seven messages n..n+6 into a record of 13 integers: name, description and art through `atoi`, components 1 and 2 and the product (three integers each) through the parse, the quantity through `atoi`. n = −1 is first replaced by `6000 + 10 × discipline`. A missing message is the MES module's missing-line message, which names the number and `rules\schematic.mes`: `atoi` gives 0, and the parse writes six values (0, 0, 0, N, 0, 0) into a field of three: the components' extra values are rewritten by the next line, the product's reach the quantity (rewritten) and two integers past the record. No offset is applied; the prototype is the base + 20 (0x4685A0). | Original (the overflow of a missing list line: TC6 class) |
+| SD6 | list parse (0x56DD20) | Copies the line into a 2000-byte stack buffer without a length check, splits it with `strtok` on a single space and writes each token's `atoi` into consecutive integers of the field: three tokens as they are, one or two then repeat the last value to three, none leaves the field unwritten (callers do not clear it), more than three run past the field. | Original (TC6) |
+| TC11 | window init (0x56CD60), selection (0x56DB60) | The learned list has "count" slots (entries / 7) but is filled with every existing start without a bound and walked to the count: more starts than the count overflow the heap, fewer leave slots unwritten that the selection then reads; a start at 3600 or above counts past the eight-entry discipline table. The installed data has 56 starts for a count of 56, all in disciplines 0..7. | Original bug (latent, out of bounds; both fixed: the catalogue refuses such a file) |
+
+## Tech degrees (ARC-TECHNOLOGY-002)
+
+Source: the [tech degrees runtime](../../world/tech-degrees-runtime.md) (slice TECH-2 of the
+[technology research](../technology-evidence.md#disciplines-and-degrees-tech-module-0x4afcd00x4b0340)) and the
+[Technology](#technology-arc-res-062) rows above. Re-read on 2026-10-21 for this slice by a fresh agent that saw only the
+questions (method step 6): the degree getter and setter, raise and lower, the intelligence check, the stat base setter's guard
+branch, the editor's buy and sell wrappers and effective expertise. Every direct branch stays inside `.text`. Both readers agree
+on every point the first reading recorded; the second reader confirmed the stat numbers (4 intelligence, 21 unspent points,
+23 tech points) in the effect keyword table and added the details below. The rows are F2.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| TD1 | degree getter (0x4AFE60) | A PC or NPC: element `discipline + 17` of the critter spell/tech array (field 223); any other object 0. No range check on the discipline. | Original |
+| TD2 | degree setter (0x4AFF90) | A critter only: writes the value into the same element without a check or clamp (a multiplayer host also sends it), returns it. | Original (not implemented here: the session writes the sheet) |
+| TD3 | lower (0x4AFFF0) | A critter; a multiplayer client changes nothing; degree 0 returns 0; otherwise the base tech points (stat 23) fall by `cost[degree]` {0, 1, 1, 1, 1, 1, 1, 1} through the stat base setter and the degree by one. No intelligence check. | Original |
+| TD4 | raise (0x4AFEC0) | A critter; the client gate; the cap 7; the **effective** intelligence (0x4B0490) against {0, 5, 8, 11, 13, 15, 17, 19} of the new degree; the base tech points rise by the cost; the unspent points are not read. | Original (agrees with AL8) |
+| TD5 | intelligence check (0x4B02B0) | A non-critter holds; otherwise every discipline's stored degree must have its minimum at most the value passed. | Original |
+| TD6 | stat base setter (0x4B0980), guard branch | The value is clamped to the stat's range and the new effective value computed with the tentative base; only on a decrease (the new value below the old base): the skill key-stat guard, then for intelligence the spell check (0x4B1B90) and the degree check (0x4B02B0), for willpower 0x4B1C00, each with the new effective value. A refusal restores the base and returns the old one; no message. | Original |
+| TD7 | editor buy (0x589A20) | The client gate; the cost of degree + 1 against the **effective** unspent points (stat 21): too few shows charedit message 18 for the PC; then the raise: a refusal shows message 26; on success the unspent points fall by the cost and the window refreshes. At degree 7 the cost is read one past its table (the next table's 0), so the check passes and the raise refuses (message 26). | Original (the over-read is harmless: Steamwoven answers "at maximum" first) |
+| TD8 | editor sell (0x589AF0) | The client gate; the lower; a refused lower returns silently; on success the unspent points rise by `cost[degree]` through the stat setter (clamped to the stat's range). No floor or intelligence check; the editor's degree snapshot (taken when it opens) only decides whether the − button is shown. | Original (TC10: a floor in both modes, owner decision) |
+| TD9 | effective expertise (0x4B00B0) | The stored degree lowered while the effective intelligence is below its minimum; then {0, 10, 20, 35, 50, 65, 80, 100} (table 0x5B5144) through the effect aggregation (0x4EA9F0 → 0x4EA6C0) of the fifth effect attribute table, whose attribute is the discipline (the eight `expertise…` keywords in discipline order). No clamp. | Original |
+
+## Schematic knowledge (ARC-TECHNOLOGY-003)
+
+Source: the [schematic knowledge runtime](../../world/schematic-knowledge-runtime.md) (slice TECH-3 of the
+[technology research](../technology-evidence.md#learned-and-found-lists)) and the [Technology](#technology-arc-res-062) rows above.
+Re-read on 2026-10-21 for this slice by a fresh agent that saw only the questions (method step 6): the field name table, the
+registration, the reading start and the list part of the schematic window. Every direct branch stays inside `.text`. Both
+readers agree on every point the first reading recorded; the second reader added the details below and found TC12. The rows
+are F2.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SK1 | field name table (0x59BEA8) | The written block is fields 200..209: begin, flags (201), subtype (202), first text line (203), last text line (204), four pads, end; the item block 86..110 with the discipline at 97 (0x61); the PC's found list is field 267 (0x10B). In the per-type slot layout the written block starts at slot 59 (flags, subtype, first line, last line). | Original |
+| SK2 | registration (0x4B0120) | Reader and written item: the number is the item's first text line (203); a linear 32-bit search of the reader's field 267; found → `mes\tech.mes` 88 as a type-13 message with the number, the document kept; new → appended at the end (no capacity), the document destroyed (0x43CCA0), then 89. No type, liveness or null check; no meaningful return. | Original |
+| SK3 | reading start (0x56BB60) | Refused when the reading window is not initialised or the reader is dead (a null handle counts as dead). Subtype 5 calls the registration; any other subtype opens the reading window (with a flag for one newspaper prototype, see [WR2](ui-audio.md#reading-window-arc-ui-049)). No PC check. | Original |
+| SK4 | window open (0x56D130), lists | An open window closes. Refused for a null or dead crafter or viewer and when the interface mode cannot change. An NPC crafter's tab is reset to learned. Learned: the init's full list with the crafter's stored degree per discipline as the counts. Found: for a PC crafter its field 267 copied, each number counted at the index its discipline (0x56DB00) gives, with no range check; for any other crafter the found count is 0. | Original (TC12 below) |
+| TC12 | window open (0x56D130) | A found number whose discipline is outside 0..7 (a product prototype with another discipline value) increments an entry past the eight-entry count table. The installed found records all have disciplines 0..7. | Original bug (latent, out of bounds; both fixed: the number is left out of the found tab) |
+
+## Schematic assembly (ARC-TECHNOLOGY-004)
+
+Source: the [schematic assembly runtime](../../world/schematic-assembly-runtime.md) (slice TECH-4 of the
+[technology research](../technology-evidence.md#assembly-0x56e720-fr-item-018-f2)) and the [Technology](#technology-arc-res-062) rows
+above. Read on 2026-10-21 for this slice by a fresh agent that saw only the questions (method step 6): the component gate, the
+page draw and the button's click handler, assembly, object creation, the transfer into a holder and the ammunition unit use. Every
+direct branch stays inside `.text`; the Schematic-UI module has no indirect call. The rows are F2; the third reading settles O7.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SA1 | component gate (0x56E190) | The three alternatives in order, each as a prototype searched with 0x462540 (flags 7): the holder's own direct inventory only (no nested container, no party); an exact prototype handle; items at locations 1000..1008, items whose current art carries the destroyed bit and items whose description differs from their prototype's skipped; an item at 2000..2009 kept only as a fallback (the last), any other match returned at once. The first found sets the prototype, otherwise the first alternative's is shown. Expertise: 0x4B00B0 in that prototype's item discipline (0x61) against −complexity (0x60), signed. Outputs: found and expertise flags per slot. | Original |
+| SA2 | page draw (0x56DDC0) and click (0x56D530), O7 | The state is 2 when the expertise fails for either component (checked first), 1 when it holds but an item is missing, 0 otherwise. The click shows `schematic_text.mes` 1 for state 2 and 0 for state 1, and assembles for state 0; the hover always shows 3. The installed texts, read locally, confirm the pairing: message 0 names missing items and message 1 lacking expertise. So the first reading of ARC-RES-062 (2 expertise, 1 item) holds and the second reader's reversal does not. | Original (O7 settled) |
+| SA3 | assembly (0x56E720) | The client gate; selection −1 returns 0; both components searched (0x462540) before consuming (an item matching both lists serves both: TC4); the product is alternative i1 when i1 ≠ 0, else i2; component 1 then 2 consumed (ammunition: 0x4658E0 one unit; any other item destroyed, 0x43CCA0); then "quantity" times: create (0x4ED8B0) at the crafter's location, a failure returns at once after the consumption (TC3), else transfer (0x4617F0) unchecked; the completion callback (0x4EE0F0). No expertise check (TC5), no sound or message of its own. | Original |
+| SA4 | object creation (0x4ED8B0) | The prototype from the base number, created on the map at the given location (the crafter's tile) with a new id; 0 and a null handle on failure; a network client creates nothing. | Original |
+| SA5 | transfer into a holder (0x4617F0) | An item already in an inventory moves between inventories; otherwise the get trigger, then the insert check (0x466510): a refusal shows its message for a PC and returns 0, leaving the item where it was (a made product stays on the tile); acceptance inserts it and returns 1. | Original |
+| SA6 | ammunition unit use (0x4658E0) | Count 0 returns 1; fewer units than the count returns 0; equal units destroy the item, more lower `obj_f_ammo_quantity` by the count; with a target the units move to it. Assembly passes no target and count 1. | Original |
+
+## Schematic window (ARC-TECHNOLOGY-005)
+
+Source: the [schematic window runtime](../../world/schematic-window-runtime.md) (slice TECH-5 of the
+[technology research](../technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted)) and the
+[Technology](#technology-arc-res-062) and [Schematic assembly](#schematic-assembly-arc-technology-004) rows above. Read on
+2026-10-21 for this slice by a fresh agent that saw only the questions (method step 6), with a follow-up read of the completion
+sound's global and of the dialog path: the in-game key handler, every caller of the window's open function, open and close, the
+event handler, the build and the draw, the completion callback, assembly's holders and script action 129. Every direct branch
+stays inside `.text`; the indirect calls are the modal callback, two callback relays and the callback slot globals (none in the
+Schematic-UI module). The rows are F2: the second reading of the window domain's F0 facts of ARC-RES-062.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SW1 | in-game key handler (0x54B5D0, a copy at 0x54C8E0) | `T` and `t` arrive as character messages and share one table entry with C/c, L/l, F, I, R, S and W; the call is the window open (0x56D130) with the local PC as crafter and viewer, then the generic click sound 0. The guards before the table are those of C and L: text-edit and other consumers first, a modal callback takes everything, another critter's turn in turn-based combat admits only Space, an active dialog takes the key, nothing while the main menu is up. No check of real-time combat, a dead PC or another window here. | Original |
+| SW2 | callers of the open (0x56D130) | Exactly six direct calls: the interface button (art 471, hover 1003) twice and the T key twice, each (PC, PC); the dialog reply's pending action 7 in two dispatchers (0x567E30, 0x568280), only when the dialog's PC is the local PC, passing (NPC, PC). | Original |
+| SW3 | open and close (0x56D130, 0x56D2D0, 0x56D4D0, 0x551A80) | Open while open closes. A null or dead crafter or viewer (0x45D8D0, HP ≤ 0) returns. The interface mode change (0x551A80) never refuses: leaving the old mode closes its window (a dialog ends, the logbook, the sheet, a reading window close). The crafter and viewer are stored; an NPC crafter (type 16) resets the tabs (learned, discipline 0, page 0, both saved pairs cleared). The build plays 3008; close plays 3009. The dialog path ends the dialog in this mode change, not in 0x553370 → 0x4C9720, which only clears the dialog's option area. | Original |
+| SW4 | event handler (0x56D530) | A discipline tab sets the discipline, page 0, 3010. Previous and Next move one page and play 3010 with no bounds check; the redraw disables Previous on page 0 and Next on the last page. A list tab acts only from the other tab: it saves that tab's discipline and page, restores the other tab's own pair, swaps list and counts, plays 3011. Assemble (on release): state 2 shows `schematic_text.mes` 1, state 1 message 0, state 0 assembles (0x56E720) with no sound of its own. Hover texts: Assemble 3, learned tab 4, found tab 5; a discipline tab `tech.mes` 0..7 and 16..23. | Original |
+| SW5 | build and draw (0x56D310, 0x56DDC0) | An 800×400 window on interface art 365; the record's name and word-wrapped description from `schematic_text.mes`, its art; a discipline glyph; the Assemble face per state; component slots with found/missing overlays, the item picture shaded when the expertise is lacking, and the required number. No degree name, page number or product slot is drawn. | Original (the viewer draws a diagnostic layout) |
+| SW6 | completion (0x4EE0F0 → 0x56E950) | The callback slot holds 0x56E950; it acts only when the viewer is the local PC: `schematic_text.mes` 2, a redraw, and sound 3018 + the **current discipline** (the global the discipline tab writes, 0..7), so 3018..3025. This corrects the first reading of ARC-RES-062 ("3018 + current tab", a slip: the tab is another global). | Original (ARC-RES-062 corrected) |
+| SW7 | assembly holders (0x56E720), Q7 | The components are searched in and consumed from the **crafter**'s inventory; each product is created at the crafter's location and moved with 0x4617F0 to the **crafter**; the viewer is used only for the completion message. Through the dialog the crafter is the NPC and the viewer the PC: the NPC's inventory supplies the components and receives the product, and the PC only sees the message. | Original (NPC crafter implemented by ARC-TECHNOLOGY-006, [NC6](#npc-schematic-crafter-arc-technology-006)) |
+| SW8 | script action 129 (0x44A7BD, 0x460B50, 0x45FD40, 0x57C6E0) | The operand's object: none does nothing; a PC calls 0x460B50(PC, PC); otherwise its PC leader (0x45DDA0): none does nothing, else 0x460B50(NPC, leader). 0x460B50 calls the pointer at 0x5E8768, written only by 0x45FD40 from slot 0x110 of a structure 0x57C6E0 builds on the stack and never fills: the call goes through stack garbage (TC2). The arguments match the open (crafter, viewer). | Original bug (TC2, both fixed: the PC opens its window; an NPC with a PC leader opens it as the crafter, ARC-TECHNOLOGY-006, [NC3](#npc-schematic-crafter-arc-technology-006)) |
+
+## NPC schematic crafter (ARC-TECHNOLOGY-006)
+
+Source: the [schematic window runtime](../../world/schematic-window-runtime.md#npc-crafter-arc-technology-006) and the
+[Schematic window](#schematic-window-arc-technology-005) rows above (SW2, SW3, SW7, SW8). Read on 2026-10-21 for this slice by two agents
+that saw only the questions (method step 6), independently: the dialog action `su` and its reply handling, the interface mode stack
+after the window closes, script action 129's NPC branch, an NPC's degrees, intelligence and expertise, what the window shows for an
+NPC crafter, and the insert check of a product moved into an NPC. Every direct branch read stays inside `.text`. The readings agree on
+NC1–NC7 (F2, the F0 facts of the `su` opener, the 129 NPC branch and the NPC expertise source brought to F2); NC8 was seen by one reader
+(F1).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| NC1 | action interpreter (0x415BA0, code table 0x5A0750, `su` index 30), reply handler (0x413130), reply UI (0x567E30; the start dispatcher 0x568280) | `su` reads a number and ignores it; it composes a generic NPC line (2100–2199 of the gender-pair `gd_npc_*.mes`, blank when the NPC cannot talk), sets the dialog's pending code 7 and makes the interpreter return 0. It runs when the PC picks the reply that carries it; the field's other actions still run in order (a later `jo`/`et` resetting the code to 0, or `ce`/`ii`/`ri` setting 5/8/9, would override it), and the reply's target node is not entered. For code 7, and only when the dialog's PC is the local player, the UI clears the dialog text (0x553370 → 0x4C9720) and opens the window (0x56D130) with the NPC as crafter and the PC as viewer; the composed line is never shown. | Original |
+| NC2 | interface mode stack (0x551A80; stack 0x64C634, depth 0x64C6B8), dialog end 0x5678D0, window close 0x56D2D0 / 0x56D4D0 | The open first pops the mode stack (argument 0): leaving the dialog mode by a pop ends the conversation (0x5678D0); then it pushes the schematic mode. Closing the window pops back to the mode under the dialog, normally the world: the conversation does not resume (a pushed mode over a dialog only suspends it, 0x567A20/0x567A60, but the open pops the dialog first). When the open refuses (a missing or dead crafter or viewer, 0x45D8D0), the dialog text was already cleared and the code 7 stays, so later reply picks are ignored (inferred). | Original |
+| NC3 | script action 129 (0x44A7BD), leader getter 0x45DDA0 / 0x45DE00 | A PC object calls the hook with (PC, PC). Otherwise the leader getter returns null unless the object is an NPC, then walks its leader field (281) up through NPC leaders to the first PC (no cycle guard, no local-player test); no leader does nothing, else the hook (NPC, PC). The hook calls a callback slot the game never fills (TC2, SW8). | Original bug (TC2: both fixed, implemented) |
+| NC4 | degree getter 0x4AFE60, field getters 0x406CA0 / 0x408A20 / 0x407470 / 0x408BB0, stat getter 0x4B0490, expertise 0x4B00B0, effect aggregation 0x4EA6C0 | An NPC's degree is element `discipline + 17` of field 223, read from the instance when it has that field set, else from its prototype (the whole array; no per-element fallback). Effective intelligence and expertise run the same code for a PC and an NPC: base stat, background adjustments, poison, then the critter's own effect list (fields 228/229) clamped; expertise lowers the degree while intelligence is below its minimum, then the effect aggregation of the discipline with no cause excluded. | Original (NPC effects not modelled in the session) |
+| NC5 | window open 0x56D130, reset 0x56D0D0, learned list 0x56CD60, draw 0x56DDC0 | The degrees are always the crafter's (raw, not lowered by intelligence) and set the learned pages; the found tab is built only for a PC crafter (field 267), so an NPC crafter's is empty (its button still selectable) and the viewer's list is never read. An NPC crafter resets the tab, discipline and page on every open; a PC crafter keeps them. | Original |
+| NC6 | assembly 0x56E720, completion 0x4EE0F0 → 0x56E950 | The gate searches the crafter's inventory with the crafter's expertise; assembly consumes the components from the crafter, creates each product at the crafter's location and moves it into the crafter (0x4617F0); the completion text and sound go to the viewer when it is the local player. (Agrees with SW7.) | Original |
+| NC7 | insert check 0x466510, refusal text 0x4673B0 / 0x4D5450 | For any critter: a key into a key ring passes; the carried weight plus the item's against the carry capacity (stat 8); a technological item refused by background 72; stack merge, else a free inventory cell. No PC-only test. A refusal moves nothing: for an NPC the text floats over it, the product stays on the ground at the crafter, and assembly ignores the result and still completes. | Original (both modes since ARC-WORLD-070: the product lies on the crafter's tile) |
+| NC8 | node-entry path (call at 0x4168C2) | `su` in an NPC line's own action field also sets the pending code 7 (the return value is ignored); its text handling was not traced. One reader. | Original (F1; not admitted here) |
+
+## Charge cells (ARC-TECHNOLOGY-007)
+
+Source: the [charge-cell runtime](../../world/charge-cell-runtime.md) and the [technology study](../technology-evidence.md#technological-items-fr-magic-010-fr-magic-011)
+(TC1). Question: how does the original's spell payment (0x450420) take charge cells for a record with `ChargesFromCells:`: which
+object pays, how the cells are counted, how many an item needs, how they are taken, whether the "apply" argument is honoured,
+and which callers reach the branch? Read on 2026-10-21 by two fresh agents that saw only the questions (method step 6),
+independently; they agree on every row, so the rows are F2. Every direct branch stays inside `.text`. Prototype numbers below are
+the project's (the executable's prototype 7040 is our 7060).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| CC1 | payment (0x450420), order; record parser (0x4578F0) | The record flag 0x20 comes from a non-zero `ChargesFromCells:` (`Is_Tech:` sets 0x4, `ChargeBeginCost: 0` sets 0x100); it counts only for spells 0..222. After the zero-cost exit (cost ≤ 0 pays) and the no-payer exit, and after storing the cost for reflection, a cell record goes straight to the cell branch: before the critter branch (so the fatigue-limiting halving never applies) and the item-charge branch. | Original |
+| CC2 | 0x450420, the owner | An item payer (types 5..14) uses its parent (field 0x58, read without a null check); any other payer, critters included, is its own owner. | Original (CCA3) |
+| CC3 | ammunition count (0x465820 → 0x465870), insert (0x466510, 0x462410) | Cells are ammunition of type 2. An ammunition owner counts its own quantity; a critter the quantity (field 0x8E) of its one stack of that type, whose handle is critter field 0xE9 + type (0xEB, power cells), since insertion merges ammunition into that one stack; a container the first item of its inventory with prototype 7060 (a lookup that never matches in the original, [AM6](items.md#ammunition-arc-world-066)); any other object 0. No sum over stacks, no worn items. | Original (AMA5: Steamwoven switch, ARC-TECHNOLOGY-009) |
+| CC4 | 0x450420 with 0x461590, 0x4614A0, 0x461520 | The need is the cost for any payer but an item; an item needs `2 × cost − adjust(item, parent, cost)`. The adjustment of a value v with complexity c (field 0x60) and power p: `trunc(p × v / c)` for c > 0, `v − trunc(p × v / c)` for c < 0, v for c = 0. A critter parent gives `p = trunc((aptitude + c) / 2)` clamped into `[0, c]` or `[c, 0]` (aptitude: stat 16), any other parent `p = c`. So a neutral item needs the cost; a magickal one `2 × cost − trunc(cost × p / c)`; a technological one `cost + trunc(cost × p / c)` (TC1). All 32-bit, truncated toward zero. | Original (TC1 switch; CCA2) |
+| CC5 | 0x450420, unit use (0x4658E0, no destination) | Fewer cells than the need: the payment fails and nothing is taken. Otherwise the same one stack is found again: equal to the need, it is destroyed (0x43CCA0); otherwise it keeps the rest (0x4EFDD0). One stack only; the branch returns the unit use's result. | Original |
+| CC6 | 0x450420, "apply" | The cell branch never reads the "apply" argument. The affordability checks that pass 0 take the cells for real: the interface check 0x4508A0 (called by 0x57C110 before a cast) and the animation goal's check 0x450940 (from 0x429B50, the base cost in the first state, else the maintenance cost). | Original bug (CCA1; decided: no spending in both modes) |
+| CC7 | callers reaching the branch | BEGIN (state 0 of 0x452F20) pays only for a critter caster, a record without `Is_Tech` and without flag 0x100, a run without flag 0x2, after the intelligence and willpower checks: a tech record pays nothing at BEGIN. MAINTAIN (state 1 of 0x452F20, from 0x453168; no separate function at 0x453170) has no `Is_Tech` test: it pays the maintenance cost (doubled for race 1) and, with a margin set, the surcharge (0x453370). ChargeNBranch (0x451850) pays its component's cost; a run's release (0x456FA0) and a target handler (0x5618B0) pay with "apply"; a redirected payer (0x455550) passes spell 10000 and never reaches it. | Original (the stage is the magic slices') |
+| CC8 | holder gate (0x456A10) | Allowed for no holder, an item of complexity ≤ 0, a holder of aptitude ≥ 0, or a power above 0 (aptitude + complexity ≥ 2); the other object's aptitude is read and dropped. Confirms the receipt of ARC-MAGIC-006. | Original |
+
+Anomalies:
+
+- CCA1 (CC6): an affordability check takes the cells of a cell-powered record. Both settings answer an unapplied request as the
+  original does and write nothing (`CellPlan.Applied`), as the task contract of ARC-TECHNOLOGY-007 sets. **Decided** (owner,
+  2026-10-21): no spending on a check in both modes, no switch (tested for the hero, an item and a container in both modes,
+  ARC-TECHNOLOGY-009).
+- CCA2 (CC4): `2 × cost` and `p × cost` wrap past about 2³⁰; a negative need then adds cells to the stack, and complexity −1
+  with a product of −2³¹ faults on the division. Crash class: both settings compute the need exactly and refuse a need or a
+  product `p × cost` that does not fit 32 bits, or a complexity or aptitude out of range (`CellRefusal.OutOfRange`).
+- CCA3 (CC2): an item without a parent reads the object of pool slot 0. Both settings count no cells and refuse.
+- CCA4 (CC3, CC5): an ammunition object as owner counts its own quantity but the take finds no stack and pays for free. No
+  installed path makes an ammunition object the parent of a cell device; both settings count 0 for it.
+
+## Tech devices (ARC-TECHNOLOGY-008)
+
+Source: the [tech devices runtime](../../world/tech-devices-runtime.md) and the [technology study](../technology-evidence.md#technological-items-fr-magic-010-fr-magic-011).
+Question: which item fields hold an item's spells and charges and how a slot's spell starts; whether anything refuses a
+technological device to a magickal holder outside combat; the technology failure and the magick cancel in combat; any other
+aptitude-based failure of a device. Read on 2026-10-21 by two fresh agents that saw only the questions (method step 6),
+independently; they agree on every row, so the rows are F2 (DV6's field name is believed by both, not verified). Every direct
+branch stays inside `.text`. That MAINTAIN charges a technology record is [CC7](#charge-cells-arc-technology-007).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| DV1 | slot reader (0x4CB7A0), payment item branch (0x450420), use (0x462CC0), 0x4CC160 | An item's spells are five fields (0x64..0x68), 10000 none; the reader returns −1 for a null item or 10000; the trigger executors run a slot's low byte (0x4CB790), so a value outside 0..222 runs record `value & 0xFF` and 223..255 read past the record table (no installed slot is out of range). Field 0x69 is the spell charges: the payment's item branch refuses 0, spends one of a positive count when it commits (and sets the magical item flag 0x4), and never spends a negative count. The use takes the spell path of slot 0 when the charges are not 0 or the magical flag is set; "has a usable spell" (0x4CC160) needs charges not 0, a spell in slot 0 and a trigger mask (corrected by TP5 and SP6: true also for an empty slot 0, and it is asked only by the AI). | Original |
+| DV2 | use (0x462CC0), executors (0x4CB830, 0x4CBFF0), run creation (0x455A20, 0x455C30), admission (0x4564E0), gate (0x456A10) | Nothing refuses a technological item or its spells to a magickal holder outside combat: the use and the executors read neither complexity nor aptitude; the admission's aptitude block is skipped for a technology record (`Is_Tech:`, flag 0x4) and otherwise refuses only a technologist casting from an item he draws no power from (IV7); the gate refuses only a magickal item to a technologist (power ≤ 0), and its only caller is the AI's item scan (0x4CC930). | Original |
+| DV3 | trigger executor (0x4CB830), 0x4CBF70, 0x4CBFF0 | Each slot whose record's `ItemTriggers:` mask (record +0x38) meets the event mask fires after its chance flag (Rare 10 %, Uncommon 20 %, Common 40 %, Frequent 66 %, a 1..100 roll at or below, the first set flag in that order): a run (0x455A20) with the item as source and its parent (0x450A50: field 0x58 inside an inventory) as caster; the target is the other party (0x2000, Item_Used included), its weapon or armour slot (0x4000, 0x8000), the location (0x800000) or else the parent. The use sends Item_Used (0x1000) through 0x4CBF70; wear, unwear and drop (0x4CBFF0) roll no chance. | Original (the shared item trigger slice) |
+| DV4 | technology failure (0x461700) in the attack (0x4B3170) | For a technological weapon (complexity < 0) in a PC's or NPC's hands with aptitude a > 0: chance `a × |c| / 100`, truncated; rolled 1..100 before the hit roll for any attack but a throw; at or below, the attack is a critical miss (flag 0x4 without 0x2), unless a PC's pending fate turns it into a critical hit. | Original (confirms `AttackRules.TechnologyFailureChance`) |
+| DV5 | magick cancel (0x461620) in the attack | Both parties critters. A magickal weapon against a technologist target (aT < 0): `|aT|` when the attacker is a technologist too, else `|aT| × (100 − aA) / 100`; a technological weapon against a magickal target (aT > 0): aT when the attacker is magickal too, else `aT × (100 + aA) / 100`; truncated, rolled after a failure roll that did not fail. A cancel lets a melee attack with a magickal weapon go on without the weapon's magic to-hit and damage adjustments; any other attack misses. | Original (confirms `AttackRules.MagickCancelChance`) |
+| DV6 | wear check (0x464D20), insert check (0x466510) | Two refusals by the PC's background (field 0x101, read by 0x4C2690), not by aptitude: background 69 cannot wear a magickal item (code 18), background 72 cannot carry a technological one (code 15). | Original (implemented by ARC-WORLD-069, BG3 and BG4) |
+| DV7 | MAINTAIN (from 0x453168), data | MAINTAIN pays a technology record's maintenance (CC7). In the installed records the cell records 168 and 187 have maintenance 0, so the stage pays nothing; their cells come from a ChargeNBranch component (168 on its Maintain action, one cell a tick; 147 and 187 on Begin, one cell). | Original |
+
+Data notes (not anomalies; both settings follow the original):
+
+- DVD1 (DV1): two technological generic items (15154, record 176; 15193, record 220) carry no charges (0) and lack the magical flag
+  0x4 (item flags, field 0x57), so their use never takes the slot-0 spell path (their records cost nothing, so the payment would not
+  have spent a charge). The owner chose unlimited charges in Steamwoven on 2026-10-21;
+  ARC-TECHNOLOGY-009 then found in the installed data that both records sit in slot 1 (slot 0 is 10000) and have `ItemTriggers:`
+  0; the owner chose to read further (option B). **Settled** by ARC-TECHNOLOGY-010 ([Trap devices](#trap-devices-arc-technology-010)):
+  both carry generic flag 0x4 (generic flags, field 0xD3) and fire in the original as timed trap devices through slot 1 (TP2–TP3). Not a data fix: the
+  trap-device mechanism, the same in both modes; the owner's decision on the trap mechanism is pending (not implemented).
+- Nine items that are not technological carry technology records (six food, three scrolls); they reach the engine like any device.
+- Record 187 is on no item; of the six maintained technology records only 168 is carried (three armours).
+
+## Trap devices (ARC-TECHNOLOGY-010)
+
+Source: ledger [DVD1](#tech-devices-arc-technology-008) and the [tech devices runtime](../../world/tech-devices-runtime.md).
+Question: what the item use does with a technological generic item whose slot 0 is empty and whose technology record sits in slot 1
+(15154 with record 176, 15193 with record 220: charges 0, no magical flag, item flags 0x180), whether any path ever casts slot 1, and
+what records 176 and 220 do. Read on 2026-10-21 by two fresh agents that saw only the questions (method step 6), independently;
+they agree on every row, so the rows are F2. The installed data was read locally: both items carry generic flag 0x4, as do 15100 and
+15120 (slot 1 empty, a use script); records 176 and 220 have cost 0, no maintenance or duration, `ItemTriggers:` 0, info aggressive,
+and each the same BEGIN components: Damage (fire 5–20, normal 100–200) over a radius-2 area, EyeCandy, AGoal 43, Summon 4050, Destroy (Tgt_Self) and a
+CALLBACK Destroy. 15154 is the product of the learned explosives schematic 2660 and a component of the found schematics 4650 (whose
+product is 15193) and 4690.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| TP1 | item use (0x462CC0, on a tile 0x462FC0), field names | Item field 0x60 is the magick/tech complexity, 0x64..0x68 the five spells, 0x69 the spell charges, 0x57 the item flags; generic flags (field 0xD3) 0x1 uses the torch/shield location, 0x2 lockpick, 0x4 trap device (OGF_IS_TRAP_DEVICE); item flags 0x80 OIF_CAN_USE_BOX (the inventory use check 0x462C30 needs it), 0x100 OIF_NEEDS_TARGET. The use, in order: a null item or user returns; a scroll checks its level; with no target and OIF_NEEDS_TARGET the targeting cursor opens (0x4EE060, a fixed object-or-tile mask for a trap device, 0x5719F0) and the use returns; a generic item with generic flag 0x4 (0x4BCA60) goes to the trap-device branch (TP2) before the use script, the action points and the charges; otherwise the use script (point 1) may stop it; then charges not 0 or the magical flag cast slot 0 only (an empty slot 0 passes spell −1, read outside, before, the record table) and send Item_Used (0x4CBF70); otherwise 4 action points and the generic flags 0x2 (pick locks) or 0x8 (heal), else nothing. | Original |
+| TP2 | trap device on an object (0x4BC2E0) and on a tile or wall (0x4BC480) | The only path that reads slot 1 (field 0x65). With a spell there the device is destroyed; record 176 alone alerts every eligible critter within 10 tiles that is not the user's follower against the user (0x4AA0D0, 0x4A9650); on a tile a marker object is created there from prototype 4047 (record 176) or 4049 (record 220; none for another record) with OF_TRAP_PC, and for the PC also spotted with a message (0x4BC090); then the delayed spell is scheduled (TP3) at the tile, on an object at its location. With slot 1 empty the device arms an ordinary script trap on a portal or container instead. Not read: any check that the object or tile is a valid target before the device is destroyed (whether a refusal keeps the device). | Original |
+| TP3 | trap timer (0x4BC690, handler 0x4BC780) | A delay above 0 queues a time event of type 28 ("Traps", a game-time event in the [event-queue reading](../game-event-queue.md); the readers did not read its clock themselves) `delay × 1000` ms ahead, the device branch passing 88 (88,000 ms on that clock); when it fires, the handler calls the same function with delay 0, which creates a run with no source and no caster (0x455A20), sets its target tile to the saved tile, starts it (0x455AC0) and destroys the marker. | Original |
+| TP4 | item trigger executors (0x4CB830, called through the wrapper 0x4CB800; 0x4CBFF0), events | They loop over the five slots, leave at the first slot holding 10000 (so an empty slot 0 ends them) and skip a record whose trigger mask shares no bit with the event; a mask of 0 never fires. Wear, unwear, pickup, drop, parent hit and the other parent events and Item_Used reach them; a thrown item (an item as the attacker) gets Target_Hit only. No path casts slot 1 of these items through them. | Original |
+| TP5 | "has a usable spell" (0x4CC160), AI item scan (0x4CC930) | Only the AI action picker asks 0x4CC160: false with charges 0; otherwise true when slot 0 is empty, when slot 0's record has a trigger mask, or with OIF_VALID_AI_ACTION. The scan lists spell slots only with charges not 0. Neither reaches these items. | Original |
+| TP6 | script actions (0x447220) | The cast actions take the spell number from the script's operands and never read an item's spell fields; the built-in trap scripts (30000+) take it from the script. | Original |
+| TP7 | the run of records 176 and 220 | The trap run has only a target tile: the radius-2 area is centred on it; Damage hits each object in it with no attacker; AGoal 43 is knockback (no caster or source location: nothing); Summon creates prototype 4050 there as the run's summoned object; EyeCandy plays and its callback flag runs the CALLBACK action when the art ends; Destroy with Tgt_Self redirects to the caster (none: nothing). Held through the use UI (charges not 0, slot 0) the same record would have the holder as caster and Destroy would remove the holder. In play: a timed bomb placed on a tile or at an object's location. | Original |
+| TP8 | prototypes 4047, 4049, 4050 | The executable names 4047 and 4049 only as the markers and never names 4050 (it comes from the Summon data). | Original |
+
+Verdict on DVD1: both devices carry generic flag 0x4, so the original fires them as trap devices (TP2–TP3); their charges, slot 0 and
+trigger mask never matter. DVD1 is not a data fix: it is the trap-device mechanism, the same in both modes (not implemented); the owner's
+decision on the trap mechanism is pending.

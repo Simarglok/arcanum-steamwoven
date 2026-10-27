@@ -18,7 +18,7 @@ of [FR-ITEM-007](../requirements/items-economy.md#fr-item-007). The viewer uses 
   unarmed damage, light), the object armour class and resistance, the paperdoll UI's own checks and the TIG item art bits.
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically by two independent readers at the same
   functions per the [original executable check](../research/original-executable-check.md); rows EQ1–EQ14 in the
-  [verification ledger](../research/original-verification-ledger.md#equipment-arc-world-028). The original does what
+  [verification ledger](../research/ledger/items.md#equipment-arc-world-028). The original does what
   that first reading describes except in two rows: one changes a rule (EQ1: the original refuses a shield with one crippled arm
   too) and one changes only stored flags (EQ12: the original keeps only the critter's largest light flag). EQ5 is a bug of the original without a session effect
   (the medallion slot recalculates the animation speed of the item, not the wearer), so no rule-mode switch.
@@ -120,7 +120,7 @@ pack.
 
 The hero carries its background id in the session (`SessionHeroState.Background`, snapshot schema 36; a pre-made hero's comes from
 its prototype, 39–50, through `SessionHeroDefinition.Background`; 0 none), read in the executable
-([ledger BG1–BG8](../research/original-verification-ledger.md#backgrounds-arc-world-069)). `QueryHeroBackground()` gives it. Only a
+([ledger BG1–BG8](../research/ledger/character.md#backgrounds-arc-world-069)). `QueryHeroBackground()` gives it. Only a
 PC has a background (the original's reader answers 0 for any other object), so an NPC is never refused. Two rules read it:
 
 - **Magick Allergy (69, BG3).** The hero as a wearer is `MagickAllergy`, so the wear check refuses a magickal item (complexity above

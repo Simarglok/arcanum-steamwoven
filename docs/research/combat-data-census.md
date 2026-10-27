@@ -402,7 +402,7 @@ dead humans have row 0 and no kill-on-sight flag.
 ## 9. Critical charts and body types (ARC-COMBAT-009)
 
 A second probe mode counts what the original's critical-effect procedures read
-([ledger CR1–CR15](original-verification-ledger.md#critical-effects-arc-combat-009)):
+([ledger CR1–CR15](ledger/combat.md#critical-effects-arc-combat-009)):
 every critter's critical-hit body type (field 227) and every weapon's critical
 hit and miss charts (fields 129 and 132), for prototypes and for every map's
 mobiles by their effective fields, through the module content stack.

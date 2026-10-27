@@ -217,6 +217,15 @@ public sealed class SessionCritterCombat
         CrippledArmsBoth = conditions.HasFlag(LifeConditions.CrippledArmsBoth),
     };
 
+    /// <summary>ARC-MAGIC-014: the NPC's race (its stored race stat).</summary>
+    public CharacterRace Race => _race;
+
+    /// <summary>ARC-MAGIC-014: an effective stat of the NPC in this life state (under its poison and crippled legs), as
+    /// <see cref="Combatant"/> reads them.</summary>
+    public int EffectiveStat(CharacterStat stat, LifeState state) =>
+        _stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel), state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))
+            .Snapshot!.GetEffective(stat);
+
     /// <summary>What the NPC defends as in this life state: effective stats under its poison and crippled legs, armour class
     /// (<see cref="AttackRules.ArmorClass"/> under <paramref name="profile"/>), resistances, dodge, light and conditions.</summary>
     public Combatant Combatant(LifeStatus status, LifeState state, CombatAnomalyProfile profile)

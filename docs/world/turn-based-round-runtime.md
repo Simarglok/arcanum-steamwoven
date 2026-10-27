@@ -19,7 +19,7 @@ as a domain of the [game session](game-session-runtime.md) (snapshot schema 11).
   gate, weapon speed, the object, sector and object-find scan order, and game time during a round.
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically by two independent readers per the
   [original executable check](../research/original-executable-check.md); the rows are in the
-  [verification ledger](../research/original-verification-ledger.md#turn-based-round-arc-combat-003). The original does
+  [verification ledger](../research/ledger/combat.md#turn-based-round-arc-combat-003). The original does
   what that first reading describes for every rule below except the two differences already known (A1 in the sort: the
   original moves followers too; A4 in the run step, ledger TB14), which both rule modes follow, and it
   answers the open question O2 (scan order). Three behaviours of the original are bugs and get a switch of the Original

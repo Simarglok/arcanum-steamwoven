@@ -25,7 +25,7 @@ since ARC-COMBAT-009 a critical hit rolls the original's critical-effect tables 
   animations).
 - The retail 1.0.7.4 `Arcanum.exe`, read statically by two independent readers per the
   [original executable check](../research/original-executable-check.md); rows FA1–FA10 of the
-  [verification ledger](../research/original-verification-ledger.md#hero-attack-arc-combat-005). Three rows differ from that first
+  [verification ledger](../research/ledger/combat.md#hero-attack-arc-combat-005). Three rows differ from that first
   reading: a click on a follower of the hero does nothing unless left Alt is held (FA2), a corpse click without Alt does
   nothing (FA3), and the click does nothing when the PC is not active, is stoned, or is stunned or paralysed (FA6); none
   is a bug of the original, so there is no rule-mode switch.
@@ -45,7 +45,7 @@ since ARC-COMBAT-009 a critical hit rolls the original's critical-effect tables 
 | Training (FA8) | Stored bits 6..7; a monstrous critter's melee takes the highest tier whose melee level and character level reach 1/10, 9/20, 18/30 in order. |
 | Monstrous (FA9) | Mechanical, monster, animal or undead critter flag. |
 | Resistance (`CombatantRules.Resistances`) | Stored + worn armour (with its magic, scaled for the wearer) + `5 × (CN − 4)` for poison when positive, clamped 0..95 unless a monstrous NPC (the resistance getter 0x43D6D0, ledger EQ8); resistance effects are not applied. |
-| Reach | The weapon's range, 1 bare-handed; farther away the click route walks (running, as every object approach) to the nearest standable cell within reach first, the attack goal's move-near step. |
+| Reach | The weapon's range, 1 bare-handed; farther away the click route walks (running, as every object approach) (since ARC-WORLD-073 the original's approach: the cell one step short of the target on the shared request's route into its tile, [click route](click-route-runtime.md#attack-approach-arc-world-073)) first, the attack goal's move-near step. |
 | Animation | The hero's bare-handed attack ART (animation 20, weapon slot 1: 9 frames, 15 fps, action frame 6) played by [`RealTimeCombatRules`](real-time-combat-runtime.md#rules-realtimecombatrules) at the rate of the hero's Speed and the pause of its weapon speed; one attack sound roll (1..4) per attack start; facing the target. |
 | Hit | The update that shows the action frame runs the hit once when the target is still within reach (else the attack ends without one): `GameSessionOwner.AttackCritter`. |
 | Repeat | Auto attack (on, the original's default) starts the attack again 5 ms after it ends while the hero is in combat mode, no round runs and the target is alive. A click elsewhere, the stick, a dialog or window, a quick load, the hero leaving the map or combat mode (refused while an animation plays: the exit gate's attempt-attack test) or losing the ability to act stop it; a refused hit ends it; the same target clicked again keeps its goal. |
@@ -111,7 +111,7 @@ there (the critical tables read the host's `TargetWorn`).
 
 Requirements: [FR-COMBAT-007](../requirements/combat-magic-tech.md#fr-combat-007) (ammunition per shot, partly) and
 [FR-COMBAT-004](../requirements/combat-magic-tech.md#fr-combat-004) (the line of fire chooses the struck object). Read in the
-retail 1.0.7.4 executable by two readers ([ledger RA1–RA10](../research/original-verification-ledger.md#reach-and-line-of-fire-arc-combat-012)).
+retail 1.0.7.4 executable by two readers ([ledger RA1–RA10](../research/ledger/combat.md#reach-and-line-of-fire-arc-combat-012)).
 
 | Rule | Value |
 | --- | --- |

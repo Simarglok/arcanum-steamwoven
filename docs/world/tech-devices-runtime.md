@@ -10,8 +10,8 @@ state is added (the snapshot schema is unchanged).
 Requirements: [FR-MAGIC-010](../requirements/combat-magic-tech.md#fr-magic-010) (magick against technology),
 [FR-MAGIC-011](../requirements/combat-magic-tech.md#fr-magic-011) (devices and their spells).
 
-Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Tech devices"](../research/original-verification-ledger.md#tech-devices-arc-technology-008),
-DV1–DV7, and ["Charge cells"](../research/original-verification-ledger.md#charge-cells-arc-technology-007) CC7). Code:
+Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Tech devices"](../research/ledger/technology.md#tech-devices-arc-technology-008),
+DV1–DV7, and ["Charge cells"](../research/ledger/technology.md#charge-cells-arc-technology-007) CC7). Code:
 [`TechDeviceCatalogue`](../../src/Arcanum.Data/Technology/TechDeviceCatalogue.cs) (Data),
 [`TechDeviceRules`](../../src/Arcanum.Simulation/Technology/TechDeviceRules.cs) (Simulation),
 [`GameSessionCells`](../../src/Arcanum.Session/GameSessionCells.cs) (`QueryHeroDeviceUse`); tests
@@ -36,9 +36,10 @@ complexity, slot, record, spell charges); a spell outside 0..222 is a `TechDevic
 | MAINTAIN components | a ChargeNBranch on the Maintain action pays its cost each tick |
 
 The installed data (opt-in census): 70 item spell slots name technology records, 65 distinct records, on 70 items (61
-technological; nine others: six food and three scrolls); charges −1 ×21, 0 ×2, 1 ×47; no slot out of range. The two devices without charges also lack the magical flag, so they never fire on
-use (ledger DVD1). Their records also sit in slot 1 with no item triggers, so unlimited charges alone would not make them fire;
-the owner's decision on a fix is open (ARC-TECHNOLOGY-009 found this; both settings follow the data). Maintained
+technological; nine others: six food and three scrolls); charges −1 ×21, 0 ×2, 1 ×47; no slot out of range. The two devices without charges also lack the magical flag, so their use never takes
+the slot-0 spell path (ledger DVD1). ARC-TECHNOLOGY-010 read why ([trap devices](../research/ledger/technology.md#trap-devices-arc-technology-010),
+TP1–TP8): both carry generic flag 0x4 (trap device), and the original's use plants them as timed bombs through slot 1 (a marker on
+the tile, a "Traps" event 88,000 game ms later, then a source-less run of the record there); the trap-device path is not implemented. Maintained
 technology records: 146, 149 (maintenance 1 every 10 s, the source's payment), 168, 187 (maintenance 0: cells come from their
 ChargeNBranch, 168 one cell a MAINTAIN tick, 187 one at BEGIN), 209, 216 (maintenance 0). Cell records 147 (one weapon, BEGIN
 branch), 168 (three armours, Maintain branch), 187 (no item). Only 168 is both maintained and carried.

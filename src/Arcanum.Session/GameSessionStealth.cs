@@ -68,7 +68,7 @@ public sealed partial class GameSessionOwner
     /// otherwise <see cref="StealthRules.Margin"/> of the shared check's prowling effectiveness (opposed by the observer's
     /// perception, <paramref name="observerPerception"/>) and its difficulty for <paramref name="observer"/> (the host's facts of
     /// the observer, the light at the hero, cover and the worn armour's silent-move adjustments; the sight or hearing flag is
-    /// set here). The source computes it at every check and stores nothing; the observer's AI (slice I2) is its consumer.
+    /// set here). The source computes it at every check and stores nothing; the awareness checks (Ai.AwarenessRules, slice I2) take it as an input, called by the AI from slice I4 on.
     /// </summary>
     public SessionProwlingMargin HeroProwlingMargin(int observerPerception, SkillDifficultyFacts observer, bool seeing)
     {

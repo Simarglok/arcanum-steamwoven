@@ -434,7 +434,7 @@ and round-trips through a snapshot; it prints `ARC-WORLD-010 native-smoke clock 
 `ARC_AREA_TRANSITION_CAPTURE` saves views of both maps. The real-data Core test
 `AreaTransitionOriginalTests` walks to each trigger over the step evidence and
 checks the same transfers. The ordinary launcher passes the cave input only to an
-ARC-WORLD-009 build (`./arcanum area` prefers it); exported AREA builds that predate
+ARC-WORLD-009 build (which `./arcanum area` preferred until ARC-RENDER-028 made it map mode on the main world map); exported AREA builds that predate
 it reject the flag ([launcher](../workflow/local-development.md#cave-and-return-candidate-arc-world-009)).
 
 ### Actor anchor and wall fade (ARC-RENDER-011)
@@ -892,7 +892,8 @@ export), switching on other GPUs and handhelds.
 In `crash-site-area` Virgil talks through the [session party](../world/party-runtime.md): his `JO` joins it, and his
 follower entry (node 385) offers its `WA`/`UW` replies. While he follows he walks after the PC on his own grid session
 over the same step evidence (start beyond 4 cells, stop within 2, stand on the PC beyond 30 then step off); the PC and
-Virgil block each other where they stand, and his T0 cell no longer blocks. His T0 body frame is drawn where he stands
+Virgil block each other where they stand (since ARC-WORLD-074 the PC steps through him outside combat mode; Virgil is still
+admitted against the PC), and his T0 cell no longer blocks. His T0 body frame is drawn where he stands
 (no walk cycle or turning), talk reach uses his current cell, a waiting Virgil stays, and his cell is written to the
 session on F7 and when the PC leaves the map. HUD: `companion script 1324 <standing> at
 (x,y) …`. Contract and checks: [companion follow runtime](../world/companion-follow-runtime.md); native smoke
@@ -950,7 +951,7 @@ auto-level scheme spends its 5 starting points at the start and each level's poi
 experience award (a dialog's quest completion, a hit, a kill) the followers and the NPCs waiting on this map follow the
 hero's level step with their own schemes ([auto-level schemes](../world/advancement-runtime.md#viewer-host); the log prints
 `ARC-WORLD-036 follower-level`). The actor is still drawn with the fixed human body of the AREA profile, not the hero's own
-race/gender ART. Launcher: `./arcanum area --hero NAME`, `./arcanum map NAME --hero HERO`
+race/gender ART. Launcher: `./arcanum area --hero NAME` (since ARC-RENDER-028 the main world map in map mode), `./arcanum map NAME --hero HERO`
 ([local development](../workflow/local-development.md#project-launcher)). Native smoke with `--hero` (after the
 inventory stage, and in map mode after the map stages): `ARC-WORLD-027 native-smoke hero PASS`.
 
@@ -974,7 +975,7 @@ run may end under a roof.
 
 In combat mode (R, `--hero`) a left click on a living NPC attacks it, on the exterior, in the cave and in `--area-map`
 ([hero attack runtime](../world/hero-attack-runtime.md#viewer-area), ledger
-[FA1–FA10](../research/original-verification-ledger.md#hero-attack-arc-combat-005)): the hero walks (running) within its
+[FA1–FA10](../research/ledger/combat.md#hero-attack-arc-combat-005)): the hero walks (running) within its
 weapon's reach, turns to the target and plays its bare-handed attack ART at the rate of its Speed; the frame that shows the
 action frame resolves the hit through the session, and the attack repeats (auto attack) until the target dies. Shift makes
 it the attempt-attack goal (here the same attack); a follower is attacked only with left Alt held; held `,` `.` `/` aim at the
@@ -991,7 +992,7 @@ living NPC with combat values.
 The original Character sheet key `C` (logical key down) toggles a diagnostic sheet of the session's hero in
 crash-site-area (exterior, cave and `--area-map`). It shows what the original sheet of the PC shows
 (`charedit` in active mode, checked in the original executable, ledger rows
-[CS1–CS7](../research/original-verification-ledger.md#character-sheet-arc-ui-007)), every value a session query:
+[CS1–CS7](../research/ledger/character.md#character-sheet-arc-ui-007)), every value a session query:
 
 - the hero's project name (no PC name in the session), race and gender;
 - level, experience still needed for the next level (`last level` at 51; `next level unknown` without experience data),
@@ -1027,7 +1028,7 @@ not admitted fails the load (`AREA_HERO_TableUnavailable`, `AREA_HERO_Experience
 #### Skills page (ARC-UI-009)
 
 Since ARC-UI-009 (task S6 of the [skills plan](../research/skills-plan.md)) the sheet has the original's skills page, checked
-in the original executable (ledger rows [SP1–SP8](../research/original-verification-ledger.md#skills-page-arc-ui-009)):
+in the original executable (ledger rows [SP1–SP8](../research/ledger/skills.md#skills-page-arc-ui-009)):
 
 - the sixteen skills in the original's four groups of four (three of basic skills, the fourth the tech skills), all four
   groups at once instead of the original's tabs;
@@ -1070,7 +1071,7 @@ Requirements: [FR-UI-004](../requirements/ui-media-lifecycle.md#fr-ui-004) (the 
 
 Since ARC-MAGIC-008 (slice MT19 of the [magic implementation plan](../research/magic-implementation-plan.md)) the sheet has
 the original's college page as a second tab beside the skills, checked in the original executable (ledger rows
-[SG1–SG8](../research/original-verification-ledger.md#spell-page-arc-magic-008)). Code: `AreaSpellsPage` (Core, Godot-free)
+[SG1–SG8](../research/ledger/magic.md#spell-page-arc-magic-008)). Code: `AreaSpellsPage` (Core, Godot-free)
 and the panel's "Spells" tab; tests `AreaSpellsPageTests`.
 
 - **Colleges.** Sixteen college tabs, one shown at a time. The shown college is kept between opens, as the original keeps
@@ -1170,7 +1171,7 @@ window art, its other messages and its three interface callbacks after the entry
 ### Logbook (ARC-UI-008)
 
 The original Logbook key `L` (logical key down; the original's in-game key handler toggles the logbook for the local PC on
-`l`/`L`, ledger [LB1](../research/original-verification-ledger.md#logbook-arc-ui-008)) toggles a read-only diagnostic
+`l`/`L`, ledger [LB1](../research/ledger/ui-audio.md#logbook-arc-ui-008)) toggles a read-only diagnostic
 logbook of the session's PC in crash-site-area (exterior, cave and `--area-map`), with the two tabs of the original that
 the session can fill: **rumors** and **quests**. What it lists and how each entry looks follow the original logbook
 (ledger rows LB2–LB13):
@@ -1216,7 +1217,7 @@ on the live session; on a detached copy every quest and rumor that has a text is
 ### Schematic window (ARC-TECHNOLOGY-005)
 
 The original Technical schematics key `T` (logical key down; the original's in-game key handler opens the window for the local
-PC as crafter and viewer, ledger [SW1](../research/original-verification-ledger.md#schematic-window-arc-technology-005)) toggles
+PC as crafter and viewer, ledger [SW1](../research/ledger/technology.md#schematic-window-arc-technology-005)) toggles
 a diagnostic schematic window of the session's hero in crash-site-area (exterior, cave and `--area-map`), with the learned and
 found tabs, the eight discipline tabs, Previous and Next, the record's name and description, the two components (found or
 missing, the expertise they need), the product and quantity, and the Assemble button with its state. Contract:
@@ -1249,7 +1250,7 @@ holding a learned record's components one assembly makes its product).
 
 The inventory window shows a `Read:` button for each written item the hero holds; the session decides the use
 ([reading window runtime](../world/reading-window-runtime.md), ledger
-[WR1–WR16](../research/original-verification-ledger.md#reading-window-arc-ui-049)). A schematic document registers and the
+[WR1–WR16](../research/ledger/ui-audio.md#reading-window-arc-ui-049)). A schematic document registers and the
 inventory message shows `tech.mes` 89 with its name (88 when known); any other kind replaces the inventory with a modal reading
 window, as the original's mode change pops the inventory. Script actions 64, 65 and 114 of the dialog, use, tile and sector scripts
 open it for a PC viewer once nothing else owns input. The window owns every key: `Escape` or a controller cancel closes it, a book's
@@ -1319,7 +1320,7 @@ WORLD starts in Follow at preferred zoom 2.00 when no valid preference exists.
 This is a hypothesis for an assessable actor, not a QHD comfort measurement.
 LT out / RT in are admitted complete-frame levels with deadzone 0.10 and full
 drive one octave/second. The ratio remains 0.125..8 with nearest filtering (on a map loaded as a window the
-smallest is its zoom floor, ARC-RENDER-032, [map mode](area-map-mode.md#the-main-world-map-arc-render-024));
+smallest is its zoom floor, ARC-RENDER-032, or 1/8 again over its terrain overview since ARC-RENDER-034, [map mode](area-map-mode.md#the-main-world-map-arc-render-024));
 camera zoom never changes simulation, asset geometry, UI scale or display DPI.
 Numerical 1.00 does not prove physical 1:1 on a HiDPI framebuffer.
 

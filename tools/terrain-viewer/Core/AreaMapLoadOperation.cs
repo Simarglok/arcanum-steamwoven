@@ -118,6 +118,8 @@ internal static class AreaMapLoadOperation
                 command.Phase == 0 ? TerrainKind.Tile : TerrainKind.Facade, checked((int)(command.MapX - plan.Chart.OriginX)),
                 checked((int)(command.MapY - plan.Chart.OriginY)), command.FlipX ? 0xC1u : 0u, command.Source.Width, command.Source.Height,
                 new(TerrainDiagnosticMode.EditorDiagnostic, command.Phase, command.MapY, command.MapX))));
+        // ARC-RENDER-034: a window's terrain overview beyond its core, from the map's terrain grid and the types' editor colours.
+        var (overview, overviewFailure) = centre is { } middle ? Overview(stack, catalog, mapPlan.Map, middle, plan) : (null, null);
         var elapsed = Environment.TickCount64 - started;
         area = area with { ArtSources = mapPlan.Files.Where(f => f.Member is null && f.Key.Role is not (AreaSourceRole.Loose or AreaSourceRole.Module or AreaSourceRole.Prototype or AreaSourceRole.NormalGameMobile))
                 .GroupBy(f => f.Key).ToDictionary(g => g.Key, g => g.First().Path),
@@ -130,8 +132,24 @@ internal static class AreaMapLoadOperation
             mf, rf, mf, rf, area.CpuRgbaBytes + actor.CheckedRgbaBytes, elapsed, 1)
         { Area = area, ActorPlan = actor.Plan, ActorTextures = actor.Textures, AreaStepSnapshot = traversal,
             MapTransitions = transitions, MapDestinations = destinations, MapTransitionsFailure = transitionsFailure, AreaMapWindowCentre = centre,
+            AreaOverview = overview, AreaOverviewFailure = overviewFailure,
             UnlitSessionStartup = unlitStartup?.Startup, UnlitSessionStartupFailure = unlitStartup?.Failure,
             ActorResourceFingerprint = new(actorIdentity.Length, actorIdentity.Sha256), ActorResourceFingerprintAfter = new(actorIdentity.Length, actorIdentity.Sha256) };
+    }
+
+    /// <summary>ARC-RENDER-034: the overview around the window's centre, or why there is none (no terrain grid or no types).</summary>
+    private static (AreaTerrainOverview? Overview, string? Failure) Overview(ContentStack stack, WorldCatalog catalog, WorldMap map, AreaSectorCoordinate centre,
+        AreaScenePlan plan)
+    {
+        var started = Environment.TickCount64;
+        var terrain = catalog.ReadTerrain(map);
+        if (terrain.Grid is not { } grid) return (null, "TERRAIN_" + (terrain.Issue?.Code.ToString() ?? "NONE").ToUpperInvariant());
+        if (catalog.TerrainTypes.Table is not { } table) return (null, "TYPES_" + catalog.TerrainTypes.Status.ToString().ToUpperInvariant());
+        var colours = TerrainEditorColours.Open(stack, table);
+        var overview = AreaTerrainOverview.Create(grid, colours.Colours ?? [], centre, 1, plan.Chart, plan.WorldBounds);
+        Console.WriteLine($"ARC-RENDER-034 load stage=overview sectors={overview.Sectors.Count} fallback={overview.MissingColours} colours={colours.Failure ?? "read"} " +
+            $"bounds={overview.Bounds.Width}x{overview.Bounds.Height} ms={Environment.TickCount64 - started}");
+        return (overview, null);
     }
 
     /// <summary>ARC-RENDER-024: the centre of the window a map opens as, or null when it loads whole. A map with more sector

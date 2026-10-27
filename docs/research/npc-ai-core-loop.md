@@ -27,7 +27,7 @@ independently, by a second reader that saw only the questions
 ([method step 6](original-executable-check.md)). Function names are the
 descriptive names the project uses for these addresses; object field numbers
 were named from the executable's own field name table (0x59BEA8). The rows and
-verdicts are in the [ledger](original-verification-ledger.md#npc-ai-core-loop-arc-res-054).
+verdicts are in the [ledger](ledger/npc-ai.md#npc-ai-core-loop-arc-res-054).
 Everything below is read from the executable unless marked **(inference)**.
 Readings of the functions that only *consume* a parameter (stages A2–A7) are
 marked as such: this note fixes which function reads which parameter slot, not
@@ -81,7 +81,7 @@ the full rule of that function.
 | Event | Mode | What runs | Function (address) |
 | --- | --- | --- | --- |
 | AI event of the NPC | real time | the tick ([section 2](#2-cadence)); thinks only outside a round | AI event (0x4AD200) |
-| A sector's objects are folded in (sector load) | both | an immediate AI event marked "wake-up" for every NPC that is not destroyed ([main-map streaming SS7](original-verification-ledger.md#main-map-streaming-arc-data-030)) | immediate event (0x4AD790), from the fold (0x441FC0) |
+| A sector's objects are folded in (sector load) | both | an immediate AI event marked "wake-up" for every NPC that is not destroyed ([main-map streaming SS7](ledger/world.md#main-map-streaming-arc-data-030)) | immediate event (0x4AD790), from the fold (0x441FC0) |
 | An NPC is created or placed into a sector | both | a normal AI event after the distance delay; not in the editor | delayed event (0x4AD6E0), from object placement (0x442260) |
 | A dead non-PC critter is resurrected | both | a normal AI event after the distance delay | delayed event (0x4AD6E0), from the heal step (0x4B58C0) |
 | Start of a non-PC subturn | turn-based | action points `max(5, Speed)`, then heartbeat; on "continue" one AI pass; no animation left → action points 0, subturn ends | turn set (0x4B6E70), subturn hook (0x4B7010) |
@@ -281,7 +281,7 @@ the state read; whether any caller relies on it is stage A3's question).
 
 ## 7. Anomalies and decisions
 
-Verdicts and rows: [ledger](original-verification-ledger.md#npc-ai-core-loop-arc-res-054).
+Verdicts and rows: [ledger](ledger/npc-ai.md#npc-ai-core-loop-arc-res-054).
 Decisions follow D2 and D8: a bug of the original game gets a fix and an
 Original switch; where only the reconstruction differs, both settings follow the
 original and there is no switch.
@@ -293,7 +293,7 @@ original and there is no switch.
 | LM4 | The module unload does nothing, so module rows 100..149 survive into the next module. | Original | Steamwoven rebuilds the module rows with each module's content layer, so rows of a previous module never leak; no switch, because a module change inside one session is not modelled (load-map policy 1). |
 | CL1 | A stunned NPC never passes the gate; the pass on which the stun animation has ended clears the flag and still ends. | The reconstruction lets a still-stunned NPC act: slip | Follow the original in both settings. No switch. |
 | CL2 | After the full re-wield both "check wield" and "check weapon" are cleared. | The reconstruction clears only "check wield", so the next pass re-wields the weapon again: slip | Follow the original in both settings. No switch. |
-| CL4 | On a surrender the setter leaves combat mode (0x4B3F20, which runs the toggle 0x4B3F80 when the NPC is in combat mode and the toggle acts), then writes back critter flags it read before, so the combat-mode bit is set again; the NPC still counts as in combat mode (gate step 6 keeps running its combat scripts) while the rest of leaving combat mode was done. The reconstruction has the same code. | Bug of the original | Steamwoven: a surrender leaves the combat-mode bit cleared. Original setting keeps it (`SurrenderKeepsCombatModeFlag`, owner decision 2026-10-20). Lands with slice I3. |
+| CL4 | On a surrender the setter leaves combat mode (0x4B3F20, which runs the toggle 0x4B3F80 when the NPC is in combat mode and the toggle acts), then writes back critter flags it read before, so the combat-mode bit is set again; the NPC still counts as in combat mode (gate step 6 keeps running its combat scripts) while the rest of leaving combat mode was done. The reconstruction has the same code. | Bug of the original | Steamwoven: a surrender leaves the combat-mode bit cleared. Original setting keeps it (`SurrenderKeepsCombatModeFlag`, owner decision 2026-10-20). Implemented by ARC-WORLD-079 (slice I3, [danger state](../world/ai-danger-state.md)). |
 | CL5 | The gate's blind, crippled and stun writes use a copy of the critter flags read before the combat scripts of step 6, so a flag a script changed in that pass is undone when one of the writes happens. The reconstruction has the same code. | Bug of the original (latent: needs a combat script that changes critter flags in the same pass as a recovery) | Steamwoven: each write changes only its own bits of the current flags. Original setting keeps the stale write (`GateRecoveryWritesStaleFlags`, owner decision 2026-10-20). Lands with slice I6. |
 | CL3 | On a network client (network active, not host) the AI event, the pass and the danger setter do nothing and the delayed scheduler adds no event; in any network game the follower catch-up ends the follower's conversation first. | The reconstruction leaves multiplayer out | Not applicable: Steamwoven is single player. Recorded so a network mode would start from it. |
 

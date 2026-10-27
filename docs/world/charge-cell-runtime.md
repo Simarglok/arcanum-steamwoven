@@ -12,7 +12,7 @@ Requirements: [FR-MAGIC-010](../requirements/combat-magic-tech.md#fr-magic-010) 
 need, TC1), [FR-MAGIC-011](../requirements/combat-magic-tech.md#fr-magic-011) (tech devices; the device list and the maintain test
 are ARC-TECHNOLOGY-008).
 
-Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Charge cells"](../research/original-verification-ledger.md#charge-cells-arc-technology-007),
+Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Charge cells"](../research/ledger/technology.md#charge-cells-arc-technology-007),
 CC1–CC8, anomalies CCA1–CCA4; switch [TC1](rule-modes.md)). Code: [`ChargeCellRules`](../../src/Arcanum.Simulation/Technology/ChargeCellRules.cs)
 (need, plan, `ChargeCellSource`), [`TechnologyRuleProfile.ItemCellsFavourMagick`](../../src/Arcanum.Simulation/Technology/TechnologyRuleProfile.cs)
 and [`GameSessionCells`](../../src/Arcanum.Session/GameSessionCells.cs); tests
@@ -27,7 +27,7 @@ and [`GameSessionCells`](../../src/Arcanum.Session/GameSessionCells.cs); tests
   critter parent, a container, no parent, or another object.
 - Cells are ammunition of type 2 (prototype 7060). A critter has one power-cell stack (the original merges ammunition into
   one stack per type); a container's cells are its first stack of type 2, but the original's lookup passes the raw prototype
-  number where a handle is compared and never finds it (ledger [AM6](../research/original-verification-ledger.md#ammunition-arc-world-066)).
+  number where a handle is compared and never finds it (ledger [AM6](../research/ledger/items.md#ammunition-arc-world-066)).
   AMA5 is a switch (owner decision 2026-10-21, ARC-TECHNOLOGY-009): `ItemRuleProfile.ContainerStackLookupFails` (Original `true`)
   keeps the failed lookup; Steamwoven finds the stack. The lookup is the host's: the rules pay from the stack the host gives
   (`CellStack(entity, units)`, null when it found none) for a critter or a container; no parent or another object has none.

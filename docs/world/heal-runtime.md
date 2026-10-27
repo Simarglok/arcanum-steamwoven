@@ -14,12 +14,12 @@ Requirements: [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019) (a
 
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically per the
   [original executable check](../research/original-executable-check.md) by two independent readers and checked against a
-  first reading: rows HL1–HL5 of the [verification ledger](../research/original-verification-ledger.md#heal-arc-skills-005).
+  first reading: rows HL1–HL5 of the [verification ledger](../research/ledger/skills.md#heal-arc-skills-005).
   They agree on every row; no anomaly, no rule-mode switch. HL4 re-reads the record heal applier (0x4B58C0) that
   `LifeRules.Heal` (ARC-COMBAT-002) modelled at F0: it agrees, now F2.
 - The skill check, its difficulty (a healing item lowers it by its bonus, none makes it impossible) and the heal fate are
-  [SC1–SC17](../research/original-verification-ledger.md#skill-check-arc-skills-003) and
-  [FT6](../research/original-verification-ledger.md#fate-points-arc-world-054).
+  [SC1–SC17](../research/ledger/skills.md#skill-check-arc-skills-003) and
+  [FT6](../research/ledger/skills.md#fate-points-arc-world-054).
 - Installed original (opt-in, [below](#real-data-census)).
 
 ## Rules

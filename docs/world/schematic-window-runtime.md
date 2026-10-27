@@ -13,8 +13,8 @@ Requirements: [FR-MAGIC-012](../requirements/combat-magic-tech.md#fr-magic-012) 
 [FR-ITEM-017](../requirements/items-economy.md#fr-item-017) (learned and found schematics shown),
 [FR-ITEM-018](../requirements/items-economy.md#fr-item-018) (assembly).
 
-Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Schematic window"](../research/original-verification-ledger.md#schematic-window-arc-technology-005),
-SW1–SW8, and ["NPC schematic crafter"](../research/original-verification-ledger.md#npc-schematic-crafter-arc-technology-006), NC1–NC8). Code: [`AreaSchematics`](../../tools/terrain-viewer/Core/AreaSchematics.cs) (the Godot-free page),
+Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Schematic window"](../research/ledger/technology.md#schematic-window-arc-technology-005),
+SW1–SW8, and ["NPC schematic crafter"](../research/ledger/technology.md#npc-schematic-crafter-arc-technology-006), NC1–NC8). Code: [`AreaSchematics`](../../tools/terrain-viewer/Core/AreaSchematics.cs) (the Godot-free page),
 [`AreaSchematicsPanel`](../../tools/terrain-viewer/Godot/AreaSchematicsPanel.cs) (the diagnostic panel),
 [`TerrainViewerAreaSchematics`](../../tools/terrain-viewer/Godot/TerrainViewerAreaSchematics.cs) (keys, sounds, routing),
 [`AreaScriptHost`](../../tools/terrain-viewer/Core/AreaScriptHost.cs) (action 129) and the SCR dispatcher's

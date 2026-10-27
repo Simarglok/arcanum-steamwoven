@@ -67,6 +67,8 @@ public static class LineOfFireRules
     public const int OpaqueCover = 50, ProvidedCover = 20;
     /// <summary>Object flags (field 19) the cover test reads.</summary>
     public const uint SeeThrough = 0x10, ShootThrough = 0x20, ProvidesCover = 0x4000;
+    /// <summary>The animation's clear-shot limit (AW8): a line with this much cover or more is no clear shot.</summary>
+    public const int ClearShotCover = 26;
 
     private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
 
@@ -157,10 +159,40 @@ public static class LineOfFireRules
     }
 
     /// <summary>
+    /// The tile steps of a line walk (shared by the line of fire 0x4ADE00 and the sound cost 0x4AF640): the pixel line between the
+    /// two tiles' screen centres, walked from <paramref name="from"/>'s centre plus the walker's pixel offset (object fields 3 and 4,
+    /// AW18) in its samples; each time the point lands on another tile (a point off the map keeps the last tile) that step is listed,
+    /// and the walk ends on reaching <paramref name="to"/> or when the samples run out. The tiles do not depend on what a step costs,
+    /// so a caller that stops at a blocker stops partway through the list. Empty for the same tile; null when the line cannot be
+    /// built (more than <see cref="MaxLinePixels"/> pixels on its major axis, AW17).
+    /// </summary>
+    public static IReadOnlyList<LineWalkStep>? Walk(CellCoord from, int offsetX, int offsetY, CellCoord to, Func<CellCoord, bool> contains)
+    {
+        ArgumentNullException.ThrowIfNull(contains);
+        if (from == to) return [];
+        var start = Screen(from);
+        var end = Screen(to);
+        if (Samples((start.X + HalfWidth, start.Y + HalfHeight), (end.X + HalfWidth, end.Y + HalfHeight)) is not { } samples) return null;
+        var steps = new List<LineWalkStep>();
+        var current = from;
+        long accX = offsetX, accY = offsetY;
+        foreach (var (sampleX, sampleY) in samples)
+        {
+            if (current == to) break;
+            accX += sampleX; accY += sampleY;
+            var next = Tile(start.X + accX + HalfWidth, start.Y + accY + HalfHeight, contains) ?? current;
+            if (next == current) continue;
+            steps.Add(new(current, Rotation(current, next), next));
+            current = next;
+        }
+        return steps;
+    }
+
+    /// <summary>
     /// The line of fire from the attacker's tile (with its pixel offset, object fields 3 and 4) to the target tile (0x4ADE00): the same
-    /// tile costs 0; a line that cannot be built costs <see cref="FailedLineCost"/> with no blocker. Otherwise each sample moves the
-    /// point; when it lands on another tile (a point off the map keeps the last tile) that step is priced (<see cref="StepCost{T}"/>,
-    /// the target tile's own non-wall objects skipped) and the walk stops at the first blocker or when it reaches the target tile.
+    /// tile costs 0; a line that cannot be built costs <see cref="FailedLineCost"/> with no blocker. Otherwise each step of the
+    /// <see cref="Walk"/> is priced (<see cref="StepCost{T}"/>, the target tile's own non-wall objects skipped) and the walk stops at
+    /// the first blocker or when it reaches the target tile.
     /// </summary>
     [OriginalFunction(0x4ADE00, OriginalFunctionScope.Partial)]
     public static LineOfFireTrace<TObject> Trace<TObject>(CellCoord from, int offsetX, int offsetY, CellCoord to, ILineOfFireMap<TObject> map,
@@ -168,28 +200,29 @@ public static class LineOfFireRules
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(profile);
-        if (from == to) return new(0, null, false, []);
-        var start = Screen(from);
-        var end = Screen(to);
-        if (Samples((start.X + HalfWidth, start.Y + HalfHeight), (end.X + HalfWidth, end.Y + HalfHeight)) is not { } samples)
-            return new(FailedLineCost, null, true, []);
+        if (Walk(from, offsetX, offsetY, to, map.Contains) is not { } steps) return new(FailedLineCost, null, true, []);
         var tiles = new List<CellCoord>();
-        var current = from;
-        long accX = offsetX, accY = offsetY;
         var cost = 0;
-        foreach (var (sampleX, sampleY) in samples)
+        foreach (var step in steps)
         {
-            if (current == to) break;
-            accX += sampleX; accY += sampleY;
-            var next = Tile(start.X + accX + HalfWidth, start.Y + accY + HalfHeight, map.Contains) ?? current;
-            if (next == current) continue;
-            var step = StepCost(current, Rotation(current, next), next == to, map, profile);
-            cost += step.Cost;
-            if (step.Blocker is not null) return new(cost, step.Blocker, false, tiles);
-            current = next;
-            tiles.Add(current);
+            var met = StepCost(step.From, step.Rotation, step.To == to, map, profile);
+            cost += met.Cost;
+            if (met.Blocker is not null) return new(cost, met.Blocker, false, tiles);
+            tiles.Add(step.To);
         }
         return new(cost, null, false, tiles);
+    }
+
+    /// <summary>
+    /// The animation's "clear shot from here" test on a traced line (the two attack-goal callbacks 0x425590 and 0x429960, ledger
+    /// AW8; their weapon, reach and goal handling are the attack executor's): the cover is below <see cref="ClearShotCover"/>, so at
+    /// most one see-through cover object, and nothing but <paramref name="target"/> (the same object: identity, as the original compares
+    /// object handles) stops the line.
+    /// </summary>
+    public static bool ClearShot<TObject>(LineOfFireTrace<TObject> trace, TObject target) where TObject : class
+    {
+        ArgumentNullException.ThrowIfNull(trace);
+        return trace.Cost < ClearShotCover && (trace.Blocker is null || ReferenceEquals(trace.Blocker, target));
     }
 
     /// <summary>
@@ -279,6 +312,10 @@ public static class LineOfFireRules
         : (objectFlags & ProvidesCover) != 0 ? new(ProvidedCover, null)
         : default;
 }
+
+/// <summary>One tile step of a line walk: the tile left, the rotation 0..7 toward the next tile (<see cref="LineOfFireRules.Rotation"/>)
+/// and the tile entered.</summary>
+public readonly record struct LineWalkStep(CellCoord From, int Rotation, CellCoord To);
 
 /// <summary>What a step or a part of it costs a line of fire, and the object that stops it (null when none).</summary>
 public readonly record struct LineOfFireCost<TObject>(int Cost, TObject? Blocker) where TObject : class;

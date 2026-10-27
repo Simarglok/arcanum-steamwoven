@@ -18,7 +18,7 @@ Requirements: [FR-MAGIC-007](../requirements/combat-magic-tech.md#fr-magic-007) 
 ## Verification
 
 Two independent readers read every rule in the retail 1.0.7.4 `Arcanum.exe`
-([ledger "Spell damage and heal"](../research/original-verification-ledger.md#spell-damage-and-heal-arc-magic-012), DH1–DH10).
+([ledger "Spell damage and heal"](../research/ledger/spell-runs.md#spell-damage-and-heal-arc-magic-012), DH1–DH10).
 
 The function oracle compared three functions with the original on 10,000 seeded inputs each (F3):
 
@@ -131,10 +131,10 @@ Owner decisions 2026-10-20 and 2026-10-21: every difference is documented.
 
 | Original 1.0.7.4 | Steamwoven | Mode |
 | --- | --- | --- |
-| A PC's full or death hit is scaled by difficulty after it took the current hit points: on hard the target lives with a quarter (MG35). | The amount is not scaled. | `MagicAnomalyProfile.DifficultyScalesKillDamage` (pending the owner, recommended) |
-| The spell's context carries the caster's wielded weapon: ignore-resistance, "uber" and damage-armour flags reach the spell (MG36). | No weapon: a nigh-invulnerable critter takes no spell damage. | `MagicAnomalyProfile.SpellDamageUsesCastersWeapon` (pending the owner, recommended) |
-| A margin takes at least 1 from an amount of 0, so a resisted stun-only spell heals a hit point (MG37). | Nothing is taken from 0 or less. | `MagicAnomalyProfile.MarginTakesFromNoDamage` (pending the owner, recommended) |
-| The acid's body-armour test compares the loop index with the slot, so the wearer always takes a third (MG38). | A wearer who wears body armour is spared. | `MagicAnomalyProfile.AcidIgnoresBodyArmour` (pending the owner, recommended) |
+| A PC's full or death hit is scaled by difficulty after it took the current hit points: on hard the target lives with a quarter (MG35). | The amount is not scaled. | `MagicAnomalyProfile.DifficultyScalesKillDamage` (owner decision 2026-10-21: fix) |
+| The spell's context carries the caster's wielded weapon: ignore-resistance, "uber" and damage-armour flags reach the spell (MG36). | No weapon: a nigh-invulnerable critter takes no spell damage. | `MagicAnomalyProfile.SpellDamageUsesCastersWeapon` (owner decision 2026-10-21: fix) |
+| A margin takes at least 1 from an amount of 0, so a resisted stun-only spell heals a hit point (MG37). | Nothing is taken from 0 or less. | `MagicAnomalyProfile.MarginTakesFromNoDamage` (owner decision 2026-10-21: fix) |
+| The acid's body-armour test compares the loop index with the slot, so the wearer always takes a third (MG38). | A wearer who wears body armour is spared. | `MagicAnomalyProfile.AcidIgnoresBodyArmour` (owner decision 2026-10-21: fix) |
 | Record 221 loses its repeated `Scaled` (DF4). | Restored (no effect on any amount). | `DataFixProfile.RepeatedDamageFlagsLost` (decided) |
 | A spell's damage step is cancelled by the target's taking-damage script; the AI notice, experience share, item effects and eye candy run inside the step. | The host's (no SCR runtime for point 0x17 yet; the session applies the life damage). | — |
 
@@ -147,8 +147,6 @@ No installed record reaches either: the one acid component is a technology recor
 
 ## Not ready
 
-- No viewer caller: the casting UI (MT20a).
-- The world port behind the session's NPCs is the casting host's (MT20a).
+- No viewer caller: the casting UI (MT20a-2).
+- The world port behind the session's NPCs is the cast host's ([spell cast host](spell-cast-host.md), ARC-MAGIC-014).
 - The taking-damage script (point 0x17) runs no SCR yet.
-- MG34 (a resisted target after a reflection) belongs to the run system, not to damage or heal application. It waits for a
-  follow-up after the owner's answer.

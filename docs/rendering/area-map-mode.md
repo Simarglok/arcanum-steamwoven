@@ -139,7 +139,7 @@ With compaction, in four runs, the samples equal the live bytes to within about
 
 The scene plan draws three more serialized body states, by rules checked in the
 retail executable
-([ledger BL1–BL5](../research/original-verification-ledger.md#rendering-body-blends-and-wading-arc-render-018)).
+([ledger BL1–BL5](../research/ledger/world.md#rendering-body-blends-and-wading-arc-render-018)).
 They are general rules of every body, not of these maps.
 
 - **Blend choice.** Blit additive `0x10` wins over multiply `0x40`, which wins
@@ -287,7 +287,7 @@ with an unconditional exit stays that exit.
   session's queue, the use slot; a step the session refuses leaves the earlier ones applied and the use is reported
   refused. Printed lines show on the status line; effect sounds are not played. The first teleport of the player is the
   transfer: its map (−1 keeps this map, ledger TR4) and tile replace the site's, and it queues through the ordinary
-  transfer path. A teleport map mode cannot take (an exit to the start map, an arrival the step evidence does not admit)
+  transfer path. A teleport map mode cannot take (an arrival the step evidence does not admit)
   is checked before anything is applied: the use is refused, the door stays as it was and its printed lines are not shown. A teleport of another object
   is not modelled: the run's effects are dropped and the use is refused. A run outside the set, without script content or
   after a script file changed is refused and changes nothing.
@@ -474,7 +474,7 @@ travels with the player. Nothing is pinned to Virgil or to a location.
   and alignment as the original's stat getter reads them. That means the stored
   stat, then every effect of its effect list that changes it (the effect tables
   from the content stack, the original's aggregation), then the getter's clamp of
-  0..51 and −1000..1000 ([ledger AP5](../research/original-verification-ledger.md#ai-parameters-and-follow-consent-arc-data-033));
+  0..51 and −1000..1000 ([ledger AP5](../research/ledger/npc-ai.md#ai-parameters-and-follow-consent-arc-data-033));
   an effect number without a definition changes nothing, as in the original.
   `AreaCompanionData` opens the tables once per module. The PC side stays the
   AREA diagnostic profile (charisma 8, level 1), so through a dialog `JO` the
@@ -559,7 +559,7 @@ loyalty or wait timer. The exterior keeps its measured roster (Virgil).
 Doors and windows keep their state in the session's lock owner
 ([lock state](../world/lock-state-runtime.md), ARC-WORLD-050). Their rules follow
 the executable as read in
-[ledger LK1–LK13](../research/original-verification-ledger.md#doors-containers-and-locks-arc-res-065).
+[ledger LK1–LK13](../research/ledger/world.md#doors-containers-and-locks-arc-res-065).
 
 - **Frames.** The area owner decodes every frame of a portal ART with more than
   one frame as `PortalFrame` visuals, and the plan copies them into the map's
@@ -691,7 +691,28 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   its goal held by the new window (the far-goal hand-over was not needed on this walk; unit tests cover it), at least
   179 visible bodies after each move. Managed heap after a full collection: 265 MB at the start and 413 MB at the end
   in the Shrouded Hills window (observed values, not a growth measure; the stream smoke's windows take 368 to 435 MB).
-- **Zoom floor (ARC-RENDER-032).** On a map loaded as a window the smallest zoom is not the viewer's ordinary 1/8 but
+- **Terrain overview (ARC-RENDER-034).** Beyond the window's 3×3 core the viewer draws a terrain overview: every sector within
+  6 of the window's centre (`AreaTerrainOverview.Radius`; 160 sectors at most) is one flat diamond (5,120 × 2,560 px) in the
+  colour of its base terrain type, read from the map's terrain grid (`terrain.tdf`) and the type's editor colour in
+  `terrain\terrain.mes` (message 100 + type, `R,G,B`, `TerrainEditorColours`; a type without one is grey). It is drawn behind
+  everything (`AreaOverviewLayer`, one polygon per sector, redrawn only when a window publishes, unbound when a scene is
+  cleared), at full colour whatever the hour (the map's light is not applied to it). Objects, critters and tiles appear only
+  inside the loaded window. The overview's bounds become the camera's, and the window's zoom floor is the smallest power of two
+  (at least the ordinary 1/8) at which a view centred anywhere in the core stays inside the diamond of the core and the overview
+  (`AreaTerrainOverview.Floor`): 1/8 up to 2560 × 1440 (a 20,480 × 11,520 px view reaches past the window onto the overview),
+  1/4 at 3840 × 2160. A manual pan can still move the view into the corners of the overview's bounding box outside that diamond,
+  which stay empty, as do the parts of the overview cut by the map's edge. The editor colours are data the original's
+  terrain initialisation does not read; the overview is a Steamwoven viewer feature (the original has no zoom), so no parity
+  applies. A window whose terrain grid or types cannot be read has no overview and keeps the floor below (the load log says
+  why: `ARC-RENDER-034 overview unavailable`). Load cost on the owner's Mac (2026-10-21): the grid and colours read in 40 ms
+  per window load; the farthest frame at 2560 × 1440 took 15 ms with 269 level-3 chunks and 37,363 visible commands. Native
+  check in the map battery: `ARC-RENDER-034 native-smoke overview PASS` (a window must have its overview, whole away from the
+  map's edge; at the smoke's window size and at 2560 × 1440 the zoom reaches its floor, the view stays inside the overview's
+  bounds, past the window on the large display, every corner and edge midpoint of the view falls on the core or an overview
+  sector, a pixel near the view's lower left corner shows its sector's colour, the overview is drawn, and the far frame keeps
+  within the census frame budget). Tests: `AreaTerrainOverviewTests` (sectors, colours and the fallback, diamonds, bounds, the
+  floor), `TerrainEditorColourTests` (the colour messages).
+- **Zoom floor (ARC-RENDER-032).** Without a terrain overview (ARC-RENDER-034, above), on a map loaded as a window the smallest zoom is not the viewer's ordinary 1/8 but
   the smallest power of two (1/2^k), at least 1/8, at which the view is no wider and no taller than the window's drawn
   bounds (`WorldZoomPolicy.WindowFloor`: the viewport over the bounds of the 3×3 core on the tighter axis, rounded up).
   The camera keeps the view inside those bounds, so the view never reaches past what the window loads and draws; at 1/8
@@ -724,10 +745,9 @@ in progress ends on its committed cell); saved sector differences (`.dif`) are n
 moves is bound only if the new window holds its cell; on the same map, an F8 save or a jump point or teleport whose cell
 lies outside the shown window is refused (the cell is not admitted in this window; another map's save or exit opens the
 window around it); a click is a goal inside the shown window (a goal farther away is reached only by a host that plans
-it, as the walk smoke does with the window route); far out, the view is bounded by the window (the zoom floor):
-there is no overview of the terrain beyond it (a terrain overview from `terrain.mes` colours or thinned chunks is a
-follow-up and NOT READY), and the corners of the window's bounding box outside its diamond stay empty, as at any
-map's edge. Original parity NOT_VERIFIED.
+it, as the walk smoke does with the window route); far out, the view shows the terrain overview beyond the window
+(ARC-RENDER-034): flat colours by terrain type, sector by sector, no tile detail, objects or critters, and nothing beyond
+6 sectors from the window's centre (the camera keeps the view inside). Original parity NOT_VERIFIED.
 
 ## World map (ARC-UI-048)
 
@@ -805,6 +825,17 @@ map-mode start; named elsewhere it fails, and it ends on the last map). Per map:
 
 The census found that the two unlisted maps failed to open in map mode (`AREA_SESSION_InvalidActor`): see
 [dialogs](#dialogs-arc-world-032). Original parity does not apply (a viewer census).
+
+## The Crash Site through map mode (ARC-RENDER-028)
+
+`./arcanum area` is map mode on the main world map: `--area-map Arcanum1-024-fixed`, a window around the map-list start (the
+Crash Site), with `--hero NAME` and `--sector X,Y` passed on as for `./arcanum map`. It needs the same universal ARC-DEV-015
+build (else ARC-RENDER-008, exported after ARC-RENDER-024 so it opens the main map by window) and the same four inputs as map
+mode, on any installation. The pinned Crash Site exterior profile
+(`crash-site-area` without `--area-map`, its pinned mobile, effects and patch inputs) is no launcher mode any more: the viewer
+keeps it for its regression smokes, which start it with explicit arguments. `./arcanum status` reports `area` with map mode's
+inputs. Tests: `tools/local_dev/test_launcher_sync.py` (`area` is map mode on the main map, the arguments it passes) and
+`test_universal_dev.py` (status).
 
 ## Not yet
 

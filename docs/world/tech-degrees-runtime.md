@@ -12,7 +12,7 @@ aptitude), [FR-MAGIC-012](../requirements/combat-magic-tech.md#fr-magic-012) (th
 
 Every rule was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers: the first reading of ARC-RES-062
 ([disciplines and degrees](../research/technology-evidence.md#disciplines-and-degrees-tech-module-0x4afcd00x4b0340)) and a
-second reading for this slice ([ledger "Tech degrees"](../research/original-verification-ledger.md#tech-degrees-arc-technology-002),
+second reading for this slice ([ledger "Tech degrees"](../research/ledger/technology.md#tech-degrees-arc-technology-002),
 rows TD1–TD9). Code: [`TechDegreeRules`](../../src/Arcanum.Simulation/Character/TechDegreeRules.cs),
 [`GameSessionTechnology`](../../src/Arcanum.Session/GameSessionTechnology.cs); tests
 [`TechDegreeRulesTests`](../../tests/Arcanum.Simulation.Tests/Character/TechDegreeRulesTests.cs),

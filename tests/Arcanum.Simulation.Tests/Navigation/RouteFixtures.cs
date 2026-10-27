@@ -15,6 +15,11 @@ internal sealed class GridSource(params string[] rows) : IRouteStepSource
     /// <summary>Extra cost of a step (a window jump), asked for Open steps only.</summary>
     public Func<CellCoord, NeighborDirection, int>? Extra { get; set; }
     public int ExtraCost(CellCoord from, NeighborDirection direction) => Extra?.Invoke(from, direction) ?? 0;
+    /// <summary>ARC-WORLD-073: cells a living critter stands on; the source's steps pass them (a plan outside combat mode), its goal
+    /// gate and segment-end check see them.</summary>
+    public HashSet<CellCoord> Critters { get; } = [];
+    public bool GoalHoldsCritter(CellCoord goal) => Critters.Contains(goal);
+    public bool StepEntersCritter(CellCoord from, NeighborDirection direction) => Critters.Contains(RoutePlanner.Neighbor(from, direction));
     public int OriginX { get; init; }
     public int OriginY { get; init; }
     private char At(CellCoord c)

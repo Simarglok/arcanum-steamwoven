@@ -22,7 +22,7 @@ The question: how to build a complete, checkable evidence base that Steamwoven b
   mutant in the bonus-point rule (every fourth level instead of every fifth) was caught on 1,617 inputs. The installed
   `rules\xp_level.mes` (from `arcanum4.dat`) tops out at 1,380,000 with a largest step of 80,000, so the wrap never
   happens with the shipped data; `ExperienceTable.Create` admits thresholds up to 2,000,000,000, so a modded table
-  would show it. Ledger row [XP3](original-verification-ledger.md#experience-and-levels-arc-world-030) records the
+  would show it. Ledger row [XP3](ledger/character.md#experience-and-levels-arc-world-030) records the
   verdict.
 - **The executable carries most of what the reconstruction was used for.**
   - Ghidra 12.1.4 with its full auto-analysis plus a small script that creates functions at pointers found in `.data`
@@ -32,7 +32,7 @@ The question: how to build a complete, checkable evidence base that Steamwoven b
   - The object field names are in the executable as a table of 338 string pointers at 0x59BEA8, from `obj_f_begin` to
     `obj_f_max`, in field order; the stat names are a table at 0x5B5384 that names stats 0–20 in stat order (`stat_level` is
     17, `stat_experience_points` 18, the numbers the oracle saw in real calls; from 21 on the table and the code disagree,
-    the poison level being stat 24 in code, ledger [IF12](original-verification-ledger.md#implemented-functions-arc-dev-025)). These can replace the reconstruction's field and stat headers.
+    the poison level being stat 24 in code, ledger [IF12](ledger/data.md#implemented-functions-arc-dev-025)). These can replace the reconstruction's field and stat headers.
   - The reconstruction gave 4,980 distinct names for its 4,981 addresses. Of its 3,820 descriptive names, 279 occur
     verbatim in the executable's own strings (animation and magic messages), and five Troika source paths appear
     (`GameLibX\Anim.c` and others). The other names were its own; 1,160 more functions had only `sub_…` names.

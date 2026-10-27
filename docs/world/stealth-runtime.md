@@ -2,7 +2,7 @@
 
 Status: **Implemented bounded component**, ARC-SKILLS-008 (2026-10-21), task S12 of the [skills plan](../research/skills-plan.md):
 the concealment toggle of the hero and its followers (saved), the prowling margin an observer's sight or hearing check uses, and
-the stealth gait. The AI's use of the margin is slice I2 (not built). Rules: `StealthRules` in
+the stealth gait. The awareness functions take the margin as an input ([AI awareness](ai-awareness.md), ARC-WORLD-078, slice I2); their callers come with slice I4 and later. Rules: `StealthRules` in
 [`Arcanum.Simulation.Skills`](../../src/Arcanum.Simulation/Skills/StealthRules.cs); session:
 [`GameSessionStealth.cs`](../../src/Arcanum.Session/GameSessionStealth.cs); viewer: the palette's **Prowl (stealth) on/off**.
 Snapshot schema 35. Requirements: [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) (perception and stealth),
@@ -11,9 +11,9 @@ Snapshot schema 35. Requirements: [FR-AI-002](../requirements/story-social-ai.md
 ## Evidence
 
 - The retail 1.0.7.4 `Arcanum.exe`, read statically per the [original executable check](../research/original-executable-check.md)
-  by two independent readers: rows ST1–ST6 of the [verification ledger](../research/original-verification-ledger.md#stealth-arc-skills-008).
+  by two independent readers: rows ST1–ST6 of the [verification ledger](../research/ledger/skills.md#stealth-arc-skills-008).
   They agree on every row (ST1's hotkey refusal of a stunned or paralysed PC was read by one reader only). No rule-mode switch.
-- Sight, hearing and the margin's terms: [AW1–AW12](../research/original-verification-ledger.md#npc-ai-awareness-arc-res-056).
+- Sight, hearing and the margin's terms: [AW1–AW12](../research/ledger/npc-ai.md#npc-ai-awareness-arc-res-056).
 
 ## Rules
 
@@ -41,7 +41,7 @@ stand and walk are). Followers keep their ordinary follow gait in the viewer: th
 
 ## Boundaries (NOT READY)
 
-- The observers: no NPC sees or hears in the session yet (AI slice I2 will call `HeroProwlingMargin`); the examine lines (ST6), the
+- The observers: no NPC sees or hears in the session yet (the awareness functions of slice I2 take the margin as an input; the target scan and witnesses of slice I4 and later will call `HeroProwlingMargin`); the examine lines (ST6), the
   AI's target rules (ST5) and script condition 51 are its.
 - Not modelled: the crouch art and its missing-art refusal (ST1), the hotkey's refusal of a stunned or paralysed PC (ST1, one reader only), the followers' stealth gait in the viewer, summoned NPCs created concealed (ST2), the right-click and goal
   54 ends (ST4), NPC attacks on the hero (no NPC attack path yet), the 2 action points per step in a turn-based round and the light

@@ -119,7 +119,7 @@ than 300 items fails afterwards and empties **only the items** (the coins
 already read stay); a failing `Rules\InvenSourceBuy.mes` line for the same set
 (not empty, not `ALL`, an unknown prototype or more than 300) also empties the
 items. The lookup accepts `0 < id ≤ N`, so the last set is reachable (ledger
-[LM13](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024); parser (0x4BF640, 0x4BF7B0),
+[LM13](ledger/npc-ai.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024); parser (0x4BF640, 0x4BF7B0),
 lookup (0x4BF5D0)).
 
 ### Level 1 and the auto-level scheme

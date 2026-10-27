@@ -22,7 +22,7 @@ public partial class TerrainViewerApp
     private CancellationTokenSource? _walkPlanCancellation;
     private static readonly AreaStepCell WalkGoal = new(1409 * 64 + 32, 1314 * 64 + 32);
     // A second's walk is at most 6 steps: the run takes 9 steps in 1.578 s (ARC-WORLD-020 native smoke).
-    private const int WalkFrameLimit = 20000, WalkStallFrames = 300, WalkStepsPerFrame = 6;
+    private const int WalkFrameLimit = 20000, WalkStallFrames = 300, WalkStepsPerFrame = 6, ProgressAhead = 24, ProgressNear = 3;
 
     private async Task RunAreaMapWalkSmokeAsync()
     {
@@ -73,9 +73,12 @@ public partial class TerrainViewerApp
                 var here = walking.Chart.ToWorld(walking.State.CommittedCell);
                 if (follower.Status == RouteFollowStatus.Arrived && follower.Target is { } arrived && index.TryGetValue(walking.Chart.ToWorld(arrived), out var at) && at > reached)
                 { reached = at; lastProgress = frames; }
-                // The follower's own path may leave the route's cells (another path as short): progress is the route cell it
-                // stands on or the route cell it arrived at.
+                // The follower's own path may leave the route's cells (another path as short; since ARC-WORLD-073 the original's
+                // search breaks ties its own way): progress is the route cell it stands on, the route cell it arrived at, or a later
+                // route cell within ProgressNear cells of it (among the next ProgressAhead).
                 if (index.TryGetValue(here, out var on) && on > reached) { reached = on; lastProgress = frames; }
+                for (var i = Math.Min(path.Count - 1, reached + ProgressAhead); i > reached; i--)
+                    if (Math.Max(Math.Abs(path[i].X - here.X), Math.Abs(path[i].Y - here.Y)) <= ProgressNear) { reached = i; lastProgress = frames; break; }
                 Require(follower.Status != RouteFollowStatus.Stopped, $"FOLLOWER_STOPPED {follower.StopReason} at={here} target={follower.Target}");
                 if (here == WalkGoal || ReferenceEquals(walking, steered) && follower.Status == RouteFollowStatus.Following) return;
                 bool Shown(int i) => walking.Chart.Contains(walking.Chart.ToChart(path[i]));

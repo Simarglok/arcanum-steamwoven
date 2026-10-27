@@ -15,10 +15,10 @@ not covered: NPC pickers and the witnesses' reaction are not modelled.
 ## Evidence
 
 - The retail 1.0.7.4 `Arcanum.exe`, read statically per the [original executable check](../research/original-executable-check.md)
-  by two independent readers: rows PL1–PL7 of the [verification ledger](../research/original-verification-ledger.md#pick-locks-arc-skills-006).
+  by two independent readers: rows PL1–PL7 of the [verification ledger](../research/ledger/skills.md#pick-locks-arc-skills-006).
   They agree on every row; no anomaly that needs a rule-mode switch (PL7 confirms the ledger's SK4).
-- The check, its difficulty and the fate: [SC1–SC17](../research/original-verification-ledger.md#skill-check-arc-skills-003), FT6.
-  The lock setters and the Lock event: [LK2–LK5](../research/original-verification-ledger.md#doors-containers-and-locks-arc-res-065).
+- The check, its difficulty and the fate: [SC1–SC17](../research/ledger/skills.md#skill-check-arc-skills-003), FT6.
+  The lock setters and the Lock event: [LK2–LK5](../research/ledger/world.md#doors-containers-and-locks-arc-res-065).
 - Installed original (opt-in, [below](#real-data-census)).
 
 ## Rules
