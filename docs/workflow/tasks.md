@@ -64,6 +64,23 @@ lanes (about 75 to 150 million cache-read tokens each), and saved tool outputs o
 32 to 48 KB were read whole and re-read about 390 times. Godot, launcher and
 `dotnet` output stay outside this rule.
 
+### Fewer steps
+
+Owner decision 2026-10-27 (ARC-DEV-036): every step re-reads the whole session
+context, so a task takes as few steps as its work allows.
+
+- Put independent tool calls in one response: reads, searches and checks that
+  do not depend on each other's results go out together, not one per step.
+- Update the thread's progress checklist only when a step changes state, and
+  in the same response as other work, never as a step of its own.
+- Coordinator: send a running lane only what needs action from it; batch
+  messages that are for information only.
+
+Why: in the token audit of 2026-10-21, lanes made about one tool call per step,
+status (progress-checklist) and no-reply calls were 12 to 21 percent of all
+steps (about 220 such calls per audited lane), and each lane received 16 to 23 coordinator messages,
+many for information only.
+
 ## Definition of Ready
 
 Owner decision 2026-10-14: work stalls when one work item carries several
