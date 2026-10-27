@@ -13,11 +13,12 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     // Native observation (ARC-MAGIC-015, the first cast) with --hero, after the attack stage: the hero learns the first damaging rank-1
-    // college spell (an experience award buys the point when it has none), stands three cells from the living NPC with the fewest hit
-    // points, opens the spell pane with M, presses the spell, hovers the NPC (the cast cursor), clicks it, and the casting goal plays
-    // its start, release frame and end; the hero's fatigue drops by the spell's cost and the NPC resists or takes damage. A right
-    // click closes the cursor. The NPC and the hero's fatigue are restored for the later stages; the learned spell and the experience
-    // stay. A map without a living NPC that has combat values reports that and passes nothing.
+    // college spell in its character editor (an experience award for the next level buys the point when it has none, with its
+    // auto-level scheme suspended), stands three cells from the living NPC with the fewest hit points, opens the spell pane with M,
+    // presses the spell, hovers the NPC (the cast cursor), clicks it, and the casting goal plays its start, release frame and end; the
+    // hero's fatigue drops by the spell's cost and the NPC resists or takes damage. A right click closes the cursor. The NPC and the
+    // hero's fatigue are restored for the later stages; the learned spell, the experience and the level stay. A map without a living
+    // NPC that has combat values reports that and passes nothing.
     private async Task RunAreaCastSmokeAsync(TerrainLoadResult? mapMode = null)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area)
@@ -51,11 +52,31 @@ public partial class TerrainViewerApp
         var spell = Known();
         if (spell is null)
         {
-            if (session.QueryHeroExperience()?.UnspentPoints is not > 0) session.AwardHeroExperience(session.Version, 2000);
+            if (session.QueryHeroExperience() is { UnspentPoints: not > 0 } before)
+            {
+                // The award must write a level whose points stay unspent: a hero's auto-level scheme (ARC-WORLD-036) would spend them,
+                // so the hero has none while the award lands and gets its scheme back after. A third more covers the Hard difficulty's
+                // quarter off (ExperienceRules.AdjustForDifficulty).
+                var scheme = session.QueryHero()!.Advancement.AutoLevelScheme;
+                if (scheme != 0) session.SetAutoLevelScheme(session.Version, SessionSchemeTarget.Hero, 0);
+                var award = session.AwardHeroExperience(session.Version, Math.Max(2000, (before.ToNextLevel ?? 0) * 4 / 3 + 1));
+                if (scheme != 0)
+                    Require(session.SetAutoLevelScheme(session.Version, SessionSchemeTarget.Hero, scheme).Disposition == GameSessionDisposition.Changed,
+                        "the hero gets its auto-level scheme back");
+                var after = session.QueryHeroExperience();
+                Require(after?.UnspentPoints > 0, $"an experience award buys a point: {award.Disposition} {award.Failure}, scheme {scheme}, "
+                    + $"level {before.Level} -> {after?.Level}, experience {before.Experience} -> {after?.Experience}, to next {before.ToNextLevel}");
+            }
             var book = session.QueryHeroSpellBook()!;
             var first = records.FirstOrDefault(r => Damaging(r) && r.Data.Number % SpellRecord.Ranks == 0 && book.Ranks[r.Data.Number / SpellRecord.Ranks] == 0);
             Require(first is not null, "a damaging rank-1 college spell");
+            // Points are spent only in the open character editor (0x5597C0, CP1), as the sheet's + does; the editor closes again
+            // unless it was already open.
+            var opened = !session.HeroEditorOpen;
+            var editor = session.OpenHeroEditor();
+            Require(editor.Failure == GameSessionFailure.None, "the hero editor opens: " + editor.Failure);
             var spent = session.SpendHeroPoint(session.Version, AdvancementTrack.College, first!.Data.Number / SpellRecord.Ranks);
+            if (opened) session.CloseHeroEditor();
             Require(spent.Disposition == GameSessionDisposition.Changed, "the hero learns the spell: " + spent.Failure + " " + spent.Change?.Status);
             spell = Known();
         }
