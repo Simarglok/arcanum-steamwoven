@@ -256,7 +256,6 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
     /// used executor (0x4CBF70: <see cref="ItemSpellTriggerRules.ItemUsed"/>, the target as the other object) and, for food or a
     /// scroll, the spend (<see cref="SessionSpellCaster.SpendUsedItem"/>).
     /// </summary>
-    [OriginalFunction(0x462CC0, OriginalFunctionScope.Partial)]
     public SessionItemUseResult UseItem(string item, string? target)
     {
         ArgumentNullException.ThrowIfNull(item);
