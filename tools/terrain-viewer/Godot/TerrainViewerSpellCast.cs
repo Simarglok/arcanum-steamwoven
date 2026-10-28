@@ -37,7 +37,7 @@ public partial class TerrainViewerApp
     // The Alt keys held, left and right apart (the original adds the non-party bit back only when the last one is released).
     private bool _spellAltLeft, _spellAltRight;
     private int _spellLogSeen;
-    private int _spellCasts, _spellQueuedStarts;
+    private int _spellCasts, _spellQueuedStarts, _spellTargetFailedAtStart;
 
     /// <summary>The open targeting cursor: the spell, its record and the cursor's mask (the Alt keys change it).</summary>
     private sealed class SpellTargeting(int spell, SessionSpellRecord record, ulong mask)
@@ -153,7 +153,7 @@ public partial class TerrainViewerApp
         // once (nothing begins, MG41) and the goal ends through the end step, which drops the casts queued behind it.
         if (goal.Animation is null && owner.QuerySpellRuns()[goal.Run] is { } awaiting && !caster.TargetStillValid(awaiting))
         {
-            goal.TargetFailedAtStart = true;
+            goal.TargetFailedAtStart = true; _spellTargetFailedAtStart++;
             ReleaseSpellGoal(caster, goal, now);
             EndSpellGoal(caster, goal, null);
             return;

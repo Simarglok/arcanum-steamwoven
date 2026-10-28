@@ -125,13 +125,22 @@ public partial class TerrainViewerApp
             Require(_spellGoal is not null, "the casting goal plays: " + _spellNotice);
             var run = _spellGoal!.Run;
             // ARC-MAGIC-019 (SU13): a second click while the goal plays queues a second cast beneath it, which plays once the first ends.
-            var queuedStarts = _spellQueuedStarts;
+            var queuedStarts = _spellQueuedStarts; var failedAtStart = _spellTargetFailedAtStart;
             AreaSmokeClick(point);
             Require(_spellCasts == casts + 2 && _spellQueue.Count == 1 && _spellGoal?.Run == run, "the second click queued a cast: " + _spellNotice);
             var second = _spellQueue[0].Run;
             var frames = 0;
+            var revived = false;
             for (; frames < 800 && _spellGoal is not null; frames++)
             {
+                // The first cast may kill the NPC (the one with the fewest hit points): it is raised before the queued goal's first
+                // frame, so the queued cast plays at a living target.
+                if (_spellGoal is { Animation: null } queuedGoal && queuedGoal.Run == second && session.QueryLife(npc).View?.Status is { IsActive: false })
+                {
+                    session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                    PublishWorldSelection();
+                    revived = true;
+                }
                 _areaSmokeTime++;
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
@@ -140,7 +149,8 @@ public partial class TerrainViewerApp
             Require(session.QuerySpellRuns()[second] is null, "the queued instant run is freed");
             // ARC-MAGIC-017: the cast entry's eye candy timed the goal and was drawn on the hero.
             var castEntry = SpellEyeCandyRules.EntryIndex(spell.Data.Number, SpellEyeCandyRules.Cast);
-            Require(_castTimingsForSelfTest.Count == Math.Min(timings + 2, 16) && _castTimingsForSelfTest.Count > 0, "both goals recorded their eye-candy timing");
+            var untimed = _spellTargetFailedAtStart - failedAtStart;
+            Require(_castTimingsForSelfTest.Count == Math.Min(timings + 2, 16) && untimed == 0, $"both goals recorded their eye-candy timing ({untimed} ended before it)");
             var timing = _castTimingsForSelfTest[^1];
             var entry = EyeCandyTable?.At(castEntry);
             Require(entry?.Art is { } && !timing.Immediate, $"the spell's cast eye candy plays: {_spellData?.EyeCandyDetail}, entry art {entry?.Art}");
@@ -166,7 +176,8 @@ public partial class TerrainViewerApp
             var heroAfter = session.QueryHeroLife()!.Status;
             var npcAfter = session.QueryLife(npc).View!.Status.HitPoints;
             Require(paid > 0 && heroAfter.Fatigue < heroBefore.Fatigue, $"the cast cost fatigue: paid {paid}, {heroBefore.Fatigue} -> {heroAfter.Fatigue}");
-            Require(resisted || damaged > 0 && npcAfter == npcBefore - damaged || npcAfter <= 0,
+            Require(log.Count(e => e.Kind == SpellCastEventKind.FatiguePaid) == 2, "both casts paid at their own release (SU13)");
+            Require(resisted || damaged > 0 && (revived || npcAfter == npcBefore - damaged) || npcAfter <= 0,
                 $"the NPC resists or takes the damage: damaged {damaged}, resisted {resisted}, hp {npcBefore} -> {npcAfter}");
             Require(session.QuerySpellRuns()[run] is null, "the instant run is freed");
             RefreshAreaStatus();
@@ -178,7 +189,7 @@ public partial class TerrainViewerApp
             Require(_spellPane is { Shown: false }, "M hides the pane");
             HoverReleaseForSelfTest();
             GD.Print("ARC-MAGIC-015 native-smoke cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Spell = spell.Data.Number, Cost = spell.Data.Cost, Target = target.Row.PrototypeNumber, Frames = frames, Queued = second, Paid = paid,
+                map.RuntimeMap, Spell = spell.Data.Number, Cost = spell.Data.Cost, Target = target.Row.PrototypeNumber, Frames = frames, Queued = second, Revived = revived, Paid = paid,
                 Fatigue = $"{heroBefore.Fatigue}->{heroAfter.Fatigue}", HitPoints = $"{npcBefore}->{npcAfter}", Damaged = damaged, Resisted = resisted,
                 Log = string.Join(",", log.Select(e => e.Kind)), Hover = hover.ToString(),
                 EyeCandy = $"release {timing.ReleaseMs} end {timing.EndMs} drawn {string.Join("/", _eyeCandyDrawnForSelfTest.Order())}",
