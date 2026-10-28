@@ -7,7 +7,7 @@ namespace Arcanum.TerrainViewer;
 /// ARC-UI-011 main menu: a backdrop over the whole window and a column of the shown buttons of <see cref="AreaMainMenu"/>'s window
 /// with their original labels (each with its hotkey letter), the hidden buttons' note and the notice; the pre-made browser shows the
 /// browsed hero with Previous, Next, Start and Back. The app owns the state and rebuilds the window after every change; the
-/// original's menu art and layout are not drawn.
+/// original's menu art and layout are not drawn. ARC-UI-012: the in-play windows, and the quit box as its question with Yes and No.
 /// </summary>
 public partial class AreaMainMenuPanel : CanvasLayer
 {
@@ -24,6 +24,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
     public event Action<int>? BrowseRequested;
     public event Action? StartRequested;
     public event Action? BackRequested;
+    public event Action<bool>? AnswerRequested;
     public bool IsOpen => Visible;
     internal IReadOnlyList<string> ButtonsForSelfTest => _buttons.Visible ? _buttons.GetChildren().OfType<Button>().Select(button => button.Text).ToArray() : [];
     internal string HeroForSelfTest => _browser.Visible ? _hero.Text : "";
@@ -74,13 +75,24 @@ public partial class AreaMainMenuPanel : CanvasLayer
         ArgumentNullException.ThrowIfNull(menu);
         Show();
         var browser = menu.Window == AreaMenuWindow.PickCharacter;
-        _header.Text = menu.Window switch
+        _header.Text = menu.QuitPending ? menu.Texts.Text(AreaMainMenuTexts.QuitQuestion) : menu.Window switch
         {
-            AreaMenuWindow.Main => "Main menu", AreaMenuWindow.SinglePlayer => menu.Texts.Text(10),
-            AreaMenuWindow.NewGame => menu.Texts.Text(50), _ => menu.Texts.Text(420),
+            AreaMenuWindow.Main => "Main menu", AreaMenuWindow.InPlay or AreaMenuWindow.InPlayLimited => "Game menu",
+            AreaMenuWindow.SinglePlayer => menu.Texts.Text(10), AreaMenuWindow.NewGame => menu.Texts.Text(50), _ => menu.Texts.Text(420),
         };
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         var shown = menu.Shown;
+        // The quit box (ARC-UI-012): the original's yes/no box with its fixed letters; the project's button texts.
+        if (menu.QuitPending)
+        {
+            foreach (var (text, yes) in new[] { ($"Yes  ({AreaMainMenu.YesLetter})", true), ($"No  ({AreaMainMenu.NoLetter})", false) })
+            {
+                var answer = new Button { Name = yes ? "Yes" : "No", Text = text, FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(280, 34) };
+                answer.Pressed += () => AnswerRequested?.Invoke(yes);
+                _buttons.AddChild(answer);
+            }
+            shown = [];
+        }
         for (var i = 0; i < shown.Count; i++)
         {
             var index = i;
@@ -101,7 +113,9 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _note.Text = hidden.Count == 0 ? "" : "Not offered: " + string.Join("; ", hidden);
         _notice.Text = menu.Notice ?? "";
         _hint.Text = (browser ? "Previous/Next browse the pre-made heroes, Start begins a new game with that hero, Escape or Back goes back"
-                : "a button's letter or a click chooses it" + (menu.BackStack.Count > 0 ? ", Escape goes back" : ""))
+                : menu.QuitPending ? "Y, Return or Yes quits to the main menu; N, No or Escape keeps playing (saves are not touched)"
+                : "a button's letter or a click chooses it" + (menu.BackStack.Count > 0 ? ", Escape goes back"
+                    : menu.Root != AreaMenuWindow.Main ? ", Escape continues" : menu.Reopened ? ", Escape exits the game" : ""))
             + " | PROJECT window over the original's menu windows; labels "
             + (menu.Texts.FromGame ? "from the game's MainMenu.mes" : "are the project's (" + menu.Texts.Detail + ")") + "; original art and layout NOT_VERIFIED";
         ResizePanel();

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -147,6 +148,43 @@ class LauncherSyncTests(unittest.TestCase):
         for command in (["area", "--main-menu"], ["map", "Arcanum1-024-fixed", "--main-menu"]):
             self.assertTrue(project["parser"]().parse_args(command).main_menu, command)
         self.assertIn('launcher.add_argument("--main-menu"', (REPO / "tools/arcanum-local").read_text())
+        # ARC-UI-012: `area` opens the menu by default; --no-main-menu or a hero start opens none; `map` only on request.
+        requested = project["main_menu_requested"]
+        for command, expected in ((["area"], True), (["area", "--no-main-menu"], False), (["area", "--hero", "elf-male"], False),
+                                  (["map", "Arcanum1-024-fixed"], False), (["map", "Arcanum1-024-fixed", "--main-menu"], True)):
+            self.assertEqual(requested(project["parser"]().parse_args(command)), expected, command)
+        with self.assertRaises(SystemExit):
+            project["parser"]().parse_args(["area", "--main-menu", "--no-main-menu"])
+
+    def test_area_refuses_a_build_exported_before_the_main_menu(self):
+        # ARC-UI-012: the menu's argument is refused by older builds, so `area` stops first with the way out.
+        project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
+        run = project["run"]
+        try:
+            head = subprocess.check_output(["git", "-C", str(REPO), "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL).strip()
+            older = subprocess.check_output(["git", "-C", str(REPO), "rev-parse", project["MAIN_MENU_COMMIT"] + "~1"], text=True,
+                                            stderr=subprocess.DEVNULL).strip()
+        except (OSError, subprocess.CalledProcessError):
+            self.skipTest("needs a git checkout holding the main menu's history")
+        self.assertTrue(project["build_has_main_menu"]({"candidate": {"commit": head}}))
+        self.assertFalse(project["build_has_main_menu"]({"candidate": {"commit": older}}))
+        self.assertFalse(project["build_has_main_menu"]({"candidate": {"commit": "0" * 40}}), "an unknown commit is not trusted")
+        self.assertFalse(project["build_has_main_menu"]({}))
+        conf = {"artifactRoots": {project["ROOT_ID"]: str(self.root)}, "launchSelection": {}}
+        for commit, expected in ((older, 2), (head, 0)):
+            calls = []
+            with patch.dict(run.__globals__, {"local": lambda *arguments: calls.append(arguments) or 0}), \
+                    patch.object(run.__globals__["manifests"], "resolve_current",
+                                 lambda root, tool, *, root_id, selected_task: (self.root / "build" / "manifest.json", {"candidate": {"commit": commit}}, None)), \
+                    patch.object(run.__globals__["config"], "load_config", lambda: conf), \
+                    patch.object(run.__globals__["config"], "save_config", lambda value: None), \
+                    patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                self.assertEqual(expected, run(project["parser"]().parse_args(["area", "--dry-run"])))
+            if expected:
+                self.assertEqual(calls, [], "nothing is launched")
+                self.assertIn("--no-main-menu", stderr.getvalue())
+            else:
+                self.assertEqual(calls[1][-3:], ("Arcanum1-024-fixed", "--main-menu", "--dry-run"))
 
     def test_viewer_modes_match_the_launcher_modes(self):
         source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()

@@ -30,6 +30,9 @@ MODES = {"world": ("world-diagnostic", ("ARC-WORLD-003",))}
 MAP_MODE = ("crash-site-area", (launch.UNIVERSAL_TASK, "ARC-RENDER-008"))
 # ARC-RENDER-028: `area` is map mode on the main world map, opened as a window around its map-list start (the Crash Site).
 AREA_MAP = "Arcanum1-024-fixed"
+# ARC-UI-012: `area` opens the main menu first, as the game does; builds exported before the menu (ARC-UI-011, merged in
+# this commit) refuse its argument, so such a build is refused here with the way out.
+MAIN_MENU_COMMIT = "309d1236ba3a0a9ed554bc86c696090c3e661d8b"
 
 
 def main_checkout() -> Path:
@@ -59,12 +62,31 @@ def setup(args: argparse.Namespace) -> int:
     return 0
 
 
+def main_menu_requested(args: argparse.Namespace) -> bool:
+    """ARC-UI-012: `area` opens the main menu unless --no-main-menu or --hero (a hero start has no menu) says otherwise;
+    `map` opens it only with --main-menu."""
+    if getattr(args, "main_menu", False):
+        return True
+    return args.mode == "area" and not getattr(args, "no_main_menu", False) and not getattr(args, "hero", None)
+
+
+def build_has_main_menu(manifest: dict) -> bool:
+    """True when the build's commit contains the main menu (ARC-UI-011) in this checkout's history."""
+    try:
+        commit = manifests.manifest_candidate(manifest)
+    except ValueError:
+        return False
+    return subprocess.call(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", MAIN_MENU_COMMIT, commit],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
+
+
 def run(args: argparse.Namespace) -> int:
     mode, tasks = MAP_MODE if args.mode in ("map", "area") else MODES[args.mode]
     name = AREA_MAP if args.mode == "area" else getattr(args, "name", None)
+    main_menu = args.mode in ("map", "area") and main_menu_requested(args)
     extra = (("--area-map", name) if args.mode in ("map", "area") else ()) + (("--hero", args.hero) if getattr(args, "hero", None) else ()) \
         + (("--area-map-sector", args.sector) if getattr(args, "sector", None) else ()) \
-        + (("--main-menu",) if getattr(args, "main_menu", False) else ())
+        + (("--main-menu",) if main_menu else ())
     roots = config.load_config().get("artifactRoots", {})
     if not isinstance(roots, dict) or not isinstance(roots.get(ROOT_ID), str):
         print("Run ./arcanum setup first.", file=sys.stderr)
@@ -73,11 +95,16 @@ def run(args: argparse.Namespace) -> int:
     # Tasks are tried in their fixed preference order; only a missing build falls through.
     for index, task in enumerate(tasks):
         try:
-            manifest_path, _, _ = manifests.resolve_current(Path(roots[ROOT_ID]), "terrain", root_id=ROOT_ID, selected_task=task)
+            manifest_path, manifest, _ = manifests.resolve_current(Path(roots[ROOT_ID]), "terrain", root_id=ROOT_ID, selected_task=task)
             break
         except ValueError:
             if index == len(tasks) - 1:
                 raise
+    if main_menu and not build_has_main_menu(manifest):
+        print("The current build was exported before the main menu (ARC-UI-011) and cannot open it: export a fresh "
+              f"{launch.UNIVERSAL_TASK} build, or run ./arcanum {args.mode} with --no-main-menu"
+              + (" (or without --main-menu)" if args.mode == "map" else "") + ".", file=sys.stderr)
+        return 2
     candidate = f"{ROOT_ID}:{task}:{manifest_path.parent.name}"
     # A real run leaves the terrain launch selection on this build (as `tools/arcanum-local configure
     # select-launch` would); a dry run restores the previous selection afterwards.
@@ -223,10 +250,13 @@ def parser() -> argparse.ArgumentParser:
         command.set_defaults(func=run, mode=name)
     # ARC-RENDER-028: the Crash Site in the universal map mode (the main world map's window around its map-list start).
     command = commands.add_parser("area", help=f"launch the main world map ({AREA_MAP}) at the Crash Site from the current "
-                                  f"{launch.UNIVERSAL_TASK} or ARC-RENDER-008 build (map mode; the window moves with the actor)")
+                                  f"{launch.UNIVERSAL_TASK} or ARC-RENDER-008 build (map mode; the window moves with the actor), "
+                                  "with the main menu first unless --no-main-menu or --hero")
     command.add_argument("--sector", help="X,Y: open the main map at this sector instead of the Crash Site")
     command.add_argument("--hero", choices=launch.PREMADE_HEROES, help="start as this pre-made hero (default: the diagnostic PC profile)")
-    command.add_argument("--main-menu", action="store_true", help="open the main menu first (new game with a pre-made hero, last save, load); not with --hero")
+    menu = command.add_mutually_exclusive_group()
+    menu.add_argument("--main-menu", action="store_true", help="open the main menu first (the default without --hero; ARC-UI-012); not with --hero")
+    menu.add_argument("--no-main-menu", action="store_true", help="start playing at once with the diagnostic PC profile, without the main menu")
     command.add_argument("--dry-run", action="store_true")
     command.add_argument("--no-queue", action="store_true", help="start at once instead of taking the launch queue's Godot slot")
     command.set_defaults(func=run, mode="area")
