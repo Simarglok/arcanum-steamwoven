@@ -121,6 +121,6 @@ public partial class AreaFollowerPortraits : CanvasLayer
         if (_list?.GetParent() is not PanelContainer panel) return;
         var size = GetViewport().GetVisibleRect().Size;
         panel.ResetSize();
-        panel.Position = new(12, Math.Max(12, size.Y - panel.GetCombinedMinimumSize().Y - 12));
+        panel.Position = new(12, Math.Max(12, size.Y - panel.GetCombinedMinimumSize().Y - 12 - AreaGameBarPanel.BottomInset));
     }
 }

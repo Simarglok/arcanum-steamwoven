@@ -1,0 +1,129 @@
+using Arcanum.TerrainViewer.Core;
+using Godot;
+
+namespace Arcanum.TerrainViewer;
+
+// ARC-UI-018: the original's in-game interface bars over an AREA session (docs/rendering/terrain-viewer.md#interface-bars-arc-ui-018;
+// checked in the 1.0.7.4 executable, ledger GB1–GB7). The bar buttons open the viewer's windows as their keys do; a button whose
+// window another bar window covers switches to it (the original's interface mode change leaves the old mode first). Automated runs
+// draw no bars unless their smoke asks, so world presses at fixed screen points are not taken by them.
+public partial class TerrainViewerApp
+{
+    private AreaGameBarPanel? _gameBarPanel;
+    private AreaGameBar _gameBar = new();
+    private AreaGameBarContent? _gameBarContent;
+    private string? _gameBarModule;
+    private string? _gameBarNotice;
+    private bool _gameBarForSelfTest;
+    private readonly List<(int Id, bool Started)> _gameBarSoundsForSelfTest = [];
+
+    private bool GameBarActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea
+        && !MainMenuOpen && !ConversationOpen && !BarterOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen
+        && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
+
+    /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
+    private void SyncGameBar()
+    {
+        if (!GameBarActive)
+        {
+            if (_gameBarPanel is { Visible: true } hidden) { hidden.Visible = false; _hud?.SetTopInset(0); }
+            return;
+        }
+        if (_gameBarPanel is null)
+        {
+            _gameBarPanel = new AreaGameBarPanel(); AddChild(_gameBarPanel);
+            _gameBarPanel.Effect += GameBarEffect;
+        }
+        var module = _arguments?.ModulePath;
+        if (_gameBarContent is null || module != _gameBarModule)
+        {
+            _gameBarModule = module;
+            _gameBarContent = SelfTestBootstrap || module is null ? AreaGameBarContent.Empty("self-test: no game folder") : AreaGameBarContent.Load(module);
+            GD.Print($"ARC-UI-018 bars art ready={_gameBarContent.ArtReady} texts fromGame={_gameBarContent.Texts.FromGame} {_gameBarContent.Detail}");
+            _gameBarPanel.Bind(GameBarTextures(_gameBarContent), _gameBarContent.Texts, _gameBar);
+        }
+        // The M key shows and hides the same pane the Spells button does; showing it is the original's spells mode (Skills goes up).
+        var spells = _spellPane?.Shown == true;
+        if (spells != _gameBar.IsOn(AreaBarButton.Spells) || (spells && _gameBar.IsOn(AreaBarButton.Skills)))
+        {
+            _gameBar.SetOn(AreaBarButton.Spells, spells);
+            if (spells) _gameBar.SetOn(AreaBarButton.Skills, false);
+            _gameBarPanel.Render();
+        }
+        _gameBarPanel.Visible = true;
+        _hud?.SetTopInset(_gameBarPanel.TopInset);
+    }
+
+    private static IReadOnlyDictionary<int, ImageTexture[]> GameBarTextures(AreaGameBarContent content) =>
+        content.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready).ToDictionary(load => load.Number,
+            load => load.Frames.Select(frame => ImageTexture.CreateFromImage(Image.CreateFromData(frame.Width, frame.Height, false, Image.Format.Rgba8, frame.Rgba))).ToArray());
+
+    private void PlayBarSound(int id, string what)
+    {
+        var (sfx, _, result) = PlaySfx(id);
+        _gameBarSoundsForSelfTest.Add((id, result?.Started == true));
+        if (result?.Started == true) _interfaceSoundsPlayed++;
+        _cueNotice = $"{what} {id}: {result?.Status.ToString() ?? (sfx is null ? "no sound catalogue" : "not playable")}";
+    }
+
+    private void GameBarEffect(AreaBarEffect effect)
+    {
+        foreach (var id in effect.Sounds) PlayBarSound(id, "bar button");
+        if (effect.Act is { } button) RunBarButton(button);
+        if (effect.Sounds.Count > 0 || effect.Act is not null) RefreshAreaStatus();
+    }
+
+    private void RunBarButton(AreaBarButton button)
+    {
+        GD.Print($"ARC-UI-018 bar button {button}");
+        _gameBarNotice = null;
+        switch (button)
+        {
+            case AreaBarButton.Character: BarWindow("character sheet", SheetActive, SheetOpen, OpenSheet, EndSheet); break;
+            case AreaBarButton.Logbook: BarWindow("logbook", LogbookActive, LogbookOpen, OpenLogbook, CloseLogbookByPlayer); break;
+            case AreaBarButton.Inventory: BarWindow("inventory", InventoryActive, InventoryOpen, () => OpenInventory(), EndInventory); break;
+            case AreaBarButton.Schematics: BarWindow("schematics", SchematicsActive, SchematicsOpen, () => OpenSchematics(), CloseSchematicsByPlayer); break;
+            case AreaBarButton.Map: BarWindow("world map", WorldMapActive, WorldMapOpen, OpenWorldMap, CloseWorldMapByPlayer); break;
+            case AreaBarButton.Combat:
+                if (!CombatModeActive) _gameBarNotice = "combat: not available here";
+                else if (WorldModal) _gameBarNotice = "combat: ignored while a window is open";
+                else ToggleCombatMode();
+                break;
+            case AreaBarButton.Spells: BarSpells(); break;
+            case AreaBarButton.Skills:
+                // The original's skills mode shows the skill buttons in the message window; the viewer has no such pane yet.
+                if (_gameBar.IsOn(AreaBarButton.Skills)) { _spellPane?.HidePane(); _gameBarNotice = "skills: the skill pane is not built"; }
+                break;
+            case AreaBarButton.FatePoints: _gameBarNotice = "fate points: the window is not built"; break;
+            case AreaBarButton.Sleep: _gameBarNotice = "sleep: the window is not built"; break;
+        }
+        _gameBarPanel?.Render();
+    }
+
+    /// <summary>A window button: closes its window when open; otherwise closes the other bar window that is open and opens its own.
+    /// Another window (palette, conversation, barter, reading, save list, menu) keeps the press from acting.</summary>
+    private void BarWindow(string name, bool active, bool open, Action openWindow, Action close)
+    {
+        if (!active) { _gameBarNotice = $"{name}: not available here"; return; }
+        if (open) { close(); return; }
+        if (PaletteOpen || ConversationOpen || BarterOpen || ReadingOpen || SaveListOpen || MainMenuOpen) { _gameBarNotice = $"{name}: ignored while another window owns input"; return; }
+        if (SheetOpen) EndSheet();
+        if (LogbookOpen) CloseLogbookByPlayer();
+        if (InventoryOpen) EndInventory();
+        if (SchematicsOpen) CloseSchematicsByPlayer();
+        if (WorldMapOpen) CloseWorldMapByPlayer();
+        openWindow();
+    }
+
+    private void BarSpells()
+    {
+        var on = _gameBar.IsOn(AreaBarButton.Spells);
+        if (!on) { _spellPane?.HidePane(); _spellNotice = null; return; }
+        if (!SpellMapActive || _areaSession?.QueryHero() is null) _gameBarNotice = "spells: needs a hero on a map";
+        else if (WorldModal) _gameBarNotice = "spells: ignored while a window is open";
+        else { ShowSpellPane(); return; }
+        _gameBar.SetOn(AreaBarButton.Spells, false);
+    }
+
+    private string GameBarStatus() => _gameBarPanel is not { Visible: true } ? "" : " | interface bars" + (_gameBarNotice is null ? "" : ": " + _gameBarNotice);
+}

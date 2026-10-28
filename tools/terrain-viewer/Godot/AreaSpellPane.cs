@@ -121,6 +121,6 @@ public partial class AreaSpellPane : CanvasLayer
         var size = GetViewport().GetVisibleRect().Size;
         _panel.ResetSize();
         var panel = _panel.GetCombinedMinimumSize();
-        _panel.Position = new(12, Math.Max(12, size.Y - panel.Y - 12));
+        _panel.Position = new(12, Math.Max(12, size.Y - panel.Y - 12 - AreaGameBarPanel.BottomInset));
     }
 }

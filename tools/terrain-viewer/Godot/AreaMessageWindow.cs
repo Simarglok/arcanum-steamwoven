@@ -87,6 +87,6 @@ public partial class AreaMessageWindow : CanvasLayer
         var size = GetViewport().GetVisibleRect().Size;
         _panel.ResetSize();
         var panel = _panel.GetCombinedMinimumSize();
-        _panel.Position = new(Math.Max(12, (size.X - panel.X) / 2), Math.Max(12, size.Y - panel.Y - 12));
+        _panel.Position = new(Math.Max(12, (size.X - panel.X) / 2), Math.Max(12, size.Y - panel.Y - 12 - AreaGameBarPanel.BottomInset));
     }
 }

@@ -29,7 +29,12 @@ public partial class AreaMainMenuPanel : CanvasLayer
     public event Action<bool>? AnswerRequested;
     /// <summary>ARC-UI-013: an arrow of the options window's control (index among the shown ones, direction -1 or 1).</summary>
     public event Action<int, int>? OptionChangeRequested;
+    /// <summary>ARC-UI-018: a window button's interface sound: the pointer entering it (3026) or a press on it (3027), as the
+    /// original's text-only menu buttons sound (ledger GB7).</summary>
+    public event Action<int>? SoundRequested;
     public bool IsOpen => Visible;
+    internal Vector2? ButtonCentreForSelfTest(int index) =>
+        _buttons.Visible && _buttons.GetChildren().OfType<Button>().ElementAtOrDefault(index) is { } button ? button.GetGlobalRect().GetCenter() : null;
     internal IReadOnlyList<string> ButtonsForSelfTest => _buttons.Visible ? _buttons.GetChildren().OfType<Button>().Select(button => button.Text).ToArray() : [];
     internal string HeroForSelfTest => _browser.Visible ? _hero.Text : "";
     internal string NoteForSelfTest => _note.Text;
@@ -118,6 +123,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
                 Modulate = i == focus ? new Color(1f, .85f, .6f) : Colors.White,
             };
             button.Pressed += () => ButtonPressed?.Invoke(index);
+            button.MouseEntered += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuHoverSound);
+            button.ButtonDown += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuPressSound);
             _buttons.AddChild(button);
         }
         _buttons.Visible = !browser;
