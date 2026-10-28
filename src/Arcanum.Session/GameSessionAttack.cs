@@ -2,6 +2,7 @@ using Arcanum.Data.Combat;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Randomness;
 using Arcanum.Simulation.Skills;
 
@@ -344,6 +345,10 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     /// <summary>The actor's map as the original's drop reads it (ARC-COMBAT-010): with it a drop draws its distance and directions and
     /// lands where the original's placement puts it; null: on the holder's cell, without draws.</summary>
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
+    /// <summary>ARC-MAGIC-023: the trigger host the damage step's item events fire through (stunned, going unconscious, target going
+    /// unconscious, dying, parent hit, damages opponent and target hit: <see cref="SessionAttackResult.ItemSpells"/>), a host of this
+    /// session; null: they fire nothing, as before ARC-MAGIC-023.</summary>
+    public ISessionItemTriggers? ItemTriggers { get; init; }
 }
 
 /// <summary>
@@ -377,6 +382,11 @@ public sealed record SessionAttackResult(GameSessionDisposition Disposition, Gam
     /// <summary>The critical item steps (ARC-COMBAT-009) of whoever took the damage, in the original's order: the arm-hit drops, the
     /// helmet and weapon drops and the ammunition effects; empty when the attack had none.</summary>
     public IReadOnlyList<SessionCriticalStep> Criticals { get => _criticals ?? Array.Empty<SessionCriticalStep>(); init => _criticals = value; }
+    private readonly IReadOnlyList<SessionItemTriggerFiring>? _itemSpells;
+
+    /// <summary>ARC-MAGIC-023: the executor calls of the damage step's item events, in order (<see cref="SessionAttack.ItemTriggers"/>);
+    /// empty without a host, without damage to the target or after a refused item step.</summary>
+    public IReadOnlyList<SessionItemTriggerFiring> ItemSpells { get => _itemSpells ?? Array.Empty<SessionItemTriggerFiring>(); init => _itemSpells = value; }
 }
 
 public sealed partial class GameSessionOwner
@@ -592,6 +602,10 @@ public sealed partial class GameSessionOwner
                 GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version) { Ammunition = ammunition, Shots = flying, Scatter = scatter };
 
         var recipient = resolution.Damage!.Recipient;
+        // ARC-MAGIC-023: the hero's worn items and the context's weapon (0x4B2210: the wielded weapon, or the projectile's item) for the
+        // damage step's item events, as they are before the step.
+        var heroWorn = _equipment.Worn.Values.OrderBy(item => item.Slot).Select(item => item.Entity).ToArray();
+        var contextWeapon = pending?.Thrown is not null ? null : _equipment.Worn.TryGetValue(EquipmentSlot.Weapon, out var held) ? held.Entity : null;
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage);
         if (applied.Disposition == GameSessionDisposition.Rejected)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version)
@@ -620,6 +634,13 @@ public sealed partial class GameSessionOwner
         if (stepFailure == GameSessionFailure.None)
             (wear, stepFailure) = CriticalAndWearSteps(resolution, outcome, heroSide, targetSide, recipient == DamageRecipient.Target ? target : null,
                 attack.TargetCell, attack.DropMap, criticals);
+        // The parent hit's melee bit (0x4CBAD0): an attack entry's context, the range of the weapon the shot or swing carries (0x465E30).
+        var striker = pending?.Hero ?? hero;
+        var itemSpells = recipient == DamageRecipient.Target && stepFailure == GameSessionFailure.None
+            ? FireDamageStepItems(attack.ItemTriggers, facts!, damage, outcome, target.Entity, heroWorn, contextWeapon,
+                ItemSpellTriggerRules.MeleeHit(attackEntry: true, striker.Weapon.Kind == WeaponKind.Unarmed ? null : striker.Range),
+                attack.TargetWorn, wear, criticals)
+            : [];
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, outcome, hitAward, killAward, stepFailure, Version)
         {
             Wear = wear,
@@ -627,6 +648,7 @@ public sealed partial class GameSessionOwner
             Ammunition = ammunition,
             Shots = flying,
             Scatter = scatter,
+            ItemSpells = itemSpells,
         };
     }
 

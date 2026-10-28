@@ -27,7 +27,7 @@ public readonly record struct ItemSpellFiring(int Slot, int Spell, ItemSpellAim 
 /// flag and aim, and which an unwear or a drop withdraws and casts again (0x4CBFF0). The events' masks are the wrappers'. Pure
 /// functions; the host builds the runs (the item as source, its holder as parent) and stops the withdrawn ones.
 /// </summary>
-public static class ItemSpellTriggerRules
+public static partial class ItemSpellTriggerRules
 {
     /// <summary>The five item spell fields (0x64..0x68), 10000 for none; a run's spell is the slot's low byte (0x4CB790, LM7).</summary>
     public const int Slots = 5, NoSpell = 10000, SpellMask = 0xFF;

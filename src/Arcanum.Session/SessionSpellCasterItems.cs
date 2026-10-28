@@ -83,7 +83,9 @@ public interface ISessionItemTriggers
     /// ARC-MAGIC-022 the session saves the charges its spells spend). The host must cast in the same session as the move that asks.</summary>
     bool Supports(string item);
 
-    SessionItemTriggerResult Fire(uint eventMask, string item, string holder);
+    /// <summary>The executor for one item of <paramref name="holder"/>; <paramref name="other"/> is the event's other object (since
+    /// ARC-MAGIC-023: an attack's other party), the aim of <c>Target_Attacker</c>.</summary>
+    SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null);
 
     SessionItemTriggerResult Withdraw(uint eventMask, string item, string holder);
 
@@ -291,8 +293,8 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
 
     public bool Supports(string item) => _caster.Item(item) is { Holder: SessionSpellCaster.Hero };
 
-    public SessionItemTriggerResult Fire(uint eventMask, string item, string holder) =>
-        Played([], _caster.StartItemSpells(eventMask, item, holder));
+    public SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null) =>
+        Played([], _caster.StartItemSpells(eventMask, item, holder, other));
 
     public SessionItemTriggerResult Withdraw(uint eventMask, string item, string holder)
     {
