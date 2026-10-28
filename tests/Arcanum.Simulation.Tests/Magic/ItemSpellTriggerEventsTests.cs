@@ -130,4 +130,46 @@ public sealed class ItemSpellTriggerEventsTests
         Assert.AreEqual(0, WornCalls(ItemTriggerEvent.ParentHit, 0).Count);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => WornCalls(ItemTriggerEvent.ParentHit, WornSlots + 1));
     }
+
+    // ARC-MAGIC-024: the life steps outside a damage step (IC4), the dying animation's end (IC5) and a spell's damage step (DH1, MG46).
+
+    [TestMethod]
+    public void A_life_step_that_empties_the_fatigue_fires_going_unconscious_with_no_other_object_once()
+    {
+        var max = LifeRules.MaxFatigue(Facts);
+        var spent = LifeRules.ChargeFatigue(LifeState.Unharmed, Facts, max);
+        CollectionAssert.AreEqual(new[] { S(ItemTriggerEvent.ParentGoingUnconscious, Target, None) }, LifeStep(Facts, spent).ToArray());
+        Assert.AreEqual(0, LifeStep(Facts, LifeRules.ChargeFatigue(LifeState.Unharmed, Facts, max - 1)).Count, "still conscious");
+        Assert.AreEqual(0, LifeStep(Facts, LifeRules.ChargeFatigue(spent.After, Facts, 3)).Count, "already unconscious");
+        Assert.AreEqual(0, LifeStep(Facts with { Traits = LifeTraits.Undead }, LifeRules.ChargeFatigue(LifeState.Unharmed, Facts with { Traits = LifeTraits.Undead }, max)).Count,
+            "an undead critter is never unconscious");
+        // The setter reads the fatigue only: a kill that also empties it fires it too; a kill alone does not.
+        var both = LifeRules.ApplyDamage(LifeState.Unharmed, Facts, new LifeDamage { HitPoints = 10_000, Fatigue = 10_000 }, new Rolls(15));
+        Assert.IsTrue(both.Events.HasFlag(LifeEvents.Died));
+        Assert.AreEqual(1, LifeStep(Facts, both).Count);
+        Assert.AreEqual(0, LifeStep(Facts, LifeRules.Kill(LifeState.Unharmed, Facts)).Count);
+    }
+
+    [TestMethod]
+    public void The_dying_animation_s_end_fires_dying_with_no_other_object_for_a_dead_critter_only()
+    {
+        var dead = LifeRules.Kill(LifeState.Unharmed, Facts).After;
+        CollectionAssert.AreEqual(new[] { S(ItemTriggerEvent.ParentDying, Target, None) }, DyingEnd(Facts, dead).ToArray());
+        Assert.AreEqual(0, DyingEnd(Facts, LifeState.Unharmed).Count);
+    }
+
+    [TestMethod]
+    public void A_spell_s_damage_step_has_no_melee_bit_and_an_item_run_s_hooks_follow_the_setting()
+    {
+        var (damage, outcome) = Step(new LifeDamage { HitPoints = 2 });
+        var hooks = new[] { S(ItemTriggerEvent.ParentHit, Target, Attacker), S(ItemTriggerEvent.ParentDamagesOpponent, Attacker, Target) };
+        CollectionAssert.AreEqual(hooks, SpellDamageStep(Facts, damage, outcome, true, true, false, MagicAnomalyProfile.Steamwoven).ToArray());
+        CollectionAssert.AreEqual(hooks, SpellDamageStep(Facts, damage, outcome, true, true, true, MagicAnomalyProfile.Original).ToArray(), "MG46 kept");
+        Assert.AreEqual(0, SpellDamageStep(Facts, damage, outcome, true, true, true, MagicAnomalyProfile.Steamwoven).Count, "MG46 fixed");
+        // The fix leaves the other calls: a kill still fires dying with the run's damage source.
+        var (kill, killed) = Step(new LifeDamage { HitPoints = 10_000 });
+        CollectionAssert.AreEqual(new[] { S(ItemTriggerEvent.ParentDying, Target, Killer) },
+            SpellDamageStep(Facts, kill, killed, true, true, true, MagicAnomalyProfile.Steamwoven).ToArray());
+        Assert.AreEqual(0, SpellDamageStep(Facts, kill, killed, false, false, false, MagicAnomalyProfile.Original).Count, "no parent, no source");
+    }
 }

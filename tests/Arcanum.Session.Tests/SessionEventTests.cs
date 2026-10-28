@@ -191,7 +191,7 @@ public sealed class SessionEventTests
         Damage(owner, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
         Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxScriptCalls - SessionEffectLimits.MaxTimedEffects - SessionEventKinds.MaxLockResets
             - SessionEventKinds.MaxWaitTimers - SessionEventKinds.MaxObjectRespawns - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays
-            - SessionEventKinds.MaxAiTicks - 1, owner.QueryEvents().Count);
+            - SessionEventKinds.MaxAiTicks - SessionEventKinds.MaxRestocks - 1, owner.QueryEvents().Count);
         // ARC-SCRIPT-010: the deferred SCR calls have their own share of the queue on top.
         for (var i = 0; i < SessionEventKinds.MaxScriptCalls; i++)
             Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleScriptCall(owner.Version, new(i + 1, 0, null, null), 1000).Disposition);
@@ -231,6 +231,11 @@ public sealed class SessionEventTests
             Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleAiTick(owner.Version, new() { Entity = $"oid:t{i}" }).Disposition);
         Assert.AreEqual(GameSessionFailure.EventBudgetExceeded, owner.ScheduleAiTick(owner.Version, new() { Entity = "oid:tx" }).Failure);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleAiTick(owner.Version, new() { Entity = "oid:t0", Start = SessionAiTickStart.Delayed }).Disposition);
+        // ARC-WORLD-094: and so do the restock events, one per holder (a second one replaces the first).
+        for (var i = 0; i < SessionEventKinds.MaxRestocks; i++)
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleRestock(owner.Version, $"chest:{i}", true).Disposition);
+        Assert.AreEqual(GameSessionFailure.EventBudgetExceeded, owner.ScheduleRestock(owner.Version, "chest:x", true).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleRestock(owner.Version, "chest:0", true).Disposition);
         // ARC-MAGIC-010: the magic-tech events have a share too (not saved; empty here); so do the Item Decay events (ARC-WORLD-062) and the
         // hero's encumbrance timer (ARC-WORLD-087).
         Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - 1, owner.QueryEvents().Count);

@@ -79,7 +79,14 @@ public sealed record SessionLifeQueryResult(GameSessionFailure Failure, SessionL
 /// full scar list change no state but still tell the host what happened); it is null for a refusal.
 /// </summary>
 public sealed record SessionLifeResult(GameSessionDisposition Disposition, GameSessionFailure Failure, LifeOutcome? Outcome,
-    GameSessionVersion Version);
+    GameSessionVersion Version)
+{
+    /// <summary>ARC-MAGIC-024: the item events the step calls for, in order (ledger IC2, IC4): for a damage step with its parties
+    /// (<see cref="GameSessionOwner.ApplyDamage"/>) its wrapper calls, for any other step the fatigue setter's going unconscious;
+    /// empty for a refusal. The host fires them (<see cref="GameSessionOwner.FireItemEvents"/>,
+    /// <see cref="SessionSpellCaster.FireItemEvents"/>); the session fires none by itself.</summary>
+    public IReadOnlyList<SessionItemEvent> ItemEvents { get; init; } = [];
+}
 
 /// <summary>The life domain of one owner.</summary>
 internal sealed class LifeDomain

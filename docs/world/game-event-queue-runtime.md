@@ -147,6 +147,18 @@ item whose map's seed is not attached yet: the firing then postpones the deletio
 it does while the deleted-item budget (`MaxDurabilityRecords`) is full. A restore refuses one with another delay, set after the saved
 clock, whose deadline is not its time plus its delay, or a second one of the same item. See [item decay](inventory-runtime.md#item-decay-arc-world-062).
 
+**Restock events (ARC-WORLD-094).** The kind `inventory.restock` (also added to registry version 1 without a new version) is the
+original's restock event (type 0x16, ledger RK1–RK8): game time, saved, scoped to the holder's map (it fires while that map is the
+actor's, late on return), one per holder (`Replace`: a new schedule replaces the pending one), at most `SessionEventKinds.MaxRestocks`
+(2,048) on top of the others. One entity, the NPC or container (never the player, the absent role or a made item); values: the game time
+it was set at and its delay (43,200,000..86,400,000 ms, or `RestockRetryDelayMs`, a minute). The host's `ScheduleRestock` sets it; when
+due the handler runs through an `ISessionRestockWorld` host and `SessionEventPassResult.Restocks` reports it. The session answers for the
+objects its pending restock events name other than an NPC with a life record (the host's critter facts answer for that one), so a host
+without an object check does not drop a container's event; a pass without a restock host, or before the map's seed is attached,
+postpones it a minute (`SessionRestockFiring.Postponed`). A restore refuses one with another delay, set after the saved clock, whose
+deadline is not its time plus its delay, naming the player or a made item, or a second one of the same holder. See
+[restock event](barter-runtime.md#restock-event-arc-world-094).
+
 **Encumbrance timer (ARC-WORLD-087).** The kind `life.hero.encumbrance` (also added to registry version 1 without a new version)
 is mode 1 of the original's fatigue timer (ledger WE5, WE8): game time, saved, global, no entities, one at a time (`KeepExisting`:
 a level rise while one is pending keeps its older delay, WEA2). Value: the game time it was set at. A recalculation of the
@@ -194,10 +206,10 @@ poison schedule (0x4B1350), hit-point write (0x43D530), poison write (0x4B0980).
 Rules of the wiring:
 
 - **Scheduling with the step.** Every life call (`ApplyDamage`, `Kill`, `Heal`, the ticks) sets its timers in the same
-  step. The session's queue holds 53,380 events (`SessionEventKinds.MaxPending`: four per NPC life record, 8,192 records
+  step. The session's queue holds 55,428 events (`SessionEventKinds.MaxPending`: four per NPC life record, 8,192 records
   since ARC-DATA-029, and four for the hero (its encumbrance timer since ARC-WORLD-087), plus the 1,024 deferred script calls,
   64 timed-effect ENDs, 1,024 Lock events, 64 wait timers, 1,024 respawn events, 1,024 magic-tech events, since ARC-WORLD-062
-  8,192 Item Decay events and since ARC-WORLD-084 8,192 AI ticks), so the
+  8,192 Item Decay events, since ARC-WORLD-084 8,192 AI ticks and since ARC-WORLD-094 2,048 restock events), so the
   timers of a step always fit; a step whose timers would not fit, or whose deadline would pass the clock's range, is
   refused whole (`EventBudgetExceeded`) with nothing drawn or changed.
 - **Map of an NPC timer.** The map the NPC is on: the actor's map when a life call sets it (the host acts on NPCs of the

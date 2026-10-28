@@ -261,6 +261,7 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG43 | original bug (ARC-MAGIC-019, ledger MG43) | fix in both modes without a switch (owner decision 2026-10-28): queued casts whose goals never play are freed unpaid | MT20a-2 leftover |
 | MG44 | original bug (ARC-MAGIC-018, ledger MG44) | fix in both modes (owner decision 2026-10-28: fixed in both rule modes, no switch): a run whose missile is lost before it arrives (a leg's line refused, the goal stopped) is freed unpaid | MT20a-2 leftover |
 | MG45 | original bug (ARC-MAGIC-021, ledger MG45) | technical bug (owner rule 2026-10-28): fixed in both modes without a switch — no flag is written (latent: only an object whose data carries `OF_CLICK_THROUGH` could lose it) | MT20a-2 leftover |
+| MG46 | original bug (ARC-MAGIC-024, ledger MG46, IC9) | gameplay bug (owner's bug rule 2026-10-28): the original behind the Original switch `ItemRunDamageFiresHooks`; Steamwoven fires no parent hit and no damages opponent for the damage step of a run an item event started | FR-MAGIC-011 |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |
 | O10 shell and reflection order | reconstruction change | the original in both modes | MT10 |
 | Charm asymmetry | reconstruction change confirmed | the original (+30 and −30 both through the reaction effects) | MT14 |
@@ -297,7 +298,8 @@ Agreed through the coordinator on 2026-10-20:
   ARC-MAGIC-020 ([ledger IT1–IT10](ledger/spell-runs.md#item-spell-triggers-arc-magic-020)), which runs the wear and unwear
   through the cast host and lifts the equipment's refusal where a trigger host is given ([contract](../world/item-spell-triggers.md)).
   Left as slices of their own: pickup, drop and item use with saved charges; the combat and life events; the item spell
-  pane, inventory-target spells and hotkeys (0x57C040, 0x57C080).
+  pane (done by ARC-UI-016, [IP rows](ledger/spell-runs.md#item-spell-pane-arc-ui-016)), inventory-target spells and hotkeys
+  (0x57C080, IP7–IP9).
 - **Technology runtime**: the technology lane above.
 - **Spell visuals**: `SpellEyeCandy.mes`, the cast, release and component eye candy and the cast's timing are done
   ([ARC-MAGIC-017](../world/spell-cast-host.md#eye-candy-arc-magic-017)); the missile's art and flight (goals 28 and 78) and the

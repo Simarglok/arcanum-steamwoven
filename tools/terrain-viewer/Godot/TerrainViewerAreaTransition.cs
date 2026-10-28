@@ -76,6 +76,7 @@ public partial class TerrainViewerApp
         _areaKitArt = result.Hero?.KitArt;
         _areaKitMissileArt = result.Hero?.KitMissileArt;
         _areaKitThrowWeight = result.Hero?.KitThrowWeight;
+        _areaKitItemSpells = result.Hero?.KitItemSpells;
         if (carried is not null) { _areaSession = carried; AttachAreaEncumbranceEffect(); SyncTurnBasedSetting(carried); }
         else
         {

@@ -14,12 +14,14 @@ public partial class TerrainViewerApp
     private (GameSessionOwner Session, long Revision, IReadOnlySet<int> Completed)? _interfaceWatch;
     private int _interfaceSoundsPlayed;
 
-    private void PlayInterfaceSound(int id, string what)
+    /// <summary>Plays an interface sound; true when it started.</summary>
+    private bool PlayInterfaceSound(int id, string what)
     {
-        if (_audio is null) return;
+        if (_audio is null) return false;
         var (_, _, result) = PlaySfx(id);
         if (result?.Started == true) _interfaceSoundsPlayed++;
         _cueNotice = $"{what} {id}: {result?.Status.ToString() ?? "not played"}";
+        return result?.Started == true;
     }
 
     /// <summary>Per frame: a quest that became completed for the PC plays the quest sound (checked once per session revision; the

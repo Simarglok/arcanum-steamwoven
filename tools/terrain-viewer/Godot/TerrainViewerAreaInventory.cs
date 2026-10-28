@@ -28,6 +28,8 @@ public partial class TerrainViewerApp
     private IReadOnlyList<SessionLockpick?>? _areaKitLockpicks;
     // ARC-COMBAT-008: the kit's durability values for the attack's wear.
     private IReadOnlyList<SessionWearItem?>? _areaKitDurability;
+    // ARC-UI-016: the kit's item spell facts (the cast host's item lookup).
+    private IReadOnlyList<SessionItemSpells?>? _areaKitItemSpells;
     // ARC-UI-015: the kit's wear facts (the best-items start's), for wearing a kit item from the window.
     private IReadOnlyList<SessionWearableItem?>? _areaKitWear;
     // ARC-UI-019: the kit's facts for a move in the hero's grid.
@@ -110,8 +112,16 @@ public partial class TerrainViewerApp
         return AreaInventoryTargetOf(key);
     }
 
-    private static long Chebyshev(AreaObjectRecord row, (long X, long Y) cell) =>
-        Math.Max(Math.Abs(row.WorldX!.Value - cell.X), Math.Abs(row.WorldY!.Value - cell.Y));
+    private long Chebyshev(AreaObjectRecord row, (long X, long Y) cell)
+    {
+        var at = LiveWorldCell(row);
+        return Math.Max(Math.Abs(at.X - cell.X), Math.Abs(at.Y - cell.Y));
+    }
+
+    /// <summary>ARC-WORLD-092: where a map row stands now: an NPC the AI walked on its cell, anything else on its map data's.</summary>
+    private (long X, long Y) LiveWorldCell(AreaObjectRecord row) =>
+        _aiHost?.Scene.Npcs.FirstOrDefault(n => n.Row.Key == row.Key) is { } npc && _aiHost.Movers.IsMoved(npc.Entity) && _aiHost.Movers.Of(npc.Entity) is { } mover
+            ? (mover.Cell.X, mover.Cell.Y) : (row.WorldX!.Value, row.WorldY!.Value);
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>) on a ground item or a dead NPC: true when it was one.</summary>
     private bool TryAreaInventoryClick(Vector2 screen)
@@ -127,7 +137,7 @@ public partial class TerrainViewerApp
             return true;
         }
         if (_worldActor.Session is AreaGridSession session && WorldRoute(session) is { } route
-            && ApproachCell(session, target.Row.WorldX!.Value, target.Row.WorldY!.Value, AreaInventoryHost.Reach) is { } goal)
+            && ApproachCell(session, LiveWorldCell(target.Row).X, LiveWorldCell(target.Row).Y, AreaInventoryHost.Reach) is { } goal)
         {
             StopWorldRoute(target.Kind == AreaInventoryTargetKind.GroundItem ? "ROUTE_REPLACED_BY_PICKUP" : "ROUTE_REPLACED_BY_LOOT");
             route.SetTarget(goal, WorldTime); _inventoryAfterRoute = (target.Row.Key, target.Kind);
