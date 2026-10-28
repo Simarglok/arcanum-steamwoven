@@ -16,6 +16,8 @@ public partial class TerrainViewerApp
     private int _clearShotStops;
 
     private const int LentBowRange = 10;
+    // ARC-COMBAT-016: the projectile art the smoke lends its bow: scenery number 0, the art of every installed bow (combat census).
+    private const int LentMissileArt = 0x40000000;
 
     // Native observation (ARC-COMBAT-015) with --hero, in map mode after the line-of-fire stage (or alone with
     // ARC_AREA_MAP_SMOKE_ONLY=ranged): the hero's ranged attack. No kit holds a bow, so the stage lends the wielded kit weapon a bow's
@@ -143,20 +145,76 @@ public partial class TerrainViewerApp
                 break;
             }
             Require(second is not null || tried == 0, $"an approach ran from one of {tried} far cells");
+            var flights = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Projectiles() : "NONE (a critical miss took the bow)";
             ToggleCombatMode();
             GD.Print("ARC-COMBAT-015 native-smoke ranged PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, Target = pick.Target.Entity, Hero = new[] { pick.Hero.X, pick.Hero.Y }, Shot = first,
                 Approach = second ?? (object)(stillBow ? "NONE (no cell 12..16 away, or the Original setting)" : "NONE (the first shot's critical miss took the bow)"), Npcs = npcs.Length,
+                Projectiles = flights,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
         {
             CancelAreaAttack(null);
+            _lentMissileArtForSelfTest = null;
+            ClearAreaProjectiles("the smoke ended");
             if (lent && !Wear(wielded.Item)) GD.Print("ARC-COMBAT-015 ranged smoke could not restore the kit weapon");
             Heal();
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
+        }
+
+        // ARC-COMBAT-016: with the lent bow's projectile art each shot flies from the hero's cell: the hit decided at the shot deals
+        // nothing until the arrow leaves the target's tile, its art is drawn on the way, and a missed arrow flies on past the target
+        // (to its range's end, a stray critter or an obstruction). Shots from the first cell until a hit has landed and a miss has
+        // flown (at most 12; a miss is reported, not required).
+        async Task<object> Projectiles()
+        {
+            _lentMissileArtForSelfTest = LentMissileArt;
+            Heal();
+            AreaSmokePlace(map, map.Chart.ToChart(new(pick.Hero.X, pick.Hero.Y)));
+            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            PublishWorldSelection();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var life = pick.Target.Build.Combat!.Target;
+            int Hp() => session.QueryLife(life).View!.Status.HitPoints;
+            var hits = 0; var misses = new List<string>(); var drawn = 0; var maxSteps = 0L;
+            for (var shots = 0; shots < 12 && (hits == 0 || misses.Count == 0); shots++)
+            {
+                Heal();
+                _projectileEndsForSelfTest.Clear();
+                var result = await ShootOnce(pick.Target, expectWalk: false);
+                Require(result?.Shot is { } && _projectiles.Count == 1, $"the shot flies ({result?.Failure} {result?.Resolution?.Outcome}, {_projectiles.Count} in flight)");
+                var hit = result!.Resolution!.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+                var before = Hp();
+                Require(!hit || result.Life is null, "a hit deals nothing at the shot");
+                for (var frames = 0; frames < 400 && _projectiles.Count > 0; frames++)
+                {
+                    if (_projectileBodies.Count > 0) drawn++;
+                    maxSteps = Math.Max(maxSteps, _projectiles.Count > 0 ? _projectiles[0].Flight.Steps : 0);
+                    _areaSmokeTime++;
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                }
+                Require(_projectiles.Count == 0 && _projectileEndsForSelfTest.Count == 1, $"the flight ended ({_projectiles.Count} in flight, {_projectileEndsForSelfTest.Count} ends)");
+                var end = _projectileEndsForSelfTest[0];
+                if (hit)
+                {
+                    Require(end.Strike == ProjectileStrikeKind.Target && end.Struck == pick.Target.Entity && Hp() <= before,
+                        $"the hit struck its target on arrival ({end.Strike} {end.Struck}, hp {before} -> {Hp()})");
+                    hits++;
+                }
+                else
+                {
+                    Require(end.Strike != ProjectileStrikeKind.Target, "a miss never strikes its target");
+                    misses.Add($"{end.Strike}:{end.Struck ?? "none"}");
+                }
+                Require(session.QueryShotsInFlight().Count == 0, "the session holds no shot after the flight");
+            }
+            Require(hits >= 1, $"a hit landed within 12 shots (misses {string.Join(",", misses)})");
+            Require(drawn > 0 && maxSteps >= ProjectileRules.DefaultStepsPerTick, $"the arrow was drawn while it flew ({drawn} frames, {maxSteps} steps)");
+            GD.Print($"ARC-COMBAT-016 native-smoke projectile PASS map={_readyMapName} target={pick.Target.Entity} misses={misses.Count} drawn={drawn} steps={maxSteps}");
+            return new { Hits = hits, Misses = misses, DrawnFrames = drawn, Steps = maxSteps };
         }
 
         void Heal()

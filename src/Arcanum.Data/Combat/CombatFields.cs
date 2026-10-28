@@ -81,7 +81,16 @@ public sealed record CombatWeaponFields(CombatWeaponFlags Flags, CombatWeaponSki
     IReadOnlyList<CombatDamageRange> Damage, IReadOnlyList<int> MagicDamageAdjustment, int SpeedFactor, int MagicSpeedAdjustment,
     int Range, int MagicRangeAdjustment, int MinimumStrength, int MagicMinimumStrengthAdjustment, int AmmoType, int AmmoConsumption,
     int CriticalHitChart, int MagicCriticalHitChance, int MagicCriticalHitEffect, int CriticalMissChart, int MagicCriticalMissChance,
-    int MagicCriticalMissEffect);
+    int MagicCriticalMissEffect)
+{
+    /// <summary>The value of "none" in <see cref="MissileArt"/>.</summary>
+    public const int NoMissileArt = -1;
+
+    /// <summary>ARC-COMBAT-016: the weapon's projectile art (object field 127, <c>weapon_missile_aid</c>): with an art other than
+    /// <see cref="NoMissileArt"/> a shot on the ranged path flies as a projectile and hits on arrival (ledger RH3, PF rows); a 0 is an
+    /// art.</summary>
+    public int MissileArt { get; init; } = NoMissileArt;
+}
 
 /// <summary>Ammunition item fields: flags, stack quantity and <see cref="CombatAmmoType"/> value.</summary>
 public sealed record CombatAmmoFields(uint Flags, int Quantity, int AmmoType);

@@ -66,6 +66,10 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
     /// read or an item outside the durability bounds), from the same prototype fields (<see cref="SessionWearItem.FromCombatFields"/>).</summary>
     public IReadOnlyList<SessionWearItem?>? KitDurability { get; init; }
 
+    /// <summary>ARC-COMBAT-016: each kit weapon's projectile art (field 127, -1 for none), by kit index; null for a prototype that does
+    /// not read or is no weapon. A shot on the ranged path with an art flies as a projectile.</summary>
+    public IReadOnlyList<int?>? KitMissileArt { get; init; }
+
     /// <summary>ARC-RENDER-033: each kit item's ground ART id (its prototype's current art, field 0), by kit index; null for a
     /// prototype that does not read. The viewer draws a placed kit item with it.</summary>
     public IReadOnlyList<uint?>? KitArt { get; init; }
@@ -154,6 +158,7 @@ public static class AreaStartingHero
             KitLockpicks = KitLockpicks(prototypes.Read, definition),
             KitDurability = KitDurability(prototypes.Read, definition),
             KitArt = KitArt(prototypes.Read, definition),
+            KitMissileArt = KitMissileArt(prototypes.Read, definition),
         };
     }
 
@@ -225,6 +230,16 @@ public static class AreaStartingHero
         ArgumentNullException.ThrowIfNull(definition);
         return definition.Kit.Select(item => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields is { } fields
             ? (uint?)fields.Object.CurrentArt : null).ToArray();
+    }
+
+    /// <summary>ARC-COMBAT-016: each kit weapon's projectile art from its prototype's combat fields, null where it does not read or is
+    /// no weapon.</summary>
+    public static IReadOnlyList<int?> KitMissileArt(Func<int, PrototypeFile> prototypes, SessionHeroDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(prototypes);
+        ArgumentNullException.ThrowIfNull(definition);
+        return definition.Kit.Select(item => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields?.Weapon is { } weapon
+            ? (int?)weapon.MissileArt : null).ToArray();
     }
 
     /// <summary>The session's experience data from the three tables (ARC-WORLD-030 readers), or null with the reason.</summary>

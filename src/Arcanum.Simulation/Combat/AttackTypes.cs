@@ -301,6 +301,11 @@ public sealed record AttackRequest
     /// dispatcher's 0x4B65D0, which the host answers: a PC or an NPC led by one, a weapon with an ammunition type). The attack is
     /// refused after the hit location's roll and before every other roll.</summary>
     public bool AmmunitionShort { get; init; }
+
+    /// <summary>ARC-COMBAT-016: the shot flies as a projectile (ledger PF1): a hit is decided now and its damage left to the arrival
+    /// (<see cref="AttackResolver.LandHit"/>), so the resolution of a hit has no damage packet; a miss and a critical miss resolve as
+    /// usual (the critical-miss procedure runs at the shot).</summary>
+    public bool DeferHit { get; init; }
 }
 
 /// <summary>Why the resolver refused the attack: before any roll (ARC-RES-030 C11, C16), or after the hit location's roll for want of

@@ -157,7 +157,7 @@ taken), each to be checked against the requirements and read in the executable w
 
 | Task | Scope |
 | --- | --- |
-| ARC-COMBAT-016 Projectiles in flight | The projectile object of 0x4B39B0 (field 127, −1 none): its flight, its timing of the hit on arrival (0x4B2870), its drawing in the viewer, and what a miss does with it (the 1-in-3 stray hit on a critter it passes, RH3). |
+| ARC-COMBAT-016 Projectiles in flight | Done ([below](#projectiles-in-flight-arc-combat-016)): the projectile of 0x4B39B0 (field 127, −1 none), its flight, the hit on arrival (0x4B2870), its drawing in the viewer and a miss's stray strike (ledger PF1–PF14). |
 | ARC-COMBAT-017 Thrown weapons | The thrown item leaving the hand (weapon flag 0x200 "default throws" at the attack start 0x434B00, RH2; the session keeps no such flag yet), the throw goal 37 and script point 6, its landing cell, picking it up again, and the auto-switch re-wield. The throwing dagger (6072, melee skill, default throws) is today attacked with as a reach weapon that stays in the hand. |
 | ARC-COMBAT-018 Second projectile and scatter | The second projectile of a bow from expert and the scatter of a missed throw (RH2, RH3), and their ammunition. |
 | ARC-COMBAT-019 Returning weapons | Boomerangs (weapon flag 0x40, the throwing skill): the shot's thrown range (0x4622A0, RH4: strength and the item's weight, which the hero's equipment facts do not hold yet), the projectile's return and the "weapon away" bit (RH3), and their catch. |
@@ -194,10 +194,44 @@ object-attack, critical and line-of-fire stages that follow the cast stage in th
 native observation: the goal's reach test admits only a clear line, so the viewer meets a wall blocker only when the line changed
 after it; the session tests cover the wall's shot.
 
-Not ready: thrown weapons (RH2, ARC-COMBAT-017; the throwing dagger keeps its ARC-COMBAT-012 reach behaviour), boomerangs (RH3, RH4,
-ARC-COMBAT-019), the projectile's flight and the hit on its arrival (RH3, ARC-COMBAT-016: the hit resolves on the action frame), a
-bow's second projectile (ARC-COMBAT-018), the out-of-ammunition refusal's sound, flag and auto-switch (RA3), the firearms' and
+Not ready: thrown weapons (RH2, ARC-COMBAT-017; the throwing dagger keeps its ARC-COMBAT-012 reach behaviour, and since ARC-COMBAT-016 its shot flies as a projectile while it stays in the hand), boomerangs (RH3, RH4,
+ARC-COMBAT-019), a bow's second projectile (ARC-COMBAT-018), the out-of-ammunition refusal's sound, flag and auto-switch (RA3), the firearms' and
 bows' repeat shot (RT rows), the weapon attack ART, a follower struck on the line (RH6), and the NPCs' ranged attacks (no AI).
+
+## Projectiles in flight (ARC-COMBAT-016)
+
+Requirements: [FR-COMBAT-007](../requirements/combat-magic-tech.md#fr-combat-007) (the projectile of a ranged shot, partly) and
+[FR-COMBAT-006](../requirements/combat-magic-tech.md#fr-combat-006) (the hit's timing, partly). Read in the retail 1.0.7.4
+executable by two readers ([ledger PF1–PF14](../research/ledger/combat.md#projectiles-in-flight-arc-combat-016)); the weapon's
+projectile art is field 127 (`CombatWeaponFields.MissileArt`, slot 74, [combat fields](../formats/combat-fields.md)).
+
+| Rule | Value |
+| --- | --- |
+| Which shots fly (PF1, PF2) | A shot on the ranged path (`RangedPath`) whose weapon has a projectile art (not −1). Every installed bow, 5 of the 41 firearms, the throwing weapons and the throwing dagger have one, all scenery arts (combat census). Without one the hit runs on the action frame as before. |
+| Decided at the shot (PF1) | `SessionAttack.Flight` / `SessionObjectAttack.Flight`: the attack runs as without it up to the outcome (refusals, the hit location, the ammunition, the check, the dodge, the fate, the concealment) and a critical miss turns on the hero at once; a hit or critical hit carries no damage yet (`AttackRequest.DeferHit`). The result names the shot in flight (`SessionAttackResult.Shot`), a hit or a miss; at most `MaxShotsInFlight` (16) fly. |
+| Strike (PF5, PF6, PF8) | `LandShot` (an NPC) and `LandShotOnObject` (a portal, container, scenery, trap or wall): the shot's own target when it hit, with the carried location, aim and critical (`AttackResolver.LandHit` rolls only the damage, on the target as it is now; a target dead by then is refused); any other object as a forced hit without a check (`AttackResolver.ForcedHit`: torso, no critical). A miss never strikes its own target (walls excepted: they share one identity and take nothing). Every step after the resolution follows as for an attack at once; the shot's fate, concealment and ammunition are not spent again. The damage uses the shot's weapon and skill (field 0x50); the attacker's values and the wear of the hero's items are those of the strike (a weapon wielded since then takes the wear). |
+| End (PF9) | `EndShot`: the shot flew beyond its range, off the map or its map left the screen; a carried hit is lost. |
+| Not saved | The session keeps its shots in memory only: a snapshot taken during a flight holds what the shot spent and no projectile, and a restored session has none (Steamwoven; the original's projectile is a map object). |
+| Flight (PF3, PF4) | `ProjectileRules.Launch` and `Step`: the pixel line from the hero's tile centre to the destination tile's (the goal target's tile at the shot, also after a line-of-fire redirect, PF2), in 10-pixel steps, replayed when they run out; four steps a 35 ms tick (`TickMs`, `StepsIn`; the weapon's eye-candy speed column is not read). A tile change is a `ProjectileCrossing` of the tile left; a point off the map ends the flight. |
+| Crossing (PF5–PF7, PF9) | `ProjectileRules.Cross` (0x4B2870): a hit strikes its target where the target stands on the tile left; leaving the destination turns the shot into a free miss; a miss meets, flying free, the object stopping its next step, else each living critter on the tile left other than its target and the hero, struck when the session's `combat.StrayStrike` roll of 1..3 is 1; with nothing struck beyond the range from the start the flight ends. The obstruction is the line of fire's step cost (flags 0x0C): the original's flags 0x0D stop at a closed door or window before its cover test (PF7), which is not ready. |
+| Facing (PF13, PF14) | `ProjectileRules.Direction` (32 screen directions, 0 up, clockwise) and `FacedArt` (a scenery art: rotation direction mod 8, number + direction / 8). |
+
+Viewer (AREA): with the wielded kit weapon's projectile art (`AreaStartingHero.KitMissileArt`) the action frame's hit, the line of
+fire's NPC or object blocker and the wall shot fly (`ARC-COMBAT-016 projectile-launch`); each frame the projectile takes the steps
+its ticks owe (`ProcessAreaProjectiles`), the tiles it leaves are crossed over the shown map (the struck target where it stands, the
+hero, the companions on their live cells and the map's living NPCs in row order, the line-of-fire view's step for an obstruction),
+and a strike resolves through the session with the same sounds, status line, death pose and drawn bodies as a hit at once
+(`projectile-end strike=… struck=…`). The projectile is drawn from its faced art at its tile, moved by its pixel offset along the
+line, its frame advanced once per step; each projectile keeps the session that holds its shot, and a map change, a reload (F8 or the load window) or the smoke's end gives the flights up (a strike the session refuses ends its shot there too). A companion struck on the
+way ends the shot without a strike (RH6, not ready). Native smoke `ARC-COMBAT-016 native-smoke projectile PASS` (in the ranged stage,
+with the lent bow and scenery art 0 as its projectile art): from the first cell each shot flies, a hit deals nothing at the shot and
+strikes its target on arrival, a miss never strikes its target, the arrow is drawn while it flies and the session keeps no shot
+afterwards, until a hit has landed and a miss has flown (at most 12 shots; the miss is reported, not required).
+
+Not ready: the second projectile of a bow (ARC-COMBAT-018), thrown items and their scale arc (PF11, PF12, ARC-COMBAT-017),
+boomerangs (ARC-COMBAT-019), the AI alert, taunt and attack end at the strike (no AI), the weapon's miss scripts and the item event
+0x800000 (PF9, PF10), a closed portal stopping a free flight (PF7), the eye-candy speed column, the additive draw of weapon flag 0x20,
+and a projectile across a save.
 
 ## Viewer (AREA)
 
@@ -235,9 +269,9 @@ bows' repeat shot (RT rows), the weapon attack ART, a follower struck on the lin
 
 - AI: no NPC fights back, flees, joins combat mode or changes its reaction when attacked; the attacked NPC's AI pass, combat
   focus and taunts; the exit gate's threats are still empty.
-- Thrown and returning weapons and projectile flight (the [proposed split](#proposed-split-of-true-ranged-combat-not-ready); a melee-skill
-  weapon with reach, the ammunition per shot and the line of fire are in since ARC-COMBAT-012, bow and firearm shots since
-  ARC-COMBAT-015), the "default throws" weapon, backstab (needs facing and
+- Thrown and returning weapons and a bow's second projectile (the [proposed split](#proposed-split-of-true-ranged-combat-not-ready); a
+  melee-skill weapon with reach, the ammunition per shot and the line of fire are in since ARC-COMBAT-012, bow and firearm shots
+  since ARC-COMBAT-015, projectiles in flight since ARC-COMBAT-016), the "default throws" weapon, backstab (needs facing and
   perception), aimed-attack critical bonuses beyond the resolver's, the target's awareness (an NPC always sees the hero) and the
   darkness penalty (every position is lit), the critical effects listed above as not ready, the taking-damage
   and dying scripts, blood splotches, the corpse's decay timer, alignment and the kill log.
@@ -265,7 +299,9 @@ resistances, conditions), `tests/Arcanum.Session.Tests/AttackStateTests.cs` (NPC
 until the kill with the experience, loot of a session kill, refusals before any roll, the aimed attack, the ranged refusal,
 experience-free sessions), `tests/Arcanum.Simulation.Tests/Combat/LineOfFireRulesTests.cs` and
 `tests/Arcanum.TerrainViewer.Tests/AreaLineOfFireTests.cs` (ARC-COMBAT-012: the geometry, samples, cover, walls, portals, the
-corner switch), `tests/Arcanum.Session.Tests/CriticalEffectsStateTests.cs` (ARC-COMBAT-009 and the ammunition per shot of ARC-COMBAT-012: a critical hit disarms
+corner switch), `tests/Arcanum.Simulation.Tests/Combat/ProjectileRulesTests.cs` and `tests/Arcanum.Session.Tests/ProjectileStateTests.cs`
+(ARC-COMBAT-016: the direction and faced art, the flight along the line of fire's tiles and past it, the strike, stray, obstruction
+and range end; the shot decided at once and struck on arrival, the forced hit, the end, the limit, no shot after a restore), `tests/Arcanum.Session.Tests/CriticalEffectsStateTests.cs` (ARC-COMBAT-009 and the ammunition per shot of ARC-COMBAT-012: a critical hit disarms
 an NPC and the weapon lies at its cell after a restore, items without a cell stay, the hero's dropped weapon lies at its cell until it is picked up (ARC-WORLD-059), a crippled
 arm drops a torch it can no longer hold), `tests/Arcanum.Session.Tests/AttackWearStateTests.cs` (armour wear to the second break, the critical
 weapon effects and invulnerability, the hero's weapon to its break, bare hands never killing, an NPC attacker, object targets,

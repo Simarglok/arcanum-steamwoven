@@ -215,6 +215,15 @@ The request gives:
 There is no roll and no critical procedure. `DifficultyScalesFullAmount` false leaves that amount unscaled (MG35's Steamwoven
 fix). `LifeDamage.FromStep` turns the result into the life state's packet, with the plain dying animation for a death flag.
 
+## Carried hit of a projectile (ARC-COMBAT-016)
+
+`AttackRequest.DeferHit` resolves a shot that flies as a projectile (ledger PF1): every roll up to the outcome runs, a miss and a
+critical miss resolve as usual, and a hit or critical hit returns without its damage packet or wear. `AttackResolver.LandHit` rolls
+that hit's damage when the projectile strikes (PF5, PF8): on the request's target as it is then, with the carried location, aim,
+critical and weapon magic, only the damage's rolls (its `Rolls`), and the wear; a target dead by then is refused (`TargetDead`).
+`AttackResolver.ForcedHit` is a stray strike's or an obstruction's carried hit (PF6, PF7): torso, not aimed, no critical, no roll.
+The session's use is in the [hero attack runtime](hero-attack-runtime.md#projectiles-in-flight-arc-combat-016).
+
 ## Rule settings and anomaly switches
 
 Owner decision D8 gives combat two settings: **Original**, the retail 1.0.7.4

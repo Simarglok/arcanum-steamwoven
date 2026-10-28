@@ -37,7 +37,7 @@ public static class CombatFieldReader
     // Weapon block (59..85).
     private const int WeaponFlagsSlot = 59, BonusToHitSlot = 61, MagicHitSlot = 62, DamageLowerSlot = 63, DamageUpperSlot = 64, MagicDamageSlot = 65,
         SpeedSlot = 66, MagicSpeedSlot = 67, RangeSlot = 68, MagicRangeSlot = 69, MinStrengthSlot = 70, MagicMinStrengthSlot = 71,
-        WeaponAmmoTypeSlot = 72, AmmoConsumptionSlot = 73, CritHitChartSlot = 76, MagicCritHitChanceSlot = 77, MagicCritHitEffectSlot = 78,
+        WeaponAmmoTypeSlot = 72, AmmoConsumptionSlot = 73, MissileArtSlot = 74, CritHitChartSlot = 76, MagicCritHitChanceSlot = 77, MagicCritHitEffectSlot = 78,
         CritMissChartSlot = 79, MagicCritMissChanceSlot = 80, MagicCritMissEffectSlot = 81;
     // Ammunition block (59..65).
     private const int AmmoFlagsSlot = 59, AmmoQuantitySlot = 60, AmmoTypeSlot = 61;
@@ -223,7 +223,7 @@ public static class CombatFieldReader
                 Ranges(Array(DamageLowerSlot, DamageTypes), Array(DamageUpperSlot, DamageTypes)), Array(MagicDamageSlot, DamageTypes),
                 Int(SpeedSlot), Int(MagicSpeedSlot), range, Int(MagicRangeSlot), Int(MinStrengthSlot), Int(MagicMinStrengthSlot), ammoType,
                 Int(AmmoConsumptionSlot), Int(CritHitChartSlot), Int(MagicCritHitChanceSlot), Int(MagicCritHitEffectSlot), Int(CritMissChartSlot),
-                Int(MagicCritMissChanceSlot), Int(MagicCritMissEffectSlot));
+                Int(MagicCritMissChanceSlot), Int(MagicCritMissEffectSlot)) { MissileArt = Int(MissileArtSlot) };
         }
         else if (type == AmmoType)
             ammo = new(Flags(AmmoFlagsSlot), Int(AmmoQuantitySlot), Int(AmmoTypeSlot));

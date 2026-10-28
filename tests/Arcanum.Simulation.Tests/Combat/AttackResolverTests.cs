@@ -33,6 +33,34 @@ public sealed class AttackResolverTests
     }
 
     [TestMethod]
+    public void AProjectileCarriesTheHitAndItsDamageIsRolledOnArrival()
+    {
+        // ARC-COMBAT-016 (ledger PF1, PF5): the shot rolls its check only; the strike rolls the damage on the target as it is then.
+        var shot = Run(Melee() with { DeferHit = true }, PlainHit());
+        Assert.AreEqual((AttackOutcome.Hit, (AttackDamage?)null, (AttackWear?)null), (shot.Outcome, shot.Damage, shot.Wear));
+        var arrival = new ScriptedRolls(new[] { (Normal, 7) });
+        var landed = AttackResolver.LandHit(Melee(), shot, arrival);
+        arrival.AssertConsumed();
+        Assert.AreEqual((AttackOutcome.Hit, 7, 1), (landed.Outcome, landed.Damage!.HitPointDamage, landed.Rolls.Count));
+        // A critical hit carries its critical: the multiplier is rolled on arrival.
+        var critical = Run(Melee() with { DeferHit = true }, CriticalHit());
+        Assert.AreEqual((AttackOutcome.CriticalHit, (AttackDamage?)null), (critical.Outcome, critical.Damage));
+        var crit = new ScriptedRolls(Concat(new[] { (Normal, 7) }, NoMultiplier()));
+        Assert.AreEqual(AttackOutcome.CriticalHit, AttackResolver.LandHit(Melee(), critical, crit).Outcome);
+        crit.AssertConsumed();
+        // A miss resolves at the shot as before.
+        Assert.AreEqual(AttackOutcome.Miss, Run(Melee() with { DeferHit = true }, Concat(Opening(), new[] { (AttackCheck, 76), (AttackCritical, 4) })).Outcome);
+        // The target dead on arrival is refused; a resolution with damage or a miss cannot be landed.
+        var dead = Melee() with { Target = Npc() with { Conditions = CombatantConditions.Dead } };
+        Assert.AreEqual(AttackRefusal.TargetDead, AttackResolver.LandHit(dead, shot, new ScriptedRolls([])).Refusal);
+        Assert.ThrowsExactly<ArgumentException>(() => AttackResolver.LandHit(Melee(), Run(Melee(), Concat(PlainHit(), new[] { (Normal, 7) })), new ScriptedRolls([])));
+        // The forced hit of a stray strike: torso, not aimed, no critical, nothing rolled until the damage.
+        var forced = AttackResolver.ForcedHit(weaponMagicCancelled: false);
+        Assert.AreEqual((AttackOutcome.Hit, HitLocation.Torso, false, 0), (forced.Outcome, forced.HitLocation, forced.Aimed, forced.Rolls.Count));
+        Assert.AreEqual(7, AttackResolver.LandHit(Melee(), forced, new ScriptedRolls(new[] { (Normal, 7) })).Damage!.HitPointDamage);
+    }
+
+    [TestMethod]
     public void AimedAttackSkipsTheLocationRoll()
     {
         var request = Melee() with { AimedLocation = HitLocation.Head };

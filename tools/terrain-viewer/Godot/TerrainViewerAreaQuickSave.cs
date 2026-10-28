@@ -194,6 +194,7 @@ public partial class TerrainViewerApp
     {
         StopWorldRoute("QUICK_LOAD");
         CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load"); CancelInventoryApproach("quick load"); CancelAreaAttack("quick load");
+        ClearAreaProjectiles("quick load");
         if (_mapTransfers?.Clear() is { } dropped) GD.Print("ARC-WORLD-038 quick load dropped the queued transfer to=" + dropped.To.Name);
         var grid = (AreaGridSession)_worldActor.Session!;
         var actor = loaded.QueryActor();
@@ -226,6 +227,8 @@ public partial class TerrainViewerApp
     {
         StopWorldRoute("QUICK_LOAD");
         CancelAreaUseApproach(reason); CancelTalkApproach(reason); CancelInventoryApproach(reason); CancelAreaAttack(reason);
+        // ARC-COMBAT-016: the flights of the replaced session are given up.
+        ClearAreaProjectiles(reason);
         if (_areaTransitions?.Cancel() is { } dropped) GD.Print($"ARC-WORLD-011 {reason} dropped the queued transfer to=" + dropped.ToMap);
         if (_mapTransfers?.Clear() is { } queued) GD.Print($"ARC-WORLD-038 {reason} dropped the queued transfer to=" + queued.To.Name);
         var actor = loaded.QueryActor();
@@ -266,6 +269,8 @@ public partial class TerrainViewerApp
         if (_areaTransitions is not null) _areaTransitions = new(maps.Values, currentMap, session);
         // ARC-SCRIPT-017: the cached use-script host kept the previous owner.
         _useScriptHost = null;
+        // ARC-COMBAT-016: the replaced session's flights end while it still lives.
+        ClearAreaProjectiles("session replaced");
         previous?.Dispose();
     }
 
