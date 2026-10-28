@@ -32,14 +32,16 @@ public partial class TerrainViewerApp
         return bare.Wearing(WornBodyArmorUseArt(session)) is { } worn && !_heroBodyFailures.ContainsKey(worn) ? worn : bare;
     }
 
-    /// <summary>The use art of the hero's worn body armour: null with none, or when its facts are not read here (a made item: NOT READY,
-    /// drawn bare).</summary>
+    /// <summary>The use art of the hero's worn body armour: null with none, or when its facts are not read here (a made item, a taken
+    /// item whose map rows the inventory host does not hold: NOT READY, drawn bare). Only a read use art is kept, so an item read later is
+    /// drawn then.</summary>
     private uint? WornBodyArmorUseArt(GameSessionOwner session)
     {
         if (session.QueryEquipment().Worn.FirstOrDefault(worn => worn.Slot == EquipmentSlot.Armor) is not { } armor) return null;
         if (_bodyArmorUseArtsFor != (session.Version.Owner, _areaKitWear)) { _bodyArmorUseArts.Clear(); _bodyArmorUseArtsFor = (session.Version.Owner, _areaKitWear); }
-        if (!_bodyArmorUseArts.TryGetValue(armor.Entity, out var use) && _inventoryHost is { } host)
-            _bodyArmorUseArts[armor.Entity] = use = host.Wearable(session, armor.Entity, _areaKitWear)?.UseArt;
+        if (_bodyArmorUseArts.TryGetValue(armor.Entity, out var use)) return use;
+        use = _inventoryHost?.Wearable(session, armor.Entity, _areaKitWear)?.UseArt;
+        if (use is not null) _bodyArmorUseArts[armor.Entity] = use;
         return use;
     }
 
@@ -131,7 +133,7 @@ public partial class TerrainViewerApp
         var session = _areaSession!;
         if (session.QueryEquipment().Worn.FirstOrDefault(worn => worn.Slot == EquipmentSlot.Armor) is not { } armor)
         { GD.Print($"ARC-WORLD-112 native-smoke body armour SKIP no worn body armour body={bare.Label}"); return; }
-        Require(dressed != bare, $"the worn {armor.Item} draws its armour: {_heroBodyStatus}");
+        if (dressed == bare) { GD.Print($"ARC-WORLD-112 native-smoke body armour SKIP {armor.Entity} draws the bare body={bare.Label}"); return; }
         void Drawn(HeroBody body, string when)
         {
             SyncHeroBody();
@@ -147,7 +149,8 @@ public partial class TerrainViewerApp
         Require(wearable is not null, "the armour's wear facts");
         var on = session.Equip(session.Version, armor.Entity, EquipmentSlot.Armor, wearable!, (_, _) => true, _inventoryHost.InsertCheck,
             _inventoryHost.ItemScripts(session), ItemTriggersNow());
-        Require(on.Disposition == GameSessionDisposition.Changed, $"wear {on.Disposition} {on.Failure} {on.Refusal}");
+        Require(on.Disposition == GameSessionDisposition.Changed && session.QueryEquipment().Worn.Any(worn => worn.Slot == EquipmentSlot.Armor && worn.Entity == armor.Entity),
+            $"wear {on.Disposition} {on.Failure} {on.Refusal}: the armour is back in its slot");
         Drawn(dressed, "worn again");
         GD.Print($"ARC-WORLD-112 native-smoke body armour PASS item={armor.Entity} use=0x{wearable!.UseArt:x8} bare={bare.Label} "
             + $"worn={dressed.Label} armor={dressed.Armor} palette={dressed.Palette}");

@@ -31,7 +31,8 @@ public static class BodyArmorArtRules
         _ => art,
     };
 
-    /// <summary>The armour part an item's use art gives its wearer (0x5044F0): bits 6..9 of an item art id, 0 for another type.</summary>
+    /// <summary>The armour part an item's use art gives its wearer (0x5044F0): bits 6..9 of an item art id, 0 for another type (the bits
+    /// <c>Arcanum.Data.Combat.CombatItemArt.Subtype</c> reads too; Simulation does not reference Data).</summary>
     [OriginalFunction(0x5044F0, OriginalFunctionScope.Full)]
     public static int ItemArmor(uint useArt) => useArt >> 28 == ItemArt ? (int)((useArt >> 6) & 15) : 0;
 

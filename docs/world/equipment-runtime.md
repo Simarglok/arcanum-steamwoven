@@ -170,8 +170,9 @@ from its stored fields (`SessionEquipmentFacts.Wearable`); the session saves non
 The AREA viewer's hero (ARC-UI-039's `HeroBody`) wears the session hero's worn body armour: `HeroBody.Wearing(useArt)` sets the
 body's armour part and palette, and the swap draws the new body at the next frame after a wear, a take-off, a new game or a load.
 The file the id names is the art owner's rule N1 (plate parts 4 and 6 draw the sexless body, elf as human and halfling as dwarf). An
-installed observation: all twelve pre-made heroes' kit body armour loads (clothes, part 8, for most; the robe 8114, part 5 palette 2,
-for the human man and the elf woman). Not ready: a made item's use art is not read (the hero is drawn bare in it); a worn body whose
+installed observation: the body armour in every pre-made hero's kit loads (clothes, part 8, for most; the robe 8114, part 5 palette
+2, for the human man and the elf woman). Not ready: a made item's use art is not read, nor a taken item's whose map rows the inventory
+host no longer holds (after a transition to another map or a load there); the hero is drawn bare in it. A worn body whose
 ARTs do not read is drawn bare; NPCs and companions keep their map art (the session's NPC wear, ARC-WORLD-103/106, does not redraw
 them); the viewer's art check still answers yes, so an item whose armour art is missing is worn and drawn bare. Tests:
 `BodyArmorArtRulesTests`, `HeroBodyArtTests`, `EquipmentStateTests`; native smoke `ARC-WORLD-112 native-smoke body armour PASS`

@@ -164,6 +164,7 @@ public sealed class HeroBodyArtTests
             // The pre-made start wears the kit's best body armour (ARC-WORLD-034); the human woman's dress stays carried.
             var armour = load.KitWear!.Where(item => item is not null && Arcanum.Simulation.Equipment.EquipmentRules.WearSlot(item.Item)
                 == Arcanum.Simulation.Equipment.EquipmentSlot.Armor).Select(item => item!).ToArray();
+            Assert.IsTrue(armour.Length > 0, $"{name}: the kit holds body armour");
             foreach (var item in armour)
             {
                 var worn = bare.Wearing(item.UseArt);
@@ -173,7 +174,6 @@ public sealed class HeroBodyArtTests
                 report.Add($"{name} {item.Kind.Prototype}: {worn.Value.Label} armor={worn.Value.Armor} palette={worn.Value.Palette}");
             }
         }
-        Assert.IsTrue(report.Count >= 11, "the pre-made kits hold body armour");
         Console.WriteLine(string.Join("\n", report));
     }
 }

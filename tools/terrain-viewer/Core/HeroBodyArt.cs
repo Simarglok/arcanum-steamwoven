@@ -49,12 +49,12 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
     public HeroBody? Wearing(uint? useArt, int basePalette = 0)
     {
         if (basePalette is < 0 or > 3) return null;
-        var current = Selector(CritterArt);
+        var current = Selector(CritterArtType);
         if (BodyArmorArtRules.WornArt(current, BodyArmorArtRules.WithPalette(current, basePalette), useArt) is not { } worn) return null;
         return this with { Armor = SoundCueRules.CritterArtArmor(worn), Palette = BodyArmorArtRules.Palette(worn) };
     }
 
-    private const uint CritterArt = BodyArmorArtRules.CritterArt << 28;
+    private const uint CritterArtType = BodyArmorArtRules.CritterArt << 28;
 
     /// <summary>The folder and file prefix of this body's critter ART (for example <c>EFM</c>). Plate armour (4, 6) has one
     /// sexless art per body and none for the elf or halfling body, which take the human and dwarf ones (rule N1).</summary>
