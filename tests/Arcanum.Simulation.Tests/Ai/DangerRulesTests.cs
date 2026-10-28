@@ -23,7 +23,7 @@ public sealed class DangerRulesTests
         Assert.AreEqual(DangerState.CombatFocus, DangerRules.Read(DangerFlags.Fighting));
         Assert.AreEqual(DangerState.Surrender, DangerRules.Read(DangerFlags.Surrendered | DangerFlags.Fighting));
         Assert.AreEqual(DangerState.Flee, DangerRules.Read(DangerFlags.Fleeing | DangerFlags.Surrendered | DangerFlags.Fighting));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DangerRules.Read((DangerFlags)(1 << 9)));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DangerRules.Read((DangerFlags)(1 << 10)));
     }
 
     [TestMethod]

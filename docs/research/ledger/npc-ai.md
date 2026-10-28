@@ -131,7 +131,14 @@ off, including after a PC's kill. Read on 2026-10-20 by a first reader and, inde
 questions (method step 6). Both agree on every row. The second reader added the script executor's other dialog-point rules
 (generator NPCs skip every script, a mind-controlled NPC's dialog script is replaced), the stale partial-step value of MR15 and
 that set no-flee accepts any object type; the first reader re-read them and agrees. P2 and P6 above were read again by both:
-their ARC-RES-048 verdicts stand. Every direct branch stays inside `.text`.
+their ARC-RES-048 verdicts stand. Every direct branch stays inside `.text`. ARC-WORLD-082 (slice I5) re-read should flee, the HP ratio, both party
+functions, fight or flee, the flee-spell step, perform fleeing, perform surrender, combat perform's back-off start, the back-off
+run, the kill notification, flee, stop fleeing and set no-flee on 2026-10-28, one reader, agreeing with MR1–MR3, MR6, MR7 (this
+function's set and clear), perform fleeing in MR8 and MR9, perform surrender in MR10, MR12, MR14 and MR16. Details the rows leave implicit: SPELL_FLEE is critter flag 0x10000 (field 0xDA, beside NO_FLEE 0x8000000); the
+party function hands a PC straight to the root step and a leaderless non-PC writes size 1 and its level itself; perform
+surrender tests the fleeing-from handle for null, dead, then unconscious; combat perform and the back-off compare the 64-bit
+distance signed in its high word, unsigned in its low word; the kill notification's square query passes the NPC type mask and
+reads the state before comparing its source with the killer.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
