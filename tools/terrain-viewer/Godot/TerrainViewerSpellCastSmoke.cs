@@ -391,6 +391,8 @@ public partial class TerrainViewerApp
             HotkeyKey(Key.Key1);
             Require(_spellTargeting is null && _hotkeyActivations == activations + 2, "an empty entry does nothing: " + _hotkeyNotice);
             GD.Print($"ARC-UI-022 native-smoke hotkeys PASS spell={latest.Index} weapon-entry={(weaponCast is null ? "skipped" : "activated")} activations={_hotkeyActivations - activations}");
+            // ARC-UI-027: the bar's art, its clicks and its right-button drag.
+            await RunAreaHotkeyBarSmokeAsync(session, latest.Index);
             GD.Print("ARC-MAGIC-015 native-smoke cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, Cast = first, MissileCast = second, WeaponCast = weaponCast,
                 Parity = "NOT_VERIFIED (spell UI, eye-candy timing and the missile read in the original executable; no original-runtime run)" }));

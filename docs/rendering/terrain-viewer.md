@@ -1392,18 +1392,17 @@ game folder like the skill texts); a file that is missing falls back to the proj
 a second for a load still running; then its entries wait in a queue that the next frames post once the texts arrive. The two
 formats take their one number at the first `%d` or `%i` (`%%` is a percent sign; another conversion stays as text).
 
-The message window (`AreaMessageWindow`, bottom centre) is the smallest bounded stand-in for the original's: the newest entry
-with its title and lines, a history of the last ten browsed with ‹ and ›, and × hiding it until the next entry; its buttons take
-no focus, and a click elsewhere on it reaches the world. A different session (a quick load, a new game) empties it and its
+Since ARC-UI-023 the entries go to the original's [message log](#message-log-arc-ui-023) in the bottom strip (the diagnostic
+`AreaMessageWindow` is gone): a level-up entry is drawn with its icon, the title, the level line and the points line (or the
+scheme text on two lines), and its drawing plays 3005. A different session (a quick load, a new game) empties the log and the
 queue, and so does a session that ends without one (a failed reload); a map transfer, the main map's window move or world-map
-travel carries the session and keeps them. No other original
-message uses it yet.
+travel carries the session and keeps them.
 
 Self-test inside `ARC-UI-007 self-test PASS` (synthetic hero: an award to level 3 posts two entries with the project's labels,
 eleven more keep the last ten); native smoke `ARC-UI-046 native-smoke level message PASS` on the original installation (all six
 files load; an award built in the smoke, without changing the session, posts a points entry and a scheme entry that read the
-player's title, formats and names, each with the level-up sound; no text is printed). Not ready: the original's message
-window art, its other messages and its three interface callbacks after the entry (button state, two refreshes, not traced).
+player's title, formats and names, each with the level-up sound; no text is printed). Not ready: the original's other messages
+and its three interface callbacks after the entry (button state, two refreshes, not traced).
 
 ### Save list (ARC-UI-010)
 
@@ -1543,8 +1542,53 @@ prints `ARC-UI-012 native-smoke scene flow PASS` (the game's in-play texts and q
 map `arcanum1-024-fixed` and beginning the game there as the first hero at the map list's start, Escape's in-play
 window, Save Game saving, Quit loading the start map again with a fresh session and the main menu reopened, the save
 kept, its root Escape exiting). The short window 4 is covered by the core tests only (no turn-based round on another's
-turn in the self-test or the smoke). Not done: the start movies, the menu after the hero's death
-or the game's end (the original restarts it there), the original menu art and button sounds.
+turn in the self-test or the smoke). Not done: the start movies, the menu after the game's end (the original restarts
+it there; after the hero's death see [Hero death](#hero-death-arc-ui-026)), the original menu art and button sounds.
+
+### Hero death (ARC-UI-026)
+
+What follows the hero's death in crash-site-area (exterior, cave and map mode), as the original's in single player
+([ledger PD1–PD9](../research/ledger/ui-audio.md#hero-death-arc-ui-026)); the core is
+[`AreaHeroDeath`](../../tools/terrain-viewer/Core/AreaHeroDeath.cs), the art and timing the original's.
+
+- **The wait.** Five seconds after the session's hero dies (real time; the original counts from the end of the PC's dying
+  animation, which the viewer does not play for the hero) the death comes. Play goes on meanwhile. When it comes the
+  hero is checked again (one brought back to life meanwhile is not reset), the inventory and barter windows close, and an
+  open main-menu window (the in-play menu, its save and load windows, the options) closes and the death comes again
+  0.3 s later. A session whose hero is dead already when it comes (a load) starts nothing: only a death does.
+- **The slides.** The screen fades to black (2 s) and owns every key and mouse button from then on; the world stands still
+  under it (the game clock, the walk, the scene's sounds). The default death slide of the installed `rules\slide.mes`
+  (message 0, read at module load: its first word names the picture in `slide\`, its second the voice in
+  `sound\speech\slide\`; the installed one is `death.bmp` with `DeathSound.mp3`) fades in (2 s) while the slides' music
+  `sound\music\DwarvenMusic.mp3` loops, then its voice plays. The slide ends when the voice ends (at once without one),
+  on a key's release or a left, right or middle button release (presses do nothing); Escape ends the whole show. Input
+  during a fade does nothing. The slide fades out (2 s). The fades take their 2 s in both rule modes; the original's
+  flash by, a technical bug (PD9). A slide whose message names no picture and voice is skipped; one whose picture cannot be read shows
+  nothing and fades out. Without the table (no game folder) no slide shows: the fade to black leads straight to the reset.
+  Scripts that queue their own slides do not run (the installed data has none for a death).
+- **The reset.** The game ends as a quit does ([scene flow](#scene-flow-arc-ui-012)): the start scene loads from the launch
+  arguments with a fresh session and the main menu reopens over it (its root Escape exits), fading in from black (2 s).
+  Saves are not touched; a load is the main menu's (Single Player, Load Game or Last Save). There is no window with a
+  choice. A reset refused (another map or the start scene loading, a reset in progress) is tried again every 0.3 s with
+  the screen black; when no start scene is known (no launch arguments, a start map the shown map does not know), or no
+  menu has come 2 minutes after the first try, the screen fades in over the game as it is (the original's reset cannot
+  be refused). A start scene that fails shows its failure.
+
+Automated runs (self-tests, native smokes) keep the death off unless their own check turns it on, as many of them kill
+or wound the hero for other checks. Self-test `ARC-UI-026 self-test PASS synthetic hero death` (the production app over
+the synthetic area owner, a synthetic slide table, picture and voice, the start scene published again): a new game's
+hero dies, the in-play menu opened meanwhile closes after 5 s and the death comes 0.3 s later, the fade to black owns
+the input (Escape opens nothing), the 800 × 600 picture fades in, its voice starts, a key ends it, the reset loads the
+start scene with a fresh session and the reopened main menu, which fades in; a hero brought back to life before the
+death comes is not reset; a voice's end ends the slide; a start scene that does not publish clears the screen over
+the game as it is. Steamwoven's own death window (load the last save, as the
+quit box asks) is a later task: it branches where the show ends, before the reset (`AreaHeroDeath`'s reset step). Native smoke on the original data, map mode on the start map
+with `--main-menu true`: `ARC_AREA_MAP_SMOKE_ONLY=death` prints `ARC-UI-026 native-smoke death PASS` (a new game as the
+first pre-made hero, the hero killed through the session, the death after 5 s on the wall clock, the installed default
+slide's 800 × 600 picture with the slides' music and its voice, a left click through the window ending it, the start
+map loaded again with a fresh session and the main menu reopened). `ARC_AREA_DEATH_CAPTURE=PATH.png` saves the shown
+slide (original art: never into git). Not done: script-queued slides, the end-game and credits slides, the hero's dying
+animation.
 
 ### Options window (ARC-UI-013)
 
@@ -1626,10 +1670,12 @@ on the bars. The main menu's, in-play menu's and options window's buttons play 3
 the press (GB7). The bars are drawn over the windows they open, and those windows (character sheet, inventory, logbook,
 schematics) lay themselves out in the part the bars leave free; while a conversation, barter, reading, the save list,
 the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held. The
-diagnostic HUD moves below the top strip and the message window, follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
-[gauges](#health-and-fatigue-bars-arc-ui-020). The rest of the bottom strip (message log, hot-key slots, recent actions; their keys work, [hotkey bar](#hotkey-bar-arc-ui-022)) and the top
-strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated runs draw no bars
-unless their smoke asks.
+diagnostic HUD moves below the top strip and the follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
+[gauges](#health-and-fatigue-bars-arc-ui-020), and since ARC-UI-023 the bottom strip's message window is the
+[message log](#message-log-arc-ui-023), where the button names appear. Since ARC-UI-027 the hot-key slots, the recent-action buttons and
+the light button are the [hotkey bar](../world/spell-cast-host.md#the-hotkey-bars-art-and-drag-arc-ui-027) (icons, counts, clicks and the
+right-button drag). The top strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated
+runs draw no bars unless their smoke asks.
 
 Tests `AreaGameBarTests` (layout, frames, button states and sounds, texts, interface art names; with `DAT_ROOT` the
 installed art and texts read). Native smoke on the original data, map mode on the start map with `--main-menu true`:
@@ -1639,18 +1685,65 @@ name and lit frame, its down frame with 3000, the release with 3001 opening the 
 Logbook and Schematics opening and closing their windows, the logbook lying between the strips and taking a press inside
 it, Map opening the world map with the bars hidden and back with no hover, Combat in and out of combat mode, Spells showing and hiding
 the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started). Not done: the
-message log, hot-key bar and portraits (later slices; the vials since ARC-UI-020), the skill pane, fate and sleep windows, the town map, the
+hot-key bar and portraits (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023), the skill pane, fate and sleep windows, the town map, the
 buttons' lit art the original sets from game events (0x556A90), the compact interface (F10).
+
+### Message log (ARC-UI-023)
+
+The bottom strip's message window shows the original's message log, as the 1.0.7.4 executable keeps and draws it (ledger
+[ML1–ML8](../research/ledger/ui-audio.md#message-log-arc-ui-023)); the log itself (`AreaMessageLog`, Core) exists in every area
+session, the window only while the [interface bars](#interface-bars-arc-ui-018) are drawn.
+
+- **Entries.** The last ten stored entries are kept; a new one becomes the newest and the shown one, and drawing it plays its
+  sound: a level-up entry 3005, a message 3004 (the hero's encumbrance changes, `mes\critter.mes` 11–17). A message equal to the
+  newest entry's text (A–Z compared without case) is not stored again: the newest is shown and plays its sound once more. Texts (a level-up entry's
+  scheme text) keep at most 199 characters. The viewer's spell lines are a plain text entry (no sound) titled with the project's label "Magic"; the original's
+  own spell messages are not built.
+- **Drawing.** In the message mode the mode's background art (354) lies at (196, 492) of the 800 × 600 screen; an entry fills
+  the text area (211, 503, 383 × 82) with black and draws its icon (438 level up, 442 message, 443 plain, 444 hover) at (217, 510)
+  and its texts in the original's rectangles: a level-up entry its title, level and points lines (the scheme text on two
+  lines); a text entry splits at its first line break into a title line and a body, or fills the whole column (290, 504, 291 × 78).
+  A text entry whose last text does not fit is drawn again without the icon in the wide rectangles (from x 217, 364 wide), cut
+  by characters until it fits. The original's font art (27 for titles, 229 for text, both white) is not drawn: the viewer's font
+  stands in at its sizes.
+- **Scrolling.** The window's upper half (210, 504, 382 × 41) shows the next older entry, as far back as the log holds, and its
+  lower half (210, 545) the next newer one; both are invisible push areas with no sound that act on a release over the area
+  pressed.
+- **Button names.** The pointer entering a bar button and every move while it is there write the button's name
+  (`mes\intgame.mes` 1000–1009) as a hover entry with icon 444, which is never stored and shows only in the message mode and when
+  no entry was stored in the last 3 s (real time). Leaving the button takes the name away.
+- **Panes.** While Spells (the spell pane, `M`) or Skills is down the window belongs to that pane and draws nothing of the log
+  (the panes' own art in the window is a later slice; the viewer's spell pane stays above the strip). A new stored entry puts the
+  window back in the message mode, and the next pointer move over the bottom strip (x 10–790, y 441–590) gives it back to the
+  pane whose button is still down; a pointer move above the strip gives the spells or skills pane's window to the log (not the
+  weapon's spells), as the original's panes own the window only while the pointer is over the strip; the button going up
+  returns the window to the log. The viewer shows the weapon's spells inside the spell pane with Spells down, and treats the
+  whole pane as the original's separate weapon mode while they are open (no return above the strip).
+- **Steamwoven fix (both rule modes).** The original leaves the window blank after a button name is taken away and after the
+  window returns from a pane, until the next entry or scroll click; the viewer shows the scroll position's entry again there
+  (a technical display bug, ML7).
+
+Not ready: entry types 1–3 and 7–13 (listed in ML5), the original's other messages, a held inventory item released over the
+scroll areas (the original drops it through 0x575770), the compact interface's message window (F10), the hovered object's
+portrait and name in the window (ARC-UI-024). Tests `AreaMessageLogTests` (ring, repeats, the 199-character copy, the quiet
+time, scrolling, panes, sounds, layout), `AreaLevelMessagesTests`. Native smoke, part of `ARC_AREA_MAP_SMOKE_ONLY=bar`:
+`ARC-UI-023 native-smoke message-log PASS` (three encumbrance entries with the player's texts through the production post, each
+drawn with the background, its icon and 3004; a repeat not stored and sounding again; the halves clicked through the window's
+GUI; Character's name withheld within 3 s and drawn after, leaving it showing the entry again; Spells taking the window, an entry
+taking it back, a move over the strip returning it, a move above the strip giving it to the log, Spells up showing the entry; a
+long text drawn wide).
 
 ### Hotkey bar (ARC-UI-022)
 
 With an AREA session that has a hero, the keys `1`..`0` activate the session's ten hotkey entries (on the press, not during another critter's turn of a turn-based round) and `A` the latest
 recent action ([contract](../world/spell-cast-host.md#the-hotkey-bar-arc-ui-022),
-ledger [HK rows](../research/ledger/spell-runs.md#hotkey-bar-arc-ui-022)). The bar's hot-key slots and recent-action buttons are not
-drawn as working yet, so keys stand in for its drag and drop: `Ctrl`+`1`..`0` puts the latest recent action (a spell pressed in the
-spell pane, or the palette's Prowl action) on that entry, `Ctrl`+`Shift`+`1`..`0` empties it, and a key `1`..`0` while the
+ledger [HK rows](../research/ledger/spell-runs.md#hotkey-bar-arc-ui-022)). Since ARC-UI-027 the bar's slots and recent-action buttons
+are drawn on the bottom strip and work with the mouse ([hotkey bar art and drag](../world/spell-cast-host.md#the-hotkey-bars-art-and-drag-arc-ui-027)):
+a left click on a slot activates it, a right drag from a slot or the spell pane puts its entry on another slot or off the bar, and a
+recent-action button activates its action. Keys stay as stand-ins: `Ctrl`+`1`..`0` puts the latest recent action (a spell pressed in the
+spell pane, or the palette's Prowl action; the only way to a skill-bar button, as the skill bar is not drawn) on that entry, `Ctrl`+`Shift`+`1`..`0` empties it, and a key `1`..`0` while the
 inventory window holds an item drops the item on the entry (it leaves the grid). The status line lists the entries and the latest
-action. The cast smoke prints `ARC-UI-022 native-smoke hotkeys PASS`.
+action. The cast smoke prints `ARC-UI-022 native-smoke hotkeys PASS` and then `ARC-UI-027 native-smoke hotkey-bar PASS`.
 
 ### Logbook (ARC-UI-008)
 
