@@ -15,6 +15,8 @@ public partial class TerrainViewerApp
     private void PaletteProwlToggle()
     {
         if (!GaitControlsActive || _areaSession is not { } session) { _prowlNotice = "prowl: no area session"; BindGaitPalette(); return; }
+        // ARC-UI-022: the skill bar's button press becomes the latest recent action (0x57EFA0).
+        RecordRecentAction(Arcanum.Simulation.Hotkeys.HotkeyEntry.ForSkill(Arcanum.Simulation.Hotkeys.SkillBarButton.Prowling));
         var result = session.ToggleHeroConcealment(session.Version);
         _prowlNotice = result.Disposition == GameSessionDisposition.Rejected ? $"prowl refused: {result.Failure}"
             : session.IsConcealed(SessionCombatant.Hero) ? "prowling (concealed)" : "prowling off";

@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":52," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":53," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
@@ -86,7 +86,7 @@ internal static class SessionFixtures
         "\"flags\":{\"revision\":0,\"entries\":[{\"flag\":3,\"value\":false},{\"flag\":7,\"value\":true},{\"flag\":9,\"value\":null}]}," +
         "\"actor\":{\"map\":79,\"x\":100,\"y\":200,\"facing\":\"XPlus\"}," +
         "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":1}," +
-        "{\"scope\":\"entity\",\"entity\":\"npc-1\",\"property\":\"hp\",\"value\":12}]}]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + LightingTail;
+        "{\"scope\":\"entity\",\"entity\":\"npc-1\",\"property\":\"hp\",\"value\":12}]}]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + LightingTail;
 
     internal const string QuelledRumors = ",\"quelledRumors\":[]";
     internal const string NoReputations = ",\"reputations\":[]";
@@ -115,6 +115,11 @@ internal static class SessionFixtures
     internal const string NoEffects = ",\"effects\":{\"hero\":[],\"definitions\":[],\"blessings\":[],\"curses\":[]}";
     internal const string NoExperience = ",\"experience\":{\"npcs\":[]}";
     internal const string NoAdvancement = ",\"advancement\":{\"npcs\":[],\"missed\":[]}";
+    // ARC-UI-022: an empty hotkey bar (ten empty entries, two empty recent actions).
+    internal const string NoHotkeys = ",\"hotkeys\":{\"entries\":[" + EmptyHotkey + "," + EmptyHotkey + "," + EmptyHotkey + "," + EmptyHotkey + "," +
+        EmptyHotkey + "," + EmptyHotkey + "," + EmptyHotkey + "," + EmptyHotkey + "," + EmptyHotkey + "," + EmptyHotkey + "],\"recent\":[" +
+        EmptyHotkey + "," + EmptyHotkey + "]}";
+    internal const string EmptyHotkey = "{\"kind\":0,\"item\":null,\"index\":-1}";
     internal const string NoEvents = ",\"events\":{\"registry\":1,\"nextSequence\":1,\"pending\":[]}";
 
     internal static GameSessionOwner GoldenSession()

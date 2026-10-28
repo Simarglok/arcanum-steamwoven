@@ -196,7 +196,7 @@ public sealed class PartyStateTests
         StringAssert.Contains(text, ",\"party\":{\"followers\":[{\"entity\":\"golem\",\"forced\":true,\"spreadOut\":true,\"loyalty\":0}," +
             "{\"entity\":\"ari\",\"forced\":false,\"spreadOut\":false,\"loyalty\":0}]," +
             "\"others\":[{\"entity\":\"sogg\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":0}," +
-            "{\"entity\":\"virgil\",\"standing\":\"Free\",\"spreadOut\":false,\"jilted\":true,\"loyalty\":0}]}" + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + ",\"lighting\":null}");
+            "{\"entity\":\"virgil\",\"standing\":\"Free\",\"spreadOut\":false,\"jilted\":true,\"loyalty\":0}]}" + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + ",\"lighting\":null}");
 
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryParty().Followers.ToArray(), restored.QueryParty().Followers.ToArray());

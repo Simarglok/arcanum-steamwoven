@@ -1543,7 +1543,7 @@ the press (GB7). The bars are drawn over the windows they open, and those window
 schematics) lay themselves out in the part the bars leave free; while a conversation, barter, reading, the save list,
 the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held. The
 diagnostic HUD moves below the top strip and the message window, follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
-[gauges](#health-and-fatigue-bars-arc-ui-020). The rest of the bottom strip (message log, hot-key slots, recent actions) and the top
+[gauges](#health-and-fatigue-bars-arc-ui-020). The rest of the bottom strip (message log, hot-key slots, recent actions; their keys work, [hotkey bar](#hotkey-bar-arc-ui-022)) and the top
 strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated runs draw no bars
 unless their smoke asks.
 
@@ -1557,6 +1557,16 @@ it, Map opening the world map with the bars hidden and back with no hover, Comba
 the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started). Not done: the
 message log, hot-key bar and portraits (later slices; the vials since ARC-UI-020), the skill pane, fate and sleep windows, the town map, the
 buttons' lit art the original sets from game events (0x556A90), the compact interface (F10).
+
+### Hotkey bar (ARC-UI-022)
+
+With an AREA session that has a hero, the keys `1`..`0` activate the session's ten hotkey entries and `A` the latest recent action
+(on the press, not during another critter's turn of a turn-based round; [contract](../world/spell-cast-host.md#the-hotkey-bar-arc-ui-022),
+ledger [HK rows](../research/ledger/spell-runs.md#hotkey-bar-arc-ui-022)). The bar's hot-key slots and recent-action buttons are not
+drawn as working yet, so keys stand in for its drag and drop: `Ctrl`+`1`..`0` puts the latest recent action (a spell pressed in the
+spell pane, or the palette's Prowl action) on that entry, `Ctrl`+`Shift`+`1`..`0` empties it, and a key `1`..`0` while the
+inventory window holds an item drops the item on the entry (it leaves the grid). The status line lists the entries and the latest
+action. The cast smoke prints `ARC-UI-022 native-smoke hotkeys PASS`.
 
 ### Logbook (ARC-UI-008)
 
