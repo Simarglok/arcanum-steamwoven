@@ -129,6 +129,7 @@ public partial class TerrainViewerApp
     private bool TryAreaInventoryClick(Vector2 screen)
     {
         if (InventoryOpen || ActorCell() is not { } cell || InventoryTargetAt(screen) is not { } target) return false;
+        CancelPickPocket("an item click replaced it");
         CancelTalkApproach("an item click replaced it"); CancelAreaUseApproach("an item click replaced it"); CancelInventoryApproach(null);
         var distance = Chebyshev(target.Row, cell);
         var verb = target.Kind == AreaInventoryTargetKind.GroundItem ? "pick up" : "loot";
@@ -179,6 +180,8 @@ public partial class TerrainViewerApp
 
     private void CancelInventoryApproach(string? why)
     {
+        // ARC-SKILLS-010: what replaces a walk to pick up or loot replaces an armed or walking pick pocket too.
+        if (why is not null) CancelPickPocket(why);
         if (_inventoryAfterRoute is null) return;
         _inventoryAfterRoute = null;
         if (why is not null) _inventoryStatus = "walk to pick up/loot cancelled: " + why;
@@ -215,6 +218,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.CloseRequested += EndInventory;
             _inventoryPanel.TakeRequested += TakeFromBody;
             _inventoryPanel.TakeAllRequested += TakeAllFromBody;
+            _inventoryPanel.PlantRequested += item => PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item);
             _inventoryPanel.UseRequested += UseItemFromWindow;
             _inventoryPanel.PointerStill += InventoryPointerStill;
             _inventoryPanel.ReadRequested += ReadItem;
@@ -233,11 +237,13 @@ public partial class TerrainViewerApp
         _inventoryPanel.Open(InventoryView(holder));
         // ARC-WORLD-096: a loot open schedules the looted holder's restock (RK2; a junk pile is no seed holder and has none).
         if (holder is not null) ScheduleRestock(holder, "loot");
-        GD.Print($"ARC-UI-004 inventory open holder={(holder is null ? "none" : SessionJunkPile.Number(holder) is not null ? "junk-pile" : ReferenceEquals(_containerLootSession, _areaSession) ? "container" : "dead-npc")} pc={_areaSession!.QueryPcInventory().Count} loot={_inventoryPanel.ViewForSelfTest!.Loot.Count}");
+        GD.Print($"ARC-UI-004 inventory open holder={(holder is null ? "none" : SessionJunkPile.Number(holder) is not null ? "junk-pile" : ReferenceEquals(_containerLootSession, _areaSession) ? "container" : holder == _pickPocketVictim ? "steal" : "dead-npc")} pc={_areaSession!.QueryPcInventory().Count} loot={_inventoryPanel.ViewForSelfTest!.Loot.Count}");
         RefreshReadyStatus();
     }
 
-    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks, _areaKitDurability, _areaKitWear, _areaKitUse);
+    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks, _areaKitDurability, _areaKitWear, _areaKitUse)
+        // ARC-SKILLS-010: the window on the NPC whose pocket the hero picks is in steal mode.
+        with { Steal = holder is not null && holder == _pickPocketVictim };
 
     /// <summary>ARC-SKILLS-005: the hero uses a healing item on itself (the inventory use passes the user as the target, as the
     /// original's inventory window does). ARC-UI-025: the item use (0x462CC0) reaches it as the heal skill with the item and has charged
@@ -278,6 +284,7 @@ public partial class TerrainViewerApp
         }
         EndInventory();
         CancelPendingWalkOrder("lockpicks armed");
+        _pickPocketArmed = false; _pickPocketAfterRoute = null;
         _lockpickArmed = item;
         _portalNotice = "pick a lock: press a door or window";
         GD.Print($"ARC-SKILLS-006 lockpicks armed item={item}");
@@ -429,6 +436,7 @@ public partial class TerrainViewerApp
         // ARC-UI-029: a question still up goes with the window; nothing moves.
         _quantityMove = null;
         _inventoryPanel.CloseView();
+        _pickPocketVictim = null;
         // ARC-WORLD-063: closing the window on a junk pile runs its dissolve check (0x573440 → 0x463540): one item or none left, it goes.
         var pileSession = _junkPileSession;
         _junkPileSession = null;
@@ -445,6 +453,8 @@ public partial class TerrainViewerApp
     private void TakeFromBody(string item)
     {
         if (!InventoryOpen || !InventoryActive || _inventoryPanel!.Holder is not { } holder) return;
+        // ARC-SKILLS-010: in steal mode a take is a theft of the whole item (no quantity window: the drag runs the steal at once).
+        if (holder == _pickPocketVictim) { PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Steal, item); return; }
         // ARC-UI-029: a gold pile or an ammunition stack of more than one unit asks how many first.
         if (TakeStackFromBody(holder, item)) return;
         var result = _inventoryHost!.Loot(_areaSession!, holder, item);
@@ -460,7 +470,7 @@ public partial class TerrainViewerApp
     /// <summary>Takes every item in list order; a refused item stays and is named in the message.</summary>
     private void TakeAllFromBody()
     {
-        if (!InventoryOpen || !InventoryActive || _inventoryPanel!.Holder is not { } holder) return;
+        if (!InventoryOpen || !InventoryActive || _inventoryPanel!.Holder is not { } holder || holder == _pickPocketVictim) return;
         var taken = 0; var refused = new List<string>(); var printed = new System.Text.StringBuilder();
         foreach (var line in InventoryView(holder).Loot)
         {

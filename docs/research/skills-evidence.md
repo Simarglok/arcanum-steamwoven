@@ -440,6 +440,14 @@ a script vetoes it or the victim is the thief's follower, the theft counts as
 an attack by the thief on the victim (AI hostility). A master is never caught planting
 (handler (0x4C7160)).
 
+**Original check (ARC-SKILLS-010):** read in the retail executable, rows
+[PP1–PP11](ledger/skills.md#pick-pocket-arc-skills-010) (PP1–PP8 by two readers, PP9–PP11 one reading). They add that a stoned
+target and the thief itself are refused silently, that the "no pickpocket" and mechanical refusal comes before the life test, that the
+window opens only while the thief sees the target, that each drag is a 4-action-point attempt without a quantity window, that a
+refused insertion is a quiet failure, that only an untrained thief faces the perception die, that the alignment change has bounds and
+skips a summoned victim, and that a theft sets no stolen flag on the item; "marks the victim robbed" is critter flags 2 bit 0x01, read
+only by a PC victim's own inventory window.
+
 ### Prowling
 
 The skill bar toggles concealment (preprocess (0x57A0A0)). Sight

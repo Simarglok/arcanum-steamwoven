@@ -24,10 +24,14 @@ public sealed class AreaAiCastTests
         AreaEventWorld Events) : IDisposable
     {
         public void Dispose() => Session.Dispose();
+        /// <summary>ARC-WORLD-105: the cast host the scene answers (the viewer rebuilds its host on a map change).</summary>
+        public System.Runtime.CompilerServices.StrongBox<SessionSpellCaster> Spells { get; init; } = new(Caster);
+        /// <summary>A new cast host over the same session and map, as a rebuilt one.</summary>
+        public Func<SessionSpellCaster>? Rebuild { get; init; }
     }
 
     // The exterior's highest-level NPC whose fields store a college level (the monster; Virgil is the other), the hero a few tiles away.
-    private static Crash Open(Func<string, int, CastEyeCandyAnimation?>? eyeCandy = null)
+    private static Crash Open(Func<string, int, CastEyeCandyAnimation?>? eyeCandy = null, Func<int, bool>? missileArt = null)
     {
         var root = Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT");
         var mobile = Environment.GetEnvironmentVariable("ARC_AREA_MOBILE");
@@ -84,10 +88,11 @@ public sealed class AreaAiCastTests
         var known = Enumerable.Range(0, SpellBookRules.Spells).Where(s => SpellBookRules.IsKnown(book, s)).ToArray();
         Trace($"caster {casterRow.PrototypeNumber} knows {string.Join(",", known)}; lists "
             + string.Join(" ", Enum.GetValues<AiActionList>().Select(l => $"{l}:{string.Join(",", caster.AiLists[l].Where(known.Contains))}")));
+        var spells = new System.Runtime.CompilerServices.StrongBox<SessionSpellCaster>(caster);
         var scene = new AreaAiScene
         {
             RuntimeMap = map, Chart = AreaChart.For(snapshot), Steps = steps, Npcs = npcs, Combat = combat, HeroCell = () => hero, Parameters = table,
-            LineOfFire = lineOfFire, Spells = () => caster, CastEyeCandy = eyeCandy,
+            LineOfFire = lineOfFire, Spells = () => spells.Value, CastEyeCandy = eyeCandy, MissileArt = missileArt,
         };
         host = new AreaAiHost(session, scene, events, round);
         Assert.AreEqual(0, host.ScheduleTicks());
@@ -95,7 +100,11 @@ public sealed class AreaAiCastTests
         host.HeroAttacked(npc);
         Trace($"reaction {host.TraceOf(npc)?.Reaction} setter {host.TraceOf(npc)?.Setter}");
         Assert.AreEqual(DangerState.CombatFocus, session.QueryDanger(npc).State, "the caster fights the hero");
-        return new(session, host, caster, npc, known, round, events);
+        return new(session, host, caster, npc, known, round, events)
+        {
+            Spells = spells,
+            Rebuild = () => new SessionSpellCaster(session, n => n is >= 0 and < SpellRecord.Count ? records[n] : null, spellMap, events),
+        };
     }
 
     [TestMethod, TestCategory("RealData")]
@@ -348,6 +357,105 @@ public sealed class AreaAiCastTests
         CollectionAssert.DoesNotContain(RunsOf(session, npc), secondQueued, "no slot is left behind");
     }
 
+    // ---- ARC-WORLD-105: the NPC's spell missile (AC8) ----
+
+    // The casting goal up to its missile's launch: the play (the invented eye candy) and the launch notice. Every spell has a missile
+    // here: the caster's installed spells have none.
+    private static (AreaAiNotice Play, AreaAiNotice Missile, List<AreaAiNotice> Notices) LaunchFirstMissile(Crash crash, AreaEventPump pump, ref int frame)
+    {
+        var notices = new List<AreaAiNotice>();
+        for (; frame < 4000 && !notices.Any(n => n.Kind == AreaAiNoticeKind.Missile); frame++)
+        {
+            pump.Advance(8 * 50);
+            crash.Host.Pump(50L * frame);
+            notices.AddRange(crash.Host.DrainNotices().Where(n => n.Npc == crash.Npc));
+        }
+        var play = notices.FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Cast) ?? throw new AssertFailedException("no casting goal played");
+        var missile = notices.FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Missile) ?? throw new AssertFailedException("no missile launched");
+        Trace105($"spell {play.Spell} run {play.Run} swing {play.CastSwing}; missile at {missile.Target}; cast {crash.Host.TraceOf(crash.Npc)?.Cast}");
+        return (play, missile, notices);
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void A_missile_spell_launches_at_the_action_frame_and_its_arrival_after_the_goals_end_begins_the_run()
+    {
+        using var crash = Open((_, _) => EightFrames(), _ => true);
+        var (session, host, caster, npc, _, _, events) = crash;
+        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var frame = 0;
+        var (play, missile, notices) = LaunchFirstMissile(crash, pump, ref frame);
+        // The release frame at 300 ms; the launch restarts the goal one pace (100 ms) later (SM1), so the rest is 500 ms, not 400.
+        Assert.AreEqual(new AiCastSwing(true, 300, 500), play.CastSwing);
+        Assert.AreEqual(play.Run, missile.Run);
+        Assert.AreEqual(play.Spell, missile.Spell);
+        Assert.AreSame(caster, missile.Caster, "the map's cast host launched it");
+        Assert.AreEqual(play.Target, missile.Target, "the missile flies at the run's target");
+        Assert.IsFalse(notices.Any(n => n.Kind == AreaAiNoticeKind.Release), "the launch is no release: no re-check, no BEGIN");
+        Assert.IsTrue(caster.MissileFlies(play.Run));
+        Assert.AreEqual(SpellRunAction.Begin, session.QuerySpellRuns()[play.Run]?.Action, "the run waits for the missile");
+
+        for (; frame < 8000 && host.RunOf(npc) is not null; frame++)
+        {
+            pump.Advance(8 * 50);
+            host.Pump(50L * frame);
+            notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
+        }
+        Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.CastEnd && n.Run == play.Run && n.SpellRun is null),
+            "the goal's end after the launch frees nothing (0x429CD0: the frame was handled)");
+        Assert.IsTrue(caster.MissileFlies(play.Run), "the missile still flies after the caster's goal ended");
+
+        // The arrival (goal 28's release, 0x429C80): the re-check and the BEGIN.
+        var begun = caster.ArriveMissile(play.Run);
+        Trace105($"arrived: {begun?.Disposition} {begun?.Failure}; hero hp {session.QueryHeroLife()!.Status.HitPoints}");
+        Assert.IsNotNull(begun, "the re-check passed");
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, begun.Disposition);
+        Assert.AreNotEqual(SpellRunAction.Begin, session.QuerySpellRuns()[play.Run]?.Action ?? SpellRunAction.End, "its BEGIN ran");
+        Assert.IsFalse(caster.MissileFlies(play.Run));
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void A_missile_outlives_its_casters_run_dropped_mid_play_and_its_loss_frees_the_run()
+    {
+        using var crash = Open((_, _) => EightFrames(), _ => true);
+        var (session, host, caster, npc, _, _, events) = crash;
+        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var frame = 0;
+        var (play, _, _) = LaunchFirstMissile(crash, pump, ref frame);
+        Assert.AreEqual(AiGoalType.AttemptSpell, host.RunOf(npc)?.Top.Goal, "the play's rest holds the attempt goal");
+        // The NPC's run is dropped mid-rest (a retired host; an interrupt or a new perform alike): the attempt goal's end node frees
+        // nothing after the launch, so the run is the missile's (a goal of its own on its own object), whatever becomes of the caster's.
+        host.Retire();
+        Assert.IsNull(host.RunOf(npc));
+        Assert.IsTrue(caster.MissileFlies(play.Run));
+        Assert.AreEqual(SpellRunAction.Begin, session.QuerySpellRuns()[play.Run]?.Action, "the run waits for the missile");
+        // A lost missile (a refused line, the map left) frees its run unpaid (MG44, both modes).
+        var freed = caster.LoseMissile(play.Run);
+        Assert.IsNotNull(freed);
+        Assert.IsNull(session.QuerySpellRuns()[play.Run], "no slot is left behind");
+        Trace105($"dropped mid-rest, then lost: run {play.Run} freed {freed.Disposition}");
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void A_cast_host_rebuilt_before_the_launched_goals_end_frees_nothing_of_the_missiles_run()
+    {
+        using var crash = Open((_, _) => EightFrames(), _ => true);
+        var (session, host, caster, npc, _, _, events) = crash;
+        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var frame = 0;
+        var (play, _, _) = LaunchFirstMissile(crash, pump, ref frame);
+        // The viewer rebuilds its cast host mid-rest (a map change), then drops the AI host: the goal's end goes to the host that
+        // launched the run, which knows the handled frame, so the run is neither freed nor charged (the new host would free it charged).
+        crash.Spells.Value = crash.Rebuild!();
+        var fatigue = session.QueryLife(host.AiLifeTarget(npc)!).View?.Record.State.FatigueDamage;
+        host.Retire();
+        Assert.IsTrue(caster.MissileFlies(play.Run));
+        Assert.AreEqual(SpellRunAction.Begin, session.QuerySpellRuns()[play.Run]?.Action, "the run waits for its missile");
+        Assert.AreEqual(fatigue, session.QueryLife(host.AiLifeTarget(npc)!).View?.Record.State.FatigueDamage, "nothing was charged");
+        Assert.IsNotNull(caster.LoseMissile(play.Run), "the launching host loses it, freeing the run unpaid");
+        Assert.IsNull(session.QuerySpellRuns()[play.Run]);
+    }
+
     private static void Trace(string line) => Console.WriteLine("ARC-WORLD-102 " + line);
+    private static void Trace105(string line) => Console.WriteLine("ARC-WORLD-105 " + line);
     private static void Trace104(string line) => Console.WriteLine("ARC-WORLD-104 " + line);
 }

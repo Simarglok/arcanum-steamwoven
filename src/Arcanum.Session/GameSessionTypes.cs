@@ -270,6 +270,9 @@ public enum GameSessionFailure
     InvalidPlayerName,
     // Trap state (ARC-WORLD-076): an object id, carrier or use script out of range.
     InvalidTrap,
+    // Pick pocket (ARC-SKILLS-010): no living hero to steal; a victim's facts outside their bounds, or a victim that is not a living NPC;
+    // in a turn-based round, not the hero's turn or too few action points.
+    PickPocketUnavailable, InvalidPickPocketVictim, PickPocketOutOfTurn,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }

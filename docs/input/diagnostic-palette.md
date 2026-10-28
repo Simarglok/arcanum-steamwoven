@@ -52,6 +52,9 @@ its Close button. Contents:
 - **Prowl (stealth) on/off** (ARC-SKILLS-008): the original's skill-bar prowling button; toggles the
   session hero's concealment and its followers'. While concealed, a run is a walk unless the hero is
   a master of prowling with fatigue left ([stealth](../world/stealth-runtime.md)).
+- **Pick pocket (then press an NPC)** (ARC-SKILLS-010): the original's skill-bar pick-pocket button; arms the skill, and the next left
+  press on an NPC in map mode walks within reach and opens the inventory window in steal mode (Steal and Plant buttons, one attempt
+  each), or floats the refusal, or loots a dead NPC; it needs the map's AI host ([pick pocket](../world/pick-pocket-runtime.md)).
 - **Save game (save list)** and **Load game (save list)** (ARC-UI-010): close the palette and open the save or
   load window of the session's save list; without an AREA game session the line under the actions says so
   ([save list](../rendering/terrain-viewer.md#save-list-arc-ui-010)).
