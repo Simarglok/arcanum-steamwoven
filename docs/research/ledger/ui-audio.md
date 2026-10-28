@@ -283,7 +283,7 @@ an item is held, and how the grid is drawn.
 ## Quantity window (ARC-UI-029)
 
 The question how many units of a gold or ammunition stack a move to another holder takes (interface mode 13), for the stacks of
-[FR-ITEM-005](../../requirements/items-economy.md#fr-item-005) and [FR-UI-004](../../requirements/ui-media-lifecycle.md#fr-ui-004)
+[FR-ITEM-003](../../requirements/items-economy.md#fr-item-003), [FR-ITEM-005](../../requirements/items-economy.md#fr-item-005) and [FR-UI-004](../../requirements/ui-media-lifecycle.md#fr-ui-004)
 (alpha item N6, follow-up b; IW7 is the earlier reading). Read on 2026-10-28 by this task and, independently, by a fresh agent that
 saw only the questions (method step 6). The readers agree on every row; the second corrected the first on a count of 0 (QW5: the
 request returns before any move, so no empty stack is made) and added the cancel by a bar change (QW2). Every direct branch stays
@@ -299,8 +299,8 @@ inside `.text`. The rows are F2. Field 0x14F is the item type (6 ammunition, 8 g
 | QW5 | request 0x578B80 → 0x578EA0 (0x578F94); gold 0x464830, ammunition 0x4658E0; new objects 0x464970, 0x465A40; 0x4417A0, 0x466E50 | The count goes into the request; a count of 0 returns before any move (the item stays where the put-back left it). Gold moves through 0x464830 and ammunition through 0x4658E0 (with the type, field 0x8F): fewer units than the count refuse, exactly the count deletes the source stack, more leave the rest; a target holder's stack grows or a new one is made (AM4, NT1). A drop (flags 2 or 4, no target) only takes the units; then a new object carries them: gold (0x464970, base prototype 9056) or the ammunition type's base prototype (0x465A40, table 0x5B32B0), with the count as its quantity, at the source holder's location; with flag 2 the drop's placement (0x466E50: junk pile, decay) lays it there, with flag 4 it leaves the map for the cursor (IW18). Neither path runs the item's drop script or its no-drop check (the ordinary item's 0x461A70 and 0x466DA0 do). | Original; Steamwoven's `DropHeroAmmo` (a made stack of the kind the host names), `TakeGoldFromNpc`, `TakeAmmoFromNpc` |
 | QW6 | handler 0x573850 (0x574080, 0x5746F4, 0x57471E) | While mode 13 is up a left press in the inventory window picks up nothing (only modes 8, 10, 11 and 4 pick, modes 1, 2 and 16 have their own branches), and the barter branch's close test exits for mode 13. | Original; Steamwoven's doll, grid and other buttons do nothing while the question is up |
 
-A single unit of a dead NPC's ammunition stack still moves with its Take button as the whole item (`LootItem`, with its scripts and
-insert check) where the original takes the stack path with count 1 (QW1, QW5); a single coin moves as gold.
+The viewer passes the moved stack's own kind as the new stack's (`DropHeroAmmo`, a hero's new stack in `TakeAmmoFromNpc`) where the
+original makes the type's base prototype (QW5); every installed stack is a base prototype, so nothing differs on installed data.
 
 ## Interface bars (ARC-UI-018)
 

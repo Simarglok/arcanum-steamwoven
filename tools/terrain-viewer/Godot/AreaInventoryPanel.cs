@@ -321,6 +321,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     /// </summary>
     public void AskQuantity(string name, int maximum, string? message = null)
     {
+        // A held item goes back to its place first (0x575770, QW1).
+        _area.Hold(null);
         _bar = QuantityBar.Open(maximum);
         _quantityName = name;
         _quantity.Show(); _area.Blocked = true;

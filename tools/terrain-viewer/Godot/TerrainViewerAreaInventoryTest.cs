@@ -504,25 +504,54 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-UI-029 on the original data: an ammunition stack of more than one unit of the hero's (when it holds none, part of an NPC's
-    /// stack on a loaded map is lent to it through the session first) is dropped through its Drop button; the quantity window asks,
+    /// stack on a loaded map, a stack lying there, or, on the crash site which holds none, 5 arrows of the installed prototype given to
+    /// an NPC there, is lent to it through the session first) is dropped through its Drop button; the quantity window asks,
     /// keypad 1 and Enter drop one unit on the hero's tile, and the unit is taken back. Returns the window's view after it.
     /// </summary>
+    // The installed arrows' prototype file (basic 7038 + 20, ammunition type 0; ledger AM3).
+    private const int ArrowPrototype = 7058;
+
     private async Task<AreaInventoryView> QuantityForSmoke()
     {
-        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA_INVENTORY_SMOKE quantity " + why); }
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-UI-029 native-smoke quantity FAIL " + why);
+            throw new InvalidOperationException("AREA_INVENTORY_SMOKE quantity " + why);
+        }
         var session = _areaSession!;
         var panel = _inventoryPanel!;
         var lent = "none";
+        // The units lent from an NPC go back to it at the end, so later steps see the hero and the NPC as before.
+        (string Npc, int Units, SessionItemKind Kind)? giveBack = null;
         if (session.QueryHeroAmmo().All(stack => stack.Units < 2))
         {
-            var source = new[] { CurrentAreaMap }.Concat(AreaRuntimes().Keys).Distinct().Select(map => session.QueryMapInventory(new(map)))
-                .Where(inventory => inventory is not null).SelectMany(inventory => inventory!.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc)
-                    .SelectMany(holder => holder.Items.Where(item => item.Facts.AmmoType is not null && item.Facts.Quantity >= 2).Select(item => (holder.Entity, Item: item))))
-                .FirstOrDefault();
-            Require(source.Item is not null, "an ammunition stack of two or more units on a loaded map");
-            var taken = session.TakeAmmoFromNpc(session.Version, source.Entity, source.Item!.Entity, 2, source.Item.Facts.Kind, _inventoryHost!.InsertCheck);
-            Require(taken.Disposition == GameSessionDisposition.Changed, "lending 2 units: " + taken.Failure);
-            lent = source.Item.Entity;
+            // Lent from the loaded maps: two units of an NPC's stack, else a whole stack lying on the ground.
+            var maps = new[] { CurrentAreaMap }.Concat(AreaRuntimes().Keys).Distinct().Select(map => session.QueryMapInventory(new(map))).Where(inventory => inventory is not null).ToArray();
+            static bool Stack(SessionItemFacts facts) => facts.AmmoType is not null && facts.Quantity >= 2;
+            var held = maps.SelectMany(inventory => inventory!.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc)
+                .SelectMany(holder => holder.Items.Where(item => Stack(item.Facts)).Select(item => (holder.Entity, Item: item)))).FirstOrDefault();
+            var ground = maps.SelectMany(inventory => inventory!.Ground.Where(entry => Stack(entry.Item.Facts)).Select(entry => entry.Item)).FirstOrDefault();
+            GD.Print($"ARC-UI-029 native-smoke quantity lend npc={held.Item?.Entity ?? "-"} ground={ground?.Entity ?? "-"}");
+            InventoryMutationResult taken;
+            if (held.Item is not null)
+            {
+                taken = session.TakeAmmoFromNpc(session.Version, held.Entity, held.Item.Entity, 2, held.Item.Facts.Kind, _inventoryHost!.InsertCheck);
+                lent = held.Item.Entity; giveBack = (held.Entity, 2, held.Item.Facts.Kind);
+            }
+            else if (ground is not null) { taken = _inventoryHost!.PickUp(session, ground.Entity); lent = ground.Entity; }
+            else
+            {
+                // The crash site holds no stack: an NPC of the map gets 5 arrows of the installed prototype (file 7058, type 0) first.
+                var npc = maps.SelectMany(inventory => inventory!.Holders).FirstOrDefault(holder => holder.Kind == SessionHolderKind.Npc);
+                Require(npc is not null && PrototypeItems()?.Item(ArrowPrototype) is { Kind.Type: SessionItemType.Ammo }, "an NPC and the arrow prototype");
+                var arrows = PrototypeItems()!.Item(ArrowPrototype)!.Kind;
+                var added = session.AddItemToNpc(session.Version, npc!.Entity, arrows, _inventoryHost!.InsertCheck, (0, 5));
+                Require(added.Disposition == GameSessionDisposition.Changed, "an NPC's arrows: " + added.Failure);
+                taken = session.TakeAmmoFromNpc(session.Version, npc.Entity, added.Item!, 5, arrows, _inventoryHost.InsertCheck);
+                lent = $"{ArrowPrototype}x5"; giveBack = (npc.Entity, 5, arrows);
+            }
+            Require(taken.Disposition == GameSessionDisposition.Changed, "lending: " + taken.Failure);
             panel.Render(InventoryView(null), null);
         }
         var stack = session.QueryHeroAmmo().First(entry => entry.Units >= 2);
@@ -541,6 +570,11 @@ public partial class TerrainViewerApp
         var back = pile is null ? _inventoryHost!.PickUp(session, dropped!) : _inventoryHost!.Loot(session, pile.Entity, dropped!);
         Require(back.Disposition == GameSessionDisposition.Changed && session.QueryAmmo(stack.Entity)?.Units == stack.Units, "taken back into the stack: " + back.Failure);
         if (pile is not null) session.CloseJunkPile(session.Version, pile.Entity);
+        if (giveBack is { } loan)
+        {
+            var returned = session.GiveAmmoToNpc(session.Version, loan.Npc, stack.Entity, loan.Units, loan.Kind, _inventoryHost.InsertCheck);
+            Require(returned.Disposition == GameSessionDisposition.Changed, "the lent units go back: " + returned.Failure);
+        }
         panel.Render(InventoryView(null), null);
         GD.Print($"ARC-UI-029 native-smoke quantity PASS units={stack.Units} dropped=1 lent={lent} pile={pile is not null} cell={placed!.Cell}");
         return panel.ViewForSelfTest!;

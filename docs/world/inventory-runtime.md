@@ -785,8 +785,8 @@ up, down, a keypad digit capped at the maximum, Backspace or Delete). The host s
   carries them, and the drop's placement lays it down (junk pile, decay). The stack's drop script and no-drop flag are not consulted
   (the original's stack path never reaches 0x461A70). In order: input (`InvalidItem`; a negative count or a kind that is not
   ammunition `InvalidAmmo`), version, a stack the hero holds (`ItemNotAvailable`), a count of 0 (`NoChange`, as the original's request
-  returns before any move), fewer units (`AmmoShort`), the tile (`DropTileUnfit`), the ammunition, item and made-number budgets
-  (`BudgetExceeded`), the revision. One revision; no insert check, no events, no action points.
+  returns before any move), fewer units (`AmmoShort`), the tile (`DropTileUnfit`), the durability record of an emptied stack, the ammunition, item and
+  made-number budgets (`BudgetExceeded`), the revision. One revision; no insert check, no events, no action points.
 - **Takes from a dead NPC** use `TakeGoldFromNpc` and `TakeAmmoFromNpc` (ARC-WORLD-071) with the count.
 - **No snapshot change.** The new stack is a placed made item with its ammunition record (schemas 24, 32, 34).
 

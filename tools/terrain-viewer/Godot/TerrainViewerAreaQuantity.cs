@@ -7,7 +7,7 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-UI-029: the quantity window (the original's interface mode 13, ledger QW1–QW6) in the inventory window. A gold pile or an
 // ammunition stack of more than one unit taken from a dead NPC, and an ammunition stack the hero drops on its tile, first ask how
-// many units move (QuantityBar.Ask); the window starts at 0, Accept moves the count shown (0 moves nothing), Cancel nothing. Take all
+// many units move (QuantityBar.Ask; one unit moves at once by the same stack path); the window starts at 0, Accept moves the count shown (0 moves nothing), Cancel nothing. Take all
 // moves whole stacks without asking (the original's flag 0x20). A junk pile's stacks still move whole (its partial take is not
 // modelled). The moves are the session's: TakeGoldFromNpc, TakeAmmoFromNpc and DropHeroAmmo. No action points (IW8).
 public partial class TerrainViewerApp
@@ -24,10 +24,9 @@ public partial class TerrainViewerApp
     {
         if (SessionJunkPile.Number(holder) is not null || InventoryView(holder).Loot.FirstOrDefault(line => line.Entity == item) is not { StackKind: { } kind } line) return false;
         var move = new AreaQuantityMove(item, _inventoryHost!.Name(item, _hoverNames?.Catalog), holder, kind, line.Units);
-        if (QuantityBar.Ask((int)kind.Type, line.Units, intoLootedHolder: false, takeAll: false) is not { } count) { AskQuantity(move); return true; }
-        // One unit: an ammunition stack keeps the whole-item take (its scripts and insert check); a single coin moves as gold.
-        if (kind.Type != SessionItemType.Gold) return false;
-        MoveQuantity(move, count);
+        // One unit moves at once by the same stack path (0x4658E0 or 0x464830 with count 1, QW1, QW5).
+        if (QuantityBar.Ask((int)kind.Type, line.Units, intoLootedHolder: false, takeAll: false) is { } count) MoveQuantity(move, count);
+        else AskQuantity(move);
         return true;
     }
 
