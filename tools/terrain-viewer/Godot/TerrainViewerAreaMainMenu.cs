@@ -317,6 +317,7 @@ public partial class TerrainViewerApp
         _areaKitArt = hero?.KitArt;
         _areaKitMissileArt = hero?.KitMissileArt;
         _areaKitThrowWeight = hero?.KitThrowWeight;
+        _areaKitItemSpells = hero?.KitItemSpells;
         _menuTablesHero = hero?.Hero;
         if (_arguments is not null) _arguments = _arguments with { Hero = hero?.Hero };
     }

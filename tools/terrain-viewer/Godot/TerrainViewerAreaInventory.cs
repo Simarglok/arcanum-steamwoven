@@ -27,6 +27,8 @@ public partial class TerrainViewerApp
     private IReadOnlyList<SessionLockpick?>? _areaKitLockpicks;
     // ARC-COMBAT-008: the kit's durability values for the attack's wear.
     private IReadOnlyList<SessionWearItem?>? _areaKitDurability;
+    // ARC-UI-016: the kit's item spell facts (the cast host's item lookup).
+    private IReadOnlyList<SessionItemSpells?>? _areaKitItemSpells;
     // A pickup or loot clicked from too far: the click route walks within reach first, then the same action runs once.
     private (AreaObjectKey Key, AreaInventoryTargetKind Kind)? _inventoryAfterRoute;
     private (GameSessionOwner Session, long Revision, int Map)? _inventoryHiddenStamp;

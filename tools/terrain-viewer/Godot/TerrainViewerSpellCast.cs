@@ -21,6 +21,11 @@ namespace Arcanum.TerrainViewer;
 // ARC-MAGIC-017 the goal is timed by the cast entry's eye candy on the hero (TerrainViewerEyeCandy.cs).
 // ARC-MAGIC-019 (SU13): a cast while a goal plays is queued beneath it (at most 4, none in a turn-based round) and plays when the
 // goals before it are done; a goal refused at its start, or one cut short, drops the casts queued behind it.
+// ARC-UI-016: the cast host knows the hero's items (kit and taken), so an item can be a cast's source. The pane's weapon button
+// (shown while the wielded weapon qualifies, 0x556EF0) opens the weapon's spell pane (bar mode 8); a slot pressed there is activated
+// for the weapon (0x57C040 → 0x57BC70: its holder casts, the weapon is the source and pays from its charges) and the cursor keeps the
+// weapon as the cast's source. The pane returns to the spell list when the weapon leaves the weapon slot (the inventory callback
+// 0x5570D0).
 public partial class TerrainViewerApp
 {
     private SessionSpellRecord[]? _spellRecords;
@@ -30,6 +35,9 @@ public partial class TerrainViewerApp
     private AreaSpellPane? _spellPane;
     private SpellTargeting? _spellTargeting;
     private SpellCastGoal? _spellGoal;
+    // ARC-UI-016: the item whose spell pane is open (bar mode 8), or null for the spell list.
+    private string? _itemPaneItem;
+    private int _itemPaneActivations;
     // ARC-MAGIC-019: the casts queued beneath the playing goal, first cast first (the original inserts each at the bottom of the
     // caster's goal stack, 0x44D9B0).
     private readonly List<SpellCastGoal> _spellQueue = [];
@@ -39,12 +47,14 @@ public partial class TerrainViewerApp
     private int _spellLogSeen;
     private int _spellCasts, _spellQueuedStarts, _spellTargetFailedAtStart;
 
-    /// <summary>The open targeting cursor: the spell, its record and the cursor's mask (the Alt keys change it).</summary>
-    private sealed class SpellTargeting(int spell, SessionSpellRecord record, ulong mask)
+    /// <summary>The open targeting cursor: the spell, its record and the cursor's mask (the Alt keys change it); ARC-UI-016: the item
+    /// that is the cast's source (null for the hero's own spell).</summary>
+    private sealed class SpellTargeting(int spell, SessionSpellRecord record, ulong mask, string? item = null)
     {
         public int Spell { get; } = spell;
         public SessionSpellRecord Record { get; } = record;
         public ulong Mask { get; set; } = mask;
+        public string? Item { get; } = item;
     }
 
     /// <summary>A casting goal playing: its run, spell and target, when it started (the first frame after the click, on the frames'
@@ -87,11 +97,16 @@ public partial class TerrainViewerApp
         ClearEyeCandy("the map changed");
         var map = new AreaSpellCastMap(owner, area.Snapshot.RuntimeMap, grid.Snapshot, area.Snapshot.Objects, _combatHost!, HeroWorldCell, AreaLineOfFireNow,
             key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions);
-        _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents);
+        _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents, HeroItemSpells);
         _spellCastMap = map; _spellCasterStamp = stamp; _spellLogSeen = 0;
         GD.Print($"ARC-MAGIC-015 cast-host map={area.Snapshot.RuntimeMap} records={records.Length}");
         return _spellCaster;
     }
+
+    // ARC-UI-016: the cast host's item lookup: the spell facts of an item the hero holds, kit or taken.
+    private SessionItemSpells? HeroItemSpells(string id) =>
+        _lentItemSpellsForSelfTest is { } lent && lent.Entity == id ? lent
+        : _areaSession is { } owner && _inventoryHost is { } host ? host.ItemSpells(owner, id, _areaKitItemSpells) : null;
 
     // ARC-MAGIC-021: the companions' rows where they stand now (the committed cell), none while on another map.
     private IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> SpellPlacedCompanions()
@@ -138,9 +153,15 @@ public partial class TerrainViewerApp
 
     private void ShowSpellPane()
     {
-        if (_spellPane is null) { _spellPane = new AreaSpellPane(); AddChild(_spellPane); _spellPane.Activated += ActivateSpell; }
+        if (_spellPane is null)
+        {
+            _spellPane = new AreaSpellPane(); AddChild(_spellPane);
+            _spellPane.Activated += spell => ActivateSpell(spell);
+            _spellPane.WeaponToggled += ToggleWeaponPane;
+            _spellPane.ItemActivated += ActivateItemSlot;
+        }
         AdoptSpellData();
-        _spellPane.Show(AreaSpellCasting.Known(_areaSession!, _spellData?.Data));
+        _spellPane.Show(AreaSpellCasting.Known(_areaSession!, _spellData?.Data), WeaponPaneNow());
         _spellNotice = _spellData?.Data is null ? "spell data loading" : null;
     }
 
@@ -151,7 +172,7 @@ public partial class TerrainViewerApp
         if (_spellPane?.Shown == true)
         {
             if (!SpellMapActive || _areaSession?.QueryHero() is null) _spellPane.HidePane();
-            else _spellPane.Show(AreaSpellCasting.Known(_areaSession, _spellData?.Data));
+            else _spellPane.Show(AreaSpellCasting.Known(_areaSession, _spellData?.Data), WeaponPaneNow());
         }
         if (_spellTargeting is not null && (!SpellMapActive || WorldModal || ConversationOpen)) CancelSpellTargeting("a window opened or the map changed");
         if (_spellGoal is null) return;
@@ -262,10 +283,55 @@ public partial class TerrainViewerApp
         FlushSpellLog("queued casts dropped: " + why);
     }
 
+    // ---- the weapon's spell pane (ARC-UI-016) ----
+
+    /// <summary>The hero's wielded weapon (slot 1004), or null.</summary>
+    private string? HeroWeapon() =>
+        _areaSession?.QueryEquipment().Worn.FirstOrDefault(worn => worn.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon)?.Entity;
+
+    /// <summary>The weapon button and the weapon's spell pane now: the pane closes (bar mode 0) once its item is no longer the wielded
+    /// weapon (the inventory callback 0x5570D0); null without a weapon the cast host knows.</summary>
+    private AreaWeaponSpellPane? WeaponPaneNow()
+    {
+        var weapon = HeroWeapon();
+        if (_itemPaneItem is not null && _itemPaneItem != weapon)
+        {
+            GD.Print($"ARC-UI-016 item-pane-close item={_itemPaneItem} weapon={weapon ?? "none"}");
+            _itemPaneItem = null;
+        }
+        if (weapon is null || SpellCasterNow() is not { } caster) return null;
+        return AreaSpellCasting.WeaponPane(caster.ItemPane(weapon), _itemPaneItem == weapon, _spellData?.Data);
+    }
+
+    /// <summary>The weapon button (0x556EA0 with no object: the wielded weapon; 0x5506C0: a second press returns to mode 0).</summary>
+    private void ToggleWeaponPane()
+    {
+        if (_itemPaneItem is not null) _itemPaneItem = null;
+        else if (WeaponPaneNow() is { ButtonShown: true } pane) _itemPaneItem = pane.Item;
+        GD.Print($"ARC-UI-016 item-pane open={_itemPaneItem ?? "no"}");
+        if (_spellPane?.Shown == true && _areaSession is { } owner) _spellPane.Show(AreaSpellCasting.Known(owner, _spellData?.Data), WeaponPaneNow());
+        RefreshAreaStatus();
+    }
+
+    /// <summary>A slot pressed in the weapon's spell pane (0x57C040): the slot's spell is activated for the weapon when it names a spell
+    /// without item triggers; otherwise nothing.</summary>
+    private void ActivateItemSlot(int slot)
+    {
+        if (_itemPaneItem is not { } item || SpellCasterNow() is not { } caster || caster.Item(item) is not { } spells || slot < 0 || slot >= spells.Spells.Count)
+            return;
+        var spell = spells.Spells[slot];
+        var activates = ItemSpellPaneRules.CanActivate(spell, caster.ItemTriggered);
+        GD.Print($"ARC-UI-016 item-activate item={item} slot={slot} spell={spell} activates={activates}");
+        if (!activates) return;
+        _itemPaneActivations++;
+        ActivateSpell(spell, item);
+    }
+
     // ---- activation and the cursor ----
 
-    /// <summary>A spell pressed in the pane (0x57BC70).</summary>
-    private void ActivateSpell(int spell)
+    /// <summary>A spell pressed in the pane (0x57BC70); ARC-UI-016: with <paramref name="item"/> the item is the cast's source and its
+    /// holder, the hero, the caster.</summary>
+    private void ActivateSpell(int spell, string? item = null)
     {
         if (_spellTargeting is not null) CancelSpellTargeting(null);
         if (_areaSession is not { } owner || SpellCasterNow() is null || _spellRecords is not { } records || spell < 0 || spell >= records.Length)
@@ -276,20 +342,20 @@ public partial class TerrainViewerApp
         if (active && SpellUiRules.TargetsInventory(begin)) { _spellNotice = "a spell on an inventory item is not ready"; RefreshAreaStatus(); return; }
         var activation = SpellUiRules.Activate(active, record.Data.Enabled, begin, record.Resist.Aggressive, Godot.Input.IsKeyPressed(Key.Alt),
             Godot.Input.IsKeyPressed(Key.Shift), owner.QueryActionPointCheck(SessionCombatant.Hero, TurnBasedRules.CastSpellCost));
-        GD.Print($"ARC-MAGIC-015 activate spell={spell} kind={activation.Kind} mask=0x{activation.Mask:X}");
+        GD.Print($"ARC-MAGIC-015 activate spell={spell} kind={activation.Kind} mask=0x{activation.Mask:X}" + (item is null ? "" : " item=" + item));
         switch (activation.Kind)
         {
             case SpellActivationKind.Nothing: _spellNotice = "the hero cannot cast now"; break;
             case SpellActivationKind.NoActionPoints: _spellNotice = "not enough action points"; break;
             case SpellActivationKind.CastAtCaster:
-                if (HeroWorldCell() is { } cell) CastSpell(spell, null, AreaSpellCastMap.Location(cell));
+                if (HeroWorldCell() is { } cell) CastSpell(spell, null, AreaSpellCastMap.Location(cell), item);
                 break;
             case SpellActivationKind.Target:
             case SpellActivationKind.CastAtPlayer:
-                _spellTargeting = new(spell, record, activation.Mask);
+                _spellTargeting = new(spell, record, activation.Mask, item);
                 _spellNotice = $"{AreaSpellsPage.SpellName(_spellData?.Data, spell)}: left-click a target, right click cancels";
                 _hoverStamp = null;
-                if (activation.Kind == SpellActivationKind.CastAtPlayer) CastSpell(spell, SessionSpellCaster.Hero, SpellLocation.None);
+                if (activation.Kind == SpellActivationKind.CastAtPlayer) CastSpell(spell, SessionSpellCaster.Hero, SpellLocation.None, item);
                 break;
         }
         RefreshAreaStatus();
@@ -379,18 +445,18 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
-        CastSpell(targeting.Spell, pick.Object, pick.Tile);
+        CastSpell(targeting.Spell, pick.Object, pick.Tile, targeting.Item);
     }
 
     // ---- the cast and its goal ----
 
     /// <summary>The cast at a target (0x57C110) and, when the run starts, its casting goal's start (0x429B50).</summary>
-    private void CastSpell(int spell, string? target, SpellLocation tile)
+    private void CastSpell(int spell, string? target, SpellLocation tile, string? item = null)
     {
         if (SpellCasterNow() is not { } caster) return;
-        var attempt = caster.CastAt(SessionSpellCaster.Hero, spell, target, tile);
+        var attempt = caster.CastAt(SessionSpellCaster.Hero, spell, target, tile, item);
         _spellCasts++;
-        GD.Print($"ARC-MAGIC-015 cast spell={spell} target={target ?? $"tile {tile.X},{tile.Y}"} outcome={attempt.Outcome} message={attempt.Message}"
+        GD.Print($"ARC-MAGIC-015 cast spell={spell} target={target ?? $"tile {tile.X},{tile.Y}"}{(item is null ? "" : " item=" + item)} outcome={attempt.Outcome} message={attempt.Message}"
             + $" creation={attempt.Run?.Creation?.Status} check={attempt.Run?.Creation?.Check} failure={attempt.Run?.Failure}");
         if (attempt.Outcome != SpellCastAttemptOutcome.Started || attempt.RunId is not { } run)
         {

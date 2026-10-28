@@ -269,6 +269,36 @@ the BEGIN waits for the missile's arrival. The rules are Godot-free (`SpellMissi
 spell that has one (learning it if needed): the hero turns to the NPC, the missile is drawn faced toward it, flies one leg of the
 line's steps and arrives, and the run's BEGIN pays its cost.
 
+## The weapon's spell pane (ARC-UI-016)
+
+The original's interface bar has a weapon button and a mode 8 that shows the wielded weapon's spells (ledger
+[IP rows](../research/ledger/spell-runs.md#item-spell-pane-arc-ui-016)). The rules are Godot-free (`ItemSpellPaneRules`), the
+item facts come from the cast host (`SessionSpellCaster.ItemPane`), the viewer draws them in its spell pane:
+
+1. **The items.** Since ARC-UI-016 the viewer's cast host knows the hero's items (its item lookup: a kit item's prototype fields
+   from the hero load, a taken item's from its object row, listed or worn), so an item can be the source of a cast
+   (`CastAt(..., item)`, ARC-MAGIC-022) and the item executors find it.
+2. **The weapon button** (`WeaponButtonShown`, IP1). It shows in the pane's header while the wielded weapon (slot 1004) has charges
+   (not 0, unlimited included) or the magical flag and a complexity above 0; technological weapons never show it. A press opens the
+   weapon's spell pane in place of the spell list (IP2, the bar's mode 8), a second press returns to the list.
+3. **The weapon's pane** (`PaneButtons`, `Gauge`, IP3, IP4). An identified weapon with a complexity above 0 shows one button per
+   filled spell slot whose record is not technological, in slot order; a slot whose record has item triggers shows disabled (its
+   press does nothing, IP5). The header shows the charges, "unlimited" or, for an unidentified weapon, nothing known (the pane then
+   has no buttons). Identification is the item's stored flag: the session does not change it yet.
+4. **The activation** (IP5, `CanActivate` for 0x57C040). A slot without item triggers is activated as a spell of the pane is (SU1–SU3)
+   with the hero, the weapon's holder, as the caster and the weapon as the source: the targeting cursor keeps the weapon, and the
+   cast at the picked target (`CastAt` with the item) skips the hero's cost check and pays from the weapon's charges (the
+   session's saved count, ARC-MAGIC-022), not the hero's fatigue.
+5. **The close** (IP6). The pane returns to the spell list as soon as its weapon is no longer the wielded one (the inventory
+   callback 0x5570D0 does it on the item's removal).
+
+The native cast smoke (`ARC_AREA_MAP_SMOKE_ONLY=cast`) checks it after its casts: no kit weapon carries castable spells, so it lends
+the wielded kit weapon the spell facts of the first weapon prototype with a castable critter spell that needs no damaged target
+(prototype 6134 in the installed data), marked identified; `M` shows the weapon button, the weapon's pane opens, the slot opens the
+cursor with the weapon as the source, a click casts at the NPC, the weapon pays one charge (20 → 19) and the hero no fatigue; taking
+the weapon off (through the trigger host, since the run still has it as its source) returns the pane to the list, and wielding it
+again brings the button back. Marker `ARC-UI-016 native-smoke item-pane PASS`.
+
 ## Differences from the original
 
 Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is documented.
@@ -295,6 +325,7 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | A target object freed while the missile flies has its location read from a freed handle (not read). | A target gone from the map counts as arrived; the re-check then refuses it. | — |
 | Goal 28's first leg builds its line only when the reused run slot's path flag is set; a slot whose last run did not end through the end step flies its stale line, and a never-used one does not advance (SM9; not observed in play). | The first leg always builds its line. | — (latent, no switch) |
 | The missile plays its projectile entry's sound (0x458C00). | No sound. | — (not ready) |
+| The bar's weapon button is refreshed only on the PC's inventory moves, so a weapon whose charges ran out keeps a stale button until the next move (IP1). | The viewer re-reads the button's condition each frame. | — (technical, fixed in both modes by the owner rule 2026-10-28) |
 
 Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Friendly cast.** Goal 73 (the friendly cast) has no end and frees nothing on its refusals.
@@ -309,9 +340,10 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
   (EC9, EC11, EC12).
 - Other goals while a cast plays: the viewer ignores world presses and the stick until the goal and its queue end, and refuses F7
   meanwhile (the session saves no goal or queue).
-- Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item); item and hotkey activation
-  (0x57C040, 0x57C080, read as IT9). The host runs an item's own spells with the item as source since ARC-MAGIC-020
-  ([item spell triggers](item-spell-triggers.md)).
+- Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item) and the hotkey bar (0x54FCF0,
+  0x57C080, IP7–IP9): later slices of ARC-UI-016. The host runs an item's own spells with the item as source since ARC-MAGIC-020
+  ([item spell triggers](item-spell-triggers.md)); the weapon's spell pane is [above](#the-weapons-spell-pane-arc-ui-016).
+- The weapon's pane draws no spell icons and shows no hover description (0x5507E0).
 - The pick's stand-ins (ARC-MAGIC-021): the hero is no drawn pick target, so the pick finds it only through its tile; the order of
   the objects on one tile is the host's (the hero, then the map's rows in file order; the original's sector list order is not
   read); the dead critters seen through are the whole map's, where the original takes those in a window-sized rectangle around the

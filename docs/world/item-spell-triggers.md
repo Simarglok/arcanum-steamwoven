@@ -130,7 +130,8 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
   (`UseWrittenItem`, `PickLock…`, `HealWithItem`); no viewer action calls `UseItem` yet. Spells aimed at an inventory item through a
   use, and an NPC's use (the activation refuses a holder that is not a player's PC, SU1) are not ready.
 - The combat and life events (parent hit, stunned, going unconscious, dying, attacks, damages, target hit) and the global attacker.
-- The item spell pane and hotkeys (0x57C040, 0x57C080, IT9), and spells aimed at an inventory item.
+- Hotkeys (0x57C080, IP7–IP9) and spells aimed at an inventory item; the weapon's spell pane (0x57C040) is in the viewer since
+  ARC-UI-016 ([spell cast host](spell-cast-host.md#the-weapons-spell-pane-arc-ui-016)).
 - The best-items start (`EquipBest`) skips items with spells, as before: it runs before any cast host exists.
 - A first break of a marked worn item takes it off without its unwear (0x4CBFC0), and its runs keep the item as source.
 - The viewer has no equip action, so nothing calls these executors there yet; the session's runs are not saved (MT9b), so a loaded
