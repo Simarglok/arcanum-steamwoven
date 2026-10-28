@@ -67,9 +67,6 @@ public sealed class AreaLevelTexts
     }
 }
 
-/// <summary>One entry of the message window: its title and its lines.</summary>
-public sealed record AreaMessageEntry(string Title, string Line, string Detail);
-
 /// <summary>
 /// The level-up message as the original draws it (ARC-UI-046; checked in the 1.0.7.4 executable, ledger OL27–OL28): the title
 /// (<c>intgame.mes</c> 21), message 11 formatted with the new level, then message 12 formatted with the points, or the scheme
@@ -89,13 +86,13 @@ public static class AreaLevelMessages
 
     /// <summary>
     /// ARC-WORLD-087: the message of a change of the hero's encumbrance level (the recalculation 0x45F820, ledger WE5): line
-    /// <c>11 + level</c> of <c>mes\critter.mes</c>, which the original shows to the local PC as a one-line message; the project's label
-    /// when the text is missing.
+    /// <c>11 + level</c> of <c>mes\critter.mes</c>, which the original posts to the local PC as a message entry (type 4, sound 3004,
+    /// ARC-UI-023 ML3); the project's label when the text is missing.
     /// </summary>
     public static AreaMessageEntry Encumbrance(int level, AreaLevelTexts texts)
     {
         ArgumentNullException.ThrowIfNull(texts);
-        return new(texts.Text(AreaLevelTexts.CritterPath, EncumbranceMessage + level) ?? $"Encumbrance level {level}", "", "");
+        return AreaMessageEntry.Text(AreaMessageKind.Message, texts.Text(AreaLevelTexts.CritterPath, EncumbranceMessage + level) ?? $"Encumbrance level {level}");
     }
 
     public static AreaMessageEntry Compose(SessionLevelUp levelUp, AreaLevelTexts texts)
@@ -106,7 +103,7 @@ public static class AreaLevelMessages
         var line = Format(texts.Text(AreaLevelTexts.InterfacePath, LevelMessage) ?? "Level %d", levelUp.Level);
         var detail = levelUp.Scheme is { } scheme ? SchemeText(scheme, texts)
             : Format(texts.Text(AreaLevelTexts.InterfacePath, PointsMessage) ?? "Unspent points: %d", levelUp.Points);
-        return new(title, line, detail);
+        return new(AreaMessageKind.LevelUp, title, line, detail, Scheme: levelUp.Scheme is not null);
     }
 
     /// <summary>The scheme's text (0x4A7030) with the purchases logged as 0x4A7B90 logs them.</summary>

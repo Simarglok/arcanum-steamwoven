@@ -8,7 +8,8 @@ namespace Arcanum.TerrainViewer;
 // window another bar window covers switches to it (the original's interface mode change leaves the old mode first). The bars are
 // over the windows they open, which lay themselves out in the part the bars leave free; they hide under the windows they cannot
 // reach or that do not fit (conversation, barter, reading, save list, palette, menu, world map). Automated runs draw no bars unless
-// their smoke asks, so world presses at fixed screen points are not taken by them.
+// their smoke asks, so world presses at fixed screen points are not taken by them. ARC-UI-023: the bottom strip's message window draws
+// the message log (ledger ML1–ML8), and the bar's hover names are hover entries of that log.
 public partial class TerrainViewerApp
 {
     private AreaGameBarPanel? _gameBarPanel;
@@ -18,6 +19,8 @@ public partial class TerrainViewerApp
     private string? _gameBarNotice;
     private bool _gameBarForSelfTest;
     private readonly List<(int Id, bool Started)> _gameBarSoundsForSelfTest = [];
+    // ARC-UI-023: whether a pane (spells, the weapon's spells, skills) held the message window at the last frame.
+    private bool _messagePaneShown;
 
     private bool GameBarActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea
         && !MainMenuOpen && !ConversationOpen && !BarterOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen
@@ -31,7 +34,7 @@ public partial class TerrainViewerApp
             if (_gameBarPanel is { Visible: true } hidden)
             {
                 // No leave or release reaches hidden bars: the pointer state starts afresh when they show again.
-                hidden.Visible = false; _gameBar.Reset(); hidden.Render(); _hud?.SetTopInset(0);
+                hidden.Visible = false; _gameBar.Reset(); _messageLog.ClearHover(); hidden.Render(); _hud?.SetTopInset(0);
             }
             return;
         }
@@ -39,6 +42,7 @@ public partial class TerrainViewerApp
         {
             _gameBarPanel = new AreaGameBarPanel(); AddChild(_gameBarPanel);
             _gameBarPanel.Effect += GameBarEffect;
+            _gameBarPanel.PointerMoved += GameBarPointerMoved;
         }
         var module = _arguments?.ModulePath;
         if (_gameBarContent is null || module != _gameBarModule)
@@ -46,7 +50,7 @@ public partial class TerrainViewerApp
             _gameBarModule = module;
             _gameBarContent = SelfTestBootstrap || module is null ? AreaGameBarContent.Empty("self-test: no game folder") : AreaGameBarContent.Load(module);
             GD.Print($"ARC-UI-018 bars art ready={_gameBarContent.ArtReady} texts fromGame={_gameBarContent.Texts.FromGame} {_gameBarContent.Detail}");
-            _gameBarPanel.Bind(GameBarTextures(_gameBarContent), _gameBarContent.Texts, _gameBar);
+            _gameBarPanel.Bind(GameBarTextures(_gameBarContent), _gameBar, _messageLog);
         }
         // The M key shows and hides the same pane the Spells button does; showing it is the original's spells mode (Skills goes up).
         var spells = _spellPane?.Shown == true;
@@ -55,6 +59,14 @@ public partial class TerrainViewerApp
             _gameBar.SetOn(AreaBarButton.Spells, spells);
             if (spells) _gameBar.SetOn(AreaBarButton.Skills, false);
             _gameBarPanel.Render();
+        }
+        // ARC-UI-023: a pane taking the message window (its button down) or giving it back (ML8).
+        var pane = spells || _gameBar.IsOn(AreaBarButton.Skills);
+        if (pane != _messagePaneShown)
+        {
+            _messagePaneShown = pane;
+            if (pane) _messageLog.EnterPane(); else _messageLog.EnterMessages();
+            _gameBarPanel.MessageLog.Render();
         }
         _gameBarPanel.Visible = true;
         _hud?.SetTopInset(AreaGameBarPanel.TopInset);
@@ -73,6 +85,7 @@ public partial class TerrainViewerApp
     private void GameBarEffect(AreaBarEffect effect)
     {
         foreach (var id in effect.Sounds) PlayBarSound(id, "bar button");
+        if (effect.HoverChanged) GameBarHover();
         if (effect.Act is { } button) RunBarButton(button, effect);
         if (effect.Sounds.Count > 0 || effect.Act is not null) RefreshAreaStatus();
     }
@@ -132,6 +145,26 @@ public partial class TerrainViewerApp
         else { ShowSpellPane(); return true; }
         _gameBar.SetOn(AreaBarButton.Spells, false);
         return false;
+    }
+
+    /// <summary>ARC-UI-023: the bar's hover name is a hover entry of the message log (GB5, ML2): written when the pointer enters a
+    /// button and again on each move while it is there, shown only in the message mode and when no entry was stored in the last 3 s;
+    /// leaving the button takes it away.</summary>
+    private void GameBarHover()
+    {
+        if (_gameBar.HoverMessage is { } message && _gameBarContent is { } content)
+            PostMessage(AreaMessageEntry.Text(AreaMessageKind.Hover, content.Texts.Text(message)), "hover");
+        else { _messageLog.ClearHover(); _gameBarPanel?.MessageLog.Render(); }
+    }
+
+    private void GameBarPointerMoved(Vector2 screen)
+    {
+        if (_gameBar.HoverMessage is not null) GameBarHover();
+        // A move over the bottom strip gives the window back to the pane whose button is still down (0x54B70B); a move above it
+        // gives the spells or skills pane's window to the log (0x54B7C0), not the weapon's spells.
+        var down = _gameBar.IsOn(AreaBarButton.Spells) || _gameBar.IsOn(AreaBarButton.Skills);
+        if (_messageLog.PointerMoved((int)MathF.Floor(screen.X), (int)MathF.Floor(screen.Y), down, weaponPane: _itemPaneItem is not null))
+            _gameBarPanel?.MessageLog.Render();
     }
 
     private string GameBarStatus() => _gameBarPanel is not { Visible: true } ? "" : " | interface bars" + (_gameBarNotice is null ? "" : ": " + _gameBarNotice);

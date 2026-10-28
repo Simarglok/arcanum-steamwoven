@@ -61,6 +61,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Click-to-move route | [World, maps and movement](status/world.md) | ARC-WORLD-073, ARC-WORLD-042, ARC-WORLD-060 |
 | Hover tooltip and action cursor | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-005 |
 | Health and fatigue bars | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-020 |
+| Floating text | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-021 |
 | Inventory window, pickup and loot | [Viewer, rendering, HD and input](status/viewer.md) | ARC-WORLD-014, ARC-SCRIPT-013, ARC-UI-004 |
 | Character sheet | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-009, ARC-MAGIC-008, ARC-UI-007 |
 | Logbook | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-008 |
@@ -68,7 +69,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Main menu | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-011, ARC-UI-012 |
 | Scene flow | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-012 |
 | Launcher screen | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-014 |
-| Interface bars | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-018 |
+| Interface bars | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-018, ARC-UI-023 |
 | WORLD diagnostic integration | [Viewer, rendering, HD and input](status/viewer.md) | ARC-INPUT-001 |
 | Human presentation | [Viewer, rendering, HD and input](status/viewer.md) | — |
 | Input/camera/zoom | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DEV-032, ARC-INPUT-003 |

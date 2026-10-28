@@ -159,8 +159,9 @@ call-ex (81) and the conditions identified (47) and items being rewielded (50); 
 wield-off scripts are admitted, the other counts stay.
 
 **Not ready.** The wield-on and wield-off events of `EquipBest` and the rewield (`Equip` and `Unequip` run them since
-ARC-SCRIPT-042, [wield events](equipment-runtime.md#wield-events-arc-script-042)); the drop event (no drop command and no
-installed drop script; the critical drops of [placed items](#placed-items-arc-world-059) run no script); the buy event (no barter);
+ARC-SCRIPT-042, [wield events](equipment-runtime.md#wield-events-arc-script-042)); the drop event of the critical drops of
+[placed items](#placed-items-arc-world-059) (no installed drop script; the player's drop runs it since ARC-UI-025,
+[hero drop](#hero-drop-and-inventory-use-arc-ui-025)); the buy event (no barter);
 the scripts of a placed item's pickup (PI6); a container as recipient (putting items into containers is not modelled).
 
 ## Dialog seam
@@ -256,7 +257,7 @@ not migrated.
 | --- | --- |
 | Changes are saved with the map the NPC stands on (NI1–NI3). | Changes are saved by NPC identity; the visible result is the same because the NPC carries its items (NI4). |
 | A reference to an item no longer found is kept as a null list element with the count unchanged (NI2). | The list holds only items it has; a deleted item is gone from it. |
-| Closing a barter window restocks a non-follower NPC with an inventory source after 12–24 game hours, destroying items without the persistent flag (NI6, F1). | Not modelled (no barter); added items stay. |
+| Closing a barter window restocks a non-follower NPC with an inventory source after 12–24 game hours, destroying items without the persistent flag (NI6, F1; corrected by BT4 and RK2: the timer is set at every open). | The restock event (ARC-WORLD-094, [barter runtime](barter-runtime.md#restock-event-arc-world-094)); the AREA viewer schedules it at every barter and loot open (ARC-WORLD-096). |
 | A teleport clears an NPC's substitute-inventory link; an insert makes the NPC re-equip its best items (NI7, F1). | Not modelled. |
 | Any object type can enter an NPC's list. | Gold, keys and key rings are refused, as for the PC's lists; ammunition merges into the NPC's stack of its prototype (ARC-WORLD-066). |
 
@@ -339,7 +340,7 @@ each decay event (one item on a map, set no later than the saved clock, the deca
 event pump fires them like the other kinds (`AreaEventReport.Decays`, log `ARC-WORLD-062 item-decay`) and redraws the ground.
 
 Since ARC-WORLD-063 an item in a junk pile decays as a loose one, and a drop into a pile restarts its two days, while an item swept
-into a new pile keeps its time ([junk piles](#junk-piles-arc-world-063)). Not ready: the player's own drop command (ARC-WORLD-064); the viewer's loot window shows no container but the session's junk piles (a dead NPC it loots does not count, as in the original's
+into a new pile keeps its time ([junk piles](#junk-piles-arc-world-063)). The player's own drop is the window's `DropHeroItem` (ARC-UI-025). Not ready: the viewer's loot window shows no container but the session's junk piles (a dead NPC it loots does not count, as in the original's
 counter), so only an open pile delays a decay; the item flag of the hero's kit and made items is not known (no
 installed prototype sets it); the session reads the no-decay flag only from an attached seed's row, so a seed item the PC took
 whose map's seed is not attached (after a restore on another map) reads as decaying and is deleted two days after a drop, where the
@@ -601,7 +602,7 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
   (0x20); NPC flag 0x40, which makes the AI re-wield its best items after a move; gold in containers. The barter window's trades
   (item, then coins) are `BarterBuy` and `BarterSell` ([barter runtime](barter-runtime.md), ARC-UI-050); since ARC-WORLD-090 they move
   items out of and into a merchant's substitute container (its added list in the NPC store, marked as a container), and the barter open
-  moves the container's coins onto the merchant; restock is not modelled.
+  moves the container's coins onto the merchant; ARC-WORLD-094 and ARC-WORLD-096 restock it ([barter runtime](barter-runtime.md#restock-in-the-viewer-arc-world-096)).
 
 ## Made item complexity (ARC-WORLD-083)
 
@@ -746,8 +747,29 @@ a kit or made item's 1 × 1; the inventory art's size is not read yet, so every 
 **Not ready.** The inventory art's size of an item (a size is taken when the item takes a slot; a worn or waiting item whose seed is
 not attached then counts as 1 × 1); the room of items entering from outside; a restore accepts a grid that leaves out held items
 there is room for (they wait outside it until the next change places them); the item events of a wear move into an empty slot
-that its insert check refuses (IW15); the drop to the ground and the use icon;
-the stacks' merge on a grid drop; the gold drag; a made item's no-drop flag and scripts in the viewer.
+that its insert check refuses (IW15); the stacks' merge on a grid drop; the gold drag; a made item's no-drop flag and scripts in the viewer.
+
+## Hero drop and inventory use (ARC-UI-025)
+
+Source: alpha item N6 part 3, [ledger IW16–IW19](../research/ledger/ui-audio.md#inventory-drop-and-use-arc-ui-025) with the drop's
+rows PI1–PI3 and the item use's AG15, TP1 and IU1.
+
+- **Drop.** `DropHeroItem` drops one of the hero's items (kit, taken or made, listed or worn) on the actor's tile, as the window's drop
+  icon does (0x461A70: the drop 0x461AB0 with distance 0). In order: input, version, an item the hero holds and has not placed
+  (`ItemNotAvailable`), its saved kind (`InventoryMismatch`), item event scripts without a host (`ItemScriptUnsupported`: drop 5,
+  remove item 28 and, worn, wield off 25; a taken item's attached origin seed answers the drop script too), item spells without a
+  trigger host (`ItemEffectUnsupported`), the drop script (its skip default keeps the item, `DeclinedBy` 5, its effects applied), the
+  no-drop flag (`ItemNotDroppable`; a worn item's own record answers too), the tile (`DropTileUnfit`), then the removal's wield-off and
+  remove-item events and the placement (`PlaceHeroItem`: a junk pile on the tile or a new one, then the decay timer). One revision;
+  with a trigger host a worn item's unwear executor and the removal's spell steps follow. A refusal after the drop script drops its
+  writes (session policy, as the pickup's). No action points (IW8). The caller places the actor on the hero's tile first. A stack
+  drops whole: the quantity window that splits it first (IW7) is the host's (the viewer refuses a stack of more than one unit).
+- **Use.** `AiExecutorRules.UseItemNow` (0x462CC0) now reads an `IItemUseWorld`, the part of `IAiGoalWorld` the use needs, so the
+  inventory window runs the same use as the NPC executor (see [terrain viewer](../rendering/terrain-viewer.md)).
+- **No snapshot change.** A dropped item is a placed item (schema 32 and later).
+
+**Not ready.** The quantity window before a stack's drop (IW7); the map drop and the throw of an arbitrary held item (IW18); the item
+targeting cursor of an item that needs a target (lockpicks excepted) and a trap device's use from the window.
 
 ## Next steps
 

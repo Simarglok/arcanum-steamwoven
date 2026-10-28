@@ -42,7 +42,7 @@ public static class GameSessionSnapshotCodec
     /// it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
     public const int MaxEncodedCharacters = 96 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -61,7 +61,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut", "loyalty"];
     private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted", "loyalty"];
     private static readonly string[] HeroFields = ["prototype", "race", "gender", "stats", "level", "experience", "unspentPoints",
-        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills", "fatePoints", "armedFates", "background"];
+        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills", "fatePoints", "armedFates", "background", "backgroundDescription"];
     private static readonly string[] EffectFields = ["effect", "modifiers"];
     private static readonly string[] InnateSkillFields = ["cause", "skill", "operator", "value"];
     // Skill names in Skill order (ARC-SKILLS-002), the innate skill change's causes.
@@ -132,6 +132,9 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] SoundFields = ["slots", "restorePending", "restore", "combatMusic", "preCombat"];
     private static readonly string[] PendingEventFields = ["sequence", "kind", "deadlineMs", "entities", "values"];
     private static readonly string[] EventEntityFields = ["map", "entity"];
+    // ARC-UI-022 (schema 53): the hotkey bar.
+    private static readonly string[] HotkeysFields = ["entries", "recent"];
+    private static readonly string[] HotkeyEntryFields = ["kind", "item", "index"];
 
     public static string Encode(GameSessionSnapshot snapshot)
     {
@@ -325,6 +328,7 @@ public static class GameSessionSnapshotCodec
                 w.WriteNumber("fatePoints", hero.Fate.Points);
                 w.WriteNumber("armedFates", hero.Fate.Armed);
                 w.WriteNumber("background", hero.Background);
+                w.WriteNumber("backgroundDescription", hero.BackgroundDescription);
                 w.WriteEndObject();
             }
             else w.WriteNull("hero");
@@ -767,6 +771,12 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteEndObject();
 
+            // ARC-UI-022: ten entries and two recent actions, each its kind (0..4), its item or null, and its index (−1 for none).
+            w.WriteStartObject("hotkeys");
+            WriteHotkeys(w, "entries", snapshot.Hotkeys.Entries);
+            WriteHotkeys(w, "recent", snapshot.Hotkeys.Recent);
+            w.WriteEndObject();
+
             if (snapshot.Lighting is { } lighting)
             {
                 w.WriteStartObject("lighting");
@@ -775,9 +785,52 @@ public static class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             else w.WriteNull("lighting");
+
             w.WriteEndObject();
         }
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    private static void WriteHotkeys(Utf8JsonWriter w, string name, IReadOnlyList<Arcanum.Simulation.Hotkeys.HotkeyEntry> entries)
+    {
+        w.WriteStartArray(name);
+        foreach (var entry in entries)
+        {
+            w.WriteStartObject();
+            w.WriteNumber("kind", (int)entry.Kind);
+            if (entry.Item is null) w.WriteNull("item"); else w.WriteString("item", entry.Item);
+            w.WriteNumber("index", entry.Index);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+    }
+
+    // Shapes: exactly ten entries and two recent actions, each fitting its kind; who holds the items and the kinds of the recent actions
+    // are Restore's.
+    private static SessionHotkeyState Hotkeys(JsonElement element)
+    {
+        const string p = "$.hotkeys";
+        var f = Fields(element, p, HotkeysFields);
+        return new(HotkeyEntries(f["entries"], p + ".entries", Arcanum.Simulation.Hotkeys.HotkeyRules.Entries),
+            HotkeyEntries(f["recent"], p + ".recent", Arcanum.Simulation.Hotkeys.HotkeyRules.RecentActions));
+    }
+
+    private static Arcanum.Simulation.Hotkeys.HotkeyEntry[] HotkeyEntries(JsonElement element, string path, int count)
+    {
+        var rows = Array(element, path, count);
+        if (rows.Length != count) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
+        var entries = new Arcanum.Simulation.Hotkeys.HotkeyEntry[count];
+        for (var i = 0; i < count; i++)
+        {
+            var at = $"{path}[{i}]";
+            var e = Fields(rows[i], at, HotkeyEntryFields);
+            var kind = (Arcanum.Simulation.Hotkeys.HotkeyKind)Int(e["kind"], at + ".kind", 0, (int)Arcanum.Simulation.Hotkeys.HotkeyKind.ItemSpell);
+            var item = e["item"].ValueKind == JsonValueKind.Null ? null : Entity(e["item"], at + ".item");
+            var entry = new Arcanum.Simulation.Hotkeys.HotkeyEntry(kind, item, Int(e["index"], at + ".index", -1, Arcanum.Simulation.Magic.ItemSpellPaneRules.NoSpell - 1));
+            if (!entry.IsWellFormed) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, at);
+            entries[i] = entry.IsEmpty ? Arcanum.Simulation.Hotkeys.HotkeyEntry.Empty : entry;
+        }
+        return entries;
     }
 
     private static void WriteHandle(Utf8JsonWriter w, string name, SessionCombatant? handle)
@@ -859,7 +912,8 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Concealment(f["concealment"]), Danger(f["danger"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Concealment(f["concealment"]), Danger(f["danger"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]),
+            Hotkeys(f["hotkeys"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
@@ -1334,7 +1388,8 @@ public static class GameSessionSnapshotCodec
             Effect(f["genderEffect"], p + ".genderEffect"), Int(f["experience"], p + ".experience", int.MinValue, int.MaxValue),
             HeroAdvancement(f["advancement"], p + ".advancement"), InnateSkills(f["innateSkills"], p + ".innateSkills"),
             new FateState(Int(f["fatePoints"], p + ".fatePoints", int.MinValue, int.MaxValue),
-                Int(f["armedFates"], p + ".armedFates", int.MinValue, int.MaxValue)), Int(f["background"], p + ".background", int.MinValue, int.MaxValue));
+                Int(f["armedFates"], p + ".armedFates", int.MinValue, int.MaxValue)), Int(f["background"], p + ".background", int.MinValue, int.MaxValue),
+            Int(f["backgroundDescription"], p + ".backgroundDescription", int.MinValue, int.MaxValue));
     }
 
     // Shapes only; the count, magnitudes and divisors are the hero's import (InvalidHero).

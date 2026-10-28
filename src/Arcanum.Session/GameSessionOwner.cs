@@ -48,6 +48,8 @@ public sealed partial class GameSessionOwner : IDisposable
     private readonly GameEventQueue _events;
     // Set only while a pass runs: the host's answers for the timers it fires and the life steps they made.
     private ISessionEventWorld? _passWorld;
+    // ARC-WORLD-096: the pass world as T, or the host world a spell host's pass world wraps as T.
+    private T? PassWorldAs<T>() where T : class => _passWorld as T ?? (_passWorld as ISessionWrappingEventWorld)?.Wrapped as T;
     private List<SessionLifeFiring>? _passFirings;
     private List<SessionScriptCallFiring>? _passCalls;
     private List<SessionEffectFiring>? _passEffects;
@@ -175,7 +177,9 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportWornConditions(equipment, durability);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportHeroGrid(snapshot.Inventory.Grid, inventory, equipment);
+        failure = ImportHotkeys(snapshot.Hotkeys, hero is not null, inventory, equipment, out var hotkeys, out var recentActions);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportHeroGrid(snapshot.Inventory.Grid, inventory, equipment, hotkeys);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSchematics(snapshot.Schematics, hero is not null, limits, out var found);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -227,8 +231,9 @@ public sealed partial class GameSessionOwner : IDisposable
             hero, inventory, equipment, effects, experience, advancement, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat,
             snapshot.Lighting, sink, events!)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
-          _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty };
+          _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions };
         owner.MarkEncumbranceOfRestore();
+        owner.MarkHotkeyPlaces();
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -1364,7 +1369,8 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureConcealment(), _danger.Capture(), CaptureEvents(), _lighting, _sound.Capture());
+            _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureConcealment(), _danger.Capture(), CaptureEvents(), _lighting, _sound.Capture(),
+            QueryHotkeys());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -1719,7 +1725,8 @@ public sealed partial class GameSessionOwner : IDisposable
         hero = null;
         if (saved is null) return GameSessionFailure.None;
         hero = HeroDomain.Build(saved.Prototype, saved.Race, saved.Gender, saved.Stats, saved.Level, saved.UnspentPoints, saved.Alignment,
-            saved.RaceEffect, saved.GenderEffect, saved.Experience, saved.Advancement, saved.InnateSkills, saved.Fate, saved.Background);
+            saved.RaceEffect, saved.GenderEffect, saved.Experience, saved.Advancement, saved.InnateSkills, saved.Fate, saved.Background,
+            saved.BackgroundDescription);
         return hero is null ? GameSessionFailure.InvalidHero : GameSessionFailure.None;
     }
 

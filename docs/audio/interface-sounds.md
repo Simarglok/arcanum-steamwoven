@@ -16,6 +16,7 @@ interface sound is non-positional at the plain volume (127, centre) through the 
 | Logbook tab pressed (button or `Tab`) | 3010 (page) |
 | The player closes the logbook | 3009 (book close); closing it on a map change or reload is silent |
 | The hero gains a level | 3005 (level up), with each level's message-window entry since [ARC-UI-046](../rendering/terrain-viewer.md#level-up-messages-arc-ui-046): one per level written, as the original plays it when it draws each entry |
+| The hero's encumbrance level changes; the same message posted again while it is the newest (ARC-UI-023) | 3004 (message), as the original's message log plays it when it draws a message entry ([ML5](../research/ledger/ui-audio.md#message-log-arc-ui-023)); scrolling the log and button names play nothing |
 | A quest becomes completed for the PC (also by un-botching) | 3028 (quest completed) |
 | An item is taken from a body in the inventory window | the item's pickup sound ([sound cues](sound-cues.md)) |
 | A button of the [interface bars](../rendering/terrain-viewer.md#interface-bars-arc-ui-018) is pressed; released over it (ARC-UI-018) | 3000; 3001. A toggle (Spells, Skills) plays 3000 turning on and 3001 turning off. The pointer entering or leaving plays nothing ([GB6](../research/ledger/ui-audio.md#interface-bars-arc-ui-018)) |

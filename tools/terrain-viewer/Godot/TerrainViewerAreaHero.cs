@@ -65,8 +65,12 @@ public partial class TerrainViewerApp
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-SKILLS-008 prowl smoke: " + why); }
         var session = _areaSession!;
         var revision = session.Version.Revision;
+        // ARC-UI-022: the press first becomes the latest recent action (one more revision unless it already was).
+        var recorded = session.QueryHotkeys().Recent[0] == Arcanum.Simulation.Hotkeys.HotkeyEntry.ForSkill(Arcanum.Simulation.Hotkeys.SkillBarButton.Prowling) ? 0 : 1;
         PaletteProwlToggle();
-        Require(session.IsConcealed(Arcanum.Session.SessionCombatant.Hero) && session.Version.Revision == revision + 1, "prowl on: " + _prowlNotice);
+        Require(session.IsConcealed(Arcanum.Session.SessionCombatant.Hero) && session.Version.Revision == revision + 1 + recorded, "prowl on: " + _prowlNotice);
+        Require(session.QueryHotkeys().Recent[0] == Arcanum.Simulation.Hotkeys.HotkeyEntry.ForSkill(Arcanum.Simulation.Hotkeys.SkillBarButton.Prowling),
+            "the prowling button is the latest recent action");
         var training = session.QueryHeroSkills()![Arcanum.Simulation.Skills.Skill.Prowling].Training;
         var (gait, origin) = (_worldGait, _gaitOrigin); SetObjectApproachGait();
         var stepped = StepGait();

@@ -51,7 +51,7 @@ public partial class TerrainViewerApp
             Require(_mainMenu.Window == AreaMenuWindow.Options && texts.FromGame && _mainMenuPanel!.HeaderForSelfTest == "Options: Game",
                 $"Options opened the options window with the game's texts: {texts.Detail} {_mainMenuPanel?.HeaderForSelfTest}");
             var panel = _mainMenuPanel!;
-            Require(panel.ButtonsForSelfTest.SequenceEqual(["Game  (G)", "Sound  (S)", "Done  (D)"]), "page buttons: " + string.Join("|", panel.ButtonsForSelfTest));
+            Require(panel.ButtonsForSelfTest.SequenceEqual(["Game  (G)", "Video  (V)", "Sound  (S)", "Done  (D)"]), "page buttons: " + string.Join("|", panel.ButtonsForSelfTest));
             Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven"]), "Game page: " + string.Join("|", Controls()));
             // ARC-UI-014: Original chosen in the main menu is the rule mode the new game begins in.
             panel.ChangeForSelfTest(4, 1);

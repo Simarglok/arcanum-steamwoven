@@ -130,6 +130,81 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
+    /// ARC-WORLD-096 native observation (stage `barter`, after the barter part, on the live session): the open scheduled the merchant's
+    /// substitute container (its inventory source); the game time jumps to the event with the container on screen (the event is
+    /// scheduled again), then, with the camera moved until the container is off screen, to the new event: the merchant regenerates when
+    /// it has a source of its own and the container is cleared and generated again; the window opened again shows the new wares.
+    /// Prints counts and outcomes only. SKIP for a merchant without a container or without lighting (no event pump).
+    /// </summary>
+    private async Task RunAreaRestockSmokeAsync(AreaConversationHost talk, string merchant, int speaker, AreaBarterView before)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-WORLD-096 restock smoke: " + why); }
+        if (_areaSession is not { } session || before.Merchant.Container is not { } container) { GD.Print("ARC-WORLD-096 native-smoke restock SKIP (the merchant has no substitute container)"); return; }
+        if (_areaAmbient is not { Events: not null } driver || _camera is null) { GD.Print("ARC-WORLD-096 native-smoke restock SKIP (no event pump)"); return; }
+        var host = RestockHostNow();
+        Require(host is not null, "the restock host is ready");
+        var map = new SessionMapId(CurrentAreaMap);
+        var key = _inventoryHost!.Maps.Single(m => m.RuntimeMap == map.RuntimeMap).Row(container).Key;
+        Require(_canvas!.AreaBodyRect(key) is not null, "the container draws a body");
+        Require(session.QueryRestocks().Any(e => e.Holder == container), "the open scheduled the container (RK2, RK9)");
+        var zoom = _camera.State.Zoom;
+        // Moves the camera by the production manual pan until the container's screen test answers as wanted.
+        bool Camera(bool onScreen)
+        {
+            var body = _canvas.AreaBodyRect(key)!.Value;
+            var centre = body.GetCenter();
+            for (var attempt = 0; attempt < 12 && host!.OnScreen(map, container) != onScreen; attempt++)
+            {
+                // Farther in each direction in turn; the zoom stays (the merchant search's area does not follow it, but the view does).
+                var far = onScreen ? centre : centre + new Vector2(attempt % 2 == 0 ? 4000 : -4000, attempt % 4 < 2 ? 3000 : -3000) * (1 + attempt / 4);
+                _camera.UpdateWorld(WorldAnchor, default, new GamepadLab.Core.Vec2(_camera.State.X - far.X, _camera.State.Y - far.Y), false, true, WorldViewport);
+                _camera.Camera.ForceUpdateScroll();
+            }
+            return host!.OnScreen(map, container) == onScreen;
+        }
+        SessionRestockFiring Wait()
+        {
+            var due = session.QueryRestocks().Single(e => e.Holder == container).DeadlineMs - session.QueryClockSnapshot().GameTimestampMs;
+            driver.AdvanceMilliseconds(Math.Max(1, due), AmbientSector());
+            LogAreaEvents(driver);
+            return driver.Events!.Last.Restocks.Single(f => f.Holder == container);
+        }
+        try
+        {
+            string first;
+            if (Camera(onScreen: true))
+            {
+                var waited = Wait();
+                Require(waited.Decision.Step == Arcanum.Simulation.Items.RestockStep.Reschedule && session.QueryRestocks().Any(e => e.Holder == container),
+                    "on screen the event is scheduled again: " + waited.Decision.Step);
+                first = "on screen: rescheduled";
+            }
+            else first = "could not show the container: on-screen half skipped";
+            Require(Camera(onScreen: false), "the camera could not leave the container off screen");
+            var fired = Wait();
+            Require(fired is { Postponed: false, Decision.Step: Arcanum.Simulation.Items.RestockStep.RegenerateMerchantAndContainer },
+                $"off screen it regenerates through its merchant: {fired.Decision.Step} postponed {fired.Postponed}");
+            var done = fired.Regenerations.Single(r => r.Holder == container);
+            Require(done.Outcome == SessionRestockOutcome.Regenerated && session.QueryRestocks().All(e => e.Holder != container), "the container regenerated: " + done.Outcome);
+            _camera.ResetWorld(WorldAnchor, WorldViewport, zoom); _camera.Camera.ForceUpdateScroll();
+            QueueDialogBarter(talk, (merchant, speaker));
+            TakeDialogBarter();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(BarterOpen && _barterPanel!.View is { } again && again.Merchant.Entity == merchant, "the window opened again: " + _barterStatus);
+            var after = _barterPanel!.View!;
+            InventoryKey(Key.Escape);
+            Require(!BarterOpen, "Escape closed it");
+            GD.Print("ARC-WORLD-096 native-smoke restock PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                First = first,
+                Fired = $"{fired.Decision.Step}, merchant regenerates {fired.Decision.MerchantRegenerates}",
+                Container = $"removed {done.Removed}, coins {done.Coins}, created {done.Created.Count}, refused {done.Refused}, skipped {done.Skipped}",
+                Wares = $"{before.Wares.Count} before, {after.Wares.Count} after; merchant gold {before.MerchantGold} before, {after.MerchantGold} after",
+                Rescheduled = session.QueryRestocks().Any(e => e.Holder == container) }));
+        }
+        finally { _camera.ResetWorld(WorldAnchor, WorldViewport, zoom); _camera.Camera.ForceUpdateScroll(); }
+    }
+
+    /// <summary>
     /// ARC-UI-050 native observation on the original data (stage `barter`, with --hero): a living NPC speaker of the shown map, a merchant
     /// when one is there, is passed to the production path a `b:` reply takes once its talk ended; the window opens over the live session
     /// with its quotes (ARC-WORLD-090: the open moves a substitute container's coins onto the merchant and identifies the goods, its only
@@ -166,7 +241,8 @@ public partial class TerrainViewerApp
             TakeDialogBarter();
             Require(BarterOpen && _barterPanel!.View is { } view && view.Merchant.Entity == chosen.Entity, "the window opened with the speaker: " + _barterStatus);
             var live = _barterPanel!.View!;
-            Require(session.Version.Revision - revision is 0 or 1, "the open is one revision at most");
+            // ARC-WORLD-090: the open's coins and identification; ARC-WORLD-096: the restock schedule of the shown object.
+            Require(session.Version.Revision - revision is >= 0 and <= 2, "the open is two revisions at most");
             revision = session.Version.Revision;
             InventoryKey(Key.Escape);
             Require(!BarterOpen && session.Version.Revision == revision, "Escape closed it; nothing changed");
@@ -194,6 +270,7 @@ public partial class TerrainViewerApp
                 Container = live.Merchant.Container is null ? "none" : $"buys {live.Merchant.ContainerBuyList?.Status}, identified {session.Capture().Inventory.Identified.Count}",
                 Live = $"hero items {live.Hero.Count} (priced {live.Hero.Count(l => l.Quote.Price > 0)}), wares {live.Wares.Count} (priced {live.Wares.Count(l => l.Quote.Price > 0)}), gold {live.HeroGold}/{live.MerchantGold}, haggle {live.Haggle} {live.Training}, reaction {live.Reaction}",
                 Sold = sold.Text, Bought = bought }));
+            await RunAreaRestockSmokeAsync(talk, chosen.Entity, chosen.Index, live);
         }
         finally
         {

@@ -172,7 +172,8 @@ public partial class TerrainViewerApp
         if (_spellPane is null)
         {
             _spellPane = new AreaSpellPane(); AddChild(_spellPane);
-            _spellPane.Activated += spell => ActivateSpell(spell);
+            // ARC-UI-022: the press becomes the latest recent action first (0x57EFA0), then the activation.
+            _spellPane.Activated += spell => { RecordRecentAction(Arcanum.Simulation.Hotkeys.HotkeyEntry.ForSpell(spell)); ActivateSpell(spell); };
             _spellPane.WeaponToggled += ToggleWeaponPane;
             _spellPane.ItemActivated += ActivateItemSlot;
         }
@@ -572,11 +573,9 @@ public partial class TerrainViewerApp
         PostSpellMessage(_spellNotice);
     }
 
-    private void PostSpellMessage(string text)
-    {
-        if (_messageWindow is null) { _messageWindow = new AreaMessageWindow(); AddChild(_messageWindow); }
-        _messageWindow.Post(new("Magic", text, ""));
-    }
+    // ARC-UI-023: the cast's lines go to the message log as a plain text entry (no sound), titled with the project's label: the
+    // original's own spell messages are not built.
+    private void PostSpellMessage(string text) => PostMessage(AreaMessageEntry.Text(AreaMessageKind.Plain, "Magic\n" + text), "magic");
 
     private string SpellObjectName(string id) =>
         id == SessionSpellCaster.Hero ? "the hero"

@@ -3,6 +3,7 @@ using Arcanum.Data.Magic;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Hotkeys;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -101,12 +102,14 @@ public partial class TerrainViewerApp
         var npc = target.Build.Combat!.Target;
         var npcStart = session.QueryLife(npc).View!.Status.HitPoints;
         var scaled = false;
+        var lastPressed = -1;
 
         // One cast at the NPC through the pane, the cursor and the click, played to its end (and its missile's arrival); the NPC and
         // the hero's fatigue are restored first and the hero turned back, so a second cast finds them as the first did.
         // ARC-MAGIC-019 (SU13): a spell without a missile is clicked twice, the second cast queued beneath the first.
         async Task<object> CastOnce(SessionSpellRecord spell)
         {
+            lastPressed = spell.Data.Number;
             var queue = SpellMissileArt(spell.Data.Number) is null;
             if (session.QueryLife(npc).View?.Status is { } was && (was.HitPoints != npcStart || was.IsDead))
                 session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
@@ -297,6 +300,14 @@ public partial class TerrainViewerApp
                     "the hero paid no fatigue for the weapon's spell");
                 _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true, Position = point });
                 Require(_spellTargeting is null, "a right click closes the weapon's cursor");
+                // ARC-UI-022: the weapon's spell on entry 1 (key 2): the wielded weapon goes straight to the activation (0x57C080).
+                Require(session.AssignHotkey(session.Version, 1, HotkeyEntry.ForItemSpell(wielded.Entity, spellNumber)).Disposition == GameSessionDisposition.Changed,
+                    "the weapon's spell is put on entry 1");
+                HotkeyKey(Key.Key2);
+                Require(_spellTargeting is { Item: { } hotkeySource } && hotkeySource == wielded.Entity && _spellTargeting.Spell == spellNumber,
+                    "the key 2 opened the weapon's cursor: " + _hotkeyNotice);
+                CancelSpellTargeting(null);
+                Require(session.ClearHotkey(session.Version, 1).Disposition == GameSessionDisposition.Changed, "entry 1 emptied");
                 // Unwielding the weapon returns the bar to the spell list (0x5570D0), wielding it again shows the button (0x556EF0).
                 // The weapon's run still has it as the source (a run with a duration): its moves need the trigger host (ARC-MAGIC-020).
                 var host = new SessionItemTriggers(SpellCasterNow()!, CombatWorldOrNull() ?? NoSpellCombat.Instance);
@@ -361,6 +372,25 @@ public partial class TerrainViewerApp
                 second = await CastOnce(missile!);
             }
             var weaponCast = await WeaponPaneCastAsync();
+            // ARC-UI-022: the pane's last press is the latest recent action; Ctrl+1 puts it on entry 0, the keys 1 and A activate it, Ctrl+Shift+1
+            // empties the entry and an empty entry does nothing.
+            var latest = session.QueryHotkeys().Recent[0];
+            Require(latest.Kind == HotkeyKind.Spell && latest.Index == lastPressed, $"the pane's press is the latest recent action: {latest} (pressed {lastPressed})");
+            CancelSpellTargeting(null);
+            HotkeyKey(Key.Key1, ctrl: true);
+            Require(session.QueryHotkeys().Entries[0] == latest, "Ctrl+1 put the latest recent action on entry 0: " + _hotkeyNotice);
+            var activations = _hotkeyActivations;
+            HotkeyKey(Key.Key1);
+            Require(_spellTargeting?.Spell == latest.Index && _hotkeyActivations == activations + 1, "the key 1 opened the spell's cursor: " + _hotkeyNotice);
+            CancelSpellTargeting(null);
+            HotkeyKey(Key.A);
+            Require(_spellTargeting?.Spell == latest.Index && _hotkeyActivations == activations + 2, "A opened the latest action's cursor: " + _hotkeyNotice);
+            CancelSpellTargeting(null);
+            HotkeyKey(Key.Key1, ctrl: true, shift: true);
+            Require(session.QueryHotkeys().Entries[0].IsEmpty, "Ctrl+Shift+1 emptied entry 0: " + _hotkeyNotice);
+            HotkeyKey(Key.Key1);
+            Require(_spellTargeting is null && _hotkeyActivations == activations + 2, "an empty entry does nothing: " + _hotkeyNotice);
+            GD.Print($"ARC-UI-022 native-smoke hotkeys PASS spell={latest.Index} weapon-entry={(weaponCast is null ? "skipped" : "activated")} activations={_hotkeyActivations - activations}");
             GD.Print("ARC-MAGIC-015 native-smoke cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, Cast = first, MissileCast = second, WeaponCast = weaponCast,
                 Parity = "NOT_VERIFIED (spell UI, eye-candy timing and the missile read in the original executable; no original-runtime run)" }));
@@ -380,6 +410,14 @@ public partial class TerrainViewerApp
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
+    }
+
+    // ARC-UI-022 smoke: a key down and up through the WORLD keyboard route, with Ctrl or Shift held.
+    private void HotkeyKey(Key key, bool ctrl = false, bool shift = false)
+    {
+        var unicode = key == Key.A ? 'a' : 0;
+        InputWorld(new InputEventKey { Keycode = key, PhysicalKeycode = key, Unicode = unicode, CtrlPressed = ctrl, ShiftPressed = shift, Pressed = true });
+        InputWorld(new InputEventKey { Keycode = key, PhysicalKeycode = key, Unicode = unicode, CtrlPressed = ctrl, ShiftPressed = shift, Pressed = false });
     }
 
     // ARC-UI-016 smoke: spell facts lent to the hero's wielded weapon (see the cast smoke) and where they came from.

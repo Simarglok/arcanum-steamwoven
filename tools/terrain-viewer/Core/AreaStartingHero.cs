@@ -84,6 +84,10 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
 
     /// <summary>ARC-UI-019: each kit item's facts for a move in the hero's grid, by kit index; null for a prototype that does not read.</summary>
     public IReadOnlyList<SessionGridMoveItem?>? KitGridMove { get; init; }
+
+    /// <summary>ARC-UI-025: each kit item's use facts under its kit entity, by kit index; null for a prototype that does not read or is no
+    /// item.</summary>
+    public IReadOnlyList<AreaItemUseFacts?>? KitUse { get; init; }
 }
 
 /// <summary>
@@ -173,6 +177,7 @@ public static class AreaStartingHero
             KitThrowWeight = KitThrowWeight(prototypes.Read, definition),
             KitItemSpells = KitItemSpells(prototypes.Read, definition),
             KitGridMove = KitGridMove(prototypes.Read, definition),
+            KitUse = KitUse(prototypes.Read, definition),
         };
     }
 
@@ -256,6 +261,16 @@ public static class AreaStartingHero
         ArgumentNullException.ThrowIfNull(definition);
         return definition.Kit.Select(item => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields is { } fields
             ? AreaInventoryHost.GridMoveFacts(item.Kind, fields) : null).ToArray();
+    }
+
+    /// <summary>ARC-UI-025: each kit item's use facts (<see cref="AreaItemUseFacts.From"/>) under its kit entity from its prototype's combat
+    /// fields, null where it does not read or is no item.</summary>
+    public static IReadOnlyList<AreaItemUseFacts?> KitUse(Func<int, PrototypeFile> prototypes, SessionHeroDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(prototypes);
+        ArgumentNullException.ThrowIfNull(definition);
+        return definition.Kit.Select((item, index) => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields is { } fields
+            ? AreaItemUseFacts.From("kit:" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), fields) : null).ToArray();
     }
 
     /// <summary>ARC-RENDER-033: each kit item's ground ART id from its prototype's combat fields, null where it does not read.</summary>

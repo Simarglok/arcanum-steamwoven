@@ -82,8 +82,9 @@ follow the original in both settings.
 ## Not ready
 
 - **Host.** The AREA viewer's AI host ([AI viewer host](ai-host.md), ARC-WORLD-092, slice I10's first part) implements both worlds,
-  holds one run per NPC, steps it on the world clock and wires the scheduler's perform stage, in real time; its turn-based round
-  (the subturn hook, the round costs, the pending cost's reset) is I10's next part.
+  holds one run per NPC, steps it on the world clock and wires the scheduler's perform stage; in a turn-based round
+  (ARC-WORLD-095, [turn-based round](ai-host.md#turn-based-round-arc-world-095)) its runs pay the round's costs through the session
+  and its pending cost reads 0 after each subturn start.
 - **Other goals.** The casting (26, 82), item use (39), skill (33), throw (37) and pickup (15, 16) goals and their starters are
   [slice I8b](ai-action-goals.md) (the decisions are [AI support](ai-support.md), slice I8); the PC's attack goal and its
   auto-attack repeat stay the hero attack's ([hero attack](hero-attack-runtime.md)).

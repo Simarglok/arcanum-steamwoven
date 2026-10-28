@@ -111,7 +111,7 @@ public sealed class FateStateTests
         owner.ArmHeroFate(owner.Version, FateKind.CriticalMiss);
         owner.ArmHeroFate(owner.Version, FateKind.DisarmTraps);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "\"fatePoints\":1,\"armedFates\":1028,\"background\":0}");
+        StringAssert.Contains(text, "\"fatePoints\":1,\"armedFates\":1028,\"background\":0,\"backgroundDescription\":0}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(new FateState(1, 1028), restored.QueryHeroFate());
         foreach (var bad in new[] { "\"fatePoints\":101,", "\"fatePoints\":-1," })

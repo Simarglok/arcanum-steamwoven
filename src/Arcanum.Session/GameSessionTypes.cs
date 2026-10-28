@@ -260,6 +260,12 @@ public enum GameSessionFailure
     WeaponInFlight,
     // Hero inventory grid (ARC-UI-019): the target cells hold another item or leave the grid; a saved grid that disagrees with the lists.
     GridCellsTaken, InvalidGrid,
+    // Hotkey bar (ARC-UI-022): a slot, entry or saved bar that does not fit; no hero to own a bar.
+    InvalidHotkey, HotkeysUnavailable,
+    // Hero drop (ARC-UI-025): the item's no-drop flag (item flag 0x20, the remove check 0x466DA0); the hero's tile outside the drop's bounds.
+    ItemNotDroppable, DropTileUnfit,
+    // Hero background (ARC-WORLD-097): a choice outside the stored range or whose effect is not the one given.
+    InvalidBackground,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -435,20 +441,23 @@ public sealed class GameSessionSnapshot
     /// the placed items of <see cref="Inventory"/> (source <c>created</c>, ARC-WORLD-081); schema 49 adds the items' spent spell charges to
     /// <see cref="Durability"/> and a worn item's item spells mark to <see cref="Equipment"/> (ARC-MAGIC-022); schema 50 adds the identified items and the
     /// containers' added lists to <see cref="Inventory"/> (ARC-WORLD-090); schema 51 adds the highest discarded made number to
-    /// <see cref="Inventory"/> (ARC-WORLD-094); schema 52 adds the hero's inventory grid to <see cref="Inventory"/> (ARC-UI-019).
-    /// Schemas 1..51 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 52;
+    /// <see cref="Inventory"/> (ARC-WORLD-094); schema 52 adds the hero's inventory grid to <see cref="Inventory"/> (ARC-UI-019); schema 53
+    /// adds the hotkey bar (<see cref="Hotkeys"/>, ARC-UI-022); schema 54 adds the hero's background description number to <see cref="Hero"/>
+    /// (ARC-WORLD-097). Schemas 1..53 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 54;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
         SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionEquipmentState equipment, SessionDurabilityState durability, SessionSchematicState schematics,
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
-        SessionConcealmentState concealment, SessionDangerState danger, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound)
+        SessionConcealmentState concealment, SessionDangerState danger, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound,
+        SessionHotkeyState? hotkeys = null)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
         Hero = hero; Inventory = inventory; Equipment = equipment; Durability = durability; Schematics = schematics; Effects = effects; Experience = experience; Advancement = advancement; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Concealment = concealment; Danger = danger; Events = events; Lighting = lighting; Sound = sound;
+        Hotkeys = hotkeys ?? SessionHotkeyState.Empty;
     }
 
     public int SchemaVersion { get; }
@@ -496,6 +505,8 @@ public sealed class GameSessionSnapshot
     public SessionLightingState? Lighting { get; }
     /// <summary>The music and ambient scheme slots, the transition restore and combat music (ARC-WORLD-040).</summary>
     public SessionSoundState Sound { get; }
+    /// <summary>The hero's hotkey bar: ten entries and two recent actions (ARC-UI-022).</summary>
+    public SessionHotkeyState Hotkeys { get; }
 }
 
 internal static class SessionValidation

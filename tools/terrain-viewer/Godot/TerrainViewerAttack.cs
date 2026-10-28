@@ -246,6 +246,7 @@ public partial class TerrainViewerApp
         if (goal is not null && target.Row.Key == goal.Row.Key)
             goal.Broke = result.Object?.Broken == true || result.Item?.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted;
         _attackNotice = AreaObjectTargets.Describe(result);
+        FloatObjectAttack(result, target.Entity, target.Row);
         GD.Print($"ARC-COMBAT-008 object-attack-hit target={target.Entity} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} damage={result.Object?.Damage}/{result.Item?.Condition?.Damage} break={result.Object?.Break}/{result.Item?.Break}"
             + $" host={result.Host} step={result.StepFailure} wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}"
@@ -257,12 +258,13 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-COMBAT-010: the session's actor placement follows the walking actor only at a save or a map change; a drop of the
     /// hero's item starts from it, so the attack places it on the committed cell first (as F7 does).</summary>
-    private void PlaceHeroForDrop()
+    private bool PlaceHeroForDrop()
     {
-        if (_worldActor.Session is not AreaGridSession grid || _areaSession is not { } owner) return;
+        if (_worldActor.Session is not AreaGridSession grid || _areaSession is not { } owner) return false;
         var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
         var placed = owner.PlaceActor(owner.Version, new(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing));
         if (placed.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-COMBAT-010 hero-placement refused failure={placed.Failure}");
+        return placed.Disposition != GameSessionDisposition.Rejected;
     }
 
     /// <summary>ARC-COMBAT-010: the shown map as a drop reads it now: the step evidence with the doors' runtime passage, the map's
@@ -614,6 +616,7 @@ public partial class TerrainViewerApp
                 if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
             }
             _attackNotice = "the line of fire struck a wall: " + AreaObjectTargets.Describe(result);
+            FloatObjectAttack(result, $"wall:{blocker.Key.SourceIndex}", null);
             GD.Print($"ARC-COMBAT-015 wall-hit disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" prevented={result.Resolution?.Damage?.Prevented} ammo={result.Ammunition?.UnitsAfter.ToString() ?? "none"} step={result.StepFailure}");
             if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) EndStun(owner, SessionLifeTarget.Hero, "hero");
@@ -687,6 +690,7 @@ public partial class TerrainViewerApp
         PlayAttackResultSounds(result, struck.Row, struck.Entity);
         var life = owner.QueryLife(struck.Combat!.Target).View;
         _attackNotice = AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
+        FloatCritterAttack(result, HeroFloater, struck.Entity);
         GD.Print($"ARC-COMBAT-005 attack-hit target={struck.Entity} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} cause={result.Resolution?.MissCause} damage={result.Life?.HitPointDamage} events={result.Life?.Events}"
             + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} xp={result.HitAward?.Award}/{result.KillAward?.Award} step={result.StepFailure}"

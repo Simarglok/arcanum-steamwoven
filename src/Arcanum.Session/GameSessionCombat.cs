@@ -157,6 +157,8 @@ internal sealed class CombatDomain
     internal CombatRound? Round { get; set; }
     internal TurnBasedStall<SessionCombatant> Stall { get; set; }
     internal bool HeroCombatMode { get; set; }
+    // ARC-WORLD-095: the subturns started since the session began (not saved), so a host sees each subturn start whoever began it.
+    internal long SubturnStarts { get; set; }
     internal SortedSet<string> Critters { get; } = new(StringComparer.Ordinal);
     // ARC-SKILLS-008: the concealment flags (the source's critter flags 0x1 and 0x2, set and cleared together) of the hero and of
     // its followers.
@@ -184,6 +186,13 @@ public sealed partial class GameSessionOwner
 {
     /// <summary>The active round, or null when none is active.</summary>
     public SessionCombatRound? QueryCombatRound() { ThrowIfDisposed(); return _combat.Round?.Capture(); }
+
+    /// <summary>
+    /// ARC-WORLD-095: how many subturns started in this session (each <see cref="SessionCombatEventKind.SubturnStarted"/> a committed
+    /// step listed, so A9's repeated start counts twice). A host compares it with the count it last saw to learn that a new subturn
+    /// began, whichever call began it. Not saved: a restored session counts from 0.
+    /// </summary>
+    public long QueryCombatSubturnStarts() { ThrowIfDisposed(); return _combat.SubturnStarts; }
 
     /// <summary>
     /// The preview check of a cost (the source's action-point check): true without a round or outside the participant's
@@ -443,6 +452,7 @@ public sealed partial class GameSessionOwner
         }
         _combat.Round = plan.Round;
         _combat.Stall = plan.Stall;
+        _combat.SubturnStarts += plan.Events.Count(e => e.Kind == SessionCombatEventKind.SubturnStarted);
         if (changed && !revisionTaken) Revise();
         var disposition = changed || revisionTaken || plan.AdvancesClock ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange;
         return new(disposition, GameSessionFailure.None, plan.Events.ToArray(), Version);

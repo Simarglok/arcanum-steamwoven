@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
+using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 
@@ -52,9 +53,9 @@ public sealed record AreaOptionControl(AreaOption Option, AreaOptionsPage Page, 
 /// <summary>
 /// ARC-UI-013: the original's options window (window 6, ledger OP1–OP8) as Steamwoven offers it. The table is the original's: 16
 /// controls on three pages, each with its <c>arcanum.cfg</c> setting and registered default. Steamwoven shows the controls whose
-/// function it has (difficulty, the default combat mode without fast turn-based, auto attack, Always Run, the three volumes) and
-/// hides the rest with the reason (FR-UI-001: only what the profile supports); the Video page, all of whose controls are hidden,
-/// is hidden too.
+/// function it has (difficulty, the default combat mode without fast turn-based, auto attack, Always Run, ARC-UI-021's floating text
+/// level and speed, the three volumes) and hides the rest with the reason (FR-UI-001: only what the profile supports); a page all of
+/// whose controls are hidden is hidden too.
 /// </summary>
 public static class AreaOptionTable
 {
@@ -63,10 +64,10 @@ public static class AreaOptionTable
     public const string NoAutoSwitch = "switching weapons by itself is not built";
     public const string NoFollowerSkills = "followers do not use skills on their own yet";
     public const string NoBrightness = "the gamma control is not built";
-    public const string NoFloats = "floating text is not built (FR-UI-005)";
+    public const string NoTextDuration = "text bubbles are not built";
     public const string NoTaunts = "combat taunts are not built";
     public const string NoFastTurnBased = "Fast Turn Based is not built";
-    public const string NoVideoPage = "brightness, floating text and combat taunts are not built";
+    public const string NoVideoPage = "brightness, text bubbles and combat taunts are not built";
     public const string OffOn = "mes/OptionsOffOn.mes";
     public const string Difficulties = "mes/OptionsDifficulty.mes";
     public const string CombatModes = "mes/OptionsCombatMode.mes";
@@ -86,9 +87,10 @@ public static class AreaOptionTable
         new(AreaOption.AlwaysRun, AreaOptionsPage.Game, 6, AreaOptionKind.List, 1, 1, OffOn, "always run", 0, null),
         new(AreaOption.FollowerSkills, AreaOptionsPage.Game, 7, AreaOptionKind.List, 1, 1, OffOn, "follower skills", 1, NoFollowerSkills),
         new(AreaOption.Brightness, AreaOptionsPage.Video, 0, AreaOptionKind.Slider, 9, 9, null, "brightness", 0, NoBrightness),
-        new(AreaOption.TextDuration, AreaOptionsPage.Video, 1, AreaOptionKind.Slider, 10, 10, null, "text duration", 6, NoFloats),
-        new(AreaOption.Floats, AreaOptionsPage.Video, 2, AreaOptionKind.List, 2, 2, FloatLevels, "text floaters", 1, NoFloats),
-        new(AreaOption.FloatSpeed, AreaOptionsPage.Video, 3, AreaOptionKind.Slider, 10, 10, null, "float speed", 2, NoFloats),
+        new(AreaOption.TextDuration, AreaOptionsPage.Video, 1, AreaOptionKind.Slider, 10, 10, null, "text duration", 6, NoTextDuration),
+        // ARC-UI-021: the floating text (CH10).
+        new(AreaOption.Floats, AreaOptionsPage.Video, 2, AreaOptionKind.List, 2, 2, FloatLevels, "text floaters", FloaterRules.DefaultLevel, null),
+        new(AreaOption.FloatSpeed, AreaOptionsPage.Video, 3, AreaOptionKind.Slider, 10, 10, null, "float speed", FloaterRules.DefaultSpeed, null),
         new(AreaOption.CombatTaunts, AreaOptionsPage.Video, 4, AreaOptionKind.List, 1, 1, OffOn, "combat taunts", 1, NoTaunts),
         new(AreaOption.Effects, AreaOptionsPage.Sound, 0, AreaOptionKind.Slider, 10, 10, null, "effects volume", 5, null),
         new(AreaOption.Voice, AreaOptionsPage.Sound, 1, AreaOptionKind.Slider, 10, 10, null, "voice volume", 5, null),
@@ -107,9 +109,10 @@ public static class AreaOptionTable
 }
 
 /// <summary>The values the window shows, from the host's settings (the original reads each through its getter when the page opens, OP4);
-/// <paramref name="Rules"/> is the rule mode the session plays by (ARC-UI-014).</summary>
+/// <paramref name="Rules"/> is the rule mode the session plays by (ARC-UI-014), <paramref name="Floats"/> and <paramref name="FloatSpeed"/>
+/// the floating text's level and speed (ARC-UI-021).</summary>
 public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAttack, bool AlwaysRun, int Effects, int Voice, int Music,
-    RuleMode Rules = RuleMode.Steamwoven)
+    RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed)
 {
     /// <summary>A shown control's value; null for a hidden one.</summary>
     public int? Value(AreaOption option) => option switch
@@ -122,6 +125,8 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
         AreaOption.Voice => Voice,
         AreaOption.Music => Music,
         AreaOption.Rules => (int)Rules,
+        AreaOption.Floats => Floats,
+        AreaOption.FloatSpeed => FloatSpeed,
         _ => null,
     };
 }
@@ -129,13 +134,16 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
 /// <summary>
 /// ARC-UI-013: the original's settings the viewer keeps that no earlier store holds (Always Run and the volumes have their own):
 /// <c>difficulty</c> 0–2 (easy, moderate, hard; default 1), <c>turn-based</c> (default off) and <c>auto attack</c> (default on), as
-/// the original registers them (OP5). User preferences, never part of a save (FR-LIFECYCLE-004).
+/// the original registers them (OP5); ARC-UI-021: <c>text floaters</c> 0–2 (default 1) and <c>float speed</c> 0–10 (default 2). User
+/// preferences, never part of a save (FR-LIFECYCLE-004).
 /// </summary>
 public sealed record AreaGameSettings
 {
     public const int MaxDifficulty = 2;
 
     private readonly int _difficulty;
+    private readonly int _floats = FloaterRules.DefaultLevel;
+    private readonly int _floatSpeed = FloaterRules.DefaultSpeed;
 
     public AreaGameSettings(int difficulty, bool turnBased, bool autoAttack) => (Difficulty, TurnBased, AutoAttack) = (difficulty, turnBased, autoAttack);
 
@@ -147,23 +155,38 @@ public sealed record AreaGameSettings
     public bool TurnBased { get; init; }
     public bool AutoAttack { get; init; }
 
+    /// <summary>The "text floaters" level (<see cref="FloaterRules.Never"/>, messages, numbers).</summary>
+    public int Floats
+    {
+        get => _floats;
+        init => _floats = value is < 0 or > FloaterRules.MaxLevel ? throw new ArgumentOutOfRangeException(nameof(value)) : value;
+    }
+
+    /// <summary>The "float speed" (a step of speed + 1 px).</summary>
+    public int FloatSpeed
+    {
+        get => _floatSpeed;
+        init => _floatSpeed = value is < 0 or > FloaterRules.MaxSpeed ? throw new ArgumentOutOfRangeException(nameof(value)) : value;
+    }
+
     public static AreaGameSettings Defaults { get; } = new(1, RealTimeCombatRules.TurnBasedDefault, RealTimeCombatRules.AutoAttackDefault);
 
     /// <summary>The session's difficulty for the setting (0 easy, 1 normal, 2 hard: the skill and experience readers, SC2/XP1).</summary>
     public GameDifficulty SessionDifficulty => Difficulty switch { 0 => GameDifficulty.Easy, 2 => GameDifficulty.Hard, _ => GameDifficulty.Normal };
 }
 
-/// <summary>ARC-UI-013: the preference file's text, <c>{"version":1,"difficulty":D,"turnBased":B,"autoAttack":B}</c>. Anything else
-/// (another version, a missing, extra or out-of-range value) reads as null; the caller then uses the defaults.</summary>
+/// <summary>ARC-UI-013: the preference file's text, <c>{"version":2,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S}</c>
+/// (ARC-UI-021 added the last two); a version 1 file (the first four) reads with the floaters' defaults. Anything else (another version,
+/// a missing, extra or out-of-range value) reads as null; the caller then uses the defaults.</summary>
 public static class AreaGameSettingsCodec
 {
-    public const int Version = 1;
+    public const int Version = 2;
 
     public static string Serialize(AreaGameSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         return string.Create(CultureInfo.InvariantCulture,
-            $"{{\"version\":{Version},\"difficulty\":{settings.Difficulty},\"turnBased\":{(settings.TurnBased ? "true" : "false")},\"autoAttack\":{(settings.AutoAttack ? "true" : "false")}}}");
+            $"{{\"version\":{Version},\"difficulty\":{settings.Difficulty},\"turnBased\":{(settings.TurnBased ? "true" : "false")},\"autoAttack\":{(settings.AutoAttack ? "true" : "false")},\"floats\":{settings.Floats},\"floatSpeed\":{settings.FloatSpeed}}}");
     }
 
     public static AreaGameSettings? Deserialize(string text)
@@ -174,15 +197,25 @@ public static class AreaGameSettingsCodec
             using var document = JsonDocument.Parse(text);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return null;
+            if (!root.TryGetProperty("version", out var version) || version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var v) || v is not (1 or Version)) return null;
+            var count = v == 1 ? 4 : 6;
             var names = root.EnumerateObject().Select(p => p.Name).ToArray();
-            if (names.Length != 4 || names.Distinct(StringComparer.Ordinal).Count() != 4) return null;
-            if (!root.TryGetProperty("version", out var version) || version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var v) || v != Version) return null;
-            if (!root.TryGetProperty("difficulty", out var difficulty) || difficulty.ValueKind != JsonValueKind.Number || !difficulty.TryGetInt32(out var d)
-                || d is < 0 or > AreaGameSettings.MaxDifficulty) return null;
+            if (names.Length != count || names.Distinct(StringComparer.Ordinal).Count() != count) return null;
+            if (!Int(root, "difficulty", 0, AreaGameSettings.MaxDifficulty, out var d)) return null;
             if (!Bool(root, "turnBased", out var turnBased) || !Bool(root, "autoAttack", out var autoAttack)) return null;
-            return new(d, turnBased, autoAttack);
+            var settings = new AreaGameSettings(d, turnBased, autoAttack);
+            if (v == 1) return settings;
+            if (!Int(root, "floats", 0, FloaterRules.MaxLevel, out var floats) || !Int(root, "floatSpeed", 0, FloaterRules.MaxSpeed, out var speed)) return null;
+            return settings with { Floats = floats, FloatSpeed = speed };
         }
         catch (JsonException) { return null; }
+    }
+
+    private static bool Int(JsonElement root, string name, int minimum, int maximum, out int value)
+    {
+        value = 0;
+        return root.TryGetProperty(name, out var element) && element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out value)
+            && value >= minimum && value <= maximum;
     }
 
     private static bool Bool(JsonElement root, string name, out bool value)

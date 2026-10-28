@@ -39,6 +39,11 @@ public sealed class AreaBarterData
     /// <summary>A set's buy list (<see cref="InventorySourceBuyRules"/>); 0 or a negative set has none.</summary>
     public InventorySourceBuyList BuyList(int set) => InventorySourceBuyRules.Read(Sources, Buy, set, Existing.Contains);
 
+    /// <summary>The kind of a gold pile (prototype 9076, its stored name and description when read).</summary>
+    public SessionItemKind GoldKind() => Prototype(GoldPrototype) is { } gold
+        ? new(SessionItemType.Gold, GoldPrototype, gold.Object.Name, gold.Object.Description)
+        : new(SessionItemType.Gold, GoldPrototype, 0, 0);
+
     /// <summary>Synthetic data for tests: the sources, the buy file, and prototype fields by file number.</summary>
     public static AreaBarterData Create(MesFile sources, MesFile? buy, IReadOnlyDictionary<int, CombatFields> prototypes) =>
         new(sources, buy, prototypes.ToDictionary(pair => pair.Key, pair => (CombatFields?)pair.Value),
@@ -286,7 +291,5 @@ public sealed class AreaBarter
 
     private int? Units(string entity) => _session.QueryAmmo(entity) is { } stack ? stack.Units : null;
 
-    private SessionItemKind GoldKind() => _data.Prototype(AreaBarterData.GoldPrototype) is { } gold
-        ? new(SessionItemType.Gold, AreaBarterData.GoldPrototype, gold.Object.Name, gold.Object.Description)
-        : new(SessionItemType.Gold, AreaBarterData.GoldPrototype, 0, 0);
+    private SessionItemKind GoldKind() => _data.GoldKind();
 }
