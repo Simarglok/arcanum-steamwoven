@@ -120,7 +120,9 @@ public partial class LauncherPanel : CanvasLayer
                 var index = i;
                 var candidate = screen.Candidates[i];
                 if (candidate.Path == screen.Folder?.Path) continue;
-                _candidates.AddChild(MakeButton("Candidate" + i, $"Use {candidate.Path} ({LauncherScreen.Origin(candidate.Origin)})", () => CandidateRequested?.Invoke(index)));
+                _candidates.AddChild(MakeButton("Candidate" + i, $"Use {candidate.Path} ({LauncherScreen.Origin(candidate.Origin)})", 
+                    // Deferred: the render it causes frees this button.
+                    () => Callable.From(() => CandidateRequested?.Invoke(index)).CallDeferred()));
             }
             foreach (var button in _rules.GetChildren().OfType<Button>()) button.ButtonPressed = button.Name == screen.Settings.Rules.ToString();
             _showAtStart.ButtonPressed = screen.Settings.ShowAtStart;

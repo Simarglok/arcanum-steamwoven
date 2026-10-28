@@ -94,7 +94,7 @@ Before the original main menu, a start without inputs shows the launcher screen 
 [research](../research/launcher-settings.md#recommended-shape-option-a) option A, question 2 A) when
 `LauncherScreen.Decide` gives a reason, in this order: on request (`--launcher`, alone or with `--native-smoke`; or
 Shift pressed at the start or during the 0.75 s an ordinary start that would skip the screen waits for it, with the HUD
-saying so), the first run (no stored folder, also when the settings file is one this build cannot use), a stored folder
+saying so; only while the game's window has the focus), the first run (no stored folder, also when the settings file is one this build cannot use), a stored folder
 that is no longer a game folder, a changed installation (the stored identity differs) and "show at start". Without a
 reason the start opens the stored folder at once. `--launcher` with other viewer arguments is a usage error. The developer launcher
 (`./arcanum`) always passes its inputs, so its runs never show the screen; an exported build started with no arguments
@@ -116,7 +116,9 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   newer build's or an unreadable file); the shown folder stays, for Play to store again.
 - **Rule mode.** Every ordinary run, with inputs or without, starts in `rules.active` of `launcher_v1.json`
   (`LauncherSettings.Rules`); the options window's Rules line writes it there through the same store (one owner per
-  file). An automated run without `LAUNCHER_SETTINGS_TEST_PATH` has no file and starts in Steamwoven.
+  file), reading the file again and changing only `rules.active`, so a folder another run stored meanwhile is kept. An
+  automated run without `LAUNCHER_SETTINGS_TEST_PATH` has no file and starts in Steamwoven. A start that fails after the
+  screen (an unexpected error) shows `failure stage=GameFolder code=StartFailed` and a native smoke exits with 1.
 
 Self-test `ARC-UI-014 self-test PASS synthetic launcher` (synthetic folders, a temporary settings file, a stand-in for
 the start): the first run without a folder and Play off, a non-game folder named in words, Play storing the chosen

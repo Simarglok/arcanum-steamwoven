@@ -108,14 +108,6 @@ public sealed class LauncherScreen
         Notice = written ? "Settings reset to the defaults." : "The settings file could not be written; the defaults apply to this start only.";
     }
 
-    public void SaveFailed(LauncherSettingsSaveStatus status) => Notice = status switch
-    {
-        LauncherSettingsSaveStatus.Saved => null,
-        LauncherSettingsSaveStatus.RefusedOtherSchema => "Not saved: the settings file is a newer build's; Reset settings replaces it.",
-        LauncherSettingsSaveStatus.RefusedUnreadable => "Not saved: the settings file cannot be read; Reset settings replaces it.",
-        _ => "Not saved: the settings file could not be written.",
-    };
-
     /// <summary>The reason line.</summary>
     public string ReasonText => Describe(Reason);
 

@@ -107,8 +107,6 @@ public sealed class LauncherScreenTests
         var screen = new LauncherScreen(newer, GameFolderStartup.Resolve(newer.Settings, Mac()), LauncherShowReason.FirstRun);
         Assert.IsFalse(screen.FileUsable);
         Assert.AreEqual("The settings file is a newer build's; it is kept until Reset settings replaces it.", screen.FileText);
-        screen.SaveFailed(LauncherSettingsSaveStatus.RefusedOtherSchema);
-        Assert.AreEqual("Not saved: the settings file is a newer build's; Reset settings replaces it.", screen.Notice);
         screen.SelectRules(RuleMode.Original);
         Assert.AreEqual(LauncherSettings.Defaults, screen.Reset());
         screen.ResetDone(written: true);
