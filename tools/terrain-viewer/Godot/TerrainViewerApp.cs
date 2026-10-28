@@ -79,7 +79,7 @@ public partial class TerrainViewerApp : Node
         try
         {
             (_nativeSmoke, _nativeSmokeScreenshot) = TakeNativeSmokeArguments(args);
-            _arguments = TerrainViewerArguments.Parse(args);
+            _arguments = _launchArguments = TerrainViewerArguments.Parse(args);
             ConfigureVisualProfile();
             ConfigureAudio();
             _hud.SetMode(_arguments.Mode);
@@ -127,9 +127,9 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, menu)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, menu, scene)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
-                        // walk, census and menu run.
+                        // walk, census, menu and scene run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
@@ -146,6 +146,8 @@ public partial class TerrainViewerApp : Node
                                 if (Stage("ranged")) { await RunAreaObjectAttackSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); }
                                 // ARC-UI-011: the main menu over the start map (with --main-menu true, which blocks the other stages).
                                 if (Stage("menu")) await RunAreaMainMenuSmokeAsync();
+                                // ARC-UI-012: the scene flow from another map (with --main-menu true; the start map loads in it).
+                                if (Stage("scene")) await RunAreaSceneFlowSmokeAsync();
                             }
                         }
                         else await RunAreaSmokeAsync(result);
