@@ -88,4 +88,52 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, entity, null, Version)
             { Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
     }
+
+    /// <summary>
+    /// ARC-UI-029: the hero drops <paramref name="count"/> units of one of its ammunition stacks on its own tile, as the inventory
+    /// window's drop does after the quantity window (ledger QW5, IW16): the unit use with no destination (0x4658E0) takes the units from
+    /// the stack (the stack goes at exactly the count, a deletion with no remove-item event, else it keeps the rest), then a new object
+    /// of <paramref name="newStackKind"/> carries them (0x465A40: the original creates the type's base prototype; the host names the kind)
+    /// and the drop's placement lays it on the hero's tile (0x466E50: a junk pile, then the decay timer). It joins the hero's placed items
+    /// as a made item. Unlike an ordinary item's drop (<see cref="DropHeroItem"/>) the stack's drop script and no-drop flag are not
+    /// consulted: the original's gold and ammunition path never reaches 0x461A70. No insert check, no events, no action points (IW8).
+    /// A count of 0 changes nothing (<see cref="GameSessionDisposition.NoChange"/>), as the original's request does (QW5).
+    /// Refused before any effect: an invalid input (<see cref="GameSessionFailure.InvalidItem"/>), a negative count or a kind that is
+    /// not ammunition (<see cref="GameSessionFailure.InvalidAmmo"/>), the version, a stack the hero does not hold
+    /// (<see cref="GameSessionFailure.ItemNotAvailable"/>), fewer units than the count (<see cref="GameSessionFailure.AmmoShort"/>),
+    /// the tile (<see cref="GameSessionFailure.DropTileUnfit"/>), a full list, record budget or no free made number
+    /// (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. One revision. The caller places the actor on the hero's current
+    /// tile first.
+    /// </summary>
+    [Arcanum.Simulation.OriginalFunction(0x465A40, Arcanum.Simulation.OriginalFunctionScope.Partial)]
+    public InventoryMutationResult DropHeroAmmo(GameSessionVersion expected, string stack, int count, SessionItemKind newStackKind)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(stack)) return RejectItem(GameSessionFailure.InvalidItem);
+        if (count < 0 || newStackKind.Type != SessionItemType.Ammo) return RejectItem(GameSessionFailure.InvalidAmmo);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!HeroHeld().Any(held => held.Entity == stack && held.Kind.Type == SessionItemType.Ammo)) return RejectItem(GameSessionFailure.ItemNotAvailable);
+        var source = _inventory.Ammo[stack];
+        if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
+        if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
+        var cell = _actor.Cell;
+        if (!DropCellFits(cell)) return RejectItem(GameSessionFailure.DropTileUnfit);
+        var emptied = source.Units == count;
+        if (emptied && !_durability.Records.ContainsKey(source.Entity) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        // The new stack's record and item; an emptied source's go.
+        var freed = emptied ? 1 : 0;
+        if (_inventory.Ammo.Count - freed + 1 > _limits.MaxAmmoRecords || _inventory.Held - freed + 1 > _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
+        var number = NextMadeNumber();
+        if (number > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        if (emptied) Delete(source.Entity);
+        else _inventory.Ammo[source.Entity] = source with { Units = source.Units - count };
+        var item = new SessionMadeItem(SessionMadeItem.EntityOf((int)number), newStackKind);
+        _inventory.Add(item);
+        _inventory.SetWeight(item.Entity, CreatedWeight(newStackKind.Prototype));
+        _inventory.Ammo[item.Entity] = new(item.Entity, source.AmmoType, count);
+        // The placement is the drop's (junk pile, decay) and makes the one revision.
+        PlaceHeroItem(item.Entity, cell);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, null, Version);
+    }
 }

@@ -922,7 +922,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   lookup is NOT READY, so an item with spells stays refused. Wear values come from the hero load's kit (the best-items start's) and a
   taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
-  "no hero: nothing can be worn". Not built yet (follow-up slices): stack splitting and the gold drag. NOT READY with a worn taken
+  "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); not built yet: the gold drag. NOT READY with a worn taken
   (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
   taken ranged weapon has no missile art or throw weight (`WieldedKitNumber`).
 - **Grid and drag (ARC-UI-019).** Above the lists the window draws the doll's nine slots and the hero's 10 × 12 grid in the original
@@ -945,8 +945,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   703, 331 on the window; plain 32-pixel squares, the icons' art size is not read; [ledger IW16–IW19](../research/ledger/ui-audio.md#inventory-drop-and-use-arc-ui-025)).
   A held item released on *Drop* (or a *Drop on the ground* button) lies on the hero's tile through the session's `DropHeroItem`
   ([hero drop](../world/inventory-runtime.md#hero-drop-and-inventory-use-arc-ui-025)): its drop script, the no-drop flag, its removal
-  events and the placement into a junk pile or loose with its decay; a stack of more than one unit is refused ("the quantity window is
-  NOT READY", IW7). A right press on an item (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
+  events and the placement into a junk pile or loose with its decay; an ammunition stack goes the stack path after the quantity window
+  (ARC-UI-029, below). A right press on an item (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
   wear location) uses it with the hero as target; a worn or wearable item does nothing (IW5). A held item released on *Use* is used with
   the hero as target while Shift is held and with no target otherwise; an item whose use is a throw is refused there (the throw from the
   map, IW18, is NOT READY). In a turn-based round both need the hero's turn. The use is the original's 0x462CC0
@@ -958,6 +958,24 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   `ARC-UI-025 use item=… source=… step=…` and `ARC-UI-025 ground-drop item=… disposition=… cell=… pile=…`; the native smoke right-presses
   a worn item (nothing), uses the first usable grid item when the hero holds one, drags a taken item onto *Drop* and takes it back
   (`ARC-UI-025 native-smoke drop-use PASS`).
+- **Quantity window (ARC-UI-029).** A dead NPC's gold pile or ammunition stack of more than one unit taken with its *Take* button,
+  and an ammunition stack of the hero's dropped (the *Drop* icon or button), first ask how many units move: a row above the doll
+  shows "How many of NAME? COUNT of MAXIMUM" with *All*, *+1*, *-1*, *Accept* and *Cancel* (the original's bar mode 9,
+  [ledger QW1–QW6](../research/ledger/ui-audio.md#quantity-window-arc-ui-029)). It starts at 0; the keypad digits append (capped
+  at the stack), Backspace and Delete erase the last digit, Enter accepts, Escape and I cancel; the main-row digits do nothing.
+  While it asks the rest of the window, the doll and the grid do nothing (QW6); closing the window cancels it. Accept with 0 moves
+  nothing. The moves are the session's `TakeGoldFromNpc`, `TakeAmmoFromNpc` and `DropHeroAmmo`
+  ([stack drop](../world/inventory-runtime.md#stack-drop-and-the-quantity-window-arc-ui-029)). *Take all* moves whole stacks
+  without asking, a gold pile too (QW1; a session without a hero refuses the gold, as it has none to hold it); a stack of one unit moves at once by the same stack path. The new stack keeps the moved
+  stack's kind (the original makes the type's base prototype, QW5; every installed stack is one). A dead NPC with two gold piles
+  answers with its first pile (the session's `TakeGoldFromNpc`, NT1), so a take from the second asks with its coins but moves from
+  the first (no installed NPC holds two). The loot list
+  shows a gold pile's coins (×N) and the header the hero's gold and its four ammunition counts (arrows, bullets, charges, fuel; IW9).
+  NOT READY: the question in the barter window and for a junk pile's stacks, a drag of the hero's gold, the art of the original's
+  bar. The self-test takes 2 of 12 synthetic arrows by keypad and buttons, cancels with Escape, and drops 1 of the 2
+  (`ARC-UI-029 self-test quantity`); the native smoke drops one unit of an ammunition stack of the hero's
+  through its *Drop* button, keypad 1 and Enter, and takes it back (`ARC-UI-029 native-smoke quantity PASS`; the crash site holds no
+  stack, so 5 arrows of the installed prototype are lent to the hero through an NPC there first and stay with it).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.
