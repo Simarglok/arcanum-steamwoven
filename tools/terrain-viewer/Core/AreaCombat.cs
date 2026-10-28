@@ -46,6 +46,9 @@ public sealed class AreaCombatHost : IAreaEventObjects
     /// <summary>ARC-WORLD-039: the NPC's life facts from its combat fields on that map, or null.</summary>
     public LifeFacts? Facts(int runtimeMap, string entity) => Build(runtimeMap, entity).Combat?.Facts;
 
+    /// <summary>ARC-WORLD-103: the NPC's combat values from its combat fields on that map, or null.</summary>
+    public SessionCritterCombat? Critter(int runtimeMap, string entity) => Build(runtimeMap, entity).Combat;
+
     /// <summary>The NPC drawn as <paramref name="key"/> on <paramref name="runtimeMap"/>, or null for anything else.</summary>
     public AreaCombatTarget? Target(GameSessionOwner session, int runtimeMap, AreaObjectKey key)
     {

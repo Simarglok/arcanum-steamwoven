@@ -446,8 +446,9 @@ public sealed class GameSessionSnapshot
     /// <see cref="Inventory"/> (ARC-WORLD-094); schema 52 adds the hero's inventory grid to <see cref="Inventory"/> (ARC-UI-019); schema 53
     /// adds the hotkey bar (<see cref="Hotkeys"/>, ARC-UI-022); schema 54 adds the hero's background description number to <see cref="Hero"/>
     /// (ARC-WORLD-097); schema 55 adds the generated-once containers to <see cref="Inventory"/> (ARC-WORLD-100); schema 56 adds the hero's
-    /// player name and portrait to <see cref="Hero"/> (ARC-UI-033). Schemas 1..55 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 56;
+    /// player name and portrait to <see cref="Hero"/> (ARC-UI-033); schema 57 adds the worn items of the NPCs the session dressed to
+    /// <see cref="Inventory"/> (ARC-WORLD-103). Schemas 1..55 are refused, not migrated; schema 56 is upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 57;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

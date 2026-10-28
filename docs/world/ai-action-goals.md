@@ -102,9 +102,9 @@ an object may hold several runs at once (inference: the call stands in for that)
   world members (the other animations and their timing, the skill invocation, the throw and the pickup) or calls `UseItemNow` for the
   chooser's AI-action item; the item search's `StartPickup` is the host's call of
   `AiExecutorRules.StartPickup`.
-- **Queued cast.** A cast the magic domain queues under the caster's running cast (SU13) is kept by the host, not by the run; the
-  viewer's queue for the hero ([queued cast](spell-cast-host.md), ARC-MAGIC-019, QC1–QC6) starts the next cast after a pop and drops
-  the queue after an end step, which a host can follow with the run ends this executor reports.
+- **Queued cast.** A cast the magic domain queues under the caster's running cast (SU13) is kept by the host: the viewer's queue for
+  the hero ([queued cast](spell-cast-host.md), ARC-MAGIC-019, QC1–QC6) and, for an NPC, the AI host's insertion of the queued goal at
+  the bottom of the NPC's run, which this executor's pop then plays ([queued cast](ai-host.md#queued-cast-arc-world-104), ARC-WORLD-104).
 - **Missiles.** A spell missile's flight and the release at its arrival are the missile flight's; the attempt goal ends its run
   (`EndCast(refused: false)`) while the missile flies, so the host's `EndGoal` must keep a run whose missile is pending.
 - **Frame flag 0x80.** A refused release ends the play through 0x431A40, which takes the end step instead of the pop when the goal's

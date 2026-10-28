@@ -194,8 +194,9 @@ public sealed partial class GameSessionOwner
             if (seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == SessionHolderKind.Npc)
                 foreach (var entity in holder.Items)
                     if (!_inventory.Taken.Contains(entity) && !Dropped(entity))
-                        listed.Add((entity, seed.Items[entity].Facts.Kind.Prototype, seed.Items[entity].Facts.InventoryLocation));
-        foreach (var item in _inventory.AddedTo(npc)) listed.Add((item.Entity, item.Kind.Prototype, -1));
+                        listed.Add((entity, seed.Items[entity].Facts.Kind.Prototype, _inventory.Worn(npc, entity, seed.Items[entity].Facts).InventoryLocation));
+        // ARC-WORLD-103: a dressed NPC's record names the slots of its items, made ones included.
+        foreach (var item in _inventory.AddedTo(npc)) listed.Add((item.Entity, item.Kind.Prototype, _inventory.Worn(npc, item.Entity, InventoryDomain.MadeFacts(item.Kind)).InventoryLocation));
         var result = new List<CraftItem>(listed.Count);
         var stacks = NpcStacks(npc).ToDictionary(pair => pair.Stack.Entity, pair => pair.Stack, StringComparer.Ordinal);
         foreach (var (entity, prototype, location) in listed)

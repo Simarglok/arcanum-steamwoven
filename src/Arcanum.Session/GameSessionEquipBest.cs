@@ -79,10 +79,12 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(insertCheck);
         if (!IsCurrent(expected)) return RejectBest(GameSessionFailure.StaleVersion);
         if (_hero is null) return RejectBest(GameSessionFailure.EquipmentUnavailable);
-        var plan = new BestPlan(this, items, artCheck, insertCheck);
+        var plan = new BestPlan(this, new(_equipment.Worn), HeroWearer(), HeroChooser(), artCheck,
+            worn => HeroInsertVerdict(insertCheck(new SessionInventoryItem(worn.Entity, CarriedFacts(worn.Entity, worn.Item.MagickTechComplexity))),
+                worn.Item.MagickTechComplexity));
         try
         {
-            plan.Collect();
+            plan.Collect(items);
             foreach (var slot in slots) if (!emptyOnly || !plan.Worn.ContainsKey(slot)) WieldBest(plan, slot);
         }
         catch (BestPlan.Refused refused) { return RejectBest(refused.Failure); }
@@ -140,25 +142,31 @@ public sealed partial class GameSessionOwner
         internal SessionEquipBestStep Capture() => new(slot, TakenOff, Wielded, Refusal, Verdict) { Unsupported = Unsupported, Failure = Failure };
     }
 
-    /// <summary>The planned equipment of one <see cref="EquipBest"/> call: the owner's state stays untouched until the call commits.</summary>
-    private sealed class BestPlan(GameSessionOwner owner, SessionWearableLookup lookup, SessionWearArtCheck artCheck, SessionInsertCheck insertCheck)
+    /// <summary>The planned equipment of one <see cref="EquipBest"/> call (the hero's) or of one NPC's wield after a regeneration
+    /// (ARC-WORLD-103): the owner's state stays untouched until the call commits. <paramref name="insert"/> is the critter's insert check
+    /// for an item a step takes off.</summary>
+    private sealed class BestPlan(GameSessionOwner owner, SortedDictionary<EquipmentSlot, SessionWornItem> worn, EquipmentWearer wearer,
+        EquipmentChooser wielder, SessionWearArtCheck artCheck, Func<SessionWornItem, SessionInsertVerdict> insert)
     {
         private readonly long _revision = owner._revision;
+        // ARC-WORLD-103: a seed attached from a callback changes the lists the plan read without a revision.
+        private readonly long _seeds = owner._inventory.SeedGeneration;
 
-        internal SortedDictionary<EquipmentSlot, SessionWornItem> Worn { get; } = new(owner._equipment.Worn);
+        internal SortedDictionary<EquipmentSlot, SessionWornItem> Worn { get; } = worn;
         internal Dictionary<string, SessionWearableItem> Facts { get; } = new(StringComparer.Ordinal);
-        /// <summary>The wearable items the hero holds, in creation order.</summary>
+        /// <summary>The wearable items the critter holds, in creation order (an NPC's: its list order).</summary>
         internal List<string> Held { get; } = [];
         internal List<SessionEquipBestStep> Steps { get; } = [];
-        internal EquipmentWearer Wearer { get; } = owner.HeroWearer();
-        internal EquipmentChooser Wielder { get; } = owner.HeroChooser();
+        internal EquipmentWearer Wearer { get; } = wearer;
+        internal EquipmentChooser Wielder { get; } = wielder;
 
         internal sealed class Refused(GameSessionFailure failure) : Exception
         {
             internal GameSessionFailure Failure { get; } = failure;
         }
 
-        internal void Collect()
+        /// <summary>The hero's held items with the host's facts.</summary>
+        internal void Collect(SessionWearableLookup lookup)
         {
             var kinds = owner._inventory.Kit.Select(kit => (kit.Entity, kit.Kind)).Concat(owner._inventory.Pc.Select(pc => (pc.Entity, pc.Kind)))
                 .Concat(owner._inventory.Made.Select(made => (made.Entity, made.Kind)));
@@ -252,17 +260,16 @@ public sealed partial class GameSessionOwner
 
         private SessionInsertVerdict Insert(SessionWornItem current)
         {
-            var verdict = owner.HeroInsertVerdict(insertCheck(new SessionInventoryItem(current.Entity, owner.CarriedFacts(current.Entity, current.Item.MagickTechComplexity))),
-                current.Item.MagickTechComplexity);
+            var verdict = insert(current);
             Fresh();
             return verdict;
         }
 
         // A host callback that moved the session makes the whole call stale.
-        private void Fresh()
+        internal void Fresh()
         {
             owner.ThrowIfDisposed();
-            if (owner._revision != _revision) throw new Refused(GameSessionFailure.StaleVersion);
+            if (owner._revision != _revision || owner._inventory.SeedGeneration != _seeds) throw new Refused(GameSessionFailure.StaleVersion);
         }
     }
 

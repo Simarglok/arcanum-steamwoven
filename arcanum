@@ -309,8 +309,9 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- COMMAND", help="the command and its arguments, after --")
     command.set_defaults(func=queued)
     command = commands.add_parser("package", help="build the packaged alpha for a player from a fresh commit of origin/main "
-                                  "into artifacts/packages/PLATFORM (ARC-DEV-047; through the launch queue as an export)")
-    command.add_argument("platform", choices=("mac",), help="mac: Arcanum Steamwoven.app, ad-hoc signed")
+                                  "into artifacts/packages/PLATFORM (ARC-DEV-047/048; through the launch queue as an export)")
+    command.add_argument("platform", choices=("mac", "win"), help="mac: Arcanum Steamwoven.app, ad-hoc signed; win: the Windows "
+                         "11 x64 folder (Arcanum Steamwoven.exe, unsigned) as one zip, file checks only (ARC-DEV-048)")
     command.add_argument("--ref", default="origin/main", help="the commit to package (default origin/main, fetched first)")
     command.add_argument("--no-fetch", action="store_true", help="do not fetch origin main first")
     command.add_argument("--no-smoke", action="store_true", help="skip the launcher and main menu smoke on the exported app")

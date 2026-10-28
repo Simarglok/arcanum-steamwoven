@@ -212,13 +212,39 @@ public sealed class SessionCritterCombat
 
     /// <summary>The NPC as a wearer under <paramref name="conditions"/>: race, gender and crippled arms; its spells, background and art
     /// are not read (never transformed, magick-allergic or unique), so a body armour's unique-art refusal is not seen.</summary>
-    internal EquipmentWearer Wearer(LifeConditions conditions) => new()
+    public EquipmentWearer Wearer(LifeConditions conditions) => new()
     {
         Race = _race,
         Gender = _gender,
         CrippledArmOne = conditions.HasFlag(LifeConditions.CrippledArmOne),
         CrippledArmsBoth = conditions.HasFlag(LifeConditions.CrippledArmsBoth),
     };
+
+    /// <summary>
+    /// ARC-WORLD-103: the NPC as its best-items choice scores it (<see cref="EquipmentChoice"/>) in this life state: its effective damage
+    /// bonus, aptitude and intelligence under its poison and crippled legs, and the melee, bow and throwing levels of its stored basic skills
+    /// (or of the sheet it was levelled to), as <see cref="AttackValues"/> reads them; firearms 0 (a tech skill the map data's basic skills
+    /// do not hold). An NPC chooser (<see cref="EquipmentChooser.IsPc"/> false), with no ammunition: the session adds its stacks.
+    /// </summary>
+    public EquipmentChooser Chooser(LifeState state)
+    {
+        var snapshot = _stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
+            state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!;
+        var dexterity = snapshot.GetEffective(CharacterStat.Dexterity);
+        int Level(BasicCombatSkill skill, Skill sheet) =>
+            _sheetSkills?[sheet].Level ?? CombatSkillRules.Level(skill, _basicSkills[(int)skill], dexterity, Monstrous);
+        return new EquipmentChooser
+        {
+            DamageBonus = snapshot.GetEffective(CharacterStat.DamageBonus),
+            MagickTechAptitude = Math.Clamp(snapshot.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude),
+            MeleeLevel = Level(BasicCombatSkill.Melee, Skill.Melee),
+            BowLevel = Level(BasicCombatSkill.Bow, Skill.Bow),
+            ThrowingLevel = Level(BasicCombatSkill.Throwing, Skill.Throwing),
+            FirearmsLevel = _sheetSkills?[Skill.Firearms].Level ?? 0,
+            ExtraordinaryIntelligence = snapshot.GetEffective(CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold,
+            IsPc = false,
+        };
+    }
 
     /// <summary>ARC-MAGIC-014: the NPC's race (its stored race stat).</summary>
     public CharacterRace Race => _race;

@@ -1,12 +1,14 @@
-"""ARC-DEV-047: the package command's steps, checks and install, with a fake runner on a synthetic git repository."""
+"""ARC-DEV-047/ARC-DEV-048: the package command's steps, checks and install, with a fake runner on a synthetic git repository."""
 from __future__ import annotations
 
 import os
 from pathlib import Path
+import struct
 import subprocess
 import tempfile
 import unittest
 from unittest import mock
+import zipfile
 
 from tools.local_dev import package
 
@@ -35,6 +37,8 @@ class PackageTests(unittest.TestCase):
         self.export_text = "dotnet /sdk/dotnet publish ... SDK 8.0.425\n"
         self.smoke_text = ""
         self.signature = "Signature=adhoc\n"
+        self.windows = {"machine": 0x8664, "subsystem": 2, "name": package.PLAYER_NAME, "description": "Arcanum Steamwoven alpha",
+                        "pack": b"GDPC", "feature": package.FEATURE, "assemblies": package.WINDOWS_ASSEMBLIES, "data": 1}
         quiet = mock.patch.object(package, "say"); quiet.start(); self.addCleanup(quiet.stop)
 
     def tearDown(self) -> None:
@@ -46,7 +50,10 @@ class PackageTests(unittest.TestCase):
         if command[1:2] == ["restore"]:
             self.source_files = sorted(path.name for path in cwd.rglob("*") if path.is_file())
         text = ""
-        if "--export-release" in command:
+        if "--export-release" in command and command[-2] == "Windows package":
+            self.write_windows_export(Path(command[-1]))
+            text = self.export_text
+        elif "--export-release" in command:
             product = Path(command[-1])
             executable = product / package.PLATFORMS["mac"].executable
             executable.parent.mkdir(parents=True)
@@ -59,9 +66,27 @@ class PackageTests(unittest.TestCase):
         log.write_text(text)
         return 0
 
-    def run_package(self, smoke_folder: Path | None = None) -> Path:
+    def write_windows_export(self, executable: Path) -> None:
+        """What Godot's Windows export writes beside the given .exe: a PE header, the .pck and the .NET data folder."""
+        header = bytearray(0x40 + 24 + 70)
+        header[:2] = b"MZ"
+        struct.pack_into("<I", header, 0x3C, 0x40)
+        header[0x40:0x44] = b"PE\0\0"
+        struct.pack_into("<H", header, 0x44, self.windows["machine"])
+        struct.pack_into("<H", header, 0x40 + 24, 0x20B)
+        struct.pack_into("<H", header, 0x40 + 24 + 68, self.windows["subsystem"])
+        strings = "VS_VERSION_INFO\0FileDescription\0" + self.windows["description"] + "\0ProductName\0\0" + self.windows["name"] + "\0"
+        executable.write_bytes(bytes(header) + strings.encode("utf-16-le"))
+        executable.with_suffix(".pck").write_bytes(self.windows["pack"] + self.windows["feature"].encode())
+        for number in range(self.windows["data"]):
+            data = executable.parent / f"data_Arcanum.TerrainViewer{number or ''}_windows_x86_64"
+            data.mkdir()
+            for name in self.windows["assemblies"]:
+                (data / name).write_bytes(b"x")
+
+    def run_package(self, smoke_folder: Path | None = None, platform: str = "mac") -> Path:
         with mock.patch.object(package, "game_folder", return_value=smoke_folder):
-            return package.package(package.PLATFORMS["mac"], root=self.repo, output=self.root / "out", ref="HEAD", fetch=False,
+            return package.package(package.PLATFORMS[platform], root=self.repo, output=self.root / "out", ref="HEAD", fetch=False,
                                    smoke=True, keep_work=False, runner=self.runner, base=self.base)
 
     def test_steps_build_from_the_archive_with_the_pinned_toolchain_and_stamp(self) -> None:
@@ -127,6 +152,40 @@ class PackageTests(unittest.TestCase):
             self.smoke_text = text
             with self.assertRaisesRegex(package.PackageError, error):
                 self.run_package(smoke_folder=self.root)
+
+    def test_the_windows_build_is_checked_by_its_files_zipped_and_installed(self) -> None:
+        installed = self.run_package(smoke_folder=self.root, platform="win")
+        self.assertEqual([Path(command[0]).name for command, _ in self.calls], ["dotnet", "dotnet", "Godot", "Godot"])  # no signing, no smoke
+        export = self.calls[3][0]
+        self.assertEqual(export[-2:-1], ["Windows package"])
+        self.assertEqual(Path(export[-1]).name, "Arcanum Steamwoven.exe")
+        self.assertEqual(installed, self.root / "out" / "windows" / "Arcanum Steamwoven Windows x64.zip")
+        with zipfile.ZipFile(installed) as archive:
+            names = sorted(archive.namelist())
+        self.assertTrue(all(name.startswith("Arcanum Steamwoven/") for name in names))
+        self.assertIn("Arcanum Steamwoven/Arcanum Steamwoven.exe", names)
+        self.assertIn("Arcanum Steamwoven/Arcanum Steamwoven.pck", names)
+        self.assertIn("Arcanum Steamwoven/data_Arcanum.TerrainViewer_windows_x86_64/coreclr.dll", names)
+        build = (self.root / "out" / "windows" / "BUILD.txt").read_text()
+        self.assertIn(f"commit {self.commit}", build)
+        self.assertIn("product Arcanum Steamwoven Windows x64.zip", build)
+        self.assertIn("smoke NOT RUN", build)
+        self.calls.clear()
+        self.run_package(platform="win")
+        self.assertEqual(sorted(path.name for path in (self.root / "out" / "windows").iterdir()),
+                         ["Arcanum Steamwoven Windows x64.zip", "BUILD.txt", "README.md", "previous"])
+        self.assertTrue((self.root / "out" / "windows" / "previous" / "Arcanum Steamwoven Windows x64.zip").is_file())
+
+    def test_a_windows_export_with_a_wrong_file_is_refused_and_nothing_installed(self) -> None:
+        good = dict(self.windows)
+        for change, error in (({"machine": 0x14C}, "x86-64 GUI"), ({"subsystem": 3}, "x86-64 GUI"),
+                              ({"name": "Godot Engine"}, "product name"), ({"pack": b"PK\3\4"}, "Godot pack"),
+                              ({"feature": "standard"}, "feature"), ({"assemblies": ("GodotSharp.dll",)}, "lacks"),
+                              ({"data": 0}, "0 .NET data"), ({"data": 2}, "2 .NET data")):
+            self.windows = dict(good, **change)
+            with self.assertRaisesRegex(package.PackageError, error):
+                self.run_package(platform="win")
+            self.assertFalse((self.root / "out" / "windows").exists())
 
     def test_a_failed_step_names_its_log(self) -> None:
         def failing(command, cwd, environment, log, minutes) -> int:

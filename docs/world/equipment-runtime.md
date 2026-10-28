@@ -126,6 +126,11 @@ from the hero's content prototypes and yes to the art and insert checks (one dia
 armour and boots on, except the human woman, whose body armour 8220 carries wield-on and wield-off scripts and stays in the
 pack.
 
+Since ARC-WORLD-103 the same plan dresses an NPC at the end of its regeneration (0x463E20 → 0x4654F0, ledger RK15), with the NPC's
+wearer and chooser from the host and its list in place of the hero's items; the session then keeps what the NPC wears
+(`inventory.npcWorn`, schema 57), which replaces its map data's inventory locations
+([NPC best items after a regeneration](barter-runtime.md#npc-best-items-after-a-regeneration-arc-world-103)).
+
 ## Backgrounds (ARC-WORLD-069)
 
 The hero carries its background id in the session (`SessionHeroState.Background`, snapshot schema 36; a pre-made hero's comes from
@@ -284,8 +289,9 @@ times; wield off reaches the same script's removal loop through call-ex, which r
   worn taken item the viewer's attack wears none of the hero's items and a taken ranged weapon has no missile art (kit values only). The
   pre-made start wields the kit (ARC-WORLD-034). The best-items choice reads the hero's skill levels (ARC-SKILLS-002) and its ammunition stacks (ARC-WORLD-066); a custom
   character's start (weapon and armour only) and the AI's call with a target are not wired.
-- **NPC equipment.** NPC slots stay the host's (seed inventory locations); `EquipmentRules.Evaluate` serves them too, and
-  looting a worn item is still `WornItemUnsupported`.
+- **NPC equipment.** NPC slots stay the host's (seed inventory locations) until a regeneration dresses the NPC (ARC-WORLD-103: the
+  session's record then wins); `EquipmentRules.Evaluate` serves them too, and looting a worn item is still `WornItemUnsupported`.
+  The AI's best-items call (item insert's CHECK_WIELD, the gate with a target) is not wired.
 - **Not tied to the round.** `Equip` and `Unequip` neither charge action points nor refuse during a turn-based round; the
   whether the original charges for changing equipment in a round is not researched here.
 - **Not modelled:** item spells on wear and unwear (such items are refused), scripts on wield without a script host (refused;
