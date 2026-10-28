@@ -834,7 +834,10 @@ public sealed partial class GameSessionOwner : IDisposable
     /// without a host such an item is refused.
     /// </summary>
     [OriginalFunction(0x4617F0, OriginalFunctionScope.Partial)]
-    public InventoryMutationResult PickUpItem(GameSessionVersion expected, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
+    public InventoryMutationResult PickUpItem(GameSessionVersion expected, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null,
+        ISessionItemTriggers? triggers = null) => PickedUp(PickUp(expected, item, insertCheck, scripts), triggers);
+
+    private InventoryMutationResult PickUp(GameSessionVersion expected, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -864,7 +867,9 @@ public sealed partial class GameSessionOwner : IDisposable
     /// </summary>
     [OriginalFunction(0x461CA0, OriginalFunctionScope.Partial)]
     public InventoryMutationResult LootItem(GameSessionVersion expected, string holder, string item, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts = null)
+        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null) => PickedUp(Loot(expected, holder, item, insertCheck, scripts), triggers);
+
+    private InventoryMutationResult Loot(GameSessionVersion expected, string holder, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -893,7 +898,9 @@ public sealed partial class GameSessionOwner : IDisposable
     /// refusal of <paramref name="insertCheck"/> is <see cref="GameSessionFailure.InsertRefused"/> with no effect.
     /// </summary>
     public InventoryMutationResult GiveItemToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts = null)
+        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null) => PickedUp(GiveToPc(expected, npc, name, insertCheck, scripts), triggers);
+
+    private InventoryMutationResult GiveToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -1668,6 +1675,15 @@ public sealed partial class GameSessionOwner : IDisposable
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, new(_identity, _revision))
             { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
+    }
+
+    /// <summary>ARC-MAGIC-022: the pickup executor (0x4CBAA0, IU10) through <paramref name="triggers"/> for an item that entered the hero's
+    /// list (not for an ammunition item merged into a stack: it is deleted, and the original returns before the pickup).</summary>
+    private InventoryMutationResult PickedUp(InventoryMutationResult result, ISessionItemTriggers? triggers)
+    {
+        if (triggers is null || result.Disposition != GameSessionDisposition.Changed || result.Item is not { } item || _durability.Destroyed.Contains(item))
+            return result;
+        return result with { ItemSpells = [triggers.Fire(Arcanum.Simulation.Magic.ItemSpellTriggerRules.Pickup, item, SessionSpellCaster.Hero)], Version = Version };
     }
 
     private InventoryMutationResult RejectItem(GameSessionFailure failure, SessionInsertVerdict? verdict = null) =>

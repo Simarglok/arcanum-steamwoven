@@ -107,7 +107,15 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.InsertRefused"/>; a call back into the owner from it is <see cref="GameSessionFailure.StaleVersion"/>).
     /// The original's no-drop item flag and the NPC flag 0x40 (re-wield) are not modelled. One revision.
     /// </summary>
-    public InventoryMutationResult GiveItemToNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck)
+    public InventoryMutationResult GiveItemToNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck,
+        ISessionItemTriggers? triggers = null)
+    {
+        var result = GiveToNpc(expected, npc, item, insertCheck, triggers);
+        if (triggers is null || result.Disposition != GameSessionDisposition.Changed) return result;
+        return result with { ItemSpells = [triggers.Remove(item, SessionSpellCaster.Hero)], Version = Version };
+    }
+
+    private InventoryMutationResult GiveToNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, ISessionItemTriggers? triggers)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -122,6 +130,8 @@ public sealed partial class GameSessionOwner
         if (_equipment.SlotOf(item) is { } wornIn && _equipment.Worn[wornIn].ScriptPoints.Count > 0) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // ARC-MAGIC-022: a worn item with the item spells mark would leave without its unwear (0x4CBFC0).
         if (_equipment.SlotOf(item) is { } markedIn && _equipment.Worn[markedIn].ItemSpells) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
+        // ARC-MAGIC-022: the removal ends the item's runs and runs its drop (IU9) only through an item trigger host.
+        if (triggers is null && HasItemRuns(item)) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
         if (held.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(item, out var listed) &&
             (listed.Facts.HasScript(SessionScriptPoint.RemoveItem) || listed.Facts.HasScript(SessionScriptPoint.InsertItem) ||
                 worn && listed.Facts.HasScript(SessionScriptPoint.WieldOff)))
@@ -180,7 +190,9 @@ public sealed partial class GameSessionOwner
     /// <see cref="LootItem"/>. One revision.
     /// </summary>
     public InventoryMutationResult TakeItemFromNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts = null)
+        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null) => PickedUp(TakeFromNpc(expected, npc, item, insertCheck, scripts), triggers);
+
+    private InventoryMutationResult TakeFromNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);

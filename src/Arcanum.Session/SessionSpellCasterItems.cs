@@ -86,6 +86,11 @@ public interface ISessionItemTriggers
     SessionItemTriggerResult Fire(uint eventMask, string item, string holder);
 
     SessionItemTriggerResult Withdraw(uint eventMask, string item, string holder);
+
+    /// <summary>ARC-MAGIC-022: the spell steps of the inventory removal (0x467860, IU9) of <paramref name="item"/>, which has just left
+    /// <paramref name="holder"/>'s inventory: its runs as source end (0x457450), then the drop's withdrawal (0x4CC130) with the holder
+    /// as parent.</summary>
+    SessionItemTriggerResult Remove(string item, string holder);
 }
 
 public sealed partial class SessionSpellCaster
@@ -97,6 +102,7 @@ public sealed partial class SessionSpellCaster
     public SessionItemSpells? Item(string id)
     {
         if (_items?.Invoke(id) is not { } item || item.Entity != id) return null;
+        if (_heldBy is { } held && held.Item == id) item = item with { Holder = held.Holder };
         return _owner.QueryItemCharges(id) is { } left ? item with { Charges = left, Flags = item.Flags | SessionItemSpells.MagicalFlag } : item;
     }
 
@@ -147,6 +153,34 @@ public sealed partial class SessionSpellCaster
         }
         return (stopped, started);
     }
+
+    /// <summary>
+    /// ARC-MAGIC-022: the spell steps of the inventory removal (0x467860, IU9) of <paramref name="item"/> from
+    /// <paramref name="holder"/>, called after the session's move: every run whose source is the item ends by event unless its record
+    /// is technological or has item triggers without a maintenance period (0x457450, <see cref="SessionSpellRunActionKind.Demaintain"/>);
+    /// then the drop's withdrawal (0x4CC130, <see cref="WithdrawItemSpells"/> with <see cref="ItemSpellTriggerRules.Drop"/>) with the
+    /// holder passed, as the original passes it and leaves the item's parent field unwritten: the item counts as the holder's while it
+    /// runs, so the lookup need only still know it. The runs the first step ends come first in the stopped list.
+    /// </summary>
+    public (IReadOnlyList<int> Stopped, IReadOnlyList<SessionItemSpellStart> Spells) RemoveItemSpells(string item, string holder)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(holder);
+        // The runs 0x457450 ends (by event: an interrupt event, or freed before their BEGIN), as SpellRunSystem.Demaintain picks them.
+        var ended = _owner.QuerySpellRuns().Runs.Where(run => run.Source?.Id == item && Record(run.Spell) is var r && !r.Technology &&
+            (!r.ItemTriggers || r.MaintainPeriod > 0)).Select(run => run.Id).ToList();
+        Act(new(SessionSpellRunActionKind.Demaintain, Object: item));
+        _heldBy = (item, holder);
+        try
+        {
+            var (stopped, spells) = WithdrawItemSpells(ItemSpellTriggerRules.Drop, item, holder);
+            return ([.. ended, .. stopped], spells);
+        }
+        finally { _heldBy = null; }
+    }
+
+    // ARC-MAGIC-022: an item a removal is withdrawing counts as its former holder's (IU9: the parent field is not rewritten).
+    private (string Item, string Holder)? _heldBy;
 
     // The record's trigger mask (+0x38) of a slot's whole value (0x4CB760): 0 for a value outside the table, which the original reads
     // past it (no installed slot holds one).
@@ -243,6 +277,12 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
     public SessionItemTriggerResult Withdraw(uint eventMask, string item, string holder)
     {
         var (stopped, spells) = _caster.WithdrawItemSpells(eventMask, item, holder);
+        return Played(stopped, spells);
+    }
+
+    public SessionItemTriggerResult Remove(string item, string holder)
+    {
+        var (stopped, spells) = _caster.RemoveItemSpells(item, holder);
         return Played(stopped, spells);
     }
 
