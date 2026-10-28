@@ -151,19 +151,22 @@ def check_windows(product: Path) -> None:
     except OSError as error:
         raise PackageError(f"the export has no {executable.name}") from error
     offset = struct.unpack_from("<I", head, 0x3C)[0] if len(head) >= 0x40 and head[:2] == b"MZ" else -1
-    if offset < 0 or head[offset:offset + 4] != b"PE\0\0":
+    if offset < 0 or len(head) < offset + 24 + 70 or head[offset:offset + 4] != b"PE\0\0":
         raise PackageError(f"{executable.name} is not a Windows executable")
     machine = struct.unpack_from("<H", head, offset + 4)[0]
     magic, subsystem = struct.unpack_from("<H", head, offset + 24)[0], struct.unpack_from("<H", head, offset + 24 + 68)[0]
     if machine != 0x8664 or magic != 0x20B or subsystem != 2:
         raise PackageError(f"{executable.name} is not an x86-64 GUI executable (machine {machine:#x}, subsystem {subsystem})")
+    # The ProductName entry of the version resource: the key, its terminator and up to one padding word, then the value.
     version = head.find("VS_VERSION_INFO".encode("utf-16-le"))
-    if version < 0 or PLAYER_NAME.encode("utf-16-le") not in head[version:version + 4096]:
+    entry = re.escape("ProductName".encode("utf-16-le")) + b"\0\0(?:\0\0)?" + re.escape(PLAYER_NAME.encode("utf-16-le")) + b"\0\0"
+    if version < 0 or not re.search(entry, head[version:version + 4096]):
         raise PackageError(f"{executable.name} does not carry the product name {PLAYER_NAME!r} (modify_resources)")
     pck = product / f"{PLAYER_NAME}.pck"
-    if not pck.is_file() or pck.open("rb").read(4) != b"GDPC":
+    pack = pck.read_bytes() if pck.is_file() else b""
+    if pack[:4] != b"GDPC":
         raise PackageError(f"the export has no Godot pack {pck.name}")
-    if FEATURE.encode() not in pck.read_bytes():
+    if FEATURE.encode() not in pack:
         raise PackageError(f"{pck.name} was not exported with the feature {FEATURE}")
     data = [path for path in product.glob("data_*_windows_x86_64") if path.is_dir()]
     if len(data) != 1:

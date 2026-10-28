@@ -37,7 +37,8 @@ class PackageTests(unittest.TestCase):
         self.export_text = "dotnet /sdk/dotnet publish ... SDK 8.0.425\n"
         self.smoke_text = ""
         self.signature = "Signature=adhoc\n"
-        self.windows = {"machine": 0x8664, "name": package.PLAYER_NAME, "feature": package.FEATURE, "assemblies": package.WINDOWS_ASSEMBLIES}
+        self.windows = {"machine": 0x8664, "subsystem": 2, "name": package.PLAYER_NAME, "description": "Arcanum Steamwoven alpha",
+                        "pack": b"GDPC", "feature": package.FEATURE, "assemblies": package.WINDOWS_ASSEMBLIES, "data": 1}
         quiet = mock.patch.object(package, "say"); quiet.start(); self.addCleanup(quiet.stop)
 
     def tearDown(self) -> None:
@@ -73,13 +74,15 @@ class PackageTests(unittest.TestCase):
         header[0x40:0x44] = b"PE\0\0"
         struct.pack_into("<H", header, 0x44, self.windows["machine"])
         struct.pack_into("<H", header, 0x40 + 24, 0x20B)
-        struct.pack_into("<H", header, 0x40 + 24 + 68, 2)
-        executable.write_bytes(bytes(header) + "VS_VERSION_INFO ProductName ".encode("utf-16-le") + self.windows["name"].encode("utf-16-le"))
-        executable.with_suffix(".pck").write_bytes(b"GDPC" + self.windows["feature"].encode())
-        data = executable.parent / "data_Arcanum.TerrainViewer_windows_x86_64"
-        data.mkdir()
-        for name in self.windows["assemblies"]:
-            (data / name).write_bytes(b"x")
+        struct.pack_into("<H", header, 0x40 + 24 + 68, self.windows["subsystem"])
+        strings = "VS_VERSION_INFO\0FileDescription\0" + self.windows["description"] + "\0ProductName\0\0" + self.windows["name"] + "\0"
+        executable.write_bytes(bytes(header) + strings.encode("utf-16-le"))
+        executable.with_suffix(".pck").write_bytes(self.windows["pack"] + self.windows["feature"].encode())
+        for number in range(self.windows["data"]):
+            data = executable.parent / f"data_Arcanum.TerrainViewer{number or ''}_windows_x86_64"
+            data.mkdir()
+            for name in self.windows["assemblies"]:
+                (data / name).write_bytes(b"x")
 
     def run_package(self, smoke_folder: Path | None = None, platform: str = "mac") -> Path:
         with mock.patch.object(package, "game_folder", return_value=smoke_folder):
@@ -175,8 +178,10 @@ class PackageTests(unittest.TestCase):
 
     def test_a_windows_export_with_a_wrong_file_is_refused_and_nothing_installed(self) -> None:
         good = dict(self.windows)
-        for change, error in (({"machine": 0x14C}, "x86-64 GUI"), ({"name": "Godot Engine"}, "product name"),
-                              ({"feature": "standard"}, "feature"), ({"assemblies": ("GodotSharp.dll",)}, "lacks")):
+        for change, error in (({"machine": 0x14C}, "x86-64 GUI"), ({"subsystem": 3}, "x86-64 GUI"),
+                              ({"name": "Godot Engine"}, "product name"), ({"pack": b"PK\3\4"}, "Godot pack"),
+                              ({"feature": "standard"}, "feature"), ({"assemblies": ("GodotSharp.dll",)}, "lacks"),
+                              ({"data": 0}, "0 .NET data"), ({"data": 2}, "2 .NET data")):
             self.windows = dict(good, **change)
             with self.assertRaisesRegex(package.PackageError, error):
                 self.run_package(platform="win")

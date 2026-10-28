@@ -54,7 +54,9 @@ The Windows build is **not signed** (a code-signing certificate costs money), so
 
 1. **Unpack the zip; do not start the game from inside it.** Right-click `Arcanum Steamwoven Windows x64.zip` →
    **Extract All…** and pick a folder you can write to, for example `C:\Games` or your Documents folder (not
-   `C:\Program Files`, which needs administrator rights). You get a folder `Arcanum Steamwoven` with
+   `C:\Program Files`, which needs administrator rights). Windows proposes a folder named after the zip, so the game
+   ends up in `…\Arcanum Steamwoven Windows x64\Arcanum Steamwoven\` (remove the last part of the proposed path to skip the
+   outer folder). The game folder `Arcanum Steamwoven` holds
    `Arcanum Steamwoven.exe`, `Arcanum Steamwoven.pck` and a `data_Arcanum.TerrainViewer_windows_x86_64` folder. Keep the
    three together: the `.exe` does not start without the other two beside it.
 2. **Start `Arcanum Steamwoven.exe`.** If the zip came from the internet, a messenger or mail, Windows marks the files and
