@@ -102,6 +102,24 @@ public sealed record CombatAnomalyProfile
     /// </summary>
     public bool NoAttackKeepsChosenAction { get; init; }
 
+    /// <summary>
+    /// MR3 (owner decision 2026-10-20): a leaderless NPC counts as a party of one in the flee test, its own followers ignored,
+    /// while each of its followers counts the whole group (see <see cref="Ai.MoraleRules.Party"/>, ARC-WORLD-082).
+    /// </summary>
+    public bool NpcLeaderPartyCountsAlone { get; init; }
+
+    /// <summary>
+    /// MR7 (owner decision 2026-10-20): the "flee spell used" bit is cleared only by the flee-spell step, so a flight left before
+    /// that step makes the next flight skip its flee spell or item once (see <see cref="Ai.DangerRules.Set"/>, ARC-WORLD-082).
+    /// </summary>
+    public bool StaleSpellFleeSkipsFleeSpell { get; init; }
+
+    /// <summary>
+    /// MR9 (owner decision 2026-10-20): perform fleeing starts the flee goal even when the setter refused the surrender
+    /// (invulnerable, or a leader of extraordinary charisma; see <see cref="Ai.MoraleRules.StartsFleeGoal"/>, ARC-WORLD-082).
+    /// </summary>
+    public bool FleeGoalAfterRefusedSurrender { get; init; }
+
     /// <summary>The original with every recorded D2 fix; the default setting.</summary>
     public static readonly CombatAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -124,6 +142,9 @@ public sealed record CombatAnomalyProfile
         EnemyListFocusTakesSpellTarget = true,
         NoAttackSurvivesLeaving = true,
         NoAttackKeepsChosenAction = true,
+        NpcLeaderPartyCountsAlone = true,
+        StaleSpellFleeSkipsFleeSpell = true,
+        FleeGoalAfterRefusedSurrender = true,
     };
 
     /// <summary>Both settings, default first.</summary>

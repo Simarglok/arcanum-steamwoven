@@ -7,7 +7,7 @@ stage A1; [enemy list and target lock](../research/npc-ai-hostility.md#6-enemy-l
 [ledger CL4, CL10](../research/ledger/npc-ai.md#npc-ai-core-loop-arc-res-054) and
 [HS18](../research/ledger/npc-ai.md#npc-ai-hostility-and-targeting-arc-res-057), two readers, re-read by this task)
 as pure rules in `Arcanum.Simulation.Ai.DangerRules` and per-NPC session state in
-`Arcanum.Session` (`GameSessionDanger.cs`, snapshot schema 38). No AI pass or host
+`Arcanum.Session` (`GameSessionDanger.cs`, snapshot schema 38; 39 since ARC-WORLD-082). No AI pass or host
 calls it yet: the rules of slice I4 ([hostility and targets](ai-hostility.md), ARC-WORLD-080) decide its requests, and peace,
 stop attacking and the attack event's writes are session operations there.
 
@@ -19,7 +19,7 @@ stop attacking and the attack event's writes are session operations there.
 - **Bits** (`DangerFlags`, one set for both settings): `Fighting` (NPC flag 0x1), `CheckWield` (0x40),
   `CheckGrenade` (0x40000000), `BackingOff` (0x10000000), `DemaintainSpells` (0x1000000), `NoAttack`
   (0x20000000), `Fleeing` (critter flag 0x10), `Surrendered` (0x4000), `TargetLocked` (critter flag 2
-  0x200000). NO_FLEE, invulnerability, the leader's charisma, the global "NPC fighting" switch and the
+  0x200000), `SpellFlee` (critter flag 0x10000, the flee-spell step of slice I5, [morale](ai-morale.md)). NO_FLEE, invulnerability, the leader's charisma, the global "NPC fighting" switch and the
   float callback are the caller's `DangerSetterFacts`.
 - **Setter** (`Set`, 0x4AABE0) returns a `DangerTransition` in the original's rule order:
   1. invulnerable, nigh-invulnerable or the decoy → NONE (`DangerSetterRule.Invulnerable`);
@@ -69,13 +69,13 @@ also on death (0x4B411C), and allows the hero's followers to attack when the her
 Budgets: `GameSessionLimits.MaxDangerRecords` (8,192, as life and reaction) and
 `MaxDangerEnemies` (65,536 entries of all lists together; the original's lists have no limit).
 
-## Snapshot schema 38
+## Snapshot schema 39
 
 `"danger":{"records":[{"entity","flags","focus","fleeingFrom","hitBy","enemies"}]}` after
 `concealment`, records in ordinal entity order, flag names in bit order, each handle the entity id,
 `""` for the hero (never a valid entity id) or `null` for none. Restore refuses a baseline record,
-an undefined bit, an invalid handle, a repeated enemy and the budgets; schemas 1..37 are refused, not
-migrated.
+an undefined bit, an invalid handle, a repeated enemy and the budgets; schemas 1..38 are refused, not
+migrated. Schema 39 (ARC-WORLD-082) adds the flag name `SpellFlee`.
 
 ## Settings
 
@@ -86,7 +86,7 @@ migrated.
 
 ## Not ready
 
-- **Callers.** No AI pass (slice I6), morale (I5) or follower order (I9) calls the setter yet, and nothing calls the danger
+- **Callers.** No AI pass (slice I6) or follower order (I9) calls the setter yet (morale, I5, decides its flight requests), and nothing calls the danger
   update, attack event, reaction to an attack, kill-on-sight or scan rules of slice I4; the viewer shows nothing.
   The hosts run no enter or exit combat script: the hook is returned, and the dispatcher's combat
   hooks (S7) are to carry it. The start and end combat points (15, 16) are I6's gate.
