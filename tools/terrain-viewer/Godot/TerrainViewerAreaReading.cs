@@ -53,8 +53,11 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-049 reading data status={_readingData.Status} detail={_readingData.Detail}");
     }
 
-    /// <summary>The inventory's Read button: the session uses the written item; a document opens the window in place of the inventory.</summary>
-    private void ReadItem(string item)
+    /// <summary>The inventory's Read button: the session uses the written item; a document opens the window in place of the inventory.
+    /// ARC-UI-025: the item use (0x462CC0) reaches it after it ran the use script itself (<paramref name="scriptRan"/>).</summary>
+    private void ReadItem(string item) => ReadItem(item, scriptRan: false);
+
+    private void ReadItem(string item, bool scriptRan)
     {
         if (!InventoryOpen || !InventoryActive) return;
         AdoptReadingData();
@@ -62,7 +65,7 @@ public partial class TerrainViewerApp
         string message;
         if (_readingData?.Data is not { } data) message = "not read: the written texts are " + (_readingData is null ? "still loading" : $"unavailable ({_readingData.Status})");
         else if (_inventoryHost!.WrittenFacts(_areaSession!, item, data) is not { } facts) message = "not read: not a written item the hero holds";
-        else if (facts.UseScript && ItemUseScript(item) is { } stopped) message = stopped;
+        else if (facts.UseScript && !scriptRan && ItemUseScript(item) is { } stopped) message = stopped;
         else
         {
             var result = _areaSession!.UseWrittenItem(_areaSession.Version, item, facts, data.Texts, useScriptRan: facts.UseScript);
@@ -93,16 +96,17 @@ public partial class TerrainViewerApp
     /// user; null when it let the use go on (run default), otherwise why the use stopped. Its effects (flags, story, quests, areas, rumors,
     /// reputations, its own slot) are the session's either way the run ended; a completed quest's award levels the followers.
     /// </summary>
-    private string? ItemUseScript(string item)
+    private string? ItemUseScript(string item, bool reading = true)
     {
-        if (_readyArea?.Snapshot is not { } snapshot || UseScriptHost(snapshot) is not { } host) return "not read: its use script needs a game session";
+        var not = reading ? "not read" : "not used";
+        if (_readyArea?.Snapshot is not { } snapshot || UseScriptHost(snapshot) is not { } host) return $"{not}: its use script needs a game session";
         if (_areaSession!.QueryPcInventory().FirstOrDefault(held => held.Entity == item) is not { Entity: not null } held)
-            return "not read: its use script runs only for an item taken from a map";
+            return $"{not}: its use script runs only for an item taken from a map";
         var ran = Awarded(host, host.RunItemUse(held.Origin.RuntimeMap, item, _areaSession.Rules.Scripts));
         var lines = ran.Lines.Count > 0 ? " — \"" + string.Join(" / ", ran.Lines) + "\"" : "";
         GD.Print($"ARC-SCRIPT-020 item use script outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} detail={ran.Detail}{lines}");
-        if (ran.Outcome is not AreaScriptedUseOutcome.NoTeleport) return "not read: its use script was refused (" + ran.Detail + ")";
-        return ran.Run?.Outcome == ScrOutcome.SkipDefault ? "its use script stopped the reading" + lines : null;
+        if (ran.Outcome is not AreaScriptedUseOutcome.NoTeleport) return $"{not}: its use script was refused (" + ran.Detail + ")";
+        return ran.Run?.Outcome == ScrOutcome.SkipDefault ? (reading ? "its use script stopped the reading" : "its use script stopped the use") + lines : null;
     }
 
     private void OpenReading(WrittenDocument document, string title)
