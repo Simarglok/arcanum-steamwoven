@@ -50,8 +50,8 @@ public sealed record SessionItemTriggerResult(IReadOnlyList<int> Stopped, IReadO
 /// </summary>
 public interface ISessionItemTriggers
 {
-    /// <summary>Whether <paramref name="item"/>'s spells can run through this host (the host knows it, and its charges need no saved
-    /// state: unlimited or none).</summary>
+    /// <summary>Whether <paramref name="item"/>'s spells can run through this host for the hero (the host knows it as the hero's, and
+    /// its charges need no saved state: unlimited or none). The host must cast in the same session as the move that asks.</summary>
     bool Supports(string item);
 
     SessionItemTriggerResult Fire(uint eventMask, string item, string holder);
@@ -168,8 +168,8 @@ public sealed partial class SessionSpellCaster
 /// goals of the runs they start play at once — no eye-candy art is drawn, so each release comes on the goal's start — through the
 /// host's goal (<see cref="SessionSpellCaster.StartGoal"/>, its action points in a turn-based round, then
 /// <see cref="SessionSpellCaster.Release"/>). A fired run's goal 73 has no end node: when its start refuses, the original keeps the
-/// run in its slot (it never begins); Steamwoven frees it unpaid, as MG39 does for the casting goal (switch
-/// <see cref="MagicAnomalyProfile.GoalRefusalChargesBegin"/>). A withdrawal's recast plays the casting goal with its end
+/// run in its slot, never begun (IT10); Steamwoven frees it unpaid, as MG41 does for a run that fails its release re-check (switch
+/// <see cref="MagicAnomalyProfile.ReleaseRefusalKeepsRun"/>). A withdrawal's recast plays the casting goal with its end
 /// (<see cref="SessionSpellCaster.EndGoal"/>).
 /// </summary>
 public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionCombatWorld combat) : ISessionItemTriggers
@@ -177,7 +177,7 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
     private readonly SessionSpellCaster _caster = caster ?? throw new ArgumentNullException(nameof(caster));
     private readonly ISessionCombatWorld _combat = combat ?? throw new ArgumentNullException(nameof(combat));
 
-    public bool Supports(string item) => _caster.Item(item) is { Charges: <= 0 };
+    public bool Supports(string item) => _caster.Item(item) is { Holder: SessionSpellCaster.Hero, Charges: <= 0 };
 
     public SessionItemTriggerResult Fire(uint eventMask, string item, string holder) =>
         Played([], _caster.StartItemSpells(eventMask, item, holder));
@@ -196,7 +196,7 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
         var start = _caster.StartGoal(run, _combat);
         if (start.Outcome == SpellCastGoalOutcome.Started) _caster.Release(run);
         if (castGoal) _caster.EndGoal(run, refused: start.Outcome != SpellCastGoalOutcome.Started);
-        else if (start.Outcome != SpellCastGoalOutcome.Started && !_caster.Owner.Rules.Magic.GoalRefusalChargesBegin)
+        else if (start.Outcome != SpellCastGoalOutcome.Started && !_caster.Owner.Rules.Magic.ReleaseRefusalKeepsRun)
             _caster.Act(new(SessionSpellRunActionKind.Free, run));
         return start;
     }

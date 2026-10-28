@@ -42,10 +42,14 @@ slices (see [Not ready](#not-ready)).
   knows the item and its charges need no saved state: unlimited or none), `Fire`, `Withdraw`. It plays each started run's goal at
   once: the goal's start (`StartGoal`, 4 action points in a turn-based round), then the release (`Release`, its BEGIN). No eye-candy
   art paces it. A withdrawal's recast ends its goal (`EndGoal`). A fired run's goal 73 has no end node: when its start refuses, the
-  original leaves the run in its slot, never begun; Steamwoven frees it unpaid under MG39's switch
-  (`MagicAnomalyProfile.GoalRefusalChargesBegin`, owner decision 2026-10-27 for refused casting goals).
-- **Equipment.** `Equip` and `Unequip` take an optional `ISessionItemTriggers`. Without one, as before ARC-MAGIC-020, an item with
-  item spells is refused (`ItemEffectUnsupported`), and so is a move of an item that is the source of a run. With one, an item with
+  original leaves the run in its slot, never begun (IT10); Steamwoven frees it unpaid as MG41 does for a run that fails its release
+  re-check (`MagicAnomalyProfile.ReleaseRefusalKeepsRun`, owner decision 2026-10-27 for MG41; its use here awaits the owner's
+  confirmation).
+- **Equipment.** `Equip` and `Unequip` take an optional `ISessionItemTriggers` of the same session. Without one, as before
+  ARC-MAGIC-020, an item with item spells is refused (`ItemEffectUnsupported`), and so is a move of an item that is the source of a
+  run in the table. The session does not record which worn items carry spells (the worn item's saved state is unchanged), so an item
+  worn through a host whose run has ended, or after a load (runs are not saved), comes off without a host and without its unwear: a
+  caller that wears through a host takes off through one. The saved item spell state is the pickup, drop and use slice's. With one, an item with
   spells moves when the host supports it; after the move (and its item event scripts) come, in order, the unwear of the item when it
   left another slot, the unwear of the occupant it displaced, and the item's wear (`EquipmentMutationResult.ItemSpells`); `Unequip`
   runs the unwear. A move that rolled back fires nothing.
@@ -56,7 +60,8 @@ The census (`ItemSpellCensusRealDataTests`, opt-in `DAT_ROOT`) finds four wear i
 scripts: 8168, 8169 and 8170 carry record 168, a maintained technology heal that pays cells (its MAINTAIN components are gated by
 `Wear`), and 8207 carries record 182, whose BEGIN sets object flags on the wear and clears them on the unwear. Nothing fires on pickup
 or drop. Of the components, Heal runs; NoOp, TestNBranch, ChargeNBranch, ObjFlag are not executed yet (MT13–MT18: logged as not
-ready), so record 168 heals without paying cells and record 182 changes no flag. The unwear's recast of record 168 is maintained too;
+ready), so record 168 heals without paying cells (its maintenance cost is 0, so the stage pays nothing; its cells are the unexecuted
+ChargeNBranch's) and record 182 changes no flag. The unwear's recast of record 168 is maintained too;
 its MAINTAIN aims at the run's target (the holder) and its components are gated by `Wear`, so its first tick applies nothing and ends
 it, as in the original (a MAINTAIN with an empty target list would count as applied and keep the run).
 
@@ -65,7 +70,7 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 | Original | Steamwoven | Switch |
 | --- | --- | --- |
 | The wear and unwear executors run inside the wield and unwield (0x4677B0, 0x467CB0), before the light recalculation and script points 24/25 (IT8). | They run after the move and its scripts. No installed wear item has a move script. | — (order of the session's move) |
-| A fired run whose goal 73 refuses at its start stays in its slot, never begun. | Freed unpaid. | MG39 (`GoalRefusalChargesBegin`) |
+| A fired run whose goal 73 refuses at its start stays in its slot, never begun (IT10). | Freed unpaid. | MG41's switch (`ReleaseRefusalKeepsRun`), awaiting the owner's confirmation |
 | The casting goal's release waits for the caster's eye candy (EC7). | The goals of item spells are released at once. | — (presentation, not ready) |
 
 ## Not ready

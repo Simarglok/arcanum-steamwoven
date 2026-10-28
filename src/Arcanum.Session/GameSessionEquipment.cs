@@ -299,7 +299,12 @@ public sealed partial class GameSessionOwner
         if (current?.Entity == entity) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, EquipmentRefusal.None, null, null, Version);
         var points = EquipmentDomain.MovePoints(item.ScriptPoints);
         if (scripts is null && (points.Count > 0 || current?.ScriptPoints.Count > 0)) return RejectWear(GameSessionFailure.ItemScriptUnsupported);
-        if (item.HasItemSpells && triggers?.Supports(entity) != true) return RejectWear(GameSessionFailure.ItemEffectUnsupported);
+        if (item.HasItemSpells)
+        {
+            var supported = triggers?.Supports(entity) == true;
+            ThrowIfDisposed();
+            if (!supported) return RejectWear(GameSessionFailure.ItemEffectUnsupported);
+        }
         if (triggers is null && (HasItemRuns(entity) || current is not null && HasItemRuns(current.Entity)))
             return RejectWear(GameSessionFailure.ItemEffectUnsupported);
 

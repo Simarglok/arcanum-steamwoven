@@ -17,7 +17,7 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SessionItemSpellTests
 {
-    private const string Coat = "kit:2";
+    private const string Coat = "kit:2", Ring = "kit:3";
     private static readonly SpellLocation HeroTile = new(5, 5);
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
     private static readonly SessionWearArtCheck Drawn = (_, _) => true;
@@ -63,14 +63,27 @@ public sealed class SessionItemSpellTests
         with { Areas = [.. Enumerable.Repeat(new SpellArea(0x4, 0, 0, 0, -1), 5)], Cost = cost, MaintainCost = 0, MaintainPeriod = 5, DurationSeconds = 0, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1,
             NoStack = 0, DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0, ItemTriggers = Wear | Unwear });
 
+    // Record 151 fires on the wear with only the melee aim bit: the executor sets no target and starts no run (IT3).
+    private static SessionSpellRecord Melee151() =>
+        SessionSpellRecords.Translate(Record(number: 151, beginTargets: 0x4, info: SpellInfo.Friendly, technology: true,
+            components: [new(SpellAction.Begin, SpellComponentType.NoOp, new(0x4, 0, 0, 0, -1), 0, 0, null)])
+        with { ItemTriggers = Wear | WeaponMelee, Cost = 0, DurationSeconds = 0, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0,
+            DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0 });
+
     private static (GameSessionOwner Owner, SessionSpellCaster Caster, SessionItemTriggers Triggers) Session(RuleMode mode = RuleMode.Steamwoven,
         int charges = -1, SessionSpellRecord? record = null)
     {
         var spell = record ?? Record150();
+        var melee = Melee151();
         var owner = CreateWith(HalfElf());
         owner.SelectRules(mode);
-        var caster = new SessionSpellCaster(owner, n => n == spell.Data.Number ? spell : null, new Map(owner), new Events(),
-            id => id == Coat ? new SessionItemSpells(Coat, SessionSpellCaster.Hero, 7, [150, 10000, 10000, 10000, 10000], charges, -20) : null);
+        var caster = new SessionSpellCaster(owner, n => n == spell.Data.Number ? spell : n == melee.Data.Number ? melee : null, new Map(owner), new Events(),
+            id => id switch
+            {
+                Coat => new SessionItemSpells(Coat, SessionSpellCaster.Hero, 7, [150, 10000, 10000, 10000, 10000], charges, -20),
+                Ring => new SessionItemSpells(Ring, SessionSpellCaster.Hero, 7, [151, 150, 10000, 10000, 10000], -1, -20),
+                _ => null,
+            });
         return (owner, caster, new SessionItemTriggers(caster, new NoCombat()));
     }
 
@@ -142,7 +155,7 @@ public sealed class SessionItemSpellTests
     }
 
     [TestMethod]
-    public void A_fired_run_whose_goal_start_refuses_stays_in_the_original_and_is_freed_unpaid_in_Steamwoven()
+    public void It10_a_fired_run_whose_goal_start_refuses_stays_in_the_original_and_is_freed_unpaid_in_Steamwoven()
     {
         // No charges left: the pre-animation check refuses the goal (an item source pays a charge); goal 73 has no end node.
         foreach (var (mode, stays) in new[] { (RuleMode.Original, true), (RuleMode.Steamwoven, false) })
@@ -162,12 +175,38 @@ public sealed class SessionItemSpellTests
     {
         var (owner, _, triggers) = Session();
         using var _ = owner;
-        var worn = owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, new(Kit[2].Kind, [], false, new EquipmentItem
+        var worn = owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, new EquipmentItem
         {
-            Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor { Coverage = ArmorCoverage.Ring, Sizes = ArmorSizes.None },
+            Kind = EquipmentItemKind.Weapon,
+            Weapon = new EquipmentWeapon { Skill = CombatSkill.Melee, Damage = DamageRanges.None with { Normal = new(10, 30) } },
         }), Drawn, Accept, triggers: triggers);
         Assert.AreEqual(GameSessionDisposition.Changed, worn.Disposition, $"{worn.Failure}");
         Assert.AreEqual(0, worn.ItemSpells.Single().Spells.Count);
         Assert.AreEqual(0, Runs(owner).Length);
+    }
+
+    [TestMethod]
+    public void A_ring_moved_to_the_other_ring_slot_unwears_and_wears_again_and_a_melee_aim_alone_starts_nothing()
+    {
+        var (owner, _, triggers) = Session();
+        using var _ = owner;
+        SessionWearableItem Band() => new(Kit[2].Kind, [], true, new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor { Coverage = ArmorCoverage.Ring, Sizes = ArmorSizes.None },
+        });
+        var worn = owner.Equip(owner.Version, Ring, EquipmentSlot.Ring1, Band(), Drawn, Accept, triggers: triggers);
+        Assert.AreEqual(GameSessionDisposition.Changed, worn.Disposition, $"{worn.Failure}");
+        Assert.AreEqual(owner.Version, worn.Version, "the result carries the version after the host's runs");
+        CollectionAssert.AreEqual(new[] { (151, SessionItemSpellOutcome.NoTarget), (150, SessionItemSpellOutcome.Started) },
+            worn.ItemSpells.Single().Spells.Select(s => (s.Firing.Spell, s.Outcome)).ToArray());
+        var first = Runs(owner).Single().Id;
+
+        var moved = owner.Equip(owner.Version, Ring, EquipmentSlot.Ring2, Band(), Drawn, Accept, triggers: triggers);
+        Assert.AreEqual(GameSessionDisposition.Changed, moved.Disposition, $"{moved.Failure}");
+        Assert.AreEqual(2, moved.ItemSpells.Count, "the ring's unwear, then its wear");
+        CollectionAssert.AreEqual(new[] { first }, moved.ItemSpells[0].Stopped.ToArray());
+        Assert.IsTrue(moved.ItemSpells[0].Spells.Single().Firing.CastGoal);
+        Assert.AreEqual(SessionItemSpellOutcome.Started, moved.ItemSpells[1].Spells.Single(s => s.Firing.Spell == 150).Outcome);
+        Assert.AreEqual(1, Runs(owner).Count(r => r.Triggers == (int)Wear), "one wear run again");
     }
 }
