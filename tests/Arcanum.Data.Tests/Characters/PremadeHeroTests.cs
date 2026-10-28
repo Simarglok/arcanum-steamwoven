@@ -89,35 +89,44 @@ public sealed class PremadeHeroTests
         "{11}{" + new string('n', 69) + ": 1,1}{12}{Many: 1,1" + string.Concat(Enumerable.Repeat(" 1,1", 301)) + "}" +
         "{13}{Bought: 1,1}{14}{Last: 1,1}{16}{After the gap: 1,1}");
 
+    private static bool Any(int basic) => true;
+
     [TestMethod]
     public void InventorySourceSetsParseWithTheSourceNumberingAndAdmission()
     {
-        var hero = InventorySourceRules.Read(Sources, Mes("{2}{  }"), 2);
+        var hero = InventorySourceRules.Read(Sources, Mes("{2}{  }"), 2, Any);
         Assert.AreEqual(InventorySourceStatus.Parsed, hero.Status);
         Assert.AreEqual((2, 385, 385), (hero.Set!.Number, hero.Set.MinCoins, hero.Set.MaxCoins));
         CollectionAssert.AreEqual(new[] { new InventorySourceEntry(100, 6029), new InventorySourceEntry(100, 8168) }, hero.Set.Items.ToArray());
-        Assert.AreEqual((5, 50, 1), (InventorySourceRules.Read(Sources, null, 3).Set!.MinCoins, InventorySourceRules.Read(Sources, null, 3).Set!.MaxCoins,
-            InventorySourceRules.Read(Sources, null, 3).Set!.Items.Count));
-        Assert.AreEqual(0, InventorySourceRules.Read(Sources, null, 1).Set!.Items.Count);
-        Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(Sources, null, 11).Status, "a 69-character name");
+        Assert.AreEqual((5, 50, 1), (InventorySourceRules.Read(Sources, null, 3, Any).Set!.MinCoins, InventorySourceRules.Read(Sources, null, 3, Any).Set!.MaxCoins,
+            InventorySourceRules.Read(Sources, null, 3, Any).Set!.Items.Count));
+        Assert.AreEqual(0, InventorySourceRules.Read(Sources, null, 1, Any).Set!.Items.Count);
+        Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(Sources, null, 11, Any).Status, "a 69-character name");
 
         foreach (var (set, status) in new[]
         {
             (0, InventorySourceStatus.Unreachable), (-1, InventorySourceStatus.Unreachable), (15, InventorySourceStatus.Unreachable),
             (16, InventorySourceStatus.Unreachable), (4, InventorySourceStatus.Malformed), (5, InventorySourceStatus.Malformed),
-            (6, InventorySourceStatus.Malformed), (7, InventorySourceStatus.Malformed), (8, InventorySourceStatus.Malformed),
-            (9, InventorySourceStatus.Malformed), (10, InventorySourceStatus.Malformed), (12, InventorySourceStatus.Malformed),
+            (6, InventorySourceStatus.Emptied), (7, InventorySourceStatus.Malformed), (8, InventorySourceStatus.Emptied),
+            (9, InventorySourceStatus.Malformed), (10, InventorySourceStatus.Emptied), (12, InventorySourceStatus.Emptied),
         })
-            Assert.AreEqual(new InventorySourceRead(status, null), InventorySourceRules.Read(Sources, null, set), set.ToString());
-        // The lookup accepts only numbers below the entry count, so the last of 15 entries is out of reach.
-        Assert.AreEqual(InventorySourceStatus.Unreachable, InventorySourceRules.Read(Mes("{1}{a: 1,1}{2}{b: 1,1}"), null, 2).Status);
-        Assert.AreEqual(InventorySourceStatus.BuyListUnsupported, InventorySourceRules.Read(Sources, Mes("{13}{ALL}"), 13).Status);
-        Assert.AreEqual(InventorySourceStatus.BuyListUnsupported, InventorySourceRules.Read(Sources, Mes("{13}{ \t }"), 13).Status,
+            Assert.AreEqual(new InventorySourceRead(status, null), InventorySourceRules.Read(Sources, null, set, Any), set.ToString());
+        // ARC-WORLD-093: the lookup takes 1..count (0x4BF5D0, BT9), so the last of two entries is reachable.
+        Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(Mes("{1}{a: 1,1}{2}{b: 1,1}"), null, 2, Any).Status);
+        Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(Sources, null, 14, Any).Status, "the last set before the gap");
+        // A buy line that parses is read; a failing one empties the whole set (BT8).
+        Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(Sources, Mes("{13}{ALL}"), 13, Any).Status);
+        Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(Sources, Mes("{2}{6029 8168}"), 2, Any).Status);
+        Assert.AreEqual(InventorySourceStatus.Emptied, InventorySourceRules.Read(Sources, Mes("{13}{ \t }"), 13, Any).Status,
             "a tab is a (failing) buy token in the source");
+        Assert.AreEqual(InventorySourceStatus.Emptied, InventorySourceRules.Read(Sources, Mes("{2}{6029 8168}"), 2, basic => basic != 8168).Status,
+            "a buy number without a prototype");
+        Assert.AreEqual(InventorySourceStatus.Emptied, InventorySourceRules.Read(Sources, null, 2, basic => basic != 8168).Status,
+            "a loot item without a prototype empties the set in the source");
         Assert.AreEqual(InventorySourceStatus.InvalidText,
-            InventorySourceRules.Read(Mes("{1}{a: 385,385\n100,6029}{2}{b: 1,1}"), null, 1).Status, "the source would read one token 385, LF, 100");
+            InventorySourceRules.Read(Mes("{1}{a: 385,385\n100,6029}{2}{b: 1,1}"), null, 1, Any).Status, "the source would read one token 385, LF, 100");
         Assert.AreEqual(InventorySourceStatus.InvalidText,
-            InventorySourceRules.Read(MesFile.Parse(Encoding.Latin1.GetBytes("{1}{aé: 1,1}{2}{b: 1,1}")).File!, null, 1).Status);
+            InventorySourceRules.Read(MesFile.Parse(Encoding.Latin1.GetBytes("{1}{aé: 1,1}{2}{b: 1,1}")).File!, null, 1, Any).Status);
     }
 
     // ---------------------------------------------------------------- synthetic v119 prototypes
@@ -291,9 +300,16 @@ public sealed class PremadeHeroTests
         var set = Read(Changed(pc => pc[57] = 4));
         Assert.AreEqual((PremadeHeroFailure.InventorySourceRefused, 4, (InventorySourceStatus?)InventorySourceStatus.Malformed),
             (set.Failure, set.Detail, set.SourceStatus));
-        Refused(PremadeHeroFailure.InventorySourceRefused, Files(), 2, buy: Mes("{2}{6029}"));
+        // ARC-WORLD-093: a buy line that parses is allowed; a failing one empties the set (BT8).
+        Assert.AreEqual(PremadeHeroFailure.None, Read(Files(), buy: Mes("{2}{6029}")).Failure);
+        var emptied = Read(Files(), buy: Mes("{2}{1}"));
+        Assert.AreEqual((PremadeHeroFailure.InventorySourceRefused, 2, (InventorySourceStatus?)InventorySourceStatus.Emptied),
+            (emptied.Failure, emptied.Detail, emptied.SourceStatus));
         Refused(PremadeHeroFailure.RandomInventorySource, Changed(pc => pc[57] = 3), 3);
-        Refused(PremadeHeroFailure.ItemPrototypeMissing, With(8188, new(PrototypeFileStatus.Missing, null)), 8188);
+        // A kit item without a prototype empties the set in the source (ARC-WORLD-093, BT9).
+        var missing = Read(With(8188, new(PrototypeFileStatus.Missing, null)));
+        Assert.AreEqual((PremadeHeroFailure.InventorySourceRefused, 2, (InventorySourceStatus?)InventorySourceStatus.Emptied),
+            (missing.Failure, missing.Detail, missing.SourceStatus));
         Refused(PremadeHeroFailure.ItemPrototypeAmbiguous, With(8188, new(PrototypeFileStatus.Ambiguous, null)), 8188);
         Refused(PremadeHeroFailure.ItemPrototypeInvalid, With(8188, new(PrototypeFileStatus.Found, [1, 2, 3])), 8188);
         Refused(PremadeHeroFailure.ItemTypeUnsupported, With(8188, new(PrototypeFileStatus.Found, Prototype(8188, 8))), 8188);

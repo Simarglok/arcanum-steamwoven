@@ -59,11 +59,13 @@ ASCII are typed refusals instead of the source's partial effect.
 
 **Inventory source sets** (`InventorySourceRules`, S:
 parser and lookup (0x4BF5D0, 0x4BF640, 0x4BF7B0)):
-set N is message N, numbered from 1 without gaps, reachable when `0 < N < entry count`. An entry is
+set N is message N, numbered from 1 without gaps, reachable when `0 < N ≤ entry count` (ARC-WORLD-093 corrects the earlier
+"below the count", ledger BT9). An entry is
 `name: min,max rate,proto …`; here the entry must be printable ASCII (the source splits on commas and spaces only, so a
 tab or line feed would empty the set), the name 1..69 characters before the first colon and every space-separated token
-a pair of digit runs, at most 300 items. A buy line for the set with anything but spaces is refused
-(`BuyListUnsupported`): a failing one empties the set in the source and buy lists are not modelled.
+a pair of digit runs, at most 300 items. A set whose buy line or loot line fails in the source (`InventorySourceBuyRules`: a bad
+buy number, a loot item outside the basic ranges or without a prototype file, …) is `Emptied`, as the source empties it; a buy line
+that parses is allowed (ARC-WORLD-093; it was refused as `BuyListUnsupported` before).
 
 ## Session hero
 

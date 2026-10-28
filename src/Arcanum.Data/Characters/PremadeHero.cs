@@ -146,7 +146,10 @@ public static class PremadeHeroReader
         var items = new List<PremadeHeroItem>();
         if (setNumber != 0)
         {
-            var set = InventorySourceRules.Read(sources.InventorySources, sources.InventorySourcesBuy, setNumber);
+            // ARC-WORLD-093: a loot or buy number without a prototype file empties the set in the source (BT8, BT9); an ambiguous or
+            // invalid file keeps its own refusal below.
+            var set = InventorySourceRules.Read(sources.InventorySources, sources.InventorySourcesBuy, setNumber,
+                basic => basic is > 0 and <= 999_999 - PrototypeOffset && Prototype(sources, basic + PrototypeOffset, out _) != PrototypeFileStatus.Missing);
             if (set.Set is null) return new(PremadeHeroFailure.InventorySourceRefused, null, setNumber, SourceStatus: set.Status);
             if (set.Set.MinCoins != set.Set.MaxCoins || set.Set.Items.Any(item => item.Rate < 100))
                 return new(PremadeHeroFailure.RandomInventorySource, null, setNumber);

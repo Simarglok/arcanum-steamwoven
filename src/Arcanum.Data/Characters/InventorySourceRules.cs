@@ -5,8 +5,8 @@ namespace Arcanum.Data.Characters;
 public enum InventorySourceStatus
 {
     Parsed,
-    /// <summary>Not a set the source's lookup returns: below 1, not below the table's entry count, or after the first gap in
-    /// the 1..N numbering (the source stops parsing there).</summary>
+    /// <summary>Not a set the source's lookup returns: below 1, above the table's entry count, or at or after the first gap in
+    /// the 1..N numbering (the source stops parsing there). ARC-WORLD-093: the last set is reachable (BT9).</summary>
     Unreachable,
     /// <summary>The entry is not <c>name: min,max rate,proto …</c> as admitted here: no colon, an empty name or one of 70
     /// or more characters, a token that is not two comma-separated digit runs, no coin pair, or more than 300 items.</summary>
@@ -14,9 +14,9 @@ public enum InventorySourceStatus
     /// <summary>A byte outside printable ASCII (space included): the source splits only on commas and spaces, so a tab or
     /// line feed would glue a pair to the next one and empty the set.</summary>
     InvalidText,
-    /// <summary>The set has a non-empty <c>rules\InvenSourceBuy.mes</c> line. A failing buy line empties the set in the
-    /// source; buy lists are not modelled, so any non-empty one is refused.</summary>
-    BuyListUnsupported,
+    /// <summary>ARC-WORLD-093: the source empties the set (loot too) because its <c>rules\InvenSourceBuy.mes</c> line or its loot line
+    /// fails (<see cref="InventorySourceBuyStatus.Emptied"/>, BT8, BT9). A set with a buy line that parses is read.</summary>
+    Emptied,
 }
 
 /// <summary>One item line: chance in percent and the basic prototype number (the prototype file is number + 20).</summary>
@@ -28,8 +28,9 @@ public sealed record InventorySourceSet(int Number, int MinCoins, int MaxCoins, 
 public sealed record InventorySourceRead(InventorySourceStatus Status, InventorySourceSet? Set);
 
 /// <summary>
-/// <c>rules\InvenSource.mes</c> sets (ARC-RES-027, docs/research/starting-hero-evidence.md, F0): set N is message N,
-/// numbered from 1 without gaps; the lookup accepts <c>0 &lt; N &lt; entry count</c>. An entry is the set name, a colon,
+/// <c>rules\InvenSource.mes</c> sets (ARC-RES-027, docs/research/starting-hero-evidence.md): set N is message N,
+/// numbered from 1 without gaps; the lookup accepts <c>0 &lt; N ≤ entry count</c> (0x4BF5D0; ARC-WORLD-093 corrects the earlier
+/// "below the count", ledger BT9, LM13). An entry is the set name, a colon,
 /// then space-separated <c>a,b</c> pairs: the first is the coin range, each further one an item's rate and basic
 /// prototype. Project admission policy: a shape the source would empty, truncate or read partially is a typed refusal.
 /// Whether a listed prototype exists is the caller's check.
@@ -38,18 +39,21 @@ public static class InventorySourceRules
 {
     public const int MaxNameCharacters = 69, MaxItems = 300;
 
-    public static InventorySourceRead Read(MesFile sources, MesFile? buy, int set)
+    /// <summary>The set <paramref name="set"/>. <paramref name="prototypeExists"/> answers whether a basic prototype number has a prototype
+    /// (the original's handle lookup, which the buy and loot lines' checks use).</summary>
+    public static InventorySourceRead Read(MesFile sources, MesFile? buy, int set, Func<int, bool> prototypeExists)
     {
         ArgumentNullException.ThrowIfNull(sources);
-        if (set < 1 || set >= sources.Count) return new(InventorySourceStatus.Unreachable, null);
+        ArgumentNullException.ThrowIfNull(prototypeExists);
+        if (set < 1 || set > sources.Count) return new(InventorySourceStatus.Unreachable, null);
         for (var number = 1; number <= set; number++)
             if (sources.Find(number) is null) return new(InventorySourceStatus.Unreachable, null);
         var text = sources.Find(set)!.Bytes.Span;
         foreach (var b in text)
             if (b is < 0x20 or > 0x7e) return new(InventorySourceStatus.InvalidText, null);
-        // Only a line of spaces reads as empty in the source; any other byte, a tab included, is a (failing) buy list.
-        if (buy?.Find(set) is { } line && line.Bytes.Span.IndexOfAnyExcept((byte)' ') >= 0)
-            return new(InventorySourceStatus.BuyListUnsupported, null);
+        // A failing buy line or loot line empties the whole set in the source (BT8, BT9).
+        if (InventorySourceBuyRules.Read(sources, buy, set, prototypeExists).Status == InventorySourceBuyStatus.Emptied)
+            return new(InventorySourceStatus.Emptied, null);
 
         var entry = System.Text.Encoding.ASCII.GetString(text);
         var colon = entry.IndexOf(':');
