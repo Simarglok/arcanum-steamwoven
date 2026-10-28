@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
+using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -12,12 +13,13 @@ public enum AreaOptionsPage { Game = 0, Video = 1, Sound = 2 }
 /// <summary>The original's cyclic control types (OP3): a slider bar, a list of a value file's texts, the module list.</summary>
 public enum AreaOptionKind { Slider, List, Modules }
 
-/// <summary>The original's option controls, page by page in slot order (OP2).</summary>
+/// <summary>The original's option controls, page by page in slot order (OP2), then the project's (ARC-UI-014: the rule mode).</summary>
 public enum AreaOption
 {
     Module, Difficulty, ViolenceFilter, DefaultCombatMode, AutoAttack, AutoSwitchWeapons, AlwaysRun, FollowerSkills,
     Brightness, TextDuration, Floats, FloatSpeed, CombatTaunts,
     Effects, Voice, Music,
+    Rules,
 }
 
 /// <param name="Max">The original's highest value (a slider's 10 unless its record says otherwise, a list's last message number).</param>
@@ -27,11 +29,13 @@ public enum AreaOption
 /// <param name="Default">The value the original registers.</param>
 /// <param name="Unavailable">Why Steamwoven hides the control; null when it is shown.</param>
 /// <param name="LimitNote">What the values above <see cref="Limit"/> are, for the window's note.</param>
+/// <param name="Project">A control the original's table does not have (ARC-UI-014): its label and values are the project's texts only,
+/// never a message of the game's files, and <see cref="Setting"/> names the project's setting, not an <c>arcanum.cfg</c> one.</param>
 public sealed record AreaOptionControl(AreaOption Option, AreaOptionsPage Page, int Slot, AreaOptionKind Kind, int Max, int Limit, string? ValueTable,
-    string Setting, int Default, string? Unavailable, string? LimitNote = null)
+    string Setting, int Default, string? Unavailable, string? LimitNote = null, bool Project = false)
 {
-    /// <summary>The label's message in <c>mes\options_ui.mes</c>: 100 + 100 × page + slot (OP2).</summary>
-    public int LabelMessage => 100 + 100 * (int)Page + Slot;
+    /// <summary>The label's message in <c>mes\options_ui.mes</c>: 100 + 100 × page + slot (OP2); none for a project control.</summary>
+    public int? LabelMessage => Project ? null : 100 + 100 * (int)Page + Slot;
     public bool Shown => Unavailable is null;
 
     /// <summary>The value after an arrow (OP3): a list wraps around at either end, a slider stops there (null: no change).</summary>
@@ -66,6 +70,8 @@ public static class AreaOptionTable
     public const string Difficulties = "mes/OptionsDifficulty.mes";
     public const string CombatModes = "mes/OptionsCombatMode.mes";
     public const string FloatLevels = "mes/OptionsFloats.mes";
+    /// <summary>The rule mode control's values (a project list, no game file): <see cref="RuleMode"/> in its order.</summary>
+    public const string RuleModes = "project:rule modes";
 
     /// <summary>Every control of the original's table (0x5CCD78, three pages of eight slots; OP2).</summary>
     public static IReadOnlyList<AreaOptionControl> All { get; } = Array.AsReadOnly(new AreaOptionControl[]
@@ -86,6 +92,8 @@ public static class AreaOptionTable
         new(AreaOption.Effects, AreaOptionsPage.Sound, 0, AreaOptionKind.Slider, 10, 10, null, "effects volume", 5, null),
         new(AreaOption.Voice, AreaOptionsPage.Sound, 1, AreaOptionKind.Slider, 10, 10, null, "voice volume", 5, null),
         new(AreaOption.Music, AreaOptionsPage.Sound, 2, AreaOptionKind.Slider, 10, 10, null, "music volume", 5, null),
+        // ARC-UI-014: the rule mode (owner decision D8: the settings menu may switch it in play), after the original's eight Game slots.
+        new(AreaOption.Rules, AreaOptionsPage.Game, 8, AreaOptionKind.List, 1, 1, RuleModes, "rules", (int)RuleMode.Steamwoven, null, Project: true),
     });
 
     public static AreaOptionControl Of(AreaOption option) => All[(int)option];
@@ -97,8 +105,10 @@ public static class AreaOptionTable
     public static bool Offered(AreaOptionsPage page) => All.Any(control => control.Page == page && control.Shown);
 }
 
-/// <summary>The values the window shows, from the host's settings (the original reads each through its getter when the page opens, OP4).</summary>
-public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAttack, bool AlwaysRun, int Effects, int Voice, int Music)
+/// <summary>The values the window shows, from the host's settings (the original reads each through its getter when the page opens, OP4);
+/// <paramref name="Rules"/> is the rule mode the session plays by (ARC-UI-014).</summary>
+public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAttack, bool AlwaysRun, int Effects, int Voice, int Music,
+    RuleMode Rules = RuleMode.Steamwoven)
 {
     /// <summary>A shown control's value; null for a hidden one.</summary>
     public int? Value(AreaOption option) => option switch
@@ -110,6 +120,7 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
         AreaOption.Effects => Effects,
         AreaOption.Voice => Voice,
         AreaOption.Music => Music,
+        AreaOption.Rules => (int)Rules,
         _ => null,
     };
 }
@@ -205,6 +216,12 @@ public sealed class AreaOptionsTexts
         [AreaOptionTable.CombatModes] = ["Real Time", "Turn Based", "Fast Turn Based"],
         [AreaOptionTable.FloatLevels] = ["Never", "Minimal", "Verbose"],
     };
+    // ARC-UI-014: the project controls' texts, never looked up in the game's files.
+    private static readonly IReadOnlyDictionary<AreaOption, string> ProjectControlLabels = new Dictionary<AreaOption, string> { [AreaOption.Rules] = "Rules" };
+    private static readonly IReadOnlyDictionary<string, string[]> ProjectControlValues = new Dictionary<string, string[]>(StringComparer.Ordinal)
+    {
+        [AreaOptionTable.RuleModes] = ["Steamwoven", "Original"],
+    };
     private readonly Func<string, int, string?> _original;
 
     private AreaOptionsTexts(Func<string, int, string?> original, bool fromGame, string detail)
@@ -250,7 +267,8 @@ public sealed class AreaOptionsTexts
     public string Label(AreaOptionControl control)
     {
         ArgumentNullException.ThrowIfNull(control);
-        return _original(LabelsPath, control.LabelMessage) is { Length: > 0 } text ? text : ProjectLabels.GetValueOrDefault(control.LabelMessage, $"[{control.LabelMessage}]");
+        if (control.LabelMessage is not { } message) return ProjectControlLabels.GetValueOrDefault(control.Option, $"[{control.Option}]");
+        return _original(LabelsPath, message) is { Length: > 0 } text ? text : ProjectLabels.GetValueOrDefault(message, $"[{message}]");
     }
 
     /// <summary>A value as the control shows it: a list's text (message <paramref name="value"/> of its file), a slider's number.</summary>
@@ -258,6 +276,8 @@ public sealed class AreaOptionsTexts
     {
         ArgumentNullException.ThrowIfNull(control);
         if (control.ValueTable is not { } table) return value.ToString(CultureInfo.InvariantCulture) + "/" + control.Max.ToString(CultureInfo.InvariantCulture);
+        if (control.Project)
+            return ProjectControlValues.TryGetValue(table, out var own) && value >= 0 && value < own.Length ? own[value] : $"[{value}]";
         if (_original(table, value) is { Length: > 0 } text) return text;
         return ProjectValues.TryGetValue(table, out var values) && value >= 0 && value < values.Length ? values[value] : $"[{value}]";
     }

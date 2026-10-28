@@ -4,8 +4,9 @@ Status: **Implemented bounded component**, ARC-WORLD-023. The game has two rule 
 [NPC combat AI plan](../research/npc-combat-ai-plan.md#owner-decisions-2026-10-16), extended to every domain by the
 owner on 2026-10-17): **Steamwoven**, the original game with the recorded fixes, which is the default, and
 **Original**, the retail 1.0.7.4 behaviour including the bugs of the original game. The player will pick the mode in
-the settings menu and change it during play without a restart (there is no menu yet, see [Not ready](#not-ready)); the
-mechanism below already allows it. This contract fixes the mechanism every domain uses and
+the settings menu and change it during play without a restart (the AREA viewer's options window switches it since
+ARC-UI-014; the stored choice and the launcher are not ready, see [Not ready](#not-ready)); the mechanism below allows
+it. This contract fixes the mechanism every domain uses and
 keeps the registry of mode differences. The architecture decision is recorded in
 [architecture direction](../architecture/decisions.md).
 
@@ -175,8 +176,11 @@ The list covers every ledger row whose verdict is a bug of the original or a D2 
   each round call, but no host runs a round yet. The event queue reads the rules too
   (ARC-WORLD-024): a restore uses `Rules.Events` for `RebuildOnLoad`, and the poison recovery timer reads
   `PoisonRecoveryTwice` when it fires.
-- There is no settings menu yet; the viewer has no mode toggle. The codec is ready for the menu. The AREA quick load
-  (F8) keeps the current session's mode.
+- The AREA viewer's options window has a Rules line (ARC-UI-014) that switches the session between the two built-in
+  modes in play and gives every session the viewer then makes or loads the chosen mode. The choice is not stored yet
+  and every run starts in Steamwoven: the launcher's settings file (ARC-DEV-046) will hold it, and the launcher screen
+  will choose it before the main menu. `RuleModeSettingCodec` is still not used. Custom per-switch mixes are not
+  offered (after alpha).
 - The SCR dispatcher (ARC-SCRIPT-008) takes `GameRules.Scripts` through its run options; no session code calls it yet.
 - The reaction domain (ARC-WORLD-026) reads `Rules.Reaction` in `GameSessionOwner.ReactToPcHit`; no host calls it yet.
 - The game data fixes (ARC-DATA-022) are read by `ScriptContent.Dialog` with `Rules.Data`; the AREA conversation
