@@ -281,8 +281,30 @@ container generated once come from the original generator, so its goods depend o
 holds the seed (`RestockRules.GeneratedOnceSeed`), the generator (`OriginalRandom`) and the seeded generation
 (`RestockRules.GenerateOnce`). ARC-WORLD-100 runs them in the session: the first loot open (`GenerateContainerOnce`, RK12) and the
 restock event generate a container with flag 0x200 once and record it (its source and flag cleared, snapshot schema 55); the hero gives
-the race, gender and background, the host the tile x and the player name. The viewer's container window and the callers of RK13–RK14
-are later tasks.
+the race, gender and background, the host the tile x and the player name. ARC-WORLD-101 calls it from the viewer's container window
+([LW1–LW4](#container-loot-window-arc-world-101)); the callers of RK13–RK14 are later tasks.
+
+## Container loot window (ARC-WORLD-101)
+
+Source: [barter runtime](../../world/barter-runtime.md#container-loot-window-arc-world-101). Question: what does the inventory window's
+open in loot mode (2) do with a container before and after the generation of RK12: which checks admit it, what does a refusal show and
+play, and what does the close do? Read on 2026-10-28 by this task alone (one reading, F1): the open 0x572240, its admission 0x572370,
+the partner setup 0x572640 (its mode 2/4 branch 0x57270F..0x57279A), the close 0x573440 (0x573440..0x573537), the art frame getter
+0x502B50 and the container open wrapper 0x4EEF20. Every direct branch stays inside `.text`. The PC prototype's player name (field
+0x10E of RK10) is the PC block's one string field, v119 slot 86, between the background (0x101, slot 73) and the bank money (slot 87).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| LW1 | open 0x572240 → admission 0x572370 | The open closes a window already open (0x572340) and returns; a multiplayer client only sends a request (global 0x62AC6C bits 0x1/0x2). Otherwise the admission (player, partner, mode): a null player, a dead one (0x45D8D0) or one that is no PC (type 15) refuses. In modes 2 (loot) and 3 the player first turns to face the partner (rotation 0x441B20 → ART 0x502930 → 0x43EB30) and then the open refuses silently when the sight value from the player to the partner (0x4AF260, AW2) is not 0. Then, with a partner in mode 2 or 4: a container in mode 2 runs the player's open attempt (0x4AED80, LK8); 0 runs the container's use script (point 1, 0x441980 with the player as triggerer), whose skip default plays the container's locked sound (0x4F0FD0 + 2) and refuses; any other code shows the inventory window's message of that number (`mes\inven_ui.mes`, 0x4D43A0 → 0x550750 type 4: 1 locked, 2 jammed, 3 magically held, 4 the unlock script refused), plays the locked sound and refuses. A container in mode 4 is admitted with no test. A critter partner in mode 2 runs its use script the same way, but a skip default refuses without a sound. The admission then goes on to 0x572510 and the partner setup. | Original |
+| LW2 | partner setup 0x572640, modes 2 and 4 | For a container: in mode 2 only, when its art's frame (0x502B50 on field 1: for a container the ART id's bits 14..18) is 0, it opens (0x4EEF20 → 0x43F7F0, the next frame, LK13) and plays its open sound (0x4F0FD0 + 0); then in mode 2 or 4 a container with flag 0x200 regenerates (RK12). A critter partner in mode 2 plays sound 3007 (0xBBF) instead. | Original |
+| LW3 | close 0x573440 | After the window's own teardown, in mode 2 or 4 with a container as the shown object: in mode 2 only, a container on frame exactly 1 whose flags (field 0x38) lack 0x100 closes (0x43F8F0, the previous frame) and plays its close sound (0x4F0FD0 + 1); then, in both modes, the loot counter rises (0x468180, ID6) and the junk-pile dissolve check runs (0x4ED6C0, JP5). The name of flag 0x100 was not read. | Original |
+| LW4 | the order of LW1–LW3 | The use goal (0x428A10) charges its 2 action points before any of it (CT3), so a refused open still costs them. The attempt and the use script come before the setup, so a locked container is never generated; the generation comes after the open frame and sound and before the window's restock schedule (RK2). | Original |
+
+ARC-WORLD-101 opens containers in the AREA viewer through these rows (`AreaContainerLoot`): the attempt is the session's
+(`AttemptOpen`, no keys yet), the use script runs through the viewer's use-script host (a native trap script, which E4 hands to the trap
+code, is not modelled and the container stays shut), a container with an unlock script is not opened (it is not run), the refusal text is the
+viewer's own (the `inven_ui.mes` lines are not read), the sight test is not made (at the reach of 1 it fails only for a blocker on the
+line), the generation runs before the frame write (they do not read each other), and the critter's sound 3007 is not played.
 
 ## Made item complexity (ARC-WORLD-083)
 

@@ -234,6 +234,8 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     public SessionItemKind RestockPileKind => Restock?.PileKind ?? new(SessionItemType.Gold, AreaBarterData.GoldPrototype, 0, 0);
     // The viewer's insert check: every item fits (carry weight and room need the created character, NOT READY).
     public SessionInsertCheck RestockInsertCheck(SessionMapId map, string holder) => AreaInventoryHost.DiagnosticInsertCheck;
+    // ARC-WORLD-101: a generated-once container's tile x and the hero's player name.
+    public SessionGeneratedOnceFacts? GeneratedOnceFacts(SessionMapId map, string container) => Restock?.GeneratedOnceFacts(map, container);
 
     private readonly Func<SessionScriptCall, AreaConversationHost?>? _callHost;
 

@@ -188,6 +188,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="barter-arc-ui-050"></a>[Barter (ARC-UI-050)](ledger/items.md#barter-arc-ui-050) | [Items and inventory](ledger/items.md) | BT1–BT10 |
 | <a id="merchant-stock-arc-world-090"></a>[Merchant stock (ARC-WORLD-090)](ledger/items.md#merchant-stock-arc-world-090) | [Items and inventory](ledger/items.md) | BT11 |
 | <a id="merchant-restock-arc-world-093"></a>[Merchant restock (ARC-WORLD-093)](ledger/items.md#merchant-restock-arc-world-093) | [Items and inventory](ledger/items.md) | RK1–RK9 |
+| <a id="container-loot-window-arc-world-101"></a>[Container loot window (ARC-WORLD-101)](ledger/items.md#container-loot-window-arc-world-101) | [Items and inventory](ledger/items.md) | LW1–LW4 |
 | <a id="junk-piles-arc-world-063"></a>[Junk piles (ARC-WORLD-063)](ledger/items.md#junk-piles-arc-world-063) | [Items and inventory](ledger/items.md) | JP1–JP8 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="hero-death-arc-ui-026"></a>[Hero death (ARC-UI-026)](ledger/ui-audio.md#hero-death-arc-ui-026) | [Interface windows and audio](ledger/ui-audio.md) | PD1–PD9 |
