@@ -359,12 +359,13 @@ removes the pile, one item releases it, more keep it.
 **Session.** A pile the session made is a `SessionJunkPile`: entity `junk:n` (the number after the highest standing pile), map, cell
 and its items in the pile's order, each with its slot and size (`SessionJunkPileItem`). An item in a pile keeps its own ground record
 (a placed item, an NPC's dropped item, a spilled or seed item of the cell), so its decay and its map stay as they were; the pile only
-says it lies in the pile, not on the ground.
+says it lies in the pile, not on the ground. A pile item a host's map change moved off the pile's cell is neither shown in the pile
+nor looted from it.
 
 | Step | Value |
 | --- | --- |
-| Drop (JP1, JP2) | Every drop the session makes goes through the placement before its decay is scheduled: the hero's and an NPC's critical drops and a broken container's spill, whose items drop one by one in their list order, so from the second item on they gather into a pile on the container's cell. An item swept into a new pile keeps its decay event (in a pile it still decays, JP6); the dropped item's starts over. A thrown item's plain placement (ARC-COMBAT-017) and an assembly product the inventory refused (ARC-WORLD-070, created on the tile) make no pile, as in the original; a later drop on their tile sweeps them in. An item in flight is not on the tile. |
-| Size | `SessionItemFacts.InventoryWidth` and `InventoryHeight` of the attached seed that lists the item; 1 × 1 otherwise (the hero's kit and made items, a seed not attached). |
+| Drop (JP1, JP2) | Every drop the session makes goes through the placement before its decay is scheduled: the hero's and an NPC's critical drops and a broken container's spill, whose items drop one by one, the last first (0x463730), so from the second item on they gather into a pile on the container's cell. An item swept into a new pile keeps its decay event (in a pile it still decays, JP6); the dropped item's starts over. A thrown item's plain placement (ARC-COMBAT-017) and an assembly product the inventory refused (ARC-WORLD-070, created on the tile) make no pile, as in the original; a later drop on their tile sweeps them in. An item in flight is not on the tile. |
+| Size | `SessionItemFacts.InventoryWidth` and `InventoryHeight` of the attached seed that lists the item (a seed with a side below 1 or above 2^27 cells is refused); 1 × 1 otherwise (the hero's kit and made items, a seed not attached). |
 | Ground | `QueryMapInventory(map).Ground` leaves out the items in piles; `JunkPiles` lists the map's piles with their items. `QueryJunkPiles` lists every pile. An item in a pile is not picked up from the ground (`PickUpItem`: `ItemNotAvailable`) and cannot be attacked there (`ObjectUnavailable`). |
 | Loot (JP6) | `LootItem(pile, item)` takes an item from a pile of the actor's map as a loot from a holder (the recipient's transfer, the item's remove-item and insert-item scripts through the host; a placed item goes back to the list it came from, as its pickup does); the item lies in its pile slot, not in a worn slot, and its decay ends. The pile stays while the host's loot window shows it. |
 | Close (JP4, JP5) | `CloseJunkPile(expected, pile)` is the host's loot window closing on the pile: a pile left with no item is removed, one left with one item is removed and the item dropped again on its cell through the placement, with a new decay event two days on. One revision when the pile went; `UnknownHolder` for a pile not on the actor's map. |
@@ -401,6 +402,8 @@ chest of 3 (one with the no-decay flag), all 3 in the pile.
 - Gold and ammunition do not merge into a stack of their kind in the pile (JP8); each stays an item of its own.
 - The items' inventory sizes: the viewer's seeds leave every item 1 × 1 (the inventory art's frame size is not read yet), so a pile
   fills only after 960 items.
+- A deletion other than the decay (`DestroyItem`, a break) takes the item out of its pile without the dissolve check, so a pile can
+  be left with one item until its window closes or another of its items decays.
 - The network paths and the dissolve's network guard.
 
 ## Drop cell (ARC-COMBAT-010)

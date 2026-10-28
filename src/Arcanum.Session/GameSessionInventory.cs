@@ -62,6 +62,9 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
     /// <inheritdoc cref="InventoryWidth"/>
     public int InventoryHeight { get; init; } = 1;
 
+    /// <summary>The largest side in cells (0x461780 of a 0-pixel side wraps to 2^27); a seed with a size outside 1..this is refused.</summary>
+    public const int MaxInventoryCells = 1 << 27;
+
     public bool HasScript(int point) => ScriptPoints.Contains(point);
 
     /// <summary>Worn slots, helmet 1000 to boots 1008 (the source's wear locations).</summary>
@@ -543,10 +546,11 @@ internal sealed class InventoryDomain
         // ARC-WORLD-063: an item in a junk pile lies in the pile, not on the ground.
         var inPile = JunkPiles.Where(pile => pile.Map == map).SelectMany(pile => pile.Items).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
         var inventory = WithPiled(map, seed, killed, spilled, dropped);
-        var ground = inventory.Ground.ToDictionary(item => item.Item.Entity, item => item.Item, StringComparer.Ordinal);
+        var ground = inventory.Ground.ToDictionary(item => item.Item.Entity, StringComparer.Ordinal);
         return new(map, inventory.Ground.Where(item => !inPile.Contains(item.Item.Entity)).ToArray(), inventory.Holders.ToArray(),
             JunkPiles.Where(pile => pile.Map == map).Select(pile => new SessionJunkPileInventory(pile.Entity, pile.Cell,
-                Array.AsReadOnly(pile.Items.Where(item => ground.ContainsKey(item.Entity)).Select(item => ground[item.Entity]).ToArray()))).ToArray());
+                Array.AsReadOnly(pile.Items.Where(item => ground.TryGetValue(item.Entity, out var lying) && lying.Cell == pile.Cell)
+                    .Select(item => ground[item.Entity].Item).ToArray()))).ToArray());
     }
 
     /// <summary>The map's inventory with every item on its ground, those in junk piles included (ARC-WORLD-063).</summary>
@@ -616,7 +620,9 @@ internal sealed class InventoryDomain
     private static bool Facts(SessionItemFacts? facts) => facts?.ScriptPoints is not null && Enum.IsDefined(facts.Kind.Type) &&
         Points(facts.ScriptPoints) && (facts.Quantity is null) == (facts.Kind.Type is not (SessionItemType.Gold or SessionItemType.Ammo)) &&
         facts.Quantity is null or >= 0 && (facts.AmmoType is null) == (facts.Kind.Type != SessionItemType.Ammo) &&
-        facts.AmmoType is null or >= 0 and < SessionAmmoRecord.AmmoTypes && facts.WeightFacts.IsValid;
+        facts.AmmoType is null or >= 0 and < SessionAmmoRecord.AmmoTypes && facts.WeightFacts.IsValid &&
+        // ARC-WORLD-063: a size in cells as the original's art read gives it (at least one cell a side, at most 2^27).
+        facts.InventoryWidth is >= 1 and <= SessionItemFacts.MaxInventoryCells && facts.InventoryHeight is >= 1 and <= SessionItemFacts.MaxInventoryCells;
 
     private static bool Points(IReadOnlyList<int> points) =>
         points.All(point => point is >= 0 and <= SessionScriptPoint.Last) && points.Distinct().Count() == points.Count;

@@ -1569,7 +1569,7 @@ public static class GameSessionSnapshotCodec
                 Int(row["magicWeight"], path + ".magicWeight", -Arcanum.Simulation.Items.CarryLimits.MaxWeight, Arcanum.Simulation.Items.CarryLimits.MaxWeight),
                 Complexity(row, path)));
         }
-                // ARC-WORLD-063: the junk piles, in the order they were made; the grid's bounds and overlaps are checked on restore.
+        // ARC-WORLD-063: the junk piles, in the order they were made; the grid's bounds and overlaps are checked on restore.
         var junkRows = Array(f["junkPiles"], p + ".junkPiles", SessionJunkPile.MaxPiles);
         var junkPiles = new SessionJunkPile[junkRows.Length];
         var junkItems = 0;

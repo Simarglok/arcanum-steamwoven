@@ -213,4 +213,58 @@ public sealed class JunkPileStateTests
             Assert.AreEqual(new SessionPcItem("apple", Exterior, AppleFacts.Kind), restored.QueryPcInventory().Single());
         }
     }
+
+    [TestMethod]
+    public void AFullPileIsPassedOverAndAnItemTooBigLiesBesideOrLeavesAnEmptyPile()
+    {
+        // The apple fills a whole pile (10 × 96 cells): a new pile takes it, the kit item dropped after it lies beside the pile.
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        using (owner)
+        {
+            Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, new([], [new SessionSeedItem("apple",
+                AppleFacts with { InventoryWidth = 10, InventoryHeight = 96 }, There)])).Failure);
+            owner.PlaceHeroItem("kit:2", There);
+            CollectionAssert.AreEqual(new[] { ("junk:1", "apple") }, owner.QueryJunkPiles().SelectMany(p => p.Items.Select(i => (p.Entity, i.Entity))).ToArray());
+            Assert.AreEqual("kit:2", owner.QueryMapInventory(Exterior)!.Ground.Single().Item.Entity, "too big for the pile: beside it");
+            // The full pile is passed over: the next drop makes a second pile with the loose kit item.
+            owner.PlaceHeroItem("kit:3", There);
+            CollectionAssert.AreEqual(new[] { ("junk:1", "apple"), ("junk:2", "kit:2"), ("junk:2", "kit:3") },
+                owner.QueryJunkPiles().SelectMany(p => p.Items.Select(i => (p.Entity, i.Entity))).ToArray());
+            Assert.AreEqual(0, owner.QueryMapInventory(Exterior)!.Ground.Count);
+        }
+
+        // Nothing fits a new pile (both eleven cells wide): it stays empty, as in the original, and both lie loose; a later drop joins it.
+        var empty = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        using (empty)
+        {
+            var wide = AppleFacts with { InventoryWidth = 11 };
+            Assert.AreEqual(GameSessionFailure.None, empty.AttachMapInventory(Exterior, new([],
+                [new SessionSeedItem("apple", wide, AppleCell), new SessionSeedItem("rock", wide with { Kind = wide.Kind with { Prototype = 4601 } }, There)])).Failure);
+            Assert.AreEqual(GameSessionDisposition.Changed, empty.PickUpItem(empty.Version, "apple", Accept).Disposition);
+            empty.PlaceHeroItem("apple", There);
+            Assert.AreEqual(("junk:1", 0), empty.QueryJunkPiles().Select(p => (p.Entity, p.Items.Count)).Single());
+            CollectionAssert.AreEquivalent(new[] { "rock", "apple" }, empty.QueryMapInventory(Exterior)!.Ground.Select(g => g.Item.Entity).ToArray());
+            empty.PlaceHeroItem("kit:1", There);
+            Assert.AreEqual(("junk:1", "kit:1"), empty.QueryJunkPiles().Select(p => (p.Entity, p.Items.Single().Entity)).Single());
+        }
+    }
+
+    [TestMethod]
+    public void ASeedItemDroppedFromAWornSlotIsLootedFromItsPileSlotAndABadSizeIsRefused()
+    {
+        // A sword the map data lays on the cell with a worn location (as an NPC's dropped weapon keeps it) is swept into a pile.
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        using (owner)
+        {
+            Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, new([],
+                [new SessionSeedItem("sword", InventoryStateTests.Facts(SessionItemType.Weapon, 2001, 1004), There)])).Failure);
+            owner.PlaceHeroItem("kit:2", There);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.LootItem(owner.Version, "junk:1", "sword", Accept).Disposition, "in the pile it lies in its slot");
+            Assert.AreEqual("sword", owner.QueryPcInventory().Single().Entity);
+            Assert.AreEqual(GameSessionFailure.InvalidInventorySeed, owner.AttachMapInventory(new(80), new([],
+                [new SessionSeedItem("pebble", AppleFacts with { InventoryWidth = 0 }, There)])).Failure, "a size below one cell");
+            Assert.AreEqual(GameSessionFailure.InvalidInventorySeed, owner.AttachMapInventory(new(80), new([],
+                [new SessionSeedItem("pebble", AppleFacts with { InventoryHeight = SessionItemFacts.MaxInventoryCells + 1 }, There)])).Failure);
+        }
+    }
 }

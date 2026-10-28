@@ -125,11 +125,17 @@ public sealed partial class GameSessionOwner
     {
         if (pile.Items.FirstOrDefault(entry => entry.Entity == item) is not { } entry) return RejectItem(GameSessionFailure.ItemNotAvailable);
         InventoryMutationResult result;
-        if (_inventory.PlacedItem(item) is { } placed) result = TakePlaced(placed, insertCheck);
+        if (_inventory.PlacedItem(item) is { } placed)
+        {
+            if (placed.Map != pile.Map || placed.Cell != pile.Cell) return RejectItem(GameSessionFailure.ItemNotAvailable);
+            result = TakePlaced(placed, insertCheck);
+        }
         else
         {
             if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
-            if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item)) return RejectItem(GameSessionFailure.ItemNotAvailable);
+            // The item must still lie on the pile's cell (a host's map change may have moved it).
+            if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item) || LooseCell(_actor.Map, seed, item) != pile.Cell)
+                return RejectItem(GameSessionFailure.ItemNotAvailable);
             // In the pile the item lies in its slot, not in the worn slot it may have been dropped from.
             result = Take(seed, new(item, _inventory.WithAmmo(item, row.Facts with { InventoryLocation = entry.Slot })), pile.Entity, insertCheck, scripts);
         }

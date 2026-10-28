@@ -220,6 +220,14 @@ public sealed class AreaInventoryHost
             .Select(item => map.Row(item.Entity).Key).ToHashSet();
     }
 
+    /// <summary>ARC-WORLD-063: the drawn objects of this map that lie in a junk pile the session made: the pile is drawn instead.</summary>
+    public IReadOnlySet<AreaObjectKey> Piled(GameSessionOwner session, int runtimeMap)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!_maps.TryGetValue(runtimeMap, out var map) || session.QueryMapInventory(new(runtimeMap)) is not { } current) return new HashSet<AreaObjectKey>();
+        return current.JunkPiles.SelectMany(pile => pile.Items).Where(item => map.TryGetRow(item.Entity, out _)).Select(item => map.Row(item.Entity).Key).ToHashSet();
+    }
+
     public InventoryMutationResult PickUp(GameSessionOwner session, string item)
     {
         ArgumentNullException.ThrowIfNull(session);
