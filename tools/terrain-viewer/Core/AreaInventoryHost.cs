@@ -183,7 +183,7 @@ public sealed record AreaInventoryLine(string Entity, string Text)
     public bool Lockpick { get; init; }
     /// <summary>ARC-SKILLS-007: the item is damaged or broken, so the hero's Repair skill has something to do.</summary>
     public bool Repairable { get; init; }
-    /// <summary>ARC-UI-025: a right press on the item would use it: a held item, not worn and without a wear location, with
+    /// <summary>ARC-UI-025: a right click on the item would use it: a held item, not worn and without a wear location, with
     /// <c>OIF_CAN_USE_BOX</c> (IW5); the turn rule is the app's.</summary>
     public bool Usable { get; init; }
     /// <summary>ARC-UI-015: the wear slots the item can be put into (its wear location; a ring either ring slot); empty for an item

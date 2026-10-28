@@ -8,7 +8,7 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-UI-025: the inventory window's drop and use (ledger IW5, IW6). The drop icon (or a Drop button) drops a held item on the hero's tile
 // through the session (GameSessionOwner.DropHeroItem: drop script, no-drop flag, removal events, junk pile and decay); a stack of more
-// than one unit would first ask the quantity (IW7, NOT READY: refused). A right press on an item (or its Use button) uses it with the hero
+// than one unit would first ask the quantity (IW7, NOT READY: refused). A right click on an item (its release, IW5) or its Use button uses it with the hero
 // as user and target, the use icon with the hero as target only while Shift is held; both run the original's item use (0x462CC0,
 // AiExecutorRules.UseItemNow) over the hero's world below: read, heal with a healing kit, the item's magic through the cast host, spend
 // food and scrolls, 4 action points on the hero's turn of a round. The map drop (flag 4, a throw of the held item at a clicked tile) is NOT
@@ -21,8 +21,8 @@ public partial class TerrainViewerApp
     internal (string Item, AreaItemUseGate Gate, AiItemUseStep? Step, string Message)? LastItemUseForSelfTest => _lastItemUse;
     internal InventoryMutationResult? LastGroundDropForSelfTest => _lastGroundDrop;
 
-    /// <summary>A right press on an item of the window, or its Use button (IW5).</summary>
-    private void UseItemFromWindow(string item) => UseHeroItem(item, AreaItemUseSource.RightPress, shift: false);
+    /// <summary>A right click (its release) on an item of the window, or its Use button (IW5).</summary>
+    private void UseItemFromWindow(string item) => UseHeroItem(item, AreaItemUseSource.RightClick, shift: false);
 
     private void UseHeroItem(string item, AreaItemUseSource source, bool shift)
     {
@@ -35,7 +35,7 @@ public partial class TerrainViewerApp
         AiItemUseStep? step = null;
         var gate = AreaItemUseGate.NotUsable;
         string message;
-        if (source == AreaItemUseSource.RightPress && holder is not null) message = "nothing: a right click uses an item only in the hero's own window";
+        if (source == AreaItemUseSource.RightClick && holder is not null) message = "nothing: a right click uses an item only in the hero's own window";
         else if (_inventoryHost.UseFacts(session, item, _areaKitUse) is not { } facts) message = $"not used: {name}'s use facts do not read here";
         else
         {

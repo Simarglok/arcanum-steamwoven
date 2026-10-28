@@ -13,6 +13,8 @@ public sealed class AreaObjectArtTests
         (AreaMappingRole.Container, 1003) => "chest.art",
         (AreaMappingRole.ItemGround, 1043) => "plate.art",
         (AreaMappingRole.ItemGround, 3) => "bad/name.art",
+        (AreaMappingRole.ItemInventory, 1043) => "plate_inv.art",
+        (AreaMappingRole.ItemInventory, 2304) => "helm_inv.art",
         _ => null,
     };
 
@@ -38,5 +40,23 @@ public sealed class AreaObjectArtTests
         Assert.AreEqual(AreaObjectArtStatus.UnsafeName, AreaObjectArt.Resolve(0x60000000u | (3u << 17), Name).Status);
         Assert.IsNotNull(AreaObjectArt.ReadNameTable("{3}{sword.art}\n"u8));
         Assert.IsNull(AreaObjectArt.ReadNameTable(""u8), "an empty table");
+    }
+
+    [TestMethod]
+    public void ItemInventoryArtNamesItsFileInTheInventoryTable()
+    {
+        // ARC-UI-032 (0x4EC290): place bits 12..13 = 1; the same number as a ground art id: 3 + 20 × (2 + 50 × 1) = 1043.
+        var aid = 0x60000000u | 1u | (2u << 6) | (3u << 17) | (1u << 12) | (2u << 4);
+        var inventory = AreaObjectArt.ResolveItemInventory(aid, Name);
+        Assert.AreEqual(new AreaObjectArtPath("art/item/plate_inv.art", aid & ~0x30u, 0, 0, 0, 2), inventory.Path);
+        Assert.AreEqual("art/item/item_inven.mes", AreaObjectArt.MappingPath(AreaMappingRole.ItemInventory));
+        // Armour (type 2) with coverage 1: 4 + 20 × (0 + 50 × 2) + 20 × (5 × 1 + 10) = 2304.
+        Assert.AreEqual("art/item/helm_inv.art",
+            AreaObjectArt.ResolveItemInventory(0x60000000u | 2u | (4u << 17) | (1u << 14) | (1u << 12), Name).Path!.Path);
+        Assert.AreEqual(AreaObjectArtStatus.Unsupported, AreaObjectArt.ResolveItemInventory(aid & ~(3u << 12), Name).Status, "a ground art id");
+        Assert.AreEqual(AreaObjectArtStatus.Unsupported, AreaObjectArt.ResolveItemInventory(aid | (3u << 12), Name).Status, "a schematic art id");
+        Assert.AreEqual(AreaObjectArtStatus.OtherClass, AreaObjectArt.ResolveItemInventory(0x40000000u, Name).Status);
+        Assert.AreEqual(AreaObjectArtStatus.UnnamedNumber, AreaObjectArt.ResolveItemInventory(0x60000000u | (1u << 12) | (9u << 17), Name).Status);
+        Assert.AreEqual(AreaObjectArtStatus.Unsupported, AreaObjectArt.Resolve(aid, Name).Status, "the area owner keeps refusing inventory art");
     }
 }

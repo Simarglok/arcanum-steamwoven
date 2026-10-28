@@ -51,7 +51,7 @@ public sealed class AreaItemUseTests
     public void TheUseGateFollowsTheRightPressAndTheUseIcon()
     {
         var usable = new AreaItemUseFacts("e", AreaItemUseFacts.FoodType, AreaItemUseFacts.CanUseBoxFlag, 0, false, false);
-        var right = AreaItemUseSource.RightPress;
+        var right = AreaItemUseSource.RightClick;
         var icon = AreaItemUseSource.UseIcon;
         Assert.AreEqual(AreaItemUseGate.Use, AreaItemUse.Gate(right, usable, worn: false, inRound: false, heroTurn: false));
         Assert.AreEqual(AreaItemUseGate.Use, AreaItemUse.Gate(right, usable, false, inRound: true, heroTurn: true));
@@ -64,7 +64,7 @@ public sealed class AreaItemUseTests
         Assert.AreEqual(AreaItemUseGate.Throw, AreaItemUse.Gate(icon, usable with { ItemFlags = AreaItemUseFacts.CanUseBoxFlag | AreaItemUseFacts.UseIsThrowFlag }, false, false, false));
         Assert.AreEqual(AreaItemUseGate.NotUsable, AreaItemUse.Gate(icon, usable with { ItemFlags = AreaItemUseFacts.UseIsThrowFlag }, false, false, false));
         Assert.AreEqual(AreaItemUseGate.Use, AreaItemUse.Gate(right, usable with { ItemFlags = AreaItemUseFacts.CanUseBoxFlag | AreaItemUseFacts.UseIsThrowFlag }, false, false, false),
-            "a right press uses it");
+            "a right click uses it");
 
         Assert.AreEqual(AiSchedulerRules.Pc, AreaItemUse.Target(right, shift: false));
         Assert.AreEqual(AiSchedulerRules.Pc, AreaItemUse.Target(icon, shift: true));
@@ -78,10 +78,10 @@ public sealed class AreaItemUseTests
         var facts = AreaItemUseFacts.From("picks", fields)!;
         Assert.AreEqual(("picks", 14, true, true, true, false, false, false), (facts.Entity, facts.Type, facts.CanUseBox, facts.NeedsTarget, facts.Lockpick,
             facts.HealingKit, facts.Wearable, facts.UseScript));
-        // A generic item with the torch/shield flag has a wear location (EQ6): a right press on it does nothing.
+        // A generic item with the torch/shield flag has a wear location (EQ6): a right click on it does nothing.
         var torch = AreaItemUseFacts.From("torch", CombatFieldReader.Read(Generic(2, AreaItemUseFacts.CanUseBoxFlag, AreaItemUseFacts.ShieldLocationFlag)).Fields!)!;
         Assert.IsTrue(torch.Wearable);
-        Assert.AreEqual(AreaItemUseGate.Wearable, AreaItemUse.Gate(AreaItemUseSource.RightPress, torch, false, false, false));
+        Assert.AreEqual(AreaItemUseGate.Wearable, AreaItemUse.Gate(AreaItemUseSource.RightClick, torch, false, false, false));
         var used = AreaItemUse.Used(facts, null, scrollTooHard: false);
         Assert.AreEqual(new AiUsedItem(AiItemKind.Generic, false, true, false, 0, false, true, false), used);
         var kit = AreaItemUse.Used(facts with { GenericFlags = AreaItemUseFacts.HealingKitFlag | AreaItemUseFacts.TrapDeviceFlag, ItemFlags = AreaItemUseFacts.MagicalFlag },
@@ -90,7 +90,7 @@ public sealed class AreaItemUseTests
         Assert.AreEqual(AiItemKind.Scroll, AreaItemUse.Used(facts with { Type = AreaItemUseFacts.ScrollType }, null, true).Kind);
         Assert.IsTrue(AreaItemUse.Used(facts with { Type = AreaItemUseFacts.ScrollType }, null, true).ScrollTooHard);
 
-        // Lockpicks used from the use icon with no target open the targeting cursor; on the hero (a right press) they find no lock.
+        // Lockpicks used from the use icon with no target open the targeting cursor; on the hero (a right click) they find no lock.
         var world = new Recorder(used);
         Assert.AreEqual(AiItemUseStep.Targeting, AiExecutorRules.UseItemNow(world, AiSchedulerRules.Pc, "picks", null).Step);
         Assert.AreEqual("target", string.Join(",", world.Calls));

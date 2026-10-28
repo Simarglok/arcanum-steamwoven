@@ -41,7 +41,7 @@ public partial class AreaInventoryPanel : CanvasLayer
     public event Action? CloseRequested;
     public event Action<string>? TakeRequested;
     public event Action? TakeAllRequested;
-    /// <summary>ARC-SKILLS-005: use a healing item of the PC's list on the PC; ARC-UI-025: use any item of the hero's as a right press on
+    /// <summary>ARC-SKILLS-005: use a healing item of the PC's list on the PC; ARC-UI-025: use any item of the hero's as a right click on
     /// it does (the item use 0x462CC0 with the hero as user and target, IW5).</summary>
     public event Action<string>? UseRequested;
     /// <summary>ARC-UI-049: use a written item of the PC's list (read it, or register a schematic document).</summary>

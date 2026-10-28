@@ -38,14 +38,15 @@ public sealed record AreaItemUseFacts(string Entity, int Type, uint ItemFlags, u
     }
 }
 
-/// <summary>Where a use comes from: a right press on an item of the window (IW5), or a held item released on the use icon (IW6).</summary>
-public enum AreaItemUseSource { RightPress, UseIcon }
+/// <summary>Where a use comes from: a right click on an item of the window (the original acts on its release, IW5), or a held item released
+/// on the use icon (IW6).</summary>
+public enum AreaItemUseSource { RightClick, UseIcon }
 
 public enum AreaItemUseGate
 {
     /// <summary>The use runs (<see cref="AiExecutorRules.UseItemNow"/>).</summary>
     Use,
-    /// <summary>A worn item, or one with a wear location: the right press does nothing (IW5).</summary>
+    /// <summary>A worn item, or one with a wear location: the right click does nothing (IW5).</summary>
     Wearable,
     /// <summary>No <c>OIF_CAN_USE_BOX</c>: the use check (0x462C30) refuses; the item stays (IW5, IW6).</summary>
     NotUsable,
@@ -62,22 +63,22 @@ public enum AreaItemUseGate
 public static class AreaItemUse
 {
     /// <summary>
-    /// Whether a use runs: a right press does nothing for a worn or wearable item (IW5); the use icon sends an item whose use is a throw
+    /// Whether a use runs: a right click does nothing for a worn or wearable item (IW5); the use icon sends an item whose use is a throw
     /// to the map drop's path (IW6; checked after the use check); both need <c>OIF_CAN_USE_BOX</c> (0x462C30) and, in a turn-based round,
     /// the hero's turn (0x4B6D70, 0x4B6D80).
     /// </summary>
     public static AreaItemUseGate Gate(AreaItemUseSource source, AreaItemUseFacts facts, bool worn, bool inRound, bool heroTurn)
     {
         ArgumentNullException.ThrowIfNull(facts);
-        if (source == AreaItemUseSource.RightPress && (worn || facts.Wearable)) return AreaItemUseGate.Wearable;
+        if (source == AreaItemUseSource.RightClick && (worn || facts.Wearable)) return AreaItemUseGate.Wearable;
         if (!facts.CanUseBox) return AreaItemUseGate.NotUsable;
         if (source == AreaItemUseSource.UseIcon && facts.UseIsThrow) return AreaItemUseGate.Throw;
         return inRound && !heroTurn ? AreaItemUseGate.NotHeroTurn : AreaItemUseGate.Use;
     }
 
-    /// <summary>The use's target: the hero for a right press; for the use icon the hero with a Shift key held, else none (IW6).</summary>
+    /// <summary>The use's target: the hero for a right click; for the use icon the hero with a Shift key held, else none (IW6).</summary>
     public static string? Target(AreaItemUseSource source, bool shift) =>
-        source == AreaItemUseSource.RightPress || shift ? AiSchedulerRules.Pc : null;
+        source == AreaItemUseSource.RightClick || shift ? AiSchedulerRules.Pc : null;
 
     /// <summary>The facts <see cref="AiExecutorRules.UseItemNow"/> reads: the kind, the scroll test, the flags, and the spell charges and
     /// magical flag of the item's spell facts (none without them).</summary>
