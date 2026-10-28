@@ -115,7 +115,7 @@ The build keeps its own folder, separate from any developer build:
     Windows:  %APPDATA%\Arcanum Steamwoven Game\      (C:\Users\<you>\AppData\Roaming\Arcanum Steamwoven Game)
 
 It holds the launcher settings (`launcher_v1.json`), the options, the saves (`saves/`) and Godot's log of the last runs
-(`logs/godot.log`, useful for a bug report). Deleting the folder starts
+(`logs/godot.log`), and the bug reports that could not be written beside the game (`reports/`, section 9). Deleting the folder starts
 the game as on its first run. The game folder of Arcanum is only read.
 
 ## 6. Updating
@@ -161,3 +161,62 @@ works with or without the debug mode and lasts until the game closes: the next s
 with the debug mode). If the game folder or an area fails to load while the panel is hidden, the failure line still appears
 on its own at the top of the window. The diagnostic palette keeps its own key, **Ctrl+Shift+F9**, whether the panel is shown
 or not.
+
+## 9. Reporting a bug (Ctrl+B)
+
+Press **Ctrl+B** (the Control key, also on a Mac) whenever something looks wrong: in play, in the main menu, over any open
+window, in either rules mode (*Original* or *Steamwoven*). No debug mode is needed. The game keeps the moment of the key
+press first, then pauses and opens a small window with one text field:
+
+- Write what you did and what happened, then press **Send** (or Ctrl+Enter). **Cancel** (or Escape) drops the report and
+  nothing is written.
+- After Send the window says where the report went; **Close** (or Escape) returns to the game.
+
+The game always keeps the last 120 seconds of its log and of its own events (map, cell, combat and window changes, message
+log entries, timed events) in memory, so a report holds the time before the key press. Nothing is uploaded; the report
+stays on this computer.
+
+**Where the report goes.** Next to where the game was started from, in a `reports` folder:
+
+    macOS:    the folder that holds Arcanum Steamwoven.app, for example /Applications/reports/2026-10-28_17-43-30/
+    Windows:  the game folder beside Arcanum Steamwoven.exe, for example C:\Games\Arcanum Steamwoven\reports\2026-10-28_17-43-30\
+
+The folder is named after the local date and time of the key press (`_2`, `_3`… for a second report in the same second). If
+that place cannot be written (a protected Windows folder such as `C:\Program Files`, a read-only disk, or a Mac app started
+from a downloaded copy that macOS runs from a hidden read-only place), the report goes to the user folder of section 5
+instead, `Arcanum Steamwoven Game/reports/YYYY-MM-DD_HH-MM-SS/`, and the window says so and why. (On a Mac, moving the app
+to another folder once, or removing its quarantine mark as in section 2, lets reports go beside it.) A build started from
+the source writes into its own user folder's `reports`. On a Mac, an app kept in Downloads, Desktop or Documents makes
+macOS ask once, on the first Send, whether Arcanum Steamwoven may use that folder (again after a new build replaces the
+app); if you refuse, the report goes to the user folder as above.
+
+**What the folder holds.**
+
+| File | Content |
+| --- | --- |
+| `report.md` | Your text; the build (commit and date); the time; the rules mode; the map; the hero's position (map, cell, facing, sector); the combat state (combat mode, turn-based round); the open windows; the game time; the platform. It also lists what is missing and why (for example no save in the main menu before a game). |
+| `log.txt` | The last 120 seconds before the key press, one line each: UTC time, seconds before the key, `log`, `error` or `event`, text. |
+| `screenshot.png` | The screen as it was when the key was pressed, before the report window opened. |
+| `save/slot0000.json` (with `slot0000.meta.json` and `slot0000.png`) | The game saved at that moment the way F7 saves it, as a save of the ordinary save list. Unlike F7 it is also taken while a window is open, but a save holds the game, not the window: an open dialog, barter or map window is closed after loading it. There is no save in the main menu before a game, and none while a map change, a cast or a spell missile is under way; `report.md` then says why. |
+
+The folder contains pictures and texts of your own copy of Arcanum. Keep it to yourself and the developers; never publish it
+or put it into the project's repository.
+
+**Loading the report's save.** Copy the three `slot0000.*` files into the save folder of section 5 (`saves/map/` in the
+packaged game), renaming all three to a slot number that is not taken there (for example `slot0042.json`,
+`slot0042.meta.json`, `slot0042.png`), and choose it in **Load Game**. A save copied as `slot0000` over an existing
+`slot0000` would replace that save.
+
+**Asking an agent to read a report.** Give the agent the folder's full path and ask, for example:
+
+> Read the bug report in `/Applications/reports/2026-10-28_17-43-30/`: `report.md` first, then `screenshot.png`, then
+> `log.txt` from its end. Tell me what went wrong, which component it belongs to, and whether the save reproduces it.
+
+The agent reads `report.md` for the player's words and the game state, looks at the screenshot, and reads `log.txt`
+backwards from the key press (the `event` lines show what the game did, the `error` lines what failed). To reproduce, it
+loads the save as above, or reads it with the save list in code (`GameSaveLibrary` on the report's `save` folder). It keeps
+the report's contents (game texts, pictures, the save) out of commits, as for any original game content.
+
+Not built yet: an upload or a GitHub issue from the window, a report from the launcher screen (before the main menu), and a
+true pause of what runs on the wall clock while any window is open (NPC goal runs and flights in progress keep going under
+the report window, as under the game's other windows; the screenshot, log and save are taken before it opens).

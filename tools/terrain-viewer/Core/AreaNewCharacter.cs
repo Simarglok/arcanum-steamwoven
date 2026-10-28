@@ -229,7 +229,34 @@ public sealed class AreaNewCharacter
     /// and again once its Back returned to the editor (the original's next opening destroys the inventory and makes the kit anew, OS3).</summary>
     public AreaOpeningKit? Kit { get; private set; }
 
-    internal void TakeKit(AreaOpeningKit? kit) => Kit = kit;
+    internal void TakeKit(AreaOpeningKit? kit)
+    {
+        Kit = kit;
+        // ARC-UI-038: the shop's session goes with the kit it was made from.
+        DropShop();
+    }
+
+    /// <summary>ARC-UI-038: the opening shop's barter session on the shop map (<see cref="AreaShopSession"/>), which the start takes as the
+    /// game's session; null while the shop has none (before it opened, while its map loads, after its Back, or when the shop is the kit
+    /// alone).</summary>
+    public AreaShopSession? Shop { get; private set; }
+
+    /// <summary>ARC-UI-038: the shop's session for the kit the shop holds (a shop made for another kit is disposed); the one it replaces is
+    /// disposed.</summary>
+    public void TakeShop(AreaShopSession shop, AreaOpeningKit kit)
+    {
+        ArgumentNullException.ThrowIfNull(shop);
+        if (!ReferenceEquals(kit, Kit)) { shop.Dispose(); return; }
+        if (!ReferenceEquals(shop, Shop)) DropShop();
+        Shop = shop;
+    }
+
+    /// <summary>ARC-UI-038: disposes the shop's session unless the game took it (the shop's Back, the menu's end).</summary>
+    public void DropShop()
+    {
+        Shop?.Dispose();
+        Shop = null;
+    }
 
     /// <summary>ARC-UI-036: the hero the start makes the session from: the opening shop's kit hero (<see cref="AreaOpeningKit.Hero"/>);
     /// null with the reason before the shop made one.</summary>
@@ -246,11 +273,12 @@ public sealed class AreaNewCharacter
     /// (<see cref="AreaHeroLoad.KitWear"/>); the art lookup and the insert check are answered yes, as the pre-made start answers them.
     /// Null on success, else why the session refused it.
     /// </summary>
-    public static string? WieldStart(GameSessionOwner owner, IReadOnlyList<SessionWearableItem?> wear)
+    /// <param name="others">ARC-UI-038: the wear facts of a held item that is not a kit item (a ware bought in the opening shop); null: none.</param>
+    public static string? WieldStart(GameSessionOwner owner, IReadOnlyList<SessionWearableItem?> wear, Func<string, SessionWearableItem?>? others = null)
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(wear);
-        var worn = owner.WieldStartBest(owner.Version, entity => AreaStartingHero.KitIndex(entity) is { } index && index < wear.Count ? wear[index] : null,
+        var worn = owner.WieldStartBest(owner.Version, entity => AreaStartingHero.KitIndex(entity) is { } index ? index < wear.Count ? wear[index] : null : others?.Invoke(entity),
             (_, _) => true, _ => SessionInsertVerdict.Accepted);
         return worn.Disposition == GameSessionDisposition.Rejected ? $"the start's best items were refused ({worn.Failure})" : null;
     }

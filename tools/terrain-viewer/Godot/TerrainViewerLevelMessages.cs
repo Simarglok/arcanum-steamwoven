@@ -133,6 +133,8 @@ public partial class TerrainViewerApp
     private AreaMessagePost PostMessage(AreaMessageEntry entry, string what)
     {
         var post = _messageLog.Post(entry, MessageLogNow);
+        // ARC-DEV-051: a stored entry is a session event of the bug report's log.
+        if (entry.Stored) BugReportLog.Process.Add(BugReportLineKind.Event, $"message log {entry.Kind}: {entry.Title} {entry.Line} {entry.Detail}");
         if (post.Sound is { } sound) PlayInterfaceSound(sound, what);
         _gameBarPanel?.MessageLog.Render();
         return post;

@@ -89,9 +89,24 @@ public partial class TerrainViewerApp
                 if (_audio is not null && speech?.Status == Arcanum.Data.Audio.SpeechStatus.Found)
                     Require(_voicesPlayed == played + 1 && _voiceHandle is not null, $"script {speaker.ScriptId}: the voiced line played its voice ({_voiceNotice})");
                 var voice = speech is null ? "none" : $"{speech.Folder}/{speech.Line} {speech.Status}";
-                var turns = 0;
+                var turns = 0; var phrases = 0;
+                // ARC-SCRIPT-043: with the module's texts loaded, every offered reply that is an exact phrase marker (and the
+                // no-reply farewell) shows a phrase from the generated-dialog files, never the placeholder.
+                // A speaker whose stored fields give no greeting facts keeps empty phrases.
+                var textsReady = host.GreetingTexts?.Status == AreaGreetingTextsStatus.Ready
+                    && AreaGreeting.FactsFor(Arcanum.Data.Combat.CombatFieldReader.Read(speaker.Row).Fields, host.Profile.Pc, 0, false, false) is not null;
+                void CountPhrases()
+                {
+                    foreach (var shown in conversation!.Options.Where(o => o.TextKind == DialogOptionTextKind.Fallback
+                        || o.TextKind == DialogOptionTextKind.Generated && "abefhiklnpswy".Contains(o.Marker!.Value.Letter)))
+                    {
+                        Require(!textsReady || shown.TextOrigin is not null, $"script {speaker.ScriptId}: reply {shown.ResponseId.Value} shows its phrase");
+                        phrases++;
+                    }
+                }
                 while (conversation is { Phase: DialogConversationPhase.AwaitingSelection } && conversation.Turn < 32)
                 {
+                    CountPhrases();
                     var option = conversation.Options.FirstOrDefault(o => o.Block is null);
                     if (option is null) break;
                     _conversationPanel.Choose(option.Number); turns++;
@@ -108,7 +123,7 @@ public partial class TerrainViewerApp
                 var metBefore = session.QueryReactionRecord(AreaConversationState.EntityId(speaker.Row)) is { MetBefore: true, InConversation: false };
                 Require(conversation is null || metBefore, $"script {speaker.ScriptId}: the ended talk is remembered");
                 var record = new { speaker.ScriptId, Prototype = speaker.Row.PrototypeNumber, Walked = walked, WalkStopped = walkStopped, Hover = hover.ToString(), Frames = frames,
-                    Status = status, Offered = offered, Phase = phase, Frontier = conversation?.Frontier is { } f ? $"{f.Kind} {f.Source}" : null, Turns = turns, Effects = effects, SessionChanges = session.Version.Revision - revision, MetBefore = metBefore, Voice = voice, VoicesPlayed = _voicesPlayed - played };
+                    Status = status, Offered = offered, Phase = phase, Frontier = conversation?.Frontier is { } f ? $"{f.Kind} {f.Source}" : null, Turns = turns, Phrases = phrases, Effects = effects, SessionChanges = session.Version.Revision - revision, MetBefore = metBefore, Voice = voice, VoicesPlayed = _voicesPlayed - played };
                 tried.Add(record); opens++;
                 if (offered) { passed = record; break; }
                 started ??= conversation is not null ? record : null;

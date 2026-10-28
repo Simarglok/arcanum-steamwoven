@@ -38,9 +38,11 @@ public enum DialogGreetingStates
 /// <summary>
 /// What the greeting reads of the NPC and the PC. <paramref name="NpcDumb"/> is the original's test 0x45FC00 on the NPC
 /// (intelligence 4 or less); <paramref name="NpcSocialClass"/> is NPC field 0x128; races and genders are stats 27 and 26.
+/// <paramref name="NpcLedByPc"/> (ARC-SCRIPT-043) is whether the PC is the NPC's leader (0x45DE00), which chooses the barter
+/// phrase of a Player <c>b:</c> option.
 /// </summary>
 public sealed record DialogGreetingFacts(bool NpcMale, bool PcMale, bool NpcDumb, int NpcSocialClass, int NpcRace, int PcRace,
-    DialogReactionCategory Category, bool MetBefore, DialogGreetingStates States = DialogGreetingStates.None);
+    DialogReactionCategory Category, bool MetBefore, DialogGreetingStates States = DialogGreetingStates.None, bool NpcLedByPc = false);
 
 /// <summary>The texts a greeting reads: the module's generated-dialog files, its four reputation greeting files (NPC gender to
 /// PC gender: m2m, m2f, f2f, f2m; null when absent) and the NPC's own override dialog (the DLG of its script at SAP key 31, null
@@ -56,6 +58,8 @@ public enum DialogGreetingRoll
     ReputationChance,
     /// <summary>Which candidate reputation greets.</summary>
     ReputationPick,
+    /// <summary>ARC-SCRIPT-043: the entry of a generated Player option (a phrase).</summary>
+    Phrase,
 }
 
 /// <summary>
@@ -268,7 +272,7 @@ internal static class DialogGreeting
     }
 
     // The line pick of the three generators (GD5, GD-A1).
-    private static GreetingOutcome Pick(Context context, GeneratedDialogFile file, int first, int last)
+    private static GreetingOutcome Pick(Context context, GeneratedDialogFile file, int first, int last, DialogGreetingRoll roll = DialogGreetingRoll.Line)
     {
         var files = context.Sources.Files;
         var mes = files.File(file);
@@ -278,20 +282,65 @@ internal static class DialogGreeting
         {
             // Original: the first number plus random(0, count − 1); with no first entry that is random(0, −1).
             var count = files.RunLength(file, first, last);
-            if (Roll(context, DialogGreetingRoll.Line, Math.Min(0, count - 1), Math.Max(0, count - 1)) is not { } offset) return RollFailed();
+            if (Roll(context, roll, Math.Min(0, count - 1), Math.Max(0, count - 1)) is not { } offset) return RollFailed();
             number = first + offset;
         }
         else
         {
             var stored = mes.Messages.Where(message => message.Number >= first && message.Number <= last).ToArray();
             if (stored.Length == 0) return new(GreetingOutcomeKind.Line, Origin: new(DialogLineOriginKind.Empty, first, file));
-            if (Roll(context, DialogGreetingRoll.Line, 0, stored.Length - 1) is not { } index) return RollFailed();
+            if (Roll(context, roll, 0, stored.Length - 1) is not { } index) return RollFailed();
             number = stored[index].Number;
         }
         var line = files.Line(file, number);
         if (line.Message is null)
             return new(GreetingOutcomeKind.Line, MissingLine(number, file), new(DialogLineOriginKind.MissingLine, number, file));
         return Text(context, line.Message.Bytes.ToArray(), new(DialogLineOriginKind.Generated, number, file), substitute: true);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-043: the phrase of a generated Player option whose whole text is a marker (0x416C10), or of the farewell
+    /// offered when no reply qualifies (0x414E60: 400..499), picked like a greeting line; null for a letter without a phrase
+    /// here (a prefix marker, or a letter the original shows as literal text). <paramref name="letter"/> is the lower-case
+    /// marker letter, or null for the farewell; <paramref name="pcDumb"/> is the original's dumb test of the PC (0x45FC00).
+    /// </summary>
+    [OriginalFunction(0x416C10, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x419190, OriginalFunctionScope.Partial)]
+    public static GreetingOutcome? Phrase(char? letter, bool pcDumb, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
+        DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes)
+    {
+        var context = new Context(facts, sources, port, names, encoding, maxTextBytes);
+        return letter switch
+        {
+            null or 'e' => PcLine(context, pcDumb, 400, 499),
+            'a' => PcClassLine(context, pcDumb, 1000),
+            'b' => facts.NpcLedByPc ? PcLine(context, pcDumb, 1600, 1699) : PcLine(context, pcDumb, 300, 399),
+            'f' => PcLine(context, pcDumb, 800, 899),
+            'h' => PcLine(context, pcDumb, 700, 799),
+            'i' => PcClassLine(context, pcDumb, 3000),
+            'k' => PcLine(context, pcDumb, 1500, 1599),
+            'l' => PcLine(context, pcDumb, 2300, 2399),
+            'n' => PcLine(context, pcDumb, 100, 199),
+            'p' => PcLine(context, pcDumb, 1900, 1999),
+            's' => PcLine(context, pcDumb, 200, 299),
+            'w' => PcLine(context, pcDumb, 1800, 1899),
+            'y' => PcLine(context, pcDumb, 1, 99),
+            _ => null,
+        };
+    }
+
+    /// <summary>A PC line (0x4182D0): the PC file by the NPC's gender (the dumb one for a dumb PC), the range as given.</summary>
+    [OriginalFunction(0x4182D0, OriginalFunctionScope.Partial)]
+    private static GreetingOutcome PcLine(Context context, bool pcDumb, int first, int last) =>
+        Pick(context, GeneratedDialogFiles.PcLineFile(false, context.Facts.NpcMale, pcDumb), first, last, DialogGreetingRoll.Phrase);
+
+    /// <summary>A PC line of the class group (0x418390): the PC class file by the NPC's gender (the dumb one for a dumb PC), from
+    /// the group + 50 × the NPC's social class whether or not the PC is dumb; 50 entries.</summary>
+    [OriginalFunction(0x418390, OriginalFunctionScope.Partial)]
+    private static GreetingOutcome PcClassLine(Context context, bool pcDumb, int group)
+    {
+        var first = group + ClassBlock * context.Facts.NpcSocialClass;
+        return Pick(context, GeneratedDialogFiles.PcLineFile(true, context.Facts.NpcMale, pcDumb), first, first + ClassBlock - 1, DialogGreetingRoll.Phrase);
     }
 
     /// <summary>
