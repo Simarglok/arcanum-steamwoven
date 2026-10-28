@@ -408,7 +408,7 @@ Every direct branch stays inside `.text`. The rows refine PF2, PF5, RH2 and RH3.
 Anomalies: none. PS2 is a slip of the original without a recorded fix (the owner may record one, for example the second arrow drawn
 10 pixels aside in Steamwoven). Implemented by ARC-COMBAT-018 for the hero: PS1 (`ProjectileRules.Projectiles`, two session shots
 of one attack), PS2 (both drawn on one line), PS3 and PS4 (`ThrowRules.ScatterTiles` and `Scatter`, the session's scatter of a missed
-throw drawn from its own sequence after the attack's draws, the host's map giving the step) and PS5 (`ProjectileStrikeKind.DestinationEnd`).
+throw drawn from its own sequence right after the resolver's draws, the host's map giving the step) and PS5 (`ProjectileStrikeKind.DestinationEnd`).
 Not read: what the original's flight does when a scatter walks back onto the thrower's own tile (the line 0x4201C0 then has no step and
 the flight goal does not start; the projectile and the hidden item were not followed): Steamwoven lands the item on the thrower's tile
 at once. Not modelled: the hit script and item event of PS5 (as PF9, PF10).

@@ -240,10 +240,43 @@ public sealed class ThrowStateTests
         CollectionAssert.Contains(reachable, miss.Scatter!.Value, "one of the eight directions, the tiles of the thrower's level");
         Assert.AreEqual("kit:1", owner.QueryThrownShot(miss.Shot!.Value)!.Value.Item);
 
-        // A hit keeps its target and does not scatter.
+        // A hit keeps its target and does not scatter: it draws only the resolver's rolls, a miss one more.
         Assert.IsTrue(owner.EndShot(miss.Shot.Value));
         Rewield(owner);
-        Assert.IsNull(ThrowUntil(owner, rat, hit: true).Scatter);
+        for (var i = 0; i < 60; i++)
+        {
+            var draws = owner.QueryRandom().Draws;
+            var shot = owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true, Throw = Dagger });
+            var hits = shot.Resolution!.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+            Assert.AreEqual((hits, draws + shot.Resolution.Rolls.Count + (hits ? 0 : 1)), (shot.Scatter is null, owner.QueryRandom().Draws),
+                $"throw {i}: {shot.Resolution.Outcome}");
+            Assert.IsTrue(owner.EndShot(shot.Shot!.Value));
+            Rewield(owner);
+            if (hits) return;
+        }
+        Assert.Fail("no hit");
+    }
+
+    // A miss at a critter next to the hero may scatter back onto the hero's own cell (the tiles are capped at the distance 1).
+    [TestMethod]
+    public void AScatterAtANeighbourMayLandOnTheHerosOwnCell()
+    {
+        using var owner = Owner();
+        var rat = Rat();
+        var here = owner.QueryActor().Cell;
+        var near = new SessionThrow(ThrowRules.MaxWeight) { Target = new CellCoord(here.X + 1, here.Y) };
+        var seen = new HashSet<CellCoord>();
+        for (var i = 0; i < 80 && !seen.Contains(here); i++)
+        {
+            var miss = owner.AttackCritter(owner.Version, new(rat) { Distance = 1, Flight = true, Throw = near });
+            Assert.AreEqual(GameSessionFailure.None, miss.Failure);
+            var at = miss.Scatter!.Value;
+            Assert.AreEqual(1, Math.Max(Math.Abs(at.X - here.X - 1), Math.Abs(at.Y - here.Y)), "one tile from the target location");
+            seen.Add(at);
+            Assert.IsTrue(owner.EndShot(miss.Shot!.Value));
+            Rewield(owner);
+        }
+        CollectionAssert.Contains(seen.ToArray(), here);
     }
 
     [TestMethod]

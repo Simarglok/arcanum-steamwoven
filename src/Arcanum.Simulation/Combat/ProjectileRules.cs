@@ -190,7 +190,8 @@ public static class ProjectileRules
     /// (an obstruction), else each living critter on the tile left other than the target and the attacker in list order, struck when
     /// <paramref name="roll"/>(1, 3) is 1 (the first that rolls it; nothing more is rolled). When nothing was struck and the tile left
     /// lies more than the range from the start, the flight ends. ARC-COMBAT-018: a shot without a <paramref name="target"/> (a missed
-    /// throw's scatter) ends when it leaves its destination, before any of these tests.
+    /// throw's scatter) is a miss flying free from the start (else <see cref="ArgumentException"/>) and ends when it leaves its
+    /// destination, before any of these tests.
     /// </summary>
     [OriginalFunction(0x4B2870, OriginalFunctionScope.Partial)]
     public static ProjectileCrossingResult<TObject> Cross<TObject>(ProjectileShot shot, ProjectileCrossing crossing, CellCoord destination,
@@ -199,7 +200,9 @@ public static class ProjectileRules
         ArgumentNullException.ThrowIfNull(attacker);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(roll);
-        // ARC-COMBAT-018: a shot without a target (a missed throw's scatter cleared it, 0x4B39B0) ends on leaving its destination.
+        // ARC-COMBAT-018: a shot without a target (a missed throw's scatter cleared it and set flag 0x20, 0x4B39B0) flies free and
+        // ends on leaving its destination.
+        if (target is null && (shot.Hit || !shot.FreeFlight)) throw new ArgumentException("A shot without a target is a miss flying free.", nameof(shot));
         if (crossing.Left == destination && target is null) return new(shot, ProjectileStrikeKind.DestinationEnd, null);
         // The stored flags change when the destination is left; the rest of this crossing reads the shot as it was.
         var next = crossing.Left == destination && target is not null ? shot with { Hit = false, FreeFlight = true } : shot;

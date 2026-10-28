@@ -241,19 +241,16 @@ public partial class TerrainViewerApp
             var ends = new List<string>();
             var hit = false;
             var level = session.QueryHeroSkills()![Bow].Level;
+            var restored = false;
             try
             {
-                if (session.QueryHeroAttack() is not { Training: >= SkillTraining.Expert })
-                {
-                    GD.Print($"ARC-COMBAT-018 native-smoke expert-bow NONE (bow level {level} with {spent} points spent allows no expert training)");
-                    return $"NONE (bow level {level} allows no expert training)";
-                }
-                for (var shots = 0; shots < 12 && !hit; shots++)
+                for (var shots = 0; shots < 12 && !hit && session.QueryHeroAttack() is { Training: >= SkillTraining.Expert }; shots++)
                 {
                     Heal();
                     _projectileEndsForSelfTest.Clear();
                     var result = await ShootOnce(pick.Target, expectWalk: false);
-                    if (session.QueryHeroAttack() is not { Skill: CombatSkill.Bow }) break;
+                    // A critical miss that took the bow ends the check; its arrows are given up.
+                    if (session.QueryHeroAttack() is not { Skill: CombatSkill.Bow }) { ClearAreaProjectiles("the bow was lost"); break; }
                     Require(result?.Shots.Count == 2 && _projectiles.Count == 2 && _projectiles[0].Destination == _projectiles[1].Destination,
                         $"the expert shot flies as two projectiles on one line ({result?.Failure} {result?.Resolution?.Outcome}, {_projectiles.Count} in flight)");
                     hit = result!.Resolution!.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
@@ -273,12 +270,23 @@ public partial class TerrainViewerApp
             finally
             {
                 session.SetHeroSkillTraining(session.Version, Bow, bow);
-                // Back down to the editor's floor (the points spent here).
-                for (var i = 0; spent > 0 && i < 200; i++)
+                // Back down by the points spent here, one refund each.
+                for (var left = spent; left > 0; left--)
                     if (session.RefundHeroPoint(session.Version, AdvancementTrack.BasicSkill, (int)Bow, SkillRefundClick.OnePoint).Disposition != GameSessionDisposition.Changed) break;
                 if (opened) session.CloseHeroEditor();
+                restored = session.QueryHeroSkills()![Bow].Training == bow;
             }
-            Require(ends.Count > 0, "an expert shot flew");
+            Require(restored, "the hero's bow training is set back");
+            if (ends.Count == 0 && session.QueryHeroAttack() is { Skill: CombatSkill.Bow } && level < Arcanum.Simulation.Skills.SkillRules.MinimumLevel(SkillTraining.Expert))
+            {
+                GD.Print($"ARC-COMBAT-018 native-smoke expert-bow NONE (bow level {level} with {spent} points spent allows no expert training)");
+                return $"NONE (bow level {level} allows no expert training)";
+            }
+            if (ends.Count == 0)
+            {
+                GD.Print("ARC-COMBAT-018 native-smoke expert-bow NONE (a critical miss took the bow before an expert shot flew)");
+                return "NONE (a critical miss took the bow first)";
+            }
             GD.Print($"ARC-COMBAT-018 native-smoke expert-bow PASS map={_readyMapName} target={pick.Target.Entity} level={level} spent={spent} hit={hit}"
                 + $" ends={string.Join(",", ends)}");
             return new { Shots = ends.Count, Hit = hit, Ends = ends };
