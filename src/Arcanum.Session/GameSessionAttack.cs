@@ -290,9 +290,9 @@ public sealed class SessionCritterCombat
 /// What the hero attacks with (<see cref="GameSessionOwner.QueryHeroAttack"/>): its <see cref="Combatant"/> under its life state,
 /// the weapon it strikes with (bare hands without one), the weapon's skill with its level and training, the weapon speed, the
 /// effective Speed stat (the attack animation's rate), the weapon's range (1 for bare hands) and whether the attack is one this
-/// session can run: melee, bow and firearms (ARC-COMBAT-015); a throwing-skill weapon (a boomerang) is not, as its return is not
-/// modelled (ARC-COMBAT-019). A weapon that "default throws" (ARC-COMBAT-017) is described as wielded; its throw is
-/// <see cref="SessionAttack.Throw"/>.
+/// session can run: melee, bow and firearms (ARC-COMBAT-015), and since ARC-COMBAT-019 a throwing-skill weapon (a boomerang, weapon
+/// flag 0x40, 0x465D80), whose projectile flies back to the hero. A weapon that "default throws" (ARC-COMBAT-017) is described as
+/// wielded; its throw is <see cref="SessionAttack.Throw"/>.
 /// </summary>
 public sealed record SessionHeroAttack(Combatant Combatant, CombatWeapon Weapon, CombatSkill Skill, int SkillLevel, SkillTraining Training,
     int WeaponSpeed, int Speed, int Range, bool Supported)
@@ -428,7 +428,8 @@ public sealed partial class GameSessionOwner
         var weaponSkill = skills[SkillRules.Of(equipment.Skill)];
         var range = equipment.Weapon.Kind == WeaponKind.Unarmed ? 1 : Math.Max(1, equipment.Weapon.Range);
         return new(combatant, equipment.Weapon, equipment.Skill, weaponSkill.Level, weaponSkill.Training, equipment.WeaponSpeed,
-            snapshot.GetEffective(CharacterStat.Speed), range, equipment.Skill is CombatSkill.Melee or CombatSkill.Bow or CombatSkill.Firearms);
+            snapshot.GetEffective(CharacterStat.Speed), range,
+            equipment.Skill is CombatSkill.Melee or CombatSkill.Bow or CombatSkill.Firearms or CombatSkill.Throwing);
     }
 
     /// <summary>
@@ -449,13 +450,15 @@ public sealed partial class GameSessionOwner
     /// aim at the torso, a distance below 0 or beyond the weapon's reach (a bow's or firearm's beyond 100,000), a line-of-fire cost
     /// outside 0..100,000, a target cell outside 0 .. 2^24 − 1, a throw (<see cref="SessionAttack.Throw"/>) that does not fly, has a
     /// weight outside 0..1,000,000, no wielded weapon or one of another skill than melee, or a distance beyond the weapon's reach
-    /// (<see cref="GameSessionFailure.InvalidAttack"/>), a wielded throwing-skill
-    /// weapon (<see cref="GameSessionFailure.AttackUnsupported"/>), the version, an exhausted revision
+    /// (<see cref="GameSessionFailure.InvalidAttack"/>), the hero's boomerang still away (<see cref="GameSessionFailure.WeaponInFlight"/>,
+    /// ARC-COMBAT-019), the version, an exhausted revision
     /// (<see cref="GameSessionFailure.RevisionExhausted"/>). A bow or firearm (ARC-COMBAT-015) is checked with the distance terms of
     /// the shared check (SC8: impossible beyond its range, 5 per tile beyond half the Perception below master, impossible when
     /// <see cref="SessionAttack.LineOfFire"/> is blocked, else its cost as cover) and spends its shot's ammunition (RA3). A thrown weapon
     /// (ARC-COMBAT-017) is checked so with the throwing skill and its thrown range; unless the attack is refused it leaves the hero's
     /// hand in a revision of its own and lies hidden on the hero's cell (<see cref="GameSessionOwner.QueryThrownShot"/>).
+    /// A boomerang (ARC-COMBAT-019) stays in the hand and is checked with the throwing skill and the thrown range of its own weight
+    /// (the session's weight row, 0x461370 with the hero as holder); its shot flies back (<see cref="ReturnShot"/>).
     /// A resolver refusal (the hero cannot act, the target is dead) is NoChange with the resolution. The resolution's draws are spent
     /// once it ran; a fate the resolver used (ARC-WORLD-054) is cleared in a revision of its own, so such an attack is Changed even
     /// without damage; each later step commits on its own revision.
@@ -474,7 +477,9 @@ public sealed partial class GameSessionOwner
     /// <see cref="SessionAttack.Distance"/>, <see cref="SessionAttack.LineOfFire"/> and <see cref="SessionAttack.Flight"/> are not
     /// read. Refused as <see cref="AttackCritter"/> is, and with <see cref="GameSessionFailure.InvalidAttack"/> for a shot not in
     /// flight, a missed shot striking its own target or a thrown shot that struck already; a target dead now is NoChange with the
-    /// refusal, and the shot is gone (a thrown shot waits for its item's landing, <see cref="LandThrownItem"/>).
+    /// refusal, and the shot is gone (a thrown shot waits for its item's landing, <see cref="LandThrownItem"/>). ARC-COMBAT-019: a
+    /// boomerang's shot turns back at its strike instead (0x4B2690 before the hit, PF8) and flies back to the hero, striking nothing
+    /// more (a second strike is refused), until its flight ends (<see cref="EndShot"/>).
     /// </summary>
     public SessionAttackResult LandShot(GameSessionVersion expected, SessionShot shot, SessionAttack attack) => CritterAttack(expected, attack, shot);
 
@@ -487,7 +492,7 @@ public sealed partial class GameSessionOwner
         var resolved = Resolve(target.Target, out var record, out var facts, out _);
         if (resolved != GameSessionFailure.None) return RejectAttack(resolved);
         PendingShot? pending = null;
-        if (landing is { } id && (!_shots.TryGetValue(id, out pending) || pending.Struck || !pending.Hit && pending.Entity == target.Entity))
+        if (landing is { } id && (!_shots.TryGetValue(id, out pending) || pending.Struck || pending.Returning || !pending.Hit && pending.Entity == target.Entity))
             return RejectAttack(GameSessionFailure.InvalidAttack);
         var hero = QueryHeroAttack()!;
         // ARC-COMBAT-016: the projectile carries its weapon (field 0x50) and skill to the strike.
@@ -501,10 +506,13 @@ public sealed partial class GameSessionOwner
         if (attack.Aim is HitLocation.Torso || attack.Aim is { } aim && !Enum.IsDefined(aim) || pending is null && !AttackDistanceFits(hero, attack.Distance) ||
             attack.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude } || attack.TargetCell is { } cell && !DropCellFits(cell))
             return RejectAttack(GameSessionFailure.InvalidAttack);
+        // ARC-COMBAT-019: the attack start refuses while the hero's boomerang is away (0x434B00, attacker field 219 bit 0x4).
+        if (pending is null && HeroBoomerangAway()) return RejectAttack(GameSessionFailure.WeaponInFlight);
         // ARC-COMBAT-017: the reach is the weapon's (RH1); a thrown weapon is then checked with the throwing skill and its thrown range.
         string? thrown = null;
         if (pending is null && ThrowingHero(ref hero, attack.Throw, attack.Flight, out thrown) is var throwFailure && throwFailure != GameSessionFailure.None)
             return RejectAttack(throwFailure);
+        if (pending is null && thrown is null) BoomerangHero(ref hero);
         if (pending is null && !hero.Supported) return RejectAttack(GameSessionFailure.AttackUnsupported);
         // ARC-COMBAT-018: a missed throw scatters from its target location (RH2).
         var scatterFrom = thrown is null ? null : attack.Throw!.Target ?? attack.TargetCell;
@@ -578,7 +586,7 @@ public sealed partial class GameSessionOwner
         var scatter = scatterRotation is { } rotation ? ScatterThrow(scatterFrom!.Value, hero.SkillLevel, rotation, attack.DropMap) : (Arcanum.Simulation.Movement.CellCoord?)null;
         var flying = pending is null && attack.Flight && resolution.Refusal == AttackRefusal.None
             ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, scatter is null ? target.Entity : null, null)
-                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null }, ShotProjectiles(hero)) : [];
+                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown) }, ShotProjectiles(hero)) : [];
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)
             return new(resolution.Fate != FateUse.None && pending is null || concealmentEnded || spent || throwing ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange,
                 GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version) { Ammunition = ammunition, Shots = flying, Scatter = scatter };

@@ -148,11 +148,13 @@ public partial class TerrainViewerApp
             var flights = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Projectiles() : "NONE (a critical miss took the bow)";
             var pairs = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await ExpertShots() : "NONE (a critical miss took the bow)";
             var throws = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Throws() : "NONE (a critical miss took the bow)";
+            var boomerangs = session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon && w.Entity == wielded.Entity) ? await Boomerangs()
+                : "NONE (a critical miss took the lent weapon)";
             ToggleCombatMode();
             GD.Print("ARC-COMBAT-015 native-smoke ranged PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, Target = pick.Target.Entity, Hero = new[] { pick.Hero.X, pick.Hero.Y }, Shot = first,
                 Approach = second ?? (object)(stillBow ? "NONE (no cell 12..16 away, or the Original setting)" : "NONE (the first shot's critical miss took the bow)"), Npcs = npcs.Length,
-                Projectiles = flights, ExpertShots = pairs, Throws = throws,
+                Projectiles = flights, ExpertShots = pairs, Throws = throws, Boomerangs = boomerangs,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
@@ -364,6 +366,79 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-COMBAT-017 native-smoke throw PASS map={_readyMapName} target={pick.Target.Entity} hit={hit} landings={string.Join(",", landings)}");
             if (scatters.Count > 0) GD.Print($"ARC-COMBAT-018 native-smoke scatter PASS map={_readyMapName} misses={string.Join(",", scatters)}");
             return new { Throws = landings.Count, Hit = hit, Landings = landings, Scatters = scatters };
+        }
+
+        // ARC-COMBAT-019: the lent weapon becomes a boomerang (the throwing skill, range 10, the bow's projectile art) and stays wielded.
+        // Each throw marks the hero (a second attack is refused while it flies), turns once at its first end (its strike, or the end of
+        // its range) toward the hero's tile, flies back and ends there, which clears the mark; then the auto attack starts a new attack
+        // goal on the target. Throws until one has hit (at most 6; a hit is reported, not required).
+        async Task<object> Boomerangs()
+        {
+            var boomerang = wielded.Item with
+            {
+                Weapon = wielded.Item.Weapon! with
+                {
+                    Skill = CombatSkill.Throwing, Range = LentBowRange, MagicRange = 0, AmmoType = null, AmmoConsumption = 0,
+                },
+            };
+            Require(Wear(boomerang), "the kit weapon takes the lent boomerang's values");
+            _lentMissileArtForSelfTest = LentMissileArt;
+            Require(session.QueryHeroAttack() is { Skill: CombatSkill.Throwing, Supported: true }, "the hero throws a boomerang");
+            var at = World(pick.Target.Row);
+            var distance = Math.Max(Math.Abs(at.X - pick.Hero.X), Math.Abs(at.Y - pick.Hero.Y));
+            var flights = new List<string>();
+            var hit = false; var refused = false; var reattacks = 0;
+            for (var throws = 0; throws < 6 && !hit; throws++)
+            {
+                Heal();
+                AreaSmokePlace(map, map.Chart.ToChart(new(pick.Hero.X, pick.Hero.Y)));
+                _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+                PublishWorldSelection();
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                _projectileEndsForSelfTest.Clear(); _boomerangTurnsForSelfTest.Clear();
+                var result = await ShootOnce(pick.Target, expectWalk: false);
+                // A critical miss may drop or break the lent boomerang: the check ends there.
+                if (session.QueryHeroAttack() is not { Skill: CombatSkill.Throwing }) { ClearAreaProjectiles("the boomerang was lost"); break; }
+                Require(result?.Shot is { } shot && session.QueryShotReturns(shot) && session.QueryBoomerangInFlight() && _projectiles.Count == 1
+                    && _projectiles[0].Returns && session.QueryThrownShot(shot) is null,
+                    $"the boomerang flies and marks the hero ({result?.Failure} {result?.Resolution?.Outcome}, {_projectiles.Count} in flight)");
+                Require(session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon && w.Entity == wielded.Entity), "it stays in the hand");
+                if (!refused)
+                {
+                    var again = session.AttackCritter(session.Version, CritterAttack(new AttackGoal(pick.Target, pick.Target.Build.Combat!, null), distance, null) with { Flight = true });
+                    Require(again.Failure == GameSessionFailure.WeaponInFlight, $"no attack starts while it is away ({again.Failure})");
+                    refused = true;
+                }
+                for (var frames = 0; frames < 1500 && _projectiles.Count > 0; frames++)
+                {
+                    _areaSmokeTime++;
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                }
+                Require(_projectiles.Count == 0 && session.QueryShotsInFlight().Count == 0 && !session.QueryBoomerangInFlight(),
+                    $"the boomerang came back ({_projectiles.Count} in flight, away {session.QueryBoomerangInFlight()})");
+                Require(_boomerangTurnsForSelfTest.Count == 1 && _boomerangTurnsForSelfTest[0].To == pick.Hero,
+                    $"it turned once toward the hero's tile ({string.Join(",", _boomerangTurnsForSelfTest.Select(t => $"{t.From}->{t.To}"))})");
+                Require(_projectileEndsForSelfTest.Count == 2 && _projectileEndsForSelfTest[1].Strike == ProjectileStrikeKind.DestinationEnd,
+                    $"its first end and its return ({string.Join(",", _projectileEndsForSelfTest.Select(e => $"{e.Strike}:{e.Struck}"))})");
+                var first = _projectileEndsForSelfTest[0];
+                hit = result!.Resolution!.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+                if (hit) Require(first.Strike == ProjectileStrikeKind.Target && first.Struck == pick.Target.Entity, $"a hit turns at its target ({first.Strike} {first.Struck})");
+                else Require(first.Strike != ProjectileStrikeKind.Target, "a miss never strikes its target");
+                // 0x4A9AD0: back in the hand, the auto attack starts a new attack goal on the target (it may have fallen to the hit).
+                if (_attack is { } again2 && again2.Entity == pick.Target.Entity) reattacks++;
+                CancelAreaAttack(null);
+                flights.Add($"{first.Strike}:{first.Struck ?? "none"}:{_boomerangTurnsForSelfTest[0].From.X},{_boomerangTurnsForSelfTest[0].From.Y}");
+            }
+            if (flights.Count == 0)
+            {
+                GD.Print("ARC-COMBAT-019 native-smoke boomerang NONE (a critical miss took the boomerang before its first flight)");
+                return "NONE (a critical miss took the boomerang first)";
+            }
+            Require(reattacks > 0 || !_gameSettings.AutoAttack || _combatHost!.Target(session, runtime, pick.Target.Row.Key) is { Dead: true },
+                $"the auto attack started again after a return ({reattacks} of {flights.Count})");
+            GD.Print($"ARC-COMBAT-019 native-smoke boomerang PASS map={_readyMapName} target={pick.Target.Entity} hit={hit} reattacks={reattacks}"
+                + $" flights={string.Join(",", flights)}");
+            return new { Throws = flights.Count, Hit = hit, Reattacks = reattacks, Flights = flights };
         }
 
         void Heal()

@@ -249,6 +249,8 @@ public enum GameSessionFailure
     InvalidDangerTarget, InvalidDangerFacts,
     // NPC gold and transfers (ARC-WORLD-071).
     GoldShort, GoldUnavailable,
+    // Boomerangs (ARC-COMBAT-019): no attack starts while the hero's boomerang is away (0x434B00).
+    WeaponInFlight,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }

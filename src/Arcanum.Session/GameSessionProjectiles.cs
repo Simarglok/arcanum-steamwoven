@@ -33,6 +33,11 @@ public readonly record struct SessionThrownShot(string Item, int Range);
 /// ARC-COMBAT-017: a thrown weapon (<see cref="SessionAttack.Throw"/>) leaves the hero at the shot and lies hidden on the hero's cell
 /// while it flies (0x4B3C00: 0x4415C0, no decay); its shot ends when the item lands (<see cref="LandThrownItem"/>, after its strike
 /// if it struck) or when the host gives the flight up (<see cref="EndShot"/>: the item stays on the hero's cell).
+/// ARC-COMBAT-019: a boomerang (a throwing-skill weapon, weapon flag 0x40) stays in the hand; its projectile marks the hero (field
+/// 219 bit 0x4, <see cref="QueryBoomerangInFlight"/>: no attack starts meanwhile), turns back at its first end (its strike, or
+/// <see cref="ReturnShot"/> at the end of its range or the destination of a shot without a target) and flies back striking nothing,
+/// until its flight ends at the tile it flies back to (<see cref="EndShot"/>, which clears the mark). The mark is not saved, as no
+/// shot is.
 /// </summary>
 public sealed partial class GameSessionOwner
 {
@@ -47,6 +52,10 @@ public sealed partial class GameSessionOwner
         public SessionThrownShot? Thrown { get; init; }
         /// <summary>ARC-COMBAT-017: the thrown shot struck already and waits for its item's landing.</summary>
         public bool Struck { get; init; }
+        /// <summary>ARC-COMBAT-019: the shot of a boomerang that stays in the hand (attack flag 0x1000, 0x4B24F0).</summary>
+        public bool Boomerang { get; init; }
+        /// <summary>ARC-COMBAT-019: the boomerang turned back (flag 0x2000) and strikes nothing more.</summary>
+        public bool Returning { get; init; }
     }
 
     private readonly Dictionary<SessionShot, PendingShot> _shots = [];
@@ -77,6 +86,40 @@ public sealed partial class GameSessionOwner
 
     private bool ItemInFlight(string item) => _shots.Values.Any(pending => pending.Thrown?.Item == item);
 
+    /// <summary>ARC-COMBAT-019: whether a boomerang of the hero is away (a boomerang's shot in flight, out or back: the hero's field 219
+    /// bit 0x4 that 0x4B24F0 sets and the second end of 0x4B2690 clears): no attack starts (<see cref="GameSessionFailure.WeaponInFlight"/>,
+    /// 0x434B00) and the real-time attack does not repeat (RT7).</summary>
+    public bool QueryBoomerangInFlight()
+    {
+        ThrowIfDisposed();
+        return HeroBoomerangAway();
+    }
+
+    /// <summary>ARC-COMBAT-019: whether <paramref name="shot"/> is a boomerang's that will turn back at its first end (in flight, not
+    /// returning yet).</summary>
+    public bool QueryShotReturns(SessionShot shot)
+    {
+        ThrowIfDisposed();
+        return _shots.TryGetValue(shot, out var pending) && pending.Boomerang && !pending.Returning;
+    }
+
+    private bool HeroBoomerangAway() => _shots.Values.Any(pending => pending.Boomerang);
+
+    /// <summary>
+    /// ARC-COMBAT-019 (the projectile's end 0x4B2690, ledger BR rows): a boomerang's shot that ends without a strike (beyond its range,
+    /// or leaving the destination of a shot without a target) turns back to the hero instead (0x435A00) and strikes nothing more; a
+    /// strike turns it back itself (<see cref="LandShot"/>, <see cref="LandShotOnObject"/>). The host flies it back
+    /// (<see cref="Arcanum.Simulation.Combat.ProjectileRules.TurnBack"/>) and ends it where it arrives (<see cref="EndShot"/>). Nothing
+    /// saved changes. False when the shot is not in flight, not a boomerang's, or returning already.
+    /// </summary>
+    public bool ReturnShot(SessionShot shot)
+    {
+        ThrowIfDisposed();
+        if (!_shots.TryGetValue(shot, out var pending) || !pending.Boomerang || pending.Returning) return false;
+        _shots[shot] = pending with { Returning = true };
+        return true;
+    }
+
     /// <summary>
     /// ARC-COMBAT-017: the thrown item of <paramref name="shot"/> lands on <paramref name="cell"/> of the map it was thrown on (the
     /// projectile's end 0x4B2690, flag 0x40: the item moves to the projectile's tile through 0x4EDF20 and is shown again; no decay is
@@ -105,7 +148,9 @@ public sealed partial class GameSessionOwner
     /// ARC-COMBAT-016: the flight of <paramref name="shot"/> ends without a strike (it flew beyond its range, left the map, or its host
     /// gave it up: the map changed); a hit it carried is lost, as the original's projectile that never meets its target. False when the
     /// shot is not in flight. Nothing of the session's saved state changes: a thrown item (ARC-COMBAT-017) stays on the hero's cell where
-    /// it was thrown from, shown again (its landing is <see cref="LandThrownItem"/>).
+    /// it was thrown from, shown again (its landing is <see cref="LandThrownItem"/>). ARC-COMBAT-019: a boomerang is back in the hand
+    /// (the second end of 0x4B2690: also a flight given up before it turned, as the flight goal's own end passes no turn), which ends
+    /// the hero's mark (<see cref="QueryBoomerangInFlight"/>).
     /// </summary>
     public bool EndShot(SessionShot shot)
     {
@@ -144,6 +189,24 @@ public sealed partial class GameSessionOwner
         return GameSessionFailure.None;
     }
 
+    /// <summary>
+    /// ARC-COMBAT-019 (ledger RH4, BR rows): a wielded boomerang (the throwing skill, 0x465D80) is checked with the thrown range of its
+    /// own weight under the hero's effective strength and throwing training (<see cref="ThrowRules.Range"/>: the shared check reads
+    /// 0x4622A0 for skill 3, SC8), the weight 0x461370 from the session's row with the hero as holder (none: 0); its reach before it
+    /// and its flight's range end (PF9) stay the weapon's range. Any other weapon is left as it is.
+    /// </summary>
+    private void BoomerangHero(ref SessionHeroAttack hero)
+    {
+        if (hero.Skill != CombatSkill.Throwing || hero.Weapon.Kind != WeaponKind.Weapon || HeroCarryFacts() is not { } facts
+            || !_equipment.Worn.TryGetValue(Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, out var wielded)) return;
+        var weight = Math.Clamp(HeroItemWeight(facts, Carried(wielded.Entity, SessionItemType.Weapon)), 0, ThrowRules.MaxWeight);
+        hero = hero with { Weapon = hero.Weapon with { Range = ThrowRules.Range(hero.Combatant.Strength, hero.Training, weight) } };
+    }
+
+    /// <summary>ARC-COMBAT-019: a shot of <paramref name="hero"/> is a boomerang's when it attacks with the throwing skill and nothing
+    /// leaves the hand (0x4B24F0: weapon flag 0x40 sets attack flag 0x1000).</summary>
+    private static bool Boomerang(SessionHeroAttack hero, string? thrown) => hero.Skill == CombatSkill.Throwing && thrown is null;
+
     /// <summary>ARC-COMBAT-017: the thrown weapon leaves the hero's hand and lies hidden on the hero's cell while it flies (0x434B00 →
     /// 0x466E00, then 0x4B3C00 → 0x4415C0, which schedules no decay), one revision; the hero's worn items for the attack's later steps
     /// lose the weapon slot (the critical miss's weapon effects find the hand empty, CW3).</summary>
@@ -154,10 +217,12 @@ public sealed partial class GameSessionOwner
         return worn?.Where(pair => pair.Key != Arcanum.Simulation.Equipment.EquipmentSlot.Weapon).ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 
-    /// <summary>A struck shot ends, except a thrown one: it waits for its item's landing (<see cref="LandThrownItem"/>).</summary>
+    /// <summary>A struck shot ends, except a thrown one: it waits for its item's landing (<see cref="LandThrownItem"/>); ARC-COMBAT-019:
+    /// and a boomerang's, which turns back (0x4B2690 runs before the hit, PF8).</summary>
     private void EndStrike(SessionShot shot, PendingShot pending)
     {
-        if (pending.Thrown is null) _shots.Remove(shot);
+        if (pending.Boomerang) _shots[shot] = pending with { Returning = true };
+        else if (pending.Thrown is null) _shots.Remove(shot);
         else _shots[shot] = pending with { Struck = true };
     }
 
