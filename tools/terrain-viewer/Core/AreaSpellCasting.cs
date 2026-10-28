@@ -55,6 +55,8 @@ public static class AreaSpellCasting
             SpellCastEventKind.Healed => $"{Who()} regains {entry.Value} hit points",
             SpellCastEventKind.Resisted => $"{Who()} resists",
             SpellCastEventKind.ComponentNotReady => $"{(SpellComponentType)entry.Value} effect not ready",
+            // ARC-MAGIC-017: eye candy is drawn, not told; only its callbacks (play flags 0x8, 0x10) are not ready.
+            SpellCastEventKind.EyeCandyAdded when (entry.Detail & 0x18) != 0 => "eye-candy callback not ready",
             _ => null,
         };
     }
