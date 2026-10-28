@@ -285,6 +285,12 @@ public readonly record struct InventoryMutationResult(GameSessionDisposition Dis
     /// <see cref="SessionScriptPoint.Transfer"/>), so the item did not move; <see cref="Item"/> is null then, and the disposition is
     /// Changed only when that run wrote global flags.</summary>
     public int? DeclinedBy { get; init; }
+
+    private readonly IReadOnlyList<SessionItemTriggerResult>? _itemSpells;
+
+    /// <summary>ARC-MAGIC-022: what the item trigger host's executors did after the move (the pickup 0x4CBAA0 of an item the hero got,
+    /// the removal's steps of an item it gave away); empty without a host.</summary>
+    public IReadOnlyList<SessionItemTriggerResult> ItemSpells { get => _itemSpells ?? Array.Empty<SessionItemTriggerResult>(); init => _itemSpells = value; }
 }
 
 /// <summary>ARC-SCRIPT-041: one item script run of a transfer: the attachment point, the attachee's entity (the item, or

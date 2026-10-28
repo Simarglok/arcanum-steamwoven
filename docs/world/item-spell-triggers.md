@@ -6,7 +6,7 @@ item trigger slice of [FR-MAGIC-011](../requirements/combat-magic-tech.md#fr-mag
 read twice ([ledger IT1–IT10](../research/ledger/spell-runs.md#item-spell-triggers-arc-magic-020)); the item spell fields and the
 technology side are the [tech devices](tech-devices-runtime.md) contract's (DV1–DV3).
 
-This slice runs an item's spells on its **wear and unwear** and (ARC-MAGIC-022) its **use** through the [cast host](spell-cast-host.md),
+This slice runs an item's spells on its **wear and unwear** and (ARC-MAGIC-022) its **use, pickup and drop** through the [cast host](spell-cast-host.md),
 and saves the charges the spells spend. The other events are later slices (see [Not ready](#not-ready)); the use is read in ledger
 [IU1–IU10](../research/ledger/spell-runs.md#item-use-and-moves-arc-magic-022).
 
@@ -101,6 +101,25 @@ The installed uses ([census](#installed-data)): 84 scrolls (69 cast at a picked 
 `Item_Used`), 43 food items (41 `Item_Used` potions, 2 at a picked target), 3 weapons with 20 charges and one unlimited (at a picked
 target), and 22 items with unlimited charges whose slot 0 has item triggers (wear items and `Item_Used` devices).
 
+## Pickup and drop (ARC-MAGIC-022)
+
+The hero's inventory moves take an optional `ISessionItemTriggers` like `Equip` (results in `InventoryMutationResult.ItemSpells`):
+
+- **Pickup** (0x4CBAA0 from the insertion 0x466640, IU10): after `PickUpItem`, `LootItem`, `GiveItemToPc` and `TakeItemFromNpc` moved
+  an item into the hero's list, the executor fires with `ItemSpellTriggerRules.Pickup` and the hero as holder (after the move and its
+  scripts; in the original after the item is listed, before its insert-item script). An ammunition item merged into a stack is
+  deleted and fires nothing, as in the original.
+- **Removal** (0x467860, IU9): after `GiveItemToNpc` moved an item out, `ISessionItemTriggers.Remove` (`SessionSpellCaster.RemoveItemSpells`)
+  ends by event the runs the item is the source of, unless technological or with item triggers and no maintenance period (0x457450),
+  then runs the drop's withdrawal (0x4CC130) with the hero as holder: the item counts as the hero's while it runs, as the original
+  passes the holder and leaves the item's parent field (also while the recast's goal plays). Without a host a give of an item that is
+  the source of a run is refused (`ItemEffectUnsupported`), and so is a barter sale of one (`BarterSell` gives without a host). An
+  ammunition item merged into the NPC's stack is deleted before these steps (the original removes it first); no installed ammunition
+  carries item spells.
+- Without a host the moves run no executor; no installed record fires on a pickup or a drop (census), so only the removal's ending
+  of runs is visible in the installed game. No viewer or dialog caller passes a host yet (the viewer's pickup and loot, the dialog
+  `IN` port).
+
 ## Installed data
 
 The census (`ItemSpellCensusRealDataTests`, opt-in `DAT_ROOT`) finds four wear items, all armour with unlimited charges and no move
@@ -125,7 +144,10 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 
 ## Not ready
 
-- Pickup and drop: the session's inventory moves need the executors wired (ARC-MAGIC-022's next part).
+- The other inventory moves run no pickup or removal executor yet: barter (a sale of an item that sources a run is refused), the
+  throw, a critical drop, items placed or created on the ground by the session, the NPCs' own inventories and the items scripts move
+  (their pickup and drop fire nothing in the installed game; the removal's ending of runs is missing there). Picking such an item up
+  again through `PickUpItem` or `LootItem` fires its pickup.
 - The item use's other branches (reading, lockpick, healing kit, food and scroll spending without magic) are the host's own calls
   (`UseWrittenItem`, `PickLock…`, `HealWithItem`); no viewer action calls `UseItem` yet. Spells aimed at an inventory item through a
   use, and an NPC's use (the activation refuses a holder that is not a player's PC, SU1) are not ready.
