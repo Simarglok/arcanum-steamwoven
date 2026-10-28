@@ -124,4 +124,5 @@ The build does not update itself. A newer build is made from the current `main` 
 `./arcanum package win` on the developer's Mac; it replaces the app or the zip in `artifacts/packages/macos/` or
 `artifacts/packages/windows/` (the one before moves to `previous/` there). On macOS copy the new app over the old one; on
 Windows delete the old `Arcanum Steamwoven` folder and unpack the new zip in its place (do not unpack over it, or files of
-the old build may stay). Settings and saves stay in the folder above; an older build may refuse a save made by a newer one.
+the old build may stay). Settings and saves stay in the folder above. A newer build loads the saves of older builds (from the first packaged
+build on); an older build refuses a save made by a newer one.
