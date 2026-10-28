@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Arcanum.Data.Area;
 using Arcanum.Data.Characters;
 using Arcanum.Data.Combat;
@@ -8,6 +9,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Reaction;
@@ -55,11 +57,20 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-099: whether the hero runs no animation (its walk or attack, which count in the original's animations-complete
     /// test); null: idle.</summary>
     public Func<bool>? HeroIdle { get; init; }
+    /// <summary>ARC-WORLD-102: the shown map's cast host (the hero's casts go through it too), or null while the spell data or the
+    /// map's magic world is missing: the NPCs then know no spell.</summary>
+    public Func<SessionSpellCaster?>? Spells { get; init; }
+    /// <summary>ARC-WORLD-102: the cast entry's eye candy of a spell on the NPC (goal 27's play, 0x429F00), started at 0 ms, or null
+    /// when none plays (no table, art, part or free slot, an ART that does not read).</summary>
+    public Func<string, int, CastEyeCandyAnimation?>? CastEyeCandy { get; init; }
+    /// <summary>ARC-WORLD-102: whether a spell's projectile eye candy has art (0x458B70), so its release launches a missile.</summary>
+    public Func<int, bool>? MissileArt { get; init; }
 }
 
-/// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step, a sound, and (ARC-WORLD-099)
-/// the fidget an NPC starts after a done run (0x4B4320; its animation is not drawn: NPC ART is not read yet).</summary>
-public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget }
+/// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step, a sound, (ARC-WORLD-099)
+/// the fidget an NPC starts after a done run (0x4B4320; its animation is not drawn: NPC ART is not read yet), and (ARC-WORLD-102) a
+/// cast's play, its release and its goal's end.</summary>
+public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd }
 
 /// <summary>ARC-WORLD-092: one notice for the viewer (the attack pose, the hit's sounds and status line, the redraw).</summary>
 public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Target)
@@ -67,6 +78,14 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     public SessionAttackResult? Result { get; init; }
     public int Sound { get; init; }
     public AiAttackSwing Swing { get; init; }
+    /// <summary>ARC-WORLD-102: the cast's spell and magic run, its play's timing (<see cref="AreaAiNoticeKind.Cast"/>; none plays: the
+    /// release came at once), whether the release began the run (<see cref="AreaAiNoticeKind.Release"/>) and the goal end's free
+    /// (<see cref="AreaAiNoticeKind.CastEnd"/>).</summary>
+    public int Spell { get; init; } = -1;
+    public int Run { get; init; } = -1;
+    public AiCastSwing CastSwing { get; init; }
+    public bool Released { get; init; }
+    public SessionSpellRunResult? SpellRun { get; init; }
 }
 
 /// <summary>
@@ -83,11 +102,14 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// (<see cref="AreaTurnBased.Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int)"/>) runs the NPCs' subturn hooks.
 /// ARC-WORLD-099: an NPC's subturn end asks its end-combat script (<see cref="SubturnsEnded"/>), a turn set's interrupt that frees the
 /// last run runs the completion check, and a done run's end may start the NPC's fidget (<see cref="AiExecutorRules.FidgetAfterRun"/>).
-/// NOT READY (later slices): casting, item use, skills, throws and pickups, grenades, the
-/// back-off's away path, followers in combat (the companions keep their follow goal), the follower rule and the comment lines, NPC
+/// ARC-WORLD-102: the support rules' spell half (<see cref="IAiSupportWorld"/>, the spell answers through the map's cast host) chooses
+/// a spell at the danger update's target (<see cref="AiSupportRules.ChooseSpell"/>), perform casts it (<see cref="Cast"/>,
+/// <see cref="SessionSpellCaster.CastByAi"/>) and the casting goals play through the cast host (start, turn, play, release, end).
+/// NOT READY (later slices): queued casts, spell missiles' flights, item use and items in the lists, skills, throws and pickups,
+/// grenades, the back-off's away path, followers in combat (the companions keep their follow goal), the follower rule and the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
-public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld
+public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld
 {
     private const string Pc = AiSchedulerRules.Pc;
     // Object flags: destroyed, off, don't draw, invisible, invulnerable; critter flags; spell flags; NPC flags (HostilityCritter's bits).
@@ -96,6 +118,10 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private const uint NighInvulnerable2 = 0x200, AutoAnimates2 = 0x2;
     private const uint InvisibleSpell = 0x1, DetectsInvisibleSpell = 0x200, StonedSpell = 0x10000, MindControlledSpell = 0x8000000, EnshroudedSpell = 0x20000000;
     private const uint WaitingHereNpc = 0x8, KillOnSightNpc = 0x100, KosOverrideNpc = 0x800, GeneratorNpc = 0x80000, AloofNpc = 0x20000;
+    // ARC-WORLD-102: critter flag MECHANICAL and NPC flag CAST_HIGHEST (field 0x118, read in 0x4AE720).
+    private const uint MechanicalFlag = 0x20000000, CastHighestNpc = 0x40000;
+    // The lists of a host without spell records: every spell without AI values.
+    private static readonly AiGlobalLists NoLists = AiGlobalLists.Build([.. Enumerable.Repeat(AiSpellValues.None, AiGlobalLists.Spells)]);
     private const int GuardClass = 5;
     // The fixed human attack ART (hmfuwxbu: 9 frames, action frame 6, 15 frames per second) stands in for an NPC's own.
     private static readonly (int Frames, int ActionFrame, int RawFramesPerSecond) FixedAttackArt = (9, 6, 15);
@@ -131,6 +157,12 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private long _pendingAt = -1;
     // ARC-WORLD-099: the round actor whose done run's fidget call waits for its subturn hook.
     private string? _fidgetAfterHook;
+    // ARC-WORLD-102: the pass record's choice the danger update wrote for perform (0x4ABC20 → 0x4AC180), the list cache (SP11, not
+    // saved), the facing a casting goal's start computed for its turn, and the magic runs whose play reaches no action frame.
+    private readonly Dictionary<string, AiPassChoice> _passChoices = new(StringComparer.Ordinal);
+    private AiListCache _listCache = AiListCache.Empty;
+    private readonly Dictionary<int, SpellFacing?> _castFacing = [];
+    private readonly HashSet<int> _noRelease = [];
 
     /// <param name="events">The viewer's event world: the pass's script calls, life facts, party and loot questions.</param>
     /// <param name="round">The turn-based round's world (the scan of the map's critters).</param>
@@ -272,7 +304,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
             {
                 _runs.Remove(npc);
                 // The end step ran the end nodes itself; a killed run, the node limit and an overflow drop the run without them.
-                if (step.End is AiRunEnd.Killed or AiRunEnd.NodeLimit or AiRunEnd.Overflow) AiExecutorRules.EndRun(run, this);
+                if (step.End is AiRunEnd.Killed or AiRunEnd.NodeLimit or AiRunEnd.Overflow) EndDroppedRun(run);
                 // ARC-WORLD-099: the stepper's end of a done run (TH4): the fidget's call (0x4B4320), after the owner's subturn hook. The
                 // round actor's hook is the round host's next frame (<see cref="FidgetAfterHook"/>); anyone else's hook does nothing. The
                 // node limit frees its run without it; an overflow, which the reading did not follow, is taken as the node limit.
@@ -337,7 +369,18 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _notices.Add(new(AreaAiNoticeKind.Fidget, npc, null));
     }
 
-    /// <summary>Drops every run and mover (a map change, a load).</summary>
+    /// <summary>
+    /// ARC-WORLD-102: ends every run as a dropped one (its end nodes, <see cref="EndDroppedRun"/>: a casting goal's magic run is freed,
+    /// so no NPC's spell run outlives its goal), then <see cref="Reset"/>. The viewer calls it before it drops or replaces the host of
+    /// the same session (a follower joining or leaving, a map change, the AI turned off).
+    /// </summary>
+    public void Retire()
+    {
+        foreach (var npc in _runs.Keys.ToArray()) DropRun(npc);
+        Reset();
+    }
+
+    /// <summary>Drops every run and mover without their end nodes (a load: the runs belong to the replaced session).</summary>
     public void Reset()
     {
         _runs.Clear();
@@ -345,6 +388,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _notices.Clear();
         _roundEvents.Clear();
         _roundSeen = false; _subturnsSeen = -1; _turnSetActor = null; _pendingCost = 0; _pendingAt = -1; HookedSubturn = -1; _fidgetAfterHook = null;
+        _passChoices.Clear(); _listCache = AiListCache.Empty; _castFacing.Clear(); _noRelease.Clear();
         Movers.Clear();
     }
 
@@ -425,16 +469,32 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public bool SearchItems(string npc) => false;
     public bool Loading => false;
 
-    /// <summary>The danger stage: the update's plan applied through the setter (no spell or item choice yet).</summary>
+    /// <summary>
+    /// The danger stage: the update's plan applied through the setter. ARC-WORLD-102: for a fight the spell and item choice runs for
+    /// the found target before the setter (0x4ABC20, HS1, SP4), the setter's target is then <see cref="HostilityRules.FocusTarget"/>
+    /// of the pass record's (SP16), and the choice stays in the pass record for perform unless the setter's NO_ATTACK or "NPC
+    /// fighting" rule refused the fight in the Steamwoven setting (FO8, <see cref="HostilityRules.KeepsChosenAction"/>).
+    /// </summary>
     public void UpdateDanger(string npc)
     {
+        _passChoices.Remove(npc);
         var plan = HostilityRules.DangerUpdate(this, npc, _session.AiRolls, _session.Rules.Combat);
         Trace(npc).Danger = $"{plan.Path} {plan.Request?.ToString() ?? "-"} {plan.Target ?? "-"}";
         if (plan.Path == DangerUpdatePath.Flee) { _session.RunFleeSpellStep(_session.Version, npc, () => false); return; }
         if (plan.Unlocks) _session.UnlockDangerTarget(_session.Version, npc);
         if (plan.Request is not { } state) return;
-        var target = state == DangerState.CombatFocus ? HostilityRules.FocusTarget(plan, plan.Target, _session.Rules.Combat) : null;
-        SetDanger(npc, state, target);
+        AiPassChoice? choice = null;
+        if (plan.ChoosesAction && plan.Target is { } found)
+        {
+            var chosen = AiSupportRules.ChooseSpell(this, npc, found, _session.AiRolls);
+            // An item AI-action entry used at once (0x462CC0) needs the NPC's items, which the lists do not hold yet.
+            choice = chosen.Choice;
+            Trace(npc).Spell = $"{chosen.Stop} chance={chosen.Chance} spell={choice?.Spell.ToString() ?? "-"} target={choice?.Target ?? "-"}";
+        }
+        var target = state == DangerState.CombatFocus ? HostilityRules.FocusTarget(plan, choice?.Target ?? plan.Target, _session.Rules.Combat) : null;
+        var result = SetDanger(npc, state, target);
+        if (choice is not null && (result.Transition is not { } transition || HostilityRules.KeepsChosenAction(transition, _session.Rules.Combat)))
+            _passChoices[npc] = choice;
     }
 
     /// <summary>The perform stage: <see cref="AiExecutorRules.Perform"/> with the danger source as the pass's target; a started run
@@ -444,10 +504,12 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var danger = _session.QueryDanger(npc);
         var target = danger.Source is { } source ? Id(source) : null;
         var current = RunOf(npc);
-        var result = AiExecutorRules.Perform(this, npc, target, null, null, current);
+        // ARC-WORLD-102: the pass record's choice from this pass's danger update (none: the action type 0).
+        _passChoices.Remove(npc, out var choice);
+        var result = AiExecutorRules.Perform(this, npc, target, choice, null, current);
         Trace(npc).Perform = $"{result.Kind}{(result.Refusal == AiStartRefusal.None ? "" : " " + result.Refusal)}{(result.Started ? " started" : "")}";
         if (!result.Started || result.Run is not { } run) return;
-        if (current is not null && !ReferenceEquals(current, run)) AiExecutorRules.EndRun(current, this);
+        if (current is not null && !ReferenceEquals(current, run)) EndDroppedRun(current);
         // Started inside the event pass: it steps at the next pump.
         _runs[npc] = (run, _nowMs);
     }
@@ -457,11 +519,25 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 
     private void DropRun(string npc)
     {
-        if (_runs.Remove(npc, out var held)) AiExecutorRules.EndRun(held.Run, this);
+        if (_runs.Remove(npc, out var held)) EndDroppedRun(held.Run);
+    }
+
+    // A run the host drops without stepping it to its end: its end nodes (AiExecutorRules.EndRun). ARC-WORLD-102: a casting goal 26 or
+    // 82 dropped before its attempt goal has only the animation reset as its end node (0x42B090), which frees nothing, so its magic run
+    // would keep its slot, never begun, as MG43's queued cast does; as there (owner decision 2026-10-28, both modes) the NPC's run that
+    // still waits for its BEGIN is freed, unpaid.
+    private void EndDroppedRun(AiGoalRun run)
+    {
+        AiExecutorRules.EndRun(run, this);
+        if (_scene.Spells?.Invoke() is not { } caster) return;
+        foreach (var frame in run.Frames)
+            if (frame is { Goal: AiGoalType.CastSpell or AiGoalType.CastSpellWithAnimation, SpellRun: { } id }
+                && _session.QuerySpellRuns()[id]?.Parent?.Id == run.Owner && caster.DropQueued(id) is { } freed)
+                _notices.Add(new(AreaAiNoticeKind.CastEnd, run.Owner, null) { Run = id, SpellRun = freed });
     }
 
     // The setter call with the facts its rules read; a fight on the hero carries the reaction facts (rule 8).
-    private void SetDanger(string npc, DangerState state, string? target)
+    private SessionDangerResult SetDanger(string npc, DangerState state, string? target)
     {
         var request = new SessionDangerRequest
         {
@@ -472,6 +548,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         };
         var result = _session.SetDangerState(_session.Version, request);
         Trace(npc).Setter = $"{state} {target ?? "-"} {result.Disposition} {result.Failure} {result.Transition?.Rule}";
+        return result;
     }
 
     // ---- the executor's world (IAiGoalWorld) ----
@@ -652,13 +729,100 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         if (id != Pc) _session.SetNoFlee(_session.Version, id);
     }
 
-    // The action goals (slice I8b) wait for their host calls: nothing starts.
-    public AiCastGoalStart StartCast(string id, int run) => AiCastGoalStart.Refused;
-    public bool FaceCast(string id, int run) => false;
-    public AiCastSwing BeginCast(string id, int run, bool castAnimation) => new(false);
-    public bool CastActionFrame(string id, int run) => false;
-    public bool ReleaseCast(string id, int run) => false;
-    public void EndCast(string id, int run, bool refused) { }
+    // ---- the casting goals (ARC-WORLD-102) ----
+
+    /// <summary>The casting goal's start (0x429B50 → 0x429BC0 → 0x42C850) through the cast host (<see cref="SessionSpellCaster.StartGoal"/>):
+    /// the 4 action points of a round (their events are the round's), the pre-animation check, the target, then the facing turn, which
+    /// <see cref="FaceCast"/> applies.</summary>
+    public AiCastGoalStart StartCast(string id, int run)
+    {
+        if (_scene.Spells?.Invoke() is not { } caster) return AiCastGoalStart.Refused;
+        var start = caster.StartGoal(run, _round);
+        if (start.ActionPoints is { } points) RoundCall(points);
+        Trace(id).Cast = $"start run={run} {start.Outcome}";
+        if (start.Outcome is SpellCastGoalOutcome.Started or SpellCastGoalOutcome.CannotTurn) _castFacing[run] = start.Facing;
+        return start.Outcome switch
+        {
+            SpellCastGoalOutcome.Started or SpellCastGoalOutcome.CannotTurn => AiCastGoalStart.Started,
+            SpellCastGoalOutcome.TargetGone => AiCastGoalStart.TargetGone,
+            _ => AiCastGoalStart.Refused,
+        };
+    }
+
+    /// <summary>The facing turn (0x42C850, <see cref="SpellFacingRules.Turn"/>) the start computed: a stoned, stunned or paralysed caster
+    /// cannot turn; a turn faces the NPC toward its run's target object (its body's facing; NPC ART is not read).</summary>
+    public bool FaceCast(string id, int run)
+    {
+        _castFacing.Remove(run, out var facing);
+        if (facing?.Kind == SpellFacingKind.Refused) return false;
+        if (facing?.Kind == SpellFacingKind.Turned && _session.QuerySpellRuns()[run]?.Target?.Id is { } target) Face(id, target);
+        return true;
+    }
+
+    /// <summary>
+    /// The play's start (0x429F00, AG4): the target re-check (0x456A90, <see cref="SessionSpellCaster.TargetStillValid"/>), then the
+    /// caster's cast eye candy (6 · spell, <see cref="AreaAiScene.CastEyeCandy"/>), whose release frame and last frame time the action
+    /// frame and the rest (<see cref="CastEyeCandyAnimation"/>, played through with a passing release). A failed re-check, goal 83's
+    /// casting animation (NPC ART is not read) or no eye candy: no play, so the release runs at once. A play whose action frame is never
+    /// reached (EC7) answers its whole length, and its action frame then releases nothing.
+    /// </summary>
+    public AiCastSwing BeginCast(string id, int run, bool castAnimation)
+    {
+        if (_scene.Spells?.Invoke() is not { } caster || _session.QuerySpellRuns()[run] is not { } r) return new(false);
+        if (!caster.TargetStillValid(r) || castAnimation || _scene.CastEyeCandy?.Invoke(id, r.Spell) is not { Immediate: false } play)
+        {
+            _notices.Add(new(AreaAiNoticeKind.Cast, id, r.Target?.Id) { Spell = r.Spell, Run = run, CastSwing = new(false) });
+            return new(false);
+        }
+        long? release = null;
+        var end = play.StartMs;
+        foreach (var step in play.Advance(long.MaxValue, () => true))
+        {
+            if (step.Kind == EyeCandyStepKind.Release) release ??= step.AtMs;
+            end = Math.Max(end, step.AtMs);
+        }
+        var swing = release is { } at
+            ? new AiCastSwing(true, (int)Math.Clamp(at - play.StartMs, 1, int.MaxValue), (int)Math.Clamp(end - at, 0, int.MaxValue))
+            : new AiCastSwing(true, (int)Math.Clamp(end - play.StartMs, 1, int.MaxValue));
+        if (release is null) _noRelease.Add(run);
+        _notices.Add(new(AreaAiNoticeKind.Cast, id, r.Target?.Id) { Spell = r.Spell, Run = run, CastSwing = swing });
+        return swing;
+    }
+
+    /// <summary>The play's action frame (0x429C40): a play that never reaches it releases nothing; a spell whose projectile eye candy has
+    /// art launches its missile (goal 28), whose flight is not ready, so it is released here as if it arrived at once (a stand-in);
+    /// any other is released (<see cref="ReleaseCast"/>).</summary>
+    public bool CastActionFrame(string id, int run)
+    {
+        if (_noRelease.Remove(run)) return false;
+        if (_session.QuerySpellRuns()[run] is { } r && _scene.MissileArt?.Invoke(r.Spell) == true) Trace(id).Cast = $"missile run={run} released at once";
+        return ReleaseCast(id, run);
+    }
+
+    /// <summary>The release (0x429C80, <see cref="SessionSpellCaster.Release"/>): the target re-check and the run's BEGIN; false when the
+    /// re-check refused it (the original keeps the run, MG41; Steamwoven frees it) or the frame was released before.</summary>
+    public bool ReleaseCast(string id, int run)
+    {
+        _noRelease.Remove(run);
+        if (_scene.Spells?.Invoke() is not { } caster) return false;
+        var spell = _session.QuerySpellRuns()[run]?.Spell ?? -1;
+        var begun = caster.Release(run);
+        var released = begun is not null && begun.Disposition != GameSessionDisposition.Rejected;
+        Trace(id).Cast = $"release run={run} {(begun is null ? "re-check failed" : $"{begun.Disposition} {begun.Failure}")}";
+        _notices.Add(new(AreaAiNoticeKind.Release, id, null) { Spell = spell, Run = run, Released = released, SpellRun = begun });
+        return released;
+    }
+
+    /// <summary>The casting goal's end (0x429CD0, <see cref="SessionSpellCaster.EndGoal"/>): before the release frame the run is freed
+    /// with its BEGIN charged (MG39: refused at the start, Steamwoven frees it unpaid); after it nothing.</summary>
+    public void EndCast(string id, int run, bool refused)
+    {
+        _noRelease.Remove(run);
+        _castFacing.Remove(run);
+        if (_scene.Spells?.Invoke() is not { } caster) return;
+        var freed = caster.EndGoal(run, refused);
+        _notices.Add(new(AreaAiNoticeKind.CastEnd, id, null) { Run = run, SpellRun = freed });
+    }
     public bool FaceForAction(string id, string? target, CellCoord? tile) => false;
     public AiActionSwing BeginAction(string id, AiActionAnimation animation) => new(AiActionStart.CannotStart);
     public bool AttemptSkill(string id, string target, int skill, string? item) => false;
@@ -718,7 +882,27 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     // The back-off's away path (0x41F3C0 along the offsets) is not walked yet: no tile, so the back-off ends.
     public CellCoord? AwayTile(string npc, string? target, int range) => null;
     public void EndBackOff(string npc) => _session.EndBackOff(_session.Version, npc);
-    public AiCastStart Cast(string npc, AiPassChoice choice) => new(null);
+    /// <summary>
+    /// Perform's cast (0x4AC250): the cast host's <see cref="SessionSpellCaster.CastByAi"/> with the choice's spell and target; a started
+    /// run's casting goal is 82 when the record's casting animation is not −1, else 26. NOT READY: a choice with an item (the item's
+    /// spells and AI actions are not listed yet), and a cast while the NPC's casting goal plays, which the original queues under it
+    /// (SU13): neither starts a run.
+    /// </summary>
+    public AiCastStart Cast(string npc, AiPassChoice choice)
+    {
+        ArgumentNullException.ThrowIfNull(choice);
+        if (choice.Item is not null || _scene.Spells?.Invoke() is not { } caster) return new(null);
+        if (RunOf(npc) is { } current && current.Frames.Any(f => f.Goal is AiGoalType.CastSpell or AiGoalType.CastSpellWithAnimation
+                or AiGoalType.AttemptSpell or AiGoalType.AttemptSpellWithAnimation))
+        {
+            Trace(npc).Cast = $"cast {choice.Spell} not queued (a casting goal plays)";
+            return new(null);
+        }
+        var attempt = caster.CastByAi(npc, choice.Spell, choice.Target);
+        Trace(npc).Cast = $"cast {choice.Spell} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal}";
+        if (attempt.RunId is not { } run) return new(null);
+        return new(run, CastAnimation: (caster.SpellRecord(choice.Spell)?.Run.CastAnimation ?? -1) != -1);
+    }
 
     public void LeaveCombatMode(string npc)
     {
@@ -758,6 +942,81 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         if (MoraleRules.SurrenderEnds(this, npc)) SetDanger(npc, DangerState.None, null);
     }
 
+    // ---- the support rules' world, the spell half (IAiSupportWorld, ARC-WORLD-102) ----
+
+    /// <summary>The support facts: MECHANICAL (critter flag 0x20000000), CAST_HIGHEST (NPC flag 0x40000), the fatigue percent (0x4AB430:
+    /// 100 × current / maximum, toward zero; 0 for a maximum of 0, where the original divides by zero), the current fatigue, the
+    /// poison level, the effective willpower and the magick points (an NPC's session record when it has one, else its effective stat).</summary>
+    public AiSupportCritter Support(string id)
+    {
+        var status = Status(id);
+        var fatigue = status is { MaxFatigue: not 0 } s ? (int)(100L * s.Fatigue / s.MaxFatigue) : 0;
+        if (id == Pc)
+        {
+            // The hero is a healer only in the heal step (not run yet): its stats without the poison's effect, as the setter's facts read them.
+            var stats = _session.QueryHeroStats(new(0))?.Snapshot;
+            return new AiSupportCritter
+            {
+                FatiguePercent = fatigue, CurrentFatigue = status?.Fatigue ?? 0, PoisonLevel = _session.QueryHeroLife()?.Record.State.PoisonLevel ?? 0,
+                Willpower = stats?.GetEffective(CharacterStat.Willpower) ?? 0, MagickPoints = stats?.GetEffective(CharacterStat.MagickPoints) ?? 0,
+            };
+        }
+        if (Fields(id) is not { Critter: { } critter, Npc: { } npc } || Build(id) is not { } build) return new AiSupportCritter();
+        var state = LifeState(id) ?? build.Loaded;
+        return new AiSupportCritter
+        {
+            Mechanical = (critter.Flags & MechanicalFlag) != 0, CastHighest = (npc.Flags & CastHighestNpc) != 0,
+            FatiguePercent = fatigue, CurrentFatigue = status?.Fatigue ?? 0, PoisonLevel = state.PoisonLevel,
+            Willpower = build.EffectiveStat(CharacterStat.Willpower, state),
+            MagickPoints = _session.QueryNpcAdvancement(id)?.Sheet.MagickPoints ?? build.EffectiveStat(CharacterStat.MagickPoints, state),
+        };
+    }
+
+    /// <summary>The AI parameters 13 (the defensive list's skip), 14 (the combat heal chance) and 15 (the combat distance); out of the
+    /// table 0.</summary>
+    public AiSupportParameters SupportParameters(string npc) => Row(npc) is { } row
+        ? new(row.DefensiveSpellRoll, row.CombatHealChance, row.CombatDistance) : default;
+
+    public bool NpcFighting => true;
+    public AiGlobalLists GlobalLists => _scene.Spells?.Invoke()?.AiLists ?? NoLists;
+
+    /// <summary>The list request (0x4CCA90) through the host's cache (<see cref="AiListCache.Request"/>: the Original setting's frozen
+    /// first list, SP11; built fresh in Steamwoven). The cache is not saved: a load or a map change builds the host again.</summary>
+    public ImmutableArray<AiListEntry> List(string critter, AiActionList list)
+    {
+        var request = _listCache.Request(this, critter, list, _session.Rules.Combat);
+        _listCache = request.Cache;
+        return request.Entries;
+    }
+
+    // The NPCs' items are not listed yet (item use and goal 40 are their own slice): no hexed weapon, no inventory, no item entry.
+    public string? HexedWeapon(string critter) => null;
+    public IReadOnlyList<string> Inventory(string critter) => [];
+    public AiListItem Item(string item) => new();
+    public bool CanUseItem(string critter, string item) => false;
+    public int ItemFailChance(string critter, string item, string target, int spell) => 0;
+    public string? HealingItem(string npc) => null;
+    public bool HealSkillAccepts(string npc, string item, string target) => false;
+
+    public bool Knows(string critter, int spell) => _scene.Spells?.Invoke()?.AiKnows(critter, spell) ?? false;
+    public AiSpellFacts Spell(int spell) => _scene.Spells?.Invoke()?.AiSpell(spell) ?? default;
+    public int CollegeLevel(string critter, int college) => _scene.Spells?.Invoke()?.AiCollegeLevel(critter, college) ?? 0;
+    public int CastCost(string critter, int spell) => _scene.Spells?.Invoke()?.AiCastCost(critter, spell) ?? 0;
+    public int FreeMaintainSlots(string critter) => _scene.Spells?.Invoke()?.AiFreeMaintainSlots(critter) ?? 0;
+    public bool UnderInfluence(string target, int spell) => _scene.Spells?.Invoke()?.AiUnderInfluence(target, spell) ?? false;
+    public int FailChance(string critter, string target, int spell) => _scene.Spells?.Invoke()?.AiFailChance(critter, target, spell) ?? 0;
+
+    /// <summary>The line of fire (0x4ADE00) from the critter's tile to the target's: its cost and the first object that stops it (the
+    /// target's own id for its own row), as the attack's reach reads it; no map: cost 0, nothing in the way.</summary>
+    public AiLineOfFire LineOfFire(string critter, string target)
+    {
+        if (Line(critter, target, out var targetRow) is not { } line) return new(0, null);
+        var blocker = line.Blocker is not { } row ? null
+            : ReferenceEquals(row, targetRow) ? target
+            : _scene.Combat.Entity(_scene.RuntimeMap, row.Key) ?? row.Key.ToString();
+        return new(line.Cost, blocker);
+    }
+
     // ---- the hostility and morale world (IMoraleWorld) ----
 
     public HostilityCritter? Find(string id)
@@ -793,7 +1052,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
             InvisibleSpell = (fields.Object.SpellFlags & InvisibleSpell) != 0, DetectsInvisible = (fields.Object.SpellFlags & DetectsInvisibleSpell) != 0,
             Stoned = (fields.Object.SpellFlags & StonedSpell) != 0, Stunned = state.Conditions.HasFlag(LifeConditions.Stunned) || build.Facts.Traits.HasFlag(LifeTraits.Paralyzed),
             MindControlled = (fields.Object.SpellFlags & MindControlledSpell) != 0, Enshrouded = (fields.Object.SpellFlags & EnshroudedSpell) != 0,
-            AttemptingAttack = RunOf(id)?.Top.Goal is AiGoalType.AttemptAttack or AiGoalType.AttemptSpell,
+            AttemptingAttack = RunOf(id)?.Top.Goal is AiGoalType.AttemptAttack or AiGoalType.AttemptSpell or AiGoalType.AttemptSpellWithAnimation,
             InCombatMode = _session.QueryCombatMode(SessionCombatant.Critter(id)),
             Guard = npc.SocialClass == GuardClass, WaitingHere = (npc.Flags & WaitingHereNpc) != 0 || Waiting(id),
             KillOnSight = (npc.Flags & KillOnSightNpc) != 0, KosOverride = (npc.Flags & KosOverrideNpc) != 0,
@@ -1034,4 +1293,7 @@ public sealed class AreaAiTrace
     public string? Reaction { get; set; }
     /// <summary>ARC-WORLD-099: the end-combat scripts (point 16) its subturn ends asked.</summary>
     public int EndCombatScripts { get; set; }
+    /// <summary>ARC-WORLD-102: its last spell choice and its last cast call (perform's cast, a casting goal's start or release).</summary>
+    public string? Spell { get; set; }
+    public string? Cast { get; set; }
 }

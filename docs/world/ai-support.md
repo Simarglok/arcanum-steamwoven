@@ -94,9 +94,10 @@ line, the critter mask and the threshold, with counts by threshold. It prints no
 - **Goals (slice I8b, done).** The casting, item-use, skill, throw and pickup goals, their starters and perform's actions are the
   [action goals](ai-action-goals.md) (ARC-WORLD-089); the host calls `AiExecutorRules.UseItemNow` for an AI-action entry used at
   once (0x462CC0, EX4) and `AiExecutorRules.StartPickup` from the item search.
-- **Host (slice I10).** No host implements `IAiSupportWorld`, `IAiItemSearchWorld`, `IAiGrenadeWorld` or `IAiRedirectWorld`, holds
-  the list cache or calls `Heal`, `SearchItems`, `ChooseSpell` or `Grenade` from the scheduler's stages and perform; the magic
-  predicates (cast cost, maintenance count, fail chances, under the influence) come from the magic domain through the host.
+- **Host (slice I10).** ARC-WORLD-102: the viewer's AI host implements `IAiSupportWorld`'s spell half, holds the list cache and calls
+  `ChooseSpell` from the danger stage, with the magic predicates from the map's cast host
+  ([casting](ai-host.md#casting-arc-world-102)); the item half (inventory, hexed weapon, item spells and AI actions), `Heal`,
+  `SearchItems`, `Grenade` and the `IAiItemSearchWorld`, `IAiGrenadeWorld` and `IAiRedirectWorld` worlds have no host yet.
 - **Setters.** The out-of-ammunition attack (0x4ADFF0) and the item drop (0x461AB0) do not call `SetAiSupportBits` yet; the
   cache's clears on an insert, a force-removal and an exhausted item are the host's calls.
 - **Redirect callers.** The AI redirect component is run by the spell run's component step (the magic domain), which does not call
