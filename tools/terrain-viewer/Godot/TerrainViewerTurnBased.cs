@@ -102,6 +102,7 @@ public partial class TerrainViewerApp
         var step = AreaTurnBased.Step(session, AreaCombatWorldNow(), HeroIdleForRound(), AreaAiHostNow());
         LogRound(step.Events);
         if (step.Failure != GameSessionFailure.None) { _turnBasedNotice = "round step refused: " + step.Failure; GD.Print($"ARC-COMBAT-020 round-step failure={step.Failure}"); }
+        if (step.WriteFailure != GameSessionFailure.None) GD.Print($"ARC-WORLD-095 subturn-hook write-failure={step.WriteFailure}");
         if (step.Events.Count > 0) RefreshAreaStatus();
     }
 

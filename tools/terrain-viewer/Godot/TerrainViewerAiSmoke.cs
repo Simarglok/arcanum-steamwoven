@@ -173,7 +173,7 @@ public partial class TerrainViewerApp
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
             if (HeroInCombatMode) ToggleCombatMode();
-            _roundLog.Clear();
+            _turnBasedSetting = false; _roundLog.Clear();
             var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
             CellCoord? start = null;
             foreach (var (dx, dy) in new[] { (4, 0), (-4, 0), (0, 4), (0, -4), (3, 0), (-3, 0), (0, 3), (0, -3), (3, 3), (-3, -3) })

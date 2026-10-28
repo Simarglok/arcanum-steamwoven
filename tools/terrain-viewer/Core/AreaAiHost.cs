@@ -166,7 +166,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// start 0x4B71E0: 0x424310 and the scanned critters' 0x424070 at priority 3); a subturn that started since then interrupts the runs
     /// of the critter of the previous turn set when that is an NPC (the turn set 0x4B6E70, 0x424070 at priority 3). Priority 3 ends a run
     /// whose current goal has priority 3 or less (0x44E2C0: walks, attacks and flights; an attempted cast's 4 goes on) and its end nodes
-    /// run. Called by the pump before and after each step and by the round host.
+    /// run. Called by the pump before each step and after the last, and by the round host.
     /// </summary>
     public void ObserveRound()
     {
@@ -229,10 +229,13 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var steps = 0;
         _nowMs = Math.Max(_nowMs, nowMs);
         Movers.Settle(_nowMs);
-        ObserveRound();
-        while (steps < maxSteps && _runs.Where(r => r.Value.DueMs <= _nowMs).OrderBy(r => r.Value.DueMs).ThenBy(r => r.Key, StringComparer.Ordinal)
-                   .Select(r => r.Key).FirstOrDefault() is { } npc)
+        // Before each step: a step that began a round (an attack putting the hero into combat mode) or passed the subturn on
+        // interrupts runs as the original's round start and turn set do, its own run too (inside its step the original marks it done).
+        for (; ; )
         {
+            ObserveRound();
+            if (steps >= maxSteps || _runs.Where(r => r.Value.DueMs <= _nowMs).OrderBy(r => r.Value.DueMs).ThenBy(r => r.Key, StringComparer.Ordinal)
+                    .Select(r => r.Key).FirstOrDefault() is not { } npc) break;
             var (run, due) = _runs[npc];
             var step = AiExecutorRules.Step(run, this, _session.AiRolls, _session.Rules.Combat);
             steps++;
@@ -247,9 +250,6 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
             }
             // A delay of 0 is the next frame.
             _runs[npc] = (step.Run, Math.Max(due, _nowMs) + Math.Max(step.DelayMs, 1));
-            // A step that began a round (an attack putting the hero into combat mode) or passed the subturn on interrupts runs as the
-            // original's round start and turn set do, its own run too (inside its step the original marks it done).
-            ObserveRound();
         }
         return steps;
     }
@@ -270,6 +270,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _traces.Clear();
         _notices.Clear();
         _roundEvents.Clear();
+        _roundSeen = false; _subturnsSeen = -1; _turnSetActor = null; _pendingCost = 0; _pendingAt = -1; HookedSubturn = -1;
         Movers.Clear();
     }
 

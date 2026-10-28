@@ -97,7 +97,7 @@ public partial class TerrainViewerApp
         // ARC-WORLD-095: in a round the runs' charges and subturn ends reach the round log and the status line's action points.
         var roundEvents = host.DrainRoundEvents();
         LogRound(roundEvents);
-        if (roundEvents.Count > 0 || steps > 0 && InTurnBasedRound) RefreshAreaStatus();
+        if (roundEvents.Count > 0 || (steps > 0 && InTurnBasedRound)) RefreshAreaStatus();
         var redraw = steps > 0;
         foreach (var notice in host.DrainNotices())
         {

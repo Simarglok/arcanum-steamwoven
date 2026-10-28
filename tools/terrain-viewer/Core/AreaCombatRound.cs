@@ -152,6 +152,10 @@ public enum AreaHeroCharge
 /// and the failure of a refused call (none: <see cref="GameSessionFailure.None"/>).</summary>
 public sealed record AreaTurnBasedStep(IReadOnlyList<SessionCombatEvent> Events, int Calls, GameSessionFailure Failure)
 {
+    /// <summary>The first gate write an NPC's subturn hook could not store (ARC-WORLD-095; the hook went on, as the original's writes
+    /// cannot fail).</summary>
+    public GameSessionFailure WriteFailure { get; init; }
+
     public static AreaTurnBasedStep None { get; } = new([], 0, GameSessionFailure.None);
 }
 
@@ -194,6 +198,7 @@ public static class AreaTurnBased
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxSubturns);
         var events = new List<SessionCombatEvent>();
         var calls = 0;
+        var writeFailure = GameSessionFailure.None;
         for (var i = 0; i < maxSubturns && owner.QueryCombatRound() is { } round; i++)
         {
             ai?.ObserveRound();
@@ -212,11 +217,12 @@ public static class AreaTurnBased
                 ai.HookedSubturn = starts;
                 var hook = owner.RunAiSubturnHook(owner.Version, round.Actor, ai);
                 calls++;
-                if (hook.Failure != GameSessionFailure.None) return new(events, calls, hook.Failure);
+                if (hook.Failure != GameSessionFailure.None) return new(events, calls, hook.Failure) { WriteFailure = writeFailure };
+                if (writeFailure == GameSessionFailure.None) writeFailure = hook.WriteFailure;
                 events.AddRange(ai.DrainRoundEvents());
                 if (hook.Round is { } ended)
                 {
-                    if (ended.Disposition == GameSessionDisposition.Rejected) return new(events, calls, ended.Failure);
+                    if (ended.Disposition == GameSessionDisposition.Rejected) return new(events, calls, ended.Failure) { WriteFailure = writeFailure };
                     events.AddRange(ended.Events);
                     if (ended.Disposition != GameSessionDisposition.Changed || ended.Events.Any(e => e.Kind == SessionCombatEventKind.RoundBegan)) break;
                     continue;
@@ -226,11 +232,11 @@ public static class AreaTurnBased
                 result = owner.CompleteCombatActions(owner.Version, world);
             }
             calls++;
-            if (result.Disposition == GameSessionDisposition.Rejected) return new(events, calls, result.Failure);
+            if (result.Disposition == GameSessionDisposition.Rejected) return new(events, calls, result.Failure) { WriteFailure = writeFailure };
             events.AddRange(result.Events);
             if (result.Disposition != GameSessionDisposition.Changed || result.Events.Any(e => e.Kind == SessionCombatEventKind.RoundBegan)) break;
         }
-        return new(events, calls, GameSessionFailure.None);
+        return new(events, calls, GameSessionFailure.None) { WriteFailure = writeFailure };
     }
 
     /// <summary>
