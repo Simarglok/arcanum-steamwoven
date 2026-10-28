@@ -12,10 +12,14 @@ namespace Arcanum.Session;
 /// <summary>
 /// An NPC on the shown map as a cast reads it (ARC-MAGIC-014): its combat values (life target, facts, combatant, stats; ARC-COMBAT-005)
 /// and the stored fields the magic rules read besides — its stored magic resistance (resistance 4, no armour or effects: O9) and its
-/// object, spell and critter flags.
+/// object, spell and critter flags. ARC-WORLD-102: <see cref="Book"/> is the spell book its fields store (college ranks and mastery,
+/// <see cref="SpellBookRules.FromFields"/>), which a session record of the NPC (<see cref="GameSessionOwner.QueryNpcSpellBook"/>) replaces.
 /// </summary>
 public sealed record SpellCastCritter(SessionCritterCombat Combat, int StoredMagicResistance, int ObjectFlags, int SpellFlags, int CritterFlags,
-    int CritterFlags2);
+    int CritterFlags2)
+{
+    public SpellBook? Book { get; init; }
+}
 
 /// <summary>
 /// The map a cast happens on (ARC-MAGIC-014), for any map: the target functions' questions (<see cref="ISpellTargetWorld"/>, MT8; the
@@ -248,13 +252,19 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     public SpellResistTarget ResistTarget(SpellRun run, SpellRunTarget target)
     {
         ArgumentNullException.ThrowIfNull(run);
-        var record = ResistRecord(run.Spell);
-        if (target.Object is not { } obj) return new(false, SpellTargetKind.Other, false, 0, 0, 0, false);
+        return ResistTarget(run.Spell, run.Parent?.Id, target.Object);
+    }
+
+    // The resistance's facts of a target object for a spell cast by the parent (ARC-WORLD-102: also the AI's fail-chance predictor).
+    private SpellResistTarget ResistTarget(int spell, string? parent, SpellRunObject? target)
+    {
+        var record = ResistRecord(spell);
+        if (target is not { } obj) return new(false, SpellTargetKind.Other, false, 0, 0, 0, false);
         var kind = obj.Id == Hero ? SpellTargetKind.Pc : _map.Critter(obj.Id) is not null ? SpellTargetKind.Npc : SpellTargetKind.Other;
         var npc = obj.Id == Hero ? null : _map.Critter(obj.Id);
         var statValue = record.HasSave ? Stat(obj, record.ResistStat) ?? 0 : 0;
         // The hero stores no magic resistance of its own in the session (its pre-made fields hold none).
-        return new(obj.Id == run.Parent?.Id, kind, ((npc?.CritterFlags2 ?? 0) & 0x2000) != 0, npc?.StoredMagicResistance ?? 0,
+        return new(obj.Id == parent, kind, ((npc?.CritterFlags2 ?? 0) & 0x2000) != 0, npc?.StoredMagicResistance ?? 0,
             obj.Id == Hero ? HeroStat(CharacterStat.MagickTechAptitude) ?? 0 : npc is null ? 0 : NpcStat(npc, CharacterStat.MagickTechAptitude) ?? 0,
             statValue, record.ResistStat is >= 0 and <= 7 && statValue >= CharacterStatRules.ExtraordinaryThreshold);
     }
@@ -949,7 +959,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (source is null || !source.IsCritter) return default;
         if (source.Id == Hero && _owner.QueryHero() is { } hero)
             return new(true, (int)hero.Race, _owner.QueryHeroSpellBook()?.MasteredCollege ?? SpellBookRules.NoMastery);
-        return _map.Critter(source.Id) is { } npc ? new(true, (int)npc.Combat.Race, _owner.QueryNpcSpellBook(source.Id)?.MasteredCollege ?? SpellBookRules.NoMastery)
+        // ARC-WORLD-102: the session's record of the NPC, else the book its fields store.
+        return _map.Critter(source.Id) is { } npc ? new(true, (int)npc.Combat.Race, (_owner.QueryNpcSpellBook(source.Id) ?? npc.Book)?.MasteredCollege ?? SpellBookRules.NoMastery)
             : new(true, 0, SpellBookRules.NoMastery);
     }
 

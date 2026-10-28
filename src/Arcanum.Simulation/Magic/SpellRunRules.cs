@@ -430,6 +430,18 @@ public static class SpellRunRules
         return run.TriggerCount <= 0 ? run with { Action = SpellRunAction.End, Flags = run.Flags | FinalEnd(profile) } : run with { TriggerCount = run.TriggerCount - 1 };
     }
 
+    /// <summary>
+    /// ARC-WORLD-102: whether an object is under the influence of a spell (0x459380, the AI chooser's skip): an active run of
+    /// <paramref name="spell"/> (by slot, 0x458CF0 and 0x458D90) whose target object is <paramref name="target"/>, or whose two object
+    /// lists (+0x130, +0x134) hold it; a null object is under none. The run's object lists are not modelled.
+    /// </summary>
+    [OriginalFunction(0x459380, OriginalFunctionScope.Partial)]
+    public static bool UnderInfluence(SpellRunTable table, string? target, int spell)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        return target is not null && table.Runs.Any(r => (r.Flags & SpellRunFlags.Active) != 0 && r.Spell == spell && r.Target?.Id == target);
+    }
+
     /// <summary>The maintenance slots a critter has (0x450B90): its intelligence / 4, toward zero.</summary>
     [OriginalFunction(0x450B90, OriginalFunctionScope.Full)]
     public static int MaintainSlots(int intelligence) => intelligence / 4;
