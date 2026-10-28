@@ -162,26 +162,30 @@ The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the origina
    since ARC-MAGIC-017) times the release frame (`Release`: the re-check and BEGIN) and the end (`EndGoal`) on the world clock. While the goal plays, world presses and the stick are ignored (the original queues other goals under it). A goal
    cut short before its release frame (a lost hero, a map change, another actor) ends through its own host and frees its run
    (0x429CD0); a goal of a session a quick load replaced is dropped with that session. Before the cast eye candy is added the
-   target is checked again (0x429F00, QC4): a failure releases at once (nothing begins) and the goal ends through the end step.
-7. **A second cast** (ARC-MAGIC-019, `SessionSpellCaster.Queue`, SU13, QC1–QC6). A cast while a goal plays (from the cursor,
-   which stays open, or from the pane) is checked and started as any cast (600, 604, the run), then queued beneath the playing
-   goal: at most four wait (the playing goal's stack index 4 or more refuses, QC2), and none in a turn-based round; a refused
-   cast's run is freed unpaid and nothing is shown. The queued casts play in the order they were cast (QC1): when the playing
-   goal ends after its cast eye candy (a pop, QC3), the first queued goal starts (`StartGoal`, the same checks as a first goal).
-   A goal without cast eye candy, one whose target failed before it, or a queued goal refused at its start ends through the end
-   step, and a goal cut short interrupts the whole stack: either way the casts still queued never play (QC5), their runs freed
-   unpaid in Steamwoven (`DropQueued`, MG43). A queued run exists from the click, so a run starting before it can cancel it by
-   its `Cancels_SF:` (0x4534E0) like any active run of the same source (QC6). F7 stays refused while a goal plays.
+   target is checked again (0x429F00, QC4): a failure releases at once (nothing begins) and the goal ends through the end step,
+   without playing the cast eye candy (since ARC-MAGIC-019; before, the eye candy played to the release frame's re-check).
 5. **Feedback.** The host's new log entries become one line in the status bar and the message window: spell.mes messages by
    number (the player's own texts, `SpellTexts.Message`), the fatigue paid, damage, healing, resistance and the component types
    that are not ready. Eye candy is drawn ([below](#eye-candy-arc-magic-017)); only an eye candy's callback gets a line.
 6. **Events.** While the session holds a run, or the shown map's host exists, the event pump's passes go through the shown
    map's host (`SessionSpellCaster.ProcessEvents`, only a host of the pump's own session), so a run's later events run with the
    map's magic world and their payments are applied.
+7. **A second cast** (ARC-MAGIC-019, `SessionSpellCaster.Queue`, SU13, QC1–QC6). A cast while a goal plays (from the cursor,
+   which stays open, or from the pane) is checked and started as any cast (600, 604, the run), then queued beneath the playing
+   goal: at most four wait (the playing goal's stack index 4 or more refuses, QC2), and none in a turn-based round; a refused
+   cast's run is freed unpaid and the original shows nothing (the viewer's status line names the refusal, a diagnostic). The queued casts play in the order they were cast (QC1): when the playing
+   goal ends after its cast eye candy (a pop, QC3), the first queued goal starts (`StartGoal`, the same checks as a first goal).
+   A goal without cast eye candy, one whose target failed before it, or a queued goal refused at its start ends through the end
+   step, and a goal cut short — or a hero who cannot act when the goal ends — interrupts the whole stack: either way the casts still queued never play (QC5), their runs freed
+   unpaid in Steamwoven (`DropQueued`, MG43). A queued run exists from the click, so a run starting before it can cancel it by
+   its `Cancels_SF:` (0x4534E0) like any active run of the same source (QC6); its slot is free again, so the viewer forgets a queued
+   entry whose slot a newer cast takes. F7 stays refused while a goal plays.
 
 The first cast (plan milestone) is the native smoke: the pre-made hero learns the first damaging rank-1 college spell, opens the
 pane, activates it and casts with the cursor at the core NPC with the fewest hit points of the shown map (exterior, cave or
-`--area-map`); its fatigue drops and the NPC resists or takes damage.
+`--area-map`); its fatigue drops and the NPC resists or takes damage. A second click while the goal plays queues a second cast
+(ARC-MAGIC-019), which plays after the first and pays at its own release (an NPC the first cast killed is raised before the
+queued goal's first frame); the drops (no eye candy, a target failing first, a refused start, a lost hero) have no smoke.
 
 ## Eye candy (ARC-MAGIC-017)
 

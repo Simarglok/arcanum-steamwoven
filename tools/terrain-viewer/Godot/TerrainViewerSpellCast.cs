@@ -206,6 +206,8 @@ public partial class TerrainViewerApp
     private void StartQueuedSpellGoal(SessionSpellCaster caster)
     {
         if (_spellQueue.Count == 0) return;
+        // A caster lost meanwhile (knocked out by the release, say) kills its whole stack (0x44E2C0): no queued goal starts.
+        if (_areaSession?.QueryHeroLife() is not { Status.IsActive: true }) { DropSpellQueue(caster, "the hero cannot act"); return; }
         var next = _spellQueue[0];
         _spellQueue.RemoveAt(0);
         if (!ReferenceEquals(next.Caster, caster)) { DropSpellQueue(caster, "the cast host changed"); return; }
@@ -380,6 +382,8 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-MAGIC-019 cast-queue run={run} spell={spell} depth={depth} outcome={queued}");
             if (queued == SpellCastQueueOutcome.Queued)
             {
+                // An entry whose run was freed meanwhile (cancelled by a run that began, QC6) lost its slot to this one.
+                _spellQueue.RemoveAll(q => q.Run == run);
                 _spellQueue.Add(new(caster, run, spell, name));
                 _spellNotice = $"{AreaSpellsPage.SpellName(_spellData?.Data, spell)} queued ({_spellQueue.Count} waiting)";
             }
