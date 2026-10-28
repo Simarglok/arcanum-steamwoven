@@ -77,6 +77,8 @@ public sealed class GameFolderLocatorTests
         Assert.AreEqual(GameFolderStatus.Ready, check.Status, check.Detail);
         Assert.IsNull(check.Identity!.Version);
         Assert.AreEqual(5L, check.Identity.ExeBytes);
+        File.WriteAllBytes(Path.Combine(game, "VERSION.TXT"), [(byte)'1', 0xE9]);
+        Assert.IsNull(GameFolderLocator.Check(game).Identity!.Version, "a byte outside ASCII");
         File.WriteAllText(Path.Combine(game, "VERSION.TXT"), new string('1', GameFolderLocator.MaxVersionBytes + 1));
         Assert.IsNull(GameFolderLocator.Check(game).Identity!.Version);
         File.Delete(Path.Combine(game, "VERSION.TXT")); File.Delete(Path.Combine(game, "ARCANUM.EXE"));
@@ -105,6 +107,18 @@ public sealed class GameFolderLocatorTests
         Assert.IsNull(GameFolderLocator.Check(game).Inputs);
         File.Delete(Path.Combine(game, "tig.dat"));
         Assert.AreEqual(GameFolderStatus.MissingTig, GameFolderLocator.Check(game).Status);
+    }
+
+    [TestMethod]
+    public void A_folder_mounting_more_archives_than_the_limit_is_an_unsupported_layout()
+    {
+        var game = Game(Path.Combine(_root, "Arcanum"));
+        for (var i = 10; i < 10 + GameFolderLocator.MaxArchives - 4; i++) File.WriteAllBytes(Path.Combine(game, $"arcanum{i}.dat"), [1]);
+        var most = GameFolderLocator.Check(game);
+        Assert.AreEqual(GameFolderStatus.Ready, most.Status);
+        Assert.AreEqual(GameFolderLocator.MaxArchives, most.Identity!.Archives.Count);
+        File.WriteAllBytes(Path.Combine(game, "arcanum99.dat"), [1]);
+        Assert.AreEqual((GameFolderStatus.UnsupportedLayout, "archives"), Pair(GameFolderLocator.Check(game)));
     }
 
     private static (GameFolderStatus, string?) Pair(GameFolderCheck check) => (check.Status, check.Detail);

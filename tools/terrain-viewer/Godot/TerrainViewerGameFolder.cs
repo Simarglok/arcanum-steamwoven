@@ -7,8 +7,8 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-DEV-046: a start without command-line inputs (a player's build) reads the game folder from the launcher settings
 // (user://launcher_v1.json), or detects one at the fixed GOG candidates when none is stored or the stored one is no longer a game
-// folder, writes the folder found and its identity back, and opens map mode on the main map with the main menu, as ./arcanum area
-// does. The launcher screen (ARC-RES-074 task 2) is not built yet: where it would show, the start only says so. The developer
+// folder (for this start only: the launcher confirms a detected folder), adds the identity of a stored folder that had none, and opens
+// map mode on the main map with the main menu, as ./arcanum area does. The launcher screen (ARC-RES-074 task 2) is not built yet: where it would show, the start only says so. The developer
 // launcher always passes its inputs, so its runs never come here.
 public partial class TerrainViewerApp
 {

@@ -47,7 +47,11 @@ public static class LauncherSettingsFile
             var full = Path.GetFullPath(path);
             Directory.CreateDirectory(Path.GetDirectoryName(full)!);
             temporary = $"{full}.{Guid.NewGuid():N}.tmp";
-            File.WriteAllText(temporary, text, new UTF8Encoding(false));
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write))
+            {
+                stream.Write(new UTF8Encoding(false).GetBytes(text));
+                stream.Flush(flushToDisk: true);
+            }
             File.Move(temporary, full, overwrite: true);
             temporary = null;
             return LauncherSettingsSaveStatus.Saved;
@@ -74,8 +78,10 @@ public enum GameFolderStartupSource { Stored, Detected }
 /// <see cref="StoredCheck"/> is the stored folder's check (null when none was stored); <see cref="Detection"/> the candidates checked
 /// (null when the stored folder was ready). <see cref="IdentityChanged"/>: the stored folder's installation differs from the stored
 /// identity. <see cref="ShowLauncher"/>: the launcher screen should show before the main menu (first run, stored folder missing or no
-/// longer valid, a changed installation, or "show at start"). <see cref="Settings"/> carry the folder found and its identity; write
-/// them when <see cref="SettingsChanged"/>.</summary>
+/// longer valid, a changed installation, or "show at start"). <see cref="Settings"/> are the settings to write when
+/// <see cref="SettingsChanged"/>: the start itself only adds the identity of a stored folder that had none. A detected folder, a
+/// changed identity and a stored folder that is gone are the launcher's to confirm (<see cref="LauncherSettings.WithGameFolder"/>),
+/// so the start never replaces the player's stored folder or spends the signal before the launcher has shown it.</summary>
 public sealed record GameFolderStartup(GameFolderStartupStatus Status, GameFolderCheck? Folder, GameFolderStartupSource? Source,
     GameFolderCheck? StoredCheck, GameFolderDetection? Detection, bool IdentityChanged, bool ShowLauncher, LauncherSettings Settings,
     bool SettingsChanged)
@@ -83,7 +89,7 @@ public sealed record GameFolderStartup(GameFolderStartupStatus Status, GameFolde
     public bool Ready => Status == GameFolderStartupStatus.Ready;
 
     /// <summary>ARC-DEV-046: the stored folder when it is still a game folder, else the first ready fixed candidate of
-    /// <paramref name="platform"/>. Only reads; the caller writes <see cref="Settings"/>.</summary>
+    /// <paramref name="platform"/> for this start only. Only reads; the caller writes <see cref="Settings"/>.</summary>
     public static GameFolderStartup Resolve(LauncherSettings settings, GameFolderPlatform platform)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -95,20 +101,14 @@ public sealed record GameFolderStartup(GameFolderStartupStatus Status, GameFolde
             if (stored.Ready)
             {
                 var changed = settings.GameIdentity is { } identity && !identity.SameAs(stored.Identity);
-                var updated = settings.WithGameFolder(stored);
+                var first = settings.GameIdentity is null;
                 return new(GameFolderStartupStatus.Ready, stored, GameFolderStartupSource.Stored, stored, null, changed,
-                    settings.ShowAtStart || changed, updated, !Same(settings, updated));
+                    settings.ShowAtStart || changed, first ? settings.WithGameFolder(stored) : settings, first);
             }
         }
         var detection = GameFolderLocator.Detect(platform);
-        if (detection.Found is { } found)
-        {
-            var updated = settings.WithGameFolder(found);
-            return new(GameFolderStartupStatus.Ready, found, GameFolderStartupSource.Detected, stored, detection, false, true, updated, true);
-        }
-        return new(GameFolderStartupStatus.NotFound, null, null, stored, detection, false, true, settings, false);
+        return detection.Found is { } found
+            ? new(GameFolderStartupStatus.Ready, found, GameFolderStartupSource.Detected, stored, detection, false, true, settings, false)
+            : new(GameFolderStartupStatus.NotFound, null, null, stored, detection, false, true, settings, false);
     }
-
-    private static bool Same(LauncherSettings a, LauncherSettings b)
-        => a.GameRoot == b.GameRoot && a.GameSource == b.GameSource && (a.GameIdentity?.SameAs(b.GameIdentity) ?? b.GameIdentity is null);
 }

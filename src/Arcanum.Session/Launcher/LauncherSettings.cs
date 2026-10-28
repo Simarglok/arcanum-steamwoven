@@ -44,14 +44,17 @@ public sealed record LauncherSettings(string? GameRoot, GameSource GameSource, G
 }
 
 /// <summary>How a settings file read: absent (<see cref="Missing"/>), read (fields with an invalid value take their default and are
-/// listed), not a settings object (<see cref="Invalid"/>: not JSON or not UTF-8, not an object, no integer schema, too large), a
-/// settings file of another schema (<see cref="OtherSchema"/>: a newer build's, which this build never overwrites), or a file that
+/// listed), not a settings object (<see cref="Invalid"/>: not JSON or not UTF-8, not an object, no <c>schema</c>, larger than
+/// <see cref="LauncherSettingsCodec.MaxBytes"/>; such a file is replaced on the next write), a settings file of another schema
+/// (<see cref="OtherSchema"/>: any <c>schema</c> but the integer 1, a newer build's, which this build never overwrites), or a file that
 /// exists but cannot be read (<see cref="Unreadable"/>, never overwritten either). All but <see cref="Read"/> give the defaults.</summary>
 public enum LauncherSettingsReadStatus { Missing, Read, Invalid, OtherSchema, Unreadable }
 
 /// <param name="Defaulted">The keys present with a value this build cannot use, which took their default.</param>
-/// <param name="UnknownKeys">The keys this build does not know (top level, and inside <c>rules</c> as <c>rules.KEY</c>); a rewrite
-/// keeps them, so an older build does not erase a newer build's settings.</param>
+/// <param name="UnknownKeys">The keys this build does not know (top level, and inside the <c>rules</c> and <c>display</c> objects as
+/// <c>rules.KEY</c>, <c>display.KEY</c>); a rewrite keeps them, so an older build does not erase a newer build's settings. Keys inside
+/// <c>gameIdentity</c> are not kept (the identity is rewritten whole from a check), nor is a <c>rules</c> or <c>display</c> value that is
+/// not an object.</param>
 public sealed record LauncherSettingsRead(LauncherSettingsReadStatus Status, LauncherSettings Settings, IReadOnlyList<string> Defaulted,
     IReadOnlyList<string> UnknownKeys)
 {
@@ -62,17 +65,18 @@ public sealed record LauncherSettingsRead(LauncherSettingsReadStatus Status, Lau
 /// <c>gameSource</c> (<c>gog</c>, <c>other</c>), <c>gameIdentity</c> (null or <c>version</c>, <c>exeBytes</c>, <c>exeSha256</c>,
 /// <c>gog</c>, <c>archives</c>: <c>[{"name","bytes"}]</c> in mount order), <c>showAtStart</c>, <c>rules</c>
 /// (<c>{"active":"steamwoven"|"original"}</c>) and <c>display</c> (<c>window</c>: <c>windowed</c>/<c>fullscreen</c>, <c>monitor</c>,
-/// <c>uiScale</c>). Reading never throws: see <see cref="LauncherSettingsReadStatus"/>.</summary>
+/// <c>uiScale</c>). <c>gameRoot</c> must be a full path of this system. Reading never throws: see <see cref="LauncherSettingsReadStatus"/>.</summary>
 public static class LauncherSettingsCodec
 {
     public const int Schema = 1;
     /// <summary>A longer file is not read.</summary>
     public const int MaxBytes = 64 * 1024;
-    public const int MaxArchives = 32;
-    public const int MaxArchiveName = 260;
-    public const int MaxVersionLength = 64;
+    public const int MaxArchives = GameFolderLocator.MaxArchives;
+    public const int MaxArchiveName = GameFolderLocator.MaxPathLength;
+    public const int MaxVersionLength = GameFolderLocator.MaxVersionLength;
 
     private static readonly string[] KnownKeys = ["schema", "gameRoot", "gameSource", "gameIdentity", "showAtStart", "rules", "display"];
+    private static readonly string[] DisplayKeys = ["window", "monitor", "uiScale"];
 
     public static LauncherSettingsRead Deserialize(string? json)
     {
@@ -83,8 +87,10 @@ public static class LauncherSettingsCodec
             if (JsonNode.Parse(json) is not JsonObject root) return Defaults(LauncherSettingsReadStatus.Invalid);
             // Enumerating the object materialises it, so a repeated key fails here (ArgumentException) as unreadable.
             var names = root.Select(property => property.Key).ToArray();
-            if (root["schema"] is not JsonValue schemaValue || !schemaValue.TryGetValue<int>(out var schema)) return Defaults(LauncherSettingsReadStatus.Invalid);
-            if (schema != Schema) return Defaults(LauncherSettingsReadStatus.OtherSchema);
+            // Any schema but the integer 1 is another build's file (never overwritten); only an object without one is invalid.
+            if (!root.ContainsKey("schema")) return Defaults(LauncherSettingsReadStatus.Invalid);
+            if (root["schema"] is not JsonValue schemaValue || schemaValue.GetValueKind() != JsonValueKind.Number || !schemaValue.TryGetValue<int>(out var schema)
+                || schema != Schema) return Defaults(LauncherSettingsReadStatus.OtherSchema);
             var defaulted = new List<string>();
             var settings = LauncherSettings.Defaults;
             if (root.TryGetPropertyValue("gameRoot", out var gameRoot) && gameRoot is not null)
@@ -116,16 +122,20 @@ public static class LauncherSettingsCodec
                 if (rules is JsonObject kept)
                     foreach (var property in kept.Where(property => property.Key != "active")) unknownRules[property.Key] = property.Value?.DeepClone();
             }
+            var unknownDisplay = new JsonObject();
             if (root.TryGetPropertyValue("display", out var display))
             {
                 if (Display(display) is { } read) settings = settings with { Display = read };
                 else defaulted.Add("display");
+                if (display is JsonObject kept)
+                    foreach (var property in kept.Where(property => !DisplayKeys.Contains(property.Key, StringComparer.Ordinal))) unknownDisplay[property.Key] = property.Value?.DeepClone();
             }
             var unknown = new JsonObject();
             foreach (var name in names.Where(name => !KnownKeys.Contains(name, StringComparer.Ordinal))) unknown[name] = root[name]?.DeepClone();
             if (unknownRules.Count > 0) unknown["rules"] = unknownRules;
+            if (unknownDisplay.Count > 0) unknown["display"] = unknownDisplay;
             var unknownKeys = names.Where(name => !KnownKeys.Contains(name, StringComparer.Ordinal))
-                .Concat(unknownRules.Select(property => "rules." + property.Key)).ToArray();
+                .Concat(unknownRules.Select(property => "rules." + property.Key)).Concat(unknownDisplay.Select(property => "display." + property.Key)).ToArray();
             return new(LauncherSettingsReadStatus.Read, settings, defaulted.AsReadOnly(), unknownKeys) { Unknown = unknown };
         }
         // Text that is not valid UTF-16 is unreadable too (as in RuleModeSettingCodec), and so is a repeated key.
@@ -169,8 +179,10 @@ public static class LauncherSettingsCodec
                 ["uiScale"] = settings.Display.UiScalePercent,
             },
         };
+        if (kept?["display"] is JsonObject unknownDisplay)
+            foreach (var property in unknownDisplay) root["display"]![property.Key] = property.Value?.DeepClone();
         if (kept is not null)
-            foreach (var property in kept.Where(property => property.Key != "rules" && !KnownKeys.Contains(property.Key, StringComparer.Ordinal)))
+            foreach (var property in kept.Where(property => !KnownKeys.Contains(property.Key, StringComparer.Ordinal)))
                 root[property.Key] = property.Value?.DeepClone();
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
@@ -181,7 +193,9 @@ public static class LauncherSettingsCodec
     private static bool? Boolean(JsonNode? node) => node is JsonValue value && value.TryGetValue<bool>(out var flag) ? flag : null;
     private static long? Integer(JsonNode? node) => node is JsonValue value && value.GetValueKind() == JsonValueKind.Number && value.TryGetValue<long>(out var number) ? number : null;
 
-    private static bool SafePath(string path) => path.Length is > 0 and <= GameFolderLocator.MaxPathLength && !path.Any(char.IsControl) && path.Trim().Length > 0;
+    /// <summary>A full path of this system (a relative path or another system's would resolve against the working folder).</summary>
+    private static bool SafePath(string path) => path.Length is > 0 and <= GameFolderLocator.MaxPathLength && !path.Any(char.IsControl) && path.Trim().Length > 0
+                                                 && System.IO.Path.IsPathFullyQualified(path);
 
     private static LauncherDisplay? Display(JsonNode? node)
     {

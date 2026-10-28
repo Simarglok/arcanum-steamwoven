@@ -21,7 +21,7 @@ public sealed class LauncherSettingsTests
     private static readonly GameFolderIdentity Identity = new("1.0.7.4", 13, new string('a', 64), true,
         [new("tig.dat", 3), new("arcanum1.dat", 5), new("modules/Arcanum.dat", 11)]);
 
-    private static readonly LauncherSettings Full = new("/Applications/Arcanum", GameSource.Gog, Identity, true, RuleMode.Original,
+    private static readonly LauncherSettings Full = new(Path.Combine(Path.GetTempPath(), "Arcanum"), GameSource.Gog, Identity, true, RuleMode.Original,
         new(LauncherWindowMode.Fullscreen, 1, 150));
 
     private static string Game(string folder, int terrainBytes = 7)
@@ -69,16 +69,18 @@ public sealed class LauncherSettingsTests
     public void Text_that_is_not_a_settings_file_reads_as_the_defaults()
     {
         Assert.AreEqual(LauncherSettingsReadStatus.Missing, LauncherSettingsCodec.Deserialize(null).Status);
-        foreach (var text in new[] { "", "{", "[]", "1", "null", """{"rules":{"active":"original"}}""", """{"schema":"1"}""", """{"schema":1.5}""",
-                     """{"schema":1,"schema":1}""", """{"schema":1,"gameRoot":"\uD800"}""", "{\"schema\":1,\"gameRoot\":\"\uD800\"}",
+        foreach (var text in new[] { "", "{", "[]", "1", "null", """{"rules":{"active":"original"}}""", """{"schema":1,"schema":1}""", """{"schema":1,"gameRoot":"\uD800"}""", "{\"schema\":1,\"gameRoot\":\"\uD800\"}",
                      "{\"schema\":1,\"x\":\"" + new string('a', LauncherSettingsCodec.MaxBytes) + "\"}" })
         {
             var read = LauncherSettingsCodec.Deserialize(text);
             Assert.AreEqual(LauncherSettingsReadStatus.Invalid, read.Status, text.Length > 80 ? "too large" : text);
             Assert.AreEqual(LauncherSettings.Defaults, read.Settings);
         }
-        var newer = LauncherSettingsCodec.Deserialize("""{"schema":2,"gameRoot":"/x"}""");
-        Assert.AreEqual((LauncherSettingsReadStatus.OtherSchema, LauncherSettings.Defaults), (newer.Status, newer.Settings));
+        foreach (var text in new[] { """{"schema":2,"gameRoot":"/x"}""", """{"schema":"1"}""", """{"schema":1.5}""", """{"schema":1e10}""", """{"schema":null}""", """{"schema":{}}""" })
+        {
+            var newer = LauncherSettingsCodec.Deserialize(text);
+            Assert.AreEqual((LauncherSettingsReadStatus.OtherSchema, LauncherSettings.Defaults), (newer.Status, newer.Settings), text);
+        }
     }
 
     [TestMethod]
@@ -94,6 +96,8 @@ public sealed class LauncherSettingsTests
         CollectionAssert.AreEqual(new[] { "gameRoot", "gameSource", "gameIdentity", "showAtStart", "rules", "display" }, read.Defaulted.ToArray());
 
         Assert.AreEqual(LauncherSettings.Defaults, Read("""{"schema":1,"gameRoot":null,"gameIdentity":null}"""));
+        foreach (var root in new[] { "relative/Arcanum", "Arcanum", OperatingSystem.IsWindows() ? "/Arcanum" : @"C:\GOG Games\Arcanum" })
+            CollectionAssert.AreEqual(new[] { "gameRoot" }, LauncherSettingsCodec.Deserialize($$"""{"schema":1,"gameRoot":{{System.Text.Json.JsonSerializer.Serialize(root)}}}""").Defaulted.ToArray(), "not a full path here: " + root);
         foreach (var identity in new[] { """{"gog":true}""", """{"gog":1,"archives":[]}""", """{"gog":true,"archives":[{"name":"","bytes":1}]}""",
                      """{"gog":true,"archives":[{"name":"a","bytes":-1}]}""", """{"gog":true,"exeBytes":"1","archives":[]}""", """{"gog":true,"version":"","archives":[]}""",
                      "{\"gog\":true,\"archives\":[" + string.Join(',', Enumerable.Repeat("""{"name":"a","bytes":1}""", LauncherSettingsCodec.MaxArchives + 1)) + "]}" })
@@ -106,13 +110,15 @@ public sealed class LauncherSettingsTests
     [TestMethod]
     public void A_rewrite_keeps_the_keys_this_build_does_not_know()
     {
-        var read = LauncherSettingsCodec.Deserialize("""{"schema":1,"rules":{"active":"steamwoven","custom":[{"name":"mix"}]},"future":{"a":1}}""");
-        CollectionAssert.AreEqual(new[] { "future", "rules.custom" }, read.UnknownKeys.ToArray());
+        var read = LauncherSettingsCodec.Deserialize("""{"schema":1,"rules":{"active":"steamwoven","custom":[{"name":"mix"}]},"future":{"a":1},"display":{"window":"windowed","monitor":0,"uiScale":100,"hdr":true}}""");
+        CollectionAssert.AreEqual(new[] { "future", "rules.custom", "display.hdr" }, read.UnknownKeys.ToArray());
         var text = LauncherSettingsCodec.Serialize(read.Settings with { Rules = RuleMode.Original }, read);
         var root = JsonNode.Parse(text)!.AsObject();
         Assert.AreEqual(1, (int)root["future"]!["a"]!);
         Assert.AreEqual("original", (string)root["rules"]!["active"]!);
         Assert.AreEqual("mix", (string)root["rules"]!["custom"]![0]!["name"]!);
+        Assert.IsTrue((bool)root["display"]!["hdr"]!);
+        Assert.AreEqual(100, (int)root["display"]!["uiScale"]!);
         Assert.IsFalse(JsonNode.Parse(LauncherSettingsCodec.Serialize(read.Settings))!.AsObject().ContainsKey("future"), "only a read passed in is kept");
     }
 
@@ -121,10 +127,13 @@ public sealed class LauncherSettingsTests
     {
         foreach (var settings in new[]
                  {
-                     Full with { GameRoot = "a\nb" }, Full with { GameRoot = " " }, Full with { Display = Full.Display with { UiScalePercent = 10 } },
+                     Full with { GameRoot = "a\nb" }, Full with { GameRoot = " " }, Full with { GameRoot = "relative" }, Full with { Display = Full.Display with { UiScalePercent = 10 } },
                      Full with { GameSource = (GameSource)7 }, Full with { GameIdentity = Identity with { ExeSha256 = "x" } },
+                     Full with { GameIdentity = Identity with { Archives = Enumerable.Repeat(new GameArchiveSize("a.dat", 1), GameFolderLocator.MaxArchives + 1).ToArray() } },
                  })
             Assert.Throws<ArgumentException>(() => LauncherSettingsCodec.Serialize(settings));
+        var most = Identity with { Archives = Enumerable.Range(0, GameFolderLocator.MaxArchives).Select(i => new GameArchiveSize(new string('a', 200) + i + ".dat", i)).ToArray() };
+        Assert.IsTrue(most.SameAs(Read(LauncherSettingsCodec.Serialize(Full with { GameIdentity = most })).GameIdentity), "every identity the locator makes is stored");
     }
 
     [TestMethod]
@@ -181,10 +190,12 @@ public sealed class LauncherSettingsTests
 
         Game(game, terrainBytes: 9);
         var changed = GameFolderStartup.Resolve(stored, Mac(_root));
-        Assert.IsTrue(changed.Ready && changed.IdentityChanged && changed.ShowLauncher && changed.SettingsChanged);
-        Assert.IsTrue(changed.Settings.GameIdentity!.SameAs(GameFolderLocator.Check(game).Identity));
+        Assert.IsTrue(changed.Ready && changed.IdentityChanged && changed.ShowLauncher);
+        Assert.IsFalse(changed.SettingsChanged, "the launcher confirms a changed installation; until then each start says so");
+        Assert.AreSame(stored, changed.Settings);
         var first = GameFolderStartup.Resolve(stored with { GameIdentity = null }, Mac(_root));
         Assert.IsTrue(first.Ready && !first.IdentityChanged && first.SettingsChanged, "a folder stored without an identity gains one");
+        Assert.IsTrue(first.Settings.GameIdentity!.SameAs(GameFolderLocator.Check(game).Identity));
     }
 
     [TestMethod]
@@ -199,12 +210,16 @@ public sealed class LauncherSettingsTests
         var detected = Game(Path.Combine(_root, "home", "Applications", "Arcanum"));
         var first = GameFolderStartup.Resolve(LauncherSettings.Defaults with { Rules = RuleMode.Original }, Mac(_root));
         Assert.AreEqual((GameFolderStartupStatus.Ready, GameFolderStartupSource.Detected, detected), (first.Status, first.Source, first.Folder!.Path));
-        Assert.IsTrue(first.ShowLauncher && first.SettingsChanged);
-        Assert.AreEqual((detected, RuleMode.Original), (first.Settings.GameRoot, first.Settings.Rules), "the other settings stay");
+        Assert.IsTrue(first.ShowLauncher);
+        Assert.IsFalse(first.SettingsChanged, "the launcher confirms a detected folder");
+        Assert.IsNull(first.Settings.GameRoot);
 
-        var gone = GameFolderStartup.Resolve(first.Settings with { GameRoot = Path.Combine(_root, "moved") }, Mac(_root));
+        var moved = LauncherSettings.Defaults with { GameRoot = Path.Combine(_root, "moved") };
+        var gone = GameFolderStartup.Resolve(moved, Mac(_root));
         Assert.AreEqual((GameFolderStatus.MissingFolder, GameFolderStartupSource.Detected, detected), (gone.StoredCheck!.Status, gone.Source, gone.Folder!.Path));
         Assert.IsTrue(gone.ShowLauncher);
+        Assert.IsFalse(gone.SettingsChanged, "the player's stored folder is never replaced by a detected one");
+        Assert.AreSame(moved, gone.Settings);
         Assert.Throws<ArgumentException>(() => LauncherSettings.Defaults.WithGameFolder(gone.StoredCheck));
     }
 }

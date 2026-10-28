@@ -76,8 +76,10 @@ viewer reads the launcher settings `user://launcher_v1.json` ([research](../rese
 `LAUNCHER_SETTINGS_TEST_PATH` names another file, and an automated run without it has no file). It opens the stored
 game folder while `GameFolderLocator.Check` finds it ready, else the first ready fixed candidate (Windows: the GOG
 registry key `HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\1207658829` and its 64-bit twin, `C:\GOG Games\Arcanum`, the GOG
-Galaxy folder; macOS: `/Applications/Arcanum`, `~/Applications/Arcanum`, the GOG folders of each CrossOver bottle), and
-writes the folder found with its source and identity back. A folder is ready when the content stack mounts the
+Galaxy folder; macOS: `/Applications/Arcanum`, `~/Applications/Arcanum`, the GOG folders of each CrossOver bottle) for
+that start only. It writes nothing but the identity of a stored folder that had none: a detected folder, a changed
+installation and a stored folder that is gone are left for the launcher screen to confirm, so the player's stored folder
+is never replaced and each such start says so again. A folder is ready when the content stack mounts the
 `Arcanum` module and the module archive, `arcanum1.dat` and `arcanum2.dat` are there; any other result is a typed
 `GameFolderStatus` with the missing name. The start is map mode on `Arcanum1-024-fixed` with the main menu and the
 folder's own inputs, the same as `./arcanum area` (`test_launcher_sync.py` keeps the two in step). The log prints

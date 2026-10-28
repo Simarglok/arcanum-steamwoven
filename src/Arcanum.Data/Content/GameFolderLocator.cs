@@ -113,6 +113,10 @@ public static class GameFolderLocator
     public const long MaxExeBytes = 64L * 1024 * 1024;
     /// <summary>A longer <c>Version.txt</c> is not read as a version.</summary>
     public const int MaxVersionBytes = 256;
+    /// <summary>A version longer than this is no version.</summary>
+    public const int MaxVersionLength = 64;
+    /// <summary>A folder mounting more archives than this (tig, <c>arcanum*.dat</c>, the module and its patches) is an unsupported layout.</summary>
+    public const int MaxArchives = 64;
 
     private static readonly string[][] InstallFolders = [["GOG Games", "Arcanum"], ["Program Files (x86)", "GOG Galaxy", "Games", "Arcanum"]];
     private static readonly string[][] WrapperDrives = [["Contents", "SharedSupport", "prefix", "drive_c"], ["Contents", "Resources", "drive_c"]];
@@ -151,7 +155,7 @@ public static class GameFolderLocator
                     break;
             }
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException) { }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or System.Security.SecurityException or NotSupportedException) { }
         return candidates.AsReadOnly();
     }
 
@@ -208,11 +212,13 @@ public static class GameFolderLocator
         if (actor is null) return new(GameFolderStatus.MissingActorArchive, full, origin, "arcanum1.dat", plan);
         var terrain = BaseArchive(plan, "arcanum2.dat");
         if (terrain is null) return new(GameFolderStatus.MissingTerrainArchive, full, origin, "arcanum2.dat", plan);
+        if (plan.SearchOrder.Count(source => source.Kind == ContentSourceKind.Archive) > MaxArchives)
+            return new(GameFolderStatus.UnsupportedLayout, full, origin, "archives", plan);
         try
         {
             return new(GameFolderStatus.Ready, plan.GameRoot, origin, null, plan, new(plan.GameRoot, module.Path, actor.Path, terrain.Path), Identify(plan));
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException or NotSupportedException)
         {
             return new(GameFolderStatus.Unreadable, full, origin, "identity", plan);
         }
@@ -233,8 +239,11 @@ public static class GameFolderLocator
         string? version = null;
         if (Find("version.txt") is { } versionFile && new FileInfo(versionFile).Length <= MaxVersionBytes)
         {
-            var text = File.ReadAllText(versionFile, Encoding.ASCII).Trim();
-            if (text.Length is > 0 and <= 64 && text.All(c => c is >= ' ' and <= '~')) version = text;
+            // Bytes, not decoded text: a byte outside printable ASCII makes it no version (a decoder would turn it into '?').
+            var bytes = File.ReadAllBytes(versionFile);
+            var text = Encoding.ASCII.GetString(bytes).Trim();
+            if (bytes.All(b => b is >= 0x20 and <= 0x7e or (byte)'\r' or (byte)'\n' or (byte)'\t') && text.Length is > 0 and <= MaxVersionLength
+                && text.All(c => c is >= ' ' and <= '~')) version = text;
         }
         long? exeBytes = null; string? exeSha256 = null;
         if (Find("arcanum.exe") is { } exe)
