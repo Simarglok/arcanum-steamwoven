@@ -12,7 +12,10 @@ subturns of a turn-based round ([below](#turn-based-round-arc-world-095); exe ro
 [TH1–TH6](../research/ledger/npc-ai.md#npc-ai-turn-based-host-arc-world-095), one reader, F1). ARC-WORLD-099 (the first part of
 I10's third step) adds the round's tail: the end-combat script at an NPC's subturn end, the completion check of a turn set's
 interrupt and the fidget after a done run (exe rows [TH7–TH10](../research/ledger/npc-ai.md#npc-ai-turn-based-host-tail-arc-world-099),
-one reader, F1).
+one reader, F1). ARC-WORLD-102 (the next part of I10's third step) is the casting host: an NPC that knows a spell chooses it at its
+danger update and casts it through the map's cast host ([below](#casting-arc-world-102); exe rows
+[AC1–AC4](../research/ledger/npc-ai.md#npc-ai-casting-host-arc-world-102), one reader, F1); it covers the NPC's casts of
+[FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) and [FR-MAGIC-004](../requirements/combat-magic-tech.md#fr-magic-004).
 
 ## Session: the NPC hit step (`GameSessionOwner.AttackByNpc`)
 
@@ -65,6 +68,25 @@ A host built during a round (a load, a map change, a follower joining) asks the 
 kept). A9's repeated first subturn (Original setting) runs the hook once: the second start would interrupt the first start's run and
 ask again, so the NPC acts once either way.
 
+## Casting (ARC-WORLD-102)
+
+The support rules' spell half ([support and magic](ai-support.md), slice I8) and the casting goals ([action goals](ai-action-goals.md),
+slice I8b) get their host: the AI host answers `IAiSupportWorld`, its spell questions through the shown map's cast host
+(`SessionSpellCaster`, the hero's casts' host too, the scene's `Spells`), and the casting goals' calls go to the cast host's goal.
+
+| Part | Original | What it does |
+| --- | --- | --- |
+| Spell choice | danger update 0x4A92D0 → 0x4ABC20 (HS1, SP4, SP16, FO8) | For a fight request the danger stage runs `AiSupportRules.ChooseSpell` for the found target before the setter; the setter's target is `HostilityRules.FocusTarget` of the pass record's (the choice's target, else the found one, SP16); the choice stays in the pass record for this pass's perform unless the setter's NO_ATTACK or "NPC fighting" rule refused the fight in the Steamwoven setting (`KeepsChosenAction`, FO8). Without a fight, or with nothing chosen, perform acts by the danger state as before. |
+| The spell half of the support world | 0x4B1950, 0x4B1AB0, 0x4B1660, 0x450B40, 0x459380, 0x453B20, 0x4AB430, 0x4ADE00 | `Support`: MECHANICAL (critter flag 0x20000000), CAST_HIGHEST (NPC flag 0x40000, AC2), the fatigue percent (AC3: 0 for a maximum of 0), current fatigue, poison, the effective willpower and the magick points (an NPC's session record, else its stat). The ten global lists from the records' AI values; the critter's list through the host's list cache (SP11, not saved). The cast host answers the book (`Book`: the hero's, an NPC's session record, else its fields' `SpellBookRules.FromFields`), knows and the college rank, the record facts (`AiSpell`: maintained, the minimum intelligence 5 and willpower, item triggers), the cast cost with the caster's mastered college (an NPC's fields' mastery now counts in every cast cost), the free maintenance count, under the influence (`SpellRunRules.UnderInfluence`, AC1) and the fail-chance predictor with its own d20 (the fate-maximised flag of the last processed action is not kept: it reads unset). The line of fire is the attack's, with the blocking row's entity. Parameters 13, 14 and 15 come from the AI table row. |
+| Perform's cast | 0x4AC250 (EX2, AG14, IV12) | `IAiPerformWorld.Cast` runs `SessionSpellCaster.CastByAi`: the invocation with the NPC as source and parent and the choice's target object (in a round with the round's actor), its check (a refusal starts nothing), then the run, whose activation checks it again. The started run's casting goal is 82 when the record's casting animation is not −1, else 26, and replaces the NPC's run. |
+| Goal 26/82 | 0x429B50, 0x429BC0, 0x42C850 (AG3, SM7) | `StartCast` is the cast host's goal start (`StartGoal`: in a round the 4 action points, whose events are the round's; the pre-animation check; a target destroyed or off); `FaceCast` applies the facing turn it computed (a stoned, stunned or paralysed caster cannot turn: the goal ends, freeing the run per MG39). |
+| Goal 27/83 | 0x429F00, 0x42CAA0, 0x429C40, 0x429C80, 0x429CD0 (AG4) | `BeginCast`: the target re-check, then the cast eye candy (6 · spell) on the NPC (the viewer's `CastEyeCandy`, timing only): its release frame is the action frame and its end the rest (`CastEyeCandyAnimation` played through); a failed re-check, goal 83's casting animation (NPC ART is not read) or no eye candy releases at once. `CastActionFrame` releases (a play that never reaches its action frame releases nothing, EC7); `ReleaseCast` is the cast host's release (the re-check and BEGIN; MG41 in both settings as the cast host has it); `EndCast` its goal end (before the release the run is freed charged, MG39). |
+| Dropped casting goal | 26/82's end node 0x42B090 (AC4) | A run the host drops (an interrupt, a replacement, a kill) whose casting goal 26 or 82 had not reached its attempt frees the NPC's magic run that still waits for its BEGIN, unpaid, in both settings (the original keeps the slot, as MG43's queued cast). |
+| Viewer | | The cast map sees the NPCs the AI walked on their cells (range, line of fire, a target's tile; the hero's casts too). A play logs `ARC-WORLD-102 ai-cast`, a release `ai-cast-release` with the cast host's log (the status line, the message window, the eye-candy components on their targets), the bodies and the inventory; the goal's end `ai-cast-end`. Smoke stage `ai-cast` (only when named, map mode with `--hero`, `Arcanum1-024-fixed`'s Crash Site window): the highest-level NPC whose fields store a college level (27359, college 10 at rank 2) is told of the hero's attack 3..5 cells away and casts at the hero; marker `ARC-WORLD-102 native-smoke ai-cast PASS`. |
+
+No new state: the pass record's choice, the list cache and the casting goals' play are the host's, not saved (a load builds the
+host again); a magic run itself is the session's, as the hero's.
+
 ## Settings
 
 No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rules they belong to.
@@ -81,8 +103,12 @@ No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the mora
   in the Original setting the stalled-actor observation keeps the previous value either way (A11); in Steamwoven it records the new
   participant's own points, as A11's fix does for every check. A round that ends and another that begins between two observations (one frame) skips the round start's interrupt
   of every run. The fidget's animation is not played and its run not held (NPC ART is not read).
-- **Action goals.** Casting, item use, skills, throws and pickups (I8b's goals), grenades, NPC queued casts and spell missiles and
-  goal 40: the host's calls refuse or do nothing; heal and item search choose nothing.
+- **Action goals.** Item use, skills, throws and pickups (I8b's goals), grenades and goal 40: the host's calls refuse or do nothing;
+  heal and item search choose nothing. ARC-WORLD-102: the NPCs' items are not listed (no hexed weapon, inventory or item entry), so
+  no item spell or AI-action item is chosen; a cast while the NPC's casting goal plays starts nothing (the original queues it, SU13);
+  a spell whose projectile eye candy has art is released at its action frame as if its missile arrived at once (the flight is not
+  run); goal 83's casting animation is not played (NPC ART is not read: the release comes at once); the NPC's cast eye candy times
+  its goal but is not drawn; the fail-chance predictor reads the fate-maximised flag unset.
 - **Followers in combat.** Companions keep their follow goal; the follower rule, the attack order's target and pass, the comment
   lines and the world-map travel's stop and allow calls are I9's host part.
 - **NPC ranged attacks** (bow, throw, firearm, missile) are refused by the hit step (`AttackUnsupported`).
@@ -104,9 +130,15 @@ starts its attack run (adjacent, and from 4 tiles after walking up) and bites th
 and bites in its own subturns, its run holding its subturn and paying action points, never moving on another participant's subturn,
 and the pending cost reads 0 after a subturn start (ARC-WORLD-095); the done attack run's fidget in real time, the end-combat script
 asked at its subturn ends and no fidget in a round, and a turn set's interrupt of its last run running the completion check once
-(ARC-WORLD-099). `ExecutorRulesTests` (Simulation): `FidgetAfterRun`'s combat mode, auto-animate flag, running animation, art test,
+(ARC-WORLD-099). `AreaAiCastTests` (viewer Core, opt-in `ARC_AREA_CONVERSATION_GAME_ROOT`, `ARC_AREA_MOBILE`): on the Crash Site
+exterior the college NPC told of the hero's attack chooses a spell at its danger update, casts it at the hero through the cast host,
+the release begins the run and its goal's end frees nothing; in a turn-based round it casts in its own subturn and the goal's start
+pays 4 action points (ARC-WORLD-102). `SessionSpellCasterAiTests` (Session): the NPC's book from its fields with its mastery halving
+the cost, the record facts, the global lists, the free maintenance count, perform's cast and under the influence, a refused check,
+the fail-chance predictor (ARC-WORLD-102). `ExecutorRulesTests` (Simulation): `FidgetAfterRun`'s combat mode, auto-animate flag, running animation, art test,
 PC, and in a round the action points and the gate. `CombatRoundTests` (Session): the subturn starts are counted
 whichever call began them, A9's twice, and not saved. Native smokes: `ARC_AREA_MAP_SMOKE_ONLY=ai` on `crash site cave` with
 `--hero`, marker `ARC-WORLD-092 native-smoke ai PASS` (since ARC-WORLD-099 also the fidget after the bite's run, `Fidgets` in the
 marker); `ai-turn-based`, marker `ARC-WORLD-095 native-smoke ai-turn-based PASS` (since ARC-WORLD-099 also the end-combat script
-asked at the NPC's subturn end, `EndCombatScripts`).
+asked at the NPC's subturn end, `EndCombatScripts`); `ai-cast` on `Arcanum1-024-fixed` with `--hero`, marker
+`ARC-WORLD-102 native-smoke ai-cast PASS`.

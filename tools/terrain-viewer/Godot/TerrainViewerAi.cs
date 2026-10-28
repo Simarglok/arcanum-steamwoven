@@ -14,8 +14,10 @@ namespace Arcanum.TerrainViewer;
 // hero hits reacts (the attack event); a fighting NPC walks up tile by tile, swings and bites through the session's NPC hit step. NPC
 // bodies are their T0 frames moved with the walker (no walk or attack ART yet). Automated runs (self-test, native smokes) keep the AI
 // off unless their stage turns it on, so the other stages stay as they were. In a turn-based round (ARC-WORLD-095) the round host
-// runs the NPCs' subturn hooks with this host and their runs pay action points. NOT READY: casting, items, throws, pickups, followers
-// in combat, NPC ranged attacks, saved NPC positions.
+// runs the NPCs' subturn hooks with this host and their runs pay action points. ARC-WORLD-102: an NPC that knows a spell may choose it
+// at its danger update and cast it through the map's cast host (the hero's); its casting goal is timed by its cast eye candy (not
+// drawn on the NPC yet) and its release's effects reach the spell log, the bodies and the status line. NOT READY: queued casts, spell
+// missiles' flights (released at once), items, throws, pickups, followers in combat, NPC ranged attacks, saved NPC positions.
 public partial class TerrainViewerApp
 {
     private AreaAiHost? _aiHost;
@@ -24,6 +26,8 @@ public partial class TerrainViewerApp
     private bool _aiForSmoke;
     // ARC-WORLD-099: the fidgets the AI host reported (smoke stage ai).
     private int _aiFidgets;
+    // ARC-WORLD-102: the NPC casts the AI host played and released (smoke stage ai-cast).
+    private int _aiCasts, _aiCastReleases;
     private string? _aiNotice;
     // The line of fire the AI reads, rebuilt once per frame.
     private (ulong Frame, AreaLineOfFire? Map)? _aiLineOfFire;
@@ -70,6 +74,10 @@ public partial class TerrainViewerApp
             Parameters = _companionData?.Data?.Table ?? (_arguments is { } arguments ? MapCompanionData(arguments.ModulePath)?.Table : null),
             Timing = grid.Timing,
             HeroIdle = HeroIdleForRound,
+            // ARC-WORLD-102: the spell answers and the casts go through the map's cast host; its eye candy times an NPC's casting goal.
+            Spells = SpellCasterNow,
+            CastEyeCandy = NpcCastEyeCandy,
+            MissileArt = spell => SpellMissileArt(spell) is not null,
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
@@ -113,6 +121,19 @@ public partial class TerrainViewerApp
                     AiHit(notice);
                     redraw = true;
                     break;
+                case AreaAiNoticeKind.Cast:
+                    _aiCasts++;
+                    _aiNotice = $"{AiName(notice.Npc)} casts spell {notice.Spell}";
+                    GD.Print($"ARC-WORLD-102 ai-cast npc={notice.Npc} spell={notice.Spell} run={notice.Run} target={notice.Target} plays={notice.CastSwing.Plays}"
+                        + $" action={notice.CastSwing.ActionFrameMs} rest={notice.CastSwing.RestMs}");
+                    break;
+                case AreaAiNoticeKind.Release:
+                    AiCastReleased(notice);
+                    redraw = true;
+                    break;
+                case AreaAiNoticeKind.CastEnd:
+                    GD.Print($"ARC-WORLD-102 ai-cast-end npc={notice.Npc} run={notice.Run} freed={notice.SpellRun?.Disposition.ToString() ?? "nothing"}");
+                    break;
                 case AreaAiNoticeKind.Fidget:
                     // ARC-WORLD-099: the fidget after a done run (0x4B4320); NPC ART is not drawn, so only the log shows it.
                     _aiFidgets++;
@@ -146,6 +167,20 @@ public partial class TerrainViewerApp
         if (hero && owner.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         if (!hero && result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))
             _deathAnimations[(CurrentAreaMap, notice.Target!)] = AreaFallenPoses.Animation(dealt.Death);
+        SyncAreaCombatBodies();
+        SyncAreaInventory();
+        RefreshAreaStatus();
+    }
+
+    // ARC-WORLD-102: an NPC's cast released (its BEGIN ran, or the re-check refused it): the cast host's log reaches the status line and
+    // the message window (its eye-candy components play on their targets), and its damage the bodies, the inventory and the status line.
+    private void AiCastReleased(AreaAiNotice notice)
+    {
+        if (notice.Released) _aiCastReleases++;
+        GD.Print($"ARC-WORLD-102 ai-cast-release npc={notice.Npc} spell={notice.Spell} run={notice.Run} released={notice.Released}"
+            + $" disposition={notice.SpellRun?.Disposition} failure={notice.SpellRun?.Failure} hero-hp={_areaSession?.QueryHeroLife()?.Status.HitPoints}");
+        FlushSpellLog(notice.Released ? null : $"{AiName(notice.Npc)}'s spell found no target");
+        if (_areaSession?.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();

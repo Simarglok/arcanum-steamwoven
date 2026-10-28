@@ -9,8 +9,8 @@ thrown weapon's throw, the item search's pickup, and the item use an AI-action i
 EX19](../research/ledger/npc-ai.md#npc-ai-action-execution-arc-res-066); this task's reading, one reader:
 [AG1–AG16](../research/ledger/npc-ai.md#npc-ai-action-goals-arc-world-089)). The rules extend `Arcanum.Simulation.Ai.AiExecutorRules`
 (`ExecutorActionGoals.cs`) over the [executor's](ai-executor.md) `IAiPerformWorld` and `IAiGoalWorld`; animations, the magic run, the
-skill invocation, the throw, the pickup and the item's own effects are the world's. No host runs them yet: the viewer's AI host is
-slice I10.
+skill invocation, the throw, the pickup and the item's own effects are the world's. The viewer's AI host (slice I10) runs
+perform's cast and the casting goals since ARC-WORLD-102 ([casting](ai-host.md#casting-arc-world-102)); the other goals have no host yet.
 
 Requirements: [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) (the NPC's actions in a fight),
 [FR-COMBAT-003](../requirements/combat-magic-tech.md#fr-combat-003) (their action points in a round),

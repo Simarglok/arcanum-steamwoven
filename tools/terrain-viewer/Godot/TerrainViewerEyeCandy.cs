@@ -99,6 +99,17 @@ public partial class TerrainViewerApp
         return animation;
     }
 
+    /// <summary>ARC-WORLD-102: an NPC's casting goal's eye candy (the cast entry on the NPC, its own slots), started at 0 ms for the AI
+    /// host's timing of the goal; null when none plays (no table, art, part or free slot). It is not drawn on the NPC yet.</summary>
+    private CastEyeCandyAnimation? NpcCastEyeCandy(string npc, int spell)
+    {
+        var entry = EyeCandyTable?.Entry(spell, SpellEyeCandyTable.Cast) ?? SpellEyeCandyEntry.Empty;
+        var parts = PartsOf(entry.Flags);
+        if (entry.Art is not { } art || !parts.Any || !EyeCandySlotsFree(npc, parts)) return null;
+        var (timing, background, pace) = EyeCandyClips(art, parts);
+        return new CastEyeCandyAnimation(timing, background, parts.TimesRelease, 0, pace);
+    }
+
     /// <summary>An eye candy played by a goal of its own (ag_eye_candy): the release's secondary cast entry or an EyeCandy component's.
     /// Only an animating entry with a foreground or underlay part plays (0x4CD49D).</summary>
     private void PlayEyeCandy(string obj, int index, int run, long now)

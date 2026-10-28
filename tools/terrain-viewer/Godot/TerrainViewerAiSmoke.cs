@@ -277,4 +277,122 @@ public partial class TerrainViewerApp
         }
         await Task.CompletedTask;
     }
+
+    // Native observation (ARC-WORLD-102, ARC_AREA_MAP_SMOKE_ONLY=ai-cast, map mode with --hero, a map with an NPC whose fields store a
+    // magick college level: the Crash Site window of Arcanum1-024-fixed): the AI on, the hero a few cells from the highest-level such
+    // NPC, which is told of the hero's attack. Its AI pass chooses one of its spells at the danger update (0x4ABC20), perform casts it
+    // through the map's cast host (0x4AC250), and its casting goal plays: the start, the play timed by its cast eye candy, the release's
+    // BEGIN and the goal's end. The NPC, the hero and the casts' runs are restored for the later stages.
+    private async Task RunAreaAiCastSmokeAsync(TerrainLoadResult? mapMode = null)
+    {
+        if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area) return;
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-WORLD-102 ai-cast smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_AI_CAST_SMOKE_FAILED");
+        }
+        var map = mapMode is { Area: { } loaded, AreaStepSnapshot: { } mapSteps }
+            ? new AreaMapRuntime(loaded.Snapshot, mapSteps, loaded.Plan.Chart) : _areaTransitions!.Current;
+        var inventory = _inventoryHost!.Maps.Single(m => m.RuntimeMap == map.RuntimeMap);
+        var commands = area.Plan.Commands.Where(c => c.Identity is not null).ToDictionary(c => c.Identity!.Value);
+        var candidates = session.QueryMapInventory(new(map.RuntimeMap))!.Holders
+            .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free)
+            .Select(h => (Holder: h, Row: inventory.Row(h.Entity), Build: _combatHost.Build(map.RuntimeMap, h.Entity), Fields: _combatHost.Fields(map.RuntimeMap, h.Entity)))
+            .Where(c => c.Build.Combat is not null && commands.ContainsKey(c.Row.Key)
+                && c.Fields?.Critter?.SpellTech.Take(Arcanum.Simulation.Magic.SpellBookRules.Colleges).Any(rank => rank > 0) == true)
+            .OrderByDescending(c => c.Build.Combat!.Level).ThenBy(c => c.Holder.Entity, StringComparer.Ordinal).ToArray();
+        if (candidates.Length == 0) { GD.Print($"ARC-WORLD-102 native-smoke ai-cast NO-TARGET map={map.RuntimeMap}"); return; }
+        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
+        _worldFocusSimulationForSelfTest = true;
+        _aiForSmoke = true;
+        var target = candidates[0];
+        var entity = target.Holder.Entity;
+        var npcLife = target.Build.Combat!.Target;
+        var npcBefore = session.QueryLife(npcLife).View?.Status.HitPoints;
+        var heroBefore = session.QueryHeroLife()!.Record.State;
+        try
+        {
+            _worldFocused = true; SelectSimulatedPadForSelfTest();
+            var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
+            // A standable cell 3..5 cells from the NPC.
+            CellCoord? start = null;
+            foreach (var (dx, dy) in new[] { (4, 0), (-4, 0), (0, 4), (0, -4), (3, 0), (-3, 0), (0, 3), (0, -3), (5, 0), (-5, 0), (0, 5), (0, -5) })
+            {
+                var near = new CellCoord(targetCell.X + dx, targetCell.Y + dy);
+                if (!map.Chart.Contains(near)) continue;
+                CellCoord cell;
+                try { cell = AreaSmokeStandable(map, near, 1); } catch (InvalidOperationException) { continue; }
+                if (Math.Max(Math.Abs(cell.X - targetCell.X), Math.Abs(cell.Y - targetCell.Y)) >= 3) { start = cell; break; }
+            }
+            Require(start is not null, "a standable cell a few cells from the NPC");
+            AreaSmokePlace(map, start!.Value);
+            if (!HeroInCombatMode) ToggleCombatMode();
+            Require(HeroInCombatMode, "the hero is in combat mode");
+            _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
+            PublishWorldSelection();
+            // The spell data loads in the background: the cast host is built once it is there.
+            for (var wait = 0; wait < 600 && SpellCasterNow() is null; wait++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var caster = SpellCasterNow();
+            Require(caster is not null, "the map's cast host is built (spell data " + _spellData?.Status + ")");
+            var known = Enumerable.Range(0, Arcanum.Simulation.Magic.SpellBookRules.Spells).Where(spell => caster!.AiKnows(entity, spell)).ToArray();
+            var host = AreaAiHostNow();
+            Require(host is not null, "the AI host is built");
+            host!.HeroAttacked(entity);
+            var danger = session.QueryDanger(entity);
+            Require(danger.State == DangerState.CombatFocus && danger.Focus == SessionCombatant.Hero,
+                $"the NPC fights the hero: {danger.State} {host.TraceOf(entity)?.Reaction} {host.TraceOf(entity)?.Setter}");
+
+            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            var casts = _aiCasts; var releases = _aiCastReleases;
+            var frames = 0; var choices = new HashSet<string>();
+            var hostMs = 30_000_000L;
+            TickAreaClock(hostMs);
+            for (; frames < 4000 && _aiCastReleases == releases; frames++)
+            {
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                if (host.TraceOf(entity)?.Spell is { } spell) choices.Add(spell);
+            }
+            var trace = host.TraceOf(entity);
+            GD.Print($"ARC-WORLD-102 ai-cast smoke trace knows={string.Join(",", known)} choices={string.Join(" | ", choices)} perform={trace?.Perform} cast={trace?.Cast}");
+            Require(_aiCasts > casts, $"a casting goal played after {frames} frames: {trace?.Cast}");
+            Require(_aiCastReleases > releases, $"its release began the run: {trace?.Cast}");
+            // The goal's end follows its play; afterwards no run of the NPC waits for a BEGIN.
+            for (var f = 0; f < 200 && host.RunOf(entity)?.Frames.Any(g => g.SpellRun is not null) == true; f++)
+            {
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            Require(!session.QuerySpellRuns().Runs.Any(r => r.Parent?.Id == entity && r.Action == Arcanum.Simulation.Magic.SpellRunAction.Begin
+                && (r.Flags & Arcanum.Simulation.Magic.SpellRunFlags.Processed) == 0), "no run of the NPC waits for its BEGIN after its goal");
+            RefreshAreaStatus();
+            Require(GetSelfTestSnapshot().Hud.Contains(" | AI: ", StringComparison.Ordinal), "the status line shows the AI");
+            GD.Print("ARC-WORLD-102 native-smoke ai-cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                map.RuntimeMap, Caster = target.Row.PrototypeNumber, Level = target.Build.Combat!.Level, Known = known, Frames = frames,
+                Casts = _aiCasts - casts, Releases = _aiCastReleases - releases, Cast = trace?.Cast,
+                HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroBefore.HitPointDamage,
+                Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
+        }
+        finally
+        {
+            if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
+            CancelAreaAttack(null);
+            // The casts' runs (a maintained one keeps its slot) are freed, the NPC and the hero healed.
+            foreach (var run in session.QuerySpellRuns().Runs.Where(r => r.Parent?.Id == entity).ToArray())
+                _spellCaster?.Act(new(SessionSpellRunActionKind.Free, run.Id));
+            if (session.QueryLife(npcLife).View?.Status is { } now && (now.HitPoints != npcBefore || now.IsDead))
+                session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            var heroNow = session.QueryHeroLife()!.Record.State;
+            if (heroNow.HitPointDamage > heroBefore.HitPointDamage || heroNow.FatigueDamage > heroBefore.FatigueDamage)
+                session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { HitPoints = heroNow.HitPointDamage - heroBefore.HitPointDamage, Fatigue = heroNow.FatigueDamage - heroBefore.FatigueDamage });
+            _aiForSmoke = false; _aiHost = null; _aiHostStamp = null;
+            _areaSmokeTime = (_areaSmokeTime + 19) / 20;
+            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
+            _worldFocused = focused; RestoreWorldTestTime(testTime);
+            PublishWorldSelection();
+        }
+    }
 }
