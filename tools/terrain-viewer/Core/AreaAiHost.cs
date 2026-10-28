@@ -1156,14 +1156,16 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// first list, SP11; built fresh in Steamwoven). The cache is not saved: a load or a map change builds the host again.</summary>
     public ImmutableArray<AiListEntry> List(string critter, AiActionList list)
     {
-        // ARC-WORLD-108: an item the NPC used or cast from that is gone or out of charges drops its slot (the force-removal 0x467860 →
-        // 0x4CCC00 of a destroyed item, the exhausted item 0x450420 → 0x4CCC40), so the Original setting's frozen list lists it no more.
+        // ARC-WORLD-108: an item the NPC used or cast from that is gone drops the NPC's slot (the force-removal 0x467860 → 0x4CCC00), one
+        // out of charges drops it when a list holds the item (0x450420 → 0x4CCC40), once each, so the Original setting's frozen list
+        // lists it no more.
         if (_usedItems.TryGetValue(critter, out var used))
             foreach (var item in used.ToArray())
             {
-                var gone = _session.IsItemDestroyed(item);
-                if (gone || _scene.Spells?.Invoke()?.Item(item) is { Charges: 0 }) _listCache = _listCache.ItemExhausted(critter, item);
-                if (gone) used.Remove(item);
+                if (_session.IsItemDestroyed(item)) _listCache = _listCache.Clear(critter);
+                else if (_scene.Spells?.Invoke()?.Item(item) is { Charges: 0 }) _listCache = _listCache.ItemExhausted(critter, item);
+                else continue;
+                used.Remove(item);
             }
         var request = _listCache.Request(this, critter, list, _session.Rules.Combat);
         _listCache = request.Cache;
