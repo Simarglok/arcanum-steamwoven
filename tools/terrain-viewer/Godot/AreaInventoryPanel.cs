@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Hud;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
 using Arcanum.TerrainViewer.Core;
@@ -11,6 +12,8 @@ namespace Arcanum.TerrainViewer;
 /// nine wear slots, a take-off button per worn item), a wear button per slot an item can go to, and the weight line. ARC-UI-019: above the
 /// lists the doll and the hero's grid, where the mouse picks an item up and drops it (<see cref="AreaInventoryGridArea"/>); the buttons stay
 /// for the keyboard and the controller. It renders an <see cref="AreaInventoryView"/>; the app runs every transfer through the session.
+/// ARC-UI-029: the quantity window (<see cref="AskQuantity"/>, the original's interface mode 13) asks how many units of a stack move;
+/// while it is up only its buttons and keys act.
 /// </summary>
 public partial class AreaInventoryPanel : CanvasLayer
 {
@@ -38,7 +41,17 @@ public partial class AreaInventoryPanel : CanvasLayer
     private AreaInventoryGridArea _area = null!;
     private readonly List<Button> _buttons = new();
     private AreaInventoryView? _view;
+    // ARC-UI-029: the quantity window's row, its buttons (All, +1, −1, Accept, Cancel) and its state while it asks.
+    private HBoxContainer _quantity = null!;
+    private Label _quantityLabel = null!;
+    private readonly List<Button> _quantityButtons = new();
+    private QuantityBar? _bar;
+    private string _quantityName = string.Empty;
     public event Action? CloseRequested;
+    /// <summary>ARC-UI-029: the quantity window's Accept (or Enter) with the count shown, 0 too (QW4).</summary>
+    public event Action<int>? QuantityAccepted;
+    /// <summary>ARC-UI-029: the quantity window's Cancel: nothing moves.</summary>
+    public event Action? QuantityCancelled;
     public event Action<string>? TakeRequested;
     public event Action? TakeAllRequested;
     /// <summary>ARC-SKILLS-005: use a healing item of the PC's list on the PC; ARC-UI-025: use any item of the hero's as a right press on
@@ -57,6 +70,11 @@ public partial class AreaInventoryPanel : CanvasLayer
     /// <summary>ARC-UI-019: the held item was released on the doll or the grid (or elsewhere: put back).</summary>
     public event Action<AreaInventoryDrop>? DropRequested;
     public bool IsOpen => Visible;
+    /// <summary>ARC-UI-029: the quantity window is up.</summary>
+    public bool Asking => _bar is not null;
+    internal QuantityBar? QuantityForSelfTest => _bar;
+    internal IReadOnlyList<Button> QuantityButtonsForSelfTest => _quantityButtons;
+    internal string QuantityTextForSelfTest => _quantityLabel.Text;
     /// <summary>The looted holder's entity, or null in the plain inventory view.</summary>
     public string? Holder => IsOpen ? _view?.Holder : null;
     internal AreaInventoryView? ViewForSelfTest => _view;
@@ -112,7 +130,20 @@ public partial class AreaInventoryPanel : CanvasLayer
         _area = new AreaInventoryGridArea { Name = "DollAndGrid" };
         _area.DropRequested += drop => DropRequested?.Invoke(drop);
         _area.UseRequested += held => UseRequested?.Invoke(held.Entity);
-        foreach (var control in new Control[] { _header, _area, _scroll, _message, _close, _hint }) contents.AddChild(control);
+        _quantity = new HBoxContainer { Name = "Quantity", Visible = false };
+        _quantityLabel = new Label { Modulate = new Color(1f, .85f, .55f) };
+        _quantity.AddChild(_quantityLabel);
+        foreach (var (name, text, action) in new (string, string, Action)[]
+        {
+            ("QuantityAll", "All", () => PressQuantity(QuantityAction.All)), ("QuantityUp", "+1", () => PressQuantity(QuantityAction.Up)),
+            ("QuantityDown", "-1", () => PressQuantity(QuantityAction.Down)), ("QuantityAccept", "Accept", AcceptQuantity), ("QuantityCancel", "Cancel", CancelQuantity),
+        })
+        {
+            var button = new Button { Name = name, Text = text, FocusMode = Control.FocusModeEnum.All };
+            button.Pressed += () => Callable.From(action).CallDeferred();
+            _quantity.AddChild(button); _quantityButtons.Add(button);
+        }
+        foreach (var control in new Control[] { _header, _quantity, _area, _scroll, _message, _close, _hint }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
@@ -130,6 +161,8 @@ public partial class AreaInventoryPanel : CanvasLayer
 
     public void CloseView()
     {
+        // ARC-UI-029: a question still up goes with the window (nothing moves).
+        EndQuantity();
         // An item held on the cursor goes back first (0x575770, IW1): it never left its place.
         _area.Hold(null);
         _view = null; Hide();
@@ -149,7 +182,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _takeOffButtons.Clear(); _wearButtons.Clear(); _wearTargets.Clear(); _dropButtons.Clear();
         _view = view;
         _area.Render(view);
-        _header.Text = $"Inventory | PC items {view.Pc.Count} | gold {view.Gold}" + (view.Carry is { } carry ? " | " + CarryText(carry) : string.Empty)
+        _header.Text = $"Inventory | PC items {view.Pc.Count} | gold {view.Gold} | {AmmoText(view.Ammo)}" + (view.Carry is { } carry ? " | " + CarryText(carry) : string.Empty)
             + (view.Holder is null ? string.Empty : " | looting a dead NPC");
         _doll.Text = view.Doll.Count == 0 ? "(no hero: nothing can be worn)"
             : string.Join("\n", view.Doll.Select(slot => $"{AreaInventoryHost.SlotName(slot.Slot)}: {slot.Name ?? "-"}"));
@@ -261,7 +294,10 @@ public partial class AreaInventoryPanel : CanvasLayer
             + (_wearButtons.Count + _takeOffButtons.Count > 0 ? "Wear puts an item into a slot (an occupant goes back to the pack); Take off moves it to the pack | " : string.Empty)
             + "Mouse: press an item of the doll or grid and release it on a grid cell or a slot (an occupant comes onto the cursor), on Drop to drop it on the hero's tile or on Use to use it"
             + (view.Unplaced.Count > 0 ? $" | no room in the grid: {string.Join(", ", view.Unplaced)}" : string.Empty)
-            + " | I, Escape or cancel closes | PROJECT diagnostic window: no throw from the map, no stacks; original UI parity NOT_VERIFIED";
+            + " | a gold or ammunition stack asks how many units move (keypad digits, Backspace, Enter; Escape cancels)"
+            + " | I, Escape or cancel closes | PROJECT diagnostic window: no throw from the map; original UI parity NOT_VERIFIED";
+        // ARC-UI-029: a re-render while the quantity window is up keeps the rest of the window inert.
+        if (_bar is not null) SetOthersDisabled(true);
         var enabled = Focusable();
         enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
         ResizePanel();
@@ -269,12 +305,82 @@ public partial class AreaInventoryPanel : CanvasLayer
 
     private List<Button> Focusable()
     {
+        // ARC-UI-029: while the quantity window asks only its buttons take focus.
+        if (_bar is not null) return _quantityButtons.ToList();
         var list = _useButtons.Concat(_pickButtons).Concat(_repairButtons).Concat(_buttons).ToList();
         if (_takeAll.Visible && !_takeAll.Disabled) list.Add(_takeAll);
         // ARC-UI-015: the doll's buttons come after the earlier ones, so the first focus (a confirm right after opening) stays where it was.
         list.AddRange(_takeOffButtons.Concat(_wearButtons).Concat(_dropButtons));
         list.Add(_close);
         return list;
+    }
+
+    /// <summary>
+    /// ARC-UI-029: opens the quantity window over a stack of <paramref name="maximum"/> units of <paramref name="name"/> (bar mode 9,
+    /// ledger QW2, QW3): the count starts at 0; the rest of the window, the doll and the grid do nothing until Accept or Cancel (QW6).
+    /// </summary>
+    public void AskQuantity(string name, int maximum, string? message = null)
+    {
+        // A held item goes back to its place first (0x575770, QW1).
+        _area.Hold(null);
+        _bar = QuantityBar.Open(maximum);
+        _quantityName = name;
+        _quantity.Show(); _area.Blocked = true;
+        SetOthersDisabled(true);
+        ShowQuantity();
+        _message.Text = message ?? string.Empty;
+        _quantityButtons[0].GrabFocus();
+        ResizePanel();
+    }
+
+    /// <summary>ARC-UI-029: one press on the quantity window (its buttons, the keypad digits, Backspace or Delete).</summary>
+    public void PressQuantity(QuantityAction action, int digit = 0)
+    {
+        if (_bar is not { } bar) return;
+        _bar = bar.Apply(action, digit);
+        ShowQuantity();
+    }
+
+    /// <summary>ARC-UI-029: Accept (or Enter): the question ends and the count shown goes to the app.</summary>
+    public void AcceptQuantity()
+    {
+        if (_bar is not { } bar) return;
+        EndQuantity();
+        QuantityAccepted?.Invoke(bar.Count);
+    }
+
+    /// <summary>ARC-UI-029: Cancel (or Escape): the question ends and nothing moves.</summary>
+    public void CancelQuantity()
+    {
+        if (_bar is null) return;
+        EndQuantity();
+        QuantityCancelled?.Invoke();
+    }
+
+    private void EndQuantity()
+    {
+        if (_bar is null) return;
+        _bar = null;
+        _quantity.Hide(); _area.Blocked = false;
+        SetOthersDisabled(false);
+        // The app re-renders after every answer; this restores the buttons if it does not.
+        if (_view is { } view) Render(view, _message.Text);
+    }
+
+    private void ShowQuantity() =>
+        _quantityLabel.Text = _bar is { } bar ? $"How many of {_quantityName}? {bar.Count.ToString(System.Globalization.CultureInfo.InvariantCulture).PadLeft(QuantityBar.Digits)} of {bar.Maximum}  " : string.Empty;
+
+    private void SetOthersDisabled(bool disabled)
+    {
+        foreach (var button in _useButtons.Concat(_pickButtons).Concat(_repairButtons).Concat(_buttons).Concat(_takeOffButtons).Concat(_wearButtons)
+            .Concat(_dropButtons).Append(_takeAll).Append(_close)) button.Disabled = disabled || button == _takeAll && (_view?.Loot.Count ?? 0) == 0;
+    }
+
+    /// <summary>ARC-UI-029: the four ammunition counts after the gold (ledger IW9).</summary>
+    internal static string AmmoText(IReadOnlyList<int> ammo)
+    {
+        int At(int type) => type < ammo.Count ? ammo[type] : 0;
+        return $"arrows {At(0)} | bullets {At(1)} | charges {At(2)} | fuel {At(3)}";
     }
 
     /// <summary>ARC-UI-015: the original's weight lines (ledger IW9): the carried weight, and the encumbrance level with the weight

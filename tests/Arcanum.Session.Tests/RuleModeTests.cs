@@ -61,6 +61,8 @@ public sealed class RuleModeTests
             Assert.AreSame(rules.Navigation, Arcanum.Simulation.Navigation.NavigationRuleProfile.FromName(rules.Name));
             Assert.AreEqual(rules.Name, rules.Creation.Name);
             Assert.AreSame(rules.Creation, Arcanum.Simulation.Character.CharacterCreationRuleProfile.FromName(rules.Name));
+            Assert.AreEqual(rules.Name, rules.Lifecycle.Name);
+            Assert.AreSame(rules.Lifecycle, LifecycleRuleProfile.FromName(rules.Name));
         }
         Assert.AreSame(Arcanum.Simulation.Items.ItemRuleProfile.Steamwoven, GameRules.Steamwoven.Items);
         Assert.AreSame(Arcanum.Simulation.Items.ItemRuleProfile.Original, GameRules.Original.Items);
@@ -95,6 +97,9 @@ public sealed class RuleModeTests
         // ARC-UI-030: NW4 is a Steamwoven fix with an Original switch.
         Assert.IsTrue(GameRules.Original.Creation.RefusedGenderClearsBackground);
         Assert.IsFalse(GameRules.Steamwoven.Creation.RefusedGenderClearsBackground);
+        // ARC-UI-028: the death window is a Steamwoven addition; Original resets to the main menu (PD8).
+        Assert.IsTrue(GameRules.Original.Lifecycle.DeathResetsToMainMenu);
+        Assert.IsFalse(GameRules.Steamwoven.Lifecycle.DeathResetsToMainMenu);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
 

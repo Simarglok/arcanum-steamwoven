@@ -189,6 +189,10 @@ public sealed record AreaInventoryLine(string Entity, string Text)
     /// <summary>ARC-UI-015: the wear slots the item can be put into (its wear location; a ring either ring slot); empty for an item
     /// that is worn now, worn nowhere, or whose wear facts the viewer does not have.</summary>
     public IReadOnlyList<EquipmentSlot> WearSlots { get; init; } = Array.Empty<EquipmentSlot>();
+    /// <summary>ARC-UI-029: a gold or ammunition stack's kind and units (a move of more than one unit to another holder asks how
+    /// many, ledger QW1); null for any other item.</summary>
+    public SessionItemKind? StackKind { get; init; }
+    public int Units { get; init; }
 }
 
 /// <summary>ARC-UI-019: one item of the hero's grid as the window draws it: its entity, slot (row × 10 + column), size in cells and name.</summary>
@@ -210,6 +214,9 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     public IReadOnlyList<AreaGridItem> Grid { get; init; } = Array.Empty<AreaGridItem>();
     /// <summary>ARC-UI-019: the names of held items that are neither worn nor in the grid (no room), in list order.</summary>
     public IReadOnlyList<string> Unplaced { get; init; } = Array.Empty<string>();
+    /// <summary>ARC-UI-029: the hero's ammunition counts by type (arrows, bullets, charge cells, fuel): its first stack of each type,
+    /// 0 without one, as the original's window prints them after the gold (ledger IW9).</summary>
+    public IReadOnlyList<int> Ammo { get; init; } = new int[SessionAmmoRecord.AmmoTypes];
 }
 
 /// <summary>
@@ -342,7 +349,10 @@ public sealed class AreaInventoryHost
             // ARC-WORLD-055: the items the hero made or took from an NPC that held made items follow, named by their kind.
             .Concat(session.QueryMadeItems().Select(item => new AreaInventoryLine(item.Entity, Line(KindName(item.Kind, catalog), item.Kind.Type, null) + Units(item.Entity) + " (made)" + Worn(item.Entity))
             { Written = item.Kind.Type == SessionItemType.Written }))
+            .Select(line => session.QueryAmmo(line.Entity) is { } stack ? line with { StackKind = HeldKind(line.Entity), Units = stack.Units } : line)
             .ToArray();
+        SessionItemKind? HeldKind(string entity) => session.QueryHeroKit().Select(item => (item.Entity, item.Kind)).Concat(session.QueryPcInventory().Select(item => (item.Entity, item.Kind)))
+            .Concat(session.QueryMadeItems().Select(item => (item.Entity, item.Kind))).Where(pair => pair.Entity == entity).Select(pair => (SessionItemKind?)pair.Kind).FirstOrDefault();
         var gold = session.QueryGold();
         // ARC-UI-015: the paper doll lists the nine wear slots in slot order (the original's locations 1000..1008).
         var wornBySlot = session.QueryEquipment().Worn.ToDictionary(item => item.Slot, item => item.Entity);
@@ -354,8 +364,11 @@ public sealed class AreaInventoryHost
         var heroGrid = session.QueryHeroGrid();
         var grid = heroGrid.Items.Select(item => new AreaGridItem(item.Entity, item.Slot, item.Width, item.Height, ItemName(session, item.Entity, catalog))).ToArray();
         var unplaced = heroGrid.Unplaced.Select(entity => ItemName(session, entity, catalog)).ToArray();
+        // ARC-UI-029: the four ammunition counts follow the gold (IW9: the stack each type's critter field names, the first here).
+        var heroAmmo = session.QueryHeroAmmo();
+        var ammo = Enumerable.Range(0, SessionAmmoRecord.AmmoTypes).Select(type => heroAmmo.FirstOrDefault(stack => stack.AmmoType == type).Units).ToArray();
         if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>())
-            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced };
+            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo };
         var current = session.QueryMapInventory(new(runtimeMap));
         // ARC-WORLD-063: a junk pile the session made lists its items in the pile's order.
         var pile = current?.JunkPiles.FirstOrDefault(p => p.Entity == holder);
@@ -366,9 +379,13 @@ public sealed class AreaInventoryHost
         string? Rowless(string entity) => entity.StartsWith("made:", StringComparison.Ordinal) ? " (made)" : kit.Contains(entity) ? " (starting kit)" : null;
         var loot = list.Select(item => new AreaInventoryLine(item.Entity, (Rowless(item.Entity) is { } label
                 ? Line(KindName(item.Facts.Kind, catalog) + label, item.Facts.Kind.Type, null) : Line(Name(item.Entity, catalog), item.Facts.Kind.Type, item.Facts.Weight))
-            + (item.Facts.AmmoType is not null ? $" ×{item.Facts.Quantity}" : string.Empty) + (pile is null && item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
+            + (Stack(item.Facts) ? $" ×{item.Facts.Quantity}" : string.Empty) + (pile is null && item.Facts.Worn ? " (worn)" : string.Empty))
+            { StackKind = Stack(item.Facts) ? item.Facts.Kind : null, Units = Stack(item.Facts) ? item.Facts.Quantity ?? 0 : 0 }).ToArray();
         return new(Array.AsReadOnly(pc), holder, pile is not null ? JunkPileTitle : Name(holder, catalog), Array.AsReadOnly(loot))
-            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced };
+            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo };
+
+        // ARC-UI-029: a gold pile shows its coins as an ammunition stack shows its units.
+        static bool Stack(SessionItemFacts facts) => facts.AmmoType is not null || facts.Kind.Type == SessionItemType.Gold && facts.Quantity is not null;
 
         IReadOnlyList<EquipmentSlot> Slots(string entity) => worn.Contains(entity) ? Array.Empty<EquipmentSlot>() : WearSlots(Wearable(session, entity, kitWear));
         bool Usable(string entity) => !worn.Contains(entity) && UseFacts(session, entity, kitUse) is { CanUseBox: true, Wearable: false };
@@ -658,6 +675,10 @@ public sealed class AreaInventoryHost
         GameSessionFailure.InsertRefused => "the PC cannot take it",
         GameSessionFailure.BudgetExceeded => "the PC's list is full",
         GameSessionFailure.InventoryUnavailable => "no inventory on this map",
+        // ARC-UI-029: the stack moves after the quantity window.
+        GameSessionFailure.GoldUnavailable => "there is no hero to hold gold",
+        GameSessionFailure.GoldShort or GameSessionFailure.AmmoShort => "fewer units are left than asked",
+        GameSessionFailure.UnknownHolder => "the holder is not known here",
         _ => failure.ToString(),
     };
 }

@@ -1,9 +1,11 @@
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-026 the hero's death: the delayed event, the menu retry, the slides and the reset (ledger PD1–PD9).</summary>
+/// <summary>ARC-UI-026 the hero's death: the delayed event, the menu retry, the slides and the reset (ledger PD1–PD9); ARC-UI-028
+/// the Steamwoven box that offers the newest save before the reset.</summary>
 [TestClass]
 public sealed class AreaHeroDeathTests
 {
@@ -28,6 +30,13 @@ public sealed class AreaHeroDeathTests
         public void EndSlides() => Calls.Add("end slides");
         public bool Lasting { get; set; }
         public string? Reset(out bool lasting) { Calls.Add("reset"); lasting = Lasting; return Refusal; }
+        public LifecycleRuleProfile Rules { get; set; } = LifecycleRuleProfile.Steamwoven;
+        public string? LastSave { get; set; }
+        public string? LoadRefusal { get; set; }
+        public bool LoadSettled { get; set; } = true;
+        public void Ask(string save, string? notice) => Calls.Add($"ask {save}" + (notice is null ? "" : " " + notice));
+        public void EndAsk() => Calls.Add("end ask");
+        public string? LoadLastSave(string save) { Calls.Add("load " + save); return LoadRefusal; }
     }
 
     private static (AreaHeroDeath Death, Host Host) Died()
@@ -88,6 +97,109 @@ public sealed class AreaHeroDeathTests
             "windows", "fade out 2000", "music", "show slide/death.bmp", "fade in 2000", "voice sound/speech/slide/DeathSound.mp3",
             "end slide", "fade out 2000", "end slides", "reset", "fade in 2000",
         }, host.Calls);
+    }
+
+    /// <summary>A death whose show ended (no slide table: straight to the point of the reset).</summary>
+    private static (AreaHeroDeath Death, Host Host) ShowEnded(string? save, LifecycleRuleProfile rules)
+    {
+        var (death, host) = Died();
+        host.Slides = AreaSlideTable.None("t");
+        host.LastSave = save; host.Rules = rules;
+        death.Tick(AreaHeroDeath.DeathDelay, host); death.Tick(AreaHeroDeath.FadeTime, host);
+        return (death, host);
+    }
+
+    [TestMethod]
+    public void Steamwoven_asks_to_load_the_newest_save_and_yes_loads_it_and_fades_in()
+    {
+        var (death, host) = ShowEnded("slot0003", LifecycleRuleProfile.Steamwoven);
+        Assert.AreEqual(AreaDeathStage.Asking, death.Stage, "the box asks instead of the reset");
+        Assert.IsTrue(death.Covering);
+        Assert.AreEqual("slot0003", death.OfferedSave);
+        Assert.IsFalse(death.Input(false, host), "a key is no slide input here");
+        death.Tick(60_000, host);
+        Assert.AreEqual(AreaDeathStage.Asking, death.Stage, "the box waits for its answer");
+        host.LoadSettled = false;
+        Assert.IsTrue(death.Answer(true, host));
+        Assert.AreEqual(AreaDeathStage.Loading, death.Stage);
+        Assert.IsTrue(death.Loaded);
+        Assert.IsFalse(death.Answer(true, host), "answered once");
+        death.Tick(1000, host);
+        Assert.AreEqual(AreaDeathStage.Loading, death.Stage, "black until the loaded game's map is there");
+        host.LoadSettled = true; host.HeroDead = false;
+        death.Tick(16, host);
+        Assert.AreEqual(AreaDeathStage.MenuFadeIn, death.Stage);
+        death.Tick(AreaHeroDeath.FadeTime, host);
+        Assert.AreEqual(AreaDeathStage.Watching, death.Stage);
+        CollectionAssert.AreEqual(new[] { "windows", "fade out 2000", "ask slot0003", "load slot0003", "end ask", "fade in 2000" }, host.Calls, "no reset");
+        // A load that never settles gives up as a reset does.
+        var (stuck, other) = ShowEnded("slot0001", LifecycleRuleProfile.Steamwoven);
+        other.LoadSettled = false;
+        stuck.Answer(true, other);
+        stuck.Tick(AreaHeroDeath.ResetTimeout, other);
+        Assert.AreEqual(AreaDeathStage.MenuFadeIn, stuck.Stage);
+        Assert.IsTrue(stuck.LoadAbandoned);
+        Assert.IsFalse(death.LoadAbandoned);
+    }
+
+    [TestMethod]
+    public void A_load_that_brings_no_living_hero_asks_again()
+    {
+        // The other map failed and the old game came back, or the save's hero is dead: the hero is still dead when it settles.
+        var (death, host) = ShowEnded("slot0004", LifecycleRuleProfile.Steamwoven);
+        host.LoadSettled = false;
+        death.Answer(true, host);
+        host.LoadSettled = true;
+        death.Tick(16, host);
+        Assert.AreEqual(AreaDeathStage.Asking, death.Stage);
+        Assert.AreEqual(AreaHeroDeath.NoLivingHero, death.LoadRefusal);
+        Assert.IsFalse(death.Loaded);
+        Assert.AreEqual("ask slot0004 " + AreaHeroDeath.NoLivingHero, host.Calls[^1]);
+        Assert.IsTrue(death.Answer(false, host));
+        Assert.IsNull(death.LoadRefusal, "No clears the refusal");
+        Assert.AreEqual(AreaDeathStage.Reset, death.Stage);
+    }
+
+    [TestMethod]
+    public void No_resets_as_the_original_and_a_refused_load_keeps_the_box()
+    {
+        var (death, host) = ShowEnded("quicksave", LifecycleRuleProfile.Steamwoven);
+        host.LoadRefusal = "Death: last save quick load refused: another map is loading";
+        Assert.IsTrue(death.Answer(true, host));
+        Assert.AreEqual(AreaDeathStage.Asking, death.Stage, "the box stays");
+        Assert.AreEqual(host.LoadRefusal, death.LoadRefusal);
+        Assert.IsFalse(death.Loaded);
+        Assert.IsTrue(death.Answer(false, host));
+        Assert.AreEqual(AreaDeathStage.Reset, death.Stage, "No: the original's reset");
+        Assert.IsNull(death.OfferedSave);
+        death.MenuReady(host);
+        Assert.AreEqual(AreaDeathStage.MenuFadeIn, death.Stage);
+        CollectionAssert.AreEqual(new[]
+        {
+            "windows", "fade out 2000", "ask quicksave", "load quicksave", "ask quicksave " + host.LoadRefusal, "end ask", "reset", "fade in 2000",
+        }, host.Calls);
+    }
+
+    [TestMethod]
+    public void Original_or_no_save_resets_at_once()
+    {
+        var (original, host) = ShowEnded("slot0000", LifecycleRuleProfile.Original);
+        Assert.AreEqual(AreaDeathStage.Reset, original.Stage, "PD8: Original never asks");
+        Assert.IsFalse(original.Answer(true, host));
+        CollectionAssert.AreEqual(new[] { "windows", "fade out 2000", "reset" }, host.Calls);
+        var (none, other) = ShowEnded(null, LifecycleRuleProfile.Steamwoven);
+        Assert.AreEqual(AreaDeathStage.Reset, none.Stage, "nothing to load: the reset");
+        CollectionAssert.AreEqual(new[] { "windows", "fade out 2000", "reset" }, other.Calls);
+        // After the slides the box comes at the same point.
+        var (shown, slides) = Died();
+        slides.LastSave = "slot0002";
+        shown.Tick(AreaHeroDeath.DeathDelay, slides); shown.Tick(AreaHeroDeath.FadeTime, slides); shown.Tick(AreaHeroDeath.FadeTime, slides);
+        Assert.IsTrue(shown.Input(true, slides));
+        shown.Tick(AreaHeroDeath.FadeTime, slides);
+        Assert.AreEqual(AreaDeathStage.Asking, shown.Stage);
+        CollectionAssert.AreEqual(new[] { "end slides", "ask slot0002" }, slides.Calls.TakeLast(2).ToArray());
+        shown.Stop(true);
+        Assert.IsNull(shown.OfferedSave);
     }
 
     [TestMethod]
@@ -279,5 +391,11 @@ public sealed class AreaHeroDeathTests
         public void EndSlide() => inner.EndSlide();
         public void EndSlides() => inner.EndSlides();
         public string? Reset(out bool lasting) { lasting = false; death.MenuReady(this); return null; }
+        public LifecycleRuleProfile Rules => inner.Rules;
+        public string? LastSave => inner.LastSave;
+        public bool LoadSettled => inner.LoadSettled;
+        public void Ask(string save, string? notice) => inner.Ask(save, notice);
+        public void EndAsk() => inner.EndAsk();
+        public string? LoadLastSave(string save) => inner.LoadLastSave(save);
     }
 }

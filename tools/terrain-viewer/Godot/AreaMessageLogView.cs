@@ -24,12 +24,12 @@ public partial class AreaMessageLogView : Control
     private bool _wide;
 
     /// <summary>The texts drawn now (a label with at least one line on screen), joined by line breaks ("" when nothing is drawn).</summary>
-    internal string ShownTextForSelfTest => _clear.Visible ? string.Join("\n", _labels.Where(Drawn).Select(label => label.Text)) : "";
+    internal string ShownTextForSelfTest => Visible && _clear.Visible ? string.Join("\n", _labels.Where(Drawn).Select(label => label.Text)) : "";
     /// <summary>How many of the drawing's texts have at least one line on screen.</summary>
-    internal int DrawnTextsForSelfTest => _clear.Visible ? _labels.Count(Drawn) : 0;
+    internal int DrawnTextsForSelfTest => Visible && _clear.Visible ? _labels.Count(Drawn) : 0;
     private static bool Drawn(Label label) => label.Visible && label.Text.Length > 0 && label.GetVisibleLineCount() > 0;
     /// <summary>The hover text drawn now ("" when the window shows no hover text).</summary>
-    internal string HoverTextForSelfTest => _log.Shown is { Kind: AreaMessageKind.Hover } && _clear.Visible ? ShownTextForSelfTest : "";
+    internal string HoverTextForSelfTest => _log.Shown is { Kind: AreaMessageKind.Hover } && Visible && _clear.Visible ? ShownTextForSelfTest : "";
     internal bool IconShownForSelfTest => _icon.Visible && _icon.Texture is not null;
     internal bool BackgroundShownForSelfTest => _background.Visible && _background.Texture is not null;
     internal bool WideForSelfTest => _wide;

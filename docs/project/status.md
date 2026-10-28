@@ -60,7 +60,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Exact movement | [World, maps and movement](status/world.md) | — |
 | Click-to-move route | [World, maps and movement](status/world.md) | ARC-WORLD-073, ARC-WORLD-042, ARC-WORLD-060 |
 | Hover tooltip and action cursor | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-005 |
-| Health and fatigue bars | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-020 |
+| Health and fatigue bars | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-020, ARC-UI-024 |
 | Floating text | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-021 |
 | Inventory window, pickup and loot | [Viewer, rendering, HD and input](status/viewer.md) | ARC-WORLD-014, ARC-SCRIPT-013, ARC-UI-004 |
 | Character sheet | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-009, ARC-MAGIC-008, ARC-UI-007 |

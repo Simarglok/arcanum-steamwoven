@@ -114,6 +114,14 @@ public partial class TerrainDiagnosticHud : CanvasLayer
         ResizeForViewport();
     }
 
+    /// <summary>ARC-UI-024: starts the panel right of the follower frames down the window's left edge (the window x of their right
+    /// edge; 0 without them), which would otherwise cover its left end.</summary>
+    internal void SetLeftInset(float inset)
+    {
+        if (_panel is null || _panel.OffsetLeft == 16 + inset) return;
+        _panel.OffsetLeft = 16 + inset;
+    }
+
     private void ResizeForViewport()
     {
         if (_panel is null) return;
