@@ -302,9 +302,10 @@ public enum DialogOptionTextKind
 {
     /// <summary>Decoded record text with @pcname@/@npcname@ substituted.</summary>
     Record,
-    /// <summary>Generated phrase marker; the phrase itself lives in generic resources that are not loaded.</summary>
+    /// <summary>Generated phrase marker. With a greeting port (ARC-SCRIPT-043) the text is the phrase picked from the generated
+    /// dialog files (<see cref="DialogOption.TextOrigin"/>); otherwise, and for a prefix marker, it is empty.</summary>
     Generated,
-    /// <summary>No reply qualified: the single generated farewell that ends the dialog.</summary>
+    /// <summary>No reply qualified: the single generated farewell that ends the dialog (its phrase as for a generated reply).</summary>
     Fallback,
 }
 
@@ -333,7 +334,8 @@ public sealed record DialogOption(
     DialogNodeId? Target,
     DialogScriptLine? ScriptLine,
     DialogOptionToken Token,
-    DialogOptionBlock? Block);
+    DialogOptionBlock? Block,
+    DialogLineOrigin? TextOrigin = null);
 
 /// <param name="Origin">ARC-WORLD-058: for a greeting line (a <c>g:</c> node), where its text came from; null for a record's
 /// own text.</param>

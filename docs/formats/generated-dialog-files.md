@@ -35,6 +35,7 @@ read from the names.
 | --- | --- |
 | `GeneratedDialogFiles.Load(ContentStack, MesReaderOptions?)` | 0x418250: every file from the stack's winner at module load (`ContentLoadPhase.ModuleLoaded`). The original opens a file on first use and exits the program when one is missing (GD2); here a missing file stays absent (`Absent`), and a file that cannot be read or parsed as MES refuses the whole load (`ReadFailed`, `ParseFailed` with the path): project policy. |
 | `GeneratedDialogFiles.Create(files)` | The set from 32 parsed files in handle order (null = absent), for synthetic data or another loader. |
+| `PcLineFile(classLines, npcMale, pcDumb)` | ARC-SCRIPT-043 (ledger GP2, GP3): the file a PC line reads, `gd_pc2*` or for class lines `gd_cls_pc2*`, by the NPC's gender (the listener), the dumb variants for a dumb PC. |
 | `NpcLineFile(group, npcMale, pcMale, npcDumb)` | GD5: the file an NPC line of the class, race or NPC group reads, by the NPC's gender, then the PC's; the dumb files for a dumb NPC (class and race only). |
 | `RunLength(file, first, last)` | GD3 (0x4D4550, `MesFile.RunLength`): 0 without an entry numbered exactly `first`, else the stored entries from it numbered ≤ `last`, gaps not seen; 0 for an absent file. |
 | `Line(file, number)` | GD4 (0x4D43A0): the entry's message (raw bytes, CR LF read as LF), or a missing result (`Message` null; `FileAbsent` when the file is absent). The original shows a static missing-line message naming the number and the file instead; what is shown is the caller's. |
@@ -59,8 +60,9 @@ by synthetic files.
 
 ## Not ready
 
-- The NPC greeting (`g:`) reads these files since ARC-WORLD-058 ([dialog greeting](../scripting/dialog-greeting.md)); the
-  markers `i:`, `m:` and `r:` and the PC's generated options do not yet.
-- The PC option files (`gd_pc*`, `gd_cls_pc*` and their dumb variants) and the story files (`gd_sto_*`) are loaded but have
-  no consumer.
+- The NPC greeting (`g:`) reads these files since ARC-WORLD-058 ([dialog greeting](../scripting/dialog-greeting.md)), the
+  phrases of the PC's generated options with an exact marker and the no-reply farewell since ARC-SCRIPT-043
+  ([generated phrases](../scripting/dialog-conversation-runtime.md#generated-phrases-arc-script-043)); the NPC markers `i:`,
+  `m:` and `r:` and the PC's prefix markers do not yet.
+- The story files (`gd_sto_*`) are loaded but have no consumer.
 - Text decoding and localisations other than the declared MES byte profiles.

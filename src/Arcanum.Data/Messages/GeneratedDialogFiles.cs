@@ -95,6 +95,23 @@ public sealed class GeneratedDialogFiles
     }
 
     /// <summary>
+    /// ARC-SCRIPT-043: the file a PC line reads (the Player-option generators 0x4182D0 and 0x418390): the plain PC files
+    /// (<c>gd_pc2*</c>) or, for <paramref name="classLines"/>, the class files (<c>gd_cls_pc2*</c>), by the NPC's gender (the
+    /// listener), and their dumb variants when the PC is dumb.
+    /// </summary>
+    public static GeneratedDialogFile PcLineFile(bool classLines, bool npcMale, bool pcDumb)
+    {
+        var first = (classLines, pcDumb) switch
+        {
+            (false, false) => GeneratedDialogFile.PcToMale,
+            (false, true) => GeneratedDialogFile.DumbPcToMale,
+            (true, false) => GeneratedDialogFile.ClassPcToMale,
+            (true, true) => GeneratedDialogFile.ClassDumbPcToMale,
+        };
+        return npcMale ? first : first + 1;
+    }
+
+    /// <summary>
     /// The number of entries a line pick may choose from in <paramref name="first"/>..<paramref name="last"/> (0x4D4550 over
     /// the file): 0 when the file has no entry numbered exactly <paramref name="first"/>, else how many stored entries from it
     /// are numbered ≤ <paramref name="last"/>. The numbers are not checked to be consecutive, so a block with a gap counts

@@ -317,10 +317,14 @@ public sealed class DialogGreetingTests
 
     private static MesFile Mes(string text) => MesFile.Parse(Encoding.ASCII.GetBytes(text)).File!;
 
-    internal sealed class FakeGreeter(DialogGreetingFacts? facts, DialogGreetingSources sources, int[] rolls, DialogRuleProfile rules, int[] candidates)
+    /// <summary>A greeting port over fixed facts and texts. Phrase rolls (ARC-SCRIPT-043) come from their own queue, so a
+    /// greeting's queued rolls stay the greeting's; an empty queue answers the minimum.</summary>
+    internal sealed class FakeGreeter(DialogGreetingFacts? facts, DialogGreetingSources sources, int[] rolls, DialogRuleProfile rules, int[] candidates,
+        int[]? phraseRolls = null)
         : IDialogGreetingPort
     {
         private readonly Queue<int> _rolls = new(rolls);
+        private readonly Queue<int> _phraseRolls = new(phraseRolls ?? []);
         public List<(DialogGreetingRoll, int, int)> Asked { get; } = [];
         public Action? OnFacts { get; set; }
         public bool Refuse { get; set; }
@@ -348,7 +352,8 @@ public sealed class DialogGreetingTests
         {
             Asked.Add((roll, min, max));
             if (Refuse) return null;
-            return _rolls.Count > 0 ? _rolls.Dequeue() : min;
+            var queue = roll == DialogGreetingRoll.Phrase ? _phraseRolls : _rolls;
+            return queue.Count > 0 ? queue.Dequeue() : min;
         }
     }
 }

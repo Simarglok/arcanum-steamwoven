@@ -148,3 +148,24 @@ Anomalies (classification for D8):
 - Project policy, not a mode difference: every node a slot names is planned with the `g:` node, before its actions, so a
   missing, reply, greeting or unplannable slot node stops or fails the greeting node even when its slot never fires (the
   original follows a slot only when it fires); no installed slot text names such a node.
+
+## Generated Player phrases (ARC-SCRIPT-043)
+
+Source: the owner's playtest of Virgil's follower menu (node 385 of DLG 1324, the replies `B:`, `H:`, `K:`, `E:` shown as
+placeholders) and the [conversation runtime](../../scripting/dialog-conversation-runtime.md#generated-phrases-arc-script-043).
+Question: which text does the original give a Player reply whose text is a generated marker, and from where? Read statically on
+2026-10-28 by one reader (the implementing session, method step 6 with the project's own records of the dialog state); the rows are
+F1. Every direct branch and the jump table read (0x414DE0, 31 entries) stay inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| GP1 | option builder (0x416C10) | Each eligible reply's text is tested in this order, case-insensitively: `a:` `b:` exact, `c:` `d:` prefix, `e:` `f:` `h:` `i:` `k:` `l:` `n:` `p:` exact, `q:` prefix, `r:` prefix, `s:` exact, `t:` `u:` prefix, `w:` exact, `x:` prefix, `y:` exact, `z:` prefix; any other text is the reply's own, names substituted (0x416B00). An exact marker's text is a PC line: `y` 1–99, `n` 100–199, `s` 200–299, `b` 300–399 (1600–1699 when the NPC's leader, 0x45DE00, is the PC), `e` 400–499, `h` 700–799, `f` 800–899, `k` 1500–1599, `w` 1800–1899, `p` 1900–1999, `l` 2300–2399; `a` is the PC class line from 1000 and `i` (0x419190) from 3000. `a e f k n s w y` keep the reply's own response (0x417590); `b` sets state 3 (barter), `h` 11, `l` 30, `p` 25, `i` 10. The prefix markers `d r t x` append the reply's text after the marker to their phrase (1300–1399, class 2000, 500–599, 1400–1499); `c` reads the single line 1700 + a value of 0x445090; `q`, `u`, `x`, `d` test world, quest or skill state first and may drop the option, `z` builds a spell option (0x419AC0). | Original |
+| GP2 | PC line (0x4182D0) | The file is `gd_pc2m` when the NPC's effective gender (stat 26) is male, else `gd_pc2f`; a dumb PC (0x45FC00) reads `gd_dumb_pc2m`/`gd_dumb_pc2f`. The pick is the GD5 pick of the range (run count 0x4D4550, random 0x4CEF00 from 0 to the count less one, fetch 0x4D43A0), then the name substitution 0x416B00. | Original |
+| GP3 | PC class line (0x418390) | As GP2 with `gd_cls_pc2m`/`gd_cls_pc2f` (dumb: `gd_cls_dumb_pc2m`/`gd_cls_dumb_pc2f`); the first number is the group + 50 × the NPC's social class (field 0x128, 0x45D010), for a dumb PC too, and the range 50 entries. | Original |
+| GP4 | dumb test (0x45FC00) | A critter (type 15 or 16) is dumb when its effective intelligence (stat 4) is at most 4, or when 0x4C2690 returns 55, 74 or 75 (not read further; the conversation's `IsDumb` PC fact stands for it). | Original |
+| GP5 | reply list (0x414E60) | The options are built in the reply order (0x414F50 lists the eligible replies) and an option whose builder returns 0 is dropped and its slot reused. With no option left the single option is a PC line 400–499 with state 1 (exit). | Original |
+| GP6 | reply list rebuild (0x414E60, flag argument; 0x4CEEE0, 0x4CEED0) | A first build reseeds the random generator with the current time (`time(0)`, 0x4CEEE0) and keeps that seed in the dialog record; a rebuild with the flag set reseeds it with the kept seed (0x4CEED0), so the rebuilt options show the same phrases. | Original; here a rebuild in the same turn keeps the turn's phrases and draws nothing, and the session's generator is never reseeded (its labelled rolls stay reproducible; the original's generator is not the session's, RG8) |
+| GP7 | the `h:` reply (0x414810 case 11 → 0x419830) | The healer menu: the NPC's class line 14000, then by the NPC's heal skill (0x4B1AB0, skill 12) generated options of state 12 (PC lines 1100–1199) and 13 (1200–1299), spell options (0x419AC0) for spells 60, 61, 62 and 64, the skill service of 0x419A00 (skill 10) when allowed (0x4AE570), and "forget it" (800–899) with the reply's own response. | Not implemented (ARC-SCRIPT-044); the option stays blocked |
+
+Not read here: 0x4C2690 (GP4), the value 0x445090 returns (`c:`), and the conditions and actions of the questions node behind
+Virgil's `K:` (`ss`, `ar`, `ia`, `ce`; ARC-SCRIPT-045).

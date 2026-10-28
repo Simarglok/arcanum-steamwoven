@@ -158,6 +158,60 @@ public sealed class VirgilPartyTests
         Assert.IsTrue(session.QueryHero()!.Alignment > side.Alignment, "the dialog's AL wrote the hero's alignment");
     }
 
+    [TestMethod, TestCategory("RealData")]
+    public void Original_virgil_follower_menu_shows_its_generated_phrases()
+    {
+        // ARC-SCRIPT-043: node 385 (the follower entry) through the AREA greeting seam with the installation's generated-dialog
+        // files. Numbers, files and blocks only; no original text is asserted or printed.
+        var root = Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("ARC_AREA_CONVERSATION_GAME_ROOT is required.");
+        string P(string relative) => Path.Combine(root, relative);
+        using var data = AreaOriginalValidator.OpenFiles(P("modules/Arcanum.dat"), P("arcanum1.dat"), P("arcanum2.dat"), P("modules/Arcanum/maps/qrmvs-420-1zjcnpgn"), P("data/proto"));
+        var snapshot = data.LoadStrict();
+        var document = VirgilDialog(P("arcanum3.dat"));
+        using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
+        using var scripts = ConversationSessionFixture.Scripts(root);
+        var host = new AreaConversationHost(snapshot, scripts, session);
+        var speaker = host.Speakers.Single();
+        var entity = AreaConversationState.EntityId(speaker.Row);
+        Assert.IsTrue(host.Begin(host.Nearest(speaker.WorldX, speaker.WorldY)).Conversation!.Close());
+        var party = Port(session, host, entity);
+        Walk(Start(document, host, session, party, 1, 4));
+        Assert.IsTrue(session.QueryCompanion(entity).LedByPc, "Virgil follows the PC");
+
+        var plan = Arcanum.Data.Content.ContentMountPlan.Discover(root);
+        Assert.AreEqual(Arcanum.Data.Content.ContentMountStatus.Ready, plan.Status, plan.Detail);
+        var texts = AreaGreetingTexts.Load(plan.Plan!);
+        Assert.AreEqual(AreaGreetingTextsStatus.Ready, texts.Status, texts.Detail);
+        // A state with Virgil as a party speaker reads "led by the PC" from the session party, as the wired viewer does.
+        var partyState = new AreaConversationState(session, new(snapshot.RuntimeMap), [entity], host.State.Reaction(0), partySpeakers: new HashSet<int> { 0 });
+        var greeting = new AreaGreeting(session, speaker, partyState, host.Profile.Pc, texts, null);
+        var draws = session.QueryRandom().Draws;
+        var menu = DialogConversation.Start(document,
+            new DialogConversationRequest(new DialogNodeId(385),
+                new DialogParticipants(new DialogId(1324), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                new DialogScriptLine(6), host.Profile.Pc, host.Profile.Names),
+            new DialogConversationPorts(host.State, host.State, session.Flags, host.State, party, Greeting: greeting));
+        Assert.AreEqual(DialogConversationPhase.AwaitingSelection, menu.Phase);
+        var byReply = menu.Options.ToDictionary(option => option.ResponseId.Value);
+        CollectionAssert.AreEqual(new[] { 386, 387, 388, 389, 391 }, byReply.Keys.ToArray(), "the WA 0 replies the diagnostic PC qualifies for");
+        foreach (var (reply, first, last) in new[] { (386, 1600, 1699), (387, 700, 799), (388, 1500, 1599), (391, 400, 499) })
+        {
+            var option = byReply[reply];
+            Assert.AreEqual(DialogOptionTextKind.Generated, option.TextKind, $"reply {reply}");
+            Assert.AreEqual(DialogLineOriginKind.Generated, option.TextOrigin!.Kind, $"reply {reply}");
+            Assert.AreEqual(Arcanum.Data.Messages.GeneratedDialogFile.PcToMale, option.TextOrigin.File, $"reply {reply}: Virgil is male");
+            Assert.IsTrue(option.TextOrigin.Number >= first && option.TextOrigin.Number <= last, $"reply {reply}: {option.TextOrigin.Number}");
+            Assert.AreNotEqual(string.Empty, option.Text, $"reply {reply}");
+        }
+        Assert.AreEqual(4, session.QueryRandom().Draws - draws, "one labelled roll per phrase, in offer order");
+        Assert.AreEqual(DialogOptionTextKind.Record, byReply[389].TextKind);
+        // Still to come: the healer menu (h:, ARC-SCRIPT-044) and the questions node's conditions (k: target 395, ARC-SCRIPT-045).
+        Assert.AreEqual(DialogOptionBlockKind.UnsupportedInteraction, byReply[387].Block!.Kind);
+        Assert.AreEqual(DialogOptionBlockKind.TargetUnsupported, byReply[388].Block!.Kind);
+        Assert.IsNull(byReply[391].Block);
+    }
+
     private static PartyConsentFacts Facts(AreaConversationHost host, int speaker) => new(
         MindControlledByPc: false, PcPersuasion: PersuasionTraining.None, PcCharisma: 8, PcAlignment: host.State.Alignment, PcLevel: 1,
         OtherLeaderCharisma: null, Reaction: host.State.Reaction(speaker), Thresholds: Row5, NpcAlignment: 1, NpcLevel: 1,

@@ -32,6 +32,7 @@ public sealed class DialogConversation
     private IReadOnlyList<DialogOption> _offers = Array.Empty<DialogOption>();
     private Dictionary<int, OfferPlan> _offerPlans = new();
     private int _generation;
+    private readonly Dictionary<int, (string Text, DialogLineOrigin? Origin)> _phrases = new();
 
     private DialogConversation(DlgDocument document, DialogConversationRequest request, DialogConversationPorts ports, DialogConversationOptions options)
     {
@@ -238,6 +239,7 @@ public sealed class DialogConversation
     private void Enter(StepPlan plan)
     {
         Turn++;
+        _phrases.Clear();
         _step = plan;
         var previous = NpcLine?.Text ?? string.Empty;
         CurrentNode = new DialogNodeId(plan.Npc.Id);
@@ -332,7 +334,10 @@ public sealed class DialogConversation
         }
     }
 
-    /// <summary>Source order with the source cap: stop after five eligible replies; later rows are not queried.</summary>
+    /// <summary>Source order with the source cap: stop after five eligible replies; later rows are not queried. A generated
+    /// phrase is picked as its reply is offered, in that order (ARC-SCRIPT-043, 0x414E60 → 0x416C10), and kept for the turn: a
+    /// rebuild of the same node's offers shows the phrase it showed (the original rebuilds with the random state it saved).</summary>
+    [OriginalFunction(0x414E60, OriginalFunctionScope.Partial)]
     private void BuildOffers(StepPlan step)
     {
         var offers = new List<DialogOption>();
@@ -365,6 +370,12 @@ public sealed class DialogConversation
                         targetFrontier?.Source ?? targetFailure?.Source);
                 }
             }
+            var text = reply.Text;
+            DialogLineOrigin? origin = null;
+            if (reply.Phrase && !PickPhrase(reply.Record.Id, reply.Marker!.Value.Letter, out text, out origin))
+            {
+                return;
+            }
             var response = new DialogResponseId(reply.Record.Id);
             plans.Add(reply.Record.Id, new OfferPlan(reply, target));
             offers.Add(new DialogOption(
@@ -372,23 +383,94 @@ public sealed class DialogConversation
                 response,
                 reply.Record.SerializedIndex,
                 reply.TextKind,
-                reply.Text,
+                text,
                 reply.Marker,
                 reply.Transition,
                 reply.Target is null ? null : new DialogNodeId(reply.Target.Id),
                 reply.ScriptLine,
                 new DialogOptionToken(_identity, Turn, _generation, response),
-                block));
+                block,
+                origin));
         }
         if (offers.Count == 0)
         {
+            if (!PickPhrase(FarewellPhrase, null, out var text, out var origin))
+            {
+                return;
+            }
             var response = new DialogResponseId(0);
-            offers.Add(new DialogOption(1, response, -1, DialogOptionTextKind.Fallback, string.Empty, null,
-                DialogOptionTransition.Exit, null, null, new DialogOptionToken(_identity, Turn, _generation, response), null));
+            offers.Add(new DialogOption(1, response, -1, DialogOptionTextKind.Fallback, text, null,
+                DialogOptionTransition.Exit, null, null, new DialogOptionToken(_identity, Turn, _generation, response), null, origin));
         }
         _offers = offers.AsReadOnly();
         _offerPlans = plans;
     }
+
+    // The phrase key of the no-reply farewell (reply ids are record ids, never negative).
+    private const int FarewellPhrase = -1;
+
+    /// <summary>
+    /// ARC-SCRIPT-043: the phrase of an offered generated reply (<paramref name="letter"/>) or of the farewell (null), through the
+    /// greeting port's facts, files and rolls (<see cref="DialogGreeting.Phrase"/>), once per reply and turn. Without a greeting
+    /// port, or when the port does not know the facts, the text stays empty (the option still works). False when the
+    /// conversation failed: a broken port result, a refused roll or an undecodable line.
+    /// </summary>
+    private bool PickPhrase(int key, char? letter, out string text, out DialogLineOrigin? origin)
+    {
+        text = string.Empty;
+        origin = null;
+        if (_phrases.TryGetValue(key, out var kept))
+        {
+            (text, origin) = kept;
+            return true;
+        }
+        if (_ports.Greeting is not { } port)
+        {
+            return true;
+        }
+        var query = new DialogReactionQuery(_request.Participants.Npc, _request.Participants.PlayerCharacter);
+        GreetingOutcome? outcome;
+        try
+        {
+            if (port.Facts(query) is not { } facts)
+            {
+                return true;
+            }
+            var sources = port.Sources(query);
+            if (sources?.Files is null || port.Rules is null)
+            {
+                Fail(new DialogConversationFailure(DialogConversationFailureKind.InvalidQueryResult, CurrentNode));
+                return false;
+            }
+            outcome = DialogGreeting.Phrase(letter, PcIntelligence() <= LowIntelligence, facts, sources, port, _request.Names, _request.Encoding,
+                _options.MaxTextBytes);
+        }
+        catch (DialogGreeting.InvalidGreetingRoll)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.InvalidQueryResult, CurrentNode));
+            return false;
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode));
+            return false;
+        }
+        if (outcome is { Kind: not GreetingOutcomeKind.Line })
+        {
+            Fail(new DialogConversationFailure(outcome.Failure, CurrentNode, TextFailure: outcome.TextFailure));
+            return false;
+        }
+        if (outcome is not null)
+        {
+            text = outcome.Text;
+            origin = outcome.Origin;
+        }
+        _phrases[key] = (text, origin);
+        return true;
+    }
+
+    // The PC's intelligence as the reply gates read it: a dumb PC counts 1 (the original's dumb test 0x45FC00 is then true).
+    private int PcIntelligence() => _request.Pc.Intelligence > LowIntelligence && _request.Pc.IsDumb ? 1 : _request.Pc.Intelligence;
 
     /// <summary>Gender, then effective IQ, then the condition conjunction in order. Null means the session stopped.</summary>
     private bool? IsEligible(ReplyPlan reply)
@@ -397,7 +479,7 @@ public sealed class DialogConversation
         {
             return false;
         }
-        var intelligence = _request.Pc.Intelligence > LowIntelligence && _request.Pc.IsDumb ? 1 : _request.Pc.Intelligence;
+        var intelligence = PcIntelligence();
         var passes = reply.Iq < 0 ? intelligence <= -(long)reply.Iq : intelligence >= reply.Iq;
         if (!passes)
         {
@@ -944,6 +1026,8 @@ public sealed class DialogConversation
             frontier = new DialogConversationFrontier(DialogFrontierKind.UnsupportedGeneratedText, node, Response: response);
             return null;
         }
+        // ARC-SCRIPT-043: an exact marker's text is a generated phrase, picked when the reply is offered (BuildOffers).
+        var phrase = exact && found is { Letter: 'a' or 'b' or 'e' or 'f' or 'h' or 'i' or 'k' or 'l' or 'n' or 'p' or 's' or 'w' or 'y' };
         if (found is { Letter: 'a' or 'e' or 'f' or 'k' or 'n' or 's' or 'w' or 'y' } && exact)
         {
             kind = DialogOptionTextKind.Generated;
@@ -1112,7 +1196,7 @@ public sealed class DialogConversation
             }
         }
         return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
-            block is null ? insult : null, block is null ? barter : null);
+            block is null ? insult : null, block is null ? barter : null, phrase);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -1246,7 +1330,8 @@ public sealed class DialogConversation
         IReadOnlyList<ConversationOperation>? Action,
         DialogOptionBlock? Block,
         DialogOperationSource? Insult,
-        DialogOperationSource? Barter = null);
+        DialogOperationSource? Barter = null,
+        bool Phrase = false);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }
