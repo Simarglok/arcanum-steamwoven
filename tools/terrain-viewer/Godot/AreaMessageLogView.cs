@@ -13,7 +13,7 @@ namespace Arcanum.TerrainViewer;
 /// </summary>
 public partial class AreaMessageLogView : Control
 {
-    private const int TitleFontSize = 14, TextFontSize = 12;
+    private const int TitleFontSize = 13, TextFontSize = 12;
     private AreaMessageLog _log = new();
     private IReadOnlyDictionary<int, ImageTexture[]> _art = new Dictionary<int, ImageTexture[]>();
     private TextureRect _background = null!, _icon = null!;
@@ -23,8 +23,11 @@ public partial class AreaMessageLogView : Control
     private Control? _pressed;
     private bool _wide;
 
-    /// <summary>The texts drawn now, joined by line breaks ("" when nothing is drawn).</summary>
-    internal string ShownTextForSelfTest => _clear.Visible ? string.Join("\n", _labels.Where(label => label.Visible).Select(label => label.Text)) : "";
+    /// <summary>The texts drawn now (a label with at least one line on screen), joined by line breaks ("" when nothing is drawn).</summary>
+    internal string ShownTextForSelfTest => _clear.Visible ? string.Join("\n", _labels.Where(Drawn).Select(label => label.Text)) : "";
+    /// <summary>How many of the drawing's texts have at least one line on screen.</summary>
+    internal int DrawnTextsForSelfTest => _clear.Visible ? _labels.Count(Drawn) : 0;
+    private static bool Drawn(Label label) => label.Visible && label.Text.Length > 0 && label.GetVisibleLineCount() > 0;
     /// <summary>The hover text drawn now ("" when the window shows no hover text).</summary>
     internal string HoverTextForSelfTest => _log.Shown is { Kind: AreaMessageKind.Hover } && _clear.Visible ? ShownTextForSelfTest : "";
     internal bool IconShownForSelfTest => _icon.Visible && _icon.Texture is not null;
@@ -126,8 +129,10 @@ public partial class AreaMessageLogView : Control
             var text = draw.Texts[i];
             label.AddThemeFontSizeOverride("font_size", text.Font == AreaMessageFont.Title ? TitleFontSize : TextFontSize);
             label.Position = Local(text.Rect.X, text.Rect.Y);
-            label.Size = new(text.Rect.Width, text.Rect.Height);
             label.Text = text.Text;
+            // A rectangle at least one of the viewer's lines high: Godot draws no line taller than the label (the original's fonts
+            // are smaller than the stand-in's).
+            label.Size = new(text.Rect.Width, Math.Max(text.Rect.Height, label.GetLineHeight()));
             label.Visible = true;
             var shown = text.Text;
             // The wide layout cuts characters from the end until the text fits (flag 0x20 of 0x550A10).
@@ -138,5 +143,5 @@ public partial class AreaMessageLogView : Control
     }
 
     // The rectangle holds as many lines as its height takes, at least one (the text library draws a line while one fits, 0x535570).
-    private static bool Fits(Label label) => label.GetLineCount() <= Math.Max(1, (int)((label.Size.Y + 1) / Math.Max(1, label.GetLineHeight())));
+    private static bool Fits(Label label) => label.GetLineCount() <= Math.Max(1, label.GetVisibleLineCount());
 }

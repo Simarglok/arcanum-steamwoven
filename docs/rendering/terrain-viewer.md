@@ -1566,8 +1566,8 @@ session, the window only while the [interface bars](#interface-bars-arc-ui-018) 
 
 - **Entries.** The last ten stored entries are kept; a new one becomes the newest and the shown one, and drawing it plays its
   sound: a level-up entry 3005, a message 3004 (the hero's encumbrance changes, `mes\critter.mes` 11–17). A message equal to the
-  newest entry's text (A–Z compared without case) is not stored again: the newest is shown and plays its sound once more. Texts keep at most 199
-  characters. The viewer's spell lines are a plain text entry (no sound) titled with the project's label "Magic"; the original's
+  newest entry's text (A–Z compared without case) is not stored again: the newest is shown and plays its sound once more. Texts (a level-up entry's
+  scheme text) keep at most 199 characters. The viewer's spell lines are a plain text entry (no sound) titled with the project's label "Magic"; the original's
   own spell messages are not built.
 - **Drawing.** In the message mode the mode's background art (354) lies at (196, 492) of the 800 × 600 screen; an entry fills
   the text area (211, 503, 383 × 82) with black and draws its icon (438 level up, 442 message, 443 plain, 444 hover) at (217, 510)
@@ -1587,7 +1587,8 @@ session, the window only while the [interface bars](#interface-bars-arc-ui-018) 
   window back in the message mode, and the next pointer move over the bottom strip (x 10–790, y 441–590) gives it back to the
   pane whose button is still down; a pointer move above the strip gives the spells or skills pane's window to the log (not the
   weapon's spells), as the original's panes own the window only while the pointer is over the strip; the button going up
-  returns the window to the log.
+  returns the window to the log. The viewer shows the weapon's spells inside the spell pane with Spells down, and treats the
+  whole pane as the original's separate weapon mode while they are open (no return above the strip).
 - **Steamwoven fix (both rule modes).** The original leaves the window blank after a button name is taken away and after the
   window returns from a pane, until the next entry or scroll click; the viewer shows the scroll position's entry again there
   (a technical display bug, ML7).

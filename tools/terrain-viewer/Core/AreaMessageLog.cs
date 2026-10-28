@@ -41,7 +41,8 @@ public sealed class AreaMessageLog
 {
     public const int Capacity = 10;
     public const int QuietMilliseconds = 3000;
-    /// <summary>The original copies at most 199 characters of an entry's text into its slot (strncpy of 200, last byte zeroed).</summary>
+    /// <summary>The original copies at most 199 characters of an entry's text into its slot (strncpy of 200, last byte zeroed): a
+    /// text entry's text, a level-up entry's scheme text.</summary>
     public const int MaxTextLength = 199;
     /// <summary>The pointer area that gives the window back to a pane (0x54B70B): the bottom strip from y 441 to 590, x 10 to 790.</summary>
     public const int PaneReturnTop = 441, PaneReturnBottom = 590, PaneReturnLeft = 10, PaneReturnRight = 790;
@@ -78,7 +79,7 @@ public sealed class AreaMessageLog
             return new(false, true, null);
         }
         _lastStored = nowMilliseconds;
-        if (_count != 0 && entry.Kind is AreaMessageKind.Message or AreaMessageKind.Plain && SameText(entry.Title, _ring[_head]!.Title))
+        if (_count != 0 && entry.Kind is AreaMessageKind.Message or AreaMessageKind.Plain && SameText(entry.Title, TextField(_ring[_head]!)))
         {
             // The repeat is not stored: the newest entry is shown and drawn with its sound again.
             _view = _head;
@@ -86,7 +87,7 @@ public sealed class AreaMessageLog
         }
         _head = _count < Capacity ? _count : (_head + 1) % Capacity;
         if (_count < Capacity) _count++;
-        _ring[_head] = entry.Title.Length > MaxTextLength ? entry with { Title = entry.Title[..MaxTextLength] } : entry;
+        _ring[_head] = Cut(entry);
         _view = _head;
         return Redraw(sound: true);
     }
@@ -144,6 +145,14 @@ public sealed class AreaMessageLog
         EnterPane();
         return true;
     }
+
+    // The entry's text field (+4), copied with at most 199 characters: a text entry's text, a level-up entry's scheme text (empty
+    // with points, ML1). The level-up title and lines are the draw's own messages, not stored.
+    private static string TextField(AreaMessageEntry entry) => entry.Kind != AreaMessageKind.LevelUp ? entry.Title : entry.Scheme ? entry.Detail : "";
+
+    private static AreaMessageEntry Cut(AreaMessageEntry entry) => entry.Kind != AreaMessageKind.LevelUp
+        ? entry.Title.Length > MaxTextLength ? entry with { Title = entry.Title[..MaxTextLength] } : entry
+        : entry.Scheme && entry.Detail.Length > MaxTextLength ? entry with { Detail = entry.Detail[..MaxTextLength] } : entry;
 
     // 0x58ADB0 in the C locale: A–Z fold to a–z, every other byte compares as it is.
     private static bool SameText(string a, string b)

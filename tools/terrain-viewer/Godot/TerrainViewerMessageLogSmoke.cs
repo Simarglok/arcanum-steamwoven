@@ -93,11 +93,18 @@ public partial class TerrainViewerApp
             paned = true;
         }
 
-        // A text too long for the icon layout is drawn wide, without the icon.
+        // A text too long for the icon layout is drawn wide, without the icon, cut until it fits.
         var words = string.Join(" ", Enumerable.Repeat("steamwoven", 18));
         PostMessage(AreaMessageEntry.Text(AreaMessageKind.Plain, words), "smoke message");
         await Frames(1);
-        Require(view.WideForSelfTest && !view.IconShownForSelfTest && view.ShownTextForSelfTest.Length is > 0 and < 199, $"the long text is drawn wide ({view.ShownTextForSelfTest.Length})");
+        Require(view.WideForSelfTest && !view.IconShownForSelfTest && view.ShownTextForSelfTest.Length > 0 && view.ShownTextForSelfTest.Length < words.Length,
+            $"the long text is drawn wide and cut ({view.ShownTextForSelfTest.Length} of {words.Length})");
+        // A level-up entry with the player's texts: every one of its texts with a line on screen.
+        var levelEntry = AreaLevelMessages.Compose(new Arcanum.Session.SessionLevelUp(5, 3, null), texts);
+        PostMessage(levelEntry, "smoke level");
+        await Frames(1);
+        var texted = new[] { levelEntry.Title, levelEntry.Line, levelEntry.Detail }.Count(text => text.Length > 0);
+        Require(texted >= 2 && view.DrawnTextsForSelfTest == texted && view.IconShownForSelfTest, $"the level-up entry drew {view.DrawnTextsForSelfTest} of {texted} texts");
         var stored = _messageLog.Count;
         ClearLevelMessages();
         Require(view.ShownTextForSelfTest == "", "the smoke's entries are cleared");

@@ -69,6 +69,16 @@ public sealed class AreaMessageLogTests
         Assert.AreEqual(2, log.Count);
         log.Post(Message(text[..199]), 2);
         Assert.AreEqual(2, log.Count);
+        // A level-up entry's text field is its scheme text (cut the same way); with points it is empty.
+        var scheme = new AreaMessageEntry(AreaMessageKind.LevelUp, "T", "L", text, Scheme: true);
+        log.Post(scheme, 3);
+        Assert.AreEqual(AreaMessageLog.MaxTextLength, log.Shown!.Detail.Length);
+        Assert.AreEqual("T", log.Shown.Title);
+        log.Post(Message(text[..199].ToUpperInvariant()), 4);
+        Assert.AreEqual(3, log.Count, "a message equal to the scheme text repeats it");
+        log.Post(Level(2), 5);
+        log.Post(Message("Level up"), 6);
+        Assert.AreEqual(5, log.Count, "the level-up title is not the entry's text");
     }
 
     [TestMethod]
