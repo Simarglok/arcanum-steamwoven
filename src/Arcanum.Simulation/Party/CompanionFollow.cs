@@ -48,20 +48,27 @@ public readonly record struct CompanionFollowUpdate(FollowAction Action, CellCoo
 /// frame, not the source's 100 ms re-check). A goal the planner cannot reach is not asked again until the follower or
 /// the leader stands on another cell. The jump itself is the host's: it stands the follower settled on
 /// <see cref="CompanionFollowUpdate.JumpTo"/>. Running speed is the host's step duration. No combat, turn-based cost or loyalty check.
+/// ARC-WORLD-075: with <c>segmentEndCritterCheck</c> answering yes the route checks the cell before a segment's last step for a
+/// living critter (the walk goals' step check, ledger EX20 and LR5); the original's approach walk (goal 61) then pops back to its
+/// parent, which plans again, so a goal stopped there (<see cref="SegmentEndCritterReason"/>) is not remembered as unreachable and the
+/// next update plans it again from where the follower stands: the critter is then on the new plan's first step and is passed, so the
+/// follower pauses one frame before it (the original's pause is 2 action points and a random 0..300 ms wait, not modelled).
 /// </summary>
 public sealed class CompanionFollower
 {
     public const string NotFollowingReason = "FOLLOW_NOT_FOLLOWING";
+    /// <summary>The route's stop before a segment's last step onto a living critter (<see cref="RouteFollower"/>, ledger LR5).</summary>
+    public const string SegmentEndCritterReason = "ROUTE_SEGMENT_END_CRITTER";
     private static readonly NeighborDirection[] Directions = Enum.GetValues<NeighborDirection>();
     private readonly IRouteStepSource _source;
     private (CellCoord Follower, CellCoord Leader)? _unreachable;
     private bool _stopSeen = true;
     private bool _ordered;
 
-    public CompanionFollower(IRouteStepSource source, RouteLimits? limits = null)
+    public CompanionFollower(IRouteStepSource source, RouteLimits? limits = null, Func<bool>? segmentEndCritterCheck = null)
     {
         _source = source ?? throw new ArgumentNullException(nameof(source));
-        Route = new RouteFollower(source, limits);
+        Route = new RouteFollower(source, limits, segmentEndCritterEndsWalk: segmentEndCritterCheck);
     }
 
     public RouteFollower Route { get; }
@@ -112,10 +119,11 @@ public sealed class CompanionFollower
         }
         var settled = state.Phase == MovementPhase.Settled;
         var cell = state.CommittedCell;
-        // A goal that ended without arriving is remembered for the cells it ended at.
+        // A goal that ended without arriving is remembered for the cells it ended at; one stopped before a critter is planned again (EX20).
         if (!_stopSeen && Route.Status == RouteFollowStatus.Stopped && settled)
         {
-            _unreachable = (cell, Route.Target ?? leader); _stopSeen = true;
+            if (Route.StopReason != SegmentEndCritterReason) _unreachable = (cell, Route.Target ?? leader);
+            _stopSeen = true;
         }
         var range = FollowDistanceRules.RangeOf(spreadOut);
         if (Route.Status == RouteFollowStatus.Following)

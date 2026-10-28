@@ -264,3 +264,23 @@ switch since ARC-WORLD-072 (owner decision 2026-10-21): Steamwoven walks the cor
   spurious 50. In the original; no walk passes flag 0x1. Since ARC-WORLD-073 the attack's approach passes flag 0x1 (AP2); the shared request takes the step onto the goal as an
   open one without the window cost, so the possible spurious 50 is not modelled.
 - LRA4 (LR8): 0x420E30 does not check that the town-map info loaded. Dead in 1.0.7.4; nothing to decide.
+
+## Companion walks through critters (ARC-WORLD-075)
+
+Source: [companion follow](../../world/companion-follow-runtime.md) and the [click route](../../world/click-route-runtime.md#original-check-arc-world-060).
+Question: does a follower's walk pass living critters outside combat mode, as the PC's walk does (LR2), and what does its step
+check do near a segment's end? Read on 2026-10-28 by this task alone (F1): the goal-type table (0x5B03D0, node lists of 0x200
+bytes), the goal-name table (0x5A164C) and the node 0x427990. The flag builder, the request and the step check were not read
+again (LR2, LR5, LR9, DC2–DC5, EX20).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| LR10 | approach path step (0x427990), goals 8 [ag_move_near_obj] and 56 [ag_run_near_obj] | The follow goal's walk and run legs (24 → 8 or 56, EX16) and the spread-out goal's (69) plan in node 0x427990, not in the walk's 0x426040 (goals 3 and 4). It asks the flag builder (0x425BF0) with its second argument 1 at both of its calls (0x427BA1, 0x427CA5), as the walk's path step does (0x426560, LR2), and takes the walk's budget (0x426320). So outside combat mode the follower's request has flag 0x10 and PCs and NPCs do not block its plan (DC5, mode 4). | Original (F1) |
+| LR11 | approach walk (61 [ag_attempt_move_near]) | Goals 8 and 56 push goal 61 for each segment: goal 5's node list with node 0x4254C0 in place of 0x425430. Its step check is goal 5's (0x4270B0 → 0x427110): a living critter on the next tile near the segment's end stops the walk, and goal 61 pops back to its parent (EX20), which plans again from the follower's tile; the critter, now on the new plan's first step, is walked through. Between the two the follower pays 2 action points and waits a random 0..300 ms (EX20). | Original (F1) |
+
+Since ARC-WORLD-075 a companion's follow and walk-order goals plan and step through living critters while the session has the
+companion out of combat mode (`AreaCompanion.PassesCritters`, the PC's admission of ARC-WORLD-074 and the route source's
+`crittersPass` of ARC-WORLD-073). The segment-end check of LR11 follows the switch `NavigationRuleProfile.SegmentEndCritterEndsWalk`
+(LRA1): Original stops the companion's goal before the critter and plans it again at the next frame (`CompanionFollower`, the stop
+is not remembered as unreachable), Steamwoven walks on. The pause is one host frame; the action points and the random wait are
+not modelled (no companion moves in a turn-based round yet).

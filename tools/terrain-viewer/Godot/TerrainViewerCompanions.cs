@@ -40,6 +40,8 @@ public partial class TerrainViewerApp
         _areaCompanions = AreaCompanionGroup.Create(templates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time, grid.Timing);
         // ARC-WORLD-065: the companions step over what the session destroyed or switched off, as the PC does.
         _areaCompanions.Removed = AreaRemovedObjects;
+        // ARC-WORLD-075: outside combat mode they walk through living critters; the dead are not checked on a goal or a segment end.
+        _areaCompanions.Dead = AreaCritterDeadNow;
         if (_readyMapName is not null) AdoptTravellers(_areaCompanions);
         // ARC-WORLD-048: a companion recorded here without a body kept in this run (after a quick load) cannot be talked to here.
         if (_readyMapName is not null) _unbodiedVisitors = AreaVisitors.Unbodied(session, new(CurrentAreaMap), _companionTemplates,
@@ -405,6 +407,14 @@ public partial class TerrainViewerApp
                 "a waiting Virgil stays although the PC is farther than 4");
             GD.Print("ARC-WORLD-045 native-smoke loyalty PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Script = speaker.ScriptId, StepClearedMarks = true, GoalGated = true, WaitTimer = "none (index 6)", Parity = "NOT_VERIFIED" }));
+            // ARC-WORLD-067: the HUD names the PC side of the party rules; ARC-WORLD-075: out of combat mode his walk passes critters.
+            RefreshAreaStatus();
+            var side = _areaSession.QueryHero() is null ? "PC side: diagnostic profile" : "PC side: hero (";
+            Require(_hud!.Text.Contains(side, StringComparison.Ordinal), $"the HUD names the PC side ('{side}')");
+            Require(companion.PassesCritters && !_areaSession.QueryCombatMode(SessionCombatant.Critter(companion.Entity)),
+                "out of combat mode Virgil's walk passes critters");
+            GD.Print("ARC-WORLD-075 native-smoke companion pass PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Script = speaker.ScriptId, PassesCritters = true, PcSide = PartySideLabel(), Parity = "NOT_VERIFIED" }));
             GD.Print("ARC-WORLD-016 native-smoke follow PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Origin = new { speaker.WorldX, speaker.WorldY }, Pc = map.Chart.ToWorld(pc), Followed = world, Distance = FollowDistanceRules.Distance(cell, pc),
                 Plans = plans, Session = revision, Parity = "NOT_VERIFIED" }));

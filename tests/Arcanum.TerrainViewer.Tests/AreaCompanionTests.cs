@@ -248,6 +248,30 @@ public sealed class AreaCompanionTests
         var other = f.Speaker with { ScriptId = 1325 };
         Assert.AreEqual(0, AreaCompanionGroup.Create(Templates(f, other), f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0)).Companions.Count);
     }
+    [TestMethod]
+    public void A_companion_passes_critters_while_the_session_has_it_out_of_combat_mode()
+    {
+        // ARC-WORLD-075: each drive reads the companion's combat mode; its grid (after a jump too) and its plan follow it.
+        var f = Load();
+        using var session = ConversationSessionFixture.Create();
+        var group = AreaCompanionGroup.Create(Templates(f), f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        var companion = group.Companions[0];
+        Assert.IsFalse(companion.PassesCritters, "not read before the first drive");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, companion.Entity).Disposition);
+        var pc = new AreaGridSession(f.Steps, SimulationTime.At(0), Step, start: new(40, 20)) { Occupancy = group.OccupancyForPc };
+        var time = 0;
+        void Frames(int count) { for (var i = 0; i < count; i++) { pc.Advance(SimulationTime.At(++time, 4), []); group.Drive(session, pc.State, SimulationTime.At(time, 4)); } }
+        Frames(8);
+        Assert.AreEqual(1, companion.Jumps);
+        Assert.IsTrue(companion.PassesCritters && companion.Grid.CrittersPass?.Invoke() == true, "the jump's new grid keeps the switch");
+
+        var entered = session.SetCombatMode(session.Version, SessionCombatant.Critter(companion.Entity), true,
+            new() { Facts = new() { Speed = 7, Life = new Arcanum.Simulation.Combat.LifeFacts() } });
+        Assert.IsTrue(entered.InCombatMode, entered.Failure.ToString());
+        Frames(1);
+        Assert.IsFalse(companion.PassesCritters || companion.Grid.CrittersPass?.Invoke() == true, "in combat mode critters block it");
+    }
+
     // ARC-WORLD-017: the fixture stands for both maps of a transfer, home map 1 and a second map 2 on the same chart.
     [TestMethod]
     public void AFollowingCompanionGoesWithThePcToTheArrivalCellAndBackAndAWaitingOneStays()
