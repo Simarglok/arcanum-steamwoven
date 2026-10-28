@@ -86,12 +86,28 @@ public sealed class AreaGameBarTests
         var skills = bar.Press(AreaBarButton.Skills);
         CollectionAssert.AreEqual(new[] { 3000 }, skills.Sounds.ToArray());
         Assert.IsTrue(bar.IsOn(AreaBarButton.Skills)); Assert.IsFalse(bar.IsOn(AreaBarButton.Spells), "the other goes up silently");
+        Assert.AreEqual(AreaBarButton.Spells, skills.LetGo, "the host can give it back");
+        Assert.IsNull(on.LetGo);
         var off = bar.Press(AreaBarButton.Skills);
         CollectionAssert.AreEqual(new[] { 3001 }, off.Sounds.ToArray()); Assert.AreEqual(AreaBarButton.Skills, off.Act);
         Assert.IsFalse(bar.IsOn(AreaBarButton.Skills));
         bar.SetOn(AreaBarButton.Spells, true);
         Assert.IsTrue(bar.IsOn(AreaBarButton.Spells));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => bar.SetOn(AreaBarButton.Combat, true));
+    }
+
+    [TestMethod]
+    public void Reset_forgets_the_pointer_and_keeps_the_toggles()
+    {
+        var bar = new AreaGameBar();
+        bar.Press(AreaBarButton.Spells);
+        bar.Enter(AreaBarButton.Character);
+        bar.Press(AreaBarButton.Character);
+        bar.Reset();
+        Assert.IsNull(bar.Held); Assert.IsNull(bar.Hovered); Assert.IsNull(bar.HoverMessage);
+        Assert.IsTrue(bar.IsOn(AreaBarButton.Spells));
+        Assert.AreEqual(AreaBarButtonLook.Idle, bar.Look(AreaBarButton.Character));
+        Assert.AreEqual(1004, bar.Enter(AreaBarButton.Logbook).HoverMessage, "nothing held any more");
     }
 
     [TestMethod]
@@ -124,7 +140,7 @@ public sealed class AreaGameBarTests
         var content = AreaGameBarContent.Load(Path.Combine(root, "modules", "Arcanum.dat"));
         Console.WriteLine(content.Detail);
         Assert.IsTrue(content.ArtReady, content.Detail);
-        Assert.IsTrue(content.Texts.FromGame, content.Texts.Detail);
+        Assert.AreEqual(AreaGameBarTexts.Count, content.Texts.GameCount, content.Texts.Detail);
         Assert.AreEqual("Character Editor", content.Texts.Text(1005));
         Assert.AreEqual((800, 41), (content.Art[185].Frames[0].Width, content.Art[185].Frames[0].Height));
         Assert.AreEqual((800, 159), (content.Art[184].Frames[0].Width, content.Art[184].Frames[0].Height));

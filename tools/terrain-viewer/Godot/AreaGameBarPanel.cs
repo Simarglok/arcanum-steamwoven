@@ -29,7 +29,12 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// viewer places at the window's bottom sit above it. One bar panel exists per app.</summary>
     public static float BottomInset { get; private set; }
     /// <summary>The height the top strip takes in the window while the bars are shown (0 otherwise).</summary>
-    public float TopInset => Visible ? AreaGameBarLayout.TopHeight * Factor : 0;
+    public static float TopInset { get; private set; }
+    /// <summary>Raised after the insets changed (the bars shown, hidden or scaled): the panels placed by them place themselves again.</summary>
+    public static event Action? InsetsChanged;
+
+    /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size.</summary>
+    public static (float Top, Vector2 Size) FreeArea(Vector2 size) => (TopInset, new(size.X, Math.Max(1, size.Y - TopInset - BottomInset)));
     internal string HoverTextForSelfTest => _hover.Visible ? _hover.Text : "";
     internal int FrameForSelfTest(AreaBarButton button) => _buttons.TryGetValue(button, out var rect) && rect.HasMeta(FrameMeta) ? (int)rect.GetMeta(FrameMeta) : -1;
     internal Vector2 ButtonCentreForSelfTest(AreaBarButton button) => _buttons[button].GetGlobalRect().GetCenter();
@@ -127,12 +132,19 @@ public partial class AreaGameBarPanel : CanvasLayer
         _strips[AreaBarStrip.Top].Position = new Vector2(left, 0);
         _strips[AreaBarStrip.Bottom].Position = new Vector2(left, size.Y - AreaGameBarLayout.BottomHeight * Factor);
         foreach (var strip in _strips.Values) strip.Scale = new Vector2(Factor, Factor);
-        BottomInset = Visible ? AreaGameBarLayout.BottomHeight * Factor : 0;
+        SetInsets(Visible ? AreaGameBarLayout.TopHeight * Factor : 0, Visible ? AreaGameBarLayout.BottomHeight * Factor : 0);
+    }
+
+    private static void SetInsets(float top, float bottom)
+    {
+        if (TopInset == top && BottomInset == bottom) return;
+        TopInset = top; BottomInset = bottom;
+        InsetsChanged?.Invoke();
     }
 
     public override void _ExitTree()
     {
         GetViewport().SizeChanged -= Place;
-        BottomInset = 0;
+        SetInsets(0, 0);
     }
 }

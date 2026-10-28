@@ -83,8 +83,9 @@ public static class AreaGameBarLayout
 
 /// <summary>What one pointer event on the bars did: the sounds to play in order, the button whose function runs (a push button's
 /// release over it, either change of a toggle), and the hover name to show (null clears it; unchanged when <see cref="HoverChanged"/>
-/// is false).</summary>
-public sealed record AreaBarEffect(IReadOnlyList<int> Sounds, AreaBarButton? Act, bool HoverChanged, int? HoverMessage)
+/// is false). <see cref="LetGo"/> is the other toggle of the Spells/Skills pair that a toggle turning on let go silently (the host
+/// sets it on again when it refuses the press).</summary>
+public sealed record AreaBarEffect(IReadOnlyList<int> Sounds, AreaBarButton? Act, bool HoverChanged, int? HoverMessage, AreaBarButton? LetGo = null)
 {
     public static AreaBarEffect None { get; } = new([], null, false, null);
 }
@@ -143,9 +144,9 @@ public sealed class AreaGameBar
         if (_on.Remove(button)) return new([AreaGameBarLayout.ReleaseSound], button, false, null);
         _on.Add(button);
         // The other of the Spells/Skills pair goes up without a sound (the filter sets its state, GB3).
-        if (button is AreaBarButton.Spells) _on.Remove(AreaBarButton.Skills);
-        else if (button is AreaBarButton.Skills) _on.Remove(AreaBarButton.Spells);
-        return new([AreaGameBarLayout.PressSound], button, false, null);
+        var other = button == AreaBarButton.Spells ? AreaBarButton.Skills : AreaBarButton.Spells;
+        var letGo = _on.Remove(other) ? other : (AreaBarButton?)null;
+        return new([AreaGameBarLayout.PressSound], button, false, null, letGo);
     }
 
     /// <summary>The left button was released; <paramref name="over"/> is the button under the pointer then (null none).</summary>
@@ -156,6 +157,13 @@ public sealed class AreaGameBar
         return over == held ? new([AreaGameBarLayout.ReleaseSound], held, false, null) : AreaBarEffect.None;
     }
 
+    /// <summary>Forgets the pointer (hover, held button and hover message) and keeps the toggles: the bars were hidden, so no
+    /// leave or release reaches them.</summary>
+    public void Reset()
+    {
+        Hovered = null; Held = null; HoverMessage = null;
+    }
+
     /// <summary>Sets a toggle without a sound or an action, for the host to follow its own state (a pane closed by its key).</summary>
     public void SetOn(AreaBarButton button, bool on)
     {
@@ -164,7 +172,7 @@ public sealed class AreaGameBar
     }
 }
 
-/// <summary>The hover names of the bar buttons: the installed <c>mes\intgame.mes</c> 1000–1010 when it reads, otherwise the project's
+/// <summary>The hover names of the bar buttons: the installed <c>mes\intgame.mes</c> 1000–1009 when it reads, otherwise the project's
 /// English text with the reason in <see cref="Detail"/>. Godot-free.</summary>
 public sealed class AreaGameBarTexts
 {
@@ -179,8 +187,12 @@ public sealed class AreaGameBarTexts
 
     private AreaGameBarTexts(IReadOnlyDictionary<int, string> game, bool fromGame, string detail) { _game = game; FromGame = fromGame; Detail = detail; }
 
+    /// <summary>True when the file read and gave at least one name; <see cref="GameCount"/> says how many.</summary>
     public bool FromGame { get; }
     public string Detail { get; }
+    /// <summary>The names the game's file gave (of <see cref="Count"/>).</summary>
+    public int GameCount => _game.Count;
+    public static int Count => ProjectText.Count;
 
     public static AreaGameBarTexts Project(string reason) => new(new Dictionary<int, string>(), false, reason ?? throw new ArgumentNullException(nameof(reason)));
 
@@ -194,7 +206,7 @@ public sealed class AreaGameBarTexts
         foreach (var number in ProjectText.Keys)
             if (table.Find(number) is { } message && MesText.Decode(message, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { Length: > 0 and <= MaxText } text })
                 kept[number] = text;
-        return new(kept, true, $"{IntgamePath}: {kept.Count} of {ProjectText.Count} texts");
+        return new(kept, kept.Count > 0, $"{IntgamePath}: {kept.Count} of {ProjectText.Count} texts");
     }
 
     public string Text(int message) => _game.GetValueOrDefault(message) ?? ProjectText.GetValueOrDefault(message, $"[{message}]");

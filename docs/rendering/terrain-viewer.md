@@ -1471,8 +1471,8 @@ under the bars. Buttons:
 
 | Button | Strip | Does in the viewer |
 | --- | --- | --- |
-| Character, Logbook, Inventory, Schematics | top, top, top, bottom | Opens its window as `C`, `L`, `I`, `T` do, or closes it when open. Over another of these windows (or the world map) it closes that one first and opens its own (the original's interface mode change). |
-| Map | top | The world map window (`W`, map mode on the start map); the town map is not built. |
+| Character, Logbook, Inventory, Schematics | top, top, top, bottom | Opens its window as `C`, `L`, `I`, `T` do, or closes it when open. Over another of these windows it closes that one first and opens its own (the original's interface mode change). |
+| Map | top | The world map window (`W`, map mode on the start map), which does not fit between the strips, so the bars hide while it is open (`W` or Escape closes it); the town map is not built. |
 | Combat | bottom | Toggles the hero's combat mode (`R`). |
 | Spells | bottom | A toggle: on shows the spell pane (`M`), off hides it; `M` moves the button with the pane. |
 | Skills | bottom | A toggle (Spells goes up when it goes down); the original's skill pane is not built, so it only says so. |
@@ -1482,9 +1482,10 @@ A button shows its idle, down and lit frames as the original's (GB4). It plays 3
 over it, and acts on that release; a toggle plays 3000 turning on and 3001 turning off (GB3, GB6). The pointer over a
 button writes its name from `mes\intgame.mes` (1000–1009) where the original's message window is; there is no hover sound
 on the bars. The main menu's, in-play menu's and options window's buttons play 3026 when the pointer enters one and 3027 on
-the press (GB7). While a conversation, barter, reading, the save list, the palette or the menu is open the bars are hidden;
-the diagnostic HUD moves below the top strip and the message window, follower portraits and spell pane above the bottom
-strip. The rest of the bottom strip (message log, hot-key slots, recent actions, health and fatigue vials) and the top
+the press (GB7). The bars are drawn over the windows they open, and those windows (character sheet, inventory, logbook,
+schematics) lay themselves out in the part the bars leave free; while a conversation, barter, reading, the save list,
+the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held. The
+diagnostic HUD moves below the top strip and the message window, follower portraits and spell pane above the bottom strip. The rest of the bottom strip (message log, hot-key slots, recent actions, health and fatigue vials) and the top
 strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated runs draw no bars
 unless their smoke asks.
 
@@ -1493,7 +1494,8 @@ installed art and texts read). Native smoke on the original data, map mode on th
 `ARC_AREA_MAP_SMOKE_ONLY=bar` prints `ARC-UI-018 native-smoke bar PASS` (through the window's GUI: a menu button's 3026 and
 3027, a new game as the first pre-made hero, the bars with all 11 arts and 10 texts from the game, Character's hover
 name and lit frame, its down frame with 3000, the release with 3001 opening the sheet, Inventory switching from the sheet,
-Logbook, Schematics and Map opening and closing their windows, Combat in and out of combat mode, Spells showing and hiding
+Logbook and Schematics opening and closing their windows, the logbook lying between the strips and taking a press inside
+it, Map opening the world map with the bars hidden and back with no hover, Combat in and out of combat mode, Spells showing and hiding
 the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started). Not done: the
 message log, hot-key bar, portraits and vials (later slices), the skill pane, fate and sleep windows, the town map, the
 buttons' lit art the original sets from game events (0x556A90), the compact interface (F10).

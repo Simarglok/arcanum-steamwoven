@@ -5,8 +5,10 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-UI-018: the original's in-game interface bars over an AREA session (docs/rendering/terrain-viewer.md#interface-bars-arc-ui-018;
 // checked in the 1.0.7.4 executable, ledger GB1–GB7). The bar buttons open the viewer's windows as their keys do; a button whose
-// window another bar window covers switches to it (the original's interface mode change leaves the old mode first). Automated runs
-// draw no bars unless their smoke asks, so world presses at fixed screen points are not taken by them.
+// window another bar window covers switches to it (the original's interface mode change leaves the old mode first). The bars are
+// over the windows they open, which lay themselves out in the part the bars leave free; they hide under the windows they cannot
+// reach or that do not fit (conversation, barter, reading, save list, palette, menu, world map). Automated runs draw no bars unless
+// their smoke asks, so world presses at fixed screen points are not taken by them.
 public partial class TerrainViewerApp
 {
     private AreaGameBarPanel? _gameBarPanel;
@@ -18,7 +20,7 @@ public partial class TerrainViewerApp
     private readonly List<(int Id, bool Started)> _gameBarSoundsForSelfTest = [];
 
     private bool GameBarActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea
-        && !MainMenuOpen && !ConversationOpen && !BarterOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen
+        && !MainMenuOpen && !ConversationOpen && !BarterOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen
         && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
 
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
@@ -26,7 +28,11 @@ public partial class TerrainViewerApp
     {
         if (!GameBarActive)
         {
-            if (_gameBarPanel is { Visible: true } hidden) { hidden.Visible = false; _hud?.SetTopInset(0); }
+            if (_gameBarPanel is { Visible: true } hidden)
+            {
+                // No leave or release reaches hidden bars: the pointer state starts afresh when they show again.
+                hidden.Visible = false; _gameBar.Reset(); hidden.Render(); _hud?.SetTopInset(0);
+            }
             return;
         }
         if (_gameBarPanel is null)
@@ -51,7 +57,7 @@ public partial class TerrainViewerApp
             _gameBarPanel.Render();
         }
         _gameBarPanel.Visible = true;
-        _hud?.SetTopInset(_gameBarPanel.TopInset);
+        _hud?.SetTopInset(AreaGameBarPanel.TopInset);
     }
 
     private static IReadOnlyDictionary<int, ImageTexture[]> GameBarTextures(AreaGameBarContent content) =>
@@ -60,20 +66,18 @@ public partial class TerrainViewerApp
 
     private void PlayBarSound(int id, string what)
     {
-        var (sfx, _, result) = PlaySfx(id);
-        _gameBarSoundsForSelfTest.Add((id, result?.Started == true));
-        if (result?.Started == true) _interfaceSoundsPlayed++;
-        _cueNotice = $"{what} {id}: {result?.Status.ToString() ?? (sfx is null ? "no sound catalogue" : "not playable")}";
+        var started = PlayInterfaceSound(id, what);
+        if (_gameBarForSelfTest) _gameBarSoundsForSelfTest.Add((id, started));
     }
 
     private void GameBarEffect(AreaBarEffect effect)
     {
         foreach (var id in effect.Sounds) PlayBarSound(id, "bar button");
-        if (effect.Act is { } button) RunBarButton(button);
+        if (effect.Act is { } button) RunBarButton(button, effect);
         if (effect.Sounds.Count > 0 || effect.Act is not null) RefreshAreaStatus();
     }
 
-    private void RunBarButton(AreaBarButton button)
+    private void RunBarButton(AreaBarButton button, AreaBarEffect effect)
     {
         GD.Print($"ARC-UI-018 bar button {button}");
         _gameBarNotice = null;
@@ -89,7 +93,10 @@ public partial class TerrainViewerApp
                 else if (WorldModal) _gameBarNotice = "combat: ignored while a window is open";
                 else ToggleCombatMode();
                 break;
-            case AreaBarButton.Spells: BarSpells(); break;
+            case AreaBarButton.Spells:
+                // A refused Spells press gives the pair back as it was.
+                if (!BarSpells() && effect.LetGo is { } other) _gameBar.SetOn(other, true);
+                break;
             case AreaBarButton.Skills:
                 // The original's skills mode shows the skill buttons in the message window; the viewer has no such pane yet.
                 if (_gameBar.IsOn(AreaBarButton.Skills)) { _spellPane?.HidePane(); _gameBarNotice = "skills: the skill pane is not built"; }
@@ -115,14 +122,16 @@ public partial class TerrainViewerApp
         openWindow();
     }
 
-    private void BarSpells()
+    /// <summary>The Spells toggle changed: on shows the spell pane, off hides it. False when an on press is refused.</summary>
+    private bool BarSpells()
     {
         var on = _gameBar.IsOn(AreaBarButton.Spells);
-        if (!on) { _spellPane?.HidePane(); _spellNotice = null; return; }
+        if (!on) { _spellPane?.HidePane(); _spellNotice = null; return true; }
         if (!SpellMapActive || _areaSession?.QueryHero() is null) _gameBarNotice = "spells: needs a hero on a map";
         else if (WorldModal) _gameBarNotice = "spells: ignored while a window is open";
-        else { ShowSpellPane(); return; }
+        else { ShowSpellPane(); return true; }
         _gameBar.SetOn(AreaBarButton.Spells, false);
+        return false;
     }
 
     private string GameBarStatus() => _gameBarPanel is not { Visible: true } ? "" : " | interface bars" + (_gameBarNotice is null ? "" : ": " + _gameBarNotice);

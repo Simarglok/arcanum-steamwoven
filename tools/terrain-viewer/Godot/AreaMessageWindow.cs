@@ -41,6 +41,7 @@ public partial class AreaMessageWindow : CanvasLayer
         _line = new Label(); column.AddChild(_line);
         _detail = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new(420, 0) }; column.AddChild(_detail);
         GetViewport().SizeChanged += Place;
+        AreaGameBarPanel.InsetsChanged += Place;
     }
 
     private static Button Small(string text, Action pressed)
@@ -80,6 +81,9 @@ public partial class AreaMessageWindow : CanvasLayer
         _panel.Show();
         Place();
     }
+
+    // ARC-UI-018: the bar panel's inset event is static; a freed panel must leave it.
+    public override void _ExitTree() => AreaGameBarPanel.InsetsChanged -= Place;
 
     private void Place()
     {

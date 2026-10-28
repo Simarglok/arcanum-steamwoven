@@ -67,7 +67,7 @@ public partial class TerrainViewerApp
             MainMenuCommand(() => _mainMenu!.Start());
             await Frames(3);
             Require(!MainMenuOpen && _areaSession?.QueryHero() is not null, "a new game began with a hero");
-            Require(_gameBarPanel is { Visible: true } && _gameBarContent is { ArtReady: true, Texts.FromGame: true },
+            Require(_gameBarPanel is { Visible: true } && _gameBarContent is { ArtReady: true } content && content.Texts.GameCount == AreaGameBarTexts.Count,
                 "the bars show with the game's art and texts: " + _gameBarContent?.Detail);
             var panel = _gameBarPanel!;
             GD.Print($"ARC-UI-018 bar smoke bars factor={panel.Factor} top={panel.StripRectForSelfTest(AreaBarStrip.Top)} bottom={panel.StripRectForSelfTest(AreaBarStrip.Bottom)}");
@@ -92,14 +92,28 @@ public partial class TerrainViewerApp
             Require(!SheetOpen && InventoryOpen, "Inventory switched from the sheet to the inventory: " + _gameBarNotice);
             await Click(AreaBarButton.Inventory);
             Require(!InventoryOpen, "a second press closed it");
-            foreach (var (button, open) in new (AreaBarButton, Func<bool>)[]
-                { (AreaBarButton.Logbook, () => LogbookOpen), (AreaBarButton.Schematics, () => SchematicsOpen), (AreaBarButton.Map, () => WorldMapOpen) })
+            foreach (var (button, open) in new (AreaBarButton, Func<bool>)[] { (AreaBarButton.Logbook, () => LogbookOpen), (AreaBarButton.Schematics, () => SchematicsOpen) })
             {
                 await Click(button);
                 Require(open(), $"{button} opened its window: {_gameBarNotice}");
                 await Click(button);
                 Require(!open() && !WorldModal, $"{button} closed it");
             }
+            // The logbook laid out in the part the bars leave free, and its own close button is pressed with the bars shown.
+            await Click(AreaBarButton.Logbook);
+            var book = _logbookPanel!.PanelRectForSelfTest;
+            Require(book.Position.Y >= AreaGameBarPanel.TopInset && book.End.Y <= GetViewport().GetVisibleRect().Size.Y - AreaGameBarPanel.BottomInset,
+                $"the logbook {book} lies between the strips");
+            await Move(book.GetCenter()); await Button(book.GetCenter(), true); await Button(book.GetCenter(), false);
+            Require(LogbookOpen && _gameBar.Hovered is null, "a press inside the window is the window's");
+            CloseLogbookByPlayer();
+            // The world map does not fit between the strips: the bars hide while it is open, and come back with the pointer state reset.
+            await Click(AreaBarButton.Map);
+            await Frames(1);
+            Require(WorldMapOpen && !_gameBarPanel!.Visible, "Map opened the world map and the bars hid: " + _gameBarNotice);
+            CloseWorldMapByPlayer();
+            await Frames(1);
+            Require(!WorldMapOpen && _gameBarPanel!.Visible && _gameBar.Hovered is null && panel.HoverTextForSelfTest == "", "the bars came back with no hover");
             await Click(AreaBarButton.Combat);
             Require(HeroInCombatMode, "Combat entered combat mode: " + _gameBarNotice);
             await Click(AreaBarButton.Combat);

@@ -57,6 +57,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         AddChild(_menu);
         _menuItems = new VBoxContainer(); _menu.AddChild(_menuItems);
         GetViewport().SizeChanged += () => { CloseMenu(); Place(); };
+        AreaGameBarPanel.InsetsChanged += Place;
         Hide();
     }
 
@@ -115,6 +116,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
     }
 
     public void CloseMenu() { _menu.Hide(); _menuEntity = null; }
+
+    // ARC-UI-018: the bar panel's inset event is static; a freed panel must leave it.
+    public override void _ExitTree() => AreaGameBarPanel.InsetsChanged -= Place;
 
     private void Place()
     {
