@@ -97,7 +97,7 @@ public sealed partial class SessionSpellCaster
     {
         ArgumentNullException.ThrowIfNull(critter);
         if (Item(item ?? throw new ArgumentNullException(nameof(item))) is not { } spells) return false;
-        var holder = RunObject(critter) is { IsCritter: true } who ? Facts(critter) : null;
+        var holder = RunObject(critter) is { IsCritter: true } ? Facts(critter) : null;
         return SpellInvocationRules.HolderCanUseItem(holder?.Aptitude, spells.Complexity, () => ItemPower(spells, holder!));
     }
 

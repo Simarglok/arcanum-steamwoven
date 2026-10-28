@@ -435,6 +435,8 @@ public partial class TerrainViewerApp
                 new SessionItemKind(SessionItemType.Food, potionNumber, potionFields.Object.Name, potionFields.Object.Description), _ => SessionInsertVerdict.Accepted);
             Require(given.Failure == GameSessionFailure.None && given.Item is not null, $"the NPC took the potion: {given.Failure}");
             potion = given.Item;
+            // A quarter: at or below 30 % the heal step skips its combat-mode care roll (the NPC fights the hero); its own spells are on
+            // no healing list, so the heavier rungs find nothing and the light rung lists the potion.
             var max = session.QueryLife(npcLife).View?.Status.MaxHitPoints ?? 0;
             if (session.QueryLife(npcLife).View?.Status is { } full && full.HitPoints > max / 4)
                 session.ApplyDamage(session.Version, npcLife, new LifeDamage { HitPoints = full.HitPoints - max / 4 });

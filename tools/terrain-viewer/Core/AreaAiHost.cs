@@ -176,6 +176,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     // saved), the facing a casting goal's start computed for its turn, and the magic runs whose play reaches no action frame.
     private readonly Dictionary<string, AiPassChoice> _passChoices = new(StringComparer.Ordinal);
     private AiListCache _listCache = AiListCache.Empty;
+    // ARC-WORLD-108: the items each NPC used or cast from, until they are gone (the list cache's drops, List).
+    private readonly Dictionary<string, HashSet<string>> _usedItems = new(StringComparer.Ordinal);
     private readonly Dictionary<int, SpellFacing?> _castFacing = [];
     private readonly HashSet<int> _noRelease = [];
     // ARC-WORLD-104: the magic runs of queued casting goals that have not started yet (SU13); an end step leaves them unplayed.
@@ -965,6 +967,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     {
         if (_scene.Spells?.Invoke()?.ItemTriggers is not SessionItemTriggers triggers) { Trace(user).Item += $" magic {item} needs the cast host"; return; }
         var used = triggers.UseItem(item, target);
+        NoteUsedItem(user, item);
         Trace(user).Item += $" magic {item} {used.Outcome} {used.Cast} fired={used.ItemUsed?.Spells.Count ?? 0} spent={used.Spent}";
         _notices.Add(new(AreaAiNoticeKind.ItemUse, user, target) { Item = item, ItemUse = used });
     }
@@ -974,7 +977,15 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public void SpendItem(string item)
     {
         if (_session.IsItemDestroyed(item) || _scene.Spells?.Invoke() is not { } caster) return;
+        if (ItemHolder(item) is { } holder) NoteUsedItem(holder, item);
         caster.SpendUsedItem(item);
+    }
+
+    // An item the NPC used or cast from, whose cached list slot the next list request checks.
+    private void NoteUsedItem(string npc, string item)
+    {
+        if (!_usedItems.TryGetValue(npc, out var items)) _usedItems[npc] = items = new HashSet<string>(StringComparer.Ordinal);
+        items.Add(item);
     }
 
     // The item use's facts of an item an NPC holds, or null.
@@ -1043,6 +1054,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
             return new(null);
         }
         var attempt = caster.CastByAi(npc, choice.Spell, choice.Target, choice.Item);
+        if (choice.Item is { } fromItem) NoteUsedItem(npc, fromItem);
         Trace(npc).Cast = $"cast {choice.Spell}{(choice.Item is null ? "" : " from " + choice.Item)} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal}";
         if (attempt.RunId is not { } run) return new(null);
         var castAnimation = (caster.SpellRecord(choice.Spell)?.Run.CastAnimation ?? -1) != -1;
@@ -1144,6 +1156,15 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// first list, SP11; built fresh in Steamwoven). The cache is not saved: a load or a map change builds the host again.</summary>
     public ImmutableArray<AiListEntry> List(string critter, AiActionList list)
     {
+        // ARC-WORLD-108: an item the NPC used or cast from that is gone or out of charges drops its slot (the force-removal 0x467860 →
+        // 0x4CCC00 of a destroyed item, the exhausted item 0x450420 → 0x4CCC40), so the Original setting's frozen list lists it no more.
+        if (_usedItems.TryGetValue(critter, out var used))
+            foreach (var item in used.ToArray())
+            {
+                var gone = _session.IsItemDestroyed(item);
+                if (gone || _scene.Spells?.Invoke()?.Item(item) is { Charges: 0 }) _listCache = _listCache.ItemExhausted(critter, item);
+                if (gone) used.Remove(item);
+            }
         var request = _listCache.Request(this, critter, list, _session.Rules.Combat);
         _listCache = request.Cache;
         return request.Entries;
@@ -1190,9 +1211,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public bool HealSkillAccepts(string npc, string item, string target) => false;
 
     // The fields of an item an NPC of the shown map holds now, or null.
-    private CombatFields? ItemFields(string item) =>
-        _scene.Combat.NpcHolder(_session, _scene.RuntimeMap, item) is { } holder
-            ? _scene.Combat.NpcItems(_session, _scene.RuntimeMap, holder).FirstOrDefault(i => i.Entity == item).Fields : null;
+    private CombatFields? ItemFields(string item) => _scene.Combat.NpcItemFields(_session, _scene.RuntimeMap, item);
 
     public bool Knows(string critter, int spell) => _scene.Spells?.Invoke()?.AiKnows(critter, spell) ?? false;
     public AiSpellFacts Spell(int spell) => _scene.Spells?.Invoke()?.AiSpell(spell) ?? default;

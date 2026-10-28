@@ -21,7 +21,8 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaAiItemTests
 {
     [TestMethod, TestCategory("RealData")]
-    public void On_the_crash_site_a_hurt_npc_given_a_healing_potion_drinks_it_in_its_heal_step()
+    [DataRow(RuleMode.Steamwoven), DataRow(RuleMode.Original)]
+    public void On_the_crash_site_a_hurt_npc_given_a_healing_potion_drinks_it_in_its_heal_step(RuleMode mode)
     {
         var root = Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT");
         var mobile = Environment.GetEnvironmentVariable("ARC_AREA_MOBILE");
@@ -50,6 +51,7 @@ public sealed class AreaAiItemTests
         var session = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(), hero, map,
             AreaStartingHero.Load(module, AreaStartingHero.Premade[0])).Owner!;
         using var _ = session;
+        session.SelectRules(mode);
         Assert.AreEqual(GameSessionFailure.None, session.AttachMapInventory(new SessionMapId(map), inventory.Seed).Failure);
 
         AreaAiHost? host = null;
@@ -107,7 +109,7 @@ public sealed class AreaAiItemTests
         }
         var trace = host.TraceOf(npc);
         var healed = session.QueryLife(critter.Target).View!.Status.HitPoints;
-        Trace($"potion {potion.Number} spell {potion.Fields.Item!.Spells[0]} hp {hurt}->{healed}/{max}; item {trace?.Item}; perform {trace?.Perform};"
+        Trace($"{mode} potion {potion.Number} spell {potion.Fields.Item!.Spells[0]} hp {hurt}->{healed}/{max}; item {trace?.Item}; perform {trace?.Perform};"
             + $" step {trace?.Step}; cast {trace?.Cast}; log {string.Join(",", caster.Log.Select(e => $"{e.Kind}:{e.Value}"))}");
         Assert.IsTrue(session.IsItemDestroyed(item), "the NPC used the potion up");
         CollectionAssert.DoesNotContain(host.Inventory(npc).ToArray(), item);
@@ -117,6 +119,9 @@ public sealed class AreaAiItemTests
         Assert.AreEqual((SessionItemUseOutcome.Used, SessionItemUseCast.Triggered, true), (use.ItemUse!.Outcome, use.ItemUse.Cast, use.ItemUse.Spent));
         Assert.AreEqual(SessionItemSpellOutcome.Started, use.ItemUse.ItemUsed!.Spells.Single().Outcome, "its Item_Used spell ran");
         Assert.IsTrue(healed > hurt, "the potion healed the NPC");
+        // The Original setting's list cache (SP11) froze the light-healing list with the potion; its destruction drops the slot
+        // (0x467860 → 0x4CCC00), so the list holds it no more.
+        Assert.IsFalse(host.List(npc, AiActionList.HealingLight).Any(entry => entry.Item == item), $"{mode}: the spent potion is listed no more");
     }
 
     private static void Trace(string line) => Console.WriteLine("ARC-WORLD-108 " + line);

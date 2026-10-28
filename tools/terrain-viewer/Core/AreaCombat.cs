@@ -140,6 +140,19 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return items;
     }
 
+    /// <summary>ARC-WORLD-108: the fields of an item an NPC of a map this host covers holds now (<see cref="ItemFields"/>), or null for
+    /// an item no NPC of that map holds, a destroyed one, or one without fields.</summary>
+    public CombatFields? NpcItemFields(GameSessionOwner session, int runtimeMap, string item)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(item);
+        if (!_maps.TryGetValue(runtimeMap, out var map)) return null;
+        var (holders, npcItems) = HolderIndex(session, runtimeMap);
+        return npcItems.TryGetValue(item, out var holder) && !session.IsItemDestroyed(item)
+            && holders[holder].Items.FirstOrDefault(listed => listed.Entity == item) is { Entity: not null } found
+            && ItemFields(map, found) is { Item: not null } fields ? fields : null;
+    }
+
     /// <summary>ARC-WORLD-108: the NPC of a map this host covers that holds the item now (0x4612A0 for an NPC's item), or null.</summary>
     public string? NpcHolder(GameSessionOwner session, int runtimeMap, string item)
     {
