@@ -475,6 +475,35 @@ public sealed class CombatRoundTests
     }
 
     [TestMethod]
+    public void TheSubturnStartsAreCountedWhicheverCallBeganThemAndAreNotSaved()
+    {
+        foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        {
+            using var owner = Owner(mode);
+            var world = Fight();
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "oid:virgil").Disposition);
+            world.With(Virgil, 101, 200, Npc(6));
+            Assert.AreEqual(0, owner.QueryCombatSubturnStarts());
+            Ok(owner.StartCombatRound(owner.Version, world), owner);
+            Assert.AreEqual(1, owner.QueryCombatSubturnStarts(), "the round's first subturn");
+            // A refused charge passes the turn on: the bandit's subturn starts.
+            Ok(owner.ConsumeActionPoints(owner.Version, Wolf, 8, world), owner);
+            Assert.AreEqual(2, owner.QueryCombatSubturnStarts());
+            // A refused call starts nothing.
+            Assert.AreEqual(GameSessionDisposition.Rejected, owner.EndCombatTurn(new GameSessionVersion(owner.Identity, 0), Bandit, world).Disposition);
+            Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition);
+            Assert.AreEqual(2, owner.QueryCombatSubturnStarts());
+            Ok(owner.EndCombatTurn(owner.Version, Bandit, world), owner);
+            world.Facts["oid:virgil"] = null;
+            // Past the end through the skip loop A9 starts the wolf's subturn twice in the Original setting: both starts count.
+            Ok(owner.EndCombatTurn(owner.Version, Hero, world), owner);
+            Assert.AreEqual(mode == RuleMode.Original ? 5 : 4, owner.QueryCombatSubturnStarts(), mode.ToString());
+            using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions());
+            Assert.AreEqual(0, restored.QueryCombatSubturnStarts(), "not saved");
+        }
+    }
+
+    [TestMethod]
     public void TheRoundSurvivesCanonicalTextAndRestore()
     {
         using var owner = Owner();
