@@ -71,4 +71,4 @@ hero (leave, the leader check's leave, the expired wait) loses NO_ATTACK (FO7). 
   returned (a rotation only).
 - **Exit gate.** The combat-mode exit gate's threats (`SessionCombatThreat`) still come from the host; the danger records could
   supply them later.
-- **Redirect** (0x4A9560, P3) is slice I8's.
+- **Redirect** (0x4A9560, P3) and the spell and item choice of the danger update are slice I8's: `AiGroundRules.Redirect` and `AiSupportRules.ChooseSpell` ([AI support](ai-support.md)).

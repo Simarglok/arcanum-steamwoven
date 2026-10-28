@@ -91,7 +91,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="spell-records-arc-magic-001"></a>[Spell records (ARC-MAGIC-001)](ledger/magic.md#spell-records-arc-magic-001) | [Magic: spells, costs and the spell book](ledger/magic.md) | SR1–SR16 |
 | <a id="spell-components-arc-magic-002"></a>[Spell components (ARC-MAGIC-002)](ledger/magic.md#spell-components-arc-magic-002) | [Magic: spells, costs and the spell book](ledger/magic.md) | SC1–SC12 |
 | <a id="spell-cost-and-payment-arc-magic-003"></a>[Spell cost and payment (ARC-MAGIC-003)](ledger/magic.md#spell-cost-and-payment-arc-magic-003) | [Magic: spells, costs and the spell book](ledger/magic.md) | PC1–PC12 |
-| <a id="npc-ai-support-and-magic-arc-res-059"></a>[NPC AI support and magic (ARC-RES-059)](ledger/npc-ai.md#npc-ai-support-and-magic-arc-res-059) | [NPC AI](ledger/npc-ai.md) | SP1–SP18 |
+| <a id="npc-ai-support-and-magic-arc-res-059"></a>[NPC AI support and magic (ARC-RES-059)](ledger/npc-ai.md#npc-ai-support-and-magic-arc-res-059) | [NPC AI](ledger/npc-ai.md) | SP1–SP21 (SP19–SP21 ARC-WORLD-088) |
 | <a id="technology-arc-res-062"></a>[Technology (ARC-RES-062)](ledger/technology.md#technology-arc-res-062) | [Technology](ledger/technology.md) | TC1–TC10 |
 | <a id="schematic-data-arc-technology-001"></a>[Schematic data (ARC-TECHNOLOGY-001)](ledger/technology.md#schematic-data-arc-technology-001) | [Technology](ledger/technology.md) | SD1–SD6, TC11 |
 | <a id="item-durability-arc-world-053"></a>[Item durability (ARC-WORLD-053)](ledger/items.md#item-durability-arc-world-053) | [Items and inventory](ledger/items.md) | DU1–DU8 |

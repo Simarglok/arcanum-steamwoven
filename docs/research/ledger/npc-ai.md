@@ -258,6 +258,18 @@ both: their ARC-RES-048 verdicts stand. Every direct branch stays inside `.text`
 | SP17 | heal helper (0x4A8AA0) | The fatigue-recovery rung tests the healer's fatigue while the target may be its leader or a follower. | Original bug; owner decision 2026-10-20: Original switch `HealFatigueRungForOthers` |
 | SP18 | chooser (0x4ABF10), 0x4CC2A0 | In mode 4 the second defensive value is read for every visited entry before the spell −1 test; for an item AI-action entry the spell table is indexed with −1, so 4 bytes before the table decide whether the item is used on the pass target or on the NPC. Reachable only by an item with AI action 2; the installed data has none. | Original bug (latent) |
 
+ARC-WORLD-088 (slice I8, 2026-10-28) re-read the chooser (0x4ABF10), the global list build (0x4CC380) with its comparator
+(0x4CC2D0) and the runtime's quicksort (0x58A548, 0x58A69C, 0x58A6EA), the list build and cache (0x4CC4C0, 0x4CC4F0, 0x4CC520,
+0x4CC580, 0x4CC6F0, 0x4CC740, 0x4CC770, 0x4CC810, 0x4CC8A0, 0x4CC930, 0x4CCA30, 0x4CCA90, 0x4CCB90, 0x4CCC00, 0x4CCC40), the item-use
+test (0x4CC160) and the item search (0x4A8E70, 0x4A8F90) with `llvm-objdump` (one reader) and agrees with SP6, SP9, SP10, SP11 and
+SP12; the global list build also runs in the function oracle (F3, model `ai-global-list`). The three facts it adds are SP19–SP21.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SP19 | list request (0x4CCA90), request init (0x4CC4F0), cache (0x4CC580, 0x4CC6F0, 0x4CC740), identification (0x4CCA30) | The request init sets the critter, the list and four zero fields but not the PC-leader field (+0x8) that the identification rule reads; only a newly taken slot gets the critter's PC leader (0x45DDA0). A hit with the requested list empty builds into the request record, whose PC-leader field no function of the cache sets (what the caller's frame holds there was not traced). | Original bug (latent, uninitialised read): both settings use the critter's current PC leader, as for SU8 |
+| SP20 | runtime quicksort (0x58A548), selection sort (0x58A69C), swap (0x58A6EA), comparator (0x4CC2D0) | Parts of up to 8 elements: from the whole part down to two elements, the first element the comparator ranks last (`> 0` against the current one) moves to the part's end. Longer parts: the middle element (`lo + (size / 2) × width`) swapped to the front; scans `≤ 0` from the left while within the part and `≥ 0` from the right while above the front; swap, until the scans cross; the pivot swapped to the right scan's place; the larger side stacked (when it holds two or more elements) and the smaller sorted next. The comparator answers 1 when the first value is smaller, 0 when equal, −1 when larger. The 16-byte entries are swapped byte by byte; a swap with itself does nothing. | Original (closes U1: three equal values 0, 1, 2 come out 1, 2, 0) |
+| SP21 | search (0x4A8F90) | The nearest loose item gets the pickup (0x4356C0); when the pickup does not start, the junk piles are searched as when no loose item qualified. | Original |
+
 ## NPC AI action execution (ARC-RES-066)
 
 Source: [NPC AI action execution](../npc-ai-execution.md) (plan stage A6, source unit S19 and the animation goals behind it).
