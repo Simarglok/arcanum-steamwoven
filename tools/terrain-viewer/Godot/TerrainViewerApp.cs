@@ -143,9 +143,9 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, junk, barter, menu, scene, options, plants)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, junk, barter, menu, scene, options, plants, ai)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
-                        // walk, census, barter, menu, scene, options and plants run.
+                        // walk, census, barter, menu, scene, options, plants and ai run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
@@ -172,6 +172,8 @@ public partial class TerrainViewerApp : Node
                                 if (Stage("options")) await RunAreaOptionsSmokeAsync();
                                 // ARC-WORLD-081: only when named, the plant generator of a generated sector on a main-map window.
                                 if (only?.Contains("plants") == true) await RunAreaTemplatePlantsSmokeAsync();
+                                // ARC-WORLD-092: only when named, the first fight with the AI on (the other stages run with it off).
+                                if (only?.Contains("ai") == true) await RunAreaAiSmokeAsync(result);
                             }
                         }
                         else await RunAreaSmokeAsync(result);

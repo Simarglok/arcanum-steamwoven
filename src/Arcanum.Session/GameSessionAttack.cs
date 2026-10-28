@@ -70,12 +70,14 @@ public sealed class SessionCritterCombat
     private readonly int _constitutionMaximum;
     private readonly CharacterRace _race;
     private readonly CharacterGender _gender;
+    private readonly DamageRanges _natural;
 
     private SessionCritterCombat(string entity, CharacterStatsOwner stats, IReadOnlyDictionary<EquipmentSlot, EquipmentItem> worn,
         IReadOnlyList<int> basicSkills, int baseArmorClass, DamageResistances storedResistances, LightEmission ownLight, CombatantFlags flags,
         ObjectMaterial material, int criticalBody, CharacterRace race, CharacterGender gender, LifeFacts facts, LifeState loaded,
-        SessionNpcExperience experience, bool monstrous, int level, SessionSkills? sheetSkills = null)
+        SessionNpcExperience experience, bool monstrous, int level, DamageRanges natural, SessionSkills? sheetSkills = null)
     {
+        _natural = natural;
         Entity = entity; _stats = stats; _worn = worn; _basicSkills = basicSkills; _sheetSkills = sheetSkills; _baseArmorClass = baseArmorClass;
         _storedResistances = storedResistances; _ownLight = ownLight; _flags = flags; _material = material; _criticalBody = criticalBody;
         _race = race; _gender = gender; _constitutionMaximum = CharacterStatRules.Range(race, CharacterStat.Constitution).Maximum; Facts = facts; Loaded = loaded; Experience = experience; Monstrous = monstrous; Level = level;
@@ -99,7 +101,7 @@ public sealed class SessionCritterCombat
     /// reads it) and that sheet's level; its other values stay the map data's.</summary>
     internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, sheet.Level,
-        SessionSkills.Of(sheet, AdvancementModifiers.None));
+        _natural, SessionSkills.Of(sheet, AdvancementModifiers.None));
 
     /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
@@ -197,7 +199,7 @@ public sealed class SessionCritterCombat
         var lightEmission = (LightEmission)Math.Max((int)light, (int)equipment.Light);
         return new(SessionCritterCombatFailure.None, new(entity, owner, worn, critter.BasicSkills, fields.Object.ArmorClass,
             StoredResistances(fields.Object.Resistances), lightEmission, combatFlags, Material(fields.Object.Material), critter.CriticalHitChart,
-            race, gender, facts, loaded, experience, monstrous, level));
+            race, gender, facts, loaded, experience, monstrous, level, Natural(npc.Damage)));
 
         static SessionCritterCombatBuild Fail(SessionCritterCombatFailure failure) => new(failure, null);
     }
@@ -267,6 +269,55 @@ public sealed class SessionCritterCombat
         };
     }
 
+    /// <summary>
+    /// ARC-WORLD-092: what the NPC attacks with in this life state (the AI's hit step, 0x4B3170 with an NPC attacker): its
+    /// <see cref="Combatant"/>, the wielded weapon from its map data's worn items, else a monstrous critter's own damage table (NPC
+    /// field 0x12F, two values per damage type) and any other critter's bare hands with its gauntlets' bonus (0x465F70 reads the
+    /// gauntlets for melee only, then the monster test 0x45F730 picks the table over them); the weapon's skill with the level and training
+    /// of the NPC's stored basic skill (melee 20 and the tiers for a monstrous critter), or of the sheet it was levelled to; the weapon
+    /// speed and attack cost; the reach (1 bare-handed). <see cref="SessionNpcAttackValues.Supported"/> is a melee attack: bows,
+    /// throws and firearms are the ranged slice's.
+    /// </summary>
+    public SessionNpcAttackValues AttackValues(LifeStatus status, LifeState state, CombatAnomalyProfile profile)
+    {
+        var combatant = Combatant(status, state, profile);
+        var snapshot = _stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
+            state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!;
+        var dexterity = snapshot.GetEffective(CharacterStat.Dexterity);
+        var aptitude = Math.Clamp(snapshot.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
+        var wielded = _worn.TryGetValue(EquipmentSlot.Weapon, out var item) ? item : null;
+        var skill = wielded?.Weapon?.Skill ?? CombatSkill.Melee;
+        BasicCombatSkill? basic = skill switch
+        {
+            CombatSkill.Melee => BasicCombatSkill.Melee,
+            CombatSkill.Bow => BasicCombatSkill.Bow,
+            CombatSkill.Throwing => BasicCombatSkill.Throwing,
+            _ => null,
+        };
+        int level; SkillTraining training;
+        if (_sheetSkills is { } sheet) (level, training) = (sheet[SkillRules.Of(skill)].Level, sheet[SkillRules.Of(skill)].Training);
+        else if (basic is { } stored)
+        {
+            level = CombatSkillRules.Level(stored, _basicSkills[(int)stored], dexterity, Monstrous);
+            training = CombatSkillRules.Training(stored, _basicSkills[(int)stored], Monstrous, level, Level);
+        }
+        // The firearms skill is a tech skill, which the map data's basic skills do not hold.
+        else (level, training) = (0, SkillTraining.None);
+        var equipment = EquipmentRules.Evaluate(_worn, aptitude, training);
+        var weapon = wielded is null && Monstrous ? CombatWeapon.Natural(_natural) : equipment.Weapon;
+        var range = weapon.Kind == WeaponKind.Unarmed ? 1 : Math.Max(1, weapon.Range);
+        return new(combatant, weapon, skill, level, training, equipment.WeaponSpeed, equipment.AttackCost, snapshot.GetEffective(CharacterStat.Speed),
+            range, skill == CombatSkill.Melee);
+    }
+
+    // The monster damage table in the damage order (normal, poison, electrical, fire, fatigue); a missing entry is 0.
+    private static DamageRanges Natural(IReadOnlyList<CombatDamageRange> stored)
+    {
+        DamageRange At(CombatDamageIndex index) => (int)index < stored.Count ? new(stored[(int)index].Minimum, stored[(int)index].Maximum) : DamageRange.Zero;
+        return new(At(CombatDamageIndex.Normal), At(CombatDamageIndex.Poison), At(CombatDamageIndex.Electrical), At(CombatDamageIndex.Fire),
+            At(CombatDamageIndex.Fatigue));
+    }
+
     // A stored material outside the fourteen wears nothing in the original (its wear table treats every other value as 0), which a
     // critter defending as flesh reproduces: a critter's material is read by the wear alone.
     private static ObjectMaterial Material(int stored) => Enum.IsDefined((ObjectMaterial)stored) ? (ObjectMaterial)stored : ObjectMaterial.Flesh;
@@ -285,6 +336,14 @@ public sealed class SessionCritterCombat
         yield return (CharacterStat.TechPoints, TechPointsStat);
     }
 }
+
+/// <summary>
+/// ARC-WORLD-092: what an NPC attacks with (<see cref="SessionCritterCombat.AttackValues"/>), as <see cref="SessionHeroAttack"/>
+/// describes the hero's: the combatant, weapon, skill with its level and training, weapon speed, the attack's action-point cost, the
+/// effective Speed stat (the attack animation's rate), the reach and whether this session can run the attack (melee).
+/// </summary>
+public sealed record SessionNpcAttackValues(Combatant Combatant, CombatWeapon Weapon, CombatSkill Skill, int SkillLevel, SkillTraining Training,
+    int WeaponSpeed, int AttackCost, int Speed, int Range, bool Supported);
 
 /// <summary>
 /// What the hero attacks with (<see cref="GameSessionOwner.QueryHeroAttack"/>): its <see cref="Combatant"/> under its life state,

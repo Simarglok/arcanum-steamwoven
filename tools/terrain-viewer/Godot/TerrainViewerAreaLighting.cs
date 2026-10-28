@@ -19,8 +19,10 @@ public partial class TerrainViewerApp
     private AreaAmbientDriver? _areaAmbient;
     // ARC-WORLD-039: the event world the clock's pump asks; it reads the viewer's current combat and conversation hosts.
     private AreaEventWorld? _areaEventWorld;
+    // ARC-WORLD-092: its AI ticks run through the shown map's AI host.
     private AreaEventWorld AreaEvents => _areaEventWorld ??= new AreaEventWorld(() => _combatHost, () => _conversationHost, VisitorCallHost,
-        () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null);
+        () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null, () => _aiHost,
+        () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null);
 
     private void StartAreaAmbient(AreaLoadResult area)
     {

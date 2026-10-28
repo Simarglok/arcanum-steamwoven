@@ -81,7 +81,7 @@ public partial class TerrainViewerApp
         CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = new AreaCombatHost(host); _attackNotice = null; _spellCasterStamp = null;
     }
 
-    private void UnbindAreaCombat() { CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = null; _attackNotice = null; _spellCasterStamp = null; }
+    private void UnbindAreaCombat() { _aiHost = null; _aiHostStamp = null; CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = null; _attackNotice = null; _spellCasterStamp = null; }
 
     private long WorldMilliseconds() { var time = WorldTime.Value; return (long)(time.Numerator * 1000 / time.Denominator); }
 
@@ -300,7 +300,10 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-WORLD-016/065: the PC's live overlay: the companions' (which moves the removed objects too), or with no
     /// companions the removed objects alone (null when there are none).</summary>
-    private AreaOccupancy? AreaPcOccupancy()
+    private AreaOccupancy? AreaPcOccupancy() => WithAiMovers(CompanionPcOccupancy());
+
+    // ARC-WORLD-092: the AI's moved NPCs are added by WithAiMovers.
+    private AreaOccupancy? CompanionPcOccupancy()
     {
         if (_areaCompanions is { } group) return group.OccupancyForPc();
         var removed = AreaRemovedObjects();
@@ -550,6 +553,10 @@ public partial class TerrainViewerApp
                 var (x, y) = group.WorldCell(companion.Speaker);
                 live.TryAdd(new(checked((int)x), checked((int)y)), companion.Speaker.Row);
             }
+        // ARC-WORLD-092: the NPCs the AI walked stand on their cells now.
+        if (_aiHost is { } ai)
+            foreach (var npc in ai.Scene.Npcs)
+                if (ai.Movers.Of(npc.Entity) is { } mover) live.TryAdd(mover.Cell, npc.Row);
         var gone = ObjectTargets()?.Gone(owner) ?? new HashSet<AreaObjectKey>();
         var map = CurrentAreaMap;
         var portals = _areaPortals;
@@ -632,6 +639,8 @@ public partial class TerrainViewerApp
             Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
         });
         goal.Attacks++;
+        // ARC-WORLD-092: the attack event of a resolved attack: the victim (and the witnesses of the noise) react.
+        if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None) _aiHost?.HeroAttacked(struck.Entity);
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
         if (result.Shot is { } shot)
@@ -793,6 +802,9 @@ public partial class TerrainViewerApp
     private IReadOnlyList<AreaDrawCommand>? AreaMovingCommands()
     {
         var companions = AreaCompanionCommands();
+        // ARC-WORLD-092: the NPCs the AI walked, after the companions (a fallen body where it stands).
+        if (AiMoverCommands() is { Count: > 0 } walked)
+            companions = [.. companions ?? [], .. walked.Where(c => companions?.Any(o => o.Identity == c.Identity) != true)];
         if ((_fallenBodies.Count == 0 && _portalBodies.Count == 0 && _groundBodies.Count == 0 && _projectileBodies.Count == 0 && _eyeCandyBodies.Count == 0
             && _spellMissileBodies.Count == 0)
             || _readyArea is null || _areaOverlay?.Area != _readyArea) return companions;
