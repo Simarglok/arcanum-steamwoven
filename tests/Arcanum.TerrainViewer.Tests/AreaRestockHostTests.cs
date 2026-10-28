@@ -154,6 +154,10 @@ public sealed class AreaRestockHostTests
         Assert.AreEqual(new SessionItemKind(SessionItemType.Gold, AreaBarterData.GoldPrototype, 3008, 33008), host.PileKind);
         Assert.IsTrue(host.Persistent(new(1), Entity(3)));
         Assert.IsFalse(host.Persistent(new(1), Entity(2)) || host.Persistent(new(1), "made:1") || host.Persistent(new(2), Entity(3)));
+        // Data that failed to load: every set keeps the lists and no item is known.
+        var empty = new AreaRestockHost(session, new AreaInventoryHost([Map()]), null, new Screen());
+        Assert.AreEqual((SessionRestockSetStatus.Unsupported, (SessionRestockItem?)null, AreaBarterData.GoldPrototype),
+            (empty.Set(5).Status, empty.Item(4020), empty.PileKind.Prototype));
     }
 
     [TestMethod]

@@ -28,6 +28,20 @@ public sealed record InventorySourceSet(int Number, int MinCoins, int MaxCoins, 
 
 public sealed record InventorySourceRead(InventorySourceStatus Status, InventorySourceSet? Set);
 
+/// <summary>ARC-WORLD-096: how an emptied set's coin pair reads.</summary>
+public enum InventorySourceCoinsStatus
+{
+    /// <summary>The pair was read before the loot line failed.</summary>
+    Read,
+    /// <summary>The loot line failed before the pair, or the set is unreachable: the original's pair is uninitialised.</summary>
+    Undefined,
+    /// <summary>A pair the project does not model (an overflowing side, text outside printable ASCII).</summary>
+    Unsupported,
+}
+
+/// <summary>ARC-WORLD-096: an emptied set's coin pair (<see cref="InventorySourceRules.LootCoins"/>).</summary>
+public readonly record struct InventorySourceCoins(InventorySourceCoinsStatus Status, int Min, int Max);
+
 /// <summary>
 /// <c>rules\InvenSource.mes</c> sets (ARC-RES-027, docs/research/starting-hero-evidence.md): set N is message N,
 /// numbered from 1 without gaps; the lookup accepts <c>0 &lt; N ≤ entry count</c> (0x4BF5D0; ARC-WORLD-093 corrects the earlier
@@ -76,24 +90,20 @@ public static class InventorySourceRules
     }
 
     /// <summary>
-    /// ARC-WORLD-096: the coin pair the loot line of set <paramref name="set"/> reads first (its first <c>a,b</c> pair after the colon),
-    /// which a set the load emptied (<see cref="InventorySourceStatus.Emptied"/>) keeps (RK6); null when the set is unreachable, its text
-    /// is not printable ASCII, or the pair is not two digit runs (the original's pair would be uninitialised then).
+    /// ARC-WORLD-096: the coin pair a set the load emptied (<see cref="InventorySourceStatus.Emptied"/>) keeps (RK6): what the loot-line
+    /// parse read before it failed (<see cref="InventorySourceBuyRules.LootLineCoins"/>). An unreachable set reads none
+    /// (<see cref="InventorySourceCoinsStatus.Undefined"/>); text outside printable ASCII is <see cref="InventorySourceCoinsStatus.Unsupported"/>.
     /// </summary>
-    public static (int Min, int Max)? LootCoins(MesFile sources, int set)
+    public static InventorySourceCoins LootCoins(MesFile sources, int set)
     {
         ArgumentNullException.ThrowIfNull(sources);
-        if (set < 1 || set > sources.Count) return null;
+        if (set < 1 || set > sources.Count) return new(InventorySourceCoinsStatus.Undefined, 0, 0);
         for (var number = 1; number <= set; number++)
-            if (sources.Messages[number - 1].Number != number) return null;
+            if (sources.Messages[number - 1].Number != number) return new(InventorySourceCoinsStatus.Undefined, 0, 0);
         var text = sources.Messages[set - 1].Bytes.Span;
         foreach (var b in text)
-            if (b is < 0x20 or > 0x7e) return null;
-        var entry = System.Text.Encoding.ASCII.GetString(text);
-        var colon = entry.IndexOf(':');
-        if (colon is < 1 or > MaxNameCharacters) return null;
-        var first = entry[(colon + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Split(',');
-        return first is { Length: 2 } && Digits(first[0], out var min) && Digits(first[1], out var max) ? (min, max) : null;
+            if (b is < 0x20 or > 0x7e) return new(InventorySourceCoinsStatus.Unsupported, 0, 0);
+        return InventorySourceBuyRules.LootLineCoins(text);
     }
 
     private static bool Digits(string token, out int value)

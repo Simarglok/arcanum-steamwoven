@@ -14,8 +14,9 @@ public readonly record struct AreaPixelRect(double X, double Y, double Width, do
         X < other.X + other.Width && Y < other.Y + other.Height && other.X < X + Width && other.Y < Y + Height;
 }
 
-/// <summary>ARC-WORLD-096: what the viewer shows, for the restock host: the shown map, the game window in area pixels (null when no map
-/// is shown), its size (the vicinity of a merchant search on any map) and an object's drawn rectangle on the shown map.</summary>
+/// <summary>ARC-WORLD-096: what the viewer shows, for the restock host: the shown map, the game window in area pixels at the viewer's
+/// zoom (null when no map is shown; the screen test), the window's size at zoom 1 (the merchant search's area, which a display zoom
+/// must not change) and an object's drawn rectangle on the shown map.</summary>
 public interface IAreaRestockScreen
 {
     int? ShownMap { get; }
@@ -28,7 +29,8 @@ public interface IAreaRestockScreen
 /// <summary>
 /// ARC-WORLD-096: the AREA viewer's restock host (the original's live objects for the restock event, ledger RK1–RK9; contract
 /// docs/world/barter-runtime.md). It reads the holders' T0 restock fields and persistent items from the inventory maps, death and the PC
-/// leader from the session, the screen from the viewer, the inventory sources and item prototypes from the barter data; the
+/// leader from the session, the screen from the viewer, the inventory sources and item prototypes from the barter data (null when they
+/// failed to load: every set is <see cref="SessionRestockSetStatus.Unsupported"/>, so a restock keeps the lists, and no item is known); the
 /// <see cref="AreaEventWorld"/> answers <see cref="ISessionRestockWorld"/> through it. NPC positions are their T0 cells (a merchant the
 /// session moved is not seen where it stands).
 /// </summary>
@@ -36,20 +38,20 @@ public sealed class AreaRestockHost
 {
     private readonly GameSessionOwner _session;
     private readonly AreaInventoryHost _inventory;
-    private readonly AreaBarterData _data;
+    private readonly AreaBarterData? _data;
     private readonly IAreaRestockScreen _screen;
 
-    public AreaRestockHost(GameSessionOwner session, AreaInventoryHost inventory, AreaBarterData data, IAreaRestockScreen screen)
+    public AreaRestockHost(GameSessionOwner session, AreaInventoryHost inventory, AreaBarterData? data, IAreaRestockScreen screen)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
-        _data = data ?? throw new ArgumentNullException(nameof(data));
+        _data = data;
         _screen = screen ?? throw new ArgumentNullException(nameof(screen));
     }
 
     public GameSessionOwner Session => _session;
     public AreaInventoryHost Inventory => _inventory;
-    public AreaBarterData Data => _data;
+    public AreaBarterData? Data => _data;
 
     /// <summary>
     /// The restock schedule at an inventory window open (0x5733A9 in 0x5727B0, ledger RK2): the window's shown object (in the barter
@@ -130,14 +132,18 @@ public sealed class AreaRestockHost
     /// </summary>
     public SessionRestockSet Set(int source)
     {
+        if (_data is null) return new(SessionRestockSetStatus.Unsupported, null);
         var read = InventorySourceRules.Read(_data.Sources, _data.Buy, source, _data.Existing.Contains);
         return read.Status switch
         {
             InventorySourceStatus.Parsed when read.Set is { } set => new(SessionRestockSetStatus.Read,
                 new(set.MinCoins, set.MaxCoins, Array.AsReadOnly(set.Items.Select(line => new RestockLine(line.Rate, line.BasicPrototype)).ToArray()))),
-            InventorySourceStatus.Emptied => InventorySourceRules.LootCoins(_data.Sources, source) is { } coins
-                ? new(SessionRestockSetStatus.Read, new(coins.Min, coins.Max, Array.Empty<RestockLine>()))
-                : new(SessionRestockSetStatus.Unreachable, null),
+            InventorySourceStatus.Emptied => InventorySourceRules.LootCoins(_data.Sources, source) switch
+            {
+                { Status: InventorySourceCoinsStatus.Read } coins => new(SessionRestockSetStatus.Read, new(coins.Min, coins.Max, Array.Empty<RestockLine>())),
+                { Status: InventorySourceCoinsStatus.Undefined } => new(SessionRestockSetStatus.Unreachable, null),
+                _ => new(SessionRestockSetStatus.Unsupported, null),
+            },
             InventorySourceStatus.Unreachable => new(SessionRestockSetStatus.Unreachable, null),
             _ => new(SessionRestockSetStatus.Unsupported, null),
         };
@@ -147,7 +153,7 @@ public sealed class AreaRestockHost
     /// from the prototype's stored fields, with an ammunition prototype's type and units; null for no item prototype the data holds.</summary>
     public SessionRestockItem? Item(int basicPrototype)
     {
-        if (basicPrototype > int.MaxValue - 20 || _data.Prototype(basicPrototype + 20) is not { } fields) return null;
+        if (basicPrototype > int.MaxValue - 20 || _data?.Prototype(basicPrototype + 20) is not { } fields) return null;
         var type = (SessionItemType)fields.Object.Type;
         if (!Enum.IsDefined(type)) return null;
         var kind = new SessionItemKind(type, basicPrototype + 20, fields.Object.Name, fields.Object.Description);
@@ -155,7 +161,7 @@ public sealed class AreaRestockHost
     }
 
     /// <summary>The kind of a new gold pile (prototype 9076).</summary>
-    public SessionItemKind PileKind => _data.GoldKind();
+    public SessionItemKind PileKind => _data?.GoldKind() ?? new(SessionItemType.Gold, AreaBarterData.GoldPrototype, 0, 0);
 
     private (AreaInventoryMap Map, SessionSeedHolder Holder)? Holder(int runtimeMap, string entity) =>
         _inventory.Maps.FirstOrDefault(map => map.RuntimeMap == runtimeMap) is { } map && map.Seed.Holders.FirstOrDefault(holder => holder.Entity == entity) is { } holder

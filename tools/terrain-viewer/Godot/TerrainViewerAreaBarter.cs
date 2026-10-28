@@ -119,14 +119,14 @@ public partial class TerrainViewerApp
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
+        // ARC-WORLD-096: the open schedules the shown object's restock: the substitute container, else the merchant (0x573042, RK9).
+        ScheduleRestock(merchant.Container ?? merchant.Entity, "barter");
         _barterMessage = null; _barterStatus = null; _barterSession = session;
         var view = _barter.View();
         _barterPanel.Open(view);
         _barterRevision = session.Version.Revision;
         GD.Print($"ARC-UI-050 barter open merchant={merchant.Entity} follower={merchant.Follower} multiplier={merchant.Multiplier} buys={merchant.BuyList.Status} fence={merchant.Fence} script={merchant.BuyScript} hero={view.Hero.Count} wares={view.Wares.Count} gold={view.HeroGold}/{view.MerchantGold} haggle={view.Haggle} reaction={view.Reaction}");
         GD.Print($"ARC-WORLD-090 barter stock container={merchant.Container ?? "none"} containerBuys={merchant.ContainerBuyList?.Status.ToString() ?? "-"} movedCoins={opened.Coins} movedPiles={opened.Piles} identified={opened.Identified}");
-        // ARC-WORLD-096: the open schedules the shown object's restock: the substitute container, else the merchant (0x573042, RK9).
-        ScheduleRestock(merchant.Container ?? merchant.Entity, "barter");
         RefreshReadyStatus();
     }
 

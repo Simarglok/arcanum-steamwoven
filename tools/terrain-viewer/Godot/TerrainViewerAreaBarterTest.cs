@@ -155,8 +155,8 @@ public partial class TerrainViewerApp
             var centre = body.GetCenter();
             for (var attempt = 0; attempt < 12 && host!.OnScreen(map, container) != onScreen; attempt++)
             {
+                // Farther in each direction in turn; the zoom stays (the merchant search's area does not follow it, but the view does).
                 var far = onScreen ? centre : centre + new Vector2(attempt % 2 == 0 ? 4000 : -4000, attempt % 4 < 2 ? 3000 : -3000) * (1 + attempt / 4);
-                if (!onScreen && attempt >= 4) _camera.SetWorldZoom(8, WorldAnchor, WorldViewport);
                 _camera.UpdateWorld(WorldAnchor, default, new GamepadLab.Core.Vec2(_camera.State.X - far.X, _camera.State.Y - far.Y), false, true, WorldViewport);
                 _camera.Camera.ForceUpdateScroll();
             }

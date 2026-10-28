@@ -13,13 +13,15 @@ public partial class TerrainViewerApp
 {
     private AreaRestockHost? _restockHost;
 
-    /// <summary>The restock host of the area session now: once the barter data (inventory sources, item prototypes) loaded, over the
-    /// shown session and inventory host; null before (a due restock event then waits a minute).</summary>
+    /// <summary>The restock host of the area session now: once the barter data (inventory sources, item prototypes) loaded or failed to
+    /// load (then without them), over the shown session and inventory host; null while it loads (a due restock event then waits a
+    /// minute).</summary>
     private AreaRestockHost? RestockHostNow()
     {
         if (_areaSession is not { } session || _inventoryHost is not { } inventory) return null;
         AdoptBarterData();
-        if (_barterData is not { Data: { } data }) return null;
+        if (_barterData is not { } loaded) return null;
+        var data = loaded.Data;
         if (_restockHost is { } host && ReferenceEquals(host.Session, session) && ReferenceEquals(host.Inventory, inventory) && ReferenceEquals(host.Data, data))
             return host;
         return _restockHost = new AreaRestockHost(session, inventory, data, new RestockScreen(this));
@@ -51,8 +53,8 @@ public partial class TerrainViewerApp
     {
         public int? ShownMap => app._readyArea is null ? null : app.CurrentAreaMap;
         public AreaPixelRect? GameWindow => app.AreaGameWindow();
-        public (double Width, double Height) WindowSize => app.AreaGameWindow() is { } window ? (window.Width, window.Height)
-            : (app.GetViewport().GetVisibleRect().Size.X, app.GetViewport().GetVisibleRect().Size.Y);
+        // The viewport's size: the window in area pixels at zoom 1.
+        public (double Width, double Height) WindowSize => (app.GetViewport().GetVisibleRect().Size.X, app.GetViewport().GetVisibleRect().Size.Y);
         public AreaPixelRect? BodyRect(AreaObjectKey key) =>
             app._canvas?.AreaBodyRect(key) is { } rect ? new(rect.Position.X, rect.Position.Y, rect.Size.X, rect.Size.Y) : null;
     }
