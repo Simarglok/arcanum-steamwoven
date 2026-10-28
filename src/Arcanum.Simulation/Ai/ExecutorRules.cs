@@ -491,7 +491,13 @@ public static class AiExecutorRules
                 var wait = rolls.Roll(AiRollPurpose.BlockedStepWait, 0, BlockedStepWaitMs);
                 return new(Move.Wait, BlockedNode, Delay: wait, Reason: AiExecutorReason.StepBlocked);
             case AiStepBlock.CannotStart:
-                return new(Move.Next, BlockedNode, Reason: AiExecutorReason.StepBlocked);
+                // No wait drawn; the step still ends here (inference: the next frame goes on at node 10), so a melee walk that keeps
+                // re-planning onto a step that cannot start does not spin within one step.
+                return new(Move.Wait, BlockedNode, Reason: AiExecutorReason.StepBlocked);
+            case AiStepBlock.Clear:
+                break;
+            default:
+                throw new InvalidOperationException("The world answered an undefined step block.");
         }
         var mover = world.Mover(owner);
         var running = Running(world, owner, flags);

@@ -673,6 +673,13 @@ public sealed class ExecutorRulesTests
         Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.StepBlocked), (steps[^1].End, steps[^1].Reason));
         Assert.AreEqual(draws, Rolls.Draws, "no wait drawn");
         Assert.AreEqual(new CellCoord(11, 10), world.At[Npc]);
+
+        // A melee walk re-plans onto the same stuck step in the next frame, not within one step.
+        world = Arena(4);
+        world.Stuck.Add(new(12, 10));
+        var first = Drive(AttackRun(), world, Steamwoven, limit: 4);
+        Assert.IsTrue(first.All(s => !s.Ended && s.Nodes < AiExecutorRules.MaxNodes));
+        Assert.AreEqual((0, AiExecutorReason.StepBlocked), (first[1].DelayMs, first[1].Reason));
     }
 
     [TestMethod]
