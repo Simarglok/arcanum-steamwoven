@@ -20,7 +20,7 @@ public sealed class RestockStateTests
     private static readonly SessionItemKind Key = new(SessionItemType.Key, 9001, 3400, 33400);
     private const int SmithSource = 5, ChestSource = 7;
 
-    private sealed class World : ISessionRestockWorld
+    private class World : ISessionRestockWorld
     {
         public Dictionary<string, RestockHolder> Facts { get; } = new()
         {
@@ -70,10 +70,10 @@ public sealed class RestockStateTests
             new("bullets", Facts(SessionItemType.Ammo, 3301, quantity: 20) with { AmmoType = 1 }, null),
         ]);
 
-    private static GameSessionOwner Owner()
+    private static GameSessionOwner Owner(GameSessionLimits? limits = null, SessionMapInventorySeed? seed = null)
     {
-        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() }).Owner!;
-        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed()).Failure);
+        var owner = GameSessionOwner.Create(Descriptor(limits) with { Hero = HeroStateTests.HalfElf() }).Owner!;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed ?? Seed()).Failure);
         return owner;
     }
 
@@ -288,6 +288,56 @@ public sealed class RestockStateTests
         Assert.IsTrue(fired.Postponed);
         Assert.AreEqual(owner.QueryClockSnapshot().GameTimestampMs + SessionEventKinds.RestockRetryDelayMs, owner.QueryRestocks().Single().DeadlineMs);
         Assert.IsTrue(Fire(owner, new World(), SessionEventKinds.RestockRetryDelayMs).Restocks.Single() is { Postponed: false, Decision.Step: RestockStep.Regenerate });
+    }
+
+    [TestMethod]
+    public void Holders_the_session_cannot_regenerate_keep_their_lists()
+    {
+        // A container generated once (flag 0x200) is the first-open slice's.
+        using var once = Owner();
+        var world = new World();
+        world.Facts["box"] = world.Facts["box"] with { ContainerFlags = RestockRules.RegeneratesAloneFlag | RestockRules.GeneratedOnceFlag };
+        Schedule(once, "box");
+        var revision = once.Version.Revision;
+        Assert.AreEqual(SessionRestockOutcome.Unsupported, Fire(once, world).Restocks.Single().Regenerations.Single().Outcome);
+        Assert.AreEqual(revision, once.Version.Revision);
+        // A holder with a transfer script would refuse every created item after the clear (the script is not run).
+        var scripted = Seed() with { Holders = [.. Seed().Holders.Select(h => h.Entity == "smith" ? h with { ScriptPoints = [SessionScriptPoint.Transfer] } : h)] };
+        using var owner = Owner(seed: scripted);
+        Schedule(owner, "smith");
+        Assert.AreEqual(SessionRestockOutcome.Unsupported, Fire(owner, new World()).Restocks.Single().Regenerations.Single().Outcome);
+        CollectionAssert.AreEqual(new[] { "purse", "hammer", "ring" }, List(owner, "smith"));
+    }
+
+    [TestMethod]
+    public void A_clear_the_deleted_item_budget_cannot_hold_waits_a_minute()
+    {
+        using var owner = Owner(new GameSessionLimits(maxDurabilityRecords: 1));
+        Schedule(owner, "smith");
+        var revision = owner.Version.Revision;
+        var fired = Fire(owner, new World()).Restocks.Single();
+        Assert.AreEqual((true, GameSessionFailure.None, 0), (fired.Postponed, fired.ScheduleFailure, fired.Regenerations.Count));
+        Assert.AreEqual(revision, owner.Version.Revision);
+        CollectionAssert.AreEqual(new[] { "purse", "hammer", "ring" }, List(owner, "smith"), "nothing is cleared");
+        Assert.AreEqual(owner.QueryClockSnapshot().GameTimestampMs + SessionEventKinds.RestockRetryDelayMs, owner.QueryRestocks().Single().DeadlineMs);
+    }
+
+    private sealed class ScriptWorld(params string[] present) : World, ISessionScriptWorld
+    {
+        public bool ObjectExists(SessionMapId map, string entity) => present.Contains(entity);
+        public bool RunScriptCall(SessionScriptCall call) => true;
+    }
+
+    [TestMethod]
+    public void A_host_that_checks_objects_answers_for_restock_holders_too()
+    {
+        using var owner = Owner();
+        Schedule(owner, "chest");
+        var pass = Fire(owner, new ScriptWorld());
+        Assert.AreEqual(0, pass.Restocks.Count, "a missing holder's event is dropped by the queue (RK3: nothing)");
+        Assert.AreEqual(0, owner.QueryRestocks().Count);
+        Schedule(owner, "box");
+        Assert.AreEqual(RestockStep.Regenerate, Fire(owner, new ScriptWorld("box")).Restocks.Single().Decision.Step);
     }
 
     private sealed class NoHost : ISessionEventWorld

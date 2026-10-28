@@ -121,11 +121,16 @@ Decisions of this slice for sets (`SessionRestockSet`, the host's reading of `In
 - `Unreachable`: a set outside 1..count (RK7), or one the load emptied before its coin pair, would give an undefined coin count: the
   list is cleared and nothing is generated, in both modes (technical bug, owner rule 2026-10-28).
 - `Unsupported`: the shapes the project refuses (`Malformed`, `InvalidText`; 39 of the 123 installed sets are `Malformed`) are read
-  partially by the original; the holder keeps its list untouched (`SessionRestockOutcome.Unsupported`, not modelled). So are a holder
-  the map's seed does not list as that kind and a spilled container.
+  partially by the original; the holder keeps its list untouched (`SessionRestockOutcome.Unsupported`, not modelled). So do a holder
+  the map's seed does not list as that kind, a spilled container, a holder with a transfer script (the session does not run it, so
+  every created item would be refused after the clear) and a container with flag 0x200 (generated once from its own seeded draws,
+  RK4: the first-open slice).
 
 The session postpones a firing a minute (`SessionRestockFiring.Postponed`) when the pass has no restock host, the holder's map seed
-is not attached, or the deleted-item budget cannot hold the clear's records.
+is not attached, the deleted-item budget cannot hold the clear's records, or the session-wide added-item, pile or stack budgets could
+not hold every line and a pile after the clear; nothing is cleared then. A postponement or a reschedule whose new event is refused
+(a full event budget) reports it in `SessionRestockFiring.ScheduleFailure`. With a host that checks objects (`ISessionScriptWorld`)
+a restock event of a missing holder is dropped by the queue, which is the same "nothing" as RK3.
 
 ## Not modelled (NOT READY)
 
@@ -133,8 +138,9 @@ is not attached, or the deleted-item budget cannot hold the clear's records.
   has no restock host (screen test, merchant search, persistent flag, set reading, `AreaEventWorld` port): next slice. The first-open
   generation of containers with flag 0x200 (RK4, RK8; 116 installed), an NPC's best-items wield after a regeneration (0x4654F0) and the
   other callers of 0x463E20 and 0x463C60 (RK8) are not modelled. Lines whose prototype is gold, a key or a key ring are skipped (the
-  session's lists do not admit them), as are lines the host has no prototype for, lines into a holder with a transfer script and
-  lines past a full budget (`SessionRestockRegeneration.Skipped`).
+  session's lists do not admit them), as are lines the host has no prototype for and lines past the holder's full list
+  (`SessionRestockRegeneration.Skipped`). A roll refused by an exhausted generator (2^63 − 1 draws) throws out of the pass after the
+  clear (not guarded).
 - **Substitute container limits** (ARC-WORLD-090): the host finds the container from the T0 data (the NPC's leader handle and field
   0x126) and measures the 20 tiles between the T0 positions of the speaker and the container (the original measures where they are now);
   a leader the session gave the NPC other than the hero is not seen. A container's coins move only at a barter open (no other container

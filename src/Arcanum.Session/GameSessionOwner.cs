@@ -1113,10 +1113,11 @@ public sealed partial class GameSessionOwner : IDisposable
         var decaying = _events.Any(SessionEventKinds.ItemDecay)
             ? _events.QueryPending(SessionEventKinds.ItemDecay).Select(e => e.Payload.Entities[0].Code).ToHashSet(StringComparer.Ordinal)
             : null;
-        // ARC-WORLD-094: so are the objects the pending restock events name, other than an NPC with a life record (the host's facts
-        // answer for it as for its timers): the handler asks the restock host, and a missing object does nothing there (RK3).
-        var restocking = _events.Any(SessionEventKinds.Restock)
-            ? _events.QueryPending(SessionEventKinds.Restock).Select(e => e.Payload.Entities[0].Code).ToHashSet(StringComparer.Ordinal)
+        // ARC-WORLD-094: so are the objects the pending restock events name (by map and entity), other than an NPC with a life record
+        // (the host's facts answer for it as for its timers), for a host that has no object check: the handler asks the restock host,
+        // and a missing object does nothing there (RK3). A host with an object check answers for them as for any object.
+        var restocking = _events.Any(SessionEventKinds.Restock) && world is not ISessionScriptWorld
+            ? _events.QueryPending(SessionEventKinds.Restock).Select(e => e.Payload.Entities[0]).ToHashSet()
             : null;
         _passRespawns = respawns;
         _passSpellRuns = spellRuns;
@@ -1134,7 +1135,7 @@ public sealed partial class GameSessionOwner : IDisposable
             pass = _events.ProcessDue(new(new(0, now, 0), _actor.Map.RuntimeMap, budget, entity =>
                 entity.Code == SessionEventKinds.AbsentRole
                 || decaying?.Contains(entity.Code) == true && !_durability.Destroyed.Contains(entity.Code)
-                || restocking?.Contains(entity.Code) == true && !_life.Critters.ContainsKey(entity.Code)
+                || restocking?.Contains(entity) == true && !_life.Critters.ContainsKey(entity.Code)
                 || (_life.Critters.ContainsKey(entity.Code)
                     ? world.CritterFacts(new(entity.Map), entity.Code) is not null
                     // A host that knows objects answers for every kind; otherwise a Lock event's object exists while the

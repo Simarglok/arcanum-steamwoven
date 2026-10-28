@@ -76,6 +76,9 @@ public sealed record SessionRestockFiring(GameEvent Event, SessionMapId Map, str
     IReadOnlyList<SessionRestockRegeneration> Regenerations)
 {
     public bool Postponed { get; init; }
+    /// <summary>The refusal of the new event a postponement or a <see cref="RestockStep.Reschedule"/> set (a full event budget, an
+    /// exhausted generator): <see cref="GameSessionFailure.None"/> when it was set or none was due; the holder then has no pending event.</summary>
+    public GameSessionFailure ScheduleFailure { get; init; }
 }
 
 /// <summary>
@@ -149,16 +152,14 @@ public sealed partial class GameSessionOwner
     {
         var entity = firing.Event.Payload.Entities[0];
         var map = new SessionMapId(entity.Map);
-        GameEventHandlerOutcome Report(RestockDecision decision, IReadOnlyList<SessionRestockRegeneration> regenerations, bool postponed = false)
+        GameEventHandlerOutcome Report(RestockDecision decision, IReadOnlyList<SessionRestockRegeneration> regenerations, bool postponed = false,
+            GameSessionFailure scheduled = GameSessionFailure.None)
         {
-            _passRestocks?.Add(new(firing.Event, map, entity.Code, decision, regenerations) { Postponed = postponed });
+            _passRestocks?.Add(new(firing.Event, map, entity.Code, decision, regenerations) { Postponed = postponed, ScheduleFailure = scheduled });
             return GameEventHandlerOutcome.Completed;
         }
-        GameEventHandlerOutcome Postpone(RestockDecision decision)
-        {
-            ScheduleRestockEvent(map, entity.Code, SessionEventKinds.RestockRetryDelayMs);
-            return Report(decision, [], postponed: true);
-        }
+        GameEventHandlerOutcome Postpone(RestockDecision decision) =>
+            Report(decision, [], postponed: true, ScheduleRestockEvent(map, entity.Code, SessionEventKinds.RestockRetryDelayMs));
         var none = new RestockDecision(RestockStep.None, false);
         if (_passWorld is not ISessionRestockWorld world || !_inventory.Seeds.TryGetValue(map, out var seed)) return Postpone(none);
         if (world.RestockFacts(map, entity.Code) is not { } holder || !Enum.IsDefined(holder.Kind)) return Report(none, []);
@@ -172,11 +173,7 @@ public sealed partial class GameSessionOwner
             (merchant, merchantFacts) = (found, user);
         var decision = RestockRules.Fire(holder, merchantFacts);
         if (decision.Step == RestockStep.None) return Report(decision, []);
-        if (decision.Step == RestockStep.Reschedule)
-        {
-            ScheduleRestockEvent(map, entity.Code);
-            return Report(decision, []);
-        }
+        if (decision.Step == RestockStep.Reschedule) return Report(decision, [], scheduled: ScheduleRestockEvent(map, entity.Code));
         var plans = new List<RestockPlan>();
         if (decision.Step == RestockStep.RegenerateMerchantAndContainer && decision.MerchantRegenerates)
             plans.Add(PlanRestock(world, map, seed, merchant!, merchantFacts!.Value));
@@ -184,6 +181,12 @@ public sealed partial class GameSessionOwner
         // A deletion of an item that is not a made one keeps a deleted-item record: without room for all of them nothing is cleared yet.
         var records = plans.SelectMany(plan => plan.Deleted).Count(item => SessionMadeItem.Number(item) is null && !_durability.Records.ContainsKey(item));
         if (_durability.Count + records > _limits.MaxDurabilityRecords) return Postpone(decision);
+        // The session-wide item, pile and stack budgets must hold every line and a pile after the clear, or the clear would leave an
+        // empty list: nothing is cleared yet.
+        var lines = plans.Sum(plan => plan.Set?.Lines.Count + 1 ?? 0);
+        var freed = plans.SelectMany(plan => plan.Deleted).Count(item => _inventory.NpcOf(item) is not null);
+        if (_inventory.NpcHeld - freed + lines > _limits.MaxNpcItems || _inventory.Piles.Count + plans.Count > _limits.MaxGoldRecords ||
+            _inventory.Ammo.Count + lines > _limits.MaxAmmoRecords) return Postpone(decision);
         if (_revision == long.MaxValue) return GameEventHandlerOutcome.Refused;
         var done = plans.Select(plan => Regenerate(world, map, plan)).ToArray();
         if (done.Any(regeneration => regeneration.Outcome != SessionRestockOutcome.Unsupported)) Revise();
@@ -199,9 +202,12 @@ public sealed partial class GameSessionOwner
     {
         var kind = facts.Kind == RestockHolderKind.Npc ? SessionHolderKind.Npc : SessionHolderKind.Container;
         RestockPlan Unsupported() => new(holder, kind, SessionRestockOutcome.Unsupported, null, [], []);
-        // A holder of the map's seed as that kind; a spilled container's items lie on the ground.
+        // A holder of the map's seed as that kind; a spilled container's items lie on the ground. A holder with a transfer script would
+        // refuse every created item here (the script is not run, NT2), and a container generated once (flag 0x200: its own seeded
+        // draws, then no source, RK4) is the first-open slice's: both keep their lists.
         if (facts.Kind == RestockHolderKind.Other || !seed.Holders.TryGetValue(holder, out var row) || row.Kind != kind ||
-            kind == SessionHolderKind.Container && SpillCell(map, seed, holder) is not null) return Unsupported();
+            kind == SessionHolderKind.Container && (SpillCell(map, seed, holder) is not null || (facts.ContainerFlags & RestockRules.GeneratedOnceFlag) != 0) ||
+            HolderHasScript(holder, kind, SessionScriptPoint.Transfer)) return Unsupported();
         var read = world.RestockSet(RestockRules.InventorySource(facts));
         if (read is null || !Enum.IsDefined(read.Status) || read.Status == SessionRestockSetStatus.Unsupported) return Unsupported();
         if (read.Status == SessionRestockSetStatus.Read && (read.Set?.Lines is not { } lines || lines.Count > RestockRules.MaxLines)) return Unsupported();
@@ -255,7 +261,12 @@ public sealed partial class GameSessionOwner
             var held = _inventory.Piles.TryGetValue(kept.Entity, out var tracked) ? tracked : kept.Facts.Quantity ?? 0;
             if ((long)held + coins > int.MaxValue || !_inventory.Piles.ContainsKey(kept.Entity) && _inventory.Piles.Count >= _limits.MaxGoldRecords)
                 return RestockCreation.Skipped;
-            if (insert(new(kept.Entity, InventoryDomain.MadeFacts(pileKind) with { Quantity = coins })) != SessionInsertVerdict.Accepted) return RestockCreation.Refused;
+            var (revision, seeds) = (_revision, _inventory.SeedGeneration);
+            var verdict = insert(new(kept.Entity, InventoryDomain.MadeFacts(pileKind) with { Quantity = coins }));
+            ThrowIfDisposed();
+            // A call back into the session from the check may have changed the pile: nothing is merged then.
+            if (_revision != revision || _inventory.SeedGeneration != seeds) return RestockCreation.Skipped;
+            if (verdict != SessionInsertVerdict.Accepted) return RestockCreation.Refused;
             _inventory.Piles[kept.Entity] = held + coins;
             pile = kept.Entity;
             return RestockCreation.Created;
@@ -288,8 +299,11 @@ public sealed partial class GameSessionOwner
             {
                 if ((long)into.Units + units > int.MaxValue || !_inventory.Ammo.ContainsKey(into.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords)
                     return RestockCreation.Skipped;
-                if (insert(new(into.Entity, InventoryDomain.MadeFacts(item.Kind) with { AmmoType = type, Quantity = units })) != SessionInsertVerdict.Accepted)
-                    return RestockCreation.Refused;
+                var (revision, seeds) = (_revision, _inventory.SeedGeneration);
+                var verdict = insert(new(into.Entity, InventoryDomain.MadeFacts(item.Kind) with { AmmoType = type, Quantity = units }));
+                ThrowIfDisposed();
+                if (_revision != revision || _inventory.SeedGeneration != seeds) return RestockCreation.Skipped;
+                if (verdict != SessionInsertVerdict.Accepted) return RestockCreation.Refused;
                 _inventory.Ammo[into.Entity] = into with { Units = into.Units + units };
                 entity = into.Entity;
                 return RestockCreation.Created;
