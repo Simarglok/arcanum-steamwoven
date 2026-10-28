@@ -7,6 +7,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Locks;
+using Arcanum.Simulation.Traps;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -189,6 +190,34 @@ public sealed class AreaContainerLootTests
         var ran = AreaContainerLoot.Open(session, map, Entity(3), 2, world, _ => new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "synthetic"));
         Assert.AreEqual(AreaContainerOpenOutcome.Opened, ran.Outcome);
         StringAssert.Contains(ran.Detail, "use-script=run-default");
+    }
+
+    [TestMethod]
+    public void A_trap_met_on_the_use_keeps_the_container_shut()
+    {
+        // ARC-WORLD-110: the use-script host's trap meeting comes before the use script; one that cancels the use refuses the open.
+        var (session, map, _, world) = Start();
+        using var owned = session;
+        var run = TrapRules.NativeRun(30001, 0x1)!.Value;
+        AreaScriptedUse Met(SessionTrapOutcome outcome, NativeTrapRun? fired, GameSessionDisposition disposition = GameSessionDisposition.NoChange) =>
+            new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "synthetic")
+            {
+                Trap = new(Container(3, 103), SessionTrapCause.Use, new(new(disposition, GameSessionFailure.None, session.Version), outcome, fired,
+                    new(TrapClass.Nonmagical, 30001, 0, false)), null, null),
+            };
+        foreach (var (used, outcome) in new[]
+        {
+            (Met(SessionTrapOutcome.Spotted, null, GameSessionDisposition.Changed), AreaContainerOpenOutcome.TrapSpotted),
+            (Met(SessionTrapOutcome.Fired, run), AreaContainerOpenOutcome.TrapFired),
+            (Met(SessionTrapOutcome.NoTrap, null, GameSessionDisposition.Rejected), AreaContainerOpenOutcome.TrapRefused),
+        })
+        {
+            var open = AreaContainerLoot.Open(session, map, Entity(3), 2, world, _ => used);
+            Assert.AreEqual((outcome, false, false), (open.Outcome, open.Opening, open.LockedSound), outcome.ToString());
+            Assert.AreSame(used, open.UseScript);
+        }
+        // An ordinary trap script that fired ran as the use script: its run decides.
+        Assert.AreEqual(AreaContainerOpenOutcome.Opened, AreaContainerLoot.Open(session, map, Entity(3), 2, world, _ => Met(SessionTrapOutcome.Fired, null)).Outcome);
     }
 
     [TestMethod]

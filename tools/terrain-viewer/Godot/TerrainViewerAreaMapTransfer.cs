@@ -186,6 +186,9 @@ public partial class TerrainViewerApp
             number => PrototypeItems()?.ScriptItem(number),
             AreaDropMapNow);
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content, world);
+        // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
+        _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow);
+        host.Traps = _areaTraps.Use;
         _useScriptHost = (snapshot, owner, content, _inventoryHost, host);
         return host;
     }
