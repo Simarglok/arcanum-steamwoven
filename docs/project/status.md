@@ -12,6 +12,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | --- | --- | --- |
 | DAT | [Data and formats](status/data.md) | — |
 | Resource precedence | [Data and formats](status/data.md) | ARC-DATA-026, ARC-DATA-011 |
+| Launcher settings and game folder | [Data and formats](status/data.md) | ARC-DEV-046 |
 | Object names and MES text | [Data and formats](status/data.md) | ARC-DATA-042, ARC-DATA-013, ARC-UI-005 |
 | Universal map catalogue | [Data and formats](status/data.md) | ARC-DATA-026, ARC-DATA-015, ARC-DATA-025 |
 | Whole-map plans | [Data and formats](status/data.md) | ARC-RENDER-021, ARC-RENDER-022, ARC-DATA-020 |
@@ -43,6 +44,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Spell cast host and viewer casting | [Magic](status/magic.md) | ARC-MAGIC-014, ARC-MAGIC-015 |
 | Spell eye candy | [Magic](status/magic.md) | ARC-MAGIC-017 |
 | Item spell triggers | [Magic](status/magic.md) | ARC-MAGIC-020 |
+| Spell missile and caster facing | [Magic](status/magic.md) | ARC-MAGIC-018 |
 | Schematic data | [Technology](status/technology.md) | ARC-TECHNOLOGY-001 |
 | ART and playback | [Data and formats](status/data.md) | ARC-DATA-016 |
 | HD pack format | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DATA-014, ARC-RENDER-016, ARC-DEV-003 |
@@ -63,6 +65,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Save list | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-010 |
 | Main menu | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-011, ARC-UI-012 |
 | Scene flow | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-012 |
+| Launcher screen | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-014 |
 | WORLD diagnostic integration | [Viewer, rendering, HD and input](status/viewer.md) | ARC-INPUT-001 |
 | Human presentation | [Viewer, rendering, HD and input](status/viewer.md) | — |
 | Input/camera/zoom | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DEV-032, ARC-INPUT-003 |
@@ -126,6 +129,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | NPC AI executor | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-086, ARC-WORLD-084, ARC-WORLD-082 |
 | NPC AI support and magic | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-088, ARC-WORLD-086, ARC-MAGIC-014 |
 | NPC AI action goals | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-089, ARC-WORLD-088, ARC-WORLD-086 |
+| NPC AI followers in combat | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-091, ARC-WORLD-080, ARC-WORLD-046 |
 | NPC awareness rules | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-078, ARC-COMBAT-012, ARC-SKILLS-008 |
 | Function oracle | [Verification and tools](status/tools.md) | ARC-DEV-007, ARC-WORLD-033, ARC-SKILLS-001 |
 | Function registry | [Verification and tools](status/tools.md) | ARC-DEV-008, ARC-DEV-023, ARC-DEV-009 |

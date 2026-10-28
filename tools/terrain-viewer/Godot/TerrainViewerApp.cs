@@ -79,13 +79,16 @@ public partial class TerrainViewerApp : Node
         try
         {
             (_nativeSmoke, _nativeSmokeScreenshot) = TakeNativeSmokeArguments(args);
-            _arguments = _launchArguments = TerrainViewerArguments.Parse(args);
-            ConfigureVisualProfile();
-            ConfigureAudio();
-            ConfigureGameSettings();
-            _hud.SetMode(_arguments.Mode);
-            if (IsWorld) InitializeWorld();
-            _lastLoad = StartLoadAsync(_arguments);
+            // ARC-UI-014: --launcher opens the launcher screen of a start without inputs.
+            var launcher = args.Remove("--launcher");
+            // ARC-DEV-046: without command-line inputs the game folder comes from the launcher settings.
+            if (args.Count == 0)
+            {
+                _gameFolderStart = StartFromGameFolderAsync(launcher);
+                return;
+            }
+            if (launcher) throw new ArgumentException("Usage");
+            StartWithArguments(TerrainViewerArguments.Parse(args));
         }
         catch (ArgumentException)
         {
@@ -93,6 +96,18 @@ public partial class TerrainViewerApp : Node
             // explicit rather than emitting an ambiguous bare usage string.
             ShowStatus("Diagnostic mode unresolved | failure stage=Arguments code=Usage | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
         }
+    }
+
+    /// <summary>The start's arguments, then its preferences and the first load.</summary>
+    private void StartWithArguments(TerrainViewerArguments arguments)
+    {
+        _arguments = _launchArguments = arguments;
+        ConfigureVisualProfile();
+        ConfigureAudio();
+        ConfigureGameSettings();
+        _hud?.SetMode(_arguments.Mode);
+        if (IsWorld) InitializeWorld();
+        _lastLoad = StartLoadAsync(_arguments);
     }
 
     private async Task StartLoadAsync(TerrainViewerArguments arguments, bool orchestrateSmoke = true)

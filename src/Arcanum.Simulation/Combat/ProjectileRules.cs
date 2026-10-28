@@ -128,21 +128,25 @@ public static class ProjectileRules
     /// 0x4B6B10 for a scenery art (class 4, the class of every installed projectile art, combat census): the art faced in
     /// <paramref name="direction"/> 0..31 takes rotation direction mod 8 (bits 11..13) and its number (bits 19..27) raised by
     /// direction / 8, so a projectile has four consecutive scenery numbers of eight rotations each; a number past 511 leaves the
-    /// number as it was (the original logs it). Null for an art of another class (an item art takes rotation direction / 4; the
-    /// rotation setter's other classes and its single-rotation test 0x504790 are not read).
+    /// number as it was (the original logs it). ARC-MAGIC-018: an eye-candy art (class 14, a spell's missile) the same, with its
+    /// rotation in bits 9..11 (the rotation setter 0x502930's class 14 branch). Null for an art of another class (an item art takes
+    /// rotation direction / 4; the rotation setter's other classes and its single-rotation test 0x504790 are not read).
     /// </summary>
     [OriginalFunction(0x4B6B10, OriginalFunctionScope.Partial)]
     public static uint? FacedArt(uint art, int direction)
     {
         if (direction is < 0 or >= Directions) throw new ArgumentOutOfRangeException(nameof(direction));
-        if (art >> 28 != SceneryArtClass) return null;
+        var shift = (art >> 28) switch { SceneryArtClass => 11, EyeCandyArtClass => 9, _ => -1 };
+        if (shift < 0) return null;
         var number = ((art >> 19) & 0x1FF) + (uint)(direction / 8);
         if (number < 0x200) art = (art & ~(0x1FFU << 19)) | (number << 19);
-        return (art & ~(7U << 11)) | ((uint)(direction % 8) << 11);
+        return (art & ~(7U << shift)) | ((uint)(direction % 8) << shift);
     }
 
     /// <summary>The art class of a scenery art (id &gt;&gt; 28).</summary>
     public const uint SceneryArtClass = 4;
+    /// <summary>ARC-MAGIC-018: the art class of an eye-candy art (a spell's missile).</summary>
+    public const uint EyeCandyArtClass = 14;
 
     /// <summary>
     /// ARC-COMBAT-019 (the projectile's end 0x4B2690 with attack flag 0x1000, the turn 0x435A00, ledger BR rows): a boomerang's

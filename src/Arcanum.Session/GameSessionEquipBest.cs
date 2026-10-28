@@ -181,6 +181,8 @@ public sealed partial class GameSessionOwner
             var current = Worn[slot];
             // ARC-SCRIPT-042: a worn item with item event scripts stays (this call runs no scripts).
             if (current.ScriptPoints.Count > 0) { step.Unsupported = current.Entity; step.Failure = GameSessionFailure.ItemScriptUnsupported; return; }
+            // ARC-MAGIC-022: nor does it run a marked item's unwear.
+            if (current.ItemSpells) { step.Unsupported = current.Entity; step.Failure = GameSessionFailure.ItemEffectUnsupported; return; }
             if (EquipmentRules.CheckRemove(current.Item) is var refusal and not EquipmentRefusal.None) { step.Refusal = refusal; return; }
             var verdict = Insert(current);
             if (verdict != SessionInsertVerdict.Accepted) { step.Verdict = verdict; return; }
@@ -198,6 +200,7 @@ public sealed partial class GameSessionOwner
                 : facts.HasItemSpells ? GameSessionFailure.ItemEffectUnsupported : GameSessionFailure.None;
             if (unsupported != GameSessionFailure.None) { step.Unsupported = entity; step.Failure = unsupported; return; }
             if (current?.ScriptPoints.Count > 0) { step.Unsupported = current.Entity; step.Failure = GameSessionFailure.ItemScriptUnsupported; return; }
+            if (current?.ItemSpells == true) { step.Unsupported = current.Entity; step.Failure = GameSessionFailure.ItemEffectUnsupported; return; }
             var worn = Worn.ToDictionary(pair => pair.Key, pair => pair.Value.Item);
             var refusal = EquipmentRules.CheckWear(facts.Item, slot, Wearer, worn);
             if (refusal == EquipmentRefusal.None && EquipmentRules.NeedsArtCheck(facts.Item, slot))

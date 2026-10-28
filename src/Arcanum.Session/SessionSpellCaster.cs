@@ -3,6 +3,7 @@ using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
+using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reaction;
 
 namespace Arcanum.Session;
@@ -44,12 +45,16 @@ public interface ISpellCastMap : ISpellTargetWorld
 public sealed record SpellCastEvent(SpellCastEventKind Kind, int Run, int Value = 0, string? Object = null, int Detail = 0);
 
 /// <summary>How a casting goal's start went (<see cref="SessionSpellCaster.StartGoal"/>): it started, or it ends because the parent's
-/// action points refused, because the source cannot afford the cast, because the target is destroyed or off, or because there is
-/// no such run.</summary>
-public enum SpellCastGoalOutcome { Started, NoActionPoints, CannotAfford, TargetGone, NoRun }
+/// action points refused, because the source cannot afford the cast, because the target is destroyed or off, because the caster
+/// cannot turn to its target (ARC-MAGIC-018: stoned, stunned or paralysed), or because there is no such run.</summary>
+public enum SpellCastGoalOutcome { Started, NoActionPoints, CannotAfford, TargetGone, CannotTurn, NoRun }
 
-/// <summary>A casting goal's start and its action-point charge (null when the parent is not a combatant).</summary>
-public sealed record SpellCastGoalStart(SpellCastGoalOutcome Outcome, SessionCombatResult? ActionPoints);
+/// <summary>A casting goal's start and its action-point charge (null when the parent is not a combatant). ARC-MAGIC-018:
+/// <see cref="Facing"/> is the facing turn's answer for a started goal (null when the run has no parent).</summary>
+public sealed record SpellCastGoalStart(SpellCastGoalOutcome Outcome, SessionCombatResult? ActionPoints)
+{
+    public SpellFacing? Facing { get; init; }
+}
 
 /// <summary>How a cast while the caster's casting goal plays went (<see cref="SessionSpellCaster.Queue"/>, SU13): queued beneath the
 /// playing goal, refused (the run freed), or there is no such run.</summary>
@@ -88,6 +93,11 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-017: an EyeCandy component's Remove (0x4CD940) took entry <see cref="SpellCastEvent.Value"/> off
     /// <see cref="SpellCastEvent.Object"/>: only this run's, or any run's with the <c>no_id</c> play flag (0x100).</summary>
     EyeCandyRemoved,
+    /// <summary>ARC-MAGIC-022: a payment spent a charge of the item <see cref="SpellCastEvent.Object"/>; the value is the charges left.</summary>
+    ChargeSpent,
+    /// <summary>ARC-MAGIC-022: the session refused to save a payment's spent charge of the item <see cref="SpellCastEvent.Object"/>
+    /// (the value is the <see cref="GameSessionFailure"/>): the spell was paid without it.</summary>
+    ChargeNotSaved,
 }
 
 /// <summary>
@@ -110,6 +120,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     // The runs whose goal reached its release frame (the goal's frame flag 0x8): their goal's end frees nothing. A freed run's id
     // leaves the set, since the slot is reused.
     private readonly HashSet<int> _released = [];
+    // ARC-MAGIC-018: the runs whose missile flies (goal 28): their release comes when it arrives.
+    private readonly HashSet<int> _missiles = [];
     // Whose charge cells a payment spends: the payer the rules asked for last (only the hero's are modelled). The rules ask the payer
     // before the cells of every payment; a run without a source asks neither and pays nothing.
     private string? _cellsPayer;
@@ -353,6 +365,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (_owner.QuerySpellRuns()[run] is not { } r) return new(SpellCastGoalOutcome.NoRun, null);
         // A new goal for the slot: a release this host remembers belongs to an earlier run, freed elsewhere.
         _released.Remove(run);
+        _missiles.Remove(run);
         SessionCombatResult? points = null;
         if (r.Parent is { } parent && Combatant(parent.Id) is { } combatant)
         {
@@ -372,8 +385,23 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         // 0x429BC0: a target destroyed or switched off ends the goal before its animation.
         if (r.Target is { } target && ((_map.Object(target.Id)?.ObjectFlags ?? 0) & (SpellTargetObject.Destroyed | SpellTargetObject.Off)) != 0)
             return new(SpellCastGoalOutcome.TargetGone, points);
-        return new(SpellCastGoalOutcome.Started, points);
+        // ARC-MAGIC-018: the facing turn (0x42C850) after the range node; a refusal ends the goal through its end node, as above.
+        var facing = Facing(r);
+        if (facing?.Kind == SpellFacingKind.Refused) return new(SpellCastGoalOutcome.CannotTurn, points) { Facing = facing };
+        return new(SpellCastGoalOutcome.Started, points) { Facing = facing };
     }
+
+    /// <summary>ARC-MAGIC-018: the casting goal's facing turn (0x42C850, <see cref="SpellFacingRules.Turn"/>) of the run's parent toward
+    /// its target object; null without a parent on the map.</summary>
+    private SpellFacing? Facing(SpellRun run)
+    {
+        if (run.Parent is not { } parent || _map.Object(parent.Id) is not { } caster) return null;
+        var target = run.Target is { } t ? _map.Object(t.Id) : null;
+        return SpellFacingRules.Turn(caster.SpellFlags, caster.IsCritter, caster.CritterFlags, Cell(caster.Location), run.Target?.Id == parent.Id,
+            target is null ? null : Cell(target.Location));
+    }
+
+    private static CellCoord Cell(SpellLocation location) => new(unchecked((int)location.X), unchecked((int)location.Y));
 
     /// <summary>
     /// The casting goal's release frame (0x429C80): the target is checked again (0x456A90, <see cref="TargetStillValid"/>); then the
@@ -387,16 +415,63 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (_released.Contains(run) || _owner.QuerySpellRuns()[run] is not { } r || !AwaitsBegin(r)) return null;
         // The release gate marks the goal's frame handled before the re-check (0x42CAA0): the goal's end then frees nothing.
         _released.Add(run);
-        if (TargetStillValid(r))
-        {
-            var begun = Act(new(SessionSpellRunActionKind.Begin, run));
-            // A BEGIN the session rejected left the run untouched: its goal's end still frees it.
-            if (begun.Disposition == GameSessionDisposition.Rejected) _released.Remove(run);
-            return begun;
-        }
-        if (!Profile.ReleaseRefusalKeepsRun) Act(new(SessionSpellRunActionKind.Free, run));
+        var begun = ReleaseRun(r);
+        // A BEGIN the session rejected left the run untouched: its goal's end still frees it.
+        if (begun?.Disposition == GameSessionDisposition.Rejected) _released.Remove(run);
+        return begun;
+    }
+
+    // The release's re-check and BEGIN (0x429C80), for the casting goal and the missile's arrival.
+    private SessionSpellRunResult? ReleaseRun(SpellRun r)
+    {
+        if (TargetStillValid(r)) return Act(new(SessionSpellRunActionKind.Begin, r.Id));
+        if (!Profile.ReleaseRefusalKeepsRun) Act(new(SessionSpellRunActionKind.Free, r.Id));
         return null;
     }
+
+    /// <summary>
+    /// ARC-MAGIC-018: the casting goal's release frame for a spell whose projectile eye candy has art (0x429C40, the host's test): the
+    /// release gate marks the frame handled (0x42CAA0), so the goal's end frees nothing, and a missile is launched (0x4248A0, goal 28)
+    /// instead of the release: no re-check and no BEGIN now; they come when it arrives (<see cref="ArriveMissile"/>). False, and
+    /// nothing done, for a run already released or begun, or none.
+    /// </summary>
+    [OriginalFunction(0x429C40, OriginalFunctionScope.Partial)]
+    public bool LaunchMissile(int run)
+    {
+        if (_released.Contains(run) || _owner.QuerySpellRuns()[run] is not { } r || !AwaitsBegin(r)) return false;
+        _released.Add(run);
+        _missiles.Add(run);
+        return true;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-018: the missile arrived (goal 28's release, 0x429C80): the target re-check and the run's BEGIN, as the casting goal's
+    /// release does; a failed re-check keeps the run in the original (MG41) and frees it unpaid in Steamwoven. A BEGIN the session
+    /// rejected leaves no goal to free the run: it is freed as a lost missile's is. Null when no missile of the run flies or the run
+    /// no longer waits.
+    /// </summary>
+    public SessionSpellRunResult? ArriveMissile(int run)
+    {
+        if (!_missiles.Remove(run) || _owner.QuerySpellRuns()[run] is not { } r || !AwaitsBegin(r)) return null;
+        var begun = ReleaseRun(r);
+        if (begun?.Disposition == GameSessionDisposition.Rejected) Act(new(SessionSpellRunActionKind.Free, run));
+        return begun;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-018: the missile's goal ended without its release (goal 28's end, 0x429E70: a leg whose line is refused, the map left,
+    /// a point off the map): the original destroys the missile and frees nothing, so the run keeps its slot, never begun (MG44, owner
+    /// decision 2026-10-28: fixed in both rule modes, no switch): the run is freed unpaid. Null when no missile of the run flies.
+    /// </summary>
+    [OriginalFunction(0x429E70, OriginalFunctionScope.Partial)]
+    public SessionSpellRunResult? LoseMissile(int run)
+    {
+        if (!_missiles.Remove(run) || _owner.QuerySpellRuns()[run] is not { } r || !AwaitsBegin(r)) return null;
+        return Act(new(SessionSpellRunActionKind.Free, run));
+    }
+
+    /// <summary>ARC-MAGIC-018: whether a missile of the run flies.</summary>
+    public bool MissileFlies(int run) => _missiles.Contains(run);
 
     /// <summary>
     /// The casting goal ended (0x429CD0). After its release frame (the goal's frame flag 0x8), or for a run whose BEGIN ran, nothing
@@ -430,11 +505,12 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     /// <summary>
     /// ARC-MAGIC-019: a queued cast whose goal never plays, because its caster's goal stack ended through the end step or was
-    /// interrupted. Its only end node, the casting goal 26's animation reset (0x42B090), frees nothing: in the original the run keeps
-    /// its slot (MG43); Steamwoven frees a run still waiting for its BEGIN, unpaid. Null when nothing was freed.
+    /// interrupted. Its only end node, the casting goal 26's animation reset (0x42B090), frees nothing, so in the original the run
+    /// keeps its slot (MG43); fixed in both modes (owner decision 2026-10-28): a run still waiting for its BEGIN is freed, unpaid.
+    /// Null when nothing was freed.
     /// </summary>
     public SessionSpellRunResult? DropQueued(int run) =>
-        Profile.DroppedQueueKeepsRuns || _owner.QuerySpellRuns()[run] is not { } r || !AwaitsBegin(r) ? null : Act(new(SessionSpellRunActionKind.Free, run));
+        _owner.QuerySpellRuns()[run] is not { } r || !AwaitsBegin(r) ? null : Act(new(SessionSpellRunActionKind.Free, run));
 
     /// <summary>
     /// The release frame's target re-check (0x456A90): the record's BEGIN area passes at once when it is 0, exactly 0x10, or has
@@ -589,7 +665,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                     _log.Add(new(SpellCastEventKind.Resisted, note.Run, 0, note.Target?.Object?.Id));
                     if (IsLocalPlayer(runs(note.Run)?.Parent)) _log.Add(new(SpellCastEventKind.Message, note.Run, ResistedMessage));
                     break;
-                case SpellRunNoteKind.Freed: _released.Remove(note.Run); _log.Add(new(SpellCastEventKind.Freed, note.Run)); break;
+                case SpellRunNoteKind.Freed: _released.Remove(note.Run); _missiles.Remove(note.Run); _log.Add(new(SpellCastEventKind.Freed, note.Run)); break;
             }
         }
     }
@@ -599,6 +675,19 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     private void Pay(int run, string payer, SpellPayment payment)
     {
+        // ARC-MAGIC-022: an item source's spent charge (and with it the magical flag) is saved. The notes of an event pass are applied
+        // after the pass, so two payments of one pass were both made against the count before it: one that finds no charge left
+        // spends nothing (the original refuses the second, NoCharges). A spend the session refuses (a full record budget) is logged.
+        if (payment.ChargeSpent)
+        {
+            if (_items?.Invoke(payer) is not { } raw || raw.Entity != payer) return;
+            var left = _owner.QueryItemCharges(payer) ?? raw.Charges;
+            if (left <= 0) return;
+            var spent = _owner.SpendItemCharge(_owner.Version, payer, Math.Max(1, raw.Charges));
+            _log.Add(spent.Disposition == GameSessionDisposition.Changed ? new(SpellCastEventKind.ChargeSpent, run, left - 1, payer)
+                : new(SpellCastEventKind.ChargeNotSaved, run, (int)spent.Failure, payer));
+            return;
+        }
         if (payment.FatigueDamageAdded <= 0 || LifeTarget(payer) is not { } target) return;
         var result = _owner.PaySpellFatigue(_owner.Version, target, payment.FatigueDamageAdded);
         if (result.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.FatiguePaid, run, payment.FatigueDamageAdded, payer));

@@ -127,7 +127,7 @@ public sealed class WieldEventScriptTests
         // The kept slot and the worn item's points survive the snapshot.
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, "\"scriptSlots\":[{\"entity\":\"kit:3\",\"point\":24,\"script\":700,\"localFlags\":0,\"counters\":10}]");
-        StringAssert.Contains(text, "\"scripts\":[24,25]}");
+        StringAssert.Contains(text, "\"scripts\":[24,25],\"itemSpells\":false}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(owner.QueryItemScriptSlots().Single(), restored.QueryItemScriptSlots().Single());
         CollectionAssert.AreEqual(owner.QueryEquipment().Worn.ToArray(), restored.QueryEquipment().Worn.ToArray());

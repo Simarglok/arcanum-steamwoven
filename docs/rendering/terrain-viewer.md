@@ -15,9 +15,9 @@ not inferred world state. See [local development](../workflow/local-development.
 
 Use the `godot_canonical` function from the [shared toolchain](../workflow/toolchain.md), after restoring/building the viewer solution below. Launch the Godot project through the engine; its C# project is not a `dotnet run` executable.
 
-The viewer has no picker, archive discovery, precedence, PATCH/dif/loose-file
-policy, or extraction behavior. It requires caller-selected inputs and a safe,
-non-path source label:
+With arguments the viewer has no picker, archive discovery, precedence, PATCH/dif/loose-file
+policy, or extraction behavior (a start without arguments reads the stored game folder, [below](#start-without-inputs-arc-dev-046)).
+It requires caller-selected inputs and a safe, non-path source label:
 
     godot_canonical --path tools/terrain-viewer/Godot -- \
       --mode terrain-only --module PATH --resource PATH --source-id LABEL
@@ -68,6 +68,69 @@ recovered lookup IDs. `--expect-module-sha256` and `--expect-resource-sha256`
 are optional additional equality constraints, not replacements. Errors expose
 only stable categories and aggregate counts; paths, entry names, exception text,
 archive bytes, and sampled colours are deliberately not shown.
+
+### Start without inputs (ARC-DEV-046)
+
+Started with no viewer arguments (a player's build; `--native-smoke`, its screenshot option and `--launcher` alone also count), the
+viewer reads the launcher settings `user://launcher_v1.json` ([research](../research/launcher-settings.md#configuration-file);
+`LAUNCHER_SETTINGS_TEST_PATH` names another file, and an automated run without it has no file). It opens the stored
+game folder while `GameFolderLocator.Check` finds it ready, else the first ready fixed candidate (Windows: the GOG
+registry key `HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\1207658829` and its 64-bit twin, `C:\GOG Games\Arcanum`, the GOG
+Galaxy folder; macOS: `/Applications/Arcanum`, `~/Applications/Arcanum`, the GOG folders of each CrossOver bottle) for
+that start only. It writes nothing but the identity of a stored folder that had none: a detected folder, a changed
+installation and a stored folder that is gone are left for the launcher screen to confirm, so the player's stored folder
+is never replaced and each such start says so again. A folder is ready when the content stack mounts the
+`Arcanum` module and the module archive, `arcanum1.dat` and `arcanum2.dat` are there; any other result is a typed
+`GameFolderStatus` with the missing name. The start is map mode on `Arcanum1-024-fixed` with the main menu and the
+folder's own inputs, the same as `./arcanum area` (`test_launcher_sync.py` keeps the two in step). The log prints
+`ARC-DEV-046` lines: the settings read, each folder checked, the save and the folder used (GOG marker, verified
+1.0.7.4 executable, changed identity, whether the launcher screen shows). Not built: applying the stored display at
+start (window or fullscreen, monitor, UI scale; stored, not edited or applied); the candidate paths are F0 until a
+packaging task checks them on Windows and in Wine wrappers.
+
+### Launcher screen (ARC-UI-014)
+
+Before the original main menu, a start without inputs shows the launcher screen (owner decision 2026-10-28,
+[research](../research/launcher-settings.md#recommended-shape-option-a) option A, question 2 A) when
+`LauncherScreen.Decide` gives a reason, in this order: on request (`--launcher`, alone or with `--native-smoke`; or
+Shift pressed at the start or during the 0.75 s an ordinary start that would skip the screen waits for it, with the HUD
+saying so; only while the game's window has the focus), the first run (no stored folder, also when the settings file is one this build cannot use), a stored folder
+that is no longer a game folder, a changed installation (the stored identity differs) and "show at start". Without a
+reason the start opens the stored folder at once. `--launcher` with other viewer arguments is a usage error. The developer launcher
+(`./arcanum`) always passes its inputs, so its runs never show the screen; an exported build started with no arguments
+(a double click) or `--launcher`, or a source run `godot_canonical --path tools/terrain-viewer/Godot -- --launcher`, does.
+
+- **What it shows.** Why it opened; the settings file's state (none yet, read, damaged, a newer build's, unreadable);
+  the game folder with its check in words (ready: GOG installation or not, version, the verified 1.0.7.4 executable or a
+  warning that only that release is checked; otherwise what is missing, for example "no arcanum2.dat here"); a button
+  for each other ready fixed candidate; "Choose folder…" (the system's folder dialog; `GameFolderLocator.Choose` also
+  looks inside a chosen Wine wrapper `.app`, bottle or `drive_c`); the rules Steamwoven or Original (custom mixes
+  after alpha); "Show this screen at every start"; Play, Reset settings and Quit. The project's own look, not a
+  window of the original's menu.
+- **Play** is offered only for a ready folder. It stores the folder with its source and identity (the start leaves a
+  detected folder and a changed installation unwritten, so Play is where they are confirmed), the rule mode and "show
+  at start", then starts map mode on the main map with the main menu from that folder, as a start without the screen
+  does. A save the file refuses (a newer build's or an unreadable file) does not stop the start: the choices apply to
+  it and the file is kept.
+- **Reset settings** writes the defaults over the file (`LauncherSettingsFile.Reset`, the one write that replaces a
+  newer build's or an unreadable file); the shown folder stays, for Play to store again.
+- **Rule mode.** Every ordinary run, with inputs or without, starts in `rules.active` of `launcher_v1.json`
+  (`LauncherSettings.Rules`); the options window's Rules line writes it there through the same store (one owner per
+  file), reading the file again and changing only `rules.active`, so a folder another run stored meanwhile is kept. An
+  automated run without `LAUNCHER_SETTINGS_TEST_PATH` has no file and starts in Steamwoven. A start that fails after the
+  screen (an unexpected error) shows `failure stage=GameFolder code=StartFailed` and a native smoke exits with 1.
+
+Self-test `ARC-UI-014 self-test PASS synthetic launcher` (synthetic folders, a temporary settings file, a stand-in for
+the start): the first run without a folder and Play off, a non-game folder named in words, Play storing the chosen
+folder with its identity, Original and "show at start", that setting reopening the screen, a stored folder going
+straight to the start, a request opening it, the Rules line writing the file, Play never overwriting a newer build's
+file and Reset replacing it. Native smoke on the original data: `LAUNCHER_SETTINGS_TEST_PATH=FILE
+ARC_AREA_MAP_SMOKE_ONLY=menu` and `godot_canonical --path tools/terrain-viewer/Godot -- --native-smoke` (a first run
+with `FILE` absent, or with `--launcher`) prints `ARC-UI-014 native-smoke launcher PASS` (the detected or stored folder
+ready, an empty folder refused, Original chosen, Play storing it and starting under Original), then
+`ARC-UI-011 native-smoke main menu PASS`; with `FILE` holding a stored folder and no `--launcher` the log says
+`launcher reason=None` and the menu smoke runs at once. Not done: applying the display at start, keyboard and
+controller use of the screen (mouse only), the candidate paths and the folder dialog on Windows and with wrappers (F0).
 
 ## Diagnostic rendering contract
 
@@ -1353,9 +1416,8 @@ project's.
   [rule modes](../world/rule-modes.md); custom mixes come after alpha (owner, 2026-10-28). A change switches the
   session at once (`GameSessionOwner.SelectRules`; the contract makes a switch in play safe), and every session the
   viewer then makes, loads or brings (start, new game, quick load, save load, map transfer) takes the chosen mode,
-  together with the difficulty. The choice lasts the run and is not stored yet: its stored value belongs to the
-  launcher's settings file (`launcher_v1.json`, [launcher research](../research/launcher-settings.md)), which the
-  launcher task's next step writes through the launcher's store; every run starts in Steamwoven until then.
+  together with the difficulty. It is stored in the launcher's settings file (`launcher_v1.json`, `rules.active`),
+  which the [launcher screen](#launcher-screen-arc-ui-014) writes too, and every ordinary run starts in it.
 - **Storage.** User preferences, never part of a save: difficulty, turn-based and auto attack in
   `user://game_settings_v1.json` (`{"version":1,"difficulty":D,"turnBased":B,"autoAttack":B}`; a missing or invalid file
   reads as the original's defaults 1, off, on), Always Run and the volumes in their own files. Each change is saved at

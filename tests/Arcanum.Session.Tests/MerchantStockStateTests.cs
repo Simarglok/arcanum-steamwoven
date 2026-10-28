@@ -7,7 +7,7 @@ namespace Arcanum.Session.Tests;
 
 // ARC-WORLD-090: a merchant's substitute container in the barter window (ledger BT4, BT5, BT11): the open moves the container's coins
 // onto the merchant and identifies both lists, the trades move items out of and into the container while the coins stay the
-// merchant's, and the store and the identified items are saved (schema 49). A synthetic seed: the smith (alive, a pile of 10 coins and
+// merchant's, and the store and the identified items are saved (schema 50). A synthetic seed: the smith (alive, a pile of 10 coins and
 // a hammer), its chest (piles of 30, 0 and 12 coins, a magickal amulet, an axe and 20 bullets) and an unrelated box; the half-elf hero
 // (385 gold, kit:1..3). Entities and numbers are invented.
 [TestClass]

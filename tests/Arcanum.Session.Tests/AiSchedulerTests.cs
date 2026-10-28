@@ -17,7 +17,7 @@ public sealed class AiSchedulerTests
     private static readonly SessionCombatModeContext Living = new() { Facts = new() { Speed = 7, Life = new LifeFacts() } };
 
     /// <summary>A host with critters on the exterior: loaded life states, a distance to the PC and scripted answers.</summary>
-    private sealed class World : ISessionAiWorld
+    internal sealed class World : ISessionAiWorld
     {
         public readonly Dictionary<string, LifeState> Loaded = new(StringComparer.Ordinal);
         public readonly List<string> Calls = [];

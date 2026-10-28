@@ -14,7 +14,8 @@ public enum HostilityKind
 /// One object as the hostility rules read it (stage A3, slice I4; ARC-WORLD-080). The flags carry the original's bits:
 /// object flags <see cref="Destroyed"/> 0x1, <see cref="Off"/> 0x2, <see cref="DontDraw"/> 0x100, <see cref="ObjectInvisible"/>
 /// 0x200, <see cref="Invulnerable"/> 0x400000; critter flags <see cref="Undead"/> 0x4, <see cref="Animal"/> 0x8,
-/// <see cref="NoFlee"/> 0x8000000, <see cref="NonLethal"/> 0x10000000, <see cref="AnimalEnshrouded"/> 0x40000000; critter flag 2
+/// <see cref="Stunned"/> 0x20 or 0x40 (stunned or paralysed, the activity test 0x45D790), <see cref="NoFlee"/> 0x8000000,
+/// <see cref="NonLethal"/> 0x10000000, <see cref="AnimalEnshrouded"/> 0x40000000; critter flag 2
 /// <see cref="NighInvulnerable"/> 0x200; spell flags <see cref="InvisibleSpell"/> 0x1, <see cref="DetectsInvisible"/> 0x200,
 /// <see cref="Stoned"/> 0x10000, <see cref="MindControlled"/> 0x8000000, <see cref="Enshrouded"/> 0x20000000; NPC flags
 /// <see cref="WaitingHere"/> 0x8, <see cref="KillOnSight"/> 0x100, <see cref="KosOverride"/> 0x800. <see cref="Monstrous"/> is
@@ -47,6 +48,7 @@ public sealed record HostilityCritter
     public bool InvisibleSpell { get; init; }
     public bool DetectsInvisible { get; init; }
     public bool Stoned { get; init; }
+    public bool Stunned { get; init; }
     public bool MindControlled { get; init; }
     public bool Enshrouded { get; init; }
     public bool Concealed { get; init; }
@@ -138,6 +140,10 @@ public enum AiRollPurpose
     ChooserStart,
     /// <summary>Otherwise the chooser starts at entry 0..n−1 (slice I8).</summary>
     ChooserEntry,
+    /// <summary>The combat taunt (0x4AE9E0) goes on unless 1..2 is 1 (slice I9).</summary>
+    TauntSpeak,
+    /// <summary>The combat taunt's speaker, follower 0..n−1 of the PC's array (slice I9; no draw for one follower).</summary>
+    TauntFollower,
 }
 
 /// <summary>The AI's random source: one inclusive range draw per call, the original's range draw (0x4CEF00); equal bounds

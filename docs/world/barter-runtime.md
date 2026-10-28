@@ -11,7 +11,7 @@ merchant's price multiplier (NPC field 0x125, `CombatNpcFields.RetailPriceMultip
 `IDialogBarterPort` ([dialog runtime](../scripting/dialog-conversation-runtime.md)); viewer: [barter window](../rendering/terrain-viewer.md#barter-window-arc-ui-050).
 ARC-WORLD-090 (merchant stock, first slice) adds the merchant's **substitute container** (NPC field 0x126): the window shows and fills the
 container, its coins move onto the merchant at the open, the dealer test tries the container's buy list second, and the open identifies the
-merchant's and the container's goods (snapshot schema 49: the identified items and the containers' added lists). ARC-UI-050 itself changed
+merchant's and the container's goods (snapshot schema 50: the identified items and the containers' added lists). ARC-UI-050 itself changed
 no schema: a trade is a move of items and coins the inventory section already saves.
 Requirements: [FR-ITEM-013](../requirements/items-economy.md#fr-item-013) (trade, price and payment),
 [FR-ITEM-014](../requirements/items-economy.md#fr-item-014) (stock: the substitute container; restock not yet),
@@ -73,7 +73,7 @@ budget (`SessionInventoryState.MaxIdentified`, 16384), and the new pile's insert
 loot core (`Take`), or units of one of its stacks; `BarterSell(…, container, identify)` puts the item into the container's added list (the
 NPC store, marked as a container in the snapshot: `inventory.npcs[].container`), `identify` marking it in the move's revision.
 `QueryItemIdentified(item)` answers the session's flag. A seed that lists a filled container as an NPC (or the reverse) is another map's
-data (`InventoryMismatch`); a deleted item loses its flag. Snapshot schema 49 adds `inventory.identified` (entities in ordinal order) and
+data (`InventoryMismatch`); a deleted item loses its flag. Snapshot schema 50 adds `inventory.identified` (entities in ordinal order) and
 the container flag of each added list. Tests: [`MerchantStockStateTests`](../../tests/Arcanum.Session.Tests/MerchantStockStateTests.cs),
 [`BarterStateTests`](../../tests/Arcanum.Session.Tests/BarterStateTests.cs), [`TradeRulesTests`](../../tests/Arcanum.Simulation.Tests/Items/TradeRulesTests.cs),
 [`TradeOriginalExeTests`](../../tests/Arcanum.Simulation.Tests/Items/TradeOriginalExeTests.cs) (oracle),

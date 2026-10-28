@@ -8,21 +8,29 @@ namespace Arcanum.Session;
 /// <summary>
 /// An item a critter holds as the item spell executors read it (ARC-MAGIC-020): its entity and holder (the parent, field 0x58),
 /// object type, the five item spell fields (0x64..0x68, 10000 none), the spell charges (0x69; negative unlimited, 0 none) and the
-/// magick/tech complexity (the charge-cell need of an item source). The host builds it from the item's data.
+/// magick/tech complexity (the charge-cell need of an item source). The host builds it from the item's data. Since ARC-MAGIC-022 also
+/// the item flags (field 0x57: 0x4 magical, 0x100 needs a target); the cast host reads the charges and the magical flag through the
+/// session's spent charges (<see cref="GameSessionOwner.QueryItemCharges"/>).
 /// </summary>
-public sealed record SessionItemSpells(string Entity, string Holder, int Type, IReadOnlyList<int> Spells, int Charges, int Complexity)
+public sealed record SessionItemSpells(string Entity, string Holder, int Type, IReadOnlyList<int> Spells, int Charges, int Complexity, uint Flags = 0)
 {
     private const int NoSpell = 10000;
 
+    /// <summary>The magical item flag (0x4) the payment sets when it spends a charge.</summary>
+    public const uint MagicalFlag = 0x4;
+
     /// <summary>Whether any of the five slots holds a spell.</summary>
     public bool HasSpells => Spells.Any(spell => spell != NoSpell);
+
+    /// <summary>Whether the item carries the magical flag (0x4).</summary>
+    public bool Magical => (Flags & MagicalFlag) != 0;
 
     /// <summary>The facts of an item from its stored fields; null for an object that is not an item.</summary>
     public static SessionItemSpells? FromCombatFields(string entity, string holder, Arcanum.Data.Combat.CombatFields fields)
     {
         ArgumentNullException.ThrowIfNull(fields);
         return fields.Item is { } item
-            ? new(entity, holder, fields.Object.Type, Array.AsReadOnly(item.Spells.ToArray()), item.SpellManaStore, item.MagickTechComplexity)
+            ? new(entity, holder, fields.Object.Type, Array.AsReadOnly(item.Spells.ToArray()), item.SpellManaStore, item.MagickTechComplexity, item.Flags)
             : null;
     }
 }
@@ -50,8 +58,8 @@ public sealed record SessionItemTriggerResult(IReadOnlyList<int> Stopped, IReadO
 /// </summary>
 public interface ISessionItemTriggers
 {
-    /// <summary>Whether <paramref name="item"/>'s spells can run through this host for the hero (the host knows it as the hero's, and
-    /// its charges need no saved state: unlimited or none). The host must cast in the same session as the move that asks.</summary>
+    /// <summary>Whether <paramref name="item"/>'s spells can run through this host for the hero (the host knows it as the hero's; since
+    /// ARC-MAGIC-022 the session saves the charges its spells spend). The host must cast in the same session as the move that asks.</summary>
     bool Supports(string item);
 
     SessionItemTriggerResult Fire(uint eventMask, string item, string holder);
@@ -63,8 +71,13 @@ public sealed partial class SessionSpellCaster
 {
     private readonly Func<string, SessionItemSpells?>? _items;
 
-    /// <summary>An item the host's item lookup knows (ARC-MAGIC-020), or null.</summary>
-    public SessionItemSpells? Item(string id) => _items?.Invoke(id) is { } item && item.Entity == id ? item : null;
+    /// <summary>An item the host's item lookup knows (ARC-MAGIC-020), or null; since ARC-MAGIC-022 with the charges the session left
+    /// on it and, once it spent one, the magical flag (<see cref="GameSessionOwner.QueryItemCharges"/>).</summary>
+    public SessionItemSpells? Item(string id)
+    {
+        if (_items?.Invoke(id) is not { } item || item.Entity != id) return null;
+        return _owner.QueryItemCharges(id) is { } left ? item with { Charges = left, Flags = item.Flags | SessionItemSpells.MagicalFlag } : item;
+    }
 
     /// <summary>
     /// The executor (0x4CB830, ARC-MAGIC-020) for <paramref name="item"/> and an event: the spells <see cref="ItemSpellTriggerRules.Fire"/>
@@ -168,8 +181,8 @@ public sealed partial class SessionSpellCaster
 /// goals of the runs they start play at once — no eye-candy art is drawn, so each release comes on the goal's start — through the
 /// host's goal (<see cref="SessionSpellCaster.StartGoal"/>, its action points in a turn-based round, then
 /// <see cref="SessionSpellCaster.Release"/>). A fired run's goal 73 has no end node: when its start refuses, the original keeps the
-/// run in its slot, never begun (IT10); Steamwoven frees it unpaid, as MG41 does for a run that fails its release re-check (switch
-/// <see cref="MagicAnomalyProfile.ReleaseRefusalKeepsRun"/>). A withdrawal's recast plays the casting goal with its end
+/// run in its slot, never begun (IT10); both rule modes free it unpaid (owner decision 2026-10-28: a slot leak, fixed without a
+/// switch). A withdrawal's recast plays the casting goal with its end
 /// (<see cref="SessionSpellCaster.EndGoal"/>).
 /// </summary>
 public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionCombatWorld combat) : ISessionItemTriggers
@@ -177,7 +190,7 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
     private readonly SessionSpellCaster _caster = caster ?? throw new ArgumentNullException(nameof(caster));
     private readonly ISessionCombatWorld _combat = combat ?? throw new ArgumentNullException(nameof(combat));
 
-    public bool Supports(string item) => _caster.Item(item) is { Holder: SessionSpellCaster.Hero, Charges: <= 0 };
+    public bool Supports(string item) => _caster.Item(item) is { Holder: SessionSpellCaster.Hero };
 
     public SessionItemTriggerResult Fire(uint eventMask, string item, string holder) =>
         Played([], _caster.StartItemSpells(eventMask, item, holder));
@@ -196,8 +209,7 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
         var start = _caster.StartGoal(run, _combat);
         if (start.Outcome == SpellCastGoalOutcome.Started) _caster.Release(run);
         if (castGoal) _caster.EndGoal(run, refused: start.Outcome != SpellCastGoalOutcome.Started);
-        else if (start.Outcome != SpellCastGoalOutcome.Started && !_caster.Owner.Rules.Magic.ReleaseRefusalKeepsRun)
-            _caster.Act(new(SessionSpellRunActionKind.Free, run));
+        else if (start.Outcome != SpellCastGoalOutcome.Started) _caster.Act(new(SessionSpellRunActionKind.Free, run));
         return start;
     }
 }
