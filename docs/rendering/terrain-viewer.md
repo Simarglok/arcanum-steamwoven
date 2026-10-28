@@ -776,7 +776,9 @@ FR-UI-002: the in-game panel's art after the [interface bars](#interface-bars-ar
 - **Hovered portrait** (PA6). The original has no fixed PC portrait or name area in its bars: its hovered-object panel
   in the message window shows the hovered object's image at 217, 510, the portrait (at its own 64 × 64 size) for the PC
   and for the PC's followers with one. While the bars are drawn the viewer shows there the portrait and name of a hovered
-  follower the PC leads that has a portrait; the [message log](#message-log-arc-ui-023)'s texts give way while it is shown.
+  follower the PC leads that has a portrait; the [message log](#message-log-arc-ui-023) (its background included) gives way
+  while it is shown. The portrait shows when the pointer moves over the follower, not when the bars come back under a
+  pointer that has not moved.
 
 Checks: `LifeBarsTests` (gauge art placement, compact fill and numbers), `AreaPanelArtTests` (layouts, the stored portrait
 of a critter record; with `DAT_ROOT` the installed frame and vial art and a portrait image read) and the native smoke stage
@@ -1758,8 +1760,10 @@ session, the window only while the [interface bars](#interface-bars-arc-ui-018) 
   (a technical display bug, ML7).
 
 Not ready: entry types 1–3 and 7–13 (listed in ML5), the original's other messages, a held inventory item released over the
-scroll areas (the original drops it through 0x575770), the compact interface's message window (F10), the hovered object's
-portrait and name in the window (ARC-UI-024). Tests `AreaMessageLogTests` (ring, repeats, the 199-character copy, the quiet
+scroll areas (the original drops it through 0x575770), the compact interface's message window (F10). Since ARC-UI-024 a
+hovered follower's portrait and name take the window while shown ([panel art](#panel-art-arc-ui-024)): the log, its background
+included, is hidden until the hover ends, and an entry stored meanwhile sounds then but is drawn only after (the original's
+order there was not read). Tests `AreaMessageLogTests` (ring, repeats, the 199-character copy, the quiet
 time, scrolling, panes, sounds, layout), `AreaLevelMessagesTests`. Native smoke, part of `ARC_AREA_MAP_SMOKE_ONLY=bar`:
 `ARC-UI-023 native-smoke message-log PASS` (three encumbrance entries with the player's texts through the production post, each
 drawn with the background, its icon and 3004; a repeat not stored and sounding again; the halves clicked through the window's
