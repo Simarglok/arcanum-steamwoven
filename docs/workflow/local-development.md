@@ -8,7 +8,7 @@
 every identity, artifact-authority and ordinary-launch check stays there.
 
     ./arcanum setup [--game-root /Applications/Arcanum]   # find the game's inputs, record their identities, register artifacts/world-builds as root "world"
-    ./arcanum area [--hero NAME | --main-menu] [--sector X,Y] [--dry-run]  # the main world map at the Crash Site in map mode (= map Arcanum1-024-fixed), any installation, a build exported after ARC-RENDER-024 (ARC-RENDER-028)
+    ./arcanum area [--hero NAME | --no-main-menu] [--sector X,Y] [--dry-run]  # the main menu first (ARC-UI-012), then the main world map at the Crash Site in map mode (= map Arcanum1-024-fixed), any installation, a build exported after ARC-RENDER-024 (ARC-RENDER-028)
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
     ./arcanum map NAME [--hero NAME | --main-menu] [--sector X,Y] [--dry-run]  # one map (a maps/ folder name) in map mode, from the ARC-DEV-015 build, else ARC-RENDER-008; any installation; the main world map (Arcanum1-024-fixed) opens as a window that moves with the actor, at --sector or the new-game start (a build exported after ARC-RENDER-024)
     ./arcanum oracle [--function ADDR|--all] [--exe PATH] # function oracle on the installed Arcanum.exe, then the OriginalExe tests (ARC-DEV-007)
@@ -61,7 +61,12 @@ argument, so `--hero` needs a new export. `--main-menu` (ARC-UI-011, [main menu]
 opens the original's main menu over the scene first (a new game as a pre-made hero picked in the menu, the last save,
 the load window, exit); it is refused with `--hero`, reaches the viewer as `--main-menu true` through
 `tools/arcanum-local launch terrain ... --main-menu`, and needs a build exported after ARC-UI-011 (an older build
-refuses the argument). `oracle` ([function oracle](toolchain.md#function-oracle), ARC-DEV-007) runs
+refuses the argument). ARC-UI-012 ([scene flow](../rendering/terrain-viewer.md#scene-flow-arc-ui-012)): `./arcanum area`
+opens the main menu by default, as the game starts with it; `--no-main-menu` starts playing at once with the diagnostic
+PC profile, and `--hero` starts as that hero without the menu. `map NAME` opens the menu only with `--main-menu`. Before
+launching with the menu, `./arcanum` checks that the build's commit holds the main menu (`MAIN_MENU_COMMIT`, the
+ARC-UI-011 merge, in this checkout's history); an older or unknown build is refused with the way out (a fresh export,
+or `--no-main-menu`), and nothing starts. `oracle` ([function oracle](toolchain.md#function-oracle), ARC-DEV-007) runs
 `tools/original-oracle/oracle.py generate` for the chosen functions (`ORACLE_FUNCTIONS` in
 `tools/local_dev/launch.py`, default all) into `research-private/oracle/`, then their `OriginalExe` tests in
 `tests/Arcanum.Simulation.Tests` with `ARCANUM_ORACLE_REQUIRED=1`, which write their receipts to `docs/verification/receipts`

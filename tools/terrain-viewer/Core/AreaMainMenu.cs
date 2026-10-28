@@ -3,8 +3,9 @@ using Arcanum.Data.Messages;
 
 namespace Arcanum.TerrainViewer.Core;
 
-/// <summary>The original main-menu windows this menu models, by their window type in the original's window table (ledger MM2).</summary>
-public enum AreaMenuWindow { Main = 2, SinglePlayer = 5, NewGame = 11, PickCharacter = 13 }
+/// <summary>The original main-menu windows this menu models, by their window type in the original's window table (ledger MM2;
+/// ARC-UI-012: the in-play windows 3 and 4 that Escape opens in play, ledger SF1–SF2).</summary>
+public enum AreaMenuWindow { Main = 2, InPlay = 3, InPlayLimited = 4, SinglePlayer = 5, NewGame = 11, PickCharacter = 13 }
 
 /// <summary>What a menu button does in Steamwoven.</summary>
 public enum AreaMenuRole
@@ -16,6 +17,12 @@ public enum AreaMenuRole
     LoadGame,
     LastSave,
     Exit,
+    /// <summary>ARC-UI-012: opens the save list's save window (in play).</summary>
+    SaveGame,
+    /// <summary>ARC-UI-012: asks whether to quit the game (message 5100); yes goes back to the main menu.</summary>
+    Quit,
+    /// <summary>ARC-UI-012: closes the in-play menu and play goes on.</summary>
+    Continue,
     /// <summary>A button the original has whose function Steamwoven does not have yet; hidden (FR-UI-001).</summary>
     Unavailable,
 }
@@ -30,6 +37,12 @@ public enum AreaMenuCommandKind
     /// <summary>Start a new game as pre-made hero <see cref="AreaMenuCommand.Hero"/> (index in <see cref="AreaStartingHero.Premade"/>).</summary>
     StartNewGame,
     Exit,
+    /// <summary>ARC-UI-012: open the save list's save window; the menu waits under it (a save ends it, as the original's, SF4).</summary>
+    SaveGame,
+    /// <summary>ARC-UI-012: the quit was confirmed: the game ends and the main menu opens over a fresh start of the game (SF3).</summary>
+    QuitToMenu,
+    /// <summary>ARC-UI-012: close the in-play menu.</summary>
+    Continue,
 }
 
 public readonly record struct AreaMenuCommand(AreaMenuCommandKind Kind, int Hero = -1)
@@ -55,7 +68,10 @@ public sealed class AreaMainMenuTexts
     /// <summary>A button's hotkey letter is its label's message + 10 (original window build, ledger MM3).</summary>
     public const int HotkeyOffset = 10;
     public const string MainMenuPath = "mes/MainMenu.mes";
+    /// <summary>ARC-UI-012: the question of the quit box (SF3).</summary>
+    public const int QuitQuestion = 5100;
     private const int MaxLabel = 64;
+    private const int MaxQuestion = 256;
     private static readonly IReadOnlyDictionary<int, string> ProjectText = new Dictionary<int, string>
     {
         [10] = "Single Player", [11] = "MultiPlayer", [12] = "Options", [13] = "Credits", [14] = "Exit Game",
@@ -64,6 +80,11 @@ public sealed class AreaMainMenuTexts
         [60] = "N", [61] = "L", [62] = "S", [63] = "V", [64] = "C",
         [420] = "Pick Character", [421] = "New Character", [422] = "Cancel",
         [430] = "P", [431] = "N", [432] = "X",
+        [30] = "Save Game", [31] = "Load Game", [32] = "Options", [33] = "Quit", [34] = "Continue",
+        [40] = "S", [41] = "L", [42] = "O", [43] = "Q", [44] = "C",
+        [70] = "Options", [71] = "Quit", [72] = "Continue",
+        [80] = "O", [81] = "Q", [82] = "C",
+        [QuitQuestion] = "Quit the current game?",
     };
     private readonly Func<int, string?> _original;
 
@@ -98,7 +119,8 @@ public sealed class AreaMainMenuTexts
         // Only the menu's own numbers are kept (the table is not held).
         var kept = new Dictionary<int, string>();
         foreach (var number in ProjectText.Keys)
-            if (table.Find(number) is { } message && MesText.Decode(message, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { Length: > 0 and <= MaxLabel } text })
+            if (table.Find(number) is { } message && MesText.Decode(message, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { Length: > 0 } text }
+                && text.Length <= (number == QuitQuestion ? MaxQuestion : MaxLabel))
                 kept[number] = text;
         return new(number => kept.GetValueOrDefault(number), true, $"{MainMenuPath}: {kept.Count} of {ProjectText.Count} texts");
     }
@@ -124,6 +146,10 @@ public sealed class AreaMainMenuTexts
 /// (the original's new game teleports the PC there); the host says whether the shown map is it. The pre-made browser starts at the
 /// first hero and cycles through all twelve (the original: 1..count-1, twelve heroes when the female heroes' art exists). The host
 /// runs the returned command. Caller-serialized.
+/// ARC-UI-012: the same menu opens in play on Escape at the in-play window (Save Game, Load Game, Options, Quit, Continue; window 4,
+/// in a turn-based round on another's turn, has Options, Quit and Continue), whose Escape continues play (ledger SF1–SF2). Quit asks
+/// first (message 5100; Y or N, Escape answers no) and then goes back to the main menu (SF3), whose root Escape exits the game once
+/// the menu opens again (MM6: <c>reopened</c>).
 /// </summary>
 public sealed class AreaMainMenu
 {
@@ -132,18 +158,29 @@ public sealed class AreaMainMenu
     public const string NoCredits = "the credits screen is not built (FR-MEDIA-002)";
     public const string NoIntro = "movies do not play (FR-MEDIA-001)";
     public const string NoEditor = "the character editor is not built";
+    /// <summary>The quit box's fixed letters (the original's yes/no box, SF3).</summary>
+    public const char YesLetter = 'Y', NoLetter = 'N';
     private readonly List<AreaMenuWindow> _back = [];
 
-    /// <param name="newGameRefusal">Why a new game cannot start here (null: the shown map is the start map and a hero can be picked).</param>
-    public AreaMainMenu(AreaMainMenuTexts texts, string? newGameRefusal)
+    /// <param name="newGameRefusal">Why a new game cannot start (null: a hero can be picked; the host reaches the start map).</param>
+    /// <param name="root">The window the menu opens at: <see cref="AreaMenuWindow.Main"/>, or an in-play window (ARC-UI-012).</param>
+    /// <param name="reopened">The main menu opens again after its first opening (from play): its root Escape exits (MM6).</param>
+    public AreaMainMenu(AreaMainMenuTexts texts, string? newGameRefusal, AreaMenuWindow root = AreaMenuWindow.Main, bool reopened = false)
     {
         Texts = texts ?? throw new ArgumentNullException(nameof(texts));
+        if (root is not (AreaMenuWindow.Main or AreaMenuWindow.InPlay or AreaMenuWindow.InPlayLimited)) throw new ArgumentOutOfRangeException(nameof(root));
         NewGameRefusal = newGameRefusal;
+        Root = Window = root;
+        Reopened = reopened;
     }
 
     public AreaMainMenuTexts Texts { get; }
     public string? NewGameRefusal { get; }
-    public AreaMenuWindow Window { get; private set; } = AreaMenuWindow.Main;
+    public AreaMenuWindow Root { get; }
+    public bool Reopened { get; }
+    /// <summary>True while the quit box asks (message 5100); only its answer, Escape and its letters act.</summary>
+    public bool QuitPending { get; private set; }
+    public AreaMenuWindow Window { get; private set; }
     /// <summary>The browsed pre-made hero (index in <see cref="AreaStartingHero.Premade"/>).</summary>
     public int Hero { get; private set; }
     /// <summary>The focused shown button (controller); -1 none.</summary>
@@ -169,6 +206,12 @@ public sealed class AreaMainMenu
             NewGameRefusal is null ? new(420, AreaMenuRole.Open, AreaMenuWindow.PickCharacter) : new(420, AreaMenuRole.Unavailable, Unavailable: NewGameRefusal),
             new(421, AreaMenuRole.Unavailable, Unavailable: NoEditor), new(422, AreaMenuRole.Back),
         ],
+        AreaMenuWindow.InPlay =>
+        [
+            new(30, AreaMenuRole.SaveGame), new(31, AreaMenuRole.LoadGame), new(32, AreaMenuRole.Unavailable, Unavailable: NoOptions),
+            new(33, AreaMenuRole.Quit), new(34, AreaMenuRole.Continue),
+        ],
+        AreaMenuWindow.InPlayLimited => [new(70, AreaMenuRole.Unavailable, Unavailable: NoOptions), new(71, AreaMenuRole.Quit), new(72, AreaMenuRole.Continue)],
         _ => [],
     };
 
@@ -181,11 +224,14 @@ public sealed class AreaMainMenu
     public AreaMenuCommand Activate(int index)
     {
         var shown = Shown;
-        if (index < 0 || index >= shown.Count) return AreaMenuCommand.Nothing;
+        if (QuitPending || index < 0 || index >= shown.Count) return AreaMenuCommand.Nothing;
         var button = shown[index];
         Notice = null;
         switch (button.Role)
         {
+            case AreaMenuRole.SaveGame: return new(AreaMenuCommandKind.SaveGame);
+            case AreaMenuRole.Quit: QuitPending = true; return AreaMenuCommand.Nothing;
+            case AreaMenuRole.Continue: return new(AreaMenuCommandKind.Continue);
             case AreaMenuRole.Open: Open(button.Target!.Value); return AreaMenuCommand.Nothing;
             case AreaMenuRole.Back: Back(); return AreaMenuCommand.Nothing;
             case AreaMenuRole.LoadGame: return new(AreaMenuCommandKind.LoadGame);
@@ -199,16 +245,35 @@ public sealed class AreaMainMenu
     public AreaMenuCommand Type(char typed)
     {
         var upper = char.ToUpperInvariant(typed);
+        if (QuitPending) return upper == YesLetter ? Answer(true) : upper == NoLetter ? Answer(false) : AreaMenuCommand.Nothing;
         var shown = Shown;
         for (var i = 0; i < shown.Count; i++)
             if (Texts.Hotkey(shown[i]) == upper) return Activate(i);
         return AreaMenuCommand.Nothing;
     }
 
-    /// <summary>Escape: back to the previous window; true when it went back (the root window does nothing).</summary>
+    /// <summary>The quit box's answer: yes quits to the main menu, no keeps the window.</summary>
+    public AreaMenuCommand Answer(bool yes)
+    {
+        if (!QuitPending) return AreaMenuCommand.Nothing;
+        QuitPending = false;
+        return yes ? new(AreaMenuCommandKind.QuitToMenu) : AreaMenuCommand.Nothing;
+    }
+
+    /// <summary>Escape (ARC-UI-012): the quit box answers no; a window goes back; the in-play root continues play (SF2); the main
+    /// menu's root exits once the menu opened again (MM6), and does nothing at its first opening.</summary>
+    public AreaMenuCommand Escape()
+    {
+        if (QuitPending) return Answer(false);
+        if (Back()) return AreaMenuCommand.Nothing;
+        if (Root != AreaMenuWindow.Main) return new(AreaMenuCommandKind.Continue);
+        return Reopened ? new(AreaMenuCommandKind.Exit) : AreaMenuCommand.Nothing;
+    }
+
+    /// <summary>Back to the previous window; true when it went back (the root window does nothing).</summary>
     public bool Back()
     {
-        if (_back.Count == 0) return false;
+        if (QuitPending || _back.Count == 0) return false;
         Window = _back[^1];
         _back.RemoveAt(_back.Count - 1);
         Focus = Shown.Count > 0 ? 0 : -1;
@@ -219,13 +284,13 @@ public sealed class AreaMainMenu
     /// <summary>Moves the focus over the shown buttons (controller), wrapping.</summary>
     public void Move(int direction)
     {
-        var count = Window == AreaMenuWindow.PickCharacter ? 0 : Shown.Count;
+        var count = Window == AreaMenuWindow.PickCharacter || QuitPending ? 0 : Shown.Count;
         if (count == 0 || direction == 0) return;
         Focus = Focus < 0 ? 0 : ((Focus + Math.Sign(direction)) % count + count) % count;
     }
 
     /// <summary>Confirm (controller): the focused button, or in the browser the start with the browsed hero.</summary>
-    public AreaMenuCommand Confirm() => Window == AreaMenuWindow.PickCharacter ? Start() : Activate(Focus);
+    public AreaMenuCommand Confirm() => QuitPending ? Answer(true) : Window == AreaMenuWindow.PickCharacter ? Start() : Activate(Focus);
 
     /// <summary>The browser's previous or next hero, cycling through all of them.</summary>
     public void Browse(int direction)
