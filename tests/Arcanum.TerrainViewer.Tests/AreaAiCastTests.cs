@@ -24,6 +24,10 @@ public sealed class AreaAiCastTests
         AreaEventWorld Events) : IDisposable
     {
         public void Dispose() => Session.Dispose();
+        /// <summary>ARC-WORLD-105: the cast host the scene answers (the viewer rebuilds its host on a map change).</summary>
+        public System.Runtime.CompilerServices.StrongBox<SessionSpellCaster> Spells { get; init; } = new(Caster);
+        /// <summary>A new cast host over the same session and map, as a rebuilt one.</summary>
+        public Func<SessionSpellCaster>? Rebuild { get; init; }
     }
 
     // The exterior's highest-level NPC whose fields store a college level (the monster; Virgil is the other), the hero a few tiles away.
@@ -84,10 +88,11 @@ public sealed class AreaAiCastTests
         var known = Enumerable.Range(0, SpellBookRules.Spells).Where(s => SpellBookRules.IsKnown(book, s)).ToArray();
         Trace($"caster {casterRow.PrototypeNumber} knows {string.Join(",", known)}; lists "
             + string.Join(" ", Enum.GetValues<AiActionList>().Select(l => $"{l}:{string.Join(",", caster.AiLists[l].Where(known.Contains))}")));
+        var spells = new System.Runtime.CompilerServices.StrongBox<SessionSpellCaster>(caster);
         var scene = new AreaAiScene
         {
             RuntimeMap = map, Chart = AreaChart.For(snapshot), Steps = steps, Npcs = npcs, Combat = combat, HeroCell = () => hero, Parameters = table,
-            LineOfFire = lineOfFire, Spells = () => caster, CastEyeCandy = eyeCandy, MissileArt = missileArt,
+            LineOfFire = lineOfFire, Spells = () => spells.Value, CastEyeCandy = eyeCandy, MissileArt = missileArt,
         };
         host = new AreaAiHost(session, scene, events, round);
         Assert.AreEqual(0, host.ScheduleTicks());
@@ -95,7 +100,11 @@ public sealed class AreaAiCastTests
         host.HeroAttacked(npc);
         Trace($"reaction {host.TraceOf(npc)?.Reaction} setter {host.TraceOf(npc)?.Setter}");
         Assert.AreEqual(DangerState.CombatFocus, session.QueryDanger(npc).State, "the caster fights the hero");
-        return new(session, host, caster, npc, known, round, events);
+        return new(session, host, caster, npc, known, round, events)
+        {
+            Spells = spells,
+            Rebuild = () => new SessionSpellCaster(session, n => n is >= 0 and < SpellRecord.Count ? records[n] : null, spellMap, events),
+        };
     }
 
     [TestMethod, TestCategory("RealData")]
@@ -424,6 +433,26 @@ public sealed class AreaAiCastTests
         Assert.IsNotNull(freed);
         Assert.IsNull(session.QuerySpellRuns()[play.Run], "no slot is left behind");
         Trace105($"dropped mid-rest, then lost: run {play.Run} freed {freed.Disposition}");
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void A_cast_host_rebuilt_before_the_launched_goals_end_frees_nothing_of_the_missiles_run()
+    {
+        using var crash = Open((_, _) => EightFrames(), _ => true);
+        var (session, host, caster, npc, _, _, events) = crash;
+        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var frame = 0;
+        var (play, _, _) = LaunchFirstMissile(crash, pump, ref frame);
+        // The viewer rebuilds its cast host mid-rest (a map change), then drops the AI host: the goal's end goes to the host that
+        // launched the run, which knows the handled frame, so the run is neither freed nor charged (the new host would free it charged).
+        crash.Spells.Value = crash.Rebuild!();
+        var fatigue = session.QueryLife(host.AiLifeTarget(npc)!).View?.Record.State.FatigueDamage;
+        host.Retire();
+        Assert.IsTrue(caster.MissileFlies(play.Run));
+        Assert.AreEqual(SpellRunAction.Begin, session.QuerySpellRuns()[play.Run]?.Action, "the run waits for its missile");
+        Assert.AreEqual(fatigue, session.QueryLife(host.AiLifeTarget(npc)!).View?.Record.State.FatigueDamage, "nothing was charged");
+        Assert.IsNotNull(caster.LoseMissile(play.Run), "the launching host loses it, freeing the run unpaid");
+        Assert.IsNull(session.QuerySpellRuns()[play.Run]);
     }
 
     private static void Trace(string line) => Console.WriteLine("ARC-WORLD-102 " + line);

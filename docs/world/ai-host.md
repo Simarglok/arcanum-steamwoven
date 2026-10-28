@@ -111,7 +111,7 @@ the launch node has no player test (AC8). The flight is the viewer's, shared wit
 | Part | Original | What it does |
 | --- | --- | --- |
 | Launch | 0x429C40, 0x42CAA0, 0x4246E0 (AC8, SM1) | At the play's action frame a spell whose projectile eye candy has art (the scene's `MissileArt`) launches instead of releasing: `CastActionFrame` runs `SessionSpellCaster.LaunchMissile` (the release gate marks the frame handled, no re-check or BEGIN now) and posts a `Missile` notice with the spell, the run, its target object and the cast host. The goal restarts one pace after the launch (`PaceAfterRelease` in `BeginCast`'s timing), so the rest is one pace longer than a release's. A run released or begun before launches nothing and the goal ends. |
-| Goal's end | 0x429CD0 | The attempt goal's end after the launch frees nothing (`EndGoal` sees the handled frame): the run waits for its missile, whatever becomes of the NPC's goal run afterwards (an end, an interrupt, a replacement, `Retire`). |
+| Goal's end | 0x429CD0 | The attempt goal's end after the launch frees nothing (`EndGoal` sees the handled frame): the run waits for its missile, whatever becomes of the NPC's goal run afterwards (an end, an interrupt, a replacement, `Retire`). The host keeps the cast host that launched the run until the goal's end and ends the goal there, so a cast host rebuilt meanwhile (a map change) does not free the run charged. |
 | Flight | goals 28 and 78, 0x4248A0, 0x424D90, 0x429C80, 0x429E70 (SM2–SM9, MG44) | The viewer flies the missile from the NPC's live tile to its target's (a tile for a tile target): the secondary cast eye candy plays on the NPC, the missile is drawn and steps, follows a moved target on a new leg, and arrives (`ArriveMissile`: the re-check and BEGIN, whose damage reaches the bodies, the inventory, the status line and a downed hero's walk and attack as a release's does) or is lost (`LoseMissile`: the run freed unpaid, MG44 in both settings). A missile that cannot fly from the NPC (no cell, no art, a run gone, another session) is lost at once. Logs: `ARC-MAGIC-018 missile-launch` with `caster=`, `missile-end`. |
 
 No new state: the missile is the viewer's, not saved (a quick save is refused while any missile flies, as for the hero's); its run
@@ -136,7 +136,9 @@ No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the mora
 - **Action goals.** Item use, skills, throws and pickups (I8b's goals), grenades and goal 40: the host's calls refuse or do nothing;
   heal and item search choose nothing. ARC-WORLD-102: the NPCs' items are not listed (no hexed weapon, inventory or item entry), so
   no item spell or AI-action item is chosen;
-  goal 83's casting animation is not played (NPC ART is not read: the release comes at once); the NPC's cast eye candy times
+  an NPC's spell missile still in flight does not hold its subturn in a turn-based round (the NPC's run ends one pace after the
+  launch; the hero's missile is the same): whether the round's "a run runs" test counts the missile's goal 28 (0x423300) is not
+  read (F0); goal 83's casting animation is not played (NPC ART is not read: the release comes at once); the NPC's cast eye candy times
   its goal but is not drawn; the fail-chance predictor reads the fate-maximised flag unset. A cast host rebuilt between a release
   and its goal's end (a map change) forgets the release: in the Original setting a run kept by a refused re-check (MG41) is then
   freed charged by the goal's end; no synthetic test covers the pass record's choice under the setter's refusal (FO8).
@@ -169,8 +171,8 @@ play that never reaches its action frame releases nothing and its end frees the 
 plays is queued beneath it and the queue plays in the order cast, the queue refuses at depth 4 and in a turn-based round, freeing the
 run, a retired host frees the queue, and a queued goal that ends through the end step frees the run of the cast beneath it
 (ARC-WORLD-104); with every spell given a missile, the action frame launches it (no release, the rest one pace longer), the goal's
-end frees nothing, the arrival after it begins the run, and a run dropped mid-rest leaves the missile's run, whose loss frees it
-(ARC-WORLD-105). `AreaAiHostTests` also: an animal walking up to bite is busy at its attack goal's priority 3 (the bottom goal,
+end frees nothing, the arrival after it begins the run, a run dropped mid-rest leaves the missile's run, whose loss frees it, and a cast host rebuilt before the
+goal's end neither frees nor charges it (ARC-WORLD-105). `AreaAiHostTests` also: an animal walking up to bite is busy at its attack goal's priority 3 (the bottom goal,
 ARC-WORLD-105). `ActionGoalsTests` (Simulation): a queued goal 26 at the bottom plays once the goals above it have popped, and one
 refused at its start takes the end step (ARC-WORLD-104). `SessionSpellCasterAiTests` (Session): the NPC's book from its fields with its mastery halving
 the cost, the record facts, the global lists, the free maintenance count, perform's cast and under the influence, a refused check,
