@@ -143,13 +143,16 @@ public sealed partial class GameSessionOwner
     }
 
     // The items lying loose on a cell, in ground order (the session's order; the original's object list order was not read): the
-    // map's seed items, spilled and dropped items when its seed is attached, then the hero's placed items; none in a junk pile.
+    // map's seed items, spilled and dropped items when its seed is attached, then the hero's placed items; none in a junk pile or in
+    // flight.
     private IReadOnlyList<string> LooseAt(SessionMapId map, CellCoord cell)
     {
         IEnumerable<SessionGroundItem> ground = _inventory.Seeds.TryGetValue(map, out var seed)
             ? _inventory.WithPiled(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item)).Ground
             : _inventory.Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, InventoryDomain.MadeFacts(item.Kind)), item.Cell));
-        return ground.Where(item => item.Cell == cell && _inventory.JunkPileOf(item.Item.Entity) is null).Select(item => item.Item.Entity).ToArray();
+        // ARC-COMBAT-017: a thrown item in flight is hidden (object flag 0x2), which the tile's object list skips.
+        return ground.Where(item => item.Cell == cell && _inventory.JunkPileOf(item.Item.Entity) is null && !ItemInFlight(item.Item.Entity))
+            .Select(item => item.Item.Entity).ToArray();
     }
 
     // An item's size in inventory cells: from the facts of the attached seed that lists it; 1 × 1 for the hero's kit and made items and
