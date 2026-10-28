@@ -7,7 +7,7 @@ namespace Arcanum.TerrainViewer;
 // ARC-DEV-050 native smoke (map mode with --debug-mode, stage "debug-travel" only when named): W opens the world map on this map
 // (the start map or any other) with the area list and Teleport; Teleport on the farthest placed area (one the original's travel
 // cannot route to in one waypoint) loads the start map around it with the session carried, no area discovered and no travel time;
-// a save location is marked. Prints counts and outcomes only.
+// a save location is marked; Ctrl+Shift+F10 hides and shows the diagnostic panel. Prints counts and outcomes only.
 public partial class TerrainViewerApp
 {
     private async Task RunAreaDebugTravelSmokeAsync()
@@ -30,6 +30,13 @@ public partial class TerrainViewerApp
             var session = _areaSession!;
             var fromMap = _readyArea!.Snapshot.RuntimeMap;
             Require(SaveLocation().StartsWith(ViewerDebugMode.SaveMark, StringComparison.Ordinal), "a save location is marked: " + SaveLocation());
+            // Ctrl+Shift+F10 hides the diagnostic panel and shows it again (pressed through the HUD's own input handler).
+            void Chord(bool pressed) => _hud!._Input(new InputEventKey { Keycode = Key.F10, Pressed = pressed, CtrlPressed = true, ShiftPressed = true });
+            var shown = _hud!.PanelShown;
+            Chord(true); Chord(false);
+            Require(_hud.PanelShown != shown, "Ctrl+Shift+F10 toggled the diagnostic panel");
+            Chord(true); Chord(false);
+            Require(_hud.PanelShown == shown, "Ctrl+Shift+F10 toggled it back");
             InventoryKey(Key.W);
             Require(WorldMapOpen && _worldMap is not null, "W opened the world map: " + _worldMapStatus);
             Require(_worldMapPanel!.DebugControlsShownForSelfTest, "the area list and Teleport are shown");

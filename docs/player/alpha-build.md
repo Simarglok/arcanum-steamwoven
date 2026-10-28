@@ -150,3 +150,10 @@ travel on the world map works as without the debug mode.
 
 **Saves:** the debug mode does not change the rules or what a save holds, but a save made while it is on has `[DEBUG]`
 before its location in the save's details (the line under the list in the save and load windows), so you can tell it apart. Such a save loads normally with the debug mode off.
+
+## 8. Hiding the diagnostic panel
+
+The panel of diagnostic text at the top of the window is a development aid. Press **Ctrl+Shift+F10** to hide it and
+again to show it (on a Mac keyboard where the F keys control brightness or volume, hold **fn** as well:
+**fn+Ctrl+Shift+F10**). It works with or without the debug mode and shows again at the next start. The diagnostic palette
+keeps its own key, **Ctrl+Shift+F9**.
