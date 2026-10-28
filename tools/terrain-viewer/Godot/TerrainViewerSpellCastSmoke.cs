@@ -121,13 +121,20 @@ public partial class TerrainViewerApp
             Require(_spellCasts == casts + 1, "the click cast: " + _spellNotice);
             Require(_spellGoal is not null, "the casting goal plays: " + _spellNotice);
             var run = _spellGoal!.Run;
+            // ARC-MAGIC-019 (SU13): a second click while the goal plays queues a second cast beneath it, which plays once the first ends.
+            var queuedStarts = _spellQueuedStarts;
+            AreaSmokeClick(point);
+            Require(_spellCasts == casts + 2 && _spellQueue.Count == 1 && _spellGoal?.Run == run, "the second click queued a cast: " + _spellNotice);
+            var second = _spellQueue[0].Run;
             var frames = 0;
-            for (; frames < 400 && _spellGoal is not null; frames++)
+            for (; frames < 800 && _spellGoal is not null; frames++)
             {
                 _areaSmokeTime++;
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
-            Require(_spellGoal is null, $"the goal ended after {frames} frames");
+            Require(_spellGoal is null && _spellQueue.Count == 0, $"both goals ended after {frames} frames");
+            Require(_spellQueuedStarts == queuedStarts + 1, "the queued cast's goal started after the first: " + _spellNotice);
+            Require(session.QuerySpellRuns()[second] is null, "the queued instant run is freed");
             Require(_spellTargeting is not null, "the cursor stays open after the cast (SU9)");
             var log = _spellCaster!.Log;
             var paid = log.Where(e => e.Kind == SpellCastEventKind.FatiguePaid).Sum(e => e.Value);
@@ -148,7 +155,7 @@ public partial class TerrainViewerApp
             Require(_spellPane is { Shown: false }, "M hides the pane");
             HoverReleaseForSelfTest();
             GD.Print("ARC-MAGIC-015 native-smoke cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Spell = spell.Data.Number, Cost = spell.Data.Cost, Target = target.Row.PrototypeNumber, Frames = frames, Paid = paid,
+                map.RuntimeMap, Spell = spell.Data.Number, Cost = spell.Data.Cost, Target = target.Row.PrototypeNumber, Frames = frames, Queued = second, Paid = paid,
                 Fatigue = $"{heroBefore.Fatigue}->{heroAfter.Fatigue}", HitPoints = $"{npcBefore}->{npcAfter}", Damaged = damaged, Resisted = resisted,
                 Log = string.Join(",", log.Select(e => e.Kind)), Hover = hover.ToString(),
                 Parity = "NOT_VERIFIED (spell UI read in the original executable; no original-runtime run; release frame timing is a stand-in)" }));
