@@ -83,8 +83,9 @@ are local: the tool never commits, uploads or publishes them; giving a copy to a
 ## Not done
 
 - A start of the Windows build on a Windows 11 PC: the launcher, the GOG detection (registry and default folders, so far
-  synthetic tests only), the main menu and the SmartScreen steps of the player instruction are still to be confirmed by the
-  owner; the Windows build is not signed (a free signature would need a free certificate route, none chosen).
+  synthetic tests only), the main menu, the SmartScreen steps of the player instruction, a new game reaching the map and a
+  save and load are still to be confirmed by the owner (map files are read on Windows since ARC-DEV-049, tested on macOS
+  only); the Windows build is not signed (a free signature would need a free certificate route, none chosen).
 - An app icon of the project's own (Godot's default icon is used), notarization (needs a paid Apple Developer ID),
   automatic updates.
 - Starting a downloaded (quarantined) copy was not tried: the instruction's "Open Anyway" steps follow Apple's
