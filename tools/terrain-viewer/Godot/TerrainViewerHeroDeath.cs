@@ -1,5 +1,6 @@
 using Arcanum.Data.Audio;
 using Arcanum.Presentation.Audio;
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using GamepadLab.Core;
 using Godot;
@@ -10,8 +11,11 @@ namespace Arcanum.TerrainViewer;
 // PD1–PD9). Five seconds after the session's hero dies the windows over play close (an open main-menu window closes and the death
 // comes again 0.3 s later), the screen fades to black and the death slide of the installed rules\slide.mes shows with its voice
 // and the slides' music; then the game ends as a quit does: the start scene loads from the launch arguments with a fresh session
-// and the main menu reopens, fading in. There is no screen with a choice: a load is the main menu's. Automated runs (self-tests,
-// native smokes) keep it off unless their own check turns it on, as many of them kill or wound the hero for other checks.
+// and the main menu reopens, fading in. There is no screen with a choice in the original: a load is the main menu's. Automated runs
+// (self-tests, native smokes) keep it off unless their own check turns it on, as many of them kill or wound the hero for other checks.
+// ARC-UI-028 (Steamwoven addition, Original keeps the reset): before the reset, when the save list has a save, a box like the quit
+// box asks over the black screen whether to load the newest one; Yes (Y, Return, the button or the controller's confirm) loads it as
+// F8 does and the loaded game fades in, No (N, Escape, the button or cancel) resets to the main menu as the original.
 public partial class TerrainViewerApp
 {
     /// <summary>The music the original plays under the slides (PD6).</summary>
@@ -68,6 +72,21 @@ public partial class TerrainViewerApp
     private bool HandleHeroDeathInput(InputEvent input)
     {
         if (!HeroDeathCovering) return false;
+        // ARC-UI-028: the box's buttons take the mouse (a click elsewhere reaches no world under the modal screen); its keys act
+        // on their press, as the quit box's (SF3).
+        if (_heroDeath.Stage == AreaDeathStage.Asking)
+        {
+            if (input is InputEventMouse) return false;
+            if (input is InputEventKey { Pressed: true, Echo: false } asked)
+            {
+                var routed = asked.Keycode != Key.None ? asked.Keycode : asked.PhysicalKeycode;
+                var typed = asked.Unicode is > 0 and < 0x10000 ? char.ToUpperInvariant((char)asked.Unicode) : '\0';
+                bool? yes = routed is Key.Enter or Key.KpEnter || typed == AreaMainMenu.YesLetter ? true
+                    : routed == Key.Escape || typed == AreaMainMenu.NoLetter ? false : null;
+                if (yes is { } answer) AnswerHeroDeath(answer, "key");
+            }
+            return true;
+        }
         // The original ends a slide on a key's release and on the left, right and middle button releases (its mouse events 1, 3
         // and 5); presses do nothing (PD7). A press is taken all the same, so the world never sees it.
         var acted = input switch
@@ -83,8 +102,23 @@ public partial class TerrainViewerApp
     /// <summary>Controller: confirm ends the slide, cancel the show (as a key and Escape).</summary>
     private void HandleHeroDeathPulse(IntentFrame intent)
     {
+        if (_heroDeath.Stage == AreaDeathStage.Asking)
+        {
+            if (intent.Cancel) AnswerHeroDeath(false, "controller");
+            else if (intent.Confirm) AnswerHeroDeath(true, "controller");
+            return;
+        }
         if (intent.Cancel) _heroDeath.Input(true, _heroDeathHost!);
         else if (intent.Confirm) _heroDeath.Input(false, _heroDeathHost!);
+    }
+
+    /// <summary>ARC-UI-028: the load box's answer.</summary>
+    private void AnswerHeroDeath(bool yes, string by)
+    {
+        if (_heroDeathHost is null || !_heroDeath.Answer(yes, _heroDeathHost)) return;
+        _heroDeathStatus = $"{_heroDeath.Stage}{(_heroDeath.Stage == AreaDeathStage.Asking && _heroDeath.LoadRefusal is { } refused ? " (load refused: " + refused + ")" : "")}";
+        GD.Print($"ARC-UI-028 hero death answer={(yes ? "yes" : "no")} by={by} stage={_heroDeath.Stage}"
+            + (_heroDeath.Stage == AreaDeathStage.Asking && _heroDeath.LoadRefusal is { } why ? " refused=" + why : ""));
     }
 
     /// <summary>The scene flow's start scene is there (the main menu opened, or the scene failed and shows why): the death's
@@ -110,7 +144,12 @@ public partial class TerrainViewerApp
 
     private AreaDeathPanel DeathPanel()
     {
-        if (_heroDeathPanel is null) { _heroDeathPanel = new AreaDeathPanel(); AddChild(_heroDeathPanel); }
+        if (_heroDeathPanel is null)
+        {
+            _heroDeathPanel = new AreaDeathPanel();
+            AddChild(_heroDeathPanel);
+            _heroDeathPanel.AnswerRequested += yes => WorldObservation(() => AnswerHeroDeath(yes, "button"));
+        }
         return _heroDeathPanel;
     }
 
@@ -214,6 +253,35 @@ public partial class TerrainViewerApp
             app.StopDeathSound(ref app._deathVoice);
             app.StopDeathSound(ref app._deathMusic);
             app.DeathPanel().ShowPicture(null);
+        }
+
+        public LifecycleRuleProfile Rules => (app._areaSession?.Rules ?? GameRules.For(app._ruleMode)).Lifecycle;
+        public string? LastSave => app.SaveLibrary.Latest()?.Name;
+        public bool LoadSettled => app._mapHandoff is null;
+
+        public void Ask(string save, string? notice)
+        {
+            var details = app.SaveLibrary.List().Entries.FirstOrDefault(entry => string.Equals(entry.Name, save, StringComparison.Ordinal));
+            app.DeathPanel().ShowChoice(AreaHeroDeath.LoadQuestion, details is { } shown ? $"{shown.DisplayDescription} ({shown.Name})" : save,
+                $"Yes  ({AreaMainMenu.YesLetter})", $"No  ({AreaMainMenu.NoLetter})", notice ?? "",
+                "Y, Return or Yes loads the newest save; N, No or Escape ends the game to the main menu | PROJECT window (Steamwoven setting; "
+                + "the original resets to the main menu)");
+            GD.Print($"ARC-UI-028 hero death asks to load save={save}" + (notice is null ? "" : " notice=" + notice));
+        }
+
+        public void EndAsk() => app.DeathPanel().HideChoice();
+
+        public string? LoadLastSave(string save)
+        {
+            // A window stream held under the death screen (it waits while a modal screen is up) would refuse the load for ever;
+            // the load replaces the scene anyway.
+            if (app._mapHandoff is { Kind: MapHandoffKind.Stream } stream)
+            {
+                app._loadCancellation?.Cancel();
+                app.EndMapStream(stream);
+                GD.Print("ARC-UI-028 hero death load dropped the window stream");
+            }
+            return app.LoadGame(app.SaveLibrary.Slot(save), "Death: last save ") ? null : app._quickSaveStatus ?? "the save was not loaded";
         }
 
         public string? Reset(out bool lasting)

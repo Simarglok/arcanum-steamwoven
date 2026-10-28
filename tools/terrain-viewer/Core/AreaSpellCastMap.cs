@@ -102,7 +102,9 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         ArgumentNullException.ThrowIfNull(id);
         if (id == SessionSpellCaster.Hero) return HeroObject();
-        return !_held(id) && _rows.TryGetValue(id, out var row) && Cell(row, _placed()) is { } cell ? RowObject(id, row, cell) : null;
+        // ARC-UI-031: a carried item (object flag 0x1000) is no map object either: the cast host's item lookup places it at its holder.
+        return !_held(id) && _rows.TryGetValue(id, out var row) && (Flags(row, ObjectFlagsSlot) & SpellTargetObject.Inventory) == 0
+            && Cell(row, _placed()) is { } cell ? RowObject(id, row, cell) : null;
     }
 
     // A row's cell now: a placed row's live cell (none while on another map), any other its map cell.

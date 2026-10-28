@@ -73,7 +73,10 @@ that parses is allowed (ARC-WORLD-093; it was refused as `BuyListUnsupported` be
 `GameSessionDescriptor` takes an optional `SessionHeroDefinition`: PC prototype number, race, gender, the ten stored stats
 (eight primary, magick points, tech points), level, unspent points, alignment, the race and gender effects as
 `StatEffectDefinition` (only stats the character owner models; `null` when none), gold, the kit as item kinds and, since
-ARC-WORLD-069, the background id (`Background`, 0 none; a pre-made hero's 39–50, [backgrounds](equipment-runtime.md#backgrounds-arc-world-069)). The
+ARC-WORLD-069, the background id (`Background`, 0 none; a pre-made hero's 39–50, [backgrounds](equipment-runtime.md#backgrounds-arc-world-069)) and,
+since ARC-UI-033, the portrait (`Portrait`, field 0xE7: a pre-made prototype's, or the new-character window's choice; 0 none,
+negative refused; the session keeps it with the hero and saves it from schema 56, as it saves the player name that
+`SetHeroPlayerName` stores, empty for every hero until the window's Accept writes it). The
 host maps the reader's result (the mapping lives in the real-data test until the viewer is wired): effect changes on
 the 17 primary/derived stats and magick/tech points are kept; since ARC-SKILLS-002 the changes on basic and tech skills are
 kept too, as the hero's innate skill changes (`InnateSkills`, [hero skills](hero-skills-runtime.md)); changes on resistances, tech disciplines,

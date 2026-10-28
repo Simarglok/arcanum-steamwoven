@@ -713,14 +713,15 @@ maximum truncated toward zero.
   original prints it (C's `%03d`: `030`, `-05`). While the hero is poisoned the health gauge takes the poisoned colour
   (green) and the poison level is printed over it. While the [interface bars](#interface-bars-arc-ui-018) are shown the
   gauges fill the bottom strip's vials at the original's places (gauges at 14, 472 and 754, 473 of the 800 × 600 screen,
-  the numbers at 15, 578 and 755, 578, the poison at 15, 500), scaled with the bars and drawn over them as plain fills
-  (the original's fill art 17–20 is not drawn); they stay while a window the bars reach is open. Without the bars they
-  stand in a small panel at the bottom right, hidden while a window or the palette is open. Without a hero there are
-  none. Automated runs draw them only when their smoke asks or the bars are drawn.
-- **Follower portraits** (CH9). Under each portrait button of the [follower strip](../world/companion-orders-runtime.md#area-viewer)
-  (ARC-WORLD-046) a health bar (green while poisoned) and a fatigue bar, each cropped to the follower's percent
-  (nothing at 0 % or less, capped at 100 %); below 20 % health the button turns red, as the original adds red over the
-  face. A follower's values are its combat values on the shown map (a visiting companion's on its home map); a follower
+  the numbers at 15, 578 and 755, 578, the poison at 15, 500), scaled with the bars and drawn over them, since ARC-UI-024
+  with the original's vial art ([panel art](#panel-art-arc-ui-024)); they stay while a window the bars reach is open.
+  Without the bars the original's compact panel stands at the screen's bottom right (ARC-UI-024), hidden while a window
+  or the palette is open. Without a hero there are none. Automated runs draw them only when their smoke asks or the bars
+  are drawn.
+- **Follower portraits** (CH9). In each frame of the [follower portraits](../world/companion-orders-runtime.md#area-viewer)
+  (ARC-WORLD-046; the original's frames since ARC-UI-024) a health bar (its poisoned art while poisoned) and a fatigue bar,
+  each cropped to the follower's percent (nothing at 0 % or less, capped at 100 %); below 20 % health red is added over
+  the portrait, as the original does. A follower's values are its combat values on the shown map (a visiting companion's on its home map); a follower
   without combat values shows empty bars.
 - **Hovered critter** (CH8). The [tooltip](#hover-tooltip-and-action-cursor-arc-ui-005) of a critter with combat values
   (an NPC of a covered map or a companion) adds its health and fatigue bars under the name, each filled to the
@@ -736,10 +737,58 @@ lev 2`; `ARC_AREA_LIFE_CAPTURE=<ignored path prefix>` saves readbacks): the gaug
 poison packet, a speaker that joins shows its portrait bars and turns red after a hit to 15 % of its maximum, hovering it
 reads `current/maximum` (`15/100` on that map), hovering another living NPC reads a percent, with the bars drawn the gauges
 sit in the vials at the original's places and stay there with the inventory open, and the palette hides the gauges; it prints `ARC-UI-020 native-smoke life PASS`
-(the stage leaves the hero poisoned and the NPC joined and wounded). Not done: the original's fill art in the vials, the
-hovered panel's level line and its place on the bars' description line, portrait art, the PC as a hover target (the
-viewer's actor is not pickable), action points and the turn cue (slice 2), floating text (slice 4, [ARC-UI-021](#floating-text-arc-ui-021)). Original visual parity
-NOT VERIFIED.
+(the stage leaves the hero poisoned and the NPC joined and wounded). Not done: the hovered panel's level line and its
+place on the bars' description line, the PC as a hover target (the viewer's actor is not pickable), action points and the
+turn cue (slice 2), floating text (slice 4, [ARC-UI-021](#floating-text-arc-ui-021)). The art (vials, compact panel, frames, portraits) is ARC-UI-024's. Original
+visual parity NOT VERIFIED.
+
+### Panel art (ARC-UI-024)
+
+FR-UI-002: the in-game panel's art after the [interface bars](#interface-bars-arc-ui-018) and the
+[health and fatigue bars](#health-and-fatigue-bars-arc-ui-020), read in the 1.0.7.4 executable (ledger
+[PA1–PA6](../research/ledger/ui-audio.md#panel-art-arc-ui-024) and CH9). The rules are `LifeBarRules.GaugeArt`,
+`CompactFill` and `CompactNumber`; the layouts and the portrait reading are `AreaPanelArt.cs` in the viewer's Core.
+
+- **Vials** (PA1–PA3). While the bars are drawn each gauge draws, as the original, the empty vial (art 20) over its
+  empty rows from the art's top left, then the fill art (18 health, 17 while poisoned, 19 fatigue; frame 0 of the 15)
+  placed with its top 8 rows, the liquid's surface, above the fill line and clipped to the gauge, so a full gauge shows
+  the art's rows 8 to 95 and an empty one only the empty vial. The art comes with the bars' own art read. A fill beyond
+  the gauge (a value above its maximum, or a dead PC's negative one), which the original draws from a lower art row or
+  with the empty art past the gauge, is clamped to the gauge in both rule modes (a technical drawing overflow).
+- **Compact panel** (PA4–PA5). The original draws, instead of the bars, a 49 × 102 "Health/Fatigue Bar" panel at the
+  screen's bottom right when the interface is hidden (only with its `-fullscreen` start option). The viewer draws it
+  whenever its bars are not drawn (it has no hide toggle): a (9, 9, 9) outline and divider, the health column (red, green
+  while poisoned) and the fatigue column (blue), each filled from row d + 1 to row 100 where d is the damage percent
+  (damage × 100 / maximum, so 2 of 3 hit points fill from row 34, not by the life percent), and each current value
+  printed `%02d` in white at the fill's top, the poison level 40 rows lower; nothing filled at 100 % damage. The original
+  divides by a zero maximum there (a crash): the column reads fully damaged in both rule modes; and it shifts a poisoned
+  PC's health number off centre by reusing the poison text's rectangle, which the viewer centres in both modes (both
+  technical). The original's font (art 229) is not drawn; Godot's default font stands in.
+- **Follower frames** (CH9, PA6). The [follower portraits](../world/companion-orders-runtime.md#area-viewer) are the
+  original's frames: up to six 40 × 49 frames (art 503) at 11, 50 + 62 × slot of the 800 × 600 screen, scaled by the
+  bars' whole factor with the screen centred and its top at the window's top (with or without the bars), each with the
+  follower's portrait at 4, 4 scaled to 32 × 32, the health bar (505, 616 while poisoned) at 3, 39 and the fatigue bar
+  (504) at 3, 44, cropped to the percent, and pure red added over the portrait below 20 % health. A follower's portrait
+  is its stored field 0xE7 (critter slot 49 of its map record), its image the portrait catalogue's small `.bmp`
+  (ARC-DATA-045), read when a follower first needs it. A press on a frame opens the order menu as before; the name is
+  the frame's tooltip. The diagnostic HUD starts right of the frames while any is shown. Without the art (no game
+  folder) a frame is a dark rectangle with the name's first letters and plain bars.
+- **Hovered portrait** (PA6). The original has no fixed PC portrait or name area in its bars: its hovered-object panel
+  in the message window shows the hovered object's image at 217, 510, the portrait (at its own 64 × 64 size) for the PC
+  and for the PC's followers with one. While the bars are drawn the viewer shows there the portrait and name of a hovered
+  follower the PC leads that has a portrait; the [message log](#message-log-arc-ui-023) (its background included) gives way
+  while it is shown. The portrait shows when the pointer moves over the follower, not when the bars come back under a
+  pointer that has not moved.
+
+Checks: `LifeBarsTests` (gauge art placement, compact fill and numbers), `AreaPanelArtTests` (layouts, the stored portrait
+of a critter record; with `DAT_ROOT` the installed frame and vial art and a portrait image read) and the native smoke stage
+`life` (map mode, `bates mansion lev 2` with `--hero`): without the bars the compact panel's columns, numbers and place,
+the frame's art, place and portrait, with the bars the vials' art numbers (17 while poisoned) and the hovered follower's
+portrait and name in the message window when it has one. NOT READY: frames past six (the original scrolls them with its
+arrow buttons), the critter art the original draws for a follower without a portrait (by race or flags, at 50 %), the
+PC's portrait (it is not session state, and the PC is not a hover target), the rule that gives an NPC sharing the PC's
+portrait another one (0x4CEB80, it needs the PC's), the hovered panel's art for anyone else, and the original's hide
+toggle. Original visual parity NOT VERIFIED.
 
 ### Floating text (ARC-UI-021)
 
@@ -870,10 +919,11 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   item spell that cannot run; a move between the pack and a slot changes no carried weight, so weight never refuses it). Moving, wearing and taking off cost no action points, in a turn-based round too (IW8). The viewer has one diagnostic
   body art, so it answers the wear check's art lookup with yes (as the best-items start does). The item's wield and insert/remove
   scripts run through the item script host; its item spells through the shown map's cast host (`SessionItemTriggers`), whose item
-  lookup is NOT READY, so an item with spells stays refused. Wear values come from the hero load's kit (the best-items start's) and a
+  lookup knows the hero's kit and taken items (ARC-UI-016) and the shown map's NPCs' (ARC-UI-031); the same triggers fire the worn
+  items of the cast host's own spell damage, payments and passes (ARC-UI-031). Wear values come from the hero load's kit (the best-items start's) and a
   taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
-  "no hero: nothing can be worn". Not built yet (follow-up slices): stack splitting and the gold drag. NOT READY with a worn taken
+  "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); not built yet: the gold drag. NOT READY with a worn taken
   (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
   taken ranged weapon has no missile art or throw weight (`WieldedKitNumber`).
 - **Grid and drag (ARC-UI-019).** Above the lists the window draws the doll's nine slots and the hero's 10 × 12 grid in the original
@@ -896,8 +946,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   703, 331 on the window; plain 32-pixel squares, the icons' art size is not read; [ledger IW16–IW19](../research/ledger/ui-audio.md#inventory-drop-and-use-arc-ui-025)).
   A held item released on *Drop* (or a *Drop on the ground* button) lies on the hero's tile through the session's `DropHeroItem`
   ([hero drop](../world/inventory-runtime.md#hero-drop-and-inventory-use-arc-ui-025)): its drop script, the no-drop flag, its removal
-  events and the placement into a junk pile or loose with its decay; a stack of more than one unit is refused ("the quantity window is
-  NOT READY", IW7). A right press on an item (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
+  events and the placement into a junk pile or loose with its decay; an ammunition stack goes the stack path after the quantity window
+  (ARC-UI-029, below). A right press on an item (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
   wear location) uses it with the hero as target; a worn or wearable item does nothing (IW5). A held item released on *Use* is used with
   the hero as target while Shift is held and with no target otherwise; an item whose use is a throw is refused there (the throw from the
   map, IW18, is NOT READY). In a turn-based round both need the hero's turn. The use is the original's 0x462CC0
@@ -909,6 +959,24 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   `ARC-UI-025 use item=… source=… step=…` and `ARC-UI-025 ground-drop item=… disposition=… cell=… pile=…`; the native smoke right-presses
   a worn item (nothing), uses the first usable grid item when the hero holds one, drags a taken item onto *Drop* and takes it back
   (`ARC-UI-025 native-smoke drop-use PASS`).
+- **Quantity window (ARC-UI-029).** A dead NPC's gold pile or ammunition stack of more than one unit taken with its *Take* button,
+  and an ammunition stack of the hero's dropped (the *Drop* icon or button), first ask how many units move: a row above the doll
+  shows "How many of NAME? COUNT of MAXIMUM" with *All*, *+1*, *-1*, *Accept* and *Cancel* (the original's bar mode 9,
+  [ledger QW1–QW6](../research/ledger/ui-audio.md#quantity-window-arc-ui-029)). It starts at 0; the keypad digits append (capped
+  at the stack), Backspace and Delete erase the last digit, Enter accepts, Escape and I cancel; the main-row digits do nothing.
+  While it asks the rest of the window, the doll and the grid do nothing (QW6); closing the window cancels it. Accept with 0 moves
+  nothing. The moves are the session's `TakeGoldFromNpc`, `TakeAmmoFromNpc` and `DropHeroAmmo`
+  ([stack drop](../world/inventory-runtime.md#stack-drop-and-the-quantity-window-arc-ui-029)). *Take all* moves whole stacks
+  without asking, a gold pile too (QW1; a session without a hero refuses the gold, as it has none to hold it); a stack of one unit moves at once by the same stack path. The new stack keeps the moved
+  stack's kind (the original makes the type's base prototype, QW5; every installed stack is one). A dead NPC with two gold piles
+  answers with its first pile (the session's `TakeGoldFromNpc`, NT1), so a take from the second asks with its coins but moves from
+  the first (no installed NPC holds two). The loot list
+  shows a gold pile's coins (×N) and the header the hero's gold and its four ammunition counts (arrows, bullets, charges, fuel; IW9).
+  NOT READY: the question in the barter window and for a junk pile's stacks, a drag of the hero's gold, the art of the original's
+  bar. The self-test takes 2 of 12 synthetic arrows by keypad and buttons, cancels with Escape, and drops 1 of the 2
+  (`ARC-UI-029 self-test quantity`); the native smoke drops one unit of an ammunition stack of the hero's
+  through its *Drop* button, keypad 1 and Enter, and takes it back (`ARC-UI-029 native-smoke quantity PASS`; the crash site holds no
+  stack, so 5 arrows of the installed prototype are lent to the hero through an NPC there first and stay with it).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.
@@ -1556,10 +1624,24 @@ What follows the hero's death in crash-site-area (exterior, cave and map mode), 
 - **The reset.** The game ends as a quit does ([scene flow](#scene-flow-arc-ui-012)): the start scene loads from the launch
   arguments with a fresh session and the main menu reopens over it (its root Escape exits), fading in from black (2 s).
   Saves are not touched; a load is the main menu's (Single Player, Load Game or Last Save). There is no window with a
-  choice. A reset refused (another map or the start scene loading, a reset in progress) is tried again every 0.3 s with
+  choice in the original (the Steamwoven load box below comes first). A reset refused (another map or the start scene loading, a reset in progress) is tried again every 0.3 s with
   the screen black; when no start scene is known (no launch arguments, a start map the shown map does not know), or no
   menu has come 2 minutes after the first try, the screen fades in over the game as it is (the original's reset cannot
   be refused). A start scene that fails shows its failure.
+- **The load box (ARC-UI-028, Steamwoven only).** A project addition the owner asked for
+  ([decision](../architecture/decisions.md), switch `LifecycleRuleProfile.DeathResetsToMainMenu`, which keeps the reset
+  above under the Original setting, read from the session's rules at the end of the show). Where the show ends, before
+  the reset, when the save list holds a save, the black screen shows a box drawn as the main menu's quit box: the
+  project's question "You have died. Load the newest save?" (the game's message files hold no such question), the
+  newest save's description and name, Yes (Y) and No (N), and a line on the keys. Y, Return, the Yes button or the
+  controller's confirm loads the newest save (by file date, as F8 and the main menu's Last Save) as F8 does: on the
+  shown map at once, a save on another map after that map loads, while the screen stays black; then the loaded game
+  fades in (2 s, or after 2 minutes without the map) and play goes on. A refused load (a damaged save, another map
+  loading) keeps the box with the reason under the buttons, and so does a load that brings no living hero (the save's
+  map failed to load and the old game came back, or the save's hero is dead); a window stream held under the screen is
+  dropped first, as the load replaces the scene. N, Escape, the No button or the controller's cancel ends
+  the game with the reset above. Without any save the reset follows at once, as the original. The box acts on key
+  presses (the slides on releases); its buttons take the mouse, nothing under the screen does.
 
 Automated runs (self-tests, native smokes) keep the death off unless their own check turns it on, as many of them kill
 or wound the hero for other checks. Self-test `ARC-UI-026 self-test PASS synthetic hero death` (the production app over
@@ -1568,12 +1650,16 @@ hero dies, the in-play menu opened meanwhile closes after 5 s and the death come
 the input (Escape opens nothing), the 800 × 600 picture fades in, its voice starts, a key ends it, the reset loads the
 start scene with a fresh session and the reopened main menu, which fades in; a hero brought back to life before the
 death comes is not reset; a voice's end ends the slide; a start scene that does not publish clears the screen over
-the game as it is. Steamwoven's own death window (load the last save, as the
-quit box asks) is a later task: it branches where the show ends, before the reset (`AreaHeroDeath`'s reset step). Native smoke on the original data, map mode on the start map
-with `--main-menu true`: `ARC_AREA_MAP_SMOKE_ONLY=death` prints `ARC-UI-026 native-smoke death PASS` (a new game as the
-first pre-made hero, the hero killed through the session, the death after 5 s on the wall clock, the installed default
-slide's 800 × 600 picture with the slides' music and its voice, a left click through the window ending it, the start
-map loaded again with a fresh session and the main menu reopened). `ARC_AREA_DEATH_CAPTURE=PATH.png` saves the shown
+the game as it is. ARC-UI-028 in the same self-test: with a save in the list the Steamwoven setting asks after the
+slides (the question, the save "Auto-Save (quicksave)", Yes and No; another key does nothing), Y loads the save with its
+living hero and no reset, and it fades in; a damaged save keeps the box with the reason and Escape then resets; the No
+button and the N key reset; under Original the death resets without the box though a save is there. Native smoke on the original data, map mode on the start map
+with `--main-menu true`: `ARC_AREA_MAP_SMOKE_ONLY=death` prints `ARC-UI-026 native-smoke death PASS` and
+`ARC-UI-028 native-smoke death load PASS` (a new game as the first pre-made hero saved into a temporary save folder,
+the hero killed through the session, the death after 5 s on the wall clock, the installed default slide's 800 × 600
+picture with the slides' music and its voice, a left click through the window ending it; under Steamwoven the box asks
+and a left click on Yes loads the save, which fades in with its hero alive; the loaded hero killed under Original,
+Escape ending the show, the start map loaded again with a fresh session and the main menu reopened, without the box). `ARC_AREA_DEATH_CAPTURE=PATH.png` saves the shown
 slide (original art: never into git). Not done: script-queued slides, the end-game and credits slides, the hero's dying
 animation.
 
@@ -1650,25 +1736,45 @@ window ([ledger NW1–NW6](../research/ledger/character.md#new-character-window-
   row shows the description's name and the text below it, the game's `mes\gameback.mes`; before any background press (or after
   a clear) the window shows the default text 1000 and the character keeps background 0 without its effect, as in the
   original. Race and gender names are the project's.
+- **Portrait** (ARC-UI-033, FR-CHAR-004, [NW9](../research/ledger/character.md#new-character-name-and-portrait-arc-ui-033)):
+  a row with the original's arrows over the portraits the race and gender may take (`PortraitCatalogue.Press`, PO9: next
+  past the last takes the first, previous before the first takes the last); a race or gender change takes the first
+  portrait of the new pair, a refused press keeps it. The window starts with the generic prototype's portrait 1005 and
+  shows the portrait's image name and number (the image is not drawn yet). The catalogue is read with the generic start
+  (`AreaHeroLoad.Portraits`); without it the arrows say so and a race change keeps the portrait.
+- **Name** (ARC-UI-033, FR-CHAR-002, [NW6–NW8](../research/ledger/character.md#new-character-name-and-portrait-arc-ui-033)):
+  the field starts with main-menu message 500 (in the game's encoding, the project's text without the game). A click on it
+  (or the controller's confirm on its row) clears it and starts the typing, marked by a caret: typed characters the game's
+  encoding (code page 1252) has go to its end up to 22 bytes, Backspace removes the last, Return ends the typing (an empty
+  field takes message 500), and a press on any other button ends it first (an empty field takes back its old text). The
+  cursor keys, Delete and Insert of the original's text edit are not offered, and each opening of the window starts the
+  field with message 500 (the original keeps a name typed before Cancel, NW7). While it is typed into, letters go to the
+  field; Escape still leaves the window, as in the original.
 - **Accept** starts a new game as that character, as Start does for a pre-made hero (the same session recipe and scene
   flow): the session's hero is the generic prototype with the chosen race and gender, whose race effect (64 + race) and
   female effect (330) are its innate effects (NW3), then the chosen background is set with its effect (cause 1,
   [ARC-WORLD-097](../world/equipment-runtime.md#setting-and-clearing-the-background-arc-world-097)); no main-menu flag is
-  set. The new character's tables (effect rules, no kit) are adopted, and the scene's arguments name it, so a map
+  set. ARC-UI-033: Accept first checks the name (NW6): a name equal to message 500 (an empty field takes it) is refused with
+  message 506 as the window's notice; otherwise the session's hero starts with the chosen portrait and the name is stored as
+  its player name (`SetHeroPlayerName`, snapshot schema 56), which the status lines then show. The new character's tables
+  (effect rules, no kit) are adopted, and the scene's arguments name it, so a map
   transfer reads the generic start again; a load that makes a fresh session instead of carrying it (the palette's reload, an
   exterior scene load without a carried session) starts the generic human man with background 0, as it starts a pre-made hero
   afresh.
 - **Keys.** The window's buttons are art only in the original: no letters. Escape and Cancel go back. A controller moves
-  over the rows, Accept and Cancel, and its confirm presses a row's next arrow or the button.
+  over the rows (gender, race, background, portrait, name), Accept and Cancel, and its confirm presses a row's next arrow,
+  begins or ends the name's typing, or presses the button.
 
-Not built yet (later N10b slices): the name field and its check (NW6, FR-CHAR-002), the portrait arrows and the PC's
-portrait in the session (FR-CHAR-004), the character editor in creation mode that Accept opens in the original (point
+Not built yet (later N10b slices): the portrait's image in the window, the character editor in creation mode that Accept opens in the original (point
 buying, FR-CHAR-015, FR-CHAR-020), and the opening shop with the background's money and items and the clothes
 (FR-CHAR-007); the body type and art by race and gender are N15. So the new character starts with no gold, no items and
 its 5 points unspent. Self-test `ARC-UI-011 self-test PASS synthetic main menu` covers the window (its rows, arrows, Escape
-back and an Accept that starts a dwarf with a background and its effect); native smoke on the original data: the `menu` stage
+back, the default name refused, a name typed through the keys and an Accept that starts a dwarf with a background and its
+effect, the name and the portrait); native smoke on the original data: the `menu` stage
 (`ARC_AREA_MAP_SMOKE_ONLY=menu`) also opens New Character, presses gender on a dwarf man (refused; the background stays under Steamwoven) and makes an elf woman with a background,
-accepts and checks the session (`ARC-UI-030 native-smoke new character PASS`).
+steps her portraits, has Accept refuse the default name, types a name through the window's keys, accepts and checks the
+session (`ARC-UI-030 native-smoke new character PASS`, then `ARC-UI-033 native-smoke name and portrait PASS`). Checks:
+`AreaNewCharacterTests`, `CharacterNameRulesTests`, `HeroNameTests`.
 
 ### Interface bars (ARC-UI-018)
 
@@ -1710,8 +1816,10 @@ name and lit frame, its down frame with 3000, the release with 3001 opening the 
 Logbook and Schematics opening and closing their windows, the logbook lying between the strips and taking a press inside
 it, Map opening the world map with the bars hidden and back with no hover, Combat in and out of combat mode, Spells showing and hiding
 the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started). Not done: the
-hot-key bar and portraits (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023), the skill pane, fate and sleep windows, the town map, the
-buttons' lit art the original sets from game events (0x556A90), the compact interface (F10).
+hot-key bar (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023, the vials' art, the follower frames
+and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024)), the skill pane, fate and sleep windows, the town map, the
+buttons' lit art the original sets from game events (0x556A90), the toggle to the compact interface (the viewer shows the
+compact panel whenever its bars are not drawn).
 
 ### Message log (ARC-UI-023)
 
@@ -1749,8 +1857,10 @@ session, the window only while the [interface bars](#interface-bars-arc-ui-018) 
   (a technical display bug, ML7).
 
 Not ready: entry types 1–3 and 7–13 (listed in ML5), the original's other messages, a held inventory item released over the
-scroll areas (the original drops it through 0x575770), the compact interface's message window (F10), the hovered object's
-portrait and name in the window (ARC-UI-024). Tests `AreaMessageLogTests` (ring, repeats, the 199-character copy, the quiet
+scroll areas (the original drops it through 0x575770), the compact interface's message window (F10). Since ARC-UI-024 a
+hovered follower's portrait and name take the window while shown ([panel art](#panel-art-arc-ui-024)): the log, its background
+included, is hidden until the hover ends, and an entry stored meanwhile sounds then but is drawn only after (the original's
+order there was not read). Tests `AreaMessageLogTests` (ring, repeats, the 199-character copy, the quiet
 time, scrolling, panes, sounds, layout), `AreaLevelMessagesTests`. Native smoke, part of `ARC_AREA_MAP_SMOKE_ONLY=bar`:
 `ARC-UI-023 native-smoke message-log PASS` (three encumbrance entries with the player's texts through the production post, each
 drawn with the background, its icon and 3004; a repeat not stored and sounding again; the halves clicked through the window's

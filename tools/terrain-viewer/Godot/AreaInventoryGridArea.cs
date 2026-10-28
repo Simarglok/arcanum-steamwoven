@@ -54,9 +54,13 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>Puts an item on the cursor: the occupant a wear move took out of its slot (offset 0, ledger IW3).</summary>
     public void Hold(AreaInventoryHeld? held) { Held = held; QueueRedraw(); }
 
+    /// <summary>ARC-UI-029: while the quantity window asks, a press on the doll or grid does nothing (the original's mode 13, QW6).</summary>
+    internal bool Blocked { get; set; }
+
     public override void _GuiInput(InputEvent @event)
     {
         if (@event is InputEventMouseMotion motion) { _pointer = motion.Position; if (Held is not null) QueueRedraw(); return; }
+        if (Blocked && @event is InputEventMouseButton) { AcceptEvent(); return; }
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } right)
         {
             _pointer = right.Position;

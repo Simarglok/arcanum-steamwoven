@@ -57,8 +57,8 @@ public sealed class MadeItemComplexityStateTests
     private static GameSessionOwner AsTechnophobe(GameSessionOwner owner)
     {
         var saved = GameSessionSnapshotCodec.Encode(owner.Capture());
-        Assert.AreEqual(1, saved.Split(",\"background\":0,\"backgroundDescription\":0}").Length - 1, "one hero background");
-        var text = saved.Replace(",\"background\":0,\"backgroundDescription\":0}", ",\"background\":72,\"backgroundDescription\":0}", StringComparison.Ordinal);
+        Assert.AreEqual(1, saved.Split(",\"background\":0,\"backgroundDescription\":0,\"playerName\":\"\",\"portrait\":0}").Length - 1, "one hero background");
+        var text = saved.Replace(",\"background\":0,\"backgroundDescription\":0,\"playerName\":\"\",\"portrait\":0}", ",\"background\":72,\"backgroundDescription\":0,\"playerName\":\"\",\"portrait\":0}", StringComparison.Ordinal);
         var restored = Restore(Decode(text));
         Assert.AreEqual(GameSessionDisposition.Changed, restored.AttachMapInventory(Exterior, SmithSeed()).Disposition);
         return restored;

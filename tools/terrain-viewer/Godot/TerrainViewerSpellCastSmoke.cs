@@ -26,6 +26,9 @@ public partial class TerrainViewerApp
     // while its goal plays, the second cast queued beneath the first and played once it ends. A right click closes the cursor. The NPC and the
     // hero's fatigue are restored for the later stages; the learned spell, the experience, the level and (ARC-UI-016) the kit weapon's spent spell charge stay. A map without a living
     // NPC that has combat values reports that and passes nothing.
+    // ARC-UI-031: before the first cast the cast host knows every item the map's NPCs hold (that reads as an item) as its NPC's, placed
+    // at its holder with the inventory flag; the first cast's own life steps fire through the host's item triggers (recorded for the
+    // cast), every NPC item they walk known as its holder's, and a damage dealt with worn items on either side walks at least one.
     // ARC-UI-016: then the weapon's spell pane. No kit weapon carries castable spells, so the stage lends the hero's wielded kit weapon
     // the spell facts of the first weapon prototype (in number order, from the data) that has a castable critter spell needing a
     // target that need not be damaged, marked identified (the session does not model identification yet): M shows the weapon button, it opens the weapon's pane,
@@ -360,7 +363,26 @@ public partial class TerrainViewerApp
             PublishWorldSelection();
             if (SpellMissileArt(spell!.Data.Number) is not null)
                 GD.Print($"ARC-MAGIC-019 cast smoke: spell {spell.Data.Number} has a missile, so the queued second cast is not checked here");
-            var first = await CastOnce(spell!);
+            Require(SpellCasterNow() is { ItemTriggers: not null }, "the map's cast host is built with its item triggers");
+            var caster = _spellCaster!;
+            var lookup = NpcItemLookupCheck(session, caster, map.RuntimeMap);
+            var recorder = new RecordingItemTriggers(caster.ItemTriggers!, caster);
+            caster.ItemTriggers = recorder;
+            var heroWorn = session.QueryEquipment().Worn.Count;
+            var npcWorn = _spellCastMap!.WornItems(target.Holder.Entity).Count;
+            var triggersLog = caster.Log.Count;
+            object first;
+            try { first = await CastOnce(spell!); }
+            finally { caster.ItemTriggers = recorder.Inner; }
+            Require(ReferenceEquals(_spellCaster, caster), "the cast host was not rebuilt during the first cast");
+            var damage = caster.Log.Skip(triggersLog).Where(e => e.Kind == SpellCastEventKind.Damaged && e.Object == target.Holder.Entity).Sum(e => e.Value);
+            var npcCalls = recorder.Calls.Where(c => c.Holder != SessionSpellCaster.Hero).ToArray();
+            Require(npcCalls.All(c => c.Holder == target.Holder.Entity && c.Known == c.Holder),
+                "every NPC item the cast's damage step walked is the target's and known as its: " + string.Join(";", npcCalls.Select(c => $"{c.Item}@{c.Holder}={c.Known}")));
+            Require(damage <= 0 || heroWorn + npcWorn == 0 || recorder.Calls.Count > 0,
+                $"a damage of {damage} with {heroWorn} hero and {npcWorn} NPC worn items walked them through the item triggers");
+            GD.Print($"ARC-UI-031 native-smoke item-triggers PASS map={map.RuntimeMap} {lookup} damage={damage} hero-worn={heroWorn} npc-worn={npcWorn} "
+                + $"calls={recorder.Calls.Count} npc-calls={npcCalls.Length} started={recorder.Calls.Sum(c => c.Started)}");
             // ARC-MAGIC-018: a hero whose damaging spell has no missile also casts one that has (learned when it knows none).
             object? second = null;
             if (SpellMissileArt(spell!.Data.Number) is null)
@@ -412,6 +434,54 @@ public partial class TerrainViewerApp
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
+    }
+
+    // ARC-UI-031 smoke: every item an NPC of the map holds that reads as an item is the cast host's as its NPC's, at the NPC's location
+    // with the inventory flag (when the NPC is a map object); throws with the first that is not.
+    private string NpcItemLookupCheck(GameSessionOwner session, SessionSpellCaster caster, int runtimeMap)
+    {
+        int holders = 0, items = 0, placed = 0;
+        foreach (var holder in session.QueryMapInventory(new(runtimeMap))!.Holders.Where(h => h.Kind == SessionHolderKind.Npc))
+        {
+            holders++;
+            var at = caster.Facts(holder.Entity)?.Location;
+            foreach (var item in holder.Items.Where(i => _combatHost!.Fields(runtimeMap, i.Entity)?.Item is not null && !session.IsItemDestroyed(i.Entity)))
+            {
+                items++;
+                if (caster.Item(item.Entity)?.Holder is var known && known != holder.Entity)
+                {
+                    GD.Print($"ARC-UI-031 cast smoke FAIL: item {item.Entity} of {holder.Entity} is known as {known ?? "nothing"}");
+                    throw new InvalidOperationException("AREA_CAST_SMOKE_FAILED");
+                }
+                if (at is not { } location) continue;
+                var facts = caster.Facts(item.Entity);
+                if (facts?.Location != location || (facts.ObjectFlags & SpellTargetObject.Inventory) == 0)
+                {
+                    GD.Print($"ARC-UI-031 cast smoke FAIL: item {item.Entity} of {holder.Entity} stands at {facts?.Location} flags {facts?.ObjectFlags}, its holder at {location}");
+                    throw new InvalidOperationException("AREA_CAST_SMOKE_FAILED");
+                }
+                placed++;
+            }
+        }
+        return $"npcs={holders} npc-items={items} placed={placed}";
+    }
+
+    // ARC-UI-031 smoke: the cast host's item triggers with each executor call recorded (its item, holder, the holder the cast host knows
+    // the item as, and the runs it started).
+    private sealed class RecordingItemTriggers(ISessionItemTriggers inner, SessionSpellCaster caster) : ISessionItemTriggers
+    {
+        public ISessionItemTriggers Inner { get; } = inner;
+        public List<(string Item, string Holder, string? Known, int Started)> Calls { get; } = [];
+        public bool Supports(string item) => Inner.Supports(item);
+        public SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null, SpellLocation tile = default, string? runOther = null)
+        {
+            var known = caster.Item(item)?.Holder;
+            var result = Inner.Fire(eventMask, item, holder, other, tile, runOther);
+            Calls.Add((item, holder, known, result.Spells.Count(spell => spell.Outcome == SessionItemSpellOutcome.Started)));
+            return result;
+        }
+        public SessionItemTriggerResult Withdraw(uint eventMask, string item, string holder) => Inner.Withdraw(eventMask, item, holder);
+        public SessionItemTriggerResult Remove(string item, string holder) => Inner.Remove(item, holder);
     }
 
     // ARC-UI-022 smoke: a key down and up through the WORLD keyboard route, with Ctrl or Shift held.

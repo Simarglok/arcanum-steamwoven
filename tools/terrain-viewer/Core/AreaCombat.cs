@@ -24,8 +24,9 @@ public sealed class AreaCombatHost : IAreaEventObjects
 {
     private readonly Dictionary<int, AreaInventoryMap> _maps;
     private readonly Dictionary<(int Map, string Entity), SessionCritterCombatBuild> _builds = [];
-    // The NPC holders of one map as the session last showed them (rebuilt when the session or its revision changes).
-    private (GameSessionOwner Session, long Revision, int Map, Dictionary<string, SessionHolderInventory> Holders)? _holders;
+    // The NPC holders of one map as the session last showed them, and the NPC holding each of their items (ARC-UI-031), rebuilt when
+    // the session or its revision changes.
+    private (GameSessionOwner Session, long Revision, int Map, Dictionary<string, SessionHolderInventory> Holders, Dictionary<string, string> NpcItems)? _holders;
 
     public AreaCombatHost(AreaInventoryHost inventory)
     {
@@ -55,13 +56,35 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return new(entity, map.Row(entity), holder.Dead, session.QueryCompanion(entity).LedByPc, Build(map, entity));
     }
 
-    private Dictionary<string, SessionHolderInventory> Holders(GameSessionOwner session, int runtimeMap)
+    private Dictionary<string, SessionHolderInventory> Holders(GameSessionOwner session, int runtimeMap) => HolderIndex(session, runtimeMap).Holders;
+
+    private (Dictionary<string, SessionHolderInventory> Holders, Dictionary<string, string> NpcItems) HolderIndex(GameSessionOwner session, int runtimeMap)
     {
         if (_holders is { } cached && ReferenceEquals(cached.Session, session) && cached.Revision == session.Version.Revision && cached.Map == runtimeMap)
-            return cached.Holders;
+            return (cached.Holders, cached.NpcItems);
         var holders = session.QueryMapInventory(new(runtimeMap))?.Holders.ToDictionary(holder => holder.Entity, StringComparer.Ordinal) ?? [];
-        _holders = (session, session.Version.Revision, runtimeMap, holders);
-        return holders;
+        var npcItems = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var holder in holders.Values.Where(holder => holder.Kind == SessionHolderKind.Npc))
+            foreach (var item in holder.Items) npcItems.TryAdd(item.Entity, holder.Entity);
+        _holders = (session, session.Version.Revision, runtimeMap, holders, npcItems);
+        return (holders, npcItems);
+    }
+
+    /// <summary>
+    /// ARC-UI-031: the spell facts of an item an NPC of a map this host covers holds now, listed or worn, as the session shows the
+    /// map's holders (a dead NPC's too: its dying fires its worn items, IC5): the item's row through
+    /// <see cref="SessionItemSpells.FromCombatFields"/> with the NPC as its holder (the parent field 0x58). The cast host's item lookup
+    /// asks it for anything that is not the hero's; null for an item no NPC of that map holds (a container's, the hero's, a visiting
+    /// companion's from its own map), a destroyed one, or one whose row does not read as an item.
+    /// </summary>
+    public SessionItemSpells? NpcItemSpells(GameSessionOwner session, int runtimeMap, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(entity);
+        if (!_maps.TryGetValue(runtimeMap, out var map) || !HolderIndex(session, runtimeMap).NpcItems.TryGetValue(entity, out var holder)
+            || session.IsItemDestroyed(entity) || !map.TryGetRow(entity, out var row) || CombatFieldReader.Read(row).Fields is not { } fields)
+            return null;
+        return SessionItemSpells.FromCombatFields(entity, holder, fields);
     }
 
     /// <summary>ARC-WORLD-036: an NPC's stored fields on a map this host covers (a follower's loaded sheet), or null.</summary>
