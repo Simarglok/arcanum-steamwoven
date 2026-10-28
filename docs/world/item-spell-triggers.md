@@ -162,10 +162,10 @@ parent, its other object), computed by the rules and fired by the host; the sess
 - **`LifeStep`** (the fatigue setter 0x45D5A0, IC4, IC7): a step that takes a conscious critter to 0 fatigue fires its **going
   unconscious** with no other object. It reads the fatigue only, so a step that also kills fires it too. Every life call carries it:
   the spell payment, a run step's fatigue in combat mode, the overexertion, the encumbrance drain, scripts' damage and kills.
-- **`SpellDamageStep`** (DH1, IC8): `ApplyDamage` with `SessionDamageParties` (the attacker, the damage source the kill credits and
-  whether an item event started the run) gives a damage step's calls (`DamageStep` with no melee bit and no weapon). The cast host
-  passes the run's parent as the attacker and its other object, else its parent, as the damage source (the invocation carries no
-  other object yet, MT7, so it is the parent for now). `ApplyDamage` without
+- **`SpellDamageStep`** (DH1, IC8): `ApplyDamage` with `SessionDamageParties` (the attacker and the damage source the kill credits)
+  gives a damage step's calls (`DamageStep` with no melee bit and no weapon). The cast host passes the run's parent as the attacker
+  and its other object, else its parent, as the damage source (since ARC-MAGIC-025 a run's other object is the executor's attacker
+  global: the attacker of an attack start's first worn item and of an attacks a location, IC10). `ApplyDamage` without
   parties (a script's damage, a critical miss that hurts the hero) gives only the fatigue setter's call, which needs no context.
 - **`DyingEnd`** (0x42FF40, IC5, IC7): `QueryDyingEndItemEvents` gives a dead critter's **dying** with no other object; the host asks
   when the dying animation ends (not for a goal with flag 0x200). A kill with a killer has fired dying with the killer already, so
@@ -183,10 +183,43 @@ for the action's or pass's own firing. Without `ItemTriggers` nothing fires and 
 
 MG46 (IC9): a run an item event started damages with the item's holder as the attacker, so a `Target_Hit` weapon's spell fires the
 weapon again on its own damage, and two wearers of `Parent_Hit` armour answer each other, until the target dies or the charge runs
-out. Original keeps it (`ItemRunDamageFiresHooks`); Steamwoven leaves the parent hit and the damages opponent out of such a step,
-so an item spell's damage never answers with another item's hit or damage spell (no item fires on an item's damage), also where the
-original would answer once. The other calls stay: an item run whose damage knocks a critter down still fires the attacker's target
-going unconscious, a chain only the 64-walk bound ends (latent: no installed record uses `Target_Going_Unconscious`).
+out. Original keeps it (`ItemRunDamageFiresHooks`). Steamwoven (owner decision 2026-10-28, ARC-MAGIC-025: the narrow fix) keeps every
+call of such a damage step and lets each item fire at most once in a chain: the cast host tags the item events of a damage step of a
+run an item event started with the run's chain (`SessionItemEvent.Chain`: its source and the items whose runs led to it, recorded
+when an item event's firing starts the run), and a walk skips those items (`ItemSpellTriggerRules.ChainSkips`). So an item spell's
+damage still fires every other item once (a `Parent_Hit` armour answers a `Target_Hit` weapon's spell, and the attacker's armour may
+answer that), and the chain ends when every item in reach has fired. The 64-walk bound stays for the Original setting. Runs are not
+saved, so a chain is followed only within the session's run table: an item run the cast host has no record for (its slot reused, or
+started by a host's direct `FireItemEvents` call outside the cast host) carries only its own source.
+
+## Attack events (ARC-MAGIC-025)
+
+- **`AttackStart`** (0x432700 → 0x4CBD40, IC6, IC15): each swing's attack animation, after its checks and its action point charge,
+  fires the attacker's **attacks an opponent** with the target as the other object. `QueryAttackStartItemEvents(attacker, target)`
+  gives the event (the hero's `PlayerEntity` or an NPC's entity as the attacker); the host asks when it starts the animation and
+  fires it. A throw starts no attack animation (IC14) and asks nothing.
+- **The attacker global** (IC10): 0x4CBD40 and 0x4CBDB0 put their parent in a global that the executor copies into its runs' other
+  object, so the first worn item's runs of an attack start (`ItemTriggerCall.RunOtherIsParent`) and an attacks a location's runs take
+  the attacker as their other object (`SpellInvocation.Other`, captured as `SpellRun.Other`; `ISessionItemTriggers.Fire`'s
+  `runOther`): the damage source their kills credit (DH1) and the other party of their target areas.
+- **`LocationCall`** (0x4CBDB0, IC10, IC12): every end of a projectile's flight fires the shooter's **attacks a location** with the
+  projectile's item: at the struck object's tile after the hit, at the destination of a shot without a target or of a boomerang
+  flying back, and at the projectile's tile at its range end. There is no walk and no type test: one executor call with the item,
+  no other object and the tile (the aim of `Parent_Atks_Location`). `QueryShotEndItemEvents(shot, tile)` gives the hero's event
+  (`SessionItemEvent.Item`, `.Tile`) for a shot still in flight; the host asks before the strike or end call (`LandShot`,
+  `LandShotOnObject`, `EndShot`, `LandThrownItem`, `ReturnShot`) and fires it after. A thrown shot that struck already gives none:
+  its strike was its end.
+- **The item's own parent** (IC11): a spell an item starts runs with the item's parent (0x450A50): its holder while it is in an
+  inventory, else the item itself. A host's item lookup reports an item on the map (a thrown item after its end) as its own holder;
+  such an item fires for any executor parent, which only the parent aim reads.
+- **`ItemParentCalls`** (0x4CBE70's item branch, IC13): a damage step whose attacker is an item (a spell run whose parent is the
+  item) fires that item's own **target hit** with the victim as the executor's parent and the item as the other object; every other
+  event of an item parent fires nothing. `FireItemEvents` takes an `isItem` test for it; the cast host answers from its map's object
+  types (5..14). Such a run's source is the item itself, so in Steamwoven this target hit is always in its chain and never fires
+  (MG46: the item fired already for the event that started the run); the Original setting fires it (latent: no installed record has
+  both `Parent_Atks_Location` and `Target_Hit`).
+- A critical self-hit (`AttackCritter`, `AttackObject`) returns its life step's events (`ItemEvents`: the fatigue setter's going
+  unconscious, IC4) for the host to fire; the hero's damage step in it reads no context (IC2).
 
 ## Installed data
 
@@ -215,7 +248,8 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 | The kill's dying event waits for the victim's dying script (point 12), which may stop it (IC5). | It always fires: the session runs no dying script. | — (scripts are the host's, not ready) |
 | A firing's runs begin a frame later each (goal 73), so an item chain (MG46) spreads over frames. | The goals play at once and their events join the same firing, at most 64 walks; the rest are dropped and logged. | none (technical bound) |
 | A spell's damage step calls the item wrappers inside the run's processing (IC8). | Its events fire after the run's pass and notes, in the order queued: the runs' damage steps of an event pass first, then the pass's other life steps (the encumbrance drain), then the payments of its notes. | — (order of the cast host: the session refuses a run start while the run rules act) |
-| A run an item event started fires its parent's items again on its own damage (MG46, IC9). | No parent hit and no damages opponent for such a run's damage step. | `ItemRunDamageFiresHooks` |
+| A run an item event started fires its parent's items again on its own damage (MG46, IC9). | Each item fires at most once in a chain of item spells; every other item's answer stays (owner decision 2026-10-28, ARC-MAGIC-025). | `ItemRunDamageFiresHooks` |
+| A projectile's end fires its attacks a location inside the flight, after the end and the hit (IC12). | The host asks for it before the session's strike or end call and fires it after; a thrown item's strike and landing, which the session splits, give one event. | — (order of the session's projectile calls) |
 | An item use's empty slot 0 on the spell branch reads a record outside the table (IU6). | Nothing is cast. | none (technical bug, fixed in both modes; owner rule 2026-10-28) |
 | A used scroll whose slot-0 spell targets an inventory item opens the inventory and is cast at the use's target (IU4). | Nothing is cast and the scroll is still spent (one installed scroll). | — (not ready: inventory targets) |
 | A used food or scroll has its runs' sources cleared before their goals play, so their BEGIN finds no source and charges nothing. | The goals play at once, so the item pays its charge before it is spent and deleted. | — (not visible: the item is deleted; no installed food or scroll reaches the spell branch with no charge left) |
@@ -229,12 +263,12 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 - The item use's other branches (reading, lockpick, healing kit, food and scroll spending without magic) are the host's own calls
   (`UseWrittenItem`, `PickLock…`, `HealWithItem`); no viewer action calls `UseItem` yet. Spells aimed at an inventory item through a
   use, and an NPC's use (the activation refuses a holder that is not a player's PC, SU1) are not ready.
-- The attack start's attacks an opponent and the projectile's attacks a location (IC6), an item-type attacker's own target hit
-  (0x4CBE70: a spell run whose parent is an item fires no damages opponent), and the item events of an NPC's attack
-  (ARC-WORLD-092's `AttackByNpc` fires none yet). No viewer caller sets the cast host's `ItemTriggers` or fires a life result's item events (its cast host has no item lookup),
-  and the viewer does not report the dying animation's end. The hero's critical miss on itself and an object's damage to the hero
-  (`AttackCritter`, `AttackObject`) do not return their life step's item events, so its fatigue setter's call fires nothing yet. The global attacker (IC6) needs the run's other object, which
-  the invocation does not carry (MT7). The aims at the other's worn weapon or armour stay not ready (no installed record uses them).
+- The item events of an NPC's attack (ARC-WORLD-092's `AttackByNpc` fires no damage step events yet). No viewer caller sets the
+  cast host's `ItemTriggers`, fires a life result's item events or asks for the attack start's and the shot ends' events (its cast
+  host has no item lookup), and the viewer does not report the dying animation's end. The 14 thrown items with
+  `Parent_Atks_Location` fire nothing yet: the session throws only a wielded "default throws" weapon (the throwing dagger 6072),
+  and the AI's throw goal is not hosted. The projectile ends' script points (7, 8, 0x22, 0x23) run no script. The aims at the
+  other's worn weapon or armour stay not ready (no installed record uses them).
 - Hotkeys (0x57C080, IP7–IP9) and spells aimed at an inventory item; the weapon's spell pane (0x57C040) is in the viewer since
   ARC-UI-016 ([spell cast host](spell-cast-host.md#the-weapons-spell-pane-arc-ui-016)).
 - The best-items start (`EquipBest`) skips items with spells, as before: it runs before any cast host exists.

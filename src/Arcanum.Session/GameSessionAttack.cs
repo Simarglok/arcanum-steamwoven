@@ -448,6 +448,13 @@ public sealed record SessionAttackResult(GameSessionDisposition Disposition, Gam
     /// <summary>ARC-MAGIC-023: the executor calls of the damage step's item events, in order (<see cref="SessionAttack.ItemTriggers"/>);
     /// empty without a host or without damage to the target; none from a refused experience or item step on.</summary>
     public IReadOnlyList<SessionItemTriggerFiring> ItemSpells { get => _itemSpells ?? Array.Empty<SessionItemTriggerFiring>(); init => _itemSpells = value; }
+    private readonly IReadOnlyList<SessionItemEvent>? _itemEvents;
+
+    /// <summary>ARC-MAGIC-025: the item events of a critical self-hit's life step (its <see cref="SessionLifeResult.ItemEvents"/>: the
+    /// fatigue setter's going unconscious, IC4; the hero's damage step has no context to read, IC2), which the host fires
+    /// (<see cref="SessionSpellCaster.FireItemEvents"/>); empty otherwise (a hit on the target fires its own damage step,
+    /// <see cref="ItemSpells"/>).</summary>
+    public IReadOnlyList<SessionItemEvent> ItemEvents { get => _itemEvents ?? Array.Empty<SessionItemEvent>(); init => _itemEvents = value; }
 }
 
 public sealed partial class GameSessionOwner
@@ -719,6 +726,7 @@ public sealed partial class GameSessionOwner
             Shots = flying,
             Scatter = scatter,
             ItemSpells = itemSpells,
+            ItemEvents = recipient == DamageRecipient.Attacker ? applied.ItemEvents : [],
         };
     }
 

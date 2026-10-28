@@ -74,11 +74,11 @@ public partial class TerrainViewerApp
             Require(MainMenuOpen && WorldModal && _mainMenu!.Window == AreaMenuWindow.Options && _mainMenuPanel!.HeaderForSelfTest == "Options: Game",
                 "Options opened the options window at the Game page: " + _mainMenuPanel?.HeaderForSelfTest);
             var panel = _mainMenuPanel!;
-            Require(panel.ButtonsForSelfTest.SequenceEqual(["Game  (G)", "Sound  (S)", "Done  (D)"]), "page buttons: " + string.Join("|", panel.ButtonsForSelfTest));
+            Require(panel.ButtonsForSelfTest.SequenceEqual(["Game  (G)", "Video  (V)", "Sound  (S)", "Done  (D)"]), "page buttons: " + string.Join("|", panel.ButtonsForSelfTest));
             Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven"]),
                 "Game page: " + string.Join("|", Controls()));
-            Require(panel.NoteForSelfTest.Contains("Video: ", StringComparison.Ordinal) && panel.NoteForSelfTest.Contains("Violence Filter: ", StringComparison.Ordinal),
-                "hidden page and controls are named: " + panel.NoteForSelfTest);
+            Require(!panel.NoteForSelfTest.Contains("Video: ", StringComparison.Ordinal) && panel.NoteForSelfTest.Contains("Violence Filter: ", StringComparison.Ordinal),
+                "hidden controls are named: " + panel.NoteForSelfTest);
 
             // Each arrow applies at once: the difficulty on the session, the turn-based setting, auto attack, Always Run.
             InventoryKey(Key.Right);
@@ -97,6 +97,15 @@ public partial class TerrainViewerApp
             Require(_ruleMode == RuleMode.Original && _areaSession!.Rules.Mode == RuleMode.Original && Controls()[4] == "Rules: Original", "Original on the session");
             panel.ChangeForSelfTest(4, 1);
             Require(_ruleMode == RuleMode.Steamwoven && _areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[4] == "Rules: Steamwoven", "the list wrapped to Steamwoven");
+
+            // ARC-UI-021: the Video page's floating text level and speed apply at once.
+            Letter('v');
+            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().SequenceEqual(["Floats: Minimal", "Float Speed: 2/10"]), "Video page: " + string.Join("|", Controls()));
+            Require(panel.NoteForSelfTest.Contains("Text Duration: ", StringComparison.Ordinal), "its hidden controls are named: " + panel.NoteForSelfTest);
+            panel.ChangeForSelfTest(0, 1);
+            panel.ChangeForSelfTest(1, -1);
+            Require(_gameSettings.Floats == 2 && _gameSettings.FloatSpeed == 1 && Controls()[0] == "Floats: Verbose" && Controls()[1] == "Float Speed: 1/10",
+                "floats verbose, speed 1: " + string.Join("|", Controls()));
 
             // The Sound page: a volume moves its channel; a slider stops at its end.
             Letter('s');
@@ -124,7 +133,7 @@ public partial class TerrainViewerApp
             Require(_mainMenu?.Window == AreaMenuWindow.Options, "the O key does nothing from the main menu");
             Letter('d');
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Main, "Done went back to the main menu");
-            return "in-play Options opens window 6 at Game (Video hidden and named), arrows apply difficulty/turn-based/auto attack/Always Run/rule mode/volume at once, "
+            return "in-play Options opens window 6 at Game, arrows apply difficulty/turn-based/auto attack/Always Run/rule mode/floaters/volume at once, "
                 + "lists wrap and sliders stop, Escape does nothing, Done and O close the menu from play, Done goes back from the main menu";
         }
         finally
