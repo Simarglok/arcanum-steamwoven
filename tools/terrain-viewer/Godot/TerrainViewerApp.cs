@@ -83,6 +83,8 @@ public partial class TerrainViewerApp : Node
             (_nativeSmoke, _nativeSmokeScreenshot) = TakeNativeSmokeArguments(args);
             // ARC-UI-014: --launcher opens the launcher screen of a start without inputs.
             var launcher = args.Remove("--launcher");
+            // ARC-DEV-050: --debug-mode turns the debug mode on for either kind of start.
+            if (ViewerDebugMode.Take(args)) EnableDebugMode("command line");
             // ARC-DEV-046: without command-line inputs the game folder comes from the launcher settings.
             if (args.Count == 0)
             {
@@ -145,7 +147,7 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, container, junk, barter, menu, scene, options, plants, bar, ai, ai-turn-based, life, floaters, death)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, container, junk, barter, menu, scene, options, plants, bar, ai, ai-turn-based, life, floaters, death, debug-travel)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
                         // walk, census, barter, menu, scene, options, plants, bar, ai, ai-turn-based, life, floaters and death run.
                         var only = MapSmokeStages();
@@ -210,6 +212,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("walk") == true) await RunAreaMapWalkSmokeAsync();
                         // ARC-UI-048: after the stream, as the landing loads the start map around another place.
                         if (_readyMapName is not null && Stage("worldmap")) await RunAreaWorldMapSmokeAsync();
+                        // ARC-DEV-050: only when named (with --debug-mode), the debug teleport from this map to a far area.
+                        if (_readyMapName is not null && only?.Contains("debug-travel") == true) await RunAreaDebugTravelSmokeAsync();
                         // ARC-RENDER-027: only when named, every map of the catalogue in turn (last: it leaves the last map shown).
                         if (only?.Contains("census") == true) await RunAreaMapCensusAsync();
                         GetTree().Quit(0);

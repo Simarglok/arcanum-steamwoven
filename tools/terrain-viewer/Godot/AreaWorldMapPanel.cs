@@ -7,8 +7,10 @@ namespace Arcanum.TerrainViewer;
 /// <summary>
 /// ARC-UI-048 diagnostic world-map panel (<see cref="AreaWorldMap"/>): the project's picture of the start map drawn from its
 /// terrain (one pixel per 4 × 4 sectors, blocked sectors darker), the PC, the known areas, the waypoints and the planned route;
-/// a click on the picture adds a waypoint there, a pick in the area list at that area; Travel, Clear and Close. The original's
-/// world-map art, zoom, notes and town maps are not drawn. The app re-renders it after every change and travel step.
+/// a click on the picture adds a waypoint there; Travel, Clear and Close. ARC-DEV-050: only in debug mode it also shows the list of
+/// every area (a double-click adds a waypoint at the area) and Teleport, which moves the PC to the selected area at once; it then
+/// opens on any map, and off the start map it only teleports. The original's world-map art, zoom, notes and town maps are not
+/// drawn. The app re-renders it after every change and travel step.
 /// </summary>
 public partial class AreaWorldMapPanel : CanvasLayer
 {
@@ -18,7 +20,9 @@ public partial class AreaWorldMapPanel : CanvasLayer
     private ItemList _areas = null!;
     private Label _status = null!;
     private Label _message = null!;
-    private Button _travel = null!, _clear = null!, _close = null!;
+    private Label _header = null!, _hint = null!;
+    private Button _travel = null!, _clear = null!, _close = null!, _teleport = null!;
+    private bool _debugMode;
     private AreaWorldMap? _map;
     private Func<int, bool>? _known;
     internal AreaWorldMap? Map => _map;
@@ -26,12 +30,22 @@ public partial class AreaWorldMapPanel : CanvasLayer
 
     public event Action<WorldMapPixel>? WaypointRequested;
     public event Action<int>? AreaRequested;
+    public event Action<int>? TeleportRequested;
     public event Action? TravelRequested;
     public event Action? ClearRequested;
     public event Action? CloseRequested;
     public bool IsOpen => Visible;
     internal string StatusForSelfTest => _status.Text;
     internal string MessageForSelfTest => _message.Text;
+    /// <summary>ARC-DEV-050: the area list and Teleport are shown (debug mode only).</summary>
+    internal bool DebugControlsShownForSelfTest => _areas.Visible && _teleport.Visible;
+    /// <summary>Selects an area in the list and presses Teleport, as a player does.</summary>
+    internal void TeleportForSelfTest(int area)
+    {
+        for (var i = 0; i < _areas.ItemCount; i++)
+            if ((int)_areas.GetItemMetadata(i) == area) { _areas.Select(i); break; }
+        _teleport.EmitSignal(BaseButton.SignalName.Pressed);
+    }
 
     public override void _Ready()
     {
@@ -44,7 +58,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
         });
         AddChild(_panel);
         var contents = new VBoxContainer(); _panel.AddChild(contents);
-        var header = new Label { Text = "World map", Modulate = new Color(.15f, .1f, .05f) };
+        _header = new Label { Text = "World map", Modulate = new Color(.15f, .1f, .05f) };
         var body = new HBoxContainer();
         _picture = new TextureRect
         {
@@ -63,16 +77,17 @@ public partial class AreaWorldMapPanel : CanvasLayer
         _travel = Plain("Travel", () => TravelRequested?.Invoke());
         _clear = Plain("Clear", () => ClearRequested?.Invoke());
         _close = Plain("Close", () => CloseRequested?.Invoke());
-        foreach (var button in new[] { _travel, _clear, _close }) buttons.AddChild(button);
+        _teleport = Plain("Teleport", () =>
+        {
+            if (_areas.GetSelectedItems() is { Length: > 0 } selected) TeleportRequested?.Invoke((int)_areas.GetItemMetadata(selected[0]));
+            else Render("select an area in the list to teleport to");
+        });
+        _teleport.Modulate = new Color(.6f, .1f, .05f);
+        foreach (var button in new[] { _travel, _clear, _teleport, _close }) buttons.AddChild(button);
         _status = new Label { Modulate = new Color(.15f, .1f, .05f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _message = new Label { Modulate = new Color(.35f, .05f, .05f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        var hint = new Label
-        {
-            Modulate = new Color(.3f, .3f, .3f), AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            Text = "Click the map or double-click an area to add a waypoint; Enter or confirm travels; W, Escape or cancel closes (during travel: lands " +
-                "where the journey stands) | PROJECT diagnostic panel: terrain picture, not the original's map art; area list for testing; parity NOT_VERIFIED",
-        };
-        foreach (var control in new Control[] { header, body, buttons, _status, _message, hint }) contents.AddChild(control);
+        _hint = new Label { Modulate = new Color(.3f, .3f, .3f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        foreach (var control in new Control[] { _header, body, buttons, _status, _message, _hint }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
@@ -90,9 +105,17 @@ public partial class AreaWorldMapPanel : CanvasLayer
         _panel.Position = new Vector2(Math.Max(0, (size.X - 800) / 2), Math.Max(0, (size.Y - 680) / 2));
     }
 
-    public void Open(AreaWorldMap map, Func<int, bool> known, Func<int, string> names)
+    /// <summary>Opens the view; ARC-DEV-050: <paramref name="debugMode"/> shows the area list and Teleport, otherwise hidden.</summary>
+    public void Open(AreaWorldMap map, Func<int, bool> known, Func<int, string> names, bool debugMode)
     {
-        _map = map; _known = known;
+        _map = map; _known = known; _debugMode = debugMode;
+        _areas.Visible = _teleport.Visible = debugMode;
+        _header.Text = debugMode ? "World map | DEBUG MODE: every area open to Teleport (not gameplay)" : "World map";
+        _header.Modulate = debugMode ? new Color(.6f, .1f, .05f) : new Color(.15f, .1f, .05f);
+        _hint.Text = (map.OnStartMap ? "Click the map to add a waypoint" + (debugMode ? " (or double-click an area)" : "") + "; Enter or confirm travels; " : "Not on the start map: no journey from here; ")
+            + "W, Escape or cancel closes (during travel: lands where the journey stands)"
+            + (debugMode ? "; Teleport moves to the selected area at once, with no game time and nothing discovered" : "")
+            + " | PROJECT diagnostic panel: terrain picture, not the original's map art; parity NOT_VERIFIED";
         var data = map.Data;
         _picture.Texture = ImageTexture.CreateFromImage(Image.CreateFromData(data.PictureSize, data.PictureSize, false, Image.Format.Rgba8, data.Picture));
         _areas.Clear();
@@ -104,7 +127,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
         Show(); Render(null);
     }
 
-    public void CloseView() { Hide(); _map = null; _known = null; }
+    public void CloseView() { Hide(); _map = null; _known = null; _debugMode = false; }
 
     /// <summary>Re-renders the marks, the area list's known marks, the buttons and the texts.</summary>
     public void Render(string? message)
@@ -116,13 +139,15 @@ public partial class AreaWorldMapPanel : CanvasLayer
             _areas.SetItemCustomFgColor(i, _known?.Invoke(area) == true ? new Color(.05f, .35f, .05f) : Colors.Black);
         }
         var (steps, hours) = map.Estimate();
-        _status.Text = map.Travelling
+        _status.Text = !map.OnStartMap ? "Not on the start map: teleport only"
+            : map.Travelling
             ? $"Travelling: step {map.Steps}, {map.GameMs / WorldJourney.MsPerSector} h so far, {map.Waypoints.Count} waypoint(s) left"
             : $"{map.Waypoints.Count} waypoint(s), {steps} sector step(s), about {hours} h"
                 + (map.Landing is { } landing ? $" | landed at ({landing.X},{landing.Y})" : "");
         _message.Text = message ?? "";
         _travel.Disabled = map.Travelling || map.Waypoints.Count == 0;
         _clear.Disabled = map.Travelling || map.Waypoints.Count == 0;
+        _teleport.Disabled = !_debugMode || map.Travelling;
         _overlay.QueueRedraw();
     }
 
@@ -131,7 +156,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
     private void PictureInput(InputEvent input)
     {
         // A double-click's second press would add a waypoint in the same sector again.
-        if (_map is null || input is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left, DoubleClick: false } click) return;
+        if (_map is not { OnStartMap: true } || input is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left, DoubleClick: false } click) return;
         var size = _picture.Size;
         if (size.X <= 0 || size.Y <= 0) return;
         var x = (int)(click.Position.X / size.X * _map.Data.PictureSize);
@@ -163,6 +188,8 @@ internal partial class AreaWorldMapOverlay : Control
             var known = Panel.Known?.Invoke(area) == true;
             DrawCircle(at, known ? 3.5f : 2f, known ? new Color(1, .85f, .1f) : new Color(.9f, .9f, .9f, .7f));
         }
+        // ARC-DEV-050: a debug-mode view off the start map has no position or route.
+        if (!map.OnStartMap) return;
         var route = map.RoutePixels();
         for (var i = 1; i < route.Count; i++) DrawLine(Panel.ToPicture(route[i - 1]), Panel.ToPicture(route[i]), new Color(.85f, .1f, .1f), 2);
         foreach (var waypoint in map.Waypoints)

@@ -27,12 +27,16 @@ public sealed record LauncherDisplay(LauncherWindowMode WindowMode, int Monitor,
 /// <summary>ARC-DEV-046: the launcher's settings (research ARC-RES-074, "Configuration file"), stored in <c>launcher_v1.json</c>:
 /// the game folder with its source and the identity it had when it was last checked (so a changed installation is noticed at
 /// start), whether the launcher shows at every start, the rule mode (alpha: the built-in Steamwoven and Original only; custom
-/// profiles are a later schema), and the display at start. Player preferences outside saves (FR-LIFECYCLE-004); the session
-/// never reads this file and no snapshot holds any of it.</summary>
+/// profiles are a later schema), the display at start and the debug mode (ARC-DEV-050). Player preferences outside saves
+/// (FR-LIFECYCLE-004); the session never reads this file and no snapshot holds any of it.</summary>
 public sealed record LauncherSettings(string? GameRoot, GameSource GameSource, GameFolderIdentity? GameIdentity, bool ShowAtStart,
     RuleMode Rules, LauncherDisplay Display)
 {
     public static readonly LauncherSettings Defaults = new(null, GameSource.Other, null, false, RuleMode.Steamwoven, LauncherDisplay.Default);
+
+    /// <summary>ARC-DEV-050: the debug mode (off by default): every world-map area listed and open to an instant teleport, a
+    /// development aid, never gameplay. Stored so that it stays on until it is turned off on the launcher screen.</summary>
+    public bool DebugMode { get; init; }
 
     /// <summary>These settings with <paramref name="check"/>'s ready folder, source and identity; a folder that is not ready throws.</summary>
     public LauncherSettings WithGameFolder(GameFolderCheck check)
@@ -64,8 +68,8 @@ public sealed record LauncherSettingsRead(LauncherSettingsReadStatus Status, Lau
 /// <summary>The text of <c>launcher_v1.json</c>: a JSON object with <c>schema</c> 1, <c>gameRoot</c> (a path or null),
 /// <c>gameSource</c> (<c>gog</c>, <c>other</c>), <c>gameIdentity</c> (null or <c>version</c>, <c>exeBytes</c>, <c>exeSha256</c>,
 /// <c>gog</c>, <c>archives</c>: <c>[{"name","bytes"}]</c> in mount order), <c>showAtStart</c>, <c>rules</c>
-/// (<c>{"active":"steamwoven"|"original"}</c>) and <c>display</c> (<c>window</c>: <c>windowed</c>/<c>fullscreen</c>, <c>monitor</c>,
-/// <c>uiScale</c>). <c>gameRoot</c> must be a full path of this system. Reading never throws: see <see cref="LauncherSettingsReadStatus"/>.</summary>
+/// (<c>{"active":"steamwoven"|"original"}</c>), <c>display</c> (<c>window</c>: <c>windowed</c>/<c>fullscreen</c>, <c>monitor</c>,
+/// <c>uiScale</c>) and <c>debugMode</c> (ARC-DEV-050; absent is off, so an older build's file reads as before). <c>gameRoot</c> must be a full path of this system. Reading never throws: see <see cref="LauncherSettingsReadStatus"/>.</summary>
 public static class LauncherSettingsCodec
 {
     public const int Schema = 1;
@@ -75,7 +79,7 @@ public static class LauncherSettingsCodec
     public const int MaxArchiveName = GameFolderLocator.MaxPathLength;
     public const int MaxVersionLength = GameFolderLocator.MaxVersionLength;
 
-    private static readonly string[] KnownKeys = ["schema", "gameRoot", "gameSource", "gameIdentity", "showAtStart", "rules", "display"];
+    private static readonly string[] KnownKeys = ["schema", "gameRoot", "gameSource", "gameIdentity", "showAtStart", "rules", "display", "debugMode"];
     private static readonly string[] DisplayKeys = ["window", "monitor", "uiScale"];
 
     public static LauncherSettingsRead Deserialize(string? json)
@@ -112,6 +116,11 @@ public static class LauncherSettingsCodec
             {
                 if (Boolean(show) is { } value) settings = settings with { ShowAtStart = value };
                 else defaulted.Add("showAtStart");
+            }
+            if (root.TryGetPropertyValue("debugMode", out var debug))
+            {
+                if (Boolean(debug) is { } value) settings = settings with { DebugMode = value };
+                else defaulted.Add("debugMode");
             }
             var unknownRules = new JsonObject();
             if (root.TryGetPropertyValue("rules", out var rules))
@@ -178,6 +187,7 @@ public static class LauncherSettingsCodec
                 ["monitor"] = settings.Display.Monitor,
                 ["uiScale"] = settings.Display.UiScalePercent,
             },
+            ["debugMode"] = settings.DebugMode,
         };
         if (kept?["display"] is JsonObject unknownDisplay)
             foreach (var property in unknownDisplay) root["display"]![property.Key] = property.Value?.DeepClone();

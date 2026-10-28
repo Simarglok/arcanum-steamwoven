@@ -32,6 +32,8 @@ public partial class TerrainViewerApp
             var session = _areaSession!;
             InventoryKey(Key.W);
             Require(WorldMapOpen && WorldModal && _worldMap is not null, "W opened the world map: " + _worldMapStatus);
+            // ARC-DEV-050: the area list and Teleport exist only in debug mode.
+            Require(_worldMapPanel!.DebugControlsShownForSelfTest == DebugMode, $"area list and teleport shown={_worldMapPanel.DebugControlsShownForSelfTest} debugMode={DebugMode}");
             var map = _worldMap!;
             var here = WorldTravelGeometry.Location(map.Position, data.Width);
             var byDistance = Enumerable.Range(1, data.TravelAreas.Count - 1)

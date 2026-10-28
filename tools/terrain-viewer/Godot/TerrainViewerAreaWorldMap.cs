@@ -16,6 +16,9 @@ namespace Arcanum.TerrainViewer;
 // following companions carried. The panel refuses on another map, in combat mode, with a transfer pending and without the data.
 // When the landing load fails, the start map reloads where the PC stood, with the journey's hours and discoveries kept. Not
 // modelled: travel music, hiding the party, encounters, town maps (whose sectors the original keeps off the walkable world map).
+// ARC-DEV-050: in debug mode (ViewerDebugMode) W opens on any map; the panel lists every area and Teleport lands the PC at the
+// chosen area's location on the start map at once (a load as the journey's landing, from another map a transfer to the start
+// map), with no game time and no discovered area. Without the debug mode there is no area list and no teleport.
 public partial class TerrainViewerApp
 {
     private AreaWorldMapPanel? _worldMapPanel;
@@ -54,7 +57,7 @@ public partial class TerrainViewerApp
         if (!WorldMapActive || WorldMapOpen) return;
         AdoptWorldMapData();
         string? refused = _worldMapData is not { Data: { } data } ? $"world-map data {(_worldMapData is null ? "loading" : _worldMapData.Status.ToString())}"
-            : _readyArea!.Snapshot.RuntimeMap != data.StartRuntime ? $"only on the start map ({data.StartMap})"
+            : _readyArea!.Snapshot.RuntimeMap != data.StartRuntime && !DebugMode ? $"only on the start map ({data.StartMap})"
             : HeroInCombatMode ? "leave combat mode first"
             : AreaTransferPending ? "a transfer is pending"
             : _worldActor.Session is not AreaGridSession { State.Phase: Arcanum.Simulation.Movement.MovementPhase.Settled } ? "the actor is moving"
@@ -68,7 +71,9 @@ public partial class TerrainViewerApp
         }
         var session = (AreaGridSession)_worldActor.Session!;
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
-        _worldMap = new AreaWorldMap(_worldMapData!.Data!, _areaSession!, new(cell.X, cell.Y));
+        // ARC-DEV-050: off the start map (debug mode only) the view has no position and only teleports.
+        var onStart = _readyArea!.Snapshot.RuntimeMap == _worldMapData!.Data!.StartRuntime;
+        _worldMap = new AreaWorldMap(_worldMapData.Data, _areaSession!, onStart ? new(cell.X, cell.Y) : null);
         if (_worldMapPanel is null)
         {
             _worldMapPanel = new AreaWorldMapPanel(); AddChild(_worldMapPanel);
@@ -77,13 +82,15 @@ public partial class TerrainViewerApp
             _worldMapPanel.TravelRequested += StartWorldMapTravel;
             _worldMapPanel.ClearRequested += () => { if (_worldMap?.Clear() == true) RenderWorldMap(null); };
             _worldMapPanel.CloseRequested += CloseWorldMapByPlayer;
+            _worldMapPanel.TeleportRequested += TeleportWorldMap;
         }
         StopWorldRoute("ROUTE_STOPPED_BY_WORLD_MAP");
         QuarantineWorld(); _quickKeys.Reset();
         var names = _worldMapData.Data!.Areas.Areas;
-        _worldMapPanel.Open(_worldMap, _areaSession!.IsAreaKnown, area => names[area].Name);
+        _worldMapPanel.Open(_worldMap, _areaSession!.IsAreaKnown, area => names[area].Name, DebugMode);
         _worldMapStatus = null; _worldMapMessage = null; _worldMapStepMs = 0;
-        GD.Print($"ARC-UI-048 world map open position=({_worldMap.Position.X},{_worldMap.Position.Y}) known={_areaSession.QueryKnownAreas().Count} rules={_areaSession.Rules.Travel.Name}");
+        GD.Print($"ARC-UI-048 world map open position=({_worldMap.Position.X},{_worldMap.Position.Y}) onStartMap={onStart} debugMode={DebugMode} "
+                 + $"known={_areaSession.QueryKnownAreas().Count} rules={_areaSession.Rules.Travel.Name}");
         RefreshReadyStatus();
     }
 
@@ -97,6 +104,7 @@ public partial class TerrainViewerApp
             AreaWorldMapRefusal.NoRoute => "no route there (the original's message 601): add waypoints around mountains or water",
             AreaWorldMapRefusal.TooMany => "at most 30 waypoints",
             AreaWorldMapRefusal.Travelling => "travelling: waypoints are set before the journey",
+            AreaWorldMapRefusal.NotOnStartMap => "not on the start map: no journey from here (teleport only)",
             _ => "off the map",
         };
         GD.Print($"ARC-UI-048 waypoint {what} refusal={refusal} waypoints={_worldMap.Waypoints.Count}");
@@ -110,7 +118,12 @@ public partial class TerrainViewerApp
         var (steps, hours) = _worldMap.Estimate();
         GD.Print($"ARC-UI-048 travel start refusal={refusal} steps={steps} hours={hours}");
         _worldMapStepMs = 0;
-        RenderWorldMap(refusal == AreaWorldMapRefusal.None ? null : "nothing to travel to: add a waypoint");
+        RenderWorldMap(refusal switch
+        {
+            AreaWorldMapRefusal.None => null,
+            AreaWorldMapRefusal.NotOnStartMap => "not on the start map: no journey from here (teleport only)",
+            _ => "nothing to travel to: add a waypoint",
+        });
     }
 
     private void RenderWorldMap(string? message)
@@ -151,17 +164,38 @@ public partial class TerrainViewerApp
         }
     }
 
-    /// <summary>The panel closes and the start map loads around the landing location, as a transfer to it does.</summary>
-    private void LandWorldMap(TravelLocation landing, string why)
+    /// <summary>ARC-DEV-050, debug mode only: Teleport on the selected area lands the PC at its location at once.</summary>
+    private void TeleportWorldMap(int area)
+    {
+        if (!DebugMode || !WorldMapOpen || _worldMap is not { } map) return;
+        var refusal = map.Teleport(area, out var landing);
+        GD.Print($"ARC-DEV-050 debug teleport area={area} refusal={refusal} landing=({landing.X},{landing.Y}) from map={CurrentAreaMap}");
+        if (refusal != AreaWorldMapRefusal.None)
+        {
+            RenderWorldMap(refusal == AreaWorldMapRefusal.Travelling ? "travelling: teleport before the journey" : $"area {area} has no location on the map");
+            return;
+        }
+        LandWorldMap(landing, $"debug teleport to area {area}", teleport: true);
+    }
+
+    /// <summary>The panel closes and the start map loads around the landing location, as a transfer to it does. ARC-DEV-050: a
+    /// debug teleport may start on another map (a transfer to the start map), and it opens at the landing's sector, so the PC
+    /// stands on the walkable tile nearest to it when the location itself is not walkable.</summary>
+    private void LandWorldMap(TravelLocation landing, string why, bool teleport = false)
     {
         var steps = _worldMap?.Steps ?? 0; var hours = (_worldMap?.GameMs ?? 0) / WorldJourney.MsPerSector;
+        var onStart = _worldMap?.OnStartMap != false;
+        var startMap = _worldMapData?.Data?.StartMap;
         EndWorldMap();
         if (_worldActor.Session is not AreaGridSession session || _arguments is null || _readyMapName is null) return;
+        var target = onStart ? _readyMapName : startMap;
+        if (target is null) return;
         LeaveCombatModeForMapChange();
         var origin = _arguments;
-        _mapHandoff = new(_areaSession, CurrentAreaMap, _readyMapName, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell),
-            _readyMapName, Companions: LeavingCompanions());
-        var next = origin with { AreaMapArrival = new(landing.X, landing.Y), AreaMapSector = null };
+        _mapHandoff = new(_areaSession, CurrentAreaMap, target, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell),
+            target, Companions: LeavingCompanions());
+        var next = origin with { AreaMapName = target, AreaMapArrival = new(landing.X, landing.Y),
+            AreaMapSector = teleport ? new Arcanum.Data.Area.AreaSectorCoordinate(landing.X >> 6, landing.Y >> 6) : null };
         _worldMapStatus = $"{why} after {steps} step(s), {hours} h: landing at ({landing.X},{landing.Y})";
         GD.Print("ARC-UI-048 landing " + System.Text.Json.JsonSerializer.Serialize(new { Why = why, landing.X, landing.Y, Steps = steps, Hours = hours,
             Known = _areaSession?.QueryKnownAreas().ToArray() }));
@@ -212,5 +246,5 @@ public partial class TerrainViewerApp
     }
 
     private string AreaWorldMapStatus() => !WorldMapActive ? "" : WorldMapOpen ? " | world map open: W or Escape closes"
-        : " | W world map" + (_worldMapStatus is null ? "" : ": " + _worldMapStatus);
+        : " | W world map" + (DebugMode ? " (DEBUG MODE: teleport)" : "") + (_worldMapStatus is null ? "" : ": " + _worldMapStatus);
 }

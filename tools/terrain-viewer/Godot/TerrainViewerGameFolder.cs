@@ -121,6 +121,7 @@ public partial class TerrainViewerApp
             });
             _launcherPanel.RulesRequested += mode => LauncherChange(launcher => launcher.SelectRules(mode));
             _launcherPanel.ShowAtStartRequested += show => LauncherChange(launcher => launcher.SetShowAtStart(show));
+            _launcherPanel.DebugModeRequested += on => LauncherChange(launcher => launcher.SetDebugMode(on));
             _launcherPanel.PlayRequested += LauncherPlay;
             _launcherPanel.ResetRequested += () => LauncherChange(LauncherReset);
             _launcherPanel.QuitRequested += () => { GD.Print("ARC-UI-014 launcher quit"); GetTree().Quit(); };
@@ -154,7 +155,7 @@ public partial class TerrainViewerApp
         var saved = path is null ? null : (LauncherSettingsSaveStatus?)LauncherSettingsFile.Save(path, settings);
         // A refused or failed save does not stop the start: the chosen folder and rules apply to it.
         GD.Print($"ARC-UI-014 launcher play folder={settings.GameRoot} rules={RuleModeNames.Name(settings.Rules)} showAtStart={settings.ShowAtStart} "
-                 + $"save={saved?.ToString() ?? "skipped (automated run)"}");
+                 + $"debugMode={settings.DebugMode} save={saved?.ToString() ?? "skipped (automated run)"}");
         _launcherSettings = settings;
         var folder = launcher.Folder!;
         _launcher = null;
@@ -165,6 +166,8 @@ public partial class TerrainViewerApp
     /// <summary>The map-mode start over a ready folder (the launcher's Play, or a start the screen does not show for).</summary>
     private void StartFromLauncher(GameFolderCheck folder)
     {
+        // ARC-DEV-050: the stored debug mode joins a --debug-mode flag; neither turns the other off.
+        if (_launcherSettings.DebugMode) EnableDebugMode("launcher settings");
         var arguments = TerrainViewerArguments.ForGameFolder(folder.Inputs!);
         if (_launcherStartForSelfTest is { } stand) { stand(arguments); return; }
         try { StartWithArguments(arguments); }
