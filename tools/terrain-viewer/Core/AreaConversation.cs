@@ -435,7 +435,7 @@ public sealed class AreaConversationHost
         return new SessionDialogPartyPort(_session, AreaConversationState.PcParticipant,
             participant => participant == npc ? entity : null,
             participant => participant == npc ? AreaCompanionRoster.Facts(facts, State.Alignment, State.Reaction(speaker.Index),
-                AreaAdvancement.Level(_session, entity, facts.Level)) : null);
+                AreaAdvancement.Level(_session, entity, facts.Level), _session.QueryHeroPartySide()) : null);
     }
 
     // ARC-WORLD-048: a visitor whose home map's seed is not attached refuses negative IN instead of recording it only.
@@ -566,8 +566,11 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     public SessionStoryState Story => _session.QueryStory();
     public IReadOnlySet<int> Areas => _areas;
     public IReadOnlyList<int> Items => _items;
-    /// <summary>PC alignment, starting at 0 in this diagnostic profile; not session state.</summary>
-    public int Alignment { get; private set; }
+    // The diagnostic PC's alignment without a session hero (starts at 0, not session state).
+    private int _diagnosticAlignment;
+
+    /// <summary>PC alignment: the session hero's stored alignment (ARC-WORLD-067), else the diagnostic PC's, starting at 0.</summary>
+    public int Alignment => _session.QueryHero()?.Alignment ?? _diagnosticAlignment;
     public bool Follows(int speaker) => _party.Contains(speaker)
         ? _session.QueryCompanion(_entities[speaker]).LedByPc : Read(speaker, FollowProperty) == 1;
     public bool LocalFlag(int speaker, int bit) => (LocalFlags(speaker) & (1u << bit)) != 0;
@@ -684,13 +687,19 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     public DialogCommandResult Execute(GiveItemCommand command) { _items.Add(command.ItemName); return DialogCommandResult.Applied; }
     public DialogCommandResult Execute(MarkAreaCommand command) { _areas.Add(command.Area); return DialogCommandResult.Applied; }
 
-    /// <summary>AL: the diagnostic PC alignment; since ARC-WORLD-045 a change arms the session followers' loyalty marks (OL17)
-    /// first, and a refusal there leaves the alignment as it was.</summary>
+    /// <summary>AL: with a session hero its stored alignment changes (clamped to −1000..1000) and the followers are armed in one
+    /// revision (ARC-WORLD-067, <see cref="GameSessionOwner.ChangeHeroAlignment"/>); without one the diagnostic PC's alignment changes
+    /// after the followers are armed (ARC-WORLD-045, OL17). A refusal leaves the alignment as it was.</summary>
     public DialogCommandResult Execute(AlignmentCommand command)
     {
-        var next = command.Mode == DialogReactionMode.Target ? command.Value : checked(Alignment + command.Value);
-        if (_session.RecordPcAlignmentChange(_session.Version, Alignment, next).Disposition == GameSessionDisposition.Rejected) return DialogCommandResult.Rejected;
-        Alignment = next;
+        long next = command.Mode == DialogReactionMode.Target ? command.Value : (long)Alignment + command.Value;
+        if (_session.QueryHero() is not null)
+            return _session.ChangeHeroAlignment(_session.Version, next).Disposition == GameSessionDisposition.Rejected
+                ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
+        if (next is < int.MinValue or > int.MaxValue) return DialogCommandResult.Rejected;
+        var value = (int)next;
+        if (_session.RecordPcAlignmentChange(_session.Version, Alignment, value).Disposition == GameSessionDisposition.Rejected) return DialogCommandResult.Rejected;
+        _diagnosticAlignment = value;
         return DialogCommandResult.Applied;
     }
 

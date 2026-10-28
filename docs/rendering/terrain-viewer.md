@@ -1004,9 +1004,9 @@ crash-site-area (exterior, cave and `--area-map`). It shows what the original sh
 - level, experience still needed for the next level (`last level` at 51; `next level unknown` without experience data),
   unspent points, and the experience itself (a project addition: the original sheet does not print it);
 - the hero's stored alignment divided by ten (truncated toward zero), the magick/tech aptitude split into a magick and a
-  tech value (a positive aptitude is magick, a negative one tech, the other side 0). **Partial:** a dialog's `AL` action
-  still writes the conversation host's own alignment value, not the session hero's, so the sheet does not follow it; the
-  aptitude has no sector adjustment (not modelled);
+  tech value (a positive aptitude is magick, a negative one tech, the other side 0); a dialog's `AL` action writes the
+  hero's alignment since ARC-WORLD-067, so the sheet follows it. **Partial:** the aptitude has no sector adjustment (not
+  modelled);
 - hit points and fatigue against their maxima;
 - the eight primary stats at their effective value, in the sheet's order, marked "raised by effects" or "lowered by
   effects" when the base value adjusted by the effects that are not innate (race, background, class, gender) differs

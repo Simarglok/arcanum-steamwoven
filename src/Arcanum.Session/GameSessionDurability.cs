@@ -217,8 +217,11 @@ public sealed partial class GameSessionOwner
         _inventory.Made.RemoveAll(item => item.Entity == entity);
         _inventory.Placed.RemoveAll(item => item.Entity == entity);
         _inventory.RemoveFromNpc(entity);
-        // ARC-WORLD-066: a deleted ammunition stack is gone with its units.
+        // ARC-WORLD-066: a deleted ammunition stack is gone with its units; ARC-WORLD-071: a gold pile with its coins, a given item with
+        // its origin.
         _inventory.Ammo.Remove(entity);
+        _inventory.Piles.Remove(entity);
+        _inventory.Given.Remove(entity);
         // Taken hides an item from every seed view and from pickup and loot.
         _inventory.Taken.Add(entity);
         _durability.Records.Remove(entity);

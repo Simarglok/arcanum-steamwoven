@@ -95,6 +95,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Reading window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-049, ARC-SCRIPT-020, ARC-TECHNOLOGY-009 |
 | NPC inventory changes | [Items and inventory](status/items.md) | ARC-WORLD-055, ARC-TECHNOLOGY-006 |
 | Ammunition | [Items and inventory](status/items.md) | ARC-WORLD-066, ARC-TECHNOLOGY-009, ARC-TECHNOLOGY-007 |
+| NPC gold and transfers | [Items and inventory](status/items.md) | ARC-WORLD-071 |
 | Backgrounds | [Game session and character](status/session.md) | ARC-WORLD-069 |
 | Starting hero | [Game session and character](status/session.md) | ARC-RES-027, ARC-WORLD-027, ARC-DATA-026 |
 | Skill check | [Skills](status/skills.md) | ARC-SKILLS-003, ARC-SKILLS-005, ARC-SKILLS-006 |

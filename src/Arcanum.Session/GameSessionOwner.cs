@@ -718,7 +718,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var current = _party.Get(entity);
         if (current.Standing == CompanionStanding.Free) return NoChange();
-        if (!leave.Force && !FollowConsentRules.MayLeaveUnforced(leave.LeaderCharisma, leave.MindControlled))
+        // ARC-WORLD-067: with a hero the leader's charisma is the hero's effective charisma.
+        if (!leave.Force && !FollowConsentRules.MayLeaveUnforced(HeroPartySide()?.Charisma ?? leave.LeaderCharisma, leave.MindControlled))
             return Reject(GameSessionFailure.LeaveRefused);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The NPC already has a record, so a flagged free record needs no new budget.
@@ -758,8 +759,11 @@ public sealed partial class GameSessionOwner : IDisposable
         ThrowIfDisposed();
         if (!SessionValidation.Map(map)) return Reject(GameSessionFailure.InvalidMap);
         if (InventoryDomain.Validate(seed) is not { } admitted) return Reject(GameSessionFailure.InvalidInventorySeed);
+        // ARC-WORLD-071: a taken item the hero gave an NPC keeps its origin map, with the kind its NPC entry holds.
         foreach (var item in _inventory.Pc.Select(pc => (pc.Entity, pc.Origin, pc.Kind))
-                     .Concat(_inventory.Placed.Where(p => p.Origin is not null).Select(p => (p.Entity, Origin: p.Origin!.Value, p.Kind))))
+                     .Concat(_inventory.Placed.Where(p => p.Origin is not null).Select(p => (p.Entity, Origin: p.Origin!.Value, p.Kind)))
+                     .Concat(_inventory.Given.Values.Where(g => g.Origin is not null)
+                         .Select(g => (g.Entity, Origin: g.Origin!.Value, _inventory.AddedTo(_inventory.NpcOf(g.Entity)!).First(e => e.Entity == g.Entity).Kind))))
         {
             var listed = admitted.Items.TryGetValue(item.Entity, out var row);
             if (item.Origin == map ? !listed || row!.Facts.Kind != item.Kind : listed) return Reject(GameSessionFailure.InventoryMismatch);
@@ -767,6 +771,9 @@ public sealed partial class GameSessionOwner : IDisposable
         // Kit and made items came from no map, so no seed may list them; the made: prefix is the session's own.
         if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity)) ||
             _inventory.Placed.Any(item => item.Origin is null && admitted.Items.ContainsKey(item.Entity)) ||
+            _inventory.Given.Values.Any(item => item.Origin is null && admitted.Items.ContainsKey(item.Entity)) ||
+            // ARC-WORLD-071: a tracked pile the seed lists is a gold pile.
+            _inventory.Piles.Keys.Any(entity => admitted.Items.TryGetValue(entity, out var listed) && listed.Facts.Kind.Type != SessionItemType.Gold) ||
             admitted.Items.Keys.Any(entity => entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)))
             return Reject(GameSessionFailure.InventoryMismatch);
         // ARC-WORLD-055: a holder that holds added items is an NPC, not a container, and its seed items and added items fit one list.
@@ -1384,24 +1391,15 @@ public sealed partial class GameSessionOwner : IDisposable
         return GameSessionFailure.None;
     }
 
-    // With a hero the session owns the PC's side of the check (ARC-SKILLS-002): its persuasion training, effective charisma and
-    // level, and the max followers they give with the hero's effects on that stat (ledger AP4: charisma / 4, +1 from expert
-    // persuasion, then the effects, clamped to 1..7); the caller's values stand in only without a hero. The alignment stays the
-    // caller's: the conversation host tracks the alignment its dialog actions change.
+    // With a hero the session owns the PC's side of the check (ARC-SKILLS-002, ARC-WORLD-067, HeroPartySide): its persuasion training,
+    // effective charisma, level and alignment (dialog alignment changes write it, ChangeHeroAlignment), and the max followers they
+    // give; the caller's values stand in only without a hero.
     private FollowConsent Consent(PartyConsentFacts facts, bool forcedFollower, bool ignoreLimit)
     {
-        var (persuasion, charisma, level, maxFollowers) = (facts.PcPersuasion, facts.PcCharisma, facts.PcLevel, facts.MaxFollowers);
-        if (_hero is { } hero)
-        {
-            persuasion = HeroPersuasion();
-            var snapshot = hero.Stats.Query(new(0)).Snapshot!;
-            charisma = snapshot.GetEffective(CharacterStat.Charisma);
-            level = hero.State.Level;
-            var unclamped = charisma / 4 + (persuasion >= PersuasionTraining.Expert ? 1 : 0);
-            maxFollowers = Math.Clamp(CharacterStatRules.ApplyModifiers(CharacterStat.MaxFollowers, unclamped, snapshot.AppliedEffects),
-                FollowConsentRules.MinMaxFollowers, FollowConsentRules.MaxMaxFollowers);
-        }
-        return FollowConsentRules.Evaluate(new(facts.MindControlledByPc, persuasion, charisma, facts.PcAlignment, level,
+        var (persuasion, charisma, alignment, level, maxFollowers) = HeroPartySide() is { } pc
+            ? (pc.Persuasion, pc.Charisma, pc.Alignment, pc.Level, pc.MaxFollowers)
+            : (facts.PcPersuasion, facts.PcCharisma, facts.PcAlignment, facts.PcLevel, facts.MaxFollowers);
+        return FollowConsentRules.Evaluate(new(facts.MindControlledByPc, persuasion, charisma, alignment, level,
             facts.OtherLeaderCharisma, forcedFollower, facts.Reaction, facts.Thresholds, facts.NpcAlignment, facts.NpcLevel, maxFollowers,
             _party.NonForcedFollowers, ignoreLimit));
     }
@@ -1611,9 +1609,10 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         else if (npc is not null)
         {
-            // A made item keeps its entity and kind: it leaves the NPC's added items and joins the hero's made items.
+            // A made item keeps its entity and kind: it leaves the NPC's added items and joins the hero's made items; ARC-WORLD-071: a kit
+            // or taken item the hero gave the NPC returns to the list it came from.
             _inventory.RemoveFromNpc(item.Entity);
-            _inventory.Add(new SessionMadeItem(item.Entity, facts.Kind));
+            _inventory.ReturnGiven(item.Entity, facts.Kind);
         }
         else _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
         if (into is null && ammo is { } added) _inventory.Ammo[item.Entity] = added;
@@ -1740,12 +1739,15 @@ public sealed partial class GameSessionOwner : IDisposable
         if (saved.Kit.Count + saved.Pc.Count + saved.Made.Count + saved.Placed.Count > limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
         // Kit items are kit:1, kit:2, … in order; a deleted one (ARC-WORLD-053) or one placed on the ground (ARC-WORLD-059) leaves
         // its number out.
-        var placedKit = saved.Placed.Where(item => item?.Source == SessionPlacedSource.Kit).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        // ARC-WORLD-071: a kit item the hero gave an NPC leaves its number out too.
+        var placedKit = saved.Placed.Where(item => item?.Source == SessionPlacedSource.Kit).Select(item => item.Entity)
+            .Concat(saved.Given.Where(item => item.Origin is null && HeroDomain.KitNumber(item.Entity) is not null).Select(item => item.Entity))
+            .ToHashSet(StringComparer.Ordinal);
         var next = 0;
         foreach (var item in saved.Kit)
         {
             if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.KitAdmitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
-            while (next < limits.MaxPcItems + destroyed.Count &&
+            while (next < limits.MaxPcItems + destroyed.Count + placedKit.Count &&
                 (destroyed.Contains(HeroDomain.KitEntity(next)) || placedKit.Contains(HeroDomain.KitEntity(next)))) next++;
             if (item.Entity != HeroDomain.KitEntity(next++)) return GameSessionFailure.InvalidSnapshot;
             inventory.Add(item);
@@ -1767,8 +1769,33 @@ public sealed partial class GameSessionOwner : IDisposable
                 return GameSessionFailure.InvalidSnapshot;
             inventory.Add(item);
         }
+        // ARC-WORLD-071: the given items by entity: a kit item only with a hero and within the kit's numbers (checked below), a taken item
+        // with a valid origin map; the gold piles by entity, 1 or more coins, not deleted.
+        if (saved.Given.Count > limits.MaxNpcItems || saved.Piles.Count > limits.MaxGoldRecords) return GameSessionFailure.BudgetExceeded;
+        string? lastGiven = null;
+        foreach (var item in saved.Given)
+        {
+            if (!SessionValidation.Entity(item.Entity) || lastGiven is not null && string.CompareOrdinal(lastGiven, item.Entity) >= 0 || destroyed.Contains(item.Entity))
+                return GameSessionFailure.InvalidSnapshot;
+            lastGiven = item.Entity;
+            var fits = item.Origin is { } origin
+                ? SessionValidation.Map(origin) && HeroDomain.KitNumber(item.Entity) is null && !item.Entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)
+                : hero && HeroDomain.KitNumber(item.Entity) is not null;
+            if (!fits) return GameSessionFailure.InvalidSnapshot;
+            inventory.Given[item.Entity] = item;
+        }
+        string? lastPile = null;
+        foreach (var pile in saved.Piles)
+        {
+            // A move that empties a pile destroys it, so a tracked pile holds a coin or more.
+            if (!SessionValidation.Entity(pile.Entity) || lastPile is not null && string.CompareOrdinal(lastPile, pile.Entity) >= 0 || pile.Quantity < 1 ||
+                destroyed.Contains(pile.Entity)) return GameSessionFailure.InvalidSnapshot;
+            lastPile = pile.Entity;
+            inventory.Piles[pile.Entity] = pile.Quantity;
+        }
         // ARC-WORLD-055: the made items added to NPCs, by NPC entity in ordinal order, each list non-empty and within one list's bound;
-        // the same item rules as the hero's made items, and no item held twice.
+        // the same item rules as the hero's made items, and no item held twice. ARC-WORLD-071: an entry may also be a given item (its
+        // record above) or a made gold pile (with its pile record).
         if (saved.Npcs.Sum(npc => (long)(npc.Items?.Count ?? 0)) > limits.MaxNpcItems) return GameSessionFailure.BudgetExceeded;
         string? previous = null;
         foreach (var npc in saved.Npcs)
@@ -1779,8 +1806,13 @@ public sealed partial class GameSessionOwner : IDisposable
             previous = npc.Npc;
             foreach (var item in npc.Items)
             {
-                if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
-                if (SessionMadeItem.Number(item.Entity) is null || destroyed.Contains(item.Entity) || inventory.Taken.Contains(item.Entity))
+                // A gold item is only a made pile with its record.
+                var pile = item.Kind.Type == SessionItemType.Gold && inventory.Piles.ContainsKey(item.Entity);
+                if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type) && !pile) return GameSessionFailure.InvalidItem;
+                var given = inventory.Given.ContainsKey(item.Entity);
+                if ((SessionMadeItem.Number(item.Entity) is null) != given || pile && given ||
+                    given && !InventoryDomain.KitAdmitted(item.Kind.Type) && HeroDomain.KitNumber(item.Entity) is not null ||
+                    destroyed.Contains(item.Entity) || inventory.Taken.Contains(item.Entity))
                     return GameSessionFailure.InvalidSnapshot;
                 inventory.AddToNpc(npc.Npc, item);
                 inventory.Taken.Add(item.Entity);
@@ -1808,6 +1840,14 @@ public sealed partial class GameSessionOwner : IDisposable
             inventory.Placed.Add(item);
             inventory.Taken.Add(item.Entity);
         }
+        // ARC-WORLD-071: every given item is in an NPC's list, and a given kit item lies within the kit's numbers; a pile record names no
+        // item of the hero's (a seed pile, or a made pile in an NPC's list).
+        foreach (var item in inventory.Given.Values)
+            if (inventory.NpcOf(item.Entity) is null || item.Origin is null && HeroDomain.KitNumber(item.Entity) > kitNumbers) return GameSessionFailure.InvalidSnapshot;
+        foreach (var entity in inventory.Piles.Keys)
+            if (SessionMadeItem.Number(entity) is not null && inventory.NpcOf(entity) is null || inventory.Kit.Exists(item => item.Entity == entity) || inventory.Pc.Exists(item => item.Entity == entity) || inventory.Made.Exists(item => item.Entity == entity) ||
+                inventory.PlacedItem(entity) is not null || inventory.NpcOf(entity) is { } holder && inventory.AddedTo(holder).First(item => item.Entity == entity).Kind.Type != SessionItemType.Gold)
+                return GameSessionFailure.InvalidSnapshot;
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.
         foreach (var entity in destroyed) inventory.Taken.Add(entity);
         // ARC-WORLD-066: the ammunition stacks by entity in ordinal order, within the budget, each of a type 0..3 with 0 or more units and

@@ -463,12 +463,54 @@ rings stay out. Code: [`GameSessionAmmo`](../../src/Arcanum.Session/GameSessionA
   `made:n` stack only when it holds none; a unit the insert check refuses is a stack of its own on the crafter's tile
   (ARC-WORLD-070). The installed recipes use it: four make ammunition (cells ×5 and ×1, bullets ×2, the fourth
   type ×5) and three take one unit of ammunition as a component. The NPC crafter does the same in its list.
-- **Not modelled.** Gold (the AMA5 fix will apply to its container lookup too); transfers of units between holders (AM4's destination); the critter field and its
+- **Not modelled.** Gold in containers (the AMA5 fix will apply to its container lookup too); transfers of units between the hero and an NPC are
+  ARC-WORLD-071's ([NPC gold and transfers](#npc-gold-and-transfers-arc-world-071)), other holders' are not modelled; the critter field and its
   clearing (AM5: the session finds a holder's stack by type); the weight of a stack (the host's insert check). Since ARC-COMBAT-012 the hero's
   attacks spend a shot's ammunition through `SpendAmmo` with the weapon's ammunition type and per-shot count, hit or miss, and a
   short stack refuses the attack after the hit location ([hero attack](hero-attack-runtime.md#reach-and-line-of-fire-arc-combat-012));
   the critical misses that take the
   whole stack or five shots' worth do since ARC-COMBAT-013 ([hero attack](hero-attack-runtime.md#critical-effects-arc-combat-009)).
+
+## NPC gold and transfers (ARC-WORLD-071)
+
+NPC gold as counted piles and the moves between the hero and an NPC that pick pocket (task S15 of the
+[skills plan](../research/skills-plan.md)) and the barter window (ARC-UI-050) share, read in the executable
+([ledger NT1–NT4](../research/ledger/items.md#npc-gold-and-transfers-arc-world-071), with AM1–AM5). No prices and no skill:
+the caller decides how many coins or units move. Code: [`GameSessionNpcTransfer`](../../src/Arcanum.Session/GameSessionNpcTransfer.cs);
+tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferStateTests.cs). Snapshot schema 39.
+
+- **Gold (NT1).** An NPC's gold is its first gold pile in list order (its seed piles still in its list, then the piles the session added):
+  `QueryNpcGold(npc)` gives its coins (the seed's `Quantity`, or the tracked count), 0 without a pile, null for an NPC the session does not
+  know; a second pile (a made pile added while a seed with its own pile was not attached) is not counted until the first is gone. `TakeGoldFromNpc(expected, npc, count)` moves coins to the hero's gold: fewer coins refuse with nothing changed (`GoldShort`),
+  exactly the count destroys the pile (the durability deletion), more leave the rest. `GiveGoldToNpc(expected, npc, count, pileKind,
+  insertCheck)` moves the hero's coins to the NPC: its pile grows with no insert check; without one a new `made:n` pile of `pileKind` (the
+  gold prototype 9056, the host's) enters the end of its list after the host's insert check. Gold needs a hero (`GoldUnavailable`); a pile
+  with an insert-item script refuses (the original fires that event on the source pile first; not run here). The map views show a tracked
+  pile's coins.
+- **Items (NT2, NT3).** `GiveItemToNpc(expected, npc, item, insertCheck)` moves one of the hero's items (its kit, a taken or a made item;
+  not a placed one) to the end of the NPC's list after the host's insert check for the NPC: a worn item leaves its slot, ammunition merges
+  into the NPC's first stack of its prototype. A kit or taken item is recorded as given (`QueryGivenItems`, with a taken item's origin
+  map); `QueryNpcInventory` still lists only made items. `TakeItemFromNpc(expected, npc, item, insertCheck, scripts)` takes an item of an
+  NPC's current list in the actor's map seed (alive or not; life is the caller's concern) under the item rules of `LootItem` (insert check, Technophobia, insert-item script,
+  ammunition merge), without its dead-holder and use-script conditions; a given kit item returns to the kit at its number's place, a given
+  taken item to the taken items with its origin. Gold is `TakeGoldFromNpc`'s (`ItemTypeUnsupported`). An NPC with a transfer script (point
+  32) refuses a given item and a new pile or stack moved into it (`HolderScriptUnsupported`; an existing pile or stack grows without it, NT1), as does a taken item whose origin seed shows a remove-item, insert-item or (worn)
+  wield-off script (`ItemScriptUnsupported`).
+- **Ammunition units (AM4).** `TakeAmmoFromNpc` and `GiveAmmoToNpc(expected, npc, stack, count, newStackKind, insertCheck)` move units of
+  one named stack: fewer units refuse (`AmmoShort`), exactly the count deletes the source stack (a deletion, so a seed stack's remove-item
+  script does not run or refuse, as for an emptied pile), more leave the rest; the destination's
+  first stack of the same type grows with no insert check, or a new `made:n` stack of `newStackKind` (the type's base prototype, the
+  host's) enters its list after its insert check (the hero's with the Technophobia refusal, no complexity).
+- **State.** The inventory section's `given` list (kit or taken items in NPCs' lists, by entity, origin 0 for a kit item) and `piles` list
+  (tracked coins of seed piles and of made piles, by entity), each in ordinal order, at most `MaxNpcItems` and `MaxGoldRecords` (4,096).
+  Restore refuses a given record whose item is in no NPC's list, a given kit item without a hero or past the kit's numbers, a made gold
+  pile without its record, a pile record of the hero's item, of a made item in no NPC's list or with no coins; a seed attach refuses a
+  given taken item its origin seed does not list with its kind, a given kit item any seed lists, and a pile record a seed lists as no gold; a given kit item leaves its number out of the kit's order, like a placed one.
+- **Not modelled.** A refused new pile or stack, which the original leaves on the ground at the NPC's tile while it reports success (here
+  nothing moves, `InsertRefused`); the transfer script's veto and the item and holder events (refused when present, not run); a source
+  without a pile or stack, which the original credits from nothing (AMA6: refused here); the no-drop item flag
+  (0x20); NPC flag 0x40, which makes the AI re-wield its best items after a move; gold in containers; the barter window's substitute
+  container, identified flag, payment order and restock (ARC-UI-050, NT4).
 
 ## Next steps
 
